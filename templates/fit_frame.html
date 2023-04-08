@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script>
+            const photo_id="{{id}}";
+            const real_frame_size={{real_frame_size}};
+        </script>
+        <link rel="stylesheet" type="text/css" href="./static/fit_frame.css"></link>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <script type="module" src="./static/fit_frame.mjs"></script>
+        <style>
+            :root { 
+                --bg-color:{{tgWebApp['theme_params']['bg_color']}};
+                --button-color:{{tgWebApp['theme_params']['button_color']}};
+                --button-text-color:{{tgWebApp['theme_params']['button_text_color']}};
+                --hint-color:{{tgWebApp['theme_params']['hint_color']}};
+                --link-color:{{tgWebApp['theme_params']['link_color']}};
+                --secondary-bg-color:{{tgWebApp['theme_params']['secondary_bg_color']}};
+                --text-color:{{tgWebApp['theme_params']['text_color']}};
+            }
+        </style>
+    </head>
+    <body>
+        <div class="help">
+            Фото можно перемещать, вращать и масштабировать. Для
+            масштабирования или вращения мышкой, используйте
+            прокрутку и кнопку Shift.
+        </div>
+        <div class="photo">
+            <div class="ancor"><img src="photos/{{id}}"></div>
+        </div>
+        <div class="overlay"><div>&nbsp;</div><div>&nbsp;</div><div>&nbsp;</div><div>&nbsp;</div><div>&nbsp;</div></div>
+        <div class="button"><button name="done">💾</button><button name="cancel">❌</button></div>
+    </body>
+</html>

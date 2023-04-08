@@ -1,0 +1,86 @@
+body {
+  margin: 0;
+  background-color: #112;
+  color: var(--text-color);
+  height: 100%;
+  width: 100%;
+}
+
+button{
+  border: none;
+  background-color: var(--button-color);
+  color: var(--button-text-color);
+}
+.help{
+  padding: .5em 2em;
+  pointer-events: none;
+  color:#fff;
+  position: fixed;
+  z-index: 2;
+}
+.photo .ancor{
+  position: fixed;
+}
+.photo img{
+  position: absolute;
+}
+.photo{
+  position: fixed;
+  z-index: 0;
+  width: 100vw;
+  height: 100vh;
+}
+.overlay>div{
+  pointer-events: none;
+  background: repeat url(./frame_outer.png);
+  position: fixed;
+  height: 100vh;
+  width: 100vw;
+  z-index: 1;
+}
+.overlay>div:nth-child(1){
+  background: no-repeat center/100% url(./frame_tpl.png);
+  width: 95vmin;
+  height: 95vmin;
+}
+.overlay>div:nth-child(2){
+  left:0;
+}
+.overlay>div:nth-child(3){
+  top:0;
+}
+.overlay>div:nth-child(4){
+  top:0;
+}
+.overlay>div:nth-child(5){
+  left:0;
+}
+.button {
+  position: fixed;
+  z-index: 3;
+}
+.button button{
+  bottom:0px;
+  --offset-y:.4em;
+  --offset-x:.4em;
+  position: fixed;
+  border-radius: 50%;
+  font-size: 1.5em;
+  height: 2.5em;
+  width: 2.5em;
+  bottom: var(--offset-y);
+}
+.button button[name=cancel] {
+  background-color: #f99;
+  left:var(--offset-x);
+}
+.button button[name=cancel]:hover {
+  background-color: #f77;
+}
+.button button[name=done] {
+  background-color: #9f9;
+  right:var(--offset-x);
+}
+.button button[name=done]:hover {
+  background-color: #7f7;
+}

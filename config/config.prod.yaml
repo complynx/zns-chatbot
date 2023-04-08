@@ -1,0 +1,10 @@
+telegram:
+  token: "YOUR_TOKEN"
+
+server:
+  base: "https://zouknonstop.com/tgbot"
+  port: 8080
+
+logging:
+  level: "INFO"
+
