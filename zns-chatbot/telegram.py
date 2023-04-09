@@ -12,7 +12,8 @@ from telegram.ext import (
     CommandHandler,
     MessageHandler,
     ConversationHandler,
-    filters
+    filters,
+    Application,
 )
 import logging
 from .photo_task import get_by_user, PhotoTask, real_frame_size
@@ -138,9 +139,14 @@ async def cancel(update: Update, context: CallbackContext):
     await update.message.reply_text("Обработка фотографии отменена.", reply_markup=reply_markup)
     return ConversationHandler.END
 
+# async def log_msg(update: Update, context: CallbackContext):
+#     logger.info(f"got message from user {update.effective_user}: {update.message}")
 
-@asynccontextmanager
-async def create_telegram_bot(config):
+async def error_handler(update, context):
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
+
+def create_telegram_bot(config) -> Application:
     global web_app_base
     application = ApplicationBuilder().token(token=config.telegram_token).build()
 
@@ -158,17 +164,17 @@ async def create_telegram_bot(config):
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(ava_handler)
-    
+    # application.add_handler(MessageHandler(filters.TEXT, log_msg))
+    application.add_error_handler(error_handler)
+
+    return application
+
+async def bot_starter(application: Application):
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
-    try:
-        yield application
-    except Exception as ex:
-        logger.exception("got while running server", ex)
-    finally:
-        await application.stop()
-        await application.updater.stop()
-        await application.shutdown()
 
-    
+async def bot_stopper(application: Application):
+    await application.stop()
+    await application.updater.stop()
+    await application.shutdown()

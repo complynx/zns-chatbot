@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from .config import Config
-from .telegram import create_telegram_bot
+from .telegram import create_telegram_bot, bot_starter, bot_stopper
 from .server import create_server
 
 cfg = Config()
@@ -11,13 +11,20 @@ logger = logging.getLogger("main")
 
 
 async def main():
-    # bot = await create_telegram_bot(cfg)
+    bot = create_telegram_bot(cfg)
     server = await create_server(cfg)
-    async with create_telegram_bot(cfg) as bot:
-        try:
-            await asyncio.Event().wait()
-        except (KeyboardInterrupt, SystemExit):
-            pass
+    try:
+        await bot_starter(bot)
+        logger.info("running event loop")
+        await asyncio.Event().wait()
+    except (KeyboardInterrupt, SystemExit) as e:
+        logger.info("terminated gracefully...")
+        raise e
+    except Exception as e:
+        logger.exception(f"got exception during io loop: {e}")
+        raise e
+    finally:
+        await bot_stopper(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
