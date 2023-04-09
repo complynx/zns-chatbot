@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import json
 import re
 import os
 import asyncio
@@ -14,13 +15,19 @@ from telegram.ext import (
     filters
 )
 import logging
-from .photo_task import get_by_user, PhotoTask
+from .photo_task import get_by_user, PhotoTask, real_frame_size
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-PHOTO, CANCEL = range(2)
+PHOTO, CROPPER, FINISH = range(3)
 
 web_app_base = ""
+
+async def avatar_error(update: Update, context: CallbackContext):
+    reply_markup = ReplyKeyboardRemove()
+    await update.message.reply_text("Ошибка обработки фото, попробуйте ещё раз.", reply_markup=reply_markup)
+    return ConversationHandler.END
 
 async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
@@ -40,9 +47,7 @@ async def photo_stage2(update: Update, context: CallbackContext, file_path:str, 
     try:
         task = get_by_user(update.effective_user.id)
     except KeyError:
-        reply_markup = ReplyKeyboardRemove()
-        await update.message.reply_text("Ошибка обработки фото, попробуйте ещё раз.", reply_markup=reply_markup)
-        return ConversationHandler.END
+        return await avatar_error(update, context)
     task.add_file(file_path, file_ext)
 
     markup = ReplyKeyboardMarkup(
@@ -56,7 +61,47 @@ async def photo_stage2(update: Update, context: CallbackContext, file_path:str, 
         one_time_keyboard=True
     )
     await update.message.reply_text("Фото загружено, теперь стоит выбрать, как оно расположится внутри рамки.", reply_markup=markup)
-    return ConversationHandler.END
+    return CROPPER
+
+async def autocrop(update: Update, context: CallbackContext):
+    try:
+        task = get_by_user(update.effective_user.id)
+    except KeyError:
+        return await avatar_error(update, context)
+    
+    task.resize_avatar()
+    return await cropped_st2(task, update, context)
+
+async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext):
+    markup = ReplyKeyboardMarkup(
+        [
+            ["Ок"]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    await update.message.reply_text(f"Аватар вырезан и вставляется...", reply_markup=markup)
+    return FINISH
+
+async def image_crop_matrix(update: Update, context):
+    try:
+        task = get_by_user(update.effective_user.id)
+    except KeyError:
+        return await avatar_error(update, context)
+    data = json.loads(update.effective_message.web_app_data.data)
+    id_str = data['id']
+    a = float(data['a'])
+    b = float(data['b'])
+    c = float(data['c'])
+    d = float(data['d'])
+    e = float(data['e'])
+    f = float(data['f'])
+    if task.id.hex != id_str:
+        return await avatar_error(update, context)
+    
+    task.transform_avatar(a,b,c,d,e,f)
+
+    return await cropped_st2(task, update, context)
 
 async def photo(update: Update, context: CallbackContext):
     """Handle the photo submission as photo"""
@@ -105,8 +150,10 @@ async def create_telegram_bot(config):
         entry_points=[CommandHandler("avatar", avatar)],
         states={
             PHOTO: [MessageHandler(filters.PHOTO, photo), MessageHandler(filters.Document.IMAGE, photo_doc)],
+            CROPPER: [MessageHandler(filters.StatusUpdate.WEB_APP_DATA, image_crop_matrix),MessageHandler(filters.Regex(re.compile("^(Так сойдёт)$", re.I)), cancel)],
+            FINISH: [MessageHandler(filters.Regex(".*"), cancel)],
         },
-        fallbacks=[CommandHandler("cancel", cancel), MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I)), cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), cancel)],
     )
 
     application.add_handler(CommandHandler("start", start))

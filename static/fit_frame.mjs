@@ -295,118 +295,29 @@ screen_size_source.addEventListener('touchstart', onTouchStart, false);
 screen_size_source.addEventListener('touchmove', onTouchMove, false);
 screen_size_source.addEventListener('touchend', onTouchEnd, false);
 
-
-
-
-
-
-function invertMatrix(matrix) {
-    const a = matrix[0][0];
-    const b = matrix[0][1];
-    const c = matrix[1][0];
-    const d = matrix[1][1];
-    const e = matrix[0][2];
-    const f = matrix[1][2];
-
-    const det = a * d - b * c;
-
-    if (det === 0) {
-        throw new Error("Matrix is not invertible");
-    }
-
-    return [
-        [d / det, -b / det, (b * f - d * e) / det],
-        [-c / det, a / det, (c * e - a * f) / det]
-    ];
-}
-
-function distance(point1, point2) {
-    const dx = point2[0] - point1[0];
-    const dy = point2[1] - point1[1];
-    return Math.sqrt(dx*dx + dy*dy);
-}
-
-function applyMatrixToPoint(matrix, point) {
-    const x = matrix[0][0] * point[0] + matrix[0][1] * point[1] + matrix[0][2];
-    const y = matrix[1][0] * point[0] + matrix[1][1] * point[1] + matrix[1][2];
-    return [x, y];
-}
-
-function decomposeTransformMatrix(transformationMatrix) {
+Telegram.WebApp.MainButton.setText("Готово");
+Telegram.WebApp.MainButton.show();
+Telegram.WebApp.MainButton.onClick(()=>{
     const [a, c, e] = transformationMatrix[0];
     const [b, d, f] = transformationMatrix[1];
+    const data = JSON.stringify({
+        id: photo_id,
+        a: a,
+        b: b,
+        c: c,
+        d: d,
+        e: e,
+        f: f
+    });
 
-    const scalingX = Math.sqrt(a * a + c * c);
-    const scalingY = Math.sqrt(b * b + d * d);
-
-    const rotation = Math.atan2(b, a);
-
-    // const new_a = scalingX * Math.cos(rotation);
-    // const new_b = scalingX * Math.sin(rotation);
-    // const new_c = -scalingY * Math.sin(rotation);
-    // const new_d = scalingY * Math.cos(rotation);
-    // const new_e = e * new_a + f * new_c + e;
-    // const new_f = e * new_b + f * new_d + f;
-    // console.log(e,f,new_e, new_f);
-
-    return {
-        scaling: { x: scalingX, y: scalingY },
-        rotation: rotation,
-        translation: { x: e, y: f }
-    };
-}
-
-function generateCroppedImage() {
-    // Create a new canvas for the cropped image
-    const croppedCanvas = document.createElement("canvas");
-    croppedCanvas.width = real_frame_size;
-    croppedCanvas.height = real_frame_size;
-    const ctx = croppedCanvas.getContext("2d");
-
-    // Save the current transformation matrix and set it to identity
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-    // Apply the transforms and draw the photo on the canvas
-    ctx.translate(real_frame_size / 2, real_frame_size / 2);
-
-    // Calculate the necessary transforms
-    // const [a, c, e] = transformationMatrix[0];
-    // const [b, d, f] = transformationMatrix[1];
-    // ctx.transform(a, b, c, d, e, f);
-
-    const decomposition = decomposeTransformMatrix(transformationMatrix);
-
-    const { scaling, rotation, translation } = decomposition;
-    ctx.translate(translation.x, translation.y);
-    ctx.scale(scaling.x, scaling.y);
-    ctx.rotate(rotation);
-
-    ctx.drawImage(photo, -pw / 2, -ph / 2, pw, ph);
-
-    // Restore the original transformation matrix
-    ctx.restore();
-
-    // Get the data URL of the cropped image
-    const croppedDataURL = croppedCanvas.toDataURL("image/png");
-
-    return croppedDataURL;
-}
-
-submit_btn.addEventListener("click", () => {
-    console.log(transformationMatrix);
-    const [a, c, e] = transformationMatrix[0];
-    const [b, d, f] = transformationMatrix[1];
-    const croppedImage = new Image();
-    // croppedImage.src = generateCroppedImage();
-    croppedImage.src = `./crop_frame?id=${photo_id}&a=${a}&b=${b}&c=${c}&d=${d}&e=${e}&f=${f}`;
-    croppedImage.style.position="fixed";
-    croppedImage.style.left = f_left + "px";
-    croppedImage.style.top = f_top + "px";
-    croppedImage.style.height = croppedImage.style.width = frame_size + "px";
-    croppedImage.style.zIndex=3;
-    document.body.appendChild(croppedImage);
-    croppedImage.addEventListener("click", ()=>{
-        document.body.removeChild(croppedImage);
-    }, false);
+    Telegram.WebApp.sendData(data);
+    Telegram.WebApp.close();
 });
+Telegram.WebApp.MainButton.enable();
+Telegram.WebApp.MainButton.show();
+
+
+Telegram.WebApp.BackButton.onClick(()=>{
+    Telegram.WebApp.close();
+});
+Telegram.WebApp.BackButton.show();
