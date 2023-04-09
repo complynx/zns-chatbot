@@ -1,14 +1,17 @@
+@import url('https://fonts.googleapis.com/css?family=Open+Sans');
+
 body {
   margin: 0;
-  background-color: #112;
+  background-color:var(--tg-theme-bg-color);
   height: 100%;
   width: 100%;
 }
 
 .help{
   padding: .5em 2em;
+  font-family: "Open Sans", sans-serif;
   pointer-events: none;
-  color:#fff;
+  color: var(--tg-theme-text-color);
   position: fixed;
   z-index: 2;
 }
@@ -19,33 +22,18 @@ body {
   position: absolute;
 }
 .photo{
+  background-image: radial-gradient(circle at center, var(--tg-theme-secondary-bg-color) 45vmin, var(--tg-theme-bg-color) 45vmin);
   position: fixed;
   z-index: 0;
   width: 100vw;
   height: 100vh;
 }
-.overlay>div{
+.overlay{
   pointer-events: none;
-  background: repeat url(./frame_outer.png);
   position: fixed;
-  height: 100vh;
-  width: 100vw;
   z-index: 1;
-}
-.overlay>div:nth-child(1){
-  background: no-repeat center/100% url(./frame_tpl.png);
-  width: 95vmin;
-  height: 95vmin;
-}
-.overlay>div:nth-child(2){
-  left:0;
-}
-.overlay>div:nth-child(3){
-  top:0;
-}
-.overlay>div:nth-child(4){
-  top:0;
-}
-.overlay>div:nth-child(5){
-  left:0;
+  width: 100vw;
+  height: 100vh;
+  background-image: radial-gradient(circle at center, transparent 45vmin, var(--tg-theme-bg-color) 45vmin);
+  opacity: .6;
 }

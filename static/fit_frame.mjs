@@ -9,18 +9,21 @@ let frameTransformationMatrix = ETransform;
 const frame_size_fraction = .9;
 let W,H, Vmax, Vmin;
 let frame_size, f_top, f_left;
+let help_div = document.querySelector(".help");
 let screen_size_source = document.querySelector(".photo");
 let photo_ancor = document.querySelector(".photo .ancor");
 let photo = document.querySelector(".photo img");
-let frame = document.querySelector(".overlay>div:nth-child(1)");
-let frame_top = document.querySelector(".overlay>div:nth-child(2)");
-let frame_left = document.querySelector(".overlay>div:nth-child(3)");
-let frame_right = document.querySelector(".overlay>div:nth-child(4)");
-let frame_bottom = document.querySelector(".overlay>div:nth-child(5)");
+let frame = document.querySelector(".overlay");
 let cancel_btn = document.querySelector(".button button[name=cancel]");
 let submit_btn = document.querySelector(".button button[name=done]");
 console.log(photo, frame, cancel_btn, submit_btn);
 
+
+if(Telegram.WebApp.platform === "tdesktop") {
+    help_div.innerText = "Фото можно перемещать мышкой, для вращения зажмите кнопку Shift. Для масштабирования используйте прокрутку.";
+} else {
+    help_div.innerText = "Фото можно перемещать одним касанием. Двумя — вращать и масштабировать.";
+}
 
 /**
  * The `M` function is a matrix multiplication function that takes
@@ -173,12 +176,10 @@ function recalculate_all() {
         [0, F, 0]
     ];
 
-    frame_left.style.height = frame_right.style.height = frame.style.height = frame.style.width = frame_size + "px";
+    // frame.style.height = frame.style.width = frame_size + "px";
 
-    frame.style.left = f_left + "px";
-    frame_right.style.top = frame_left.style.top = frame.style.top = f_top + "px";
-    frame_left.style.right = frame_right.style.left = (f_left + frame_size) + "px";
-    frame_top.style.bottom = frame_bottom.style.top = (f_top + frame_size) + "px";
+    // frame.style.left = f_left + "px";
+    // frame.style.top = f_top + "px";
     photo_ancor.style.left = (f_left + frame_size/2) + "px";
     photo_ancor.style.top = (f_top + frame_size/2) + "px";
 
