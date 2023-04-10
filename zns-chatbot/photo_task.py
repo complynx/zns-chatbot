@@ -5,16 +5,65 @@ import uuid
 import PIL.Image as Image
 from PIL import ImageOps
 import math
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
+import torch
+import torchvision.transforms as transforms
 
 DEADLINE_BASIC = 24*60*60 # 24 hours
 
 real_frame_size = 2000
 
 files_path = "photos"
+models_path = "models"
+models_list = []
+torch_gpu = "none"
 
 tasks_by_uuid = dict()
 tasks_by_user = dict()
 tasks_by_chat = dict()
+
+main_executor = None
+slow_executor = None
+
+MAIN, SLOW = range(2)
+
+
+class ModelNotFoundException(Exception):
+    pass
+
+
+def init_photo_tasker(cfg):
+    global main_executor, slow_executor, models_path, torch_gpu, models_list
+    main_executor = ThreadPoolExecutor(max_workers=cfg.tasker_cpu_threads, thread_name_prefix="photo_tasker")
+    slow_executor = ThreadPoolExecutor(max_workers=max(cfg.tasker_cpu_threads // 2,1), thread_name_prefix="photo_tasker_slow")
+
+    models_path = cfg.tasker_models_path
+    torch_gpu = cfg.tasker_gpu_engine
+
+    for file_name in os.listdir(models_path):
+        name, ext = os.path.splitext(file_name)
+        if ext == 'pth':
+            models_list.append(name)
+
+    for file_name in os.listdir(files_path):
+        file_path = os.path.join(files_path, file_name)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+        elif os.path.isdir(file_path):
+            os.rmdir(file_path)
+
+def async_thread(func, executor=MAIN):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        e = executor
+        if e == MAIN:
+            e = main_executor
+        elif e == SLOW:
+            e = slow_executor
+        return asyncio.get_event_loop().run_in_executor(e, lambda: func(*args, **kwargs))
+    return wrapper
 
 
 def centered_crop_with_padding(img, x, y, size):
@@ -82,6 +131,7 @@ class PhotoTask(object):
         while self.id in tasks_by_uuid:
             self.id = uuid.uuid4()
         
+        self.file_upscaled = None
         self.file = None
         self.cropped_file = None
         self.tg_update = None
@@ -90,9 +140,49 @@ class PhotoTask(object):
         tasks_by_uuid[self.id] = self
         tasks_by_chat[self.chat.id] = self
         tasks_by_user[self.user.id] = self
+
+    def torch_device(self):
+        if torch_gpu == 'cuda' and torch.cuda.is_available():
+            return 'cuda'
+        return 'cpu'
     
+    @async_thread(SLOW)
+    def upscale_avatar(self, model):
+        if model not in models_list:
+            raise ModelNotFoundException("model not found")
+
+        model_path = os.path.join(models_path, f"{model}.pth")
+        base_name, ext = os.path.splitext(self.file)
+        file_new = base_name + "_upscale" + ext
+        file_old = self.file
+        
+        # Load the ESRGAN model
+        device = torch.device(self.torch_device())
+        model = torch.load(model_path, map_location=device).to(device)
+        model.eval()
+
+        # Load and preprocess the input image
+        image = Image.open(file_old).convert('RGB')
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225])
+        ])
+        input_image = transform(image).unsqueeze(0).to(device)
+
+        # Perform super-resolution with the ESRGAN model
+        with torch.no_grad():
+            output_image = model(input_image).clamp(0, 1).squeeze().cpu()
+
+        # Convert the output tensor to a PIL image and save it
+        output_image = transforms.ToPILImage()(output_image)
+        output_image.save(file_new)
+        self.file_upscaled = file_new
+            
+    @async_thread
     def transform_avatar(self, a: float,b: float,c: float,d: float,e: float,f: float):
-        with Image.open(self.file) as img:
+        file = self.file if self.file_upscaled is None else self.file_upscaled
+        with Image.open(file) as img:
             if img.mode != "RGBA":
                 img = img.convert("RGBA")
             cropped_img = img_transform(img, a,b,c,d,e,f)
@@ -101,8 +191,10 @@ class PhotoTask(object):
         cropped_img.save(fn, 'PNG')
         self.cropped_file = fn
     
+    @async_thread
     def resize_avatar(self):
-        with Image.open(self.file) as img:
+        file = self.file if self.file_upscaled is None else self.file_upscaled
+        with Image.open(file) as img:
             pw, ph = img.size
             left = right = top = bottom = 0
             if pw < ph:
@@ -130,6 +222,12 @@ class PhotoTask(object):
         if self.file is not None:
             os.remove(self.file)
             self.file = None
+        if self.cropped_file is not None:
+            os.remove(self.cropped_file)
+            self.cropped_file = None
+        if self.file_upscaled is not None:
+            os.remove(self.file_upscaled)
+            self.file_upscaled = None
     
     def add_file(self, file_name: str, ext: str):
         if self.file is not None:
@@ -145,8 +243,6 @@ class PhotoTask(object):
         del tasks_by_user[self.user.id]
         del tasks_by_uuid[self.id]
         self.remove_file()
-        if self.cropped_file is not None:
-            os.remove(self.cropped_file)
 
 def get_by_uuid(id: uuid.UUID|str) -> PhotoTask:
     if not isinstance(id, uuid.UUID):

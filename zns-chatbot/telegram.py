@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 import json
 import re
 import os
-import asyncio
 import mimetypes
 import tempfile
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, WebAppInfo
@@ -16,8 +15,7 @@ from telegram.ext import (
     Application,
 )
 import logging
-from .photo_task import get_by_user, PhotoTask, real_frame_size
-from PIL import Image
+from .photo_task import get_by_user, PhotoTask
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +68,7 @@ async def autocrop(update: Update, context: CallbackContext):
     except KeyError:
         return await avatar_error(update, context)
     
-    task.resize_avatar()
+    await task.resize_avatar()
     return await cropped_st2(task, update, context)
 
 async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext):
@@ -100,7 +98,7 @@ async def image_crop_matrix(update: Update, context):
     if task.id.hex != id_str:
         return await avatar_error(update, context)
     
-    task.transform_avatar(a,b,c,d,e,f)
+    await task.transform_avatar(a,b,c,d,e,f)
 
     return await cropped_st2(task, update, context)
 
@@ -146,7 +144,8 @@ async def error_handler(update, context):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
 
-def create_telegram_bot(config) -> Application:
+@asynccontextmanager
+async def create_telegram_bot(config) -> Application:
     global web_app_base
     application = ApplicationBuilder().token(token=config.telegram_token).build()
 
@@ -155,8 +154,14 @@ def create_telegram_bot(config) -> Application:
     ava_handler = ConversationHandler(
         entry_points=[CommandHandler("avatar", avatar)],
         states={
-            PHOTO: [MessageHandler(filters.PHOTO, photo), MessageHandler(filters.Document.IMAGE, photo_doc)],
-            CROPPER: [MessageHandler(filters.StatusUpdate.WEB_APP_DATA, image_crop_matrix),MessageHandler(filters.Regex(re.compile("^(Так сойдёт)$", re.I)), cancel)],
+            PHOTO: [
+                MessageHandler(filters.PHOTO, photo),
+                MessageHandler(filters.Document.IMAGE, photo_doc)
+            ],
+            CROPPER: [
+                MessageHandler(filters.StatusUpdate.WEB_APP_DATA, image_crop_matrix),
+                MessageHandler(filters.Regex(re.compile("^(Так сойдёт)$", re.I)), autocrop)
+            ],
             FINISH: [MessageHandler(filters.Regex(".*"), cancel)],
         },
         fallbacks=[CommandHandler("cancel", cancel), MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), cancel)],
@@ -167,14 +172,13 @@ def create_telegram_bot(config) -> Application:
     # application.add_handler(MessageHandler(filters.TEXT, log_msg))
     application.add_error_handler(error_handler)
 
-    return application
+    try:
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
 
-async def bot_starter(application: Application):
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-
-async def bot_stopper(application: Application):
-    await application.stop()
-    await application.updater.stop()
-    await application.shutdown()
+        yield application
+    finally:
+        await application.stop()
+        await application.updater.stop()
+        await application.shutdown()

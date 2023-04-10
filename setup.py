@@ -9,5 +9,7 @@ setup(
         "tornado==6.2",
         "pyyaml==6.0",
         "pillow==9.5",
+        "torch==2.0",
+        "torchvision==0.15.1",
     ],
 )

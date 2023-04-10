@@ -21,3 +21,15 @@ class Config:
     @property
     def logging_level(self)->str:
         return os.environ.get("LOGGING_LEVEL", self._config_data["logging"]["level"])
+
+    @property
+    def tasker_cpu_threads(self)->int:
+        return int(os.environ.get("CPU_THREADS", str(self._config_data["photo_tasker"]["cpu_threads"])))
+
+    @property
+    def tasker_gpu_engine(self)->str:
+        return os.environ.get("GPU_ENGINE", self._config_data["photo_tasker"]["gpu_engine"])
+
+    @property
+    def tasker_models_path(self)->str:
+        return os.environ.get("MODELS_PATH", self._config_data["photo_tasker"]["models_path"])
