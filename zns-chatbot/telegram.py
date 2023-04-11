@@ -19,7 +19,7 @@ from .photo_task import get_by_user, PhotoTask
 
 logger = logging.getLogger(__name__)
 
-PHOTO, CROPPER, FINISH = range(3)
+PHOTO, CROPPER, UPSCALE, FINISH = range(4)
 
 web_app_base = ""
 
@@ -48,18 +48,22 @@ async def photo_stage2(update: Update, context: CallbackContext, file_path:str, 
     except KeyError:
         return await avatar_error(update, context)
     task.add_file(file_path, file_ext)
+    buttons = [
+        # [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"{web_app_base}/fit_frame?id={task.id.hex}"))],
+        [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"https://zouknonstop.com/itworks1.html#id={task.id.hex}"))],
+        ["Так сойдёт"],["Отмена"]
+    ]
+
 
     markup = ReplyKeyboardMarkup(
-        [
-            # [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"{web_app_base}/fit_frame?id={task.id.hex}"))],
-            [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"https://zouknonstop.com/itworks1.html#id={task.id.hex}"))],
-            ["Так сойдёт"],
-            ["Отмена"]
-        ],
+        buttons,
         resize_keyboard=True,
         one_time_keyboard=True
     )
-    await update.message.reply_text("Фото загружено, теперь стоит выбрать, как оно расположится внутри рамки.", reply_markup=markup)
+    await update.message.reply_text(
+        "Фото загружено, теперь стоит выбрать, как оно расположится внутри рамки.",
+        reply_markup=markup
+    )
     return CROPPER
 
 async def autocrop(update: Update, context: CallbackContext):
@@ -160,7 +164,7 @@ async def create_telegram_bot(config) -> Application:
             ],
             CROPPER: [
                 MessageHandler(filters.StatusUpdate.WEB_APP_DATA, image_crop_matrix),
-                MessageHandler(filters.Regex(re.compile("^(Так сойдёт)$", re.I)), autocrop)
+                MessageHandler(filters.Regex(re.compile("^(Так сойдёт)$", re.I)), autocrop),
             ],
             FINISH: [MessageHandler(filters.Regex(".*"), cancel)],
         },
