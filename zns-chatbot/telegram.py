@@ -38,14 +38,22 @@ async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     logger.info(f"start called: {update.effective_user}")
     await context.bot.set_my_commands([("/avatar", "Создать аватар.")])
-    await update.message.reply_text("Добро пожаловать в ZNS бот. Пока что мы умеем только делать аватарки. Для этого надо ввести команду /avatar")
+    await update.message.reply_text("Добро пожаловать в ZNS бот. Пока что мы умеем только"+
+                                    " делать аватарки. Для этого надо ввести команду /avatar\n\n"+
+                                    "Важные два момента:\n"+
+                                    "1. Основные команды есть в меню (основная команда).\n"+
+                                    "2. Если бот слишком долго не отвечает, попробуйте заново."+
+                                    "Возможно, бот был обновлён и забыл, что происходило.")
 
 async def avatar(update: Update, context: CallbackContext):
     """Handle the /avatar command, requesting a photo."""
     logger.info(f"Received /avatar command from {update.effective_user}")
     _ = PhotoTask(update.effective_chat, update.effective_user)
     markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
-    await update.message.reply_text("Начнём с простого. Пришлите вашу фотографию.", reply_markup=markup)
+    await update.message.reply_text("Начнём с простого. Пришлите вашу фотографию.\n\n"+
+                                    "На всякий случай, если в процессе вам покажется,"+
+                                    " что бот на вас «забил», такое может изредка происходить "+
+                                    "если мы его только что обновляли. Просто начните ещё раз сначала.", reply_markup=markup)
     return PHOTO
 
 async def reavatar(update: Update, context: CallbackContext):
