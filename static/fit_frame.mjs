@@ -202,7 +202,6 @@ function onTouchStart(e) {
         isMouseDown = true;
     } else if (e.touches.length === 2) {
         isMouseDown = false;
-        rotatePhotoStart();
         initialTouch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         initialTouch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
         initialTouchDistance = Math.hypot(initialTouch2.x - initialTouch1.x, initialTouch2.y - initialTouch1.y);
@@ -219,20 +218,33 @@ function onTouchMove(e) {
         initialX = e.touches[0].clientX;
         initialY = e.touches[0].clientY;
     } else if (e.touches.length === 2) {
-        rotatePhotoStart();
-        
         let touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         let touch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
         let touchDistance = Math.hypot(touch2.x - touch1.x, touch2.y - touch1.y);
         let scaleFactor = touchDistance / initialTouchDistance;
         let centerX = (touch1.x + touch2.x) / 2;
         let centerY = (touch1.y + touch2.y) / 2;
-        scalePhoto(scaleFactor, centerX, centerY);
-        initialTouchDistance = touchDistance;
 
         let touchAngle = Math.atan2(touch2.y - touch1.y, touch2.x - touch1.x);
         let rotationAngle = touchAngle - initialTouchAngle;
-        rotatePhoto(rotationAngle, centerX, centerY);
+
+        let transformMatrix = MM(
+            translate2matrix(centerX, centerY),
+            [
+                [Math.cos(rotationAngle), -Math.sin(rotationAngle), 0],
+                [Math.sin(rotationAngle), Math.cos(rotationAngle), 0]
+            ],
+            [
+                [scaleFactor, 0, 0],
+                [0, scaleFactor, 0]
+            ],
+            translate2matrix(-centerX, -centerY)
+        );
+
+        transformationMatrix = M(transformationMatrix, transformMatrix);
+        recalculate_photo();
+
+        initialTouchDistance = touchDistance;
         initialTouchAngle = touchAngle;
     }
 }
