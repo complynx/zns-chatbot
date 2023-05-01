@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 PHOTO, CROPPER, UPSCALE, FINISH = range(4)
 
-web_app_base = "https://zouknonstop.com/bot"
+web_app_base = ""
 
 async def avatar_error(update: Update, context: CallbackContext):
     reply_markup = ReplyKeyboardRemove()
