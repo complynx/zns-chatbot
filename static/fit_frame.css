@@ -5,6 +5,7 @@ body {
   background-color:var(--tg-theme-bg-color);
   height: 100%;
   width: 100%;
+  --frame-radius: 35vmin;
 }
 
 .help{
@@ -22,18 +23,20 @@ body {
   position: absolute;
 }
 .photo{
-  background-image: radial-gradient(circle at center, var(--tg-theme-secondary-bg-color) 45vmin, var(--tg-theme-bg-color) 45vmin);
+  background-image: radial-gradient(circle at center, var(--tg-theme-secondary-bg-color) var(--frame-radius), var(--tg-theme-bg-color) var(--frame-radius));
   position: fixed;
   z-index: 0;
   width: 100vw;
   height: 100vh;
 }
 .overlay{
+  --frame-zns-radius: 25vmin;
   pointer-events: none;
   position: fixed;
   z-index: 1;
   width: 100vw;
   height: 100vh;
-  background-image: radial-gradient(circle at center, transparent 45vmin, var(--tg-theme-bg-color) 45vmin);
+  background-image: radial-gradient(circle at center, transparent var(--frame-radius), var(--tg-theme-bg-color) var(--frame-radius)),
+  radial-gradient(circle at calc(50% + 0vmin) calc(50% + 35vmin), var(--tg-theme-bg-color) var(--frame-zns-radius), transparent var(--frame-zns-radius));
   opacity: .6;
 }
