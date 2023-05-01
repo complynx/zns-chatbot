@@ -322,3 +322,15 @@ Telegram.WebApp.BackButton.onClick(()=>{
     Telegram.WebApp.close();
 });
 Telegram.WebApp.BackButton.show();
+
+
+document.addEventListener('keydown', function(event) {
+    if (event.ctrlKey && event.shiftKey && event.code === 'KeyU') {
+        help_div.innerText = window.location.href;
+        navigator.clipboard.writeText(window.location.href)
+        .catch((error) => {
+            console.error('Failed to copy text: ', error);
+        });
+        event.preventDefault(); // Prevent the default browser behavior
+    }
+});
