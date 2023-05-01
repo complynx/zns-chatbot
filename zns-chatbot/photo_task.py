@@ -62,6 +62,8 @@ def init_photo_tasker(cfg):
     global main_executor
     main_executor = ThreadPoolExecutor(max_workers=cfg.tasker_cpu_threads, thread_name_prefix="photo_tasker")
 
+    if not os.path.exists(files_path):
+        os.makedirs(files_path)
     for file_name in os.listdir(files_path):
         file_path = os.path.join(files_path, file_name)
         if os.path.isfile(file_path):
