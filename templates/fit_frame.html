@@ -8,6 +8,18 @@
         <link rel="stylesheet" type="text/css" href="./static/fit_frame.css"></link>
         <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <script type="module" src="./static/fit_frame.mjs"></script>
+        <script>
+            document.addEventListener('contextmenu', function(event) {
+                if (event.altKey) {
+                    document.querySelector('.help').innerText = window.location.href;
+                    navigator.clipboard.writeText(window.location.href)
+                    .catch((error) => {
+                        console.error('Failed to copy text: ', error);
+                    });
+                    event.preventDefault(); // Prevent the default browser behavior
+                }
+            });
+        </script>
     </head>
     <body>
         <div class="help">
