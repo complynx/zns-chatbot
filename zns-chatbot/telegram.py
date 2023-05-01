@@ -48,6 +48,17 @@ async def avatar(update: Update, context: CallbackContext):
     await update.message.reply_text("Начнём с простого. Пришлите вашу фотографию.", reply_markup=markup)
     return PHOTO
 
+async def reavatar(update: Update, context: CallbackContext):
+    logger.info(f"Avatar submission for {update.effective_user} canceled")
+    try:
+        get_by_user(update.effective_user.id).delete()
+    except KeyError:
+        pass
+    except Exception as e:
+        logger.error("Exception in cancel: %s", e, exc_info=1)
+    await update.message.reply_text("Предыдущая обработка отменена.")
+    return await avatar(update, context)
+
 async def photo_stage2(update: Update, context: CallbackContext, file_path:str, file_ext:str):
     try:
         task = get_by_user(update.effective_user.id)
@@ -201,7 +212,7 @@ async def create_telegram_bot(config) -> Application:
             ],
             FINISH: [MessageHandler(filters.Regex(".*"), cancel)],
         },
-        fallbacks=[CommandHandler("cancel", cancel), MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("avatar", reavatar), MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), cancel)],
     )
 
     application.add_handler(CommandHandler("start", start))
