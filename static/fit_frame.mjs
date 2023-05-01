@@ -219,6 +219,8 @@ function onTouchMove(e) {
         initialX = e.touches[0].clientX;
         initialY = e.touches[0].clientY;
     } else if (e.touches.length === 2) {
+        rotatePhotoStart();
+        
         let touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         let touch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
         let touchDistance = Math.hypot(touch2.x - touch1.x, touch2.y - touch1.y);
