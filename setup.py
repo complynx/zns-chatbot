@@ -9,5 +9,6 @@ setup(
         "tornado==6.2",
         "pyyaml==6.0",
         "pillow==9.5",
+        "numpy==1.24.2"
     ],
 )

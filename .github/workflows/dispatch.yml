@@ -1,0 +1,17 @@
+name: Dispatch event to server repo
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send dispatch event
+        uses: peter-evans/repository-dispatch@v1
+        with:
+          token: ${{ secrets.SERVER_REPO_TOKEN }}
+          repository: complynx/server_configs
+          event-type: updated-zns-chatbot

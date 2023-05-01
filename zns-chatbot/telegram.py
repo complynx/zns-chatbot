@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 PHOTO, CROPPER, UPSCALE, FINISH = range(4)
 
-web_app_base = ""
+web_app_base = "https://zouknonstop.com/bot"
 
 async def avatar_error(update: Update, context: CallbackContext):
     reply_markup = ReplyKeyboardRemove()
@@ -49,8 +49,8 @@ async def photo_stage2(update: Update, context: CallbackContext, file_path:str, 
         return await avatar_error(update, context)
     task.add_file(file_path, file_ext)
     buttons = [
-        # [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"{web_app_base}/fit_frame?id={task.id.hex}"))],
-        [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"https://zouknonstop.com/itworks1.html#id={task.id.hex}"))],
+        [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"{web_app_base}/fit_frame?id={task.id.hex}"))],
+        # [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"https://zouknonstop.com/itworks1.html#id={task.id.hex}"))],
         ["Так сойдёт"],["Отмена"]
     ]
 
@@ -71,20 +71,20 @@ async def autocrop(update: Update, context: CallbackContext):
         task = get_by_user(update.effective_user.id)
     except KeyError:
         return await avatar_error(update, context)
+    await update.message.reply_text(f"Аватар обрабатывается...", reply_markup=ReplyKeyboardRemove())
     
     await task.resize_avatar()
     return await cropped_st2(task, update, context)
 
 async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext):
-    markup = ReplyKeyboardMarkup(
-        [
-            ["Ок"]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-    await update.message.reply_text(f"Аватар вырезан и вставляется...", reply_markup=markup)
-    return FINISH
+    await update.message.reply_text("Аватар вырезан и вставляется."+
+                                    " Надо только подождать.", reply_markup=ReplyKeyboardRemove())
+    await task.finalize_avatar()
+    await update.message.reply_document(task.get_final_file(), filename="avatar.png")
+    await update.message.reply_text("Наш аватар лучше всего загружать в вк вместе"+
+                                    f" с нашей же [обложкой]({web_app_base}/static/cover.jpg)."+
+                                    "\n\n Ждём вас на ZNS!", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
 
 async def image_crop_matrix(update: Update, context):
     try:
@@ -101,6 +101,7 @@ async def image_crop_matrix(update: Update, context):
     f = float(data['f'])
     if task.id.hex != id_str:
         return await avatar_error(update, context)
+    await update.message.reply_text(f"Аватар обрабатывается...", reply_markup=ReplyKeyboardRemove())
     
     await task.transform_avatar(a,b,c,d,e,f)
 

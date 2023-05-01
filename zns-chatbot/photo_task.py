@@ -9,6 +9,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,9 @@ DEADLINE_BASIC = 24*60*60 # 24 hours
 real_frame_size = 2000
 
 files_path = "photos"
+
+layer1fn =  "layers/layer1.png"
+layer3fn =  "layers/layer3.png"
 
 tasks_by_uuid = dict()
 tasks_by_user = dict()
@@ -28,6 +32,31 @@ main_executor = None
 class ModelNotFoundException(Exception):
     pass
 
+
+curve_points = [(0, 0), (73, 56), (163, 164), (255, 255)]
+
+def create_lut(points):
+    x_points, y_points = zip(*points)
+    x_points = np.array(x_points, dtype=np.float32)
+    y_points = np.array(y_points, dtype=np.float32)
+    
+    spline = np.interp(np.arange(256), x_points, y_points)
+    
+    return spline.astype(np.uint8)
+
+def apply_curve(image, curve_points):
+    lut = create_lut(curve_points)
+    
+    img_array = np.array(image)
+    
+    for i in range(3):  # Apply the LUT to the R, G, and B channels
+        img_array[..., i] = lut[img_array[..., i]]
+
+    return Image.fromarray(img_array)
+
+
+def soft_light(a, b):
+    return 2 * a * b + a**2 * (1 - 2 * b)
 
 def init_photo_tasker(cfg):
     global main_executor
@@ -116,6 +145,7 @@ class PhotoTask(object):
         
         self.file = None
         self.cropped_file = None
+        self.final_file = None
         self.tg_update = None
         self.tg_context = None
         
@@ -156,6 +186,33 @@ class PhotoTask(object):
         resized_img.save(fn, 'PNG')
         self.cropped_file = fn
     
+    @async_thread
+    def finalize_avatar(self):
+        layer1 = Image.open(layer1fn)
+        source = Image.open(self.get_cropped_file())
+
+        # Convert the images to NumPy arrays and normalize them
+        layer1 = np.asarray(layer1, dtype=np.float32) / 255.0
+        source = np.asarray(source, dtype=np.float32) / 255.0
+
+        step1 = soft_light(source, layer1)
+        step1 = (step1 * 255.0).clip(0, 255).astype('uint8')
+        step1 = Image.fromarray(step1)
+
+        step2 = apply_curve(step1, curve_points)
+        step2 = step2.convert('RGBA')
+
+        layer3 = Image.open(layer3fn).convert('RGBA')
+        step3 = Image.new('RGBA', step2.size)
+
+        # Perform alpha compositing to combine the two images
+        step3.alpha_composite(step2)
+        step3.alpha_composite(layer3)
+
+        final_name = self.get_final_file(True)
+        step3.save(final_name)
+        self.final_file = final_name
+    
     def get_file_size(self):
         file = self.file
         with Image.open(file) as img:
@@ -167,9 +224,15 @@ class PhotoTask(object):
 
     def get_cropped_file(self, generate=False):
         if self.cropped_file is None and generate and self.file is not None:
-            base_name, ext = os.path.splitext(self.file)
-            return base_name + "_cropped" + ext
+            base_name, _ = os.path.splitext(self.file)
+            return base_name + "_cropped.png"
         return self.cropped_file
+
+    def get_final_file(self, generate=False):
+        if self.final_file is None and generate and self.file is not None:
+            base_name, _ = os.path.splitext(self.file)
+            return base_name + "_final.png"
+        return self.final_file
     
     def remove_file(self):
         if self.file is not None:
@@ -178,6 +241,9 @@ class PhotoTask(object):
         if self.cropped_file is not None:
             os.remove(self.cropped_file)
             self.cropped_file = None
+        if self.final_file is not None:
+            os.remove(self.final_file)
+            self.final_file = None
     
     def add_file(self, file_name: str, ext: str):
         if self.file is not None:
