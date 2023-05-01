@@ -2,7 +2,7 @@ telegram:
   token: "YOUR_TOKEN"
 
 server:
-  base: "https://zouknonstop.com/tgbot"
+  base: "https://zouknonstop.com/bot"
   port: 8080
 
 logging:
