@@ -98,9 +98,9 @@ async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext)
                                         " Надо только подождать.", reply_markup=ReplyKeyboardRemove())
         await task.finalize_avatar()
         await update.message.reply_document(task.get_final_file(), filename="avatar.png")
-        await update.message.reply_text("Наш аватар лучше всего загружать в вк вместе"+
-                                        f" с нашей же [обложкой]({web_app_base}/static/cover.jpg)."+
-                                        "\n\n Ждём вас на ZNS!", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_markdown("Наш аватар лучше всего загружать в вк вместе"+
+                                            f" с нашей же [обложкой]({web_app_base}/static/cover.jpg)."+
+                                            "\n\n Ждём вас на ZNS!", reply_markup=ReplyKeyboardRemove())
     except Exception as e:
         logger.error("Exception in cropped_st2: %s", e, exc_info=1)
         return await avatar_error(update, context)
