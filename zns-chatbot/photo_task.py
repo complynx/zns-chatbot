@@ -190,8 +190,8 @@ class PhotoTask(object):
     
     @async_thread
     def finalize_avatar(self):
-        layer1 = Image.open(layer1fn)
-        source = Image.open(self.get_cropped_file())
+        layer1 = Image.open(layer1fn).convert('RGB')
+        source = Image.open(self.get_cropped_file()).convert('RGB')
 
         # Convert the images to NumPy arrays and normalize them
         layer1 = np.asarray(layer1, dtype=np.float32) / 255.0

@@ -25,6 +25,12 @@ web_app_base = ""
 
 async def avatar_error(update: Update, context: CallbackContext):
     reply_markup = ReplyKeyboardRemove()
+    try:
+        get_by_user(update.effective_user.id).delete()
+    except KeyError:
+        pass
+    except Exception as e:
+        logger.error("Exception in avatar_error: %s", e, exc_info=1)
     await update.message.reply_text("Ошибка обработки фото, попробуйте ещё раз.", reply_markup=reply_markup)
     return ConversationHandler.END
 
@@ -46,6 +52,9 @@ async def photo_stage2(update: Update, context: CallbackContext, file_path:str, 
     try:
         task = get_by_user(update.effective_user.id)
     except KeyError:
+        return await avatar_error(update, context)
+    except Exception as e:
+        logger.error("Exception in photo_stage2: %s", e, exc_info=1)
         return await avatar_error(update, context)
     task.add_file(file_path, file_ext)
     buttons = [
@@ -71,25 +80,41 @@ async def autocrop(update: Update, context: CallbackContext):
         task = get_by_user(update.effective_user.id)
     except KeyError:
         return await avatar_error(update, context)
+    except Exception as e:
+        logger.error("Exception in autocrop: %s", e, exc_info=1)
+        return await avatar_error(update, context)
     await update.message.reply_text(f"Аватар обрабатывается...", reply_markup=ReplyKeyboardRemove())
     
-    await task.resize_avatar()
+    try:
+        await task.resize_avatar()
+    except Exception as e:
+        logger.error("Exception in autocrop: %s", e, exc_info=1)
+        return await avatar_error(update, context)
     return await cropped_st2(task, update, context)
 
 async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext):
-    await update.message.reply_text("Аватар вырезан и вставляется."+
-                                    " Надо только подождать.", reply_markup=ReplyKeyboardRemove())
-    await task.finalize_avatar()
-    await update.message.reply_document(task.get_final_file(), filename="avatar.png")
-    await update.message.reply_text("Наш аватар лучше всего загружать в вк вместе"+
-                                    f" с нашей же [обложкой]({web_app_base}/static/cover.jpg)."+
-                                    "\n\n Ждём вас на ZNS!", reply_markup=ReplyKeyboardRemove())
+    try:
+        await update.message.reply_text("Аватар вырезан и вставляется."+
+                                        " Надо только подождать.", reply_markup=ReplyKeyboardRemove())
+        await task.finalize_avatar()
+        await update.message.reply_document(task.get_final_file(), filename="avatar.png")
+        await update.message.reply_text("Наш аватар лучше всего загружать в вк вместе"+
+                                        f" с нашей же [обложкой]({web_app_base}/static/cover.jpg)."+
+                                        "\n\n Ждём вас на ZNS!", reply_markup=ReplyKeyboardRemove())
+    except Exception as e:
+        logger.error("Exception in cropped_st2: %s", e, exc_info=1)
+        return await avatar_error(update, context)
+    
+    task.delete()
     return ConversationHandler.END
 
 async def image_crop_matrix(update: Update, context):
     try:
         task = get_by_user(update.effective_user.id)
     except KeyError:
+        return await avatar_error(update, context)
+    except Exception as e:
+        logger.error("Exception in image_crop_matrix: %s", e, exc_info=1)
         return await avatar_error(update, context)
     data = json.loads(update.effective_message.web_app_data.data)
     id_str = data['id']
@@ -103,8 +128,11 @@ async def image_crop_matrix(update: Update, context):
         return await avatar_error(update, context)
     await update.message.reply_text(f"Аватар обрабатывается...", reply_markup=ReplyKeyboardRemove())
     
-    await task.transform_avatar(a,b,c,d,e,f)
-
+    try:
+        await task.transform_avatar(a,b,c,d,e,f)
+    except Exception as e:
+        logger.error("Exception in image_crop_matrix: %s", e, exc_info=1)
+        return await avatar_error(update, context)
     return await cropped_st2(task, update, context)
 
 async def photo(update: Update, context: CallbackContext):
@@ -138,6 +166,8 @@ async def cancel(update: Update, context: CallbackContext):
         get_by_user(update.effective_user.id).delete()
     except KeyError:
         pass
+    except Exception as e:
+        logger.error("Exception in cancel: %s", e, exc_info=1)
     reply_markup = ReplyKeyboardRemove()
     await update.message.reply_text("Обработка фотографии отменена.", reply_markup=reply_markup)
     return ConversationHandler.END
