@@ -206,7 +206,7 @@ function onTouchStart(e) {
         initialTouch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         initialTouch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
         initialTouchDistance = Math.hypot(initialTouch2.x - initialTouch1.x, initialTouch2.y - initialTouch1.y);
-        initialTouchAngle = Math.atan2(initialTouch2.y - initialTouch1.y, initialTouch2.x - initialTouch1.x) * (180 / Math.PI);
+        initialTouchAngle = Math.atan2(initialTouch2.y - initialTouch1.y, initialTouch2.x - initialTouch1.x);
     }
 }
 
@@ -230,7 +230,8 @@ function onTouchMove(e) {
 
         let touchAngle = Math.atan2(touch2.y - touch1.y, touch2.x - touch1.x);
         let rotationAngle = touchAngle - initialTouchAngle;
-        rotatePhoto(rotationAngle + initialAngle, centerX, centerY);
+        rotatePhoto(rotationAngle, centerX, centerY);
+        initialTouchAngle = touchAngle;
     }
 }
 
