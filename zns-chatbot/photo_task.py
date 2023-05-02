@@ -22,6 +22,9 @@ files_path = "photos"
 layer1fn =  "layers/layer1.png"
 layer3fn =  "layers/layer3.png"
 
+final_frame_size = 1000
+jpeg_quality = 90
+
 tasks_by_uuid = dict()
 tasks_by_user = dict()
 tasks_by_chat = dict()
@@ -212,8 +215,13 @@ class PhotoTask(object):
         step3.alpha_composite(step2)
         step3.alpha_composite(layer3)
 
+        final = step3.resize(
+            (final_frame_size, final_frame_size),
+            resample=Image.LANCZOS
+        )
+
         final_name = self.get_final_file(True)
-        step3.save(final_name)
+        final.save(final_name, quality=jpeg_quality, optimize=True)
         self.final_file = final_name
     
     def get_file_size(self):
@@ -234,7 +242,7 @@ class PhotoTask(object):
     def get_final_file(self, generate=False):
         if self.final_file is None and generate and self.file is not None:
             base_name, _ = os.path.splitext(self.file)
-            return base_name + "_final.png"
+            return base_name + "_final.jpg"
         return self.final_file
     
     def remove_file(self):
