@@ -1,0 +1,33 @@
+name: Build and then dispatch event
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: complynx
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          push: true
+          tags: complynx/pstore:${{ github.event.repository.name }}-latest
+
+      - name: Dispatch event to server
+        uses: peter-evans/repository-dispatch@v1
+        with:
+          token: ${{ secrets.SERVER_REPO_TOKEN }}
+          repository: complynx/server_configs
+          event-type: updated-zns-chatbot
