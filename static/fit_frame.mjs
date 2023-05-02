@@ -204,8 +204,12 @@ function onTouchStart(e) {
         isMouseDown = true;
     } else if (e.touches.length === 2) {
         isMouseDown = false;
-        initialTouch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        initialTouch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
+        const [adjustedTouch1ClientX, adjustedTouch1ClientY] = ajustCursorClientPosition(e.touches[0].clientX, e.touches[0].clientY);
+        const [adjustedTouch2ClientX, adjustedTouch2ClientY] = ajustCursorClientPosition(e.touches[1].clientX, e.touches[1].clientY);
+
+        initialTouch1 = { x: adjustedTouch1ClientX, y: adjustedTouch1ClientY };
+        initialTouch2 = { x: adjustedTouch2ClientX, y: adjustedTouch2ClientY };
+
         initialTouchDistance = Math.hypot(initialTouch2.x - initialTouch1.x, initialTouch2.y - initialTouch1.y);
         initialTouchAngle = Math.atan2(initialTouch2.y - initialTouch1.y, initialTouch2.x - initialTouch1.x);
     }
