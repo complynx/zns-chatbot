@@ -32,7 +32,10 @@ async def avatar_error(update: Update, context: CallbackContext):
         pass
     except Exception as e:
         logger.error("Exception in avatar_error: %s", e, exc_info=1)
-    await update.message.reply_text("Ошибка обработки фото, попробуйте ещё раз.", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "Ошибка обработки фото, попробуйте ещё раз.\n/avatar",
+        reply_markup=reply_markup
+    )
     return ConversationHandler.END
 
 async def start(update: Update, context: CallbackContext):
