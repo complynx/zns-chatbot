@@ -55,8 +55,8 @@ async def avatar(update: Update, context: CallbackContext):
     _ = PhotoTask(update.effective_chat, update.effective_user)
     markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
     await update.message.reply_text(
-        "Начните с простого. Отправьте нам Ваше фото.\n\nP.S. Если в процессе вам покажется, что бот "+
-        "завис, то просто начинаете сначала, выбрав команду\n/avatar",
+        "🟢 Начните с простого. Отправьте нам Ваше фото.\n\nP.S. Если в процессе вам покажется, что "+
+        "бот завис, то просто начинаете сначала, выбрав команду\n/avatar",
         reply_markup=markup
     )
     return PHOTO
@@ -106,7 +106,7 @@ async def autocrop(update: Update, context: CallbackContext):
     except Exception as e:
         logger.error("Exception in autocrop: %s", e, exc_info=1)
         return await avatar_error(update, context)
-    await update.message.reply_text(f"Аватар обрабатывается...", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text(f"Аватар обрабатывается... 🔄", reply_markup=ReplyKeyboardRemove())
     
     try:
         await task.resize_avatar()
@@ -118,19 +118,19 @@ async def autocrop(update: Update, context: CallbackContext):
 async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext):
     try:
         await update.message.reply_text(
-            "Уже совсем скоро ваше чудесное фото станет ещё и космическим! Процесс запущен.",
+            "🪐 Уже совсем скоро ваше чудесное фото станет ещё и космическим! Процесс запущен.",
             reply_markup=ReplyKeyboardRemove()
         )
         await task.finalize_avatar()
         await update.message.reply_document(task.get_final_file(), filename="avatar.jpg")
         await update.message.reply_document(
             cover,
-            caption="Получившуюся аватарку рекомендуется загружать в Ваш личный профиль"+
+            caption="❗️ Получившуюся аватарку рекомендуется загружать в Ваш личный профиль"+
             " Вконтакте вместе со специальной обложкой профиля."
         )
         await update.message.reply_text(
-            "Если вы хотите вставить другое фото, то для этого снова используйте команду\n"+
-            "/avatar\n\nДо встречи на ZNS!",
+            "🔁 Если вы хотите вставить другое фото, то для этого снова используйте команду\n"+
+            "/avatar\n\n🛸До встречи на ZNS!🛸",
             reply_markup=ReplyKeyboardRemove()
         )
     except Exception as e:
