@@ -122,7 +122,7 @@ async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext)
             reply_markup=ReplyKeyboardRemove()
         )
         await task.finalize_avatar()
-        await update.message.reply_document(task.get_final_file(), filename="avatar.png")
+        await update.message.reply_document(task.get_final_file(), filename="avatar.jpg")
         await update.message.reply_document(
             cover,
             caption="Получившуюся аватарку рекомендуется загружать в Ваш личный профиль"+
