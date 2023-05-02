@@ -218,7 +218,7 @@ class PhotoTask(object):
         final = step3.resize(
             (final_frame_size, final_frame_size),
             resample=Image.LANCZOS
-        )
+        ).convert('RGB')
 
         final_name = self.get_final_file(True)
         final.save(final_name, quality=jpeg_quality, optimize=True)

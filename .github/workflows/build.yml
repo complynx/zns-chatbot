@@ -30,4 +30,4 @@ jobs:
         with:
           token: ${{ secrets.SERVER_REPO_TOKEN }}
           repository: complynx/server_configs
-          event-type: updated-zns-chatbot
+          event-type: updated-${{ github.event.repository.name }}
