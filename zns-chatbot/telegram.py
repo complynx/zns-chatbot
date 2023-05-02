@@ -52,9 +52,8 @@ async def avatar(update: Update, context: CallbackContext):
     _ = PhotoTask(update.effective_chat, update.effective_user)
     markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
     await update.message.reply_text(
-        "Начнём с простого. Пришлите вашу фотографию.\n\nНа всякий случай, если в процессе вам покажется,"+
-        " что бот на вас «забил», такое может изредка происходить если мы его только что обновляли. "+
-        "Просто начните ещё раз сначала.",
+        "Начнём с простого. Отправьте нам Ваше фото.\n\nP.S. Если в процессе вам покажется, что бот "+
+        "завис, то просто начинаете сначала, выбрав команду\n/avatar",
         reply_markup=markup
     )
     return PHOTO
@@ -126,8 +125,8 @@ async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext)
             caption="Получившуюся аватарку рекомендуется загружать в Ваш личный профиль"+
             " Вконтакте вместе со специальной обложкой профиля."
         )
-        await update.message.reply_markdown(
-            "Если вы хотите вставить другое фото, то для этого снова используйте команду "+
+        await update.message.reply_text(
+            "Если вы хотите вставить другое фото, то для этого снова используйте команду\n"+
             "/avatar\n\nДо встречи на ZNS!",
             reply_markup=ReplyKeyboardRemove()
         )

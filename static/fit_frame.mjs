@@ -241,12 +241,8 @@ function onTouchMove(e) {
         let transformMatrix = MM(
             translate2matrix(centerX, centerY),
             [
-                [Math.cos(rotationAngle), -Math.sin(rotationAngle), 0],
-                [Math.sin(rotationAngle), Math.cos(rotationAngle), 0]
-            ],
-            [
-                [scaleFactor, 0, 0],
-                [0, scaleFactor, 0]
+                [scaleFactor * Math.cos(rotationAngle), -scaleFactor * Math.sin(rotationAngle), 0],
+                [scaleFactor * Math.sin(rotationAngle), scaleFactor * Math.cos(rotationAngle), 0]
             ],
             translate2matrix(-centerX, -centerY)
         );
