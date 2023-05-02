@@ -52,7 +52,7 @@ async def avatar(update: Update, context: CallbackContext):
     _ = PhotoTask(update.effective_chat, update.effective_user)
     markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
     await update.message.reply_text(
-        "Начнём с простого. Отправьте нам Ваше фото.\n\nP.S. Если в процессе вам покажется, что бот "+
+        "Начните с простого. Отправьте нам Ваше фото.\n\nP.S. Если в процессе вам покажется, что бот "+
         "завис, то просто начинаете сначала, выбрав команду\n/avatar",
         reply_markup=markup
     )
