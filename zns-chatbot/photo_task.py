@@ -33,7 +33,7 @@ class ModelNotFoundException(Exception):
     pass
 
 
-curve_points = [(0, 0), (73, 56), (163, 164), (255, 255)]
+curve_points = [(0, 0), (67, 59), (163, 164), (255, 255)]
 
 def create_lut(points):
     x_points, y_points = zip(*points)
@@ -55,8 +55,9 @@ def apply_curve(image, curve_points):
     return Image.fromarray(img_array)
 
 
-def soft_light(a, b):
-    return 2 * a * b + a**2 * (1 - 2 * b)
+def soft_light(a, b, opacity=1):
+    result = 2 * a * b + a**2 * (1 - 2 * b)
+    return opacity * result + (1 - opacity) * a
 
 def init_photo_tasker(cfg):
     global main_executor
@@ -197,7 +198,7 @@ class PhotoTask(object):
         layer1 = np.asarray(layer1, dtype=np.float32) / 255.0
         source = np.asarray(source, dtype=np.float32) / 255.0
 
-        step1 = soft_light(source, layer1)
+        step1 = soft_light(source, layer1, opacity=0.8)
         step1 = (step1 * 255.0).clip(0, 255).astype('uint8')
         step1 = Image.fromarray(step1)
 

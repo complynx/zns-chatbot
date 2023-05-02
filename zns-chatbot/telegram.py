@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 PHOTO, CROPPER, UPSCALE, FINISH = range(4)
 
 web_app_base = ""
+cover = "static/cover.jpg"
 
 async def avatar_error(update: Update, context: CallbackContext):
     reply_markup = ReplyKeyboardRemove()
@@ -38,22 +39,24 @@ async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     logger.info(f"start called: {update.effective_user}")
     await context.bot.set_my_commands([("/avatar", "Создать аватар.")])
-    await update.message.reply_text("Добро пожаловать в ZNS бот. Пока что мы умеем только"+
-                                    " делать аватарки. Для этого надо ввести команду /avatar\n\n"+
-                                    "Важные два момента:\n"+
-                                    "1. Основные команды есть в меню (основная команда).\n"+
-                                    "2. Если бот слишком долго не отвечает, попробуйте заново."+
-                                    "Возможно, бот был обновлён и забыл, что происходило.")
+    await update.message.reply_markdown(
+        "Добро пожаловать в ZNS бот! Пока что мы умеем только создавать аватарки. Для этого необходимо"+
+        " ввести команду /avatar.\n\nВажные моменты:\n\n1. Основные команды находятся в меню (основная"+
+        " команда).\n2. Если бот слишком долго не отвечает, попробуйте запустить команду заново. "+
+        "Возможно, бот был обновлен и забыл, что происходило."
+    )
 
 async def avatar(update: Update, context: CallbackContext):
     """Handle the /avatar command, requesting a photo."""
     logger.info(f"Received /avatar command from {update.effective_user}")
     _ = PhotoTask(update.effective_chat, update.effective_user)
     markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
-    await update.message.reply_text("Начнём с простого. Пришлите вашу фотографию.\n\n"+
-                                    "На всякий случай, если в процессе вам покажется,"+
-                                    " что бот на вас «забил», такое может изредка происходить "+
-                                    "если мы его только что обновляли. Просто начните ещё раз сначала.", reply_markup=markup)
+    await update.message.reply_text(
+        "Начнём с простого. Пришлите вашу фотографию.\n\nНа всякий случай, если в процессе вам покажется,"+
+        " что бот на вас «забил», такое может изредка происходить если мы его только что обновляли. "+
+        "Просто начните ещё раз сначала.",
+        reply_markup=markup
+    )
     return PHOTO
 
 async def reavatar(update: Update, context: CallbackContext):
@@ -78,7 +81,6 @@ async def photo_stage2(update: Update, context: CallbackContext, file_path:str, 
     task.add_file(file_path, file_ext)
     buttons = [
         [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"{web_app_base}/fit_frame?id={task.id.hex}"))],
-        # [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"https://zouknonstop.com/itworks1.html#id={task.id.hex}"))],
         ["Так сойдёт"],["Отмена"]
     ]
 
@@ -89,7 +91,7 @@ async def photo_stage2(update: Update, context: CallbackContext, file_path:str, 
         one_time_keyboard=True
     )
     await update.message.reply_text(
-        "Фото загружено, теперь стоит выбрать, как оно расположится внутри рамки.",
+        "Фото загружено. Выберите как оно будет располагаться внутри рамки.",
         reply_markup=markup
     )
     return CROPPER
@@ -113,15 +115,22 @@ async def autocrop(update: Update, context: CallbackContext):
 
 async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext):
     try:
-        await update.message.reply_text("Аватар вырезан и вставляется."+
-                                        " Надо только подождать.", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(
+            "Уже совсем скоро ваше чудесное фото станет ещё и космическим! Процесс запущен.",
+            reply_markup=ReplyKeyboardRemove()
+        )
         await task.finalize_avatar()
         await update.message.reply_document(task.get_final_file(), filename="avatar.png")
-        await update.message.reply_markdown("Наш аватар лучше всего загружать в вк вместе"+
-                                            f" с нашей же [обложкой]({web_app_base}/static/cover.jpg)."+
-                                            " А если хотите, можно попробовать ещё раз, для этого"+
-                                            " снова используйте команду /avatar"+
-                                            "\n\n Ждём вас на ZNS!", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_document(
+            cover,
+            caption="Получившуюся аватарку рекомендуется загружать в Ваш личный профиль"+
+            " Вконтакте вместе со специальной обложкой профиля."
+        )
+        await update.message.reply_markdown(
+            "Если вы хотите вставить другое фото, то для этого снова используйте команду "+
+            "/avatar\n\nДо встречи на ZNS!",
+            reply_markup=ReplyKeyboardRemove()
+        )
     except Exception as e:
         logger.error("Exception in cropped_st2: %s", e, exc_info=1)
         return await avatar_error(update, context)
@@ -137,14 +146,18 @@ async def image_crop_matrix(update: Update, context):
     except Exception as e:
         logger.error("Exception in image_crop_matrix: %s", e, exc_info=1)
         return await avatar_error(update, context)
-    data = json.loads(update.effective_message.web_app_data.data)
-    id_str = data['id']
-    a = float(data['a'])
-    b = float(data['b'])
-    c = float(data['c'])
-    d = float(data['d'])
-    e = float(data['e'])
-    f = float(data['f'])
+    try:
+        data = json.loads(update.effective_message.web_app_data.data)
+        id_str = data['id']
+        a = float(data['a'])
+        b = float(data['b'])
+        c = float(data['c'])
+        d = float(data['d'])
+        e = float(data['e'])
+        f = float(data['f'])
+    except Exception as e:
+        logger.error("Exception in image_crop_matrix: %s", e, exc_info=1)
+        return await avatar_error(update, context)
     if task.id.hex != id_str:
         return await avatar_error(update, context)
     await update.message.reply_text(f"Аватар обрабатывается...", reply_markup=ReplyKeyboardRemove())
@@ -220,7 +233,11 @@ async def create_telegram_bot(config) -> Application:
             ],
             FINISH: [MessageHandler(filters.Regex(".*"), cancel)],
         },
-        fallbacks=[CommandHandler("cancel", cancel), CommandHandler("avatar", reavatar), MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), cancel)],
+        fallbacks=[
+            CommandHandler("cancel", cancel),
+            CommandHandler("avatar", reavatar),
+            MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), cancel)
+        ],
     )
 
     application.add_handler(CommandHandler("start", start))
