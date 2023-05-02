@@ -96,12 +96,18 @@ function rotatePhotoStart() {
     transformationMatrixPreRotate = transformationMatrix;
 }
 
-function rotatePhoto(rotationAtan2, mouseClientX, mouseClientY) {
+function ajustCursorClientPosition(cursorX,cursorY) {
     const photoCenterX = parseFloat(photo_ancor.style.left) + parseFloat(photo.style.left) + pw / 2;
     const photoCenterY = parseFloat(photo_ancor.style.top) + parseFloat(photo.style.top) + ph / 2;
 
-    const adjustedMouseClientX = mouseClientX - photoCenterX;
-    const adjustedMouseClientY = mouseClientY - photoCenterY;
+    const adjustedMouseClientX = cursorX - photoCenterX;
+    const adjustedMouseClientY = cursorY - photoCenterY;
+    
+    return [adjustedMouseClientX, adjustedMouseClientY];
+}
+
+function rotatePhoto(rotationAtan2, mouseClientX, mouseClientY) {
+    const [adjustedMouseClientX, adjustedMouseClientY] = ajustCursorClientPosition(mouseClientX, mouseClientY);
 
     let rotationMatrix = MM(
         translate2matrix(adjustedMouseClientX, adjustedMouseClientY),
@@ -118,11 +124,7 @@ function rotatePhoto(rotationAtan2, mouseClientX, mouseClientY) {
 }
 
 function scalePhoto(scaleFactor, mouseClientX, mouseClientY) {
-    const photoCenterX = parseFloat(photo_ancor.style.left) + parseFloat(photo.style.left) + pw / 2;
-    const photoCenterY = parseFloat(photo_ancor.style.top) + parseFloat(photo.style.top) + ph / 2;
-
-    const adjustedMouseClientX = mouseClientX - photoCenterX;
-    const adjustedMouseClientY = mouseClientY - photoCenterY;
+    const [adjustedMouseClientX, adjustedMouseClientY] = ajustCursorClientPosition(mouseClientX, mouseClientY);
 
     let scaleMatrix = MM(
         translate2matrix(adjustedMouseClientX, adjustedMouseClientY),
@@ -218,8 +220,12 @@ function onTouchMove(e) {
         initialX = e.touches[0].clientX;
         initialY = e.touches[0].clientY;
     } else if (e.touches.length === 2) {
-        let touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        let touch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
+        const [adjustedTouch1ClientX, adjustedTouch1ClientY] = ajustCursorClientPosition(e.touches[0].clientX, e.touches[0].clientY);
+        const [adjustedTouch2ClientX, adjustedTouch2ClientY] = ajustCursorClientPosition(e.touches[1].clientX, e.touches[1].clientY);
+
+        let touch1 = { x: adjustedTouch1ClientX, y: adjustedTouch1ClientY };
+        let touch2 = { x: adjustedTouch2ClientX, y: adjustedTouch2ClientY };
+
         let touchDistance = Math.hypot(touch2.x - touch1.x, touch2.y - touch1.y);
         let scaleFactor = touchDistance / initialTouchDistance;
         let centerX = (touch1.x + touch2.x) / 2;
