@@ -45,12 +45,26 @@ class PhotoHandler(tornado.web.StaticFileHandler):
             raise tornado.web.HTTPError(404)
         return absolute_path
 
+class MenuHandler(tornado.web.RequestHandler):
+    async def post(self):
+        import json
+        # Get all the post form data
+        data = self.request.arguments
+        
+        # Convert bytes to str if needed (Tornado stores POST data as bytes)
+        for key in data:
+            data[key] = [x.decode('utf-8') for x in data[key]]
+
+        # If you want to send the data back as a response in pretty format
+        self.write(json.dumps(data, indent=4))
+
 
 
 async def create_server(config: Config):
     tornado.platform.asyncio.AsyncIOMainLoop().install()
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler),
+        (r"/menu", MenuHandler),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
     ], template_path="templates/")
