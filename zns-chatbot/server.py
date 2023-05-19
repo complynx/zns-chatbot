@@ -113,8 +113,9 @@ def parse_meal_data(meal_dict):
     return ret, costs
 
 class MenuHandler(tornado.web.RequestHandler):
-    def initialize(self, token):
+    def initialize(self, token, getbot):
         self.token = token
+        self.getbot = getbot
     
     async def post(self):
         import json
@@ -148,16 +149,18 @@ class MenuHandler(tornado.web.RequestHandler):
             writer = csv.writer(f)
             writer.writerow(save)
 
+        bot = self.getbot()
+        await bot.send_message(chat_id=379278985, text=f"пользователь {tg_user} выбрал {meals} для {data.get('name')}")
         # If you want to send the data back as a response in pretty format
         self.write(f"Ваш выбор был успешно сохранён!<br>Можете уже перечислить {total} рублей и прислать подтверждение.")
 
 
 
-async def create_server(config: Config):
+async def create_server(config: Config, getbot):
     tornado.platform.asyncio.AsyncIOMainLoop().install()
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler),
-        (r"/menu", MenuHandler, {"token": config.telegram_token}),
+        (r"/menu", MenuHandler, {"token": config.telegram_token, "getbot": getbot}),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
     ], template_path="templates/")
