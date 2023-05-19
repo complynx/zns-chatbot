@@ -120,6 +120,7 @@ class MenuHandler(tornado.web.RequestHandler):
     async def post(self):
         import json
         import csv
+        from datetime import datetime
         # Get all the post form data
         data = self.request.arguments
         
@@ -135,7 +136,9 @@ class MenuHandler(tornado.web.RequestHandler):
         
         meals, sums = parse_meal_data(data)
         total = sum(sums)
+
         save = [
+            datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
             tg_user.get("id"),
             tg_user.get("first_name"),
             tg_user.get("last_name"),
