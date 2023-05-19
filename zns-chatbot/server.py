@@ -124,7 +124,7 @@ class MenuHandler(tornado.web.RequestHandler):
         # Open the file in append mode ('a')
         with open("/menu/menu.data", 'a') as f:
             # Dump the dictionary as a JSON string into the file
-            json.dump(save, f)
+            json.dump(save, f, ensure_ascii=False)
             # Write a newline character to separate each JSON object in the file
             f.write('\n')
 
