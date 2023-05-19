@@ -77,7 +77,7 @@ class MenuHandler(tornado.web.RequestHandler):
         for key in data:
             data[key] = [x.decode('utf-8') for x in data[key]]
 
-        tg_user = json.loads(data["tg_user"])
+        tg_user = json.loads(data["tg_user"][0])
         if not check_hmac(tg_user, self.token):
             return self.write_error(401)
         
