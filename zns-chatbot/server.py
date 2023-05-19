@@ -68,8 +68,11 @@ def parse_meal_data(meal_dict):
     days = ['friday', 'saturday', 'sunday']
     meals = ['lunch', 'dinner']
     restaurants_real = ['B№1','ХиВ','ГBS']
+    restaurants_cost2 = [380, 440, 500]
+    restaurants_cost3 = [430, 440, 600]
     
     ret = []
+    costs = []
     for day in days:
         for meal in meals:
             toggler_key = f"{day}_{meal}_restaurant_toggler"
@@ -82,6 +85,8 @@ def parse_meal_data(meal_dict):
 
                 if restaurant_num == "_none":
                     ret.append("нет")
+                    ret.append(0)
+                    costs.append(0)
                 elif 1<= restaurant_num <=3:
                     main_key = f"{day}_{meal}_main_r{restaurant_num}"
                     salad_key = f"{day}_{meal}_salad_r{restaurant_num}"
@@ -90,13 +95,20 @@ def parse_meal_data(meal_dict):
                     main = meal_dict.get(main_key, '')
                     salad = meal_dict.get(salad_key, '')
                     soup = meal_dict.get(soup_key, '')
+                    cost = 0
+                    if main != '' and salad != '' and soup != '':
+                        cost = restaurants_cost3[restaurant_num-1]
+                    else:
+                        cost = restaurants_cost2[restaurant_num-1]
                     drink = meal_dict.get(drink_key, '')
                     items = [main, soup, salad, drink]
                     filtered_items = list(filter(lambda x: x != '', items))
                     result = "\n".join(filtered_items)
 
                     ret.append(f"{restaurants_real[restaurant_num-1]}:\n{result}")
-    return ret
+                    ret.append(cost)
+                    costs.append(cost)
+    return ret, costs
 
 class MenuHandler(tornado.web.RequestHandler):
     def initialize(self, token):
@@ -118,7 +130,8 @@ class MenuHandler(tornado.web.RequestHandler):
         if not check_hmac(tg_user, self.token):
             return self.write_error(401)
         
-        meals = parse_meal_data(data)
+        meals, sums = parse_meal_data(data)
+        total = sum(sums)
         save = [
             tg_user.get("id"),
             tg_user.get("first_name"),
@@ -127,13 +140,14 @@ class MenuHandler(tornado.web.RequestHandler):
             data.get("name")
         ]
         save.extend(meals)
+        save.append(total)
 
         with open("/menu/menu.data", 'a') as f:
             writer = csv.writer(f)
             writer.writerow(save)
 
         # If you want to send the data back as a response in pretty format
-        self.write("Ваш выбор был успешно сохранён!")
+        self.write(f"Ваш выбор был успешно сохранён!<br>Можете уже перечислить {total} рублей и прислать подтверждение.")
 
 
 
