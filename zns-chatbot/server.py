@@ -85,6 +85,7 @@ def parse_meal_data(meal_dict):
 
                 if restaurant_num == "_none":
                     ret.append("нет")
+                    ret.append("нет")
                     ret.append(0)
                     costs.append(0)
                 elif 1<= restaurant_num <=3:
