@@ -76,8 +76,10 @@ class MenuHandler(tornado.web.RequestHandler):
         # Convert bytes to str if needed (Tornado stores POST data as bytes)
         for key in data:
             data[key] = [x.decode('utf-8') for x in data[key]]
+            if len(data[key]) == 1:
+                data[key] = data[key][0]
 
-        tg_user = json.loads(data["tg_user"][0])
+        tg_user = json.loads(data["tg_user"])
         if not check_hmac(tg_user, self.token):
             return self.write_error(401)
         
