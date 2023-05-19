@@ -12,10 +12,14 @@ logger = logging.getLogger("main")
 
 
 async def main():
+    bot_app = None
+    def getbot():
+        return bot_app.bot
     init_photo_tasker(cfg)
-    server = await create_server(cfg)
+    server = await create_server(cfg, getbot)
     try:
         async with create_telegram_bot(cfg) as bot:
+            bot_app = bot
             logger.info("running event loop")
             await asyncio.Event().wait()
     except (KeyboardInterrupt, SystemExit):
