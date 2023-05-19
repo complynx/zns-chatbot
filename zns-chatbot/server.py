@@ -64,6 +64,41 @@ def check_hmac(data, secret_key):
     # Compare the new hash with the received tg_hash
     return new_hash == tg_hash
 
+def parse_meal_data(meal_dict):
+    days = ['friday', 'saturday', 'sunday']
+    meals = ['lunch', 'dinner']
+    restaurants_real = ['B№1','ХиВ','ГBS']
+    
+    ret = dict()
+    for day in days:
+        ret[day] = dict()
+        for meal in meals:
+            toggler_key = f"{day}_{meal}_restaurant_toggler"
+            if toggler_key in meal_dict:
+                restaurant_num = meal_dict[toggler_key].replace(f"{day}_{meal}_restaurant", "").replace("_toggler", "")
+                try:
+                    restaurant_num = int(restaurant_num)
+                except ValueError:
+                    pass
+
+                if restaurant_num == "_none":
+                    ret[day][meal] = "нет"
+                elif 1<= restaurant_num <=3:
+                    main_key = f"{day}_{meal}_main_r{restaurant_num}"
+                    salad_key = f"{day}_{meal}_salad_r{restaurant_num}"
+                    soup_key = f"{day}_{meal}_soup_r{restaurant_num}"
+                    drink_key = f"{day}_{meal}_drink_r{restaurant_num}"
+                    main = meal_dict.get(main_key, '')
+                    salad = meal_dict.get(salad_key, '')
+                    soup = meal_dict.get(soup_key, '')
+                    drink = meal_dict.get(drink_key, '')
+                    items = [main, soup, salad, drink]
+                    filtered_items = list(filter(lambda x: x != '', items))
+                    result = "\n".join(filtered_items)
+
+                    ret[day][meal] = f"{restaurants_real[restaurant_num-1]}:\n{result}"
+    return ret
+
 class MenuHandler(tornado.web.RequestHandler):
     def initialize(self, token):
         self.token = token
@@ -83,9 +118,18 @@ class MenuHandler(tornado.web.RequestHandler):
         if not check_hmac(tg_user, self.token):
             return self.write_error(401)
         
+        save = parse_meal_data(data)
+        save["user"] = tg_user
+
+        # Open the file in append mode ('a')
+        with open("/menu/menu.data", 'a') as f:
+            # Dump the dictionary as a JSON string into the file
+            json.dump(save, f)
+            # Write a newline character to separate each JSON object in the file
+            f.write('\n')
 
         # If you want to send the data back as a response in pretty format
-        self.write(json.dumps(data, indent=4, ensure_ascii=False) + " " + json.dumps(tg_user, indent=4, ensure_ascii=False))
+        self.write("Ваш выбор был успешно сохранён!")
 
 
 
