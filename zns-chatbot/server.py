@@ -105,7 +105,8 @@ def parse_meal_data(meal_dict):
                     filtered_items = list(filter(lambda x: x != '', items))
                     result = "\n".join(filtered_items)
 
-                    ret.append(f"{restaurants_real[restaurant_num-1]}:\n{result}")
+                    ret.append(restaurants_real[restaurant_num-1])
+                    ret.append(result)
                     ret.append(cost)
                     costs.append(cost)
     return ret, costs
