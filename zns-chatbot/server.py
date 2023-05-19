@@ -69,9 +69,8 @@ def parse_meal_data(meal_dict):
     meals = ['lunch', 'dinner']
     restaurants_real = ['B№1','ХиВ','ГBS']
     
-    ret = dict()
+    ret = []
     for day in days:
-        ret[day] = dict()
         for meal in meals:
             toggler_key = f"{day}_{meal}_restaurant_toggler"
             if toggler_key in meal_dict:
@@ -82,7 +81,7 @@ def parse_meal_data(meal_dict):
                     pass
 
                 if restaurant_num == "_none":
-                    ret[day][meal] = "нет"
+                    ret.append("нет")
                 elif 1<= restaurant_num <=3:
                     main_key = f"{day}_{meal}_main_r{restaurant_num}"
                     salad_key = f"{day}_{meal}_salad_r{restaurant_num}"
@@ -96,7 +95,7 @@ def parse_meal_data(meal_dict):
                     filtered_items = list(filter(lambda x: x != '', items))
                     result = "\n".join(filtered_items)
 
-                    ret[day][meal] = f"{restaurants_real[restaurant_num-1]}:\n{result}"
+                    ret.append(f"{restaurants_real[restaurant_num-1]}:\n{result}")
     return ret
 
 class MenuHandler(tornado.web.RequestHandler):
@@ -105,6 +104,7 @@ class MenuHandler(tornado.web.RequestHandler):
     
     async def post(self):
         import json
+        import csv
         # Get all the post form data
         data = self.request.arguments
         
@@ -118,13 +118,22 @@ class MenuHandler(tornado.web.RequestHandler):
         if not check_hmac(tg_user, self.token):
             return self.write_error(401)
         
-        save = parse_meal_data(data)
-        save["user"] = tg_user
+        meals = parse_meal_data(data)
+        save = [
+            tg_user.get("id"),
+            tg_user.get("first_name"),
+            tg_user.get("last_name"),
+            tg_user.get("username"),
+            data.get("name")
+        ]
+        save.extend(meals)
 
         # Open the file in append mode ('a')
         with open("/menu/menu.data", 'a') as f:
             # Dump the dictionary as a JSON string into the file
-            json.dump(save, f, ensure_ascii=False)
+            
+            writer = csv.writer(f)
+            writer.writerow(save)
             # Write a newline character to separate each JSON object in the file
             f.write('\n')
 
