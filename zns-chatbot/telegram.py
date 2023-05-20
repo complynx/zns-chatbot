@@ -45,7 +45,7 @@ async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     logger.info(f"start called: {update.effective_user}")
     await context.bot.set_my_commands([("/avatar", "Создать аватар.")])
-    await update.message.reply_markdown_v2(
+    await update.message.reply_text(
         "Здравствуй, зуконавт! Меня зовут ЗиНуСя, твой виртуальный помощник 🤗\n\n"+
         "🟢 Я могу помочь сделать красивую аватарку! Для этого выбери команду\n"+
         "/avatar"
@@ -215,8 +215,9 @@ async def food(update: Update, context: CallbackContext):
     logger.info(f"Received /food command from {update.effective_user}")
     _ = PhotoTask(update.effective_chat, update.effective_user)
     markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
-    await update.message.reply_markdown_v2(
-        "Окей, я приму заказ на еду. Сначала напиши, для кого будет еда. Напиши полные **имя** и **фамилию** зуконавта.",
+    await update.message.reply_html(
+        "Окей, я приму заказ на еду. Сначала напиши, для кого будет еда. "+
+        "Напиши полные <b>имя</b> и <b>фамилию</b> зуконавта.",
         reply_markup=markup
     )
     return NAME
@@ -229,9 +230,9 @@ async def food_for_who(update: Update, context: CallbackContext):
     context.application.base_app.add_meal_session(meal_context)
     # f"{web_app_base}/fit_frame?id={task.id.hex}"
     reply_markup = ReplyKeyboardRemove()
-    await update.message.reply_markdown_v2(
+    await update.message.reply_html(
         f"Отлично, составляем меню для зуконавта по имени {name}. Для выбора блюд, "+
-        f"[жми сюда (ссылка действительна 24 часа)]({web_app_base}{meal_context.link}).",
+        f"<a href=\"{web_app_base}{meal_context.link}\">жми сюда (ссылка действительна 24 часа)</a>.",
         reply_markup=reply_markup
     )
     return ConversationHandler.END
