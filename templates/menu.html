@@ -4,7 +4,7 @@
 		<title>Zouk Non Stop Погружение: Меню</title>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<link rel="stylesheet" href="assets/css/main.css" />
+		<link rel="stylesheet" href="/assets/css/main.css" />
         <style>
             .div_toggler {
                 display: none;
@@ -15,15 +15,14 @@
             .div_toggler:checked+div {
                 display: initial;
             }
-            .prices span:not(#tg_login):after {
+            .prices span:after {
                 content:" ₽";
             }
         </style>
 	</head>
 	<body class="subpage">
-        <form method="post" action="/bot/menu">
-        <div id="main" class="container"
-        >
+        <form method="post" action="./menu">
+        <div id="main" class="container">
             <div class="row 200%"
             onclick='document.querySelector("#summary_price").innerText = (
              parseInt(document.querySelector("#friday_dinner_price").innerText)
@@ -32,14 +31,7 @@
             +parseInt(document.querySelector("#sunday_lunch_price").innerText)
             +parseInt(document.querySelector("#sunday_dinner_price").innerText))'>
                 <div class="4u 12u$(medium) prices">
-                    <span id="tg_login">
-                    <h3>1. Сначала надо залогиниться</h3>
-                    <p>Без логина бот не примет заказ.</p>
                     <input type="hidden" name="meal_context" value="{{meal_context}}">
-                    </span>
-                    <h3>2. Для кого будет еда?</h3>
-                    <p>Введи имя и фамилию. Можно и за своего партнёра заполнить, если он разрешит.</p>
-                    <input type="text" name="name" value=""><br>
                     <h3>3. Выбери день</h3>
                     <h4>Пятница</h4>
                     <div class="row">

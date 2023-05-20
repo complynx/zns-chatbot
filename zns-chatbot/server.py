@@ -104,7 +104,6 @@ class MenuHandler(tornado.web.RequestHandler):
         )
     
     async def post(self):
-        import json
         import csv
         from datetime import datetime
         # Get all the post form data
@@ -116,10 +115,9 @@ class MenuHandler(tornado.web.RequestHandler):
             if len(data[key]) == 1:
                 data[key] = data[key][0]
 
-        meal_id = json.loads(data["meal_context"])
         meal = None
         try:
-            meal = self.app.get_meal_session(meal_id)
+            meal = self.app.get_meal_session(data["meal_context"])
         except KeyError:
             return self.write_error(401)
         
