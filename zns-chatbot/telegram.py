@@ -215,8 +215,8 @@ async def food(update: Update, context: CallbackContext):
     logger.info(f"Received /food command from {update.effective_user}")
     _ = PhotoTask(update.effective_chat, update.effective_user)
     markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
-    await update.message.reply_text(
-        "Окей, я приму заказ на еду. Сначала напиши, для кого будет еда. Напиши настоящие имя и фамилию.",
+    await update.message.reply_markdown(
+        "Окей, я приму заказ на еду. Сначала напиши, для кого будет еда. Напиши полные **имя** и **фамилию** зуконавта.",
         reply_markup=markup
     )
     return NAME
@@ -230,7 +230,7 @@ async def food_for_who(update: Update, context: CallbackContext):
     # f"{web_app_base}/fit_frame?id={task.id.hex}"
     reply_markup = ReplyKeyboardRemove()
     await update.message.reply_markdown(
-        f"Отлично, составляем меню для {name}. Для выбора блюд, "+
+        f"Отлично, составляем меню для зуконавта по имени {name}. Для выбора блюд, "+
         f"[жми сюда (ссылка действительна 24 часа)]({web_app_base}{meal_context.link}).",
         reply_markup=reply_markup
     )
