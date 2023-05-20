@@ -25,7 +25,6 @@ class FitFrameHandler(tornado.web.RequestHandler):
             raise tornado.web.HTTPError(404)
 
 
-
 class PhotoHandler(tornado.web.StaticFileHandler):
     def __init__(self, application: tornado.web.Application, request: HTTPServerRequest, **kwargs: Any) -> None:
         super().__init__(application, request, path="", **kwargs)
@@ -44,25 +43,6 @@ class PhotoHandler(tornado.web.StaticFileHandler):
         if absolute_path == "" or not os.path.isfile(absolute_path):
             raise tornado.web.HTTPError(404)
         return absolute_path
-
-def check_hmac(data, secret_key):
-    import hashlib,hmac
-
-    # Extract the hash
-    tg_hash = data.get('hash')
-    # Make a copy of the data and remove the hash
-    data_without_hash = dict(data)
-    data_without_hash.pop('hash')
-    
-    # Sort the data by keys and serialize it to a check_string
-    check_string = "\n".join(f"{k}={data_without_hash[k]}" for k in sorted(data_without_hash.keys()))
-    
-    # Calculate a new hash using the secret_key and check_string
-    secret_key = hashlib.sha256(secret_key.encode()).digest()
-    new_hash = hmac.new(secret_key, check_string.encode(), digestmod=hashlib.sha256).hexdigest()
-    
-    # Compare the new hash with the received tg_hash
-    return new_hash == tg_hash
 
 def parse_meal_data(meal_dict):
     days = ['friday', 'saturday', 'sunday']
@@ -113,9 +93,15 @@ def parse_meal_data(meal_dict):
     return ret, costs
 
 class MenuHandler(tornado.web.RequestHandler):
-    def initialize(self, token, getbot):
+    def initialize(self, token, app):
         self.token = token
-        self.getbot = getbot
+        self.app = app
+
+    async def get(self):
+        self.render(
+            "menu.html",
+            meal_context=self.get_query_argument("id", "")
+        )
     
     async def post(self):
         import json
@@ -130,8 +116,11 @@ class MenuHandler(tornado.web.RequestHandler):
             if len(data[key]) == 1:
                 data[key] = data[key][0]
 
-        tg_user = json.loads(data["tg_user"])
-        if not check_hmac(tg_user, self.token):
+        meal_id = json.loads(data["meal_context"])
+        meal = None
+        try:
+            meal = self.app.get_meal_session(meal_id)
+        except KeyError:
             return self.write_error(401)
         
         meals, sums = parse_meal_data(data)
@@ -139,11 +128,11 @@ class MenuHandler(tornado.web.RequestHandler):
 
         save = [
             datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
-            tg_user.get("id"),
-            tg_user.get("first_name"),
-            tg_user.get("last_name"),
-            tg_user.get("username"),
-            data.get("name")
+            meal.user.id,
+            meal.user.first_name,
+            meal.user.last_name,
+            meal.user.username,
+            meal.for_who
         ]
         save.extend(meals)
         save.append(total)
@@ -152,21 +141,22 @@ class MenuHandler(tornado.web.RequestHandler):
             writer = csv.writer(f)
             writer.writerow(save)
 
-        bot = self.getbot()
-        await bot.send_message(chat_id=379278985, text=f"пользователь {tg_user} выбрал {meals} для {data.get('name')}")
+        bot = self.app.bot
+        await bot.send_message(chat_id=379278985, text=f"пользователь {meal.user} выбрал {meals} для {meal.for_who}")
         # If you want to send the data back as a response in pretty format
         self.write(f"Ваш выбор был успешно сохранён!<br>Можете уже перечислить {total} рублей и прислать подтверждение.")
 
 
 
-async def create_server(config: Config, getbot):
+async def create_server(config: Config, base_app):
     tornado.platform.asyncio.AsyncIOMainLoop().install()
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler),
-        (r"/menu", MenuHandler, {"token": config.telegram_token, "getbot": getbot}),
+        (r"/menu", MenuHandler, {"token": config.telegram_token, "app": base_app}),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
     ], template_path="templates/")
     app.listen(config.server_port)
+    base_app.server = app
 
     return app

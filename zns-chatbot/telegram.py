@@ -15,11 +15,14 @@ from telegram.ext import (
     Application,
 )
 import logging
+
+from .food import MealContext
 from .photo_task import get_by_user, PhotoTask
 
 logger = logging.getLogger(__name__)
 
 PHOTO, CROPPER, UPSCALE, FINISH = range(4)
+NAME = 1
 
 web_app_base = ""
 cover = "static/cover.jpg"
@@ -194,7 +197,7 @@ async def photo_doc(update: Update, context: CallbackContext):
     await document_file.download_to_drive(file_path)
     return await photo_stage2(update, context, file_path, file_ext)
 
-async def cancel(update: Update, context: CallbackContext):
+async def cancel_avatar(update: Update, context: CallbackContext):
     """Handle the cancel command during the avatar submission."""
     logger.info(f"Avatar submission for {update.effective_user} canceled")
     try:
@@ -207,6 +210,39 @@ async def cancel(update: Update, context: CallbackContext):
     await update.message.reply_text("Обработка фотографии отменена.", reply_markup=reply_markup)
     return ConversationHandler.END
 
+async def food(update: Update, context: CallbackContext):
+    """Handle the /food command, requesting a photo."""
+    logger.info(f"Received /food command from {update.effective_user}")
+    _ = PhotoTask(update.effective_chat, update.effective_user)
+    markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
+    await update.message.reply_text(
+        "Окей, я приму заказ на еду. Сначала напиши, для кого будет еда. Напиши настоящие имя и фамилию.",
+        reply_markup=markup
+    )
+    return NAME
+
+async def food_for_who(update: Update, context: CallbackContext):
+    """Handle the cancel command during the avatar submission."""
+    name = update.message.text
+    logger.info(f"Received meal acceptor name from {update.effective_user}: {name}")
+    meal_context = MealContext(update.effective_user, name)
+    context.application.base_app.add_meal_session(meal_context)
+    # f"{web_app_base}/fit_frame?id={task.id.hex}"
+    reply_markup = ReplyKeyboardRemove()
+    await update.message.reply_markdown(
+        f"Отлично, составляем меню для {name}. Для выбора блюд, "+
+        f"[жми сюда (ссылка действительна 24 часа)]({web_app_base}{meal_context.link}).",
+        reply_markup=reply_markup
+    )
+    return ConversationHandler.END
+
+async def food_cancel(update: Update, context: CallbackContext):
+    """Handle the cancel command during the avatar submission."""
+    logger.info(f"Food conversation for {update.effective_user} canceled")
+    reply_markup = ReplyKeyboardRemove()
+    await update.message.reply_text("Составление меню отменено.", reply_markup=reply_markup)
+    return ConversationHandler.END
+
 # async def log_msg(update: Update, context: CallbackContext):
 #     logger.info(f"got message from user {update.effective_user}: {update.message}")
 
@@ -215,9 +251,10 @@ async def error_handler(update, context):
 
 
 @asynccontextmanager
-async def create_telegram_bot(config) -> Application:
+async def create_telegram_bot(config, app) -> Application:
     global web_app_base
     application = ApplicationBuilder().token(token=config.telegram_token).build()
+    application.base_app = app
 
     web_app_base = config.server_base
     # Conversation handler for /аватар command
@@ -232,27 +269,45 @@ async def create_telegram_bot(config) -> Application:
                 MessageHandler(filters.StatusUpdate.WEB_APP_DATA, image_crop_matrix),
                 MessageHandler(filters.Regex(re.compile("^(Так сойдёт)$", re.I)), autocrop),
             ],
-            FINISH: [MessageHandler(filters.Regex(".*"), cancel)],
+            FINISH: [MessageHandler(filters.Regex(".*"), cancel_avatar)],
         },
         fallbacks=[
-            CommandHandler("cancel", cancel),
+            CommandHandler("cancel", cancel_avatar),
             CommandHandler("avatar", reavatar),
-            MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), cancel)
+            MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), cancel_avatar)
+        ],
+    )
+    food_handler = ConversationHandler(
+        entry_points=[CommandHandler("food", food)],
+        states={
+            NAME: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND & ~filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)),
+                    food_for_who
+                )
+            ],
+        },
+        fallbacks=[
+            CommandHandler("cancel", food_cancel),
+            MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), food_cancel)
         ],
     )
 
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(food_handler)
     application.add_handler(ava_handler)
     # application.add_handler(MessageHandler(filters.TEXT, log_msg))
     application.add_error_handler(error_handler)
-
+    
     try:
         await application.initialize()
         await application.start()
         await application.updater.start_polling()
 
+        app.bot = application
         yield application
     finally:
+        app.bot = None
         await application.stop()
         await application.updater.stop()
         await application.shutdown()
