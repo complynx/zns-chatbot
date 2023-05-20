@@ -140,10 +140,9 @@ class MenuHandler(tornado.web.RequestHandler):
             writer.writerow(save)
 
         bot = self.app.bot
-        await bot.send_message(chat_id=379278985, text=f"пользователь {meal.user} выбрал {meals} для {meal.for_who}")
+        await bot.bot.send_message(chat_id=379278985, text=f"пользователь {meal.user} выбрал {meals} для {meal.for_who}")
         # If you want to send the data back as a response in pretty format
         self.write(f"Ваш выбор был успешно сохранён!<br>Можете уже перечислить {total} рублей и прислать подтверждение.")
-
 
 
 async def create_server(config: Config, base_app):
