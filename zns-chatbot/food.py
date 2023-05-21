@@ -19,8 +19,9 @@ class AsyncMealContextConstructor(object):
                 async with AIOMutableFileLock(f):
                     logger.info(f"from_file locked: {self.path}")
                     data = BSON(await f.read()).decode()
-                    self.context = await self.meal_cls(**data, filename=self.path).__aenter__()
-                    return self.context
+                    
+                    self.context = self.meal_cls(**data, filename=self.path)
+            return await self.context.__aenter__()
         finally:
             logger.info(f"from_file unlocked if was locked: {self.path}")
     async def __aexit__(self):
