@@ -13,7 +13,7 @@ class AsyncMealContextConstructor(object):
         self.path = path
         self.meal_cls = meal_cls
     async def __aenter__(self):
-        logger.info(f"from_file reading: {self.path}")
+        logger.info(f"from_file trying read: {self.path}")
         try:
             async with aiofiles.open(self.path, 'rb') as f:
                 async with AIOMutableFileLock(f):
@@ -24,9 +24,8 @@ class AsyncMealContextConstructor(object):
             return await self.context.__aenter__()
         finally:
             logger.info(f"from_file unlocked if was locked: {self.path}")
-    async def __aexit__(self):
-        logger.info(f"contextual __aexit__ was called")
-        return await self.context.__aexit__()
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        return await self.context.__aexit__(exc_type, exc_value, traceback)
 
 class MealContext(object):
     tg_user_id = None
