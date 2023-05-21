@@ -18,12 +18,13 @@ class AsyncMealContextConstructor(object):
             async with aiofiles.open(self.path, 'rb') as f:
                 async with AIOMutableFileLock(f):
                     logger.info(f"from_file locked: {self.path}")
-                    data = BSON(f.read()).decode()
+                    data = BSON(await f.read()).decode()
                     self.context = await self.meal_cls(**data, filename=self.path).__aenter__()
                     return self.context
         finally:
             logger.info(f"from_file unlocked if was locked: {self.path}")
     async def __aexit__(self):
+        logger.info(f"contextual __aexit__ was called")
         return await self.context.__aexit__()
 
 class MealContext(object):
@@ -70,7 +71,7 @@ class MealContext(object):
     async def __aenter__(self):
         logger.info(f"aenter locking id: {self.id}")
         if self._file is None:
-            self._file = open(self.filename, "wb+")
+            self._file = await aiofiles.open(self.filename, "wb+")
         if self._lock is None:
             self._lock = AIOMutableFileLock(self._file)
         await self._lock.acquire()
@@ -78,15 +79,15 @@ class MealContext(object):
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
-        self.save_to_file()
-        self._lock.close()
-        self._file.close()
+        await self.save_to_file()
+        await self._lock.close()
+        await self._file.close()
         logger.info(f"aexit unlocked id: {self.id}")
 
-    def save_to_file(self):
+    async def save_to_file(self):
         logger.info(f"saving to file {self.filename}, id: {self.id}")
         data = {key: value for key, value in self.__dict__.items() if key not in self._non_cacheable}
-        self._file.write(BSON.encode(data))
+        await self._file.write(BSON.encode(data))
     
     @classmethod
     def from_file(cls, path):
