@@ -32,11 +32,16 @@
             +parseInt(document.querySelector("#sunday_dinner_price").innerText))'>
                 <div class="4u 12u$(medium) prices">
                     <input type="hidden" name="meal_context" value="{{meal_context}}">
-                    <h3>3. Выбери день</h3>
+                    <h3 id="select_day">1. Выбери день</h3>
+                    <script>
+                        function select_day(){
+                            document.getElementById("select_restaurant").scrollIntoView({ behavior: 'smooth', block: "start", inline: "nearest"});
+                        }
+                    </script>
                     <h4>Пятница</h4>
                     <div class="row">
                         <div class="4u 12u$(small)">
-                            <label class="button small alt" for="friday_dinner_toggler">Ужин</label>
+                            <label class="button small alt" for="friday_dinner_toggler" onclick="select_day()">Ужин</label>
                         </div>
                         <div class="8u 12u$(small)">
                             <span id="friday_dinner_price">0</span>
@@ -45,7 +50,7 @@
                     <h4>Суббота</h4>
                     <div class="row">
                         <div class="4u 12u$(small)">
-                            <label class="button small alt" for="saturday_lunch_toggler">Обед</label>
+                            <label class="button small alt" for="saturday_lunch_toggler" onclick="select_day()">Обед</label>
                         </div>
                         <div class="8u 12u$(small)">
                             <span id="saturday_lunch_price">0</span>
@@ -53,7 +58,7 @@
                     </div>
                     <div class="row">
                         <div class="4u 12u$(small)">
-                            <label class="button small alt" for="saturday_dinner_toggler">Ужин</label>
+                            <label class="button small alt" for="saturday_dinner_toggler" onclick="select_day()">Ужин</label>
                         </div>
                         <div class="8u 12u$(small)">
                             <span id="saturday_dinner_price">0</span>
@@ -62,7 +67,7 @@
                     <h4>Воскресенье</h4>
                     <div class="row">
                         <div class="4u 12u$(small)">
-                            <label class="button small alt" for="sunday_lunch_toggler">Обед</label>
+                            <label class="button small alt" for="sunday_lunch_toggler" onclick="select_day()">Обед</label>
                         </div>
                         <div class="8u 12u$(small)">
                             <span id="sunday_lunch_price">0</span>
@@ -70,7 +75,7 @@
                     </div>
                     <div class="row">
                         <div class="4u 12u$(small)">
-                            <label class="button small alt" for="sunday_dinner_toggler">Ужин</label>
+                            <label class="button small alt" for="sunday_dinner_toggler" onclick="select_day()">Ужин</label>
                         </div>
                         <div class="8u 12u$(small)">
                             <span id="sunday_dinner_price">0</span>
@@ -182,11 +187,11 @@ function submit_onclick(ev) {
                 </div>
                 <div class="8u 12u$(medium)">
                     <h2 id="select_restaurant">
-                        4. Выбери ресторан
+                        2. Выбери ресторан
                     </h2>
                     <input id="friday_dinner_toggler" type="radio" name="meal_time" value="friday_dinner_toggler" class="div_toggler">
                     <div id="friday_dinner_container">
-                        <h3>Пятница, ужин</h3>
+                        <h3 class="meal_name">Пятница, ужин (21:00)</h3>
                         <div class="row">
                             <div class="3u 12u$(small)">
                                 <label class="button small fit alt" for="friday_dinner_restaurant1_toggler">Вареничная №1</label>
@@ -207,7 +212,7 @@ function submit_onclick(ev) {
                                 Вареничная №1
                             </h3>
                             <h2>
-                                5. Выбери еду
+                                3. Выбери еду
                             </h2>
                             <p>Это комплексные обеды. Есть три опции:</p>
                             <ol>
@@ -215,7 +220,7 @@ function submit_onclick(ev) {
                                 <li>основное блюдо и суп</li>
                                 <li>основное блюдо и салат</li>
                             </ol>
-                            <p>Плюс опция добавить напиток без изменения цены, хотя он уже к моменту получения остынет...</p>
+                            <p>Напиток включен в стоимость, хотя он уже к моменту получения остынет...</p>
                             <h3>
                                 Горячее
                             </h3>
@@ -262,7 +267,7 @@ function submit_onclick(ev) {
                                 Хачапури и Вино
                             </h3>
                             <h2>
-                                5. Выбери еду
+                                3. Выбери еду
                             </h2>
                             <p>Это комплексные обеды, поэтому выбираем из каждой категории что-нибудь.</p>
                             <h3>
@@ -296,7 +301,7 @@ function submit_onclick(ev) {
                                 Гастробар Beer Side
                             </h3>
                             <h2>
-                                5. Выбери еду
+                                3. Выбери еду
                             </h2>
                             <p>Это комплексные обеды. Есть три опции:</p>
                             <ol>
@@ -304,7 +309,7 @@ function submit_onclick(ev) {
                                 <li>выбрать три блюда</li>
                                 <li>выбрать одно блюдо по цене двух</li>
                             </ol>
-                            <p>Плюс опция добавить напиток без изменения цены, хотя он уже к моменту получения может остыть...</p>
+                            <p>Напиток включен в стоимость, хотя он уже к моменту получения может остыть...</p>
                             <h3>
                                 Горячее
                             </h3>
@@ -347,7 +352,7 @@ function submit_onclick(ev) {
                         </div>
                         <input onclick='document.querySelector("#friday_dinner_price").innerText="0"' id="friday_dinner_restaurant_none_toggler" checked value="friday_dinner_restaurant_none_toggler" type="radio" name="friday_dinner_restaurant_toggler" class="div_toggler">
                         <div>
-                            <h3>Да, можно просто поесть ещё где-то.</h3>
+                            <h3>Ресторан и еда не выбраны для текущего приёма пищи.</h3>
                         </div>
                     </div>
                     <script>
@@ -357,18 +362,26 @@ function submit_onclick(ev) {
                         let toggler = document.getElementById("friday_dinner_toggler");
                         let container = document.getElementById("friday_dinner_container");
                         let other_days = ["saturday_lunch", "saturday_dinner", "sunday_lunch", "sunday_dinner"];
+                        let other_days_ru = {
+                            "saturday_lunch":"Суббота, обед (16:00)",
+                            "saturday_dinner":"Суббота, ужин (21:00)",
+                            "sunday_lunch":"Воскресенье, обед (16:00)",
+                            "sunday_dinner":"Воскресенье, ужин (21:00)"
+                        };
                         let creator = document.createElement("DIV");
                         for(let meal of other_days) {
                             let toggler_day = toggler.outerHTML.replaceAll("friday_dinner", meal);
                             let container_day = container.outerHTML.replaceAll("friday_dinner", meal);
                             creator.innerHTML = toggler_day+container_day;
+                            creator.querySelector(".meal_name").innerText = other_days_ru[meal];
                             ins(creator.firstElementChild);
                             ins(creator.firstElementChild);
                         }
                     </script>
                     <h2>
-                        6. Повтори для каждого дня
+                        4. Повтори для каждого дня
                     </h2>
+                    <a href="#select_day" class="button small icon fa-arrow-up">к выбору дня</a>
                 </div>
             </div>
         </div>

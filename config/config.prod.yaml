@@ -1,5 +1,7 @@
 telegram:
   token: "YOUR_TOKEN"
+  admins:
+    - -1
 
 server:
   base: "https://zouknonstop.com/bot"

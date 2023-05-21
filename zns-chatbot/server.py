@@ -5,6 +5,7 @@ import tornado.platform.asyncio
 import os
 from .config import Config
 from .photo_task import get_by_uuid, real_frame_size
+from .food import MealContext
 import logging
 
 logger = logging.getLogger(__name__)
@@ -47,11 +48,12 @@ class PhotoHandler(tornado.web.StaticFileHandler):
 def parse_meal_data(meal_dict):
     days = ['friday', 'saturday', 'sunday']
     meals = ['lunch', 'dinner']
-    restaurants_real = ['B№1','ХиВ','ГBS']
+    restaurants_real = ['Bареничная №1','Хачапури и Вино','Гастробар Beer Side']
     restaurants_cost2 = [380, 440, 500]
     restaurants_cost3 = [430, 440, 600]
     
     ret = []
+    ret_objs = []
     costs = []
     for day in days:
         for meal in meals:
@@ -63,7 +65,13 @@ def parse_meal_data(meal_dict):
                 except ValueError:
                     pass
 
+                ret_obj = {
+                    "day": day,
+                    "meal": meal,
+                }
                 if restaurant_num == "_none":
+                    ret_obj["choice"] = "Не буду есть."
+                    ret_obj["cost"] = 0
                     ret.append("нет")
                     ret.append("нет")
                     ret.append(0)
@@ -85,12 +93,17 @@ def parse_meal_data(meal_dict):
                     items = [main, soup, salad, drink]
                     filtered_items = list(filter(lambda x: x != '', items))
                     result = "\n".join(filtered_items)
+                    
+                    ret_obj["choice"] = result
+                    ret_obj["restaurant"] = restaurants_real[restaurant_num-1]
+                    ret_obj["cost"] = cost
 
                     ret.append(restaurants_real[restaurant_num-1])
                     ret.append(result)
                     ret.append(cost)
                     costs.append(cost)
-    return ret, costs
+                ret_objs.append(ret_obj)
+    return ret, costs, ret_objs
 
 class MenuHandler(tornado.web.RequestHandler):
     def initialize(self, token, app):
@@ -98,14 +111,22 @@ class MenuHandler(tornado.web.RequestHandler):
         self.app = app
 
     async def get(self):
-        self.render(
-            "menu.html",
-            meal_context=self.get_query_argument("id", "")
-        )
+        meal_id=self.get_query_argument("id", "")
+        try:
+            with MealContext.from_id(meal_id) as meal_context:
+                self.app.get_meal_session(meal_context)
+            self.render(
+                "menu.html",
+                meal_context=meal_id
+            )
+        except FileNotFoundError:
+            return self.write_error(401)
     
     async def post(self):
         import csv
         from datetime import datetime
+        from telegram.constants import ParseMode
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         # Get all the post form data
         data = self.request.arguments
         
@@ -117,32 +138,64 @@ class MenuHandler(tornado.web.RequestHandler):
 
         meal = None
         try:
-            meal = self.app.get_meal_session(data["meal_context"])
-        except KeyError:
+            with MealContext.from_id(data["meal_context"]) as meal:
+                meals, sums, objs = parse_meal_data(data)
+                total = sum(sums)
+                meal.choice = objs
+                meal.total = total
+                meal.choice_date = datetime.now()
+
+                save = [
+                    datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
+                    meal.tg_user_id,
+                    meal.tg_user_first_name,
+                    meal.tg_user_last_name,
+                    meal.tg_username,
+                    meal.for_who
+                ]
+                save.extend(meals)
+                save.append(total)
+
+                with open("/menu/menu.data", 'a') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(save)
+
+                bot = self.app.bot
+
+                formatted_choice = ""
+                for choice_dict in meal.choice:
+                    formatted_choice += f"<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>{choice_dict['day']}, {choice_dict['meal']}</b> — "
+                    if choice_dict["cost"] == 0:
+                        formatted_choice += "не буду есть."
+                    else:
+                        formatted_choice += f"за <b>{choice_dict['cost']}</b> ₽ из ресторана <i>" + choice_dict["restaurant"] + "</i><br>"
+                        formatted_choice += choice_dict["choice"].replace("\n", "<br>")
+                    formatted_choice += "<br>"
+                formatted_choice += "<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"+ \
+                                    f"Итого, общая сумма: <b>{meal.total}</b> ₽."
+                
+                keyboard = [
+                    [
+                        InlineKeyboardButton("Оплачено", callback_data=f"food_choice_reply_payment|{meal.id}"),
+                        InlineKeyboardButton("Отменить", callback_data=f"food_choice_reply_cancel|{meal.id}"),
+                    ]
+                ]
+                await bot.bot.send_message(
+                    chat_id=meal.tg_user_id,
+                    text=
+                    "Я получила твой заказ для зуконавта по имени <i>{meal.for_who}</i>.<br>"+
+                    "Вот его содержание:<br>"+formatted_choice+"<br><br>"
+                    "<i>Следующий шаг</i> — оплата. Для оплаты, нужно сделать перевод"+
+                    " на Сбер по номеру<br><b>+79175295923</b><br>"+
+                    "Получатель: <i>Ушакова Дарья Евгеньевна</i>.<br>"+
+                    "Когда переведёшь, нужно будет прислать подтверждение.",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                )
+                # If you want to send the data back as a response in pretty format
+                self.write(f"Ваш выбор был успешно сохранён!<br>Вкладку или окно можно закрыть.")
+        except FileNotFoundError:
             return self.write_error(401)
-        
-        meals, sums = parse_meal_data(data)
-        total = sum(sums)
-
-        save = [
-            datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
-            meal.user.id,
-            meal.user.first_name,
-            meal.user.last_name,
-            meal.user.username,
-            meal.for_who
-        ]
-        save.extend(meals)
-        save.append(total)
-
-        with open("/menu/menu.data", 'a') as f:
-            writer = csv.writer(f)
-            writer.writerow(save)
-
-        bot = self.app.bot
-        await bot.bot.send_message(chat_id=379278985, text=f"пользователь {meal.user} выбрал {meals} для {meal.for_who}")
-        # If you want to send the data back as a response in pretty format
-        self.write(f"Ваш выбор был успешно сохранён!<br>Можете уже перечислить {total} рублей и прислать подтверждение.")
 
 
 async def create_server(config: Config, base_app):

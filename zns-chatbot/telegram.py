@@ -4,7 +4,7 @@ import re
 import os
 import mimetypes
 import tempfile
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, WebAppInfo
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, WebAppInfo
 from telegram.ext import (
     CallbackContext,
     ApplicationBuilder,
@@ -13,6 +13,7 @@ from telegram.ext import (
     ConversationHandler,
     filters,
     Application,
+    CallbackQueryHandler,
 )
 import logging
 
@@ -22,7 +23,7 @@ from .photo_task import get_by_user, PhotoTask
 logger = logging.getLogger(__name__)
 
 PHOTO, CROPPER, UPSCALE, FINISH = range(4)
-NAME = 1
+NAME, WAITING_PAYMENT = 1
 
 web_app_base = ""
 cover = "static/cover.jpg"
@@ -226,15 +227,20 @@ async def food_for_who(update: Update, context: CallbackContext):
     """Handle the cancel command during the avatar submission."""
     name = update.message.text
     logger.info(f"Received meal acceptor name from {update.effective_user}: {name}")
-    meal_context = MealContext(update.effective_user, name)
-    context.application.base_app.add_meal_session(meal_context)
-    # f"{web_app_base}/fit_frame?id={task.id.hex}"
-    reply_markup = ReplyKeyboardRemove()
-    await update.message.reply_html(
-        f"Отлично, составляем меню для зуконавта по имени {name}. Для выбора блюд, "+
-        f"<a href=\"{web_app_base}{meal_context.link}\">жми сюда (ссылка действительна 24 часа)</a>.",
-        reply_markup=reply_markup
-    )
+    with MealContext(
+        tg_user_id=update.effective_user.id,
+        tg_username=update.effective_user.username,
+        tg_user_first_name=update.effective_user.first_name,
+        tg_user_last_name=update.effective_user.last_name,
+        for_who=name,
+    ) as meal_context:
+        # f"{web_app_base}/fit_frame?id={task.id.hex}"
+        reply_markup = ReplyKeyboardRemove()
+        await update.message.reply_html(
+            f"Отлично, составляем меню для зуконавта по имени {name}. Для выбора блюд, "+
+            f"<a href=\"{web_app_base}{meal_context.link}\">жми сюда (ссылка действительна 24 часа)</a>.",
+            reply_markup=reply_markup
+        )
     return ConversationHandler.END
 
 async def food_cancel(update: Update, context: CallbackContext):
@@ -242,6 +248,37 @@ async def food_cancel(update: Update, context: CallbackContext):
     logger.info(f"Food conversation for {update.effective_user} canceled")
     reply_markup = ReplyKeyboardRemove()
     await update.message.reply_text("Составление меню отменено.", reply_markup=reply_markup)
+    return ConversationHandler.END
+
+async def food_choice_reply_payment(update: Update, context) -> int:
+    """Handle payment answer after menu received"""
+    # Get CallbackQuery from Update
+    query = update.callback_query
+    logger.info(f"Received food_choice_reply_payment from {update.effective_user}, query: {query}")
+    # CallbackQueries need to be answered, even if no notification to the user is needed
+    # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+    await query.answer()
+
+    # Instead of sending a new message, edit the message that
+    # originated the CallbackQuery. This gives the feeling of an
+    # interactive menu.
+    await query.edit_message_text(text="Пришли подтверждение в виде картинки или файла.", reply_markup=ReplyKeyboardRemove())
+    # return WAITING_PAYMENT
+    return ConversationHandler.END
+
+async def food_choice_reply_cancel(update: Update, context) -> int:
+    """Handle payment answer after menu received"""
+    # Get CallbackQuery from Update
+    query = update.callback_query
+    logger.info(f"Received food_choice_reply_payment from {update.effective_user}, query: {query}")
+    # CallbackQueries need to be answered, even if no notification to the user is needed
+    # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+    await query.answer()
+
+    # Instead of sending a new message, edit the message that
+    # originated the CallbackQuery. This gives the feeling of an
+    # interactive menu.
+    await query.edit_message_text(text="Я отменила этот выбор.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 # async def log_msg(update: Update, context: CallbackContext):
@@ -293,10 +330,25 @@ async def create_telegram_bot(config, app) -> Application:
             MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), food_cancel)
         ],
     )
+    food_stage2_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(food_choice_reply_payment, pattern="^food_choice_reply_payment|[a-zA-Z_-0-9]$"),
+            CallbackQueryHandler(food_choice_reply_cancel, pattern="^food_choice_reply_cancel|[a-zA-Z_-0-9]$"),
+        ],
+        states={
+            WAITING_PAYMENT: [],
+        },
+        fallbacks=[
+            # CallbackQueryHandler(food_choice_reply_cancel, pattern="^food_choice_reply_cancel|[a-zA-Z_-0-9]$"),
+            # CommandHandler("cancel", food_cancel),
+            # MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), food_cancel)
+        ],
+    )
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(food_handler)
     application.add_handler(ava_handler)
+    application.add_handler(food_stage2_handler)
     # application.add_handler(MessageHandler(filters.TEXT, log_msg))
     application.add_error_handler(error_handler)
     

@@ -7,6 +7,10 @@ class Config:
             self._config_data = yaml.safe_load(config_file)
 
     @property
+    def telegram_admins(self):
+        return self._config_data["telegram"]["admins"]
+
+    @property
     def telegram_token(self)->str:
         return os.environ.get("TELEGRAM_TOKEN", self._config_data["telegram"]["token"])
 
