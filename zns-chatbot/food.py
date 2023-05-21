@@ -21,8 +21,8 @@ class MealContext(object):
 
     _non_cacheable = {
         "_lock",
+        "_file",
         "filename",
-        "_file_object",
         "_non_cacheable"
     }
 
