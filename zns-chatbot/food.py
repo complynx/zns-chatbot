@@ -49,17 +49,20 @@ class MealContext(object):
         return f"/menu/{id}.bson"
 
     async def __aenter__(self):
+        logger.info(f"aenter locking id: {self.id}")
         if self._file is None:
-            self._file = open(self.filename, "rb+")
+            self._file = open(self.filename, "wb+")
         if self._lock is None:
             self._lock = AIOMutableFileLock(self._file)
         await self._lock.acquire()
+        logger.info(f"aenter locked id: {self.id}")
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
         self.save_to_file()
         self._lock.close()
         self._file.close()
+        logger.info(f"aexit unlocked id: {self.id}")
 
     def save_to_file(self):
         logger.info(f"saving to file {self.filename}, id: {self.id}")
@@ -68,10 +71,15 @@ class MealContext(object):
     
     @classmethod
     async def from_file(cls, path):
-        async with aiofiles.open(path, 'rb') as f:
-            async with AIOMutableFileLock(f):
-                data = BSON(f.read()).decode()
-                return cls(**data, filename=path)
+        logger.info(f"from_file reading: {path}")
+        try:
+            async with aiofiles.open(path, 'rb') as f:
+                async with AIOMutableFileLock(f):
+                    logger.info(f"from_file locked: {path}")
+                    data = BSON(f.read()).decode()
+                    return cls(**data, filename=path)
+        finally:
+            logger.info(f"from_file unlocked if was locked: {path}")
     
     @classmethod
     def from_id(cls, id):
