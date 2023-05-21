@@ -227,7 +227,7 @@ async def food_for_who(update: Update, context: CallbackContext):
     """Handle the cancel command during the avatar submission."""
     name = update.message.text
     logger.info(f"Received meal acceptor name from {update.effective_user}: {name}")
-    with MealContext(
+    async with MealContext(
         tg_user_id=update.effective_user.id,
         tg_username=update.effective_user.username,
         tg_user_first_name=update.effective_user.first_name,

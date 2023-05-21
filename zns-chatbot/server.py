@@ -113,12 +113,11 @@ class MenuHandler(tornado.web.RequestHandler):
     async def get(self):
         meal_id=self.get_query_argument("id", "")
         try:
-            with MealContext.from_id(meal_id) as meal_context:
-                self.app.get_meal_session(meal_context)
-            self.render(
-                "menu.html",
-                meal_context=meal_id
-            )
+            async with MealContext.from_id(meal_id) as meal_context:
+                self.render(
+                    "menu.html",
+                    meal_context=meal_context.id
+                )
         except FileNotFoundError:
             return self.write_error(401)
     
@@ -138,7 +137,7 @@ class MenuHandler(tornado.web.RequestHandler):
 
         meal = None
         try:
-            with MealContext.from_id(data["meal_context"]) as meal:
+            async with MealContext.from_id(data["meal_context"]) as meal:
                 meals, sums, objs = parse_meal_data(data)
                 total = sum(sums)
                 meal.choice = objs
