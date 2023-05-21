@@ -23,7 +23,7 @@ from .photo_task import get_by_user, PhotoTask
 logger = logging.getLogger(__name__)
 
 PHOTO, CROPPER, UPSCALE, FINISH = range(4)
-NAME, WAITING_PAYMENT = 1
+NAME, WAITING_PAYMENT = range(2)
 
 web_app_base = ""
 cover = "static/cover.jpg"
