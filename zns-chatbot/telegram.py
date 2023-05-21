@@ -332,8 +332,8 @@ async def create_telegram_bot(config, app) -> Application:
     )
     food_stage2_handler = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(food_choice_reply_payment, pattern="^food_choice_reply_payment|[a-zA-Z_-0-9]$"),
-            CallbackQueryHandler(food_choice_reply_cancel, pattern="^food_choice_reply_cancel|[a-zA-Z_-0-9]$"),
+            CallbackQueryHandler(food_choice_reply_payment, pattern="^food_choice_reply_payment|[a-zA-Z_\\-0-9]$"),
+            CallbackQueryHandler(food_choice_reply_cancel, pattern="^food_choice_reply_cancel|[a-zA-Z_\\-0-9]$"),
         ],
         states={
             WAITING_PAYMENT: [],
