@@ -7,6 +7,25 @@ from aiofilelock import AIOMutableFileLock
 
 logger = logging.getLogger(__name__)
 
+
+class AsyncMealContextConstructor(object):
+    def __init__(self, meal_cls, path) -> None:
+        self.path = path
+        self.meal_cls = meal_cls
+    async def __aenter__(self):
+        logger.info(f"from_file reading: {self.path}")
+        try:
+            async with aiofiles.open(self.path, 'rb') as f:
+                async with AIOMutableFileLock(f):
+                    logger.info(f"from_file locked: {self.path}")
+                    data = BSON(f.read()).decode()
+                    self.context = await self.meal_cls(**data, filename=self.path).__aenter__()
+                    return self.context
+        finally:
+            logger.info(f"from_file unlocked if was locked: {self.path}")
+    async def __aexit__(self):
+        return await self.context.__aexit__()
+
 class MealContext(object):
     tg_user_id = None
     tg_user_first_name = None
@@ -70,16 +89,8 @@ class MealContext(object):
         self._file.write(BSON.encode(data))
     
     @classmethod
-    async def from_file(cls, path):
-        logger.info(f"from_file reading: {path}")
-        try:
-            async with aiofiles.open(path, 'rb') as f:
-                async with AIOMutableFileLock(f):
-                    logger.info(f"from_file locked: {path}")
-                    data = BSON(f.read()).decode()
-                    return cls(**data, filename=path)
-        finally:
-            logger.info(f"from_file unlocked if was locked: {path}")
+    def from_file(cls, path):
+        return AsyncMealContextConstructor(cls, path)
     
     @classmethod
     def from_id(cls, id):
