@@ -478,6 +478,7 @@ async def food_admin_get_csv(update: Update, context: CallbackContext):
         caption="Вот обещанный файлик CSV",
         filename="menu.csv"
     )
+    os.remove(filename)
 
 # async def log_msg(update: Update, context: CallbackContext):
 #     logger.info(f"got message from user {update.effective_user}: {update.message}")
