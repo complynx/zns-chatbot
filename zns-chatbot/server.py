@@ -138,7 +138,7 @@ class MenuHandler(tornado.web.RequestHandler):
         meal = None
         try:
             async with MealContext.from_id(data["meal_context"]) as meal:
-                cancelled = data.get("cancelled", '') == ''
+                cancelled = (data.get("cancelled", '') == '')
                 meals, sums, objs = parse_meal_data(data)
                 total = sum(sums)
                 meal.choice = objs
