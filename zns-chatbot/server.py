@@ -115,7 +115,6 @@ class MenuHandler(tornado.web.RequestHandler):
             return self.write_error(401)
     
     async def post(self):
-        import csv
         from datetime import datetime
         from telegram.constants import ParseMode
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup

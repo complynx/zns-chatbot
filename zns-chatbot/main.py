@@ -4,9 +4,6 @@ from .config import Config
 from .telegram_bot import create_telegram_bot
 from .server import create_server
 from .photo_task import init_photo_tasker
-from .food import MealContext
-import threading
-import time
 
 cfg = Config()
 
