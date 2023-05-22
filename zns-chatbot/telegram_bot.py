@@ -428,10 +428,10 @@ async def food_choice_payment_stage2(update: Update, context: CallbackContext, r
         reply_markup=ReplyKeyboardRemove()
     )
     
-    proof_file_name = os.path.splitext(meal_context.filename)[0] + ".proof" + os.path.splitext(received_file)[1]
     id = context.user_data["food_choice_id"]
     del context.user_data["food_choice_id"]
     async with MealContext.from_id(id) as meal_context:
+        proof_file_name = os.path.splitext(meal_context.filename)[0] + ".proof" + os.path.splitext(received_file)[1]
         shutil.move(received_file, proof_file_name)
         meal_context.proof_file = proof_file_name
         meal_context.proof_received = datetime.datetime.now()
