@@ -190,32 +190,39 @@ def get_csv(csv_filename):
                         logger.info(f"unlocked {file}")
                 
                 arr = [
-                    data["id"],
-                    data["created"],
-                    data["tg_user_id"],
-                    data["tg_username"],
-                    data["tg_user_first_name"],
-                    data["tg_user_last_name"],
-                    data["for_who"],
+                    data.get("id",""),
+                    data.get("created",""),
+                    data.get("tg_user_id",""),
+                    data.get("tg_username",""),
+                    data.get("tg_user_first_name",""),
+                    data.get("tg_user_last_name",""),
+                    data.get("for_who",""),
                 ]
 
-                for choice_dict in data["choice"]:
-                    if choice_dict["cost"]>0:
-                        arr.append(choice_dict["restaurant"])
-                        arr.append(choice_dict["choice"])
-                        arr.append(choice_dict["cost"])
-                    else:
-                        arr.append("нет")
-                        arr.append(choice_dict["choice"])
-                        arr.append(choice_dict["cost"])
+                if "choice" in data and isinstance(data["choice"], dict):
+                    for choice_dict in data["choice"]:
+                        if choice_dict["cost"]>0:
+                            arr.append(choice_dict["restaurant"])
+                            arr.append(choice_dict["choice"])
+                            arr.append(choice_dict["cost"])
+                        else:
+                            arr.append("нет")
+                            arr.append(choice_dict["choice"])
+                            arr.append(choice_dict["cost"])
+                else:
+                    for _ in range(15):
+                        arr.append("")
+
+                def get_date(data, name):
+                    return data[name].strftime("%m/%d/%Y %H:%M:%S") if name in data and isinstance(data[name], datetime) else ""
                 
                 arr.extend([
-                    data["total"],
-                    data["choice_date"].strftime("%m/%d/%Y %H:%M:%S") if isinstance(data["choice_date"], datetime) else "",
-                    data["marked_payed"].strftime("%m/%d/%Y %H:%M:%S") if isinstance(data["marked_payed"], datetime) else "",
-                    data["proof_received"].strftime("%m/%d/%Y %H:%M:%S") if isinstance(data["proof_received"], datetime) else "",
-                    data["payment_confirmed"],
-                    data["payment_confirmed_date"].strftime("%m/%d/%Y %H:%M:%S") if data["payment_confirmed"] and isinstance(data["payment_confirmed_date"], datetime) else data["payment_declined_date"].strftime("%m/%d/%Y %H:%M:%S") if isinstance(data["payment_declined_date"], datetime) else "",
+                    data.get("total", 0),
+                    get_date(data, "choice_date"),
+                    get_date(data, "marked_payed"),
+                    get_date(data, "proof_received"),
+                    data.get("payment_confirmed", False),
+                    get_date(data, "payment_confirmed_date") if data.get("payment_confirmed", False) else get_date(data, "payment_declined_date") ,
                 ])
                 ret.append(arr)
         if len(files)>0:
