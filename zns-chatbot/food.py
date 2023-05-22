@@ -96,7 +96,7 @@ class MealContext(object):
         await self.save_to_file()
         await self._lock.close()
         await self._file.close()
-        logger.info(f"aexit unlocked id: {self.id}")
+        logger.debug(f"aexit unlocked id: {self.id}")
 
     async def save_to_file(self):
         logger.debug(f"saving to file {self.filename}, id: {self.id}")
