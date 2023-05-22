@@ -129,6 +129,7 @@ def get_csv(csv_filename):
     from fcntl import flock, LOCK_EX, LOCK_NB, LOCK_UN
     import time
     import csv
+    from collections.abc import Iterable
 
     ret = [[
         "ID заказа",
@@ -164,7 +165,7 @@ def get_csv(csv_filename):
 
     trials = 10
 
-    logger.info(f"Collectiong data for CSV")
+    logger.info(f"Collecting data for CSV")
     while len(files)>0 and trials>0:
         trials -= 1
         files_working = files
@@ -199,7 +200,7 @@ def get_csv(csv_filename):
                     data.get("for_who",""),
                 ]
 
-                if "choice" in data and isinstance(data["choice"], dict):
+                if "choice" in data and isinstance(data["choice"], Iterable):
                     for choice_dict in data["choice"]:
                         if choice_dict["cost"]>0:
                             arr.append(choice_dict["restaurant"])
