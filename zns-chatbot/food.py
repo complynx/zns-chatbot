@@ -234,7 +234,7 @@ def get_csv(csv_filename):
     logger.info(f"saving CSV to {csv_filename}")
     with open(csv_filename, 'w') as f:
         writer = csv.writer(f)
-        writer.writerow(ret)
+        writer.writerows(ret)
     logger.info(f"CSV {csv_filename} created")
     
 
