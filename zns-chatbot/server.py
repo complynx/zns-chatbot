@@ -145,6 +145,7 @@ class MenuHandler(tornado.web.RequestHandler):
                 meal.total = total
                 meal.choice_date = datetime.now()
 
+                logger.info(f"received data {data}, total {total}, cancelled {cancelled}")
                 if total > 0 and not cancelled:
                     save = [
                         datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
@@ -161,7 +162,6 @@ class MenuHandler(tornado.web.RequestHandler):
                         writer = csv.writer(f)
                         writer.writerow(save)
 
-                    bot = self.app.bot
                     day_ru = {
                         "friday": "Пятница",
                         "saturday": "Суббота",
@@ -190,7 +190,7 @@ class MenuHandler(tornado.web.RequestHandler):
                             InlineKeyboardButton("❌ Отменить", callback_data=f"FoodChoiceReplCanc|{meal.id}"),
                         ]
                     ]
-                    await bot.bot.send_message(
+                    await self.app.bot.bot.send_message(
                         chat_id=meal.tg_user_id,
                         text=
                         f"Я получила твой заказ для зуконавта по имени <i>{meal.for_who}</i>.\n"+
@@ -204,7 +204,7 @@ class MenuHandler(tornado.web.RequestHandler):
                     )
                     # If you want to send the data back as a response in pretty format
                 else:
-                    await bot.bot.send_message(
+                    await self.app.bot.bot.send_message(
                         chat_id=meal.tg_user_id,
                         text=
                         f"Твой заказ для зуконавта по имени <i>{meal.for_who}</i> оказался пуст или отменён.\n"+
