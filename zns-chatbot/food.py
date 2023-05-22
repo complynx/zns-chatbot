@@ -4,6 +4,7 @@ from bson import BSON
 import logging
 import aiofiles
 from aiofilelock import AIOMutableFileLock
+from aiofiles.os import remove
 
 logger = logging.getLogger(__name__)
 
@@ -12,17 +13,17 @@ class AsyncMealContextConstructor(object):
         self.path = path
         self.meal_cls = meal_cls
     async def __aenter__(self):
-        logger.info(f"from_file trying read: {self.path}")
+        logger.debug(f"from_file trying read: {self.path}")
         async with aiofiles.open(self.path, 'rb') as f:
             try:
                 async with AIOMutableFileLock(f):
-                    logger.info(f"from_file locked: {self.path}")
+                    logger.debug(f"from_file locked: {self.path}")
                     data = BSON(await f.read()).decode()
                     
                     self.context = self.meal_cls(**data, filename=self.path)
-                logger.info(f"from_file unlocked: {self.path}")
+                logger.debug(f"from_file unlocked: {self.path}")
             except Exception as e:
-                logger.info(f"from_file unlocked: {self.path} while propagating exception {e}")
+                logger.debug(f"from_file unlocked: {self.path} while propagating exception {e}")
                 raise
         return await self.context.__aenter__()
     async def __aexit__(self, exc_type, exc_value, traceback):
@@ -39,12 +40,15 @@ class MealContext(object):
     choice = None
     total = None
     choice_date = None
+    marked_payed = None
 
+    _cancelled = False
     _non_cacheable = {
         "_lock",
         "_file",
         "filename",
-        "_non_cacheable"
+        "_non_cacheable",
+        "_cancelled"
     }
 
     def __init__(
@@ -70,25 +74,34 @@ class MealContext(object):
         return f"/menu/{id}.bson"
 
     async def __aenter__(self):
-        logger.info(f"aenter locking id: {self.id}")
+        logger.debug(f"aenter locking id: {self.id}")
         if self._file is None:
             self._file = await aiofiles.open(self.filename, "wb+")
         if self._lock is None:
             self._lock = AIOMutableFileLock(self._file)
         await self._lock.acquire()
-        logger.info(f"aenter locked id: {self.id}")
+        logger.debug(f"aenter locked id: {self.id}")
         return self
 
     async def __aexit__(self, exc_type, exc_value, traceback):
+        if self._cancelled:
+            return
         await self.save_to_file()
         await self._lock.close()
         await self._file.close()
         logger.info(f"aexit unlocked id: {self.id}")
 
     async def save_to_file(self):
-        logger.info(f"saving to file {self.filename}, id: {self.id}")
+        logger.debug(f"saving to file {self.filename}, id: {self.id}")
         data = {key: value for key, value in self.__dict__.items() if key not in self._non_cacheable}
         await self._file.write(BSON.encode(data))
+
+    async def cancel(self):
+        self._cancelled = True
+        await self._lock.close()
+        await self._file.close()
+        logger.debug(f"cancel unlocked id: {self.id}")
+        await remove(self.filename)
     
     @classmethod
     def from_file(cls, path):

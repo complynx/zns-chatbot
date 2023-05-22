@@ -160,10 +160,19 @@ class MenuHandler(tornado.web.RequestHandler):
                     writer.writerow(save)
 
                 bot = self.app.bot
+                day_ru = {
+                    "friday": "Пятница",
+                    "saturday": "Суббота",
+                    "sunday": "Воскресенье"
+                }
+                meal_ru = {
+                    "dinner": "ужин",
+                    "lunch": "обед"
+                }
 
                 formatted_choice = ""
                 for choice_dict in meal.choice:
-                    formatted_choice += f"\n\t<b>{choice_dict['day']}, {choice_dict['meal']}</b> — "
+                    formatted_choice += f"\n\t<b>{day_ru[choice_dict['day']]}, {meal_ru[choice_dict['meal']]}</b> — "
                     if choice_dict["cost"] == 0:
                         formatted_choice += "не буду есть."
                     else:
@@ -175,15 +184,15 @@ class MenuHandler(tornado.web.RequestHandler):
                 
                 keyboard = [
                     [
-                        InlineKeyboardButton("Оплачено", callback_data=f"food_choice_reply_payment|{meal.id}"),
-                        InlineKeyboardButton("Отменить", callback_data=f"food_choice_reply_cancel|{meal.id}"),
+                        InlineKeyboardButton("💸 Оплачено", callback_data=f"food_choice_reply_payment|{meal.id}"),
+                        InlineKeyboardButton("❌ Отменить", callback_data=f"food_choice_reply_cancel|{meal.id}"),
                     ]
                 ]
                 await bot.bot.send_message(
                     chat_id=meal.tg_user_id,
                     text=
                     f"Я получила твой заказ для зуконавта по имени <i>{meal.for_who}</i>.\n"+
-                    f"Вот его содержание:\n{formatted_choice}\n\n"
+                    f"Вот содержание заказа:\n{formatted_choice}\n\n"
                     "<i>Следующий шаг</i> — оплата. Для оплаты, нужно сделать перевод"+
                     " на Сбер по номеру\n<b>+79175295923</b>\n"+
                     "Получатель: <i>Ушакова Дарья Евгеньевна</i>.\n"+
