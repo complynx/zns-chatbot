@@ -7,23 +7,24 @@ from aiofilelock import AIOMutableFileLock
 
 logger = logging.getLogger(__name__)
 
-
 class AsyncMealContextConstructor(object):
     def __init__(self, meal_cls, path) -> None:
         self.path = path
         self.meal_cls = meal_cls
     async def __aenter__(self):
         logger.info(f"from_file trying read: {self.path}")
-        try:
-            async with aiofiles.open(self.path, 'rb') as f:
+        async with aiofiles.open(self.path, 'rb') as f:
+            try:
                 async with AIOMutableFileLock(f):
                     logger.info(f"from_file locked: {self.path}")
                     data = BSON(await f.read()).decode()
                     
                     self.context = self.meal_cls(**data, filename=self.path)
-            return await self.context.__aenter__()
-        finally:
-            logger.info(f"from_file unlocked if was locked: {self.path}")
+                logger.info(f"from_file unlocked: {self.path}")
+            except Exception as e:
+                logger.info(f"from_file unlocked: {self.path} while propagating exception {e}")
+                raise
+        return await self.context.__aenter__()
     async def __aexit__(self, exc_type, exc_value, traceback):
         return await self.context.__aexit__(exc_type, exc_value, traceback)
 

@@ -163,15 +163,15 @@ class MenuHandler(tornado.web.RequestHandler):
 
                 formatted_choice = ""
                 for choice_dict in meal.choice:
-                    formatted_choice += f"<br>&nbsp;&nbsp;&nbsp;&nbsp;<b>{choice_dict['day']}, {choice_dict['meal']}</b> — "
+                    formatted_choice += f"\n\t<b>{choice_dict['day']}, {choice_dict['meal']}</b> — "
                     if choice_dict["cost"] == 0:
                         formatted_choice += "не буду есть."
                     else:
-                        formatted_choice += f"за <b>{choice_dict['cost']}</b> ₽ из ресторана <i>" + choice_dict["restaurant"] + "</i><br>"
-                        formatted_choice += choice_dict["choice"].replace("\n", "<br>")
-                    formatted_choice += "<br>"
-                formatted_choice += "<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"+ \
-                                    f"Итого, общая сумма: <b>{meal.total}</b> ₽."
+                        formatted_choice += f"за <b>{choice_dict['cost']}</b> ₽ из ресторана <i>"
+                        formatted_choice += choice_dict["restaurant"] + "</i>\n"
+                        formatted_choice += choice_dict["choice"]
+                    formatted_choice += "\n"
+                formatted_choice += f"\n\t\tИтого, общая сумма: <b>{meal.total}</b> ₽."
                 
                 keyboard = [
                     [
@@ -182,11 +182,11 @@ class MenuHandler(tornado.web.RequestHandler):
                 await bot.bot.send_message(
                     chat_id=meal.tg_user_id,
                     text=
-                    "Я получила твой заказ для зуконавта по имени <i>{meal.for_who}</i>.<br>"+
-                    "Вот его содержание:<br>"+formatted_choice+"<br><br>"
+                    f"Я получила твой заказ для зуконавта по имени <i>{meal.for_who}</i>.\n"+
+                    f"Вот его содержание:\n{formatted_choice}\n\n"
                     "<i>Следующий шаг</i> — оплата. Для оплаты, нужно сделать перевод"+
-                    " на Сбер по номеру<br><b>+79175295923</b><br>"+
-                    "Получатель: <i>Ушакова Дарья Евгеньевна</i>.<br>"+
+                    " на Сбер по номеру\n<b>+79175295923</b>\n"+
+                    "Получатель: <i>Ушакова Дарья Евгеньевна</i>.\n"+
                     "Когда переведёшь, нужно будет прислать подтверждение.",
                     parse_mode=ParseMode.HTML,
                     reply_markup=InlineKeyboardMarkup(keyboard),
