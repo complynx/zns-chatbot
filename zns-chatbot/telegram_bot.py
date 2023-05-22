@@ -438,8 +438,8 @@ async def food_choice_payment_stage2(update: Update, context: CallbackContext, r
 
         keyboard = [
             [
-                InlineKeyboardButton("✅ Подтверждено", callback_data=f"food_choice_admin_proof_confirmed|{meal_context.id}"),
-                InlineKeyboardButton("❌ Отказ", callback_data=f"food_choice_admin_proof_declined|{meal_context.id}"),
+                InlineKeyboardButton("✅ Подтверждено", callback_data=f"FoodChoiceAdmConf|{meal_context.id}"),
+                InlineKeyboardButton("❌ Отказ", callback_data=f"FoodChoiceAdmDecl|{meal_context.id}"),
             ]
         ]
         await update.message.forward(ADMIN_PROOVING_PAYMENT)
@@ -506,8 +506,8 @@ async def create_telegram_bot(config, app) -> Application:
     )
     food_stage2_handler = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(food_choice_reply_payment, pattern="^food_choice_reply_payment|[a-zA-Z_\\-0-9]$"),
-            CallbackQueryHandler(food_choice_reply_cancel, pattern="^food_choice_reply_cancel|[a-zA-Z_\\-0-9]$"),
+            CallbackQueryHandler(food_choice_reply_payment, pattern="^FoodChoiceReplPaym|[a-zA-Z_\\-0-9]$"),
+            CallbackQueryHandler(food_choice_reply_cancel, pattern="^FoodChoiceReplCanc|[a-zA-Z_\\-0-9]$"),
         ],
         states={
             WAITING_PAYMENT_PROOF: [
@@ -523,6 +523,8 @@ async def create_telegram_bot(config, app) -> Application:
             )
         ],
     )
+    application.add_handler(CallbackQueryHandler(food_choice_admin_proof_confirmed, pattern="^FoodChoiceAdmConf|[a-zA-Z_\\-0-9]$"))
+    application.add_handler(CallbackQueryHandler(food_choice_admin_proof_declined, pattern="^FoodChoiceAdmDecl|[a-zA-Z_\\-0-9]$"))
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(food_handler)
