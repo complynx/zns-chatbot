@@ -145,7 +145,6 @@ class MenuHandler(tornado.web.RequestHandler):
                 meal.total = total
                 meal.choice_date = datetime.now()
 
-                logger.info(f"received data {data}, total {total}, cancelled {cancelled}")
                 if total > 0 and not cancelled:
                     save = [
                         datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
