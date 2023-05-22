@@ -226,10 +226,15 @@ async def food(update: Update, context: CallbackContext):
     """Handle the /food command, requesting a photo."""
     logger.info(f"Received /food command from {update.effective_user}")
     _ = PhotoTask(update.effective_chat, update.effective_user)
-    markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
+    markup = ReplyKeyboardMarkup(
+        [[update.effective_user.full_name],["Отмена"]],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
     await update.message.reply_html(
-        "Окей, я приму заказ на еду. Сначала напиши, для кого будет еда. "+
-        "Напиши полные <b>имя</b> и <b>фамилию</b> зуконавта.",
+        "Привет, зуконавт! Наша звёздная кухня готова принять твой заказ! Чего изволите? 🖖\n"+
+        "Сначала напиши, для кого будем собирать меню. "+
+        "Напиши полные <u>имя</u> и <u>фамилию</u> зуконавта.",
         reply_markup=markup
     )
     return NAME
@@ -248,7 +253,7 @@ async def food_for_who(update: Update, context: CallbackContext):
         # f"{web_app_base}/fit_frame?id={task.id.hex}"
         reply_markup = ReplyKeyboardRemove()
         await update.message.reply_html(
-            f"Отлично, составляем меню для зуконавта по имени {name}. Для выбора блюд, "+
+            f"Отлично, составляем меню для зуконавта по имени <i>{name}</i>. Для выбора блюд, "+
             f"<a href=\"{web_app_base}{meal_context.link}\">жми сюда (ссылка действительна 24 часа)</a>.",
             reply_markup=reply_markup
         )
@@ -362,8 +367,8 @@ async def food_choice_payment_doc(update: Update, context: CallbackContext) -> i
     await document_file.download_to_drive(file_path)
     return await food_choice_payment_stage2(update, context, file_path)
 
-# ADMIN_PROOVING_PAYMENT = 1012402779 # darrel
-ADMIN_PROOVING_PAYMENT = 379278985 # me
+ADMIN_PROOVING_PAYMENT = 1012402779 # darrel
+# ADMIN_PROOVING_PAYMENT = 379278985 # me
 FOOD_ADMINS = [
     1012402779, # darrel
     379278985, # me

@@ -52,7 +52,6 @@ def parse_meal_data(meal_dict):
     restaurants_cost2 = [380, 440, 500]
     restaurants_cost3 = [430, 440, 600]
     
-    ret = []
     ret_objs = []
     costs = []
     for day in days:
@@ -72,9 +71,6 @@ def parse_meal_data(meal_dict):
                 if restaurant_num == "_none":
                     ret_obj["choice"] = "Не буду есть."
                     ret_obj["cost"] = 0
-                    ret.append("нет")
-                    ret.append("нет")
-                    ret.append(0)
                     costs.append(0)
                 elif 1<= restaurant_num <=3:
                     main_key = f"{day}_{meal}_main_r{restaurant_num}"
@@ -98,12 +94,9 @@ def parse_meal_data(meal_dict):
                     ret_obj["restaurant"] = restaurants_real[restaurant_num-1]
                     ret_obj["cost"] = cost
 
-                    ret.append(restaurants_real[restaurant_num-1])
-                    ret.append(result)
-                    ret.append(cost)
                     costs.append(cost)
                 ret_objs.append(ret_obj)
-    return ret, costs, ret_objs
+    return costs, ret_objs
 
 class MenuHandler(tornado.web.RequestHandler):
     def initialize(self, token, app):
@@ -139,28 +132,13 @@ class MenuHandler(tornado.web.RequestHandler):
         try:
             async with MealContext.from_id(data["meal_context"]) as meal:
                 cancelled = (data.get("cancelled", '') != '')
-                meals, sums, objs = parse_meal_data(data)
+                sums, objs = parse_meal_data(data)
                 total = sum(sums)
                 meal.choice = objs
                 meal.total = total
                 meal.choice_date = datetime.now()
 
                 if total > 0 and not cancelled:
-                    save = [
-                        datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
-                        meal.tg_user_id,
-                        meal.tg_user_first_name,
-                        meal.tg_user_last_name,
-                        meal.tg_username,
-                        meal.for_who
-                    ]
-                    save.extend(meals)
-                    save.append(total)
-
-                    with open("/menu/menu.data", 'a') as f:
-                        writer = csv.writer(f)
-                        writer.writerow(save)
-
                     day_ru = {
                         "friday": "Пятница",
                         "saturday": "Суббота",
@@ -197,7 +175,8 @@ class MenuHandler(tornado.web.RequestHandler):
                         "<i>Следующий шаг</i> — оплата. Для оплаты, нужно сделать перевод"+
                         " на Сбер по номеру\n<b>+79175295923</b>\n"+
                         "Получатель: <i>Ушакова Дарья Евгеньевна</i>.\n"+
-                        "Когда переведёшь, нужно будет прислать подтверждение.",
+                        "Когда переведёшь, понадобится подтверждение перевода. "+
+                        "Когда будешь готов(а) прислать его, <u><b>обязательно</b></u> нажми на кнопку:",
                         parse_mode=ParseMode.HTML,
                         reply_markup=InlineKeyboardMarkup(keyboard),
                     )
