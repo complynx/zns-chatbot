@@ -138,69 +138,80 @@ class MenuHandler(tornado.web.RequestHandler):
         meal = None
         try:
             async with MealContext.from_id(data["meal_context"]) as meal:
+                cancelled = data.get("cancelled", '') == ''
                 meals, sums, objs = parse_meal_data(data)
                 total = sum(sums)
                 meal.choice = objs
                 meal.total = total
                 meal.choice_date = datetime.now()
 
-                save = [
-                    datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
-                    meal.tg_user_id,
-                    meal.tg_user_first_name,
-                    meal.tg_user_last_name,
-                    meal.tg_username,
-                    meal.for_who
-                ]
-                save.extend(meals)
-                save.append(total)
-
-                with open("/menu/menu.data", 'a') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(save)
-
-                bot = self.app.bot
-                day_ru = {
-                    "friday": "Пятница",
-                    "saturday": "Суббота",
-                    "sunday": "Воскресенье"
-                }
-                meal_ru = {
-                    "dinner": "ужин",
-                    "lunch": "обед"
-                }
-
-                formatted_choice = ""
-                for choice_dict in meal.choice:
-                    formatted_choice += f"\n\t<b>{day_ru[choice_dict['day']]}, {meal_ru[choice_dict['meal']]}</b> — "
-                    if choice_dict["cost"] == 0:
-                        formatted_choice += "не буду есть."
-                    else:
-                        formatted_choice += f"за <b>{choice_dict['cost']}</b> ₽ из ресторана <i>"
-                        formatted_choice += choice_dict["restaurant"] + "</i>\n"
-                        formatted_choice += choice_dict["choice"]
-                    formatted_choice += "\n"
-                formatted_choice += f"\n\t\tИтого, общая сумма: <b>{meal.total}</b> ₽."
-                
-                keyboard = [
-                    [
-                        InlineKeyboardButton("💸 Оплачено", callback_data=f"FoodChoiceReplPaym|{meal.id}"),
-                        InlineKeyboardButton("❌ Отменить", callback_data=f"FoodChoiceReplCanc|{meal.id}"),
+                if total > 0 and not cancelled:
+                    save = [
+                        datetime.now().strftime("%m/%d/%Y %H:%M:%S"),
+                        meal.tg_user_id,
+                        meal.tg_user_first_name,
+                        meal.tg_user_last_name,
+                        meal.tg_username,
+                        meal.for_who
                     ]
-                ]
-                await bot.bot.send_message(
-                    chat_id=meal.tg_user_id,
-                    text=
-                    f"Я получила твой заказ для зуконавта по имени <i>{meal.for_who}</i>.\n"+
-                    f"Вот содержание заказа:\n{formatted_choice}\n\n"
-                    "<i>Следующий шаг</i> — оплата. Для оплаты, нужно сделать перевод"+
-                    " на Сбер по номеру\n<b>+79175295923</b>\n"+
-                    "Получатель: <i>Ушакова Дарья Евгеньевна</i>.\n"+
-                    "Когда переведёшь, нужно будет прислать подтверждение.",
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                )
-                # If you want to send the data back as a response in pretty format
+                    save.extend(meals)
+                    save.append(total)
+
+                    with open("/menu/menu.data", 'a') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(save)
+
+                    bot = self.app.bot
+                    day_ru = {
+                        "friday": "Пятница",
+                        "saturday": "Суббота",
+                        "sunday": "Воскресенье"
+                    }
+                    meal_ru = {
+                        "dinner": "ужин",
+                        "lunch": "обед"
+                    }
+
+                    formatted_choice = ""
+                    for choice_dict in meal.choice:
+                        formatted_choice += f"\n\t<b>{day_ru[choice_dict['day']]}, {meal_ru[choice_dict['meal']]}</b> — "
+                        if choice_dict["cost"] == 0:
+                            formatted_choice += "не буду есть."
+                        else:
+                            formatted_choice += f"за <b>{choice_dict['cost']}</b> ₽ из ресторана <i>"
+                            formatted_choice += choice_dict["restaurant"] + "</i>\n"
+                            formatted_choice += choice_dict["choice"]
+                        formatted_choice += "\n"
+                    formatted_choice += f"\n\t\tИтого, общая сумма: <b>{meal.total}</b> ₽."
+                    
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("💸 Оплачено", callback_data=f"FoodChoiceReplPaym|{meal.id}"),
+                            InlineKeyboardButton("❌ Отменить", callback_data=f"FoodChoiceReplCanc|{meal.id}"),
+                        ]
+                    ]
+                    await bot.bot.send_message(
+                        chat_id=meal.tg_user_id,
+                        text=
+                        f"Я получила твой заказ для зуконавта по имени <i>{meal.for_who}</i>.\n"+
+                        f"Вот содержание заказа:\n{formatted_choice}\n\n"
+                        "<i>Следующий шаг</i> — оплата. Для оплаты, нужно сделать перевод"+
+                        " на Сбер по номеру\n<b>+79175295923</b>\n"+
+                        "Получатель: <i>Ушакова Дарья Евгеньевна</i>.\n"+
+                        "Когда переведёшь, нужно будет прислать подтверждение.",
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                    )
+                    # If you want to send the data back as a response in pretty format
+                else:
+                    await bot.bot.send_message(
+                        chat_id=meal.tg_user_id,
+                        text=
+                        f"Твой заказ для зуконавта по имени <i>{meal.for_who}</i> оказался пуст или отменён.\n"+
+                        f"Если нужно сделать новый заказ, воспользуйся снова командой /food",
+                        parse_mode=ParseMode.HTML,
+                    )
+                    meal.cancel()
                 self.write(f"Ваш выбор был успешно сохранён!<br>Вкладку или окно можно закрыть.")
         except FileNotFoundError:
             return self.write_error(401)

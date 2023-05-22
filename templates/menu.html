@@ -177,13 +177,32 @@ function submit_onclick(ev) {
         full_choice += "\n";
     }
     full_choice += `\n\t\tИтого, общая сумма: ${sum} ₽.`;
+    if(sum === 0) {
+        if(!confirm("Похоже, что вы не выбрали ничего. Вы уверены в вашем решении?")) {
+            ev.preventDefault();
+            return;
+        }
+    }
     
-    if(!confirm("Вы точно всё заполнили, на все дни? Давайте проверим, ваш выбор:"+full_choice + "\tОтправляем?"))
+    if(!confirm("Вы точно всё заполнили, на все дни? Давайте проверим, ваш выбор:"+full_choice + "\tОтправляем?")) {
         ev.preventDefault();
+        return;
+    }
+}
+
+function cancel_onclick(ev) {
+    if(!confirm("Вы уверены, что хотите отменить выбор еды?")) {
+        ev.preventDefault();
+        return;
+    }else{
+        document.querySelector("input[name=cancelled]").value = "true";
+    }
 }
 
                     </script>
+                    <input type="hidden" name="cancelled" value="">
                     <input type="submit" value="Отправить" onclick='submit_onclick.apply(this,arguments);'>
+                    <input type="submit" value="Отменить" onclick='cancel_onclick.apply(this,arguments);'>
                 </div>
                 <div class="8u 12u$(medium)">
                     <h2 id="select_restaurant">
