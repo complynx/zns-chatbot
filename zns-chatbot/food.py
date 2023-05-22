@@ -5,6 +5,7 @@ import logging
 import aiofiles
 from aiofilelock import AIOMutableFileLock
 from aiofiles.os import remove
+from .photo_task import async_thread
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class MealContext(object):
     tg_user_first_name = None
     tg_user_last_name = None
     tg_username = None
+    started = None
     for_who = None
     id = None
     filename = None
@@ -41,6 +43,11 @@ class MealContext(object):
     total = None
     choice_date = None
     marked_payed = None
+    proof_received = None
+    payment_confirmed = False
+    payment_confirmed_date = None
+    payment_declined = False
+    payment_declined_date = None
 
     _cancelled = False
     _non_cacheable = {
@@ -115,4 +122,112 @@ class MealContext(object):
     @property
     def link(self):
         return f"/menu?id={self.id}"
+
+@async_thread
+def get_csv(csv_filename):
+    import glob
+    from fcntl import flock, LOCK_EX, LOCK_NB, LOCK_UN
+    import time
+    import csv
+
+    ret = [[
+        "ID заказа",
+        "Заказ создан",
+        "TG ID Пользователя",
+        "TG Пользователь",
+        "TG Имя",
+        "TG Фамилия",
+        "Для кого",
+        "пятница, ужин, ресторан",
+        "пятница, ужин, выбор",
+        "пятница, ужин, сумма",
+        "суббота, обед, ресторан",
+        "суббота, обед, выбор",
+        "суббота, обед, сумма",
+        "суббота, ужин, ресторан",
+        "суббота, ужин, выбор",
+        "суббота, ужин, сумма",
+        "воскресенье, обед, ресторан",
+        "воскресенье, обед, выбор",
+        "воскресенье, обед, сумма",
+        "воскресенье, ужин, ресторан",
+        "воскресенье, ужин, выбор",
+        "воскресенье, ужин, сумма",
+        "всего",
+        "дата выбора",
+        "дата оплаты",
+        "дата получения пруфа",
+        "подтверждено",
+        "дата подтверждения",
+    ]]
+    files = glob.glob('/menu/*.bson')
+
+    trials = 10
+
+    logger.info(f"Collectiong data for CSV")
+    while len(files)>0 and trials>0:
+        trials -= 1
+        files_working = files
+        files = []
+        for file in files_working:
+            logger.info(f"trying to parse file {file}")
+            with open(file, 'rb') as f:
+                logger.info(f"opened {file}")
+                try:
+                    flock(f, LOCK_EX | LOCK_NB)
+                    locked = True
+                    logger.info(f"locked {file}")
+
+                    data = BSON(f.read()).decode()
+                    logger.info(f"parsed BSON {file}")
+                except BlockingIOError:
+                    logger.info(f"file is already locked, skipping for now {file}")
+                    files.append(file)
+                    continue
+                finally:
+                    if locked:
+                        flock(f, LOCK_UN)
+                        logger.info(f"unlocked {file}")
+                
+                arr = [
+                    data["id"],
+                    data["created"],
+                    data["tg_user_id"],
+                    data["tg_username"],
+                    data["tg_user_first_name"],
+                    data["tg_user_last_name"],
+                    data["for_who"],
+                ]
+
+                for choice_dict in data["choice"]:
+                    if choice_dict["cost"]>0:
+                        arr.append(choice_dict["restaurant"])
+                        arr.append(choice_dict["choice"])
+                        arr.append(choice_dict["cost"])
+                    else:
+                        arr.append("нет")
+                        arr.append(choice_dict["choice"])
+                        arr.append(choice_dict["cost"])
+                
+                arr.extend([
+                    data["total"],
+                    data["choice_date"].strftime("%m/%d/%Y %H:%M:%S") if isinstance(data["choice_date"], datetime) else "",
+                    data["marked_payed"].strftime("%m/%d/%Y %H:%M:%S") if isinstance(data["marked_payed"], datetime) else "",
+                    data["proof_received"].strftime("%m/%d/%Y %H:%M:%S") if isinstance(data["proof_received"], datetime) else "",
+                    data["payment_confirmed"],
+                    data["payment_confirmed_date"].strftime("%m/%d/%Y %H:%M:%S") if data["payment_confirmed"] and isinstance(data["payment_confirmed_date"], datetime) else data["payment_declined_date"].strftime("%m/%d/%Y %H:%M:%S") if isinstance(data["payment_declined_date"], datetime) else "",
+                ])
+                ret.append(arr)
+        if len(files)>0:
+            logger.info(f"there are {len(files)} files to try parse again")
+            time.sleep(1)
+    if len(files) > 0:
+        logger.warn(f"there are {len(files)} files that couldn't be parsed: {files}")
+
+    logger.info(f"saving CSV to {csv_filename}")
+    with open(csv_filename, 'w') as f:
+        writer = csv.writer(f)
+        writer.writerow(ret)
+    logger.info(f"CSV {csv_filename} created")
     
+

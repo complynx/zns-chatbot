@@ -24,11 +24,11 @@ from telegram.ext import (
     Application,
     CallbackQueryHandler,
 )
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode, ChatAction
 import logging
 import shutil
 
-from .food import MealContext
+from .food import MealContext, get_csv
 from .photo_task import get_by_user, PhotoTask
 
 logger = logging.getLogger(__name__)
@@ -364,8 +364,14 @@ async def food_choice_payment_doc(update: Update, context: CallbackContext) -> i
 
 # ADMIN_PROOVING_PAYMENT = 1012402779 # darrel
 ADMIN_PROOVING_PAYMENT = 379278985 # me
+FOOD_ADMINS = [
+    1012402779, # darrel
+    379278985, # me
+    20538574, # love_zelensky
+    249413857, # vbutman
+]
 
-async def food_choice_admin_proof_confirmed(update: Update, context: CallbackContext) -> int:
+async def food_choice_admin_proof_confirmed(update: Update, context: CallbackContext):
     """Handle admin proof"""
     if update.effective_user.id != ADMIN_PROOVING_PAYMENT:
         return # check admin
@@ -393,7 +399,7 @@ async def food_choice_admin_proof_confirmed(update: Update, context: CallbackCon
             parse_mode=ParseMode.HTML,
         )
 
-async def food_choice_admin_proof_declined(update: Update, context: CallbackContext) -> int:
+async def food_choice_admin_proof_declined(update: Update, context: CallbackContext):
     """Handle admin proof"""
     if update.effective_user.id != ADMIN_PROOVING_PAYMENT:
         return # check admin
@@ -454,6 +460,24 @@ async def food_choice_payment_stage2(update: Update, context: CallbackContext, r
 
 
     return ConversationHandler.END
+
+async def food_admin_get_csv(update: Update, context: CallbackContext):
+    """Handle the /food_adm_csv command, requesting a photo."""
+    if update.effective_user.id not in FOOD_ADMINS:
+        return
+    logger.info(f"Received /food_adm_csv command from {update.effective_user}")
+
+    await update.message.reply_text(
+        "Создаю CSV, подожди..."
+    )
+
+    filename = tempfile.mktemp()
+    await get_csv(filename)
+    await update.message.reply_document(
+        filename,
+        caption="Вот обещанный файлик CSV",
+        filename="menu.csv"
+    )
 
 # async def log_msg(update: Update, context: CallbackContext):
 #     logger.info(f"got message from user {update.effective_user}: {update.message}")
@@ -526,6 +550,7 @@ async def create_telegram_bot(config, app) -> Application:
     application.add_handler(CallbackQueryHandler(food_choice_admin_proof_confirmed, pattern="^FoodChoiceAdmConf|[a-zA-Z_\\-0-9]$"))
     application.add_handler(CallbackQueryHandler(food_choice_admin_proof_declined, pattern="^FoodChoiceAdmDecl|[a-zA-Z_\\-0-9]$"))
 
+    application.add_handler(CommandHandler("food_adm_csv", food_admin_get_csv))
     application.add_handler(CommandHandler("start", start))
     application.add_handler(food_handler)
     application.add_handler(ava_handler)
