@@ -284,7 +284,11 @@ async def food_choice_reply_payment(update: Update, context: CallbackContext) ->
     context.user_data["food_choice_id"] = id
 
     markup = ReplyKeyboardMarkup([["Отменить выбор еды"]], resize_keyboard=True, one_time_keyboard=True)
-    await update.message.reply_html("Ок, жду скрин или документ — подтверждение оплаты.", reply_markup=markup)
+    await context.bot.send_message(
+        update.effective_user.id,
+        "Ок, жду скрин или документ — подтверждение оплаты.",
+        reply_markup=markup
+    )
     return WAITING_PAYMENT_PROOF
 
 async def food_choice_reply_cancel(update: Update, context) -> int:
