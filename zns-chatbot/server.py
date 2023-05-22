@@ -184,8 +184,8 @@ class MenuHandler(tornado.web.RequestHandler):
                 
                 keyboard = [
                     [
-                        InlineKeyboardButton("💸 Оплачено", callback_data=f"food_choice_reply_payment|{meal.id}"),
-                        InlineKeyboardButton("❌ Отменить", callback_data=f"food_choice_reply_cancel|{meal.id}"),
+                        InlineKeyboardButton("💸 Оплачено", callback_data=f"FoodChoiceReplPaym|{meal.id}"),
+                        InlineKeyboardButton("❌ Отменить", callback_data=f"FoodChoiceReplCanc|{meal.id}"),
                     ]
                 ]
                 await bot.bot.send_message(
