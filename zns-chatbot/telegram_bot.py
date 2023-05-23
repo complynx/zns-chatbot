@@ -245,21 +245,24 @@ async def food(update: Update, context: CallbackContext):
 async def food_for_who(update: Update, context: CallbackContext):
     """Handle the cancel command during the avatar submission."""
     name = update.message.text
-    logger.info(f"Received meal acceptor name from {update.effective_user}: {name}")
-    async with MealContext(
-        tg_user_id=update.effective_user.id,
-        tg_username=update.effective_user.username,
-        tg_user_first_name=update.effective_user.first_name,
-        tg_user_last_name=update.effective_user.last_name,
-        for_who=name,
-    ) as meal_context:
-        # f"{web_app_base}/fit_frame?id={task.id.hex}"
-        reply_markup = ReplyKeyboardRemove()
-        await update.message.reply_html(
-            f"Отлично, составляем меню для зуконавта по имени <i>{name}</i>. Для выбора блюд, "+
-            f"<a href=\"{web_app_base}{meal_context.link}\">жми сюда (ссылка действительна 24 часа)</a>.",
-            reply_markup=reply_markup
-        )
+    logger.info(f"Received for_who from {update.effective_user}: {name}")
+    try:
+        async with MealContext(
+            tg_user_id=update.effective_user.id,
+            tg_username=update.effective_user.username,
+            tg_user_first_name=update.effective_user.first_name,
+            tg_user_last_name=update.effective_user.last_name,
+            for_who=name,
+        ) as meal_context:
+            # f"{web_app_base}/fit_frame?id={task.id.hex}"
+            reply_markup = ReplyKeyboardRemove()
+            await update.message.reply_html(
+                f"Отлично, составляем меню для зуконавта по имени <i>{name}</i>. Для выбора блюд, "+
+                f"<a href=\"{web_app_base}{meal_context.link}\">жми сюда (ссылка действительна 24 часа)</a>.",
+                reply_markup=reply_markup
+            )
+    except Exception as e:
+        logger.error("Exception in food_for_who: %s", e, exc_info=1)
     return ConversationHandler.END
 
 async def food_cancel(update: Update, context: CallbackContext):
@@ -274,30 +277,39 @@ CANCEL_FOOD_STAGE2_REPLACEMENT_TEXT = "Этот выбор меню отменё
 async def food_choice_reply_payment(update: Update, context: CallbackContext) -> int:
     """Handle payment answer after menu received"""
     # Get CallbackQuery from Update
-    query = update.callback_query
-    logger.info(f"Received food_choice_reply_payment from {update.effective_user}, query: {query}")
-    # CallbackQueries need to be answered, even if no notification to the user is needed
-    # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
-    await query.answer()
-    id = query.data.split("|")[1]
-    async with MealContext.from_id(id) as meal_context:
-        meal_context.marked_payed = datetime.datetime.now()
-        meal_context.message_inline_id = query.inline_message_id
-        meal_context.message_self_id = query.message.message_id
-        meal_context.message_chat_id = query.message.chat_id
-    logger.info(f"MealContext ID: {id}")
-    await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([]))
-    if context.user_data is None:
-        context.user_data.update(dict())
-    context.user_data["food_choice_id"] = id
+    try:
+        query = update.callback_query
+        logger.info(f"Received food_choice_reply_payment from {update.effective_user}, query: {query}")
+        # CallbackQueries need to be answered, even if no notification to the user is needed
+        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+        await query.answer()
+        id = query.data.split("|")[1]
+        async with MealContext.from_id(id) as meal_context:
+            meal_context.marked_payed = datetime.datetime.now()
+            meal_context.message_inline_id = query.inline_message_id
+            meal_context.message_self_id = query.message.message_id
+            meal_context.message_chat_id = query.message.chat_id
+        logger.info(f"MealContext ID: {id}")
+        await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([]))
+        if context.user_data is None:
+            context.user_data.update(dict())
+        context.user_data["food_choice_id"] = id
 
-    markup = ReplyKeyboardMarkup([["Отменить выбор еды"]], resize_keyboard=True, one_time_keyboard=True)
-    await context.bot.send_message(
-        update.effective_user.id,
-        "Ок, жду скрин или документ — подтверждение оплаты.",
-        reply_markup=markup
-    )
-    return WAITING_PAYMENT_PROOF
+        markup = ReplyKeyboardMarkup([["Отменить выбор еды"]], resize_keyboard=True, one_time_keyboard=True)
+        await context.bot.send_message(
+            update.effective_user.id,
+            "Ок, жду скрин или документ — подтверждение оплаты.",
+            reply_markup=markup
+        )
+        return WAITING_PAYMENT_PROOF
+    except FileNotFoundError:
+        logger.info("MealContext file not found in food_choice_reply_payment.")
+        await query.edit_message_text(
+            "Что-то непредвиденное случилось с вашим заказом. Попробуйте ещё раз: /food",
+            reply_markup=InlineKeyboardMarkup([]))
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error("Exception in food_choice_reply_payment: %s", e, exc_info=1)
 
 async def food_choice_reply_cancel(update: Update, context) -> int:
     """Handle payment answer after menu received"""
@@ -308,9 +320,11 @@ async def food_choice_reply_cancel(update: Update, context) -> int:
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
     id = query.data.split("|")[1]
-    async with MealContext.from_id(id) as meal_context:
-        await meal_context.cancel()
-
+    try:
+        async with MealContext.from_id(id) as meal_context:
+            await meal_context.cancel()
+    except FileNotFoundError:
+        pass # already cancelled
     # Instead of sending a new message, edit the message that
     # originated the CallbackQuery. This gives the feeling of an
     # interactive menu.
@@ -338,8 +352,10 @@ async def food_choice_conversation_cancel(update: Update, context: CallbackConte
                 )
             await meal_context.cancel()
         del context.user_data["food_choice_id"]
-    except:
+    except FileNotFoundError or KeyError:
         pass
+    except Exception as e:
+        logger.error("Exception in food_choice_conversation_cancel: %s", e, exc_info=1)
 
     await update.message.reply_text(
         text="Выбор меню отменён. Для нового выбора можно снова воспользоваться командой /food",
@@ -442,30 +458,47 @@ async def food_choice_payment_stage2(update: Update, context: CallbackContext, r
         reply_markup=ReplyKeyboardRemove()
     )
     
-    id = context.user_data["food_choice_id"]
-    del context.user_data["food_choice_id"]
-    async with MealContext.from_id(id) as meal_context:
-        proof_file_name = os.path.splitext(meal_context.filename)[0] + ".proof" + os.path.splitext(received_file)[1]
-        shutil.move(received_file, proof_file_name)
-        meal_context.proof_file = proof_file_name
-        meal_context.proof_received = datetime.datetime.now()
-
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Подтверждено", callback_data=f"FoodChoiceAdmConf|{meal_context.id}"),
-                InlineKeyboardButton("❌ Отказ", callback_data=f"FoodChoiceAdmDecl|{meal_context.id}"),
-            ]
-        ]
-        await update.message.forward(ADMIN_PROOVING_PAYMENT)
-        await context.bot.send_message(
-            ADMIN_PROOVING_PAYMENT,
-            f"Пользователь <i>{update.effective_user.full_name}</i> прислал подтверждение оплаты еды"+
-            f" для зуконавта по имени <i>{meal_context.for_who}</i>. Необходимо подтверждение.\n"+
-            "<b>Внимание</b>, не стоит помечать отсутствие оплаты раньше времени, лучше сначала удостовериться.",
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup(keyboard),
+    try:
+        id = context.user_data["food_choice_id"]
+        del context.user_data["food_choice_id"]
+    except KeyError:
+        logger.error("food_choice_id not found in food_choice_payment_stage2")
+        await update.message.reply_text(
+            text="Возникла какая-то непредвиденная проблема с вашим заказом,"+
+            " возможно придётся попробовать ещё раз: /food",
+            reply_markup=ReplyKeyboardRemove()
         )
+        return ConversationHandler.END
+    try:
+        async with MealContext.from_id(id) as meal_context:
+            proof_file_name = os.path.splitext(meal_context.filename)[0] + ".proof" + os.path.splitext(received_file)[1]
+            shutil.move(received_file, proof_file_name)
+            meal_context.proof_file = proof_file_name
+            meal_context.proof_received = datetime.datetime.now()
 
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Подтверждено", callback_data=f"FoodChoiceAdmConf|{meal_context.id}"),
+                    InlineKeyboardButton("❌ Отказ", callback_data=f"FoodChoiceAdmDecl|{meal_context.id}"),
+                ]
+            ]
+            await update.message.forward(ADMIN_PROOVING_PAYMENT)
+            await context.bot.send_message(
+                ADMIN_PROOVING_PAYMENT,
+                f"Пользователь <i>{update.effective_user.full_name}</i> прислал подтверждение оплаты еды"+
+                f" для зуконавта по имени <i>{meal_context.for_who}</i>. Необходимо подтверждение.\n"+
+                "<b>Внимание</b>, не стоит помечать отсутствие оплаты раньше времени, лучше сначала удостовериться.",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+    except FileNotFoundError:
+        logger.error(f"MealContext by ID not found in food_choice_payment_stage2: {id}")
+        await update.message.reply_text(
+            text="Возникла какая-то непредвиденная проблема с вашим заказом, он потерялся.\n"+
+            " Придётся попробовать ещё раз: /food",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
 
     return ConversationHandler.END
 
@@ -478,15 +511,18 @@ async def food_admin_get_csv(update: Update, context: CallbackContext):
     await update.message.reply_text(
         "Создаю CSV, подожди..."
     )
-
-    filename = tempfile.mktemp()
-    await get_csv(filename)
-    await update.message.reply_document(
-        filename,
-        caption="Вот обещанный файлик CSV",
-        filename="menu.csv"
-    )
-    os.remove(filename)
+    try:
+        filename = tempfile.mktemp()
+        await get_csv(filename)
+        await update.message.reply_document(
+            filename,
+            caption="Вот обещанный файлик CSV",
+            filename="menu.csv"
+        )
+        os.remove(filename)
+    except:
+        await update.message.reply_text("Возникла ошибка, попробуй ещё раз.")
+        raise
 
 # async def log_msg(update: Update, context: CallbackContext):
 #     logger.info(f"got message from user {update.effective_user}: {update.message}")
