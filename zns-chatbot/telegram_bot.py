@@ -56,11 +56,15 @@ async def avatar_error(update: Update, context: CallbackContext):
 async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     logger.info(f"start called: {update.effective_user}")
-    await context.bot.set_my_commands([("/avatar", "Создать аватар."), ("/food", "Заказать еду.")])
+    await context.bot.set_my_commands([
+        ("/avatar", "Создать аватар."),
+        # ("/food", "Заказать еду."),
+    ])
     await update.message.reply_text(
         "Здравствуй, зуконавт! Меня зовут ЗиНуСя, твой виртуальный помощник 🤗\n\n"+
         "🟢 Я могу помочь заказать тебе горячее питание и сделать красивую аватарку! Для этого выбери команду:\n"+
-        "/food - заказ горячего питания\n/avatar - создать аватарку"
+        # "/food - заказ горячего питания\n"+
+        "/avatar - создать аватарку"
     )
 
 async def avatar(update: Update, context: CallbackContext):
