@@ -210,7 +210,7 @@ function cancel_onclick(ev) {
                     </h2>
                     <input id="friday_dinner_toggler" type="radio" name="meal_time" value="friday_dinner_toggler" class="div_toggler">
                     <div id="friday_dinner_container">
-                        <h3 class="meal_name">Пятница, ужин (21:00)</h3>
+                        <h3 class="meal_name">Пятница, ужин (22:00)</h3>
                         <div class="row">
                             <div class="3u 12u$(small)">
                                 <label class="button small fit alt" for="friday_dinner_restaurant1_toggler">Вареничная №1</label>
@@ -382,10 +382,10 @@ function cancel_onclick(ev) {
                         let container = document.getElementById("friday_dinner_container");
                         let other_days = ["saturday_lunch", "saturday_dinner", "sunday_lunch", "sunday_dinner"];
                         let other_days_ru = {
-                            "saturday_lunch":"Суббота, обед (16:00)",
-                            "saturday_dinner":"Суббота, ужин (21:00)",
-                            "sunday_lunch":"Воскресенье, обед (16:00)",
-                            "sunday_dinner":"Воскресенье, ужин (21:00)"
+                            "saturday_lunch":"Суббота, обед (17:00)",
+                            "saturday_dinner":"Суббота, ужин (22:00)",
+                            "sunday_lunch":"Воскресенье, обед (17:00)",
+                            "sunday_dinner":"Воскресенье, ужин (22:00)"
                         };
                         let creator = document.createElement("DIV");
                         for(let meal of other_days) {
