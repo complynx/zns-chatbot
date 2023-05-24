@@ -201,7 +201,7 @@ function cancel_onclick(ev) {
 
                     </script>
                     <input type="hidden" name="cancelled" value="">
-                    <input type="submit" value="Отправить" onclick='submit_onclick.apply(this,arguments);'>
+                    <input type="submit" class="button special" value="Отправить" onclick='submit_onclick.apply(this,arguments);'>
                     <input type="submit" value="Отменить" onclick='cancel_onclick.apply(this,arguments);'>
                 </div>
                 <div class="8u 12u$(medium)">
@@ -277,7 +277,7 @@ function cancel_onclick(ev) {
                                 <li><input type="radio" name="friday_dinner_drink_r1" value="Узвар 200 мл" id="friday_dinner_drink_r1_ch1"><label for="friday_dinner_drink_r1_ch1">Узвар 200 мл</label></li>
                                 <li><input type="radio" name="friday_dinner_drink_r1" value="чай Ассам 400 мл" id="friday_dinner_drink_r1_ch2"><label for="friday_dinner_drink_r1_ch2">чай Ассам 400 мл</label></li>
                                 <li><input type="radio" name="friday_dinner_drink_r1" value="чай Сенча 400 мл" id="friday_dinner_drink_r1_ch3"><label for="friday_dinner_drink_r1_ch3">чай Сенча 400 мл</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r1" value="" id="friday_dinner_drink_r1_ch4"><label for="friday_dinner_drink_r1_ch4">нафиг напиток</label></li>
+                                <li><input type="radio" name="friday_dinner_drink_r1" value="" id="friday_dinner_drink_r1_ch4"><label for="friday_dinner_drink_r1_ch4">Без напитка (на цену не влияет)</label></li>
                             </ol>
                         </div>
                         <input onclick='document.querySelector("#friday_dinner_price").innerText="440"' id="friday_dinner_restaurant2_toggler" value="friday_dinner_restaurant2_toggler" type="radio" name="friday_dinner_restaurant_toggler" class="div_toggler">
@@ -366,7 +366,7 @@ function cancel_onclick(ev) {
                                 <li><input type="radio" name="friday_dinner_drink_r3" value="Американо" id="friday_dinner_drink_r3_ch4"><label for="friday_dinner_drink_r3_ch4">Американо</label></li>
                                 <li><input type="radio" name="friday_dinner_drink_r3" value="Лимонад имбирь-цитрус" id="friday_dinner_drink_r3_ch5"><label for="friday_dinner_drink_r3_ch5">Лимонад имбирь-цитрус</label></li>
                                 <li><input type="radio" name="friday_dinner_drink_r3" value="Лимонад вишня" id="friday_dinner_drink_r3_ch6"><label for="friday_dinner_drink_r3_ch6">Лимонад вишня</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r3" value="" id="friday_dinner_drink_r3_ch7"><label for="friday_dinner_drink_r3_ch7">нафиг напиток</label></li>
+                                <li><input type="radio" name="friday_dinner_drink_r3" value="" id="friday_dinner_drink_r3_ch7"><label for="friday_dinner_drink_r3_ch7">Без напитка (на цену не влияет)</label></li>
                             </ol>
                         </div>
                         <input onclick='document.querySelector("#friday_dinner_price").innerText="0"' id="friday_dinner_restaurant_none_toggler" checked value="friday_dinner_restaurant_none_toggler" type="radio" name="friday_dinner_restaurant_toggler" class="div_toggler">
