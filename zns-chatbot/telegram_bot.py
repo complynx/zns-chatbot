@@ -291,7 +291,7 @@ async def food_choice_reply_payment(update: Update, context: CallbackContext) ->
     # Get CallbackQuery from Update
     try:
         query = update.callback_query
-        logger.info(f"Received food_choice_reply_payment from {update.effective_user}, query: {query}")
+        logger.info(f"Received food_choice_reply_payment from {update.effective_user}, data: {query.data}")
         # CallbackQueries need to be answered, even if no notification to the user is needed
         # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
         await query.answer()
@@ -327,7 +327,7 @@ async def food_choice_reply_cancel(update: Update, context) -> int:
     """Handle payment answer after menu received"""
     # Get CallbackQuery from Update
     query = update.callback_query
-    logger.info(f"Received food_choice_reply_payment from {update.effective_user}, query: {query}")
+    logger.info(f"Received food_choice_reply_payment from {update.effective_user}, data: {query.data}")
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
@@ -404,7 +404,7 @@ async def food_choice_admin_proof_confirmed(update: Update, context: CallbackCon
         return # check admin
     # Get CallbackQuery from Update
     query = update.callback_query
-    logger.info(f"Received food_choice_admin_proof_confirmed from {update.effective_user}, query: {query}")
+    logger.info(f"Received food_choice_admin_proof_confirmed from {update.effective_user}, data: {query.data}")
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
@@ -432,7 +432,7 @@ async def food_choice_admin_proof_declined(update: Update, context: CallbackCont
         return # check admin
     # Get CallbackQuery from Update
     query = update.callback_query
-    logger.info(f"Received food_choice_admin_proof_declined from {update.effective_user}, query: {query}")
+    logger.info(f"Received food_choice_admin_proof_declined from {update.effective_user}, data: {query.data}")
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()

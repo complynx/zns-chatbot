@@ -171,24 +171,24 @@ def get_csv(csv_filename):
         files_working = files
         files = []
         for file in files_working:
-            logger.info(f"trying to parse file {file}")
+            logger.debug(f"trying to parse file {file}")
             with open(file, 'rb') as f:
-                logger.info(f"opened {file}")
+                logger.debug(f"opened {file}")
                 try:
                     flock(f, LOCK_EX | LOCK_NB)
                     locked = True
-                    logger.info(f"locked {file}")
+                    logger.debug(f"locked {file}")
 
                     data = BSON(f.read()).decode()
-                    logger.info(f"parsed BSON {file}")
+                    logger.debug(f"parsed BSON {file}")
                 except BlockingIOError:
-                    logger.info(f"file is already locked, skipping for now {file}")
+                    logger.debug(f"file is already locked, skipping for now {file}")
                     files.append(file)
                     continue
                 finally:
                     if locked:
                         flock(f, LOCK_UN)
-                        logger.info(f"unlocked {file}")
+                        logger.debug(f"unlocked {file}")
                 
                 arr = [
                     data.get("id",""),
