@@ -489,6 +489,7 @@ async def food_choice_payment_stage2(update: Update, context: CallbackContext, r
             await context.bot.send_message(
                 ADMIN_PROOVING_PAYMENT,
                 f"Пользователь <i>{update.effective_user.full_name}</i> прислал подтверждение оплаты еды"+
+                f" на сумму {meal_context.total} ₽"+
                 f" для зуконавта по имени <i>{meal_context.for_who}</i>. Необходимо подтверждение.\n"+
                 "<b>Внимание</b>, не стоит помечать отсутствие оплаты раньше времени, лучше сначала удостовериться.",
                 parse_mode=ParseMode.HTML,
