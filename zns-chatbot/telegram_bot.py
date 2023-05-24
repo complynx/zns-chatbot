@@ -39,6 +39,22 @@ NAME, WAITING_PAYMENT_PROOF = range(2)
 web_app_base = ""
 cover = "static/cover.jpg"
 
+async def start(update: Update, context: CallbackContext):
+    """Send a welcome message when the /start command is issued."""
+    logger.info(f"start called: {update.effective_user}")
+    await context.bot.set_my_commands([
+        ("/avatar", "Создать аватар."),
+        ("/food", "Заказать еду."),
+    ])
+    await update.message.reply_text(
+        "Здравствуй, зуконавт! Меня зовут ЗиНуСя, твой виртуальный помощник 🤗\n\n"+
+        "🟢 Я могу помочь заказать тебе горячее питание и сделать красивую аватарку! Для этого выбери команду:\n"+
+        "/food - заказ горячего питания\n"+
+        "/avatar - создать аватарку"
+    )
+
+### AVATAR SECTION
+
 async def avatar_error(update: Update, context: CallbackContext):
     reply_markup = ReplyKeyboardRemove()
     try:
@@ -52,20 +68,6 @@ async def avatar_error(update: Update, context: CallbackContext):
         reply_markup=reply_markup
     )
     return ConversationHandler.END
-
-async def start(update: Update, context: CallbackContext):
-    """Send a welcome message when the /start command is issued."""
-    logger.info(f"start called: {update.effective_user}")
-    await context.bot.set_my_commands([
-        ("/avatar", "Создать аватар."),
-        # ("/food", "Заказать еду."),
-    ])
-    await update.message.reply_text(
-        "Здравствуй, зуконавт! Меня зовут ЗиНуСя, твой виртуальный помощник 🤗\n\n"+
-        "🟢 Я могу помочь заказать тебе горячее питание и сделать красивую аватарку! Для этого выбери команду:\n"+
-        # "/food - заказ горячего питания\n"+
-        "/avatar - создать аватарку"
-    )
 
 async def avatar(update: Update, context: CallbackContext):
     """Handle the /avatar command, requesting a photo."""
@@ -226,6 +228,18 @@ async def cancel_avatar(update: Update, context: CallbackContext):
     await update.message.reply_text("Обработка фотографии отменена.", reply_markup=reply_markup)
     return ConversationHandler.END
 
+### FOOD SECTION
+
+ADMIN_PROOVING_PAYMENT = 1012402779 # darrel
+# ADMIN_PROOVING_PAYMENT = 379278985 # me
+FOOD_ADMINS = [
+    1012402779, # darrel
+    379278985, # me
+    20538574, # love_zelensky
+    249413857, # vbutman
+]
+CANCEL_FOOD_STAGE2_REPLACEMENT_TEXT = "Этот выбор меню отменён. Для нового выбора можно снова воспользоваться командой /food"
+
 async def food(update: Update, context: CallbackContext):
     """Handle the /food command, requesting a photo."""
     logger.info(f"Received /food command from {update.effective_user}")
@@ -271,8 +285,6 @@ async def food_cancel(update: Update, context: CallbackContext):
     reply_markup = ReplyKeyboardRemove()
     await update.message.reply_text("Составление меню отменено.", reply_markup=reply_markup)
     return ConversationHandler.END
-
-CANCEL_FOOD_STAGE2_REPLACEMENT_TEXT = "Этот выбор меню отменён. Для нового выбора можно снова воспользоваться командой /food"
 
 async def food_choice_reply_payment(update: Update, context: CallbackContext) -> int:
     """Handle payment answer after menu received"""
@@ -385,15 +397,6 @@ async def food_choice_payment_doc(update: Update, context: CallbackContext) -> i
     file_path = os.path.join(tempfile.gettempdir(), file_name)
     await document_file.download_to_drive(file_path)
     return await food_choice_payment_stage2(update, context, file_path)
-
-ADMIN_PROOVING_PAYMENT = 1012402779 # darrel
-# ADMIN_PROOVING_PAYMENT = 379278985 # me
-FOOD_ADMINS = [
-    1012402779, # darrel
-    379278985, # me
-    20538574, # love_zelensky
-    249413857, # vbutman
-]
 
 async def food_choice_admin_proof_confirmed(update: Update, context: CallbackContext):
     """Handle admin proof"""
