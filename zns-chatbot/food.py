@@ -193,10 +193,6 @@ DELETE_EMPTY_AFTER = timedelta(days=1)
 SEND_PROMPT_AFTER = timedelta(days=1)
 SEND_PROOF_PROMPT_AFTER = timedelta(hours=1)
 
-DELETE_EMPTY_AFTER = timedelta(minutes=5) # TODO: DEBUG
-SEND_PROMPT_AFTER = timedelta(minutes=5)
-SEND_PROOF_PROMPT_AFTER = timedelta(minutes=5)
-
 async def checker(app):
     import glob
     import asyncio
@@ -204,13 +200,11 @@ async def checker(app):
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
     while True:
-        await asyncio.sleep(60) # every 5 minutes # TODO: DEBUG
+        await asyncio.sleep(600) # every 5 minutes
         files = glob.glob('/menu/*.bson')
 
         for file in files:
             async with MealContext.from_file(file, lock_timeout=3) as meal_context:
-                if meal_context.tg_user_id != 379278985: # TODO: DEBUG
-                    continue
 
                 if meal_context.choice_date is None and meal_context.created < datetime.now() - DELETE_EMPTY_AFTER:
                     await meal_context.cancel()
