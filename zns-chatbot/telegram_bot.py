@@ -346,13 +346,14 @@ async def food_choice_reply_will_pay(update: Update, context: CallbackContext):
         await query.edit_message_text(
             "Принято. Тогда жду оплаты. На всякий случай, продублирую кнопку оплаты сюда. "+
             "<u><b>Обязательно</b></u> нажми на неё, как будешь готов(а) предоставить доказательство.\n\n"+
-            "Если есть какие-то вопросы, не стесняйся обращаться к <a href=\"tg://user?id=249413857\">Вове</a>"+
-            " или <a href=\"tg://user?id=379278985\">Дане</a>, или <a href=\"tg://user?id=1012402779\">Даше</a>.",
+            "Если есть какие-то вопросы, не стесняйся обращаться к <a href=\"https://t.me/vbutman\">Вове</a>"+
+            " или <a href=\"https://t.me/complynx\">Дане</a>, или <a href=\"https://t.me/capricorndarrel\">Даше</a>.",
             parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([
+            reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("💸 Оплачено", callback_data=f"FoodChoiceReplPaym|{id}"),
                 InlineKeyboardButton("❌ Отменить", callback_data=f"FoodChoiceReplCanc|{id}"),
-        ]))
+            ]])
+        )
     except FileNotFoundError:
         logger.info("MealContext file not found in food_choice_reply_will_pay.")
         await query.edit_message_text(
