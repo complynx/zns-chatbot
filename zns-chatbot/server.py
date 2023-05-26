@@ -112,7 +112,7 @@ class MenuHandler(tornado.web.RequestHandler):
                     meal_context=meal_context.id
                 )
         except FileNotFoundError:
-            return self.write_error(401)
+            return self.write_error(404)
     
     async def post(self):
         from datetime import datetime

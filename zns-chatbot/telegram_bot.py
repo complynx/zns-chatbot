@@ -317,7 +317,7 @@ async def food_choice_reply_payment(update: Update, context: CallbackContext) ->
         markup = ReplyKeyboardMarkup([["Отменить выбор еды"]], resize_keyboard=True, one_time_keyboard=True)
         await context.bot.send_message(
             update.effective_user.id,
-            "Ок, жду скрин или документ — подтверждение оплаты.",
+            "Ок, жду скрин или документ с квитанцией/чеком об оплате.",
             reply_markup=markup
         )
         return WAITING_PAYMENT_PROOF
@@ -382,7 +382,8 @@ async def food_choice_reply_cancel(update: Update, context) -> int:
     # originated the CallbackQuery. This gives the feeling of an
     # interactive menu.
     await query.edit_message_text(
-        text=CANCEL_FOOD_STAGE2_REPLACEMENT_TEXT
+        text=CANCEL_FOOD_STAGE2_REPLACEMENT_TEXT,
+        reply_markup=InlineKeyboardMarkup([])
     )
     return ConversationHandler.END
 
@@ -621,7 +622,6 @@ async def create_telegram_bot(config, app) -> Application:
     food_stage2_handler = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(food_choice_reply_payment, pattern="^FoodChoiceReplPaym|[a-zA-Z_\\-0-9]$"),
-            CallbackQueryHandler(food_choice_reply_cancel, pattern="^FoodChoiceReplCanc|[a-zA-Z_\\-0-9]$"),
         ],
         states={
             WAITING_PAYMENT_PROOF: [
@@ -631,12 +631,14 @@ async def create_telegram_bot(config, app) -> Application:
         },
         fallbacks=[
             CommandHandler("cancel", food_choice_conversation_cancel),
+            CallbackQueryHandler(food_choice_reply_cancel, pattern="^FoodChoiceReplCanc|[a-zA-Z_\\-0-9]$"),
             MessageHandler(
                 filters.Regex(re.compile("^(Cancel|Отмена|Отменить выбор еды)$", re.I|re.U)),
                 food_choice_conversation_cancel
             )
         ],
     )
+    application.add_handler(CallbackQueryHandler(food_choice_reply_cancel, pattern="^FoodChoiceReplCanc|[a-zA-Z_\\-0-9]$"))
     application.add_handler(CallbackQueryHandler(food_choice_reply_will_pay, pattern="^FoodChoiceReplWillPay|[a-zA-Z_\\-0-9]$"))
     application.add_handler(CallbackQueryHandler(food_choice_admin_proof_confirmed, pattern="^FoodChoiceAdmConf|[a-zA-Z_\\-0-9]$"))
     application.add_handler(CallbackQueryHandler(food_choice_admin_proof_declined, pattern="^FoodChoiceAdmDecl|[a-zA-Z_\\-0-9]$"))
