@@ -297,7 +297,14 @@ async def food_choice_reply_payment(update: Update, context: CallbackContext) ->
         await query.answer()
         id = query.data.split("|")[1]
         async with MealContext.from_id(id) as meal_context:
-            meal_context.marked_payed = datetime.datetime.now()
+            if meal_context.proof_received is not None:
+                await query.edit_message_text(
+                    "Да, мы уже отправили подтверждение админинам.",
+                    reply_markup=InlineKeyboardMarkup([])
+                )
+                return ConversationHandler.END
+            if meal_context.marked_payed is None:
+                meal_context.marked_payed = datetime.datetime.now()
             meal_context.message_inline_id = query.inline_message_id
             meal_context.message_self_id = query.message.message_id
             meal_context.message_chat_id = query.message.chat_id
@@ -322,6 +329,37 @@ async def food_choice_reply_payment(update: Update, context: CallbackContext) ->
         return ConversationHandler.END
     except Exception as e:
         logger.error("Exception in food_choice_reply_payment: %s", e, exc_info=1)
+
+async def food_choice_reply_will_pay(update: Update, context: CallbackContext):
+    """Handle will pay answer for prompt"""
+    # Get CallbackQuery from Update
+    try:
+        query = update.callback_query
+        logger.info(f"Received food_choice_reply_will_pay from {update.effective_user}, data: {query.data}")
+        # CallbackQueries need to be answered, even if no notification to the user is needed
+        # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
+        await query.answer()
+        id = query.data.split("|")[1]
+        async with MealContext.from_id(id) as meal_context:
+            meal_context.marked_will_pay = datetime.datetime.now()
+        logger.info(f"MealContext ID: {id}")
+        await query.edit_message_text(
+            "Принято. Тогда жду оплаты. На всякий случай, продублирую кнопку оплаты сюда. "+
+            "<u><b>Обязательно</b></u> нажми на неё, как будешь готов(а) предоставить доказательство.\n\n"+
+            "Если есть какие-то вопросы, не стесняйся обращаться к <a href=\"tg://user?id=249413857\">Вове</a>"+
+            " или <a href=\"tg://user?id=379278985\">Дане</a>, или <a href=\"tg://user?id=1012402779\">Даше</a>.",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([
+                InlineKeyboardButton("💸 Оплачено", callback_data=f"FoodChoiceReplPaym|{id}"),
+                InlineKeyboardButton("❌ Отменить", callback_data=f"FoodChoiceReplCanc|{id}"),
+        ]))
+    except FileNotFoundError:
+        logger.info("MealContext file not found in food_choice_reply_will_pay.")
+        await query.edit_message_text(
+            "Что-то непредвиденное случилось с вашим заказом. Попробуйте ещё раз: /food",
+            reply_markup=InlineKeyboardMarkup([]))
+    except Exception as e:
+        logger.error("Exception in food_choice_reply_will_pay: %s", e, exc_info=1)
 
 async def food_choice_reply_cancel(update: Update, context) -> int:
     """Handle payment answer after menu received"""
@@ -596,6 +634,7 @@ async def create_telegram_bot(config, app) -> Application:
             )
         ],
     )
+    application.add_handler(CallbackQueryHandler(food_choice_reply_will_pay, pattern="^FoodChoiceReplWillPay|[a-zA-Z_\\-0-9]$"))
     application.add_handler(CallbackQueryHandler(food_choice_admin_proof_confirmed, pattern="^FoodChoiceAdmConf|[a-zA-Z_\\-0-9]$"))
     application.add_handler(CallbackQueryHandler(food_choice_admin_proof_declined, pattern="^FoodChoiceAdmDecl|[a-zA-Z_\\-0-9]$"))
 

@@ -11,7 +11,6 @@ setup(
         "pillow==9.5",
         "numpy==1.24.2",
         "pymongo==4.3.3",
-        "aiofilelock==1.0.0",
         "aiofiles==23.1.0",
     ],
 )

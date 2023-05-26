@@ -138,27 +138,7 @@ class MenuHandler(tornado.web.RequestHandler):
                 meal.choice_date = datetime.now()
 
                 if total > 0 and not cancelled:
-                    day_ru = {
-                        "friday": "Пятница",
-                        "saturday": "Суббота",
-                        "sunday": "Воскресенье"
-                    }
-                    meal_ru = {
-                        "dinner": "ужин",
-                        "lunch": "обед"
-                    }
-
-                    formatted_choice = ""
-                    for choice_dict in meal.choice:
-                        formatted_choice += f"\n\t<b>{day_ru[choice_dict['day']]}, {meal_ru[choice_dict['meal']]}</b> — "
-                        if choice_dict["cost"] == 0:
-                            formatted_choice += "не буду есть."
-                        else:
-                            formatted_choice += f"за <b>{choice_dict['cost']}</b> ₽ из ресторана <i>"
-                            formatted_choice += choice_dict["restaurant"] + "</i>\n"
-                            formatted_choice += choice_dict["choice"]
-                        formatted_choice += "\n"
-                    formatted_choice += f"\n\t\tИтого, общая сумма: <b>{meal.total}</b> ₽."
+                    formatted_choice = meal.format_choice()
                     
                     keyboard = [
                         [

@@ -1,27 +1,43 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 from bson import BSON
 import logging
 import aiofiles
-from aiofilelock import AIOMutableFileLock
+from .aioflielock import AIOMutableFileLock
 from aiofiles.os import remove
 from .photo_task import async_thread
 
 logger = logging.getLogger(__name__)
 
+LOCK_TIMEOUT_DEFAULT = 300 # 5 min
+GRANULARITY_DEFAULT = 0.2 # 1/5 seconds
+
 class AsyncMealContextConstructor(object):
-    def __init__(self, meal_cls, path) -> None:
+    def __init__(
+            self,
+            meal_cls,
+            path,
+            lock_timeout,
+            lock_granularity
+        ) -> None:
         self.path = path
         self.meal_cls = meal_cls
+        self.lock_timeout = lock_timeout
+        self.lock_granularity = lock_granularity
     async def __aenter__(self):
         logger.debug(f"from_file trying read: {self.path}")
         async with aiofiles.open(self.path, 'rb') as f:
             try:
-                async with AIOMutableFileLock(f):
+                async with AIOMutableFileLock(f, granularity=self.lock_granularity, timeout=self.lock_timeout):
                     logger.debug(f"from_file locked: {self.path}")
                     data = BSON(await f.read()).decode()
                     
-                    self.context = self.meal_cls(**data, filename=self.path)
+                    self.context = self.meal_cls(
+                        **data,
+                        filename=self.path,
+                        lock_timeout=self.lock_timeout,
+                        lock_granularity=self.lock_granularity
+                    )
                 logger.debug(f"from_file unlocked: {self.path}")
             except Exception as e:
                 logger.debug(f"from_file unlocked: {self.path} while propagating exception {e}")
@@ -48,6 +64,8 @@ class MealContext(object):
     payment_confirmed_date = None
     payment_declined = False
     payment_declined_date = None
+    prompt_sent = False
+    proof_prompt_sent = False
 
     _cancelled = False
     _non_cacheable = {
@@ -55,7 +73,9 @@ class MealContext(object):
         "_file",
         "filename",
         "_non_cacheable",
-        "_cancelled"
+        "_cancelled",
+        "_lock_timeout",
+        "_lock_granularity"
     }
 
     def __init__(
@@ -64,6 +84,8 @@ class MealContext(object):
             filename=None,
             lock=None,
             file=None,
+            lock_timeout=LOCK_TIMEOUT_DEFAULT,
+            lock_granularity=GRANULARITY_DEFAULT,
             **kwargs
         ) -> None:
         for key, value in kwargs.items():
@@ -74,7 +96,15 @@ class MealContext(object):
         self.filename = filename if filename is not None else self.id_path(self.id)
         self._lock = lock
         self._file = file
+        self._lock_timeout = lock_timeout
+        self._lock_granularity = lock_granularity
         assert self._file is not None or self._lock is None
+
+    def tg_user_repr(self):
+        return f"User({self.tg_user_id}" + \
+            (f" {self.tg_username}" if self.tg_username is not None else "") + \
+            f" {self.tg_user_first_name}" + \
+            (f" {self.tg_user_last_name}" if self.tg_user_last_name is not None else "") + ")"
 
     @staticmethod
     def id_path(id):
@@ -85,7 +115,7 @@ class MealContext(object):
         if self._file is None:
             self._file = await aiofiles.open(self.filename, "wb+")
         if self._lock is None:
-            self._lock = AIOMutableFileLock(self._file)
+            self._lock = AIOMutableFileLock(self._file, granularity=self._lock_granularity, timeout=self._lock_timeout)
         await self._lock.acquire()
         logger.debug(f"aenter locked id: {self.id}")
         return self
@@ -109,19 +139,142 @@ class MealContext(object):
         await self._file.close()
         logger.debug(f"cancel unlocked id: {self.id}")
         await remove(self.filename)
+
+    def format_choice(self):
+        if self.choice is not None:
+            day_ru = {
+                "friday": "Пятница",
+                "saturday": "Суббота",
+                "sunday": "Воскресенье"
+            }
+            meal_ru = {
+                "dinner": "ужин",
+                "lunch": "обед"
+            }
+
+            formatted_choice = ""
+            for choice_dict in self.choice:
+                formatted_choice += f"\n\t<b>{day_ru[choice_dict['day']]}, {meal_ru[choice_dict['meal']]}</b> — "
+                if choice_dict["cost"] == 0:
+                    formatted_choice += "не буду есть."
+                else:
+                    formatted_choice += f"за <b>{choice_dict['cost']}</b> ₽ из ресторана <i>"
+                    formatted_choice += choice_dict["restaurant"] + "</i>\n"
+                    formatted_choice += choice_dict["choice"]
+                formatted_choice += "\n"
+            formatted_choice += f"\n\t\tИтого, общая сумма: <b>{self.total}</b> ₽."
+            return formatted_choice
+        return "Не выбрано"
     
     @classmethod
-    def from_file(cls, path):
-        return AsyncMealContextConstructor(cls, path)
+    def from_file(
+        cls,
+        path,
+        lock_timeout=LOCK_TIMEOUT_DEFAULT,
+        lock_granularity=GRANULARITY_DEFAULT
+        ):
+        return AsyncMealContextConstructor(cls, path, lock_timeout=lock_timeout, lock_granularity=lock_granularity)
     
     @classmethod
-    def from_id(cls, id):
+    def from_id(cls,
+        id,
+        lock_timeout=LOCK_TIMEOUT_DEFAULT,
+        lock_granularity=GRANULARITY_DEFAULT
+        ):
+        
         filename = cls.id_path(id)
-        return cls.from_file(filename)
+        return cls.from_file(filename, lock_timeout, lock_granularity)
     
     @property
     def link(self):
         return f"/menu?id={self.id}"
+
+DELETE_EMPTY_AFTER = timedelta(days=1)
+SEND_PROMPT_AFTER = timedelta(days=1)
+SEND_PROOF_PROMPT_AFTER = timedelta(hours=1)
+
+DELETE_EMPTY_AFTER = timedelta(minutes=5) # TODO: DEBUG
+SEND_PROMPT_AFTER = timedelta(minutes=5)
+SEND_PROOF_PROMPT_AFTER = timedelta(minutes=5)
+
+async def checker(app):
+    import glob
+    import asyncio
+    from telegram.constants import ParseMode
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    while True:
+        asyncio.sleep(600) # every 5 minutes
+        files = glob.glob('/menu/*.bson')
+
+        for file in files:
+            async with MealContext.from_file(file, lock_timeout=3) as meal_context:
+                if meal_context.tg_user_id != 379278985: # TODO: DEBUG
+                    continue
+
+                if meal_context.choice_date is None and meal_context.created < datetime.now() - DELETE_EMPTY_AFTER:
+                    await meal_context.cancel()
+                    logger.info(f"deleted empty stale meal context {meal_context.id}")
+                    continue
+
+                if meal_context.choice_date is not None and \
+                    meal_context.choice_date < datetime.now() - SEND_PROMPT_AFTER and \
+                    meal_context.marked_payed is None and not meal_context.prompt_sent:
+
+                    logger.info(f"prompting for payment user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
+
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("👌 Оплачу попозже", callback_data=f"FoodChoiceReplWillPay|{meal_context.id}"),
+                            InlineKeyboardButton("❌ Отменить заказ", callback_data=f"FoodChoiceReplCanc|{meal_context.id}"),
+                        ]
+                    ]
+
+                    await app.bot.bot.send_message(
+                        chat_id=meal_context.tg_user_id,
+                        text=
+                        f"Я вижу твой заказ для зуконавта по имени <i>{meal_context.for_who}</i> "+
+                        f"на сумму {meal_context.total}, который не оплачен.\n"
+                        "Будешь ли ты его оплачивать?\n"+
+                        "<i>Важная информация</i>, оплатить надо <u>до 4 числа</u>, иначе заказ будет аннулирован.\n\n"+
+                        "Если есть какие-то вопросы, не стесняйся обращаться к <a href=\"tg://user?id=249413857\">Вове</a>"+
+                        " или <a href=\"tg://user?id=379278985\">Дане</a>, или <a href=\"tg://user?id=1012402779\">Даше</a>.",
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                    )
+                    meal_context.prompt_sent = True
+                    continue
+
+                if meal_context.marked_payed is not None and \
+                    meal_context.marked_payed < datetime.now() - SEND_PROOF_PROMPT_AFTER and \
+                    meal_context.proof_received is None and not meal_context.proof_prompt_sent:
+
+                    logger.info(f"prompting for proof user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
+
+                    keyboard = [
+                        [
+                            InlineKeyboardButton("👌 Сейчас пришлю", callback_data=f"FoodChoiceReplPaym|{meal_context.id}"),
+                            InlineKeyboardButton("❌ Отменить заказ", callback_data=f"FoodChoiceReplCanc|{meal_context.id}"),
+                        ]
+                    ]
+
+                    await app.bot.bot.send_message(
+                        chat_id=meal_context.tg_user_id,
+                        text=
+                        f"Я вижу твой заказ для зуконавта по имени <i>{meal_context.for_who}</i> "+
+                        f"на сумму {meal_context.total}. Указано, что он оплачен, но не получено подтверждения.\n"
+                        "Подтверждение оплаты заказа надо прислать в форме <u><b>квитанции (чека)</b></u> об оплате"+
+                        " <u>до 4 числа</u>, иначе заказ будет аннулирован. "+
+                        "Перед отправкой, <u><b>обязательно</b></u> нажми кнопку \"👌 Сейчас пришлю\" под сообщением.\n\n"+
+                        "Если есть какие-то вопросы, не стесняйся обращаться к <a href=\"tg://user?id=249413857\">Вове</a>"+
+                        " или <a href=\"tg://user?id=379278985\">Дане</a>, или <a href=\"tg://user?id=1012402779\">Даше</a>.",
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                    )
+                    meal_context.proof_prompt_sent = True
+                    continue
+        
+
 
 @async_thread
 def get_csv(csv_filename):
