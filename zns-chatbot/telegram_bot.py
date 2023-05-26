@@ -299,7 +299,7 @@ async def food_choice_reply_payment(update: Update, context: CallbackContext) ->
         async with MealContext.from_id(id) as meal_context:
             if meal_context.proof_received is not None:
                 await query.edit_message_text(
-                    "Да, мы уже отправили подтверждение админинам.",
+                    "Да, я уже отправила подтверждение админинам.",
                     reply_markup=InlineKeyboardMarkup([])
                 )
                 return ConversationHandler.END
@@ -345,7 +345,7 @@ async def food_choice_reply_will_pay(update: Update, context: CallbackContext):
         logger.info(f"MealContext ID: {id}")
         await query.edit_message_text(
             "Принято. Тогда жду оплаты. Подтверждение оплаты заказа надо прислать в форме "+
-            "<u><b>квитанции (чека)</b></u> об оплате <u>до 4 числа</u>, иначе заказ будет аннулирован. "+
+            "<u><b>квитанции (чека)</b></u> об оплате <u>до 1 числа</u>, иначе заказ будет аннулирован. "+
             "На всякий случай, продублирую кнопку оплаты сюда. "+
             "<u><b>Обязательно</b></u> нажми на неё, как будешь готов(а) предоставить доказательство.\n\n"+
             "Если есть какие-то вопросы, не стесняйся обращаться к <a href=\"https://t.me/vbutman\">Вове</a>"+
