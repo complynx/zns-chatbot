@@ -204,7 +204,7 @@ async def checker(app):
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
     while True:
-        asyncio.sleep(600) # every 5 minutes
+        await asyncio.sleep(60) # every 5 minutes # TODO: DEBUG
         files = glob.glob('/menu/*.bson')
 
         for file in files:
