@@ -65,10 +65,16 @@ async def start(update: Update, context: CallbackContext):
 async def avatar_cmd(update: Update, context: CallbackContext):
     """Handle the /avatar command, requesting a photo."""
     logger.info(f"Received /avatar command from {update.effective_user}")
-    await avatar_cancel(update, context)
+    await avatar_cancel_inflow(update, context)
+    buttons = [["Отмена"]]
     await update.message.reply_text(
         "📸 Отправь мне своё лучшее фото.\n\nP.S. Если в процессе покажется, что я "+
-        "уснула, то просто разбуди меня, снова выбрав команду\n/avatar"
+        "уснула, то просто разбуди меня, снова выбрав команду\n/avatar",
+        reply_markup = ReplyKeyboardMarkup(
+            buttons,
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
     )
     return PHOTO
 
@@ -97,7 +103,7 @@ async def avatar_received_document_image(update: Update, context: CallbackContex
     return await avatar_received_stage2(update, context, file_path, file_ext)
 
 async def avatar_received_stage2(update: Update, context: CallbackContext, file_path:str, file_ext:str):
-    await avatar_cancel(update, context)
+    await avatar_cancel_inner(update, context)
     task = PhotoTask(update.effective_chat, update.effective_user)
     task.add_file(file_path, file_ext)
     buttons = [
@@ -190,26 +196,38 @@ async def avatar_crop_stage2(task: PhotoTask, update: Update, context: CallbackC
     task.delete()
     return ConversationHandler.END
 
-async def avatar_cancel(update: Update, context: CallbackContext):
-    """Handle the cancel command during the avatar submission."""
-    logger.info(f"Avatar submission for {update.effective_user} canceled")
+async def avatar_cancel_inner(update: Update):
     try:
         get_by_user(update.effective_user.id).delete()
-        await update.message.reply_text("Уже активированная обработка фотографии отменена.", reply_markup=ReplyKeyboardRemove())
+        return True
     except KeyError:
         pass
     except Exception as e:
         logger.error("Exception in cancel: %s", e, exc_info=1)
-    reply_markup = ReplyKeyboardRemove()
+    return False
+
+async def avatar_cancel_inflow(update: Update, context: CallbackContext):
+    """Handle the cancel command during the avatar submission."""
+    logger.info(f"Avatar submission for {update.effective_user} canceled")
+    if await avatar_cancel_inner(update):
+        await update.message.reply_text(
+            "Уже активированная обработка фотографии отменена.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+    return ConversationHandler.END
+
+async def avatar_cancel_command(update: Update, context: CallbackContext):
+    """Handle the cancel command during the avatar submission."""
+    logger.info(f"Avatar submission for {update.effective_user} canceled")
+    await avatar_cancel_inner(update)
+    await update.message.reply_text(
+        "Oбработка фотографии отменена.",
+        reply_markup=ReplyKeyboardRemove()
+    )
     return ConversationHandler.END
 
 async def avatar_error(update: Update, context: CallbackContext):
-    try:
-        get_by_user(update.effective_user.id).delete()
-    except KeyError:
-        pass
-    except Exception as e:
-        logger.error("Exception in avatar_error: %s", e, exc_info=1)
+    await avatar_cancel_inner(update)
     await update.message.reply_text(
         "Ошибка обработки фото, попробуйте ещё раз.\n/avatar",
         reply_markup=ReplyKeyboardRemove()
@@ -217,12 +235,7 @@ async def avatar_error(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 async def avatar_timeout(update: Update, context: CallbackContext):
-    try:
-        get_by_user(update.effective_user.id).delete()
-    except KeyError:
-        pass
-    except Exception as e:
-        logger.error("Exception in avatar_error: %s", e, exc_info=1)
+    await avatar_cancel_inner(update)
     await update.message.reply_text(
         "Обработка фото отменена, так как долго не было активных действий от пользователя.\n/avatar",
         reply_markup=ReplyKeyboardRemove()
@@ -641,13 +654,13 @@ async def create_telegram_bot(config, app) -> Application:
             ],
         },
         fallbacks=[
-            CommandHandler("cancel", avatar_cancel),
-            CommandHandler("avatar", avatar_cancel),
-            MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), avatar_cancel)
+            CommandHandler("cancel", avatar_cancel_command),
+            CommandHandler("avatar", avatar_cancel_command),
+            MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), avatar_cancel_command)
         ],
         conversation_timeout=datetime.timedelta(hours=2)
     )
-    food_conversation = ConversationHandler(
+    food_start_conversation = ConversationHandler(
         entry_points=[CommandHandler("food", food_cmd)],
         states={
             NAME: [
@@ -666,7 +679,7 @@ async def create_telegram_bot(config, app) -> Application:
         ],
         conversation_timeout=datetime.timedelta(hours=1)
     )
-    food_conversation_stage2 = ConversationHandler(
+    food_proof_conversation = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(food_payment_payed, pattern=f"^{IC_FOOD_PAYMENT_PAYED}|[a-zA-Z_\\-0-9]$"),
         ],
@@ -692,9 +705,9 @@ async def create_telegram_bot(config, app) -> Application:
 
     application.add_handler(CommandHandler("food_adm_csv", food_admin_get_csv))
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(food_conversation)
+    application.add_handler(food_start_conversation)
+    application.add_handler(food_proof_conversation)
     application.add_handler(avatar_conversation)
-    application.add_handler(food_conversation_stage2)
 
     application.add_handler(MessageHandler(filters.ALL, log_msg))
     application.add_error_handler(error_handler)
