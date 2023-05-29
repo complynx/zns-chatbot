@@ -65,7 +65,7 @@ async def start(update: Update, context: CallbackContext):
 async def avatar_cmd(update: Update, context: CallbackContext):
     """Handle the /avatar command, requesting a photo."""
     logger.info(f"Received /avatar command from {update.effective_user}")
-    avatar_cancel(update, context)
+    await avatar_cancel(update, context)
     await update.message.reply_text(
         "📸 Отправь мне своё лучшее фото.\n\nP.S. Если в процессе покажется, что я "+
         "уснула, то просто разбуди меня, снова выбрав команду\n/avatar"
@@ -96,7 +96,7 @@ async def avatar_received_document_image(update: Update, context: CallbackContex
     return await avatar_received_stage2(update, context, file_path, file_ext)
 
 async def avatar_received_stage2(update: Update, context: CallbackContext, file_path:str, file_ext:str):
-    avatar_cancel(update, context)
+    await avatar_cancel(update, context)
     task = PhotoTask(update.effective_chat, update.effective_user)
     task.add_file(file_path, file_ext)
     buttons = [
@@ -194,7 +194,7 @@ async def avatar_cancel(update: Update, context: CallbackContext):
     logger.info(f"Avatar submission for {update.effective_user} canceled")
     try:
         get_by_user(update.effective_user.id).delete()
-        await update.message.reply_text("Уже активированная обработка фотографии отменена.", reply_markup=reply_markup)
+        await update.message.reply_text("Уже активированная обработка фотографии отменена.", reply_markup=ReplyKeyboardRemove())
     except KeyError:
         pass
     except Exception as e:
