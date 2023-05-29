@@ -103,7 +103,7 @@ async def avatar_received_document_image(update: Update, context: CallbackContex
     return await avatar_received_stage2(update, context, file_path, file_ext)
 
 async def avatar_received_stage2(update: Update, context: CallbackContext, file_path:str, file_ext:str):
-    await avatar_cancel_inner(update, context)
+    await avatar_cancel_inner(update)
     task = PhotoTask(update.effective_chat, update.effective_user)
     task.add_file(file_path, file_ext)
     buttons = [
