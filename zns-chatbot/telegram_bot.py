@@ -33,7 +33,7 @@ from .photo_task import get_by_user, PhotoTask
 
 logger = logging.getLogger(__name__)
 
-PHOTO, CROPPER, UPSCALE, FINISH = range(4)
+CROPPER = 1
 NAME, WAITING_PAYMENT_PROOF = range(2)
 
 web_app_base = ""
@@ -53,53 +53,44 @@ async def start(update: Update, context: CallbackContext):
         "/avatar - создать аватарку"
     )
 
-### AVATAR SECTION
+# region AVATAR SECTION
 
-async def avatar_error(update: Update, context: CallbackContext):
-    reply_markup = ReplyKeyboardRemove()
-    try:
-        get_by_user(update.effective_user.id).delete()
-    except KeyError:
-        pass
-    except Exception as e:
-        logger.error("Exception in avatar_error: %s", e, exc_info=1)
-    await update.message.reply_text(
-        "Ошибка обработки фото, попробуйте ещё раз.\n/avatar",
-        reply_markup=reply_markup
-    )
-    return ConversationHandler.END
-
-async def avatar(update: Update, context: CallbackContext):
+async def avatar_cmd(update: Update, context: CallbackContext):
     """Handle the /avatar command, requesting a photo."""
     logger.info(f"Received /avatar command from {update.effective_user}")
-    _ = PhotoTask(update.effective_chat, update.effective_user)
-    markup = ReplyKeyboardMarkup([["Отмена"]], resize_keyboard=True, one_time_keyboard=True)
+    avatar_cancel(update, context)
     await update.message.reply_text(
-        "📸 Теперь отправь своё лучшее фото.\n\nP.S. Если в процессе покажется, что я "+
-        "уснула, то просто разбуди меня, снова выбрав команду\n/avatar",
-        reply_markup=markup
+        "📸 Отправь мне своё лучшее фото.\n\nP.S. Если в процессе покажется, что я "+
+        "уснула, то просто разбуди меня, снова выбрав команду\n/avatar"
     )
-    return PHOTO
 
-async def reavatar(update: Update, context: CallbackContext):
-    logger.info(f"Avatar submission for {update.effective_user} canceled")
-    try:
-        get_by_user(update.effective_user.id).delete()
-    except KeyError:
-        pass
-    except Exception as e:
-        logger.error("Exception in cancel: %s", e, exc_info=1)
-    await update.message.reply_text("Предыдущая обработка отменена.")
-    return await avatar(update, context)
+async def avatar_received_image(update: Update, context: CallbackContext):
+    """Handle the photo submission as photo"""
+    logger.info(f"Received avatar photo from {update.effective_user}")
 
-async def photo_stage2(update: Update, context: CallbackContext, file_path:str, file_ext:str):
-    try:
-        task = get_by_user(update.effective_user.id)
-    except KeyError:
-        return await avatar_error(update, context)
-    except Exception as e:
-        logger.error("Exception in photo_stage2: %s", e, exc_info=1)
-        return await avatar_error(update, context)
+    photo_file = await update.message.photo[-1].get_file()
+    file_name = f"{photo_file.file_id}.jpg"
+    file_path = os.path.join(tempfile.gettempdir(), file_name)
+    
+    await photo_file.download_to_drive(file_path)
+    return await avatar_received_stage2(update, context, file_path, "jpg")
+
+async def avatar_received_document_image(update: Update, context: CallbackContext):
+    """Handle the photo submission as document"""
+    logger.info(f"Received avatar document from {update.effective_user}")
+
+    document = update.message.document
+
+    # Download the document
+    document_file = await document.get_file()
+    file_ext = mimetypes.guess_extension(document.mime_type)
+    file_path = os.path.join(tempfile.gettempdir(), f"{document.file_id}.{file_ext}")
+    await document_file.download_to_drive(file_path)
+    return await avatar_received_stage2(update, context, file_path, file_ext)
+
+async def avatar_received_stage2(update: Update, context: CallbackContext, file_path:str, file_ext:str):
+    avatar_cancel(update, context)
+    task = PhotoTask(update.effective_chat, update.effective_user)
     task.add_file(file_path, file_ext)
     buttons = [
         [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"{web_app_base}/fit_frame?id={task.id.hex}"))],
@@ -118,7 +109,7 @@ async def photo_stage2(update: Update, context: CallbackContext, file_path:str, 
     )
     return CROPPER
 
-async def autocrop(update: Update, context: CallbackContext):
+async def avatar_crop_auto(update: Update, context: CallbackContext):
     try:
         task = get_by_user(update.effective_user.id)
     except KeyError:
@@ -133,34 +124,9 @@ async def autocrop(update: Update, context: CallbackContext):
     except Exception as e:
         logger.error("Exception in autocrop: %s", e, exc_info=1)
         return await avatar_error(update, context)
-    return await cropped_st2(task, update, context)
+    return await avatar_crop_stage2(task, update, context)
 
-async def cropped_st2(task: PhotoTask, update: Update, context: CallbackContext):
-    try:
-        await update.message.reply_text(
-            "🪐 Уже совсем скоро твоё чудесное фото станет ещё и космическим! Процесс запущен...",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        await task.finalize_avatar()
-        await update.message.reply_document(task.get_final_file(), filename="avatar.jpg")
-        await update.message.reply_document(
-            cover,
-            caption="❗️Получившуюся аватарку рекомендуется загружать в личный профиль Вконтакте "+
-            "вместе со специальной обложкой профиля."
-        )
-        await update.message.reply_text(
-            "🔁 Если хочешь другое фото, то для этого снова используй команду\n"+
-            "/avatar\n\n🛸 Всё готово! До встречи на ZNS! 🐋",
-            reply_markup=ReplyKeyboardRemove()
-        )
-    except Exception as e:
-        logger.error("Exception in cropped_st2: %s", e, exc_info=1)
-        return await avatar_error(update, context)
-    
-    task.delete()
-    return ConversationHandler.END
-
-async def image_crop_matrix(update: Update, context):
+async def avatar_crop_matrix(update: Update, context):
     try:
         task = get_by_user(update.effective_user.id)
     except KeyError:
@@ -189,46 +155,75 @@ async def image_crop_matrix(update: Update, context):
     except Exception as e:
         logger.error("Exception in image_crop_matrix: %s", e, exc_info=1)
         return await avatar_error(update, context)
-    return await cropped_st2(task, update, context)
+    return await avatar_crop_stage2(task, update, context)
 
-async def photo(update: Update, context: CallbackContext):
-    """Handle the photo submission as photo"""
-    logger.info(f"Received avatar photo from {update.effective_user}")
-
-    photo_file = await update.message.photo[-1].get_file()
-    file_name = f"{photo_file.file_id}.jpg"
-    file_path = os.path.join(tempfile.gettempdir(), file_name)
+async def avatar_crop_stage2(task: PhotoTask, update: Update, context: CallbackContext):
+    try:
+        await update.message.reply_text(
+            "🪐 Уже совсем скоро твоё чудесное фото станет ещё и космическим! Процесс запущен...",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await task.finalize_avatar()
+        await update.message.reply_document(task.get_final_file(), filename="avatar.jpg")
+        await update.message.reply_document(
+            cover,
+            caption="❗️Получившуюся аватарку рекомендуется загружать в личный профиль Вконтакте "+
+            "вместе со специальной обложкой профиля."
+        )
+        await update.message.reply_text(
+            "🔁 Если хочешь другое фото, то для этого снова используй команду\n"+
+            "/avatar\n\n🛸 Всё готово! До встречи на ZNS! 🐋",
+            reply_markup=ReplyKeyboardRemove()
+        )
+    except Exception as e:
+        logger.error("Exception in cropped_st2: %s", e, exc_info=1)
+        return await avatar_error(update, context)
     
-    await photo_file.download_to_drive(file_path)
-    return await photo_stage2(update, context, file_path, "jpg")
+    task.delete()
+    return ConversationHandler.END
 
-async def photo_doc(update: Update, context: CallbackContext):
-    """Handle the photo submission as document"""
-    logger.info(f"Received avatar document from {update.effective_user}")
-
-    document = update.message.document
-
-    # Download the document
-    document_file = await document.get_file()
-    file_ext = mimetypes.guess_extension(document.mime_type)
-    file_path = os.path.join(tempfile.gettempdir(), f"{document.file_id}.{file_ext}")
-    await document_file.download_to_drive(file_path)
-    return await photo_stage2(update, context, file_path, file_ext)
-
-async def cancel_avatar(update: Update, context: CallbackContext):
+async def avatar_cancel(update: Update, context: CallbackContext):
     """Handle the cancel command during the avatar submission."""
     logger.info(f"Avatar submission for {update.effective_user} canceled")
     try:
         get_by_user(update.effective_user.id).delete()
+        await update.message.reply_text("Уже активированная обработка фотографии отменена.", reply_markup=reply_markup)
     except KeyError:
         pass
     except Exception as e:
         logger.error("Exception in cancel: %s", e, exc_info=1)
     reply_markup = ReplyKeyboardRemove()
-    await update.message.reply_text("Обработка фотографии отменена.", reply_markup=reply_markup)
     return ConversationHandler.END
 
-### FOOD SECTION
+async def avatar_error(update: Update, context: CallbackContext):
+    try:
+        get_by_user(update.effective_user.id).delete()
+    except KeyError:
+        pass
+    except Exception as e:
+        logger.error("Exception in avatar_error: %s", e, exc_info=1)
+    await update.message.reply_text(
+        "Ошибка обработки фото, попробуйте ещё раз.\n/avatar",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
+async def avatar_timeout(update: Update, context: CallbackContext):
+    try:
+        get_by_user(update.effective_user.id).delete()
+    except KeyError:
+        pass
+    except Exception as e:
+        logger.error("Exception in avatar_error: %s", e, exc_info=1)
+    await update.message.reply_text(
+        "Обработка фото отменена, так как долго не было активных действий от пользователя.\n/avatar",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
+# endregion AVATAR SECTION
+
+# region FOOD SECTION
 
 ADMIN_PROOVING_PAYMENT = 1012402779 # darrel
 # ADMIN_PROOVING_PAYMENT = 379278985 # me
@@ -239,8 +234,13 @@ FOOD_ADMINS = [
     249413857, # vbutman
 ]
 CANCEL_FOOD_STAGE2_REPLACEMENT_TEXT = "Этот выбор меню отменён. Для нового выбора можно снова воспользоваться командой /food"
+IC_FOOD_PAYMENT_PAYED = "FoodChoiceReplPaym"
+IC_FOOD_PAYMENT_CANCEL = "FoodChoiceReplCanc"
+IC_FOOD_PROMPT_WILL_PAY = "FoodChoiceReplWillPay"
+IC_FOOD_ADMIN_CONFIRM = "FoodChoiceAdmConf"
+IC_FOOD_ADMIN_DECLINE = "FoodChoiceAdmDecl"
 
-async def food(update: Update, context: CallbackContext):
+async def food_cmd(update: Update, context: CallbackContext):
     """Handle the /food command, requesting a photo."""
     logger.info(f"Received /food command from {update.effective_user}")
     _ = PhotoTask(update.effective_chat, update.effective_user)
@@ -256,7 +256,7 @@ async def food(update: Update, context: CallbackContext):
     )
     return NAME
 
-async def food_for_who(update: Update, context: CallbackContext):
+async def food_received_name(update: Update, context: CallbackContext):
     """Handle the cancel command during the avatar submission."""
     name = update.message.text
     logger.info(f"Received for_who from {update.effective_user}: {name}")
@@ -286,7 +286,17 @@ async def food_cancel(update: Update, context: CallbackContext):
     await update.message.reply_text("Составление меню отменено.", reply_markup=reply_markup)
     return ConversationHandler.END
 
-async def food_choice_reply_payment(update: Update, context: CallbackContext) -> int:
+async def food_timeout(update: Update, context: CallbackContext):
+    """Handle the timeout command during the avatar submission."""
+    logger.info(f"Food conversation for {update.effective_user} timed out")
+    reply_markup = ReplyKeyboardRemove()
+    await update.message.reply_text(
+        "Составление меню отменено из-за отсутствия действий пользователя.",
+        reply_markup=reply_markup
+    )
+    return ConversationHandler.END
+
+async def food_payment_payed(update: Update, context: CallbackContext) -> int:
     """Handle payment answer after menu received"""
     # Get CallbackQuery from Update
     try:
@@ -330,7 +340,7 @@ async def food_choice_reply_payment(update: Update, context: CallbackContext) ->
     except Exception as e:
         logger.error("Exception in food_choice_reply_payment: %s", e, exc_info=1)
 
-async def food_choice_reply_will_pay(update: Update, context: CallbackContext):
+async def food_prompt_will_pay(update: Update, context: CallbackContext):
     """Handle will pay answer for prompt"""
     # Get CallbackQuery from Update
     try:
@@ -352,8 +362,8 @@ async def food_choice_reply_will_pay(update: Update, context: CallbackContext):
             " или <a href=\"https://t.me/complynx\">Дане</a>, или <a href=\"https://t.me/capricorndarrel\">Даше</a>.",
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("💸 Оплачено", callback_data=f"FoodChoiceReplPaym|{id}"),
-                InlineKeyboardButton("❌ Отменить", callback_data=f"FoodChoiceReplCanc|{id}"),
+                InlineKeyboardButton("💸 Оплачено", callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{id}"),
+                InlineKeyboardButton("❌ Отменить", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{id}"),
             ]])
         )
     except FileNotFoundError:
@@ -364,7 +374,7 @@ async def food_choice_reply_will_pay(update: Update, context: CallbackContext):
     except Exception as e:
         logger.error("Exception in food_choice_reply_will_pay: %s", e, exc_info=1)
 
-async def food_choice_reply_cancel(update: Update, context) -> int:
+async def food_payment_cancel_inline(update: Update, context) -> int:
     """Handle payment answer after menu received"""
     # Get CallbackQuery from Update
     query = update.callback_query
@@ -387,7 +397,7 @@ async def food_choice_reply_cancel(update: Update, context) -> int:
     )
     return ConversationHandler.END
 
-async def food_choice_conversation_cancel(update: Update, context: CallbackContext) -> int:
+async def food_payment_cancel_message(update: Update, context: CallbackContext) -> int:
     """Cancel food choice conversation"""
     logger.info(f"Received food_choice_conversation_cancel from {update.effective_user}")
     try:
@@ -417,7 +427,7 @@ async def food_choice_conversation_cancel(update: Update, context: CallbackConte
     )
     return ConversationHandler.END
 
-async def food_choice_payment_photo(update: Update, context: CallbackContext) -> int:
+async def food_payment_proof_photo(update: Update, context: CallbackContext) -> int:
     """Received payment proof as image"""
     logger.info(f"Received food_choice_payment_photo from {update.effective_user}")
 
@@ -425,9 +435,9 @@ async def food_choice_payment_photo(update: Update, context: CallbackContext) ->
     file_name = f"{photo_file.file_id}.jpg"
     file_path = os.path.join(tempfile.gettempdir(), file_name)
     await photo_file.download_to_drive(file_path)
-    return await food_choice_payment_stage2(update, context, file_path)
+    return await food_payment_proof_stage2(update, context, file_path)
 
-async def food_choice_payment_doc(update: Update, context: CallbackContext) -> int:
+async def food_payment_proof_doc(update: Update, context: CallbackContext) -> int:
     """Received payment proof as file"""
     logger.info(f"Received food_choice_payment_doc from {update.effective_user}")
     
@@ -438,9 +448,60 @@ async def food_choice_payment_doc(update: Update, context: CallbackContext) -> i
     file_name = f"{document.file_id}.{file_ext}"
     file_path = os.path.join(tempfile.gettempdir(), file_name)
     await document_file.download_to_drive(file_path)
-    return await food_choice_payment_stage2(update, context, file_path)
+    return await food_payment_proof_stage2(update, context, file_path)
 
-async def food_choice_admin_proof_confirmed(update: Update, context: CallbackContext):
+async def food_payment_proof_stage2(update: Update, context: CallbackContext, received_file) -> int:
+    await update.message.reply_text(
+        text="Я переслала подтверждение админам. Они проверят и я вернусь с результатом.",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
+    try:
+        id = context.user_data["food_choice_id"]
+        del context.user_data["food_choice_id"]
+    except KeyError:
+        logger.error("food_choice_id not found in food_choice_payment_stage2")
+        await update.message.reply_text(
+            text="Возникла какая-то непредвиденная проблема с вашим заказом,"+
+            " возможно придётся попробовать ещё раз: /food",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+    try:
+        async with MealContext.from_id(id) as meal_context:
+            proof_file_name = os.path.splitext(meal_context.filename)[0] + ".proof" + os.path.splitext(received_file)[1]
+            shutil.move(received_file, proof_file_name)
+            meal_context.proof_file = proof_file_name
+            meal_context.proof_received = datetime.datetime.now()
+
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Подтверждено", callback_data=f"{IC_FOOD_ADMIN_CONFIRM}|{meal_context.id}"),
+                    InlineKeyboardButton("❌ Отказ", callback_data=f"{IC_FOOD_ADMIN_DECLINE}|{meal_context.id}"),
+                ]
+            ]
+            await update.message.forward(ADMIN_PROOVING_PAYMENT)
+            await context.bot.send_message(
+                ADMIN_PROOVING_PAYMENT,
+                f"Пользователь <i>{update.effective_user.full_name}</i> прислал подтверждение оплаты еды"+
+                f" на сумму {meal_context.total} ₽"+
+                f" для зуконавта по имени <i>{meal_context.for_who}</i>. Необходимо подтверждение.\n"+
+                "<b>Внимание</b>, не стоит помечать отсутствие оплаты раньше времени, лучше сначала удостовериться.",
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+    except FileNotFoundError:
+        logger.error(f"MealContext by ID not found in food_choice_payment_stage2: {id}")
+        await update.message.reply_text(
+            text="Возникла какая-то непредвиденная проблема с вашим заказом, он потерялся.\n"+
+            " Придётся попробовать ещё раз: /food",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+
+    return ConversationHandler.END
+
+async def food_admin_proof_confirmed(update: Update, context: CallbackContext):
     """Handle admin proof"""
     if update.effective_user.id != ADMIN_PROOVING_PAYMENT:
         return # check admin
@@ -468,7 +529,7 @@ async def food_choice_admin_proof_confirmed(update: Update, context: CallbackCon
             parse_mode=ParseMode.HTML,
         )
 
-async def food_choice_admin_proof_declined(update: Update, context: CallbackContext):
+async def food_admin_proof_declined(update: Update, context: CallbackContext):
     """Handle admin proof"""
     if update.effective_user.id != ADMIN_PROOVING_PAYMENT:
         return # check admin
@@ -497,57 +558,6 @@ async def food_choice_admin_proof_declined(update: Update, context: CallbackCont
             parse_mode=ParseMode.HTML,
         )
 
-async def food_choice_payment_stage2(update: Update, context: CallbackContext, received_file) -> int:
-    await update.message.reply_text(
-        text="Я переслала подтверждение админам. Они проверят и я вернусь с результатом.",
-        reply_markup=ReplyKeyboardRemove()
-    )
-    
-    try:
-        id = context.user_data["food_choice_id"]
-        del context.user_data["food_choice_id"]
-    except KeyError:
-        logger.error("food_choice_id not found in food_choice_payment_stage2")
-        await update.message.reply_text(
-            text="Возникла какая-то непредвиденная проблема с вашим заказом,"+
-            " возможно придётся попробовать ещё раз: /food",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return ConversationHandler.END
-    try:
-        async with MealContext.from_id(id) as meal_context:
-            proof_file_name = os.path.splitext(meal_context.filename)[0] + ".proof" + os.path.splitext(received_file)[1]
-            shutil.move(received_file, proof_file_name)
-            meal_context.proof_file = proof_file_name
-            meal_context.proof_received = datetime.datetime.now()
-
-            keyboard = [
-                [
-                    InlineKeyboardButton("✅ Подтверждено", callback_data=f"FoodChoiceAdmConf|{meal_context.id}"),
-                    InlineKeyboardButton("❌ Отказ", callback_data=f"FoodChoiceAdmDecl|{meal_context.id}"),
-                ]
-            ]
-            await update.message.forward(ADMIN_PROOVING_PAYMENT)
-            await context.bot.send_message(
-                ADMIN_PROOVING_PAYMENT,
-                f"Пользователь <i>{update.effective_user.full_name}</i> прислал подтверждение оплаты еды"+
-                f" на сумму {meal_context.total} ₽"+
-                f" для зуконавта по имени <i>{meal_context.for_who}</i>. Необходимо подтверждение.\n"+
-                "<b>Внимание</b>, не стоит помечать отсутствие оплаты раньше времени, лучше сначала удостовериться.",
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-            )
-    except FileNotFoundError:
-        logger.error(f"MealContext by ID not found in food_choice_payment_stage2: {id}")
-        await update.message.reply_text(
-            text="Возникла какая-то непредвиденная проблема с вашим заказом, он потерялся.\n"+
-            " Придётся попробовать ещё раз: /food",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return ConversationHandler.END
-
-    return ConversationHandler.END
-
 async def food_admin_get_csv(update: Update, context: CallbackContext):
     """Handle the /food_adm_csv command, requesting a photo."""
     if update.effective_user.id not in FOOD_ADMINS:
@@ -570,8 +580,34 @@ async def food_admin_get_csv(update: Update, context: CallbackContext):
         await update.message.reply_text("Возникла ошибка, попробуй ещё раз.")
         raise
 
-# async def log_msg(update: Update, context: CallbackContext):
-#     logger.info(f"got message from user {update.effective_user}: {update.message}")
+# endregion FOOD SECTION
+
+# region MASSAGE SECTION
+
+# flow: /massage -> ?create booking -> select type <-> de/select masseurs <-> select day <-> select time -> END
+#       /massage -> ?select booking -> cancel
+#                  \_ cancel conversation | conversation timeout
+
+async def massage_cmd(update: Update, context: CallbackContext):
+    """Handle the /massage command."""
+    logger.info(f"Received /massage command from {update.effective_user}")
+    if True: # have no bookings
+        return await massage_create_stage2(update, context)
+    keyboard = [[InlineKeyboardButton("📝 Записаться", callback_data="MassageCreate")]]
+    # add all existing bookings
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="MassageCancel")])
+    await update.message.reply_text(
+        "Выбери запись, которую надо отменить или нажми \"Записаться\", чтобы создать новую:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def massage_create_stage2(update: Update, context: CallbackContext):
+    pass
+
+# endregion MASSAGE SECTION
+
+async def log_msg(update: Update, context: CallbackContext):
+    logger.info(f"got unparsed update from user {update.effective_user}: {update}")
 
 async def error_handler(update, context):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
@@ -585,70 +621,78 @@ async def create_telegram_bot(config, app) -> Application:
 
     web_app_base = config.server_base
     # Conversation handler for /аватар command
-    ava_handler = ConversationHandler(
-        entry_points=[CommandHandler("avatar", avatar)],
+    application.add_handler(CommandHandler("avatar", avatar_cmd))
+    avatar_conversation = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.PHOTO, avatar_received_image),
+            MessageHandler(filters.Document.IMAGE, avatar_received_document_image)
+        ],
         states={
-            PHOTO: [
-                MessageHandler(filters.PHOTO, photo),
-                MessageHandler(filters.Document.IMAGE, photo_doc)
-            ],
             CROPPER: [
-                MessageHandler(filters.StatusUpdate.WEB_APP_DATA, image_crop_matrix),
-                MessageHandler(filters.Regex(re.compile("^(Так сойдёт)$", re.I)), autocrop),
+                MessageHandler(filters.StatusUpdate.WEB_APP_DATA, avatar_crop_matrix),
+                MessageHandler(filters.Regex(re.compile("^(Так сойдёт)$", re.I)), avatar_crop_auto),
             ],
-            FINISH: [MessageHandler(filters.Regex(".*"), cancel_avatar)],
+            ConversationHandler.TIMEOUT: [
+                MessageHandler(filters.ALL, avatar_timeout)
+            ],
         },
         fallbacks=[
-            CommandHandler("cancel", cancel_avatar),
-            CommandHandler("avatar", reavatar),
-            MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), cancel_avatar)
+            CommandHandler("cancel", avatar_cancel),
+            CommandHandler("avatar", avatar_cancel),
+            MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), avatar_cancel)
         ],
+        conversation_timeout=datetime.timedelta(hours=2)
     )
-    food_handler = ConversationHandler(
-        entry_points=[CommandHandler("food", food)],
+    food_conversation = ConversationHandler(
+        entry_points=[CommandHandler("food", food_cmd)],
         states={
             NAME: [
                 MessageHandler(
                     filters.TEXT & ~filters.COMMAND & ~filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)),
-                    food_for_who
+                    food_received_name
                 )
             ],
+            ConversationHandler.TIMEOUT: [
+                MessageHandler(filters.ALL, food_timeout)
+            ]
         },
         fallbacks=[
             CommandHandler("cancel", food_cancel),
             MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), food_cancel)
         ],
+        conversation_timeout=datetime.timedelta(hours=1)
     )
-    food_stage2_handler = ConversationHandler(
+    food_conversation_stage2 = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(food_choice_reply_payment, pattern="^FoodChoiceReplPaym|[a-zA-Z_\\-0-9]$"),
+            CallbackQueryHandler(food_payment_payed, pattern=f"^{IC_FOOD_PAYMENT_PAYED}|[a-zA-Z_\\-0-9]$"),
         ],
         states={
             WAITING_PAYMENT_PROOF: [
-                MessageHandler(filters.PHOTO, food_choice_payment_photo),
-                MessageHandler(filters.Document.ALL, food_choice_payment_doc)
+                MessageHandler(filters.PHOTO, food_payment_proof_photo),
+                MessageHandler(filters.Document.ALL, food_payment_proof_doc)
             ],
         },
         fallbacks=[
-            CommandHandler("cancel", food_choice_conversation_cancel),
-            CallbackQueryHandler(food_choice_reply_cancel, pattern="^FoodChoiceReplCanc|[a-zA-Z_\\-0-9]$"),
+            CommandHandler("cancel", food_payment_cancel_message),
+            CallbackQueryHandler(food_payment_cancel_inline, pattern=f"^{IC_FOOD_PAYMENT_CANCEL}|[a-zA-Z_\\-0-9]$"),
             MessageHandler(
                 filters.Regex(re.compile("^(Cancel|Отмена|Отменить выбор еды)$", re.I|re.U)),
-                food_choice_conversation_cancel
+                food_payment_cancel_message
             )
         ],
     )
-    application.add_handler(CallbackQueryHandler(food_choice_reply_cancel, pattern="^FoodChoiceReplCanc|[a-zA-Z_\\-0-9]$"))
-    application.add_handler(CallbackQueryHandler(food_choice_reply_will_pay, pattern="^FoodChoiceReplWillPay|[a-zA-Z_\\-0-9]$"))
-    application.add_handler(CallbackQueryHandler(food_choice_admin_proof_confirmed, pattern="^FoodChoiceAdmConf|[a-zA-Z_\\-0-9]$"))
-    application.add_handler(CallbackQueryHandler(food_choice_admin_proof_declined, pattern="^FoodChoiceAdmDecl|[a-zA-Z_\\-0-9]$"))
+    application.add_handler(CallbackQueryHandler(food_payment_cancel_inline, pattern=f"^{IC_FOOD_PAYMENT_CANCEL}|[a-zA-Z_\\-0-9]$"))
+    application.add_handler(CallbackQueryHandler(food_prompt_will_pay, pattern=f"^{IC_FOOD_PROMPT_WILL_PAY}|[a-zA-Z_\\-0-9]$"))
+    application.add_handler(CallbackQueryHandler(food_admin_proof_confirmed, pattern=f"^{IC_FOOD_ADMIN_CONFIRM}|[a-zA-Z_\\-0-9]$"))
+    application.add_handler(CallbackQueryHandler(food_admin_proof_declined, pattern=f"^{IC_FOOD_ADMIN_DECLINE}|[a-zA-Z_\\-0-9]$"))
 
     application.add_handler(CommandHandler("food_adm_csv", food_admin_get_csv))
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(food_handler)
-    application.add_handler(ava_handler)
-    application.add_handler(food_stage2_handler)
-    # application.add_handler(MessageHandler(filters.TEXT, log_msg))
+    application.add_handler(food_conversation)
+    application.add_handler(avatar_conversation)
+    application.add_handler(food_conversation_stage2)
+
+    application.add_handler(MessageHandler(filters.ALL, log_msg))
     application.add_error_handler(error_handler)
     
     try:

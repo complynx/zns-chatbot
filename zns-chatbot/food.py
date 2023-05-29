@@ -6,6 +6,12 @@ import aiofiles
 from .aioflielock import AIOMutableFileLock
 from aiofiles.os import remove
 from .photo_task import async_thread
+from .telegram_bot import (
+    IC_FOOD_PROMPT_WILL_PAY,
+    IC_FOOD_PAYMENT_PAYED,
+    IC_FOOD_PAYMENT_CANCEL,
+)
+from typing import Awaitable
 
 logger = logging.getLogger(__name__)
 
@@ -15,16 +21,16 @@ GRANULARITY_DEFAULT = 0.2 # 1/5 seconds
 class AsyncMealContextConstructor(object):
     def __init__(
             self,
-            meal_cls,
-            path,
-            lock_timeout,
-            lock_granularity
+            meal_cls: "MealContext",
+            path: str,
+            lock_timeout: float,
+            lock_granularity: float,
         ) -> None:
         self.path = path
         self.meal_cls = meal_cls
         self.lock_timeout = lock_timeout
         self.lock_granularity = lock_granularity
-    async def __aenter__(self):
+    async def __aenter__(self) -> "MealContext":
         logger.debug(f"from_file trying read: {self.path}")
         async with aiofiles.open(self.path, 'rb') as f:
             try:
@@ -110,7 +116,7 @@ class MealContext(object):
     def id_path(id):
         return f"/menu/{id}.bson"
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "MealContext":
         logger.debug(f"aenter locking id: {self.id}")
         if self._file is None:
             self._file = await aiofiles.open(self.filename, "wb+")
@@ -172,7 +178,7 @@ class MealContext(object):
         path,
         lock_timeout=LOCK_TIMEOUT_DEFAULT,
         lock_granularity=GRANULARITY_DEFAULT
-        ):
+        ) -> AsyncMealContextConstructor:
         return AsyncMealContextConstructor(cls, path, lock_timeout=lock_timeout, lock_granularity=lock_granularity)
     
     @classmethod
@@ -180,7 +186,7 @@ class MealContext(object):
         id,
         lock_timeout=LOCK_TIMEOUT_DEFAULT,
         lock_granularity=GRANULARITY_DEFAULT
-        ):
+        ) -> AsyncMealContextConstructor:
         
         filename = cls.id_path(id)
         return cls.from_file(filename, lock_timeout, lock_granularity)
@@ -220,8 +226,8 @@ async def checker(app):
 
                         keyboard = [
                             [
-                                InlineKeyboardButton("👌 Оплачу попозже", callback_data=f"FoodChoiceReplWillPay|{meal_context.id}"),
-                                InlineKeyboardButton("❌ Отменить заказ", callback_data=f"FoodChoiceReplCanc|{meal_context.id}"),
+                                InlineKeyboardButton("👌 Оплачу попозже", callback_data=f"{IC_FOOD_PROMPT_WILL_PAY}|{meal_context.id}"),
+                                InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
                             ]
                         ]
 
@@ -232,7 +238,8 @@ async def checker(app):
                             f"на сумму {meal_context.total}, который пока не оплачен.\n\n"+
                             "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
                             " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
-                            "Изменить заказ можно через копку \"❌ Отменить заказ\" и новое создание заказа.\n\n"+
+                            " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
+                            "и потом создай новый через команду /food.\n\n"+
                             "Нужно оплатить питание <u>до 1 июня</u> включительно чтобы ZNS смог привезти "+
                             "его для тебя на площадку горячим.",
                             parse_mode=ParseMode.HTML,
@@ -249,8 +256,8 @@ async def checker(app):
 
                         keyboard = [
                             [
-                                InlineKeyboardButton("👌 Сейчас пришлю", callback_data=f"FoodChoiceReplPaym|{meal_context.id}"),
-                                InlineKeyboardButton("❌ Отменить заказ", callback_data=f"FoodChoiceReplCanc|{meal_context.id}"),
+                                InlineKeyboardButton("👌 Сейчас пришлю", callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{meal_context.id}"),
+                                InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
                             ]
                         ]
 
@@ -261,7 +268,8 @@ async def checker(app):
                             f"на сумму {meal_context.total}. Указано, что он оплачен, но не получено подтверждения.\n\n"+
                             "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
                             " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
-                            "Изменить заказ можно через копку \"❌ Отменить заказ\" и новое создание заказа.\n\n"+
+                            " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
+                            "и потом создай новый через команду /food.\n\n"+
                             "Подтверждение оплаты заказа надо прислать в форме <u><b>квитанции (чека)</b></u> об "+
                             "оплате <u>до 1 июня</u> включительно чтобы ZNS смог привезти его для тебя на площадку горячим.",
                             parse_mode=ParseMode.HTML,
@@ -279,11 +287,9 @@ async def checker(app):
         
 
 
-@async_thread
-def get_csv(csv_filename):
+async def get_csv(csv_filename):
     import glob
-    from fcntl import flock, LOCK_EX, LOCK_NB, LOCK_UN
-    import time
+    import asyncio
     import csv
     from collections.abc import Iterable
 
@@ -316,10 +322,15 @@ def get_csv(csv_filename):
         "дата получения пруфа",
         "подтверждено",
         "дата подтверждения",
+        "напоминание об оплате",
+        "напоминание о подтверждении оплаты",
     ]]
     files = glob.glob('/menu/*.bson')
 
     trials = 10
+
+    def get_date(date):
+        return date.strftime("%m/%d/%Y %H:%M:%S") if isinstance(date, datetime) else ""
 
     logger.info(f"Collecting data for CSV")
     while len(files)>0 and trials>0:
@@ -328,63 +339,53 @@ def get_csv(csv_filename):
         files = []
         for file in files_working:
             logger.debug(f"trying to parse file {file}")
-            with open(file, 'rb') as f:
-                logger.debug(f"opened {file}")
-                try:
-                    flock(f, LOCK_EX | LOCK_NB)
-                    locked = True
-                    logger.debug(f"locked {file}")
+            try:
+                async with MealContext.from_file(file, lock_timeout=-1) as meal:
+                    logger.debug(f"opened {file}")
+                    arr = [
+                        meal.id,
+                        get_date(meal.created),
+                        meal.tg_user_id,
+                        meal.tg_username,
+                        meal.tg_user_first_name,
+                        meal.tg_user_last_name,
+                        meal.for_who,
+                    ]
 
-                    data = BSON(f.read()).decode()
-                    logger.debug(f"parsed BSON {file}")
-                except BlockingIOError:
-                    logger.debug(f"file is already locked, skipping for now {file}")
-                    files.append(file)
-                    continue
-                finally:
-                    if locked:
-                        flock(f, LOCK_UN)
-                        logger.debug(f"unlocked {file}")
+                    if isinstance(meal.choice, Iterable):
+                        for choice_dict in meal.choice:
+                            if choice_dict["cost"]>0:
+                                arr.append(choice_dict["restaurant"])
+                                arr.append(choice_dict["choice"])
+                                arr.append(choice_dict["cost"])
+                            else:
+                                arr.append("нет")
+                                arr.append(choice_dict["choice"])
+                                arr.append(choice_dict["cost"])
+                    else:
+                        for _ in range(15):
+                            arr.append("")
+                    
+                    arr.extend([
+                        meal.total,
+                        get_date(meal.choice_date),
+                        get_date(meal.marked_payed),
+                        get_date(meal.proof_received),
+                        meal.payment_confirmed,
+                        get_date(meal.payment_confirmed_date) if meal.payment_confirmed else get_date(meal.payment_declined_date),
+                        meal.prompt_sent,
+                        meal.proof_prompt_sent,
+                    ])
+                    ret.append(arr)
+                    
+            except BlockingIOError:
+                logger.debug(f"file is locked, skipping for now {file}")
+                files.append(file)
+                continue
                 
-                arr = [
-                    data.get("id",""),
-                    data.get("created",""),
-                    data.get("tg_user_id",""),
-                    data.get("tg_username",""),
-                    data.get("tg_user_first_name",""),
-                    data.get("tg_user_last_name",""),
-                    data.get("for_who",""),
-                ]
-
-                if "choice" in data and isinstance(data["choice"], Iterable):
-                    for choice_dict in data["choice"]:
-                        if choice_dict["cost"]>0:
-                            arr.append(choice_dict["restaurant"])
-                            arr.append(choice_dict["choice"])
-                            arr.append(choice_dict["cost"])
-                        else:
-                            arr.append("нет")
-                            arr.append(choice_dict["choice"])
-                            arr.append(choice_dict["cost"])
-                else:
-                    for _ in range(15):
-                        arr.append("")
-
-                def get_date(data, name):
-                    return data[name].strftime("%m/%d/%Y %H:%M:%S") if name in data and isinstance(data[name], datetime) else ""
-                
-                arr.extend([
-                    data.get("total", 0),
-                    get_date(data, "choice_date"),
-                    get_date(data, "marked_payed"),
-                    get_date(data, "proof_received"),
-                    data.get("payment_confirmed", False),
-                    get_date(data, "payment_confirmed_date") if data.get("payment_confirmed", False) else get_date(data, "payment_declined_date") ,
-                ])
-                ret.append(arr)
         if len(files)>0:
             logger.info(f"there are {len(files)} files to try parse again")
-            time.sleep(1)
+            await asyncio.sleep(1)
     if len(files) > 0:
         logger.warn(f"there are {len(files)} files that couldn't be parsed: {files}")
 

@@ -7,6 +7,10 @@ from .config import Config
 from .photo_task import get_by_uuid, real_frame_size
 from .food import MealContext
 import logging
+from .telegram_bot import (
+    IC_FOOD_PAYMENT_PAYED,
+    IC_FOOD_PAYMENT_CANCEL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,12 +111,14 @@ class MenuHandler(tornado.web.RequestHandler):
         meal_id=self.get_query_argument("id", "")
         try:
             async with MealContext.from_id(meal_id) as meal_context:
+                if meal_context.choice is not None:
+                    raise tornado.web.HTTPError(404)
                 self.render(
                     "menu.html",
                     meal_context=meal_context.id
                 )
         except FileNotFoundError:
-            return self.write_error(404)
+            raise tornado.web.HTTPError(404)
     
     async def post(self):
         from datetime import datetime
@@ -142,8 +148,8 @@ class MenuHandler(tornado.web.RequestHandler):
                     
                     keyboard = [
                         [
-                            InlineKeyboardButton("💸 Оплачено", callback_data=f"FoodChoiceReplPaym|{meal.id}"),
-                            InlineKeyboardButton("❌ Отменить", callback_data=f"FoodChoiceReplCanc|{meal.id}"),
+                            InlineKeyboardButton("💸 Оплачено", callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{meal.id}"),
+                            InlineKeyboardButton("❌ Отменить", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal.id}"),
                         ]
                     ]
                     await self.app.bot.bot.send_message(
