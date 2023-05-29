@@ -1,0 +1,5 @@
+IC_FOOD_PAYMENT_PAYED = "FoodChoiceReplPaym"
+IC_FOOD_PAYMENT_CANCEL = "FoodChoiceReplCanc"
+IC_FOOD_PROMPT_WILL_PAY = "FoodChoiceReplWillPay"
+IC_FOOD_ADMIN_CONFIRM = "FoodChoiceAdmConf"
+IC_FOOD_ADMIN_DECLINE = "FoodChoiceAdmDecl"

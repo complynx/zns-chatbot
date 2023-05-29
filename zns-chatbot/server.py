@@ -7,7 +7,7 @@ from .config import Config
 from .photo_task import get_by_uuid, real_frame_size
 from .food import MealContext
 import logging
-from .telegram_bot import (
+from .tg_constants import (
     IC_FOOD_PAYMENT_PAYED,
     IC_FOOD_PAYMENT_CANCEL,
 )

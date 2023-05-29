@@ -30,6 +30,13 @@ import shutil
 
 from .food import MealContext, get_csv
 from .photo_task import get_by_user, PhotoTask
+from .tg_constants import (
+    IC_FOOD_PAYMENT_PAYED,
+    IC_FOOD_ADMIN_CONFIRM,
+    IC_FOOD_ADMIN_DECLINE,
+    IC_FOOD_PAYMENT_CANCEL,
+    IC_FOOD_PROMPT_WILL_PAY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -234,11 +241,6 @@ FOOD_ADMINS = [
     249413857, # vbutman
 ]
 CANCEL_FOOD_STAGE2_REPLACEMENT_TEXT = "Этот выбор меню отменён. Для нового выбора можно снова воспользоваться командой /food"
-IC_FOOD_PAYMENT_PAYED = "FoodChoiceReplPaym"
-IC_FOOD_PAYMENT_CANCEL = "FoodChoiceReplCanc"
-IC_FOOD_PROMPT_WILL_PAY = "FoodChoiceReplWillPay"
-IC_FOOD_ADMIN_CONFIRM = "FoodChoiceAdmConf"
-IC_FOOD_ADMIN_DECLINE = "FoodChoiceAdmDecl"
 
 async def food_cmd(update: Update, context: CallbackContext):
     """Handle the /food command, requesting a photo."""

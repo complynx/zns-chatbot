@@ -6,7 +6,7 @@ import aiofiles
 from .aioflielock import AIOMutableFileLock
 from aiofiles.os import remove
 from .photo_task import async_thread
-from .telegram_bot import (
+from .tg_constants import (
     IC_FOOD_PROMPT_WILL_PAY,
     IC_FOOD_PAYMENT_PAYED,
     IC_FOOD_PAYMENT_CANCEL,
