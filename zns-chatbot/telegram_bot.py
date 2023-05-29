@@ -623,8 +623,6 @@ async def create_telegram_bot(config, app) -> Application:
     application.base_app = app
 
     web_app_base = config.server_base
-    # Conversation handler for /аватар command
-    application.add_handler(CommandHandler("avatar", avatar_cmd))
     avatar_conversation = ConversationHandler(
         entry_points=[
             CommandHandler("avatar", avatar_cmd),
