@@ -40,7 +40,7 @@ from .tg_constants import (
 
 logger = logging.getLogger(__name__)
 
-CROPPER = 1
+PHOTO, CROPPER = range(2)
 NAME, WAITING_PAYMENT_PROOF = range(2)
 
 web_app_base = ""
@@ -70,6 +70,7 @@ async def avatar_cmd(update: Update, context: CallbackContext):
         "📸 Отправь мне своё лучшее фото.\n\nP.S. Если в процессе покажется, что я "+
         "уснула, то просто разбуди меня, снова выбрав команду\n/avatar"
     )
+    return PHOTO
 
 async def avatar_received_image(update: Update, context: CallbackContext):
     """Handle the photo submission as photo"""
@@ -609,7 +610,7 @@ async def massage_create_stage2(update: Update, context: CallbackContext):
 # endregion MASSAGE SECTION
 
 async def log_msg(update: Update, context: CallbackContext):
-    logger.info(f"got unparsed update from user {update.effective_user}: {update}")
+    logger.info(f"got unparsed update {update}")
 
 async def error_handler(update, context):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
@@ -626,10 +627,13 @@ async def create_telegram_bot(config, app) -> Application:
     application.add_handler(CommandHandler("avatar", avatar_cmd))
     avatar_conversation = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.PHOTO, avatar_received_image),
-            MessageHandler(filters.Document.IMAGE, avatar_received_document_image)
+            CommandHandler("avatar", avatar_cmd),
         ],
         states={
+            PHOTO: [
+                MessageHandler(filters.PHOTO, avatar_received_image),
+                MessageHandler(filters.Document.IMAGE, avatar_received_document_image),
+            ],
             CROPPER: [
                 MessageHandler(filters.StatusUpdate.WEB_APP_DATA, avatar_crop_matrix),
                 MessageHandler(filters.Regex(re.compile("^(Так сойдёт)$", re.I)), avatar_crop_auto),
