@@ -16,9 +16,11 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 import asyncio
-from fcntl import lockf, flock, LOCK_EX, LOCK_SH, LOCK_NB, LOCK_UN
 from typing import IO, Union
 import time
+from portalocker.portalocker import lock, unlock
+from portalocker.constants import LOCK_EX, LOCK_NB, LOCK_SH
+from portalocker.exceptions import LockException
 
 
 class AIOMutableFileLock(object):
@@ -63,10 +65,10 @@ class AIOMutableFileLock(object):
         self._granularity = granularity
 
     def _acquire_lock(self):
-        flock(self._file, LOCK_EX | LOCK_NB)
+        lock(self._file, LOCK_EX | LOCK_NB)
 
     def _unlock(self):
-        flock(self._file, LOCK_UN)
+        unlock(self._file)
 
     async def acquire(self):
         'grab the lock'
@@ -79,7 +81,7 @@ class AIOMutableFileLock(object):
             try:
                 self._acquire_lock()
                 return
-            except BlockingIOError:
+            except LockException:
                 if deadline is not None and deadline < time.time():
                     raise
                 await asyncio.sleep(self._granularity)
@@ -143,4 +145,4 @@ class AIOImmutableFileLock(AIOMutableFileLock):
         super().__init__(file_ob, timeout=timeout, granularity=granularity)
 
     def _acquire_lock(self):
-        flock(self._file, LOCK_SH | LOCK_NB)
+        lock(self._file, LOCK_SH | LOCK_NB)

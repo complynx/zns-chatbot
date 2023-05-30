@@ -1,31 +1,37 @@
-import os
 import yaml
 
-class Config:
-    def __init__(self, config_path:str="config/config.prod.yaml"):
-        with open(config_path, "r") as config_file:
-            self._config_data = yaml.safe_load(config_file)
+from pydantic import BaseSettings, Field, SecretStr 
 
-    @property
-    def telegram_admins(self):
-        return self._config_data["telegram"]["admins"]
+class TelegramSettings(BaseSettings):
+    token: SecretStr = Field(env="TELEGRAM_TOKEN")
 
-    @property
-    def telegram_token(self)->str:
-        return os.environ.get("TELEGRAM_TOKEN", self._config_data["telegram"]["token"])
+class LoggingSettings(BaseSettings):
+    level: str = Field("WARNING", env="LOGGING_LEVEL")
 
-    @property
-    def server_port(self)->str:
-        return int(os.environ.get("SERVER_PORT", self._config_data["server"]["port"]))
+class ServerSettings(BaseSettings):
+    base: str
+    port: int = Field(8080, env="SERVER_PORT")
 
-    @property
-    def server_base(self)->str:
-        return os.environ.get("SERVER_BASE", self._config_data["server"]["base"])
+class FoodSettings(BaseSettings):
+    admins: list[int] = []
+    proover: int
+    storage_path: str = Field("menu")
 
-    @property
-    def logging_level(self)->str:
-        return os.environ.get("LOGGING_LEVEL", self._config_data["logging"]["level"])
+class PhotoSettings(BaseSettings):
+    cpu_threads: int = Field(8)
+    storage_path: str = Field("photos")
 
-    @property
-    def tasker_cpu_threads(self)->int:
-        return int(os.environ.get("CPU_THREADS", str(self._config_data["photo_tasker"]["cpu_threads"])))
+class Config(BaseSettings):
+    telegram: TelegramSettings
+    logging: LoggingSettings
+    server: ServerSettings
+    food: FoodSettings
+    photo: PhotoSettings
+
+
+def config(filename:str="config/config.yaml") -> Config:
+    # Load a YAML configuration file
+    with open(filename, 'r') as f:
+        conf = yaml.safe_load(f)
+    
+    return Config(**conf)

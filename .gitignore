@@ -3,3 +3,5 @@ venv/
 zns_chatbot.egg-info
 __pycache__
 photos/
+config/config.yaml
+menu/

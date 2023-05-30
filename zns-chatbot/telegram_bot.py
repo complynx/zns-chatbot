@@ -28,7 +28,8 @@ from telegram.constants import ParseMode
 import logging
 import shutil
 
-from .food import MealContext, get_csv
+from .config import Config
+from .food import FoodStorage
 from .photo_task import get_by_user, PhotoTask
 from .tg_constants import (
     IC_FOOD_PAYMENT_PAYED,
@@ -43,7 +44,17 @@ logger = logging.getLogger(__name__)
 PHOTO, CROPPER = range(2)
 NAME, WAITING_PAYMENT_PROOF = range(2)
 
-web_app_base = ""
+def full_link(app: "TGApplication", link: str) -> str:
+    link = f"{app.config.server.base}{link}"
+    match = re.match(r"http://localhost(:(\d+))?/", link)
+    if match:
+        port = match.group(2)
+        if port is None:
+            port = "80"
+        # Replace the localhost part with your custom URL and port
+        link = re.sub(r"http://localhost(:\d+)?/", f"https://complynx.net/testbot/{port}/", link)
+    return link
+
 cover = "static/cover.jpg"
 
 async def start(update: Update, context: CallbackContext):
@@ -107,7 +118,12 @@ async def avatar_received_stage2(update: Update, context: CallbackContext, file_
     task = PhotoTask(update.effective_chat, update.effective_user)
     task.add_file(file_path, file_ext)
     buttons = [
-        [KeyboardButton("Выбрать расположение", web_app=WebAppInfo(f"{web_app_base}/fit_frame?id={task.id.hex}"))],
+        [
+            KeyboardButton(
+                "Выбрать расположение",
+                web_app=WebAppInfo(full_link(context.application, f"/fit_frame?id={task.id.hex}"))
+            )
+        ],
         ["Так сойдёт"],["Отмена"]
     ]
 
@@ -117,6 +133,7 @@ async def avatar_received_stage2(update: Update, context: CallbackContext, file_
         resize_keyboard=True,
         one_time_keyboard=True
     )
+    logger.debug(f"url: " + full_link(context.application, f"/fit_frame?id={task.id.hex}"))
     await update.message.reply_text(
         "Фото загружено. Выберите как оно будет располагаться внутри рамки.",
         reply_markup=markup
@@ -246,14 +263,6 @@ async def avatar_timeout(update: Update, context: CallbackContext):
 
 # region FOOD SECTION
 
-ADMIN_PROOVING_PAYMENT = 1012402779 # darrel
-# ADMIN_PROOVING_PAYMENT = 379278985 # me
-FOOD_ADMINS = [
-    1012402779, # darrel
-    379278985, # me
-    20538574, # love_zelensky
-    249413857, # vbutman
-]
 CANCEL_FOOD_STAGE2_REPLACEMENT_TEXT = "Этот выбор меню отменён. Для нового выбора можно снова воспользоваться командой /food"
 
 async def food_cmd(update: Update, context: CallbackContext):
@@ -276,8 +285,9 @@ async def food_received_name(update: Update, context: CallbackContext):
     """Handle the cancel command during the avatar submission."""
     name = update.message.text
     logger.info(f"Received for_who from {update.effective_user}: {name}")
+    food_storage: FoodStorage = context.application.base_app.food_storage
     try:
-        async with MealContext(
+        async with food_storage.new_meal(
             tg_user_id=update.effective_user.id,
             tg_username=update.effective_user.username,
             tg_user_first_name=update.effective_user.first_name,
@@ -286,9 +296,10 @@ async def food_received_name(update: Update, context: CallbackContext):
         ) as meal_context:
             # f"{web_app_base}/fit_frame?id={task.id.hex}"
             reply_markup = ReplyKeyboardRemove()
+            link = full_link(context.application, meal_context.link)
             await update.message.reply_html(
                 f"Отлично, составляем меню для зуконавта по имени <i>{name}</i>. Для выбора блюд, "+
-                f"<a href=\"{web_app_base}{meal_context.link}\">жми сюда (ссылка действительна 24 часа)</a>.",
+                f"<a href=\"{link}\">жми сюда (ссылка действительна 24 часа)</a>.",
                 reply_markup=reply_markup
             )
     except Exception as e:
@@ -322,7 +333,8 @@ async def food_payment_payed(update: Update, context: CallbackContext) -> int:
         # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
         await query.answer()
         id = query.data.split("|")[1]
-        async with MealContext.from_id(id) as meal_context:
+        food_storage: FoodStorage = context.application.base_app.food_storage
+        async with food_storage.from_id(id) as meal_context:
             if meal_context.proof_received is not None:
                 await query.edit_message_text(
                     "Да, я уже отправила подтверждение админинам.",
@@ -366,7 +378,8 @@ async def food_prompt_will_pay(update: Update, context: CallbackContext):
         # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
         await query.answer()
         id = query.data.split("|")[1]
-        async with MealContext.from_id(id) as meal_context:
+        food_storage: FoodStorage = context.application.base_app.food_storage
+        async with food_storage.from_id(id) as meal_context:
             meal_context.marked_will_pay = datetime.datetime.now()
         logger.info(f"MealContext ID: {id}")
         await query.edit_message_text(
@@ -400,7 +413,8 @@ async def food_payment_cancel_inline(update: Update, context) -> int:
     await query.answer()
     id = query.data.split("|")[1]
     try:
-        async with MealContext.from_id(id) as meal_context:
+        food_storage: FoodStorage = context.application.base_app.food_storage
+        async with food_storage.from_id(id) as meal_context:
             await meal_context.cancel()
     except FileNotFoundError:
         pass # already cancelled
@@ -418,7 +432,8 @@ async def food_payment_cancel_message(update: Update, context: CallbackContext) 
     logger.info(f"Received food_choice_conversation_cancel from {update.effective_user}")
     try:
         id = context.user_data["food_choice_id"]
-        async with MealContext.from_id(id) as meal_context:
+        food_storage: FoodStorage = context.application.base_app.food_storage
+        async with food_storage.from_id(id) as meal_context:
             if meal_context.message_inline_id:
                 await context.bot.edit_message_text(
                     inline_message_id=meal_context.message_inline_id,
@@ -484,7 +499,8 @@ async def food_payment_proof_stage2(update: Update, context: CallbackContext, re
         )
         return ConversationHandler.END
     try:
-        async with MealContext.from_id(id) as meal_context:
+        food_storage: FoodStorage = context.application.base_app.food_storage
+        async with food_storage.from_id(id) as meal_context:
             proof_file_name = os.path.splitext(meal_context.filename)[0] + ".proof" + os.path.splitext(received_file)[1]
             shutil.move(received_file, proof_file_name)
             meal_context.proof_file = proof_file_name
@@ -496,9 +512,10 @@ async def food_payment_proof_stage2(update: Update, context: CallbackContext, re
                     InlineKeyboardButton("❌ Отказ", callback_data=f"{IC_FOOD_ADMIN_DECLINE}|{meal_context.id}"),
                 ]
             ]
-            await update.message.forward(ADMIN_PROOVING_PAYMENT)
+            conf: Config = context.application.config
+            await update.message.forward(conf.food.proover)
             await context.bot.send_message(
-                ADMIN_PROOVING_PAYMENT,
+                conf.food.proover,
                 f"Пользователь <i>{update.effective_user.full_name}</i> прислал подтверждение оплаты еды"+
                 f" на сумму {meal_context.total} ₽"+
                 f" для зуконавта по имени <i>{meal_context.for_who}</i>. Необходимо подтверждение.\n"+
@@ -519,7 +536,8 @@ async def food_payment_proof_stage2(update: Update, context: CallbackContext, re
 
 async def food_admin_proof_confirmed(update: Update, context: CallbackContext):
     """Handle admin proof"""
-    if update.effective_user.id != ADMIN_PROOVING_PAYMENT:
+    conf: Config = context.application.config
+    if update.effective_user.id != conf.food.proover:
         return # check admin
     # Get CallbackQuery from Update
     query = update.callback_query
@@ -528,7 +546,8 @@ async def food_admin_proof_confirmed(update: Update, context: CallbackContext):
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
     id = query.data.split("|")[1]
-    async with MealContext.from_id(id) as meal_context:
+    food_storage: FoodStorage = context.application.base_app.food_storage
+    async with food_storage.from_id(id) as meal_context:
         meal_context.payment_confirmed = True
         meal_context.payment_confirmed_date = datetime.datetime.now()
     
@@ -547,7 +566,8 @@ async def food_admin_proof_confirmed(update: Update, context: CallbackContext):
 
 async def food_admin_proof_declined(update: Update, context: CallbackContext):
     """Handle admin proof"""
-    if update.effective_user.id != ADMIN_PROOVING_PAYMENT:
+    conf: Config = context.application.config
+    if update.effective_user.id != conf.food.proover:
         return # check admin
     # Get CallbackQuery from Update
     query = update.callback_query
@@ -556,7 +576,9 @@ async def food_admin_proof_declined(update: Update, context: CallbackContext):
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
     id = query.data.split("|")[1]
-    async with MealContext.from_id(id) as meal_context:
+    
+    food_storage: FoodStorage = context.application.base_app.food_storage
+    async with food_storage.from_id(id) as meal_context:
         meal_context.payment_declined = True
         meal_context.payment_declined_date = datetime.datetime.now()
     
@@ -576,7 +598,8 @@ async def food_admin_proof_declined(update: Update, context: CallbackContext):
 
 async def food_admin_get_csv(update: Update, context: CallbackContext):
     """Handle the /food_adm_csv command, requesting a photo."""
-    if update.effective_user.id not in FOOD_ADMINS:
+    conf: Config = context.application.config
+    if update.effective_user.id not in conf.food.admins:
         return
     logger.info(f"Received /food_adm_csv command from {update.effective_user}")
 
@@ -585,7 +608,8 @@ async def food_admin_get_csv(update: Update, context: CallbackContext):
     )
     try:
         filename = tempfile.mktemp()
-        await get_csv(filename)
+        food_storage: FoodStorage = context.application.base_app.food_storage
+        await food_storage.get_csv(filename)
         await update.message.reply_document(
             filename,
             caption="Вот обещанный файлик CSV",
@@ -628,14 +652,23 @@ async def log_msg(update: Update, context: CallbackContext):
 async def error_handler(update, context):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
+class TGApplication(Application):
+    base_app = None
+    config: Config
+
+    def __init__(self, base_app, base_config: Config, **kwargs):
+        super().__init__(**kwargs)
+        self.base_app = base_app
+        self.config = base_config
+
 
 @asynccontextmanager
-async def create_telegram_bot(config, app) -> Application:
-    global web_app_base
-    application = ApplicationBuilder().token(token=config.telegram_token).build()
-    application.base_app = app
+async def create_telegram_bot(config: Config, app) -> TGApplication:
+    application = ApplicationBuilder().application_class(TGApplication, kwargs={
+        "base_app": app,
+        "base_config": config
+    }).token(token=config.telegram.token.get_secret_value()).build()
 
-    web_app_base = config.server_base
     avatar_conversation = ConversationHandler(
         entry_points=[
             CommandHandler("avatar", avatar_cmd),

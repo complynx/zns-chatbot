@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
+import os
 import uuid
 from bson import BSON
 import logging
 import aiofiles
-from .aioflielock import AIOMutableFileLock
+from .aioflielock import AIOMutableFileLock, LockException
 from aiofiles.os import remove
+from .config import Config
 from .photo_task import async_thread
 from .tg_constants import (
     IC_FOOD_PROMPT_WILL_PAY,
@@ -59,8 +61,8 @@ class MealContext(object):
     tg_username = None
     started = None
     for_who = None
-    id = None
-    filename = None
+    id: str = ""
+    filename: str = ""
     choice = None
     total = None
     choice_date = None
@@ -86,8 +88,6 @@ class MealContext(object):
 
     def __init__(
             self,
-            id="",
-            filename=None,
             lock=None,
             file=None,
             lock_timeout=LOCK_TIMEOUT_DEFAULT,
@@ -98,8 +98,10 @@ class MealContext(object):
             setattr(self, key, value)
         if not hasattr(self, "created"):
             self.created = datetime.now()
-        self.id = id if id!="" else uuid.uuid4().hex
-        self.filename = filename if filename is not None else self.id_path(self.id)
+
+        assert self.id != ""
+        assert self.filename != ""
+
         self._lock = lock
         self._file = file
         self._lock_timeout = lock_timeout
@@ -111,10 +113,6 @@ class MealContext(object):
             (f" {self.tg_username}" if self.tg_username is not None else "") + \
             f" {self.tg_user_first_name}" + \
             (f" {self.tg_user_last_name}" if self.tg_user_last_name is not None else "") + ")"
-
-    @staticmethod
-    def id_path(id):
-        return f"/menu/{id}.bson"
 
     async def __aenter__(self) -> "MealContext":
         logger.debug(f"aenter locking id: {self.id}")
@@ -181,16 +179,6 @@ class MealContext(object):
         ) -> AsyncMealContextConstructor:
         return AsyncMealContextConstructor(cls, path, lock_timeout=lock_timeout, lock_granularity=lock_granularity)
     
-    @classmethod
-    def from_id(cls,
-        id,
-        lock_timeout=LOCK_TIMEOUT_DEFAULT,
-        lock_granularity=GRANULARITY_DEFAULT
-        ) -> AsyncMealContextConstructor:
-        
-        filename = cls.id_path(id)
-        return cls.from_file(filename, lock_timeout, lock_granularity)
-    
     @property
     def link(self):
         return f"/menu?id={self.id}"
@@ -199,200 +187,229 @@ DELETE_EMPTY_AFTER = timedelta(days=1)
 SEND_PROMPT_AFTER = timedelta(days=1)
 SEND_PROOF_PROMPT_AFTER = timedelta(hours=1)
 
-async def checker(app):
-    import glob
-    import asyncio
-    from telegram.constants import ParseMode
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-    while True:
-        await asyncio.sleep(600) # every 5 minutes
-        files = glob.glob('/menu/*.bson')
-
-        for file in files:
-            try:
-                async with MealContext.from_file(file, lock_timeout=3) as meal_context:
-
-                    if meal_context.choice_date is None and meal_context.created < datetime.now() - DELETE_EMPTY_AFTER:
-                        await meal_context.cancel()
-                        logger.info(f"deleted empty stale meal context {meal_context.id}")
-                        continue
-
-                    if meal_context.choice_date is not None and \
-                        meal_context.choice_date < datetime.now() - SEND_PROMPT_AFTER and \
-                        meal_context.marked_payed is None and not meal_context.prompt_sent:
-
-                        logger.info(f"prompting for payment user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
-
-                        keyboard = [
-                            [
-                                InlineKeyboardButton("👌 Оплачу попозже", callback_data=f"{IC_FOOD_PROMPT_WILL_PAY}|{meal_context.id}"),
-                                InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
-                            ]
-                        ]
-
-                        await app.bot.bot.send_message(
-                            chat_id=meal_context.tg_user_id,
-                            text=
-                            f"Зуконавт, я вижу твой заказ для <i>{meal_context.for_who}</i> "+
-                            f"на сумму {meal_context.total}, который пока не оплачен.\n\n"+
-                            "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
-                            " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
-                            " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
-                            "и потом создай новый через команду /food.\n\n"+
-                            "Нужно оплатить питание <u>до 1 июня</u> включительно чтобы ZNS смог привезти "+
-                            "его для тебя на площадку горячим.",
-                            parse_mode=ParseMode.HTML,
-                            reply_markup=InlineKeyboardMarkup(keyboard),
-                        )
-                        meal_context.prompt_sent = True
-                        continue
-
-                    if meal_context.marked_payed is not None and \
-                        meal_context.marked_payed < datetime.now() - SEND_PROOF_PROMPT_AFTER and \
-                        meal_context.proof_received is None and not meal_context.proof_prompt_sent:
-
-                        logger.info(f"prompting for proof user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
-
-                        keyboard = [
-                            [
-                                InlineKeyboardButton("👌 Сейчас пришлю", callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{meal_context.id}"),
-                                InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
-                            ]
-                        ]
-
-                        await app.bot.bot.send_message(
-                            chat_id=meal_context.tg_user_id,
-                            text=
-                            f"Я вижу твой заказ для зуконавта по имени <i>{meal_context.for_who}</i> "+
-                            f"на сумму {meal_context.total}. Указано, что он оплачен, но не получено подтверждения.\n\n"+
-                            "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
-                            " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
-                            " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
-                            "и потом создай новый через команду /food.\n\n"+
-                            "Подтверждение оплаты заказа надо прислать в форме <u><b>квитанции (чека)</b></u> об "+
-                            "оплате <u>до 1 июня</u> включительно чтобы ZNS смог привезти его для тебя на площадку горячим.",
-                            parse_mode=ParseMode.HTML,
-                            reply_markup=InlineKeyboardMarkup(keyboard),
-                        )
-                        meal_context.proof_prompt_sent = True
-                        continue
-            
-            except FileNotFoundError:
-                pass # file was deleted in the meantime by other process (user?)
-            except BlockingIOError:
-                logger.warning(f"Failed to lock {file}, will check other time")
-            except Exception as e:
-                logger.error(f"Exception while trying to check file {file}, {e}", exc_info=1)
+class FoodStorage():
+    def __init__(self, config: Config, app):
+        self.config: Config = config
+        self.app = app
         
+        if not os.path.exists(self.config.food.storage_path):
+            os.makedirs(self.config.food.storage_path)
 
-
-async def get_csv(csv_filename):
-    import glob
-    import asyncio
-    import csv
-    from collections.abc import Iterable
-
-    ret = [[
-        "ID заказа",
-        "Заказ создан",
-        "TG ID Пользователя",
-        "TG Пользователь",
-        "TG Имя",
-        "TG Фамилия",
-        "Для кого",
-        "пятница, ужин, ресторан",
-        "пятница, ужин, выбор",
-        "пятница, ужин, сумма",
-        "суббота, обед, ресторан",
-        "суббота, обед, выбор",
-        "суббота, обед, сумма",
-        "суббота, ужин, ресторан",
-        "суббота, ужин, выбор",
-        "суббота, ужин, сумма",
-        "воскресенье, обед, ресторан",
-        "воскресенье, обед, выбор",
-        "воскресенье, обед, сумма",
-        "воскресенье, ужин, ресторан",
-        "воскресенье, ужин, выбор",
-        "воскресенье, ужин, сумма",
-        "всего",
-        "дата выбора",
-        "дата оплаты",
-        "дата получения пруфа",
-        "подтверждено",
-        "дата подтверждения",
-        "напоминание об оплате",
-        "напоминание о подтверждении оплаты",
-    ]]
-    files = glob.glob('/menu/*.bson')
-
-    trials = 10
-
-    def get_date(date):
-        return date.strftime("%m/%d/%Y %H:%M:%S") if isinstance(date, datetime) else ""
-
-    logger.info(f"Collecting data for CSV")
-    while len(files)>0 and trials>0:
-        trials -= 1
-        files_working = files
-        files = []
-        for file in files_working:
-            logger.debug(f"trying to parse file {file}")
-            try:
-                async with MealContext.from_file(file, lock_timeout=-1) as meal:
-                    logger.debug(f"opened {file}")
-                    arr = [
-                        meal.id,
-                        get_date(meal.created),
-                        meal.tg_user_id,
-                        meal.tg_username,
-                        meal.tg_user_first_name,
-                        meal.tg_user_last_name,
-                        meal.for_who,
-                    ]
-
-                    if isinstance(meal.choice, Iterable):
-                        for choice_dict in meal.choice:
-                            if choice_dict["cost"]>0:
-                                arr.append(choice_dict["restaurant"])
-                                arr.append(choice_dict["choice"])
-                                arr.append(choice_dict["cost"])
-                            else:
-                                arr.append("нет")
-                                arr.append(choice_dict["choice"])
-                                arr.append(choice_dict["cost"])
-                    else:
-                        for _ in range(15):
-                            arr.append("")
-                    
-                    arr.extend([
-                        meal.total,
-                        get_date(meal.choice_date),
-                        get_date(meal.marked_payed),
-                        get_date(meal.proof_received),
-                        meal.payment_confirmed,
-                        get_date(meal.payment_confirmed_date) if meal.payment_confirmed else get_date(meal.payment_declined_date),
-                        meal.prompt_sent,
-                        meal.proof_prompt_sent,
-                    ])
-                    ret.append(arr)
-                    
-            except BlockingIOError:
-                logger.debug(f"file is locked, skipping for now {file}")
-                files.append(file)
-                continue
-                
-        if len(files)>0:
-            logger.info(f"there are {len(files)} files to try parse again")
-            await asyncio.sleep(1)
-    if len(files) > 0:
-        logger.warn(f"there are {len(files)} files that couldn't be parsed: {files}")
-
-    logger.info(f"saving CSV to {csv_filename}")
-    with open(csv_filename, 'w') as f:
-        writer = csv.writer(f)
-        writer.writerows(ret)
-    logger.info(f"CSV {csv_filename} created")
+        app.food_storage = self
     
+    def path_from_id(self, id) -> str:
+        from os.path import join
+        return join(self.config.food.storage_path, f'{id}.bson')
+
+    def from_id(self, id):
+        filename = self.path_from_id(id)
+        return MealContext.from_file(filename)
+
+    def new_meal(self, id="", filename=None, **kwargs):
+        if id == "":
+            id = uuid.uuid4().hex
+        return MealContext(
+            id = id,
+            filename = filename if filename is not None else self.path_from_id(id),
+            **kwargs
+        )
+
+    async def checker(self):
+        import glob
+        import asyncio
+        from telegram.constants import ParseMode
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        from telegram.ext import ExtBot
+        from os.path import join
+        bot: ExtBot = self.app.bot.bot
+
+        while True:
+            await asyncio.sleep(600) # every 5 minutes
+            files = glob.glob(join(self.config.food.storage_path, '*.bson'))
+
+            for file in files:
+                try:
+                    async with MealContext.from_file(file, lock_timeout=3) as meal_context:
+
+                        if meal_context.choice_date is None and meal_context.created < datetime.now() - DELETE_EMPTY_AFTER:
+                            await meal_context.cancel()
+                            logger.info(f"deleted empty stale meal context {meal_context.id}")
+                            continue
+
+                        if meal_context.choice_date is not None and \
+                            meal_context.choice_date < datetime.now() - SEND_PROMPT_AFTER and \
+                            meal_context.marked_payed is None and not meal_context.prompt_sent:
+
+                            logger.info(f"prompting for payment user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
+
+                            keyboard = [
+                                [
+                                    InlineKeyboardButton("👌 Оплачу попозже", callback_data=f"{IC_FOOD_PROMPT_WILL_PAY}|{meal_context.id}"),
+                                    InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
+                                ]
+                            ]
+
+                            await bot.send_message(
+                                chat_id=meal_context.tg_user_id,
+                                text=
+                                f"Зуконавт, я вижу твой заказ для <i>{meal_context.for_who}</i> "+
+                                f"на сумму {meal_context.total}, который пока не оплачен.\n\n"+
+                                "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
+                                " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
+                                " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
+                                "и потом создай новый через команду /food.\n\n"+
+                                "Нужно оплатить питание <u>до 1 июня</u> включительно чтобы ZNS смог привезти "+
+                                "его для тебя на площадку горячим.",
+                                parse_mode=ParseMode.HTML,
+                                reply_markup=InlineKeyboardMarkup(keyboard),
+                            )
+                            meal_context.prompt_sent = True
+                            continue
+
+                        if meal_context.marked_payed is not None and \
+                            meal_context.marked_payed < datetime.now() - SEND_PROOF_PROMPT_AFTER and \
+                            meal_context.proof_received is None and not meal_context.proof_prompt_sent:
+
+                            logger.info(f"prompting for proof user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
+
+                            keyboard = [
+                                [
+                                    InlineKeyboardButton("👌 Сейчас пришлю", callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{meal_context.id}"),
+                                    InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
+                                ]
+                            ]
+
+                            await bot.send_message(
+                                chat_id=meal_context.tg_user_id,
+                                text=
+                                f"Я вижу твой заказ для зуконавта по имени <i>{meal_context.for_who}</i> "+
+                                f"на сумму {meal_context.total}. Указано, что он оплачен, но не получено подтверждения.\n\n"+
+                                "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
+                                " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
+                                " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
+                                "и потом создай новый через команду /food.\n\n"+
+                                "Подтверждение оплаты заказа надо прислать в форме <u><b>квитанции (чека)</b></u> об "+
+                                "оплате <u>до 1 июня</u> включительно чтобы ZNS смог привезти его для тебя на площадку горячим.",
+                                parse_mode=ParseMode.HTML,
+                                reply_markup=InlineKeyboardMarkup(keyboard),
+                            )
+                            meal_context.proof_prompt_sent = True
+                            continue
+                
+                except FileNotFoundError:
+                    pass # file was deleted in the meantime by other process (user?)
+                except LockException:
+                    logger.warning(f"Failed to lock {file}, will check other time")
+                except Exception as e:
+                    logger.error(f"Exception while trying to check file {file}, {e}", exc_info=1)
+
+    async def get_csv(self, csv_filename):
+        import glob
+        import asyncio
+        import csv
+        from collections.abc import Iterable
+        from os.path import join
+
+        ret = [[
+            "ID заказа",
+            "Заказ создан",
+            "TG ID Пользователя",
+            "TG Пользователь",
+            "TG Имя",
+            "TG Фамилия",
+            "Для кого",
+            "пятница, ужин, ресторан",
+            "пятница, ужин, выбор",
+            "пятница, ужин, сумма",
+            "суббота, обед, ресторан",
+            "суббота, обед, выбор",
+            "суббота, обед, сумма",
+            "суббота, ужин, ресторан",
+            "суббота, ужин, выбор",
+            "суббота, ужин, сумма",
+            "воскресенье, обед, ресторан",
+            "воскресенье, обед, выбор",
+            "воскресенье, обед, сумма",
+            "воскресенье, ужин, ресторан",
+            "воскресенье, ужин, выбор",
+            "воскресенье, ужин, сумма",
+            "всего",
+            "дата выбора",
+            "дата оплаты",
+            "дата получения пруфа",
+            "подтверждено",
+            "дата подтверждения",
+            "напоминание об оплате",
+            "напоминание о подтверждении оплаты",
+        ]]
+        files = glob.glob(join(self.config.food.storage_path, '*.bson'))
+
+        trials = 10
+
+        def get_date(date):
+            return date.strftime("%m/%d/%Y %H:%M:%S") if isinstance(date, datetime) else ""
+
+        logger.info(f"Collecting data for CSV")
+        while len(files)>0 and trials>0:
+            trials -= 1
+            files_working = files
+            files = []
+            for file in files_working:
+                logger.debug(f"trying to parse file {file}")
+                try:
+                    async with MealContext.from_file(file, lock_timeout=-1) as meal:
+                        logger.debug(f"opened {file}")
+                        arr = [
+                            meal.id,
+                            get_date(meal.created),
+                            meal.tg_user_id,
+                            meal.tg_username,
+                            meal.tg_user_first_name,
+                            meal.tg_user_last_name,
+                            meal.for_who,
+                        ]
+
+                        if isinstance(meal.choice, Iterable):
+                            for choice_dict in meal.choice:
+                                if choice_dict["cost"]>0:
+                                    arr.append(choice_dict["restaurant"])
+                                    arr.append(choice_dict["choice"])
+                                    arr.append(choice_dict["cost"])
+                                else:
+                                    arr.append("нет")
+                                    arr.append(choice_dict["choice"])
+                                    arr.append(choice_dict["cost"])
+                        else:
+                            for _ in range(15):
+                                arr.append("")
+                        
+                        arr.extend([
+                            meal.total,
+                            get_date(meal.choice_date),
+                            get_date(meal.marked_payed),
+                            get_date(meal.proof_received),
+                            meal.payment_confirmed,
+                            get_date(meal.payment_confirmed_date) if meal.payment_confirmed else get_date(meal.payment_declined_date),
+                            meal.prompt_sent,
+                            meal.proof_prompt_sent,
+                        ])
+                        ret.append(arr)
+                        
+                except LockException:
+                    logger.debug(f"file is locked, skipping for now {file}")
+                    files.append(file)
+                    continue
+                    
+            if len(files)>0:
+                logger.info(f"there are {len(files)} files to try parse again")
+                await asyncio.sleep(1)
+        if len(files) > 0:
+            logger.warn(f"there are {len(files)} files that couldn't be parsed: {files}")
+
+        logger.info(f"saving CSV to {csv_filename}")
+        with open(csv_filename, 'w', encoding="utf-8", newline="\n") as f:
+            writer = csv.writer(f)
+            writer.writerows(ret)
+        logger.info(f"CSV {csv_filename} created")
+
 

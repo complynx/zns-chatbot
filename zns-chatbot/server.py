@@ -5,7 +5,7 @@ import tornado.platform.asyncio
 import os
 from .config import Config
 from .photo_task import get_by_uuid, real_frame_size
-from .food import MealContext
+from .food import FoodStorage
 import logging
 from .tg_constants import (
     IC_FOOD_PAYMENT_PAYED,
@@ -103,14 +103,14 @@ def parse_meal_data(meal_dict):
     return costs, ret_objs
 
 class MenuHandler(tornado.web.RequestHandler):
-    def initialize(self, token, app):
-        self.token = token
+    def initialize(self, app):
         self.app = app
 
     async def get(self):
         meal_id=self.get_query_argument("id", "")
+        food_storage: FoodStorage = self.app.food_storage
         try:
-            async with MealContext.from_id(meal_id) as meal_context:
+            async with food_storage.from_id(meal_id) as meal_context:
                 if meal_context.choice is not None:
                     raise tornado.web.HTTPError(404)
                 self.render(
@@ -126,6 +126,7 @@ class MenuHandler(tornado.web.RequestHandler):
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
         # Get all the post form data
         data = self.request.arguments
+        food_storage: FoodStorage = self.app.food_storage
         
         # Convert bytes to str if needed (Tornado stores POST data as bytes)
         for key in data:
@@ -135,7 +136,7 @@ class MenuHandler(tornado.web.RequestHandler):
 
         meal = None
         try:
-            async with MealContext.from_id(data["meal_context"]) as meal:
+            async with food_storage.from_id(data["meal_context"]) as meal:
                 cancelled = (data.get("cancelled", '') != '')
                 sums, objs = parse_meal_data(data)
                 total = sum(sums)
@@ -185,11 +186,11 @@ async def create_server(config: Config, base_app):
     tornado.platform.asyncio.AsyncIOMainLoop().install()
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler),
-        (r"/menu", MenuHandler, {"token": config.telegram_token, "app": base_app}),
+        (r"/menu", MenuHandler, {"app": base_app}),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
     ], template_path="templates/")
-    app.listen(config.server_port)
+    app.listen(config.server.port)
     base_app.server = app
 
     return app

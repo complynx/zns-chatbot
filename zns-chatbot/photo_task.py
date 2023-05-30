@@ -4,6 +4,7 @@ import os
 import uuid
 import PIL.Image as Image
 from PIL import ImageOps
+from .config import Config
 import math
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -62,10 +63,11 @@ def soft_light(a, b, opacity=1):
     result = 2 * a * b + a**2 * (1 - 2 * b)
     return opacity * result + (1 - opacity) * a
 
-def init_photo_tasker(cfg):
-    global main_executor
-    main_executor = ThreadPoolExecutor(max_workers=cfg.tasker_cpu_threads, thread_name_prefix="photo_tasker")
+def init_photo_tasker(cfg: Config):
+    global main_executor, files_path
+    main_executor = ThreadPoolExecutor(max_workers=cfg.photo.cpu_threads, thread_name_prefix="photo_tasker")
 
+    files_path = cfg.photo.storage_path
     if not os.path.exists(files_path):
         os.makedirs(files_path)
     for file_name in os.listdir(files_path):
