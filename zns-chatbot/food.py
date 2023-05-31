@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 import uuid
 from bson import BSON
@@ -7,13 +7,11 @@ import aiofiles
 from .aioflielock import AIOMutableFileLock, LockException
 from aiofiles.os import remove
 from .config import Config
-from .photo_task import async_thread
 from .tg_constants import (
     IC_FOOD_PROMPT_WILL_PAY,
     IC_FOOD_PAYMENT_PAYED,
     IC_FOOD_PAYMENT_CANCEL,
 )
-from typing import Awaitable
 
 logger = logging.getLogger(__name__)
 
@@ -183,10 +181,6 @@ class MealContext(object):
     def link(self):
         return f"/menu?id={self.id}"
 
-DELETE_EMPTY_AFTER = timedelta(days=1)
-SEND_PROMPT_AFTER = timedelta(days=1)
-SEND_PROOF_PROMPT_AFTER = timedelta(hours=1)
-
 class FoodStorage():
     def __init__(self, config: Config, app):
         self.config: Config = config
@@ -224,28 +218,37 @@ class FoodStorage():
         bot: ExtBot = self.app.bot.bot
 
         while True:
-            await asyncio.sleep(600) # every 5 minutes
+            await asyncio.sleep(self.config.food.checker_loop_frequency.total_seconds())
             files = glob.glob(join(self.config.food.storage_path, '*.bson'))
 
             for file in files:
                 try:
                     async with MealContext.from_file(file, lock_timeout=3) as meal_context:
 
-                        if meal_context.choice_date is None and meal_context.created < datetime.now() - DELETE_EMPTY_AFTER:
+                        if meal_context.choice_date is None and \
+                            meal_context.created < datetime.now() - self.config.food.remove_empty_orders:
+
                             await meal_context.cancel()
                             logger.info(f"deleted empty stale meal context {meal_context.id}")
                             continue
 
                         if meal_context.choice_date is not None and \
-                            meal_context.choice_date < datetime.now() - SEND_PROMPT_AFTER and \
+                            meal_context.choice_date < datetime.now() - self.config.food.send_prompt_after and \
                             meal_context.marked_payed is None and not meal_context.prompt_sent:
 
-                            logger.info(f"prompting for payment user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
+                            logger.info(f"prompting for payment user {meal_context.tg_user_repr()} of"+
+                                        " {meal_context.id} for {meal_context.for_who}")
 
                             keyboard = [
                                 [
-                                    InlineKeyboardButton("👌 Оплачу попозже", callback_data=f"{IC_FOOD_PROMPT_WILL_PAY}|{meal_context.id}"),
-                                    InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
+                                    InlineKeyboardButton(
+                                        "👌 Оплачу попозже",
+                                        callback_data=f"{IC_FOOD_PROMPT_WILL_PAY}|{meal_context.id}"
+                                    ),
+                                    InlineKeyboardButton(
+                                        "❌ Отменить заказ",
+                                        callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"
+                                    ),
                                 ]
                             ]
 
@@ -267,15 +270,22 @@ class FoodStorage():
                             continue
 
                         if meal_context.marked_payed is not None and \
-                            meal_context.marked_payed < datetime.now() - SEND_PROOF_PROMPT_AFTER and \
+                            meal_context.marked_payed < datetime.now() - self.config.food.send_proof_prompt_after and \
                             meal_context.proof_received is None and not meal_context.proof_prompt_sent:
 
-                            logger.info(f"prompting for proof user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
+                            logger.info(f"prompting for proof user {meal_context.tg_user_repr()} of "+
+                                        "{meal_context.id} for {meal_context.for_who}")
 
                             keyboard = [
                                 [
-                                    InlineKeyboardButton("👌 Сейчас пришлю", callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{meal_context.id}"),
-                                    InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
+                                    InlineKeyboardButton(
+                                        "👌 Сейчас пришлю",
+                                        callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{meal_context.id}"
+                                    ),
+                                    InlineKeyboardButton(
+                                        "❌ Отменить заказ",
+                                        callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"
+                                    ),
                                 ]
                             ]
 
@@ -389,7 +399,8 @@ class FoodStorage():
                             get_date(meal.marked_payed),
                             get_date(meal.proof_received),
                             meal.payment_confirmed,
-                            get_date(meal.payment_confirmed_date) if meal.payment_confirmed else get_date(meal.payment_declined_date),
+                            get_date(meal.payment_confirmed_date) if meal.payment_confirmed else \
+                                get_date(meal.payment_declined_date),
                             meal.prompt_sent,
                             meal.proof_prompt_sent,
                         ])
