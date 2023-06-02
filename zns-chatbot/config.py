@@ -6,6 +6,8 @@ from datetime import timedelta
 class MassageSettings(BaseSettings):
     data_path = Field("massage.yaml")
     conversation_timeout: timedelta = Field(timedelta(hours=2))
+    notificator_loop_frequency: timedelta = Field(timedelta(seconds=30))
+    notify_client_in_prior: timedelta = Field(timedelta(minutes=10))
 
 class TelegramSettings(BaseSettings):
     token: SecretStr = Field(env="TELEGRAM_TOKEN")

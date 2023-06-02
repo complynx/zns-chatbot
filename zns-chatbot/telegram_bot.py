@@ -680,6 +680,7 @@ async def massage_cmd(update: Update, context: CallbackContext):
     massage_system: MassageSystem = context.application.base_app.massage_system
 
     massages = massage_system.get_client_massages(update.effective_user.id)
+    massages.sort(key=lambda x: x.start)
     # if len(massages) == 0: # have no bookings
     #     return await massage_create(update, context)
     keyboard = []
@@ -805,8 +806,11 @@ async def massage_create(update: Update, context: CallbackContext):
     if len(massage_data_str) == 0:
         message = f"Выбери тип массажа:"
         keyboard = []
-        for i in range(len(massage_system.massage_types)):
-            type = massage_system.massage_types[i]
+        
+        mts = [(i, massage_system.massage_types[i]) for i in range(len(massage_system.massage_types))]
+        mts.sort(key=lambda x: x[1].price)
+        for mtt in mts:
+            i, type = mtt
             total_minutes = type.duration.total_seconds() // 60
             message += f"\n* {type.name} — {type.price} ₽ / {total_minutes} минут."
             keyboard.append([InlineKeyboardButton(type.name, callback_data=f"{IC_MASSAGE}N{i}")])
@@ -837,7 +841,9 @@ async def massage_create(update: Update, context: CallbackContext):
         ( len(massage_data_str) == 3 and massage_data_str[2] == '?' ) or \
             masseurs_mask == 0:
 
-        message = message_prefix + "\nМожешь включить или исключить массажистов по выбору:"
+        message = message_prefix + "\nМожешь включить ✅ или исключить ❌ массажистов.\n" + \
+                                   "Чем больше массажистов выбрано, тем больше вероятность найти удобный слот.\n"+ \
+                                   "Когда закончишь, жми \"➡ Дальше\"."
         buttons = []
 
         for i in range(len(masseur_ids)):
@@ -847,7 +853,7 @@ async def massage_create(update: Update, context: CallbackContext):
             masseur = massage_system.masseurs[masseur_id]
 
             new_mask = (masseurs_mask & (~mask)) if is_enabled else (masseurs_mask | mask)
-            mark = "☑" if is_enabled else "🔳"
+            mark = "✅" if is_enabled else "❌"
 
             buttons.append(InlineKeyboardButton(
                 f"{mark} {masseur.name}",
@@ -857,7 +863,7 @@ async def massage_create(update: Update, context: CallbackContext):
         if masseurs_mask != 0:
             keyboard.append([
                 InlineKeyboardButton(
-                    "✅ Дальше",
+                    "➡ Дальше",
                     callback_data=f"{command_prefix}{int_to_base32(masseurs_mask)}"
                 ),
             ])
@@ -944,40 +950,20 @@ async def massage_create(update: Update, context: CallbackContext):
                       message_prefix + "\nВыбери новое время:"
         else:
             message = message_prefix + "\nВыбери удобное время:"
-        slots = await massage_system.get_available_slots(
-            massage_dow,
-            masseur_ids,
-            massage_type.duration,
-        )
-        slots = await massage_system.filter_available_slots(
-            slots,
-            massage_dow,
-            massage_type.duration,
+        slots = await massage_system.get_available_slots_for_client(
             update.effective_user.id,
+            massage_dow,
+            selected_masseur_ids,
+            massage_type.duration,
         )
-
-        slots_by_time:list[tuple[datetime.datetime,datetime.datetime,int]] = []
-        for masseur_id, m_slots in slots.items():
-            for slot in m_slots:
-                start, end = slot
-                slots_by_time.append((start,end,masseur_id))
-        slots_by_time.sort(key=lambda x: x[0])
 
         buttons = []
-        for slot in slots_by_time:
-            start, end, masseur_id = slot
-            end_for_massage = end - massage_type.duration
-            start_str = start.strftime("%H:%M")
+        for slot in slots:
+            start_str = slot.start.strftime("%H:%M")
             buttons.append(InlineKeyboardButton(
-                f"{start_str} {massage_system.masseurs[masseur_id].icon}",
-                callback_data=f"{command_prefix}{start_str}:{masseur_id}",
+                f"{start_str} {massage_system.masseurs[slot.masseur_id].icon}",
+                callback_data=f"{command_prefix}{start_str}:{slot.masseur_id}",
             ))
-            if end_for_massage > start + massage_system.buffer_time:
-                start_str = end_for_massage.strftime("%H:%M")
-                buttons.append(InlineKeyboardButton(
-                    f"{start_str} {massage_system.masseurs[masseur_id].icon}",
-                    callback_data=f"{command_prefix}{start_str}:{masseur_id}",
-                ))
         keyboard = split_list(buttons, 3)
         keyboard.append([
             InlineKeyboardButton("⬅ Назад", callback_data=f"{command_back}"),

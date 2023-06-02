@@ -72,6 +72,8 @@ class Massage(BaseModel):
     client_username: str|None = None
     start: datetime
     _id: int = PrivateAttr(-1)
+    _client_notified: bool = PrivateAttr(False)
+    _masseur_notified: bool = PrivateAttr(False)
 
     def client_link_url(self) -> str:
         return f"https://t.me/{self.client_username}" if self.client_username is not None else f"tg://user?id={self.client_id}"
@@ -102,6 +104,11 @@ class WorkingHour(BaseModel):
             raise ValueError('start should preceed end')
         return end
 
+class TimeSlot:
+    start: datetime
+    end: datetime
+    masseur_id: int
+
 class MassageSystem(BaseModel):
     masseurs: dict[int, Masseur]
     buffer_time: timedelta = timedelta(minutes=5)
@@ -123,12 +130,6 @@ class MassageSystem(BaseModel):
     _massage_id_cap: int = PrivateAttr(0)
     _first_day: datetime = PrivateAttr()
 
-    def get_massage_full(self, massage_id):
-        massage = self.massages[massage_id]
-        masseur = self.masseurs[massage.masseur_id]
-        m_type = self.massage_types[massage.massage_type_index]
-        return massage, masseur, m_type
-
     def __init__(self, config: Config, app):
         filename = config.massage.data_path
         with open(filename, "r", encoding="utf-8", newline="\n") as f:
@@ -147,6 +148,12 @@ class MassageSystem(BaseModel):
         self._first_day = self.working_hours[0].start
 
         app.massage_system = self
+
+    def get_massage_full(self, massage_id):
+        massage = self.massages[massage_id]
+        masseur = self.masseurs[massage.masseur_id]
+        m_type = self.massage_types[massage.massage_type_index]
+        return massage, masseur, m_type
     
     async def get_new_id(self):
         async with self._lock:
@@ -280,6 +287,60 @@ class MassageSystem(BaseModel):
 
         return slots
 
+    async def get_available_slots_for_client(self, client_id: int, dow: int, masseur_ids: list[int], duration: timedelta) -> list[TimeSlot]:
+        slots = await self.get_available_slots(
+            dow,
+            masseur_ids,
+            duration,
+        )
+        slots = await self.filter_available_slots(
+            slots,
+            dow,
+            duration,
+            client_id,
+        )
+
+        slots_by_time:list[tuple[datetime,datetime,int]] = []
+        for masseur_id, m_slots in slots.items():
+            for slot in m_slots:
+                start, end = slot
+                slots_by_time.append((start,end,masseur_id))
+        slots_by_time.sort(key=lambda x: x[0])
+
+        ret = []
+        for slot in slots_by_time:
+            start, end, masseur_id = slot
+            ts = TimeSlot()
+            ts.start = start
+            ts.end = start + duration
+            ts.masseur_id = masseur_id
+            ret.append(ts)
+
+            ts = TimeSlot()
+            ts.start = end - duration
+            ts.end = end
+            ts.masseur_id = masseur_id
+            ret.append(ts)
+        
+        ret.sort(key=lambda x: (x.masseur_id, x.start))
+
+        filtered_slots = [ret[0]]  # We always include the first slot
+        last_slot = ret[0]
+        half_duration = duration / 2
+
+        for i in range(1, len(ret)):
+            # If the current slot and previous slot have the same masseur,
+            # and their starts are closer than duration/2, skip the current slot
+
+            if ret[i].masseur_id == last_slot.masseur_id and abs(ret[i].start - last_slot.start) < half_duration:
+                continue
+            else:
+                filtered_slots.append(ret[i])
+                last_slot = ret[i]
+
+        filtered_slots.sort(key=lambda x: x.start)
+        return filtered_slots
+
     @validator('masseurs')
     def check_masseurs_len(cls, masseurs):
         if len(masseurs) > 5:
@@ -321,3 +382,25 @@ class MassageSystem(BaseModel):
         async with self._lock:
             self._save_unsafe_sync()
             # await self._save_async()
+    
+    async def notificator(self):
+        import asyncio
+        while True:
+            await asyncio.sleep(self._config.massage.notificator_loop_frequency.total_seconds())
+            for massage in self.massages.values():
+                if not massage._client_notified and \
+                    massage.start - self._config.massage.notify_client_in_prior < datetime.now() and \
+                    massage.start > datetime.now():
+
+                    # notify client
+                    massage._client_notified = True
+                if not massage._masseur_notified and \
+                    massage.start - self.buffer_time < datetime.now() and \
+                    massage.start > datetime.now():
+                    
+                    masseur = self.masseurs[massage.masseur_id]
+                    if masseur.before_massage_notifications:
+                        # notify masseur
+                        pass
+                    massage._masseur_notified = True
+                
