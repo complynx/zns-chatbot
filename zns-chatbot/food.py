@@ -233,8 +233,10 @@ class FoodStorage():
                             logger.info(f"deleted empty stale meal context {meal_context.id}")
                             continue
 
-                        if meal_context.choice_date is not None and\
-                           meal_context.proof_received is None and not meal_context.deadline_info_sent:
+                        if self.config.food.hard_deadline < datetime.now() and\
+                           meal_context.choice_date is not None and\
+                           meal_context.proof_received is None and not meal_context.deadline_info_sent \
+                           and meal_context.tg_user_id == 379278985:
                             await bot.send_message(
                                 chat_id=meal_context.tg_user_id,
                                 text=
