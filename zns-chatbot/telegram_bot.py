@@ -62,12 +62,13 @@ async def start(update: Update, context: CallbackContext):
     logger.info(f"start called: {update.effective_user}")
     await context.bot.set_my_commands([
         ("/avatar", "Создать аватар."),
-        ("/food", "Заказать еду."),
+        # ("/food", "Заказать еду."),
     ])
     await update.message.reply_text(
         "Здравствуй, зуконавт! Меня зовут ЗиНуСя, твой виртуальный помощник 🤗\n\n"+
-        "🟢 Я могу помочь заказать тебе горячее питание и сделать красивую аватарку! Для этого выбери команду:\n"+
-        "/food - заказ горячего питания\n"+
+        "🟢 Я могу сделать тебе красивую аватарку! Для этого выбери команду:\n"+
+        # "🟢 Я могу помочь заказать тебе горячее питание и сделать красивую аватарку! Для этого выбери команду:\n"+
+        # "/food - заказ горячего питания\n"+
         "/avatar - создать аватарку"
     )
 
@@ -269,17 +270,19 @@ async def food_cmd(update: Update, context: CallbackContext):
     """Handle the /food command, requesting a photo."""
     logger.info(f"Received /food command from {update.effective_user}")
     _ = PhotoTask(update.effective_chat, update.effective_user)
-    markup = ReplyKeyboardMarkup(
-        [[update.effective_user.full_name],["Отмена"]],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-    await update.message.reply_html(
-        "Привет, зуконавт! Наша звёздная кухня готова принять твой заказ! Чего изволите? 🖖\n\n"+
-        "Напиши полные <u>имя</u> и <u>фамилию</u> зуконавта, для которого будем собирать меню.",
-        reply_markup=markup
-    )
-    return NAME
+    await update.message.reply_text("Увы, поест ушёл...")
+    return ConversationHandler.END
+    # markup = ReplyKeyboardMarkup(
+    #     [[update.effective_user.full_name],["Отмена"]],
+    #     resize_keyboard=True,
+    #     one_time_keyboard=True
+    # )
+    # await update.message.reply_html(
+    #     "Привет, зуконавт! Наша звёздная кухня готова принять твой заказ! Чего изволите? 🖖\n\n"+
+    #     "Напиши полные <u>имя</u> и <u>фамилию</u> зуконавта, для которого будем собирать меню.",
+    #     reply_markup=markup
+    # )
+    # return NAME
 
 async def food_received_name(update: Update, context: CallbackContext):
     """Handle the cancel command during the avatar submission."""

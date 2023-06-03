@@ -74,6 +74,7 @@ class MealContext(object):
     payment_declined_date = None
     prompt_sent = False
     proof_prompt_sent = False
+    deadline_info_sent = False
 
     _cancelled = False
     _non_cacheable = {
@@ -236,65 +237,81 @@ class FoodStorage():
                             logger.info(f"deleted empty stale meal context {meal_context.id}")
                             continue
 
-                        if meal_context.choice_date is not None and \
-                            meal_context.choice_date < datetime.now() - SEND_PROMPT_AFTER and \
-                            meal_context.marked_payed is None and not meal_context.prompt_sent:
-
-                            logger.info(f"prompting for payment user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
-
-                            keyboard = [
-                                [
-                                    InlineKeyboardButton("👌 Оплачу попозже", callback_data=f"{IC_FOOD_PROMPT_WILL_PAY}|{meal_context.id}"),
-                                    InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
-                                ]
-                            ]
-
+                        if meal_context.choice_date is not None and\
+                           meal_context.proof_received is None and not meal_context.deadline_info_sent:
                             await bot.send_message(
                                 chat_id=meal_context.tg_user_id,
                                 text=
                                 f"Зуконавт, я вижу твой заказ для <i>{meal_context.for_who}</i> "+
                                 f"на сумму {meal_context.total}, который пока не оплачен.\n\n"+
-                                "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
-                                " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
-                                " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
-                                "и потом создай новый через команду /food.\n\n"+
-                                "Нужно оплатить питание <u>до 1 июня</u> включительно чтобы ZNS смог привезти "+
-                                "его для тебя на площадку горячим.",
+                                "К сожалению, вынуждена сообщить, что время принятия оплат "+
+                                "закончено и заказ не будет включен в выгрузку.\n"+
+                                "Если у тебя остались какие-то вопросы — их можно в напрямую задать ответственной по горячему"+
+                                " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>.",
                                 parse_mode=ParseMode.HTML,
-                                reply_markup=InlineKeyboardMarkup(keyboard),
                             )
-                            meal_context.prompt_sent = True
+                            meal_context.deadline_info_sent = True
                             continue
 
-                        if meal_context.marked_payed is not None and \
-                            meal_context.marked_payed < datetime.now() - SEND_PROOF_PROMPT_AFTER and \
-                            meal_context.proof_received is None and not meal_context.proof_prompt_sent:
+                        # if meal_context.choice_date is not None and \
+                        #     meal_context.choice_date < datetime.now() - SEND_PROMPT_AFTER and \
+                        #     meal_context.marked_payed is None and not meal_context.prompt_sent:
 
-                            logger.info(f"prompting for proof user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
+                        #     logger.info(f"prompting for payment user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
 
-                            keyboard = [
-                                [
-                                    InlineKeyboardButton("👌 Сейчас пришлю", callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{meal_context.id}"),
-                                    InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
-                                ]
-                            ]
+                        #     keyboard = [
+                        #         [
+                        #             InlineKeyboardButton("👌 Оплачу попозже", callback_data=f"{IC_FOOD_PROMPT_WILL_PAY}|{meal_context.id}"),
+                        #             InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
+                        #         ]
+                        #     ]
 
-                            await bot.send_message(
-                                chat_id=meal_context.tg_user_id,
-                                text=
-                                f"Я вижу твой заказ для зуконавта по имени <i>{meal_context.for_who}</i> "+
-                                f"на сумму {meal_context.total}. Указано, что он оплачен, но не получено подтверждения.\n\n"+
-                                "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
-                                " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
-                                " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
-                                "и потом создай новый через команду /food.\n\n"+
-                                "Подтверждение оплаты заказа надо прислать в форме <u><b>квитанции (чека)</b></u> об "+
-                                "оплате <u>до 1 июня</u> включительно чтобы ZNS смог привезти его для тебя на площадку горячим.",
-                                parse_mode=ParseMode.HTML,
-                                reply_markup=InlineKeyboardMarkup(keyboard),
-                            )
-                            meal_context.proof_prompt_sent = True
-                            continue
+                        #     await bot.send_message(
+                        #         chat_id=meal_context.tg_user_id,
+                        #         text=
+                        #         f"Зуконавт, я вижу твой заказ для <i>{meal_context.for_who}</i> "+
+                        #         f"на сумму {meal_context.total}, который пока не оплачен.\n\n"+
+                        #         "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
+                        #         " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
+                        #         " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
+                        #         "и потом создай новый через команду /food.\n\n"+
+                        #         "Нужно оплатить питание <u>до 1 июня</u> включительно чтобы ZNS смог привезти "+
+                        #         "его для тебя на площадку горячим.",
+                        #         parse_mode=ParseMode.HTML,
+                        #         reply_markup=InlineKeyboardMarkup(keyboard),
+                        #     )
+                        #     meal_context.prompt_sent = True
+                        #     continue
+
+                        # if meal_context.marked_payed is not None and \
+                        #     meal_context.marked_payed < datetime.now() - SEND_PROOF_PROMPT_AFTER and \
+                        #     meal_context.proof_received is None and not meal_context.proof_prompt_sent:
+
+                        #     logger.info(f"prompting for proof user {meal_context.tg_user_repr()} of {meal_context.id} for {meal_context.for_who}")
+
+                        #     keyboard = [
+                        #         [
+                        #             InlineKeyboardButton("👌 Сейчас пришлю", callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{meal_context.id}"),
+                        #             InlineKeyboardButton("❌ Отменить заказ", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{meal_context.id}"),
+                        #         ]
+                        #     ]
+
+                        #     await bot.send_message(
+                        #         chat_id=meal_context.tg_user_id,
+                        #         text=
+                        #         f"Я вижу твой заказ для зуконавта по имени <i>{meal_context.for_who}</i> "+
+                        #         f"на сумму {meal_context.total}. Указано, что он оплачен, но не получено подтверждения.\n\n"+
+                        #         "Если у тебя есть вопросы — их можно в напрямую задать ответственной по горячему"+
+                        #         " питанию — <a href=\"https://t.me/capricorndarrel\">Даше</a>."+
+                        #         " Если заказ не актуален или требуется что-то поменять, жми \"❌ Отменить заказ\" "+
+                        #         "и потом создай новый через команду /food.\n\n"+
+                        #         "Подтверждение оплаты заказа надо прислать в форме <u><b>квитанции (чека)</b></u> об "+
+                        #         "оплате <u>до 1 июня</u> включительно чтобы ZNS смог привезти его для тебя на площадку горячим.",
+                        #         parse_mode=ParseMode.HTML,
+                        #         reply_markup=InlineKeyboardMarkup(keyboard),
+                        #     )
+                        #     meal_context.proof_prompt_sent = True
+                        #     continue
                 
                 except FileNotFoundError:
                     pass # file was deleted in the meantime by other process (user?)
