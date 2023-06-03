@@ -1,7 +1,13 @@
 import yaml
 
 from pydantic import BaseSettings, Field, SecretStr 
-from datetime import timedelta
+from datetime import timedelta, datetime
+
+class MassageSettings(BaseSettings):
+    data_path = Field("massage.yaml")
+    conversation_timeout: timedelta = Field(timedelta(hours=2))
+    notificator_loop_frequency: timedelta = Field(timedelta(seconds=30))
+    notify_client_in_prior: timedelta = Field(timedelta(minutes=10))
 
 class MassageSettings(BaseSettings):
     data_path = Field("massage.yaml")
@@ -29,6 +35,9 @@ class FoodSettings(BaseSettings):
     send_proof_prompt_after: timedelta = Field(timedelta(hours=2))
     receive_username_conversation_timeout: timedelta = Field(timedelta(hours=1))
     receive_proof_conversation_timeout: timedelta = Field(timedelta(hours=1))
+    hard_deadline: datetime = Field(datetime(2023, 6, 4, 21,0,0))
+    soft_deadline_17: datetime = Field(datetime(2023, 6, 4, 14,0,0))
+    soft_deadline_20: datetime = Field(datetime(2023, 6, 4, 17,0,0))
 
 class PhotoSettings(BaseSettings):
     cpu_threads: int = Field(8)

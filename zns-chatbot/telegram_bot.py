@@ -63,14 +63,22 @@ cover = "static/cover.jpg"
 async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     logger.info(f"start called: {update.effective_user}")
-    await context.bot.set_my_commands([
+    conf: Config = context.application.config
+    menu = [
         ("/avatar", "Создать аватар."),
-        ("/food", "Заказать еду."),
-    ])
+    ]
+    if conf.food.hard_deadline > datetime.datetime.now():
+        menu.append(("/food", "Заказать еду."))
+    await context.bot.set_my_commands(menu)
     await update.message.reply_text(
         "Здравствуй, зуконавт! Меня зовут ЗиНуСя, твой виртуальный помощник 🤗\n\n"+
-        "🟢 Я могу помочь заказать тебе горячее питание и сделать красивую аватарку! Для этого выбери команду:\n"+
-        "/food - заказ горячего питания\n"+
+        (
+            "🟢 Я могу сделать тебе красивую аватарку! Для этого выбери команду:\n"
+            if conf.food.hard_deadline < datetime.datetime.now()
+            else
+            "🟢 Я могу помочь заказать тебе горячее питание и сделать красивую аватарку! Для этого выбери команду:\n"+
+            "/food - заказ горячего питания\n"
+        )+
         "/avatar - создать аватарку"
     )
 
@@ -272,7 +280,10 @@ CANCEL_FOOD_STAGE2_REPLACEMENT_TEXT = "Этот выбор меню отменё
 async def food_cmd(update: Update, context: CallbackContext):
     """Handle the /food command, requesting a photo."""
     logger.info(f"Received /food command from {update.effective_user}")
-    _ = PhotoTask(update.effective_chat, update.effective_user)
+    conf: Config = context.application.config
+    if conf.food.hard_deadline < datetime.datetime.now():
+        await update.message.reply_text("Увы, поест ушёл...")
+        return ConversationHandler.END
     markup = ReplyKeyboardMarkup(
         [[update.effective_user.full_name],["Отмена"]],
         resize_keyboard=True,
