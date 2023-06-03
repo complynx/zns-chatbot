@@ -3,9 +3,13 @@ telegram:
 
 food:
   admins:
-    - -1
-  proover: 1
+    - 1234 # tg ids for using /food_adm...
+  proover: 1234 # tg id for proofing the payments
   storage_path: "menu"
+  checker_loop_frequency: "5:00"
+  remove_empty_orders: "1 00:00:00"
+  send_prompt_after: "1 00:00:00"
+  send_proof_prompt_after: "1:00:00"
 
 server:
   base: "https://example.com/bot" # used for appending to local urls
