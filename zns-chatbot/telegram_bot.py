@@ -842,6 +842,11 @@ async def massage_create(update: Update, context: CallbackContext):
     masseur_ids = sorted(massage_system.masseurs.keys())
     if massage_system.remove_masseurs_self_massage and update.effective_user.id in massage_system.masseurs:
         masseur_ids.remove(update.effective_user.id)
+    
+    if massage_type.duration.total_seconds() < 60 * 60:
+        masseur_ids.remove(1518045050)
+    if massage_type.duration.total_seconds() > 60 * 60:
+        masseur_ids=[1518045050]
 
     if len(massage_data_str) == 1:
         masseurs_mask = (1<<len(masseur_ids)) - 1
@@ -855,6 +860,10 @@ async def massage_create(update: Update, context: CallbackContext):
         message = message_prefix + "\nМожешь включить ✅ или исключить ❌ массажистов.\n" + \
                                    "Чем больше массажистов выбрано, тем больше вероятность найти удобный слот.\n"+ \
                                    "Когда закончишь, жми \"➡ Дальше\"."
+        if massage_type.duration.total_seconds() < 60 * 60:
+            message += "\n<i>⚠ Таисия работает только с массажами от 60 минут, поэтому её тут не будет!</i>"
+        if massage_type.duration.total_seconds() > 60 * 60:
+            message += "\n<i>⚠ Только Таисия работает с массажами более 60 минут!</i>"
         buttons = []
 
         for i in range(len(masseur_ids)):

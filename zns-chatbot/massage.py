@@ -5,6 +5,10 @@ import asyncio
 from .aioflielock import AIOMutableFileLock
 from .photo_task import async_thread
 from .config import Config
+import pytz
+import logging
+
+logger = logging.getLogger(__name__)
 
 def timedelta_representer(dumper, data: timedelta):
     sign = "-" if data.total_seconds() < 0 else ""
@@ -28,6 +32,13 @@ yaml.add_representer(timedelta, timedelta_representer, Dumper=yaml.SafeDumper)
 
 FILE_LOCK_TIMEOUT = 300 # 5 min
 FILE_LOCK_GRANULARITY = 0.2
+
+ctime = datetime.now()
+ctime_msk = datetime.now(tz=pytz.timezone("Europe/Moscow")).replace(tzinfo=None)
+MSK_OFFSET = timedelta(seconds=round((ctime_msk-ctime).total_seconds()))
+
+def now_msk() -> datetime:
+    return datetime.now() + MSK_OFFSET
 
 class Masseur(BaseModel):
     name: str
@@ -90,7 +101,7 @@ class Massage(BaseModel):
                 dow = "Сб"
             case _:
                 dow = "Вс"
-        return dow + " " + self.start.strftime('%H:%M')
+        return dow + " " + (self.start).strftime('%H:%M')
 
 class WorkingHour(BaseModel):
     start: datetime
@@ -120,8 +131,10 @@ class MassageSystem(BaseModel):
     # set to 7, any time before 7am will be considered part of the previous day, and any time after
     # 7am will be considered part of the next day. This is used for calculating day of week and
     # generating datetime from (dow+time)
-    previous_or_next_day_hour: int = 7
+    previous_or_next_day_hour: int = 4
     remove_masseurs_self_massage: bool = True
+    latest_possible_massage_set: timedelta = timedelta(minutes=15)
+    latest_possible_massage_set_buffer: timedelta = timedelta(minutes=5)
 
     _config: Config = PrivateAttr()
     _app = PrivateAttr()
@@ -181,6 +194,8 @@ class MassageSystem(BaseModel):
         new_massage_start = new_massage.start
         new_massage_end = new_massage_start + self.massage_types[new_massage.massage_type_index].duration
         masseur_id = new_massage.masseur_id
+        if new_massage_start < now_msk() + self.latest_possible_massage_set:
+            return -1
 
         # Check if there's any overlap with existing massages
         async with self._lock:
@@ -217,9 +232,14 @@ class MassageSystem(BaseModel):
             client_massages = [m for m in self.massages.values() if m.client_id == client_id and m.start < day_end and m.start >= day_start]
             client_massages.sort(key=lambda x: x.start)
 
+        first_possible_time_msk = now_msk() + self.latest_possible_massage_set_buffer + self.latest_possible_massage_set
         for masseur_id, masseur_slots in slots.items():
             filtered_slots[masseur_id] = []
             for slot_start, slot_end in masseur_slots:
+                if slot_end < first_possible_time_msk:
+                    continue
+                if slot_start < first_possible_time_msk:
+                    slot_start = first_possible_time_msk
                 temp_slot_start = slot_start
                 temp_slot_end = slot_end
                 for massage in client_massages:
@@ -387,16 +407,17 @@ class MassageSystem(BaseModel):
         import asyncio
         while True:
             await asyncio.sleep(self._config.massage.notificator_loop_frequency.total_seconds())
+            msk_time = now_msk()
             for massage in self.massages.values():
                 if not massage._client_notified and \
-                    massage.start - self._config.massage.notify_client_in_prior < datetime.now() and \
-                    massage.start > datetime.now():
+                    massage.start - self._config.massage.notify_client_in_prior < msk_time and \
+                    massage.start > msk_time:
 
                     # notify client
                     massage._client_notified = True
                 if not massage._masseur_notified and \
-                    massage.start - self.buffer_time < datetime.now() and \
-                    massage.start > datetime.now():
+                    massage.start - self.buffer_time < msk_time and \
+                    massage.start > msk_time:
                     
                     masseur = self.masseurs[massage.masseur_id]
                     if masseur.before_massage_notifications:

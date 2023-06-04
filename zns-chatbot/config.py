@@ -52,7 +52,6 @@ class Config(BaseSettings):
     photo: PhotoSettings
     massage: MassageSettings
 
-
     def __init__(self, filename:str="config/config.yaml"):
         # Load a YAML configuration file
         with open(filename, 'r') as f:
