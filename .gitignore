@@ -5,4 +5,5 @@ __pycache__
 /photos/
 /config/config.yaml
 /massage.yaml
+/massage_real.yaml
 /menu/

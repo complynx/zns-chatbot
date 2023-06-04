@@ -5,7 +5,7 @@ from datetime import timedelta, datetime
 
 class MassageSettings(BaseSettings):
     data_path = Field("massage.yaml")
-    conversation_timeout: timedelta = Field(timedelta(hours=2))
+    conversation_timeout: timedelta = Field(timedelta(hours=1))
     notificator_loop_frequency: timedelta = Field(timedelta(seconds=30))
     notify_client_in_prior: timedelta = Field(timedelta(minutes=10))
 

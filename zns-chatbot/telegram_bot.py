@@ -66,19 +66,13 @@ async def start(update: Update, context: CallbackContext):
     conf: Config = context.application.config
     menu = [
         ("/avatar", "Создать аватар."),
+        ("/massage", "Записаться на массаж."),
     ]
-    if conf.food.hard_deadline > datetime.datetime.now():
-        menu.append(("/food", "Заказать еду."))
     await context.bot.set_my_commands(menu)
     await update.message.reply_text(
         "Здравствуй, зуконавт! Меня зовут ЗиНуСя, твой виртуальный помощник 🤗\n\n"+
-        (
-            "🟢 Я могу сделать тебе красивую аватарку! Для этого выбери команду:\n"
-            if conf.food.hard_deadline < datetime.datetime.now()
-            else
-            "🟢 Я могу помочь заказать тебе горячее питание и сделать красивую аватарку! Для этого выбери команду:\n"+
-            "/food - заказ горячего питания\n"
-        )+
+        "🟢 Я могу записать тебя на массаж и сделать тебе красивую аватарку! Для этого выбери команду:\n"
+        "/massage - запись на массаж\n"+
         "/avatar - создать аватарку"
     )
 
@@ -676,7 +670,7 @@ async def food_admin_get_csv(update: Update, context: CallbackContext):
 def split_list(lst: list, chunk: int):
     result = []
     for i in range(0, len(lst), chunk):
-        sublist = lst[i:i+3]
+        sublist = lst[i:i+chunk]
         result.append(sublist)
     return result
 
@@ -712,14 +706,16 @@ async def massage_cmd(update: Update, context: CallbackContext):
     # add all existing bookings
     massage_buttons = [
         InlineKeyboardButton(
-            massage.massage_client_repr(),
+            "💆 " + massage.massage_client_repr(),
             callback_data=f"{IC_MASSAGE}Edit|{massage._id}"
         ) for massage in massages
     ]
     if len(massage_buttons) > 0:
+        keyboard.append([InlineKeyboardButton("Твои записи:", callback_data=f"{IC_MASSAGE}ToStart")])
         keyboard.extend(split_list(massage_buttons, 3))
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel")])
-    message = "Выбери запись, которую надо изменить или нажми \"Записаться\", чтобы создать новую:"
+    message = "Кликни \"Записаться\", чтобы попасть на приём к массажисту или выбери свою "+\
+    "текущую запись из списка, чтобы внести изменения, отменить или связаться со специалистом."
     if query:
         await query.edit_message_text(
             message,
@@ -854,14 +850,16 @@ async def massage_create(update: Update, context: CallbackContext):
         masseurs_mask = int(massage_data_str[1], base=32)
     
     if ( len(massage_data_str) == 1 ) or \
-        ( len(massage_data_str) == 3 and massage_data_str[2] == '?' ) or \
+        ( len(massage_data_str) > 2 and massage_data_str[2] == '?' ) or \
             masseurs_mask == 0:
 
-        message = message_prefix + "\nМожешь включить ✅ или исключить ❌ массажистов.\n" + \
+        message = message_prefix + "\nЗдесь можно отфильтровать массажистов. По умолчанию, выбраны все ✅."+\
+                                   " Если нажать на имя, то массажист станет исключён ❌.\n" + \
                                    "Чем больше массажистов выбрано, тем больше вероятность найти удобный слот.\n"+ \
                                    "Когда закончишь, жми \"➡ Дальше\"."
         if massage_type.duration.total_seconds() < 60 * 60:
-            message += "\n<i>⚠ Таисия работает только с массажами от 60 минут, поэтому её тут не будет!</i>"
+            message += "\n<i>⚠ Если ищешь Таисию, нажми вкладку \"Общий массаж\" в предыдущем меню.\n"+\
+                       "Специалист работает со всеми запросами в тайминге от 60 минут.</i>"
         if massage_type.duration.total_seconds() > 60 * 60:
             message += "\n<i>⚠ Только Таисия работает с массажами более 60 минут!</i>"
         buttons = []
@@ -888,6 +886,7 @@ async def massage_create(update: Update, context: CallbackContext):
                 ),
             ])
         keyboard.append([
+            # InlineKeyboardButton("📗 Почитать про каждого", callback_data=f"{command_prefix}{int_to_base32(masseurs_mask)}??"),
             InlineKeyboardButton("⬅ Назад", callback_data=f"{command_back}"),
             InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel"),
         ])
@@ -912,9 +911,9 @@ async def massage_create(update: Update, context: CallbackContext):
         )
         return ConversationHandler.END
 
-    message_prefix += "\nВыбраны массажисты: "
+    message_prefix += "\nВыбраны массажисты:\n"
     masseurs_selected = [massage_system.masseurs[id] for id in selected_masseur_ids]
-    message_prefix += ", ".join([f"{m.icon} {m.name}" for m in masseurs_selected])
+    message_prefix += "\n".join([f"{m.icon} {m.name}" for m in masseurs_selected])
 
     if len(massage_data_str) == 2:
         message = message_prefix + "\nТеперь выбери вечеринку:"
@@ -965,26 +964,37 @@ async def massage_create(update: Update, context: CallbackContext):
         new_id = await massage_system.try_add_massage(massage)
 
     if len(massage_data_str) == 3 or new_id < 0:
-        if len(massage_data_str) > 3:
-            message = "Выбранное время кто-то успел занять. Придётся выбрать другое.\n" +\
-                      message_prefix + "\nВыбери новое время:"
-        else:
-            message = message_prefix + "\nВыбери удобное время:"
         slots = await massage_system.get_available_slots_for_client(
             update.effective_user.id,
             massage_dow,
             selected_masseur_ids,
             massage_type.duration,
         )
+        if len(slots) == 0:
+            message += "По выбранным параметрам увы уже всё зарезервировано.\n"+\
+                "Попробуй выбрать другой день"
+            if massage_type.duration.total_seconds() > 60 * 20:
+                message += " или массаж покороче"
+            message += "."
+            if massage_type.duration.total_seconds() < 60 * 60:
+                message += "\nИли наоборот выбери общий массаж, так как Таисия работает только с ним."
+            message += "\n"
+            keyboard = []
+        else:
+            if len(massage_data_str) > 3:
+                message = "Выбранное время кто-то успел занять. Придётся выбрать другое.\n" +\
+                        message_prefix + "\nВыбери новое время:"
+            else:
+                message = message_prefix + "\nВыбери удобное время:"
+            buttons = []
 
-        buttons = []
-        for slot in slots:
-            start_str = slot.start.strftime("%H:%M")
-            buttons.append(InlineKeyboardButton(
-                f"{start_str} {massage_system.masseurs[slot.masseur_id].icon}",
-                callback_data=f"{command_prefix}{start_str}:{slot.masseur_id}",
-            ))
-        keyboard = split_list(buttons, 3)
+            for slot in slots:
+                start_str = slot.start.strftime("%H:%M")
+                buttons.append(InlineKeyboardButton(
+                    f"{start_str} {massage_system.masseurs[slot.masseur_id].icon}",
+                    callback_data=f"{command_prefix}{start_str}:{slot.masseur_id}",
+                ))
+            keyboard = split_list(buttons, 3)
         keyboard.append([
             InlineKeyboardButton("⬅ Назад", callback_data=f"{command_back}"),
             InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel"),
@@ -996,8 +1006,8 @@ async def massage_create(update: Update, context: CallbackContext):
     await query.edit_message_text(
         "Запись на массаж прошла успешно:\n"+
         f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
-        f"Массажист: {masseur.name}\nВремя: {massage.massage_client_repr()}\n"+
-        "Не опаздывай, а если не можешь — лучше заранее отменить.\n"+
+        f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
+        "Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.\n"+
         "Приятного погружения!",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup([])
@@ -1043,7 +1053,7 @@ async def massage_edit(update: Update, context: CallbackContext):
     await query.edit_message_text(
         "Информация о массаже:\n"+
         f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
-        f"Массажист: {masseur.name}\nВремя: {massage.massage_client_repr()}\n"+
+        f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
         "Выбери действие:",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup([
@@ -1102,6 +1112,15 @@ async def massage_cancel(update: Update, context: CallbackContext):
             reply_markup=InlineKeyboardMarkup([]),
         )
     return ConversationHandler.END
+
+async def massage_adm_reload(update: Update, context: CallbackContext):
+    """Send a welcome message when the /massage_adm_reload command is issued."""
+    logger.info(f"massage_adm_reload called: {update.effective_user}")
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    if update.effective_user.id not in massage_system.admins:
+        return
+    await massage_system.reload()
+    await update.message.reply_text("перезагружено")
 
 # endregion MASSAGE SECTION
 
@@ -1228,6 +1247,7 @@ async def create_telegram_bot(config: Config, app) -> TGApplication:
 
     application.add_handler(CommandHandler("massage", massage_cmd))
     application.add_handler(CommandHandler("food_adm_csv", food_admin_get_csv))
+    application.add_handler(CommandHandler("massage_adm_reload", massage_adm_reload))
     application.add_handler(CommandHandler("start", start))
     application.add_handler(massage_conversation)
     application.add_handler(food_start_conversation)

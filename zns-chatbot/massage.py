@@ -44,8 +44,16 @@ class Masseur(BaseModel):
     name: str
     last_name: str = ""
     icon: str = "💆‍♀️"
+    username: str = ""
     update_notifications: bool = True
     before_massage_notifications: bool = True
+    _id: int = PrivateAttr(-1)
+
+    def link_url(self) -> str:
+        return f"https://t.me/{self.username}" if self.username is not None else f"tg://user?id={self._id}"
+    
+    def link_html(self) -> str:
+        return f"<a href=\"{self.link_url()}\">{self.name}</a>"
 
     @classmethod
     def __get_validators__(cls):
@@ -126,6 +134,7 @@ class MassageSystem(BaseModel):
     massage_types: list[MassageType]
     working_hours: list[WorkingHour]
     massages: dict[int, Massage] = {}
+    admins: set[int]
     # The next option sets the hour after which all times are attributed to the next day, and before
     # which they are attributed to the previous day. For example, if `previous_or_next_day_hour` is
     # set to 7, any time before 7am will be considered part of the previous day, and any time after
@@ -135,6 +144,7 @@ class MassageSystem(BaseModel):
     remove_masseurs_self_massage: bool = True
     latest_possible_massage_set: timedelta = timedelta(minutes=15)
     latest_possible_massage_set_buffer: timedelta = timedelta(minutes=5)
+    split_if_longer_than: timedelta = timedelta(hours=4)
 
     _config: Config = PrivateAttr()
     _app = PrivateAttr()
@@ -152,15 +162,28 @@ class MassageSystem(BaseModel):
         self._app = app
         self._filename = filename
         self._lock = asyncio.Lock()
+       
+        self._after_load()
+
+        app.massage_system = self
+
+    def _after_load(self):
         for id, massage in self.massages.items():
             massage._id = id
+        for id, masseur in self.masseurs.items():
+            masseur._id = id
         self._massage_id_cap = max(self.massages.keys()) if len(self.massages) > 0 else 0
         self.massage_types.sort(key=lambda type: type.name)
 
         self.working_hours.sort(key=lambda wh: wh.start)
         self._first_day = self.working_hours[0].start
-
-        app.massage_system = self
+    
+    async def reload(self):
+        async with self._lock:
+            with open(self._filename, "r", encoding="utf-8", newline="\n") as f:
+                data = yaml.safe_load(f)
+            super().__init__(**data)
+            self._after_load()
 
     def get_massage_full(self, massage_id):
         massage = self.massages[massage_id]
@@ -252,7 +275,19 @@ class MassageSystem(BaseModel):
                         temp_slot_end = massage.start
                 if temp_slot_end - temp_slot_start >= duration:
                     filtered_slots[masseur_id].append((temp_slot_start, temp_slot_end))
-        return filtered_slots
+        split_slots = {}
+        for masseur_id, masseur_slots in filtered_slots.items():
+            split_slots[masseur_id] = []
+            for slot_start, slot_end in masseur_slots:
+                if slot_end - slot_start > self.split_if_longer_than:
+                    duration = slot_end-slot_start
+                    part = duration.total_seconds() / (60*20)
+                    new_duration = timedelta(seconds=part*60*10)
+                    split_slots[masseur_id].append((slot_start, slot_start+new_duration))
+                    split_slots[masseur_id].append((slot_start+new_duration, slot_end))
+                else:
+                    split_slots[masseur_id].append((slot_start, slot_end))
+        return split_slots
 
     async def get_available_slots(self, dow: int, masseur_ids: list[int], duration: timedelta) -> dict[int, tuple[datetime, datetime]]:
         slots = {}
@@ -385,10 +420,14 @@ class MassageSystem(BaseModel):
         return working_hours
     
     def get_client_massages(self, client_id: int) -> list[Massage]:
-        return [massage for massage in self.massages.values() if massage.client_id == client_id]
+        return [massage for massage in self.massages.values()
+                if massage.client_id == client_id
+                and massage.start + self.massage_types[massage.massage_type_index].duration > now_msk()]
     
     def get_masseur_massages(self, masseur_id: int) -> list[Massage]:
-        return [massage for massage in self.massages.values() if massage.masseur_id == masseur_id]
+        return [massage for massage in self.massages.values()
+                if massage.masseur_id == masseur_id
+                and massage.start + self.massage_types[massage.massage_type_index].duration > now_msk()]
 
     def _save_unsafe_sync(self):
         with open(self._filename, "w", encoding="utf-8", newline="\n") as f:
