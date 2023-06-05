@@ -715,15 +715,21 @@ async def massage_cmd(update: Update, context: CallbackContext):
         keyboard.extend(split_list(massage_buttons, 3))
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel")])
     message = "Кликни \"Записаться\", чтобы попасть на приём к массажисту или выбери свою "+\
-    "текущую запись из списка, чтобы внести изменения, отменить или связаться со специалистом."
+    "текущую запись из списка, чтобы внести изменения, отменить или связаться со специалистом.\n"+\
+    "Наши специалисты:"
+    for masseur in massage_system.masseurs.values():
+        message += f"\n   {masseur.icon} {masseur.link_html()}"
+    
     if query:
         await query.edit_message_text(
             message,
+            parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await update.message.reply_text(
             message,
+            parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     return ConversationHandler.END
