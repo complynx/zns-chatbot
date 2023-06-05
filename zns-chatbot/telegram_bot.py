@@ -725,12 +725,14 @@ async def massage_cmd(update: Update, context: CallbackContext):
         await query.edit_message_text(
             message,
             parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
         await update.message.reply_text(
             message,
             parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     return ConversationHandler.END
