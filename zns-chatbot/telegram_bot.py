@@ -28,6 +28,7 @@ from telegram.constants import ParseMode
 import logging
 import shutil
 
+from .massage import MassageSystem, Massage
 from .config import Config
 from .food import FoodStorage
 from .photo_task import get_by_user, PhotoTask
@@ -37,12 +38,14 @@ from .tg_constants import (
     IC_FOOD_ADMIN_DECLINE,
     IC_FOOD_PAYMENT_CANCEL,
     IC_FOOD_PROMPT_WILL_PAY,
+    IC_MASSAGE,
 )
 
 logger = logging.getLogger(__name__)
 
 PHOTO, CROPPER = range(2)
 NAME, WAITING_PAYMENT_PROOF = range(2)
+MASSAGE_CREATE, MASSAGE_EDIT = range(2)
 
 def full_link(app: "TGApplication", link: str) -> str:
     link = f"{app.config.server.base}{link}"
@@ -63,19 +66,13 @@ async def start(update: Update, context: CallbackContext):
     conf: Config = context.application.config
     menu = [
         ("/avatar", "Создать аватар."),
+        ("/massage", "Записаться на массаж."),
     ]
-    if conf.food.hard_deadline > datetime.datetime.now():
-        menu.append(("/food", "Заказать еду."))
     await context.bot.set_my_commands(menu)
     await update.message.reply_text(
         "Здравствуй, зуконавт! Меня зовут ЗиНуСя, твой виртуальный помощник 🤗\n\n"+
-        (
-            "🟢 Я могу сделать тебе красивую аватарку! Для этого выбери команду:\n"
-            if conf.food.hard_deadline < datetime.datetime.now()
-            else
-            "🟢 Я могу помочь заказать тебе горячее питание и сделать красивую аватарку! Для этого выбери команду:\n"+
-            "/food - заказ горячего питания\n"
-        )+
+        "🟢 Я могу записать тебя на массаж и сделать тебе красивую аватарку! Для этого выбери команду:\n"
+        "/massage - запись на массаж\n"+
         "/avatar - создать аватарку"
     )
 
@@ -262,7 +259,8 @@ async def avatar_error(update: Update, context: CallbackContext):
 async def avatar_timeout(update: Update, context: CallbackContext):
     await avatar_cancel_inner(update)
     await update.message.reply_text(
-        "Обработка фото отменена, так как долго не было активных действий от пользователя.\n/avatar",
+        "Обработка фото отменена, так как долго не было активных действий от пользователя.\n"+
+        "Запустить новую можно по команде /avatar",
         reply_markup=ReplyKeyboardRemove()
     )
     return ConversationHandler.END
@@ -418,7 +416,7 @@ async def food_payment_cancel_inline(update: Update, context) -> int:
     """Handle payment answer after menu received"""
     # Get CallbackQuery from Update
     query = update.callback_query
-    logger.info(f"Received food_choice_reply_payment from {update.effective_user}, data: {query.data}")
+    logger.info(f"Received food_payment_cancel_inline from {update.effective_user}, data: {query.data}")
     # CallbackQueries need to be answered, even if no notification to the user is needed
     # Some clients may have trouble otherwise. See https://core.telegram.org/bots/api#callbackquery
     await query.answer()
@@ -468,6 +466,36 @@ async def food_payment_cancel_message(update: Update, context: CallbackContext) 
         reply_markup=ReplyKeyboardRemove()
     )
     return ConversationHandler.END
+
+async def food_payment_proof_timeout(update: Update, context: CallbackContext) -> int:
+    try:
+        query = update.callback_query
+        logger.info(f"Received food_payment_proof_timeout from {update.effective_user}, data: {query.data}")
+        id = query.data.split("|")[1]
+        food_storage: FoodStorage = context.application.base_app.food_storage
+        async with food_storage.from_id(id) as meal_context:
+            if meal_context.proof_received is not None:
+                return ConversationHandler.END
+        logger.info(f"MealContext ID: {id}")
+        await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("💸 Оплачено", callback_data=f"{IC_FOOD_PAYMENT_PAYED}|{id}"),
+            InlineKeyboardButton("❌ Отменить", callback_data=f"{IC_FOOD_PAYMENT_CANCEL}|{id}"),
+        ]]))
+        await context.bot.send_message(
+            update.effective_user.id,
+            "Я не дождалась подтверждения оплаты заказа. Когда будешь готов прислать его,"+
+            " не забудь вернуться к сообщению выше и нажать кнопку повторно.",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+    except FileNotFoundError:
+        logger.info("MealContext file not found in food_choice_reply_payment.")
+        await query.edit_message_text(
+            "Что-то непредвиденное случилось с заказом пока я ожидала подтверждения. Попробуй создать новый: /food",
+            reply_markup=InlineKeyboardMarkup([]))
+        return ConversationHandler.END
+    except Exception as e:
+        logger.error("Exception in food_choice_reply_payment: %s", e, exc_info=1)
 
 async def food_payment_proof_photo(update: Update, context: CallbackContext) -> int:
     """Received payment proof as image"""
@@ -639,21 +667,460 @@ async def food_admin_get_csv(update: Update, context: CallbackContext):
 #       /massage -> ?select booking -> cancel
 #                  \_ cancel conversation | conversation timeout
 
+def split_list(lst: list, chunk: int):
+    result = []
+    for i in range(0, len(lst), chunk):
+        sublist = lst[i:i+chunk]
+        result.append(sublist)
+    return result
+
 async def massage_cmd(update: Update, context: CallbackContext):
     """Handle the /massage command."""
-    logger.info(f"Received /massage command from {update.effective_user}")
-    if True: # have no bookings
-        return await massage_create_stage2(update, context)
-    keyboard = [[InlineKeyboardButton("📝 Записаться", callback_data="MassageCreate")]]
+    query = update.callback_query
+    if query is not None:
+        logger.info(f"Received massage_to_start from {update.effective_user}, data: {query.data}")
+        await query.answer()
+    else:
+        logger.info(f"Received /massage command from {update.effective_user}")
+    massage_system: MassageSystem = context.application.base_app.massage_system
+
+    massages = massage_system.get_client_massages(update.effective_user.id)
+    massages.sort(key=lambda x: x.start)
+    # if len(massages) == 0: # have no bookings
+    #     return await massage_create(update, context)
+    keyboard = []
+
+    if update.effective_user.id in massage_system.masseurs:
+        masseur = massage_system.masseurs[update.effective_user.id]
+        keyboard.append([InlineKeyboardButton("📜 Список клиентов", callback_data=f"{IC_MASSAGE}MyList")])
+        keyboard.append([InlineKeyboardButton(
+            "🔔 Сообщения об изменении" if masseur.update_notifications else "🔕 Сообщения об изменении",
+            callback_data=f"{IC_MASSAGE}ToggleNU"
+        )])
+        keyboard.append([InlineKeyboardButton(
+            "🔔 Напоминание перед массажем" if masseur.before_massage_notifications else "🔕 Напоминание перед массажем",
+            callback_data=f"{IC_MASSAGE}ToggleNBM"
+        )])
+
+    keyboard.append([InlineKeyboardButton("📝 Записаться", callback_data=f"{IC_MASSAGE}N")])
     # add all existing bookings
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="MassageCancel")])
-    await update.message.reply_text(
-        "Выбери запись, которую надо отменить или нажми \"Записаться\", чтобы создать новую:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+    massage_buttons = [
+        InlineKeyboardButton(
+            "💆 " + massage.massage_client_repr(),
+            callback_data=f"{IC_MASSAGE}Edit|{massage._id}"
+        ) for massage in massages
+    ]
+    if len(massage_buttons) > 0:
+        keyboard.append([InlineKeyboardButton("Твои записи:", callback_data=f"{IC_MASSAGE}ToStart")])
+        keyboard.extend(split_list(massage_buttons, 3))
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel")])
+    message = "Кликни \"Записаться\", чтобы попасть на приём к массажисту или выбери свою "+\
+    "текущую запись из списка, чтобы внести изменения, отменить или связаться со специалистом."
+    if query:
+        await query.edit_message_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        await update.message.reply_text(
+            message,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    return ConversationHandler.END
+
+async def massage_send_list(update: Update, context: CallbackContext):
+    query = update.callback_query
+    logger.info(f"Received massage_send_list from {update.effective_user}, data: {query.data}")
+    await query.answer()
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    if update.effective_user.id not in massage_system.masseurs:
+        return ConversationHandler.END
+    # masseur = massage_system.masseurs[update.effective_user.id]
+    massages = massage_system.get_masseur_massages(update.effective_user.id)
+    massages.sort(key=lambda x: x.start)
+
+    message = "Список записей на массаж на текущий момент:"
+    for massage in massages:
+        massage_type = massage_system.massage_types[massage.massage_type_index]
+        message += f"\n{massage.massage_client_repr()} — {massage_type.name} — <i>{massage.client_link_html()}</i>"
+    message += "\n\nПосмотреть новую версию или включить/отключить напоминания можно по команде /massage"
+    
+    await query.edit_message_text(
+        message,
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([]),
+    )
+    return ConversationHandler.END
+
+async def massage_toggle_update_notifications(update: Update, context: CallbackContext):
+    query = update.callback_query
+    logger.info(f"Received massage_toggle_update_notifications from {update.effective_user}, data: {query.data}")
+    await query.answer()
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    if update.effective_user.id not in massage_system.masseurs:
+        return ConversationHandler.END
+    masseur = massage_system.masseurs[update.effective_user.id]
+    masseur.update_notifications = not masseur.update_notifications
+    await massage_system.save()
+    await query.edit_message_text(
+        "Оповещения об изменениях листа " +
+        ("включены 🔔" if masseur.update_notifications else "отключены 🔕") +
+        "\nДля возврата в меню, можно снова вызвать команду /massage",
+        reply_markup=InlineKeyboardMarkup([]),
+    )
+    return ConversationHandler.END
+
+async def massage_toggle_before_massage_notifications(update: Update, context: CallbackContext):
+    query = update.callback_query
+    logger.info(f"Received massage_toggle_before_massage_notifications from {update.effective_user}, data: {query.data}")
+    await query.answer()
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    if update.effective_user.id not in massage_system.masseurs:
+        return ConversationHandler.END
+    masseur = massage_system.masseurs[update.effective_user.id]
+    masseur.before_massage_notifications = not masseur.before_massage_notifications
+    await massage_system.save()
+    await query.edit_message_text(
+        "Напоминания о предстоящем массаже " +
+        ("включены 🔔" if masseur.before_massage_notifications else "отключены 🔕") +
+        "\nДля возврата в меню, можно снова вызвать команду /massage",
+        reply_markup=InlineKeyboardMarkup([]),
+    )
+    return ConversationHandler.END
+
+def int_to_base32(number):
+    import string
+    if number == 0:
+        return '0'
+    base = 32
+    symbols = string.digits + string.ascii_uppercase
+    result = ""
+    while number:
+        number, remainder = divmod(number, base)
+        result = symbols[remainder] + result
+    return result
+
+async def massage_create(update: Update, context: CallbackContext):
+    query = update.callback_query
+    if query is not None:
+        logger.info(f"Received massage_create from {update.effective_user}, data: {query.data}")
+        await query.answer()
+        massage_data_str = query.data.removeprefix(f"{IC_MASSAGE}N")
+    else:
+        massage_data_str = ""
+    massage_system: MassageSystem = context.application.base_app.massage_system
+
+    if len(massage_data_str) == 0:
+        message = f"Выбери тип массажа:"
+        keyboard = []
+        
+        mts = [(i, massage_system.massage_types[i]) for i in range(len(massage_system.massage_types))]
+        mts.sort(key=lambda x: x[1].price)
+        for mtt in mts:
+            i, type = mtt
+            total_minutes = type.duration.total_seconds() // 60
+            message += f"\n* {type.name} — {type.price} ₽ / {total_minutes} минут."
+            keyboard.append([InlineKeyboardButton(type.name, callback_data=f"{IC_MASSAGE}N{i}")])
+        keyboard.append([
+            InlineKeyboardButton("⬅ В начало", callback_data=f"{IC_MASSAGE}ToStart"),
+            InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel"),
+        ])
+
+        return await massage_create_finish(update, message, keyboard)
+    else:
+        massage_type_index = int(massage_data_str[0])
+        massage_type = massage_system.massage_types[massage_type_index]
+        command_prefix = f"{IC_MASSAGE}N{massage_type_index}"
+        command_back = f"{IC_MASSAGE}N"
+    
+    message_prefix = f"Выбран массаж: {massage_type.name}."
+
+    masseur_ids = sorted(massage_system.masseurs.keys())
+    if massage_system.remove_masseurs_self_massage and update.effective_user.id in massage_system.masseurs:
+        masseur_ids.remove(update.effective_user.id)
+    
+    if massage_type.duration.total_seconds() < 60 * 60:
+        masseur_ids.remove(1518045050)
+    if massage_type.duration.total_seconds() > 60 * 60:
+        masseur_ids=[1518045050]
+
+    if len(massage_data_str) == 1:
+        masseurs_mask = (1<<len(masseur_ids)) - 1
+    else:
+        masseurs_mask = int(massage_data_str[1], base=32)
+    
+    if ( len(massage_data_str) == 1 ) or \
+        ( len(massage_data_str) > 2 and massage_data_str[2] == '?' ) or \
+            masseurs_mask == 0:
+
+        message = message_prefix + "\nЗдесь можно отфильтровать массажистов. По умолчанию, выбраны все ✅."+\
+                                   " Если нажать на имя, то массажист станет исключён ❌.\n" + \
+                                   "Чем больше массажистов выбрано, тем больше вероятность найти удобный слот.\n"+ \
+                                   "Когда закончишь, жми \"➡ Дальше\"."
+        if massage_type.duration.total_seconds() < 60 * 60:
+            message += "\n<i>⚠ Если ищешь Таисию, нажми вкладку \"Общий массаж\" в предыдущем меню.\n"+\
+                       "Специалист работает со всеми запросами в тайминге от 60 минут.</i>"
+        if massage_type.duration.total_seconds() > 60 * 60:
+            message += "\n<i>⚠ Только Таисия работает с массажами более 60 минут!</i>"
+        buttons = []
+
+        for i in range(len(masseur_ids)):
+            mask = (1<<i)
+            is_enabled = ((masseurs_mask & mask) > 0)
+            masseur_id = masseur_ids[i]
+            masseur = massage_system.masseurs[masseur_id]
+
+            new_mask = (masseurs_mask & (~mask)) if is_enabled else (masseurs_mask | mask)
+            mark = "✅" if is_enabled else "❌"
+
+            buttons.append(InlineKeyboardButton(
+                f"{mark} {masseur.name}",
+                callback_data=f"{command_prefix}{int_to_base32(new_mask)}?")
+            )
+        keyboard = split_list(buttons, 2)
+        if masseurs_mask != 0:
+            keyboard.append([
+                InlineKeyboardButton(
+                    "➡ Дальше",
+                    callback_data=f"{command_prefix}{int_to_base32(masseurs_mask)}"
+                ),
+            ])
+        keyboard.append([
+            # InlineKeyboardButton("📗 Почитать про каждого", callback_data=f"{command_prefix}{int_to_base32(masseurs_mask)}??"),
+            InlineKeyboardButton("⬅ Назад", callback_data=f"{command_back}"),
+            InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel"),
+        ])
+
+        return await massage_create_finish(update, message, keyboard)
+    
+    command_prefix += int_to_base32(masseurs_mask)
+    command_back = command_prefix+"?"
+
+    selected_masseur_ids = []
+
+    for i in range(len(masseur_ids)):
+        mask = (1<<i)
+        if ((masseurs_mask & mask) > 0):
+            selected_masseur_ids.append(masseur_ids[i])
+    
+    if len(selected_masseur_ids) == 0:
+        logger.error(f"len(selected_masseur_ids) == 0")
+        await query.edit_message_text(
+            "Что-то пошло не так, но можно всегда вызвать команду вновь: /massage",
+            reply_markup=InlineKeyboardMarkup([]),
+        )
+        return ConversationHandler.END
+
+    message_prefix += "\nВыбраны массажисты:\n"
+    masseurs_selected = [massage_system.masseurs[id] for id in selected_masseur_ids]
+    message_prefix += "\n".join([f"{m.icon} {m.name}" for m in masseurs_selected])
+
+    if len(massage_data_str) == 2:
+        message = message_prefix + "\nТеперь выбери вечеринку:"
+        keyboard = [[
+            InlineKeyboardButton("Пт-Сб", callback_data=f"{command_prefix}4"),
+            InlineKeyboardButton("Сб-Вс", callback_data=f"{command_prefix}5"),
+            InlineKeyboardButton("Вс-Пн", callback_data=f"{command_prefix}6"),
+        ],[
+            InlineKeyboardButton("⬅ Назад", callback_data=f"{command_back}"),
+            InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel"),
+        ]]
+        return await massage_create_finish(update, message, keyboard)
+    else:
+        massage_dow = int(massage_data_str[2])
+        command_back = command_prefix
+        command_prefix += massage_data_str[2]
+
+    message_prefix += "\nВыбрана вечеринка: "
+    match massage_dow:
+        case 4:
+            message_prefix += "пятничная."
+            time_prefix = massage_system.dow_to_day_start(massage_dow)
+        case 5:
+            message_prefix += "субботняя."
+            time_prefix = massage_system.dow_to_day_start(massage_dow)
+        case _:
+            message_prefix += "воскресная."
+            time_prefix = massage_system.dow_to_day_start(massage_dow)
+
+    if len(massage_data_str) > 3:
+        slot_data = massage_data_str[3:]
+
+        h_str, m_str, masseur_id_str = slot_data.split(":")
+        masseur_id = int(masseur_id_str)
+        time = datetime.time(hour=int(h_str), minute=int(m_str))
+        start = datetime.datetime.combine(time_prefix.date(), time)
+        if start < time_prefix:
+            start += datetime.timedelta(days=1)
+        
+        massage = Massage(
+            massage_type_index=massage_type_index,
+            masseur_id=masseur_id,
+            client_id=update.effective_user.id,
+            client_name=update.effective_user.full_name,
+            client_username=update.effective_user.username,
+            start=start
+        )
+        new_id = await massage_system.try_add_massage(massage)
+
+    if len(massage_data_str) == 3 or new_id < 0:
+        slots = await massage_system.get_available_slots_for_client(
+            update.effective_user.id,
+            massage_dow,
+            selected_masseur_ids,
+            massage_type.duration,
+        )
+        if len(slots) == 0:
+            message += "По выбранным параметрам увы уже всё зарезервировано.\n"+\
+                "Попробуй выбрать другой день"
+            if massage_type.duration.total_seconds() > 60 * 20:
+                message += " или массаж покороче"
+            message += "."
+            if massage_type.duration.total_seconds() < 60 * 60:
+                message += "\nИли наоборот выбери общий массаж, так как Таисия работает только с ним."
+            message += "\n"
+            keyboard = []
+        else:
+            if len(massage_data_str) > 3:
+                message = "Выбранное время кто-то успел занять. Придётся выбрать другое.\n" +\
+                        message_prefix + "\nВыбери новое время:"
+            else:
+                message = message_prefix + "\nВыбери удобное время:"
+            buttons = []
+
+            for slot in slots:
+                start_str = slot.start.strftime("%H:%M")
+                buttons.append(InlineKeyboardButton(
+                    f"{start_str} {massage_system.masseurs[slot.masseur_id].icon}",
+                    callback_data=f"{command_prefix}{start_str}:{slot.masseur_id}",
+                ))
+            keyboard = split_list(buttons, 3)
+        keyboard.append([
+            InlineKeyboardButton("⬅ Назад", callback_data=f"{command_back}"),
+            InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel"),
+        ])
+        return await massage_create_finish(update, message, keyboard)
+
+    massage, masseur, m_type = massage_system.get_massage_full(new_id)
+    total_minutes = m_type.duration.total_seconds() // 60
+    await query.edit_message_text(
+        "Запись на массаж прошла успешно:\n"+
+        f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+        f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
+        "Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.\n"+
+        "Приятного погружения!",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([])
     )
 
-async def massage_create_stage2(update: Update, context: CallbackContext):
-    pass
+    if masseur.update_notifications:
+        try:
+            await context.bot.send_message(
+                massage.masseur_id,
+                f"Пользователь <i>{massage.client_link_html()}</i> записался на массаж:\n"+
+                f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+                f"Время: {massage.massage_client_repr()}\n"+
+                "Посмотреть весь список записавшихся или отключить уведомления можно по команде /massage",
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception as e:
+            logger.error(f"failed to send masseur notification: {e}", exc_info=1)
+    return ConversationHandler.END
+
+async def massage_create_finish(update: Update, message: str, keyboard: list[list[InlineKeyboardButton]]):
+    if update.callback_query is not None:
+        await update.callback_query.edit_message_text(
+            message,
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    else:
+        await update.message.reply_text(
+            message,
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    return MASSAGE_CREATE
+
+async def massage_edit(update: Update, context: CallbackContext):
+    query = update.callback_query
+    logger.info(f"Received massage_edit from {update.effective_user}, data: {query.data}")
+    await query.answer()
+    massage_id = int(query.data.split("|")[1])
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    massage, masseur, m_type = massage_system.get_massage_full(massage_id)
+    total_minutes = m_type.duration.total_seconds() // 60
+    await query.edit_message_text(
+        "Информация о массаже:\n"+
+        f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+        f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
+        "Выбери действие:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("⬅ В начало", callback_data=f"{IC_MASSAGE}ToStart"),
+                InlineKeyboardButton("❌ Удалить", callback_data=f"{IC_MASSAGE}Delete|{massage_id}"),
+                InlineKeyboardButton("✅ Закрыть", callback_data=f"{IC_MASSAGE}Cancel"),
+            ]
+        ])
+    )
+    return MASSAGE_EDIT
+
+async def massage_delete(update: Update, context: CallbackContext):
+    query = update.callback_query
+    logger.info(f"Received massage_delete from {update.effective_user}, data: {query.data}")
+    await query.answer()
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    massage_id = int(query.data.split("|")[1])
+    massage, masseur, m_type = massage_system.get_massage_full(massage_id)
+    await massage_system.remove_massage(massage_id)
+    await query.edit_message_text(
+        "Запись успешно удалена. Если надо изменить другую запись или создать новую: /massage",
+        parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([])
+    )
+    if masseur.update_notifications:
+        try:
+            user_link = f"https://t.me/{update.effective_user.username}" if update.effective_user.username is not None else f"tg://user?id={update.effective_user.id}"
+            await context.bot.send_message(
+                massage.masseur_id,
+                f"Пользователь <i><a href=\"{user_link}\">{update.effective_user.full_name}</a></i> отменил запись на массаж "+
+                f"на {massage.massage_client_repr()}\n"+
+                "Посмотреть весь список записавшихся или отключить уведомления можно по команде /massage",
+                parse_mode=ParseMode.HTML,
+            )
+        except Exception as e:
+            logger.error(f"failed to send masseur notification: {e}", exc_info=1)
+    return ConversationHandler.END
+    
+async def massage_timeout(update: Update, context: CallbackContext):
+    query = update.callback_query
+    logger.info(f"Received massage_timeout from {update.effective_user}, data: {query.data}")
+    await query.edit_message_text(
+        "Эта сессия истекла, но можно всегда вызвать команду вновь: /massage",
+        reply_markup=InlineKeyboardMarkup([]),
+    )
+    return ConversationHandler.END
+
+async def massage_cancel(update: Update, context: CallbackContext):
+    query = update.callback_query
+    logger.info(f"Received massage_cancel from {update.effective_user}, data: {query.data}")
+    if query:
+        await query.answer()
+        await query.edit_message_text(
+            "Если ещё понадобится, можно всегда вызвать команду вновь: /massage",
+            reply_markup=InlineKeyboardMarkup([]),
+        )
+    return ConversationHandler.END
+
+async def massage_adm_reload(update: Update, context: CallbackContext):
+    """Send a welcome message when the /massage_adm_reload command is issued."""
+    logger.info(f"massage_adm_reload called: {update.effective_user}")
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    if update.effective_user.id not in massage_system.admins:
+        return
+    await massage_system.reload()
+    await update.message.reply_text("перезагружено")
 
 # endregion MASSAGE SECTION
 
@@ -702,7 +1169,7 @@ async def create_telegram_bot(config: Config, app) -> TGApplication:
             CommandHandler("avatar", avatar_cancel_command),
             MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), avatar_cancel_command)
         ],
-        conversation_timeout=datetime.timedelta(hours=2)
+        conversation_timeout=config.photo.conversation_timeout
     )
     food_start_conversation = ConversationHandler(
         entry_points=[CommandHandler("food", food_cmd)],
@@ -721,34 +1188,68 @@ async def create_telegram_bot(config: Config, app) -> TGApplication:
             CommandHandler("cancel", food_cancel),
             MessageHandler(filters.Regex(re.compile("^(Cancel|Отмена)$", re.I|re.U)), food_cancel)
         ],
-        conversation_timeout=datetime.timedelta(hours=1)
+        conversation_timeout=config.food.receive_username_conversation_timeout
     )
     food_proof_conversation = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(food_payment_payed, pattern=f"^{IC_FOOD_PAYMENT_PAYED}|[a-zA-Z_\\-0-9]$"),
+            CallbackQueryHandler(food_payment_payed, pattern=f"^{IC_FOOD_PAYMENT_PAYED}\\|[a-zA-Z_\\-0-9]+$"),
         ],
         states={
             WAITING_PAYMENT_PROOF: [
                 MessageHandler(filters.PHOTO, food_payment_proof_photo),
-                MessageHandler(filters.Document.ALL, food_payment_proof_doc)
+                MessageHandler(filters.Document.ALL, food_payment_proof_doc),
             ],
+            ConversationHandler.TIMEOUT: [
+                CallbackQueryHandler(food_payment_proof_timeout, pattern=f"^[a-zA-Z_\\-0-9|]+$"),
+            ]
         },
         fallbacks=[
             CommandHandler("cancel", food_payment_cancel_message),
-            CallbackQueryHandler(food_payment_cancel_inline, pattern=f"^{IC_FOOD_PAYMENT_CANCEL}|[a-zA-Z_\\-0-9]$"),
+            CallbackQueryHandler(food_payment_cancel_inline, pattern=f"^{IC_FOOD_PAYMENT_CANCEL}\\|[a-zA-Z_\\-0-9]+$"),
             MessageHandler(
                 filters.Regex(re.compile("^(Cancel|Отмена|Отменить выбор еды)$", re.I|re.U)),
                 food_payment_cancel_message
-            )
+            ),
         ],
+        conversation_timeout=config.food.receive_proof_conversation_timeout,
     )
-    application.add_handler(CallbackQueryHandler(food_payment_cancel_inline, pattern=f"^{IC_FOOD_PAYMENT_CANCEL}|[a-zA-Z_\\-0-9]$"))
-    application.add_handler(CallbackQueryHandler(food_prompt_will_pay, pattern=f"^{IC_FOOD_PROMPT_WILL_PAY}|[a-zA-Z_\\-0-9]$"))
-    application.add_handler(CallbackQueryHandler(food_admin_proof_confirmed, pattern=f"^{IC_FOOD_ADMIN_CONFIRM}|[a-zA-Z_\\-0-9]$"))
-    application.add_handler(CallbackQueryHandler(food_admin_proof_declined, pattern=f"^{IC_FOOD_ADMIN_DECLINE}|[a-zA-Z_\\-0-9]$"))
+    massage_conversation = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(massage_cancel, pattern=f"^{IC_MASSAGE}Cancel$"),
+            CallbackQueryHandler(massage_create, pattern=f"^{IC_MASSAGE}N$"),
+            CallbackQueryHandler(massage_edit, pattern=f"^{IC_MASSAGE}Edit\\|[a-zA-Z_\\-0-9]+$"),
+            CallbackQueryHandler(massage_send_list, pattern=f"^{IC_MASSAGE}MyList$"),
+            CallbackQueryHandler(massage_toggle_before_massage_notifications, pattern=f"^{IC_MASSAGE}ToggleNBM$"),
+            CallbackQueryHandler(massage_toggle_update_notifications, pattern=f"^{IC_MASSAGE}ToggleNU$"),
+        ],
+        states={
+            MASSAGE_CREATE: [
+                CallbackQueryHandler(massage_create, pattern=f"^{IC_MASSAGE}N.*$"),
+            ],
+            MASSAGE_EDIT: [
+                CallbackQueryHandler(massage_delete, pattern=f"^{IC_MASSAGE}Delete\\|[a-zA-Z_\\-0-9]+$"),
+            ],
+            ConversationHandler.TIMEOUT: [
+                CallbackQueryHandler(massage_timeout, pattern=f"^.*$"),
+            ]
+        },
+        fallbacks=[
+            CallbackQueryHandler(massage_cmd, pattern=f"^{IC_MASSAGE}ToStart$"),
+            CallbackQueryHandler(massage_cancel, pattern=f"^{IC_MASSAGE}Cancel$"),
+        ],
+        per_message=True,
+        conversation_timeout=config.massage.conversation_timeout,
+    )
+    application.add_handler(CallbackQueryHandler(food_payment_cancel_inline, pattern=f"^{IC_FOOD_PAYMENT_CANCEL}\\|[a-zA-Z_\\-0-9]+$"))
+    application.add_handler(CallbackQueryHandler(food_prompt_will_pay, pattern=f"^{IC_FOOD_PROMPT_WILL_PAY}\\|[a-zA-Z_\\-0-9]+$"))
+    application.add_handler(CallbackQueryHandler(food_admin_proof_confirmed, pattern=f"^{IC_FOOD_ADMIN_CONFIRM}\\|[a-zA-Z_\\-0-9]+$"))
+    application.add_handler(CallbackQueryHandler(food_admin_proof_declined, pattern=f"^{IC_FOOD_ADMIN_DECLINE}\\|[a-zA-Z_\\-0-9]+$"))
 
+    application.add_handler(CommandHandler("massage", massage_cmd))
     application.add_handler(CommandHandler("food_adm_csv", food_admin_get_csv))
+    application.add_handler(CommandHandler("massage_adm_reload", massage_adm_reload))
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(massage_conversation)
     application.add_handler(food_start_conversation)
     application.add_handler(food_proof_conversation)
     application.add_handler(avatar_conversation)

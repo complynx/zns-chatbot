@@ -1,8 +1,9 @@
 
-venv/
+/venv/
 zns_chatbot.egg-info
 __pycache__
-photos/
-config/config.yaml
-menu/
+/photos/
+/config/config.yaml
 /massage.yaml
+/massage_real.yaml
+/menu/
