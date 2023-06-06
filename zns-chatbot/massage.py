@@ -240,8 +240,9 @@ class MassageSystem(BaseModel):
             # Check if the new massage fits into the masseur's working hours
             for wh in self.working_hours:
                 if wh.masseur_id == masseur_id:
-                    if new_massage_start >= wh.start and new_massage_end <= wh.end:
-                        # Massage fits into working hours, so we add it
+                    if (new_massage_start >= wh.start and new_massage_end <= wh.end) or\
+                        new_massage.masseur_id == new_massage.client_id:
+                        # Massage fits into working hours or added by masseur themself, so we add it
                         new_id = self._get_new_id_insecure()
                         new_massage._id = new_id
                         self.massages[new_id] = new_massage
