@@ -1141,12 +1141,17 @@ async def massage_adm_set(update: Update, context: CallbackContext):
     massage_system: MassageSystem = context.application.base_app.massage_system
     if update.effective_user.id not in massage_system.admins:
         return
-    data = update.message.text.split(" ", maxsplit=2)[1]
-    logger.info(f"massage_adm_set data: {data}")
+    try:
+        data = update.message.text.split(" ", maxsplit=1)[1]
+        logger.info(f"massage_adm_set data: {data}")
+    except IndexError:
+        await update.message.reply_html("required massage format: <pre>masseur_id client_id dow hh:mm duration client_name</pre>")
+        return
     # masseur_id client_id dow hh:mm duration client_name
-    split = data.split(" ", maxsplit=6)
+    split = data.split(" ", maxsplit=5)
     if len(split) < 6:
-        update.message.reply_html("required massage format: <pre>masseur_id client_id dow hh:mm duration client_name</pre>")
+        logger.info(f"split: {split}")
+        await update.message.reply_html("required massage format: <pre>masseur_id client_id dow hh:mm duration client_name</pre>")
         return
     try:
         masseur_id, client_id, dow, time, duration, client_name = split
@@ -1204,7 +1209,7 @@ async def massage_adm_set(update: Update, context: CallbackContext):
                 logger.error(f"failed to send masseur notification: {e}", exc_info=1)
     except Exception as e:
         logger.error(f"failed to create massage: {e}", exc_info=1)
-        update.message.reply_html(f"failed to create massage: {e}")
+        await update.message.reply_html(f"failed to create massage: {e}")
 
 async def massage_adm_list(update: Update, context: CallbackContext):
     """Send a welcome message when the /massage_adm_list command is issued."""
