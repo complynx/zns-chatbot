@@ -35,4 +35,9 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=cfg.logging.level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+    # Get or create a specific logger
+    httpx_logger = logging.getLogger('httpx')
+    if cfg.logging.level != "DEBUG":
+        httpx_logger.setLevel(logging.WARNING)
+
     asyncio.run(main(cfg))
