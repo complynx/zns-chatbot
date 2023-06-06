@@ -700,6 +700,13 @@ async def massage_cmd(update: Update, context: CallbackContext):
             "🔔 Напоминание перед массажем" if masseur.before_massage_notifications else "🔕 Напоминание перед массажем",
             callback_data=f"{IC_MASSAGE}ToggleNBM"
         )])
+        keyboard.append([InlineKeyboardButton("Моментальная бронь:", callback_data=f"{IC_MASSAGE}ToStart")])
+        keyboard.append([
+            InlineKeyboardButton("🕓 20", callback_data=f"{IC_MASSAGE}Fast20"),
+            InlineKeyboardButton("🕕 30", callback_data=f"{IC_MASSAGE}Fast30"),
+            InlineKeyboardButton("🕘 45", callback_data=f"{IC_MASSAGE}Fast45"),
+            InlineKeyboardButton("🕛 60", callback_data=f"{IC_MASSAGE}Fast60"),
+        ])
 
     keyboard.append([InlineKeyboardButton("📝 Записаться", callback_data=f"{IC_MASSAGE}N")])
     # add all existing bookings
@@ -806,6 +813,39 @@ def int_to_base32(number):
         number, remainder = divmod(number, base)
         result = symbols[remainder] + result
     return result
+
+async def massage_fast(update: Update, context: CallbackContext):
+    query = update.callback_query
+    logger.info(f"Received massage_fast from {update.effective_user}, data: {query.data}")
+    await query.answer()
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    if update.effective_user.id not in massage_system.masseurs:
+        return ConversationHandler.END
+    mins = query.data.removeprefix(f"{IC_MASSAGE}Fast")
+    dur_b = datetime.timedelta(minutes=int(mins)-3)
+    dur_t = datetime.timedelta(minutes=int(mins)+3)
+    massage_type = [(i,massage_system.massage_types[i]) for i in range(len(massage_system.massage_types))
+                    if dur_b < massage_system.massage_types[i].duration < dur_t][0]
+    massage = Massage(
+        massage_type_index=massage_type[0],
+        masseur_id=update.effective_user.id,
+        client_id=update.effective_user.id,
+        client_name=update.effective_user.full_name,
+        client_username=update.effective_user.username,
+        start=datetime.datetime.now()
+    )
+    new_id = await massage_system.try_add_massage(massage)
+    if new_id < 0:
+        await query.message.edit_text(
+            "Забронировать не удалось — есть другая бронь на ближайшее время."
+        )
+    else:
+        await query.message.edit_text(
+            "Время зарезервировано успешно."
+        )
+    return ConversationHandler.END
+
+
 
 async def massage_create(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1145,13 +1185,13 @@ async def massage_adm_set(update: Update, context: CallbackContext):
         data = update.message.text.split(" ", maxsplit=1)[1]
         logger.info(f"massage_adm_set data: {data}")
     except IndexError:
-        await update.message.reply_html("required massage format: <pre>masseur_id client_id dow hh:mm duration client_name</pre>")
+        await update.message.reply_html("required massage format: <pre>masseur_id client_id dow hh:mm duration client name</pre>")
         return
     # masseur_id client_id dow hh:mm duration client_name
     split = data.split(" ", maxsplit=5)
     if len(split) < 6:
         logger.info(f"split: {split}")
-        await update.message.reply_html("required massage format: <pre>masseur_id client_id dow hh:mm duration client_name</pre>")
+        await update.message.reply_html("required massage format: <pre>masseur_id client_id dow hh:mm duration client name</pre>")
         return
     try:
         masseur_id, client_id, dow, time, duration, client_name = split
@@ -1358,6 +1398,7 @@ async def create_telegram_bot(config: Config, app) -> TGApplication:
             CallbackQueryHandler(massage_send_list, pattern=f"^{IC_MASSAGE}MyList$"),
             CallbackQueryHandler(massage_toggle_before_massage_notifications, pattern=f"^{IC_MASSAGE}ToggleNBM$"),
             CallbackQueryHandler(massage_toggle_update_notifications, pattern=f"^{IC_MASSAGE}ToggleNU$"),
+            CallbackQueryHandler(massage_fast, pattern=f"^{IC_MASSAGE}Fast[0-9]+$"),
         ],
         states={
             MASSAGE_CREATE: [

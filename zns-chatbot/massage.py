@@ -218,7 +218,8 @@ class MassageSystem(BaseModel):
         new_massage_start = new_massage.start
         new_massage_end = new_massage_start + self.massage_types[new_massage.massage_type_index].duration
         masseur_id = new_massage.masseur_id
-        if new_massage_start < now_msk() + self.latest_possible_massage_set:
+        if new_massage.masseur_id != new_massage.client_id and \
+            new_massage_start < now_msk() + self.latest_possible_massage_set:
             return -1
 
         # Check if there's any overlap with existing massages
