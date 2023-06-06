@@ -50,7 +50,7 @@ class Masseur(BaseModel):
     _id: int = PrivateAttr(-1)
 
     def link_url(self) -> str:
-        return f"tg://user?id={self._id}"
+        return f"https://t.me/{self.username}" if self.username is not None and self.username != "" else f"tg://user?id={self._id}"
     
     def link_html(self) -> str:
         return f"<a href=\"{self.link_url()}\">{self.name}</a>"
@@ -95,7 +95,8 @@ class Massage(BaseModel):
     _masseur_notified: bool = PrivateAttr(False)
 
     def client_link_url(self) -> str:
-        return f"tg://user?id={self.client_id}"
+        return f"https://t.me/{self.client_username}" if self.client_username is not None and \
+            self.client_username != "" else f"tg://user?id={self.client_id}"
     
     def client_link_html(self) -> str:
         return f"<a href=\"{self.client_link_url()}\">{self.client_name}</a>"
