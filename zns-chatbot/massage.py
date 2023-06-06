@@ -355,14 +355,14 @@ class MassageSystem(BaseModel):
         for slot in slots_by_time:
             start, end, masseur_id = slot
             if end-start > self.split_if_longer_than:
-                while start-end > self.split_if_longer_than:
+                while end-start > self.split_if_longer_than:
                     ts = TimeSlot()
                     ts.start = start
                     ts.end = start + self.split_chunk
                     ts.masseur_id = masseur_id
                     ret.append(ts)
                     start = ts.end
-            if start-end > duration:
+            if end-start > duration:
                 ts = TimeSlot()
                 ts.start = start
                 ts.end = start + duration
