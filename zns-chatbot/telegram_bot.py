@@ -685,7 +685,6 @@ async def massage_cmd(update: Update, context: CallbackContext):
     massage_system: MassageSystem = context.application.base_app.massage_system
 
     massages = massage_system.get_client_massages(update.effective_user.id)
-    massages.sort(key=lambda x: x.start)
     # if len(massages) == 0: # have no bookings
     #     return await massage_create(update, context)
     keyboard = []
@@ -746,7 +745,6 @@ async def massage_send_list(update: Update, context: CallbackContext):
         return ConversationHandler.END
     # masseur = massage_system.masseurs[update.effective_user.id]
     massages = massage_system.get_masseur_massages(update.effective_user.id)
-    massages.sort(key=lambda x: x.start)
 
     message = "Список записей на массаж на текущий момент:"
     for massage in massages:
@@ -1058,11 +1056,17 @@ async def massage_edit(update: Update, context: CallbackContext):
     massage_id = int(query.data.split("|")[1])
     massage_system: MassageSystem = context.application.base_app.massage_system
     massage, masseur, m_type = massage_system.get_massage_full(massage_id)
+    if massage.client_id != update.effective_user.id and update.effective_user.id not in massage_system.admins:
+        return
     total_minutes = m_type.duration.total_seconds() // 60
     await query.edit_message_text(
         "Информация о массаже:\n"+
         f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
-        f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
+        (f"Массажист: {masseur.link_html()}\n"
+         if massage.masseur_id != update.effective_user.id else "")+
+        (f"Клиент: {massage.client_link_html()}\n"
+         if massage.client_id != update.effective_user.id else "")+
+        f"Время: {massage.massage_client_repr()}\n"+
         "Выбери действие:",
         parse_mode=ParseMode.HTML,
         reply_markup=InlineKeyboardMarkup([
@@ -1130,6 +1134,125 @@ async def massage_adm_reload(update: Update, context: CallbackContext):
         return
     await massage_system.reload()
     await update.message.reply_text("перезагружено")
+
+async def massage_adm_set(update: Update, context: CallbackContext):
+    """Send a welcome message when the /massage_adm_set command is issued."""
+    logger.info(f"massage_adm_set called: {update.effective_user}")
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    if update.effective_user.id not in massage_system.admins:
+        return
+    data = update.message.text.split(" ", maxsplit=2)[1]
+    logger.info(f"massage_adm_set data: {data}")
+    # masseur_id client_id dow hh:mm duration client_name
+    split = data.split(" ", maxsplit=6)
+    if len(split) < 6:
+        update.message.reply_html("required massage format: <pre>masseur_id client_id dow hh:mm duration client_name</pre>")
+        return
+    try:
+        masseur_id, client_id, dow, time, duration, client_name = split
+        masseur_id = int(masseur_id)
+        masseur = massage_system.masseurs[masseur_id]
+        client_id = int(client_id)
+        time_prefix = massage_system.dow_to_day_start(int(dow))
+        hour, minute = time.split(":")
+        time = datetime.time(hour=int(hour), minute=int(minute))
+        start = datetime.datetime.combine(time_prefix.date(), time)
+        if start < time_prefix:
+            start += datetime.timedelta(days=1)
+        dur_b = datetime.timedelta(minutes=int(duration)-3)
+        dur_t = datetime.timedelta(minutes=int(duration)+3)
+        massage_type = [(i,massage_system.massage_types[i]) for i in range(len(massage_system.massage_types))
+                        if dur_b < massage_system.massage_types[i].duration < dur_t][0]
+        massage = Massage(
+            massage_type_index=massage_type[0],
+            masseur_id=masseur_id,
+            client_id=client_id,
+            client_name=client_name,
+            client_username=None,
+            start=start
+        )
+        new_id = await massage_system.try_add_massage(massage)
+        assert new_id >= 0
+        massage, masseur, m_type = massage_system.get_massage_full(new_id)
+        total_minutes = m_type.duration.total_seconds() // 60
+        await update.message.reply_html(
+            "Запись на массаж прошла успешно:\n"+
+            f"Пользователь <i>{massage.client_link_html()}</i> записался на массаж:\n"+
+            f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+            f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}"
+        )
+        await context.bot.send_message(
+            massage.client_id,
+            "Привет, зуконавт!\nТы записан на массаж через админа:\n"+
+            f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+            f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
+            "Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.\n"+
+            "Приятного погружения!"
+        )
+
+        if masseur.update_notifications:
+            try:
+                await context.bot.send_message(
+                    massage.masseur_id,
+                    f"Пользователь <i>{massage.client_link_html()}</i> записался на массаж:\n"+
+                    f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+                    f"Время: {massage.massage_client_repr()}\n"+
+                    "Посмотреть весь список записавшихся или отключить уведомления можно по команде /massage",
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception as e:
+                logger.error(f"failed to send masseur notification: {e}", exc_info=1)
+    except Exception as e:
+        logger.error(f"failed to create massage: {e}", exc_info=1)
+        update.message.reply_html(f"failed to create massage: {e}")
+
+async def massage_adm_list(update: Update, context: CallbackContext):
+    """Send a welcome message when the /massage_adm_list command is issued."""
+    logger.info(f"massage_adm_list called: {update.effective_user}")
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    if update.effective_user.id not in massage_system.admins:
+        return
+    # masseur = massage_system.masseurs[update.effective_user.id]
+    message = "Админский лист массажей:\n"
+    buttons = []
+    for masseur in massage_system.masseurs.values():
+        message += f"== {masseur.link_html()}"
+        massages = massage_system.get_masseur_massages(masseur._id)
+        massages.sort(key=lambda x: x.start)
+        for massage in massages:
+            massage_type = massage_system.massage_types[massage.massage_type_index]
+            message += f"\n{massage.massage_client_repr()} — {massage_type.name} — <i>{massage.client_link_html()}</i>"
+        buttons.append([
+            InlineKeyboardButton(f"{masseur.name} пт", callback_data=f"{IC_MASSAGE}AE1|{masseur._id}|4"),
+            InlineKeyboardButton(f"{masseur.name} сб", callback_data=f"{IC_MASSAGE}AE1|{masseur._id}|5"),
+            InlineKeyboardButton(f"{masseur.name} вс", callback_data=f"{IC_MASSAGE}AE1|{masseur._id}|6"),
+        ])
+        message += "\n"
+    await update.message.reply_html(
+        message,
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+async def massage_adm_list_edit1(update: Update, context: CallbackContext):
+    query = update.callback_query
+    logger.info(f"Received massage_edit from {update.effective_user}, data: {query.data}")
+    await query.answer()
+    massage_system: MassageSystem = context.application.base_app.massage_system
+    if update.effective_user.id not in massage_system.admins:
+        return
+    _, masseur_id, dow = query.data.split("|")
+    masseur_id = int(masseur_id)
+    time_prefix = massage_system.dow_to_day_start(int(dow))
+    time_postfix = time_prefix + datetime.timedelta(days=1)
+    massages = [InlineKeyboardButton(f"{massage.massage_client_repr()} — {massage.client_name}",
+                                     callback_data=f"{IC_MASSAGE}Edit|{massage._id}")
+                for massage in massage_system.massages.values()
+                if massage.masseur_id == masseur_id
+                and time_prefix <= massage.start < time_postfix ]
+    await query.edit_message_text(
+        "select massage:",
+        reply_markup=InlineKeyboardMarkup(split_list(massages, 2))
+    )
 
 # endregion MASSAGE SECTION
 
@@ -1257,6 +1380,10 @@ async def create_telegram_bot(config: Config, app) -> TGApplication:
     application.add_handler(CommandHandler("massage", massage_cmd))
     application.add_handler(CommandHandler("food_adm_csv", food_admin_get_csv))
     application.add_handler(CommandHandler("massage_adm_reload", massage_adm_reload))
+    application.add_handler(CommandHandler("massage_adm_set", massage_adm_set))
+    application.add_handler(CommandHandler("massage_adm_list", massage_adm_list))
+    application.add_handler(CallbackQueryHandler(massage_adm_list_edit1, pattern=f"^{IC_MASSAGE}AE1\\|.*$"))
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(massage_conversation)
     application.add_handler(food_start_conversation)

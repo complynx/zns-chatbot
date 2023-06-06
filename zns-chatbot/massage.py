@@ -418,14 +418,16 @@ class MassageSystem(BaseModel):
         return working_hours
     
     def get_client_massages(self, client_id: int) -> list[Massage]:
-        return [massage for massage in self.massages.values()
+        return sorted([massage for massage in self.massages.values()
                 if massage.client_id == client_id
-                and massage.start + self.massage_types[massage.massage_type_index].duration > now_msk()]
+                and massage.start + self.massage_types[massage.massage_type_index].duration > now_msk()],
+                key=lambda x: x.start)
     
     def get_masseur_massages(self, masseur_id: int) -> list[Massage]:
-        return [massage for massage in self.massages.values()
+        return sorted([massage for massage in self.massages.values()
                 if massage.masseur_id == masseur_id
-                and massage.start + self.massage_types[massage.massage_type_index].duration > now_msk()]
+                and massage.start + self.massage_types[massage.massage_type_index].duration > now_msk()],
+                key=lambda x: x.start)
 
     def _save_unsafe_sync(self):
         with open(self._filename, "w", encoding="utf-8", newline="\n") as f:
