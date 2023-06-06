@@ -145,6 +145,7 @@ class MassageSystem(BaseModel):
     latest_possible_massage_set: timedelta = timedelta(minutes=15)
     latest_possible_massage_set_buffer: timedelta = timedelta(minutes=5)
     split_if_longer_than: timedelta = timedelta(hours=4)
+    split_chunk: timedelta = timedelta(hours=2, minutes=10)
 
     _config: Config = PrivateAttr()
     _app = PrivateAttr()
@@ -275,19 +276,7 @@ class MassageSystem(BaseModel):
                         temp_slot_end = massage.start
                 if temp_slot_end - temp_slot_start >= duration:
                     filtered_slots[masseur_id].append((temp_slot_start, temp_slot_end))
-        split_slots = {}
-        for masseur_id, masseur_slots in filtered_slots.items():
-            split_slots[masseur_id] = []
-            for slot_start, slot_end in masseur_slots:
-                if slot_end - slot_start > self.split_if_longer_than:
-                    duration = slot_end-slot_start
-                    part = duration.total_seconds() / (60*20)
-                    new_duration = timedelta(seconds=part*60*10)
-                    split_slots[masseur_id].append((slot_start, slot_start+new_duration))
-                    split_slots[masseur_id].append((slot_start+new_duration, slot_end))
-                else:
-                    split_slots[masseur_id].append((slot_start, slot_end))
-        return split_slots
+        return filtered_slots
 
     async def get_available_slots(self, dow: int, masseur_ids: list[int], duration: timedelta) -> dict[int, tuple[datetime, datetime]]:
         slots = {}
@@ -365,17 +354,26 @@ class MassageSystem(BaseModel):
         ret = []
         for slot in slots_by_time:
             start, end, masseur_id = slot
-            ts = TimeSlot()
-            ts.start = start
-            ts.end = start + duration
-            ts.masseur_id = masseur_id
-            ret.append(ts)
+            if end-start > self.split_if_longer_than:
+                while start-end > self.split_if_longer_than:
+                    ts = TimeSlot()
+                    ts.start = start
+                    ts.end = start + self.split_chunk
+                    ts.masseur_id = masseur_id
+                    ret.append(ts)
+                    start = ts.end
+            if start-end > duration:
+                ts = TimeSlot()
+                ts.start = start
+                ts.end = start + duration
+                ts.masseur_id = masseur_id
+                ret.append(ts)
 
-            ts = TimeSlot()
-            ts.start = end - duration
-            ts.end = end
-            ts.masseur_id = masseur_id
-            ret.append(ts)
+                ts = TimeSlot()
+                ts.start = end - duration
+                ts.end = end
+                ts.masseur_id = masseur_id
+                ret.append(ts)
         
         ret.sort(key=lambda x: (x.masseur_id, x.start))
 
