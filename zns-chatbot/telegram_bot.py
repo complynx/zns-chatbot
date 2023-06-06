@@ -716,7 +716,7 @@ async def massage_cmd(update: Update, context: CallbackContext):
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data=f"{IC_MASSAGE}Cancel")])
     message = "Кликни \"Записаться\", чтобы попасть на приём к массажисту или выбери свою "+\
     "текущую запись из списка, чтобы внести изменения, отменить или связаться со специалистом.\n"+\
-    "<a href=\"https://vk.com/wall-181750031_2996\">Пост о массаже на ZNS</a>.\n"+\
+    "<a href=\"https://t.me/zouknonstopchannel/182\">Пост о массаже на ZNS</a>.\n"+\
     "Наши специалисты:"
     for masseur in massage_system.masseurs.values():
         message += f"\n   {masseur.icon} {masseur.link_html()}"
