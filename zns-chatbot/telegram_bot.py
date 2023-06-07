@@ -725,7 +725,7 @@ async def massage_cmd(update: Update, context: CallbackContext):
     "<a href=\"https://t.me/zouknonstopchannel/182\">Пост о массаже на ZNS</a>.\n"+\
     "Наши специалисты:"
     for masseur in massage_system.masseurs.values():
-        message += f"\n   {masseur.icon} {masseur.link_html()}"
+        message += f"\n   {masseur.icon} {masseur.link_html()} {masseur.comment}"
     
     if query:
         await query.edit_message_text(
