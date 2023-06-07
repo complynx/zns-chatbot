@@ -845,8 +845,6 @@ async def massage_fast(update: Update, context: CallbackContext):
         )
     return ConversationHandler.END
 
-
-
 async def massage_create(update: Update, context: CallbackContext):
     query = update.callback_query
     if query is not None:
