@@ -47,6 +47,7 @@ class Masseur(BaseModel):
     username: str = ""
     update_notifications: bool = True
     before_massage_notifications: bool = True
+    comment: str = ""
     _id: int = PrivateAttr(-1)
 
     def link_url(self) -> str:

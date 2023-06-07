@@ -902,11 +902,6 @@ async def massage_create(update: Update, context: CallbackContext):
                                    " Если нажать на имя, то массажист станет исключён ❌.\n" + \
                                    "Чем больше массажистов выбрано, тем больше вероятность найти удобный слот.\n"+ \
                                    "Когда закончишь, жми \"➡ Дальше\"."
-        if massage_type.duration.total_seconds() < 60 * 60:
-            message += "\n<i>⚠ Если ищешь Таисию, нажми вкладку \"Общий массаж\" в предыдущем меню.\n"+\
-                       "Специалист работает со всеми запросами в тайминге от 60 минут.</i>"
-        if massage_type.duration.total_seconds() > 60 * 60:
-            message += "\n<i>⚠ Только Таисия работает с массажами более 60 минут!</i>"
         buttons = []
 
         for i in range(len(masseur_ids)):
@@ -914,6 +909,7 @@ async def massage_create(update: Update, context: CallbackContext):
             is_enabled = ((masseurs_mask & mask) > 0)
             masseur_id = masseur_ids[i]
             masseur = massage_system.masseurs[masseur_id]
+            message += f"\n {masseur.icon} {masseur.name} {masseur.comment}"
 
             new_mask = (masseurs_mask & (~mask)) if is_enabled else (masseurs_mask | mask)
             mark = "✅" if is_enabled else "❌"
@@ -922,6 +918,11 @@ async def massage_create(update: Update, context: CallbackContext):
                 f"{mark} {masseur.name}",
                 callback_data=f"{command_prefix}{int_to_base32(new_mask)}?")
             )
+        if massage_type.duration.total_seconds() < 60 * 60:
+            message += "\n<i>⚠ Если ищешь Таисию, нажми вкладку \"Общий массаж\" в предыдущем меню.\n"+\
+                       "Специалист работает со всеми запросами в тайминге от 60 минут.</i>"
+        if massage_type.duration.total_seconds() > 60 * 60:
+            message += "\n<i>⚠ Только Таисия работает с массажами более 60 минут!</i>"
         keyboard = split_list(buttons, 2)
         if masseurs_mask != 0:
             keyboard.append([
@@ -958,7 +959,7 @@ async def massage_create(update: Update, context: CallbackContext):
 
     message_prefix += "\nВыбраны массажисты:\n"
     masseurs_selected = [massage_system.masseurs[id] for id in selected_masseur_ids]
-    message_prefix += "\n".join([f"{m.icon} {m.name}" for m in masseurs_selected])
+    message_prefix += "\n".join([f"{m.icon} {m.name} {m.comment}" for m in masseurs_selected])
 
     if len(massage_data_str) == 2:
         message = message_prefix + "\nТеперь выбери вечеринку:"

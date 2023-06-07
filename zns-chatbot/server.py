@@ -6,6 +6,7 @@ import os
 from .config import Config
 from .photo_task import get_by_uuid, real_frame_size
 from .food import FoodStorage
+from .massage import MassageSystem
 import logging
 from .tg_constants import (
     IC_FOOD_PAYMENT_PAYED,
@@ -28,6 +29,22 @@ class FitFrameHandler(tornado.web.RequestHandler):
             )
         except (KeyError, ValueError):
             raise tornado.web.HTTPError(404)
+
+
+class MassageWorkload(tornado.web.RequestHandler):
+    def initialize(self, app):
+        self.app = app
+    
+    async def get(self):
+        import json
+        massage_system: MassageSystem = self.app.massage_system
+        self.write(massage_system.json())
+
+class MassageWorkloadHTML(tornado.web.RequestHandler):
+    async def get(self):
+        self.render(
+            "massage_workload.html"
+        )
 
 
 class PhotoHandler(tornado.web.StaticFileHandler):
@@ -187,6 +204,8 @@ async def create_server(config: Config, base_app):
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler),
         (r"/menu", MenuHandler, {"app": base_app}),
+        (r"/massage_system", MassageWorkload, {"app": base_app}),
+        (r"/massage_workload", MassageWorkloadHTML),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
     ], template_path="templates/")
