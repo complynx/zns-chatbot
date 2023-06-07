@@ -449,62 +449,76 @@ class MassageSystem(BaseModel):
     async def notificator(self):
         import asyncio
         from telegram.constants import ParseMode
+        logger.info(f"starting notificator loop")
         while True:
             await asyncio.sleep(self._config.massage.notificator_loop_frequency.total_seconds())
-            msk_time = now_msk()
-            for massage in self.massages.values():
-                masseur = self.masseurs[massage.masseur_id]
-                m_type = self.massage_types[massage.massage_type_index]
-                total_minutes = m_type.duration.total_seconds() // 60
-
-                if not massage._client_notified_1h and \
-                    massage.start - self._config.massage.notify_client_in_prior_long < msk_time and \
-                    massage.start > msk_time:
-
-                    await self._app.bot.bot.send_message(
-                        chat_id=massage.client_id,
-                        text=
-                        "Привет зуконавт!\nНапоминаю, что у тебя есть запись на массаж через "+
-                        f"{(massage.start-msk_time).total_seconds()//60} минут:\n"+
-                        f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
-                        f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
-                        "Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.\n"+
-                        "Приятного погружения!",
-                        parse_mode=ParseMode.HTML
-                    )
-                    massage._client_notified_1h = True
-
-                if not massage._client_notified and \
-                    massage.start - self._config.massage.notify_client_in_prior < msk_time and \
-                    massage.start > msk_time:
-
-                    await self._app.bot.bot.send_message(
-                        chat_id=massage.client_id,
-                        text=
-                        "Привет зуконавт!\nНапоминаю, что у тебя есть запись на массаж через "+
-                        f"{(massage.start-msk_time).total_seconds()//60} минут:\n"+
-                        f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
-                        f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
-                        "Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.\n"+
-                        "Приятного погружения!",
-                        parse_mode=ParseMode.HTML
-                    )
-                    massage._client_notified = True
-                if not massage._masseur_notified and \
-                    massage.start - self.buffer_time < msk_time and \
-                    massage.start > msk_time:
-                    
+            try:
+                msk_time = now_msk()
+                logger.debug(f"notificator tick {msk_time}")
+                for massage in self.massages.values():
                     masseur = self.masseurs[massage.masseur_id]
-                    if masseur.before_massage_notifications:
-                        await self._app.bot.bot.send_message(
-                            chat_id=masseur._id,
-                            text=
-                            "Напоминаю, что у тебя есть запись через "+
-                            f"{(massage.start-msk_time).total_seconds()//60} минут:\n"+
-                            f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
-                            f"Клиент: <i>{massage.client_link_html()}</i>\nВремя: {massage.massage_client_repr()}",
-                            parse_mode=ParseMode.HTML
-                        )
-                        pass
-                    massage._masseur_notified = True
+                    m_type = self.massage_types[massage.massage_type_index]
+                    total_minutes = m_type.duration.total_seconds() // 60
+
+                    try:
+                        if not massage._client_notified_1h and \
+                            massage.start - self._config.massage.notify_client_in_prior_long < msk_time and \
+                            massage.start > msk_time:
+
+                            logger.info(f"notifying {massage.client_id} {massage.client_name} of massage")
+                            await self._app.bot.bot.send_message(
+                                chat_id=massage.client_id,
+                                text=
+                                "Привет зуконавт!\nНапоминаю, что у тебя есть запись на массаж через "+
+                                f"{(massage.start-msk_time).total_seconds()//60} минут:\n"+
+                                f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+                                f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
+                                "Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.\n"+
+                                "Приятного погружения!",
+                                parse_mode=ParseMode.HTML
+                            )
+                            massage._client_notified_1h = True
+
+                        if not massage._client_notified and \
+                            massage.start - self._config.massage.notify_client_in_prior < msk_time and \
+                            massage.start > msk_time:
+
+                            logger.info(f"notifying {massage.client_id} {massage.client_name} of massage")
+                            await self._app.bot.bot.send_message(
+                                chat_id=massage.client_id,
+                                text=
+                                "Привет зуконавт!\nНапоминаю, что у тебя есть запись на массаж через "+
+                                f"{(massage.start-msk_time).total_seconds()//60} минут:\n"+
+                                f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+                                f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
+                                "Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.\n"+
+                                "Приятного погружения!",
+                                parse_mode=ParseMode.HTML
+                            )
+                            massage._client_notified = True
+                    except Exception as e:
+                        logger.error(f"caught exception while notifying client: {e}", exc_info=1)
+                    try:
+                        if not massage._masseur_notified and \
+                            massage.start - self.buffer_time < msk_time and \
+                            massage.start > msk_time:
+                            
+                            masseur = self.masseurs[massage.masseur_id]
+                            if masseur.before_massage_notifications:
+                                logger.info(f"notifying {masseur._id} {masseur.name} of massage")
+                                await self._app.bot.bot.send_message(
+                                    chat_id=masseur._id,
+                                    text=
+                                    "Напоминаю, что у тебя есть запись через "+
+                                    f"{(massage.start-msk_time).total_seconds()//60} минут:\n"+
+                                    f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+                                    f"Клиент: <i>{massage.client_link_html()}</i>\nВремя: {massage.massage_client_repr()}",
+                                    parse_mode=ParseMode.HTML
+                                )
+                                pass
+                            massage._masseur_notified = True
+                    except Exception as e:
+                        logger.error(f"caught exception while notifying masseur: {e}", exc_info=1)
+            except Exception as e:
+                logger.error(f"caught exception in notificator: {e}", exc_info=1)
                 

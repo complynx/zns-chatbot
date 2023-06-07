@@ -23,7 +23,7 @@ async def main(cfg: Config):
     try:
         async with create_telegram_bot(cfg, app) as bot:
             logger.info("running event loop")
-            await food_storage.checker()
+            await massage.notificator()
     except (KeyboardInterrupt, SystemExit):
         pass
     except Exception as e:
