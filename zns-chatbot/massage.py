@@ -106,6 +106,8 @@ class Massage(BaseModel):
     def massage_client_repr(self) -> str:
         dow = ""
         match self.start.weekday():
+            case 0:
+                dow = "Пн"
             case 4:
                 dow = "Пт"
             case 5:
