@@ -92,6 +92,7 @@ class Massage(BaseModel):
     start: datetime
     _id: int = PrivateAttr(-1)
     _client_notified: bool = PrivateAttr(False)
+    _client_notified_1h: bool = PrivateAttr(False)
     _masseur_notified: bool = PrivateAttr(False)
 
     def client_link_url(self) -> str:
@@ -456,6 +457,23 @@ class MassageSystem(BaseModel):
                 m_type = self.massage_types[massage.massage_type_index]
                 total_minutes = m_type.duration.total_seconds() // 60
 
+                if not massage._client_notified_1h and \
+                    massage.start - self._config.massage.notify_client_in_prior_long < msk_time and \
+                    massage.start > msk_time:
+
+                    await self._app.bot.bot.send_message(
+                        chat_id=massage.client_id,
+                        text=
+                        "Привет зуконавт!\nНапоминаю, что у тебя есть запись на массаж через "+
+                        f"{(massage.start-msk_time).total_seconds()//60} минут:\n"+
+                        f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
+                        f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
+                        "Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.\n"+
+                        "Приятного погружения!",
+                        parse_mode=ParseMode.HTML
+                    )
+                    massage._client_notified_1h = True
+
                 if not massage._client_notified and \
                     massage.start - self._config.massage.notify_client_in_prior < msk_time and \
                     massage.start > msk_time:
@@ -464,7 +482,7 @@ class MassageSystem(BaseModel):
                         chat_id=massage.client_id,
                         text=
                         "Привет зуконавт!\nНапоминаю, что у тебя есть запись на массаж через "+
-                        f"{self._config.massage.notify_client_in_prior.total_seconds()//60} минут:\n"+
+                        f"{(massage.start-msk_time).total_seconds()//60} минут:\n"+
                         f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
                         f"Массажист: {masseur.link_html()}\nВремя: {massage.massage_client_repr()}\n"+
                         "Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.\n"+
@@ -482,7 +500,7 @@ class MassageSystem(BaseModel):
                             chat_id=masseur._id,
                             text=
                             "Напоминаю, что у тебя есть запись через "+
-                            f"{self.buffer_time.total_seconds()//60} минут:\n"+
+                            f"{(massage.start-msk_time).total_seconds()//60} минут:\n"+
                             f"Тип массажа: {m_type.name} — {m_type.price} ₽ / {total_minutes} минут.\n"+
                             f"Клиент: <i>{massage.client_link_html()}</i>\nВремя: {massage.massage_client_repr()}",
                             parse_mode=ParseMode.HTML

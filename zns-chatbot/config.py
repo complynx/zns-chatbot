@@ -8,12 +8,7 @@ class MassageSettings(BaseSettings):
     conversation_timeout: timedelta = Field(timedelta(hours=1))
     notificator_loop_frequency: timedelta = Field(timedelta(seconds=30))
     notify_client_in_prior: timedelta = Field(timedelta(minutes=10))
-
-class MassageSettings(BaseSettings):
-    data_path = Field("massage.yaml")
-    conversation_timeout: timedelta = Field(timedelta(hours=2))
-    notificator_loop_frequency: timedelta = Field(timedelta(seconds=30))
-    notify_client_in_prior: timedelta = Field(timedelta(minutes=10))
+    notify_client_in_prior_long: timedelta = Field(timedelta(hours=1))
 
 class TelegramSettings(BaseSettings):
     token: SecretStr = Field(env="TELEGRAM_TOKEN")
