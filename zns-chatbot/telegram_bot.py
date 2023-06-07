@@ -762,7 +762,9 @@ async def massage_send_list(update: Update, context: CallbackContext):
     await query.edit_message_text(
         message,
         parse_mode=ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup([]),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("В виде графика", web_app=WebAppInfo(full_link(context.application, f"/massage_workload")))]
+        ]),
     )
     return ConversationHandler.END
 
@@ -1258,7 +1260,7 @@ async def massage_adm_list(update: Update, context: CallbackContext):
         return
     # masseur = massage_system.masseurs[update.effective_user.id]
     message = "Админский лист массажей:\n"
-    buttons = []
+    buttons = [[InlineKeyboardButton("В виде графика", web_app=WebAppInfo(full_link(context.application, f"/massage_workload")))]]
     for masseur in massage_system.masseurs.values():
         message += f"== {masseur.link_html()}"
         massages = massage_system.get_masseur_massages(masseur._id)
