@@ -101,7 +101,9 @@ fetch("./massage_system").then(r=> r.json()).then(massage_system=>{
         party.working_hours.push(wh);
     }
     let party = in_which_party(moment());
-    party.now = moment();
+    if(party){
+        party.now = moment();
+    }
 
     for(let p in parties) {
         let party = parties[p]; 
