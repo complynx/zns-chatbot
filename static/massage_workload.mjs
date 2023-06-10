@@ -101,9 +101,11 @@ fetch("./massage_system").then(r=> r.json()).then(massage_system=>{
         party.working_hours.push(wh);
     }
     {
-        let party = in_which_party(moment());
+        let now_msk = moment(moment().utc().utcOffset("+03:00").format("YYYY-MM-DDTkk:mm:ss"));
+        console.log(now_msk.format(), moment().format());
+        let party = in_which_party(now_msk);
         if(party){
-            party.now = moment();
+            party.now = now_msk;
         }
     }
 
