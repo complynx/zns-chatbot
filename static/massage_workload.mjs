@@ -100,6 +100,8 @@ fetch("./massage_system").then(r=> r.json()).then(massage_system=>{
         wh.party = party;
         party.working_hours.push(wh);
     }
+    let party = in_which_party(moment());
+    party.now = moment();
 
     for(let p in parties) {
         let party = parties[p]; 
@@ -134,6 +136,13 @@ fetch("./massage_system").then(r=> r.json()).then(massage_system=>{
             massage_div.style.top = (100. * massage.start.diff(party.start) / party_duration ) + "%";
             massage_div.style.height = (100. * massage.end.diff(massage.start) / party_duration ) + "%";
             masseur_div.appendChild(massage_div);
+        }
+        if(party.now) {
+            let now_div = document.createElement("DIV");
+            now_div.innerText = ` `;
+            now_div.classList.add("current-time");
+            now_div.style.top = (100. * party.now.diff(party.start) / party_duration ) + "%";
+            party.div.appendChild(now_div);
         }
     }
 }).catch(console.error);
