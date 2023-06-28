@@ -134,16 +134,22 @@ document.addEventListener('contextmenu', function(event) {
     if (event.altKey && !DEBUG) {
         if(--debug_countdown <= 0) {
             init_debug();
-        } 
+        }else{
+            console.log(debug_countdown);
+        }
         event.preventDefault();
     }
 });
-document.body.addEventListener('touchstart', function(event) {
+document.body.addEventListener('touchstart', function(e) {
     if(!DEBUG && e.touches.length === 5) {
         if(--debug_countdown <= 0) {
             init_debug();
+        }else{
+            console.log(debug_countdown);
         }
     }
+}, {
+    capture: true
 });
 }
 
