@@ -32,6 +32,8 @@ function init_debug() {
     document.body.classList.add("debug");
     let dbg_layer = document.querySelector('.debug-layer');
     let uuid_validator = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+    let debug_code_input = dbg_layer.querySelector('input[name=remotejs]');
+    debug_code_input.value = debug_code;
 
     dbg_layer.querySelector('.link').innerText = window.location.href;
     navigator.clipboard.writeText(window.location.href)
@@ -39,11 +41,10 @@ function init_debug() {
         console.error('Failed to copy text: ', error);
     });
     dbg_layer.querySelector('.remotejs').addEventListener("click", ()=>{
-        let input = dbg_layer.querySelector('input[name=remotejs]');
-        let rjs_uuid = input.value.trim();
+        let rjs_uuid = debug_code_input.value.trim();
         if(uuid_validator.test(rjs_uuid)){
             remove_from_dom(dbg_layer.querySelector('.remotejs'));
-            remove_from_dom(input);
+            remove_from_dom(debug_code_input);
             let s=document.createElement("script");
             s.src="https://remotejs.com/agent/agent.js";
             s.setAttribute("data-consolejs-channel",rjs_uuid);
