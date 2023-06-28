@@ -55,3 +55,14 @@ body {
     radial-gradient(circle at calc(50% + 0vmin) calc(50% + 35vmin), var(--tg-theme-bg-color) var(--frame-zns-radius), transparent var(--frame-zns-radius));
   opacity: .6;
 }
+
+.debug-layer {
+  display: none;
+  z-index: 3;
+  position: fixed;
+  width: 100vw;
+  height: 100vh;
+}
+body.debug .debug-layer {
+  display: block;
+}

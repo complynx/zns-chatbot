@@ -18,6 +18,135 @@ let cancel_btn = document.querySelector(".button button[name=cancel]");
 let submit_btn = document.querySelector(".button button[name=done]");
 console.log(photo, frame, cancel_btn, submit_btn);
 
+{// DEBUG
+window.DEBUG = false;
+let debug_countdown = 10;
+function remove_from_dom (el) {
+    el?.parentElement?.removeChild(el);
+}
+
+function init_debug() {
+    if(DEBUG) return;
+
+    DEBUG = true;
+    document.body.classList.add("debug");
+    let dbg_layer = document.querySelector('.debug-layer');
+    let uuid_validator = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+    dbg_layer.querySelector('.link').innerText = window.location.href;
+    navigator.clipboard.writeText(window.location.href)
+    .catch((error) => {
+        console.error('Failed to copy text: ', error);
+    });
+    dbg_layer.querySelector('.remotejs').addEventListener("click", ()=>{
+        let input = dbg_layer.querySelector('input[name=remotejs]');
+        let rjs_uuid = input.value.trim();
+        if(uuid_validator.test(rjs_uuid)){
+            remove_from_dom(dbg_layer.querySelector('.remotejs'));
+            remove_from_dom(input);
+            let s=document.createElement("script");
+            s.src="https://remotejs.com/agent/agent.js";
+            s.setAttribute("data-consolejs-channel",rjs_uuid);
+            document.head.appendChild(s);
+        }
+    });  
+    
+    let real_frame_size = 2000;
+    function decomposeTransformMatrix(transformationMatrix) {
+        const [a, c, e] = transformationMatrix[0];
+        const [b, d, f] = transformationMatrix[1];
+    
+        const scalingX = Math.sqrt(a * a + c * c);
+        const scalingY = Math.sqrt(b * b + d * d);
+
+        const rotation = Math.atan2(b, a);
+
+        // const new_a = scalingX * Math.cos(rotation);
+        // const new_b = scalingX * Math.sin(rotation);
+        // const new_c = -scalingY * Math.sin(rotation);
+        // const new_d = scalingY * Math.cos(rotation);
+        // const new_e = e * new_a + f * new_c + e;
+        // const new_f = e * new_b + f * new_d + f;
+        // console.log(e,f,new_e, new_f);
+
+        return {
+            scaling: { x: scalingX, y: scalingY },
+            rotation: rotation,
+            translation: { x: e, y: f }
+        };
+    }
+
+    function generateCroppedImage() {
+        // Create a new canvas for the cropped image
+        const croppedCanvas = document.createElement("canvas");
+        croppedCanvas.width = real_frame_size;
+        croppedCanvas.height = real_frame_size;
+        const ctx = croppedCanvas.getContext("2d");
+    
+        // Save the current transformation matrix and set it to identity
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+    
+        // Apply the transforms and draw the photo on the canvas
+        ctx.translate(real_frame_size / 2, real_frame_size / 2);
+    
+        // Calculate the necessary transforms
+        // const [a, c, e] = transformationMatrix[0];
+        // const [b, d, f] = transformationMatrix[1];
+        // ctx.transform(a, b, c, d, e, f);
+    
+        const decomposition = decomposeTransformMatrix(transformationMatrix);
+    
+        const { scaling, rotation, translation } = decomposition;
+        ctx.translate(translation.x, translation.y);
+        ctx.scale(scaling.x, scaling.y);
+        ctx.rotate(rotation);
+    
+        ctx.drawImage(photo, -pw / 2, -ph / 2, pw, ph);
+    
+        // Restore the original transformation matrix
+        ctx.restore();
+    
+        // Get the data URL of the cropped image
+        const croppedDataURL = croppedCanvas.toDataURL("image/png");
+    
+        return croppedDataURL;
+    }
+    dbg_layer.querySelector("button.canvas").addEventListener("click", () => {
+        console.log(transformationMatrix);
+        const [a, c, e] = transformationMatrix[0];
+        const [b, d, f] = transformationMatrix[1];
+        const croppedImage = new Image();
+        croppedImage.src = generateCroppedImage();
+        // croppedImage.src = `./crop_frame?id=${photo_id}&a=${a}&b=${b}&c=${c}&d=${d}&e=${e}&f=${f}`;
+        croppedImage.style.position="fixed";
+        croppedImage.style.left = f_left + "px";
+        croppedImage.style.top = f_top + "px";
+        croppedImage.style.height = croppedImage.style.width = frame_size + "px";
+        croppedImage.style.zIndex=4;
+        document.body.appendChild(croppedImage);
+        croppedImage.addEventListener("click", ()=>{
+            remove_from_dom(croppedImage);
+        }, false);
+    });
+}
+document.addEventListener('contextmenu', function(event) {
+    if (event.altKey && !DEBUG) {
+        if(--debug_countdown <= 0) {
+            init_debug();
+        } 
+        event.preventDefault();
+    }
+});
+document.body.addEventListener('touchstart', function(event) {
+    if(!DEBUG && e.touches.length === 5) {
+        if(--debug_countdown <= 0) {
+            init_debug();
+        }
+    }
+});
+}
+
 
 if(Telegram.WebApp.platform === "tdesktop") {
     help_div.innerText = "Фото можно перемещать мышкой, для вращения зажмите кнопку Shift. Для масштабирования используйте прокрутку.";
