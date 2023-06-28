@@ -61,7 +61,9 @@ body {
   z-index: 3;
   position: fixed;
   width: 100vw;
-  height: 100vh;
+  color: #fff;
+  background: #000;
+  opacity: 0.7;
 }
 body.debug .debug-layer {
   display: block;
