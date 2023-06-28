@@ -1,14 +1,25 @@
 @import url('https://fonts.googleapis.com/css?family=Open+Sans');
 
+:root {
+  --tg-color-scheme: dark;
+  --tg-theme-bg-color: #191819;
+  --tg-theme-secondary-bg-color: #000000;
+  --tg-theme-text-color: #ffffff;
+  --tg-theme-hint-color: #7d7d7d;
+  --tg-theme-link-color: #a183d2;
+  --tg-theme-button-color: #a583da;
+  --tg-theme-button-text-color: #ffffff;
+}
+
 body {
   margin: 0;
-  background-color:var(--tg-theme-bg-color);
+  background-color: var(--tg-theme-bg-color);
   height: 100%;
   width: 100%;
   --frame-radius: 35vmin;
 }
 
-.help{
+.help {
   padding: .5em 2em;
   font-family: "Open Sans", sans-serif;
   pointer-events: none;
@@ -16,20 +27,24 @@ body {
   position: fixed;
   z-index: 2;
 }
-.photo .ancor{
+
+.photo .ancor {
   position: fixed;
 }
-.photo img{
+
+.photo img {
   position: absolute;
 }
-.photo{
+
+.photo {
   background-image: radial-gradient(circle at center, var(--tg-theme-secondary-bg-color) var(--frame-radius), var(--tg-theme-bg-color) var(--frame-radius));
   position: fixed;
   z-index: 0;
   width: 100vw;
   height: 100vh;
 }
-.overlay{
+
+.overlay {
   --frame-zns-radius: 25vmin;
   pointer-events: none;
   position: fixed;
@@ -37,6 +52,6 @@ body {
   width: 100vw;
   height: 100vh;
   background-image: radial-gradient(circle at center, transparent var(--frame-radius), var(--tg-theme-bg-color) var(--frame-radius)),
-  radial-gradient(circle at calc(50% + 0vmin) calc(50% + 35vmin), var(--tg-theme-bg-color) var(--frame-zns-radius), transparent var(--frame-zns-radius));
+    radial-gradient(circle at calc(50% + 0vmin) calc(50% + 35vmin), var(--tg-theme-bg-color) var(--frame-zns-radius), transparent var(--frame-zns-radius));
   opacity: .6;
 }
