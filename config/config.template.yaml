@@ -1,29 +1,14 @@
 telegram:
   token: "YOUR_TOKEN" # or ommit to use TELEGRAM_TOKEN from env
 
-food:
-  admins:
-    - 1234 # tg ids for using /food_adm...
-  proover: 1234 # tg id for proofing the payments
-  storage_path: "menu"
-  checker_loop_frequency: "5:00"
-  remove_empty_orders: "1 00:00:00"
-  send_prompt_after: "1 00:00:00"
-  send_proof_prompt_after: "2:00:00"
-  receive_username_conversation_timeout: "1:00:00"
-  receive_proof_conversation_timeout: "1:00:00"
-
-server:
-  base: "https://example.com/bot" # used for appending to local urls
-  port: 8080 # server port
-
 logging:
   level: "INFO" # or ommit to use LOGGING_LEVEL from env
 
-photo:
-  cpu_threads: 8
-  storage_path: "photos"
-  conversation_timeout: "2:00:00"
+localization:
+  path: "i18n/{locale}"
+  fallbacks: ["en-US", "en"]
+  file: bot.ftl
 
-massage:
-  data_path: "massage.yaml"
+mongo_db:
+  address: mongodb://admin:test@mongo:27017/bots_db
+  collection: bots_users
