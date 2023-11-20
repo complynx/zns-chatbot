@@ -4,6 +4,9 @@ telegram:
 logging:
   level: "INFO" # or ommit to use LOGGING_LEVEL from env
 
+openai:
+  api_key: "YOUR_API_KEY" # or ommit to use OPENAI_API_KEY from env
+
 localization:
   path: "i18n/{locale}"
   fallbacks: ["en-US", "en"]

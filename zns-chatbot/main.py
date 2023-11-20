@@ -3,6 +3,7 @@ import logging
 from .config import Config
 from .telegram import create_telegram_bot
 from .cached_localization import Localization
+from .assistant import Assistant
 from fluent.runtime import FluentResourceLoader
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -11,7 +12,9 @@ logger = logging.getLogger(__name__)
 class App(object):
     bot = None
     localization = None
+    mongodb = None
     users_collection = None
+    assistant = None
 
 async def main(cfg: Config):
     app = App()
@@ -20,8 +23,10 @@ async def main(cfg: Config):
 
     if cfg.mongo_db.address != "":
         logger.info(f"db address {cfg.mongo_db.address}")
-        mongodb = AsyncIOMotorClient(cfg.mongo_db.address).get_database()
-        app.users_collection = mongodb[cfg.mongo_db.collection]
+        app.mongodb = AsyncIOMotorClient(cfg.mongo_db.address).get_database()
+        app.users_collection = app.mongodb[cfg.mongo_db.users_collection]
+
+    app.assistant = Assistant(app, cfg)
 
     try:
         async with create_telegram_bot(cfg, app) as bot:

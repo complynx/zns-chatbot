@@ -11,5 +11,7 @@ setup(
         "pillow>=9.5",
         "motor>=3.1",
         "pydantic>=1.10,<2.0",
+        "openai>=1.3.3",
+        "tiktoken>=0.5.1"
     ],
 )

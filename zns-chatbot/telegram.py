@@ -14,6 +14,7 @@ from telegram.ext import (
     filters,
     Application,
 )
+from telegram.constants import ChatAction
 import logging
 from .config import Config
 import datetime
@@ -65,8 +66,10 @@ async def start(update: Update, context: CallbackContext):
 
     await update.message.reply_html(l("start-message"))
 
-async def log_msg(update: Update, context: CallbackContext):
-    logger.info(f"got unparsed update {update}")
+async def ask_assistant(update: Update, context: CallbackContext):
+    logger.info(f"Asking assistant: {update}")
+    await context.bot.send_chat_action(chat_id=update.effective_message.chat_id, action=ChatAction.TYPING)
+    await context.application.base_app.assistant.reply_to(update.message.text_markdown_v2, update.effective_user.id, update.effective_message.chat_id)
 
 async def error_handler(update, context):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
@@ -89,7 +92,7 @@ async def create_telegram_bot(config: Config, app) -> TGApplication:
     }).token(token=config.telegram.token.get_secret_value()).build()
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.ALL, log_msg))
+    application.add_handler(MessageHandler(filters.ALL, ask_assistant))
     application.add_error_handler(error_handler)
 
     try:
