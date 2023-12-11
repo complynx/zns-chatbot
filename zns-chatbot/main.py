@@ -3,21 +3,22 @@ import logging
 from .config import Config
 from .telegram import create_telegram_bot
 from .cached_localization import Localization
-from .assistant import Assistant
 from fluent.runtime import FluentResourceLoader
 from motor.motor_asyncio import AsyncIOMotorClient
+from .plugins import plugins
 
 logger = logging.getLogger(__name__)
 
 class App(object):
+    config: Config
     bot = None
     localization = None
     mongodb = None
     users_collection = None
-    assistant = None
 
 async def main(cfg: Config):
     app = App()
+    app.config = cfg
     loader = FluentResourceLoader(cfg.localization.path)
     app.localization = Localization(loader, cfg.localization.file, cfg.localization.fallbacks)
 
@@ -26,10 +27,8 @@ async def main(cfg: Config):
         app.mongodb = AsyncIOMotorClient(cfg.mongo_db.address).get_database()
         app.users_collection = app.mongodb[cfg.mongo_db.users_collection]
 
-    app.assistant = Assistant(app, cfg)
-
     try:
-        async with create_telegram_bot(cfg, app) as bot:
+        async with create_telegram_bot(cfg, app, {plugin.name: plugin for plugin in [plugin(app) for plugin in plugins]}) as bot:
             logger.info("running event loop")
             await asyncio.Event().wait()
     except (KeyboardInterrupt, SystemExit):

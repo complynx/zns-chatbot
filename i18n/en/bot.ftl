@@ -27,3 +27,5 @@ frame-mover-help-unified =
     Photo can be dragged, scaled and turned.
     To scale and turn with mouse, use scrolling or hold Shift.
 frame-mover-finish-button-text = Submit
+undefined-state-error = Something went wrong, try again.
+unsupported-message-error = Sorry, I can't understand this message.

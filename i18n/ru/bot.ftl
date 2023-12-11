@@ -27,3 +27,5 @@ frame-mover-help-unified =
     Фото можно перемещать, вращать и масштабировать.
     Для масштабирования или вращения мышкой используйте прокрутку и кнопку Shift.
 frame-mover-finish-button-text = Готово
+undefined-state-error = Что-то пошло не так, попробуй ещё раз.
+unsupported-message-error = Прости, я не могу понять это сообщение.

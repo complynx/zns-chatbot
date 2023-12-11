@@ -1,9 +1,12 @@
-from .config import Config
+from ..config import Config
 from openai import AsyncOpenAI
 import tiktoken
 import logging
 import datetime
 from telegram.constants import ParseMode
+from telegram import Message, Update
+from telegram.ext import filters
+from .base_plugin import PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 
 logger = logging.getLogger(__name__)
 
@@ -12,19 +15,30 @@ class MessageTooLong(Exception):
 
 class Assistant():
     base_app = None
+    name = "assistant"
     config: Config
     client: AsyncOpenAI
 
-    def __init__(self, base_app, base_config: Config):
-        self.config = base_config
+    def __init__(self, base_app):
+        self.config = base_app.config
         self.base_app = base_app
-        self.client = AsyncOpenAI(api_key=base_config.openai.api_key.get_secret_value())
-        self.message_db = base_app.mongodb[base_config.mongo_db.messages_collection]
+        self.client = AsyncOpenAI(api_key=self.config.openai.api_key.get_secret_value())
+        self.message_db = base_app.mongodb[self.config.mongo_db.messages_collection]
         self.user_db = base_app.users_collection
-        self.model = base_config.openai.model
+        self.model = self.config.openai.model
         self.tokenizer = tiktoken.encoding_for_model(self.model)
     
-    async def reply_to(self, message: str, user_id: int, chat_id):
+    def test_message(self, message: Update):
+        if (filters.TEXT & ~filters.COMMAND).check_update(message):
+            return PRIORITY_BASIC, None
+        return PRIORITY_NOT_ACCEPTING, None
+        
+    async def handle_message(self, update):
+        await update.send_chat_action()
+        repl = await self.get_assistant_reply(update.update.message.text_markdown_v2, update.user)
+        await update.reply(repl, parse_mode=ParseMode.MARKDOWN)
+    
+    async def get_assistant_reply(self, message: str, user_id: int):
         length = len(self.tokenizer.encode(message))
         if length > self.config.openai.message_token_cap:
             raise MessageTooLong()
@@ -85,8 +99,4 @@ Be more short and informal, like chat buddy.
             "user_id": user_id,
             "date": datetime.datetime.now()
         })
-        await self.base_app.bot.bot.send_message(
-            text=completion.choices[0].message.content,
-            parse_mode=ParseMode.MARKDOWN,
-            chat_id=chat_id,
-        )
+        return completion.choices[0].message.content
