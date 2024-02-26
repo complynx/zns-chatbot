@@ -10,6 +10,7 @@ setup(
         "pyyaml>=6.0",
         "pillow>=9.5",
         "motor>=3.1",
+        "httpx~=0.26.0",
         "pydantic>=1.10,<2.0",
         "openai>=1.3.3",
         "tiktoken>=0.5.1"
