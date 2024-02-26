@@ -29,3 +29,4 @@ frame-mover-help-unified =
 frame-mover-finish-button-text = Готово
 undefined-state-error = Что-то пошло не так, попробуй ещё раз.
 unsupported-message-error = Прости, я не могу понять это сообщение.
+max-assistant-messages-reached = Сегодня увы лимит сообщений исчерпан, приходи через 24 часа с новыми вопросами.

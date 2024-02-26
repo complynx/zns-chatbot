@@ -29,3 +29,4 @@ frame-mover-help-unified =
 frame-mover-finish-button-text = Submit
 undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
+max-assistant-messages-reached = You've reached your limit for a day, please come back in 24 hours for your next questions.
