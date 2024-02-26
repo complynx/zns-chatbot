@@ -1,29 +1,36 @@
 import asyncio
 import logging
 from .config import Config
-from .telegram_bot import create_telegram_bot
-from .server import create_server
-from .photo_task import init_photo_tasker
-from .food import FoodStorage
-from .massage import MassageSystem
+from .telegram import create_telegram_bot
+from .cached_localization import Localization
+from fluent.runtime import FluentResourceLoader
+from motor.motor_asyncio import AsyncIOMotorClient
+from .plugins import plugins
 
 logger = logging.getLogger(__name__)
 
 class App(object):
+    config: Config
     bot = None
-    server = None
-
+    localization = None
+    mongodb = None
+    users_collection = None
 
 async def main(cfg: Config):
     app = App()
-    init_photo_tasker(cfg)
-    food_storage = FoodStorage(cfg, app)
-    massage = MassageSystem(cfg, app)
-    await create_server(cfg, app)
+    app.config = cfg
+    loader = FluentResourceLoader(cfg.localization.path)
+    app.localization = Localization(loader, cfg.localization.file, cfg.localization.fallbacks)
+
+    if cfg.mongo_db.address != "":
+        logger.info(f"db address {cfg.mongo_db.address}")
+        app.mongodb = AsyncIOMotorClient(cfg.mongo_db.address).get_database()
+        app.users_collection = app.mongodb[cfg.mongo_db.users_collection]
+
     try:
-        async with create_telegram_bot(cfg, app) as bot:
+        async with create_telegram_bot(cfg, app, {plugin.name: plugin for plugin in [plugin(app) for plugin in plugins]}) as bot:
             logger.info("running event loop")
-            await massage.notificator()
+            await asyncio.Event().wait()
     except (KeyboardInterrupt, SystemExit):
         pass
     except Exception as e:
