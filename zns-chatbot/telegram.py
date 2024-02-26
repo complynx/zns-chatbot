@@ -90,6 +90,32 @@ class TGUpdate():
                 "user_id": self.update.effective_user.id,
                 "bot_id": self.context.bot.id,
             })
+            if user is None:
+                await self.app.users_collection.update_one({
+                    "user_id": self.update.effective_user.id,
+                    "bot_id": self.context.bot.id,
+                }, {
+                    "$set": {
+                        "username": self.update.effective_user.username,
+                        "first_name": self.update.effective_user.first_name,
+                        "last_name": self.update.effective_user.last_name,
+                        "language_code": self.update.effective_user.language_code,
+                    },
+                    "$inc": {
+                        "starts_called": 1,
+                    },
+                    "$setOnInsert": {
+                        "user_id": self.update.effective_user.id,
+                        "bot_id": self.context.bot.id,
+                        "bot_username": self.context.bot.username,
+                        "first_seen": datetime.datetime.now(),
+                        "state": {"state":""},
+                    }
+                }, upsert=True)
+                self.state = {
+                    "state": ""
+                }
+                return
             if "state" in user:
                 self.state = user["state"]
             else:
