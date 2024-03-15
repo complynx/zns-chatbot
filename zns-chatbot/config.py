@@ -26,12 +26,18 @@ class MongoDB(BaseSettings):
     users_collection: str = Field("zns_bot_users", env="ZNS_BOT_MONGODB_USERS_COLLECTION")
     messages_collection: str = Field("zns_bot_messages", env="ZNS_BOT_MONGODB_MESSAGES_COLLECTION")
 
+class Photo(BaseSettings):
+    frame_size: int = Field(1000)
+    frame_file: str = Field("frame/ZNS2024.png")
+    quality: int = Field(90)
+
 class Config(BaseSettings):
     telegram: TelegramSettings
-    logging: LoggingSettings
-    localization: LocalizationSettings
-    mongo_db: MongoDB
+    logging: LoggingSettings = LoggingSettings()
+    localization: LocalizationSettings = LocalizationSettings()
+    mongo_db: MongoDB = MongoDB()
     openai: OpenAI
+    photo: Photo = Photo()
 
     def __init__(self, filename:str="config/config.yaml"):
         # Load a YAML configuration file

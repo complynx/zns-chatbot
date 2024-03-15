@@ -139,11 +139,14 @@ class TGUpdate():
         chosen_handle = None
         chosen_priority = PRIORITY_NOT_ACCEPTING
         chosen_plugin = None
+        accepted_plugins = []
         hits = 0
+        # TODO: for several messages chosen at the same priority, if they have priority title, send a selector message
         for _, plugin in self.context.application.plugins.items():
             priority, handle = plugin.test_message(self.update)
             if priority > PRIORITY_NOT_ACCEPTING:
                 hits += 1
+                accepted_plugins.append((plugin, handle))
             if priority > chosen_priority:
                 chosen_priority = priority
                 chosen_handle = handle

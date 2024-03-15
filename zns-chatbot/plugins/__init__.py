@@ -1,5 +1,7 @@
 from .assistant import Assistant
+from .avatar import Avatar
 
 plugins = [
-    Assistant
+    Assistant,
+    Avatar
 ]
