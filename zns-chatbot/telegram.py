@@ -4,13 +4,14 @@ import re
 import os
 import mimetypes
 import tempfile
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, WebAppInfo
+from telegram import InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, WebAppInfo
 from telegram.ext import (
     CallbackContext,
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     ConversationHandler,
+    CallbackQueryHandler,
     filters,
     Application,
 )
@@ -143,7 +144,7 @@ class TGUpdate():
         hits = 0
         # TODO: for several messages chosen at the same priority, if they have priority title, send a selector message
         for _, plugin in self.context.application.plugins.items():
-            priority, handle = plugin.test_message(self.update)
+            priority, handle = plugin.test_message(self.update, self.state)
             if priority > PRIORITY_NOT_ACCEPTING:
                 hits += 1
                 accepted_plugins.append((plugin, handle))
@@ -164,6 +165,44 @@ class TGUpdate():
         self.state["state"] = ""
         await self.save_state()
         await self.update.message.reply_markdown(self.l("undefined-state-error"))
+    
+    async def state_cq_empty(self):
+        chosen_handle = None
+        chosen_priority = PRIORITY_NOT_ACCEPTING
+        chosen_plugin = None
+        accepted_plugins = []
+        hits = 0
+        # TODO: for several messages chosen at the same priority, if they have priority title, send a selector message
+        for _, plugin in self.context.application.plugins.items():
+            priority, handle = plugin.test_callback_query(self.update, self.state)
+            if priority > PRIORITY_NOT_ACCEPTING:
+                hits += 1
+                accepted_plugins.append((plugin, handle))
+            if priority > chosen_priority:
+                chosen_priority = priority
+                chosen_handle = handle
+                chosen_plugin = plugin
+        if chosen_plugin is not None:
+            logger.info(f"from {hits} accepting plugins selected plugin {chosen_plugin.name} based on priority {chosen_priority}")
+            if chosen_handle is not None:
+                await chosen_handle(self)
+            else:
+                await chosen_plugin.handle_callback_query(self)
+        else:
+            await self.update.callback_query.edit_message_text(
+                self.l("unsupported-message-error"),
+                reply_markup=InlineKeyboardMarkup([]),
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    async def state_cq_undefined(self):
+        self.state["state"] = ""
+        await self.save_state()
+        await self.update.callback_query.edit_message_text(
+            self.l("undefined-state-error"),
+            reply_markup=InlineKeyboardMarkup([]),
+            parse_mode=ParseMode.MARKDOWN
+        )
 
     async def reply(self, text, chat_id=None, parse_mode=ParseMode.MARKDOWN_V2, *args, **kwargs):
         if chat_id is None:
@@ -193,9 +232,22 @@ class TGUpdate():
                 return await attr()
         return await self.state_undefined()
 
+    async def run_callback_query(self):
+        state = self.state
+        fn = "state_cq_" + (state["state"] if state["state"] != "" else "empty")
+        if hasattr(self, fn):
+            attr = getattr(self, fn, None)
+            if callable(attr):
+                return await attr()
+        return await self.state_cq_undefined()
+
     async def parse(self):
         await self.get_state()
         await self.run_state()
+
+    async def parse_callback_query(self):
+        await self.get_state()
+        await self.run_callback_query()
 
 class TGApplication(Application):
     base_app = None
@@ -212,6 +264,12 @@ async def parse_message(update: Update, context: CallbackContext):
     await update.parse()
     # await context.application.base_app.assistant.reply_to(update.message.text_markdown_v2, update.effective_user.id, update.effective_message.chat_id)
 
+async def parse_callback_query(update: Update, context: CallbackContext):
+    await update.callback_query.answer()
+    update = TGUpdate(update, context)
+    await update.parse_callback_query()
+    # await context.application.base_app.assistant.reply_to(update.message.text_markdown_v2, update.effective_user.id, update.effective_message.chat_id)
+
 @asynccontextmanager
 async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
     global web_app_base
@@ -223,6 +281,7 @@ async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.ALL, parse_message))
+    application.add_handler(CallbackQueryHandler(parse_callback_query, re.Pattern(".*")))
     application.add_error_handler(error_handler)
 
     try:

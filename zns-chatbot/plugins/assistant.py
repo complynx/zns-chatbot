@@ -6,29 +6,28 @@ import datetime
 from telegram.constants import ParseMode
 from telegram import Message, Update
 from telegram.ext import filters
-from .base_plugin import PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
+from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 
 logger = logging.getLogger(__name__)
 
 class MessageTooLong(Exception):
     pass
 
-class Assistant():
-    base_app = None
+class Assistant(BasePlugin):
     name = "assistant"
     config: Config
     client: AsyncOpenAI
 
     def __init__(self, base_app):
+        super().__init__(base_app)
         self.config = base_app.config
-        self.base_app = base_app
         self.client = AsyncOpenAI(api_key=self.config.openai.api_key.get_secret_value())
         self.message_db = base_app.mongodb[self.config.mongo_db.messages_collection]
         self.user_db = base_app.users_collection
         self.model = self.config.openai.model
         self.tokenizer = tiktoken.encoding_for_model(self.model)
     
-    def test_message(self, message: Update):
+    def test_message(self, message: Update, state):
         if (filters.TEXT & ~filters.COMMAND).check_update(message):
             return PRIORITY_BASIC, None
         return PRIORITY_NOT_ACCEPTING, None

@@ -8,7 +8,7 @@ import PIL.Image as Image
 from ..config import Config
 from telegram import Message, Update, File
 from telegram.ext import filters
-from .base_plugin import PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
+from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 from telegram.constants import ChatAction
 import logging
 import numpy as np
@@ -49,18 +49,17 @@ def resize_basic(img, size):
     return cropped_img.resize((size, size), resample=Image.LANCZOS)
 
 
-class Avatar():
-    base_app = None
+class Avatar(BasePlugin):
     name = "avatar"
     config: Config
 
     def __init__(self, base_app):
+        super().__init__(base_app)
         self.config = base_app.config
-        self.base_app = base_app
         self.message_db = base_app.mongodb[self.config.mongo_db.messages_collection]
         self.user_db = base_app.users_collection
     
-    def test_message(self, message: Update):
+    def test_message(self, message: Update, state):
         if filters.PHOTO.check_update(message):
             return PRIORITY_BASIC, self.handle_photo
         if filters.Document.IMAGE.check_update(message):
