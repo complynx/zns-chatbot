@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script>
+            const photo_file="{{file}}";
+            const real_frame_size={{real_frame_size}};
+            const help_desktop={% raw json_encode(help_desktop) %};
+            const help_mobile={% raw json_encode(help_mobile) %};
+            const finish_button_text={% raw json_encode(finish_button_text) %};
+            const debug_code="{{debug_code}}";
+        </script>
+        <link rel="stylesheet" type="text/css" href="./static/fit_frame.css"></link>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <script type="module" src="./static/fit_frame.mjs"></script>
+    </head>
+    <body>
+        <div class="help">{{frame_mover_help_unified}}</div>
+        <div class="photo">
+            <div class="ancor"><img src="photos/{{file}}" alt=""></div>
+        </div>
+        <div class="overlay">&nbsp;</div>
+        <div class="debug-layer">
+            <input type="text" name="remotejs" placeholder="remotejs"><button class="remotejs">init remote</button>
+            <button class="canvas">canvas</button>
+            <div class="link"></div>
+        </div>
+    </body>
+</html>

@@ -25,17 +25,6 @@ logger = logging.getLogger(__name__)
 
 CROPPER = 1
 
-def full_link(app: "TGApplication", link: str) -> str:
-    link = f"{app.config.server.base}{link}"
-    match = re.match(r"http://localhost(:(\d+))?/", link)
-    if match:
-        port = match.group(2)
-        if port is None:
-            port = "80"
-        # Replace the localhost part with your custom URL and port
-        link = re.sub(r"http://localhost(:\d+)?/", f"https://complynx.net/testbot/{port}/", link)
-    return link
-
 async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     logger.info(f"start called: {update.effective_user}")
@@ -281,7 +270,7 @@ async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.ALL, parse_message))
-    application.add_handler(CallbackQueryHandler(parse_callback_query, re.Pattern(".*")))
+    application.add_handler(CallbackQueryHandler(parse_callback_query, pattern=f".*"))
     application.add_error_handler(error_handler)
 
     try:

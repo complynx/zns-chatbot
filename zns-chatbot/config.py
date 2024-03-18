@@ -1,3 +1,4 @@
+import re
 import yaml
 
 from pydantic import BaseSettings, Field, SecretStr 
@@ -26,6 +27,10 @@ class MongoDB(BaseSettings):
     users_collection: str = Field("zns_bot_users", env="ZNS_BOT_MONGODB_USERS_COLLECTION")
     messages_collection: str = Field("zns_bot_messages", env="ZNS_BOT_MONGODB_MESSAGES_COLLECTION")
 
+class ServerSettings(BaseSettings):
+    base: str = Field("http://localhost:8080")
+    port: int = Field(8080, env="SERVER_PORT")
+
 class Photo(BaseSettings):
     frame_size: int = Field(1000)
     frame_file: str = Field("frame/ZNS2024.png")
@@ -37,6 +42,7 @@ class Config(BaseSettings):
     localization: LocalizationSettings = LocalizationSettings()
     mongo_db: MongoDB = MongoDB()
     openai: OpenAI
+    server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
 
     def __init__(self, filename:str="config/config.yaml"):
@@ -45,3 +51,14 @@ class Config(BaseSettings):
             conf = yaml.safe_load(f)
         
         super().__init__(**conf)
+
+def full_link(app, link):
+    link = f"{app.config.server.base}{link}"
+    match = re.match(r"http://localhost(:(\d+))?/", link)
+    if match:
+        port = match.group(2)
+        if port is None:
+            port = "80"
+        # Replace the localhost part with your custom URL and port
+        link = re.sub(r"http://localhost(:\d+)?/", f"https://complynx.net/testbot/{port}/", link)
+    return link
