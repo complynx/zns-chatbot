@@ -51,9 +51,10 @@ body {
   z-index: 1;
   width: 100vw;
   height: 100vh;
-  background-image: radial-gradient(circle at center, transparent var(--frame-radius), var(--tg-theme-bg-color) var(--frame-radius)),
-    radial-gradient(circle at calc(50% + 0vmin) calc(50% + 35vmin), var(--tg-theme-bg-color) var(--frame-zns-radius), transparent var(--frame-zns-radius));
-  opacity: .6;
+  background-image: url('../photos/frame');
+  background-size: 100vmin 100vmin;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .debug-layer {
