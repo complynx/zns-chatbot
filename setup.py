@@ -6,8 +6,8 @@ setup(
     packages=find_packages(),
     install_requires=[
         "python-telegram-bot[job-queue]>=21.0.1",
-        "opencv-python>=4.9.0.1"
-        "numpy>=1.26.4,<2.0.0"
+        "opencv-python==4.9.0.80"
+        "numpy==1.26.4"
         "tornado==6.4",
         "fluent.runtime>=0.4",
         "pyyaml>=6.0",
