@@ -14,7 +14,7 @@ from ..config import Config, full_link
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update, File, WebAppInfo
 from telegram.ext import filters, CommandHandler
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
-from telegram.constants import ChatAction
+from telegram.constants import ChatAction, ParseMode
 import logging
 import numpy as np
 import multiprocessing
@@ -106,7 +106,7 @@ class Avatar(BasePlugin):
         return PRIORITY_NOT_ACCEPTING, None
     
     async def handle_command(self, update):
-        await update.l("avatar-without-command")
+        await update.reply(update.l("avatar-without-command"), parse_mode=ParseMode.MARKDOWN)
     
     async def get_file(self, file_name):
         file_path = os.path.join(self.cache_dir, file_name)
