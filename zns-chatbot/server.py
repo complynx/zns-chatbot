@@ -101,8 +101,16 @@ class FitFrameHandler(tornado.web.RequestHandler):
             logger.error("error saving image: %s",e, exc_info=1)
 
 class ErrorHandler(tornado.web.RequestHandler):
+    def initialize(self, app):
+        self.app = app
     async def post(self):
-        logger.error("client error: %s %s", str(self.request.body), self.request.query_arguments)
+        try:
+            initData = self.get_argument('initData', default=None, strip=False)
+            if initData:
+                initData = validate(initData, self.app.config.telegram.token.get_secret_value())
+                logger.error("client error: %s %s", str(self.request.body), initData)
+        except Exception:
+            pass
 
 async def create_server(config: Config, base_app):
     tornado.platform.asyncio.AsyncIOMainLoop().install()
@@ -130,7 +138,7 @@ async def create_server(config: Config, base_app):
 
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
-        (r"/error", ErrorHandler),
+        (r"/error", ErrorHandler, {"app": base_app}),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
     ], template_path="templates/")

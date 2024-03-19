@@ -461,6 +461,17 @@ screen_size_source.addEventListener('touchstart', onTouchStart, false);
 screen_size_source.addEventListener('touchmove', onTouchMove, false);
 screen_size_source.addEventListener('touchend', onTouchEnd, false);
 
+function IDQ() {
+    return "initData="+encodeURIComponent(Telegram.WebApp.initData)
+}
+
+function send_error(err) {
+    return fetch("error?"+IDQ(), {
+        method: "POST",
+        body: err
+    })
+}
+
 Telegram.WebApp.MainButton.setText(finish_button_text);
 Telegram.WebApp.MainButton.show();
 Telegram.WebApp.MainButton.onClick(()=>{
@@ -469,7 +480,7 @@ Telegram.WebApp.MainButton.onClick(()=>{
     console.log(Telegram.initDataUnsafe);
     try{
         generateCroppedImage(true).toBlob(function(blob) {
-            fetch('fit_frame?initData='+encodeURIComponent(Telegram.WebApp.initData), {
+            fetch('fit_frame?'+IDQ(), {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'image/jpeg'
@@ -481,19 +492,13 @@ Telegram.WebApp.MainButton.onClick(()=>{
                 }
             }).catch(error => {
                 console.error('Error:', error);
-                return fetch("error?"+Telegram.WebApp.initData, {
-                    method: "POST",
-                    body: error
-                })
+                return send_error(error);
             }).finally(()=>{
                 Telegram.WebApp.close();
             });
         }, 'image/jpeg', quality/100.);
     }catch(error){
-        fetch("error?"+Telegram.WebApp.initData, {
-            method: "POST",
-            body: error
-        })
+        send_error(error);
     };
 });
 Telegram.WebApp.MainButton.enable();
