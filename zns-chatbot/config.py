@@ -33,6 +33,9 @@ class ServerSettings(BaseSettings):
 
 class Photo(BaseSettings):
     frame_size: int = Field(1000)
+    face_size_min: int = Field(200)
+    face_size_cut: float = Field(0.5)
+    frame_expand: float = Field(2.3)
     frame_file: str = Field("frame/ZNS2024.png")
     quality: int = Field(90)
 

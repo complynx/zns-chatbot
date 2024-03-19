@@ -6,6 +6,7 @@ import os
 import tempfile
 import threading
 import time
+import cv2
 import PIL.Image as Image
 from ..config import Config, full_link
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
@@ -35,6 +36,96 @@ def join_images(a, b):
     joiner.alpha_composite(b)
 
     return joiner.convert('RGB')
+
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+def rect_suface(rect):
+    return rect[2]*rect[3]
+
+def rect_to_bounds(rect):
+    return (rect[0], rect[1], rect[0]+rect[2], rect[1]+rect[3])
+
+def extend_to_square(rect, factor, boundary_rect):
+    # Extract coordinates for the rectangle and the boundary
+    left, top, right, bottom = rect
+    boundary_left, boundary_top, boundary_right, boundary_bottom = boundary_rect
+    
+    # Calculate the dimensions of the original rectangle
+    width = right - left
+    height = bottom - top
+    
+    # Calculate the maximum dimension of the original rectangle
+    max_dimension = max(width, height)
+    
+    # Calculate the size of the square after expansion
+    expanded_size = max_dimension * factor
+    
+    # Determine the size of the square considering the boundary
+    square_size = min(expanded_size, boundary_right - boundary_left, boundary_bottom - boundary_top)
+    
+    # Calculate the offsets to move the original rectangle to the center of the square
+    horizontal_offset = (square_size - width) / 2
+    vertical_offset = (square_size - height) / 2
+    
+    # Adjust the rectangle coordinates
+    new_left = max(left - horizontal_offset, boundary_left)
+    new_top = max(top - vertical_offset, boundary_top)
+    new_right = min(right + horizontal_offset, boundary_right)
+    new_bottom = min(bottom + vertical_offset, boundary_bottom)
+    
+    return (new_left, new_top, new_right, new_bottom)
+
+@async_thread
+def resize_faces(img: Image.Image, config: Config) -> Image.Image:
+    import numpy as np
+    numpy_image = np.array(img.convert("RGB"))
+    faces = face_cascade.detectMultiScale(
+        numpy_image,
+        scaleFactor=1.1,
+        minNeighbors=5,
+        minSize=(config.photo.face_size_min, config.photo.face_size_min)
+    )
+    
+    if len(faces)>0:
+        faces_sorted = sorted(faces, key=rect_suface)
+        logger.debug("faces: %s %s", faces, faces_sorted)
+        faces_chosen = [faces_sorted[0]]
+        min_size = rect_suface(faces_sorted[0])*config.photo.face_size_cut
+        for face in faces_sorted[1:]:
+            if min_size > rect_suface(face):
+                break
+            faces_chosen.append(face)
+        l,t,r,b = rect_to_bounds(faces_chosen[0])
+        for face in faces_chosen:
+            fbounds = rect_to_bounds(face)
+            if l > fbounds[0]:
+                l = fbounds[0]
+            if t > fbounds[1]:
+                t = fbounds[1]
+            if r < fbounds[2]:
+                r = fbounds[2]
+            if b < fbounds[3]:
+                b = fbounds[3]
+        size = config.photo.frame_size
+        pw, ph = img.size
+        sq = extend_to_square((l,t,r,b), config.photo.frame_expand, (0,0,pw,ph))
+        
+        cropped_img = img.crop(sq)
+        return cropped_img.resize((size, size), resample=Image.LANCZOS)
+    else:
+        size = config.photo.frame_size
+        pw, ph = img.size
+        left = right = top = bottom = 0
+        if pw < ph:
+            top = (ph-pw)//2
+            bottom = top+pw
+            right = pw
+        else:
+            left = (pw-ph)//2
+            right = left + ph
+            bottom = ph
+        cropped_img = img.crop((left,top,right,bottom))
+        return cropped_img.resize((size, size), resample=Image.LANCZOS)
 
 @async_thread
 def resize_basic(img, size):
@@ -142,7 +233,7 @@ class Avatar(BasePlugin):
         })
         file_path = await self.get_file(name)
         with Image.open(file_path) as img:
-            resized_avatar = await resize_basic(img, self.config.photo.frame_size)
+            resized_avatar = await resize_faces(img, self.config)
             with Image.open(self.config.photo.frame_file) as frame:
                 resized_frame = await resize_basic(frame, self.config.photo.frame_size)
 
