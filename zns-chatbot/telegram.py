@@ -238,16 +238,23 @@ class TGUpdate():
             logger.error("Failed to parse json: %s", e, exc_info=1)
 
     async def parse(self):
-        logger.debug(f"received message {self.update.effective_message}")
-        await self.get_state()
-        if filters.StatusUpdate.WEB_APP_DATA.check_update(self.update):
-            logger.debug(f"data {self.update.effective_message.web_app_data.data}")
-            self.parse_web_app_data()
-        await self.run_state()
+        try:
+            logger.debug(f"received message {self.update.effective_message}")
+            await self.get_state()
+            if filters.StatusUpdate.WEB_APP_DATA.check_update(self.update):
+                logger.debug(f"data {self.update.effective_message.web_app_data.data}")
+                self.parse_web_app_data()
+            await self.run_state()
+        except Exception as e:
+            logger.error("Failed to parse message: %s", e, exc_info=1)
+            await self.reply(self.l("something-went-wrong"), parse_mode=ParseMode.MARKDOWN)
 
     async def parse_callback_query(self):
-        await self.get_state()
-        await self.run_callback_query()
+        try:
+            await self.get_state()
+            await self.run_callback_query()
+        except Exception as e:
+            logger.error("Failed to parse callback query: %s", e, exc_info=1)
 
 class TGApplication(Application):
     base_app = None
