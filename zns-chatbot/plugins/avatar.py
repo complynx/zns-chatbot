@@ -1,6 +1,9 @@
 import asyncio
+import base64
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
+import hashlib
+import io
 import mimetypes
 import os
 import tempfile
@@ -9,7 +12,7 @@ import time
 import PIL.Image as Image
 from ..config import Config, full_link
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update, File, WebAppInfo
-from telegram.ext import filters
+from telegram.ext import filters, CommandHandler
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 from telegram.constants import ChatAction
 import logging
@@ -52,6 +55,7 @@ def resize_basic(img, size):
     cropped_img = img.crop((left,top,right,bottom))
     return cropped_img.resize((size, size), resample=Image.LANCZOS)
 
+
 def sweep_folder(folder_path):
     def sweep():
         while True:
@@ -65,7 +69,7 @@ def sweep_folder(folder_path):
                         os.remove(file_path)
 
             except Exception as e:
-                logger.error(f"Sweeper error: {e}")
+                logger.error("Sweeper error: %s", e, exc_info=1)
             time.sleep(file_cache_timeout)
 
     # Create a daemon thread to run the sweep function
@@ -90,13 +94,19 @@ class Avatar(BasePlugin):
         self.cache_dir = tempfile.gettempdir()
         sweep_folder(self.cache_dir)
         self.base_app.avatar = self
+        self._command_test = CommandHandler("avatar", self.handle_command)
     
-    def test_message(self, message: Update, state):
+    def test_message(self, message: Update, state, web_app_data):
         if filters.PHOTO.check_update(message):
             return PRIORITY_BASIC, self.handle_photo
         if filters.Document.IMAGE.check_update(message):
             return PRIORITY_BASIC, self.handle_document
+        if self._command_test.check_update(message):
+            return PRIORITY_BASIC, self.handle_command
         return PRIORITY_NOT_ACCEPTING, None
+    
+    async def handle_command(self, update):
+        await update.l("avatar-without-command")
     
     async def get_file(self, file_name):
         file_path = os.path.join(self.cache_dir, file_name)
@@ -105,7 +115,7 @@ class Avatar(BasePlugin):
                 touch_file(file_path)
                 return file_path
         except Exception as e:
-            logger.warn(f"Failed to touch file: {e}")
+            logger.warn("Failed to touch file: %s", e, exc_info=1)
         file_id, _ = os.path.splitext(file_name)
         logger.debug(f"file id: {file_id}")
         file = await self.base_app.bot.bot.get_file(file_id)

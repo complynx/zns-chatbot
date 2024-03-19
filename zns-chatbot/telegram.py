@@ -63,6 +63,7 @@ async def error_handler(update, context):
 
 class TGUpdate():
     state: dict
+    web_app_data = None
     def __init__(self, update: Update, context: CallbackContext) -> None:
         self.update = update
         self.user = update.effective_user.id
@@ -133,7 +134,7 @@ class TGUpdate():
         hits = 0
         # TODO: for several messages chosen at the same priority, if they have priority title, send a selector message
         for _, plugin in self.context.application.plugins.items():
-            priority, handle = plugin.test_message(self.update, self.state)
+            priority, handle = plugin.test_message(self.update, self.state, self.web_app_data)
             if priority > PRIORITY_NOT_ACCEPTING:
                 hits += 1
                 accepted_plugins.append((plugin, handle))
@@ -230,8 +231,18 @@ class TGUpdate():
                 return await attr()
         return await self.state_cq_undefined()
 
+    def parse_web_app_data(self):
+        try:
+            self.web_app_data = json.loads(self.update.effective_message.web_app_data.data)
+        except Exception as e:
+            logger.error("Failed to parse json: %s", e, exc_info=1)
+
     async def parse(self):
+        logger.debug(f"received message {self.update.effective_message}")
         await self.get_state()
+        if filters.StatusUpdate.WEB_APP_DATA.check_update(self.update):
+            logger.debug(f"data {self.update.effective_message.web_app_data.data}")
+            self.parse_web_app_data()
         await self.run_state()
 
     async def parse_callback_query(self):
@@ -270,9 +281,10 @@ async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.ALL, parse_message))
+    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, parse_message))
     application.add_handler(CallbackQueryHandler(parse_callback_query, pattern=f".*"))
     application.add_error_handler(error_handler)
-
+#log: ["[Telegram.WebView] > postEvent","web_app_data_send",{"data":"{\"avatar_result\":\"BQACAgIAAxkBAAIEaWX4mn7_AvMKjlPV5_NlehFRlCnbAAKWSQACYmrBS1Z671_bqZQLNAQ.jpg0.20488621038131738\"}"}]
     try:
         await application.initialize()
         await application.start()

@@ -27,7 +27,7 @@ class Assistant(BasePlugin):
         self.model = self.config.openai.model
         self.tokenizer = tiktoken.encoding_for_model(self.model)
     
-    def test_message(self, message: Update, state):
+    def test_message(self, message: Update, state, web_app_data):
         if (filters.TEXT & ~filters.COMMAND).check_update(message):
             return PRIORITY_BASIC, None
         return PRIORITY_NOT_ACCEPTING, None

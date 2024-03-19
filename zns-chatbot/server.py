@@ -1,12 +1,50 @@
-from typing import Any, Optional
+import hashlib
+import hmac
+import json
+from operator import itemgetter
+import tempfile
+from typing import Any, ClassVar, Optional
+from urllib.parse import parse_qs, parse_qsl, unquote
 import tornado.web
 from tornado.httputil import HTTPServerRequest
 import tornado.platform.asyncio
 import os
 from .config import Config
 import logging
+import random
 
 logger = logging.getLogger(__name__)
+
+class AuthError(Exception):
+    status: ClassVar[int] = 403
+    detail: str = "unknown auth error"
+
+    @property
+    def message(self) -> str:
+        return f"Auth error occurred, detail: {self.detail}"
+
+def validate(init_data: str, bot_token: str) -> dict[str, Any]:
+    secret_key = hmac.new(key=b"WebAppData", msg=bot_token.encode(), digestmod=hashlib.sha256).digest()
+    try:
+        parsed_data = dict(parse_qsl(init_data, strict_parsing=True))
+    except ValueError as err:
+        logger.error("invalid init data: %s", err, exc_info=1)
+        raise AuthError(detail="invalid init data") from err
+    if "hash" not in parsed_data:
+        logger.error(f"missing hash: {parsed_data}")
+        raise AuthError(detail="missing hash")
+    hash_ = parsed_data.pop("hash")
+    data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed_data.items(), key=itemgetter(0)))
+    calculated_hash = hmac.new(
+        key=secret_key,
+        msg=data_check_string.encode(),
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+    if calculated_hash != hash_:
+        logger.error(f"invalid hash {calculated_hash} waiting {hash_}")
+        raise AuthError(detail="invalid hash")
+    logger.debug(f"validated: {parsed_data}")
+    return parsed_data
 
 class FitFrameHandler(tornado.web.RequestHandler):
     def initialize(self, app):
@@ -30,6 +68,36 @@ class FitFrameHandler(tornado.web.RequestHandler):
             )
         except (KeyError, ValueError):
             raise tornado.web.HTTPError(404)
+    
+    async def put(self):
+        initData = self.get_argument('initData', default=None, strip=False)
+
+        if initData:
+            initData = validate(initData, self.app.config.telegram.token.get_secret_value())
+        else:
+            # initData not found in the request, reject the request
+            self.set_status(400)
+            logger.info("initData parameter is missing")
+            return
+        try:
+            user = json.loads(initData['user'])
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                temp_name = temp_file.name
+                temp_file.write(self.request.body)
+            await self.app.bot.bot.send_document(
+                user["id"],
+                temp_name,
+                filename="avatar.png",
+            )
+            os.remove(temp_name)
+
+            self.set_status(200)
+            self.write({'message': 'Image uploaded successfully'})
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({'error': "internal error"})
+            logger.error("error saving image: %s",e, exc_info=1)
 
 
 

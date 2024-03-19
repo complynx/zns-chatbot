@@ -1,5 +1,7 @@
 import asyncio
+import hashlib
 import logging
+import random
 from .config import Config
 from .telegram import create_telegram_bot
 from .cached_localization import Localization
@@ -19,6 +21,7 @@ class App(object):
 
 async def main(cfg: Config):
     app = App()
+    app.nonce = random.randbytes(256)
     app.config = cfg
     loader = FluentResourceLoader(cfg.localization.path)
     app.localization = Localization(loader, cfg.localization.file, cfg.localization.fallbacks)

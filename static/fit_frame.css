@@ -43,7 +43,14 @@ body {
   width: 100vw;
   height: 100vh;
 }
-
+.frame_source {
+  opacity: 0;
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  left: -20px;
+  top: -20px;
+}
 .overlay {
   --frame-zns-radius: 25vmin;
   pointer-events: none;
