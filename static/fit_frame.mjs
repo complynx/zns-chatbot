@@ -475,9 +475,6 @@ function send_error(err) {
 Telegram.WebApp.MainButton.setText(finish_button_text);
 Telegram.WebApp.MainButton.show();
 Telegram.WebApp.MainButton.onClick(()=>{
-    const rand = Math.random() + "";
-    console.log(Telegram.initData);
-    console.log(Telegram.initDataUnsafe);
     try{
         generateCroppedImage(true).toBlob(function(blob) {
             fetch('fit_frame?'+IDQ(), {
