@@ -1,9 +1,6 @@
 import asyncio
-import base64
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
-import hashlib
-import io
 import mimetypes
 import os
 import tempfile
@@ -11,12 +8,11 @@ import threading
 import time
 import PIL.Image as Image
 from ..config import Config, full_link
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update, File, WebAppInfo
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import filters, CommandHandler
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 from telegram.constants import ChatAction, ParseMode
 import logging
-import numpy as np
 import multiprocessing
 
 logger = logging.getLogger(__name__)
