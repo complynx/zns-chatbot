@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link rel="stylesheet" type="text/css" href="./static/massage_workload.css"></link>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment-with-locales.min.js"></script>
+        <script type="module" src="./static/massage_workload.mjs"></script>
+    </head>
+    <body>
+        <ul class="workload_togglers">
+            <li><label for="workload_toggle_4">Пт-Сб</label></li>
+            <li><label for="workload_toggle_5">Сб-Вс</label></li>
+            <li><label for="workload_toggle_6">Вс-Пн</label></li>
+        </ul>
+        <div id="workload">
+            <input type="radio" name="workload_toggle" id="workload_toggle_4" value="4" checked>
+            <div class="workload" id="workload_4">
+            </div>
+            <input type="radio" name="workload_toggle" id="workload_toggle_5" value="5">
+            <div class="workload" id="workload_5">
+            </div>
+            <input type="radio" name="workload_toggle" id="workload_toggle_6" value="6">
+            <div class="workload" id="workload_6">
+            </div>
+        </div>
+    </body>
+</html>

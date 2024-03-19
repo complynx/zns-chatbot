@@ -4,13 +4,14 @@ import re
 import os
 import mimetypes
 import tempfile
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, WebAppInfo
+from telegram import InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, WebAppInfo
 from telegram.ext import (
     CallbackContext,
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
     ConversationHandler,
+    CallbackQueryHandler,
     filters,
     Application,
 )
@@ -23,17 +24,6 @@ import datetime
 logger = logging.getLogger(__name__)
 
 CROPPER = 1
-
-def full_link(app: "TGApplication", link: str) -> str:
-    link = f"{app.config.server.base}{link}"
-    match = re.match(r"http://localhost(:(\d+))?/", link)
-    if match:
-        port = match.group(2)
-        if port is None:
-            port = "80"
-        # Replace the localhost part with your custom URL and port
-        link = re.sub(r"http://localhost(:\d+)?/", f"https://complynx.net/testbot/{port}/", link)
-    return link
 
 async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
@@ -73,6 +63,7 @@ async def error_handler(update, context):
 
 class TGUpdate():
     state: dict
+    web_app_data = None
     def __init__(self, update: Update, context: CallbackContext) -> None:
         self.update = update
         self.user = update.effective_user.id
@@ -139,11 +130,14 @@ class TGUpdate():
         chosen_handle = None
         chosen_priority = PRIORITY_NOT_ACCEPTING
         chosen_plugin = None
+        accepted_plugins = []
         hits = 0
+        # TODO: for several messages chosen at the same priority, if they have priority title, send a selector message
         for _, plugin in self.context.application.plugins.items():
-            priority, handle = plugin.test_message(self.update)
+            priority, handle = plugin.test_message(self.update, self.state, self.web_app_data)
             if priority > PRIORITY_NOT_ACCEPTING:
                 hits += 1
+                accepted_plugins.append((plugin, handle))
             if priority > chosen_priority:
                 chosen_priority = priority
                 chosen_handle = handle
@@ -161,6 +155,44 @@ class TGUpdate():
         self.state["state"] = ""
         await self.save_state()
         await self.update.message.reply_markdown(self.l("undefined-state-error"))
+    
+    async def state_cq_empty(self):
+        chosen_handle = None
+        chosen_priority = PRIORITY_NOT_ACCEPTING
+        chosen_plugin = None
+        accepted_plugins = []
+        hits = 0
+        # TODO: for several messages chosen at the same priority, if they have priority title, send a selector message
+        for _, plugin in self.context.application.plugins.items():
+            priority, handle = plugin.test_callback_query(self.update, self.state)
+            if priority > PRIORITY_NOT_ACCEPTING:
+                hits += 1
+                accepted_plugins.append((plugin, handle))
+            if priority > chosen_priority:
+                chosen_priority = priority
+                chosen_handle = handle
+                chosen_plugin = plugin
+        if chosen_plugin is not None:
+            logger.info(f"from {hits} accepting plugins selected plugin {chosen_plugin.name} based on priority {chosen_priority}")
+            if chosen_handle is not None:
+                await chosen_handle(self)
+            else:
+                await chosen_plugin.handle_callback_query(self)
+        else:
+            await self.update.callback_query.edit_message_text(
+                self.l("unsupported-message-error"),
+                reply_markup=InlineKeyboardMarkup([]),
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    async def state_cq_undefined(self):
+        self.state["state"] = ""
+        await self.save_state()
+        await self.update.callback_query.edit_message_text(
+            self.l("undefined-state-error"),
+            reply_markup=InlineKeyboardMarkup([]),
+            parse_mode=ParseMode.MARKDOWN
+        )
 
     async def reply(self, text, chat_id=None, parse_mode=ParseMode.MARKDOWN_V2, *args, **kwargs):
         if chat_id is None:
@@ -190,9 +222,39 @@ class TGUpdate():
                 return await attr()
         return await self.state_undefined()
 
+    async def run_callback_query(self):
+        state = self.state
+        fn = "state_cq_" + (state["state"] if state["state"] != "" else "empty")
+        if hasattr(self, fn):
+            attr = getattr(self, fn, None)
+            if callable(attr):
+                return await attr()
+        return await self.state_cq_undefined()
+
+    def parse_web_app_data(self):
+        try:
+            self.web_app_data = json.loads(self.update.effective_message.web_app_data.data)
+        except Exception as e:
+            logger.error("Failed to parse json: %s", e, exc_info=1)
+
     async def parse(self):
-        await self.get_state()
-        await self.run_state()
+        try:
+            logger.debug(f"received message {self.update.effective_message}")
+            await self.get_state()
+            if filters.StatusUpdate.WEB_APP_DATA.check_update(self.update):
+                logger.debug(f"data {self.update.effective_message.web_app_data.data}")
+                self.parse_web_app_data()
+            await self.run_state()
+        except Exception as e:
+            logger.error("Failed to parse message: %s", e, exc_info=1)
+            await self.reply(self.l("something-went-wrong"), parse_mode=ParseMode.MARKDOWN)
+
+    async def parse_callback_query(self):
+        try:
+            await self.get_state()
+            await self.run_callback_query()
+        except Exception as e:
+            logger.error("Failed to parse callback query: %s", e, exc_info=1)
 
 class TGApplication(Application):
     base_app = None
@@ -209,6 +271,12 @@ async def parse_message(update: Update, context: CallbackContext):
     await update.parse()
     # await context.application.base_app.assistant.reply_to(update.message.text_markdown_v2, update.effective_user.id, update.effective_message.chat_id)
 
+async def parse_callback_query(update: Update, context: CallbackContext):
+    await update.callback_query.answer()
+    update = TGUpdate(update, context)
+    await update.parse_callback_query()
+    # await context.application.base_app.assistant.reply_to(update.message.text_markdown_v2, update.effective_user.id, update.effective_message.chat_id)
+
 @asynccontextmanager
 async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
     global web_app_base
@@ -220,8 +288,10 @@ async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.ALL, parse_message))
+    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, parse_message))
+    application.add_handler(CallbackQueryHandler(parse_callback_query, pattern=f".*"))
     application.add_error_handler(error_handler)
-
+#log: ["[Telegram.WebView] > postEvent","web_app_data_send",{"data":"{\"avatar_result\":\"BQACAgIAAxkBAAIEaWX4mn7_AvMKjlPV5_NlehFRlCnbAAKWSQACYmrBS1Z671_bqZQLNAQ.jpg0.20488621038131738\"}"}]
     try:
         await application.initialize()
         await application.start()

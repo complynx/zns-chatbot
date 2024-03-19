@@ -3,11 +3,19 @@ PRIORITY_BASIC = 0
 
 class BasePlugin():
     name = "_BasePlugin"
-    def __init__(self, app) -> None:
-        self.app = app
+    base_app = None
 
-    def test_message(self, message):
+    def __init__(self, app) -> None:
+        self.base_app = app
+
+    def test_message(self, update, state, web_app_data):
         return PRIORITY_NOT_ACCEPTING, None
+
+    def test_callback_query(self, query, state):
+        return PRIORITY_NOT_ACCEPTING, None
+    
+    async def handle_callback_query(self, updater):
+        return
 
     async def handle_message(self, updater):
         return

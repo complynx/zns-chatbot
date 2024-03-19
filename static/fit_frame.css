@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css?family=Open+Sans');
+
+:root {
+  --tg-color-scheme: dark;
+  --tg-theme-bg-color: #191819;
+  --tg-theme-secondary-bg-color: #000000;
+  --tg-theme-text-color: #ffffff;
+  --tg-theme-hint-color: #7d7d7d;
+  --tg-theme-link-color: #a183d2;
+  --tg-theme-button-color: #a583da;
+  --tg-theme-button-text-color: #ffffff;
+}
+
+body {
+  margin: 0;
+  background-color: var(--tg-theme-bg-color);
+  height: 100%;
+  width: 100%;
+  --frame-radius: 35vmin;
+}
+
+.help {
+  padding: .5em 2em;
+  font-family: "Open Sans", sans-serif;
+  pointer-events: none;
+  color: var(--tg-theme-text-color);
+  position: fixed;
+  z-index: 2;
+}
+
+.photo .ancor {
+  position: fixed;
+}
+
+.photo img {
+  position: absolute;
+}
+
+.photo {
+  background-image: radial-gradient(circle at center, var(--tg-theme-secondary-bg-color) var(--frame-radius), var(--tg-theme-bg-color) var(--frame-radius));
+  position: fixed;
+  z-index: 0;
+  width: 100vw;
+  height: 100vh;
+}
+.frame_source {
+  opacity: 0;
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  left: -20px;
+  top: -20px;
+}
+.overlay {
+  --frame-zns-radius: 25vmin;
+  pointer-events: none;
+  position: fixed;
+  z-index: 1;
+  width: 100vw;
+  height: 100vh;
+  background-image: url('../photos/frame');
+  background-size: 100vmin 100vmin;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.debug-layer {
+  display: none;
+  z-index: 3;
+  position: fixed;
+  width: 100vw;
+  color: #fff;
+  background: #000;
+  opacity: 0.7;
+}
+body.debug .debug-layer {
+  display: block;
+}

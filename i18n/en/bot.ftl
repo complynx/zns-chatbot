@@ -30,3 +30,6 @@ frame-mover-finish-button-text = Submit
 undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
 max-assistant-messages-reached = You've reached your limit for a day, please come back in 24 hours for your next questions.
+avatar-custom-crop = Crop differently
+avatar-without-command = No need to send this command anymore, just send me your picture.
+something-went-wrong = Something went wrong. Try again.
