@@ -60,6 +60,7 @@ class FitFrameHandler(tornado.web.RequestHandler):
                 "fit_frame.html",
                 file=file,
                 real_frame_size=self.app.config.photo.frame_size,
+                quality=self.app.config.photo.quality,
                 debug_code="",
                 help_desktop=l("frame-mover-help-desktop"),
                 help_mobile=l("frame-mover-help-mobile"),
@@ -81,13 +82,13 @@ class FitFrameHandler(tornado.web.RequestHandler):
             return
         try:
             user = json.loads(initData['user'])
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
                 temp_name = temp_file.name
                 temp_file.write(self.request.body)
             await self.app.bot.bot.send_document(
                 user["id"],
                 temp_name,
-                filename="avatar.png",
+                filename="avatar.jpg",
             )
             os.remove(temp_name)
 
@@ -99,7 +100,9 @@ class FitFrameHandler(tornado.web.RequestHandler):
             self.write({'error': "internal error"})
             logger.error("error saving image: %s",e, exc_info=1)
 
-
+class ErrorHandler(tornado.web.RequestHandler):
+    async def post(self):
+        logger.error("client error: %s %s", str(self.request.body), self.request.query_arguments)
 
 async def create_server(config: Config, base_app):
     tornado.platform.asyncio.AsyncIOMainLoop().install()
@@ -127,6 +130,7 @@ async def create_server(config: Config, base_app):
 
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
+        (r"/error", ErrorHandler),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
     ], template_path="templates/")

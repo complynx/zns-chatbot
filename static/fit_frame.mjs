@@ -467,24 +467,34 @@ Telegram.WebApp.MainButton.onClick(()=>{
     const rand = Math.random() + "";
     console.log(Telegram.initData);
     console.log(Telegram.initDataUnsafe);
-    generateCroppedImage(true).toBlob(function(blob) {
-        
-        fetch('fit_frame?initData='+encodeURIComponent(Telegram.WebApp.initData), {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'image/png'
-            },
-            body: blob
-        }).then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-        }).catch(error => {
-            console.error('Error:', error);
-        }).finally(()=>{
-            Telegram.WebApp.close();
-        });
-      }, 'image/png');
+    try{
+        generateCroppedImage(true).toBlob(function(blob) {
+            fetch('fit_frame?initData='+encodeURIComponent(Telegram.WebApp.initData), {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'image/jpeg'
+                },
+                body: blob
+            }).then(response => {
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok: ${response.status} ${response.statusText}\n${response.body}`);
+                }
+            }).catch(error => {
+                console.error('Error:', error);
+                return fetch("error?"+Telegram.WebApp.initData, {
+                    method: "POST",
+                    body: error
+                })
+            }).finally(()=>{
+                Telegram.WebApp.close();
+            });
+        }, 'image/jpeg', quality/100.);
+    }catch(error){
+        fetch("error?"+Telegram.WebApp.initData, {
+            method: "POST",
+            body: error
+        })
+    };
 });
 Telegram.WebApp.MainButton.enable();
 Telegram.WebApp.MainButton.show();
