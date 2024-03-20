@@ -39,41 +39,53 @@ def join_images(a, b):
 
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
-def rect_suface(rect):
-    return rect[2]*rect[3]
+def expand_to_square(rect):
+    x, y, w, h = rect
+    max_side = max(w, h)
+    expanded_x = x - (max_side - w) / 2
+    expanded_y = y - (max_side - h) / 2
+    return (expanded_x, expanded_y, max_side, max_side)
 
-def rect_to_bounds(rect):
-    return (rect[0], rect[1], rect[0]+rect[2], rect[1]+rect[3])
+def expand_square(rect, scale):
+    square = expand_to_square(rect)
+    expanded_w = square[2] * scale
+    expanded_h = square[3] * scale
+    expanded_x = square[0] - (expanded_w - square[2]) / 2
+    expanded_y = square[1] - (expanded_h - square[3]) / 2
+    return (expanded_x, expanded_y, expanded_w, expanded_h)
 
-def extend_to_square(rect, factor, boundary_rect):
-    # Extract coordinates for the rectangle and the boundary
-    left, top, right, bottom = rect
-    boundary_left, boundary_top, boundary_right, boundary_bottom = boundary_rect
+def shift_square(square, shift):
+    x, y, w, h = square
+    shift_x, shift_y = shift
+    shifted_x = x + w * shift_x
+    shifted_y = y + h * shift_y
+    return (shifted_x, shifted_y, w, h)
+
+def shrink_to_boundaries(square, boundaries):
+    x, y, w, h = square
+    boundary_x, boundary_y, boundary_w, boundary_h = boundaries
     
-    # Calculate the dimensions of the original rectangle
-    width = right - left
-    height = bottom - top
+    # Calculate the maximum possible size that still fits within the boundaries
+    max_size = min(boundary_w - max(0, x), boundary_h - max(0, y))
     
-    # Calculate the maximum dimension of the original rectangle
-    max_dimension = max(width, height)
+    # Adjust the width and height while maintaining the square shape
+    new_size = min(w, h, max_size)
     
-    # Calculate the size of the square after expansion
-    expanded_size = max_dimension * factor
+    # Adjust the position of the square if necessary to keep it within the boundaries
+    new_x = max(min(x, boundary_x + boundary_w - new_size), boundary_x)
+    new_y = max(min(y, boundary_y + boundary_h - new_size), boundary_y)
     
-    # Determine the size of the square considering the boundary
-    square_size = min(expanded_size, boundary_right - boundary_left, boundary_bottom - boundary_top)
-    
-    # Calculate the offsets to move the original rectangle to the center of the square
-    horizontal_offset = (square_size - width) / 2
-    vertical_offset = (square_size - height) / 2
-    
-    # Adjust the rectangle coordinates
-    new_left = max(left - horizontal_offset, boundary_left)
-    new_top = max(top - vertical_offset, boundary_top)
-    new_right = min(right + horizontal_offset, boundary_right)
-    new_bottom = min(bottom + vertical_offset, boundary_bottom)
-    
-    return (new_left, new_top, new_right, new_bottom)
+    return (int(new_x), int(new_y), int(new_size + new_x), int(new_size + new_y))
+
+def create_scaled_square(rect, boundaries, scale, shift):
+    logger.debug("rect: %s, bounds: %s, scale %f, shift %s", rect, boundaries, scale, shift)
+    expanded_square = expand_square(rect, scale)
+    logger.debug("expanded_square: %s", expanded_square)
+    shifted_square = shift_square(expanded_square, shift)
+    logger.debug("shifted_square: %s", shifted_square)
+    shrunk_square = shrink_to_boundaries(shifted_square, boundaries)
+    logger.debug("shrunk_square: %s", shrunk_square)
+    return shrunk_square
 
 @async_thread
 def resize_faces(img: Image.Image, config: Config) -> Image.Image:
@@ -87,28 +99,11 @@ def resize_faces(img: Image.Image, config: Config) -> Image.Image:
     )
     
     if len(faces)>0:
-        faces_sorted = sorted(faces, key=rect_suface)
+        faces_sorted = sorted(faces, key=lambda f: f[2]*f[3])
         logger.debug("faces: %s %s", faces, faces_sorted)
-        faces_chosen = [faces_sorted[0]]
-        min_size = rect_suface(faces_sorted[0])*config.photo.face_size_cut
-        for face in faces_sorted[1:]:
-            if min_size > rect_suface(face):
-                break
-            faces_chosen.append(face)
-        l,t,r,b = rect_to_bounds(faces_chosen[0])
-        for face in faces_chosen:
-            fbounds = rect_to_bounds(face)
-            if l > fbounds[0]:
-                l = fbounds[0]
-            if t > fbounds[1]:
-                t = fbounds[1]
-            if r < fbounds[2]:
-                r = fbounds[2]
-            if b < fbounds[3]:
-                b = fbounds[3]
         size = config.photo.frame_size
         pw, ph = img.size
-        sq = extend_to_square((l,t,r,b), config.photo.frame_expand, (0,0,pw,ph))
+        sq = create_scaled_square(faces_sorted[0], (0,0,pw,ph), config.photo.frame_expand, (config.photo.frame_offset_x, config.photo.frame_offset_y))
         
         cropped_img = img.crop(sq)
         return cropped_img.resize((size, size), resample=Image.LANCZOS)

@@ -35,7 +35,9 @@ class Photo(BaseSettings):
     frame_size: int = Field(1000)
     face_size_min: int = Field(200)
     face_size_cut: float = Field(0.5)
-    frame_expand: float = Field(2.3)
+    frame_expand: float = Field(2.6)
+    frame_offset_y: float = Field(-0.3)
+    frame_offset_x: float = Field(0)
     frame_file: str = Field("frame/ZNS2024.png")
     quality: int = Field(90)
 
