@@ -98,7 +98,7 @@ def resize_faces(img: Image.Image, config: Config) -> Image.Image:
         minSize=(config.photo.face_size_min, config.photo.face_size_min)
     )
     
-    if len(faces)>0:
+    if len(faces)>10000:
         faces_sorted = sorted(faces, key=lambda f: f[2]*f[3])
         logger.debug("faces: %s %s", faces, faces_sorted)
         size = config.photo.frame_size
