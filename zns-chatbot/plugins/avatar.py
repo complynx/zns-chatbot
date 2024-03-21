@@ -89,16 +89,17 @@ def create_scaled_square(rect, boundaries, scale, shift):
 
 @async_thread
 def resize_faces(img: Image.Image, config: Config) -> Image.Image:
-    import numpy as np
-    numpy_image = np.array(img.convert("RGB"))
-    faces = face_cascade.detectMultiScale(
-        numpy_image,
-        scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(config.photo.face_size_min, config.photo.face_size_min)
-    )
+    # import numpy as np
+    # numpy_image = np.array(img.convert("RGB"))
+    # faces = face_cascade.detectMultiScale(
+    #     numpy_image,
+    #     scaleFactor=1.1,
+    #     minNeighbors=5,
+    #     minSize=(config.photo.face_size_min, config.photo.face_size_min)
+    # )
+    faces = []
     
-    if len(faces)>10000:
+    if len(faces)>0:
         faces_sorted = sorted(faces, key=lambda f: f[2]*f[3])
         logger.debug("faces: %s %s", faces, faces_sorted)
         size = config.photo.frame_size
