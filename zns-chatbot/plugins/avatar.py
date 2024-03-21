@@ -6,7 +6,7 @@ import os
 import tempfile
 import threading
 import time
-import cv2
+import dlib
 import PIL.Image as Image
 from ..config import Config, full_link
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
@@ -37,21 +37,20 @@ def join_images(a, b):
 
     return joiner.convert('RGB')
 
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+face_cascade = dlib.get_frontal_face_detector()
 
 def expand_to_square(rect):
     x, y, w, h = rect
     max_side = max(w, h)
-    expanded_x = x - (max_side - w) / 2
-    expanded_y = y - (max_side - h) / 2
+    expanded_x = x - (max_side - w) / 2.
+    expanded_y = y - (max_side - h) / 2.
     return (expanded_x, expanded_y, max_side, max_side)
 
-def expand_square(rect, scale):
-    square = expand_to_square(rect)
-    expanded_w = square[2] * scale
-    expanded_h = square[3] * scale
-    expanded_x = square[0] - (expanded_w - square[2]) / 2
-    expanded_y = square[1] - (expanded_h - square[3]) / 2
+def expand(rect, scale):
+    expanded_w = rect[2] * scale
+    expanded_h = rect[3] * scale
+    expanded_x = rect[0] - (expanded_w - rect[2]) / 2.
+    expanded_y = rect[1] - (expanded_h - rect[3]) / 2.
     return (expanded_x, expanded_y, expanded_w, expanded_h)
 
 def shift_square(square, shift):
@@ -77,37 +76,50 @@ def shrink_to_boundaries(square, boundaries):
     
     return (int(new_x), int(new_y), int(new_size + new_x), int(new_size + new_y))
 
-def create_scaled_square(rect, boundaries, scale, shift):
-    logger.debug("rect: %s, bounds: %s, scale %f, shift %s", rect, boundaries, scale, shift)
-    expanded_square = expand_square(rect, scale)
+def create_scaled_square(rect, boundaries, scale, bscale, shift):
+    l = rect.left()
+    t = rect.top()
+    r = rect.right()
+    b = rect.bottom()
+    logger.debug("rect: %s | %s %s, bounds: %s, scale %f, bscale %f, shift %s", rect, r-l, b-t, boundaries, scale, bscale, shift)
+    square = expand_to_square((l,t,r-l,b-t))
+    logger.debug("square: %s", square)
+    expanded_square = expand(square, scale)
     logger.debug("expanded_square: %s", expanded_square)
     shifted_square = shift_square(expanded_square, shift)
     logger.debug("shifted_square: %s", shifted_square)
-    shrunk_square = shrink_to_boundaries(shifted_square, boundaries)
+    shrunk_square = shrink_to_boundaries(shifted_square, boundaries, bscale)
     logger.debug("shrunk_square: %s", shrunk_square)
     return shrunk_square
+
+def rectProd(rect):
+    l = rect.left()
+    t = rect.top()
+    r = rect.right()
+    b = rect.bottom()
+    return (r-l)*(b-t)
 
 @async_thread
 def resize_faces(img: Image.Image, config: Config) -> Image.Image:
     import numpy as np
     numpy_image = np.array(img.convert("RGB"))
-    faces = face_cascade.detectMultiScale(
-        numpy_image,
-        scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(config.photo.face_size_min, config.photo.face_size_min)
+    faces = face_cascade(
+        numpy_image,1
     )
     
-    if len(faces)>10000:
-        faces_sorted = sorted(faces, key=lambda f: f[2]*f[3])
-        logger.debug("faces: %s %s", faces, faces_sorted)
+    if len(faces)>0:
+        logger.debug("faces: %s", faces)
+        faces_sorted = sorted(faces, key=rectProd)
+        logger.debug("sorted: %s", faces_sorted)
         size = config.photo.frame_size
         pw, ph = img.size
-        sq = create_scaled_square(faces_sorted[0], (0,0,pw,ph), config.photo.frame_expand, (config.photo.frame_offset_x, config.photo.frame_offset_y))
+        sq = create_scaled_square(faces_sorted[0], (0,0,pw,ph), config.photo.face_expand, config.photo.boundaries_expand,
+                                  (config.photo.face_offset_x, config.photo.face_offset_y))
         
         cropped_img = img.crop(sq)
         return cropped_img.resize((size, size), resample=Image.LANCZOS)
     else:
+        logger.debug("no faces")
         size = config.photo.frame_size
         pw, ph = img.size
         left = right = top = bottom = 0
@@ -248,9 +260,10 @@ class Avatar(BasePlugin):
                         )
                     ]]),
                 )
-                await tgUpdate.message.reply_document(
-                    self.config.photo.cover_file,
-                    filename="cover.jpg",
-                    caption=update.l("cover-caption-message")
-                )
+                if os.path.isfile(self.config.photo.cover_file):
+                    await tgUpdate.message.reply_document(
+                        self.config.photo.cover_file,
+                        filename="cover.jpg",
+                        caption=update.l("cover-caption-message")
+                    )
 
