@@ -40,6 +40,7 @@ class Photo(BaseSettings):
     frame_offset_x: float = Field(0)
     frame_file: str = Field("frame/ZNS2024.png")
     quality: int = Field(90)
+    cover_file: str = Field("cover/ZNS2024.jpg")
 
 class Config(BaseSettings):
     telegram: TelegramSettings

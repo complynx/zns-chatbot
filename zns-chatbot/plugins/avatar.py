@@ -218,6 +218,7 @@ class Avatar(BasePlugin):
         await self.handle_image_stage2(update, file_name)
 
     async def handle_image_stage2(self, update, name):
+        tgUpdate = update.update  # type: Update
         await self.user_db.update_one({
             "user_id": update.user,
             "bot_id": update.context.bot.id,
@@ -236,8 +237,8 @@ class Avatar(BasePlugin):
 
                 final_name = f"{file_path}_framed.jpg"
                 final.save(final_name, quality=self.config.photo.quality, optimize=True)
-                locale = update.update.effective_user.language_code
-                await update.update.message.reply_document(
+                locale = tgUpdate.effective_user.language_code
+                await tgUpdate.message.reply_document(
                     final_name,
                     filename="avatar.jpg",
                     reply_markup=InlineKeyboardMarkup([[
@@ -246,5 +247,10 @@ class Avatar(BasePlugin):
                             web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}"))
                         )
                     ]]),
+                )
+                await tgUpdate.message.reply_document(
+                    self.config.photo.cover_file,
+                    filename="cover.jpg",
+                    caption=update.l("cover-caption-message")
                 )
 
