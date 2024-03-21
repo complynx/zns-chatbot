@@ -60,7 +60,7 @@ def shift_square(square, shift):
     shifted_y = y + h * shift_y
     return (shifted_x, shifted_y, w, h)
 
-def shrink_to_boundaries(square, boundaries):
+def shrink_to_boundaries(square, boundaries,):
     x, y, w, h = square
     boundary_x, boundary_y, boundary_w, boundary_h = boundaries
     
@@ -76,19 +76,19 @@ def shrink_to_boundaries(square, boundaries):
     
     return (int(new_x), int(new_y), int(new_size + new_x), int(new_size + new_y))
 
-def create_scaled_square(rect, boundaries, scale, bscale, shift):
+def create_scaled_square(rect, boundaries, scale, shift):
     l = rect.left()
     t = rect.top()
     r = rect.right()
     b = rect.bottom()
-    logger.debug("rect: %s | %s %s, bounds: %s, scale %f, bscale %f, shift %s", rect, r-l, b-t, boundaries, scale, bscale, shift)
+    logger.debug("rect: %s | %s %s, bounds: %s, scale %f, shift %s", rect, r-l, b-t, boundaries, scale, shift)
     square = expand_to_square((l,t,r-l,b-t))
     logger.debug("square: %s", square)
     expanded_square = expand(square, scale)
     logger.debug("expanded_square: %s", expanded_square)
     shifted_square = shift_square(expanded_square, shift)
     logger.debug("shifted_square: %s", shifted_square)
-    shrunk_square = shrink_to_boundaries(shifted_square, boundaries, bscale)
+    shrunk_square = shrink_to_boundaries(shifted_square, boundaries)
     logger.debug("shrunk_square: %s", shrunk_square)
     return shrunk_square
 
@@ -113,7 +113,7 @@ def resize_faces(img: Image.Image, config: Config) -> Image.Image:
         logger.debug("sorted: %s", faces_sorted)
         size = config.photo.frame_size
         pw, ph = img.size
-        sq = create_scaled_square(faces_sorted[0], (0,0,pw,ph), config.photo.face_expand, config.photo.boundaries_expand,
+        sq = create_scaled_square(faces_sorted[0], (0,0,pw,ph), config.photo.face_expand,
                                   (config.photo.face_offset_x, config.photo.face_offset_y))
         
         cropped_img = img.crop(sq)

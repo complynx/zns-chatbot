@@ -33,7 +33,6 @@ class ServerSettings(BaseSettings):
 
 class Photo(BaseSettings):
     frame_size: int = Field(1000)
-    boundaries_expand: float = Field(1.17)
     face_expand: float = Field(5)
     face_offset_y: float = Field(0.2)
     face_offset_x: float = Field(0)
