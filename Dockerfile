@@ -1,6 +1,12 @@
 # Use an official Python runtime as a parent image
 FROM python:3.11-slim-buster
 
+# Install cmake and compiler
+RUN apt-get update && apt-get install -y \
+    cmake \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 # install gl
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
@@ -14,7 +20,10 @@ WORKDIR /app
 COPY setup.py /app
 
 # Install any needed packages specified in setup.py
-RUN python setup.py install
+RUN python setup.py install \
+    # Remove compiler and related build tools after installation
+    && apt-get purge -y --auto-remove cmake build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy the current directory contents into the container at /app
 COPY . /app
