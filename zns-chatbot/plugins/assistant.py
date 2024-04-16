@@ -38,10 +38,17 @@ class Assistant(BasePlugin):
         await update.reply(repl, parse_mode=None)
     
     async def get_assistant_reply(self, message: str, user_id: int, update):
+        date_1_day_ago = datetime.datetime.now() - datetime.timedelta(days=1)
+        msgs = await self.message_db.find(
+        {
+            "date": {"$gte": date_1_day_ago},
+            "role": "user"
+        }).to_list(length=1000)
+        logger.debug(f"latest messages: {msgs}")
         result = await self.message_db.aggregate([
             {
                 "$match": {
-                    "date": {"$gte": datetime.datetime.now() - datetime.timedelta(days=1)},
+                    "date": {"$gte": date_1_day_ago},
                     "role": "user"
                 }
             },
@@ -52,6 +59,7 @@ class Assistant(BasePlugin):
                 }
             }
         ]).to_list(length=1)
+        logger.debug(f"latest messages count: {result} ?> {self.config.openai.max_messages_per_user_per_day}")
         if len(result) > 0 and result[0]["count"] > self.config.openai.max_messages_per_user_per_day:
             return update.l("max-assistant-messages-reached")
 
