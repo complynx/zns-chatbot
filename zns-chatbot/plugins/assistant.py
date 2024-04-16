@@ -39,17 +39,20 @@ class Assistant(BasePlugin):
     
     async def get_assistant_reply(self, message: str, user_id: int, update):
         date_1_day_ago = datetime.datetime.now() - datetime.timedelta(days=1)
-        msgs = await self.message_db.find(
-        {
-            "date": {"$gte": date_1_day_ago},
-            "role": "user"
-        }).to_list(length=1000)
-        logger.debug(f"latest messages: {msgs}")
+        if self.config.logging.level == "DEBUG":
+            msgs = await self.message_db.find(
+            {
+                "date": {"$gte": date_1_day_ago},
+                "role": "user",
+                "user_id": user_id
+            }).to_list(length=1000)
+            logger.debug(f"latest messages: {msgs}")
         result = await self.message_db.aggregate([
             {
                 "$match": {
                     "date": {"$gte": date_1_day_ago},
-                    "role": "user"
+                    "role": "user",
+                    "user_id": user_id
                 }
             },
             {
