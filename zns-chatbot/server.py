@@ -100,6 +100,55 @@ class FitFrameHandler(tornado.web.RequestHandler):
             self.write({'error': "internal error"})
             logger.error("error saving image: %s",e, exc_info=1)
 
+class MenuHandler(tornado.web.RequestHandler):
+    def initialize(self, app):
+        self.app = app
+
+    async def get(self):
+        # file = self.get_query_argument("file", default="")
+        # locale_str = self.get_query_argument("locale", default="en")
+        # l = lambda s: self.app.localization(s, locale=locale_str)
+
+        try:
+            self.render(
+                "menu.html",
+                user_carts=False,
+            )
+        except (KeyError, ValueError):
+            raise tornado.web.HTTPError(404)
+    
+    async def post(self):
+        initData = self.get_argument('initData', default=None, strip=False)
+
+        if initData:
+            initData = validate(initData, self.app.config.telegram.token.get_secret_value())
+        else:
+            # initData not found in the request, reject the request
+            self.set_status(400)
+            logger.info("initData parameter is missing")
+            return
+        try:
+            user = json.loads(initData['user'])
+            carts = json.loads(self.request.body)
+            logger.info(f"user {user["id"]} carts {carts}")
+            # with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
+            #     temp_name = temp_file.name
+            #     temp_file.write(self.request.body)
+            # await self.app.bot.bot.send_document(
+            #     user["id"],
+            #     temp_name,
+            #     filename="avatar.jpg",
+            # )
+            # os.remove(temp_name)
+
+            # self.set_status(200)
+            # self.write({'message': 'Image uploaded successfully'})
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({'error': "internal error"})
+            logger.error("error saving menu: %s",e, exc_info=1)
+
 class ErrorHandler(tornado.web.RequestHandler):
     def initialize(self, app):
         self.app = app
@@ -138,6 +187,7 @@ async def create_server(config: Config, base_app):
 
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
+        (r"/menu", MenuHandler, {"app": base_app}),
         (r"/error", ErrorHandler, {"app": base_app}),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
