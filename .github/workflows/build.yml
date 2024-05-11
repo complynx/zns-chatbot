@@ -29,7 +29,7 @@ jobs:
           cache-to: type=registry,ref=complynx/${{ github.event.repository.name }}:buildcache,mode=max
 
       - name: Dispatch event to server
-        uses: peter-evans/repository-dispatch@v1
+        uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.SERVER_REPO_TOKEN }}
           repository: complynx/server_configs
