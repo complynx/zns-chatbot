@@ -45,7 +45,7 @@ class Photo(BaseSettings):
 
 class Food(BaseSettings):
     deadline: date = Field(date(2024, 6, 6))
-    payment_admin: int
+    payment_admin: int = Field(-1)
 
 class Config(BaseSettings):
     telegram: TelegramSettings
@@ -55,7 +55,7 @@ class Config(BaseSettings):
     openai: OpenAI
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
-    food: Food
+    food: Food = Food()
 
     def __init__(self, filename:str="config/config.yaml"):
         # Load a YAML configuration file

@@ -308,33 +308,34 @@ class FoodUpdate:
             }
         })
         order = await self.get_order(order_id)
-        admin = await self.base.user_db.find_one({
-            "user_id": self.base.config.food.payment_admin,
-            "bot_id": self.bot,
-        })
-        user = await self.get_user()
-        lc = "ru"
-        if admin is not None and "language_code" in admin:
-            lc = admin["language_code"]
-        def l(s, **kwargs):
-            return self.base.base_app.localization(s, args=kwargs, locale=lc)
-        await self.tgUpdate.message.forward(self.base.config.food.payment_admin)
-        await self.base.base_app.bot.bot.send_message(
-            self.base.config.food.payment_admin,
-            l(
-                "food-adm-payment-proof-received",
-                link=client_user_link_html(user),
-                total=str(order["total"]),
-                name=order["receiver_name"],
-            ),
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(l("food-adm-payment-proof-accept-button"), callback_data=f"{self.base.name}|adm_acc|{order_id}"),
-                    InlineKeyboardButton(l("food-adm-payment-proof-reject-button"), callback_data=f"{self.base.name}|adm_rej|{order_id}"),
-                ]
-            ])
-        )
+        if self.base.config.food.payment_admin>0:
+            admin = await self.base.user_db.find_one({
+                "user_id": self.base.config.food.payment_admin,
+                "bot_id": self.bot,
+            })
+            user = await self.get_user()
+            lc = "ru"
+            if admin is not None and "language_code" in admin:
+                lc = admin["language_code"]
+            def l(s, **kwargs):
+                return self.base.base_app.localization(s, args=kwargs, locale=lc)
+            await self.tgUpdate.message.forward(self.base.config.food.payment_admin)
+            await self.base.base_app.bot.bot.send_message(
+                self.base.config.food.payment_admin,
+                l(
+                    "food-adm-payment-proof-received",
+                    link=client_user_link_html(user),
+                    total=str(order["total"]),
+                    name=order["receiver_name"],
+                ),
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(l("food-adm-payment-proof-accept-button"), callback_data=f"{self.base.name}|adm_acc|{order_id}"),
+                        InlineKeyboardButton(l("food-adm-payment-proof-reject-button"), callback_data=f"{self.base.name}|adm_rej|{order_id}"),
+                    ]
+                ])
+            )
         await self.update.reply(
             self.l("food-payment-proof-forwarded"),
             parse_mode=ParseMode.HTML,
