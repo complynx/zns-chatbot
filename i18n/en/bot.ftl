@@ -33,3 +33,54 @@ max-assistant-messages-reached = You've reached your limit for a day, please com
 avatar-custom-crop = Crop differently
 avatar-without-command = No need to send this command anymore, just send me your picture.
 something-went-wrong = Something went wrong. Try again.
+food-adm-payment-proof-accept-button = ✅ Accepted
+food-adm-payment-proof-confirmed = Order payment from user {$link} for <i>{$name}</i> is confirmed.
+food-adm-payment-proof-received =
+    User {$link} sent payment for food order
+    Total order sum: {$total} ₽
+    order is in the name <i>{$name}</i>. Confirmation required.
+    <b>Attention</b>, do not mark proof as rejected, wait a bit and try to find the payment first.
+food-adm-payment-proof-reject-button = ❌ Rejected
+food-adm-payment-proof-rejected = Order payment from user {$link} for <i>{$name}</i> is rejected.
+food-back-button = To the beginning.
+food-cancel-order-button = Cancel order.
+food-command-description = Your meals at ZNS
+food-confirm-payment-button = Pay for the order
+food-created-write-for-who = Your order has been saved, write your name, so we can easily identify your meal and give it to you.
+food-day-wednesday = Wednesday
+food-day-friday = Friday
+food-day-saturday = Saturday
+food-day-sunday = Sunday
+food-edit-order-button = Edit order.
+food-meal-lunch = lunch
+food-meal-dinner = dinner
+food-new-order-button = Create new
+food-no-orders-yet = You haven't yet chosen meals. Press this button to open up the menu.
+food-order-button = {$created}|{$name}
+food-order-for = Order for <b>{$name}</b>
+food-order-message-begin = This is your order, here you can view it or edit.
+food-order-new-message-begin = This is a new order, you can open up menu and choose meals.
+food-order-saved = Your order has been saved, you can now proceed with the payment transfer.
+food-payment-confirmation-wrong = 
+food-payment-instructions =
+    To pay for the meal, you need to make a transaction using SBP to the Sber account bound to phone number
+    <code>+79175295923</code>
+    Recipient: <i>Ушакова Дарья Евгеньевна/Ushakova Daria Evgenievna</i>.
+food-payment-instructions-proof =
+    ⚠ When you're done with the transfer, you will need to send me the confirmation —
+    with all the data about the transaction: from who, amount, date and time, and other relevant data.
+    If you don't have the confirmation now, press cancel.
+    You'll be able to come back through the menu.
+food-payment-proof-cancelled = Ok, you will have to send proof using menu, when you'll have it.
+food-payment-proof-confirmed =
+    Admin confirmed your order payment for <i>{$name}</i>.
+    We are waiting you ar ZNS.
+food-payment-proof-failed = I was waiting for payment proof, and this can't be it. You will have to send proof using menu, when you'll have it.
+food-payment-proof-forwarded = I sent the proof to our admins. They will check it and I'll come back with the result.
+food-payment-proof-rejected = 
+    Admin rejected payment proof for <i>{$name}</i>.
+    You can create another order or try sending another confirmation.
+food-rename-button = Rename order
+food-select-order = Here are all your orders, you can view them or create a new one.
+food-total = Total: 
+food-write-for-who = Please write <b>full name</b> of the person, for who we are creating the order.

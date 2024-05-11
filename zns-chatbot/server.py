@@ -105,14 +105,22 @@ class MenuHandler(tornado.web.RequestHandler):
         self.app = app
 
     async def get(self):
-        # file = self.get_query_argument("file", default="")
-        # locale_str = self.get_query_argument("locale", default="en")
-        # l = lambda s: self.app.localization(s, locale=locale_str)
+        order_id = self.get_query_argument("order", default="")
+        carts = None
+        read_only = False
+        if order_id != "":
+            order = await self.app.food.get_order(order_id)
+            if "carts" in order:
+                carts = order["carts"]
+            if "proof_received_at" in order:
+                read_only = True
 
         try:
             self.render(
                 "menu.html",
-                user_carts=False,
+                order_id=json.dumps(order_id),
+                user_carts=json.dumps(carts),
+                read_only=json.dumps(read_only),
             )
         except (KeyError, ValueError):
             raise tornado.web.HTTPError(404)
@@ -130,19 +138,28 @@ class MenuHandler(tornado.web.RequestHandler):
         try:
             user = json.loads(initData['user'])
             carts = json.loads(self.request.body)
-            logger.info(f"user {user["id"]} carts {carts}")
-            # with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
-            #     temp_name = temp_file.name
-            #     temp_file.write(self.request.body)
-            # await self.app.bot.bot.send_document(
-            #     user["id"],
-            #     temp_name,
-            #     filename="avatar.jpg",
-            # )
-            # os.remove(temp_name)
+            logger.info(f"user {user['id']} carts {carts}")
 
-            # self.set_status(200)
-            # self.write({'message': 'Image uploaded successfully'})
+            order_id = self.get_query_argument("order", default="")
+            autosave = self.get_query_argument("autosave", default="")
+            if order_id == "":
+                logger.info(f"creating order for {user['id']}")
+                await self.app.food.create_order(user['id'], carts)
+                return
+            order = await self.app.food.get_order(order_id)
+            if order is None:
+                self.set_status(404)
+                logger.info("order not found")
+                return
+            if order["user_id"] != user["id"]:
+                self.set_status(403)
+                logger.error(f"user ID doesn't match")
+                return
+            logger.info(f"updating order {order_id} for {user['id']}")
+            await self.app.food.set_carts(order, carts, autosave != "")
+
+            self.set_status(200)
+            self.write({'message': 'order saved'})
 
         except Exception as e:
             self.set_status(500)

@@ -2,7 +2,9 @@
 <html>
     <head>
         <script>
-            const user_carts = {{user_carts}};
+            const user_carts = {% raw user_carts %};
+            const user_order_id = {% raw order_id %};
+            const read_only = {% raw read_only %};
         </script>
         <title>Zouk Non Stop Поток: Меню</title>
         <meta charset="utf-8" />

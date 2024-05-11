@@ -126,9 +126,11 @@ body:not(.wide-view) #menu-items .item .add {
   position: absolute;
   top: var(--margin);
   right: var(--margin);
-  width: 1.5em;
-  height: 1.5em;
+  text-align: center;
+  width: 1.6em;
+  height: 1.6em;
   font-size: 1.4em;
+  padding: 0;
 /*   --stroke:color-mix(in oklab,  var(--tg-theme-bg-color) 30%,  var(--tg-theme-bg-color) 30%);
 	box-shadow: -2px  2px 2px var(--stroke),
                 2px  2px 2px var(--stroke),

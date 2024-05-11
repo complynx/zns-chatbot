@@ -1,3 +1,6 @@
+from typing import List
+
+
 PRIORITY_NOT_ACCEPTING = -1000
 PRIORITY_BASIC = 0
 
@@ -15,7 +18,7 @@ class BasePlugin():
         return PRIORITY_NOT_ACCEPTING, None
     
     async def handle_callback_query(self, updater):
-        return
+        raise Exception("handle_callback_query unimplemented")
 
     async def handle_message(self, updater):
-        return
+        raise Exception("handle_message unimplemented")

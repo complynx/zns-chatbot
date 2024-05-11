@@ -247,18 +247,23 @@
         add_item_to_cart(day,meal,item);
         history.back();
     }
+    if(user_carts) {
+        carts = user_carts;
+    }
     for(let cart of document.querySelectorAll("#carts [data-meal]")) {
         let meal = cart.dataset.meal;
         let day = findParent(cart, "[data-day]").dataset.day;
         cart.addEventListener("click", select_cart);
-        carts[cart_id(day,meal)] = {
-            day: day,
-            meal: meal,
-            items: [],
-        };
-    }
-    if(window.user_carts) {
-        carts = user_carts;
+        let cid = cart_id(day,meal);
+        if(!(cid in carts)) {
+            carts[cid] = {};
+        }
+        let c = carts[cid];
+        c.day = day;
+        c.meal = meal;
+        if(!c.items) {
+            c.items = [];
+        }
     }
     recalculate_total();
 
@@ -272,23 +277,52 @@
             body: err
         })
     }
-    
-    Telegram.WebApp.ready();
-    Telegram.WebApp.expand();
-    Telegram.WebApp.MainButton.setText("Сохранить");
-    Telegram.WebApp.MainButton.onClick(()=>{
-        fetch('menu?'+IDQ(), {
+
+    async function save(autosave) {
+        if(read_only) return;
+        let order_query = "";
+        if(user_order_id) {
+            order_query = "&order="+user_order_id;
+        }
+        if(autosave) {
+            order_query += "&autosave=autosave"
+        }
+        const response = await fetch('menu?' + IDQ() + order_query, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(carts)
-        }).then(response => {
-            if (!response.ok) {
-                throw new Error(`Network response was not ok: ${response.status} ${response.statusText}\n${response.body}`);
+        });
+        if (!response.ok) {
+            throw new Error(`Network response was not ok: ${response.status} ${response.statusText}\n${response.body}`);
+        }
+        return response;
+    }
+    if(read_only){
+        document.body.classList.add("read-only");
+        
+        for(let cart_id in carts) {
+            let cart = carts[cart_id]
+            for(let item_id of cart.items) {
+                document.getElementById(`menu-item-${item_id}`).classList.add("in-cart")
             }
-        }).catch(error => {
-            console.error('Error:', error);
+        }
+    } else if (user_order_id) {
+        const autosaveInterval = 60*1000; // every minute
+        function autosave() {
+            setTimeout(()=>{
+                save(true).catch(rej=>{console.warn("autosave error", rej)}).finally(()=>autosave());
+            }, autosaveInterval);
+        }
+        autosave();
+    }
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+    Telegram.WebApp.MainButton.setText("Сохранить");
+    Telegram.WebApp.MainButton.onClick(()=>{
+        save().catch(error => {
+            console.error('Save error:', error);
             return send_error(error);
         }).finally(()=>{
             Telegram.WebApp.close();

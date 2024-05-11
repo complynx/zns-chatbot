@@ -9,6 +9,7 @@ from fluent.runtime import FluentResourceLoader
 from motor.motor_asyncio import AsyncIOMotorClient
 from .plugins import plugins
 from .server import create_server
+from .storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class App(object):
     localization = None
     mongodb = None
     users_collection = None
+    storage = None
 
 async def main(cfg: Config):
     app = App()
@@ -31,10 +33,12 @@ async def main(cfg: Config):
         logger.info(f"db address {cfg.mongo_db.address}")
         app.mongodb = AsyncIOMotorClient(cfg.mongo_db.address).get_database()
         app.users_collection = app.mongodb[cfg.mongo_db.users_collection]
+        app.storage = Storage(app.mongodb[cfg.mongo_db.bots_storage])
 
     try:
         async with create_telegram_bot(cfg, app, {plugin.name: plugin for plugin in [plugin(app) for plugin in plugins]}) as bot:
             logger.info("running event loop")
+
             await asyncio.Event().wait()
     except (KeyboardInterrupt, SystemExit):
         pass
