@@ -108,7 +108,7 @@ class TGUpdate():
                         "first_name": self.update.effective_user.first_name,
                         "last_name": self.update.effective_user.last_name,
                         "language_code": self.update.effective_user.language_code,
-                        "print_name": user_print_name(self.update.effective_user.name),
+                        "print_name": user_print_name(self.update.effective_user),
                     },
                     "$inc": {
                         "starts_called": 1,
