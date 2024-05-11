@@ -1,5 +1,6 @@
 import re
 import yaml
+from datetime import date
 
 from pydantic import BaseSettings, Field, SecretStr 
 
@@ -26,6 +27,8 @@ class MongoDB(BaseSettings):
     address: str = Field("", env="BOT_MONGODB_ADDRESS")
     users_collection: str = Field("zns_bot_users", env="ZNS_BOT_MONGODB_USERS_COLLECTION")
     messages_collection: str = Field("zns_bot_messages", env="ZNS_BOT_MONGODB_MESSAGES_COLLECTION")
+    bots_storage: str = Field("bots_storage", env="BOTS_STORAGE_COLLECTION")
+    food_collection: str = Field("zns_bot_food", env="ZNS_BOT_FOOD_COLLECTION")
 
 class ServerSettings(BaseSettings):
     base: str = Field("http://localhost:8080")
@@ -40,6 +43,10 @@ class Photo(BaseSettings):
     quality: int = Field(90)
     cover_file: str = Field("cover/ZNS2024.jpg")
 
+class Food(BaseSettings):
+    deadline: date = Field(date(2024, 6, 6))
+    payment_admin: int = Field(-1)
+
 class Config(BaseSettings):
     telegram: TelegramSettings
     logging: LoggingSettings = LoggingSettings()
@@ -48,6 +55,7 @@ class Config(BaseSettings):
     openai: OpenAI
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
+    food: Food = Food()
 
     def __init__(self, filename:str="config/config.yaml"):
         # Load a YAML configuration file

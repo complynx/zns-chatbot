@@ -1,409 +1,99 @@
 <!DOCTYPE HTML>
 <html>
-	<head>
-		<title>Zouk Non Stop Погружение: Меню</title>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<link rel="stylesheet" href="/assets/css/main.css" />
-        <style>
-            .div_toggler {
-                display: none;
-            }
-            .div_toggler+div {
-                display: none;
-            }
-            .div_toggler:checked+div {
-                display: initial;
-            }
-            .prices span:after {
-                content:" ₽";
-            }
-        </style>
-	</head>
-	<body class="subpage">
-        <form method="post" action="./menu">
-        <div id="main" class="container">
-            <div class="row 200%"
-            onclick='document.querySelector("#summary_price").innerText = (
-             parseInt(document.querySelector("#friday_dinner_price").innerText)
-            +parseInt(document.querySelector("#saturday_lunch_price").innerText)
-            +parseInt(document.querySelector("#saturday_dinner_price").innerText)
-            +parseInt(document.querySelector("#sunday_lunch_price").innerText)
-            +parseInt(document.querySelector("#sunday_dinner_price").innerText))'>
-                <div class="4u 12u$(medium) prices">
-                    <input type="hidden" name="meal_context" value="{{meal_context}}">
-                    <h3 id="select_day">1. Выбери день</h3>
-                    <script>
-                        function select_day(){
-                            document.getElementById("select_restaurant").scrollIntoView({ behavior: 'smooth', block: "start", inline: "nearest"});
-                        }
-                    </script>
-                    <h4>Пятница</h4>
-                    <div class="row">
-                        <div class="4u 12u$(small)">
-                            <label class="button small alt" for="friday_dinner_toggler" onclick="select_day()">Ужин</label>
-                        </div>
-                        <div class="8u 12u$(small)">
-                            <span id="friday_dinner_price">0</span>
-                        </div>
-                    </div>
-                    <h4>Суббота</h4>
-                    <div class="row">
-                        <div class="4u 12u$(small)">
-                            <label class="button small alt" for="saturday_lunch_toggler" onclick="select_day()">Обед</label>
-                        </div>
-                        <div class="8u 12u$(small)">
-                            <span id="saturday_lunch_price">0</span>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="4u 12u$(small)">
-                            <label class="button small alt" for="saturday_dinner_toggler" onclick="select_day()">Ужин</label>
-                        </div>
-                        <div class="8u 12u$(small)">
-                            <span id="saturday_dinner_price">0</span>
-                        </div>
-                    </div>
-                    <h4>Воскресенье</h4>
-                    <div class="row">
-                        <div class="4u 12u$(small)">
-                            <label class="button small alt" for="sunday_lunch_toggler" onclick="select_day()">Обед</label>
-                        </div>
-                        <div class="8u 12u$(small)">
-                            <span id="sunday_lunch_price">0</span>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="4u 12u$(small)">
-                            <label class="button small alt" for="sunday_dinner_toggler" onclick="select_day()">Ужин</label>
-                        </div>
-                        <div class="8u 12u$(small)">
-                            <span id="sunday_dinner_price">0</span>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="4u 12u$(small)">
-                            <h4>всего:</h4>
-                        </div>
-                        <div class="8u 12u$(small)">
-                            <span id="summary_price">0</span>
-                        </div>
-                    </div>
-                    <script>
-function parseMealData() {
-    let days = ['friday', 'saturday', 'sunday'];
-    let days_ru = {
-        'friday':'Пятница', 
-        'saturday':'Суббота',
-        'sunday':'Воскресенье'
-    };
-    let meals = ['lunch', 'dinner'];
-    let meals_ru = {
-        'lunch':'обед',
-        'dinner':'ужин'
-    };
-    let restaurantsReal = ['Bареничная №1','Хачапури и Вино','Гастробар Beer Side'];
-    let restaurantsCost2 = [380, 440, 500];
-    let restaurantsCost3 = [430, 440, 600];
-    
-    let ret = [];
-    let cost_sum = 0; 
-    for (let day of days) {
-        for (let meal of meals) {
-            let togglerKey = `${day}_${meal}_restaurant_toggler`;
-            let inputElement = document.querySelector(`input[name=${togglerKey}]:checked`);
-            if (inputElement) {
-                let restaurantNum = inputElement.value.replace(`${day}_${meal}_restaurant`, "").replace("_toggler", "");
-                try{
-                    restaurantNum = parseInt(restaurantNum);
-                } catch{}
-
-                let ret_obj = {
-                    "day": days_ru[day],
-                    "meal": meals_ru[meal]
-                };
-
-                if (isNaN(restaurantNum)) {
-                    ret_obj.cost = 0;
-                    ret_obj.choice = "Не буду есть.";
-                } else if (1<= restaurantNum && restaurantNum <=3){
-                    let mainKey = `${day}_${meal}_main_r${restaurantNum}`;
-                    let saladKey = `${day}_${meal}_salad_r${restaurantNum}`;
-                    let soupKey = `${day}_${meal}_soup_r${restaurantNum}`;
-                    let drinkKey = `${day}_${meal}_drink_r${restaurantNum}`;
-                    let main = document.querySelector(`input[name=${mainKey}]:checked`)?.value || '';
-                    let salad = document.querySelector(`input[name=${saladKey}]:checked`)?.value || '';
-                    let soup = document.querySelector(`input[name=${soupKey}]:checked`)?.value || '';
-                    let cost = 0;
-                    if (main != '' && salad != '' && soup != '') {
-                        cost = restaurantsCost3[restaurantNum-1];
-                    } else {
-                        cost = restaurantsCost2[restaurantNum-1];
-                    }
-                    let drink = document.querySelector(`input[name=${drinkKey}]:checked`)?.value || '';
-                    let items = [main, soup, salad, drink];
-                    let filteredItems = items.filter(item => item !== '');
-                    let result = "* " + filteredItems.join("\n* ");
-
-                    ret_obj.cost = cost;
-                    ret_obj.choice = result;
-                    ret_obj.restaurant = restaurantsReal[restaurantNum-1];
-                }
-
-                ret.push(ret_obj);
-                cost_sum += ret_obj.cost;
-            }
-        }
-    }
-    return [ret, cost_sum];
-}
-
-function submit_onclick(ev) {
-    // if(document.querySelector("input[name=tg_user]").value=="") {
-    //     alert("Надо залогиниться, вы забыли!");
-    //     ev.preventDefault();
-    //     return;
-    // }
-    let [data, sum] = parseMealData();
-
-    let full_choice = "\n";
-    for(let day of data) {
-        full_choice += `\n\t${day.day}, ${day.meal} — `;
-        if(day.cost == 0) {
-            full_choice += "не буду есть";
-        } else {
-            full_choice += `за ${day.cost} ₽ из ресторана ${day.restaurant}\n${day.choice}`;
-        }
-        full_choice += "\n";
-    }
-    full_choice += `\n\t\tИтого, общая сумма: ${sum} ₽.`;
-    if(sum === 0) {
-        if(!confirm("Похоже, что вы не выбрали ничего. Вы уверены в вашем решении?")) {
-            ev.preventDefault();
-            return;
-        }
-    }
-    
-    if(!confirm("Вы точно всё заполнили, на все дни? Давайте проверим, ваш выбор:"+full_choice + "\tОтправляем?")) {
-        ev.preventDefault();
-        return;
-    }
-}
-
-function cancel_onclick(ev) {
-    if(!confirm("Вы уверены, что хотите отменить выбор еды?")) {
-        ev.preventDefault();
-        return;
-    }else{
-        document.querySelector("input[name=cancelled]").value = "true";
-    }
-}
-
-                    </script>
-                    <input type="hidden" name="cancelled" value="">
-                    <input type="submit" class="button special" value="Отправить" onclick='submit_onclick.apply(this,arguments);'>
-                    <input type="submit" value="Отменить" onclick='cancel_onclick.apply(this,arguments);'>
+    <head>
+        <script>
+            const user_carts = {% raw user_carts %};
+            const user_order_id = {% raw order_id %};
+            const read_only = {% raw read_only %};
+        </script>
+        <title>Zouk Non Stop Поток: Меню</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="stylesheet" type="text/css" href="./static/menu.css"></link>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <script type="module" src="./static/menu.mjs"></script>
+    </head>
+    <body>
+        <div id="menu-nav">
+        </div>
+        <button id="btn-back"><span class="icon">P</span><span>Назад</span></button>
+        <div id="menu-items">
+        </div>
+        <div id="cart-contents">
+            <div data-day="wednesday">
+                <div data-meal="lunch">
+                    <h3><span class="icon">J</span> <span class="day">Среда</span><span class="meal">Обед</span></h3>
+                    <div class="sum"></div>
+                    <div class="contents"></div>
                 </div>
-                <div class="8u 12u$(medium)">
-                    <h2 id="select_restaurant">
-                        2. Выбери ресторан
-                    </h2>
-                    <input id="friday_dinner_toggler" type="radio" name="meal_time" value="friday_dinner_toggler" class="div_toggler">
-                    <div id="friday_dinner_container">
-                        <h3 class="meal_name">Пятница, ужин (21:00)</h3>
-                        <div class="row">
-                            <div class="3u 12u$(small)">
-                                <label class="button small fit alt" for="friday_dinner_restaurant1_toggler">Вареничная №1</label>
-                            </div>
-                            <div class="3u 12u$(small)">
-                                <label class="button small fit alt" for="friday_dinner_restaurant2_toggler">Хачапури и Вино</label>
-                            </div>
-                            <div class="3u 12u$(small)">
-                                <label class="button small fit alt" for="friday_dinner_restaurant3_toggler">Beer Side</label>
-                            </div>
-                            <div class="3u 12u$(small)">
-                                <label class="button small fit alt" for="friday_dinner_restaurant_none_toggler">Без еды</label>
-                            </div>
-                        </div>
-                        <input onclick='document.querySelector("#friday_dinner_price").innerText="380";if(document.querySelector("input[name=friday_dinner_soup_r1]:checked").value!="" && document.querySelector("input[name=friday_dinner_salad_r1]:checked").value!="") {document.querySelector("#friday_dinner_price").innerText="430"}' id="friday_dinner_restaurant1_toggler" value="friday_dinner_restaurant1_toggler" type="radio" name="friday_dinner_restaurant_toggler" class="div_toggler">
-                        <div>
-                            <h3>
-                                Вареничная №1
-                            </h3>
-                            <h2>
-                                3. Выбери еду
-                            </h2>
-                            <p>Это комплексные обеды. Есть три опции:</p>
-                            <ol>
-                                <li>основное блюдо, суп и салат</li>
-                                <li>основное блюдо и суп</li>
-                                <li>основное блюдо и салат</li>
-                            </ol>
-                            <p>Напиток включен в стоимость, хотя он уже к моменту получения остынет...</p>
-                            <h3>
-                                Горячее — 200 гр.
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_main_r1" value="Куриный шницель с гречкой и кетчупом" id="friday_dinner_main_r1_ch1" checked><label for="friday_dinner_main_r1_ch1">Куриный шницель с гречкой и кетчупом</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r1" value="Вареники с картофелем и грибами" id="friday_dinner_main_r1_ch2"><label for="friday_dinner_main_r1_ch2">Вареники с картофелем и грибами🌱</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r1" value="Плов с курицей" id="friday_dinner_main_r1_ch3"><label for="friday_dinner_main_r1_ch3">Плов с курицей</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r1" value="Котлеты куриные с макаронами" id="friday_dinner_main_r1_ch7"><label for="friday_dinner_main_r1_ch7">Котлеты куриные с макаронами</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r1" value="Говяжья печень в сметанном соусе с картофельным пюре" id="friday_dinner_main_r1_ch4"><label for="friday_dinner_main_r1_ch4">Говяжья печень в сметанном соусе с картофельным пюре</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r1" value="Макароны с мясной поджаркой в томатном соусе" id="friday_dinner_main_r1_ch5"><label for="friday_dinner_main_r1_ch5">Макароны с мясной поджаркой в томатном соусе</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r1" value="Жареная стручковая фасоль с грибами" id="friday_dinner_main_r1_ch6"><label for="friday_dinner_main_r1_ch6">Жареная стручковая фасоль с грибами🌱</label></li>
-                            </ol>
-                            <h3>
-                                Салат — 180 гр.
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_salad_r1" value="Винегрет с красной фасолью" id="friday_dinner_salad_r1_ch1" onclick='document.querySelector("#friday_dinner_price").innerText = (document.querySelector("input[name=friday_dinner_soup_r1]:checked").value=="")?"380":"430" '><label for="friday_dinner_salad_r1_ch1">Винегрет с красной фасолью🌱</label></li>
-                                <li><input type="radio" name="friday_dinner_salad_r1" value="Сельдь под шубой" id="friday_dinner_salad_r1_ch2" onclick='document.querySelector("#friday_dinner_price").innerText = (document.querySelector("input[name=friday_dinner_soup_r1]:checked").value=="")?"380":"430" '><label for="friday_dinner_salad_r1_ch2">Сельдь под шубой</label></li>
-                                <li><input type="radio" name="friday_dinner_salad_r1" value='\"Оливье советский\" с колбасой' id="friday_dinner_salad_r1_ch3" onclick='document.querySelector("#friday_dinner_price").innerText = (document.querySelector("input[name=friday_dinner_soup_r1]:checked").value=="")?"380":"430" '><label for="friday_dinner_salad_r1_ch3">"Оливье советский" с колбасой</label></li>
-                                <li><input type="radio" name="friday_dinner_salad_r1" value="" onclick="if(document.querySelector('input[name=friday_dinner_soup_r1]:checked').value=='') {alert('Надо либо салат, либо суп выбрать!')} else {document.querySelector('#friday_dinner_price').innerText = '380' }" id="friday_dinner_salad_r1_ch4" checked><label for="friday_dinner_salad_r1_ch4">Не буду салат</label></li>
-                            </ol>
-                            <h3>
-                                Суп — 220 гр.
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_soup_r1" value="Борщ постный (для вегетарианцев)" id="friday_dinner_soup_r1_ch1" checked onclick='document.querySelector("#friday_dinner_price").innerText = (document.querySelector("input[name=friday_dinner_salad_r1]:checked").value=="")?"380":"430" '><label for="friday_dinner_soup_r1_ch1">Борщ постный🌱</label></li>
-                                <li><input type="radio" name="friday_dinner_soup_r1" value="Овощной суп" id="friday_dinner_soup_r1_ch2" onclick='document.querySelector("#friday_dinner_price").innerText = (document.querySelector("input[name=friday_dinner_salad_r1]:checked").value=="")?"380":"430" '><label for="friday_dinner_soup_r1_ch2">Овощной суп🌱</label></li>
-                                <li><input type="radio" name="friday_dinner_soup_r1" value="Куриный суп с лапшой" id="friday_dinner_soup_r1_ch3"><label for="friday_dinner_soup_r1_ch3" onclick='document.querySelector("#friday_dinner_price").innerText = (document.querySelector("input[name=friday_dinner_salad_r1]:checked").value=="")?"380":"430" '>Куриный суп с лапшой</label></li>
-                                <li><input type="radio" name="friday_dinner_soup_r1" value="" onclick="if(document.querySelector('input[name=friday_dinner_salad_r1]:checked').value=='') {alert('Надо либо салат, либо суп выбрать!')} else {document.querySelector('#friday_dinner_price').innerText = '380' }" id="friday_dinner_soup_r1_ch4"><label for="friday_dinner_soup_r1_ch4">Не буду суп</label></li>
-                            </ol>
-                            <h3>
-                                Напиток
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_drink_r1" value="Узвар 200 мл" id="friday_dinner_drink_r1_ch1"><label for="friday_dinner_drink_r1_ch1">Узвар 200 мл</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r1" value="чай Ассам 400 мл" id="friday_dinner_drink_r1_ch2"><label for="friday_dinner_drink_r1_ch2">чай Ассам 400 мл</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r1" value="чай Сенча 400 мл" id="friday_dinner_drink_r1_ch3"><label for="friday_dinner_drink_r1_ch3">чай Сенча 400 мл</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r1" value="" id="friday_dinner_drink_r1_ch4"><label for="friday_dinner_drink_r1_ch4">Без напитка (на цену не влияет)</label></li>
-                            </ol>
-                        </div>
-                        <input onclick='document.querySelector("#friday_dinner_price").innerText="440"' id="friday_dinner_restaurant2_toggler" value="friday_dinner_restaurant2_toggler" type="radio" name="friday_dinner_restaurant_toggler" class="div_toggler">
-                        <div>
-                            <h3>
-                                Хачапури и Вино
-                            </h3>
-                            <h2>
-                                3. Выбери еду
-                            </h2>
-                            <p>Это комплексные обеды, поэтому выбираем из каждой категории что-нибудь.</p>
-                            <h3>
-                                Горячее — 220 гр.
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_main_r2" value="Аджапсандал" id="friday_dinner_main_r2_ch1" checked><label for="friday_dinner_main_r2_ch1">Аджапсандал (горячее блюдо с болгарским перцем, баклажаном, кабачком, томатом, луком и приправами)🌱</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r2" value="Хачапури по-мегрельски" id="friday_dinner_main_r2_ch2"><label for="friday_dinner_main_r2_ch2">Хачапури по-мегрельски (традиционное грузинское блюдо из теста, внутри которого сыр сулугуни)🌱</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r2" value="Куриные шашлычки на шпажках с толченым молодым картофелем" id="friday_dinner_main_r2_ch3"><label for="friday_dinner_main_r2_ch3">Куриные шашлычки на шпажках с толченым молодым картофелем</label></li>
-                            </ol>
-                            <h3>
-                                Салат — 130 гр.
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_salad_r2" value="Винегрет по-грузински" id="friday_dinner_salad_r2_ch1" checked><label for="friday_dinner_salad_r2_ch1">Винегрет по-грузински (салат с фасолью, свеклой, маринованной капустой морковью, картофелем, укропом и сельдью. Поливается маслом кахетинским и горчицей)</label></li>
-                                <li><input type="radio" name="friday_dinner_salad_r2" value="Овощной по тбилисски" id="friday_dinner_salad_r2_ch2"><label for="friday_dinner_salad_r2_ch2">Овощной по тбилисски (Огурец, томат, перец болгарский, кинза, масло кахетинское, грецкий орех, аджика)🌱</label></li>
-                                <li><input type="radio" name="friday_dinner_salad_r2" value="Сванский салат с куриным шашлыком — салат с картофелем, яйцом, малосольным огурцом, шашлыком куриным и дижонской горчицей" id="friday_dinner_salad_r2_ch3"><label for="friday_dinner_salad_r2_ch3">Сванский салат с куриным шашлыком — салат с картофелем, яйцом, малосольным огурцом, шашлыком куриным и дижонской горчицей</label></li>
-                            </ol>
-                            <h3>
-                                Суп — 250-300 гр.
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_soup_r2" value="Крем суп из брокколи" id="friday_dinner_soup_r2_ch1" checked><label for="friday_dinner_soup_r2_ch1">Крем суп из брокколи🌱</label></li>
-                                <li><input type="radio" name="friday_dinner_soup_r2" value="Уха с копченой рыбой" id="friday_dinner_soup_r2_ch2"><label for="friday_dinner_soup_r2_ch2">Уха с копченой рыбой (Горбуша, треска, картофель, петрушка, порей, морковь и специи)</label></li>
-                                <li><input type="radio" name="friday_dinner_soup_r2" value="Харчо по-мегрельски" id="friday_dinner_soup_r2_ch3"><label for="friday_dinner_soup_r2_ch3">Харчо по-мегрельски (суп, в составе которого есть говядина, кукурузная крупа, кинза, лук репчатый, перец чили, а также перец болгарский)</label></li>
-                            </ol>
-                        </div>
-                        <input onclick='document.querySelector("#friday_dinner_price").innerText="500";if(document.querySelector("input[name=friday_dinner_main_r3]:checked").value!="" && document.querySelector("input[name=friday_dinner_salad_r3]:checked").value!="" && document.querySelector("input[name=friday_dinner_soup_r3]:checked").value!=""){document.querySelector("#friday_dinner_price").innerText="600"}' id="friday_dinner_restaurant3_toggler" value="friday_dinner_restaurant3_toggler" type="radio" name="friday_dinner_restaurant_toggler" class="div_toggler">
-                        <div onclick='document.querySelector("#friday_dinner_price").innerText="500";if(document.querySelector("input[name=friday_dinner_main_r3]:checked").value!="" && document.querySelector("input[name=friday_dinner_salad_r3]:checked").value!="" && document.querySelector("input[name=friday_dinner_soup_r3]:checked").value!=""){document.querySelector("#friday_dinner_price").innerText="600"}'  >
-                            <h3>
-                                Гастробар Beer Side
-                            </h3>
-                            <h2>
-                                3. Выбери еду
-                            </h2>
-                            <p>Это комплексные обеды. Есть три опции:</p>
-                            <ol>
-                                <li>выбрать два блюда</li>
-                                <li>выбрать три блюда</li>
-                                <li>выбрать одно блюдо по цене двух</li>
-                            </ol>
-                            <p>Напиток включен в стоимость, хотя он уже к моменту получения может остыть...</p>
-                            <h3>
-                                Горячее
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_main_r3" value="Куриная котлета с сыром и картофельным пюре" id="friday_dinner_main_r3_ch1" checked><label for="friday_dinner_main_r3_ch1">Куриная котлета с сыром и картофельным пюре (90/120 гр.)</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r3" value="Филе судака с овощами на гриле" id="friday_dinner_main_r3_ch2"><label for="friday_dinner_main_r3_ch2">Филе судака с овощами на гриле (90/120 гр.)</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r3" value="Спагетти Карбонара" id="friday_dinner_main_r3_ch3"><label for="friday_dinner_main_r3_ch3">Спагетти Карбонара (180 гр.)</label></li>
-                                <li><input type="radio" name="friday_dinner_main_r3" value="" id="friday_dinner_main_r3_ch4"><label for="friday_dinner_main_r3_ch4">Не буду</label></li>
-                            </ol>
-                            <h3>
-                                Салат
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_salad_r3" value="Салат из свежих овощей" id="friday_dinner_salad_r3_ch1"><label for="friday_dinner_salad_r3_ch1">Салат из свежих овощей🌱 (160 гр.)</label></li>
-                                <li><input type="radio" name="friday_dinner_salad_r3" value="Салат с курицей и шампиньонами" id="friday_dinner_salad_r3_ch2"><label for="friday_dinner_salad_r3_ch2">Салат с курицей и шампиньонами (210 гр.)</label></li>
-                                <li><input type="radio" name="friday_dinner_salad_r3" value="Салат оливье с ростбифом" id="friday_dinner_salad_r3_ch3"><label for="friday_dinner_salad_r3_ch3">Салат оливье с ростбифом (210 гр.)</label></li>
-                                <li><input type="radio" name="friday_dinner_salad_r3" value="" id="friday_dinner_salad_r3_ch4" checked><label for="friday_dinner_salad_r3_ch4">Не буду</label></li>
-                            </ol>
-                            <h3>
-                                Суп — 350 гр.
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_soup_r3" value="Крем-суп из шампиньонов" id="friday_dinner_soup_r3_ch1" checked><label for="friday_dinner_soup_r3_ch1">Крем-суп из шампиньонов🌱</label></li>
-                                <li><input type="radio" name="friday_dinner_soup_r3" value="Домашние щи с курицей и томатами" id="friday_dinner_soup_r3_ch2"><label for="friday_dinner_soup_r3_ch2">Домашние щи с курицей и томатами</label></li>
-                                <li><input type="radio" name="friday_dinner_soup_r3" value="Борщ со сметаной" id="friday_dinner_soup_r3_ch3"><label for="friday_dinner_soup_r3_ch3">Борщ со сметаной</label></li>
-                                <li><input type="radio" name="friday_dinner_soup_r3" value="" id="friday_dinner_soup_r3_ch4"><label for="friday_dinner_soup_r3_ch4">Не буду</label></li>
-                            </ol>
-                            <h3>
-                                Напиток
-                            </h3>
-                            <ol>
-                                <li><input type="radio" name="friday_dinner_drink_r3" value="Чай черный" id="friday_dinner_drink_r3_ch1"><label for="friday_dinner_drink_r3_ch1">Чай черный</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r3" value="Чай зеленый" id="friday_dinner_drink_r3_ch2"><label for="friday_dinner_drink_r3_ch2">Чай зеленый</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r3" value="Чай травяной" id="friday_dinner_drink_r3_ch3"><label for="friday_dinner_drink_r3_ch3">Чай травяной</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r3" value="Американо" id="friday_dinner_drink_r3_ch4"><label for="friday_dinner_drink_r3_ch4">Американо</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r3" value="Лимонад имбирь-цитрус" id="friday_dinner_drink_r3_ch5"><label for="friday_dinner_drink_r3_ch5">Лимонад имбирь-цитрус</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r3" value="Лимонад вишня" id="friday_dinner_drink_r3_ch6"><label for="friday_dinner_drink_r3_ch6">Лимонад вишня</label></li>
-                                <li><input type="radio" name="friday_dinner_drink_r3" value="" id="friday_dinner_drink_r3_ch7"><label for="friday_dinner_drink_r3_ch7">Без напитка (на цену не влияет)</label></li>
-                            </ol>
-                        </div>
-                        <input onclick='document.querySelector("#friday_dinner_price").innerText="0"' id="friday_dinner_restaurant_none_toggler" checked value="friday_dinner_restaurant_none_toggler" type="radio" name="friday_dinner_restaurant_toggler" class="div_toggler">
-                        <div>
-                            <h3>Ресторан и еда не выбраны для текущего приёма пищи.</h3>
-                        </div>
-                    </div>
-                    <script>
-                        var scripts = document.getElementsByTagName('script');
-                        var currentScript = scripts[scripts.length - 1];
-                        let ins =(el) =>  currentScript.parentElement.insertBefore(el, currentScript);
-                        let toggler = document.getElementById("friday_dinner_toggler");
-                        let container = document.getElementById("friday_dinner_container");
-                        let other_days = ["saturday_lunch", "saturday_dinner", "sunday_lunch", "sunday_dinner"];
-                        let other_days_ru = {
-                            "saturday_lunch":"Суббота, обед (17:00)",
-                            "saturday_dinner":"Суббота, ужин (22:00)",
-                            "sunday_lunch":"Воскресенье, обед (17:00)",
-                            "sunday_dinner":"Воскресенье, ужин (22:00)"
-                        };
-                        let creator = document.createElement("DIV");
-                        for(let meal of other_days) {
-                            let toggler_day = toggler.outerHTML.replaceAll("friday_dinner", meal);
-                            let container_day = container.outerHTML.replaceAll("friday_dinner", meal);
-                            creator.innerHTML = toggler_day+container_day;
-                            creator.querySelector(".meal_name").innerText = other_days_ru[meal];
-                            ins(creator.firstElementChild);
-                            ins(creator.firstElementChild);
-                        }
-                    </script>
-                    <h2>
-                        4. Повтори для каждого дня
-                    </h2>
-                    <a href="#select_day" class="button small icon fa-arrow-up">к выбору дня</a>
+                <div data-meal="dinner">
+                    <h3><span class="icon">I</span> <span class="day">Среда</span><span class="meal">Ужин</span></h3>
+                    <div class="sum"></div>
+                    <div class="contents"></div>
+                </div>
+            </div>
+            <div data-day="friday">
+                <div data-meal="dinner">
+                    <h3><span class="icon">I</span> <span class="day">Пятница</span><span class="meal">Ужин</span></h3>
+                    <div class="sum"></div>
+                    <div class="contents"></div>
+                </div>
+            </div>
+            <div data-day="saturday">
+                <div data-meal="lunch">
+                    <h3><span class="icon">J</span> <span class="day">Суббота</span><span class="meal">Обед</span></h3>
+                    <div class="sum"></div>
+                    <div class="contents"></div>
+                </div>
+                <div data-meal="dinner">
+                    <h3><span class="icon">I</span> <span class="day">Суббота</span><span class="meal">Ужин</span></h3>
+                    <div class="sum"></div>
+                    <div class="contents"></div>
+                </div>
+            </div>
+            <div data-day="sunday">
+                <div data-meal="lunch">
+                    <h3><span class="icon">J</span> <span class="day">Воскресенье</span><span class="meal">Обед</span></h3>
+                    <div class="sum"></div>
+                    <div class="contents"></div>
+                </div>
+                <div data-meal="dinner">
+                    <h3><span class="icon">I</span> <span class="day">Воскресенье</span><span class="meal">Ужин</span></h3>
+                    <div class="sum"></div>
+                    <div class="contents"></div>
                 </div>
             </div>
         </div>
-        </form>
+        <div id="carts">
+            <div class="days">
+                <div data-day="wednesday">
+                    <div data-meal="lunch">J</div>
+                    <div data-meal="dinner">I</div>
+                    <div class="day-name">СР</div>
+                </div>
+                <div data-day="thursday">
+                    <div class="day-name">ЧТ</div>
+                </div>
+                <div data-day="friday">
+                    <div data-meal="dinner">I</div>
+                    <div class="day-name">ПТ</div>
+                </div>
+                <div data-day="saturday">
+                    <div data-meal="lunch">J</div>
+                    <div data-meal="dinner">I</div>
+                    <div class="day-name">СБ</div>
+                </div>
+                <div data-day="sunday">
+                    <div data-meal="lunch">J</div>
+                    <div data-meal="dinner">I</div>
+                    <div class="day-name">ВС</div>
+                </div>
+                <button class="close">×</button>
+            </div>
+            <div class="edit">
+                <div class="total"></div>
+                <button id="btn-cart-edit" class="icon">R</button>
+            </div>
+        </div>
     </body>
 </html>

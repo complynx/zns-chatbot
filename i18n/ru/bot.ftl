@@ -33,3 +33,52 @@ max-assistant-messages-reached = Сегодня увы лимит сообщен
 avatar-custom-crop = Поменять расположение
 avatar-without-command = Теперь присылать эту команду каждый раз не нужно, просто пришли мне свою фотографию.
 something-went-wrong = Что-то пошло не так. Попробуй ещё.
+food-adm-payment-proof-accept-button = ✅ Подтверждено
+food-adm-payment-proof-confirmed = Питание от пользователя {$link} для зуконавта по имени <i>{$name}</i> подтверждено.
+food-adm-payment-proof-received =
+    Пользователь {$link} прислал подтверждение оплаты еды
+    на сумму: {$total} ₽
+    для зуконавта по имени <i>{$name}</i>. Необходимо подтверждение.
+    <b>Внимание</b>, не стоит помечать отсутствие оплаты раньше времени, лучше сначала удостовериться.
+food-adm-payment-proof-reject-button = ❌ Отказ
+food-adm-payment-proof-rejected = Питание от пользователя {$link} для зуконавта по имени <i>{$name}</i> было отклонено.
+food-back-button = К началу.
+food-cancel-order-button = Отменить заказ.
+food-command-description = Твоя еда на ZNS
+food-confirm-payment-button = Оплатить заказ
+food-created-write-for-who = Твой заказ сохранён. Напиши своё имя, чтобы мы могли идентифицировать твой заказ и выдать его тебе.
+food-day-wednesday = Среда
+food-day-friday = Пятница
+food-day-saturday = Суббота
+food-day-sunday = Воскресенье
+food-edit-order-button = Изменить заказ.
+food-meal-lunch = обед
+food-meal-dinner = ужин
+food-new-order-button = Создать новый
+food-no-orders-yet = Ты ещё не выбрал себе пропитание. Жми эту кнопку, чтобы открыть меню.
+food-order-button = {$created}|{$name}
+food-order-for = Заказ для зуконавта по имени <b>{$name}</b>
+food-order-message-begin = Вот твой заказ. Тут ты можешь его посмотреть или изменить.
+food-order-saved = Твой заказ сохранён, теперь можешь приступить к его оплате.
+food-payment-instructions =
+    Для оплаты, нужно сделать перевод на Сбер по номеру
+    <code>+79175295923</code>
+    Получатель: <i>Ушакова Дарья Евгеньевна</i>.
+food-payment-instructions-proof =
+    ⚠ Когда переведёшь, понадобится подтверждение перевода — именно
+    <u><b>квитанцию (чек)</b></u> об оплате, а не просто скрин.
+    Если пока не готов(а) прислать подтверждение, жми на кнопку отмены.
+    Потом можно снова сюда вернуться.
+food-payment-proof-cancelled = Ок, чтобы снова отправить подтверждение оплаты, придётся зайти в меню.
+food-payment-proof-confirmed =
+    Админ подтвердил заказ на питание для зуконавта по имени <i>{$name}</i>.
+    Ждём тебя на ZNS.
+food-payment-proof-failed = Я ожидала подтверждение оплаты, а это не похоже на него. Чтобы снова отправить подтверждение оплаты, придётся зайти в меню.
+food-payment-proof-rejected = 
+    Админ отменил заказ на питание для зуконавта по имени <i>{$name}</i>.
+    Можно сделать другой заказ или попробовать прислать другое подтверждение.
+food-payment-proof-forwarded = Я переслала подтверждение админам. Они проверят и я вернусь с результатом.
+food-rename-button = Переименовать
+food-select-order = Вот список твоих заказов. Можешь просмотреть их или создать новый.
+food-total = Итого:
+food-write-for-who = Напиши полные <b>имя</b> и <b>фамилию</b> зуконавта, для которого будем собирать меню.

@@ -1,10 +1,21 @@
+import asyncio
 from contextlib import asynccontextmanager
 import json
 import re
 import os
 import mimetypes
 import tempfile
-from telegram import InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, WebAppInfo
+from telegram import (
+    InlineKeyboardMarkup,
+    Update,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    KeyboardButton,
+    WebAppInfo,
+    MenuButtonCommands,
+    BotCommand,
+    User
+)
 from telegram.ext import (
     CallbackContext,
     ApplicationBuilder,
@@ -25,6 +36,11 @@ logger = logging.getLogger(__name__)
 
 CROPPER = 1
 
+def user_print_name(user: User) -> str:
+    if user.full_name != "":
+        return user.full_name
+    return user.name
+
 async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     logger.info(f"start called: {update.effective_user}")
@@ -41,6 +57,7 @@ async def start(update: Update, context: CallbackContext):
                     "first_name": update.effective_user.first_name,
                     "last_name": update.effective_user.last_name,
                     "language_code": update.effective_user.language_code,
+                    "print_name": user_print_name(update.effective_user),
                 },
                 "$inc": {
                     "starts_called": 1,
@@ -71,8 +88,8 @@ class TGUpdate():
         self.app = context.application.base_app
         self.state = {}
     
-    def l(self, s):
-        return self.app.localization(s, locale=self.update.effective_user.language_code)
+    def l(self, s, **kwargs):
+        return self.app.localization(s, args=kwargs, locale=self.update.effective_user.language_code)
     
     async def get_state(self):
         col = self.app.users_collection
@@ -91,6 +108,7 @@ class TGUpdate():
                         "first_name": self.update.effective_user.first_name,
                         "last_name": self.update.effective_user.last_name,
                         "language_code": self.update.effective_user.language_code,
+                        "print_name": user_print_name(self.update.effective_user.name),
                     },
                     "$inc": {
                         "starts_called": 1,
@@ -125,6 +143,54 @@ class TGUpdate():
                     "state": self.state,
                 }
             })
+
+    async def state_waiting_text(self):
+        state = self.state
+        self.state = {
+            "state": ""
+        }
+        await self.save_state()
+        if (filters.TEXT & ~filters.COMMAND).check_update(self.update):
+            logger.debug(f"received awaited text input from user {self.user}")
+            plugin = self.context.application.plugins[state["plugin"]]
+            cb = getattr(plugin, state["plugin_callback"], None)
+            await cb(self, state["plugin_data"])
+        else:
+            logger.debug(f"was waiting text input from user {self.user}, got something else, falling back")
+            await self.state_empty(self)
+
+    async def state_waiting_everything(self):
+        state = self.state
+        self.state = {
+            "state": ""
+        }
+        await self.save_state()
+        logger.debug(f"received awaited input from user {self.user}")
+        plugin = self.context.application.plugins[state["plugin"]]
+        cb = getattr(plugin, state["plugin_callback"], None)
+        await cb(self, state["plugin_data"])
+
+    async def state_cq_waiting_text(self):
+        return await self.state_cq_empty()
+
+    async def state_cq_waiting_everything(self):
+        return await self.state_cq_empty()
+    
+    async def require_input(self, plugin_name: str, plugin_callback_name: str, data):
+        logger.debug(f"requested text input from user {self.user}")
+        self.state["state"] = "waiting_text"
+        self.state["plugin"] = plugin_name
+        self.state["plugin_callback"] = plugin_callback_name
+        self.state["plugin_data"] = data
+        await self.save_state()
+    
+    async def require_anything(self, plugin_name: str, plugin_callback_name: str, data):
+        logger.debug(f"requested everything from user {self.user}")
+        self.state["state"] = "waiting_everything"
+        self.state["plugin"] = plugin_name
+        self.state["plugin_callback"] = plugin_callback_name
+        self.state["plugin_data"] = data
+        await self.save_state()
     
     async def state_empty(self):
         chosen_handle = None
@@ -196,7 +262,13 @@ class TGUpdate():
 
     async def reply(self, text, chat_id=None, parse_mode=ParseMode.MARKDOWN_V2, *args, **kwargs):
         if chat_id is None:
-            chat_id = self.update.message.chat_id
+            if self.update.message is not None:
+                chat_id = self.update.message.chat_id
+            elif self.update.effective_user is not None:
+                chat_id = self.update.effective_user.id
+            elif self.update.effective_chat is not None:
+                chat_id = self.update.effective_chat.id
+
         return await self.context.bot.send_message(
             chat_id=chat_id,
             text=text,
@@ -265,6 +337,48 @@ class TGApplication(Application):
         self.base_app = base_app
         self.config = base_config
         self.plugins = chat_plugins
+        
+async def check_startup_actions(app):
+    if not "usernames_inserted" in app.storage:
+        logger.info("inserting usernames")
+        file_path = os.path.join(os.path.dirname(__file__), 'accounts.csv')
+        with open(file_path, encoding='utf-8') as csvfile:
+            import csv
+            reader = csv.reader(csvfile)
+            for row in reader:
+                uid = int(row[0])
+                logger.info(f"inserting username {uid} - {row[1]}")
+                await app.users_collection.update_one({
+                    "user_id": uid,
+                    "bot_id": app.bot.bot.id,
+                }, {
+                    "$set": {
+                        "known_names": [row[1]]
+                    },
+                    "$setOnInsert": {
+                        "user_id": uid,
+                        "bot_id": app.bot.bot.id,
+                        "bot_username": app.bot.bot.username,
+                        "first_seen": datetime.datetime.now(),
+                        "state": {"state":""},
+                    }
+                }, upsert=True)
+        await app.storage.set("usernames_inserted", True)
+        logger.info("inserted usernames")
+    # if not "menu_version" in app.storage or app.storage["menu_version"] != 1:
+    #     await app.bot.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    #     for lc in ["ru", "en"]:
+    #         def l(s, **kwargs):
+    #             return app.localization(s, args=kwargs, locale=lc)
+    #         commands = [
+    #             BotCommand("meal", description=l("food-command-description")),
+    #         ]
+    #         if lc != "en":
+    #             await app.bot.bot.set_my_commands(commands,language_code=lc)
+    #         else:
+    #             await app.bot.bot.set_my_commands(commands)
+    #     await app.storage.set("menu_version", 1)
+
 
 async def parse_message(update: Update, context: CallbackContext):
     update = TGUpdate(update, context)
@@ -298,6 +412,9 @@ async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
         await application.updater.start_polling()
 
         app.bot = application
+
+        await app.storage.refresh(application.bot.id)
+        asyncio.create_task(check_startup_actions(app))
         yield application
     finally:
         app.bot = None
