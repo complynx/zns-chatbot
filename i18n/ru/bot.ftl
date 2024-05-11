@@ -54,6 +54,7 @@ food-day-sunday = Воскресенье
 food-edit-order-button = Изменить заказ.
 food-meal-lunch = обед
 food-meal-dinner = ужин
+food-name-updated = Новое имя зуконавта <i>{$name}</i> сохранено
 food-new-order-button = Создать новый
 food-no-orders-yet = Ты ещё не выбрал себе пропитание. Жми эту кнопку, чтобы открыть меню.
 food-order-button = {$created}|{$name}

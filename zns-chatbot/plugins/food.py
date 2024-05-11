@@ -188,6 +188,7 @@ class FoodUpdate:
             names = await self.get_user_names()
             if not name in names:
                 await self.save_new_name(name)
+        await self.update.reply(self.l("food-name-updated"), parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
         msg = self.l("food-order-message-begin")
         await self.base.food_db.update_one({
             "_id": ObjectId(order_id)

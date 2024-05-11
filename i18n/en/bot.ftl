@@ -54,6 +54,7 @@ food-day-sunday = Sunday
 food-edit-order-button = Edit order.
 food-meal-lunch = lunch
 food-meal-dinner = dinner
+food-name-updated = The new recipient name <i>{$name}</i> was saved
 food-new-order-button = Create new
 food-no-orders-yet = You haven't yet chosen meals. Press this button to open up the menu.
 food-order-button = {$created}|{$name}
