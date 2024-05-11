@@ -360,6 +360,9 @@ body.carts-editor #btn-back {
   opacity: .2;
   margin: 0 0.3em;
 }
+#cart-contents [data-meal]{
+  position:relative;
+}
 #cart-contents .sum {
   font-weight: bold;
   position: absolute;

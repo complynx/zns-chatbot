@@ -339,32 +339,7 @@ class TGApplication(Application):
         self.plugins = chat_plugins
         
 async def check_startup_actions(app):
-    if not "usernames_inserted" in app.storage:
-        logger.info("inserting usernames")
-        file_path = os.path.join(os.path.dirname(__file__), 'accounts.csv')
-        with open(file_path, encoding='utf-8') as csvfile:
-            import csv
-            reader = csv.reader(csvfile)
-            for row in reader:
-                uid = int(row[0])
-                logger.info(f"inserting username {uid} - {row[1]}")
-                await app.users_collection.update_one({
-                    "user_id": uid,
-                    "bot_id": app.bot.bot.id,
-                }, {
-                    "$set": {
-                        "known_names": [row[1]]
-                    },
-                    "$setOnInsert": {
-                        "user_id": uid,
-                        "bot_id": app.bot.bot.id,
-                        "bot_username": app.bot.bot.username,
-                        "first_seen": datetime.datetime.now(),
-                        "state": {"state":""},
-                    }
-                }, upsert=True)
-        await app.storage.set("usernames_inserted", True)
-        logger.info("inserted usernames")
+    pass
     # if not "menu_version" in app.storage or app.storage["menu_version"] != 1:
     #     await app.bot.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     #     for lc in ["ru", "en"]:
