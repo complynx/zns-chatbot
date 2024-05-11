@@ -13,7 +13,8 @@ from telegram import (
     KeyboardButton,
     WebAppInfo,
     MenuButtonCommands,
-    BotCommand
+    BotCommand,
+    User
 )
 from telegram.ext import (
     CallbackContext,
@@ -35,6 +36,11 @@ logger = logging.getLogger(__name__)
 
 CROPPER = 1
 
+def user_print_name(user: User) -> str:
+    if user.full_name != "":
+        return user.full_name
+    return user.name
+
 async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     logger.info(f"start called: {update.effective_user}")
@@ -51,7 +57,7 @@ async def start(update: Update, context: CallbackContext):
                     "first_name": update.effective_user.first_name,
                     "last_name": update.effective_user.last_name,
                     "language_code": update.effective_user.language_code,
-                    "print_name": update.effective_user.name,
+                    "print_name": user_print_name(update.effective_user),
                 },
                 "$inc": {
                     "starts_called": 1,
@@ -102,6 +108,7 @@ class TGUpdate():
                         "first_name": self.update.effective_user.first_name,
                         "last_name": self.update.effective_user.last_name,
                         "language_code": self.update.effective_user.language_code,
+                        "print_name": user_print_name(self.update.effective_user.name),
                     },
                     "$inc": {
                         "starts_called": 1,
