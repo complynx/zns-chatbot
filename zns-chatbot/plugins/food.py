@@ -41,7 +41,7 @@ def order_total(carts, menu):
     return total
 
 def order_text(l, order, menu):
-    ret = ""
+    ret = []
     total = 0
     if "carts" in order:
         for meal_id in meal_ids_seq:
@@ -49,6 +49,7 @@ def order_text(l, order, menu):
                 continue
             cart = order["carts"][meal_id]
             items_data = {}
+            meal_total = 0
             for item_id in cart["items"]:
                 if item_id in items_data:
                     items_data[item_id]["count"] += 1
@@ -62,6 +63,7 @@ def order_text(l, order, menu):
                     "cat": cat_m,
                     "item": item_m,
                 }
+                meal_total += item_m["price"]
                 total += item_m["price"]
             def sort_key(item):
                 cat_position = item["cat"]["position"]
@@ -79,12 +81,14 @@ def order_text(l, order, menu):
                     name += f" *x{count}*"
                 items_names.append(name)
             if len(items_names) >0:
-                ret += "<b>" + l("food-day-"+cart["day"]) + ", " + l("food-meal-"+cart["meal"]) + "</b>:\n"
-                ret += ", ".join(items_names) + "\n"
-    if total > 0:
-        ret = l("food-order-for", name=order["receiver_name"]) + "\n" + ret
-        ret += l("food-total") + f" <b>{total}</b>"
-    return ret
+                meal = "🍽 <b>" + l("food-day-"+cart["day"]) + ", " + l("food-meal-"+cart["meal"]) + "</b> <code>" + str(meal_total)+ "</code>:\n"
+                meal += ", ".join(items_names)
+                ret.append(meal)
+    if len(ret) > 0:
+        txt = l("food-order-for", name=order["receiver_name"]) + "\n\n" + "\n\n".join(ret)
+        txt += "\n\n"+ l("food-total", total=total)
+        return txt
+    return ""
 
 def order_msg(l, menu, order, user, base_name, app):
     order_id = str(order["_id"])
@@ -110,6 +114,7 @@ def order_msg(l, menu, order, user, base_name, app):
     )])
     return msg, kbd
 
+cancel_chr = chr(0xE007F) # Tag cancel
 
 class FoodUpdate:
     base: 'Food'
@@ -118,6 +123,7 @@ class FoodUpdate:
     user: int
     bot: int
     _user = None
+    _order = None
 
     def __init__(self, base, update) -> None:
         self.base = base
@@ -158,13 +164,15 @@ class FoodUpdate:
         return await cursor.to_list(length=1)
     
     async def get_order(self, order_id):
-        return await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+        if self._order is None or ObjectId(self._order["_id"]) != ObjectId(order_id):
+            self._order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+        return self._order
     
     async def request_name(self, data):
         names = await self.get_user_names()
         btns = [[name] for name in names]
         logger.debug(f"known names: {names}")
-        btns.append([self.l("cancel-command")])
+        btns.append([cancel_chr+self.l("cancel-command")])
         markup = ReplyKeyboardMarkup(
             btns,
             resize_keyboard=True,
@@ -183,21 +191,26 @@ class FoodUpdate:
     
     async def handle_recipient_name(self, order_id):
         name = self.tgUpdate.message.text
-        if name != self.l('cancel-command'):
-            logger.debug(f"recipient name: {name}")
+        logger.debug(f"recipient name: {repr(name)}")
+        if name[0] != cancel_chr:
             names = await self.get_user_names()
             if not name in names:
                 await self.save_new_name(name)
-        await self.update.reply(self.l("food-name-updated"), parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
-        msg = self.l("food-order-message-begin")
-        await self.base.food_db.update_one({
-            "_id": ObjectId(order_id)
-        },{
-            "$set":{
-                "receiver_name": name,
-            }
-        })
-        logger.debug(f"updated name to {name} for {order_id} for {self.user}")
+            upd_msg = self.l("food-name-updated", name=name)
+            await self.base.food_db.update_one({
+                "_id": ObjectId(order_id)
+            },{
+                "$set":{
+                    "receiver_name": name,
+                }
+            })
+            logger.debug(f"updated name to {name} for {order_id} for {self.user}")
+        else:
+            upd_msg = self.l("food-name-update-cancelled")
+            order = await self.get_order(order_id)
+            name = order["receiver_name"]
+        await self.update.reply(upd_msg, parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
+        msg = self.l("food-order-message-begin", name=name)
         order_msg, kbd = await self.get_order_msg(order_id)
         msg += "\n" + order_msg
         logger.debug(f"msg {msg}, kbd {kbd}")
@@ -227,7 +240,7 @@ class FoodUpdate:
         await self.update.reply(self.l("food-payment-instructions-proof"),
             parse_mode=ParseMode.HTML,
             reply_markup=ReplyKeyboardMarkup(
-                [[self.l("cancel-command")]],
+                [[cancel_chr+self.l("cancel-command")]],
                 resize_keyboard=True,
                 one_time_keyboard=True
             ),
@@ -281,7 +294,7 @@ class FoodUpdate:
             )
     
     async def handle_payment_proof(self, order_id):
-        if filters.Text(self.l("cancel-command")).check_update(self.tgUpdate):
+        if filters.TEXT.check_update(self.tgUpdate) and self.tgUpdate.message.text[0] == cancel_chr:
             return await self.update.reply(
                 self.l("food-payment-proof-cancelled"),
                 parse_mode=ParseMode.HTML,
@@ -493,7 +506,7 @@ class Food(BasePlugin):
         logger.debug(f"created order for {user_id} for {name}: {order_id}")
         btns = [[name] for name in names]
         logger.debug(f"known names: {names}")
-        btns.append([l("cancel-command")])
+        btns.append([cancel_chr+l("cancel-command")])
         markup = ReplyKeyboardMarkup(
             btns,
             resize_keyboard=True,

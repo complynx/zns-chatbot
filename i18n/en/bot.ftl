@@ -54,6 +54,7 @@ food-day-sunday = Sunday
 food-edit-order-button = Edit order.
 food-meal-lunch = lunch
 food-meal-dinner = dinner
+food-name-update-cancelled = Recipient name is left unchanged
 food-name-updated = The new recipient name <i>{$name}</i> was saved
 food-new-order-button = Create new
 food-no-orders-yet = You haven't yet chosen meals. Press this button to open up the menu.
@@ -83,5 +84,5 @@ food-payment-proof-rejected =
     You can create another order or try sending another confirmation.
 food-rename-button = Rename order
 food-select-order = Here are all your orders, you can view them or create a new one.
-food-total = Total: 
+food-total = <b>Total:</b> <code>{$total}</code>
 food-write-for-who = Please write <b>full name</b> of the person, for who we are creating the order.
