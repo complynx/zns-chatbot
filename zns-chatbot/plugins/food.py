@@ -175,8 +175,7 @@ class FoodUpdate:
         btns.append([cancel_chr+self.l("cancel-command")])
         markup = ReplyKeyboardMarkup(
             btns,
-            resize_keyboard=True,
-            one_time_keyboard=True
+            resize_keyboard=True
         )
         await self.update.reply(self.l("food-write-for-who"), reply_markup=markup, parse_mode=ParseMode.HTML)
         await self.update.require_input(self.base.name, "handle_recipient_name", data)
@@ -508,8 +507,7 @@ class Food(BasePlugin):
         btns.append([cancel_chr+l("cancel-command")])
         markup = ReplyKeyboardMarkup(
             btns,
-            resize_keyboard=True,
-            one_time_keyboard=True
+            resize_keyboard=True
         )
         if not "state" in user:
             user["state"] = {}
