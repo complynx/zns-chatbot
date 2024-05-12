@@ -241,8 +241,7 @@ class FoodUpdate:
             parse_mode=ParseMode.HTML,
             reply_markup=ReplyKeyboardMarkup(
                 [[cancel_chr+self.l("cancel-command")]],
-                resize_keyboard=True,
-                one_time_keyboard=True
+                resize_keyboard=True
             ),
         )
         await self.update.require_anything(self.base.name, "handle_payment_proof", order_id)
