@@ -57,7 +57,9 @@ food-meal-dinner = ужин
 food-name-update-cancelled = Имя зуконавта оставлено прежним
 food-name-updated = Новое имя зуконавта <i>{$name}</i> сохранено
 food-new-order-button = Создать новый
-food-no-orders-yet = Ты ещё не выбрал себе пропитание. Жми эту кнопку, чтобы открыть меню.
+food-no-orders-yet = 
+    Зуконавту нельзя быть голодным!
+    Жми на кнопку и выбирай себе обед и/или ужин
 food-order-button = {$created}|{$name}
 food-order-for = Заказ для зуконавта по имени <b>{$name}</b>
 food-order-message-begin = Вот твой заказ. Тут ты можешь его посмотреть или изменить.

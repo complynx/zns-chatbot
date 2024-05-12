@@ -57,7 +57,9 @@ food-meal-dinner = dinner
 food-name-update-cancelled = Recipient name is left unchanged
 food-name-updated = The new recipient name <i>{$name}</i> was saved
 food-new-order-button = Create new
-food-no-orders-yet = You haven't yet chosen meals. Press this button to open up the menu.
+food-no-orders-yet = 
+    Zoukonaut must not stay hungry!
+    Press the button to choose yourself lunch and or dinner
 food-order-button = {$created}|{$name}
 food-order-for = Order for <b>{$name}</b>
 food-order-message-begin = This is your order, here you can view it or edit.
