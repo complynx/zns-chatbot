@@ -1,22 +1,8 @@
-create-userpic = Create userpic
 start-message =
     Hi! I will help you create a user image with frame. To do it, just send me your best picture, please.
 cancel-command = Cancel
-autocrop-command = Automatic
-select-position-command = Select position
-select-position-prompt = Photo received. Now select how it will be placed in the frame.
-processing-photo = Photo is processing... (it may take some time)
 cover-caption-message =
     ❗️If you use this photo in the social networks with profile covers, it goes well with this one.
-final-message =
-    🔁 If you want to process another photo, just send me a new picture.
-processing-cancelled = Photo processing has been terminated.
-processing-cancelled-message = Photo processing has been cancelled.
-processing-error = Something went wrong with processing your photo, try again by sending a new picture.
-conversation-timeout =
-    Photo processing has been cancelled because there was no input from user for a substantial amount of time.
-    You can always come back and try again later.
-unknown-input = I don't know this command...
 frame-mover-help-desktop =
     Photo can be moved with a mouse, to turn it hold Shift.
     To scale it, use scrolling.
