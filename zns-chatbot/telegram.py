@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from .tg_state import TGState
 import json
 import re
 import os
@@ -9,6 +10,7 @@ from telegram import (
     InlineKeyboardMarkup,
     Update,
     ReplyKeyboardMarkup,
+    Message,
     ReplyKeyboardRemove,
     KeyboardButton,
     WebAppInfo,
@@ -78,71 +80,48 @@ async def start(update: Update, context: CallbackContext):
 async def error_handler(update, context):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
-class TGUpdate():
+class TGUpdate(TGState):
     state: dict
     web_app_data = None
     def __init__(self, update: Update, context: CallbackContext) -> None:
-        self.update = update
-        self.user = update.effective_user.id
-        self.context = context
-        self.app = context.application.base_app
-        self.state = {}
+        super().__init__(
+            update.effective_user.id,
+            context.application.base_app,
+            update=update,
+            context=context,
+        )
     
     def l(self, s, **kwargs):
         return self.app.localization(s, args=kwargs, locale=self.update.effective_user.language_code)
     
     async def get_state(self):
-        col = self.app.users_collection
-        if col is not None:
-            user = await col.find_one({
-                "user_id": self.update.effective_user.id,
-                "bot_id": self.context.bot.id,
-            })
-            if user is None:
-                await self.app.users_collection.update_one({
-                    "user_id": self.update.effective_user.id,
-                    "bot_id": self.context.bot.id,
-                }, {
-                    "$set": {
-                        "username": self.update.effective_user.username,
-                        "first_name": self.update.effective_user.first_name,
-                        "last_name": self.update.effective_user.last_name,
-                        "language_code": self.update.effective_user.language_code,
-                        "print_name": user_print_name(self.update.effective_user),
-                    },
-                    "$inc": {
-                        "starts_called": 1,
-                    },
-                    "$setOnInsert": {
-                        "user_id": self.update.effective_user.id,
-                        "bot_id": self.context.bot.id,
-                        "bot_username": self.context.bot.username,
-                        "first_seen": datetime.datetime.now(),
-                        "state": {"state":""},
-                    }
-                }, upsert=True)
-                self.state = {
-                    "state": ""
-                }
-                return
-            if "state" in user:
-                self.state = user["state"]
-            else:
-                self.state = {
-                    "state": ""
-                }
-    
-    async def save_state(self):
-        col = self.app.users_collection
-        if col is not None:
-            await col.update_one({
-                "user_id": self.update.effective_user.id,
-                "bot_id": self.context.bot.id,
-            }, {
+        user = await self.load_user()
+        if user is None and self.user_db is not None:
+            await self.update_user({
                 "$set": {
-                    "state": self.state,
+                    "username": self.update.effective_user.username,
+                    "first_name": self.update.effective_user.first_name,
+                    "last_name": self.update.effective_user.last_name,
+                    "language_code": self.update.effective_user.language_code,
+                    "print_name": user_print_name(self.update.effective_user),
+                },
+                "$inc": {
+                    "starts_called": 1,
+                },
+                "$setOnInsert": {
+                    "user_id": self.user,
+                    "bot_id": self.bot.id,
+                    "bot_username": self.bot.username,
+                    "first_seen": datetime.datetime.now(),
+                    "state": {"state":""},
                 }
-            })
+            }, upsert=True)
+        if "state" in user:
+            self.state = user["state"]
+        else:
+            self.state = {
+                "state": ""
+            }
 
     async def state_waiting_text(self):
         state = self.state
@@ -175,22 +154,6 @@ class TGUpdate():
 
     async def state_cq_waiting_everything(self):
         return await self.state_cq_empty()
-    
-    async def require_input(self, plugin_name: str, plugin_callback_name: str, data):
-        logger.debug(f"requested text input from user {self.user}")
-        self.state["state"] = "waiting_text"
-        self.state["plugin"] = plugin_name
-        self.state["plugin_callback"] = plugin_callback_name
-        self.state["plugin_data"] = data
-        await self.save_state()
-    
-    async def require_anything(self, plugin_name: str, plugin_callback_name: str, data):
-        logger.debug(f"requested everything from user {self.user}")
-        self.state["state"] = "waiting_everything"
-        self.state["plugin"] = plugin_name
-        self.state["plugin_callback"] = plugin_callback_name
-        self.state["plugin_data"] = data
-        await self.save_state()
     
     async def state_empty(self):
         chosen_handle = None
@@ -258,31 +221,6 @@ class TGUpdate():
             self.l("undefined-state-error"),
             reply_markup=InlineKeyboardMarkup([]),
             parse_mode=ParseMode.MARKDOWN
-        )
-
-    async def reply(self, text, chat_id=None, parse_mode=ParseMode.MARKDOWN_V2, *args, **kwargs):
-        if chat_id is None:
-            if self.update.message is not None:
-                chat_id = self.update.message.chat_id
-            elif self.update.effective_user is not None:
-                chat_id = self.update.effective_user.id
-            elif self.update.effective_chat is not None:
-                chat_id = self.update.effective_chat.id
-
-        return await self.context.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            parse_mode=parse_mode,
-            *args,
-            **kwargs
-        )
-    
-    async def send_chat_action(self, chat_id=None, action=ChatAction.TYPING):
-        if chat_id is None:
-            chat_id = self.update.message.chat_id
-        await self.context.bot.send_chat_action(
-            chat_id=chat_id,
-            action=action,
         )
 
     async def run_state(self):

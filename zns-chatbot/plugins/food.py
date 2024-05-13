@@ -1,5 +1,6 @@
 
 from ..config import Config, full_link
+from ..tg_state import TGState
 from ..telegram_links import client_user_link_html
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo, ReplyKeyboardMarkup, User, ReplyKeyboardRemove, Message
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
@@ -119,32 +120,29 @@ cancel_chr = chr(0xE007F) # Tag cancel
 class FoodUpdate:
     base: 'Food'
     tgUpdate: Update
-    tgUser: User
     user: int
     bot: int
-    _user = None
+    update: TGState
     _order = None
 
-    def __init__(self, base, update) -> None:
+    def __init__(self, base, update: TGState) -> None:
         self.base = base
         self.update = update
         self.l = update.l
         self.user = update.user
         self.tgUpdate = update.update
-        self.tgUser = update.update.effective_user
-        self.bot = self.update.context.bot.id
+        self.bot = self.update.bot.id
 
     async def get_user(self):
-        if self._user is None:
-            self._user = await self.base.user_db.find_one({
-                "user_id": self.user,
-                "bot_id": self.bot,
-            })
-        return self._user
+        return await self.update.get_user()
 
     def user_tg_name(self):
-        u = self.tgUser
-        return (f"{u.first_name} {u.last_name}").strip()
+        if self.tgUpdate is not None:
+            u = self.tgUpdate.effective_user
+            return (f"{u.first_name} {u.last_name}").strip()
+        if self.update.maybe_get_user() is not None:
+            u = self.update.maybe_get_user()
+            return (f"{u['first_name']} {u['last_name']}").strip()
     
     async def get_user_names(self):
         user = await self.get_user()
@@ -185,7 +183,7 @@ class FoodUpdate:
         })
     
     async def handle_recipient_name(self, order_id):
-        name = self.tgUpdate.message.text
+        name = self.update.message.text
         logger.debug(f"recipient name: {repr(name)}")
         if name[0] != cancel_chr:
             names = await self.get_user_names()
@@ -215,19 +213,19 @@ class FoodUpdate:
     async def handle_cq_ed(self, order_id):
         msg = self.l("food-order-message-begin")
         order_msg, kbd = await self.get_order_msg(order_id)
-        await self.tgUpdate.callback_query.edit_message_text(
+        await self.update.edit_message_text(
             msg + "\n" + order_msg,
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(kbd),
         )
-        await self.base.save_user_source(self.tgUpdate.callback_query.message)
+        await self.base.save_user_source(self.update.message)
 
     async def handle_cq_ren(self, order_id):
-        self.tgUpdate.callback_query.edit_message_reply_markup(InlineKeyboardMarkup([]))
+        self.update.edit_reply_markup(InlineKeyboardMarkup([]))
         return await self.request_name(order_id)
 
     async def handle_cq_payment(self, order_id):
-        await self.tgUpdate.callback_query.edit_message_text(
+        await self.update.edit_message_text(
             self.l("food-payment-instructions"),
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([[]]),
@@ -261,13 +259,13 @@ class FoodUpdate:
         orders = await self.get_user_orders()
         logger.debug(f"user orders for {self.user}: {orders}")
         msg, buttons = self.base.start_msg(self.l, orders)
-        if self.tgUpdate.callback_query is not None:
-            await self.tgUpdate.callback_query.edit_message_text(
+        if self.update.callback_query is not None:
+            await self.update.edit_message_text(
                 msg,
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([[btn] for btn in buttons])
             )
-            await self.base.save_user_source(self.tgUpdate.callback_query.message)
+            await self.base.save_user_source(self.update.message)
         else:
             source = await self.update.reply(
                 msg,
@@ -277,7 +275,7 @@ class FoodUpdate:
             await self.base.save_user_source(source)
     
     async def handle_payment_proof(self, order_id):
-        if filters.TEXT.check_update(self.tgUpdate) and self.tgUpdate.message.text[0] == cancel_chr:
+        if filters.TEXT.check_update(self.tgUpdate) and self.update.message.text[0] == cancel_chr:
             return await self.update.reply(
                 self.l("food-payment-proof-cancelled"),
                 parse_mode=ParseMode.HTML,
@@ -290,10 +288,10 @@ class FoodUpdate:
                 reply_markup=ReplyKeyboardRemove(),
             )
         if filters.PHOTO.check_update(self.tgUpdate):
-            doc = self.tgUpdate.message.photo[-1]
+            doc = self.update.message.photo[-1]
             file_ext = ".jpg"
         else:
-            doc = self.tgUpdate.message.document
+            doc = self.update.message.document
             import mimetypes
             file_ext = mimetypes.guess_extension(doc.mime_type)
         await self.base.food_db.update_one({
@@ -316,15 +314,15 @@ class FoodUpdate:
                 lc = admin["language_code"]
             def l(s, **kwargs):
                 return self.base.base_app.localization(s, args=kwargs, locale=lc)
-            await self.tgUpdate.message.forward(self.base.config.food.payment_admin)
-            await self.base.base_app.bot.bot.send_message(
-                self.base.config.food.payment_admin,
+            await self.update.forward_message(self.base.config.food.payment_admin)
+            await self.update.reply(
                 l(
                     "food-adm-payment-proof-received",
                     link=client_user_link_html(user),
                     total=str(order["total"]),
                     name=order["receiver_name"],
                 ),
+                chat_id=self.base.config.food.payment_admin,
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([
                     [
@@ -355,15 +353,15 @@ class FoodUpdate:
         })
         def l(s, **kwargs):
             return self.base.base_app.localization(s, args=kwargs, locale=user["language_code"])
-        await self.base.base_app.bot.bot.send_message(
-            order["user_id"],
+        await self.update.reply(
             l(
                 "food-payment-proof-confirmed",
                 name=order["receiver_name"],
             ),
+            order["user_id"],
             parse_mode=ParseMode.HTML
         )
-        await self.tgUpdate.callback_query.edit_message_text(
+        await self.update.edit_message_text(
             self.l(
                 "food-adm-payment-proof-confirmed",
                 link=client_user_link_html(user),
@@ -390,15 +388,15 @@ class FoodUpdate:
         })
         def l(s, **kwargs):
             return self.base.base_app.localization(s, args=kwargs, locale=user["language_code"])
-        await self.base.base_app.bot.bot.send_message(
-            order["user_id"],
+        await self.update.reply(
             l(
                 "food-payment-proof-rejected",
                 name=order["receiver_name"],
             ),
+            order["user_id"],
             parse_mode=ParseMode.HTML
         )
-        await self.tgUpdate.callback_query.edit_message_text(
+        await self.update.edit_message_text(
             self.l(
                 "food-adm-payment-proof-rejected",
                 link=client_user_link_html(user),
@@ -413,7 +411,7 @@ class FoodUpdate:
         await self.handle_cq_start()
 
     async def handle_callback_query(self):
-        q = self.tgUpdate.callback_query
+        q = self.update.callback_query
         await q.answer()
         logger.info(f"Received callback_query from {self.user}, data: {q.data}")
         data = q.data.split("|")
@@ -441,14 +439,18 @@ class Food(BasePlugin):
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}|.*")
         self.menu = self.get_menu()
     
-    async def save_user_source(self, source: Message):
-        logger.debug(f"saving message {source}")
+    async def save_user_source(self, source, user_id=None, bot=None):
+        if isinstance(source, Message):
+            user_id = source.chat.id
+            bot = source.get_bot().id
+            source = source.message_id
+        logger.debug(f"saving message {source} to user {user_id}")
         await self.user_db.update_one({
-            "user_id": source.chat.id,
-            "bot_id": source.get_bot().id,
+            "user_id": user_id,
+            "bot_id": bot,
         }, {
             "$set": {
-                "food_webview_source": source.message_id
+                "food_webview_source": source
             }
         })
         
