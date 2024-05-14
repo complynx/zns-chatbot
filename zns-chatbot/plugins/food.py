@@ -519,8 +519,11 @@ class Food(BasePlugin):
             "bot_id": self.base_app.bot.bot.id,
         })
         await self.try_remove_user_source(user)
+        ls = 'en'
+        if "language_code" in user:
+            ls = user["language_code"]
         def l(s, **kwargs):
-            return self.base_app.localization(s, args=kwargs, locale=user["language_code"])
+            return self.base_app.localization(s, args=kwargs, locale=ls)
         name = ""
         names = []
         if "known_names" in user and len(user["known_names"]) > 0:
