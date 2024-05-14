@@ -221,7 +221,7 @@ class FoodUpdate:
         await self.base.save_user_source(self.update.message)
 
     async def handle_cq_ren(self, order_id):
-        self.update.edit_reply_markup(InlineKeyboardMarkup([]))
+        await self.update.edit_reply_markup(InlineKeyboardMarkup([]))
         return await self.request_name(order_id)
 
     async def handle_cq_payment(self, order_id):
