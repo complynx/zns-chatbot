@@ -351,8 +351,11 @@ class FoodUpdate:
             "user_id": order["user_id"],
             "bot_id": self.bot,
         })
+        ls = 'en'
+        if "language_code" in user:
+            ls=user["language_code"]
         def l(s, **kwargs):
-            return self.base.base_app.localization(s, args=kwargs, locale=user["language_code"])
+            return self.base.base_app.localization(s, args=kwargs, locale=ls)
         await self.update.reply(
             l(
                 "food-payment-proof-confirmed",
@@ -386,8 +389,11 @@ class FoodUpdate:
             "user_id": order["user_id"],
             "bot_id": self.bot,
         })
+        ls = 'en'
+        if "language_code" in user:
+            ls=user["language_code"]
         def l(s, **kwargs):
-            return self.base.base_app.localization(s, args=kwargs, locale=user["language_code"])
+            return self.base.base_app.localization(s, args=kwargs, locale=ls)
         await self.update.reply(
             l(
                 "food-payment-proof-rejected",
@@ -587,6 +593,11 @@ class Food(BasePlugin):
                 "total": total
             }
         })
+        ls = 'en'
+        if "language_code" in user:
+            ls = user["language_code"]
+        def l(s, **kwargs):
+            return self.base_app.localization(s, args=kwargs, locale=ls)
         if is_autosave:
             return
         if total == 0:
@@ -598,11 +609,9 @@ class Food(BasePlugin):
                 }
             })
             orders = await self.get_user_orders(order["user_id"])
-            msg, kbd = self.start_msg(self.l, orders)
+            msg, kbd = self.start_msg(l, orders)
         else:
             order["carts"] = new_carts
-            def l(s, **kwargs):
-                return self.base_app.localization(s, args=kwargs, locale=user["language_code"])
             logger.debug(f"updated {order['_id']} carts")
             msg, kbd = order_msg(l, self.menu, order, order["user_id"], self.name, self.base_app)
             msg = l("food-order-saved") + "\n" + msg
