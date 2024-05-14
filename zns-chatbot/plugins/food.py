@@ -91,29 +91,6 @@ def order_text(l, order, menu):
         return txt
     return ""
 
-def order_msg(l, menu, order, user, base_name, app):
-    order_id = str(order["_id"])
-    kbd = [
-        [InlineKeyboardButton(l("food-rename-button"), callback_data=f"{base_name}|ren|{order_id}")],
-    ]
-    msg = order_text(l, order, menu)
-    if not "proof_received_at" in order:
-        if "total" in order and order["total"] > 0:
-            kbd.append([InlineKeyboardButton(
-                l("food-confirm-payment-button"), callback_data=f"{base_name}|payment|{order_id}"
-            )])
-        check = calculate_sha256(f"{order['nonce']}{order_id}{user}")
-        kbd.append([InlineKeyboardButton(
-            l("food-edit-order-button"),
-            web_app=WebAppInfo(full_link(app, f"/menu?order={order_id}&check={check}"))
-        )])
-        kbd.append([InlineKeyboardButton(
-            l("food-cancel-order-button"),callback_data=f"{base_name}|del|{order_id}"
-        )])
-    kbd.append([InlineKeyboardButton(
-        l("food-back-button"),callback_data=f"{base_name}|start"
-    )])
-    return msg, kbd
 
 cancel_chr = chr(0xE007F) # Tag cancel
 
@@ -155,13 +132,22 @@ class FoodUpdate:
         return names
     
     async def get_user_orders(self):
-        return await self.base.get_user_orders(self.user)
+        cursor = self.base.food_db.find({
+            "user_id": {"$eq": self.user},
+            "deleted": { "$exists": False },
+        }).sort("created_at", 1)
+        return await cursor.to_list()
     
     async def get_order(self, order_id):
         if self._order is None or ObjectId(self._order["_id"]) != ObjectId(order_id):
             self._order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
         return self._order
-    
+
+    async def update_order(self, order_id, request):
+        return await self.base.food_db.update_one({
+            "_id": ObjectId(order_id)
+        }, request)
+
     async def request_name(self, data):
         names = await self.get_user_names()
         btns = [[name] for name in names]
@@ -175,10 +161,7 @@ class FoodUpdate:
         await self.update.require_input(self.base.name, "handle_recipient_name", data)
 
     async def save_new_name(self, name):
-        await self.base.user_db.update_one({
-            "user_id": self.user,
-            "bot_id": self.bot,
-        }, {
+        await self.update.update_user({
             "$push": { "known_names": name }
         })
     
@@ -208,7 +191,7 @@ class FoodUpdate:
         msg += "\n" + order_msg
         logger.debug(f"msg {msg}, kbd {kbd}")
         source = await self.update.reply(msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kbd))
-        await self.base.save_user_source(source)
+        await self.save_user_source(source)
     
     async def handle_cq_ed(self, order_id):
         msg = self.l("food-order-message-begin")
@@ -218,7 +201,7 @@ class FoodUpdate:
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(kbd),
         )
-        await self.base.save_user_source(self.update.message)
+        await self.save_user_source(self.update.message)
 
     async def handle_cq_ren(self, order_id):
         await self.update.edit_reply_markup(InlineKeyboardMarkup([]))
@@ -253,26 +236,46 @@ class FoodUpdate:
     
     async def get_order_msg(self, order_id):
         order = await self.get_order(order_id)
-        return order_msg(self.l, self.base.menu, order, self.user, self.base.name, self.base.base_app)
+        order_id = str(order_id)
+        base_name = self.base.name
+        kbd = [
+            [InlineKeyboardButton(self.l("food-rename-button"), callback_data=f"{base_name}|ren|{order_id}")],
+        ]
+        msg = order_text(self.l, order, self.base.menu)
+        if not "proof_received_at" in order:
+            if "total" in order and order["total"] > 0:
+                kbd.append([InlineKeyboardButton(
+                    self.l("food-confirm-payment-button"), callback_data=f"{base_name}|payment|{order_id}"
+                )])
+            check = calculate_sha256(f"{order['nonce']}{order_id}{self.user}")
+            kbd.append([InlineKeyboardButton(
+                self.l("food-edit-order-button"),
+                web_app=WebAppInfo(full_link(self.base.base_app, f"/menu?order={order_id}&check={check}"))
+            )])
+            kbd.append([InlineKeyboardButton(
+                self.l("food-cancel-order-button"),callback_data=f"{base_name}|del|{order_id}"
+            )])
+        kbd.append([InlineKeyboardButton(
+            self.l("food-back-button"),callback_data=f"{base_name}|start"
+        )])
+        return msg, kbd
 
     async def handle_cq_start(self):
-        orders = await self.get_user_orders()
-        logger.debug(f"user orders for {self.user}: {orders}")
-        msg, buttons = self.base.start_msg(self.l, orders)
+        msg, buttons = await self.start_msg()
         if self.update.callback_query is not None:
             await self.update.edit_message_text(
                 msg,
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([[btn] for btn in buttons])
             )
-            await self.base.save_user_source(self.update.message)
+            await self.save_user_source(self.update.message)
         else:
             source = await self.update.reply(
                 msg,
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([[btn] for btn in buttons])
             )
-            await self.base.save_user_source(source)
+            await self.save_user_source(source)
     
     async def handle_payment_proof(self, order_id):
         if filters.TEXT.check_update(self.tgUpdate) and self.update.message.text[0] == cancel_chr:
@@ -412,6 +415,68 @@ class FoodUpdate:
             reply_markup=InlineKeyboardMarkup([])
         )
     
+    async def set_carts(self, order, new_carts, is_autosave):
+        self._order = order
+        await self.try_remove_user_source()
+        total = order_total(new_carts, self.base.menu)
+        await self.update_order(order["_id"], {
+            "$set":{
+                "carts": new_carts,
+                "total": total
+            }
+        })
+        if is_autosave:
+            return
+        if total == 0:
+            await self.update_order(order["_id"], {
+                "$set":{
+                    "deleted": True,
+                }
+            })
+            msg, kbd = await self.start_msg()
+        else:
+            order["carts"] = new_carts
+            order["total"] = total
+            logger.debug(f"updated {order['_id']} carts")
+            msg, kbd = await self.get_order_msg(order["_id"])
+            msg = self.l("food-order-saved") + "\n" + msg
+        source = await self.update.reply(
+            msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kbd)
+        )
+        await self.save_user_source(source)
+    
+    async def create_order(self, new_carts):
+        total = order_total(new_carts, self.base.menu)
+        if total == 0:
+            logger.debug("total is 0, won't create")
+            return
+        await self.try_remove_user_source()
+        names = await self.get_user_names()
+        name = names[0]
+        res = await self.base.food_db.insert_one({
+            "user_id": self.user,
+            "receiver_name": name,
+            "created_at": datetime.datetime.now(),
+            "nonce": generate_random_string(20),
+            "carts": new_carts,
+            "total": total
+        })
+        order_id = str(res.inserted_id)
+        logger.debug(f"created order for {self.user} for {name}: {order_id}")
+        btns = [[name] for name in names]
+        logger.debug(f"known names: {names}")
+        btns.append([cancel_chr+self.l("cancel-command")])
+        markup = ReplyKeyboardMarkup(
+            btns,
+            resize_keyboard=True
+        )
+        await self.update.require_input(self.base.name, "handle_recipient_name", order_id)
+        await self.update.reply(
+            self.l("food-created-write-for-who"),
+            reply_markup=markup,
+            parse_mode=ParseMode.HTML,
+        )
+
     async def handle_start(self):
         logger.debug(f"starting orders for: {self.user}")
         await self.handle_cq_start()
@@ -428,6 +493,57 @@ class FoodUpdate:
                 return await attr(*data[2:])
         logger.error(f"unknown callback {data[1]}: {data[2:]}")
 
+    async def try_remove_user_source(self):
+        user = self.get_user()
+        if "food_webview_source" in user:
+            logger.debug(f"trying remove message {user['food_webview_source']} for user {user['user_id']}")
+            try:
+                await self.update.edit_reply_markup(
+                    chat_id=user['user_id'],
+                    message_id=user['food_webview_source'],
+                    reply_markup=InlineKeyboardMarkup([])
+                )
+                await self.update.delete_message(
+                    chat_id=user['user_id'],
+                    message_id=user['food_webview_source']
+                )
+            except Exception as e:
+                logger.warn(f"failed to remove message {user['food_webview_source']} for user {user['user_id']}: {e}", exc_info=True)
+    
+    async def save_user_source(self, source):
+        if isinstance(source, Message):
+            user_id = source.chat.id
+            bot = source.get_bot().id
+            source = source.message_id
+        else:
+            user_id = self.user
+            bot = self.bot
+        logger.debug(f"saving message {source} to user {user_id}")
+        await self.base.user_db.update_one({
+            "user_id": user_id,
+            "bot_id": bot,
+        }, {
+            "$set": {
+                "food_webview_source": source
+            }
+        })
+    
+    async def start_msg(self):
+        orders = await self.get_user_orders()
+        buttons = [InlineKeyboardButton(self.l(
+            "food-order-button",
+            created=order["created_at"].strftime("%d.%m"),
+            name=order["receiver_name"],
+        ), callback_data=f"{self.base.name}|ed|{str(order['_id'])}") for order in orders]
+        if self.base.config.food.deadline > datetime.date.today():
+            buttons.append(InlineKeyboardButton(
+                self.l("food-new-order-button"),
+                web_app=WebAppInfo(full_link(self.base.base_app, f"/menu"))
+            ))
+        msg = self.l("food-select-order")
+        if len(orders) == 0:
+            msg = self.l("food-no-orders-yet")
+        return msg, buttons
 
 class Food(BasePlugin):
     name = "food"
@@ -444,37 +560,6 @@ class Food(BasePlugin):
         self._meal_test = CommandHandler("meal", self.handle_start)
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}|.*")
         self.menu = self.get_menu()
-    
-    async def save_user_source(self, source, user_id=None, bot=None):
-        if isinstance(source, Message):
-            user_id = source.chat.id
-            bot = source.get_bot().id
-            source = source.message_id
-        logger.debug(f"saving message {source} to user {user_id}")
-        await self.user_db.update_one({
-            "user_id": user_id,
-            "bot_id": bot,
-        }, {
-            "$set": {
-                "food_webview_source": source
-            }
-        })
-        
-    def start_msg(self, l, orders):
-        buttons = [InlineKeyboardButton(l(
-            "food-order-button",
-            created=order["created_at"].strftime("%d.%m"),
-            name=order["receiver_name"],
-        ), callback_data=f"{self.name}|ed|{str(order['_id'])}") for order in orders]
-        if self.config.food.deadline > datetime.date.today():
-            buttons.append(InlineKeyboardButton(
-                l("food-new-order-button"),
-                web_app=WebAppInfo(full_link(self.base_app, f"/menu"))
-            ))
-        msg = l("food-select-order")
-        if len(orders) == 0:
-            msg = l("food-no-orders-yet")
-        return msg, buttons
         
     def get_menu(self):
         from os.path import dirname as d
@@ -489,136 +574,14 @@ class Food(BasePlugin):
     
     async def handle_callback_query(self, updater):
         return await self.create_update(updater).handle_callback_query()
-    
-    async def get_order(self, order_id):
-        return await self.food_db.find_one({"_id": ObjectId(order_id)})
-    
-    async def get_user_orders(self, user_id):
-        cursor = self.food_db.find({
-            "user_id": {"$eq": user_id},
-            "deleted": { "$exists": False },
-        }).sort("created_at", 1)
-        return await cursor.to_list(length=1)
-
-    async def try_remove_user_source(self, user):
-        if "food_webview_source" in user:
-            logger.debug(f"trying remove message {user['food_webview_source']} for user {user['user_id']}")
-            try:
-                await self.base_app.bot.bot.edit_message_reply_markup(
-                    user['user_id'],
-                    user['food_webview_source'],
-                    reply_markup=InlineKeyboardMarkup([])
-                )
-                await self.base_app.bot.bot.delete_message(
-                    user['user_id'],
-                    user['food_webview_source']
-                )
-            except Exception as e:
-                logger.warn(f"failed to remove message {user['food_webview_source']} for user {user['user_id']}: {e}", exc_info=True)
 
     async def create_order(self, user_id, new_carts):
-        total = order_total(new_carts, self.menu)
-        if total == 0:
-            return
-        user = await self.user_db.find_one({
-            "user_id": user_id,
-            "bot_id": self.base_app.bot.bot.id,
-        })
-        await self.try_remove_user_source(user)
-        ls = 'en'
-        if "language_code" in user:
-            ls = user["language_code"]
-        def l(s, **kwargs):
-            return self.base_app.localization(s, args=kwargs, locale=ls)
-        name = ""
-        names = []
-        if "known_names" in user and len(user["known_names"]) > 0:
-            name = user["known_names"][0]
-            names = names.copy()
-        if name == "":
-            name = (f"{user['first_name']} {user['last_name']}").strip()
-        if not name in names:
-            names.append(name)
-        res = await self.food_db.insert_one({
-            "user_id": user_id,
-            "receiver_name": name,
-            "created_at": datetime.datetime.now(),
-            "nonce": generate_random_string(20),
-            "carts": new_carts,
-            "total": total
-        })
-        order_id = str(res.inserted_id)
-        logger.debug(f"created order for {user_id} for {name}: {order_id}")
-        btns = [[name] for name in names]
-        logger.debug(f"known names: {names}")
-        btns.append([cancel_chr+l("cancel-command")])
-        markup = ReplyKeyboardMarkup(
-            btns,
-            resize_keyboard=True
-        )
-        if not "state" in user:
-            user["state"] = {}
-        user["state"]["state"] = "waiting_text"
-        user["state"]["plugin"] = self.name
-        user["state"]["plugin_callback"] = "handle_recipient_name"
-        user["state"]["plugin_data"] = order_id
-        
-        await self.user_db.update_one({
-            "user_id": user_id,
-            "bot_id": self.base_app.bot.bot.id,
-        }, {
-            "$set": {
-                "state": user["state"],
-            }
-        })
-        await self.base_app.bot.bot.send_message(
-            user_id,
-            l("food-created-write-for-who"),
-            reply_markup=markup,
-            parse_mode=ParseMode.HTML,
-        )
+        upd = await self.create_update_from_user(user_id)
+        return await upd.create_order(new_carts)
     
     async def set_carts(self, order, new_carts, is_autosave):
-        user = await self.user_db.find_one({
-            "user_id": order["user_id"],
-            "bot_id": self.base_app.bot.bot.id,
-        })
-        await self.try_remove_user_source(user)
-        total = order_total(new_carts, self.menu)
-        await self.food_db.update_one({
-            "_id": order["_id"]
-        },{
-            "$set":{
-                "carts": new_carts,
-                "total": total
-            }
-        })
-        ls = 'en'
-        if "language_code" in user:
-            ls = user["language_code"]
-        def l(s, **kwargs):
-            return self.base_app.localization(s, args=kwargs, locale=ls)
-        if is_autosave:
-            return
-        if total == 0:
-            await self.food_db.update_one({
-                "_id": order["_id"]
-            },{
-                "$set":{
-                    "deleted": True,
-                }
-            })
-            orders = await self.get_user_orders(order["user_id"])
-            msg, kbd = self.start_msg(l, orders)
-        else:
-            order["carts"] = new_carts
-            logger.debug(f"updated {order['_id']} carts")
-            msg, kbd = order_msg(l, self.menu, order, order["user_id"], self.name, self.base_app)
-            msg = l("food-order-saved") + "\n" + msg
-        source = await self.base_app.bot.bot.send_message(
-            order["user_id"], msg, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kbd)
-        )
-        await self.save_user_source(source)
+        upd = await self.create_update_from_order(order)
+        return await upd.set_carts(order, new_carts, is_autosave)
     
     def test_message(self, message: Update, state, web_app_data):
         if self._meal_test.check_update(message):
@@ -629,6 +592,14 @@ class Food(BasePlugin):
         if self._cbq_handler.check_update(query):
             return PRIORITY_BASIC, self.handle_callback_query
         return PRIORITY_NOT_ACCEPTING, None
+    
+    async def create_update_from_order(self, order) -> FoodUpdate:
+        return await self.create_update_from_user(order["user_id"])
+    
+    async def create_update_from_user(self, user) -> FoodUpdate:
+        upd = TGState(user, self.base_app)
+        await upd.get_state()
+        return FoodUpdate(self, upd)
     
     def create_update(self, update) -> FoodUpdate:
         return FoodUpdate(self, update)
