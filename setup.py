@@ -16,7 +16,7 @@ setup(
         "motor>=3.1",
         "httpx~=0.27.0",
         "pydantic>=1.10,<2.0",
-        "openai>=1.3.3",
-        "tiktoken>=0.5.1"
+        "openai>=1.30.1",
+        "tiktoken>=0.7.0"
     ],
 )
