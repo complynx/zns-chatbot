@@ -136,7 +136,7 @@ class TGUpdate(TGState):
             await cb(self, state["plugin_data"])
         else:
             logger.debug(f"was waiting text input from user {self.user}, got something else, falling back")
-            await self.state_empty(self)
+            await self.state_empty()
 
     async def state_waiting_everything(self):
         state = self.state
