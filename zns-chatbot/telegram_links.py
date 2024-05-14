@@ -8,8 +8,10 @@ def client_user_link_html(user) -> str:
     if "print_name" in user:
         name = user['print_name']
     else:
-        name = (f"{user['first_name']} {user['last_name']}").strip()
-    if name == "" and user["username"] is not None and user["username"] != "":
+        fn = user['first_name'] if 'first_name' in user else ''
+        ln = user['last_name'] if 'last_name' in user else ''
+        name = (f"{fn} {ln}").strip()
+    if name == "" and "username" in user and user["username"] is not None and user["username"] != "":
         name = user["username"]
     if name == "":
         name = user["user_id"]
