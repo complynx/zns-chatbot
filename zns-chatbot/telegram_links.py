@@ -1,6 +1,6 @@
 
 def client_user_link_url(user) -> str:
-    return f"https://t.me/{user['username']}" if user["username"] is not None and \
+    return f"https://t.me/{user['username']}" if "username" in user and user["username"] is not None and \
         user["username"] != "" else f"tg://user?id={user['user_id']}"
 
 def client_user_link_html(user) -> str:
