@@ -116,7 +116,7 @@ class TGUpdate(TGState):
                     "state": {"state":""},
                 }
             }, upsert=True)
-        if "state" in user:
+        if user is not None and "state" in user:
             self.state = user["state"]
         else:
             self.state = {
