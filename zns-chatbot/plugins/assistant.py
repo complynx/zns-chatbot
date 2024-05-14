@@ -36,6 +36,23 @@ class Assistant(BasePlugin):
         await update.send_chat_action()
         repl = await self.get_assistant_reply(update.update.message.text_markdown_v2, update.user, update)
         await update.reply(repl, parse_mode=None)
+
+    async def user_info(self, user_id, tgUpdate: Update):
+        user = await self.user_db.find_one({
+            "user_id": user_id,
+            "bot_id": self.base_app.bot.bot.id,
+        })
+        ret = f"имя пользователя {tgUpdate.effective_user.full_name}"
+        if tgUpdate.effective_user.username is not None:
+            ret += f", ник @{tgUpdate.effective_user.username}"
+        orders = await self.base_app.food.get_user_orders_assist(user_id)
+        if orders != "":
+            ret += "\n заказы пользователя в /meal\n"+orders
+        else:
+            ret += "\nпользователь пока не заказал ничего через /meal"
+        if 'avatars_called' in user:
+            ret += f"\nаватарок создано: {user['avatars_called']}"
+        return ret
     
     async def get_assistant_reply(self, message: str, user_id: int, update):
         date_1_day_ago = datetime.datetime.now() - datetime.timedelta(days=1)
@@ -62,9 +79,13 @@ class Assistant(BasePlugin):
                 }
             }
         ]).to_list(length=1)
+        last_question = ""
         logger.debug(f"latest messages count: {result} ?> {self.config.openai.max_messages_per_user_per_day}")
         if len(result) > 0 and result[0]["count"] > self.config.openai.max_messages_per_user_per_day:
             return update.l("max-assistant-messages-reached")
+        if len(result) > 0:
+            limit = self.config.openai.max_messages_per_user_per_day-result[0]["count"]
+            last_question = f"\nвопросов на сегодня осталось: {limit}, следующие пользователь сможет задать завтра"
 
         length = len(self.tokenizer.encode(message))
         if length > self.config.openai.message_token_cap:
@@ -95,6 +116,8 @@ class Assistant(BasePlugin):
             "user_id": user_id,
             "date": datetime.datetime.now()
         })
+
+        user_info = await self.user_info(user_id, update.update)
 
         messages = [{
             "role": "system",
@@ -145,14 +168,14 @@ Dark room — работает на площадке ночью, в пиковы
 Елена Ергина @ElenaErgina — Западная часть России, кроме регионов, Христины и Оли
 Анна Рякина @annyrya — территория России, расположенная восточнее Уральских гор
 Питание: Всё питание готовится день в день и привозится в вакуумной упаковке в охлаждённом виде. На площадке есть место, где разогреть. Срок хранения от 12-72 часов. Заказ нужно оформить и оплатить до 4 июня включительно.
-Питание будет в дни лисоборья, обед и ужин. В пятницу из-за позднего старта только ужин.
+Питание будет в дни лисоборья, обед и ужин. В пятницу из-за позднего старта только ужин. Обед примерно в 17, ужин примерно в 22.
 Чтобы заказать питание, пользователю надо нажать, ввести или выбрать в меню "/meal" и после этого следовать твоим инструкциям. Там также есть информация о самих блюдах, их состав, фото. Всё автоматизировано.
 ```
 Используя эту информацию, как можно точнее ответь на вопрос участника.
 По-возможности избегай длинных и формальных ответов. Если неизвестны детали требуемые для короткого ответа, например пол участника, день брони или город проживания для определения амбассадора, задай наводящий вопрос.
 Обязательно указывай @-тег, если он есть в ответе. Обязательно указывай /-команду, если она есть в ответе.
 Если пользователь хочет аватарку фестиваля, попроси просто прислать фото.
-"""
+""" + user_info + last_question
         }] + messages
         # import json
         # return await self.base_app.bot.bot.send_message(

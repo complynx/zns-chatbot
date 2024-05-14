@@ -21,6 +21,22 @@ def generate_random_string(length):
     return ''.join(random.choice(characters) for _ in range(length))
 
 
+def next_weekday_date(given_date: datetime.date, target_weekday: str) -> datetime.date:
+    weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    given_weekday = given_date.weekday()
+    target_weekday = weekdays.index(target_weekday.lower())
+    
+    if given_weekday == target_weekday:
+        return given_date
+    
+    days_difference = target_weekday - given_weekday
+    if days_difference < 0:
+        days_difference += 7
+    
+    next_date = given_date + datetime.timedelta(days=days_difference)
+    return next_date
+
+
 def calculate_sha256(input_string):
     import hashlib
     sha256_hash = hashlib.sha256(input_string.encode()).hexdigest()
@@ -41,7 +57,7 @@ def order_total(carts, menu):
             total += item_m["price"]
     return total
 
-def order_text(l, order, menu):
+def order_text(l, order, menu, for_assist=False):
     ret = []
     total = 0
     if "carts" in order:
@@ -79,15 +95,29 @@ def order_text(l, order, menu):
                 item = item_d["item"]
                 name = item["name"]
                 if count > 1:
-                    name += f" *x{count}*"
+                    if for_assist:
+                        name += f" x{count}"
+                    else:
+                        name += f" *x{count}*"
                 items_names.append(name)
             if len(items_names) >0:
-                meal = "🍽 <b>" + l("food-day-"+cart["day"]) + ", " + l("food-meal-"+cart["meal"]) + "</b> <code>" + str(meal_total)+ "</code>:\n"
+                if for_assist:
+                    meal = cart["day"] + ", " +cart["meal"] + " " + str(meal_total)+ "rub.\n"
+                else:
+                    meal = "🍽 <b>" + l("food-day-"+cart["day"]) + ", " + l("food-meal-"+cart["meal"]) + "</b> <code>" + str(meal_total)+ "</code>:\n"
                 meal += ", ".join(items_names)
                 ret.append(meal)
     if len(ret) > 0:
-        txt = l("food-order-for", name=order["receiver_name"]) + "\n\n" + "\n\n".join(ret)
-        txt += "\n\n"+ l("food-total", total=total)
+        if for_assist:
+            txt = ""
+            if "validation" in order and order["validation"]:
+                txt += "paid "
+            else:
+                txt += "unpaid "
+            txt += "order for " + order["receiver_name"] + "\n - " + "\n - ".join(ret) + f"\n total: {total}rub."
+        else:
+            txt = l("food-order-for", name=order["receiver_name"]) + "\n\n" + "\n\n".join(ret)
+            txt += "\n\n"+ l("food-total", total=total)
         return txt
     return ""
 
@@ -136,7 +166,7 @@ class FoodUpdate:
             "user_id": {"$eq": self.user},
             "deleted": { "$exists": False },
         }).sort("created_at", 1)
-        return await cursor.to_list()
+        return await cursor.to_list(length=1000)
     
     async def get_order(self, order_id):
         if self._order is None or ObjectId(self._order["_id"]) != ObjectId(order_id):
@@ -560,6 +590,21 @@ class Food(BasePlugin):
         self._meal_test = CommandHandler("meal", self.handle_start)
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}|.*")
         self.menu = self.get_menu()
+    
+    async def get_user_orders_assist(self, user_id: int) -> str:
+        cursor = self.food_db.find({
+            "user_id": {"$eq": user_id},
+            "deleted": { "$exists": False },
+        }).sort("created_at", 1)
+        orders = await cursor.to_list(length=1000)
+        ret = []
+        for order in orders:
+            ot = order_text(None, order, self.menu, True)
+            if ot != "":
+                ret.append(ot)
+        if len(ret) == 0:
+            return ""
+        return "\n".join(ret)
         
     def get_menu(self):
         from os.path import dirname as d

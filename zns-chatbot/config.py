@@ -1,6 +1,6 @@
 import re
 import yaml
-from datetime import date
+from datetime import date, time
 
 from pydantic import BaseSettings, Field, SecretStr 
 
@@ -45,6 +45,9 @@ class Photo(BaseSettings):
 
 class Food(BaseSettings):
     deadline: date = Field(date(2024, 6, 6))
+    start_day: date = Field(date(2024, 6, 12))
+    lunch_time: time = Field(time(17,0,0))
+    dinner_time: time = Field(time(22,0,0))
     payment_admin: int = Field(-1)
 
 class Config(BaseSettings):
