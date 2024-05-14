@@ -1,5 +1,5 @@
 start-message =
-    Hi! I will help you create a user image with frame. To do it, just send me your best picture, please.
+    Hi, zoukonaut! I will help you create a user image with frame. To do it, just send me your best picture, please.
 cancel-command = Cancel
 cover-caption-message =
     ❗️If you use this photo in the social networks with profile covers, it goes well with this one.
@@ -15,9 +15,9 @@ frame-mover-help-unified =
 frame-mover-finish-button-text = Submit
 undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
-max-assistant-messages-reached = You've reached your limit for a day, please come back in 24 hours for your next questions.
+max-assistant-messages-reached = You've reached your questions limit for a day, please come back in 24 hours.
 avatar-custom-crop = Crop differently
-avatar-without-command = No need to send this command anymore, just send me your picture.
+avatar-without-command = No need to send this command anymore, sending the picture right away is better.
 something-went-wrong = Something went wrong. Try again.
 food-adm-payment-proof-accept-button = ✅ Accept
 food-adm-payment-proof-confirmed = Order payment from user {$link} for <i>{$name}</i> is confirmed.
@@ -30,7 +30,7 @@ food-adm-payment-proof-reject-button = ❌ Reject
 food-adm-payment-proof-rejected = Order payment from user {$link} for <i>{$name}</i> is rejected.
 food-back-button = To the beginning.
 food-cancel-order-button = Cancel order.
-food-command-description = Your meals at ZNS
+food-command-description = Your space meal at ZNS
 food-confirm-payment-button = Pay for the order
 food-created-write-for-who = Your order has been saved, write your name, so we can easily identify your meal and give it to you.
 food-day-wednesday = Wednesday
@@ -40,8 +40,8 @@ food-day-sunday = Sunday
 food-edit-order-button = Edit order.
 food-meal-lunch = lunch
 food-meal-dinner = dinner
-food-name-update-cancelled = Recipient name is left unchanged
-food-name-updated = The new recipient name <i>{$name}</i> was saved
+food-name-update-cancelled = Recipient name is left unchanged.
+food-name-updated = The new recipient name <i>{$name}</i> was saved.
 food-new-order-button = Create new
 food-no-orders-yet = 
     For the full immersion, zoukonaut has to have a good meal!
@@ -70,6 +70,6 @@ food-payment-proof-rejected =
     Administrator rejected payment proof for <i>{$name}</i>.
     You can create another order or try sending another confirmation.
 food-rename-button = Rename order
-food-select-order = Here are all your orders, you can view them or create a new one.
+food-select-order = Here you can view your order or create a new one.
 food-total = <b>Total:</b> <code>{$total}</code>
 food-write-for-who = Please write <b>full name</b> of the person, for who we are creating the order. This will help to identify it at the event.
