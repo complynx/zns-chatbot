@@ -116,6 +116,16 @@ class TGUpdate(TGState):
                     "state": {"state":""},
                 }
             }, upsert=True)
+        else:
+            await self.update_user({
+                "$set": {
+                    "username": self.update.effective_user.username,
+                    "first_name": self.update.effective_user.first_name,
+                    "last_name": self.update.effective_user.last_name,
+                    "language_code": self.update.effective_user.language_code,
+                    "print_name": user_print_name(self.update.effective_user),
+                }
+            }, upsert=True)
         if user is not None and "state" in user:
             self.state = user["state"]
         else:

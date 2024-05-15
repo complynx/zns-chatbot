@@ -146,10 +146,23 @@ class FoodUpdate:
     def user_tg_name(self):
         if self.tgUpdate is not None:
             u = self.tgUpdate.effective_user
-            return (f"{u.first_name} {u.last_name}").strip()
+            return u.full_name
         if self.update.maybe_get_user() is not None:
-            u = self.update.maybe_get_user()
-            return (f"{u['first_name']} {u['last_name']}").strip()
+            user = self.update.maybe_get_user()
+            name = ""
+            if "print_name" in user:
+                name = user['print_name']
+            else:
+                fn = user['first_name'] if 'first_name' in user else ''
+                ln = user['last_name'] if 'last_name' in user else ''
+                name = (f"{fn} {ln}").strip()
+            if name == "" and "username" in user and user["username"] is not None and user["username"] != "":
+                name = user["username"]
+            if name == "":
+                name = user["user_id"]
+            if name == "":
+                name = "???"
+            return name
     
     async def get_user_names(self):
         user = await self.get_user()
@@ -464,6 +477,7 @@ class FoodUpdate:
                 }
             })
             msg, kbd = await self.start_msg()
+            kbd = [[btn] for btn in buttons]
         else:
             order["carts"] = new_carts
             order["total"] = total
@@ -500,6 +514,7 @@ class FoodUpdate:
             btns,
             resize_keyboard=True
         )
+        logger.warn(f"{btns}")
         await self.update.require_input(self.base.name, "handle_recipient_name", order_id)
         await self.update.reply(
             self.l("food-created-write-for-who"),
@@ -524,7 +539,7 @@ class FoodUpdate:
         logger.error(f"unknown callback {data[1]}: {data[2:]}")
 
     async def try_remove_user_source(self):
-        user = self.get_user()
+        user = await self.get_user()
         if "food_webview_source" in user:
             logger.debug(f"trying remove message {user['food_webview_source']} for user {user['user_id']}")
             try:
@@ -590,6 +605,9 @@ class Food(BasePlugin):
         self._meal_test = CommandHandler("meal", self.handle_start)
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}|.*")
         self.menu = self.get_menu()
+    
+    async def get_order(self, order_id):
+        return await self.food_db.find_one({"_id": ObjectId(order_id)})
     
     async def get_user_orders_assist(self, user_id: int) -> str:
         cursor = self.food_db.find({
