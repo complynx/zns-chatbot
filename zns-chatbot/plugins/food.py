@@ -148,8 +148,21 @@ class FoodUpdate:
             u = self.tgUpdate.effective_user
             return (f"{u.first_name} {u.last_name}").strip()
         if self.update.maybe_get_user() is not None:
-            u = self.update.maybe_get_user()
-            return (f"{u['first_name']} {u['last_name']}").strip()
+            user = self.update.maybe_get_user()
+            name = ""
+            if "print_name" in user:
+                name = user['print_name']
+            else:
+                fn = user['first_name'] if 'first_name' in user else ''
+                ln = user['last_name'] if 'last_name' in user else ''
+                name = (f"{fn} {ln}").strip()
+            if name == "" and "username" in user and user["username"] is not None and user["username"] != "":
+                name = user["username"]
+            if name == "":
+                name = user["user_id"]
+            if name == "":
+                name = "???"
+            return name
     
     async def get_user_names(self):
         user = await self.get_user()
