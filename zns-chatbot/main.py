@@ -28,13 +28,13 @@ async def main(cfg: Config):
     loader = FluentResourceLoader(cfg.localization.path)
     app.localization = Localization(loader, cfg.localization.file, cfg.localization.fallbacks)
 
-    await create_server(cfg, app)
     if cfg.mongo_db.address != "":
         logger.info(f"db address {cfg.mongo_db.address}")
         app.mongodb = AsyncIOMotorClient(cfg.mongo_db.address).get_database()
         app.users_collection = app.mongodb[cfg.mongo_db.users_collection]
         app.storage = Storage(app.mongodb[cfg.mongo_db.bots_storage])
 
+    await create_server(cfg, app)
     try:
         async with create_telegram_bot(cfg, app, {plugin.name: plugin for plugin in [plugin(app) for plugin in plugins]}) as bot:
             logger.info("running event loop")

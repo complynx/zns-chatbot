@@ -1,11 +1,12 @@
 import re
 import yaml
-from datetime import date, time
+from datetime import date, time, timedelta
 
 from pydantic import BaseSettings, Field, SecretStr 
 
 class TelegramSettings(BaseSettings):
     token: SecretStr = Field(env="TELEGRAM_TOKEN")
+    admins: set[int] = Field({379278985})
 
 class OpenAI(BaseSettings):
     api_key: SecretStr = Field(env="OPENAI_API_KEY")
@@ -33,6 +34,7 @@ class MongoDB(BaseSettings):
 class ServerSettings(BaseSettings):
     base: str = Field("http://localhost:8080")
     port: int = Field(8080, env="SERVER_PORT")
+    admin_timeout: timedelta = Field(timedelta(minutes=15))
 
 class Photo(BaseSettings):
     frame_size: int = Field(1000)

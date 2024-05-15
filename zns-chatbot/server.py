@@ -15,6 +15,12 @@ import random
 
 logger = logging.getLogger(__name__)
 
+def generate_random_string(length):
+    import random
+    import string
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for _ in range(length))
+
 class AuthError(Exception):
     status: ClassVar[int] = 403
     detail: str = "unknown auth error"
@@ -166,6 +172,32 @@ class MenuHandler(tornado.web.RequestHandler):
             self.write({'error': "internal error"})
             logger.error("error saving menu: %s",e, exc_info=1)
 
+
+class GetOrders(tornado.web.RequestHandler):
+    def verify_tg(data, token):
+        sorted_keys = [key for key in sorted(data.keys()) if key != 'hash']
+        data_check_string = '\n'.join([f"{key}={data[key]}" for key in sorted_keys])
+        signature = hmac.new(token.encode(), data_check_string.encode(), hashlib.sha256).hexdigest()
+        return 'hash' in data and data['hash'] == signature
+    
+    async def post(self):
+        try:
+            req = json.loads(self.request.body)
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({'error': "internal error"})
+            logger.error("error getting orders: %s",e, exc_info=1)
+
+
+class BotNameHandler(tornado.web.RequestHandler):
+    def initialize(self, app):
+        self.app = app
+    async def get(self):
+        self.set_status(200)
+        self.write({'name': self.app.bot.bot.name})
+
+
 class ErrorHandler(tornado.web.RequestHandler):
     def initialize(self, app):
         self.app = app
@@ -201,14 +233,17 @@ async def create_server(config: Config, base_app):
             else:
                 self.abs_path = await base_app.avatar.get_file(path_part)
             return await super().get(path, include_body)
+    
+    secret = hashlib.sha256(f"secret {config.telegram.token.get_secret_value()} {config.mongo_db.address}").hexdigest()
 
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
+        (r"/bot_name", BotNameHandler, {"app": base_app}),
         (r"/menu", MenuHandler, {"app": base_app}),
         (r"/error", ErrorHandler, {"app": base_app}),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
-    ], template_path="templates/")
+    ], template_path="templates/", cookie_secret=secret)
     app.listen(config.server.port)
     base_app.server = app
 
