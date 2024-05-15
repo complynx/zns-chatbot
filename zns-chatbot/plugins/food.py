@@ -604,9 +604,9 @@ class Food(BasePlugin):
         self._meal_test = CommandHandler("meal", self.handle_start)
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}|.*")
         self.menu = self.get_menu()
-
-     async def get_order(self, order_id):
-         return await self.food_db.find_one({"_id": ObjectId(order_id)})
+    
+    async def get_order(self, order_id):
+        return await self.food_db.find_one({"_id": ObjectId(order_id)})
     
     async def get_user_orders_assist(self, user_id: int) -> str:
         cursor = self.food_db.find({
