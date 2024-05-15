@@ -524,7 +524,7 @@ class FoodUpdate:
         logger.error(f"unknown callback {data[1]}: {data[2:]}")
 
     async def try_remove_user_source(self):
-        user = self.get_user()
+        user = await self.get_user()
         if "food_webview_source" in user:
             logger.debug(f"trying remove message {user['food_webview_source']} for user {user['user_id']}")
             try:
