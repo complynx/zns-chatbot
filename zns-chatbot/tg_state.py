@@ -217,7 +217,7 @@ class TGState:
         if message_id is None:
             message_id = self.message_id
 
-        return await self.bot.send_message(
+        return await self.bot.edit_message_reply_markup(
             reply_markup=reply_markup,
             chat_id=chat_id,
             message_id=message_id,
