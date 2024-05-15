@@ -477,6 +477,7 @@ class FoodUpdate:
                 }
             })
             msg, kbd = await self.start_msg()
+            kbd = [[btn] for btn in buttons]
         else:
             order["carts"] = new_carts
             order["total"] = total
