@@ -513,6 +513,7 @@ class FoodUpdate:
             btns,
             resize_keyboard=True
         )
+        logger.warn(f"{btns}")
         await self.update.require_input(self.base.name, "handle_recipient_name", order_id)
         await self.update.reply(
             self.l("food-created-write-for-who"),
