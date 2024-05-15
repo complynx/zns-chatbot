@@ -234,7 +234,7 @@ async def create_server(config: Config, base_app):
                 self.abs_path = await base_app.avatar.get_file(path_part)
             return await super().get(path, include_body)
     
-    secret = hashlib.sha256(f"secret {config.telegram.token.get_secret_value()} {config.mongo_db.address}").hexdigest()
+    secret = hashlib.sha256(f"secret {config.telegram.token.get_secret_value()} {config.mongo_db.address}".encode()).hexdigest()
 
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
