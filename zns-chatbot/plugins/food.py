@@ -146,7 +146,7 @@ class FoodUpdate:
     def user_tg_name(self):
         if self.tgUpdate is not None:
             u = self.tgUpdate.effective_user
-            return (f"{u.first_name} {u.last_name}").strip()
+            return u.full_name
         if self.update.maybe_get_user() is not None:
             user = self.update.maybe_get_user()
             name = ""
