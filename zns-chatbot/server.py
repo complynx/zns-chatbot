@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import mimetypes
 from operator import itemgetter
 import tempfile
 from typing import Any, ClassVar, Optional
@@ -179,6 +180,9 @@ class GetOrders(tornado.web.RequestHandler):
         data_check_string = '\n'.join([f"{key}={data[key]}" for key in sorted_keys])
         signature = hmac.new(token.encode(), data_check_string.encode(), hashlib.sha256).hexdigest()
         return 'hash' in data and data['hash'] == signature
+    def set_default_headers(self):
+        super().set_default_headers()
+        self.set_header("Access-Control-Allow-Origin", "*")
     
     async def post(self):
         try:
@@ -190,12 +194,67 @@ class GetOrders(tornado.web.RequestHandler):
             logger.error("error getting orders: %s",e, exc_info=1)
 
 
+class AuthHandler(tornado.web.RequestHandler):
+    def initialize(self, app):
+        self.app = app
+    def set_default_headers(self):
+        super().set_default_headers()
+        self.set_header("Access-Control-Allow-Origin", "*")
+    async def get(self):
+        try:
+            logger.info(f"auth request headers: {self._headers}")
+            username = self.get_argument('username', default="", strip=True)
+            if username == "":
+                self.set_status(400)
+                logger.warn("auth without username")
+                return
+            user = await self.app.users_collection.find_one({
+                "username": username,
+                "bot_id": self.app.bot.bot.id,
+            })
+            if user is None:
+                self.set_status(404)
+                logger.warn(f"auth username {username} not found")
+                return
+            logger.info(f"auth request for user {user['user_id']} with {username}")
+            from .tg_state import TGState
+            state = TGState(user["user_id"], self.app)
+            await state.get_state()
+            req = await self.app.auth.request_auth(state)
+            await req.wait()
+            if req.is_cancelled():
+                logger.warn(f"auth request for user {user['user_id']} with {username} cancelled")
+                self.set_status(403)
+                self.write({'result': "cancelled"})
+                return
+            if req.is_authorized():
+                self.set_signed_cookie(self.app.bot.bot.name[1:]+"_user", str(user["user_id"]))
+                logger.info(f"auth request for user {user['user_id']} with {username} authorized")
+                self.set_status(200)
+                self.write({'result': "authorized"})
+                return
+            else:
+                logger.info(f"auth request for user {user['user_id']} with {username} declined")
+                self.set_status(403)
+                self.write({'result': "unauthorized"})
+                return
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({'error': "internal error"})
+            logger.error("error getting orders: %s",e, exc_info=1)
+
+
+
 class BotNameHandler(tornado.web.RequestHandler):
     def initialize(self, app):
         self.app = app
+    def set_default_headers(self):
+        super().set_default_headers()
+        self.set_header("Access-Control-Allow-Origin", "*")
     async def get(self):
         self.set_status(200)
-        self.write({'name': self.app.bot.bot.name})
+        self.write({'name': self.app.bot.bot.name[1:]})
 
 
 class ErrorHandler(tornado.web.RequestHandler):
@@ -209,6 +268,13 @@ class ErrorHandler(tornado.web.RequestHandler):
                 logger.error("client error: %s %s", str(self.request.body), initData)
         except Exception:
             pass
+
+class CustomStaticFileHandler(tornado.web.StaticFileHandler):
+    def set_default_headers(self):
+        super().set_default_headers()
+        self.set_header("Access-Control-Allow-Origin", "*")
+    def get_content_type(self):
+        return "application/javascript"
 
 async def create_server(config: Config, base_app):
     tornado.platform.asyncio.AsyncIOMainLoop().install()
@@ -239,9 +305,11 @@ async def create_server(config: Config, base_app):
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
         (r"/bot_name", BotNameHandler, {"app": base_app}),
+        (r"/auth", AuthHandler, {"app": base_app}),
         (r"/menu", MenuHandler, {"app": base_app}),
         (r"/error", ErrorHandler, {"app": base_app}),
         (r"/photos/(.*)", PhotoHandler),
+        (r"/static/x/(.*)",CustomStaticFileHandler, {"path": "static/x/"}),
         (r"/static/(.*)", tornado.web.StaticFileHandler, {"path": "static/"}),
     ], template_path="templates/", cookie_secret=secret)
     app.listen(config.server.port)

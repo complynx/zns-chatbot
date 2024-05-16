@@ -1,3 +1,9 @@
+auth-authorize = ✔ Авторизовать
+auth-authorized = Запрос авторизован
+auth-cancelled = Запрос отменён
+auth-decline = ❌ Отклонить
+auth-declined = Запрос отклонён
+auth-request = Кто-то запросил авторизацию для ZNS бота
 start-message =
     Привет, зуконавт! Я помогу тебе создать красивую аватарку, для этого пришли мне своё лучшее фото, пожалуйста!
 cancel-command = Отмена

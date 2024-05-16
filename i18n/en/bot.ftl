@@ -1,3 +1,9 @@
+auth-authorize = ✔ Authorize
+auth-authorized = Request authorized
+auth-cancelled = Request cancelled
+auth-decline = ❌ Decline
+auth-declined = Request declined
+auth-request = Someone requested authorization for ZNS bot
 start-message =
     Hi, zoukonaut! I will help you create a user image with frame. To do it, just send me your best picture, please.
 cancel-command = Cancel
