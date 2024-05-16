@@ -202,7 +202,7 @@ class AuthHandler(tornado.web.RequestHandler):
         self.set_header("Access-Control-Allow-Origin", "*")
     async def get(self):
         try:
-            logger.info(f"auth request headers: {self._headers}")
+            logger.info(f"auth request {self.request} headers: {self.request.headers} args: {self.request.arguments}")
             username = self.get_argument('username', default="", strip=True)
             if username == "":
                 self.set_status(400)
