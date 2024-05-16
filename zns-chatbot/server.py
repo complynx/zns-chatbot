@@ -202,7 +202,19 @@ class AuthHandler(tornado.web.RequestHandler):
         self.set_header("Access-Control-Allow-Origin", "*")
     async def get(self):
         try:
-            logger.info(f"auth request {self.request} headers: {self.request.headers} args: {self.request.arguments}")
+            try:
+                req_info = {
+                    "origin": self.request.headers["Origin"],
+                    "useragent": self.request.headers["User-Agent"],
+                }
+            except KeyError as e:
+                self.set_status(400)
+                logger.warn(f"auth request without header: {e}")
+                return
+            try:
+                req_info["ip"] = self.request.headers["X-Forwarded-For"]
+            except KeyError:
+                req_info["ip"] = str(self.request.remote_ip)
             username = self.get_argument('username', default="", strip=True)
             if username == "":
                 self.set_status(400)
@@ -220,7 +232,7 @@ class AuthHandler(tornado.web.RequestHandler):
             from .tg_state import TGState
             state = TGState(user["user_id"], self.app)
             await state.get_state()
-            req = await self.app.auth.request_auth(state)
+            req = await self.app.auth.request_auth(state, req_info)
             await req.wait()
             if req.is_cancelled():
                 logger.warn(f"auth request for user {user['user_id']} with {username} cancelled")

@@ -82,9 +82,9 @@ class Auth(BasePlugin):
             self.requests[update.user] = req
             return req
 
-    async def request_auth(self, update: TGState):
+    async def request_auth(self, update: TGState, request_info):
         reqMessage = await update.reply(
-            update.l("auth-request"),
+            update.l("auth-request", **request_info),
             parse_mode=ParseMode.HTML, 
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton(update.l("auth-authorize"), callback_data="auth|authorize"),
