@@ -608,6 +608,30 @@ class Food(BasePlugin):
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self.menu = self.get_menu()
     
+    async def get_all_orders(self):
+        cursor = self.food_db.find({
+            "deleted": { "$exists": False },
+            "validation": { "$eq": True },
+        }).sort("created_at", 1)
+        orders = {}
+        async for order in cursor:
+            for cid, cart in order["carts"].items():
+                if not cid in orders:
+                    orders[cid] = {
+                        "day": cart["day"],
+                        "meal": cart["meal"],
+                        "items": {},
+                    }
+                items = orders[cid]["items"]
+                for item in cart["items"]:
+                    if not item in items:
+                        items[item] = 1
+                    else:
+                        items[item] += 1
+        return orders
+
+        orders = await cursor.to_list(length=1000)
+
     async def get_order(self, order_id):
         return await self.food_db.find_one({"_id": ObjectId(order_id)})
     

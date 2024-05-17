@@ -4,7 +4,7 @@ import json
 from operator import itemgetter
 import tempfile
 from typing import Any, ClassVar, Optional
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, urlparse
 import tornado.web
 from tornado.httputil import HTTPServerRequest
 import tornado.platform.asyncio
@@ -59,14 +59,16 @@ class RequestHandlerWithApp(tornado.web.RequestHandler):
     def user_cookie(self) -> str:
         return self.bot.name[1:]+"_user"
     
-    def get_user_id(self):
+    def get_user_id(self, max_age_days: float|None=None):
+        if max_age_days is None:
+            max_age_days=self.config.server.auth_timeout
         user_id = self.get_signed_cookie(
             self.user_cookie,
-            max_age_days=self.config.server.auth_timeout,
+            max_age_days=max_age_days,
         )
         if user_id is None:
             return None
-        return int(str(user_id))
+        return int(user_id.decode('utf-8'))
 
 class FitFrameHandler(RequestHandlerWithApp):
     async def get(self):
@@ -183,19 +185,24 @@ class MenuHandler(RequestHandlerWithApp):
             logger.error("error saving menu: %s",e, exc_info=1)
 
 
-class GetOrders(RequestHandlerWithApp):
-    def verify_tg(data, token):
-        sorted_keys = [key for key in sorted(data.keys()) if key != 'hash']
-        data_check_string = '\n'.join([f"{key}={data[key]}" for key in sorted_keys])
-        signature = hmac.new(token.encode(), data_check_string.encode(), hashlib.sha256).hexdigest()
-        return 'hash' in data and data['hash'] == signature
+class FoodGetOrders(RequestHandlerWithApp):
     def set_default_headers(self):
         super().set_default_headers()
-        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Origin", self.request.headers["Origin"])
+        self.set_header("Access-Control-Allow-Credentials", "true")
     
-    async def post(self):
+    async def get(self):
         try:
-            req = json.loads(self.request.body)
+            user_id = self.get_user_id()
+            if user_id is None:
+                self.set_status(401)
+                self.write({'result': "unauthorized"})
+                return
+            orders = await self.app.food.get_all_orders()
+            self.set_status(200)
+            self.write({
+                'orders': orders,
+            })
 
         except Exception as e:
             self.set_status(500)
@@ -204,15 +211,25 @@ class GetOrders(RequestHandlerWithApp):
 
 
 
+def domain_from_uri(origin):
+    parsed_origin = urlparse(origin)
+    domain:str = parsed_origin.netloc
+    if ":" in domain:
+        domain = domain.split(":",2)[0]
+    if domain.startswith('.'):
+        domain = domain[1:]
+    return domain
+
 class AuthHandler(RequestHandlerWithApp):
     def set_default_headers(self):
         super().set_default_headers()
-        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Origin", self.request.headers["Origin"])
+        self.set_header("Access-Control-Allow-Credentials", "true")
     async def get(self):
         try:
             check = self.get_argument('check', default=None, strip=True)
             if check is not None:
-                user_id = self.get_user_id()
+                user_id = self.get_user_id(self.config.server.auth_timeout*0.7)
                 if user_id is not None:
                     self.set_status(200)
                     self.write({'result': "authorized"})
@@ -337,6 +354,7 @@ async def create_server(config: Config, base_app):
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
         (r"/bot_name", BotNameHandler, {"app": base_app}),
         (r"/auth", AuthHandler, {"app": base_app}),
+        (r"/food_get_orders", FoodGetOrders, {"app": base_app}),
         (r"/menu", MenuHandler, {"app": base_app}),
         (r"/error", ErrorHandler, {"app": base_app}),
         (r"/photos/(.*)", PhotoHandler),
