@@ -34,7 +34,7 @@ class MongoDB(BaseSettings):
 class ServerSettings(BaseSettings):
     base: str = Field("http://localhost:8080")
     port: int = Field(8080, env="SERVER_PORT")
-    admin_timeout: timedelta = Field(timedelta(minutes=15))
+    auth_timeout: float = Field(1, description="days till auth expire")
 
 class Photo(BaseSettings):
     frame_size: int = Field(1000)

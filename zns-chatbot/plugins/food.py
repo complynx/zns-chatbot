@@ -532,8 +532,10 @@ class FoodUpdate:
         logger.info(f"Received callback_query from {self.user}, data: {q.data}")
         data = q.data.split("|")
         fn = "handle_cq_" + data[1]
+        logger.debug(f"fn: {fn}")
         if hasattr(self, fn):
             attr = getattr(self, fn, None)
+            logger.debug(f"fn: {attr}")
             if callable(attr):
                 return await attr(*data[2:])
         logger.error(f"unknown callback {data[1]}: {data[2:]}")
@@ -603,7 +605,7 @@ class Food(BasePlugin):
         self.user_db = base_app.users_collection
         self.base_app.food = self
         self._meal_test = CommandHandler("meal", self.handle_start)
-        self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}|.*")
+        self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self.menu = self.get_menu()
     
     async def get_order(self, order_id):

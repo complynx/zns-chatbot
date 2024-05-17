@@ -1,26 +1,19 @@
 import hashlib
 import hmac
 import json
-import mimetypes
 from operator import itemgetter
 import tempfile
 from typing import Any, ClassVar, Optional
-from urllib.parse import parse_qs, parse_qsl, unquote
+from urllib.parse import parse_qsl
 import tornado.web
 from tornado.httputil import HTTPServerRequest
 import tornado.platform.asyncio
 import os
 from .config import Config
 import logging
-import random
+from telegram import Bot
 
 logger = logging.getLogger(__name__)
-
-def generate_random_string(length):
-    import random
-    import string
-    characters = string.ascii_letters + string.digits
-    return ''.join(random.choice(characters) for _ in range(length))
 
 class AuthError(Exception):
     status: ClassVar[int] = 403
@@ -53,10 +46,29 @@ def validate(init_data: str, bot_token: str) -> dict[str, Any]:
     logger.debug(f"validated: {parsed_data}")
     return parsed_data
 
-class FitFrameHandler(tornado.web.RequestHandler):
+class RequestHandlerWithApp(tornado.web.RequestHandler):
     def initialize(self, app):
         self.app = app
+        self.config: Config = app.config
+    
+    @property
+    def bot(self) -> Bot:
+        return self.app.bot.bot
+    
+    @property
+    def user_cookie(self) -> str:
+        return self.bot.name[1:]+"_user"
+    
+    def get_user_id(self):
+        user_id = self.get_signed_cookie(
+            self.user_cookie,
+            max_age_days=self.config.server.auth_timeout,
+        )
+        if user_id is None:
+            return None
+        return int(str(user_id))
 
+class FitFrameHandler(RequestHandlerWithApp):
     async def get(self):
         file = self.get_query_argument("file", default="")
         locale_str = self.get_query_argument("locale", default="en")
@@ -66,8 +78,8 @@ class FitFrameHandler(tornado.web.RequestHandler):
             self.render(
                 "fit_frame.html",
                 file=file,
-                real_frame_size=self.app.config.photo.frame_size,
-                quality=self.app.config.photo.quality,
+                real_frame_size=self.config.photo.frame_size,
+                quality=self.config.photo.quality,
                 debug_code="",
                 help_desktop=l("frame-mover-help-desktop"),
                 help_mobile=l("frame-mover-help-mobile"),
@@ -81,7 +93,7 @@ class FitFrameHandler(tornado.web.RequestHandler):
         initData = self.get_argument('initData', default=None, strip=False)
 
         if initData:
-            initData = validate(initData, self.app.config.telegram.token.get_secret_value())
+            initData = validate(initData, self.config.telegram.token.get_secret_value())
         else:
             # initData not found in the request, reject the request
             self.set_status(400)
@@ -92,7 +104,7 @@ class FitFrameHandler(tornado.web.RequestHandler):
             with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
                 temp_name = temp_file.name
                 temp_file.write(self.request.body)
-            await self.app.bot.bot.send_document(
+            await self.bot.send_document(
                 user["id"],
                 temp_name,
                 filename="avatar.jpg",
@@ -107,10 +119,7 @@ class FitFrameHandler(tornado.web.RequestHandler):
             self.write({'error': "internal error"})
             logger.error("error saving image: %s",e, exc_info=1)
 
-class MenuHandler(tornado.web.RequestHandler):
-    def initialize(self, app):
-        self.app = app
-
+class MenuHandler(RequestHandlerWithApp):
     async def get(self):
         order_id = self.get_query_argument("order", default="")
         carts = None
@@ -136,7 +145,7 @@ class MenuHandler(tornado.web.RequestHandler):
         initData = self.get_argument('initData', default=None, strip=False)
 
         if initData:
-            initData = validate(initData, self.app.config.telegram.token.get_secret_value())
+            initData = validate(initData, self.config.telegram.token.get_secret_value())
         else:
             # initData not found in the request, reject the request
             self.set_status(400)
@@ -174,7 +183,7 @@ class MenuHandler(tornado.web.RequestHandler):
             logger.error("error saving menu: %s",e, exc_info=1)
 
 
-class GetOrders(tornado.web.RequestHandler):
+class GetOrders(RequestHandlerWithApp):
     def verify_tg(data, token):
         sorted_keys = [key for key in sorted(data.keys()) if key != 'hash']
         data_check_string = '\n'.join([f"{key}={data[key]}" for key in sorted_keys])
@@ -194,14 +203,24 @@ class GetOrders(tornado.web.RequestHandler):
             logger.error("error getting orders: %s",e, exc_info=1)
 
 
-class AuthHandler(tornado.web.RequestHandler):
-    def initialize(self, app):
-        self.app = app
+
+class AuthHandler(RequestHandlerWithApp):
     def set_default_headers(self):
         super().set_default_headers()
         self.set_header("Access-Control-Allow-Origin", "*")
     async def get(self):
         try:
+            check = self.get_argument('check', default=None, strip=True)
+            if check is not None:
+                user_id = self.get_user_id()
+                if user_id is not None:
+                    self.set_status(200)
+                    self.write({'result': "authorized"})
+                    return
+                else:
+                    self.set_status(401)
+                    self.write({'result': "unauthorized"})
+                    return
             try:
                 req_info = {
                     "origin": self.request.headers["Origin"],
@@ -222,7 +241,7 @@ class AuthHandler(tornado.web.RequestHandler):
                 return
             user = await self.app.users_collection.find_one({
                 "username": username,
-                "bot_id": self.app.bot.bot.id,
+                "bot_id": self.bot.id,
             })
             if user is None:
                 self.set_status(404)
@@ -236,18 +255,22 @@ class AuthHandler(tornado.web.RequestHandler):
             await req.wait()
             if req.is_cancelled():
                 logger.warn(f"auth request for user {user['user_id']} with {username} cancelled")
-                self.set_status(403)
+                self.set_status(401)
                 self.write({'result': "cancelled"})
                 return
             if req.is_authorized():
-                self.set_signed_cookie(self.app.bot.bot.name[1:]+"_user", str(user["user_id"]))
+                self.set_signed_cookie(
+                    self.user_cookie,
+                    str(user["user_id"]),
+                    expires_days=self.config.server.auth_timeout,
+                )
                 logger.info(f"auth request for user {user['user_id']} with {username} authorized")
                 self.set_status(200)
                 self.write({'result': "authorized"})
                 return
             else:
                 logger.info(f"auth request for user {user['user_id']} with {username} declined")
-                self.set_status(403)
+                self.set_status(401)
                 self.write({'result': "unauthorized"})
                 return
 
@@ -258,25 +281,21 @@ class AuthHandler(tornado.web.RequestHandler):
 
 
 
-class BotNameHandler(tornado.web.RequestHandler):
-    def initialize(self, app):
-        self.app = app
+class BotNameHandler(RequestHandlerWithApp):
     def set_default_headers(self):
         super().set_default_headers()
         self.set_header("Access-Control-Allow-Origin", "*")
     async def get(self):
         self.set_status(200)
-        self.write({'name': self.app.bot.bot.name[1:]})
+        self.write({'name': self.bot.name[1:]})
 
 
-class ErrorHandler(tornado.web.RequestHandler):
-    def initialize(self, app):
-        self.app = app
+class ErrorHandler(RequestHandlerWithApp):
     async def post(self):
         try:
             initData = self.get_argument('initData', default=None, strip=False)
             if initData:
-                initData = validate(initData, self.app.config.telegram.token.get_secret_value())
+                initData = validate(initData, self.config.telegram.token.get_secret_value())
                 logger.error("client error: %s %s", str(self.request.body), initData)
         except Exception:
             pass

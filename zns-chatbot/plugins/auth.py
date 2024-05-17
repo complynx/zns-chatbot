@@ -65,7 +65,7 @@ class Auth(BasePlugin):
         super().__init__(base_app)
         base_app.auth = self
         self.user_db = base_app.users_collection
-        self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}|.*")
+        self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self.requests = dict()
         self._lock = Lock()
 
