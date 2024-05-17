@@ -194,7 +194,7 @@ class FoodGetOrders(RequestHandlerWithApp):
     async def get(self):
         try:
             user_id = self.get_user_id()
-            if user_id is None:
+            if user_id is None or not user_id in self.config.food.admins:
                 self.set_status(401)
                 self.write({'result': "unauthorized"})
                 return
