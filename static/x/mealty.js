@@ -184,6 +184,9 @@ zns_container.querySelectorAll(".zns-menu .zns-main button[data-cart]").forEach(
                 }
                 show_out_of_stock(out_of_stock);
             }
+        } catch(e){
+            console.error(e);
+            alert("При изменении корзины возникли ошибки. Попробуй ещё раз. Если будет повторяться, зови специалиста.");
         } finally{
             zns_container.dataset.state="main";
         }
@@ -196,6 +199,9 @@ zns_container.querySelectorAll(".zns-menu .zns-main button[data-meal]").forEach(
             let oid = btn.dataset.day + "_" + btn.dataset.meal;
             let out_of_stock = await add_order(oid);
             show_out_of_stock(out_of_stock);
+        } catch(e){
+            console.error(e);
+            alert("При изменении корзины возникли ошибки. Попробуй ещё раз. Если будет повторяться, зови специалиста.");
         } finally{
             zns_container.dataset.state="main";
         }
