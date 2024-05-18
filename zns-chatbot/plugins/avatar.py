@@ -7,8 +7,10 @@ import tempfile
 import threading
 import time
 import dlib
+from motor.core import AgnosticCollection
 import PIL.Image as Image
 from ..config import Config, full_link
+from ..tg_state import TGState
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import filters, CommandHandler
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
@@ -178,13 +180,10 @@ def touch_file(file_path):
 
 class Avatar(BasePlugin):
     name = "avatar"
-    config: Config
 
     def __init__(self, base_app):
         super().__init__(base_app)
-        self.config = base_app.config
-        self.message_db = base_app.mongodb[self.config.mongo_db.messages_collection]
-        self.user_db = base_app.users_collection
+        self.user_db: AgnosticCollection = base_app.users_collection
         self.cache_dir = tempfile.gettempdir()
         sweep_folder(self.cache_dir)
         self.base_app.avatar = self
@@ -199,7 +198,7 @@ class Avatar(BasePlugin):
             return PRIORITY_BASIC, self.handle_command
         return PRIORITY_NOT_ACCEPTING, None
     
-    async def handle_command(self, update):
+    async def handle_command(self, update: TGState):
         await update.reply(update.l("avatar-without-command"), parse_mode=ParseMode.MARKDOWN)
     
     async def get_file(self, file_name):
@@ -212,24 +211,24 @@ class Avatar(BasePlugin):
             logger.warn("Failed to touch file: %s", e, exc_info=1)
         file_id, _ = os.path.splitext(file_name)
         logger.debug(f"file id: {file_id}")
-        file = await self.base_app.bot.bot.get_file(file_id)
+        file = await self.bot.get_file(file_id)
         await file.download_to_drive(file_path)
         return file_path
     
-    async def handle_photo(self, update):
+    async def handle_photo(self, update: TGState):
         await update.send_chat_action(action=ChatAction.UPLOAD_PHOTO)
         document = update.update.message.photo[-1]
         file_name = f"{document.file_id}.jpg"
         await self.handle_image_stage2(update, file_name)
     
-    async def handle_document(self, update):
+    async def handle_document(self, update: TGState):
         await update.send_chat_action(action=ChatAction.UPLOAD_PHOTO)
         document = update.update.message.document
         file_ext = mimetypes.guess_extension(document.mime_type)
         file_name = f"{document.file_id}{file_ext}"
         await self.handle_image_stage2(update, file_name)
 
-    async def handle_image_stage2(self, update, name):
+    async def handle_image_stage2(self, update: TGState, name):
         tgUpdate = update.update  # type: Update
         await self.user_db.update_one({
             "user_id": update.user,

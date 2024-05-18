@@ -3,7 +3,9 @@ from openai import AsyncOpenAI
 import tiktoken
 import logging
 import datetime
+from ..tg_state import TGState
 from telegram.constants import ParseMode
+from motor.core import AgnosticCollection
 from telegram import Message, Update
 from telegram.ext import filters
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
@@ -15,15 +17,13 @@ class MessageTooLong(Exception):
 
 class Assistant(BasePlugin):
     name = "assistant"
-    config: Config
     client: AsyncOpenAI
 
     def __init__(self, base_app):
         super().__init__(base_app)
-        self.config = base_app.config
         self.client = AsyncOpenAI(api_key=self.config.openai.api_key.get_secret_value())
-        self.message_db = base_app.mongodb[self.config.mongo_db.messages_collection]
-        self.user_db = base_app.users_collection
+        self.message_db: AgnosticCollection = base_app.mongodb[self.config.mongo_db.messages_collection]
+        self.user_db: AgnosticCollection = base_app.users_collection
         self.model = self.config.openai.model
         self.tokenizer = tiktoken.encoding_for_model(self.model)
     
@@ -32,7 +32,7 @@ class Assistant(BasePlugin):
             return PRIORITY_BASIC, None
         return PRIORITY_NOT_ACCEPTING, None
         
-    async def handle_message(self, update):
+    async def handle_message(self, update: TGState):
         await update.send_chat_action()
         repl = await self.get_assistant_reply(update.update.message.text_markdown_v2, update.user, update)
         await update.reply(repl, parse_mode=None)
@@ -40,7 +40,7 @@ class Assistant(BasePlugin):
     async def user_info(self, user_id, tgUpdate: Update):
         user = await self.user_db.find_one({
             "user_id": user_id,
-            "bot_id": self.base_app.bot.bot.id,
+            "bot_id": self.bot.id,
         })
         ret = f"имя пользователя {tgUpdate.effective_user.full_name}"
         if tgUpdate.effective_user.username is not None:
@@ -54,7 +54,7 @@ class Assistant(BasePlugin):
             ret += f"\nаватарок создано: {user['avatars_called']}"
         return ret
     
-    async def get_assistant_reply(self, message: str, user_id: int, update):
+    async def get_assistant_reply(self, message: str, user_id: int, update: TGState):
         date_1_day_ago = datetime.datetime.now() - datetime.timedelta(days=1)
         if self.config.logging.level == "DEBUG":
             msgs = await self.message_db.find(
@@ -134,7 +134,8 @@ Zouk Non Stop (Зук Нон Стоп/ZNS/ЗНС) — танцевальный �
 большое количество диджеев, фотографов, видеографов
 Особое кастомное оформление и освещение площадки, фотозона, аквагрим, утренние разминки, Dark room, подарки участникам (наборы зуконавта)
 Отсутствие мастер-классов
-баланс партнеров и партнерш ~ 50/50 (сейчас уже более 200 чел, 51.5% / 48.5%)
+баланс партнеров и партнерш ~ 50/50 (сейчас уже более 230 чел, 51.5% / 48.5%)
+60+ часов танцев, 21 диджей, 7 спутников, 4 массажиста, 4 видеографа, 3 фотографа, 3 гримера, 1 кальянщик
 дружеская атмосфера  для полного расслабления и погружения в танцевальный поток
 
 ЗНС дважды становился “событием года” по версии Russian Zouk Awards (2019 2023)
@@ -175,6 +176,7 @@ Dark room — работает на площадке ночью, в пиковы
 По-возможности избегай длинных и формальных ответов. Если неизвестны детали требуемые для короткого ответа, например пол участника, день брони или город проживания для определения амбассадора, задай наводящий вопрос.
 Обязательно указывай @-тег, если он есть в ответе. Обязательно указывай /-команду, если она есть в ответе.
 Если пользователь хочет аватарку фестиваля, попроси просто прислать фото.
+Ответ должен быть на языке вопроса участника.
 """ + user_info + last_question
         }] + messages
         # import json

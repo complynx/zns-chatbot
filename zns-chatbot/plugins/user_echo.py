@@ -13,9 +13,9 @@ class UserEcho(BasePlugin):
 
     def __init__(self, base_app):
         super().__init__(base_app)
-        self.admins = base_app.config.telegram.admins
+        self.admins = self.config.telegram.admins
         self.user_db = base_app.users_collection
-        self._checker = CommandHandler("user_echo", self.handle_message)
+        self._checker = CommandHandler(self.name, self.handle_message)
 
     def test_message(self, message: Update, state, web_app_data):
         if self._checker.check_update(message) and message.effective_user.id in self.admins:

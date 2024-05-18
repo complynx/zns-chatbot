@@ -594,13 +594,11 @@ class FoodUpdate:
 
 class Food(BasePlugin):
     name = "food"
-    config: Config
     food_db: AgnosticCollection
     user_db: AgnosticCollection
 
     def __init__(self, base_app):
         super().__init__(base_app)
-        self.config = base_app.config
         self.food_db = base_app.mongodb[self.config.mongo_db.food_collection]
         self.user_db = base_app.users_collection
         self.base_app.food = self
@@ -610,7 +608,7 @@ class Food(BasePlugin):
 
     async def out_of_stock(self, out_of_stock):
         import json
-        await self.base_app.bot.bot.send_message(
+        await self.bot.send_message(
             self.config.food.out_of_stock_admin,
             "out of stock: ```json\n"+json.dumps(out_of_stock, indent=4) + "\n```",
             ParseMode.MARKDOWN_V2
@@ -637,8 +635,6 @@ class Food(BasePlugin):
                     else:
                         items[item] += 1
         return orders
-
-        orders = await cursor.to_list(length=1000)
 
     async def get_order(self, order_id):
         return await self.food_db.find_one({"_id": ObjectId(order_id)})
