@@ -202,12 +202,29 @@ class FoodGetOrders(RequestHandlerWithApp):
             self.set_status(200)
             self.write({
                 'orders': orders,
+                'menu': self.app.food.menu
             })
 
         except Exception as e:
             self.set_status(500)
             self.write({'error': "internal error"})
             logger.error("error getting orders: %s",e, exc_info=1)
+    async def post(self):
+        try:
+            user_id = self.get_user_id()
+            if user_id is None or not user_id in self.config.food.admins:
+                self.set_status(401)
+                self.write({'result': "unauthorized"})
+                return
+            out_of_stock = json.loads(self.request.body)
+            await self.app.food.out_of_stock(out_of_stock)
+            self.set_status(200)
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({'error': "internal error"})
+            logger.error("error getting orders: %s",e, exc_info=1)
+
 
 
 

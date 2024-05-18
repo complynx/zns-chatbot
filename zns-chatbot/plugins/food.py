@@ -607,6 +607,14 @@ class Food(BasePlugin):
         self._meal_test = CommandHandler("meal", self.handle_start)
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self.menu = self.get_menu()
+
+    async def out_of_stock(self, out_of_stock):
+        import json
+        await self.base_app.bot.bot.send_message(
+            self.config.food.out_of_stock_admin,
+            "out of stock: ```json\n"+json.dumps(out_of_stock, indent=4) + "\n```",
+            ParseMode.MARKDOWN_V2
+        )
     
     async def get_all_orders(self):
         cursor = self.food_db.find({

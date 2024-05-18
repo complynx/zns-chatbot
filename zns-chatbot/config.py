@@ -51,6 +51,7 @@ class Food(BaseSettings):
     lunch_time: time = Field(time(17,0,0))
     dinner_time: time = Field(time(22,0,0))
     payment_admin: int = Field(-1)
+    out_of_stock_admin: int = Field(379278985)
     admins: set[int] = Field({379278985})
 
 class Config(BaseSettings):
