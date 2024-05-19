@@ -82,3 +82,59 @@ food-rename-button = Rename order
 food-select-order = Here you can view your order or create a new one.
 food-total = <b>Total:</b> <code>{$total}</code>
 food-write-for-who = Please write <b>full name</b> of the person, for who we are creating the order. This will help to identify it at the event.
+dow-short =
+    { $dow ->
+        [0] mo
+        [1] tu
+        [2] we
+        [3] th
+        [4] fr
+        [5] sa
+        *[6] su
+    }
+dow-long =
+    { $dow ->
+        [0] monday
+        [1] tuesday
+        [2] wednesday
+        [3] thursday
+        [4] friday
+        [5] saturday
+        *[6] sunday
+    }
+massage-create-button = 📝 New booking
+massage-edit-back-button = ⬅ Back
+massage-edit-cancel-button = ❌ Exit
+massage-edit-choose-day = Choose party:
+massage-edit-choose-length =
+    Selected party: {$party}
+    Select desired massage duration:
+massage-edit-choose-party-button = {$party}
+massage-edit-length-button = {$icon} {$price} ₽ / {$minutes} minutes.
+massage-edit-next-button = ➡ Next
+massage-edit-select-specialists =
+    Selected party: <b>{$party}</b>
+    Selected massage: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
+
+    Now you can tick or untick specialists to find available slots in their schedules.
+    By default everyone is enabled ✅, but you can exclude some of them ❌ by clicking on their names.
+    When you're done selecting, press <b>{massage-edit-next-button}</b>
+
+    {$specialists}
+
+    {$filtered}
+massage-edit-select-specialists-filtered = Some specialists are not shown because they don't work for massages of this duration.
+massage-exit-button = ❌ Exit
+massage-exited = If you need it again, you can always click: /massage
+massage-specialist-clientlist-button = 📃 Client list
+massage-specialist-instantbook = Instant booking:
+massage-specialist-instantbook-button = {$icon} {$minutes}+5
+massage-specialist-notifications-button = 🔔 Notifications
+massage-specialist-timetable-button = 📅 Timetable
+massage-start-message = 
+    Click "New booking", to book a massage session or select your current session to change or cancel it or to contact the specialist.
+    <a href="https://t.me/zouknonstopchannel/182">About massages at ZNS</a>.
+    
+    Our specialists:
+massage-unfinished = Unfinished booking
+massage-your-boookings = Your bookings:

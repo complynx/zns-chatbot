@@ -152,6 +152,16 @@ class TGState:
             *args,
             **kwargs
         )
+    
+    async def edit_or_reply(
+            self, text,
+            parse_mode=ParseMode.MARKDOWN_V2,
+            *args, **kwargs
+        ):
+        if self.callback_query is not None:
+            return await self.edit_message_text(text, parse_mode=parse_mode, *args, **kwargs)
+
+        return await self.reply(text, parse_mode=parse_mode, *args, **kwargs)
 
     async def delete_message(
             self,

@@ -1,8 +1,14 @@
 import re
 import yaml
-from datetime import date, time, timedelta
+from datetime import datetime, date, time, timedelta
 
-from pydantic import BaseSettings, Field, SecretStr 
+from pydantic import BaseSettings, Field, SecretStr
+
+class Party(BaseSettings):
+    start: datetime
+    end: datetime
+    is_open: bool = Field(False)
+    massage_tables: int = Field(0)
 
 class TelegramSettings(BaseSettings):
     token: SecretStr = Field(env="TELEGRAM_TOKEN")
@@ -30,6 +36,7 @@ class MongoDB(BaseSettings):
     messages_collection: str = Field("zns_bot_messages", env="ZNS_BOT_MONGODB_MESSAGES_COLLECTION")
     bots_storage: str = Field("bots_storage", env="BOTS_STORAGE_COLLECTION")
     food_collection: str = Field("zns_bot_food", env="ZNS_BOT_FOOD_COLLECTION")
+    massage_collection: str = Field("zns_bot_massage", env="ZNS_BOT_MASSAGE_COLLECTION")
 
 class ServerSettings(BaseSettings):
     base: str = Field("http://localhost:8080")
@@ -63,6 +70,33 @@ class Config(BaseSettings):
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
     food: Food = Food()
+    parties: list[Party] = [
+        Party(
+            start=datetime(2024, 6, 12, 16),
+            end=datetime(2024, 6, 13, 6),
+            massage_tables=1
+        ),
+        Party(
+            start=datetime(2024, 6, 13, 18),
+            end=datetime(2024, 6, 13, 23),
+            is_open=True
+        ),
+        Party(
+            start=datetime(2024, 6, 14, 20),
+            end=datetime(2024, 6, 15, 6),
+            massage_tables=3
+        ),
+        Party(
+            start=datetime(2024, 6, 15, 13),
+            end=datetime(2024, 6, 16, 6),
+            massage_tables=3
+        ),
+        Party(
+            start=datetime(2024, 6, 16, 13),
+            end=datetime(2024, 6, 17, 6),
+            massage_tables=3
+        )
+    ]
 
     def __init__(self, filename:str="config/config.yaml"):
         # Load a YAML configuration file

@@ -158,11 +158,8 @@ class FoodUpdate:
                 name = (f"{fn} {ln}").strip()
             if name == "" and "username" in user and user["username"] is not None and user["username"] != "":
                 name = user["username"]
-            if name == "":
-                name = user["user_id"]
-            if name == "":
-                name = "???"
             return name
+        return ""
     
     async def get_user_names(self):
         user = await self.get_user()
@@ -170,7 +167,7 @@ class FoodUpdate:
         names = []
         if "known_names" in user:
             names = user["known_names"].copy()
-        if not tg_name in names:
+        if not tg_name in names and tg_name != "":
             names.append(tg_name)
         return names
     
