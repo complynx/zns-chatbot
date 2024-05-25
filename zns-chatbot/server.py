@@ -184,7 +184,6 @@ class MenuHandler(RequestHandlerWithApp):
             self.write({'error': "internal error"})
             logger.error("error saving menu: %s",e, exc_info=1)
 
-
 class FoodGetOrders(RequestHandlerWithApp):
     def set_default_headers(self):
         super().set_default_headers()
@@ -226,6 +225,41 @@ class FoodGetOrders(RequestHandlerWithApp):
             logger.error("error getting orders: %s",e, exc_info=1)
 
 
+class MassageTimetablePageHandler(RequestHandlerWithApp):
+    async def get(self):
+        try:
+            self.render(
+                "massage_timetable.html",
+            )
+        except (KeyError, ValueError):
+            raise tornado.web.HTTPError(404)
+class MassageTimetableHandler(RequestHandlerWithApp):
+    async def get(self):
+        initData = self.get_argument('initData', default=None, strip=False)
+
+        if initData:
+            initData = validate(initData, self.config.telegram.token.get_secret_value())
+        else:
+            # initData not found in the request, reject the request
+            self.set_status(400)
+            logger.info("initData parameter is missing")
+            return
+        try:
+            from .plugins.massage import MassagePlugin
+            massages: MassagePlugin = self.app.massages
+            user = json.loads(initData['user'])
+            specialist = await massages.get_specialist(user["id"])
+            if specialist is None:
+                self.set_status(403)
+                logger.info("not a specialist")
+                return
+            ret = await massages.get_all_massages_for_web()
+            self.set_status(200)
+            self.write(ret)
+        except Exception as e:
+            self.set_status(500)
+            self.write({'error': "internal error"})
+            logger.error("error saving menu: %s",e, exc_info=1)
 
 
 def domain_from_uri(origin):
@@ -369,6 +403,8 @@ async def create_server(config: Config, base_app):
 
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
+        (r"/massage_timetable", MassageTimetablePageHandler, {"app": base_app}),
+        (r"/massage_timetable_data", MassageTimetableHandler, {"app": base_app}),
         (r"/bot_name", BotNameHandler, {"app": base_app}),
         (r"/auth", AuthHandler, {"app": base_app}),
         (r"/food_get_orders", FoodGetOrders, {"app": base_app}),

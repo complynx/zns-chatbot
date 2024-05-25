@@ -102,39 +102,105 @@ dow-long =
         [5] saturday
         *[6] sunday
     }
+massage-booking-cancel-button = ❌ Cancel booking
+massage-client-about =
+    Massage type: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
+    Party: <b>{$party}</b>
+    Time: <b>{$time}</b>
+    Specialist: {$specialist}
+
+    Come <u>on time</u> because there is somebody after you. If you can't come, please cancel in advance.
+    Enjoy your cake of peace!
+massage-command-description = Book a massage
 massage-create-button = 📝 New booking
+massage-deleted = Booking successfully deleted. If you need to modify or delete another, press /massage
 massage-edit-back-button = ⬅ Back
-massage-edit-cancel-button = ❌ Exit
-massage-edit-choose-day = Choose party:
-massage-edit-choose-length =
-    Selected party: {$party}
-    Select desired massage duration:
+massage-edit-cancel-button = 🚪 Exit
+massage-edit-choose-length = Select desired massage duration:
 massage-edit-choose-party-button = {$party}
+massage-edit-error-too-many-massages = Only { $max} massages allowed a day for one client.
+massage-edit-error-slot-timeout = Cannot book this late, choose another time slot.
+massage-edit-error-slot-unavailable = Somebody just reserved this slot, choose another one.
 massage-edit-length-button = {$icon} {$price} ₽ / {$minutes} minutes.
 massage-edit-next-button = ➡ Next
-massage-edit-select-specialists =
-    Selected party: <b>{$party}</b>
+massage-edit-no-slots-available = No slots available...
+massage-edit-page = page {$page} of {$leng}
+massage-edit-page-next-button = Next ▶
+massage-edit-page-previous-button = ◀ Previous
+massage-edit-select-slot =
     Selected massage: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
 
-    Now you can tick or untick specialists to find available slots in their schedules.
+    Now you can select a party, tick or untick specialists to find available slots in their schedules.
     By default everyone is enabled ✅, but you can exclude some of them ❌ by clicking on their names.
-    When you're done selecting, press <b>{massage-edit-next-button}</b>
+    Then, select the time slot you want.
 
-    {$specialists}
-
-    {$filtered}
+    {$specialists}<i>{$filtered}{$error}</i>
 massage-edit-select-specialists-filtered = Some specialists are not shown because they don't work for massages of this duration.
-massage-exit-button = ❌ Exit
+massage-exit-button = 🚪 Exit
 massage-exited = If you need it again, you can always click: /massage
+massage-notification-prior-long =
+    Hi, zoukonaut!
+    I remind you that you have a massage in {$inminutes} minutes, at <b>{$time}</b>:
+    Massage type: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
+    Specialist: {$specialist}
+
+    Come <u>on time</u> because there is somebody after you. If you can't come, please cancel in advance.
+    Enjoy your cake of peace!
+massage-notification-prior =
+    Hi, zoukonaut!
+    I remind you that you have a massage in {$inminutes} minutes, at <b>{$time}</b>:
+    Massage type: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
+    Specialist: {$specialist}
+
+    Come <u>on time</u> because there is somebody after you. If you can't come, please cancel in advance.
+    Enjoy your cake of peace!
+massage-notification-toggle = {$pos ->
+    [y] 🔔
+    *[n] 🔕
+}
+massage-notifications-edit = You can switch on and off your notifications:
+massage-specialist-booking-cancelled =
+    Client <i>{$client}</i> <u>cancelled</u> booking:
+    Massage type: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
+    Party: <b>{$party}</b>
+    Time: <b>{$time}</b>
+
+    You can view all the bookings or disable notifications by calling /massage
+massage-specialist-clientlist = Here are your clients and their bookings by party:
 massage-specialist-clientlist-button = 📃 Client list
+massage-specialist-failed-to-reserve = Failed to reserve instant slot, likely someone booked in the meantime, or slot timed out. Try again.
 massage-specialist-instantbook = Instant booking:
 massage-specialist-instantbook-button = {$icon} {$minutes}+5
+massage-specialist-new-booking =
+    Client <i>{$client}</i> booked a massage:
+    Massage type: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
+    Party: <b>{$party}</b>
+    Time: <b>{$time}</b>
+massage-specialist-no-party-or-slot = No party or slot could have been calculated — error.
+massage-specialist-notification-notify-bookings = Booking created or deleted
+massage-specialist-notification-notify-next = Upcoming session (5 min before)
+massage-specialist-notification-soon =
+    You have upcoming massage in {$inminutes} minutes, at <b>{$time}</b>.
+    Client <i>{$client}</i>:
+    Massage type: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
 massage-specialist-notifications-button = 🔔 Notifications
+massage-specialist-reserved =
+    Successfully reserved:
+    Massage type: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
+    Time: <b>{$time}</b>
 massage-specialist-timetable-button = 📅 Timetable
+massage-specialist-to-start-button = ⬅ To start
+massage-specialist-view =
+    Client: <i>{$client}</i>
+    Massage type: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
+    Party: <b>{$party}</b>
+    Time: <b>{$time}</b>
+massage-specialist-view-booking-button = 📝 View booking
 massage-start-message = 
     Click "New booking", to book a massage session or select your current session to change or cancel it or to contact the specialist.
     <a href="https://t.me/zouknonstopchannel/182">About massages at ZNS</a>.
     
     Our specialists:
+massage-successfully-created = Massage session was successfully booked.
 massage-unfinished = Unfinished booking
 massage-your-boookings = Your bookings:

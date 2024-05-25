@@ -61,6 +61,11 @@ class Food(BaseSettings):
     out_of_stock_admin: int = Field(379278985)
     admins: set[int] = Field({379278985})
 
+class Massages(BaseSettings):
+    max_massages_a_day: int = Field(3)
+    notify_client_prior_long: timedelta = Field(timedelta(hours=1))
+    notify_client_prior: timedelta = Field(timedelta(minutes=10))
+
 class Config(BaseSettings):
     telegram: TelegramSettings
     logging: LoggingSettings = LoggingSettings()
@@ -70,6 +75,7 @@ class Config(BaseSettings):
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
     food: Food = Food()
+    massages: Massages = Massages()
     parties: list[Party] = [
         Party(
             start=datetime(2024, 6, 12, 16),

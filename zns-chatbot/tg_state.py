@@ -185,27 +185,32 @@ class TGState:
             inline_message_id=None,
             chat_id=None, message_id=None,
             *args, **kwargs):
-        if inline_message_id is None:
-            inline_message_id = self.inline_message_id
-        if inline_message_id is not None:
-            return await self.bot.delete_message(
+        from telegram.error import BadRequest
+        try:
+            if inline_message_id is None:
+                inline_message_id = self.inline_message_id
+            if inline_message_id is not None:
+                return await self.bot.edit_message_text(
+                    text,
+                    inline_message_id=self.inline_message_id,
+                    *args, **kwargs
+                )
+            if chat_id is None:
+                chat_id = self.chat_id
+            if chat_id is None:
+                chat_id = self.user
+            if message_id is None:
+                message_id = self.message_id
+
+            return await self.bot.edit_message_text(
                 text,
-                inline_message_id=self.inline_message_id,
+                chat_id=chat_id,
+                message_id=message_id,
                 *args, **kwargs
             )
-        if chat_id is None:
-            chat_id = self.chat_id
-        if chat_id is None:
-            chat_id = self.user
-        if message_id is None:
-            message_id = self.message_id
-
-        return await self.bot.edit_message_text(
-            text,
-            chat_id=chat_id,
-            message_id=message_id,
-            *args, **kwargs
-        )
+        except BadRequest as e:
+            if e.message.find("Message is not modified: ") < 0:
+                raise e
 
     async def edit_reply_markup(
             self, reply_markup,
