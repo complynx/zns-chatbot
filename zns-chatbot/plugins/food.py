@@ -474,7 +474,7 @@ class FoodUpdate:
                 }
             })
             msg, kbd = await self.start_msg()
-            kbd = [[btn] for btn in buttons]
+            kbd = [[btn] for btn in kbd]
         else:
             order["carts"] = new_carts
             order["total"] = total
@@ -552,7 +552,7 @@ class FoodUpdate:
                     message_id=user['food_webview_source']
                 )
             except Exception as e:
-                logger.warn(f"failed to remove message {user['food_webview_source']} for user {user['user_id']}: {e}", exc_info=True)
+                logger.warn(f"failed to remove message {user['food_webview_source']} for user {user['user_id']}: {e}")
     
     async def save_user_source(self, source):
         if isinstance(source, Message):
