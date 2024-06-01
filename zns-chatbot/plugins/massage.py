@@ -219,7 +219,7 @@ class Specialist:
         about = self.specialist["about"]
         if "about_" + lc in self.specialist:
             about = self.specialist["about_" + lc]
-        return self.icon + " " + client_user_link_html(self.user) + " " + about
+        return self.icon + " <b>" + client_user_link_html(self.user) + "</b> \n" + about + "\n"
     
     def massage_edit_buttons(self, massage: 'MassageRecord'):
         return [[
