@@ -500,7 +500,8 @@ class FoodUpdate:
             "created_at": datetime.datetime.now(),
             "nonce": generate_random_string(20),
             "carts": new_carts,
-            "total": total
+            "total": total,
+            "client_notified": datetime.datetime.now(),
         })
         order_id = str(res.inserted_id)
         logger.debug(f"created order for {self.user} for {name}: {order_id}")
@@ -589,12 +590,31 @@ class FoodUpdate:
             msg = self.l("food-no-orders-yet")
         return msg, buttons
 
+    async def remind_about_order(self, order_doc):
+        self._order = order_doc
+        msg, kbd = await self.get_order_msg(order_doc["_id"])
+        await self.update.reply(
+            self.l("food-remind-about-order") + "\n" + msg,
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(kbd),
+        )
+        await self.base.food_db.update_one({
+            "_id": order_doc["_id"]
+        },{
+            "$set":{
+                "client_notified": datetime.datetime.now(),
+            },
+        })
+
+
+NOTIFICATOR_LOOP = 3600
 class Food(BasePlugin):
     name = "food"
     food_db: AgnosticCollection
     user_db: AgnosticCollection
 
     def __init__(self, base_app):
+        from asyncio import create_task
         super().__init__(base_app)
         self.food_db = base_app.mongodb[self.config.mongo_db.food_collection]
         self.user_db = base_app.users_collection
@@ -602,6 +622,32 @@ class Food(BasePlugin):
         self._meal_test = CommandHandler("meal", self.handle_start)
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self.menu = self.get_menu()
+        create_task(self._notifier())
+    
+    async def _notifier(self):
+        from asyncio import sleep, create_task
+        logger.info(f"starting Food.notifier loop ")
+        while self.config.food.deadline > datetime.date.today():
+            await sleep(NOTIFICATOR_LOOP)
+            try:
+                async for doc in self.food_db.find({
+                    "deleted": {"$exists":False},
+                    "proof_received_at": {"$exists": False},
+                     "$or": [
+                        {"client_notified": {"$exists": False}},
+                        {"client_notified": {"$lt": datetime.datetime.today() - datetime.timedelta(days=1)}}
+                    ],
+                }):
+                    create_task(self.remind_about_order(doc))
+            except Exception as e:
+                logger.error("Exception in notifier: %s", e, exc_info=1)
+    
+    async def remind_about_order(self, order_doc):
+        try:
+            upd = await self.create_update_from_user(order_doc["user_id"])
+            await upd.remind_about_order(order_doc)
+        except Exception as e:
+            logger.error("Exception in remind_about_order: %s", e, exc_info=1)
 
     async def out_of_stock(self, out_of_stock):
         import json

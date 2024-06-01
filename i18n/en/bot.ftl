@@ -78,6 +78,12 @@ food-payment-proof-forwarded = I sent the proof to our administrators. They will
 food-payment-proof-rejected = 
     Administrator rejected payment proof for <i>{$name}</i>.
     You can create another order or try sending another confirmation.
+food-remind-about-order =
+    I noticed that you have an order that hasn't been paid for yet. If you still plan to have these meals at the marathon, please make the payment and send me the receipt. Otherwise, the order will not be placed and won't be delivered.
+
+    You can pay up until June 4th. If you don't want your order, you can simply cancel it.
+    
+    Here is your order:
 food-rename-button = Rename order
 food-select-order = Here you can view your order or create a new one.
 food-total = <b>Total:</b> <code>{$total}</code>
