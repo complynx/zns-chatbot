@@ -126,6 +126,7 @@ class TGUpdate(TGState):
                     "print_name": user_print_name(self.update.effective_user),
                 }
             }, upsert=True)
+        self.language_code = self.update.effective_user.language_code
         if user is not None and "state" in user:
             self.state = user["state"]
         else:
