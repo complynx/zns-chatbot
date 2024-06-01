@@ -1227,7 +1227,7 @@ class MassagePlugin(BasePlugin):
         return ret
 
     def test_message(self, message: Update, state, web_app_data):
-        if self._cmd_checker.check_update(message) and message.effective_user.id in self.admins:
+        if self._cmd_checker.check_update(message):
             return PRIORITY_BASIC, self.handle_start
         return PRIORITY_NOT_ACCEPTING, None
     
