@@ -64,6 +64,7 @@ food-payment-instructions =
     To pay for the meal, you need to make a transaction using SBP to the Sber account bound to phone number
     <code>+79175295923</code>
     Recipient: <i>Ушакова Дарья Евгеньевна/Ushakova Daria Evgenievna</i>.
+    <b>Amount to pay:</b> <code>{$total}</code> ₽
 food-payment-instructions-proof =
     ⚠ When you're done with the transfer, you will need to send me the confirmation —
     with all the data about the transaction: from who, amount, date and time, and other relevant data.
@@ -82,11 +83,11 @@ food-remind-about-order =
     I noticed that you have an order that hasn't been paid for yet. If you still plan to have these meals at the marathon, please make the payment and send me the receipt. Otherwise, the order will not be placed and won't be delivered.
 
     You can pay up until June 4th. If you don't want your order, you can simply cancel it.
-    
+
     Here is your order:
 food-rename-button = Rename order
 food-select-order = Here you can view your order or create a new one.
-food-total = <b>Total:</b> <code>{$total}</code>
+food-total = <b>Total:</b> <code>{$total}</code> ₽
 food-write-for-who = Please write <b>full name</b> of the person, for who we are creating the order. This will help to identify it at the event.
 dow-short =
     { $dow ->

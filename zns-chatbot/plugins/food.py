@@ -248,8 +248,10 @@ class FoodUpdate:
         return await self.request_name(order_id)
 
     async def handle_cq_payment(self, order_id):
+        order = await self.get_order(order_id)
+        total = order_total(order["carts"], self.base.menu)
         await self.update.edit_message_text(
-            self.l("food-payment-instructions"),
+            self.l("food-payment-instructions", total=total),
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([[]]),
         )
