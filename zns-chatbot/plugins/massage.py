@@ -688,7 +688,7 @@ class UserMassages:
             await massage.specialist.write(
                 massage.specialist_repr("massage-specialist-new-booking"),
                 parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup(self.specialist.massage_edit_buttons(massage)),
+                reply_markup=InlineKeyboardMarkup(massage.specialist.massage_edit_buttons(massage)),
                 disable_web_page_preview=True,
             )
         return True
