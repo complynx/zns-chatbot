@@ -17,8 +17,8 @@ class TelegramSettings(BaseSettings):
 class OpenAI(BaseSettings):
     api_key: SecretStr = Field(env="OPENAI_API_KEY")
     model: str = Field("gpt-3.5-turbo-0125")
-    reply_token_cap: int = Field(3000)
-    message_token_cap: int = Field(4000)
+    reply_token_cap: int = Field(2000)
+    message_token_cap: int = Field(2000)
     temperature: float = Field(1)
     max_messages_per_user_per_day: int = Field(5)
 
