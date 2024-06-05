@@ -1108,6 +1108,7 @@ class MassagePlugin(BasePlugin):
         return self.parties_by_day[day].start + (SLOT_DURATION * index)
 
     async def available_slots(self, day: int, length: int = 1) -> dict[int,set[int]]:
+        logger.debug(f"length {length}")
         if self.parties_by_day[day].end + EARLY_COMER_TOLERANCE < now_msk():
             return dict[int,set[int]]()
         available, _ = await self.all_slots(day)
@@ -1117,7 +1118,7 @@ class MassagePlugin(BasePlugin):
         for slot in available:
             slot_set = set[int]()
             for specialist_id in available[slot]:
-                for i in range(1, length+1):
+                for i in range(1, length):
                     next_slot = slot + i
                     if not next_slot in available or not specialist_id in available[next_slot]:
                         break
@@ -1126,7 +1127,7 @@ class MassagePlugin(BasePlugin):
             if len(slot_set) != 0:
                 available_filtered[slot] = slot_set
         logger.debug(f"available slots for {day} of length {length}: {available}")
-        return available
+        return available_filtered
     
     async def all_slots(self, day: int) -> tuple[dict[int,set[int]], dict[int,set[int]]]:
         all_available = dict[int,set[int]]()
