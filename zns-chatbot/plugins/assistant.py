@@ -1,5 +1,13 @@
 from ..config import Config
 from openai import AsyncOpenAI
+from langchain_openai import ChatOpenAI
+from langchain.schema import (
+    AIMessage,
+    HumanMessage,
+    SystemMessage
+)
+from langchain_core.embeddings import Embeddings
+from langchain_community.vectorstores import MongoDBAtlasVectorSearch
 import tiktoken
 import logging
 import datetime
@@ -9,6 +17,8 @@ from motor.core import AgnosticCollection
 from telegram import Message, Update
 from telegram.ext import filters
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
+from .avatar import async_thread
+from asyncio import Event
 
 logger = logging.getLogger(__name__)
 
@@ -17,15 +27,42 @@ class MessageTooLong(Exception):
 
 class Assistant(BasePlugin):
     name = "assistant"
-    client: AsyncOpenAI
+    chat: ChatOpenAI
+    embeddings: Embeddings
 
     def __init__(self, base_app):
         super().__init__(base_app)
-        self.client = AsyncOpenAI(api_key=self.config.openai.api_key.get_secret_value())
+        self.chat = ChatOpenAI(
+            api_key=self.config.openai.api_key.get_secret_value(),
+            model=self.config.openai.model,
+            temperature=self.config.openai.temperature
+        )
         self.message_db: AgnosticCollection = base_app.mongodb[self.config.mongo_db.messages_collection]
         self.user_db: AgnosticCollection = base_app.users_collection
-        self.model = self.config.openai.model
-        self.tokenizer = tiktoken.encoding_for_model(self.model)
+        self.rag_db: AgnosticCollection = base_app.mongodb[self.config.mongo_db.rag_collection]
+        self.tokenizer = tiktoken.encoding_for_model(self.config.openai.model)
+        self._database_ready = Event()
+        self.update_database()
+    
+    @async_thread
+    def update_database(self):
+        import yaml
+        from langchain_huggingface import HuggingFaceEmbeddings
+        from time import time
+        start = time()
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name=self.config.langchain.embedding_model,
+            cache_folder="models/embeddings",
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': False},
+        )
+        self.vectorstore = MongoDBAtlasVectorSearch(self.rag_db.delegate, self.embeddings)
+        with open("static/rag_data.yaml", 'r', encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        logger.debug(data)
+
+        logger.debug(f"---- update ready ---- took {time()-start} seconds")
+        self._database_ready.set()
     
     def test_message(self, message: Update, state, web_app_data):
         if (filters.TEXT & ~filters.COMMAND).check_update(message):
@@ -91,10 +128,9 @@ class Assistant(BasePlugin):
         if length > self.config.openai.message_token_cap:
             raise MessageTooLong()
         logger.debug(f"message length {length}")
-        messages = [{
-            "content": message,
-            "role": "user",
-        }]
+        messages = [HumanMessage(
+            content=message,
+        )]
 
         cursor = self.message_db.find({"user_id": {"$eq": user_id}}).sort("date", -1)
         async for prev_message in cursor:
@@ -104,10 +140,11 @@ class Assistant(BasePlugin):
                 logger.debug(f"broke the cap with length {length + ml}")
                 break
             length += ml
-            messages = [{
-                "content": prev_message["content"],
-                "role": prev_message["role"]
-            }] + messages
+            if prev_message["role"] == "user":
+                msg = HumanMessage(content=prev_message["content"])
+            else:
+                msg = AIMessage(content=prev_message["content"])
+            messages = [msg] + messages
         await cursor.close()
 
         await self.message_db.insert_one({
@@ -119,9 +156,8 @@ class Assistant(BasePlugin):
 
         user_info = await self.user_info(user_id, update.update)
 
-        messages = [{
-            "role": "system",
-            "content": """
+        messages = [
+            SystemMessage(content= """
 Ты — полезный бот-помощник, девушка по имени ЗиНуСя, помогающая с вопросами участникам танцевального марафона. Усердная, но немного блондинка.
 Информация о марафоне
 ```
@@ -183,25 +219,20 @@ Dark room — работает на площадке ночью, в пиковы
 Если пользователь хочет аватарку фестиваля, попроси просто прислать фото.
 Ответ должен быть на языке вопроса участника.
 """ + user_info + last_question
-        }] + messages
+        )] + messages
         # import json
         # return await self.base_app.bot.bot.send_message(
         #     text=f"```json\n{json.dumps(messages,ensure_ascii=False, indent=4)}\n```",
         #     parse_mode=ParseMode.MARKDOWN,
         #     chat_id=chat_id,
         # )
-        completion = await self.client.chat.completions.create(
-            model=self.config.openai.model,
-            messages=messages,
-            max_tokens=self.config.openai.reply_token_cap,
-            temperature=self.config.openai.temperature,
-        )
+        result = await self.chat.ainvoke(messages)
 
-        logger.info("completion: %s", completion)
+        logger.info("result: %s", result)
         await self.message_db.insert_one({
-            "content": completion.choices[0].message.content,
-            "role": completion.choices[0].message.role,
+            "content": result.content,
+            "role": "assistant",
             "user_id": user_id,
             "date": datetime.datetime.now()
         })
-        return completion.choices[0].message.content
+        return result.content

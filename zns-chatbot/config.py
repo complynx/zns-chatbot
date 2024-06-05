@@ -2,7 +2,15 @@ import re
 import yaml
 from datetime import datetime, date, time, timedelta
 
-from pydantic import BaseSettings, Field, SecretStr
+from pydantic import Field, SecretStr, AliasChoices
+from typing import Tuple, Type
+
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+    YamlConfigSettingsSource,
+)
 
 class Party(BaseSettings):
     start: datetime
@@ -11,36 +19,40 @@ class Party(BaseSettings):
     massage_tables: int = Field(0)
 
 class TelegramSettings(BaseSettings):
-    token: SecretStr = Field(env="TELEGRAM_TOKEN")
+    token: SecretStr = Field()
     admins: set[int] = Field({379278985})
 
 class OpenAI(BaseSettings):
-    api_key: SecretStr = Field(env="OPENAI_API_KEY")
+    api_key: SecretStr = Field()
     model: str = Field("gpt-3.5-turbo-0125")
     reply_token_cap: int = Field(2000)
     message_token_cap: int = Field(2000)
     temperature: float = Field(1)
     max_messages_per_user_per_day: int = Field(5)
 
+class LangChain(BaseSettings):
+    embedding_model: str = Field("intfloat/multilingual-e5-base")
+
 class LoggingSettings(BaseSettings):
-    level: str = Field("WARNING", env="LOGGING_LEVEL")
+    level: str = Field("WARNING")
 
 class LocalizationSettings(BaseSettings):
-    path: str = Field("i18n/{locale}", env="LOCALIZATION_PATH")
+    path: str = Field("i18n/{locale}", validation_alias="LOCALIZATION_PATH")
     fallbacks: list[str] = Field(["en-US", "en"])
     file: str = Field("bot.ftl")
 
 class MongoDB(BaseSettings):
-    address: str = Field("", env="BOT_MONGODB_ADDRESS")
-    users_collection: str = Field("zns_bot_users", env="ZNS_BOT_MONGODB_USERS_COLLECTION")
-    messages_collection: str = Field("zns_bot_messages", env="ZNS_BOT_MONGODB_MESSAGES_COLLECTION")
-    bots_storage: str = Field("bots_storage", env="BOTS_STORAGE_COLLECTION")
-    food_collection: str = Field("zns_bot_food", env="ZNS_BOT_FOOD_COLLECTION")
-    massage_collection: str = Field("zns_bot_massage", env="ZNS_BOT_MASSAGE_COLLECTION")
+    address: str = Field("", validation_alias=AliasChoices("address","BOT_MONGODB_ADDRESS"))
+    users_collection: str = Field("zns_bot_users", validation_alias="ZNS_BOT_MONGODB_USERS_COLLECTION")
+    messages_collection: str = Field("zns_bot_messages", validation_alias="ZNS_BOT_MONGODB_MESSAGES_COLLECTION")
+    bots_storage: str = Field("bots_storage", validation_alias="BOTS_STORAGE_COLLECTION")
+    food_collection: str = Field("zns_bot_food", validation_alias="ZNS_BOT_FOOD_COLLECTION")
+    massage_collection: str = Field("zns_bot_massage", validation_alias="ZNS_BOT_MASSAGE_COLLECTION")
+    rag_collection: str = Field("zns_bot_rag", validation_alias="ZNS_BOT_RAG_COLLECTION")
 
 class ServerSettings(BaseSettings):
     base: str = Field("http://localhost:8080")
-    port: int = Field(8080, env="SERVER_PORT")
+    port: int = Field(8080)
     auth_timeout: float = Field(1, description="days till auth expire")
 
 class Photo(BaseSettings):
@@ -67,11 +79,13 @@ class Massages(BaseSettings):
     notify_client_prior: timedelta = Field(timedelta(minutes=10))
 
 class Config(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix='zns_', yaml_file="config/config.yaml", env_nested_delimiter='_')
     telegram: TelegramSettings
     logging: LoggingSettings = LoggingSettings()
     localization: LocalizationSettings = LocalizationSettings()
     mongo_db: MongoDB = MongoDB()
     openai: OpenAI
+    langchain: LangChain = LangChain()
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
     food: Food = Food()
@@ -104,12 +118,16 @@ class Config(BaseSettings):
         )
     ]
 
-    def __init__(self, filename:str="config/config.yaml"):
-        # Load a YAML configuration file
-        with open(filename, 'r') as f:
-            conf = yaml.safe_load(f)
-        
-        super().__init__(**conf)
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return env_settings, YamlConfigSettingsSource(settings_cls), init_settings, dotenv_settings, file_secret_settings
 
 def full_link(app, link):
     link = f"{app.config.server.base}{link}"

@@ -15,8 +15,13 @@ setup(
         "pillow>=10.2",
         "motor>=3.1",
         "httpx~=0.27.0",
-        "pydantic>=1.10,<2.0",
+        "pydantic>=2.7",
+        "pydantic-settings>=2.3",
         "openai>=1.30.1",
         "tiktoken>=0.7.0"
+        "langchain>=0.2.2",
+        "langchain-community>=0.2.2",
+        "langchain-openai>=0.1.8",
+        "langchain-huggingface>=0.0.2",
     ],
 )
