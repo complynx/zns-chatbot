@@ -496,7 +496,8 @@ class UserMassages:
     async def handle_cq_create(self):
         user = await self.get_user()
         rec = MassageRecord({
-            "user_id": self.update.user
+            "user_id": self.update.user,
+            "created_at": datetime.now(),
         }, self.plugin, user)
         await rec.init()
         await self.edit_massage(rec)
@@ -676,6 +677,7 @@ class UserMassages:
             massage.record["start"] = self.plugin.slot_time(massage.day, slot)
             massage.record["end"] = massage.record["start"]+timedelta(minutes=massage.duration)
             massage.record["specialist"] = specialist_id
+            massage.record["finalized_at"] = datetime.now()
             if "choices" in massage.record:
                 del massage.record["choices"]
             if "specialists_choices" in massage.record:
