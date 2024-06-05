@@ -15,7 +15,7 @@ class TelegramSettings(BaseSettings):
     admins: set[int] = Field({379278985})
 
 class OpenAI(BaseSettings):
-    api_key: SecretStr = Field(env="OPENAI_API_KEY")
+    api_key: SecretStr = Field("", env="OPENAI_API_KEY")
     model: str = Field("gpt-4o")
     reply_token_cap: int = Field(2000)
     message_token_cap: int = Field(2000)

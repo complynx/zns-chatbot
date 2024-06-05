@@ -664,7 +664,7 @@ class UserMassages:
                 my_occupied = self.get_occupied_slots(massage.day, massages)
                 my_occupied_extended = my_occupied.copy()
                 for slot_id in my_occupied:
-                    for i in range(1, massage.length):
+                    for i in range(1, massage.length+1):
                         if not slot_id-i in my_occupied:
                             my_occupied_extended.add(slot_id-i)
             else:
@@ -749,7 +749,7 @@ class UserMassages:
             my_occupied = self.get_occupied_slots(massage.day, my_massages)
             my_occupied_extended = my_occupied.copy()
             for slot_id in my_occupied:
-                for i in range(1, massage.length):
+                for i in range(1, massage.length+1):
                     if not slot_id-i in my_occupied:
                         my_occupied_extended.add(slot_id-i)
         else:
