@@ -1117,7 +1117,7 @@ class MassagePlugin(BasePlugin):
         for slot in available:
             slot_set = set[int]()
             for specialist_id in available[slot]:
-                for i in range(1, length):
+                for i in range(1, length+1):
                     next_slot = slot + i
                     if not next_slot in available or not specialist_id in available[next_slot]:
                         break
