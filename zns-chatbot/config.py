@@ -71,7 +71,7 @@ class Config(BaseSettings):
     logging: LoggingSettings = LoggingSettings()
     localization: LocalizationSettings = LocalizationSettings()
     mongo_db: MongoDB = MongoDB()
-    openai: OpenAI
+    openai: OpenAI = OpenAI()
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
     food: Food = Food()
