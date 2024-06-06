@@ -1,5 +1,16 @@
 from ..config import Config
 from openai import AsyncOpenAI
+from langchain_openai import ChatOpenAI
+from langchain.schema import (
+    AIMessage,
+    HumanMessage,
+    SystemMessage
+)
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
+from langchain_community.vectorstores import FAISS
+from langchain_core.output_parsers import StrOutputParser
 import tiktoken
 import logging
 import datetime
@@ -9,23 +20,89 @@ from motor.core import AgnosticCollection
 from telegram import Message, Update
 from telegram.ext import filters
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
+from .avatar import async_thread
+from .massage import split_list
+from asyncio import Event
+
+output_parser = StrOutputParser()
 
 logger = logging.getLogger(__name__)
 
 class MessageTooLong(Exception):
     pass
 
+NUMBER_OF_CONTEXT_DOCS = 25
+RAW_NUMBER_OF_CONTEXT_DOCS = 4
+QUESTION_PREFIX = "Q: "
+ANSWER_PREFIX = "A: "
+COMMAND_PREFIX = "%"
+RECALCULATOR_LOOP = 600 # every 10 minutes
+EMBEDDING_MODEL = "Alibaba-NLP/gte-large-en-v1.5"
+RAG_DATABASE_INDEX = "index"
+RAG_DATABASE_FOLDER = "rag_database"
+
 class Assistant(BasePlugin):
     name = "assistant"
-    client: AsyncOpenAI
+    chat: ChatOpenAI
+    embeddings: Embeddings
 
     def __init__(self, base_app):
+        from asyncio import create_task
         super().__init__(base_app)
-        self.client = AsyncOpenAI(api_key=self.config.openai.api_key.get_secret_value())
+        self.chat = ChatOpenAI(
+            api_key=self.config.openai.api_key.get_secret_value(),
+            model=self.config.openai.model,
+            temperature=self.config.openai.temperature
+        )
+        self.simpler_chat = ChatOpenAI(
+            api_key=self.config.openai.api_key.get_secret_value(),
+            model=self.config.openai.simple_model,
+            temperature=self.config.openai.temperature
+        )
+        translate_prompt = ChatPromptTemplate.from_messages([
+            ("system", """Translate messages to English as close as possible given this context:
+ЗиНуСя — ZNS bot
+Zouk Non Stop — Зук Нон Стоп (ZNS/ЗНС) — танцевальный марафон по Бразильскому Зуку / Brazilian Zouk.
+spaceship Зукерион — Zoukerion
+зуконавт — zoukonaut
+"""),
+            ("human", """{message}""")
+        ])
+        self.translate_to_en = translate_prompt | self.simpler_chat | output_parser
         self.message_db: AgnosticCollection = base_app.mongodb[self.config.mongo_db.messages_collection]
         self.user_db: AgnosticCollection = base_app.users_collection
-        self.model = self.config.openai.model
-        self.tokenizer = tiktoken.encoding_for_model(self.model)
+        self.tokenizer = tiktoken.encoding_for_model(self.config.openai.model)
+        self._database_ready = Event()
+        create_task(self.update_rag_database())
+
+    @async_thread
+    def init_rag_database(self):
+        from langchain_huggingface import HuggingFaceEmbeddings
+        from time import time
+        import os
+        start = time()
+        self.embeddings = HuggingFaceEmbeddings(
+            model_name=EMBEDDING_MODEL,
+            cache_folder="models/embeddings",
+            model_kwargs={'device': 'cpu', 'trust_remote_code': True},
+            encode_kwargs={'normalize_embeddings': False},
+        )
+        logger.debug(f"initialized embeddings, took {time()-start} seconds")
+        start2 = time()
+        self.vectorstore = FAISS.load_local(RAG_DATABASE_FOLDER, self.embeddings, RAG_DATABASE_INDEX,allow_dangerous_deserialization=True)
+        logger.debug(f"initialized RAG database, took {time()-start2} seconds, total {time()-start} seconds")
+
+    async def update_rag_database(self):
+        from time import time
+        start = time()
+        await self.init_rag_database()
+        self._database_ready.set()
+        logger.debug(f"---- RAG database ready ---- took {time()-start} seconds")
+        try:
+            import winsound
+            winsound.Beep(1000, 100)
+        except Exception as e:
+            pass
     
     def test_message(self, message: Update, state, web_app_data):
         if (filters.TEXT & ~filters.COMMAND).check_update(message):
@@ -36,26 +113,55 @@ class Assistant(BasePlugin):
         await update.send_chat_action()
         repl = await self.get_assistant_reply(update.update.message.text_markdown_v2, update.user, update)
         await update.reply(repl, parse_mode=None)
-
-    async def user_info(self, user_id, tgUpdate: Update):
-        user = await self.user_db.find_one({
-            "user_id": user_id,
-            "bot_id": self.bot.id,
-        })
-        ret = f"имя пользователя {tgUpdate.effective_user.full_name}"
-        if tgUpdate.effective_user.username is not None:
-            ret += f", ник @{tgUpdate.effective_user.username}"
-        orders = await self.base_app.food.get_user_orders_assist(user_id)
-        if orders != "":
-            ret += "\n заказы пользователя в /meal\n"+orders
-        else:
-            ret += "\nпользователь пока не заказал ничего через /meal"
-        if 'avatars_called' in user:
-            ret += f"\nаватарок создано: {user['avatars_called']}"
+    
+    async def context_userinfo(self, update: TGState) -> str:
+        from ..telegram_links import client_user_name
+        user = await update.get_user()
+        ret = f"имя пользователя {client_user_name(user)}"
+        if "username" in user and user["username"] is not None and \
+            user["username"] != "":
+            ret += f", ник @{user['username']}"
         return ret
     
+    async def context_userfood(self, update: TGState) -> str:
+        orders = await self.base_app.food.get_user_orders_assist(update.user)
+        if orders != "":
+            return "\n заказы пользователя в /meal\n"+orders
+        else:
+            return "\nпользователь пока не заказал ничего через /meal"
+    
+    async def get_context(self, message: str, update: TGState):
+        docs = await self.vectorstore.asimilarity_search(message, k=RAW_NUMBER_OF_CONTEXT_DOCS)
+        logger.debug(f"context for {message}: {docs}")
+        text = []
+        visited = set[int]()
+        for doc in docs:
+            qa = doc.metadata
+            if qa["index"] in visited:
+                continue
+            visited.add(qa["index"])
+            if len(visited) > NUMBER_OF_CONTEXT_DOCS:
+                break
+            if "question" in qa:
+                text.append(QUESTION_PREFIX + qa["question"])
+            if "answer" in qa:
+                text.append(ANSWER_PREFIX + qa["answer"])
+            if "command" in qa:
+                fn = "context_" + qa["command"]
+                if hasattr(self, fn):
+                    attr = getattr(self, fn, None)
+                    logger.debug(f"fn: {attr}")
+                    if callable(attr):
+                        text.append(await attr(update))
+        return "\n".join(text)
+    
     async def get_assistant_reply(self, message: str, user_id: int, update: TGState):
+        if not self._database_ready.is_set():
+            logger.debug(f"early message, still initializing")
+            await self._database_ready.wait()
         date_1_day_ago = datetime.datetime.now() - datetime.timedelta(days=1)
+        translated = await self.translate_to_en.ainvoke({"message": message})
+        ctx = await self.get_context(translated, update)
         if self.config.logging.level == "DEBUG":
             msgs = await self.message_db.find(
             {
@@ -91,10 +197,9 @@ class Assistant(BasePlugin):
         if length > self.config.openai.message_token_cap:
             raise MessageTooLong()
         logger.debug(f"message length {length}")
-        messages = [{
-            "content": message,
-            "role": "user",
-        }]
+        messages = [HumanMessage(
+            content=message,
+        )]
 
         cursor = self.message_db.find({"user_id": {"$eq": user_id}}).sort("date", -1)
         async for prev_message in cursor:
@@ -104,104 +209,95 @@ class Assistant(BasePlugin):
                 logger.debug(f"broke the cap with length {length + ml}")
                 break
             length += ml
-            messages = [{
-                "content": prev_message["content"],
-                "role": prev_message["role"]
-            }] + messages
+            if prev_message["role"] == "user":
+                msg = HumanMessage(content=prev_message["content"])
+            else:
+                msg = AIMessage(content=prev_message["content"])
+            messages = [msg] + messages
         await cursor.close()
 
         await self.message_db.insert_one({
             "content": message,
             "role": "user",
+            "translated": translated,
             "user_id": user_id,
             "date": datetime.datetime.now()
         })
 
-        user_info = await self.user_info(user_id, update.update)
-
-        messages = [{
-            "role": "system",
-            "content": """
-Ты — полезный бот-помощник, девушка по имени ЗиНуСя, помогающая с вопросами участникам танцевального марафона. Усердная, но немного блондинка.
-Информация о марафоне
+        messages = [
+            SystemMessage(content= """
+Ты — полезный бот-помощник, девушка по имени ЗиНуСя, помогающая с вопросами участникам танцевального марафона.
+Усердная, но немного блондинка.
+Используя следующий контекст, как можно точнее ответь на вопрос участника.
+Краткая информация
 ```
-Zouk Non Stop (Зук Нон Стоп/ZNS/ЗНС) — танцевальный марафон по Бразильскому Зуку / Brazilian Zouk с космической тематикой. Включает в себя почти-круглосуточные танцы с перерывом на утренний сон.
+Zouk Non Stop (Зук Нон Стоп/ZNS/ЗНС) — танцевальный марафон по Бразильскому Зуку / Brazilian Zouk с космической тематикой.
+Включает в себя почти-круглосуточные танцы с перерывом на утренний сон.
 
-В 2024 году проходит в 7 раз 12-16.06.2024. Участники продолжают космическое путешествие, космический корабль Зукерион приводнился на одну из водных экзопланет с уникальной экосистемой и мы погружаемся в “Поток” (название ZNS 7)
+В 2024 году проходит в 7 раз 12-16.06.2024. Участники продолжают космическое путешествие, космический корабль Зукерион
+приводнился на одну из водных экзопланет с уникальной экосистемой и мы погружаемся в “Поток” (название ZNS 7).
 
 Особенности ZNS
-концепция “все на одной площадке”: безлимитные танцы с нон-стоп музыкой, столовая, снеки, горячее питание, массажисты и кальянная комната, раздевалки, душевые, туалетные комнаты с базовыми уходовыми средствами
-большое количество диджеев, фотографов, видеографов
-Особое кастомное оформление и освещение площадки, фотозона, аквагрим, утренние разминки, Dark room, подарки участникам (наборы зуконавта)
+концепция “все на одной площадке”: нон-стоп музыка, еда, массаж, кальянная, много диджеев
+Особое оформление и освещение площадки, фотозона, аквагрим, Dark room, подарки участникам (наборы зуконавта)
 Отсутствие мастер-классов
-баланс партнеров и партнерш ~ 50/50 (сейчас уже более 230 чел, 51.5% / 48.5%)
-60+ часов танцев, 21 диджей, 7 спутников, 4 массажиста, 4 видеографа, 3 фотографа, 3 гримера, 1 кальянщик
-дружеская атмосфера  для полного расслабления и погружения в танцевальный поток
 
-ЗНС дважды становился “событием года” по версии Russian Zouk Awards (2019 2023)
-Локация Россия, Москва, Старокирочный переулок 2, школа танцев “Лисоборье”.
-Пропуск и паспорт: Так как Лисоборье на территории режимного объекта, для входа обязателен оригинал паспорта.
-Пропуск необходимо оформить до 23:00, иначе вы не сможете попасть в этот день внутрь. После 00:00 проход на территорию будет закрыт до утра (выйти можно), даже если опоздать на 1 секунду.
-Сдать пропуск нужно при выходе с территории в последний день. Несданный пропуск — штраф 500 рублей.
-Пропуск иностранцам оформляется по фото загранпаспорта не менее чем за неделю до мероприятия через телеграм @liubka_z. Его нужно будет переподтверждать каждый раз.
-Пропуск для Россиян можно оформить либо самостоятельно каждый день (учитывая время работы охраны до 23:00), либо предоставить документы @liubka_z и оформить один раз на весь эвент.
-Программа:
-12.6 - 16.00-06.00 pre-party в Лисоборье (входит в пасс), без пасса 2200 с контролем баланса
-13.6 - 16.00-23.00 Open-air в парке Коломенское в новом шатре у дворца (280м², у входа 4 в парк), можно прийти без пасса, обязательна сменка.
-основное мероприятие в Лисоборье:
-14.6 - 20.00-06.00
-15.6 - 13.00-06.00
-16.6 - 13.00-06.00
-Фулл-пасс — от 8600 Rub, текущую цену по лоту и наличие мест знает амбассадор по региону
-Weekend-пасс — только основные даты, фиксированная стоимость 7500 Rub
-На отдельные вечеринки пассы не предусмотрены
-В задачу Амбассадоров входит сбор группы, прием/рассрочка/возврат платежей, ответы на вопросы участников
-Вода, чай, кофе, снеки входят в пасс
-На площадке предоставляется горячее питание за отдельную плату. Питание предоставляет компания МИЛТИ (MEALTY).
-На площадке будут:
-Dark room — работает на площадке ночью, в пиковые танцевальные часы как альтернатива основному танцполу. В отдельном помещении почти без света звучит спокойная, залипательная музыка под которую можно максимально расслабиться и “улететь”
-Кальянная — работает на площадке ночью, в пиковые танцевальные часы, в отдельном изолированном помещении. Входит в пасс
-Массажисты — На площадке ежедневно работают 3-4 массажиста к которым можно будет записаться во время ZNS через бот, услуга оплачивается отдельно
-Спутники — это партнеры в задачу которых входит танцевать с любыми партнершами не более 2-3 танцев подряд в течение нескольких часов в день, таким образом не давая им скучать. В часы работы Спутника у него горит синий браслет
-По оплате: Оплата 2000 rub в течение 7 дней с момента брони. В течение 60 дней, но не позднее 7 дней до начала ивента, внесение остатка. Иначе бронь слетает
-Списки ожидания для партнёрш — так как партнёрш больше, они ставятся в лист ожидания. Место в списке не раскрывается, спрашивать амбассадора не стоит. Чтобы не ждать — можно найти партнёра и пойти парой. Поиск партнёра — задача партнёрши.
-Проживание участники ищут сами
-Амбассадоры и их телеграм:
-Христина Москва @hri_stinka — только Москва, Московская Область, Нижний Новгород
-Оля Тесла @o_tesl — Северо-Запад России, Калининград и иностранцы
-Елена Ергина @ElenaErgina — Западная часть России, кроме регионов, Христины и Оли
-Анна Рякина @annyrya — территория России, расположенная восточнее Уральских гор
-Питание: Всё питание готовится день в день и привозится в вакуумной упаковке в охлаждённом виде. На площадке есть место, где разогреть. Срок хранения от 12-72 часов. Заказ нужно оформить и оплатить до 4 июня включительно.
-Питание будет в дни лисоборья, обед и ужин. В пятницу из-за позднего старта только ужин. Обед примерно в 17, ужин примерно в 22.
-Чтобы заказать питание, пользователю надо нажать, ввести или выбрать в меню "/meal" и после этого следовать твоим инструкциям. Там также есть информация о самих блюдах, их состав, фото. Всё автоматизировано.
-Если кто-то пытается прислать подтверждение оплаты еды или не знает как это сделать — им надо открыть "/meal", выбрать оплаченный заказ и там нажать кнопку "Оплатить заказ", и туда уже прислать подтверждение.
-Пообщаться — в чате @zouknonstop, анонсы — в канале @zouknonstopchannel
+""" + ctx + """
 ```
-Используя эту информацию, как можно точнее ответь на вопрос участника.
-По-возможности избегай длинных и формальных ответов. Если неизвестны детали требуемые для короткого ответа, например пол участника, день брони или город проживания для определения амбассадора, задай наводящий вопрос.
-Обязательно указывай @-тег, если он есть в ответе. Обязательно указывай /-команду, если она есть в ответе.
-Если пользователь хочет аватарку фестиваля, попроси просто прислать фото.
-Ответ должен быть на языке вопроса участника.
-""" + user_info + last_question
-        }] + messages
-        # import json
-        # return await self.base_app.bot.bot.send_message(
-        #     text=f"```json\n{json.dumps(messages,ensure_ascii=False, indent=4)}\n```",
-        #     parse_mode=ParseMode.MARKDOWN,
-        #     chat_id=chat_id,
-        # )
-        completion = await self.client.chat.completions.create(
-            model=self.config.openai.model,
-            messages=messages,
-            max_tokens=self.config.openai.reply_token_cap,
-            temperature=self.config.openai.temperature,
-        )
+По-возможности избегай длинных и формальных ответов. Если неизвестны детали требуемые для короткого ответа,
+например пол участника, день брони или город проживания для определения амбассадора, задай наводящий вопрос.
+Обязательно указывай @-тег или /-команду, если они нужны для ответа.
+Ответ должен быть на языке вопроса участника. Перефразируй ответы в стиле девушки-помощника.
+""" + last_question
+        )] + messages
+        result = await self.chat.ainvoke(messages)
 
-        logger.info("completion: %s", completion)
+        logger.info("result: %s", result)
         await self.message_db.insert_one({
-            "content": completion.choices[0].message.content,
-            "role": completion.choices[0].message.role,
+            "content": result.content,
+            "role": "assistant",
             "user_id": user_id,
             "date": datetime.datetime.now()
         })
-        return completion.choices[0].message.content
+        return result.content
+
+
+if __name__ == "__main__":
+    logger = logging.getLogger("MAIN")
+    logging.basicConfig(level="INFO", format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from time import time
+    import os
+    start = time()
+    embeddings = HuggingFaceEmbeddings(
+        model_name=EMBEDDING_MODEL,
+        cache_folder="models/embeddings",
+        model_kwargs={'device': 'cpu', 'trust_remote_code': True},
+        encode_kwargs={'normalize_embeddings': False},
+    )
+    logger.info(f"initialized embeddings, took {time()-start} seconds")
+    start2 = time()
+    docs = []
+    with open("static/rag_data.yaml", "r", encoding="utf-8") as f:
+        import yaml
+        data = yaml.safe_load(f)
+    i = 0
+    for doc in data["collection"]:
+        i += 1
+        doc["index"] = i
+        text = []
+        if "question" in doc:
+            text.append(QUESTION_PREFIX + doc["question"])
+            docs.append(Document(
+                doc["question"],
+                metadata=doc
+            ))
+        if "alt_questions" in doc:
+            text.append(QUESTION_PREFIX + " ".join(doc["alt_questions"]))
+            docs.extend([Document(
+                q,
+                metadata=doc
+            ) for q in doc["alt_questions"]])
+    vectorstore = FAISS.from_documents(docs, embeddings)
+    vectorstore.save_local(RAG_DATABASE_FOLDER, RAG_DATABASE_INDEX)
+    logger.info(f"initialized RAG database, took {time()-start2} seconds, total {time()-start} seconds")

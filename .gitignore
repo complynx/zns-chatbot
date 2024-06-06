@@ -8,3 +8,5 @@ __pycache__
 /massage_real.yaml
 /menu/
 /build
+/models
+/rag_database
