@@ -103,6 +103,7 @@ div.timetable {
   color: var(--tg-theme-button-text-color);
   position: absolute;
   width: 100%;
+  font-size: .6em;
   z-index: 2;
   overflow: hidden;
 }

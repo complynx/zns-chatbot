@@ -496,7 +496,8 @@ class UserMassages:
     async def handle_cq_create(self):
         user = await self.get_user()
         rec = MassageRecord({
-            "user_id": self.update.user
+            "user_id": self.update.user,
+            "created_at": datetime.now(),
         }, self.plugin, user)
         await rec.init()
         await self.edit_massage(rec)
@@ -664,7 +665,7 @@ class UserMassages:
                 my_occupied = self.get_occupied_slots(massage.day, massages)
                 my_occupied_extended = my_occupied.copy()
                 for slot_id in my_occupied:
-                    for i in range(1, massage.length):
+                    for i in range(1, massage.length+1):
                         if not slot_id-i in my_occupied:
                             my_occupied_extended.add(slot_id-i)
             else:
@@ -676,6 +677,7 @@ class UserMassages:
             massage.record["start"] = self.plugin.slot_time(massage.day, slot)
             massage.record["end"] = massage.record["start"]+timedelta(minutes=massage.duration)
             massage.record["specialist"] = specialist_id
+            massage.record["finalized_at"] = datetime.now()
             if "choices" in massage.record:
                 del massage.record["choices"]
             if "specialists_choices" in massage.record:
@@ -749,7 +751,7 @@ class UserMassages:
             my_occupied = self.get_occupied_slots(massage.day, my_massages)
             my_occupied_extended = my_occupied.copy()
             for slot_id in my_occupied:
-                for i in range(1, massage.length):
+                for i in range(1, massage.length+1):
                     if not slot_id-i in my_occupied:
                         my_occupied_extended.add(slot_id-i)
         else:
@@ -1106,6 +1108,7 @@ class MassagePlugin(BasePlugin):
         return self.parties_by_day[day].start + (SLOT_DURATION * index)
 
     async def available_slots(self, day: int, length: int = 1) -> dict[int,set[int]]:
+        logger.debug(f"length {length}")
         if self.parties_by_day[day].end + EARLY_COMER_TOLERANCE < now_msk():
             return dict[int,set[int]]()
         available, _ = await self.all_slots(day)
@@ -1124,7 +1127,7 @@ class MassagePlugin(BasePlugin):
             if len(slot_set) != 0:
                 available_filtered[slot] = slot_set
         logger.debug(f"available slots for {day} of length {length}: {available}")
-        return available
+        return available_filtered
     
     async def all_slots(self, day: int) -> tuple[dict[int,set[int]], dict[int,set[int]]]:
         all_available = dict[int,set[int]]()

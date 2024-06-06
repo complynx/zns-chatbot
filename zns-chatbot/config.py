@@ -23,12 +23,12 @@ class TelegramSettings(BaseSettings):
     admins: set[int] = Field({379278985})
 
 class OpenAI(BaseSettings):
-    api_key: SecretStr = Field()
+    api_key: SecretStr = Field("", env="OPENAI_API_KEY")
     model: str = Field("gpt-4o")
     simple_model: str = Field("gpt-3.5-turbo-0125")
     reply_token_cap: int = Field(2000)
     message_token_cap: int = Field(2000)
-    temperature: float = Field(1)
+    temperature: float = Field(1.06)
     max_messages_per_user_per_day: int = Field(5)
 
 class LoggingSettings(BaseSettings):
@@ -62,7 +62,7 @@ class Photo(BaseSettings):
     cover_file: str = Field("cover/ZNS2024.jpg")
 
 class Food(BaseSettings):
-    deadline: date = Field(date(2024, 6, 6))
+    deadline: date = Field(date(2024, 6, 7))
     start_day: date = Field(date(2024, 6, 12))
     lunch_time: time = Field(time(17,0,0))
     dinner_time: time = Field(time(22,0,0))
@@ -81,7 +81,7 @@ class Config(BaseSettings):
     logging: LoggingSettings = LoggingSettings()
     localization: LocalizationSettings = LocalizationSettings()
     mongo_db: MongoDB = MongoDB()
-    openai: OpenAI
+    openai: OpenAI = OpenAI()
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
     food: Food = Food()
