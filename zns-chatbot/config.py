@@ -53,7 +53,7 @@ class Photo(BaseSettings):
     cover_file: str = Field("cover/ZNS2024.jpg")
 
 class Food(BaseSettings):
-    deadline: date = Field(date(2024, 6, 6))
+    deadline: date = Field(date(2024, 6, 7))
     start_day: date = Field(date(2024, 6, 12))
     lunch_time: time = Field(time(17,0,0))
     dinner_time: time = Field(time(22,0,0))
