@@ -5,6 +5,7 @@ setup(
     version="0.3",
     packages=find_packages(),
     install_requires=[
+        "packaging==23.2",
         "python-telegram-bot[job-queue]>=21.0.1",
         # "opencv-python>=4.9.0.1",
         "dlib>=19.24.0",
