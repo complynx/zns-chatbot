@@ -76,7 +76,7 @@ class Massages(BaseSettings):
     notify_client_prior: timedelta = Field(timedelta(minutes=10))
 
 class Config(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix='zns_', yaml_file="config/config.yaml", env_nested_delimiter='_')
+    model_config = SettingsConfigDict(env_prefix='zns_', yaml_file="config/config.yaml", env_nested_delimiter='__')
     telegram: TelegramSettings
     logging: LoggingSettings = LoggingSettings()
     localization: LocalizationSettings = LocalizationSettings()
