@@ -29,7 +29,7 @@ RUN python setup.py install \
 COPY . /app
 
 # Bootstrap RAG model
-RUN python -m zns-chatbot.plugin.assistant
+RUN python -m zns-chatbot.plugins.assistant
 
 # Make port 80 available to the world outside this container
 EXPOSE 80

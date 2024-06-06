@@ -26,4 +26,7 @@ setup(
         "langchain-huggingface>=0.0.2",
         "faiss-cpu>=1.8",
     ],
+    dependency_links=[
+        "https://download.pytorch.org/whl/cpu"
+    ],
 )
