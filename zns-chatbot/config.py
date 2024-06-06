@@ -24,14 +24,12 @@ class TelegramSettings(BaseSettings):
 
 class OpenAI(BaseSettings):
     api_key: SecretStr = Field()
-    model: str = Field("gpt-3.5-turbo-0125")
+    model: str = Field("gpt-4o")
+    simple_model: str = Field("gpt-3.5-turbo-0125")
     reply_token_cap: int = Field(2000)
     message_token_cap: int = Field(2000)
     temperature: float = Field(1)
     max_messages_per_user_per_day: int = Field(5)
-
-class LangChain(BaseSettings):
-    embedding_model: str = Field("intfloat/multilingual-e5-base")
 
 class LoggingSettings(BaseSettings):
     level: str = Field("WARNING")
@@ -48,7 +46,6 @@ class MongoDB(BaseSettings):
     bots_storage: str = Field("bots_storage", validation_alias="BOTS_STORAGE_COLLECTION")
     food_collection: str = Field("zns_bot_food", validation_alias="ZNS_BOT_FOOD_COLLECTION")
     massage_collection: str = Field("zns_bot_massage", validation_alias="ZNS_BOT_MASSAGE_COLLECTION")
-    rag_collection: str = Field("zns_bot_rag", validation_alias="ZNS_BOT_RAG_COLLECTION")
 
 class ServerSettings(BaseSettings):
     base: str = Field("http://localhost:8080")
@@ -85,7 +82,6 @@ class Config(BaseSettings):
     localization: LocalizationSettings = LocalizationSettings()
     mongo_db: MongoDB = MongoDB()
     openai: OpenAI
-    langchain: LangChain = LangChain()
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
     food: Food = Food()

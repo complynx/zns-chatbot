@@ -6,9 +6,16 @@
     "configurations": [
         {
             "name": "zns-chatbot",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "zns-chatbot.main",
+            "justMyCode": false
+        },
+        {
+            "name": "bootstrap",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "zns-chatbot.plugins.assistant",
             "justMyCode": false
         }
     ]

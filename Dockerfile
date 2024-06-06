@@ -28,6 +28,9 @@ RUN python setup.py install \
 # Copy the current directory contents into the container at /app
 COPY . /app
 
+# Bootstrap RAG model
+RUN python -m zns-chatbot.plugin.assistant
+
 # Make port 80 available to the world outside this container
 EXPOSE 80
 

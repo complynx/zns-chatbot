@@ -18,10 +18,11 @@ setup(
         "pydantic>=2.7",
         "pydantic-settings>=2.3",
         "openai>=1.30.1",
-        "tiktoken>=0.7.0"
+        "tiktoken>=0.7.0",
         "langchain>=0.2.2",
         "langchain-community>=0.2.2",
         "langchain-openai>=0.1.8",
         "langchain-huggingface>=0.0.2",
+        "faiss-cpu>=1.8",
     ],
 )
