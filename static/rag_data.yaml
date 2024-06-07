@@ -2,7 +2,27 @@ collection:
   - question: Who is Vladimir Butman?
     alt_questions:
     - Who is Владимир Бутман?
-    answer: Владимир Бутман is the main organizer of ZNS.
+    answer: Владимир Бутман @vbutman is the main organizer of ZNS.
+  - question: Who organizes ZNS?
+    alt_questions:
+    - Who are team members?
+    answer: |
+      Here is a list of team members:
+      - Владимир Бутман @vbutman - the leader 
+      - Люба Зеленская - payments and accounting
+      - Веталь Портников - art, tech and sound
+      - Оля Чепель - decor and design, open-air
+      - Юля Бухарова - мать диджеев
+      - Даша Ушакова - food
+      - Анна Натарова - posts, media
+      - Валерия Бондарева - local connections
+      - Каролина Зянюк - Belarus leader
+      - Люся - Belarus leader
+      - Аня Атман - meetings and data manager
+      - Даниил Дрижук - IT infrastructure, bot
+      - Евгений Виноградов - lighting
+      - Борис Боренко - owner of the venue (Лисоборье), wood/metal works
+      and many more who help
   - question: Who are the DJs at ZNS?
     alt_questions:
     - Will DJ play at ZNS?
@@ -40,6 +60,8 @@ collection:
   - question: What food did I order at ZNS?
     answer: Food ordered by the user (more details with the command /meal)
     command: userfood
+  - question: Who is your creator?
+    answer: Даниил Дрижук @complynx
   - question: Which marathon number is this ZNS event?
     answer: This is already the 7th ZNS marathon.
   - question: What are the features of the Zouk Non Stop (ZNS) marathon?
@@ -235,6 +257,7 @@ collection:
     answer: |
       Anna Natarova's (Анна Натарова) practice, "Connection with Yourself," (Коннекшн с собой) will take place on Saturday at 13:00. 
       It helps you wake up, feel your body, and recharge with energy. The practice includes stretching, preparing the body for dancing with effective and enjoyable exercises, and exercises to feel your body and contact with yourself and the surrounding space. It concludes with a small dance therapy session and a pleasant meditation.
+      There is also comedy impovisation workshop from her at the open-air at 16:00.
   - question: What is Yulia Ivanova's yoga class about? (Юлия Иванова)
     answer: |
       Yulia Ivanova's (Юлия Иванова) class, "Health Yoga and Stretching," (Оздоровительная йога и растяжка) will be held on Sunday at 13:00.

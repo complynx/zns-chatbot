@@ -87,17 +87,17 @@ spaceship Зукерион — Zoukerion
             model_kwargs={'device': 'cpu', 'trust_remote_code': True},
             encode_kwargs={'normalize_embeddings': False},
         )
-        logger.debug(f"initialized embeddings, took {time()-start} seconds")
+        logger.info(f"initialized embeddings, took {time()-start} seconds")
         start2 = time()
         self.vectorstore = FAISS.load_local(RAG_DATABASE_FOLDER, self.embeddings, RAG_DATABASE_INDEX,allow_dangerous_deserialization=True)
-        logger.debug(f"initialized RAG database, took {time()-start2} seconds, total {time()-start} seconds")
+        logger.info(f"initialized RAG database, took {time()-start2} seconds, total {time()-start} seconds")
 
     async def update_rag_database(self):
         from time import time
         start = time()
         await self.init_rag_database()
         self._database_ready.set()
-        logger.debug(f"---- RAG database ready ---- took {time()-start} seconds")
+        logger.info(f"---- RAG database ready ---- took {time()-start} seconds")
         try:
             import winsound
             winsound.Beep(1000, 100)
