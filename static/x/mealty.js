@@ -54,7 +54,7 @@ zns_container.innerHTML = `
     <button data-meal=lunch data-day=wednesday>ср/обед</button>
     <button data-meal=dinner data-day=wednesday>ср/ужин</button>
     &nbsp;
-    <button data-meal=dinner data-day=firday>пт/ужин</button>
+    <button data-meal=dinner data-day=friday>пт/ужин</button>
     &nbsp;
     <button data-meal=lunch data-day=saturday>сб/обед</button>
     <button data-meal=dinner data-day=saturday>сб/ужин</button>
