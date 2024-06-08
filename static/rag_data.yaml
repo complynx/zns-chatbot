@@ -4,6 +4,11 @@ collection:
     - Who is Владимир Бутман?
     answer: Владимир Бутман @vbutman is the main organizer of ZNS.
 
+  - question: What is Butman's strength?
+    alt_questions:
+    - What is Бутман's strength?
+    answer: Сила Бутмана в каждом батончике!
+
   - question: Who organizes ZNS?
     alt_questions:
     - Who are team members?
