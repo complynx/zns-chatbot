@@ -1,5 +1,6 @@
 
-from ..config import Config, full_link
+from typing import Tuple
+from ..config import Config, full_link, Party
 from ..tg_state import TGState
 from ..telegram_links import client_user_link_html
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo, ReplyKeyboardMarkup, User, ReplyKeyboardRemove, Message
@@ -21,10 +22,10 @@ def generate_random_string(length):
     return ''.join(random.choice(characters) for _ in range(length))
 
 
+WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
 def next_weekday_date(given_date: datetime.date, target_weekday: str) -> datetime.date:
-    weekdays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
     given_weekday = given_date.weekday()
-    target_weekday = weekdays.index(target_weekday.lower())
+    target_weekday = WEEKDAYS.index(target_weekday.lower())
     
     if given_weekday == target_weekday:
         return given_date
@@ -57,7 +58,7 @@ def order_total(carts, menu):
             total += item_m["price"]
     return total
 
-def order_text(l, order, menu, for_assist=False):
+def order_text(l, order, menu, for_assist=False, day=None, mealtime=None):
     ret = []
     total = 0
     if "carts" in order:
@@ -65,6 +66,10 @@ def order_text(l, order, menu, for_assist=False):
             if not meal_id in order["carts"]:
                 continue
             cart = order["carts"][meal_id]
+            if day is not None and cart["day"] != day:
+                continue
+            if mealtime is not None and cart["meal"] != mealtime:
+                continue
             items_data = {}
             meal_total = 0
             for item_id in cart["items"]:
@@ -109,12 +114,15 @@ def order_text(l, order, menu, for_assist=False):
                 ret.append(meal)
     if len(ret) > 0:
         if for_assist:
-            txt = ""
-            if "validation" in order and order["validation"]:
-                txt += "paid "
+            if day is None and mealtime is None:
+                txt = ""
+                # if "validation" in order and order["validation"]:
+                #     txt += "paid "
+                # else:
+                #     txt += "unpaid "
+                txt += "order for " + order["receiver_name"] + "\n - " + "\n - ".join(ret) + f"\n total: {total}rub."
             else:
-                txt += "unpaid "
-            txt += "order for " + order["receiver_name"] + "\n - " + "\n - ".join(ret) + f"\n total: {total}rub."
+                txt = "order for " + order["receiver_name"] + "\n - " + "\n - ".join(ret)
         else:
             txt = l("food-order-for", name=order["receiver_name"]) + "\n\n" + "\n\n".join(ret)
             txt += "\n\n"+ l("food-total", total=total)
@@ -608,7 +616,13 @@ class FoodUpdate:
             },
         })
 
-
+MEALTIME_MAP = {
+    2: ['lunch','dinner'],
+    4: ['dinner'],
+    5: ['lunch','dinner'],
+    6: ['lunch','dinner'],
+}
+MEALTIME_DINNERTIME_SOON = datetime.time(hour=21,minute=0)
 NOTIFICATOR_LOOP = 3600
 class Food(BasePlugin):
     name = "food"
@@ -625,6 +639,22 @@ class Food(BasePlugin):
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self.menu = self.get_menu()
         create_task(self._notifier())
+    
+    def current_party(self) -> Tuple[Party|None, datetime.datetime]:
+        from .massage import now_msk
+        now = now_msk()
+        for party in self.config.parties:
+            if party.start.replace(hour=7,minute=0) < now < party.end:
+                return party, now
+        return None, now
+    
+    def next_party(self) -> Tuple[Party|None, datetime.datetime]:
+        from .massage import now_msk
+        now = now_msk()
+        for party in self.config.parties:
+            if party.start > now:
+                return party, now
+        return None, now
     
     async def _notifier(self):
         from asyncio import sleep, create_task
@@ -688,6 +718,7 @@ class Food(BasePlugin):
         cursor = self.food_db.find({
             "user_id": {"$eq": user_id},
             "deleted": { "$exists": False },
+            "validation": { "$eq": True },
         }).sort("created_at", 1)
         orders = await cursor.to_list(length=1000)
         ret = []
@@ -697,6 +728,48 @@ class Food(BasePlugin):
                 ret.append(ot)
         if len(ret) == 0:
             return ""
+        return "\n".join(ret)
+    
+    async def get_user_orders_assist_today(self, user_id: int) -> str:
+        p, _ = self.current_party()
+        if p is None:
+            return await self.get_user_orders_assist(user_id)
+        day = WEEKDAYS[p.start.weekday()]
+        return await self.get_user_orders_assist_day_mealtime(user_id, day, None)
+    
+    async def get_user_orders_assist_tomorrow(self, user_id: int) -> str:
+        p, _ = self.next_party()
+        if p is None:
+            return await self.get_user_orders_assist(user_id)
+        day = WEEKDAYS[p.start.weekday()]
+        return await self.get_user_orders_assist_day_mealtime(user_id, day, None)
+    
+    async def get_user_orders_assist_closest(self, user_id: int) -> str:
+        p, now = self.current_party()
+        if p is None:
+            return await self.get_user_orders_assist(user_id)
+        day = WEEKDAYS[p.start.weekday()]
+        mealtimes = MEALTIME_MAP[p.start.weekday()]
+        if len(mealtimes) == 1 or now.time() < MEALTIME_DINNERTIME_SOON:
+            mealtime = mealtimes[0]
+        else:
+            mealtime = mealtimes[1]
+        return await self.get_user_orders_assist_day_mealtime(user_id, day, mealtime)
+            
+    async def get_user_orders_assist_day_mealtime(self, user_id: int, day:str|None, mealtime:str|None) -> str:
+        cursor = self.food_db.find({
+            "user_id": {"$eq": user_id},
+            "deleted": { "$exists": False },
+            "validation": { "$eq": True },
+        }).sort("created_at", 1)
+        orders = await cursor.to_list(length=1000)
+        ret = []
+        for order in orders:
+            ot = order_text(None, order, self.menu, True, day=day, mealtime=mealtime)
+            if ot != "":
+                ret.append(ot)
+        if len(ret) == 0:
+            return f"didn't order anything for {day} {mealtime if mealtime is not None else ''}"
         return "\n".join(ret)
         
     def get_menu(self):

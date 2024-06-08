@@ -21,7 +21,7 @@ from telegram import Message, Update
 from telegram.ext import filters
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 from .avatar import async_thread
-from .massage import split_list
+from .massage import split_list, now_msk
 from asyncio import Event
 
 output_parser = StrOutputParser()
@@ -130,6 +130,15 @@ spaceship Зукерион — Zoukerion
         else:
             return "\nпользователь пока не заказал ничего через /meal"
     
+    async def context_userfood_closest(self, update: TGState) -> str:
+        return await self.base_app.food.get_user_orders_assist_closest(update.user)
+    
+    async def context_userfood_today(self, update: TGState) -> str:
+        return await self.base_app.food.get_user_orders_assist_today(update.user)
+    
+    async def context_userfood_tomorrow(self, update: TGState) -> str:
+        return await self.base_app.food.get_user_orders_assist_tomorrow(update.user)
+    
     async def get_context(self, message: str, update: TGState):
         docs = await self.vectorstore.asimilarity_search(message, k=RAW_NUMBER_OF_CONTEXT_DOCS)
         logger.debug(f"context for {message}: {docs}")
@@ -191,9 +200,10 @@ spaceship Зукерион — Zoukerion
             return update.l("max-assistant-messages-reached")
         if len(result) > 0:
             limit = self.config.openai.max_messages_per_user_per_day-result[0]["count"]
-            last_question = f"\nвопросов на сегодня осталось: {limit}, следующие пользователь сможет задать завтра"
+            last_question = f"\n this user has only {limit} questions left for today"
 
         length = len(self.tokenizer.encode(message))
+        tokens_message = length
         if length > self.config.openai.message_token_cap:
             raise MessageTooLong()
         logger.debug(f"message length {length}")
@@ -215,21 +225,17 @@ spaceship Зукерион — Zoukerion
                 msg = AIMessage(content=prev_message["content"])
             messages = [msg] + messages
         await cursor.close()
+        tokens_history = length - tokens_message
 
-        await self.message_db.insert_one({
-            "content": message,
-            "role": "user",
-            "translated": translated,
-            "user_id": user_id,
-            "date": datetime.datetime.now()
-        })
+        ctx_date = "\n\nnow it's " +now_msk().strftime("%A, %d %B %Y, %H:%M")+ "\n"
 
         messages = [
             SystemMessage(content= """
-Ты — полезный бот-помощник, девушка по имени ЗиНуСя, помогающая с вопросами участникам танцевального марафона.
-Усердная, но немного блондинка.
-Используя следующий контекст, как можно точнее ответь на вопрос участника.
-Краткая информация
+You're a helpful assistant bot, девушка по имени ЗиНуСя.
+You help participants of the dance marathon with questions.
+Ты усердная, но немного блондинка.
+You have to answer in the same language as the users message.
+Answer the questions with the help of the following context:
 ```
 Zouk Non Stop (Зук Нон Стоп/ZNS/ЗНС) — танцевальный марафон по Бразильскому Зуку / Brazilian Zouk с космической тематикой.
 Включает в себя почти-круглосуточные танцы с перерывом на утренний сон.
@@ -242,19 +248,33 @@ Zouk Non Stop (Зук Нон Стоп/ZNS/ЗНС) — танцевальный �
 Особое оформление и освещение площадки, фотозона, аквагрим, Dark room, подарки участникам (наборы зуконавта)
 Отсутствие мастер-классов
 
-""" + ctx + """
+""" + ctx + ctx_date + """
 ```
-По-возможности избегай длинных и формальных ответов. Если неизвестны детали требуемые для короткого ответа,
-например пол участника, день брони или город проживания для определения амбассадора, задай наводящий вопрос.
-Обязательно указывай @-тег или /-команду, если они нужны для ответа.
+Avoid long and formal answers. If some details are not known, for instance sex of the participant, their region or anything,
+please ask a clarification question.
+If a @-mention or /-command, is relevant to a question, it is really helpful to include them.
 Ответ должен быть на языке вопроса участника. Перефразируй ответы в стиле девушки-помощника.
 """ + last_question
         )] + messages
+
+        await self.message_db.insert_one({
+            "content": message,
+            "tokens_message": tokens_message,
+            "tokens_context": len(self.tokenizer.encode(ctx)),
+            "tokens_history": tokens_history,
+            "role": "user",
+            "translated": translated,
+            "context": ctx,
+            "user_id": user_id,
+            "date": datetime.datetime.now()
+        })
+        
         result = await self.chat.ainvoke(messages)
 
-        logger.info("result: %s", result)
+        logger.info("result: %s\n%s", result, result.response_metadata)
         await self.message_db.insert_one({
             "content": result.content,
+            "response_metadata": result.response_metadata,
             "role": "assistant",
             "user_id": user_id,
             "date": datetime.datetime.now()
