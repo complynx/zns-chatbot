@@ -234,7 +234,7 @@ spaceship Зукерион — Zoukerion
                     logger.debug(f"fn: {attr}")
                     if callable(attr):
                         text.append(await attr(update))
-        text.append("user info: "+ (await self.userinfo()))
+        text.append("user info: "+ (await self.userinfo(update)))
         return "\n".join(text)
     
     async def get_assistant_reply(self, message: str, user_id: int, update: TGState):
