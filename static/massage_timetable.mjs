@@ -219,7 +219,7 @@ const pinchZoomMove = (event) => {
 
         if (initialDistance) {
             const delta = distance - initialDistance;
-            handleZoom(delta * 0.1);
+            handleZoom(delta);
             initialDistance = distance;
         }
     }
