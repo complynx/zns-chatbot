@@ -183,10 +183,31 @@ const handleZoom = (delta) => {
     timetable.style.height = `${newHeight}px`;
 };
 
-// Pinch-zoom event listener
+// Prevent default browser behavior for pinch-zoom
+const preventDefault = (event) => {
+    if (event.touches.length > 1) {
+        event.preventDefault();
+    }
+};
+
+// Pinch-zoom event listeners
 let initialDistance = null;
 
-const pinchZoomHandler = (event) => {
+const pinchZoomStart = (event) => {
+    preventDefault(event);
+    if (event.touches.length === 2) {
+        const touch1 = event.touches[0];
+        const touch2 = event.touches[1];
+
+        initialDistance = Math.sqrt(
+            Math.pow(touch2.clientX - touch1.clientX, 2) +
+            Math.pow(touch2.clientY - touch1.clientY, 2)
+        );
+    }
+};
+
+const pinchZoomMove = (event) => {
+    preventDefault(event);
     if (event.touches.length === 2) {
         const touch1 = event.touches[0];
         const touch2 = event.touches[1];
@@ -196,9 +217,7 @@ const pinchZoomHandler = (event) => {
             Math.pow(touch2.clientY - touch1.clientY, 2)
         );
 
-        if (initialDistance === null) {
-            initialDistance = distance;
-        } else {
+        if (initialDistance) {
             const delta = distance - initialDistance;
             handleZoom(delta * 0.1);
             initialDistance = distance;
@@ -206,11 +225,14 @@ const pinchZoomHandler = (event) => {
     }
 };
 
-timetable.addEventListener('touchmove', pinchZoomHandler);
-
-timetable.addEventListener('touchend', () => {
+const pinchZoomEnd = (event) => {
+    preventDefault(event);
     initialDistance = null;
-});
+};
+
+timetable.addEventListener('touchstart', pinchZoomStart, { passive: false });
+timetable.addEventListener('touchmove', pinchZoomMove, { passive: false });
+timetable.addEventListener('touchend', pinchZoomEnd);
 
 // Ctrl+Scroll event listener
 const scrollHandler = (event) => {
