@@ -102,6 +102,8 @@ class Specialist:
 
     @property
     def name(self):
+        if "name" in self.specialist:
+            return self.specialist["name"]
         return client_user_name(self.user)
     
     @property
@@ -219,7 +221,7 @@ class Specialist:
         about = self.specialist["about"]
         if "about_" + lc in self.specialist:
             about = self.specialist["about_" + lc]
-        return self.icon + " <b>" + client_user_link_html(self.user) + "</b> \n" + about + "\n"
+        return self.icon + " <b>" + client_user_link_html(self.user, self.name) + "</b> \n" + about + "\n"
     
     def massage_edit_buttons(self, massage: 'MassageRecord'):
         return [[
