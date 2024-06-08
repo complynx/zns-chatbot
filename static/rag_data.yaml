@@ -202,12 +202,6 @@ collection:
       - Who is Vladimir Zaitsev?
     answer: DJ Koks - Владимир Зайцев, will not be at ZNS but he recorded a special set for us
 
-  - question: Who am I?
-    alt_questions:
-    - Tell me about myself?
-    answer: User information
-    command: userinfo
-
   - question: Show me full DJ schedule for each day.
     answer: This is DJ schedule by day (with times they start playing)
     command: dj_schedule

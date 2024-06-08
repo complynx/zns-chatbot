@@ -155,7 +155,7 @@ spaceship Зукерион — Zoukerion
         repl = await self.get_assistant_reply(update.update.message.text_markdown_v2, update.user, update)
         await update.reply(repl, parse_mode=None)
     
-    async def context_userinfo(self, update: TGState) -> str:
+    async def userinfo(self, update: TGState) -> str:
         from ..telegram_links import client_user_name
         user = await update.get_user()
         ret = f"имя пользователя {client_user_name(user)}"
@@ -234,6 +234,7 @@ spaceship Зукерион — Zoukerion
                     logger.debug(f"fn: {attr}")
                     if callable(attr):
                         text.append(await attr(update))
+        text.append("user info: "+ (await self.userinfo()))
         return "\n".join(text)
     
     async def get_assistant_reply(self, message: str, user_id: int, update: TGState):
