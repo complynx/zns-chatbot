@@ -1007,6 +1007,13 @@ class UserMassages:
                 keyboard.extend(split_list([instant_book(i+1) for i in range(0, possible_slots)], 3))
             keyboard.append([InlineKeyboardButton(self.l("massage-specialist-notifications-button"),
                                                    callback_data=f"{self.plugin.name}|notifications")])
+        elif self.update.user in self.plugin.config.food.admins:
+            keyboard.append([
+                InlineKeyboardButton(
+                    self.l("massage-specialist-timetable-button"),
+                    web_app=WebAppInfo(full_link(self.plugin.base_app, f"/massage_timetable"))
+                ),
+            ])
         massages = await self.get_massages()
         massage_buttons = [
             InlineKeyboardButton(

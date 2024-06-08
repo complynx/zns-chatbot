@@ -249,7 +249,7 @@ class MassageTimetableHandler(RequestHandlerWithApp):
             massages: MassagePlugin = self.app.massages
             user = json.loads(initData['user'])
             specialist = await massages.get_specialist(user["id"])
-            if specialist is None:
+            if specialist is None and user["id"] not in massages.config.food.admins:
                 self.set_status(403)
                 logger.info("not a specialist")
                 return
