@@ -281,6 +281,22 @@ class MassageRecord:
             disable_web_page_preview=True,
         )
     
+    async def notify_client_addidtional(self):
+        await self.plugin.massage_db.update_one(
+            {"_id":self.record["_id"]},
+            {"$unset":{"notify":True}}
+        )
+        await self.init()
+        await self.plugin.bot.send_message(
+            self.record["user_id"],
+            self.client_repr(
+                "massage-notification-additional"
+            ),
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(self.client_buttons()),
+            disable_web_page_preview=True,
+        )
+    
     async def notify_client(self):
         await self.plugin.massage_db.update_one(
             {"_id":self.record["_id"]},
@@ -1083,6 +1099,15 @@ class MassagePlugin(BasePlugin):
                 }):
                     rec = MassageRecord(doc, self)
                     create_task(rec.notify_specialist())
+                async for doc in self.massage_db.find({
+                    "deleted": {"$exists":False},
+                    "start": {
+                        "$gte": now,
+                    },
+                    "notify": {"$eq":True},
+                }):
+                    rec = MassageRecord(doc, self)
+                    create_task(rec.notify_client_addidtional())
             except Exception as e:
                 logger.error("Exception in notifier: %s", e, exc_info=1)
 

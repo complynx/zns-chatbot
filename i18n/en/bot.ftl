@@ -145,6 +145,16 @@ massage-edit-select-slot =
 massage-edit-select-specialists-filtered = Some specialists are not shown because they don't work for massages of this duration.
 massage-exit-button = 🚪 Exit
 massage-exited = If you need it again, you can always click: /massage
+massage-notification-additional =
+    Hi, zoukonaut!
+    You have a massage booking:
+    Massage type: {$durationicon} <b>{$price}</b> ₽ / <b>{$duration}</b> minutes.
+    Party: <b>{$party}</b>
+    Time: <b>{$time}</b>
+    Specialist: {$specialist}
+
+    Come <u>on time</u> because there is somebody after you. If you can't come, please cancel in advance.
+    Enjoy your cake of peace!
 massage-notification-prior-long =
     Hi, zoukonaut!
     I remind you that you have a massage in {$inminutes} minutes, at <b>{$time}</b>:
