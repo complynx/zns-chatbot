@@ -41,6 +41,47 @@ EMBEDDING_MODEL = "Alibaba-NLP/gte-large-en-v1.5"
 RAG_DATABASE_INDEX = "index"
 RAG_DATABASE_FOLDER = "rag_database"
 
+DJ_TABLE_TEXT="""	Wed	Thu	Fri	Fri-darkroom	Sat	Sat-darkroom	Sun	Sun-darkroom
+14:00					Kota		Chepel	
+15:00					Tropikana		Lakshmi	
+16:00	Set				Dark Horse		Vikki	
+17:00	Remy				Belov		Kid	
+18:00	KatRina	Set			Finik		Belov	
+19:00	Chepel	Belov			Agent Smith		Finik	
+20:00	Peko	Chepel	Zorrito		KatRina		K-line	
+21:00	Kota	Ula	Dark Horse		Koks		Ula	
+22:00	Lakshmi	Tropikana	John Mass		K-line		John Mass	
+23:00	Belov		KatRina		Kriki		Zorrito	
+00:00	Agent Smith		Ula	Remy	Kaver	Kota	Peko	Dark Horse
+01:00	John Mass		Kriki	Vikki	Remy	Lakshmi	Tropikana	Kid
+02:00	Tropikana		Agent Smith	K-line	Ula	Kid	Kriki	Shamanka
+03:00	Dark Horse		Kaver	Dj / Set	Vikki	Dj / Set	Remy	Dj / Set
+04:00	K-line		Lakshmi		Peko		Agent Smith	
+05:00	Kid		Kota		Zorrito		K-line	"""
+
+# Split the table into lines
+lines = DJ_TABLE_TEXT.split("\n")
+
+# Initialize the array of arrays with inner arrays for columns
+DJ_TABLE = []
+
+# Split the first line for headers
+headers = lines[0].split("\t")
+num_columns = len(headers)
+DJ_TABLE = [[] for _ in range(num_columns)]
+
+# Parse the data lines
+for line in lines[1:]:
+    cells = line.split("\t")
+    for i, cell in enumerate(cells):
+        DJ_TABLE[i].append(cell.strip())
+
+# Add headers to the corresponding columns
+for i, header in enumerate(headers):
+    DJ_TABLE[i].insert(0, header.strip())
+def format_dj_schedule(times, djs):
+    return "\n".join(f"{time}: {dj}" for time, dj in zip(times, djs) if dj)
+
 class Assistant(BasePlugin):
     name = "assistant"
     chat: ChatOpenAI
@@ -129,6 +170,37 @@ spaceship Зукерион — Zoukerion
             return "\n заказы пользователя в /meal\n"+orders
         else:
             return "\nпользователь пока не заказал ничего через /meal"
+    
+    async def context_today_djs(self, update: TGState) -> str:
+        from ..config import Party
+        p, _ = self.base_app.food.current_party()
+        if p is None:
+            return "No party today"
+        day = p.start.weekday()
+        if day == 2:  # Wednesday
+            djs_day = DJ_TABLE[1].copy()[1:]
+            djs_dark = None
+        elif day == 3:  # Thursday (Open-Air)
+            djs_day = DJ_TABLE[2].copy()[1:]
+            djs_dark = None
+        elif day == 4:  # Friday
+            djs_day = DJ_TABLE[3].copy()[1:]
+            djs_dark = DJ_TABLE[4].copy()[1:]
+        elif day == 5:  # Saturday
+            djs_day = DJ_TABLE[5].copy()[1:]
+            djs_dark = DJ_TABLE[6].copy()[1:]
+        elif day == 6:  # Sunday
+            djs_day = DJ_TABLE[7].copy()[1:]
+            djs_dark = DJ_TABLE[8].copy()[1:]
+        djs_day_time = DJ_TABLE[0].copy()[1:]
+        djs_dark_time = DJ_TABLE[0].copy()[1:]
+
+        djs_day_str = format_dj_schedule(djs_day_time, djs_day)
+        djs_dark_str = ("\nDark room DJs:\n" + format_dj_schedule(djs_dark_time, djs_dark)) if djs_dark else ""
+        return "Today's DJs:\n" + djs_day_str + djs_dark_str + "\nSet means prerecorded set"
+    
+    async def context_dj_schedule(self, update: TGState) -> str:
+        return DJ_TABLE_TEXT + "\nSet means prerecorded set"
     
     async def context_userfood_closest(self, update: TGState) -> str:
         return await self.base_app.food.get_user_orders_assist_closest(update.user)

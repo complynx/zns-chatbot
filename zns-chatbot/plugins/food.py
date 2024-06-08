@@ -732,21 +732,21 @@ class Food(BasePlugin):
     
     async def get_user_orders_assist_today(self, user_id: int) -> str:
         p, _ = self.current_party()
-        if p is None:
+        if p is None or p.start.weekday() not in WEEKDAYS:
             return await self.get_user_orders_assist(user_id)
         day = WEEKDAYS[p.start.weekday()]
         return await self.get_user_orders_assist_day_mealtime(user_id, day, None)
     
     async def get_user_orders_assist_tomorrow(self, user_id: int) -> str:
         p, _ = self.next_party()
-        if p is None:
+        if p is None or p.start.weekday() not in WEEKDAYS:
             return await self.get_user_orders_assist(user_id)
         day = WEEKDAYS[p.start.weekday()]
         return await self.get_user_orders_assist_day_mealtime(user_id, day, None)
     
     async def get_user_orders_assist_closest(self, user_id: int) -> str:
         p, now = self.current_party()
-        if p is None:
+        if p is None or p.start.weekday() not in WEEKDAYS:
             return await self.get_user_orders_assist(user_id)
         day = WEEKDAYS[p.start.weekday()]
         mealtimes = MEALTIME_MAP[p.start.weekday()]

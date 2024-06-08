@@ -208,6 +208,17 @@ collection:
     answer: User information
     command: userinfo
 
+  - question: Show me full DJ schedule for each day.
+    answer: This is DJ schedule by day (with times they start playing)
+    command: dj_schedule
+
+  - question: Who is playing now?
+    alt_questions:
+    - Who is playing today?
+    - Show me DJ schedule for today.
+    answer: This is DJ schedule for today (with times they start playing)
+    command: today_djs
+
   - question: Show me full list of what food I ordered.
     answer: Food ordered by the user (more details with the command /meal)
     command: userfood
