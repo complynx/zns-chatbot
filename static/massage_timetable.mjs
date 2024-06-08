@@ -150,7 +150,9 @@ fetch("./massage_timetable_data?"+ IDQ()).then(r=> r.json()).then(timetable_data
         }
         let div = specialist_div(party, specialist);
         let massage_div = document.createElement("DIV");
-        massage_div.innerText = `${massage.user.name} ${massage.price} ₽ / ${massage.duration}'`;
+        massage_div.innerText = `${massage.user.name} ${massage.price} ₽ / ${massage.duration}'
+${massage.start.format("HH:mm")}
+`;
         massage_div.title = `${massage.user.name} ${massage.price} ₽ / ${massage.duration}'`;
         massage_div.classList.add("massage");
         massage_div.classList.add(`massage-id-${massage.id}`);
@@ -159,3 +161,64 @@ fetch("./massage_timetable_data?"+ IDQ()).then(r=> r.json()).then(timetable_data
         div.appendChild(massage_div);
     }
 }).catch(console.error);
+
+
+const timetable = document.getElementById('timetable');
+const minHeight = timetable.offsetHeight;
+
+// Function to handle zoom
+const handleZoom = (delta) => {
+    let currentHeight = timetable.offsetHeight;
+    let newHeight = currentHeight + delta;
+
+    if (newHeight < minHeight) {
+        newHeight = minHeight;
+    }
+    if (newHeight >= minHeight * 1.6) {
+        timetable.style.setProperty('--font-size', '1em');
+    } else {
+        timetable.style.setProperty('--font-size', '0.6em');
+    }
+
+    timetable.style.height = `${newHeight}px`;
+};
+
+// Pinch-zoom event listener
+let initialDistance = null;
+
+const pinchZoomHandler = (event) => {
+    if (event.touches.length === 2) {
+        const touch1 = event.touches[0];
+        const touch2 = event.touches[1];
+
+        const distance = Math.sqrt(
+            Math.pow(touch2.clientX - touch1.clientX, 2) +
+            Math.pow(touch2.clientY - touch1.clientY, 2)
+        );
+
+        if (initialDistance === null) {
+            initialDistance = distance;
+        } else {
+            const delta = distance - initialDistance;
+            handleZoom(delta * 0.1);
+            initialDistance = distance;
+        }
+    }
+};
+
+timetable.addEventListener('touchmove', pinchZoomHandler);
+
+timetable.addEventListener('touchend', () => {
+    initialDistance = null;
+});
+
+// Ctrl+Scroll event listener
+const scrollHandler = (event) => {
+    if (event.shiftKey) {
+        event.preventDefault();
+        const delta = event.deltaY * -5;
+        handleZoom(delta);
+    }
+};
+
+window.addEventListener('wheel', scrollHandler);
