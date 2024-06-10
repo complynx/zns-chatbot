@@ -307,7 +307,7 @@ async def check_startup_actions(app):
 async def parse_message(tgupdate: Update, context: CallbackContext):
     update = TGUpdate(tgupdate, context)
     user = await update.get_user()
-    if ["banned"] in user:
+    if "banned" in user:
         return await update.reply(update.l("user-is-restricted"), parse_mode=ParseMode.HTML)
     await update.parse()
     # await context.application.base_app.assistant.reply_to(update.message.text_markdown_v2, update.effective_user.id, update.effective_message.chat_id)
@@ -316,7 +316,7 @@ async def parse_callback_query(tgupdate: Update, context: CallbackContext):
     await tgupdate.callback_query.answer()
     update = TGUpdate(tgupdate, context)
     user = await update.get_user()
-    if ["banned"] in user:
+    if "banned" in user:
         return await update.edit_or_reply(update.l("user-is-restricted"), parse_mode=ParseMode.HTML)
     await update.parse_callback_query()
     # await context.application.base_app.assistant.reply_to(update.message.text_markdown_v2, update.effective_user.id, update.effective_message.chat_id)
