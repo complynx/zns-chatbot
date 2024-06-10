@@ -166,8 +166,16 @@ ${massage.start.format("HH:mm")}
 const timetable = document.getElementById('timetable');
 const minHeight = timetable.offsetHeight;
 
+// Prevent default browser behavior for pinch-zoom
+const preventDefault = (event) => {
+    if (event.touches.length > 1) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+};
+
 // Function to handle zoom
-const handleZoom = (delta) => {
+const handleZoom = (delta, centerX, centerY) => {
     let currentHeight = timetable.offsetHeight;
     let newHeight = currentHeight + delta;
 
@@ -180,21 +188,33 @@ const handleZoom = (delta) => {
         timetable.style.setProperty('--font-size', '0.6em');
     }
 
-    timetable.style.height = `${newHeight}px`;
-};
+    // Calculate the scaling factor
+    let scale = newHeight / currentHeight;
 
-// Prevent default browser behavior for pinch-zoom
-const preventDefault = (event) => {
-    if (event.touches.length > 1) {
-        event.preventDefault();
-    }
+    // Get the current scroll position
+    let scrollLeft = timetable.scrollLeft;
+    let scrollTop = timetable.scrollTop;
+
+    // Get the current bounding rectangle
+    let rect = timetable.getBoundingClientRect();
+
+    // Calculate the new scroll position
+    let newScrollLeft = centerX - rect.left + scrollLeft - (centerX - rect.left) * scale;
+    let newScrollTop = centerY - rect.top + scrollTop - (centerY - rect.top) * scale;
+
+    // Apply the new height
+    timetable.style.height = `${newHeight}px`;
+
+    // Adjust the scroll position
+    timetable.scrollLeft = newScrollLeft;
+    timetable.scrollTop = newScrollTop;
 };
 
 // Pinch-zoom event listeners
 let initialDistance = null;
 
 const pinchZoomStart = (event) => {
-    preventDefault(event);
+    event.preventDefault();
     if (event.touches.length === 2) {
         const touch1 = event.touches[0];
         const touch2 = event.touches[1];
@@ -207,7 +227,7 @@ const pinchZoomStart = (event) => {
 };
 
 const pinchZoomMove = (event) => {
-    preventDefault(event);
+    event.preventDefault();
     if (event.touches.length === 2) {
         const touch1 = event.touches[0];
         const touch2 = event.touches[1];
@@ -219,14 +239,16 @@ const pinchZoomMove = (event) => {
 
         if (initialDistance) {
             const delta = distance - initialDistance;
-            handleZoom(delta);
+            const centerX = (touch1.clientX + touch2.clientX) / 2;
+            const centerY = (touch1.clientY + touch2.clientY) / 2;
+            handleZoom(delta, centerX, centerY);
             initialDistance = distance;
         }
     }
 };
 
 const pinchZoomEnd = (event) => {
-    preventDefault(event);
+    event.preventDefault();
     initialDistance = null;
 };
 
@@ -239,7 +261,7 @@ const scrollHandler = (event) => {
     if (event.shiftKey) {
         event.preventDefault();
         const delta = event.deltaY * -5;
-        handleZoom(delta);
+        handleZoom(delta, event.clientX, event.clientY);
     }
 };
 

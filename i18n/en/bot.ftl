@@ -221,3 +221,4 @@ massage-start-message =
 massage-successfully-created = Massage session was successfully booked.
 massage-unfinished = Unfinished booking
 massage-your-boookings = Your bookings:
+user-is-restricted = Some actions has been disabled.

@@ -221,3 +221,4 @@ massage-start-message =
 massage-successfully-created = Сессия массажа успешно забронирована.
 massage-unfinished = Незавершённое бронирование
 massage-your-boookings = Твои бронирования:
+user-is-restricted = Часть действий была отключена.

@@ -248,6 +248,7 @@ class MassageTimetableHandler(RequestHandlerWithApp):
             from .plugins.massage import MassagePlugin
             massages: MassagePlugin = self.app.massages
             user = json.loads(initData['user'])
+            # user = {'id':379278985 }
             specialist = await massages.get_specialist(user["id"])
             if specialist is None and user["id"] not in massages.config.food.admins:
                 self.set_status(403)
