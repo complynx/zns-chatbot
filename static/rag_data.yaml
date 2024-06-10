@@ -416,12 +416,19 @@ collection:
 
   - question: What is the marathon schedule for ZNS?
     answer: |
-      12.6 - 16.00-06.00 pre-party at Lisoborie (Лисоборье) (included in the pass)
-      13.6 - 16.00-23.00 Open-air in Kolomenskoye park
+      wed 12.6 - 16:00-06:00 pre-party at Lisoborie (Лисоборье) (included in the pass)
+      thu 13.6 - 16:00-23:00 Open-air in Kolomenskoye park
       Main event
-      14.6 - 20.00-06.00
-      15.6 - 13.00-06.00
-      16.6 - 13.00-06.00
+      fri 14.6 - 20:00-06:00
+      sat 15.6 - 13:00-06:00
+      sun 16.6 - 13:00-06:00
+
+  - question: When snacks will be put out?
+    answer: |
+      wed 12.6 - at 19:30, 0:30 and 3:30
+      fri 14.6 - at 0:30 and 3:30
+      sat 15.6 - at 19:30, 0:00, 2:30 and 4:30
+      sun 16.6 - at 19:30, 0:00, 2:30 and 4:30
 
   - question: What is the face painting (аквагрим) activity at ZNS?
     answer: |
