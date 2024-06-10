@@ -41,7 +41,7 @@ EMBEDDING_MODEL = "Alibaba-NLP/gte-large-en-v1.5"
 RAG_DATABASE_INDEX = "index"
 RAG_DATABASE_FOLDER = "rag_database"
 
-DJ_TABLE_TEXT="""	Wed	Thu	Fri	Fri-darkroom	Sat	Sat-darkroom	Sun	Sun-darkroom
+DJ_TABLE_TEXT="""	Wed	Thu open-air	Fri	Fri darkroom DJs	Sat	Sat darkroom DJs	Sun	Sun darkroom DJs
 14:00					Kota		Chepel	
 15:00					Tropikana		Lakshmi	
 16:00	Set				Dark Horse		Vikki	
@@ -200,7 +200,14 @@ spaceship Зукерион — Zoukerion
         return "Today's DJs:\n" + djs_day_str + djs_dark_str + "\nSet means prerecorded set"
     
     async def context_dj_schedule(self, update: TGState) -> str:
-        return DJ_TABLE_TEXT + "\nSet means prerecorded set"
+        ret = []
+        for i in range(1,len(DJ_TABLE)):
+            day = DJ_TABLE[i][0]
+            djs = DJ_TABLE[i].copy()[1:]
+            djs_time = DJ_TABLE[0].copy()[1:]
+            
+            ret.append(day + "\n" + format_dj_schedule(djs_time, djs))
+        return "\n".join(ret) + "\nSet means prerecorded set"
     
     async def context_userfood_closest(self, update: TGState) -> str:
         return await self.base_app.food.get_user_orders_assist_closest(update.user)
