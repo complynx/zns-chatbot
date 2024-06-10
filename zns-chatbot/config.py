@@ -29,7 +29,7 @@ class OpenAI(BaseSettings):
     reply_token_cap: int = Field(2000)
     message_token_cap: int = Field(2000)
     temperature: float = Field(1.06)
-    max_messages_per_user_per_day: int = Field(10)
+    max_messages_per_user_per_day: int = Field(15)
 
 class LoggingSettings(BaseSettings):
     level: str = Field("WARNING")
