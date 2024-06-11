@@ -2,7 +2,7 @@ collection:
   - question: Who is Vladimir Butman?
     alt_questions:
     - Who is Владимир Бутман?
-    answer: Владимир Бутман @vbutman is the main organizer of ZNS.
+    answer: Владимир Бутман @vbutman is the captain of ZNS.
 
   - question: What is Butman's strength?
     alt_questions:
@@ -14,16 +14,16 @@ collection:
     - Who are team members?
     answer: |
       Here is a list of team members:
-      - Владимир Бутман @vbutman - the leader 
-      - Люба Зеленская - payments and accounting
-      - Веталь Портников - art, tech and sound
+      - Владимир Бутман @vbutman - the captain
+      - Люба Зеленская - payments and accounting, passes
+      - Remy - art, tech and sound
       - Оля Чепель - decor and design, open-air, check-in administering
-      - Юля Бухарова - мать диджеев, buying snacks, beauty-boxes
+      - Юля Бухарова - buying snacks, beauty-boxes, snack team lead
       - Даша Ушакова - food
       - Анна Натарова - posts, media
       - Валерия Бондарева - local connections, face-painting (аквагрим), hookah rooms
-      - Каролина Зянюк - Belarus leader
-      - Люся - Belarus leader
+      - Каролина Зенюк - music and content
+      - Люся - content, reels
       - Аня Атман - meetings and data manager
       - Даниил Дрижук - IT infrastructure, bot
       - Евгений Виноградов - lighting
@@ -35,7 +35,7 @@ collection:
     - Will DJ play at ZNS?
     answer: |
       List of DJs (participating live):
-      - Remy - Виталий Портников, SPb
+      - Remy - Веталь, SPb
       - U.la - Юля Бухарова, Moscow
       - Finik - Сергей Финский, Grodno, Belarus
       - KatRina - Екатерина Молодцова, Moscow
@@ -43,7 +43,7 @@ collection:
       - Tropikana - Анна Натарова, SPb
       - Agent Smith - Андрей Кузнецов
       - Kid - Данил Хасанов, Kazan
-      - K-Line - Каралина Зянюк, Belarus
+      - K-Line - Каролина Зенюк, Belarus
       - Belov - Владислав Белов, SPb
       - Lakshmi - Юлия Иванова, SPb
       - Chepel - Оля Чепель, Moscow
@@ -65,7 +65,7 @@ collection:
       - Who is Виталий Портников?
       - Who is Веталь?
     answer: |
-      DJ Remy - Виталий Портников (Веталь), SPb
+      DJ Remy - (Веталь), SPb
       He does art, tech and sound at ZNS. He also creates our merch.
 
   - question: Who is U.la?
@@ -74,7 +74,7 @@ collection:
       - Who is Yulia Bukharova?
     answer: |
       DJ U.la - Юля Бухарова, Moscow
-      Мать диджеев
+      She's also buying snacks, beauty-boxes, is a snack team lead
 
   - question: Who is Finik?
     alt_questions:
@@ -118,9 +118,9 @@ collection:
 
   - question: Who is K-Line?
     alt_questions:
-      - Who is Каралина Зянюк?
+      - Who is Каролина Зенюк?
       - Who is Karalina Zyanyuk?
-    answer: DJ K-Line - Каралина Зянюк, Belarus, she also leads ZNS 8 in Grodno, Belarus
+    answer: DJ K-Line - Каролина Зенюк, Belarus, she also leads ZNS 8 in Grodno, Belarus
 
   - question: Who is Belov?
     alt_questions:
