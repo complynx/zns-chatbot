@@ -288,20 +288,48 @@ class TGApplication(Application):
         self.plugins = chat_plugins
         
 async def check_startup_actions(app):
-    if not "menu_version" in app.storage or app.storage["menu_version"] != 3:
-        await app.bot.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
-        for lc in ["ru", "en"]:
-            def l(s, **kwargs):
-                return app.localization(s, args=kwargs, locale=lc)
-            commands = [
-                BotCommand("meal", description=l("food-command-description")),
-                BotCommand("massage", description=l("massage-command-description")),
-            ]
-            if lc != "en":
-                await app.bot.bot.set_my_commands(commands,language_code=lc)
-            else:
-                await app.bot.bot.set_my_commands(commands)
-        await app.storage.set("menu_version", 3)
+    from asyncio import sleep
+    if not "sent_announcement" in app.storage:
+        async for user in app.users_collection.find({}):
+            try:
+                await app.bot.bot.send_message(
+                    chat_id=user["user_id"],
+                    text="""<b>Внимание!
+
+ПРОПУСК</b>
+В первый день марафона 12/06 необходимо получить пропуск.
+ПАСПОРТ обязателен. Только лично.
+<b>Выдача пропусков до 23:00.</b>
+<u>Если вы опоздаете, то не сможете попасть на марафон в этот день.</u>
+Если вы приезжаете в другой день, выдача пропусков тоже до 23:00.
+
+<b>ВХОД</b>
+Все дни ВХОД на территорию марафона <b>строго <u>до 00:00</u>!</b>
+<u>Опоздаете на 1 сек - останетесь без марафона в эту ночь.</u>
+После 00:00 проходная работает только на выход. 
+
+<b>Вернуть</b> пропуск необходимо будет на проходной в последнюю ночь/утро марафона.
+<u>Если забудете, штраф 500 руб.</u>""",
+                    parse_mode=ParseMode.HTML,
+                )
+                await sleep(0.3)
+            except Exception as e:
+                logger.error("Error in sender: %s", e, exc_info=1)
+        await app.storage.set("sent_announcement", 1)
+    # if not "menu_version" in app.storage or app.storage["menu_version"] != 3:
+    #     await app.bot.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    #     for lc in ["ru", "en"]:
+    #         def l(s, **kwargs):
+    #             return app.localization(s, args=kwargs, locale=lc)
+    #         commands = [
+    #             BotCommand("meal", description=l("food-command-description")),
+    #             BotCommand("massage", description=l("massage-command-description")),
+    #         ]
+    #         if lc != "en":
+    #             await app.bot.bot.set_my_commands(commands,language_code=lc)
+    #         else:
+    #             await app.bot.bot.set_my_commands(commands)
+    #     await app.storage.set("menu_version", 3)
 
 
 async def parse_message(tgupdate: Update, context: CallbackContext):
