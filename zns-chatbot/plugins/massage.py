@@ -728,9 +728,12 @@ class UserMassages:
             choices[str(cid)] = doc
             return f"{self.plugin.name}|ed|{massage.id}|{cid}"
         parties = [party for party in self.plugin.config.parties if not party.is_open and party.end + EARLY_COMER_TOLERANCE > now_msk()]
-        current_party = massage.party
-        if current_party is None:
-            massage.record["party"] = parties[0].start.day
+        current_party = self.plugin.current_party()
+        if massage.party is None:
+            if current_party is not None:
+                massage.record["party"] = current_party.start.day
+            else:
+                massage.record["party"] = parties[-1].start.day
         keyboard = [[
             InlineKeyboardButton(
                 ("" if party.start.day != massage.day else "🔘 ")+
@@ -741,7 +744,7 @@ class UserMassages:
                 callback_data=add_choice({
                     "party": party.start.day
                 })
-            ) for party in parties
+            ) for party in parties if (current_party is None or party.start >= current_party.start) and party.end >= now_msk()
         ]]
         specialists = await self.plugin.get_specialists()
         total_specialists = len(specialists)
