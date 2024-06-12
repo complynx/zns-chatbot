@@ -767,6 +767,8 @@ class UserMassages:
             current_slot = self.plugin.current_slot()
             if self.specialist is None and current_slot is not None:
                 current_slot += 1
+        else:
+            current_slot = None
         if self.specialist is None:
             my_massages = await self.get_massages()
             day_massages = [m for m in my_massages if m.day == massage.day]
