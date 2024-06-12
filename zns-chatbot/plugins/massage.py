@@ -786,6 +786,8 @@ class UserMassages:
             day_massages = []
         buttons = []
         for slot in available:
+            if self.plugin.slot_time(massage.day, slot) < now_msk():
+                continue
             if current_slot is not None and slot <= current_slot:
                 continue
             for specialist_id in available[slot]:
