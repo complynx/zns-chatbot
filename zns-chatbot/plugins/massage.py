@@ -763,7 +763,7 @@ class UserMassages:
 
         available = await self.plugin.available_slots(massage.day, massage.length)
         cp = self.plugin.current_party()
-        if cp is not None and cp.start.weekday() == m.day:
+        if cp is not None and cp.start.weekday() == massage.day:
             current_slot = self.plugin.current_slot()
             if self.specialist is None and current_slot is not None:
                 current_slot += 1
