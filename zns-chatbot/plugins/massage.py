@@ -561,7 +561,9 @@ class UserMassages:
             InlineKeyboardButton(self.l("massage-exit-button"), callback_data=f"{self.plugin.name}|exit"),
         ])
         await self.update.edit_or_reply(
-            self.l("massage-specialist-clientlist"),
+            self.l("massage-specialist-clientlist") + "\n\n" + "\n".join([
+                massage.start_str + f" {massage.duration}' " + client_user_link_html(massage.client) for massage in massages
+            ]),
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(keyboard),
             disable_web_page_preview=True,
