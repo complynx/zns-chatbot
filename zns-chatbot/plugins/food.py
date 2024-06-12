@@ -99,6 +99,8 @@ def order_text(l, order, menu, for_assist=False, day=None, mealtime=None):
                 count = item_d["count"]
                 item = item_d["item"]
                 name = item["name"]
+                if "name_sub" in item:
+                    name += " "+item["name_sub"]
                 if count > 1:
                     if for_assist:
                         name += f" x{count}"
