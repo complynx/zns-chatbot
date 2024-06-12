@@ -760,9 +760,11 @@ class UserMassages:
         keyboard.extend(split_list(buttons, 2))
 
         available = await self.plugin.available_slots(massage.day, massage.length)
-        current_slot = self.plugin.current_slot()
-        if self.specialist is None and current_slot is not None:
-            current_slot += 1
+        cp = self.plugin.current_party()
+        if cp is not None and cp.start.weekday() == m.day:
+            current_slot = self.plugin.current_slot()
+            if self.specialist is None and current_slot is not None:
+                current_slot += 1
         if self.specialist is None:
             my_massages = await self.get_massages()
             day_massages = [m for m in my_massages if m.day == massage.day]
