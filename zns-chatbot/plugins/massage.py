@@ -1160,7 +1160,7 @@ class MassagePlugin(BasePlugin):
                     slot_set.add(specialist_id)
             if len(slot_set) != 0:
                 available_filtered[slot] = slot_set
-        logger.debug(f"available slots for {day} of length {length}: {available}")
+        logger.info(f"available slots for {day} of length {length}: {available_filtered}")
         return available_filtered
     
     async def all_slots(self, day: int) -> tuple[dict[int,set[int]], dict[int,set[int]]]:
@@ -1171,6 +1171,7 @@ class MassagePlugin(BasePlugin):
             if specialist.table_required:
                 tables.add(specialist.id)
             occupied, available = await specialist.get_both_slots(day)
+            logger.info(f"slots for {day} for {specialist.id}: {available}, {occupied}")
             for slot in available:
                 if not slot in all_available:
                     all_available[slot] = set[int]()
@@ -1191,7 +1192,7 @@ class MassagePlugin(BasePlugin):
             all_available = all_available_filtered
         elif self.parties_by_day[day].massage_tables < len(tables):
             raise Exception("unimplemented")
-        logger.debug(f"slots for {day}: {all_available}, {all_occupied}")
+        logger.info(f"slots for {day}: {all_available}, {all_occupied}")
         return all_available, all_occupied
     
     @async_cache(ttl=60)
