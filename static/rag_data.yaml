@@ -404,11 +404,20 @@ collection:
       Information about your orders can be viewed with the command "/meal".
 
   - question: How can I book a massage at ZNS?
-    alt_questions:
-    - avatar
     answer: |
       There are 3-4 massage therapists working on site daily, you can book them using the command /massage
       the service is paid separately
+
+  - question: How much does a massage cost?
+    answer: |
+      Here are the prices:
+      15 min - 700 rubles
+      35 min - 1100 rubles
+      55 min - 1500 rubles
+      75 min - 2000 rubles
+      95 min - 2500 rubles
+      115 min - 3000 rubles
+      more info and booking using command /massage
 
   - question: How can I make an avatar or userpic for ZNS?
     answer: |
