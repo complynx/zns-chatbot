@@ -316,21 +316,17 @@ async def check_startup_actions(app):
 #             except Exception as e:
 #                 logger.error("Error in sender: %s", e, exc_info=1)
 #         await app.storage.set("sent_announcement", 1)
-    # if not "menu_version" in app.storage or app.storage["menu_version"] != 3:
-    #     await app.bot.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
-    #     for lc in ["ru", "en"]:
-    #         def l(s, **kwargs):
-    #             return app.localization(s, args=kwargs, locale=lc)
-    #         commands = [
-    #             BotCommand("meal", description=l("food-command-description")),
-    #             BotCommand("massage", description=l("massage-command-description")),
-    #         ]
-    #         if lc != "en":
-    #             await app.bot.bot.set_my_commands(commands,language_code=lc)
-    #         else:
-    #             await app.bot.bot.set_my_commands(commands)
-    #     await app.storage.set("menu_version", 3)
-    pass
+    if not "menu_version" in app.storage or app.storage["menu_version"] != 4:
+        await app.bot.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        for lc in ["ru", "en"]:
+            def l(s, **kwargs):
+                return app.localization(s, args=kwargs, locale=lc)
+            commands = []
+            if lc != "en":
+                await app.bot.bot.set_my_commands(commands,language_code=lc)
+            else:
+                await app.bot.bot.set_my_commands(commands)
+        await app.storage.set("menu_version", 4)
 
 
 async def parse_message(tgupdate: Update, context: CallbackContext):

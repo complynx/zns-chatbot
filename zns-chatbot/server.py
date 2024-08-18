@@ -404,12 +404,12 @@ async def create_server(config: Config, base_app):
 
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
-        (r"/massage_timetable", MassageTimetablePageHandler, {"app": base_app}),
-        (r"/massage_timetable_data", MassageTimetableHandler, {"app": base_app}),
+        # (r"/massage_timetable", MassageTimetablePageHandler, {"app": base_app}),
+        # (r"/massage_timetable_data", MassageTimetableHandler, {"app": base_app}),
         (r"/bot_name", BotNameHandler, {"app": base_app}),
         (r"/auth", AuthHandler, {"app": base_app}),
-        (r"/food_get_orders", FoodGetOrders, {"app": base_app}),
-        (r"/menu", MenuHandler, {"app": base_app}),
+        # (r"/food_get_orders", FoodGetOrders, {"app": base_app}),
+        # (r"/menu", MenuHandler, {"app": base_app}),
         (r"/error", ErrorHandler, {"app": base_app}),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/x/(.*)",CustomStaticFileHandler, {"path": "static/x/"}),

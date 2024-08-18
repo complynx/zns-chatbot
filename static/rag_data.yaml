@@ -17,17 +17,10 @@ collection:
       - Владимир Бутман @vbutman - the captain
       - Люба Зеленская - payments and accounting, passes
       - Remy - art, tech and sound
-      - Оля Чепель - decor and design, open-air, check-in administering
-      - Юля Бухарова - buying snacks, beauty-boxes, snack team lead
-      - Даша Ушакова - food
-      - Анна Натарова - posts, media
-      - Валерия Бондарева - local connections, face-painting (аквагрим), hookah rooms
       - Каролина Зенюк - music and content
       - Люся - content, reels
       - Аня Атман - meetings and data manager
-      - Даниил Дрижук - IT infrastructure, bot
-      - Евгений Виноградов - lighting
-      - Борис Боренко - owner of the venue (Лисоборье), wood/metal works
+      - Сергей Финский - coorganizer for Grodno
       and many more who help
 
   - question: Who are the DJs at ZNS?
@@ -36,28 +29,15 @@ collection:
     answer: |
       List of DJs (participating live):
       - Remy - Веталь, SPb
-      - U.la - Юля Бухарова, Moscow
-      - Finik - Сергей Финский, Grodno, Belarus
-      - KatRina - Екатерина Молодцова, Moscow
-      - Kota - Валерий Охотников, Moscow
-      - Tropikana - Анна Натарова, SPb
-      - Agent Smith - Андрей Кузнецов
-      - Kid - Данил Хасанов, Kazan
-      - K-Line - Каролина Зенюк, Belarus
-      - Belov - Владислав Белов, SPb
-      - Lakshmi - Юлия Иванова, SPb
-      - Chepel - Оля Чепель, Moscow
-      - Dark Horse - Наташа Войтас, Belarus
-      - Zoritto - Наталья, Yekaterinburg
-      - Peko - Валерий Кант, Moscow
-      - John Mass, Moscow
-      - Kaver - Денис Каверзнев, Moscow
       - Kriki - Кирилл Пуговкин, Mocsow
+      - Amigo - Юра Петров, Moscow
       - Vikki - Вика Турмышева, Moscow
-      And recorded sets from:
-      - Touchzouk - Даниил Дрижук, Amsterdam
-      - Shamanka - Анастасия Шкретова, USA
-      - Koks - Владимир Зайцев
+      - K-Line - Каролина Зенюк, Belarus
+      - Finik - Сергей Финский, Grodno, Belarus
+      - Dark Horse - Наташа Войтас, Belarus
+      - Peko - Валерий Кант, Moscow
+      - Kotoff - ?, Belarus
+      - Kid - Данил Хасанов, Kazan
       (DJ names do not translate)
 
   - question: Who is Remy?
@@ -68,47 +48,50 @@ collection:
       DJ Remy - (Веталь), SPb
       He does art, tech and sound at ZNS. He also creates our merch.
 
-  - question: Who is U.la?
-    alt_questions:
-      - Who is Юля Бухарова?
-      - Who is Yulia Bukharova?
-    answer: |
-      DJ U.la - Юля Бухарова, Moscow
-      She's also buying snacks, beauty-boxes, is a snack team lead
+  # - question: Who is U.la?
+  #   alt_questions:
+  #     - Who is Юля Бухарова?
+  #     - Who is Yulia Bukharova?
+  #   answer: |
+  #     DJ U.la - Юля Бухарова, Moscow
+  #     not playing in Grodno
+    # She's also buying snacks, beauty-boxes, is a snack team lead
 
   - question: Who is Finik?
     alt_questions:
       - Who is Сергей Финский?
       - Who is Sergey Finskiy?
-    answer: DJ Finik - Сергей Финский, Grodno, Belarus
-
-  - question: Who is KatRina?
-    alt_questions:
-      - Who is Екатерина Молодцова?
-      - Who is Ekaterina Molodtsova?
-    answer: DJ KatRina - Екатерина Молодцова, Moscow
-
-  - question: Who is Kota?
-    alt_questions:
-      - Who is Валерий Охотников?
-      - Who is Valery Okhotnikov?
-    answer: DJ Kota - Валерий Охотников, Moscow
-
-  - question: Who is Tropikana?
-    alt_questions:
-      - Who is Анна Натарова?
-      - Who is Anna Natarova?
     answer: |
-      DJ Tropikana - Анна Натарова, SPb
-      She created many iconic texts, she leads social media
-      She also will give a comedy impovisation workshop before the open-air
-      and a class "Connection with Yourself," (Коннекшн с собой) on Saturday at 13:00. 
+      DJ Finik - Сергей Финский, Grodno, Belarus
+      He is also one of coorganizers
 
-  - question: Who is Agent Smith?
-    alt_questions:
-      - Who is Андрей Кузнецов?
-      - Who is Andrey Kuznetsov?
-    answer: DJ Agent Smith - Андрей Кузнецов
+  # - question: Who is KatRina?
+  #   alt_questions:
+  #     - Who is Екатерина Молодцова?
+  #     - Who is Ekaterina Molodtsova?
+  #   answer: DJ KatRina - Екатерина Молодцова, Moscow (not playing for Grodno)
+
+  # - question: Who is Kota?
+  #   alt_questions:
+  #     - Who is Валерий Охотников?
+  #     - Who is Valery Okhotnikov?
+  #   answer: DJ Kota - Валерий Охотников, Moscow (not playing for Grodno)
+
+  # - question: Who is Tropikana?
+  #   alt_questions:
+  #     - Who is Анна Натарова?
+  #     - Who is Anna Natarova?
+  #   answer: |
+  #     DJ Tropikana - Анна Натарова, SPb
+  #     She created many iconic texts, she leads social media
+  #     She also will give a comedy impovisation workshop before the open-air
+  #     and a class "Connection with Yourself," (Коннекшн с собой) on Saturday at 13:00. 
+
+  # - question: Who is Agent Smith?
+  #   alt_questions:
+  #     - Who is Андрей Кузнецов?
+  #     - Who is Andrey Kuznetsov?
+  #   answer: DJ Agent Smith - Андрей Кузнецов
 
   - question: Who is Kid?
     alt_questions:
@@ -120,33 +103,30 @@ collection:
     alt_questions:
       - Who is Каролина Зенюк?
       - Who is Karalina Zyanyuk?
-    answer: DJ K-Line - Каролина Зенюк, Belarus, she also leads ZNS 8 in Grodno, Belarus
+    answer: DJ K-Line - Каролина Зенюк, Belarus, she also leads ZNS 8 in Grodno, Belarus and is a videographer
 
-  - question: Who is Belov?
-    alt_questions:
-      - Who is Владислав Белов?
-      - Who is Vladislav Belov?
-    answer: DJ Belov - Владислав Белов, SPb, also he is a videographer
+  # - question: Who is Belov?
+  #   alt_questions:
+  #     - Who is Владислав Белов?
+  #     - Who is Vladislav Belov?
+  #   answer: DJ Belov - Владислав Белов, SPb, also he is a videographer
 
-  - question: "Where is open-air located on map?"
-    answer: "Here is map link to open-air: https://maps.app.goo.gl/Dvf1AH47GSGeGhy99"
+  # - question: Who is Lakshmi?
+  #   alt_questions:
+  #     - Who is Юлия Иванова?
+  #     - Who is Yulia Ivanova?
+  #   answer: |
+  #     DJ Lakshmi - Юлия Иванова, SPb
+  #     She will also lead class Health Yoga and Stretching (Оздоровительная йога и растяжка) on Sunday at 13:00
 
-  - question: Who is Lakshmi?
-    alt_questions:
-      - Who is Юлия Иванова?
-      - Who is Yulia Ivanova?
-    answer: |
-      DJ Lakshmi - Юлия Иванова, SPb
-      She will also lead class Health Yoga and Stretching (Оздоровительная йога и растяжка) on Sunday at 13:00
-
-  - question: Who is Chepel?
-    alt_questions:
-      - Who is Оля Чепель?
-      - Who is Olya Chepel?
-    answer: |
-      DJ Chepel - Оля Чепель, Moscow
-      She also leads decor and design at ZNS
-      and organizes the open-air
+  # - question: Who is Chepel?
+  #   alt_questions:
+  #     - Who is Оля Чепель?
+  #     - Who is Olya Chepel?
+  #   answer: |
+  #     DJ Chepel - Оля Чепель, Moscow
+  #     She also leads decor and design at ZNS
+  #     and organizes the open-air
 
   - question: Who is Dark Horse?
     alt_questions:
@@ -154,11 +134,17 @@ collection:
       - Who is Natasha Voitas?
     answer: DJ Dark Horse - Наташа Войтас, Belarus
 
-  - question: Who is Zoritto?
+  - question: Who is Amigo?
     alt_questions:
-      - Who is Наталья?
-      - Who is Natalia?
-    answer: DJ Zoritto - Наталья, Yekaterinburg
+      - Who is Юра Петров?
+      - Who is Yura Petrov?
+    answer: DJ Amigo - Юра Петров, Moscow
+
+  # - question: Who is Zoritto?
+  #   alt_questions:
+  #     - Who is Наталья?
+  #     - Who is Natalia?
+  #   answer: DJ Zoritto - Наталья, Yekaterinburg
 
   - question: Who is Peko?
     alt_questions:
@@ -166,17 +152,17 @@ collection:
       - Who is Valery Kant?
     answer: DJ Peko - Валерий Кант, Moscow
 
-  - question: Who is John Mass?
-    answer: DJ John Mass, Moscow
+  # - question: Who is John Mass?
+  #   answer: DJ John Mass, Moscow
 
-  - question: Who is Kaver?
-    alt_questions:
-      - Who is Денис Каверзнев?
-      - Who is Denis Kaverznev?
-    answer: |
-      DJ Kaver - Денис Каверзнев, Moscow
-      At one of the previous marathons, he left the party and couldn't come back because the gate was closed.
-      Don't be like him, the gate closes at 00:00.
+  # - question: Who is Kaver?
+  #   alt_questions:
+  #     - Who is Денис Каверзнев?
+  #     - Who is Denis Kaverznev?
+  #   answer: |
+  #     DJ Kaver - Денис Каверзнев, Moscow
+  #     At one of the previous marathons, he left the party and couldn't come back because the gate was closed.
+  #     Don't be like him, the gate closes at 00:00.
 
   - question: Who is Kriki?
     alt_questions:
@@ -195,53 +181,56 @@ collection:
       - Who is Даниил Дрижук?
       - Who is Daniil Drizhuk?
     answer: |
-      DJ Touchzouk - Даниил Дрижук, Amsterdam, will not be at ZNS but he recorded a special set for us
+      DJ Touchzouk - Даниил Дрижук, Amsterdam, will not be at ZNS
       He is my creator and IT specialist in the core ZNS team.
 
-  - question: Who is Shamanka?
-    alt_questions:
-      - Who is Анастасия Шкретова?
-      - Who is Anastasia Shkretova?
-    answer: DJ Shamanka - Анастасия Шкретова, USA, will not be at ZNS but he recorded a special set for us
+  # - question: Who is Shamanka?
+  #   alt_questions:
+  #     - Who is Анастасия Шкретова?
+  #     - Who is Anastasia Shkretova?
+  #   answer: DJ Shamanka - Анастасия Шкретова, USA, will not be at ZNS but he recorded a special set for us
 
-  - question: Who is Koks?
-    alt_questions:
-      - Who is Владимир Зайцев?
-      - Who is Vladimir Zaitsev?
-    answer: DJ Koks - Владимир Зайцев, will not be at ZNS but he recorded a special set for us
+  # - question: Who is Koks?
+  #   alt_questions:
+  #     - Who is Владимир Зайцев?
+  #     - Who is Vladimir Zaitsev?
+  #   answer: DJ Koks - Владимир Зайцев, will not be at ZNS but he recorded a special set for us
 
-  - question: Show me full DJ schedule for each day.
-    answer: This is DJ schedule by day (with times they start playing)
-    command: dj_schedule
+  # - question: Show me full DJ schedule for each day.
+  #   answer: This is DJ schedule by day (with times they start playing)
+  #   command: dj_schedule
 
-  - question: Who is playing now?
-    alt_questions:
-    - Who is playing today?
-    - Show me DJ schedule for today.
-    answer: This is DJ schedule for today (with times they start playing)
-    command: today_djs
+  # - question: Who is playing now?
+  #   alt_questions:
+  #   - Who is playing today?
+  #   - Show me DJ schedule for today.
+  #   answer: This is DJ schedule for today (with times they start playing)
+  #   command: today_djs
 
-  - question: Show me full list of what food I ordered.
-    answer: Food ordered by the user (more details with the command /meal)
-    command: userfood
+  # - question: Show me full list of what food I ordered.
+  #   answer: Food ordered by the user (more details with the command /meal)
+  #   command: userfood
 
-  - question: What food did I order?
-    answer: Food ordered by the user for the closest meal (more details with the command /meal)
-    command: userfood_closest
+  # - question: What food did I order?
+  #   answer: Food ordered by the user for the closest meal (more details with the command /meal)
+  #   command: userfood_closest
 
-  - question: What food did I order for today?
-    answer: Food ordered by the user for the current party (more details with the command /meal)
-    command: userfood_today
+  # - question: What food did I order for today?
+  #   answer: Food ordered by the user for the current party (more details with the command /meal)
+  #   command: userfood_today
 
-  - question: What food did I order for tomorrow?
-    answer: Food ordered by the user for the next party (more details with the command /meal)
-    command: userfood_tomorrow
+  # - question: What food did I order for tomorrow?
+  #   answer: Food ordered by the user for the next party (more details with the command /meal)
+  #   command: userfood_tomorrow
 
   - question: Who is your creator?
     answer: Даниил Дрижук @complynx
 
   - question: Which marathon number is this ZNS event?
-    answer: This is already the 7th ZNS marathon.
+    answer: This is already the 8th ZNS marathon.
+
+  # - question: "Where is open-air located on map?"
+  #   answer: "Here is map link to open-air: https://maps.app.goo.gl/Dvf1AH47GSGeGhy99"
 
   - question: What are the features of the Zouk Non Stop (ZNS) marathon?
     answer: |
@@ -253,16 +242,14 @@ collection:
       Special custom decoration and lighting of the venue, photo zone, face painting,
       morning warm-ups, Dark room, participant gifts (наборы зуконавта|zoukonaut kit)
       No workshops
-      balance of partners and followers ~ 50/50 (currently over 230 people, 51.5% / 48.5%)
-      60+ hours of dancing, 21 DJs, 7 satellites, 4 masseurs, 4 videographers, 3 photographers, 3 makeup artists, 1 hookah master
+      balance of partners and followers ~ 50/50 (currently over 100 people, 51.5% / 48.5%)
       friendly atmosphere for complete relaxation and immersion in the dance flow
 
   - question: What is the participant list for ZNS?
     alt_questions:
     - What is the participant balance?
     answer: |
-      The list of participants is not included in the program, but currently over 230 people, balance 51.5% / 48.5%
-      21 DJs, 7 satellites, 4 masseurs, 4 videographers, 3 photographers, 3 makeup artists, 1 hookah master
+      The list of participants is not included in the program, currently over 100 people, 51.5% / 48.5%. 49.5% from Russia, 49.5% from Belarus.
 
   - question: What awards has ZNS received?
     alt_questions:
@@ -272,63 +259,57 @@ collection:
 
   - question: Where does the ZNS marathon take place?
     answer: |
-      The main event will take place at: Russia, Moscow, Starokirochny Lane 2, dance school “Lisoborie”. Metro Baumanskaya.
-      (Старокирочный переулок 2, школа танцев “Лисоборье”)
-      - Be sure to bring your original passport or pass!
-      The open-air will be held at Kolomenskoye Park in the new tent by the palace, park entrance #4.
+      The main event will take place at: Belarus, Grodno, Советская ул., 9.
+      The preparty will be in Minsk, ул. Кальварийская 17, ПРОСТРАНСТВО "BETON".
 
-  - question: What is known about the open-air?
+  - question: What is the price for attending the preparty?
+    answer: |
+      The price is 750 rub/25 byn, you have to pay in advance through ambassadors.
+
+  - question: Tell me about the preparty?
+    answer: |
+      ПРОСТРАНСТВО "BETON" ул. Кальварийская 17, Минск, Беларусь
+      350м2 танцевального пространства, кастомный свет и отличный звук. 
+      26/09 20.30-01.30 - ЦЕНА 750rub/25byn (оплата заранее нашим амбассадорам)
+      4 диджея РФ/РБ
+  
+  - question: Tell me about the excursions?
+    answer: |
+      There are two excursions:
+      27/09 11.00-13:30 — Minsk
+      28/09 12.30-15.00 — Grodno
+      Each costs 400 rub / 14 byn.
+  
+  - question: Tell me about Grodno Brunch?
+    answer: |
+      28.09 11.30-12.30 Ресторан "Бакст" ул. Замковая, 21
+      Европейская и беларусская кухня. Средний чек 600-1500руб/20-50byn
+  
+  - question: Tell me about Lunch in Minsk?
+    answer: |
+      27/09 13.30-14.30
+      "ЛИДО" ул. Немига, 5
+      Широкий выбор свежеприготовленных блюд белорусской и европейской кухни, а также постоянное обновление меню с учетом сезонов года.
+      300-750руб средний чек
+  
+  - question: How to get from Minsk to Grodno?
     alt_questions:
-    - What is known about the open?
+    - What is the bus from Minsk to Grodno?
     answer: |
-      The open-air will be held at Kolomenskoye Park in the new tent by the palace, park entrance #4. Be sure to have a change of shoes!
-      The Zouk Non Stop Open Air event will take place on June 13th (Thursday) from 16:00 to 23:00.
-      Music will start at 18:00, but entry to the tent is open from 16:00 - a free comedy impovisation workshop from TropikAna for participants.
-      The price is included in the Full Pass, or for 1500 rubles at the entrance.
-      Participants are allowed to bring any food and drinks, including alcoholic beverages.
-
-  - question: What is the date and time of the Zouk Non Stop Open Air event?
-    answer: |
-      The Zouk Non Stop Open Air event will take place on June 13th (Thursday) from 16:00 to 23:00.
-      Music will start at 18:00, but entry to the tent is open 16:00 with a free comedy impovisation workshop from TropikAna for participants.
-
-  - question: What is the price for attending the Zouk Non Stop Open Air event and is there any donation requested?
-    answer: |
-      The entrance to the Zouk Non Stop Open Air event is included in the Full Pass. For those without a Full Pass,
-      the price is 1000 rubles if paid before June 7th, and 1500 rubles at the entrance on the day of the event.
-      Additionally, Full Pass holders are requested to consider making a donation at the end of the event,
-      with an approximate amount of 300 rubles. The donation is not obligatory but would be appreciated to support
-      the costs of the venue and ensure participant comfort.
-
-  - question: Why is a passport needed at Lisoborie?
-    alt_questions:
-    - Can I enter with a driver's license or a passport copy or photo?
-    answer: |
-      The dance school Lisoborie (Лисоборье), where ZNS takes place, is located on a restricted site (режимный объект).
-      They have their own rules, and you can only enter with the original passport or pass.
-
-  - question: How can I arrange a pass to Lisoborie?
-    alt_questions:
-    - When is entry to Lisoborie closed?
-    answer: |
-      Pass and passport: Since Lisoborie (Лисоборье) is on a restricted site (режимный объект), the original passport is required for entry.
-      No copies, photos, no driver license.
-      The pass must be arranged by 23:00 (бюро пропусков will close), otherwise you will not be able to enter that day.
-      After 00:00 the gate closes, entry to the territory will be closed until morning, even if you are 1 second late.
-      You can exit the territory, but not return.
-      The pass must be returned when leaving the territory on the last day. Unreturned pass — a fine of 500 rubles.
-      Pass for foreigners is arranged with a photo of the international passport at least a week before the event through Telegram @liubka_z. It needs to be re-confirmed each time.
-      Pass for Russians can be arranged either independently every day (considering the бюро пропусков working hours until 23:00), or provide documents to @liubka_z and arrange it once for the entire event.
+      Отправление из Минска в Гродно на комфортабельном автобусе. Мест всего 40-45 + команда 7-10 человек.
+      Время в пути 3.5-4 часа. Цена 1500руб/52byn
+      Для вас будет организована развлекательная программа в пути.
+      Запись будет чуть позже открыта.
 
   - question: Who is my ambassador for ZNS?
     alt_questions:
     - Who to write to with questions?
     answer: |
       Ambassadors and their Telegram:
-      Kristina Moscow @hri_stinka — only Moscow, Moscow Region, Nizhny Novgorod
-      Olya Tesla @o_tesl — Northwest Russia, Kaliningrad and foreigners
-      Elena Ergina @ElenaErgina — Western part of Russia, except for the regions of Kristina and Olya
-      Anna Ryakina @annyrya — the territory of Russia located east of the Ural Mountains
+      Каролина @karolinezen — Belarus
+      Люси @lucia_lucia — Belarus
+      Сергей @finik4 — Belarus
+      Olya Tesla @o_tesl — Russia
       The ambassadors' tasks include gathering a group, accepting/installment/return of payments, answering participants' questions
 
   - question: Can I get a link to the ZNS chat?
@@ -343,10 +324,8 @@ collection:
     alt_questions:
     - How much is the ZNS pass?
     answer: |
-      Full pass — from 8600 Rub, the current price per lot and availability is known by the ambassador for the region
-      Weekend pass — only the main dates, fixed cost 7500 Rub
-      There are no passes for individual parties of the main event
-      Without a pass, you can come on Wednesday (2200 rubles) and on Thursday to the open-air.
+      Full pass — 8000 rub / 80 Eur
+      You can not buy a ticket for just one party of the main event. But you can attend a preparty separately.
 
   - question: What are the payment and reservation terms for ZNS?
     answer: |
@@ -358,36 +337,51 @@ collection:
       Dark room — operates at the venue at night, during peak dance hours as an alternative to the main dance floor.
       In a separate room with almost no light, calm, mesmerizing music plays, under which you can completely relax and "fly away".
 
-  - question: What is known about the hookah room?
-    alt_questions:
-    - What is Сява?
-    - When hookah room operates?
-    answer: |
-      Hookah room — operates at the venue at night, during peak dance hours, in a separate isolated room.
-      Сява will operate the hookahs.
-      Hookah room is open:
-      - wed june 12, 21:00-00:00
-      - fri june 14, 22:00-01:30
-      - sat june 15, 21:00-00:30
-      - sun june 16, 21:00-00:00
-
-  - question: Who are the satellites at ZNS?
-    answer: |
-      Satellites (Спутники) are partners whose task is to dance with any followers for no more than 2-3 dances in a row for
-      several hours a day, thus preventing them from getting bored. During the working hours of the Satellite, he wears a blue bracelet.
-      Бравник Андрей
-      Муренцев Данил
-      Зырянов Денис
-      Корелин Антон
-      Мальшаков Дмитрий
-      Кудрян Дмитрий
-      Серпуховитин Стас
-      Кружалов Михаил
-      Успенский Сергей
+  # - question: Who are the satellites at ZNS?
+  #   answer: |
+  #     Satellites (Спутники) are partners whose task is to dance with any followers for no more than 2-3 dances in a row for
+  #     several hours a day, thus preventing them from getting bored. During the working hours of the Satellite, he wears a blue bracelet.
+  #     Бравник Андрей
+  #     Муренцев Данил
+  #     Зырянов Денис
+  #     Корелин Антон
+  #     Мальшаков Дмитрий
+  #     Кудрян Дмитрий
+  #     Серпуховитин Стас
+  #     Кружалов Михаил
+  #     Успенский Сергей
 
   - question: Is accommodation included in the ZNS pass?
     answer: |
-      Participants need to find accommodation themselves.
+      Participants need to find accommodation themselves, but we prepared a list of hotels with special discounts:
+
+      Discount code "ЗНС"
+
+      1. VS DESIGN HOTEL (ул. Урицкого, 23) https://www.vsdhotel.by/ru/
+        Современный дизайнерский отель, расположенный в восстановленном историческом здании конца XIX века в самом сердце Гродно.
+        11 уникальных номеров
+        Скидка: 12% при оплате онлайн, 15% на месте
+        Стоимость: от 282 бел руб (~87$) за 2 человека (возможно размещение до 4х человек)
+        Оплата: онлайн/на месте
+
+      2. Гостиничный комплекс СЛАВИЯ (ул. Молодежная, 1 ) https://hotel-slavia.by/
+        Островок уюта в центре шумного города
+        Скидка: 10%
+        Стоимость: от 180 бел руб (~55$) за 2 человека (~16$ доплата за последующего человека) *завтрак включён
+        Оплата: на месте
+
+      3. У Груши (Урицкого, 26) https://ugrushi-hotel.by/#nomera
+        Решили предложить вам альтернативу отелям. Для тех, кто любит размещаться компаниями. Новый, невероятный АРТ АПАРТ-ОТЕЛЬ с очень доброжелательными хозяевами! Пока с ними договаривались, уже влюбились)
+        Скидка: 15%
+        Стоимость: от 153 бел руб (~47$) за 2 человека (~9$ доплата за последующего человека) возможно размещение до 6 человек
+        Оплата: на месте
+
+      Hostel:
+      ГОСТИМ (ул. Мостовая, 31, 1 этаж)
+        Отдельные номера + общие комнаты (без подселения, если группа)
+        Бронь по тел.: +375(33) 313-13-12
+        Скидка: рассматривается индивидуально
+        Стоимость: 30 бел руб (9$)
 
   - question: What are the waiting lists for followers at ZNS?
     alt_questions:
@@ -400,27 +394,23 @@ collection:
   - question: What food and snacks are available at ZNS?
     answer: |
       Water, tea, coffee, snacks are included in the pass.
-      Hot meals are provided on-site for an additional fee. Meals are provided by the company МИЛТИ (MEALTY).
-      Meals: All meals are prepared on the same day and delivered in vacuum packaging in a chilled state.
-      There is a place to reheat on-site. Shelf life from 12-72 hours. The order must be placed and paid for by June 4 inclusive.
-      Meals will be available on Lisoborie days, lunch and dinner. On Friday, due to the late start, only dinner. Lunch around 17, dinner around 22.
-      Information about your orders can be viewed with the command "/meal".
+      Hot meals are provided on-site by the venue itself, the menu will be available later in the bot.
 
-  - question: How can I book a massage at ZNS?
-    answer: |
-      There are 3-4 massage therapists working on site daily, you can book them using the command /massage
-      the service is paid separately
+  # - question: How can I book a massage at ZNS?
+  #   answer: |
+  #     There are 3-4 massage therapists working on site daily, you can book them using the command /massage
+  #     the service is paid separately
 
-  - question: How much does a massage cost?
-    answer: |
-      Here are the prices:
-      15 min - 700 rubles
-      35 min - 1100 rubles
-      55 min - 1500 rubles
-      75 min - 2000 rubles
-      95 min - 2500 rubles
-      115 min - 3000 rubles
-      more info and booking using command /massage
+  # - question: How much does a massage cost?
+  #   answer: |
+  #     Here are the prices:
+  #     15 min - 700 rubles
+  #     35 min - 1100 rubles
+  #     55 min - 1500 rubles
+  #     75 min - 2000 rubles
+  #     95 min - 2500 rubles
+  #     115 min - 3000 rubles
+  #     more info and booking using command /massage
 
   - question: How can I make an avatar or userpic for ZNS?
     answer: |
@@ -428,116 +418,24 @@ collection:
 
   - question: What is the marathon schedule for ZNS?
     answer: |
-      wed 12.6 - 16:00-06:00 pre-party at Lisoborie (Лисоборье) (included in the pass)
-      thu 13.6 - 16:00-23:00 Open-air in Kolomenskoye park
-      Main event
-      fri 14.6 - 20:00-06:00
-      sat 15.6 - 13:00-06:00
-      sun 16.6 - 13:00-06:00
+      Thu, 26/09 20.30-01.30 МИНСК ПРЕПАТИ
+      Fri, 27/09 МИНСК ЭКСКУРСИЯ ПО ГОРОДУ, НАЦИОНАЛЬНЫЙ ОБЕД, АВТОБУС МИНСК - ГРОДНО
+      Fri, 27/09 20.00-05.00 ГРОДНО 1-й ДЕНЬ МАРАФОНА
+      Sat, 28/09 11.30-15.00 ГРОДНО-БРАНЧ и ЭКСКУРСИЯ ПО ГОРОДУ
+      Sat, 28/09 16.00-05.00 ГРОДНО 2-й ДЕНЬ МАРАФОНА
+      Sun, 29/09 16.00-04.00 ГРОДНО 3-й ДЕНЬ МАРАФОНА
 
-  - question: When snacks will be put out?
-    answer: |
-      wed 12.6 - at 19:30, 0:30 and 3:30
-      fri 14.6 - at 0:30 and 3:30
-      sat 15.6 - at 19:30, 0:00, 2:30 and 4:30
-      sun 16.6 - at 19:30, 0:00, 2:30 and 4:30
-
-  - question: What is the face painting (аквагрим) activity at ZNS?
-    answer: |
-      The face painting (аквагрим) activity at ZNS is designed to enhance your experience of the cosmic
-      atmosphere and the flow of music and dance. Artists will transform you to better immerse you in
-      the magical and boundless depths of the underwater world. This activity helps participants look
-      great in photos and videos captured by our photographers and videographers.
-      Shine brightly in the splashes of foamy waves!
-      Face painting sessions are available on June 14 and 15 from 19:00 to 21:00.
-
-  - question: When is the face painting (аквагрим) available at ZNS?
-    alt_questions:
-    - What are the timings for face painting at ZNS?
-    answer: |
-      Face painting (аквагрим) is available on June 14 and 15 from 19:00 to 21:00.
-
-  - question: What is the purpose of the face painting (аквагрим) at ZNS?
-    alt_questions:
-    - Why should I get face painting at ZNS?
-    answer: |
-      The purpose of the face painting (аквагрим) at ZNS is to help you fully immerse yourself in the
-      event's magical atmosphere, making you look stunning in photos and videos, and enhancing your overall
-      experience of the cosmic and underwater themes.
-
-  - question: What yoga and practices are available at ZNS?
-    answer: |
-      On Saturday at 13:00, you will have a practice led by Anna Natarova (Анна Натарова).
-
-      🌟"Connection with Yourself" (Коннекшн с собой):
-      This practice will help you wake up, feel your body, and recharge with energy.
-      We will stretch, prepare the body for dancing with the most effective and enjoyable exercises.
-      We will do practices and exercises to feel your body and contact, both with yourself and the surrounding space.
-      We will conclude this pleasant hour with a small dance therapy and a nice meditation.
-
-      ☀️ On Sunday at 13:00, Yulia Ivanova (Юлия Иванова) will be waiting for you for her class:
-
-      🌟 Health Yoga and Stretching (Оздоровительная йога и растяжка).
-      This practice aims to relieve muscle tension, relax, and maintain a gentle tone — just what you need on the fifth day of the dance marathon.
-      In this class, you can relax not only your body but also your mind and harmonize your state.
-      It is worth noting that Yulia practices and teaches yoga professionally and does it with great love.
-
-  - question: What is Anna Natarova's practice about?
-    answer: |
-      Anna Natarova's (Анна Натарова) practice, "Connection with Yourself," (Коннекшн с собой) will take place on Saturday at 13:00. 
-      It helps you wake up, feel your body, and recharge with energy. The practice includes stretching, preparing the body for dancing with effective and enjoyable exercises, and exercises to feel your body and contact with yourself and the surrounding space. It concludes with a small dance therapy session and a pleasant meditation.
-      There is also comedy impovisation workshop from her at the open-air at 16:00.
-
-  - question: What is Yulia Ivanova's yoga class about? (Юлия Иванова)
-    answer: |
-      Yulia Ivanova's (Юлия Иванова) class, "Health Yoga and Stretching," (Оздоровительная йога и растяжка) will be held on Sunday at 13:00.
-      This practice aims to relieve muscle tension, relax, and maintain a gentle tone — just what you need on the fifth day of the dance marathon. It helps relax both the body and the mind and harmonize your state. Yulia practices and teaches yoga professionally and does it with great love.
-
-  - question: When is the "Connection with Yourself" practice by Anna Natarova at ZNS?
-    answer: The "Connection with Yourself" (Коннекшн с собой) practice by Anna Natarova (Анна Натарова) is on Saturday at 13:00.
-
-  - question: When is the Health Yoga and Stretching class by Yulia Ivanova (Юлия Иванова) at ZNS?
-    answer: The Health Yoga and Stretching (Оздоровительная йога и растяжка) class by Yulia Ivanova (Юлия Иванова) is on Sunday at 13:00.
-
-  - question: Who leads the "Connection with Yourself" practice at ZNS?
-    answer: Anna Natarova (Анна Натарова) leads the "Connection with Yourself" (Коннекшн с собой) practice at ZNS.
-
-  - question: Who leads the Health Yoga and Stretching class at ZNS?
-    answer: Yulia Ivanova (Юлия Иванова) leads the Health Yoga and Stretching (Оздоровительная йога и растяжка) class at ZNS.
+  # - question: When snacks will be put out?
+  #   answer: |
+  #     wed 12.6 - at 19:30, 0:30 and 3:30
+  #     fri 14.6 - at 0:30 and 3:30
+  #     sat 15.6 - at 19:30, 0:00, 2:30 and 4:30
+  #     sun 16.6 - at 19:30, 0:00, 2:30 and 4:30
 
   - question: Who are the videographers at ZNS?
     answer: |
       The videographers at ZNS are:
-      - Александр Галюк: Instead of a thousand words, one video from Losenta perfectly conveys your mood and the atmosphere of the dance floor.
-      - Владислав Белов: Vlad not only understands electricity well, but his energy is enough for many things: DJing, recording videos, and beautifully capturing DJs for promo videos.
-      - Елизавета Догадина: Like a breeze, Elizaveta moves easily and quickly between events, capturing the most spectacular dances on her camera.
-      - Екатерина Ярощук: Katya and her video works are undoubtedly the mountain river of our FLOW: confident, refreshing, reliable.
-      - Иван Бубнов: An unpredictable current has brought a new interesting video fish into our flow (new to ZNS, but not to Zouk).
-
-  - question: What is Александр Галюк known for at ZNS?
-    alt_questions:
-    - What is Alexander Galyuk known for at ZNS?
-    answer: Александр Галюк is known for creating videos that perfectly convey the mood and atmosphere of the dance floor, instead of a thousand words.
-
-  - question: What are Владислав Белов's contributions to ZNS?
-    alt_questions:
-    - What are Vladislav Belov's contributions to ZNS?
-    answer: Владислав Белов is a videographer as well as a DJ by name "DJ Bleov" at ZNS. (DJ name does not translate)
-
-  - question: How does Елизавета Догадина capture the ZNS event?
-    alt_questions:
-    - How does Elizaveta Dogadina capture the ZNS event?
-    answer: Елизавета Догадина is a videographer at ZNS.
-
-  - question: What is special about Екатерина Ярощук's video work at ZNS?
-    alt_questions:
-    - What is special about Yekaterina Yaroschuk's video work at ZNS?
-    answer: Екатерина Ярощук from Moscow is a videographer at ZNS.
-
-  - question: What is Иван Бубнов's role at ZNS?
-    alt_questions:
-    - What is special about Ivan Bubnov's video work at ZNS?
-    answer: Иван Бубнов is a new interesting videographer at ZNS.
+      - Каролина Зянюк
 
   - question: Who stole Alexey Merkulov's t-shirt?
     alt_questions:
@@ -546,134 +444,16 @@ collection:
       Алексей Меркулов lost his t-shirt and couldn't find it at one of the previous ZNS marathons.
       People joke that some of his fans might have stolen it.
 
-  - question: What is Бравник Андрей's role at Zouk Non Stop (ZNS) marathon?
-    alt_questions:
-      - What is Bravnik Andrei's role at ZNS?
-    answer: |
-      Бравник Андрей's role at Zouk Non Stop (ZNS) marathon is to be a satellite (спутник) among 8 others. During his working hours, he wears a lit blue bracelet to dance with followers for no more than 2-3 dances in a row for several hours a day, preventing them from getting bored.
-
-  - question: What is Муренцев Данил's role at Zouk Non Stop (ZNS) marathon?
-    alt_questions:
-      - What is Murentsev Danil's role at ZNS?
-    answer: |
-      Муренцев Данил's role at Zouk Non Stop (ZNS) marathon is to be a satellite (спутник) among 8 others. During his working hours, he wears a lit blue bracelet to dance with followers for no more than 2-3 dances in a row for several hours a day, preventing them from getting bored.
-
-  - question: What is Зырянов Денис's role at Zouk Non Stop (ZNS) marathon?
-    alt_questions:
-      - What is Zyrjanov Denis's role at ZNS?
-    answer: |
-      Зырянов Денис's role at Zouk Non Stop (ZNS) marathon is to be a satellite (спутник) among 8 others. During his working hours, he wears a lit blue bracelet to dance with followers for no more than 2-3 dances in a row for several hours a day, preventing them from getting bored.
-
-  - question: What is Корелин Антон's role at Zouk Non Stop (ZNS) marathon?
-    alt_questions:
-      - What is Korelin Anton's role at ZNS?
-    answer: |
-      🧞 Корелин Антон's role at Zouk Non Stop (ZNS) marathon is to be a satellite (спутник) among 8 others. During his working hours, he wears a lit blue bracelet to dance with followers for no more than 2-3 dances in a row for several hours a day, preventing them from getting bored.
-      He is also a massage therapist.
-      Has been actively working with dancers of various styles and professional athletes for over 5 years.
-      Skilled in various techniques from Western and Eastern schools of massage.
-      Combinations of relaxing and restorative techniques will help you get back in shape after exhilarating dances,
-      so you can continue to shine on the dance floor.
-      Press /massage to book.
-
-  - question: What is Мальшаков Дмитрий's role at Zouk Non Stop (ZNS) marathon?
-    alt_questions:
-      - What is Mal'shakov Dmitry's role at ZNS?
-    answer: |
-      Мальшаков Дмитрий's role at Zouk Non Stop (ZNS) marathon is to be a satellite (спутник) among 8 others. During his working hours, he wears a lit blue bracelet to dance with followers for no more than 2-3 dances in a row for several hours a day, preventing them from getting bored.
-
-  - question: What is Кудрян Дмитрий's role at Zouk Non Stop (ZNS) marathon?
-    alt_questions:
-      - What is Kudryan Dmitry's role at ZNS?
-    answer: |
-      Кудрян Дмитрий's role at Zouk Non Stop (ZNS) marathon is to be a satellite (спутник) among 8 others. During his working hours, he wears a lit blue bracelet to dance with followers for no more than 2-3 dances in a row for several hours a day, preventing them from getting bored.
-
-  - question: What is Серпуховитин Стас's role at Zouk Non Stop (ZNS) marathon?
-    alt_questions:
-      - What is Serpukhovitin Stas's role at ZNS?
-    answer: |
-      Серпуховитин Стас's role at Zouk Non Stop (ZNS) marathon is to be a satellite (спутник) among 8 others. During his working hours, he wears a lit blue bracelet to dance with followers for no more than 2-3 dances in a row for several hours a day, preventing them from getting bored.
-
-  - question: What is Кружалов Михаил's role at Zouk Non Stop (ZNS) marathon?
-    alt_questions:
-      - What is Kruzhalov Mikhail's role at ZNS?
-    answer: |
-      Кружалов Михаил's role at Zouk Non Stop (ZNS) marathon is to be a satellite (спутник) among 8 others. During his working hours, he wears a lit blue bracelet to dance with followers for no more than 2-3 dances in a row for several hours a day, preventing them from getting bored.
-
-  - question: What is Успенский Сергей's role at Zouk Non Stop (ZNS) marathon?
-    alt_questions:
-      - What is Uspenskiy Sergey's role at ZNS?
-    answer: |
-      Успенский Сергей's role at Zouk Non Stop (ZNS) marathon is to be a satellite (спутник) among 8 others. During his working hours, he wears a lit blue bracelet to dance with followers for no more than 2-3 dances in a row for several hours a day, preventing them from getting bored.
-
   - question: Who are the photographers?
     answer: |
       The photographers are:
       - Татьяна Эрнандес
-      - Илиас Саймонов
-      - Игорь Рякин
 
   - question: What does Татьяна Эрнандес do?
     alt_questions:
       - What does Tatiana Ernandes do?
     answer: |
       Татьяна Эрнандес from Petersburg is a photographer.
-
-  - question: What does Илиас Саймонов do?
-    alt_questions:
-      - What does Ilyas Saimonov do?
-    answer: |
-      Илиас Саймонов from Moscow is a photographer.
-
-  - question: What does Игорь Рякин do?
-    alt_questions:
-      - What does Igor Ryakin do?
-    answer: |
-      Игорь Рякин from Yekaterinburg is a photographer.
-
-  - question: What is Drisheruk Aleksandr's role?
-    answer: |
-      🐗 Drisheruk (does not translate this name): Masseur, acupuncturist, trainer.
-      Uses a unique method tailored to the client's needs (primarily dry techniques, minimal oil).
-      The method is based on osteopathic techniques, gentle manual correction, PNF stretching, sports,
-      therapeutic, and lymphatic drainage massages, as well as acupuncture using Dry Needling technology.
-      Only one-hour sessions.
-      Press /massage to book.
-
-  - question: What is Oksana Cherkashina's role?
-    alt_questions:
-      - What is Оксана Черкашина's role?
-    answer: |
-      🦋 Оксана Черкашина: Masseur, acupuncturist, trainer.
-      Practicing massage since 2011.
-      Has a medical education.
-      Skilled in various types and techniques of massage, combining them to achieve the best results.
-      Has been "reviving" zouk dancers since the very first marathons.
-      Gently and deeply works on the entire body (or specific areas upon request) without using oils.
-      Works using unconventional approaches and techniques such as Thai massage (performed on sports mats/rugs using hands, feet, and more...)
-      Press /massage to book.
-
-  - question: What is Yekaterina Shain's role?
-    alt_questions:
-      - What is Екатерина Шайн's role?
-    answer: |
-      🍑 Екатерина Шайн: Masseur, acupuncturist, trainer.
-      Has been practicing massage for over 6 years, and Zouk massage since 2019.
-      Helps all tired and danced-out participants to relax and regain lightness in their bodies,
-      so you will feel refreshed and re-energized afterward.
-      Practices relaxing massage and can work on specific tight areas of the body.
-      Additionally, all guests who book a session this year will receive a pleasant alcoholic surprise!
-      Only short slots.
-      Press /massage to book.
-
-  - question: What are the dress codes and corresponding moods for each day at Zouk Non Stop (ZNS) marathon?
-    answer: |
-      The dress codes and corresponding moods for each day at Zouk Non Stop (ZNS) marathon are as follows:
-      - Wednesday (Zone 1): Dress code - Blue, Sky Blue; Mood - Sea Breeze
-      - Thursday (Island/Open air): Dress code - Tropical, Green, Yellow; Mood - Beach, Brazil
-      - Friday (Zone 2): Dress code - Red, Yellow, Orange; Mood - Warm, Emotional, Hot, Ethnic
-      - Saturday (Zone 3): Dress code - Neon, Blue, Purple, Pink; Mood - Scale, Energy, Immersion, Meditativeness
-      - Sunday (Zone 4): Dress code - White, Silver; Mood - Chill, Romance, Tenderness
 
   - question: What is known about ZNS Belarus?
     alt_questions:
