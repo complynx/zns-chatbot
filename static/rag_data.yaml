@@ -36,7 +36,7 @@ collection:
       - Finik - Сергей Финский, Grodno, Belarus
       - Dark Horse - Наташа Войтас, Belarus
       - Peko - Валерий Кант, Moscow
-      - Kotoff - ?, Belarus
+      - Kotoff - Кирил Котов, Minsk, Belarus
       - Kid - Данил Хасанов, Kazan
       (DJ names do not translate)
 
@@ -56,6 +56,13 @@ collection:
   #     DJ U.la - Юля Бухарова, Moscow
   #     not playing in Grodno
     # She's also buying snacks, beauty-boxes, is a snack team lead
+
+  - question: Who is Kotoff?
+    alt_questions:
+      - Who is Кирил Котов?
+      - Who is Kiril Kotov?
+    answer: |
+      DJ Kotoff - Кирил Котов, Minsk, Belarus
 
   - question: Who is Finik?
     alt_questions:
