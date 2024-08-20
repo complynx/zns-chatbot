@@ -1,6 +1,7 @@
 # Use an official Python runtime as a parent image
 FROM python:3.11-slim-buster
 
+RUN pip install tokenizers==0.19.1
 RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
 
 # Install cmake and compiler
