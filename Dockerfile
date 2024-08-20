@@ -1,8 +1,7 @@
 # Use an official Python runtime as a parent image
 FROM python:3.11-slim-buster
 
-RUN pip install tokenizers==0.19.1 faiss-cpu==1.8.0
-RUN pip install torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cpu
 
 # Install cmake and compiler
 RUN apt-get update && apt-get install -y \
