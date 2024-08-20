@@ -13,7 +13,7 @@ setup(
         "tornado==6.4",
         "fluent.runtime>=0.4",
         "pyyaml>=6.0",
-        "pillow>=10.2",
+        "pillow>=10.4",
         "motor>=3.1",
         "httpx~=0.27.0",
         "pydantic>=2.7",

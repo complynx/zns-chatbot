@@ -14,6 +14,7 @@ let screen_size_source = document.querySelector(".photo");
 let photo_ancor = document.querySelector(".photo .ancor");
 let photo = document.querySelector(".photo img");
 let frame_source = document.querySelector(".frame_source");
+let flare_source = document.querySelector(".flare_source");
 let frame = document.querySelector(".overlay");
 let cancel_btn = document.querySelector(".button button[name=cancel]");
 let submit_btn = document.querySelector(".button button[name=done]");
@@ -76,6 +77,11 @@ function generateCroppedImage(returnCanvas) {
     // Restore the original transformation matrix
     ctx.restore();
     ctx.drawImage(frame_source, 0, 0, real_frame_size, real_frame_size);
+    
+    // Draw the flare image on top with the screen blending mode
+    ctx.globalCompositeOperation = 'screen';
+    ctx.drawImage(flare_source, 0, 0, real_frame_size, real_frame_size);
+    ctx.globalCompositeOperation = 'source-over';
 
     if(returnCanvas)
         return croppedCanvas;
