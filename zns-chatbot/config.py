@@ -60,7 +60,7 @@ class Photo(BaseSettings):
     frame_file: str = Field("frame/frame.png")
     flare_file: str = Field("frame/flare.png")
     quality: int = Field(90)
-    cover_file: str = Field("cover/ZNS2024.jpg")
+    cover_file: str = Field("cover/ZNS2024_2.jpg")
 
 class Food(BaseSettings):
     deadline: date = Field(date(2024, 6, 7))
