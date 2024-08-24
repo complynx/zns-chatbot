@@ -259,7 +259,7 @@ class Avatar(BasePlugin):
                         reply_markup=InlineKeyboardMarkup([[
                             InlineKeyboardButton(
                                 update.l("avatar-custom-crop"),
-                                web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}{compensations}"))
+                                web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}"))
                             )
                         ]]),
                     )
