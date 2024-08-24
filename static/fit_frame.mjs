@@ -47,19 +47,19 @@ function stopRealign() {
     document.body.classList.remove("realign");
     photo.src = photo_src;
 }
-fetch("get_compensations?"+IDQ()).then(r=>r.json()).then(r=>{
-    if("x" in r) {
-        alignment.x = r.x;
-    }
-    if("y" in r) {
-        alignment.y = r.y;
-    }
-    if((!("x" in r) || !("y" in r))
-         && isIOS()
-    ) {
-        startRealign();
-    }
-}).catch(send_error);
+// fetch("get_compensations?"+IDQ()).then(r=>r.json()).then(r=>{
+//     if("x" in r) {
+//         alignment.x = r.x;
+//     }
+//     if("y" in r) {
+//         alignment.y = r.y;
+//     }
+//     if((!("x" in r) || !("y" in r))
+//          && isIOS()
+//     ) {
+//         startRealign();
+//     }
+// }).catch(send_error);
 
 function decomposeTransformMatrix(transformationMatrix) {
     const [a, c, e] = transformationMatrix[0];
