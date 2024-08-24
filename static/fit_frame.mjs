@@ -47,12 +47,6 @@ function stopRealign() {
     document.body.classList.remove("realign");
     photo.src = photo_src;
 }
-if(compensations_x !== null) {
-    alignment.x = compensations_x;
-}
-if(compensations_y !== null) {
-    alignment.y = compensations_y;
-}
 fetch("get_compensations?"+IDQ()).then(r=>r.json()).then(r=>{
     if("x" in r) {
         alignment.x = r.x;

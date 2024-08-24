@@ -73,14 +73,6 @@ class RequestHandlerWithApp(tornado.web.RequestHandler):
 class FitFrameHandler(RequestHandlerWithApp):
     async def get(self):
         file = self.get_query_argument("file", default="")
-        try:
-            compensations_x = float(self.get_query_argument("compensations_x", default=""))
-        except ValueError:
-            compensations_x = "null"
-        try:
-            compensations_y = float(self.get_query_argument("compensations_y", default=""))
-        except ValueError:
-            compensations_y = "null"
         locale_str = self.get_query_argument("locale", default="en")
         l = lambda s: self.app.localization(s, locale=locale_str)
 
@@ -88,8 +80,6 @@ class FitFrameHandler(RequestHandlerWithApp):
             self.render(
                 "fit_frame.html",
                 file=file,
-                compensations_x=compensations_x,
-                compensations_y=compensations_y,
                 real_frame_size=self.config.photo.frame_size,
                 quality=self.config.photo.quality,
                 debug_code="",
@@ -129,19 +119,24 @@ class FitFrameHandler(RequestHandlerWithApp):
             self.write({'message': 'Image uploaded successfully'})
 
             if compensations:
+                user_agent = self.request.headers.get("User-Agent", "Unknown")
+                import hashlib
                 from .tg_state import TGState
+                ua_sha = hashlib.sha256(user_agent.encode()).hexdigest()
                 compensations = json.loads(compensations)
+                compensations["user_agent"] = user_agent
                 state = TGState(user["id"], self.app)
                 await state.update_user({
                     "$set": {
-                        "avatar_compensations": compensations
+                        "avatar_compensations_map."+ua_sha: compensations
                     }
-                })
+                }, upsert=True)
 
         except Exception as e:
             self.set_status(500)
             self.write({'error': "internal error"})
             logger.error("error saving image: %s",e, exc_info=1)
+
 class GetCompensationsHandler(RequestHandlerWithApp):
     async def get(self):
         initData = self.get_argument('initData', default=None, strip=False)
@@ -153,13 +148,16 @@ class GetCompensationsHandler(RequestHandlerWithApp):
             logger.info("initData parameter is missing")
             return
         try:
+            user_agent = self.request.headers.get("User-Agent", "Unknown")
             from .tg_state import TGState
+            import hashlib
+            ua_sha = hashlib.sha256(user_agent.encode()).hexdigest()
             user = json.loads(initData['user'])
             state = TGState(user["id"], self.app)
             user = await state.get_user()
-            if "avatar_compensations" in user:
+            if "avatar_compensations_map" in user and ua_sha in user["avatar_compensations_map"]:
                 self.set_status(200)
-                self.write(user["avatar_compensations"])
+                self.write(user["avatar_compensations_map"][ua_sha])
             else:
                 self.set_status(200)
                 self.write({})

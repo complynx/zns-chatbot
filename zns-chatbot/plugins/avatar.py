@@ -253,10 +253,6 @@ class Avatar(BasePlugin):
                     final_name = f"{file_path}_framed.jpg"
                     final.save(final_name, quality=self.config.photo.quality, optimize=True)
                     locale = tgUpdate.effective_user.language_code
-                    user = await update.get_user()
-                    compensations=""
-                    if "avatar_compensations" in user:
-                        compensations = "&compensations_x=" + user["avatar_compensations"]["x"] + "&compensations_y=" + user["avatar_compensations"]["y"]
                     await tgUpdate.message.reply_document(
                         final_name,
                         filename="avatar.jpg",
