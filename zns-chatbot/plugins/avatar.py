@@ -253,13 +253,17 @@ class Avatar(BasePlugin):
                     final_name = f"{file_path}_framed.jpg"
                     final.save(final_name, quality=self.config.photo.quality, optimize=True)
                     locale = tgUpdate.effective_user.language_code
+                    user = await update.get_user()
+                    compensations=""
+                    if "avatar_compensations" in user:
+                        compensations = "&compensations_x=" + user["avatar_compensations"]["x"] + "&compensations_y=" + user["avatar_compensations"]["y"]
                     await tgUpdate.message.reply_document(
                         final_name,
                         filename="avatar.jpg",
                         reply_markup=InlineKeyboardMarkup([[
                             InlineKeyboardButton(
                                 update.l("avatar-custom-crop"),
-                                web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}"))
+                                web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}{compensations}"))
                             )
                         ]]),
                     )

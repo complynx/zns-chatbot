@@ -33,6 +33,36 @@ body {
   position: fixed;
   z-index: 2;
 }
+body.realign{
+  --tg-theme-bg-color: #fff;
+  --tg-theme-button-color: #fff;
+  --tg-theme-button-text-color: #ffffff;
+  --tg-theme-destructive-text-color: #000;
+  --tg-theme-header-bg-color: #fff;
+  --tg-theme-hint-color: #fff;
+  --tg-theme-link-color: #000;
+  --tg-theme-secondary-bg-color: #fff;
+  --tg-theme-section-bg-color: #fff;
+  --tg-theme-section-header-text-color: #000;
+  --tg-theme-subtitle-text-color: #000;
+  --tg-theme-text-color: #000;
+}
+.help-realign {
+  pointer-events: none;
+  display: none;
+  z-index: 5;
+  position: fixed;
+  width: 70%;
+  height: 20%;
+  top: 35%;
+  left: 15%;
+}
+.realign .help-realign {
+  display: block;
+}
+.realign .overlay {
+  opacity: .5;
+}
 
 .photo .ancor {
   position: fixed;
@@ -69,6 +99,18 @@ body {
   background-size: 100vmin 100vmin;
   background-position: center;
   background-repeat: no-repeat;
+}
+.realign .overlay{
+  background-image: url('marker.png');
+  animation: scaleUp 1s ease forwards;
+}
+@keyframes scaleUp {
+  0% {
+    transform: scale(0.6);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .debug-layer {

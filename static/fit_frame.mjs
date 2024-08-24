@@ -20,7 +20,52 @@ let cancel_btn = document.querySelector(".button button[name=cancel]");
 let submit_btn = document.querySelector(".button button[name=done]");
 console.log(photo, frame, cancel_btn, submit_btn);
 
+function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
 
+let alignment = {
+    x: 0,
+    y: 0,
+    changed: false,
+};
+
+let photo_src;
+function startRealign() {
+    console.log(alignment);
+    document.body.classList.add("realign");
+    photo_src = photo.src;
+    photo.src = "./static/marker.png";
+}
+function stopRealign() {
+    const decomposition = decomposeTransformMatrix(transformationMatrix);
+    alignment.x = decomposition.translation.x;
+    alignment.y = decomposition.translation.y;
+    alignment.changed = true;
+    alignment.scale = decomposition.scaling;
+    console.log(alignment);
+    document.body.classList.remove("realign");
+    photo.src = photo_src;
+}
+if(compensations_x !== null) {
+    alignment.x = compensations_x;
+}
+if(compensations_y !== null) {
+    alignment.y = compensations_y;
+}
+fetch("get_compensations?"+IDQ()).then(r=>r.json()).then(r=>{
+    if("x" in r) {
+        alignment.x = r.x;
+    }
+    if("y" in r) {
+        alignment.y = r.y;
+    }
+    if((!("x" in r) || !("y" in r))
+         && isIOS()
+    ) {
+        startRealign();
+    }
+}).catch(send_error);
 
 function decomposeTransformMatrix(transformationMatrix) {
     const [a, c, e] = transformationMatrix[0];
@@ -68,7 +113,7 @@ function generateCroppedImage(returnCanvas) {
     const decomposition = decomposeTransformMatrix(transformationMatrix);
 
     const { scaling, rotation, translation } = decomposition;
-    ctx.translate(translation.x, translation.y);
+    ctx.translate(translation.x + alignment.x, translation.y + alignment.y);
     ctx.scale(scaling.x, scaling.y);
     ctx.rotate(rotation);
 
@@ -142,6 +187,12 @@ function init_debug() {
         croppedImage.addEventListener("click", ()=>{
             remove_from_dom(croppedImage);
         }, false);
+    });
+    
+    dbg_layer.querySelector("button.realign").addEventListener("click", () => {
+        if(document.body.classList.contains("realign")) {
+            stopRealign();
+        }else startRealign();
     });
 }
 document.addEventListener('contextmenu', function(event) {
@@ -471,6 +522,13 @@ function IDQ() {
     return "initData="+encodeURIComponent(Telegram.WebApp.initData)
 }
 
+function AlignmentSave() {
+    if(alignment.changed) {
+        return "&compensations="+encodeURIComponent(JSON.stringify(alignment))
+    }
+    return "";
+}
+
 function send_error(err) {
     return fetch("error?"+IDQ(), {
         method: "POST",
@@ -482,8 +540,12 @@ Telegram.WebApp.MainButton.setText(finish_button_text);
 Telegram.WebApp.MainButton.show();
 Telegram.WebApp.MainButton.onClick(()=>{
     try{
+        if(document.body.classList.contains("realign")) {
+            stopRealign();
+            return;
+        }
         generateCroppedImage(true).toBlob(function(blob) {
-            fetch('fit_frame?'+IDQ(), {
+            fetch('fit_frame?'+IDQ()+AlignmentSave(), {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'image/jpeg'

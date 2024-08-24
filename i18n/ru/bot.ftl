@@ -21,6 +21,8 @@ frame-mover-help-mobile =
 frame-mover-help-unified =
     Фото можно перемещать, вращать и масштабировать.
     Для масштабирования или вращения мышкой используй прокрутку и кнопку Shift.
+frame-realign-message =
+    Пожалуйста, совместите маркеры на экране как можно точнее, если они расходятся, и нажмите готово.
 frame-mover-finish-button-text = Готово
 undefined-state-error = Что-то пошло не так, попробуй ещё раз!
 unsupported-message-error = Прости, я не понимаю этого сообщения.

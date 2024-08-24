@@ -21,6 +21,8 @@ frame-mover-help-mobile =
 frame-mover-help-unified =
     Photo can be dragged, scaled and turned using mouse or touch.
     To scale and turn with a mouse, use scrolling or hold Shift.
+frame-realign-message =
+    Please align the markers on screen if they are not align, and click submit.
 frame-mover-finish-button-text = Submit
 undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.

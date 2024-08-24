@@ -3,6 +3,8 @@
     <head>
         <script>
             const photo_file="{{file}}";
+            const compensations_x={{compensations_x}};
+            const compensations_y={{compensations_y}};
             const real_frame_size={{real_frame_size}};
             const help_desktop={% raw json_encode(help_desktop) %};
             const help_mobile={% raw json_encode(help_mobile) %};
@@ -18,6 +20,7 @@
         <img src="photos/frame" alt="" class="frame_source">
         <img src="photos/flare" alt="" class="flare_source">
         <div class="help">{{frame_mover_help_unified}}</div>
+        <div class="help-realign">{{help_realign}}</div>
         <div class="photo">
             <div class="ancor"><img src="photos/{{file}}" alt=""></div>
         </div>
@@ -25,6 +28,7 @@
         <div class="debug-layer">
             <input type="text" name="remotejs" placeholder="remotejs"><button class="remotejs">init remote</button>
             <button class="canvas">canvas</button>
+            <button class="realign">realign</button>
             <div class="link"></div>
         </div>
     </body>

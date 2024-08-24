@@ -73,6 +73,14 @@ class RequestHandlerWithApp(tornado.web.RequestHandler):
 class FitFrameHandler(RequestHandlerWithApp):
     async def get(self):
         file = self.get_query_argument("file", default="")
+        try:
+            compensations_x = float(self.get_query_argument("compensations_x", default=""))
+        except ValueError:
+            compensations_x = "null"
+        try:
+            compensations_y = float(self.get_query_argument("compensations_y", default=""))
+        except ValueError:
+            compensations_y = "null"
         locale_str = self.get_query_argument("locale", default="en")
         l = lambda s: self.app.localization(s, locale=locale_str)
 
@@ -80,11 +88,14 @@ class FitFrameHandler(RequestHandlerWithApp):
             self.render(
                 "fit_frame.html",
                 file=file,
+                compensations_x=compensations_x,
+                compensations_y=compensations_y,
                 real_frame_size=self.config.photo.frame_size,
                 quality=self.config.photo.quality,
                 debug_code="",
                 help_desktop=l("frame-mover-help-desktop"),
                 help_mobile=l("frame-mover-help-mobile"),
+                help_realign=l("frame-realign-message"),
                 frame_mover_help_unified=l("frame-mover-help-unified"),
                 finish_button_text=l("frame-mover-finish-button-text"),
             )
@@ -93,6 +104,7 @@ class FitFrameHandler(RequestHandlerWithApp):
     
     async def put(self):
         initData = self.get_argument('initData', default=None, strip=False)
+        compensations = self.get_argument('compensations', default=None, strip=False)
 
         if initData:
             initData = validate(initData, self.config.telegram.token.get_secret_value())
@@ -115,6 +127,42 @@ class FitFrameHandler(RequestHandlerWithApp):
 
             self.set_status(200)
             self.write({'message': 'Image uploaded successfully'})
+
+            if compensations:
+                from .tg_state import TGState
+                compensations = json.loads(compensations)
+                state = TGState(user["id"], self.app)
+                await state.update_user({
+                    "$set": {
+                        "avatar_compensations": compensations
+                    }
+                })
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({'error': "internal error"})
+            logger.error("error saving image: %s",e, exc_info=1)
+class GetCompensationsHandler(RequestHandlerWithApp):
+    async def get(self):
+        initData = self.get_argument('initData', default=None, strip=False)
+        if initData:
+            initData = validate(initData, self.config.telegram.token.get_secret_value())
+        else:
+            # initData not found in the request, reject the request
+            self.set_status(400)
+            logger.info("initData parameter is missing")
+            return
+        try:
+            from .tg_state import TGState
+            user = json.loads(initData['user'])
+            state = TGState(user["id"], self.app)
+            user = await state.get_user()
+            if "avatar_compensations" in user:
+                self.set_status(200)
+                self.write(user["avatar_compensations"])
+            else:
+                self.set_status(200)
+                self.write({})
 
         except Exception as e:
             self.set_status(500)
@@ -406,6 +454,7 @@ async def create_server(config: Config, base_app):
 
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
+        (r"/get_compensations", GetCompensationsHandler, {"app": base_app}),
         # (r"/massage_timetable", MassageTimetablePageHandler, {"app": base_app}),
         # (r"/massage_timetable_data", MassageTimetableHandler, {"app": base_app}),
         (r"/bot_name", BotNameHandler, {"app": base_app}),
