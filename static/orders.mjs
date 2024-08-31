@@ -287,6 +287,8 @@ function fillInOrders(orders) {
     if ("excursion_grodno" in orders.extras) {
         grodnoExcursionCheckbox.checked = true;
     }
+    
+    document.getElementById("total-sum").innerText = orders.total;
 }
 
 Telegram.WebApp.ready();
@@ -321,6 +323,11 @@ function validateSection(index) {
 }
 
 updateSections();
+
+document.body.addEventListener("click", ()=>{
+    let orders = collectOrdersWithExtras();
+    document.getElementById("total-sum").innerText = orders.total;
+}, {passive:true});
 
 function IDQ() {
     return "initData="+encodeURIComponent(Telegram.WebApp.initData)
@@ -375,6 +382,7 @@ function backButtonClick(){
         Telegram.WebApp.close();
     }
 }
+
 
 Telegram.WebApp.MainButton.show();
 Telegram.WebApp.MainButton.onClick(mainButtonClick);

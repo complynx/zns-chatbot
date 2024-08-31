@@ -56,6 +56,16 @@ input[type="checkbox"] {
     appearance: none; /* Remove default checkbox styling */
 }
 
+#total-sum {
+    position: fixed;
+    top: .2em;
+    right: .2em;
+    color: var(--tg-theme-subtitle-text-color);
+}
+#total-sum:before{
+    content: "Br ";
+}
+
 input[type="checkbox"]:hover {
     background-color: var(--tg-theme-section-bg-color);
     border-color: var(--tg-theme-accent-text-color); /* Highlight on hover */
