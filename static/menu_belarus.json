@@ -157,8 +157,8 @@
                     "price": 8
                 },
                 "ryba_v_syire": {
-                    "name_ru": "Рыба в сыре",
-                    "name_en": "Fish in Cheese",
+                    "name_ru": "Рыба Хек в сыре",
+                    "name_en": "Hake in Cheese",
                     "output": "150",
                     "price": 10
                 },
@@ -279,8 +279,8 @@
                     "price": 10
                 },
                 "ryba_zapechennaya_s_tomatom": {
-                    "name_ru": "Рыба запеченная с томатом",
-                    "name_en": "Baked Fish with Tomato",
+                    "name_ru": "Рыба Хек запеченная с томатом",
+                    "name_en": "Baked Hake with Tomato",
                     "output": "150",
                     "price": 10
                 },
