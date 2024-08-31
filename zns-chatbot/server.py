@@ -137,6 +137,76 @@ class FitFrameHandler(RequestHandlerWithApp):
             self.write({'error': "internal error"})
             logger.error("error saving image: %s",e, exc_info=1)
 
+
+class OrdersHandler(RequestHandlerWithApp):
+    async def get(self):
+        order_id = self.get_query_argument("order_id", default="")
+        locale_str = self.get_query_argument("locale", default="en")
+        l = lambda s: self.app.localization(s, locale=locale_str)
+        choice = None
+        read_only = False
+        if order_id != "":
+            order = await self.app.orders.order_by_id(order_id)
+            if "choice" in order:
+                choice = order["choice"]
+            read_only="proof_file" in order
+        lang = "en"
+        if locale_str.startswith("ru"):
+            lang = "ru"
+        
+        try:
+            self.render(
+                "orders.html",
+                read_only=read_only,
+                user_order=choice,
+                user_order_id=order_id,
+                lang=lang,
+                finish_button_text=l("orders-finish-button-text"),
+                next_button_text=l("orders-next-button-text"),
+            )
+        except (KeyError, ValueError):
+            raise tornado.web.HTTPError(404)
+    
+    async def post(self):
+        initData = self.get_argument('initData', default=None, strip=False)
+
+        if initData:
+            initData = validate(initData, self.config.telegram.token.get_secret_value())
+        else:
+            # initData not found in the request, reject the request
+            self.set_status(400)
+            logger.info("initData parameter is missing")
+            return
+        try:
+            user = json.loads(initData['user'])
+            order_id = self.get_query_argument("order_id", default="")
+            choice = json.loads(self.request.body)
+            logger.info(f"user {user['id']} order {order_id} choice {choice}")
+
+            if order_id == "":
+                logger.info(f"creating order for {user['id']}")
+                await self.app.orders.create_order(user['id'], choice)
+                return
+            order = await self.app.orders.order_by_id(order_id)
+            if order is None:
+                self.set_status(404)
+                logger.info("order not found")
+                return
+            if order["user_id"] != user["id"]:
+                self.set_status(403)
+                logger.error(f"user ID doesn't match")
+                return
+            logger.info(f"updating order {order_id} for {user['id']}")
+            await self.app.orders.set_choice(order, choice)
+
+            self.set_status(200)
+            self.write({'message': 'order saved'})
+
+        except Exception as e:
+            self.set_status(500)
+            self.write({'error': "internal error"})
+            logger.error("error saving image: %s",e, exc_info=1)
+
 class GetCompensationsHandler(RequestHandlerWithApp):
     async def get(self):
         initData = self.get_argument('initData', default=None, strip=False)
@@ -457,6 +527,7 @@ async def create_server(config: Config, base_app):
         # (r"/massage_timetable_data", MassageTimetableHandler, {"app": base_app}),
         (r"/bot_name", BotNameHandler, {"app": base_app}),
         (r"/auth", AuthHandler, {"app": base_app}),
+        (r"/orders", OrdersHandler, {"app": base_app}),
         # (r"/food_get_orders", FoodGetOrders, {"app": base_app}),
         # (r"/menu", MenuHandler, {"app": base_app}),
         (r"/error", ErrorHandler, {"app": base_app}),

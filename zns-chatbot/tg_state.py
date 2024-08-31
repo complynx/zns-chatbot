@@ -252,7 +252,7 @@ class TGState:
             message_id = self.message_id
         return await self.bot.forward_message(
             chat_id=chat_id,
-            from_chat_id=self.chat_id,
-            message_id=self.message_id,
+            from_chat_id=from_chat_id,
+            message_id=message_id,
             *args, **kwargs
         )

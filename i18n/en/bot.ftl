@@ -24,6 +24,47 @@ frame-mover-help-unified =
 frame-realign-message =
     Please align the markers on screen if they are not align, and click submit.
 frame-mover-finish-button-text = Submit
+orders-adm-payment-cash-requested =
+    User {$link} wants to pay for their order in cash to you.
+    Total order sum: Br {$total}
+    order is in the name <i>{$name}</i>.
+    Don't reject the order, wait for the user to contact you first, or ask them yourself.
+orders-admin-belarus = {$name}/{$region}
+orders-back-button = Back
+orders-closed = If you need to see your orders or change something, you can always use /orders command
+orders-close-button = Exit
+orders-edit-button = Change order
+orders-finish-button-text = Submit
+orders-message-list = Your orders are listed here
+orders-message-payed-where =
+    I received a PDF, which may be a payment proof. Am I right?
+
+orders-message-payment-options =
+    You can pay for your order using these methods:
+
+    Russia:
+    SBp to <code>+79217826737</code> (Sber, VTB)
+    Olga Tesla
+    <code>{$rutotal}</code> ₽
+
+    ⚠ <i>After payment, you have to send me a payment proof in <b>PDF</b> format, I don't accept other formats!
+    If you have a proof as an image, you can convert it to PDF using this bot:</i> @ImageToPdfRobot
+
+    Belarus:
+    Choose one of the contacts below and pay them in person.
+    Br <code>{$total}</code>
+orders-next-button-text = Next
+orders-new-button = Create order
+orders-order-pay-button = Payment
+orders-order-button = {$created}|{$name}
+orders-order-delete-button = Clear order
+orders-pay-cancel = Cancel
+orders-payment-cash-requested =
+    Contact {$link} to arrange a personal meeting and pay.
+    Total order sum: Br {$total}
+    order is in the name <i>{$name}</i>.
+    After cash is collected, the admin will mark your order as payed.
+orders-payed-button = It's payment proof
 undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
 max-assistant-messages-reached = You've reached your questions limit for a day, please come back in 24 hours.

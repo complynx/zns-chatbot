@@ -1,0 +1,962 @@
+<!DOCTYPE HTML>
+<html lang="{{lang}}">
+    <head>
+        <script>
+            const user_order = {% raw json_encode(user_order) %};
+            const read_only = {% raw json_encode(read_only) %};
+            const user_order_id = {% raw json_encode(user_order_id) %};
+            const finish_button_text={% raw json_encode(finish_button_text) %};
+            const next_button_text={% raw json_encode(next_button_text) %};
+        </script>
+        <title>Zouk Non Stop orders</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="stylesheet" type="text/css" href="./static/orders.css"></link>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <script type="module" src="./static/orders.mjs"></script>
+    </head>
+    <body>
+        <section class="for-who">
+            <label>
+                <span lang="ru">Введи своё полное ФИО</span>
+                <span lang="en">Enter your full name</span>
+                <input type="text" name="for_who" id="fullName" required 
+                       pattern="^[A-ZА-Я][a-zа-я]*\s+[A-ZА-Я][a-zа-я]*$"
+                       title="Please enter your full name (at least two words, each starting with a capital letter).">
+            </label>
+        </section>
+        <section class="excursions">
+            <span lang="ru">Выбери, что тебе нужно</span>
+            <span lang="en">Choose what you need</span>
+            <label>
+                <span lang="ru">Экскурсия по Минску</span>
+                <span lang="en">Minsk excursion</span>
+                <input type="checkbox" name="excursion_minsk">
+            </label>
+            <label>
+                <span lang="ru">Автобус из Минска в Гродно</span>
+                <span lang="en">Shuttle bus from Minsk to Grodno</span>
+                <input type="checkbox" name="shuttle_bus">
+            </label>
+            <label>
+                <span lang="ru">Экскурсия по Гродно</span>
+                <span lang="en">Grodno excursion</span>
+                <input type="checkbox" name="excursion_grodno">
+            </label>
+        </section>
+        <section class="friday dinner meal">
+            <div class="day">
+                <span lang="ru">Пятница</span>
+                <span lang="en">Friday</span>
+            </div>
+            <div class="mealtime">
+                <span lang="ru">Ужин</span>
+                <span lang="en">Dinner</span>
+            </div>
+            <div class="salads">
+                <div class="dish-type">
+                    <span lang="ru">Салаты</span>
+                    <span lang="en">Salads</span>
+                </div>
+                <div class="dishes">
+                    <div data-name="salad_ovoshnoy_kokteyl_s_vetchinoy">
+                        <div class="name">
+                            <span lang="ru">Овощной коктейль с ветчиной</span>
+                            <span lang="en">Vegetable cocktail with ham</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">6</div>
+                        <div class="counter">6</div>
+                        <button class="add">+</button>
+                        <button class="remove">-</button>
+                        <button class="clear">🗑</button>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Греческий</span>
+                            <span lang="en">Greek</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">6</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Цезарь</span>
+                            <span lang="en">Caesar</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">6</div>
+                    </div>
+                </div>
+            </div>
+            <div class="hot-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Горячие блюда</span>
+                    <span lang="en">Hot Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Шницель куриный</span>
+                            <span lang="en">Chicken schnitzel</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">10</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Рыба с овощами</span>
+                            <span lang="en">Fish with vegetables</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">10</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Медальоны из вырезки свиной с грибным соусом</span>
+                            <span lang="en">Pork medallions with mushroom sauce</span>
+                        </div>
+                        <div class="output">170/40/2</div>
+                        <div class="price">10</div>
+                    </div>
+                </div>
+            </div>
+            <div class="side-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Гарниры</span>
+                    <span lang="en">Side Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Драники</span>
+                            <span lang="en">Potato pancakes</span>
+                        </div>
+                        <div class="output">240/2</div>
+                        <div class="price">7</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Гречневая каша с маслом</span>
+                            <span lang="en">Buckwheat porridge with butter</span>
+                        </div>
+                        <div class="output">200/2/2</div>
+                        <div class="price">3</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Овощи весенние</span>
+                            <span lang="en">Spring vegetables</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">6</div>
+                    </div>
+                </div>
+            </div>
+            <div class="bread">
+                <div class="dish-type">
+                    <span lang="ru">Хлеб</span>
+                    <span lang="en">Bread</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        
+                        <div class="name">
+                            <span lang="ru">Хлеб</span>
+                            <span lang="en">Bread</span>
+                        </div>
+                        <div class="output">50</div>
+                        <div class="price">0.5</div>
+                    </div>
+                </div>
+            </div>
+            <div class="drinks">
+                <div class="dish-type">
+                    <span lang="ru">Напитки</span>
+                    <span lang="en">Drinks</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Чай с сахаром</span>
+                            <span lang="en">Tea with sugar</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Вода</span>
+                            <span lang="en">Water</span>
+                        </div>
+                        <div class="output">0.5</div>
+                        <div class="price">2</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Сок</span>
+                            <span lang="en">Juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Морс клюквенный</span>
+                            <span lang="en">Cranberry juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="saturday lunch meal">
+            <div class="day">
+                <span lang="ru">Суббота</span>
+                <span lang="en">Saturday</span>
+            </div>
+            <div class="mealtime">
+                <span lang="ru">Обед</span>
+                <span lang="en">Lunch</span>
+            </div>
+            <div class="salads">
+                <div class="dish-type">
+                    <span lang="ru">Салаты</span>
+                    <span lang="en">Salads</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Овощной</span>
+                            <span lang="en">Vegetable</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">6</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Витаминный</span>
+                            <span lang="en">Vitamin Salad</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">3</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Из свежих овощей</span>
+                            <span lang="en">Fresh Vegetable Salad</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">3</div>
+                    </div>
+                </div>
+            </div>
+            <div class="soups">
+                <div class="dish-type">
+                    <span lang="ru">Супы</span>
+                    <span lang="en">Soups</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Борщ</span>
+                            <span lang="en">Borscht</span>
+                        </div>
+                        <div class="output">250/20</div>
+                        <div class="price">5</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Щи</span>
+                            <span lang="en">Cabbage Soup</span>
+                        </div>
+                        <div class="output">250/20</div>
+                        <div class="price">5</div>
+                    </div>
+                </div>
+            </div>
+            <div class="hot-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Горячие блюда</span>
+                    <span lang="en">Hot Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Колбаски свиные</span>
+                            <span lang="en">Pork sausages</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">8</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Рыба в сыре</span>
+                            <span lang="en">Fish in cheese</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">10</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Бедро куриное</span>
+                            <span lang="en">Chicken thigh</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">10</div>
+                    </div>
+                </div>
+            </div>
+            <div class="side-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Гарниры</span>
+                    <span lang="en">Side Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Драники</span>
+                            <span lang="en">Potato pancakes</span>
+                        </div>
+                        <div class="output">240/2</div>
+                        <div class="price">7</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Гречневая каша с маслом</span>
+                            <span lang="en">Buckwheat porridge with butter</span>
+                        </div>
+                        <div class="output">200/2/2</div>
+                        <div class="price">3</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Овощи весенние</span>
+                            <span lang="en">Spring vegetables</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">6</div>
+                    </div>
+                </div>
+            </div>
+            <div class="bread">
+                <div class="dish-type">
+                    <span lang="ru">Хлеб</span>
+                    <span lang="en">Bread</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        
+                        <div class="name">
+                            <span lang="ru">Хлеб</span>
+                            <span lang="en">Bread</span>
+                        </div>
+                        <div class="output">50</div>
+                        <div class="price">0.5</div>
+                    </div>
+                </div>
+            </div>
+            <div class="drinks">
+                <div class="dish-type">
+                    <span lang="ru">Напитки</span>
+                    <span lang="en">Drinks</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Чай с сахаром</span>
+                            <span lang="en">Tea with sugar</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Вода</span>
+                            <span lang="en">Water</span>
+                        </div>
+                        <div class="output">0.5</div>
+                        <div class="price">2</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Сок</span>
+                            <span lang="en">Juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Морc клюквенный</span>
+                            <span lang="en">Cranberry juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="saturday dinner meal">
+            <div class="day">
+                <span lang="ru">Суббота</span>
+                <span lang="en">Saturday</span>
+            </div>
+            <div class="mealtime">
+                <span lang="ru">Ужин</span>
+                <span lang="en">Dinner</span>
+            </div>
+            <div class="salads">
+                <div class="dish-type">
+                    <span lang="ru">Салаты</span>
+                    <span lang="en">Salads</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Овощной</span>
+                            <span lang="en">Vegetable</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">6</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Витаминный</span>
+                            <span lang="en">Vitamin Salad</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">3</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Из свежих овощей</span>
+                            <span lang="en">Fresh Vegetable Salad</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">3</div>
+                    </div>
+                </div>
+            </div>
+            <div class="soups">
+                <div class="dish-type">
+                    <span lang="ru">Супы</span>
+                    <span lang="en">Soups</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Борщ</span>
+                            <span lang="en">Borscht</span>
+                        </div>
+                        <div class="output">250/20</div>
+                        <div class="price">5</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Щи</span>
+                            <span lang="en">Cabbage Soup</span>
+                        </div>
+                        <div class="output">250/20</div>
+                        <div class="price">5</div>
+                    </div>
+                </div>
+            </div>
+            <div class="hot-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Горячие блюда</span>
+                    <span lang="en">Hot Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Колбаски свиные</span>
+                            <span lang="en">Pork sausages</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">8</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Рыба в сыре</span>
+                            <span lang="en">Fish in cheese</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">10</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Бедро куриное</span>
+                            <span lang="en">Chicken thigh</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">10</div>
+                    </div>
+                </div>
+            </div>
+            <div class="side-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Гарниры</span>
+                    <span lang="en">Side Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Драники</span>
+                            <span lang="en">Potato pancakes</span>
+                        </div>
+                        <div class="output">240/2</div>
+                        <div class="price">7</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Гречневая каша с маслом</span>
+                            <span lang="en">Buckwheat porridge with butter</span>
+                        </div>
+                        <div class="output">200/2/2</div>
+                        <div class="price">3</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Овощи весенние</span>
+                            <span lang="en">Spring vegetables</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">6</div>
+                    </div>
+                </div>
+            </div>
+            <div class="bread">
+                <div class="dish-type">
+                    <span lang="ru">Хлеб</span>
+                    <span lang="en">Bread</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        
+                        <div class="name">
+                            <span lang="ru">Хлеб</span>
+                            <span lang="en">Bread</span>
+                        </div>
+                        <div class="output">50</div>
+                        <div class="price">0.5</div>
+                    </div>
+                </div>
+            </div>
+            <div class="drinks">
+                <div class="dish-type">
+                    <span lang="ru">Напитки</span>
+                    <span lang="en">Drinks</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Чай с сахаром</span>
+                            <span lang="en">Tea with sugar</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Вода</span>
+                            <span lang="en">Water</span>
+                        </div>
+                        <div class="output">0.5</div>
+                        <div class="price">2</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Сок</span>
+                            <span lang="en">Juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Морс клюквенный</span>
+                            <span lang="en">Cranberry juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="sunday lunch meal">
+            <div class="day">
+                <span lang="ru">Воскресенье</span>
+                <span lang="en">Sunday</span>
+            </div>
+            <div class="mealtime">
+                <span lang="ru">Обед</span>
+                <span lang="en">Lunch</span>
+            </div>
+            <div class="salads">
+                <div class="dish-type">
+                    <span lang="ru">Салаты</span>
+                    <span lang="en">Salads</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Винегрет</span>
+                            <span lang="en">Vinaigrette</span>
+                        </div>
+                        <div class="output">200</div>
+                        <div class="price">4</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Греческий</span>
+                            <span lang="en">Greek</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">6</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Белые росы</span>
+                            <span lang="en">White Dew</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">6</div>
+                    </div>
+                </div>
+            </div>
+            <div class="soups">
+                <div class="dish-type">
+                    <span lang="ru">Супы</span>
+                    <span lang="en">Soups</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Грибной</span>
+                            <span lang="en">Mushroom</span>
+                        </div>
+                        <div class="output">250/2</div>
+                        <div class="price">4</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Рассольник</span>
+                            <span lang="en">Rassolnik</span>
+                        </div>
+                        <div class="output">250/2</div>
+                        <div class="price">3</div>
+                    </div>
+                </div>
+            </div>
+            <div class="hot-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Горячие блюда</span>
+                    <span lang="en">Hot Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Свинина с грибами</span>
+                            <span lang="en">Pork with Mushrooms</span>
+                        </div>
+                        <div class="output">120/2</div>
+                        <div class="price">10</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Рыба запеченная с томатами</span>
+                            <span lang="en">Baked Fish with Tomatoes</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">10</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Куриные колбаски</span>
+                            <span lang="en">Chicken Sausages</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">8</div>
+                    </div>
+                </div>
+            </div>
+            <div class="side-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Гарниры</span>
+                    <span lang="en">Side Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Драники</span>
+                            <span lang="en">Draniki</span>
+                        </div>
+                        <div class="output">240/2</div>
+                        <div class="price">7</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Гречневая каша с маслом</span>
+                            <span lang="en">Buckwheat Porridge with Butter</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">3</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Овощи весенние</span>
+                            <span lang="en">Spring Vegetables</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">6</div>
+                    </div>
+                </div>
+            </div>
+            <div class="bread">
+                <div class="dish-type">
+                    <span lang="ru">Хлеб</span>
+                    <span lang="en">Bread</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        
+                        <div class="name">
+                            <span lang="ru">Хлеб</span>
+                            <span lang="en">Bread</span>
+                        </div>
+                        <div class="output">50</div>
+                        <div class="price">0.5</div>
+                    </div>
+                </div>
+            </div>
+            <div class="drinks">
+                <div class="dish-type">
+                    <span lang="ru">Напитки</span>
+                    <span lang="en">Drinks</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Чай с сахаром</span>
+                            <span lang="en">Tea with Sugar</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Вода</span>
+                            <span lang="en">Water</span>
+                        </div>
+                        <div class="output">0.5</div>
+                        <div class="price">2</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Сок</span>
+                            <span lang="en">Juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Морс клюквенный</span>
+                            <span lang="en">Cranberry Juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="sunday dinner meal">
+            <div class="day">
+                <span lang="ru">Воскресенье</span>
+                <span lang="en">Sunday</span>
+            </div>
+            <div class="mealtime">
+                <span lang="ru">Ужин</span>
+                <span lang="en">Dinner</span>
+            </div>
+            <div class="salads">
+                <div class="dish-type">
+                    <span lang="ru">Салаты</span>
+                    <span lang="en">Salads</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Винегрет</span>
+                            <span lang="en">Vinaigrette</span>
+                        </div>
+                        <div class="output">200</div>
+                        <div class="price">4</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Греческий</span>
+                            <span lang="en">Greek</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">6</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Белые росы</span>
+                            <span lang="en">White Dew</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">6</div>
+                    </div>
+                </div>
+            </div>
+            <div class="soups">
+                <div class="dish-type">
+                    <span lang="ru">Супы</span>
+                    <span lang="en">Soups</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Грибной</span>
+                            <span lang="en">Mushroom</span>
+                        </div>
+                        <div class="output">250/2</div>
+                        <div class="price">4</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Рассольник</span>
+                            <span lang="en">Rassolnik</span>
+                        </div>
+                        <div class="output">250/2</div>
+                        <div class="price">3</div>
+                    </div>
+                </div>
+            </div>
+            <div class="hot-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Горячие блюда</span>
+                    <span lang="en">Hot Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Свинина с грибами</span>
+                            <span lang="en">Pork with Mushrooms</span>
+                        </div>
+                        <div class="output">120/2</div>
+                        <div class="price">10</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Рыба запеченная с томатами</span>
+                            <span lang="en">Baked Fish with Tomatoes</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">10</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Куриные колбаски</span>
+                            <span lang="en">Chicken Sausages</span>
+                        </div>
+                        <div class="output">150/2</div>
+                        <div class="price">8</div>
+                    </div>
+                </div>
+            </div>
+            <div class="side-dishes">
+                <div class="dish-type">
+                    <span lang="ru">Гарниры</span>
+                    <span lang="en">Side Dishes</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Драники</span>
+                            <span lang="en">Draniki</span>
+                        </div>
+                        <div class="output">240/2</div>
+                        <div class="price">7</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Гречневая каша с маслом</span>
+                            <span lang="en">Buckwheat Porridge with Butter</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">3</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Овощи весенние</span>
+                            <span lang="en">Spring Vegetables</span>
+                        </div>
+                        <div class="output">200/2</div>
+                        <div class="price">6</div>
+                    </div>
+                </div>
+            </div>
+            <div class="bread">
+                <div class="dish-type">
+                    <span lang="ru">Хлеб</span>
+                    <span lang="en">Bread</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Хлеб</span>
+                            <span lang="en">Bread</span>
+                        </div>
+                        <div class="output">50</div>
+                        <div class="price">0.5</div>
+                    </div>
+                </div>
+            </div>
+            <div class="drinks">
+                <div class="dish-type">
+                    <span lang="ru">Напитки</span>
+                    <span lang="en">Drinks</span>
+                </div>
+                <div class="dishes">
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Чай с сахаром</span>
+                            <span lang="en">Tea with Sugar</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Вода</span>
+                            <span lang="en">Water</span>
+                        </div>
+                        <div class="output">0.5</div>
+                        <div class="price">2</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Сок</span>
+                            <span lang="en">Juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                    <div >
+                        <div class="name">
+                            <span lang="ru">Морс клюквенный</span>
+                            <span lang="en">Cranberry Juice</span>
+                        </div>
+                        <div class="output">0.2</div>
+                        <div class="price">1</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </body>
+</html>

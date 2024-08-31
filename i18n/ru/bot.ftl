@@ -24,6 +24,47 @@ frame-mover-help-unified =
 frame-realign-message =
     Пожалуйста, совместите маркеры на экране как можно точнее, если они расходятся, и нажмите готово.
 frame-mover-finish-button-text = Готово
+orders-adm-payment-cash-requested =
+    Пользователь {$link} хочет оплатить вам за заказ наличными.
+    Сумма к оплате: Br {$total}
+    заказ на имя <i>{$name}</i>.
+    Не отклоняй заказ сразу, а дождись разговора с клиентом, или напиши ему.
+orders-admin-belarus = {$name}/{$region}
+orders-back-button = Назад
+orders-closed = Если надо посмотреть свои заказы или что-то изменить, можно снова использовать команду /orders
+orders-close-button = Выйти
+orders-edit-button = Изменить заказ
+orders-finish-button-text = Готово
+orders-message-list = Ваши заказы
+orders-message-payed-where =
+    Я получила PDF, который видимо является подтверждением оплаты. Я права?
+
+orders-message-payment-options =
+    Можно оплатить заказ на следующие реквизиты:
+
+    Россия:
+    Перевод по номеру <code>+79217826737</code> (Сбер, ВТБ)
+    Ольга Тесла
+    <code>{$rutotal}</code> ₽
+
+    ⚠ <i>После оплаты, обязательно пришли мне подтверждение в формате <b>PDF</b>, другие форматы не принимаю!
+    Если подтверждение в виде изображения, можешь сконвертировать его в PDF с помощью этого бота:</i> @ImageToPdfRobot
+
+    Беларусь:
+    Выбери один из контактов ниже и оплати лично:
+    Br <code>{$total}</code>
+orders-next-button-text = Далее
+orders-new-button = Сделать заказ
+orders-order-pay-button = Оплата
+orders-order-button = {$created}|{$name}
+orders-order-delete-button = Очистить заказ
+orders-pay-cancel = Отменить
+orders-payment-cash-requested =
+    Свяжись с {$link} для личной встречи и оплаты.
+    Сумма к оплате: Br {$total}
+    заказ на имя <i>{$name}</i>.
+    Администратор отметит заказ как оплаченный после получения оплаты.
+orders-payed-button = Это подтверждение оплаты
 undefined-state-error = Что-то пошло не так, попробуй ещё раз!
 unsupported-message-error = Прости, я не понимаю этого сообщения.
 max-assistant-messages-reached =  К сожалению, на сегодня лимит сообщений исчерпан. Приходи снова через 24 часа)

@@ -62,6 +62,12 @@ class Photo(BaseSettings):
     quality: int = Field(90)
     cover_file: str = Field("cover/ZNS2024_2.jpg")
 
+class Orders(BaseSettings):
+    deadline: date = Field(date(2024, 6, 7))
+    payment_admin_ru: int = Field(-1)
+    admins: set[int] = Field({379278985})
+    event_number: int = Field(8)
+
 class Food(BaseSettings):
     deadline: date = Field(date(2024, 6, 7))
     start_day: date = Field(date(2024, 6, 12))
@@ -86,6 +92,7 @@ class Config(BaseSettings):
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
     food: Food = Food()
+    orders: Orders = Orders()
     massages: Massages = Massages()
     parties: list[Party] = [
         Party(

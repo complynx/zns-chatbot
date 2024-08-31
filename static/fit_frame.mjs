@@ -512,16 +512,17 @@ screen_size_source.addEventListener('touchstart', onTouchStart, false);
 screen_size_source.addEventListener('touchmove', onTouchMove, false);
 screen_size_source.addEventListener('touchend', onTouchEnd, false);
 
-function IDQ() {
-    return "initData="+encodeURIComponent(Telegram.WebApp.initData)
-}
-
 function AlignmentSave() {
     if(alignment.changed) {
         return "&compensations="+encodeURIComponent(JSON.stringify(alignment))
     }
     return "";
 }
+
+function IDQ() {
+    return "initData="+encodeURIComponent(Telegram.WebApp.initData)
+}
+
 
 function send_error(err) {
     return fetch("error?"+IDQ(), {
