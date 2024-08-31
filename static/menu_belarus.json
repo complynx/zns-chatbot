@@ -35,10 +35,16 @@
                     "price": 10
                 },
                 "ryba_s_ovoschami": {
-                    "name_ru": "Рыба с овощами",
-                    "name_en": "Fish with Vegetables",
+                    "name_ru": "Рыба Хек с овощами",
+                    "name_en": "Hake with Vegetables",
                     "output": "150",
                     "price": 10
+                },
+                "steak_iz_semgi_s_ovoschami": {
+                  "name_ru": "Стейк из семги с овощами",
+                  "name_en": "Salmon Steak with Vegetables",
+                  "output": "150/2",
+                  "price": 30
                 },
                 "medalion_iz_vyrezki_svinoy_s_gribnym_sousom": {
                     "name_ru": "Медальон из вырезки свиной с грибным соусом",
@@ -156,6 +162,12 @@
                     "output": "150",
                     "price": 10
                 },
+                "steak_iz_semgi_s_ovoschami": {
+                  "name_ru": "Стейк из семги с овощами",
+                  "name_en": "Salmon Steak with Vegetables",
+                  "output": "150/2",
+                  "price": 30
+                },
                 "bedro_kurinoe": {
                     "name_ru": "Бедро куриное",
                     "name_en": "Chicken Thigh",
@@ -271,6 +283,12 @@
                     "name_en": "Baked Fish with Tomato",
                     "output": "150",
                     "price": 10
+                },
+                "steak_iz_semgi_s_ovoschami": {
+                  "name_ru": "Стейк из семги с овощами",
+                  "name_en": "Salmon Steak with Vegetables",
+                  "output": "150/2",
+                  "price": 30
                 },
                 "kurinye_kolbaski": {
                     "name_ru": "Куриные колбаски",
