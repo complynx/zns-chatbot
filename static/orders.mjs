@@ -287,7 +287,7 @@ function fillInOrders(orders) {
     if ("excursion_grodno" in orders.extras) {
         grodnoExcursionCheckbox.checked = true;
     }
-    
+
     document.getElementById("total-sum").innerText = orders.total;
 }
 
@@ -324,9 +324,35 @@ function validateSection(index) {
 
 updateSections();
 
+function currencyCeil(sum) {
+    if (sum < 100) {
+        return Math.ceil(sum);
+    }
+
+    // Get the magnitude (order of the largest digit) of the number
+    const magnitude = Math.pow(10, Math.floor(Math.log10(sum)) - 1);
+
+    // Normalize the number by dividing by the magnitude
+    const normalized = sum / magnitude;
+
+    // Ceil the normalized number and adjust for the 0 or 5 rounding rule
+    let rounded;
+    if (normalized > Math.floor(normalized) + 0.5) {
+        rounded = Math.ceil(normalized) * magnitude;
+    } else {
+        rounded = (Math.ceil(normalized) - 0.5) * magnitude;
+    }
+
+    return rounded;
+}
+BYN_TO_RUB = 28.5
+
 document.body.addEventListener("click", ()=>{
     let orders = collectOrdersWithExtras();
-    document.getElementById("total-sum").innerText = orders.total;
+    total = currencyCeil(orders.total);
+    total_rub = currencyCeil(orders.total*BYN_TO_RUB);
+    
+    document.getElementById("total-sum").innerText = total + " BYN "+ total_rub + " RUB";
 }, {passive:true});
 
 function IDQ() {
