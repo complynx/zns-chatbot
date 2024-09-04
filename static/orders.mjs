@@ -345,7 +345,7 @@ function currencyCeil(sum) {
 
     return rounded;
 }
-BYN_TO_RUB = 28.5
+const BYN_TO_RUB = 28.5;
 
 document.body.addEventListener("click", ()=>{
     let orders = collectOrdersWithExtras();
