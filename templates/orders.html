@@ -7,6 +7,8 @@
             const user_order_id = {% raw json_encode(user_order_id) %};
             const finish_button_text={% raw json_encode(finish_button_text) %};
             const next_button_text={% raw json_encode(next_button_text) %};
+            const validity_error_first_name={% raw json_encode(validity_error_first_name) %};
+            const validity_error_last_name={% raw json_encode(validity_error_last_name) %};
         </script>
         <title>Zouk Non Stop orders</title>
         <meta charset="utf-8" />
@@ -19,11 +21,18 @@
         <div id="total-sum">0</div>
         <section class="for-who">
             <label>
-                <span lang="ru">Введи своё полное ФИО</span>
-                <span lang="en">Enter your full name</span>
-                <input type="text" name="for_who" id="fullName" required 
-                       pattern="^[A-ZА-Я][a-zа-я]*\s+[A-ZА-Я][a-zа-я]*$"
-                       title="Please enter your full name (at least two words, each starting with a capital letter).">
+                <span>
+                    <span lang="ru">Введи своё полное ФИО</span>
+                    <span lang="en">Enter your full name</span>
+                </span>
+                <input type="text" name="for_who_first_name" required 
+                       pattern="^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}*\s*$"
+                       placeholder="{{placeholder_first_name}}">
+                <input type="text" name="for_who_patronymus"
+                        placeholder="{{placeholder_patronymus}}">
+                <input type="text" name="for_who_last_name" required 
+                        pattern="^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}*\s*$"
+                        placeholder="{{placeholder_last_name}}">
             </label>
         </section>
         <section class="excursions">

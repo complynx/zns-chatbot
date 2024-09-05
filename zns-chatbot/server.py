@@ -163,6 +163,11 @@ class OrdersHandler(RequestHandlerWithApp):
                 lang=lang,
                 finish_button_text=l("orders-finish-button-text"),
                 next_button_text=l("orders-next-button-text"),
+                placeholder_first_name=l("orders-placeholder-first-name"),
+                placeholder_last_name=l("orders-placeholder-last-name"),
+                placeholder_patronymus=l("orders-placeholder-patronymus"),
+                validity_error_first_name=l("orders-validity-error-first-name"),
+                validity_error_last_name=l("orders-validity-error-last-name"),
             )
         except (KeyError, ValueError):
             raise tornado.web.HTTPError(404)

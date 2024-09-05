@@ -65,6 +65,11 @@ orders-payment-cash-requested =
     заказ на имя <i>{$name}</i>.
     Администратор отметит заказ как оплаченный после получения оплаты.
 orders-payed-button = Это подтверждение оплаты
+orders-placeholder-first-name=Имя
+orders-placeholder-last-name=Фамилия
+orders-placeholder-patronymus=Отчество
+orders-validity-error-first-name=Имя должно начинаться с заглавной буквы и содержать как минимум одну строчную
+orders-validity-error-last-name=Фамилия должна начинаться с заглавной буквы и содержать как минимум одну строчную
 undefined-state-error = Что-то пошло не так, попробуй ещё раз!
 unsupported-message-error = Прости, я не понимаю этого сообщения.
 max-assistant-messages-reached =  К сожалению, на сегодня лимит сообщений исчерпан. Приходи снова через 24 часа)

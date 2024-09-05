@@ -65,6 +65,11 @@ orders-payment-cash-requested =
     order is in the name <i>{$name}</i>.
     After cash is collected, the admin will mark your order as payed.
 orders-payed-button = It's payment proof
+orders-placeholder-first-name=First name
+orders-placeholder-last-name=Last name
+orders-placeholder-patronymus=Second name(s)
+orders-validity-error-first-name=First name should contain one upper case letter and then at least one lowercase
+orders-validity-error-last-name=Last name should contain one upper case letter and then at least one lowercase
 undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
 max-assistant-messages-reached = You've reached your questions limit for a day, please come back in 24 hours.

@@ -112,8 +112,12 @@ function collectOrdersWithExtras() {
     };
 
     // Collect customer name
-    const customerName = document.querySelector('.for-who input[name="for_who"]').value.trim();
-    orders.customer = customerName;
+    orders.customer_first_name = document.querySelector('.for-who input[name="for_who_first_name"]').value.trim();
+    orders.customer_last_name = document.querySelector('.for-who input[name="for_who_last_name"]').value.trim();
+    orders.customer_patronymus = document.querySelector('.for-who input[name="for_who_patronymus"]').value.trim();
+    orders.customer = orders.customer_first_name + " " +
+        (orders.customer_patronymus!==""?orders.customer_patronymus+" ":"") +
+        orders.customer_last_name;
 
     // Select all meal sections
     const meals = document.querySelectorAll('.meal');
@@ -192,7 +196,9 @@ function collectOrdersWithExtras() {
 }
 
 if(read_only){
-    document.querySelector('.for-who input[name="for_who"]').disabled = true;
+    document.querySelector('.for-who input[name="for_who_first_name"]').disabled = true;
+    document.querySelector('.for-who input[name="for_who_last_name"]').disabled = true;
+    document.querySelector('.for-who input[name="for_who_patronymus"]').disabled = true;
     document.querySelector('.excursions input[name="excursion_minsk"]').disabled = true;
     document.querySelector('.excursions input[name="shuttle_bus"]').disabled = true;
     document.querySelector('.excursions input[name="excursion_grodno"]').disabled = true;
@@ -205,12 +211,28 @@ function fillInOrders(orders) {
         return;
     }
 
-    // Validate customer name
-    if (typeof orders.customer !== 'string' || orders.customer.trim() === '') {
-        console.error('Invalid customer name:', orders.customer);
+    // Validate customer first name
+    if (typeof orders.customer_first_name !== 'string' || orders.customer_first_name.trim() === '') {
+        console.error('Invalid customer first name:', orders.customer_first_name);
     } else {
-        const customerInput = document.querySelector('.for-who input[name="for_who"]');
-        customerInput.value = orders.customer;
+        const customerInput = document.querySelector('.for-who input[name="for_who_first_name"]');
+        customerInput.value = orders.customer_first_name;
+    }
+
+    // Validate customer last name
+    if (typeof orders.customer_last_name !== 'string' || orders.customer_last_name.trim() === '') {
+        console.error('Invalid customer last name:', orders.customer_last_name);
+    } else {
+        const customerInput = document.querySelector('.for-who input[name="for_who_last_name"]');
+        customerInput.value = orders.customer_last_name;
+    }
+
+    // Validate customer patronymus
+    if (typeof orders.customer_patronymus !== 'string') {
+        console.error('Invalid customer patronymus:', orders.customer_patronymus);
+    } else {
+        const customerInput = document.querySelector('.for-who input[name="for_who_patronymus"]');
+        customerInput.value = orders.customer_patronymus.trim();
     }
 
     // Validate days
@@ -288,7 +310,10 @@ function fillInOrders(orders) {
         grodnoExcursionCheckbox.checked = true;
     }
 
-    document.getElementById("total-sum").innerText = orders.total;
+    let total = currencyCeil(orders.total);
+    let total_rub = currencyCeil(orders.total*BYN_TO_RUB);
+    
+    document.getElementById("total-sum").innerText = total + " BYN "+ total_rub + " RUB";
 }
 
 Telegram.WebApp.ready();
@@ -311,7 +336,21 @@ function updateSections() {
     }
 }
 
+let name_re=/^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}*\s*$/v;
+function name_validity(el, err) {
+    if(name_re.test(el.value)) {
+        if(!el.checkValidity()) {
+            el.setCustomValidity("");
+        }
+    } else {
+        el.setAttribute("pattern", name_re.source);
+        el.setCustomValidity(err);
+    }
+}
+
 function validateSection(index) {
+    name_validity(document.querySelector('.for-who input[name="for_who_first_name"]'),validity_error_first_name);
+    name_validity(document.querySelector('.for-who input[name="for_who_last_name"]'),validity_error_last_name);
     const inputs = sections[index].querySelectorAll('input');
     for (let input of inputs) {
         if (!input.checkValidity()) {
@@ -349,8 +388,8 @@ const BYN_TO_RUB = 28.5;
 
 document.body.addEventListener("click", ()=>{
     let orders = collectOrdersWithExtras();
-    total = currencyCeil(orders.total);
-    total_rub = currencyCeil(orders.total*BYN_TO_RUB);
+    let total = currencyCeil(orders.total);
+    let total_rub = currencyCeil(orders.total*BYN_TO_RUB);
     
     document.getElementById("total-sum").innerText = total + " BYN "+ total_rub + " RUB";
 }, {passive:true});
