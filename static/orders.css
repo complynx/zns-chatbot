@@ -139,11 +139,12 @@ section:not(.active){
 .meal .dishes>div{
     margin-top: .3em;
    display: grid;
+    column-gap: .3em;
     grid-template-columns: 7fr 2fr 1fr 1fr 1fr 1fr 1fr;
 }
 .meal .dishes > div:nth-child(2n) { /* Every second child */
     background-color: var(--tg-theme-secondary-bg-color);
 }
-.meal .dishes .price {
-    margin-left: .1em;
+.meal .dishes > div >*:not(:first-child) { /* Every second child */
+    text-align: center;
 }

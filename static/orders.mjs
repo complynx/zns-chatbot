@@ -170,9 +170,16 @@ function collectOrdersWithExtras() {
     });
 
     // Collect excursion and shuttle data
+    const preparty = document.querySelector('.excursions input[name="preparty"]').checked;
     const minskExcursion = document.querySelector('.excursions input[name="excursion_minsk"]').checked;
     const shuttleBus = document.querySelector('.excursions input[name="shuttle_bus"]').checked;
     const grodnoExcursion = document.querySelector('.excursions input[name="excursion_grodno"]').checked;
+
+    if (preparty) {
+        orders.extras.preparty = 25;
+        orders.extras.total += 25;
+        orders.total += 25;
+    }
 
     if (minskExcursion) {
         orders.extras.excursion_minsk = 14;
@@ -199,6 +206,7 @@ if(read_only){
     document.querySelector('.for-who input[name="for_who_first_name"]').disabled = true;
     document.querySelector('.for-who input[name="for_who_last_name"]').disabled = true;
     document.querySelector('.for-who input[name="for_who_patronymus"]').disabled = true;
+    document.querySelector('.excursions input[name="preparty"]').disabled = true;
     document.querySelector('.excursions input[name="excursion_minsk"]').disabled = true;
     document.querySelector('.excursions input[name="shuttle_bus"]').disabled = true;
     document.querySelector('.excursions input[name="excursion_grodno"]').disabled = true;
@@ -294,9 +302,14 @@ function fillInOrders(orders) {
         return;
     }
 
+    const prepartyCheckbox = document.querySelector('.excursions input[name="preparty"]');
     const minskExcursionCheckbox = document.querySelector('.excursions input[name="excursion_minsk"]');
     const shuttleBusCheckbox = document.querySelector('.excursions input[name="shuttle_bus"]');
     const grodnoExcursionCheckbox = document.querySelector('.excursions input[name="excursion_grodno"]');
+
+    if ("preparty" in orders.extras) {
+        prepartyCheckbox.checked = true;
+    }
 
     if ("excursion_minsk" in orders.extras) {
         minskExcursionCheckbox.checked = true;
