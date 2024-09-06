@@ -31,7 +31,7 @@ def currency_ceil(sum):
 
 logger = logging.getLogger(__name__)
 
-BYN_TO_RUB = 28.2
+BYN_TO_RUB = 30
 
 class OrdersUpdate:
     base: 'Orders'
