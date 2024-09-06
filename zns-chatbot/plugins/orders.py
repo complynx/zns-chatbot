@@ -257,7 +257,7 @@ class OrdersUpdate:
             )
             await self.update.reply(
                 l(
-                    "food-adm-payment-proof-received",
+                    "orders-adm-payment-proof-received",
                     link=client_user_link_html(user),
                     total=total,
                     name=order["choice"]["customer"],

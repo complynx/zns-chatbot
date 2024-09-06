@@ -29,6 +29,11 @@ orders-adm-payment-cash-requested =
     Total order sum: Br {$total}
     order is in the name <i>{$name}</i>.
     Don't reject the order, wait for the user to contact you first, or ask them yourself.
+orders-adm-payment-proof-received =
+    User {$link} sent payment for their order
+    Total order sum: {$total} ₽
+    order is in the name <i>{$name}</i>. Confirmation required.
+    <b>Attention</b>, do not mark proof as rejected, wait a bit and try to find the payment first.
 orders-admin-belarus = {$name}/{$region}
 orders-back-button = Back
 orders-closed = If you need to see your orders or change something, you can always use /orders command
