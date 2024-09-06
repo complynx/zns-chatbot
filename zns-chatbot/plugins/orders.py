@@ -21,11 +21,11 @@ def currency_ceil(sum):
     # Normalize the number by dividing by the magnitude
     normalized = sum / magnitude
     
-    # Ceil the normalized number and adjust for the 0 or 5 rounding rule
-    if normalized > int(normalized) + 0.5:
-        rounded = math.ceil(normalized) * magnitude
-    else:
-        rounded = (math.ceil(normalized) - 0.5) * magnitude
+    # Round up to the nearest 0 or 5
+    ceil_normalized = math.ceil(normalized * 2) / 2
+    
+    # Scale back to the original magnitude
+    rounded = ceil_normalized * magnitude
     
     return rounded
 

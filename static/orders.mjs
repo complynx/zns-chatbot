@@ -382,18 +382,16 @@ function currencyCeil(sum) {
     }
 
     // Get the magnitude (order of the largest digit) of the number
-    const magnitude = Math.pow(10, Math.floor(Math.log10(sum)) - 1);
+    const magnitude = 10 ** (Math.floor(Math.log10(sum)) - 1);
 
     // Normalize the number by dividing by the magnitude
     const normalized = sum / magnitude;
 
-    // Ceil the normalized number and adjust for the 0 or 5 rounding rule
-    let rounded;
-    if (normalized > Math.floor(normalized) + 0.5) {
-        rounded = Math.ceil(normalized) * magnitude;
-    } else {
-        rounded = (Math.ceil(normalized) - 0.5) * magnitude;
-    }
+    // Round up to the nearest 0 or 5
+    const ceilNormalized = Math.ceil(normalized * 2) / 2;
+
+    // Scale back to the original magnitude
+    const rounded = ceilNormalized * magnitude;
 
     return rounded;
 }
