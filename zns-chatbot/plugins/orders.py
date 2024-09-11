@@ -9,25 +9,9 @@ from telegram.constants import ParseMode
 from bson.objectid import ObjectId
 from ..telegram_links import client_user_link_html, client_user_name
 import logging
-import math
 
 def currency_ceil(sum):
-    if sum < 100:
-        return math.ceil(sum)
-    
-    # Get the magnitude (order of the largest digit) of the number
-    magnitude = 10 ** (len(str(int(sum))) - 2)
-    
-    # Normalize the number by dividing by the magnitude
-    normalized = sum / magnitude
-    
-    # Round up to the nearest 0 or 5
-    ceil_normalized = math.ceil(normalized * 2) / 2
-    
-    # Scale back to the original magnitude
-    rounded = ceil_normalized * magnitude
-    
-    return rounded
+    return sum
 
 logger = logging.getLogger(__name__)
 

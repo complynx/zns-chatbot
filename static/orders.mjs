@@ -377,23 +377,7 @@ function validateSection(index) {
 updateSections();
 
 function currencyCeil(sum) {
-    if (sum < 100) {
-        return Math.ceil(sum);
-    }
-
-    // Get the magnitude (order of the largest digit) of the number
-    const magnitude = 10 ** (Math.floor(Math.log10(sum)) - 1);
-
-    // Normalize the number by dividing by the magnitude
-    const normalized = sum / magnitude;
-
-    // Round up to the nearest 0 or 5
-    const ceilNormalized = Math.ceil(normalized * 2) / 2;
-
-    // Scale back to the original magnitude
-    const rounded = ceilNormalized * magnitude;
-
-    return rounded;
+    return sum;
 }
 const BYN_TO_RUB = 30;
 
