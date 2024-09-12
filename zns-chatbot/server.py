@@ -155,11 +155,15 @@ class OrdersHandler(RequestHandlerWithApp):
             lang = "ru"
         
         try:
+            import uuid
+            debug_id = str(uuid.uuid4())
+            logger.info(f"debug session: {debug_id} for order {order_id}")
             self.render(
                 "orders.html",
                 read_only=read_only,
                 user_order=choice,
                 user_order_id=order_id,
+                debug_id=debug_id,
                 lang=lang,
                 finish_button_text=l("orders-finish-button-text"),
                 next_button_text=l("orders-next-button-text"),
