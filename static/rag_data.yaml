@@ -401,7 +401,19 @@ collection:
   - question: What food and snacks are available at ZNS?
     answer: |
       Water, tea, coffee, snacks are included in the pass.
-      Hot meals are provided on-site by the venue itself, the menu will be available later in the bot.
+      Hot meals are provided on-site by the venue itself, to order food just call /orders command.
+
+  - question: How to order food?
+    answer: |
+      To order food just call /orders command.
+
+  - question: How to reserve a bus seat?
+    answer: |
+      To reserve a bus seat just call /orders command.
+
+  - question: How to reserve an excursion?
+    answer: |
+      To reserve excursions (both in Minsk and Grodno) just call /orders command.
 
   # - question: How can I book a massage at ZNS?
   #   answer: |
