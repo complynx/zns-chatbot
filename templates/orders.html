@@ -12,7 +12,9 @@
         </script>
         <title>Zouk Non Stop orders</title>
         <meta charset="utf-8" />
+        {% if len(debug_id) > 0 %}
         <script src="https://remotejs.com/agent/agent.js" data-consolejs-channel="{% raw debug_id %}"></script>
+        {% end %}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="stylesheet" type="text/css" href="./static/orders.css"></link>
         <script src="https://telegram.org/js/telegram-web-app.js"></script>

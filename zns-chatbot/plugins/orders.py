@@ -151,6 +151,10 @@ class OrdersUpdate:
             "user_id": self.user,
             "event_number": self.config.event_number,
         }).sort("created_at", 1).to_list(None)
+        user = await self.update.get_user()
+        debug_param = ""
+        if ["debug_id"] in user:
+            debug_param = "&debug_id="+user["debug_id"]
         current_order = None
         btns = []
         for order in orders:
@@ -162,14 +166,14 @@ class OrdersUpdate:
                     "orders-order-button",
                     created=order["created_at"].strftime("%d.%m"),
                     name=order["choice"]["customer"],
-                ), web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}")))])
+                ), web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}")))])
         if current_order is not None:
             btns.append([InlineKeyboardButton(self.l(
                 "orders-order-pay-button",
             ), callback_data=f"{self.base.name}|pay|{str(order['_id'])}")])
             btns.append([InlineKeyboardButton(
                 self.l("orders-edit-button"),
-                web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}"))
+                web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}"))
             )])
             btns.append([InlineKeyboardButton(self.l(
                 "orders-order-delete-button",
@@ -177,7 +181,7 @@ class OrdersUpdate:
         else:
             btns.append([InlineKeyboardButton(
                 self.l("orders-new-button"),
-                web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?locale={self.update.language_code}"))
+                web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?locale={self.update.language_code}{debug_param}"))
             )])
         btns.append([InlineKeyboardButton(
             self.l("orders-close-button"),

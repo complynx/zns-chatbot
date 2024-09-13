@@ -141,6 +141,7 @@ class FitFrameHandler(RequestHandlerWithApp):
 class OrdersHandler(RequestHandlerWithApp):
     async def get(self):
         order_id = self.get_query_argument("order_id", default="")
+        debug_id = self.get_query_argument("debug_id", default="")
         locale_str = self.get_query_argument("locale", default="en")
         l = lambda s: self.app.localization(s, locale=locale_str)
         choice = None
@@ -155,9 +156,6 @@ class OrdersHandler(RequestHandlerWithApp):
             lang = "ru"
         
         try:
-            import uuid
-            debug_id = str(uuid.uuid4())
-            logger.info(f"debug session: {debug_id} for order {order_id}")
             self.render(
                 "orders.html",
                 read_only=read_only,
