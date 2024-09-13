@@ -356,7 +356,7 @@ function name_validity(el, err) {
             el.setCustomValidity("");
         }
     } else {
-        el.setAttribute("pattern", name_re.source);
+        el.setAttribute("pattern", "^\s*\w+\s*$");
         el.setCustomValidity(err);
     }
 }
