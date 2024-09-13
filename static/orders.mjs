@@ -349,16 +349,40 @@ function updateSections() {
     }
 }
 
-let name_re=/^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}*\s*$/u;
-function name_validity(el, err) {
-    if(name_re.test(el.value)) {
-        if(!el.checkValidity()) {
-            el.setCustomValidity("");
+let name_validity;
+try{
+    let pattern="^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}+\s*$";
+    let name_re=/^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}+\s*$/u;
+    name_validity=function(el, err) {
+        if(name_re.test(el.value)) {
+            if(!el.checkValidity()) {
+                el.setCustomValidity("");
+            }
+        } else {
+            el.setAttribute("pattern", pattern);
+            el.setCustomValidity(err);
         }
-    } else {
-        el.setAttribute("pattern", "^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}*\s*$");
-        el.setCustomValidity(err);
     }
+    
+    document.querySelector('.for-who input[name="for_who_first_name"]').setAttribute("pattern", pattern);
+    document.querySelector('.for-who input[name="for_who_last_name"]').setAttribute("pattern", pattern);
+}catch(e) {
+    send_error(e)
+    let pattern="^\s*[A-Z][a-z]+\s*$";
+    let name_re=/^\s*[A-Z][a-z]+\s*$/u;
+    name_validity=function(el, err) {
+        if(name_re.test(el.value)) {
+            if(!el.checkValidity()) {
+                el.setCustomValidity("");
+            }
+        } else {
+            el.setAttribute("pattern", pattern);
+            el.setCustomValidity(err);
+        }
+    }
+    
+    document.querySelector('.for-who input[name="for_who_first_name"]').setAttribute("pattern", pattern);
+    document.querySelector('.for-who input[name="for_who_last_name"]').setAttribute("pattern", pattern);
 }
 
 function validateSection(index) {
