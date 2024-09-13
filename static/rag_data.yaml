@@ -404,8 +404,10 @@ collection:
       Hot meals are provided on-site by the venue itself, to order food just call /orders command.
 
   - question: How to order food?
+    alt_questions:
+    - How to order excursion?
     answer: |
-      To order food just call /orders command.
+      To order food or excursion just call /orders command.
 
   - question: How to reserve a bus seat?
     answer: |
@@ -414,6 +416,21 @@ collection:
   - question: How to reserve an excursion?
     answer: |
       To reserve excursions (both in Minsk and Grodno) just call /orders command.
+
+  - question: How to pay for an excursion?
+    alt_questions:
+    - How to pay for the food?
+    answer: |
+      Call /orders command, fill-in your order if you didn't do that yet, then press "Payment".
+      You'll be presented with options: if you're in Belarus, select one of the administrators presented to you and contact them.
+      If you're in Russia — proceed with contactless payment to the number in the message, after the payment, save the payment proof in PDF and
+      send it to me.
+
+  - question: How to change the order?
+    answer: |
+      You can change your order if you haven't payed it yet. Just go to /orders and change it.
+      If you've selected a manager to pay, ask them to cancel and change the order.
+      If you've payed it, you can place another order on top of the previous one.
 
   # - question: How can I book a massage at ZNS?
   #   answer: |
