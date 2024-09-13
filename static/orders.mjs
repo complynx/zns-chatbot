@@ -368,8 +368,8 @@ try{
     document.querySelector('.for-who input[name="for_who_last_name"]').setAttribute("pattern", pattern);
 }catch(e) {
     send_error(e)
-    let pattern="^\s*[A-Z][a-z]+\s*$";
-    let name_re=/^\s*[A-Z][a-z]+\s*$/u;
+    let pattern="^\s*[A-ZА-ЯЁ][a-zа-яё]+\s*$";
+    let name_re=/^\s*[A-ZА-ЯЁ][a-zа-яё]+\s*$/u;
     name_validity=function(el, err) {
         if(name_re.test(el.value)) {
             if(!el.checkValidity()) {
