@@ -356,7 +356,7 @@ function name_validity(el, err) {
             el.setCustomValidity("");
         }
     } else {
-        el.setAttribute("pattern", "^\s*\w+\s*$");
+        el.setAttribute("pattern", "^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}*\s*$");
         el.setCustomValidity(err);
     }
 }
