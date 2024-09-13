@@ -349,7 +349,7 @@ function updateSections() {
     }
 }
 
-let name_re=/^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}*\s*$/v;
+let name_re=/^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}*\s*$/u;
 function name_validity(el, err) {
     if(name_re.test(el.value)) {
         if(!el.checkValidity()) {
