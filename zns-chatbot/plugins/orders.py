@@ -153,7 +153,7 @@ class OrdersUpdate:
         }).sort("created_at", 1).to_list(None)
         user = await self.update.get_user()
         debug_param = ""
-        if ["debug_id"] in user:
+        if "debug_id" in user:
             debug_param = "&debug_id="+user["debug_id"]
         current_order = None
         btns = []
