@@ -55,6 +55,9 @@ class OrdersUpdate:
         return await self.handle_cq_start()
 
     async def handle_cq_del(self, order_id):
+        order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+        if "proof_file" in order:
+            return await self.handle_cq_start()
         await self.base.food_db.delete_one({"_id": ObjectId(order_id)})
         return await self.handle_cq_start()
 
@@ -65,6 +68,8 @@ class OrdersUpdate:
     
     async def handle_cq_pay(self, order_id):
         order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+        if "proof_file" in order:
+            return await self.handle_cq_start()
         total, total_rub = self.get_order_total(order)
         admins_be = await self.base.base_app.users_collection.find({
             "bot_id": self.bot,
