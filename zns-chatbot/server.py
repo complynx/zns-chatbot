@@ -530,8 +530,8 @@ async def create_server(config: Config, base_app):
     app = tornado.web.Application([
         (r"/fit_frame", FitFrameHandler, {"app": base_app}),
         (r"/get_compensations", GetCompensationsHandler, {"app": base_app}),
-        # (r"/massage_timetable", MassageTimetablePageHandler, {"app": base_app}),
-        # (r"/massage_timetable_data", MassageTimetableHandler, {"app": base_app}),
+        (r"/massage_timetable", MassageTimetablePageHandler, {"app": base_app}),
+        (r"/massage_timetable_data", MassageTimetableHandler, {"app": base_app}),
         (r"/bot_name", BotNameHandler, {"app": base_app}),
         (r"/auth", AuthHandler, {"app": base_app}),
         (r"/orders", OrdersHandler, {"app": base_app}),

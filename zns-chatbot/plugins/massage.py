@@ -35,9 +35,9 @@ logger.debug(f"ctime {ctime}, ctime msk {ctime_msk}, msk offset {MSK_OFFSET}")
 logger.debug(f"now msk {now_msk()}")
 
 def price_from_length(length:int=1)->int:
-    price = 500*length
-    if length<3:
-        price += 100 * (3 - length)
+    price = 15*length
+    if length<4:
+        price += 5 * (3 - length)
     return price
 
 def min_from_length(length:int =1)->int:

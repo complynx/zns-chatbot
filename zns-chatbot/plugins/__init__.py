@@ -4,7 +4,7 @@ from .auth import Auth
 # from .food import Food
 from .user_echo import UserEcho
 from .orders import Orders
-# from .massage import MassagePlugin
+from .massage import MassagePlugin
 
 plugins = [
     Auth,
@@ -13,5 +13,5 @@ plugins = [
     # Food,
     UserEcho,
     Orders,
-    # MassagePlugin
+    MassagePlugin
 ]

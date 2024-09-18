@@ -96,28 +96,22 @@ class Config(BaseSettings):
     massages: Massages = Massages()
     parties: list[Party] = [
         Party(
-            start=datetime(2024, 6, 12, 16),
-            end=datetime(2024, 6, 13, 6),
-            massage_tables=1
+            start=datetime(2024, 9, 26, 20, 30),
+            end=datetime(2024, 9, 27, 1, 30),
         ),
         Party(
-            start=datetime(2024, 6, 13, 18),
-            end=datetime(2024, 6, 13, 23),
-            is_open=True
-        ),
-        Party(
-            start=datetime(2024, 6, 14, 20),
-            end=datetime(2024, 6, 15, 6),
+            start=datetime(2024, 9, 27, 20),
+            end=datetime(2024, 9, 28, 5),
             massage_tables=3
         ),
         Party(
-            start=datetime(2024, 6, 15, 13),
-            end=datetime(2024, 6, 16, 6),
+            start=datetime(2024, 9, 28, 16),
+            end=datetime(2024, 9, 29, 5),
             massage_tables=3
         ),
         Party(
-            start=datetime(2024, 6, 16, 13),
-            end=datetime(2024, 6, 17, 6),
+            start=datetime(2024, 9, 29, 16),
+            end=datetime(2024, 9, 30, 4),
             massage_tables=3
         )
     ]
