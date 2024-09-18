@@ -37,7 +37,7 @@ logger.debug(f"now msk {now_msk()}")
 def price_from_length(length:int=1)->int:
     price = 15*length
     if length<4:
-        price += 5 * (3 - length)
+        price += 5 * (4 - length)
     return price
 
 def min_from_length(length:int =1)->int:
