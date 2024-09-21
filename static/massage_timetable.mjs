@@ -110,6 +110,7 @@ fetch("./massage_timetable_data?"+ IDQ()).then(r=> r.json()).then(timetable_data
     for(let specialist_id in timetable_data.specialists) {
         let specialist = timetable_data.specialists[specialist_id];
         specialist.id = parseInt(specialist_id);
+        timetable_data.specialists[specialist.id] = specialist;
         if((Telegram.WebApp?.initDataUnsafe?.user?.id ?? -1) == specialist.id) {
             specialist.myself = true;
         }
@@ -143,7 +144,7 @@ fetch("./massage_timetable_data?"+ IDQ()).then(r=> r.json()).then(timetable_data
             console.error("massage outside party time", massage);
             continue;
         }
-        let specialist = timetable_data.specialists[massage.specialist];
+        let specialist = timetable_data.specialists[parseInt(massage.specialist)];
         if(!specialist){
             console.error("massage specialist not found", massage);
             continue;

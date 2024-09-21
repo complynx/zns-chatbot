@@ -80,7 +80,7 @@ class Specialist:
     user = None
     def __init__(self, base: 'MassagePlugin', masseur_id: int, user = None):
         self.base = base
-        self.id = masseur_id
+        self.id = int(masseur_id)
         self.language_code = "en"
         self._set_user(user)
 
@@ -1254,10 +1254,10 @@ class MassagePlugin(BasePlugin):
                     "name": client_user_name(massage.client),
                     "id": massage.client["user_id"]
                 },
-                "specialist": massage.specialist.id
+                "specialist": int(massage.specialist.id)
             } for massage in massages],
             "specialists": {
-                speaialist.id: {
+                int(speaialist.id): {
                     "name": speaialist.name,
                     "icon": speaialist.icon,
                     "work_hours": [
