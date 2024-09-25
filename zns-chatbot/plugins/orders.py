@@ -35,12 +35,12 @@ class OrdersUpdate:
         self.bot = self.update.bot.id
 
     async def create_order(self, choice):
-        await self.base.food_db.insert_one({
-            "user_id": self.user,
-            "event_number": self.config.event_number,
-            "created_at": datetime.datetime.now(),
-            "choice": choice,
-        })
+        # await self.base.food_db.insert_one({
+        #     "user_id": self.user,
+        #     "event_number": self.config.event_number,
+        #     "created_at": datetime.datetime.now(),
+        #     "choice": choice,
+        # })
         return await self.handle_cq_start()
 
     async def set_choice(self, order_id, choice):
@@ -68,8 +68,8 @@ class OrdersUpdate:
     
     async def handle_cq_pay(self, order_id):
         order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
-        if "proof_file" in order:
-            return await self.handle_cq_start()
+        # if "proof_file" in order:
+        return await self.handle_cq_start()
         total, total_rub = self.get_order_total(order)
         admins_be = await self.base.base_app.users_collection.find({
             "bot_id": self.bot,
@@ -102,6 +102,7 @@ class OrdersUpdate:
         )
 
     async def handle_cq_cash(self, order_id, admin_id):
+        return await self.handle_cq_start()
         await self.base.food_db.update_one({
             "_id": ObjectId(order_id),
         }, {
@@ -173,21 +174,21 @@ class OrdersUpdate:
                     name=order["choice"]["customer"],
                 ), web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}")))])
         if current_order is not None:
-            btns.append([InlineKeyboardButton(self.l(
-                "orders-order-pay-button",
-            ), callback_data=f"{self.base.name}|pay|{str(order['_id'])}")])
-            btns.append([InlineKeyboardButton(
-                self.l("orders-edit-button"),
-                web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}"))
-            )])
+            # btns.append([InlineKeyboardButton(self.l(
+            #     "orders-order-pay-button",
+            # ), callback_data=f"{self.base.name}|pay|{str(order['_id'])}")])
+            # btns.append([InlineKeyboardButton(
+            #     self.l("orders-edit-button"),
+            #     web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}"))
+            # )])
             btns.append([InlineKeyboardButton(self.l(
                 "orders-order-delete-button",
             ), callback_data=f"{self.base.name}|del|{str(order['_id'])}")])
-        else:
-            btns.append([InlineKeyboardButton(
-                self.l("orders-new-button"),
-                web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?locale={self.update.language_code}{debug_param}"))
-            )])
+        # else:
+        #     btns.append([InlineKeyboardButton(
+        #         self.l("orders-new-button"),
+        #         web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?locale={self.update.language_code}{debug_param}"))
+        #     )])
         btns.append([InlineKeyboardButton(
             self.l("orders-close-button"),
             callback_data=f"{self.base.name}|close"
@@ -222,6 +223,7 @@ class OrdersUpdate:
         await self.handle_cq_start()
     
     async def handle_cq_payed(self, order_id):
+        return await self.handle_cq_start()
         await self.base.food_db.update_one({
             "_id": ObjectId(order_id),
         }, {
@@ -371,12 +373,12 @@ class OrdersUpdate:
             "event_number": self.config.event_number,
             "proof_file": { "$exists": False },
         })
-        if order is None:
-            return await self.update.edit_or_reply(
-                self.l("unsupported-message-error"),
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup([]),
-            )
+        # if order is None:
+        return await self.update.edit_or_reply(
+            self.l("unsupported-message-error"),
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([]),
+        )
         doc = self.update.message.document
         await self.base.food_db.update_one({
             "_id": order["_id"]
