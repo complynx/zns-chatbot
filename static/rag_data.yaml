@@ -203,9 +203,28 @@ collection:
   #     - Who is Vladimir Zaitsev?
   #   answer: DJ Koks - Владимир Зайцев, will not be at ZNS but he recorded a special set for us
 
-  # - question: Show me full DJ schedule for each day.
-  #   answer: This is DJ schedule by day (with times they start playing)
-  #   command: dj_schedule
+  - question: Show me full DJ schedule for each day.
+    alt_questions: Who is playing now?
+    answer: |
+      This is DJ schedule
+      | Start time | preparty in Minsk | Friday | Saturday | Saturday dark room | Sunday | Sunday dark room |
+      | ----- | ------------- | ---------- | --------------------- | -------------- | ----------- | ---- |
+      | 16:00 |               |            | Kid                   |                | Finik       |      |
+      | 17:00 |               |            | Kotoff                |                | Zorrito     |      |
+      | 18:00 |               |            | Kriki                 |                | Kotoff      |      |
+      | 19:00 |               |            | Peko                  |                | Vikki       |      |
+      | 20:00 |               | Зинуся     | Koks set              |                | Kriki       |      |
+      | 21:00 | Kotoff        | Remy       | Remy                  |                | Amigo       |      |
+      | 22:00 | K-line        | Peko       | Amigo                 |                | Finik       |      |
+      | 23:00 | Zorrito       | Kid        | Finik (тематический)  |                | Remy        |      |
+      | 00:00 | Peko          | Vikki      | K-line (тематический) |                | Dark Horse  |      |
+      | 01:00 |               | Amigo      | Kaver                 | Set (Bombitta) | Kid         | Set  |
+      | 02:00 |               | Kriki      | Kriki                 | Set            | Peko        | Set  |
+      | 03:00 |               | Dark Horse | Vikki                 | Set            | K-line      |      |
+      | 04:00 |               | Zorrito    | Dark Horse            |                |             |      |
+
+      Example: Nothing at 19:00 on Friday means — there will be no DJ at that moment.
+      Example2: Kid at 23:00 means that at 22:56 it will still be Peko, but from 23:00 and until the next houe it will be Kid.
 
   # - question: Who is playing now?
   #   alt_questions:
@@ -249,20 +268,26 @@ collection:
       Special custom decoration and lighting of the venue, photo zone, face painting,
       morning warm-ups, Dark room, participant gifts (наборы зуконавта|zoukonaut kit)
       No workshops
-      balance of partners and followers ~ 50/50 (currently over 100 people, 51.5% / 48.5%)
+      balance of partners and followers ~ 50/50 (currently 122 people, 52.5% / 47.5%)
       friendly atmosphere for complete relaxation and immersion in the dance flow
 
   - question: What is the participant list for ZNS?
     alt_questions:
     - What is the participant balance?
     answer: |
-      The list of participants is not included in the program, currently over 100 people, 51.5% / 48.5%. 49.5% from Russia, 49.5% from Belarus.
+      The list of participants is not included in the program, currently 122 people, 52.5% / 47.5%. 49.5% from Russia, 49.5% from Belarus.
 
   - question: What awards has ZNS received?
     alt_questions:
     - What is ZNS known for?
     answer: |
       ZNS has been named “event of the year”(“событие года”) twice by the Russian Zouk Awards (in 2019 and 2023)
+
+  - question: Dress code for parties?
+    answer: |
+      Friday beige, sandy, nude colors
+      Saturday legends, mermaids, myths, ethnic
+      Sunday ZNS under white wings, white
 
   - question: Where does the ZNS marathon take place?
     answer: |
