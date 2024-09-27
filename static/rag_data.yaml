@@ -209,7 +209,7 @@ collection:
       - Who is playing at ...?
     answer: |
       This is DJ schedule
-      | Start time | preparty in Minsk | Friday 27 sep | Saturday 28 sep | Saturday dark room | Sunday 29 sep | Sunday dark room |
+      | Start time | preparty in Minsk | Friday 27 sep - Saturday 28 sep | Saturday 28 sep - Sunday 29 sep | Saturday 28 sep - Sunday 29 sep dark room | Sunday 29 sep - Monday 30 sep | Sunday 29 sep - Monday 30 sep dark room |
       | ----- | ------------- | ---------- | --------------------- | -------------- | ----------- | ---- |
       | 16:00 |               |            | Kid                   |                | Finik       |      |
       | 17:00 |               |            | Kotoff                |                | Zorrito     |      |
@@ -227,6 +227,7 @@ collection:
 
       Example: Nothing at 19:00 on Friday means — there will be no DJ at that moment.
       Example2: Kid at 23:00 means that at 22:56 it will still be Peko, but from 23:00 and until the next houe it will be Kid.
+      People usually refer to parties by its starting date, thus for example Kaver at 1:00 would be referred to be DJing at the Saturday, 28'th sep party.
 
   # - question: Who is playing now?
   #   alt_questions:
