@@ -146,11 +146,11 @@ class OrdersHandler(RequestHandlerWithApp):
         l = lambda s: self.app.localization(s, locale=locale_str)
         choice = None
         read_only = True
-        # if order_id != "":
-        #     order = await self.app.orders.order_by_id(order_id)
-        #     if "choice" in order:
-        #         choice = order["choice"]
-        #     read_only="proof_file" in order
+        if order_id != "":
+            order = await self.app.orders.order_by_id(order_id)
+            if "choice" in order:
+                choice = order["choice"]
+            # read_only="proof_file" in order
         lang = "en"
         if locale_str.startswith("ru"):
             lang = "ru"

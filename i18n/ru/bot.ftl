@@ -62,6 +62,7 @@ orders-next-button-text = Далее
 orders-new-button = Сделать заказ
 orders-order-pay-button = Оплата
 orders-order-button = {$created}|{$name}
+orders-order-unpaid-button = (неоплачен){$created}|{$name}
 orders-order-delete-button = Очистить заказ
 orders-pay-cancel = Отменить
 orders-payment-cash-requested =

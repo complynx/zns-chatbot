@@ -177,6 +177,11 @@ class OrdersUpdate:
             # btns.append([InlineKeyboardButton(self.l(
             #     "orders-order-pay-button",
             # ), callback_data=f"{self.base.name}|pay|{str(order['_id'])}")])
+            btns.append([InlineKeyboardButton(self.l(
+                "orders-order-unpaid-button",
+                created=order["created_at"].strftime("%d.%m"),
+                name=order["choice"]["customer"],
+            ), web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}")))])
             # btns.append([InlineKeyboardButton(
             #     self.l("orders-edit-button"),
             #     web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}"))
