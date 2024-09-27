@@ -204,7 +204,9 @@ collection:
   #   answer: DJ Koks - Владимир Зайцев, will not be at ZNS but he recorded a special set for us
 
   - question: Show me full DJ schedule for each day.
-    alt_questions: Who is playing now?
+    alt_questions:
+      - Who is playing now?
+      - Who is playing at ...?
     answer: |
       This is DJ schedule
       | Start time | preparty in Minsk | Friday 27 sep | Saturday 28 sep | Saturday dark room | Sunday 29 sep | Sunday dark room |
