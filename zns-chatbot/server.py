@@ -192,19 +192,19 @@ class OrdersHandler(RequestHandlerWithApp):
 
             if order_id == "":
                 logger.info(f"creating order for {user['id']}")
-                await self.app.orders.create_order(user['id'], choice)
+                # await self.app.orders.create_order(user['id'], choice)
                 return
-            order = await self.app.orders.order_by_id(order_id)
-            if order is None:
-                self.set_status(404)
-                logger.info("order not found")
-                return
-            if order["user_id"] != user["id"]:
-                self.set_status(403)
-                logger.error(f"user ID doesn't match")
-                return
-            logger.info(f"updating order {order_id} for {user['id']}")
-            await self.app.orders.set_choice(order, choice)
+            # order = await self.app.orders.order_by_id(order_id)
+            # if order is None:
+            #     self.set_status(404)
+            #     logger.info("order not found")
+            #     return
+            # if order["user_id"] != user["id"]:
+            #     self.set_status(403)
+            #     logger.error(f"user ID doesn't match")
+            #     return
+            # logger.info(f"updating order {order_id} for {user['id']}")
+            # await self.app.orders.set_choice(order, choice)
 
             self.set_status(200)
             self.write({'message': 'order saved'})
