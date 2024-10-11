@@ -55,12 +55,13 @@ class ServerSettings(BaseSettings):
 class Photo(BaseSettings):
     frame_size: int = Field(1000)
     face_expand: float = Field(5)
-    face_offset_y: float = Field(0.2)
-    face_offset_x: float = Field(0)
-    frame_file: str = Field("frame/frame.png")
-    flare_file: str = Field("frame/flare.png")
+    face_offset_y: float = Field(-0.2)
+    face_offset_x: float = Field(0.2)
+    frame_file: str = Field("frame/frame_vibes.png")
+    # flare_file: str = Field("frame/flare.png")
     quality: int = Field(90)
-    cover_file: str = Field("cover/ZNS2024_2.jpg")
+    # cover_file: str = Field("cover/ZNS2024_2.jpg")
+    cover_file: str = Field("")
 
 class Orders(BaseSettings):
     deadline: date = Field(date(2024, 6, 7))

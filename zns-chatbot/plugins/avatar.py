@@ -30,14 +30,14 @@ def async_thread(func):
     return wrapper
 
 @async_thread
-def join_images(a, b, c):
+def join_images(a, b):
     a = a.convert('RGBA')
     b = b.convert('RGBA')
-    c = c.convert('RGBA')
+    # c = c.convert('RGBA')
     joiner = Image.new('RGBA', a.size)
     joiner.alpha_composite(a)
     joiner.alpha_composite(b)
-    joiner = ImageChops.screen(joiner, c)
+    # joiner = ImageChops.screen(joiner, c)
 
     return joiner.convert('RGB')
 
@@ -244,29 +244,29 @@ class Avatar(BasePlugin):
         with Image.open(file_path) as img:
             resized_avatar = await resize_faces(img, self.config)
             with Image.open(self.config.photo.frame_file) as frame:
-                with Image.open(self.config.photo.flare_file) as flare:
-                    resized_frame = await resize_basic(frame, self.config.photo.frame_size)
-                    resized_flare = await resize_basic(flare, self.config.photo.frame_size)
+                # with Image.open(self.config.photo.flare_file) as flare:
+                resized_frame = await resize_basic(frame, self.config.photo.frame_size)
+                # resized_flare = await resize_basic(flare, self.config.photo.frame_size)
 
-                    final = await join_images(resized_avatar, resized_frame, resized_flare)
+                final = await join_images(resized_avatar, resized_frame)
 
-                    final_name = f"{file_path}_framed.jpg"
-                    final.save(final_name, quality=self.config.photo.quality, optimize=True)
-                    locale = tgUpdate.effective_user.language_code
-                    await tgUpdate.message.reply_document(
-                        final_name,
-                        filename="avatar.jpg",
-                        reply_markup=InlineKeyboardMarkup([[
-                            InlineKeyboardButton(
-                                update.l("avatar-custom-crop"),
-                                web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}"))
-                            )
-                        ]]),
-                    )
-                    if os.path.isfile(self.config.photo.cover_file):
-                        await tgUpdate.message.reply_document(
-                            self.config.photo.cover_file,
-                            filename="cover.jpg",
-                            caption=update.l("cover-caption-message")
+                final_name = f"{file_path}_framed.jpg"
+                final.save(final_name, quality=self.config.photo.quality, optimize=True)
+                locale = tgUpdate.effective_user.language_code
+                await tgUpdate.message.reply_document(
+                    final_name,
+                    filename="avatar.jpg",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton(
+                            update.l("avatar-custom-crop"),
+                            web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}"))
                         )
+                    ]]),
+                )
+                if os.path.isfile(self.config.photo.cover_file):
+                    await tgUpdate.message.reply_document(
+                        self.config.photo.cover_file,
+                        filename="cover.jpg",
+                        caption=update.l("cover-caption-message")
+                    )
 

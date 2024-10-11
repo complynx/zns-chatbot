@@ -519,8 +519,8 @@ async def create_server(config: Config, base_app):
             path_part = self.parse_url_path(path)
             if path_part == "frame":
                 self.abs_path = os.path.abspath(config.photo.frame_file)
-            elif path_part == "flare":
-                self.abs_path = os.path.abspath(config.photo.flare_file)
+            # elif path_part == "flare":
+            #     self.abs_path = os.path.abspath(config.photo.flare_file)
             else:
                 self.abs_path = await base_app.avatar.get_file(path_part)
             return await super().get(path, include_body)
