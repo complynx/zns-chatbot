@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-slim-buster
+FROM python:3.13-slim
 
 RUN pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cpu
 
@@ -15,23 +15,8 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set the working directory to /app
-WORKDIR /app
-
-# Copy the requirements file or setup.py into the container at /app
-COPY setup.py /app
-
-# Install any needed packages specified in setup.py
-RUN python setup.py install \
-    # Remove compiler and related build tools after installation
-    && apt-get purge -y --auto-remove cmake build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy the current directory contents into the container at /app
 COPY . /app
-
-# Bootstrap RAG model
-RUN python -m zns-chatbot.plugins.assistant
 
 # Make port 80 available to the world outside this container
 EXPOSE 80

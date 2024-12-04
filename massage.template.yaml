@@ -1,9 +1,0 @@
-masseurs:
-  1234: Иван Иванов 👨
-
-massage_types:
-  - name: тип массажа
-    duration: "20:00"
-    price: 500
-
-buffer_time: '5:00'

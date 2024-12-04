@@ -1,0 +1,128 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zns_chatbot"
+version = "0.4.0"
+description = "ZNS Chat bot"
+authors = [
+    { name = "Daniil Drizhuk", email = "d.drizhuk@gmail.com" }
+]
+license = { text = "MIT" }
+dependencies = [
+    "pydantic>=2.10",
+    "pydantic-settings[yaml]>=2.6",
+]
+readme = "README.md"
+requires-python = ">=3.13"
+
+[project.optional-dependencies]
+windows = ["certifi-win32"]  # to use windows certificates
+dev = [ # don't forget to mirror some of these to tox.ini
+    "pytest>=8.0",  # For running tests
+    "pytest-asyncio>=0.24.0",  # For running async tests
+    "tox>=4.23",     # For testing automation
+    "mypy>=1.13",    # For type checking
+    "black>=24.10",  # For code formatting
+    "ruff>=0.7",   # For linting
+]
+
+[tool.setuptools]
+package-dir = { "" = "zns_chatbot" }
+
+[tool.setuptools.packages.find]
+where = ["zns_chatbot"]
+
+[tool.tox]
+requires = ["tox>=4.23"]
+env_list = ["py313", "lint", "type", "format"]
+isolated_build = true
+
+[tool.tox.env]
+[tool.tox.env.py313]
+description = "Run tests with pytest"
+deps = ["pytest", "pytest-cov", "pytest-asyncio"]
+commands = [["pytest","-vv"]]
+
+[tool.tox.env.lint]
+description = "Run linter checks"
+package = "skip"  # Skip installing the package
+deps = ["ruff"]
+commands = [["ruff","check","zns_chatbot/","tests/"]]
+
+[tool.tox.env.format]
+description = "Run code formatting checks"
+package = "skip"
+deps = ["black"]
+commands = [["black","--check","zns_chatbot/"]]
+
+[tool.tox.env.type]
+description = "Run type-checking"
+package = "skip"
+deps = ["mypy"]
+commands = [["mypy","zns_chatbot/"]]
+
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+
+[tool.mypy]
+strict = true
+
+[tool.ruff]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".github",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+line-length = 88
+indent-width = 4
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "Q", "S"]
+ignore = []
+exclude = []
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**.py" = ["S"]
+
+[tool.ruff.format]
+exclude = ["*.pyi"]
+
+[tool.isort]
+profile = "black"
+
+[tool.pylint]
+load-plugins = ["pylint.extensions.mccabe"]
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
