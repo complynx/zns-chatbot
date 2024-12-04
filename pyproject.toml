@@ -18,14 +18,13 @@ readme = "README.md"
 requires-python = ">=3.13"
 
 [project.optional-dependencies]
-windows = ["certifi-win32"]  # to use windows certificates
 dev = [ # don't forget to mirror some of these to tox.ini
-    "pytest>=8.0",  # For running tests
+    "pytest>=8.3",  # For running tests
     "pytest-asyncio>=0.24.0",  # For running async tests
     "tox>=4.23",     # For testing automation
     "mypy>=1.13",    # For type checking
     "black>=24.10",  # For code formatting
-    "ruff>=0.7",   # For linting
+    "ruff>=0.8",   # For linting
 ]
 
 [tool.setuptools]
