@@ -18,6 +18,11 @@ class Party(BaseSettings):
     is_open: bool = Field(False)
     massage_tables: int = Field(0)
 
+class PassesSettings(BaseSettings):
+    amount_cap_per_role: int = Field(20)
+    payment_admin: int = Field(-1)
+    sell_start: datetime = Field(datetime(2025, 1, 24, 18, 45))
+
 class TelegramSettings(BaseSettings):
     token: SecretStr = Field()
     admins: set[int] = Field({379278985})
@@ -90,6 +95,7 @@ class Config(BaseSettings):
     localization: LocalizationSettings = LocalizationSettings()
     mongo_db: MongoDB = MongoDB()
     openai: OpenAI = OpenAI()
+    passes: PassesSettings = PassesSettings()
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
     food: Food = Food()

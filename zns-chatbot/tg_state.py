@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+from typing import Any
 from motor.core import AgnosticCollection
 from telegram import (
     Bot,
@@ -20,6 +22,8 @@ import logging
 from .config import Config
 
 logger = logging.getLogger(__name__)
+
+INPUT_TIMEOUT=300  # 5 min
 
 class TGState:
     state: dict
@@ -115,20 +119,32 @@ class TGState:
             }
         })
     
-    async def require_input(self, plugin_name: str, plugin_callback_name: str, data):
+    async def require_input(self, plugin_name: str, plugin_callback_name: str, data: Any,
+            timeout_callback: str|None = None,
+            timeout_time: float = INPUT_TIMEOUT,
+        ):
         logger.debug(f"requested text input from user {self.user}")
         self.state["state"] = "waiting_text"
         self.state["plugin"] = plugin_name
         self.state["plugin_callback"] = plugin_callback_name
         self.state["plugin_data"] = data
+        if timeout_callback is not None:
+            self.state["timeout_callback"] = timeout_callback
+            self.state["deadline"] = datetime.now() + timedelta(seconds=timeout_time)
         await self.save_state()
 
-    async def require_anything(self, plugin_name: str, plugin_callback_name: str, data):
+    async def require_anything(self, plugin_name: str, plugin_callback_name: str, data: Any,
+            timeout_callback: str|None = None,
+            timeout_time: float = INPUT_TIMEOUT,
+        ):
         logger.debug(f"requested everything from user {self.user}")
         self.state["state"] = "waiting_everything"
         self.state["plugin"] = plugin_name
         self.state["plugin_callback"] = plugin_callback_name
         self.state["plugin_data"] = data
+        if timeout_callback is not None:
+            self.state["timeout_callback"] = timeout_callback
+            self.state["deadline"] = datetime.now() + timedelta(seconds=timeout_time)
         await self.save_state()
     
     async def send_chat_action(self, chat_id=None, action=ChatAction.TYPING):

@@ -37,6 +37,7 @@ import datetime
 logger = logging.getLogger(__name__)
 
 CROPPER = 1
+DEADLINE_TICK = 200
 
 def user_print_name(user: User) -> str:
     if user.full_name != "":
@@ -46,7 +47,8 @@ def user_print_name(user: User) -> str:
 async def start(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     logger.info(f"start called: {update.effective_user}")
-    l = lambda s: context.application.base_app.localization(s, locale=update.effective_user.language_code)
+    def l(s):  # noqa: E743
+        return context.application.base_app.localization(s, locale=update.effective_user.language_code)
 
     if context.application.base_app.users_collection is not None:
         try:
@@ -277,6 +279,28 @@ class TGUpdate(TGState):
         except Exception as e:
             logger.error("Failed to parse callback query: %s", e, exc_info=1)
 
+class TGDeadline(TGState):
+    def __init__(self, user: int, app, plugins, deadline_state: dict) -> None:
+        super().__init__(
+            user,
+            app,
+        )
+        self._deadline_state = deadline_state
+        self._plugins = plugins
+    
+    async def process(self):
+        try:
+            user = await self.get_user()
+            if user is not None and "language_code" in user:
+                self.language_code = user["language_code"]
+
+            logger.debug(f"state timeout for user {self.user}")
+            plugin = self._plugins[self._deadline_state["plugin"]]
+            cb = getattr(plugin, self._deadline_state["timeout_callback"], None)
+            await cb(self, self._deadline_state["plugin_data"])
+        except Exception as e:
+            logger.error("Failed to process TGDeadline: %s", e, exc_info=1)
+
 class TGApplication(Application):
     base_app = None
     config: Config
@@ -286,6 +310,40 @@ class TGApplication(Application):
         self.base_app = base_app
         self.config = base_config
         self.plugins = chat_plugins
+
+async def deadline_cleaner_task(app, plugins):
+    from asyncio import sleep
+    from motor.core import AgnosticCollection
+    user_db: AgnosticCollection = app.users_collection
+    while True:
+        try:
+            await sleep(DEADLINE_TICK)
+            now = datetime.datetime.now()
+            async for user in user_db.find({
+                "bot_id": app.bot.bot.id,
+                "state.deadline": {"$lt": now},
+            }):
+                result = await user_db.update_one({
+                    "bot_id": app.bot.bot.id,
+                    "user_id": user["user_id"],
+                    "state.state": user["state"]["state"],
+                    "state.deadline": {
+                        "$lte": user["state"]["deadline"] + datetime.timedelta(seconds=1),
+                        "$gte": user["state"]["deadline"] - datetime.timedelta(seconds=1),
+                    }
+                },
+                {
+                    "$set": {
+                        "state": {
+                            "state": ""
+                        }
+                    }
+                })
+                if result.modified_count > 0:
+                    d = TGDeadline(user["user_id"], app, plugins, user["state"])
+                    asyncio.create_task(d.process())
+        except Exception as e:
+            logger.error(f"error in deadline_cleaner_task: {e}", exc_info=1)
         
 async def check_startup_actions(app):
 #     from asyncio import sleep
@@ -356,9 +414,9 @@ async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
     }).token(token=config.telegram.token.get_secret_value()).build()
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.ALL, parse_message))
-    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, parse_message))
-    application.add_handler(CallbackQueryHandler(parse_callback_query, pattern=f".*"))
+    application.add_handler(MessageHandler(filters.ChatType.PRIVATE, parse_message))
+    application.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA & filters.ChatType.PRIVATE, parse_message))
+    application.add_handler(CallbackQueryHandler(parse_callback_query, pattern=".*"))
     application.add_error_handler(error_handler)
 #log: ["[Telegram.WebView] > postEvent","web_app_data_send",{"data":"{\"avatar_result\":\"BQACAgIAAxkBAAIEaWX4mn7_AvMKjlPV5_NlehFRlCnbAAKWSQACYmrBS1Z671_bqZQLNAQ.jpg0.20488621038131738\"}"}]
     try:
@@ -370,6 +428,7 @@ async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
 
         await app.storage.refresh(application.bot.id)
         asyncio.create_task(check_startup_actions(app))
+        asyncio.create_task(deadline_cleaner_task(app, plugins))
         yield application
     finally:
         app.bot = None
