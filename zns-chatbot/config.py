@@ -22,6 +22,9 @@ class PassesSettings(BaseSettings):
     amount_cap_per_role: int = Field(20)
     payment_admin: int = Field(-1)
     sell_start: datetime = Field(datetime(2025, 1, 24, 18, 45))
+    thread_channel: int|str = Field("")
+    thread_id: int|None = Field(None)
+    thread_locale: str = Field("ru")
 
 class TelegramSettings(BaseSettings):
     token: SecretStr = Field()
@@ -132,7 +135,7 @@ class Config(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> Tuple[PydanticBaseSettingsSource, ...]:
-        return env_settings, YamlConfigSettingsSource(settings_cls), init_settings, dotenv_settings, file_secret_settings
+        return env_settings, YamlConfigSettingsSource(settings_cls, yaml_file_encoding="utf-8"), init_settings, dotenv_settings, file_secret_settings
 
 def full_link(app, link):
     link = f"{app.config.server.base}{link}"

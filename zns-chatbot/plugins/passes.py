@@ -408,19 +408,23 @@ class PassUpdate:
 
     async def handle_cq_pass_role(self, role: str):
         new_role = "leader" if role.startswith("l") else "follower"
+        u_pass = {
+            "role": new_role,
+            "state": "waitlist",
+            "date_created": now_msk(),
+        }
         await self.base.user_db.update_one({
             "user_id": self.update.user,
             "bot_id": self.bot
         }, {
             "$set": {
-                PASS_KEY: {
-                    "role": new_role,
-                    "state": "waitlist",
-                    "date_created": now_msk(),
-                },
+                PASS_KEY: u_pass,
                 "role": new_role,
             }
         })
+        user = await self.get_user()
+        keys = dict(u_pass)
+        keys["name"] = user["legal_name"]
         await self.update.edit_or_reply(
             self.l(
                 "passes-pass-role-saved",
@@ -429,6 +433,24 @@ class PassUpdate:
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([]),
         )
+        if self.base.config.passes.thread_channel != "":
+            try:
+                ch = self.base.config.passes.thread_channel
+                if isinstance(ch, str):
+                    ch = "@" + ch
+                logger.debug(f"chat id: {ch}, type {type(ch)}")
+                await self.base.bot.send_message(
+                    chat_id=ch,
+                    message_thread_id=self.base.config.passes.thread_id,
+                    text=self.base.base_app.localization(
+                        "passes-announce-user-registered",
+                        args=keys,
+                        locale=self.base.config.passes.thread_locale,
+                    ),
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception as e:
+                logger.error(f"Exception while sending message to chat: {e}", exc_info=1)
         
         await self.base.recalculate_queues()
 

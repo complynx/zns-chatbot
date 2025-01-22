@@ -287,13 +287,15 @@ passes-adm-payment-proof-received =
     Their pass price: {$price} ₽
     order is in the name <i>{$name}</i>. Confirmation required.
     <b>Attention</b>, do not mark proof as rejected, wait a bit and try to find the payment first.
+passes-announce-user-registered =
+    {$name} applied for a {$role} pass!
 passes-button-cancel = ❌ Cancel ⚠️
 passes-button-change-name = 🏷 Change name
 passes-button-exit = 🚪 Exit
 passes-button-pay = 💸 Payment proof
 passes-added-to-waitlist =
     Hello, <i>{$name}</i>!
-    Unfortunately, all the passes are currently sold out. However, you’ve been added to the waiting list for a {$role} Zouk Non Stop pass.
+    Unfortunately, all the passes are currently sold out. However, you’ve been added to the waiting list for the next {$role} Zouk Non Stop pass.
     
     You can:
     - Cancel your spot (note that this will permanently remove you from the waitlist)
@@ -372,7 +374,7 @@ passes-name-timeout =
 passes-payment-proof-wrong-data =
     I was expecting a PDF file or an image as proof of payment, but this message doesn’t seem to match that.
     Sorry about the confusion.
-    To try again, please use the /passes command and submit the correct file or image.
+    To try again, please use the /passes command and submit a PDF file or an image.
 passes-payment-proof-forwarded =
     I’ve sent your payment proof to our administrators for verification. They will review it, and I’ll update you with the result soon.
     If you need to view your pass details in the meantime, use the /passes command.
