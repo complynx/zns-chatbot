@@ -450,7 +450,7 @@ class MassageRecord:
     def id(self):
         return str(self.record["_id"])
 
-def split_list(lst: list, chunk: int):
+def split_list(lst: list, chunk: int) -> list[list]:
     result = []
     for i in range(0, len(lst), chunk):
         sublist = lst[i:i+chunk]

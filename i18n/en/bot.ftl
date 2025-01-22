@@ -275,4 +275,137 @@ massage-start-message =
 massage-successfully-created = Massage session was successfully booked.
 massage-unfinished = Unfinished booking
 massage-your-boookings = Your bookings:
+
+passes-adm-payment-proof-accept-button = ✅ Accept
+passes-adm-payment-proof-reject-button = ❌ Reject
+passes-adm-payment-proof-accepted =
+    Payment for {$role} pass from user {$link} for <i>{$name}</i> is confirmed.
+passes-adm-payment-proof-rejected =
+    Payment for {$role} pass from user {$link} for <i>{$name}</i> is confirmed.
+passes-adm-payment-proof-received =
+    User {$link} sent payment for a {$role} pass.
+    Their pass price: {$price} ₽
+    order is in the name <i>{$name}</i>. Confirmation required.
+    <b>Attention</b>, do not mark proof as rejected, wait a bit and try to find the payment first.
+passes-announce-user-registered =
+    {$name} applied for a {$role} pass!
+passes-button-cancel = ❌ Cancel ⚠️
+passes-button-change-name = 🏷 Change name
+passes-button-exit = 🚪 Exit
+passes-button-pay = 💸 Payment proof
+passes-added-to-waitlist =
+    Hello, <i>{$name}</i>!
+    Unfortunately, all the passes are currently sold out. However, you’ve been added to the waiting list for the next {$role} Zouk Non Stop pass.
+    
+    You can:
+    - Cancel your spot (note that this will permanently remove you from the waitlist)
+    - Change the name associated with your spot
+    
+    Stay tuned — if a pass becomes available, you’ll be notified!
+passes-pass-edit-waitlist=
+    Hello, <i>{$name}</i>!
+    You are currently on the waiting list for a {$role} Zouk Non Stop pass.
+    
+    You can:
+    - Cancel your spot (this will remove you from the waitlist permanently)
+    - Change the name associated with your spot
+    
+    We’ll notify you as soon as a pass becomes available!
+passes-pass-assigned =
+    Hello, <i>{$name}</i>!
+    Congratulations! A {$role} Zouk Non Stop pass has just been assigned to you.
+    
+    This pass is not officially yours yet. You must complete the payment within 6 days of the assignment.
+    The current price is <code>{$price}</code> ₽. Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
+    
+    If you do not pay within this period or fail to send proof of payment, the pass will be offered to someone else.
+    Please act quickly to secure your spot!
+passes-pass-edit-assigned=
+    Hello, <i>{$name}</i>!
+    A {$role} Zouk Non Stop pass has been assigned to you.
+    
+    To claim it, you need to complete the payment within 6 days of the assignment.
+    The current price is <code>{$price}</code> ₽. Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
+    
+    You can use this interface to:
+    - Edit your name
+    - Upload proof of payment
+    - Cancel the assignment
+    
+    Please note that cancellations or missing the payment deadline are irreversible.
+passes-pass-edit-payed=
+    Hello, <i>{$name}</i>!
+    Congratulations! The {$role} Zouk Non Stop pass is now officially yours as you have successfully paid for it.
+    You can change the name associated with the pass if necessary.
+    If you need to return the pass and request a refund, please contact the administrator.
+passes-pass-role-saved =
+    You've chosen pass role {$role}.
+passes-pass-create-cancel=
+    If you want to register for a pass, you can come back using /passes command.
+passes-pass-exit=
+    If you need to view your pass, provide payment proof or change name, you can get back by calling /passes command again.
+passes-pass-cancelled=
+    Your pass assignment has been cancelled. If you want to get back again, you can call /passes command any time.
+passes-pass-cancel-failed =
+    Cancellation failed. Either the pass was marked payed or was already cancelled.
+passes-payment-request-callback-message =
+    You need to pay <code>{$price}</code> ₽.
+    Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
+    Scroll down to send the proof of payment.
+passes-payment-request-waiting-message =
+    You need to pay <code>{$price}</code> ₽.
+    Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
+    Please send the proof of payment in PDF format or as an image.
+passes-payment-proof-timeout =
+    I haven’t received your payment proof in time. Please use the /passes command to try again.
+passes-payment-proof-cancelled =
+    If you need to resubmit your payment proof or view your pass details, use the /passes command.
+passes-payment-proof-accepted =
+    Hello, <i>{$name}</i>!
+    Congratulations! The {$role} Zouk Non Stop pass is now officially yours, as your payment has been successfully approved by the administrator.
+    You can view your pass details by using the /passes command.
+passes-payment-proof-rejected =
+    Hello, <i>{$name}</i>!
+    Unfortunately, your payment proof was rejected by the administrator.
+    You can view your pass details or submit another proof by using the /passes command.
+    Don’t wait too long — secure your spot before it’s gone!
+passes-name-timeout =
+    I haven’t received your name in time. Please use the /passes command to try again.
+passes-payment-proof-wrong-data =
+    I was expecting a PDF file or an image as proof of payment, but this message doesn’t seem to match that.
+    Sorry about the confusion.
+    To try again, please use the /passes command and submit a PDF file or an image.
+passes-payment-proof-forwarded =
+    I’ve sent your payment proof to our administrators for verification. They will review it, and I’ll update you with the result soon.
+    If you need to view your pass details in the meantime, use the /passes command.
+passes-sell-not-started =
+    Please be patient; sales have not opened yet.
+passes-pass-create-start-message =
+    First, I need some information from you.
+    Scroll down and enter your full name as it appears in your passport.
+passes-legal-name-request-message =
+    First, I need some information from you.
+    Please enter your full name as it appears in your passport.
+    
+    <i>By providing your information, you consent to its storage, processing, and use in accordance with our policies.</i>
+passes-legal-name-changed-message =
+    Your legal name is updated: <b>{$name}</b>.
+passes-role-select =
+    You can select a role (not related to the assigned passes):
+passes-role-change-select =
+    You can change your future role (not related to the assigned passes):
+passes-pass-role-select =
+    To continue, please select a role:
+passes-role-button-leader = 🕺 Leader
+passes-role-button-follower = 💃 Follower
+passes-role-button-cancel = ❌ Cancel and exit
+passes-role-saved = Your new role as a {$role} is saved.
+passes-role-exit = To change role again, use command /role
+passes-payment-deadline-close =
+    Warning: Your pass payment deadline is just 1 day away. Act quickly to secure your spot!
+    See /passes for more details.
+passes-payment-deadline-exceeded =
+    Unfortunately, your payment deadline has been exceeded, and the pass is no longer reserved for you.
+    If you would like to try again, use the /passes command.
+
 user-is-restricted = Some actions has been disabled.
