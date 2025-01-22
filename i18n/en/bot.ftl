@@ -293,6 +293,7 @@ passes-button-cancel = ❌ Cancel ⚠️
 passes-button-change-name = 🏷 Change name
 passes-button-exit = 🚪 Exit
 passes-button-pay = 💸 Payment proof
+passes-command-description = Register to ZNS or manage your registration
 passes-added-to-waitlist =
     Hello, <i>{$name}</i>!
     Unfortunately, all the passes are currently sold out. However, you’ve been added to the waiting list for the next {$role} Zouk Non Stop pass.

@@ -27,6 +27,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
     Application,
+    ExtBot
 )
 from .plugins.base_plugin import PRIORITY_NOT_ACCEPTING
 from telegram.constants import ChatAction, ParseMode
@@ -374,17 +375,21 @@ async def check_startup_actions(app):
 #             except Exception as e:
 #                 logger.error("Error in sender: %s", e, exc_info=1)
 #         await app.storage.set("sent_announcement", 1)
-    if not "menu_version" in app.storage or app.storage["menu_version"] != 4:
-        await app.bot.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    new_menu_version = 5
+    if not "menu_version" in app.storage or app.storage["menu_version"] != new_menu_version:
+        bot: ExtBot = app.bot.bot
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
         for lc in ["ru", "en"]:
             def l(s, **kwargs):
                 return app.localization(s, args=kwargs, locale=lc)
-            commands = []
+            commands = [
+                BotCommand("passes", description=l("passes-command-description")),
+            ]
             if lc != "en":
-                await app.bot.bot.set_my_commands(commands,language_code=lc)
+                await bot.set_my_commands(commands,language_code=lc)
             else:
-                await app.bot.bot.set_my_commands(commands)
-        await app.storage.set("menu_version", 4)
+                await bot.set_my_commands(commands)
+        await app.storage.set("menu_version", new_menu_version)
 
 
 async def parse_message(tgupdate: Update, context: CallbackContext):
