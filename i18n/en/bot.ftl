@@ -316,7 +316,7 @@ passes-pass-assigned =
     Hello, <i>{$name}</i>!
     Congratulations! A {$role} Zouk Non Stop pass has just been assigned to you.
     
-    This pass is not officially yours yet. You must complete the payment within 6 days of the assignment.
+    This pass is not officially yours yet. You must complete the payment within 7 days of the assignment.
     The current price is <code>{$price}</code> ₽. Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
     
     If you do not pay within this period or fail to send proof of payment, the pass will be offered to someone else.
@@ -325,7 +325,7 @@ passes-pass-edit-assigned=
     Hello, <i>{$name}</i>!
     A {$role} Zouk Non Stop pass has been assigned to you.
     
-    To claim it, you need to complete the payment within 6 days of the assignment.
+    To claim it, you need to complete the payment within 7 days of the assignment.
     The current price is <code>{$price}</code> ₽. Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
     
     You can use this interface to:

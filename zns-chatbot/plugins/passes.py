@@ -18,8 +18,8 @@ CANCEL_CHR = chr(0xE007F) # Tag cancel
 PASS_KEY = "pass_2025_1"
 CURRENT_PRICE=7900
 TIMEOUT_PROCESSOR_TICK = 3600
-PAYMENT_TIMEOUT=timedelta(days=6)
-PAYMENT_TIMEOUT_NOTIFY=timedelta(days=5)
+PAYMENT_TIMEOUT=timedelta(days=8)
+PAYMENT_TIMEOUT_NOTIFY=timedelta(days=7)
 
 class PassUpdate:
     base: 'Passes'
