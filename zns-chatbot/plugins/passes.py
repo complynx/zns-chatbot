@@ -537,10 +537,10 @@ class PassUpdate:
             PASS_KEY+".state": "waitlist",
         }, {
             "$set": {
-                PASS_KEY+".no_more_passes_notified": now_msk(),
+                PASS_KEY+".no_more_passes_notification_sent": now_msk(),
             }
         })
-        user = self.get_user()
+        user = await self.get_user()
         await self.show_pass_edit(user, user[PASS_KEY], "passes-added-to-waitlist")
 
     async def notify_deadline_close(self):
@@ -656,7 +656,7 @@ class Passes(BasePlugin):
                 selected = await self.user_db.find({
                     "bot_id": self.base_app.bot.bot.id,
                     PASS_KEY + ".state": "waitlist",
-                    PASS_KEY + ".no_more_passes_notified": { "$exists": False },
+                    PASS_KEY + ".no_more_passes_notification_sent": { "$exists": False },
                     PASS_KEY + ".role": role,
                 }).to_list(100)
                 if len(selected) == 0:
