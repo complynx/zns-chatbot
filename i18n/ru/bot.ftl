@@ -449,3 +449,4 @@ passes-payment-deadline-exceeded =
     Если вы хотите попробовать снова, используйте команду /passes.
 
 user-is-restricted = Часть действий была отключена.
+user-is-none = Может запустить /start для начала?

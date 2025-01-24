@@ -410,3 +410,4 @@ passes-payment-deadline-exceeded =
     If you would like to try again, use the /passes command.
 
 user-is-restricted = Some actions has been disabled.
+user-is-none = Maybe run /start first?

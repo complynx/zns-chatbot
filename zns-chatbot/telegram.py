@@ -395,6 +395,8 @@ async def check_startup_actions(app):
 async def parse_message(tgupdate: Update, context: CallbackContext):
     update = TGUpdate(tgupdate, context)
     user = await update.get_user()
+    if user is None:
+        update.reply(update.l("user-is-none"), parse_mode=ParseMode.HTML)
     if "banned" in user:
         return await update.reply(update.l("user-is-restricted"), parse_mode=ParseMode.HTML)
     await update.parse()
