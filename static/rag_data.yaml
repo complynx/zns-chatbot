@@ -37,6 +37,19 @@ collection:
   #     - Kotoff - Кирил Котов, Minsk, Belarus
   #     - Kid - Данил Хасанов, Kazan
   #     (DJ names do not translate)
+  
+  - question: What is /legal_name command?
+    alt_questions:
+      - How to change name?
+    answer: |
+      To change your name for your pass and lisoborie pass, use command "/legal_name"
+  
+  - question: How to buy a pass for ZNS marathon?
+    alt_questions:
+      - How to register for ZNS marathon?
+      - What is /passes command
+    answer: |
+      To register for the next ZNS marathon, use "/passes" command.
 
   - question: Who is Remy?
     alt_questions:
