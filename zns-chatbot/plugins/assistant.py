@@ -78,16 +78,18 @@ spaceship Зукерион — Zoukerion
     @async_thread
     def init_rag_database(self):
         from langchain_huggingface import HuggingFaceEmbeddings
-        from time import time
+        from time import time, sleep
         import os
         start = time()
+        sleep(1)
+        start1 = time()
         self.embeddings = HuggingFaceEmbeddings(
             model_name=EMBEDDING_MODEL,
             cache_folder="models/embeddings",
             model_kwargs={'device': 'cpu', 'trust_remote_code': True},
             encode_kwargs={'normalize_embeddings': False},
         )
-        logger.info(f"initialized embeddings, took {time()-start} seconds")
+        logger.info(f"initialized embeddings, took {time()-start1} seconds")
         start2 = time()
         self.vectorstore = FAISS.load_local(RAG_DATABASE_FOLDER, self.embeddings, RAG_DATABASE_INDEX,allow_dangerous_deserialization=True)
         logger.info(f"initialized RAG database, took {time()-start2} seconds, total {time()-start} seconds")

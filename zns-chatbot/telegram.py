@@ -46,39 +46,45 @@ def user_print_name(user: User) -> str:
     return user.name
 
 async def start(update: Update, context: CallbackContext):
-    """Send a welcome message when the /start command is issued."""
-    logger.info(f"start called: {update.effective_user}")
-    def l(s):  # noqa: E743
-        return context.application.base_app.localization(s, locale=update.effective_user.language_code)
+    asyncio.create_task(start_task(update, context))
 
-    if context.application.base_app.users_collection is not None:
-        try:
-            await context.application.base_app.users_collection.update_one({
-                "user_id": update.effective_user.id,
-                "bot_id": context.bot.id,
-            }, {
-                "$set": {
-                    "username": update.effective_user.username,
-                    "first_name": update.effective_user.first_name,
-                    "last_name": update.effective_user.last_name,
-                    "language_code": update.effective_user.language_code,
-                    "print_name": user_print_name(update.effective_user),
-                },
-                "$inc": {
-                    "starts_called": 1,
-                },
-                "$setOnInsert": {
+async def start_task(update: Update, context: CallbackContext):
+    """Send a welcome message when the /start command is issued."""
+    try:
+        logger.info(f"start called: {update.effective_user}")
+        def l(s):  # noqa: E743
+            return context.application.base_app.localization(s, locale=update.effective_user.language_code)
+
+        if context.application.base_app.users_collection is not None:
+            try:
+                await context.application.base_app.users_collection.update_one({
                     "user_id": update.effective_user.id,
                     "bot_id": context.bot.id,
-                    "bot_username": context.bot.username,
-                    "first_seen": datetime.datetime.now(),
-                    "state": {"state":""},
-                }
-            }, upsert=True)
-        except Exception as e:
-            logger.error(f"mongodb update error: {e}", exc_info=1)
+                }, {
+                    "$set": {
+                        "username": update.effective_user.username,
+                        "first_name": update.effective_user.first_name,
+                        "last_name": update.effective_user.last_name,
+                        "language_code": update.effective_user.language_code,
+                        "print_name": user_print_name(update.effective_user),
+                    },
+                    "$inc": {
+                        "starts_called": 1,
+                    },
+                    "$setOnInsert": {
+                        "user_id": update.effective_user.id,
+                        "bot_id": context.bot.id,
+                        "bot_username": context.bot.username,
+                        "first_seen": datetime.datetime.now(),
+                        "state": {"state":""},
+                    }
+                }, upsert=True)
+            except Exception as e:
+                logger.error(f"mongodb update error: {e}", exc_info=1)
 
-    await update.message.reply_html(l("start-message"))
+        await update.message.reply_html(l("start-message"))
+    except Exception as e:
+        logger.error(f"Exception in start_task: {e}", exc_info=1)
 
 async def error_handler(update, context):
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
@@ -393,23 +399,33 @@ async def check_startup_actions(app):
 
 
 async def parse_message(tgupdate: Update, context: CallbackContext):
-    update = TGUpdate(tgupdate, context)
-    user = await update.get_user()
-    if user is None:
-        update.reply(update.l("user-is-none"), parse_mode=ParseMode.HTML)
-    if "banned" in user:
-        return await update.reply(update.l("user-is-restricted"), parse_mode=ParseMode.HTML)
-    await update.parse()
-    # await context.application.base_app.assistant.reply_to(update.message.text_markdown_v2, update.effective_user.id, update.effective_message.chat_id)
+    asyncio.create_task(parse_message_task(tgupdate, context))
+
+async def parse_message_task(tgupdate: Update, context: CallbackContext):
+    try:
+        update = TGUpdate(tgupdate, context)
+        user = await update.get_user()
+        if user is None:
+            return await update.reply(update.l("user-is-none"), parse_mode=ParseMode.HTML)
+        if "banned" in user:
+            return await update.reply(update.l("user-is-restricted"), parse_mode=ParseMode.HTML)
+        await update.parse()
+    except Exception as e:
+        logger.error(f"Exception in parse_message_task: {e}", exc_info=1)
 
 async def parse_callback_query(tgupdate: Update, context: CallbackContext):
     await tgupdate.callback_query.answer()
-    update = TGUpdate(tgupdate, context)
-    user = await update.get_user()
-    if "banned" in user:
-        return await update.edit_or_reply(update.l("user-is-restricted"), parse_mode=ParseMode.HTML)
-    await update.parse_callback_query()
-    # await context.application.base_app.assistant.reply_to(update.message.text_markdown_v2, update.effective_user.id, update.effective_message.chat_id)
+    asyncio.create_task(parse_callback_query_task(tgupdate, context))
+
+async def parse_callback_query_task(tgupdate: Update, context: CallbackContext):
+    try:
+        update = TGUpdate(tgupdate, context)
+        user = await update.get_user()
+        if "banned" in user:
+            return await update.edit_or_reply(update.l("user-is-restricted"), parse_mode=ParseMode.HTML)
+        await update.parse_callback_query()
+    except Exception as e:
+        logger.error(f"Exception in parse_callback_query_task: {e}", exc_info=1)
 
 @asynccontextmanager
 async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
