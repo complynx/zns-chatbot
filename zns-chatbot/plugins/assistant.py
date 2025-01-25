@@ -6,6 +6,7 @@ from langchain.schema import (
     HumanMessage,
     SystemMessage
 )
+from asyncio import create_task
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -47,7 +48,6 @@ class Assistant(BasePlugin):
     embeddings: Embeddings
 
     def __init__(self, base_app):
-        from asyncio import create_task
         super().__init__(base_app)
         self.chat = ChatOpenAI(
             api_key=self.config.openai.api_key.get_secret_value(),
@@ -112,8 +112,12 @@ spaceship Зукерион — Zoukerion
         return PRIORITY_NOT_ACCEPTING, None
         
     async def handle_message(self, update: TGState):
-        await update.send_chat_action()
-        repl = await self.get_assistant_reply(update.update.message.text_markdown_v2, update.user, update)
+        stopper = Event()
+        create_task(self.send_typing(update, stopper))
+        try:
+            repl = await self.get_assistant_reply(update.update.message.text_markdown_v2, update.user, update)
+        finally:
+            stopper.set()
         await update.reply(repl, parse_mode=None)
     
     async def userinfo(self, update: TGState) -> str:
@@ -166,6 +170,12 @@ spaceship Зукерион — Zoukerion
                         text.append(await attr(update))
         text.append("user info: "+ (await self.userinfo(update)))
         return "\n".join(text)
+
+    async def send_typing(self, update: TGState, stop: Event) -> None:
+        from asyncio import sleep
+        while not stop.is_set():
+            await update.send_chat_action()
+            await sleep(5) # action is sent for 5 seconds
     
     async def get_assistant_reply(self, message: str, user_id: int, update: TGState):
         if not self._database_ready.is_set():
