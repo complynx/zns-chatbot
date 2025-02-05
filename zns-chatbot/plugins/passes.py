@@ -1017,7 +1017,7 @@ class Passes(BasePlugin):
             }):
                 try:
                     upd = await self.create_update_from_user(user["user_id"])
-                    upd.update.reply(
+                    await upd.update.reply(
                         upd.l("passes-promopass-select-role"),
                         parse_mode=ParseMode.HTML,
                         reply_markup=InlineKeyboardMarkup([[
