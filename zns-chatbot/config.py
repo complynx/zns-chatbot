@@ -19,7 +19,7 @@ class Party(BaseSettings):
     massage_tables: int = Field(0)
 
 class PassesSettings(BaseSettings):
-    amount_cap_per_role: int = Field(50)
+    amount_cap_per_role: int = Field(25)
     payment_admin: list[int]|int|None = Field(None)
     sell_start: datetime = Field(datetime(2025, 1, 24, 18, 45))
     thread_channel: int|str = Field("")
