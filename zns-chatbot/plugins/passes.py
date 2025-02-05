@@ -1062,7 +1062,7 @@ class Passes(BasePlugin):
                     upd = await self.create_update_from_user(user["user_id"])
                     await upd.decline_due_deadline()
                     upd = await self.create_update_from_user(user[PASS_KEY]["couple"])
-                    await upd.decline_due_deadline()
+                    await upd.decline_invitation_due_deadline()
                 async for user in self.user_db.find({
                         "bot_id": self.bot.id,
                         PASS_KEY + ".state": "assigned",
