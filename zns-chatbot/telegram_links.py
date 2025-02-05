@@ -3,11 +3,15 @@ def client_user_link_url(user) -> str:
     return f"https://t.me/{user['username']}" if "username" in user and user["username"] is not None and \
         user["username"] != "" else f"tg://user?id={user['user_id']}"
 
-def client_user_name(user, name:str|None=None)->str:
+def client_user_name(user, name:str|None=None, language_code: str|None = None)->str:
     if name is not None:
         return name
     name = ""
-    if "print_name" in user:
+    if language_code is not None and "inner_name_"+language_code in user:
+        name = user["inner_name_"+language_code]
+    elif "inner_name_en" in user:
+        name = user["inner_name_en"]
+    elif "print_name" in user:
         name = user['print_name']
     else:
         fn = user['first_name'] if 'first_name' in user and isinstance(user["first_name"], str) else ''
@@ -21,5 +25,5 @@ def client_user_name(user, name:str|None=None)->str:
         name = "???"
     return name
 
-def client_user_link_html(user, name:str|None=None) -> str:
-    return f"<a href=\"{client_user_link_url(user)}\">{client_user_name(user,name)}</a>"
+def client_user_link_html(user, name:str|None=None, language_code: str|None = None) -> str:
+    return f"<a href=\"{client_user_link_url(user)}\">{client_user_name(user,name,language_code)}</a>"
