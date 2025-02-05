@@ -708,11 +708,6 @@ class PassUpdate:
                         self.l("passes-role-button-follower"),
                         callback_data=f"{self.base.name}|pass_role|f"
                     ),
-                ],[
-                    InlineKeyboardButton(
-                        self.l("passes-role-button-cancel"),
-                        callback_data=f"{self.base.name}|pass_exit"
-                    ),
                 ]]),
             )
         elif data != "cmd":
