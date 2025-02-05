@@ -1,14 +1,13 @@
 
 from datetime import timedelta
 import logging
-from bson import ObjectId
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
-from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import CommandHandler, CallbackQueryHandler, filters
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove, MessageOriginUser
 from ..tg_state import TGState
 from motor.core import AgnosticCollection
 from telegram.constants import ParseMode
-from .massage import MSK_OFFSET, now_msk, split_list
+from .massage import now_msk, split_list
 from asyncio import Lock, create_task, sleep
 from ..telegram_links import client_user_link_html, client_user_name
 from random import choice
