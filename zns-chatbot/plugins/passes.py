@@ -552,7 +552,7 @@ class PassUpdate:
         await self.update.reply(self.l("passes-couple-request-message"), reply_markup=markup, parse_mode=ParseMode.HTML)
         await self.update.require_anything(self.base.name, "handle_couple_input", None, "handle_couple_timeout")
     
-    async def handle_couple_timeout(self):
+    async def handle_couple_timeout(self, _data):
         await self.update.reply(
             self.l(
                 "passes-couple-request-timeout",
