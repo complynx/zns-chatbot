@@ -999,21 +999,6 @@ class Passes(BasePlugin):
     
     async def _timeout_processor(self) -> None:
         await sleep(1)
-        try:
-            async for user in self.user_db.find({
-                    "bot_id": self.bot.id,
-                    PASS_KEY: {"$exists": True},
-                    PASS_KEY + ".sent_to_hype_thread": {"$exists": False},
-                }):
-                await self.user_db.update_one({
-                    "user_id": user["user_id"],
-                    "bot_id": self.bot.id,
-                    PASS_KEY: {"$exists": True},
-                }, {"$set":{
-                    PASS_KEY + ".sent_to_hype_thread": now_msk(),
-                }})
-        except Exception as e:
-            logger.error("Exception in Passes._timeout_processor %s", e, exc_info=1)
         while True:
             try:
                 await sleep(TIMEOUT_PROCESSOR_TICK)

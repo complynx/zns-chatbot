@@ -16,11 +16,22 @@ class UserEcho(BasePlugin):
         self.admins = self.config.telegram.admins
         self.user_db = base_app.users_collection
         self._checker = CommandHandler(self.name, self.handle_message)
+        self._checker_gf = CommandHandler("get_file", self.handle_get_file)
 
     def test_message(self, message: Update, state, web_app_data):
         if self._checker.check_update(message) and message.effective_user.id in self.admins:
             return PRIORITY_BASIC, self.handle_message
+        if self._checker_gf.check_update(message) and message.effective_user.id in self.admins:
+            return PRIORITY_BASIC, self.handle_get_file
         return PRIORITY_NOT_ACCEPTING, None
+    
+    async def handle_get_file(self, update: TGState):
+        data = update.message.text.split(" ", maxsplit=1)[1]
+        abs_path = await self.base_app.avatar.get_file(data)
+        await update.message.reply_document(
+            abs_path,
+            filename=data,
+        )
 
     async def handle_message(self, update: TGState):
         data = update.message.text.split(" ", maxsplit=1)[1]
