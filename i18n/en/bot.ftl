@@ -69,7 +69,7 @@ orders-payment-cash-requested =
     Contact {$link} to arrange a personal meeting and pay.
     Total order sum: Br {$total}
     order is in the name <i>{$name}</i>.
-    After cash is collected, the admin will mark your order as payed.
+    After cash is collected, the admin will mark your order as paid.
 orders-payed-button = It's payment proof
 orders-placeholder-first-name=First name
 orders-placeholder-last-name=Last name
@@ -279,13 +279,22 @@ massage-your-boookings = Your bookings:
 passes-adm-payment-proof-accept-button = ✅ Accept
 passes-adm-payment-proof-reject-button = ❌ Reject
 passes-adm-payment-proof-accepted =
-    Payment for {$role} pass from user {$link} for <i>{$name}</i> is confirmed.
+    Payment for {$type ->
+        [couple] couple Zouk Non Stop pass from user {$link} for <i>{$name}</i> as {$role} and {$coupleLink} (<i>{$coupleName}</i>)
+        *[solo] {$role} Zouk Non Stop pass from user {$link} for <i>{$name}</i>
+    } is confirmed.
 passes-adm-payment-proof-rejected =
-    Payment for {$role} pass from user {$link} for <i>{$name}</i> is confirmed.
+    Payment for {$type ->
+        [couple] couple Zouk Non Stop pass from user {$link} for <i>{$name}</i> as {$role} and {$coupleLink} (<i>{$coupleName}</i>)
+        *[solo] {$role} Zouk Non Stop pass from user {$link} for <i>{$name}</i>
+    } is rejected.
 passes-adm-payment-proof-received =
-    User {$link} sent payment for a {$role} pass.
+    User {$link} sent payment for a {$type ->
+        [couple] couple Zouk Non Stop pass for <i>{$name}</i> as {$role} and {$coupleLink} (<i>{$coupleName}</i>)
+        *[solo] {$role} Zouk Non Stop pass for <i>{$name}</i>
+    }.
     Their pass price: {$price} ₽
-    order is in the name <i>{$name}</i>. Confirmation required.
+    Confirmation required.
     <b>Attention</b>, do not mark proof as rejected, wait a bit and try to find the payment first.
 passes-announce-user-registered =
     {$name} applied for a {$role} pass!
@@ -296,7 +305,10 @@ passes-button-pay = 💸 Payment proof
 passes-command-description = Register to ZNS or manage your registration
 passes-added-to-waitlist =
     Hello, <i>{$name}</i>!
-    Unfortunately, all the passes are currently sold out. However, you’ve been added to the waiting list for the next {$role} Zouk Non Stop pass.
+    Unfortunately, all the passes are currently sold out. However, you’ve been added to the waiting list for the next {$type ->
+        [couple] couple Zouk Non Stop pass with you as a {$role} and your couple {$coupleLink}
+        *[solo] {$role} Zouk Non Stop pass
+    }.
     
     You can:
     - Cancel your spot (note that this will permanently remove you from the waitlist)
@@ -305,28 +317,48 @@ passes-added-to-waitlist =
     Stay tuned — if a pass becomes available, you’ll be notified!
 passes-pass-edit-waitlist=
     Hello, <i>{$name}</i>!
-    You are currently on the waiting list for a {$role} Zouk Non Stop pass.
+    You are currently on the waiting list for a {$type ->
+        [couple] couple Zouk Non Stop pass with you as a {$role} and your couple {$coupleLink}
+        *[solo] {$role} Zouk Non Stop pass
+    }.
     
     You can:
     - Cancel your spot (this will remove you from the waitlist permanently)
     - Change the name associated with your spot
     
     We’ll notify you as soon as a pass becomes available!
+passes-pass-edit-waiting-for-couple=
+    Hello, <i>{$name}</i>!
+    You've selected a couple Zouk Non Stop pass as a {$role} and invited {$coupleLink}.
+    They haven't yet answered your invitation.
+    
+    You can:
+    - Cancel your pass
+    - Change it for solo
+    - Change the name associated with your spot
 passes-pass-assigned =
     Hello, <i>{$name}</i>!
-    Congratulations! A {$role} Zouk Non Stop pass has just been assigned to you.
+    Congratulations! A {$type ->
+        [couple] couple Zouk Non Stop pass with you as a {$role} and your couple {$coupleLink}
+        *[solo] {$role} Zouk Non Stop pass
+    } has just been assigned to you.
     
     This pass is not officially yours yet. You must complete the payment within 7 days of the assignment.
-    The current price is <code>{$price}</code> ₽. Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
+    The current price is <code>{$price}</code> ₽. Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banksEn}), contact {$adminLink}.
     
     If you do not pay within this period or fail to send proof of payment, the pass will be offered to someone else.
     Please act quickly to secure your spot!
+passes-pass-cancelled-by-other =
+    Your couple just cancelled the couple pass. Unfortunately, you have to register again using the command /passes.
 passes-pass-edit-assigned=
     Hello, <i>{$name}</i>!
-    A {$role} Zouk Non Stop pass has been assigned to you.
+    A {$type ->
+        [couple] couple Zouk Non Stop pass with you as a {$role} and your couple {$coupleLink}
+        *[solo] {$role} Zouk Non Stop pass
+    } has been assigned to you.
     
     To claim it, you need to complete the payment within 7 days of the assignment.
-    The current price is <code>{$price}</code> ₽. Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
+    The current price is <code>{$price}</code> ₽. Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banksEn}), contact {$adminLink}.
     
     You can use this interface to:
     - Edit your name
@@ -336,11 +368,71 @@ passes-pass-edit-assigned=
     Please note that cancellations or missing the payment deadline are irreversible.
 passes-pass-edit-payed=
     Hello, <i>{$name}</i>!
-    Congratulations! The {$role} Zouk Non Stop pass is now officially yours as you have successfully paid for it.
+    Congratulations! The {$type ->
+        [couple] couple Zouk Non Stop pass with you as a {$role} and your couple {$coupleLink}
+        *[solo] {$role} Zouk Non Stop pass
+    } is now officially yours as you have successfully paid for it.
     You can change the name associated with the pass if necessary.
     If you need to return the pass and request a refund, please contact the administrator.
+passes-error-couple-not-found =
+    Something went wrong and I can't find your couple to proceed with your pass registration.
+    Maybe they cancelled it and my message got lost, I don't know.
+    Please register again if possible using the command /passes.
 passes-pass-role-saved =
     You've chosen pass role {$role}.
+    
+    Do you want a solo pass or a couple pass?
+passes-button-solo = 👤 Solo
+passes-button-couple = 👥 Couple
+passes-choose-admin =
+    Please select the paymet admin for your region or the one you trust the most.
+    Do not change the admin if you've already paid, or change back to the one you've paid.
+passes-couple-request-edit =
+    Please scroll down to select your couple.
+passes-couple-request-message =
+    For a couple pass, I need your couple's account.
+    To send it, simply forward me any message sent by your couple. It can be anything, even a sticker or an emoji, message contents won't be stored or processed.
+    Go to the chat with your couple, select any message and forward it to me.
+passes-couple-request-timeout =
+    I didn't get your couple's message in time. You can try again using /passes command.
+passes-couple-request-cancelled =
+    Couple pass is cancelled. You can try again using /passes command.
+passes-couple-request-wrong-data =
+    I expected a message forwarded from your couple. This doesn’t look like one. You can try again using /passes command.
+passes-couple-request-invitee-payed =
+    Oops, this person is already registered and has a pass. You can try again using /passes command.
+passes-couple-invitation =
+    A user <i>{$coupleName}</i>, {$coupleLink} invited you to Zouk Non Stop marathon.
+    They invited you as a couple for a couple pass, for a role of {$coupleRole ->
+        [leader] follower
+        *[follower] leader
+    }.
+    Please accept or decline the invitation:
+passes-button-change-admin = 🔄🧑🏼‍💼 Change admin
+passes-button-couple-accept = ✅ Accept
+passes-button-couple-decline = 🙅 Decline
+passes-accept-pass-request-name =
+    To accept the invitation, first enter your full name please:
+passes-invitation-successfully-accepted =
+    The invitation was successfully accepted.
+    To view or manage your pass, use command /passes.
+passes-invitation-accept-failed =
+    Seems like the invitation is no longer valid. Either it has timed out or was cancelled by the inviter.
+passes-invitation-successfully-declined =
+    The invitation was successfully declined.
+passes-invitation-was-accepted =
+    A user <i>{$coupleName}</i>, {$couplelink} accepted your invitation for a couple pass.
+passes-invitation-was-declined =
+    Unfortunately, the user <i>{$coupleName}</i>, {$couplelink} declined your invitation for a couple pass.
+    You can choose a solo pass or select another person.
+passes-couple-saved =
+    I saved your invitation, but your couple is not registered and I can't send them the invitation.
+    Ask them to start conversation with me by sending me the /start command, and then accept your invitation by sending me the /passes command.
+    The invitation is valid for 2 days.
+passes-couple-saved-sent =
+    I sent your invitation to your couple.
+    Ask them to accept it. If it didn't appear in their messages, they can access it through the /passes command.
+    The invitation is valid for 2 days.
 passes-pass-create-cancel=
     If you want to register for a pass, you can come back using /passes command.
 passes-pass-exit=
@@ -348,22 +440,27 @@ passes-pass-exit=
 passes-pass-cancelled=
     Your pass assignment has been cancelled. If you want to get back again, you can call /passes command any time.
 passes-pass-cancel-failed =
-    Cancellation failed. Either the pass was marked payed or was already cancelled.
+    Cancellation failed. Either the pass was marked paid or was already cancelled.
 passes-payment-request-callback-message =
     You need to pay <code>{$price}</code> ₽.
-    Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
+    Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banksEn}), contact {$adminLink}.
     Scroll down to send the proof of payment.
 passes-payment-request-waiting-message =
     You need to pay <code>{$price}</code> ₽.
-    Payment can be made via SBP using the phone number <code>+79217826737</code> (Sberbank, VTB), recipient: <b>Olga Tesla</b>.
+    Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banksEn}), contact {$adminLink}.
     Please send the proof of payment in PDF format or as an image.
 passes-payment-proof-timeout =
     I haven’t received your payment proof in time. Please use the /passes command to try again.
+    Don't worry, your position in the waitlist hasn't changed.
 passes-payment-proof-cancelled =
     If you need to resubmit your payment proof or view your pass details, use the /passes command.
+    Don't worry, your position in the waitlist hasn't changed.
 passes-payment-proof-accepted =
     Hello, <i>{$name}</i>!
-    Congratulations! The {$role} Zouk Non Stop pass is now officially yours, as your payment has been successfully approved by the administrator.
+    Congratulations! The {$type ->
+        [couple] couple Zouk Non Stop pass with you as a {$role} and your couple {$coupleLink}
+        *[solo] {$role} Zouk Non Stop pass
+    } is now officially yours, as your payment has been successfully approved by the administrator.
     You can view your pass details by using the /passes command.
 passes-payment-proof-rejected =
     Hello, <i>{$name}</i>!
@@ -381,6 +478,8 @@ passes-payment-proof-forwarded =
     If you need to view your pass details in the meantime, use the /passes command.
 passes-sell-not-started =
     Please be patient; sales have not opened yet.
+passes-solo-saved =
+    Solo pass chosen.
 passes-pass-create-start-message =
     First, I need some information from you.
     Scroll down and enter your full name as it appears in your passport.
@@ -402,12 +501,22 @@ passes-role-button-follower = 💃 Follower
 passes-role-button-cancel = ❌ Cancel and exit
 passes-role-saved = Your new role as a {$role} is saved.
 passes-role-exit = To change role again, use command /role
+passes-promopass-select-role =
+    You have registered for Zouk Non Stop pass and are in the waitlist, but haven't yet selected a pass type.
+    You won't loose your position in the waitlist if you change the pass to couple pass now.
+    In 2 days all the passes will be automatically converted to solo passes.
 passes-payment-deadline-close =
     Warning: Your pass payment deadline is just 1 day away. Act quickly to secure your spot!
     See /passes for more details.
 passes-payment-deadline-exceeded =
     Unfortunately, your payment deadline has been exceeded, and the pass is no longer reserved for you.
     If you would like to try again, use the /passes command.
+passes-couple-didnt-answer =
+    Unfortunately, I didn't get an answer from your couple in time.
+    You can send them an invitation again, or choose another person, or a solo pass.
+passes-invitation-timeout =
+    Sorry, the invitation I've sent earlier has timed out. You can register again or see your pass in /passes.
+
 
 user-is-restricted = Some actions has been disabled.
 user-is-none = Maybe run /start first?

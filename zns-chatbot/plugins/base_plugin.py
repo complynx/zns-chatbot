@@ -1,4 +1,3 @@
-from typing import List
 from ..config import Config
 from telegram import Bot
 
