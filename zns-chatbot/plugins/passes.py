@@ -517,8 +517,7 @@ class PassUpdate:
             uids.append(user[PASS_KEY]["couple"])
             req[PASS_KEY+".couple"] = {"$in":uids}
         req["user_id"] = {"$in": uids}
-        result = await self.base.user_db.update_one({
-        }, {
+        result = await self.base.user_db.update_many(req, {
             "$set": {
                 PASS_KEY+".state": "payed",
                 PASS_KEY+".proof_received": now_msk(),
