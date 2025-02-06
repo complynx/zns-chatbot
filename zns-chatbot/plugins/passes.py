@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 CANCEL_CHR = chr(0xE007F) # Tag cancel
 PASS_KEY = "pass_2025_1"
 MAX_CONCURRENT_ASSIGNMENTS = 5
-CURRENT_PRICE=9500
+CURRENT_PRICE=10700
 TIMEOUT_PROCESSOR_TICK = 3600
 INVITATION_TIMEOUT=timedelta(days=2, hours=10)
 PAYMENT_TIMEOUT=timedelta(days=8)
