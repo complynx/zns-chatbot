@@ -378,12 +378,26 @@ class PassUpdate:
         if key != PASS_KEY or self.update.user not in self.base.payment_admins:
             return
         user_id = int(user_id_s)
-        result = await self.base.user_db.update_one({
+        user = await self.base.user_db.update_one({
             "user_id": user_id,
             "bot_id": self.bot,
             PASS_KEY+".state": "payed",
+        })
+        assert user is not None
+        u_pass = user[PASS_KEY]
+        uids = [user_id]
+        if "couple" in user[PASS_KEY]:
+            uids.append(user[PASS_KEY]["couple"])
+        result = await self.base.user_db.update_many({
+            "user_id": {"$in": uids},
+            "bot_id": self.bot,
+            PASS_KEY: {"$exists": True},
         }, {
             "$set": {
+                PASS_KEY+".state": "payed",
+                PASS_KEY+".proof_received": u_pass["proof_received"],
+                PASS_KEY+".proof_file": u_pass["proof_file"],
+                PASS_KEY+".proof_admin": u_pass["proof_admin"],
                 PASS_KEY+".proof_accepted": now_msk(),
             }
         })
@@ -411,13 +425,26 @@ class PassUpdate:
         if key != PASS_KEY or self.update.user not in self.base.payment_admins:
             return
         user_id = int(user_id_s)
-        result = await self.base.user_db.update_one({
+        user = await self.base.user_db.update_one({
             "user_id": user_id,
             "bot_id": self.bot,
             PASS_KEY+".state": "payed",
+        })
+        assert user is not None
+        u_pass = user[PASS_KEY]
+        uids = [user_id]
+        if "couple" in user[PASS_KEY]:
+            uids.append(user[PASS_KEY]["couple"])
+        result = await self.base.user_db.update_one({
+            "user_id": {"$in": uids},
+            "bot_id": self.bot,
+            PASS_KEY: {"$exists": True},
         }, {
             "$set": {
                 PASS_KEY+".state": "assigned",
+                PASS_KEY+".proof_received": u_pass["proof_received"],
+                PASS_KEY+".proof_file": u_pass["proof_file"],
+                PASS_KEY+".proof_admin": u_pass["proof_admin"],
                 PASS_KEY+".proof_rejected": now_msk(),
             }
         })
@@ -480,8 +507,11 @@ class PassUpdate:
         user = await self.get_user()
         if PASS_KEY not in user or user[PASS_KEY]["state"] != "assigned":
             return await self.handle_cq_exit()
+        uids = [user["user_id"]]
+        if "couple" in user[PASS_KEY]:
+            uids.append(user[PASS_KEY]["couple"])
         result = await self.base.user_db.update_one({
-            "user_id": self.update.user,
+            "user_id": {"$in": uids},
             "bot_id": self.bot,
             PASS_KEY+".state": "assigned",
         }, {
@@ -489,7 +519,7 @@ class PassUpdate:
                 PASS_KEY+".state": "payed",
                 PASS_KEY+".proof_received": now_msk(),
                 PASS_KEY+".proof_file": f"{doc.file_id}{file_ext}",
-                # PASS_KEY+".proof_admin": self.base.config.passes.payment_admin,
+                PASS_KEY+".proof_admin": user[PASS_KEY]["proof_admin"],
             }
         })
         if result.modified_count <= 0:
@@ -989,49 +1019,27 @@ class Passes(BasePlugin):
     async def _timeout_processor(self) -> None:
         await sleep(1)
         try:
-            if len(self.payment_admins) > 0:
-                await self.user_db.update_many({
+            async for user in self.user_db.find({
                     "bot_id": self.bot.id,
-                    PASS_KEY + ".state": "assigned",
-                    PASS_KEY + ".proof_admin": {"$exists": False},
-                },{
+                    PASS_KEY + ".state": "payed",
+                    PASS_KEY + ".couple": {"$exists": True},
+                }):
+                u_pass = user[PASS_KEY]
+                uids = [user["user_id"]]
+                if "couple" in user[PASS_KEY]:
+                    uids.append(user[PASS_KEY]["couple"])
+                await self.user_db.update_many({
+                    "user_id": {"$in": uids},
+                    "bot_id": self.bot,
+                    PASS_KEY + ".couple": {"$in": uids},
+                }, {
                     "$set": {
-                        PASS_KEY + ".proof_admin": self.payment_admins[0]
+                        PASS_KEY+".state": "payed",
+                        PASS_KEY+".proof_received": u_pass["proof_received"],
+                        PASS_KEY+".proof_file": u_pass["proof_file"],
+                        PASS_KEY+".proof_admin": u_pass["proof_admin"],
                     }
                 })
-            await self.user_db.update_many({
-                "bot_id": self.bot.id,
-                PASS_KEY: {"$exists": True},
-                PASS_KEY + ".state": {"$ne": "waitlist"},
-                PASS_KEY + ".type": {"$exists": False},
-            },{
-                "$set": {
-                    PASS_KEY + ".type": "solo",
-                }
-            })
-            async for user in self.user_db.find({
-                "bot_id": self.bot.id,
-                PASS_KEY + ".state": "waitlist",
-                PASS_KEY + ".type": {"$exists": False},
-            }):
-                try:
-                    upd = await self.create_update_from_user(user["user_id"])
-                    await upd.update.reply(
-                        upd.l("passes-promopass-select-role"),
-                        parse_mode=ParseMode.HTML,
-                        reply_markup=InlineKeyboardMarkup([[
-                            InlineKeyboardButton(
-                                upd.l("passes-button-solo"),
-                                callback_data=f"{self.name}|solo"
-                            ),
-                            InlineKeyboardButton(
-                                upd.l("passes-button-couple"),
-                                callback_data=f"{self.name}|couple"
-                            ),
-                        ]]),
-                    )
-                except Exception as e:
-                    logger.error("Exception in Passes._timeout_processor %s", e, exc_info=1)
         except Exception as e:
             logger.error("Exception in Passes._timeout_processor %s", e, exc_info=1)
         while True:
