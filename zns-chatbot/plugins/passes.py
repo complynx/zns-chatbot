@@ -1138,6 +1138,35 @@ class Passes(BasePlugin):
                         break
                     continue
             while True:
+                aggregation = await self.user_db.aggregate([{
+                    "$match": {
+                        PASS_KEY: {"$exists": True},
+                        "bot_id": self.bot.id,
+                    },
+                },{
+                    "$group": {
+                        "_id": {
+                            "state": f"${PASS_KEY}.state",
+                            "role": f"${PASS_KEY}.role",
+                        },
+                        "count": { "$count": {} },
+                    }
+                }]).to_list(None)
+                counts = {
+                    "leader": dict(),
+                    "follower": dict(),
+                }
+                for group in aggregation:
+                    if len(group["_id"]) == 0:
+                        continue
+                    counts[group["_id"]["role"]][group["_id"]["state"]] = group["count"]
+                    if group["_id"]["state"] == "assigned" and max_assigned < group["count"]:
+                        max_assigned = group["count"]
+                counts["leader"]["RA"] = counts["leader"].get("payed", 0) + counts["leader"].get("assigned", 0)
+                counts["follower"]["RA"] = counts["follower"].get("payed", 0) + counts["follower"].get("assigned", 0)
+                ra = counts["leader"]["RA"]  if counts["leader"]["RA"] >= counts["follower"]["RA"] else counts["follower"]["RA"]
+                if ra > self.config.passes.amount_cap_per_role:
+                    break
                 success = await self.assign_pass("couple")
                 if not success:
                     break
