@@ -1174,13 +1174,16 @@ class Passes(BasePlugin):
                         if isinstance(ch, str):
                             ch = "@" + ch
                         logger.debug(f"chat id: {ch}, type {type(ch)}")
+                        args = {
+                            "name": client_user_name(user),
+                            "role": user[PASS_KEY]["role"],
+                        }
                         await self.bot.send_message(
                             chat_id=ch,
                             message_thread_id=self.config.passes.thread_id,
                             text=self.base_app.localization(
                                 "passes-announce-user-registered",
-                                name=client_user_name(user),
-                                role=user[PASS_KEY]["role"],
+                                args=args,
                                 locale=self.config.passes.thread_locale,
                             ),
                             parse_mode=ParseMode.HTML,
