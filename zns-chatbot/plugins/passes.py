@@ -1160,8 +1160,6 @@ class Passes(BasePlugin):
                     if len(group["_id"]) == 0:
                         continue
                     counts[group["_id"]["role"]][group["_id"]["state"]] = group["count"]
-                    if group["_id"]["state"] == "assigned" and max_assigned < group["count"]:
-                        max_assigned = group["count"]
                 counts["leader"]["RA"] = counts["leader"].get("payed", 0) + counts["leader"].get("assigned", 0)
                 counts["follower"]["RA"] = counts["follower"].get("payed", 0) + counts["follower"].get("assigned", 0)
                 ra = counts["leader"]["RA"]  if counts["leader"]["RA"] >= counts["follower"]["RA"] else counts["follower"]["RA"]
