@@ -1102,6 +1102,9 @@ class Passes(BasePlugin):
                         max_assigned = group["count"]
                 counts["leader"]["RA"] = counts["leader"].get("payed", 0) + counts["leader"].get("assigned", 0)
                 counts["follower"]["RA"] = counts["follower"].get("payed", 0) + counts["follower"].get("assigned", 0)
+                ra = counts["leader"]["RA"]  if counts["leader"]["RA"] >= counts["follower"]["RA"] else counts["follower"]["RA"]
+                if ra > self.config.passes.amount_cap_per_role:
+                    break
                 max_assigned -= couples.get("assigned", 0)
                 if counts["leader"]["RA"] != counts["follower"]["RA"]:
                     target_group = "follower" if counts["leader"]["RA"] > counts["follower"]["RA"] else "leader"
