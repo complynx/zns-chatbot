@@ -3,7 +3,7 @@ from datetime import timedelta
 import logging
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 from telegram.ext import CommandHandler, CallbackQueryHandler, filters
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove, MessageOriginUser
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove, MessageOriginUser, Contact
 from ..tg_state import TGState
 from motor.core import AgnosticCollection
 from telegram.constants import ParseMode
@@ -348,11 +348,12 @@ class PassUpdate:
             PASS_KEY+".couple": self.update.user,
         })
         if inviter is not None:
-            if PASS_KEY not in user or user[PASS_KEY]["state"] != "payed" and user[PASS_KEY].get("couple", 0) != inviter["user_id"]:
-                return await self.show_couple_invitation(inviter)
-            else:
-                inv_update = await self.base.create_update_from_user(inviter["user_id"])
-                await inv_update.handle_invitation_declined(user)
+            if PASS_KEY not in user or user[PASS_KEY].get("couple", 0) != inviter["user_id"]:
+                if user[PASS_KEY]["state"] != "payed":
+                    return await self.show_couple_invitation(inviter)
+                else:
+                    inv_update = await self.base.create_update_from_user(inviter["user_id"])
+                    await inv_update.handle_invitation_declined(user)
         if PASS_KEY in user:
             return await self.show_pass_edit(user, user[PASS_KEY])
         else:
@@ -627,10 +628,21 @@ class PassUpdate:
                 reply_markup=ReplyKeyboardRemove(),
             )
         msg = self.update.update.message
-        if (msg is None or msg.forward_origin is None or
+        if (msg is None or (
+                msg.forward_origin is None and (
+                    msg.contact is None or
+                    not isinstance(msg.contact, Contact) or
+                    msg.contact.user_id is None or
+                    msg.contact.user_id == self.update.user
+                )
+            ) or
             not isinstance(msg.forward_origin, MessageOriginUser) or
             msg.forward_origin.sender_user.id == self.update.user):
-            return await self.update.reply(self.l("passes-couple-request-wrong-data"), reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
+            return await self.update.reply(
+                self.l("passes-couple-request-wrong-data"),
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=ParseMode.HTML,
+            )
         other_user_id = msg.forward_origin.sender_user.id
         
         invitee = await self.base.user_db.find_one({

@@ -228,6 +228,7 @@ class TGUpdate(TGState):
             else:
                 await chosen_plugin.handle_callback_query(self)
         else:
+            logger.debug(f"unsupported message: {self.update=}")
             await self.update.callback_query.edit_message_text(
                 self.l("unsupported-message-error"),
                 reply_markup=InlineKeyboardMarkup([]),
