@@ -614,25 +614,6 @@ class PassUpdate:
         keys["name"] = user["legal_name"]
         await self.update.edit_or_reply(self.l("passes-solo-saved"), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
         
-        if self.base.config.passes.thread_channel != "":
-            try:
-                ch = self.base.config.passes.thread_channel
-                if isinstance(ch, str):
-                    ch = "@" + ch
-                logger.debug(f"chat id: {ch}, type {type(ch)}")
-                await self.base.bot.send_message(
-                    chat_id=ch,
-                    message_thread_id=self.base.config.passes.thread_id,
-                    text=self.base.base_app.localization(
-                        "passes-announce-user-registered",
-                        args=keys,
-                        locale=self.base.config.passes.thread_locale,
-                    ),
-                    parse_mode=ParseMode.HTML,
-                )
-            except Exception as e:
-                logger.error(f"Exception while sending message to chat: {e}", exc_info=1)
-        
         await self.base.recalculate_queues()
     
     async def handle_couple_input(self, _data):
@@ -1021,25 +1002,16 @@ class Passes(BasePlugin):
         try:
             async for user in self.user_db.find({
                     "bot_id": self.bot.id,
-                    PASS_KEY + ".state": "payed",
-                    PASS_KEY + ".couple": {"$exists": True},
+                    PASS_KEY: {"$exists": True},
+                    PASS_KEY + ".sent_to_hype_thread": {"$exists": False},
                 }):
-                u_pass = user[PASS_KEY]
-                uids = [user["user_id"]]
-                if "couple" in user[PASS_KEY]:
-                    uids.append(user[PASS_KEY]["couple"])
-                await self.user_db.update_many({
-                    "user_id": {"$in": uids},
-                    "bot_id": self.bot,
-                    PASS_KEY + ".couple": {"$in": uids},
-                }, {
-                    "$set": {
-                        PASS_KEY+".state": "payed",
-                        PASS_KEY+".proof_received": u_pass["proof_received"],
-                        PASS_KEY+".proof_file": u_pass["proof_file"],
-                        PASS_KEY+".proof_admin": u_pass["proof_admin"],
-                    }
-                })
+                await self.user_db.update_one({
+                    "user_id": user["user_id"],
+                    "bot_id": self.bot.id,
+                    PASS_KEY: {"$exists": True},
+                }, {"$set":{
+                    PASS_KEY + ".sent_to_hype_thread": now_msk(),
+                }})
         except Exception as e:
             logger.error("Exception in Passes._timeout_processor %s", e, exc_info=1)
         while True:
@@ -1191,6 +1163,41 @@ class Passes(BasePlugin):
                 for user in selected:
                     upd = await self.create_update_from_user(user["user_id"])
                     await upd.notify_no_more_passes()
+        except Exception as e:
+            logger.error(f"Exception in recalculate_queues: {e}", exc_info=1)
+            
+        try:
+            async for user in self.user_db.find({
+                    "bot_id": self.bot.id,
+                    PASS_KEY: {"$exists": True},
+                    PASS_KEY + ".sent_to_hype_thread": {"$exists": False},
+                }):
+                await self.user_db.update_one({
+                    "user_id": user["user_id"],
+                    "bot_id": self.bot.id,
+                    PASS_KEY: {"$exists": True},
+                }, {"$set":{
+                    PASS_KEY + ".sent_to_hype_thread": now_msk(),
+                }})
+                if self.config.passes.thread_channel != "":
+                    try:
+                        ch = self.config.passes.thread_channel
+                        if isinstance(ch, str):
+                            ch = "@" + ch
+                        logger.debug(f"chat id: {ch}, type {type(ch)}")
+                        await self.bot.send_message(
+                            chat_id=ch,
+                            message_thread_id=self.config.passes.thread_id,
+                            text=self.base_app.localization(
+                                "passes-announce-user-registered",
+                                name=client_user_name(user),
+                                role=user[PASS_KEY]["role"],
+                                locale=self.config.passes.thread_locale,
+                            ),
+                            parse_mode=ParseMode.HTML,
+                        )
+                    except Exception as e:
+                        logger.error(f"Exception in recalculate_queues: {e}", exc_info=1)
         except Exception as e:
             logger.error(f"Exception in recalculate_queues: {e}", exc_info=1)
     
