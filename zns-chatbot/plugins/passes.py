@@ -378,7 +378,7 @@ class PassUpdate:
         if key != PASS_KEY or self.update.user not in self.base.payment_admins:
             return
         user_id = int(user_id_s)
-        user = await self.base.user_db.update_one({
+        user = await self.base.user_db.find_one({
             "user_id": user_id,
             "bot_id": self.bot,
             PASS_KEY+".state": "payed",
@@ -508,12 +508,16 @@ class PassUpdate:
         if PASS_KEY not in user or user[PASS_KEY]["state"] != "assigned":
             return await self.handle_cq_exit()
         uids = [user["user_id"]]
-        if "couple" in user[PASS_KEY]:
-            uids.append(user[PASS_KEY]["couple"])
-        result = await self.base.user_db.update_one({
-            "user_id": {"$in": uids},
+        req = {
             "bot_id": self.bot,
             PASS_KEY+".state": "assigned",
+            PASS_KEY+".type":user[PASS_KEY]["type"],
+        }
+        if "couple" in user[PASS_KEY]:
+            uids.append(user[PASS_KEY]["couple"])
+            req[PASS_KEY+".couple"] = {"$in":uids}
+        req["user_id"] = {"$in": uids}
+        result = await self.base.user_db.update_one({
         }, {
             "$set": {
                 PASS_KEY+".state": "payed",
