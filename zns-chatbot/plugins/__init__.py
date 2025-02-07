@@ -2,7 +2,7 @@ from .assistant import Assistant
 from .avatar import Avatar
 from .auth import Auth
 # from .food import Food
-from .user_echo import UserEcho
+from .superuser import Superuser
 # from .orders import Orders
 # from .massage import MassagePlugin
 from .passes import Passes
@@ -12,7 +12,7 @@ plugins = [
     Assistant,
     Avatar,
     # Food,
-    UserEcho,
+    Superuser,
     # Orders,
     # MassagePlugin,
     Passes,

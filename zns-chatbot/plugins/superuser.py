@@ -6,8 +6,8 @@ from telegram.ext import CommandHandler
 from telegram.constants import ParseMode
 from ..telegram_links import client_user_link_html
 
-class UserEcho(BasePlugin):
-    name = "user_echo"
+class Superuser(BasePlugin):
+    name = "superuser"
     admins: set[int]
     user_db: AgnosticCollection
 
@@ -15,15 +15,31 @@ class UserEcho(BasePlugin):
         super().__init__(base_app)
         self.admins = self.config.telegram.admins
         self.user_db = base_app.users_collection
-        self._checker = CommandHandler(self.name, self.handle_message)
+        self._checker = CommandHandler("user_echo", self.handle_message)
         self._checker_gf = CommandHandler("get_file", self.handle_get_file)
+        self._checker_send_to_user = CommandHandler("send_to_user", self.send_to_user)
 
     def test_message(self, message: Update, state, web_app_data):
-        if self._checker.check_update(message) and message.effective_user.id in self.admins:
+        if message.effective_user.id not in self.admins:
+            return PRIORITY_NOT_ACCEPTING, None
+        if self._checker.check_update(message):
             return PRIORITY_BASIC, self.handle_message
-        if self._checker_gf.check_update(message) and message.effective_user.id in self.admins:
-            return PRIORITY_BASIC, self.handle_get_file
+        if self._checker_send_to_user.check_update(message):
+            return PRIORITY_BASIC, self.send_to_user
         return PRIORITY_NOT_ACCEPTING, None
+    
+    async def send_to_user(self, update: TGState):
+        data = update.message.text.split(" ", maxsplit=2)
+        user = data[1]
+        try:
+            user = int(user)
+        except ValueError:
+            pass
+        message = data[2]
+        await self.bot.send_message(
+            chat_id=user,
+            text=message,
+        )
     
     async def handle_get_file(self, update: TGState):
         data = update.message.text.split(" ", maxsplit=1)[1]
