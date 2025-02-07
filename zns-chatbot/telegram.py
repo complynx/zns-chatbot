@@ -51,7 +51,7 @@ async def start(update: Update, context: CallbackContext):
 async def start_task(update: Update, context: CallbackContext):
     """Send a welcome message when the /start command is issued."""
     try:
-        logger.info(f"start called: {update.effective_user}")
+        logger.info(f"start called: {update.effective_user=}")
         def l(s):  # noqa: E743
             return context.application.base_app.localization(s, locale=update.effective_user.language_code)
 
@@ -80,14 +80,14 @@ async def start_task(update: Update, context: CallbackContext):
                     }
                 }, upsert=True)
             except Exception as e:
-                logger.error(f"mongodb update error: {e}", exc_info=1)
+                logger.error(f"mongodb update error {update.effective_user=}: {e}", exc_info=1)
 
         await update.message.reply_html(l("start-message"))
     except Exception as e:
-        logger.error(f"Exception in start_task: {e}", exc_info=1)
+        logger.error(f"Exception in start_task {update=}: {e}", exc_info=1)
 
 async def error_handler(update, context):
-    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+    logger.error(f"Exception while handling an update: {update=}", exc_info=context.error)
 
 class TGUpdate(TGState):
     state: dict
@@ -164,7 +164,7 @@ class TGUpdate(TGState):
             "state": ""
         }
         await self.save_state()
-        logger.debug(f"received awaited input from user {self.user}")
+        logger.debug(f"received awaited input {self.user=}")
         plugin = self.context.application.plugins[state["plugin"]]
         cb = getattr(plugin, state["plugin_callback"], None)
         await cb(self, state["plugin_data"])
@@ -192,7 +192,7 @@ class TGUpdate(TGState):
                 chosen_handle = handle
                 chosen_plugin = plugin
         if chosen_plugin is not None:
-            logger.info(f"from {hits} accepting plugins selected plugin {chosen_plugin.name} based on priority {chosen_priority}")
+            logger.info(f"from {hits} accepting plugins for user {self.user} selected plugin {chosen_plugin.name} based on priority {chosen_priority}")
             if chosen_handle is not None:
                 await chosen_handle(self)
             else:
@@ -222,7 +222,7 @@ class TGUpdate(TGState):
                 chosen_handle = handle
                 chosen_plugin = plugin
         if chosen_plugin is not None:
-            logger.info(f"from {hits} accepting plugins selected plugin {chosen_plugin.name} based on priority {chosen_priority}")
+            logger.info(f"from {hits} accepting plugins for user {self.user} selected plugin {chosen_plugin.name} based on priority {chosen_priority}")
             if chosen_handle is not None:
                 await chosen_handle(self)
             else:
@@ -266,7 +266,7 @@ class TGUpdate(TGState):
         try:
             self.web_app_data = json.loads(self.update.effective_message.web_app_data.data)
         except Exception as e:
-            logger.error("Failed to parse json: %s", e, exc_info=1)
+            logger.error(f"Failed to parse json {self.user=}: {e}", exc_info=1)
 
     async def parse(self):
         try:
@@ -277,7 +277,7 @@ class TGUpdate(TGState):
                 self.parse_web_app_data()
             await self.run_state()
         except Exception as e:
-            logger.error("Failed to parse message: %s", e, exc_info=1)
+            logger.error(f"Failed to parse message {self.user=}: {e}", exc_info=1)
             await self.reply(self.l("something-went-wrong"), parse_mode=ParseMode.MARKDOWN)
 
     async def parse_callback_query(self):
@@ -285,7 +285,7 @@ class TGUpdate(TGState):
             await self.get_state()
             await self.run_callback_query()
         except Exception as e:
-            logger.error("Failed to parse callback query: %s", e, exc_info=1)
+            logger.error(f"Failed to parse callback query {self.user=}: {e}", exc_info=1)
 
 class TGDeadline(TGState):
     def __init__(self, user: int, app, plugins, deadline_state: dict) -> None:
@@ -307,7 +307,7 @@ class TGDeadline(TGState):
             cb = getattr(plugin, self._deadline_state["timeout_callback"], None)
             await cb(self, self._deadline_state["plugin_data"])
         except Exception as e:
-            logger.error("Failed to process TGDeadline: %s", e, exc_info=1)
+            logger.error(f"Failed to process TGDeadline  {self.user=}: {e}", exc_info=1)
 
 class TGApplication(Application):
     base_app = None
@@ -412,7 +412,7 @@ async def parse_message_task(tgupdate: Update, context: CallbackContext):
             return await update.reply(update.l("user-is-restricted"), parse_mode=ParseMode.HTML)
         await update.parse()
     except Exception as e:
-        logger.error(f"Exception in parse_message_task: {e}", exc_info=1)
+        logger.error(f"Exception in parse_message_task: {e}, {tgupdate=}", exc_info=1)
 
 async def parse_callback_query(tgupdate: Update, context: CallbackContext):
     await tgupdate.callback_query.answer()
@@ -426,7 +426,7 @@ async def parse_callback_query_task(tgupdate: Update, context: CallbackContext):
             return await update.edit_or_reply(update.l("user-is-restricted"), parse_mode=ParseMode.HTML)
         await update.parse_callback_query()
     except Exception as e:
-        logger.error(f"Exception in parse_callback_query_task: {e}", exc_info=1)
+        logger.error(f"Exception in parse_callback_query_task: {e}, {tgupdate=}", exc_info=1)
 
 @asynccontextmanager
 async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:

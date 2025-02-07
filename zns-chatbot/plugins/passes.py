@@ -349,7 +349,7 @@ class PassUpdate:
         })
         if inviter is not None:
             if PASS_KEY not in user or user[PASS_KEY].get("couple", 0) != inviter["user_id"]:
-                if user[PASS_KEY]["state"] != "payed":
+                if PASS_KEY not in user or user[PASS_KEY]["state"] != "payed":
                     return await self.show_couple_invitation(inviter)
                 else:
                     inv_update = await self.base.create_update_from_user(inviter["user_id"])
@@ -512,7 +512,7 @@ class PassUpdate:
         req = {
             "bot_id": self.bot,
             PASS_KEY+".state": "assigned",
-            PASS_KEY+".type":user[PASS_KEY]["type"],
+            PASS_KEY+".type": user[PASS_KEY]["type"] if "type" in user[PASS_KEY] else "solo",
         }
         if "couple" in user[PASS_KEY]:
             uids.append(user[PASS_KEY]["couple"])
@@ -581,8 +581,8 @@ class PassUpdate:
         )
         try:
             await self.update.edit_message_text(self.l("passes-couple-request-edit"), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
-        except Exception as e:
-            logger.error(f"Exception in handle_cq_couple: {e}", exc_info=1)
+        except Exception as err:
+            logger.error(f"Exception in handle_cq_couple: {err=}, {self.update.user=}", exc_info=1)
         await self.update.reply(self.l("passes-couple-request-message"), reply_markup=markup, parse_mode=ParseMode.HTML)
         await self.update.require_anything(self.base.name, "handle_couple_input", None, "handle_couple_timeout")
     
@@ -684,7 +684,7 @@ class PassUpdate:
     async def handle_name_request(self, data):
         user = await self.get_user()
         if "legal_name_frozen" in user:
-            pass # TODO: skip the step
+            return await self.after_legal_name_input(data)
         btns = []
         if "legal_name" in user:
             btns.append([user["legal_name"]])
@@ -720,6 +720,9 @@ class PassUpdate:
             ),
             reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML,
         )
+        await self.after_legal_name_input(data)
+    
+    async def after_legal_name_input(self,data):
         if data == "pass":
             await self.update.reply(
                 self.l("passes-pass-role-select"),
