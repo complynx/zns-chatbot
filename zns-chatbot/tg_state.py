@@ -3,6 +3,7 @@ from typing import Any
 from motor.core import AgnosticCollection
 from telegram import (
     Bot,
+    MessageEntity,
     Update,
     Message,
     CallbackQuery,
@@ -24,6 +25,23 @@ from .config import Config
 logger = logging.getLogger(__name__)
 
 INPUT_TIMEOUT=300  # 5 min
+
+import argparse
+from typing import List, Optional
+
+class SilentArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.error_message: Optional[str] = None  # Store the error message
+
+    def exit(self, status=0, message=None):
+        if status != 0:  # Only capture errors
+            self.error_message = message
+            raise argparse.ArgumentError(None, message) # or just raise Exception(message) depending on your needs.
+
+    def _print_message(self, message, file=None):
+      # Override to prevent printing to stderr.  Just store the message.
+      self.error_message = message
 
 class TGState:
     state: dict
@@ -70,10 +88,108 @@ class TGState:
         self.user = user
         self.language_code = "en"
     
+    def parse_cmd_arguments(self) -> list[str]|None:
+        if self.message is None or self.message.text is None:
+            return None
+        entities = self.message.parse_entities()
+        sorted_entities = sorted(entities.items(), key=lambda item: item[0].offset)
+        message_text = self.message.text
+        utf_16_text = message_text.encode("utf-16-le")
+        last_offset = 0
+
+        text_chunks = []
+
+        for entity, text in sorted_entities:
+            if entity.type not in [MessageEntity.CODE, MessageEntity.PRE]:
+                continue
+
+            non_entity_text_bytes = utf_16_text[last_offset * 2: entity.offset * 2]
+            non_entity_text = non_entity_text_bytes.decode("utf-16-le")
+            if non_entity_text:
+                text_chunks.append((None, non_entity_text))
+
+            text_chunks.append((entity, text))
+            last_offset = entity.offset + entity.length
+
+        non_entity_text_bytes = utf_16_text[last_offset * 2: ]
+        text = non_entity_text_bytes.decode("utf-16-le")
+        if text:
+            text_chunks.append((None, text))
+        
+        ret = []
+        current_arg = ""
+        in_double_quotes = False
+        in_single_quotes = False
+        is_escaped = False
+        in_separator = False
+
+        for maybe_entity, text in text_chunks:
+            if maybe_entity is not None: # is CODE or PRE entity
+                if is_escaped:
+                    raise ValueError("escape character before code block") # NEW: Check escape before entity
+                current_arg += text
+                in_separator = False # Reset separator when adding entity content, important if entity follows spaces
+                continue
+
+            for char in text:
+                if is_escaped:
+                    current_arg += char
+                    is_escaped = False
+                    continue
+
+                if char == '\\' and not in_single_quotes:
+                    is_escaped = True
+                    in_separator = False
+                    continue
+
+                if char == '"':
+                    in_separator = False
+                    if in_single_quotes:
+                        current_arg += char
+                    else:
+                        in_double_quotes = not in_double_quotes
+                    continue
+
+                if char == "'":
+                    in_separator = False
+                    if in_double_quotes:
+                        current_arg += char
+                    else:
+                        in_single_quotes = not in_single_quotes
+                    continue
+
+                if char.isspace():
+                    if in_double_quotes or in_single_quotes:
+                        current_arg += char
+                    elif not in_separator:
+                        in_separator = True
+                        ret.append(current_arg)
+                        current_arg = ""
+                    continue
+
+                if char == "—":
+                    if current_arg == "":
+                        current_arg += "--"
+                    else:
+                        current_arg += char
+                    in_separator = False
+                    continue
+
+                in_separator = False
+                current_arg += char
+
+        if not in_separator:
+            ret.append(current_arg)
+
+        if in_double_quotes or in_single_quotes or is_escaped:
+            raise ValueError("Unclosed quotes or trailing escape character")
+
+        return ret
+    
     def maybe_get_user(self):
         return self._user
 
-    def l(self, s, **kwargs):
+    def l(self, s: str, **kwargs) -> str:
         return self.app.localization(s, args=kwargs, locale=self.language_code)
     
     async def update_user(self, request, upsert=False):
