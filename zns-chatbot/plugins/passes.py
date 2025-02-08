@@ -1017,16 +1017,7 @@ class Passes(BasePlugin):
     
     async def _timeout_processor(self) -> None:
         await sleep(1)
-        try:
-            await self.user_db.update_many({
-                    "bot_id": self.bot.id,
-                    PASS_KEY : {"$exists": True},
-                    PASS_KEY + ".type": {"$exists": False},
-                }, {"$set": {
-                     PASS_KEY + ".type": "solo"
-                }})
-        except Exception as e:
-            logger.error("Exception in Passes._timeout_processor %s", e, exc_info=1)
+        await self.recalculate_queues()
         while True:
             try:
                 await sleep(TIMEOUT_PROCESSOR_TICK)
