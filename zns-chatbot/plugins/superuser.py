@@ -41,6 +41,8 @@ class Superuser(BasePlugin):
             return PRIORITY_NOT_ACCEPTING, None
         if self._checker.check_update(message):
             return PRIORITY_BASIC, self.handle_message
+        if self._checker_gf.check_update(message):
+            return PRIORITY_BASIC, self.handle_get_file
         if self._checker_send_message_to.check_update(message):
             return PRIORITY_BASIC, self.send_message_to
         return PRIORITY_NOT_ACCEPTING, None
