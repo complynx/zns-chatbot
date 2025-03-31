@@ -27,6 +27,8 @@ RUN python setup.py install \
     && apt-get purge -y --auto-remove cmake build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+RUN pip freeze
+
 # Copy the current directory contents into the container at /app
 COPY . /app
 
