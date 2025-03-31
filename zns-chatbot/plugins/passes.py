@@ -16,8 +16,13 @@ logger = logging.getLogger(__name__)
 
 CANCEL_CHR = chr(0xE007F) # Tag cancel
 PASS_KEY = "pass_2025_1"
+PASS_RU, PASS_BY = "pass_2025_1", "pass_2025_2"
+PASS_KEYS = [PASS_RU, PASS_BY]
 MAX_CONCURRENT_ASSIGNMENTS = 5
-CURRENT_PRICE=10700
+CURRENT_PRICE={
+    PASS_RU: 10700,
+    PASS_BY: 10700,
+}
 TIMEOUT_PROCESSOR_TICK = 3600
 INVITATION_TIMEOUT=timedelta(days=2, hours=10)
 PAYMENT_TIMEOUT=timedelta(days=8)
@@ -36,6 +41,7 @@ class PassUpdate:
         self.l = update.l
         self.tgUpdate = update.update
         self.bot = self.update.bot.id
+        self.pass_key = ""
         self.user = None
     
     async def handle_callback_query(self):
@@ -52,6 +58,21 @@ class PassUpdate:
                 return await attr(*data[2:])
         logger.error(f"unknown callback {data[1]}: {data[2:]}")
 
+    def admin_to_keys(self, admin: dict, lc: str|None = None) -> dict:
+        assert isinstance(admin, dict)
+        if lc is None:
+            lc = self.update.language_code
+        keys = {}
+        keys["adminEmoji"] = admin.get("emoji", "")
+        keys["adminLink"] = client_user_link_html(admin, language_code=lc)
+        keys["adminName"] = client_user_name(admin, language_code=lc)
+        keys["phoneContact"] = admin.get("phone_contact", "nophone")
+        keys["phoneSBP"] = admin.get("phone_sbp", "nosbp")
+        keys["banks"] = admin.get("banks_en", "")
+        if lc is not None:
+            keys["banks"] = admin.get("banks_"+lc, keys["banks"])
+        return keys
+
     async def format_message(
             self,
             message_id: str,
@@ -60,8 +81,11 @@ class PassUpdate:
             u_pass: dict|None = None,
             couple: int|dict|None = None,
             admin: int|dict|None = None,
+            pass_key: str|None = None,
             **additional_keys,
         ) -> str:
+        if pass_key is None:
+            pass_key = self.pass_key
         if user is None:
             user = self.update.user
         if not isinstance(user, dict):
@@ -79,11 +103,12 @@ class PassUpdate:
             l = upd.l  # noqa: E741
             lc = upd.update.language_code
         if not isinstance(u_pass, dict):
-            if PASS_KEY in user:
-                u_pass = user[PASS_KEY]
+            if pass_key in user:
+                u_pass = user[pass_key]
             else:
                 u_pass = {}
         keys = dict(u_pass)
+        keys["passKey"] = pass_key
         keys["name"] = user.get("legal_name", "")
         keys["link"] = client_user_link_html(user, language_code=lc)
         if couple is None:
@@ -96,7 +121,7 @@ class PassUpdate:
             })
         if isinstance(couple, dict):
             keys["coupleName"] = couple.get("legal_name")
-            keys["coupleRole"] = couple.get(PASS_KEY, dict()).get("role")
+            keys["coupleRole"] = couple.get(pass_key, dict()).get("role")
             keys["coupleLink"] = client_user_link_html(couple, language_code=lc)
             if "type" not in keys:
                 keys["type"] = "couple"
@@ -111,10 +136,7 @@ class PassUpdate:
                 "bot_id": self.bot,
             })
         if isinstance(admin, dict):
-            keys["adminLink"] = client_user_link_html(admin, language_code=lc)
-            keys["phoneSBP"] = admin.get("phone_sbp", None)
-            keys["banksRu"] = admin.get("banks_ru", None)
-            keys["banksEn"] = admin.get("banks_en", None)
+            keys.update(self.admin_to_keys(admin, lc))
         keys.update(additional_keys)
         return l(message_id, **keys)
 
@@ -131,17 +153,17 @@ class PassUpdate:
         if u_pass["state"] == "assigned":
             buttons.append(InlineKeyboardButton(
                 self.l("passes-button-pay"),
-                callback_data=f"{self.base.name}|pay"
+                callback_data=f"{self.base.name}|pay|{self.pass_key}"
             ))
-            if len(self.base.payment_admins) > 1:
+        if u_pass["state"] != "payed":
+            if len(self.base.payment_admins[self.pass_key]) > 1:
                 buttons.append(InlineKeyboardButton(
                     self.l("passes-button-change-admin"),
-                    callback_data=f"{self.base.name}|change_admin"
+                    callback_data=f"{self.base.name}|change_admin|{self.pass_key}"
                 ))
-        if u_pass["state"] != "payed":
             buttons.append(InlineKeyboardButton(
                 self.l("passes-button-cancel"),
-                callback_data=f"{self.base.name}|cancel"
+                callback_data=f"{self.base.name}|cancel|{self.pass_key}"
             ))
         buttons.append(InlineKeyboardButton(
             self.l("passes-button-exit"),
@@ -158,45 +180,90 @@ class PassUpdate:
             reply_markup=InlineKeyboardMarkup(split_list(buttons, 2)),
         )
     
-    async def handle_cq_change_admin(self):
+    async def handle_cq_change_admin(self, key, message_key: str = "passes-choose-admin"):
+        self.set_pass_key(key)
         payment_admins = await self.base.user_db.find({
             "bot_id": self.bot,
-            "user_id": {"$in": self.base.payment_admins},
+            "user_id": {"$in": self.base.payment_admins[self.pass_key]},
         }).to_list(None)
         btns = []
+        admin_texts = []
         for admin in payment_admins:
+            admin_keys = self.admin_to_keys(admin)
             btns.append(InlineKeyboardButton(
-                f"{admin['emoji']} {client_user_name(admin, language_code=self.update.language_code)}",
-                callback_data=f"{self.base.name}|cha2|{admin['user_id']}",
+                self.l(
+                    "passes-payment-admin-button",
+                    **admin_keys,
+                ),
+                callback_data=f"{self.base.name}|cha2|{self.pass_key}|{admin['user_id']}",
             ))
+            admin_texts.append(
+                self.l(
+                    "passes-payment-admin-desc",
+                    **admin_keys,
+                )
+            )
         btns.append(InlineKeyboardButton(
             self.l("passes-button-exit"),
             callback_data=f"{self.base.name}|exit",
         ))
         await self.update.edit_or_reply(
-            self.l("passes-choose-admin"),
+            self.l(message_key, adminTexts="\n".join([f"{i+1}. {t}" for i,t in enumerate(admin_texts)])),
             reply_markup=InlineKeyboardMarkup(split_list(btns, 2)),
             parse_mode=ParseMode.HTML,
         )
     
-    async def handle_cq_cha2(self, admin_id_str):
+    async def handle_cq_cha2(self, key, admin_id_str):
+        self.set_pass_key(key)
         admin_id = int(admin_id_str)
-        assert admin_id in self.base.payment_admins
+        assert admin_id in self.base.payment_admins[self.pass_key]
         updated = await self.base.user_db.update_one({
             "user_id": self.update.user,
             "bot_id": self.update.bot.id,
-            PASS_KEY+".state": "assigned",
+            self.pass_key: {"$exists": True},
         }, {
             "$set": {
-                PASS_KEY+".proof_admin": admin_id,
+                self.pass_key+".proof_admin": admin_id,
             }
         })
-        assert updated.matched_count > 0
-        user = await self.base.user_db.find_one({
-            "user_id": self.update.user,
-            "bot_id": self.update.bot.id,
-        })
-        await self.show_pass_edit(user, user[PASS_KEY])
+        if updated.matched_count > 0: # has pass
+            user = await self.base.user_db.find_one({
+                "user_id": self.update.user,
+                "bot_id": self.update.bot.id,
+            })
+            await self.show_pass_edit(user, user[self.pass_key])
+        else: # no pass yet
+            updated = await self.base.user_db.update_one({
+                "user_id": self.update.user,
+                "bot_id": self.update.bot.id,
+                self.pass_key: {"$exists": False},
+            }, {
+                "$set": {
+                    "proof_admins."+self.pass_key: admin_id,
+                }
+            })
+            assert updated.matched_count > 0
+            await self.update.edit_or_reply(
+                self.l(
+                    "passes-pass-admin-saved",
+                ),
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        self.l("passes-button-solo"),
+                        callback_data=f"{self.base.name}|solo|{self.pass_key}"
+                    ),
+                    InlineKeyboardButton(
+                        self.l("passes-button-couple"),
+                        callback_data=f"{self.base.name}|couple|{self.pass_key}"
+                    ),
+                ],[
+                    InlineKeyboardButton(
+                        self.l("passes-button-cancel"),
+                        callback_data=f"{self.base.name}|pass_exit"
+                    ),
+                ]]),
+            )
 
     async def handle_cq_pass_exit(self):
         await self.update.edit_or_reply(
@@ -212,7 +279,8 @@ class PassUpdate:
             reply_markup=InlineKeyboardMarkup([]),
         )
     
-    async def handle_cq_cancel(self):
+    async def handle_cq_cancel(self, key):
+        self.set_pass_key(key)
         success = await self.cancel_pass()
         if success:
             await self.update.edit_or_reply(
@@ -235,13 +303,14 @@ class PassUpdate:
                 couple=inviter,
             ),
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(self.l("passes-button-couple-decline"), callback_data=f"{self.base.name}|cp_decl|{inviter['user_id']}"),
-                InlineKeyboardButton(self.l("passes-button-couple-accept"), callback_data=f"{self.base.name}|cp_acc|{inviter['user_id']}"),
+                InlineKeyboardButton(self.l("passes-button-couple-decline"), callback_data=f"{self.base.name}|cp_decl|{self.pass_key}|{inviter['user_id']}"),
+                InlineKeyboardButton(self.l("passes-button-couple-accept"), callback_data=f"{self.base.name}|cp_acc|{self.pass_key}|{inviter['user_id']}"),
             ]]),
             parse_mode=ParseMode.HTML,
         )
     
-    async def handle_cq_cp_acc(self, inviter_id):
+    async def handle_cq_cp_acc(self, key, inviter_id):
+        self.set_pass_key(key)
         inviter_id = int(inviter_id)
         await self.update.edit_message_text(self.l("passes-accept-pass-request-name"),
             reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
@@ -253,20 +322,20 @@ class PassUpdate:
         updated = await self.base.user_db.update_one({
             "user_id": inviter_id,
             "bot_id": self.update.bot.id,
-            PASS_KEY+".couple": self.update.user,
+            self.pass_key+".couple": self.update.user,
         }, {
             "$set": {
-                PASS_KEY+".state": "waitlist",
+                self.pass_key+".state": "waitlist",
             }
         })
         if updated.matched_count > 0:
             inviter = await self.base.user_db.find_one({
                 "user_id": inviter_id,
                 "bot_id": self.update.bot.id,
-                PASS_KEY+".couple": self.update.user,
+                self.pass_key+".couple": self.update.user,
             })
             if inviter is not None:
-                u_pass = dict(inviter[PASS_KEY])
+                u_pass = dict(inviter[self.pass_key])
                 u_pass["role"] = "leader" if u_pass["role"].startswith("f") else "follower"
                 u_pass["couple"] = inviter_id
                 await self.base.user_db.update_one({
@@ -274,29 +343,32 @@ class PassUpdate:
                     "bot_id": self.update.bot.id,
                 }, {
                     "$set": {
-                        PASS_KEY: u_pass,
+                        self.pass_key: u_pass,
                     }
                 })
-                user[PASS_KEY] = u_pass
+                user[self.pass_key] = u_pass
                 inv_update = await self.base.create_update_from_user(inviter_id)
+                inv_update.set_pass_key(self.pass_key)
                 await inv_update.handle_invitation_accepted(user)
-                await self.update.reply(self.l("passes-invitation-successfully-accepted"), parse_mode=ParseMode.HTML)
+                await self.update.reply(self.l("passes-invitation-successfully-accepted", passKey=self.pass_key), parse_mode=ParseMode.HTML)
 
                 return await self.base.recalculate_queues()
-        await self.update.reply(self.l("passes-invitation-accept-failed"), parse_mode=ParseMode.HTML)
+        await self.update.reply(self.l("passes-invitation-accept-failed", passKey=self.pass_key), parse_mode=ParseMode.HTML)
     
-    async def handle_cq_cp_decl(self, inviter_id):
+    async def handle_cq_cp_decl(self, key, inviter_id):
+        self.set_pass_key(key)
         inviter_id = int(inviter_id)
         user = await self.get_user()
         inviter = await self.base.user_db.find_one({
             "user_id": inviter_id,
             "bot_id": self.update.bot.id,
-            PASS_KEY+".couple": self.update.user,
+            self.pass_key+".couple": self.update.user,
         })
         if inviter is not None:
             inv_update = await self.base.create_update_from_user(inviter_id)
+            inv_update.set_pass_key(key)
             await inv_update.handle_invitation_declined(user)
-        await self.update.edit_or_reply(self.l("passes-invitation-successfully-declined"), 
+        await self.update.edit_or_reply(self.l("passes-invitation-successfully-declined", passKey=self.pass_key), 
             reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
     
     async def handle_invitation_accepted(self, invitee):
@@ -312,9 +384,9 @@ class PassUpdate:
         result = await self.base.user_db.update_one({
             "user_id": self.update.user,
             "bot_id": self.update.bot.id,
-            PASS_KEY+".couple": invitee["user_id"],
+            self.pass_key+".couple": invitee["user_id"],
         }, {
-            "$unset": {PASS_KEY+".couple": ""},
+            "$unset": {self.pass_key+".couple": ""},
         })
         if result.modified_count > 0:
             await self.update.reply(
@@ -325,11 +397,11 @@ class PassUpdate:
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton(
                         self.l("passes-button-solo"),
-                        callback_data=f"{self.base.name}|solo"
+                        callback_data=f"{self.base.name}|solo|{self.pass_key}"
                     ),
                     InlineKeyboardButton(
                         self.l("passes-button-couple"),
-                        callback_data=f"{self.base.name}|couple"
+                        callback_data=f"{self.base.name}|couple|{self.pass_key}"
                     ),
                 ],[
                     InlineKeyboardButton(
@@ -340,28 +412,36 @@ class PassUpdate:
                 parse_mode=ParseMode.HTML,
             )
 
-    async def handle_cq_start(self):
+    def set_pass_key(self, pass_key: str) -> None:
+        if pass_key not in PASS_KEYS:
+            raise Exception(f"wrong pass key {pass_key}")
+        self.pass_key = pass_key
+
+    async def handle_cq_start(self, pass_key: str):
+        self.set_pass_key(pass_key)
         user = await self.get_user()
         inviter = await self.base.user_db.find_one({
             "user_id": {"$ne": self.update.user},
             "bot_id": self.update.bot.id,
-            PASS_KEY+".couple": self.update.user,
+            self.pass_key+".couple": self.update.user,
         })
         if inviter is not None:
-            if PASS_KEY not in user or user[PASS_KEY].get("couple", 0) != inviter["user_id"]:
-                if PASS_KEY not in user or user[PASS_KEY]["state"] != "payed":
+            if self.pass_key not in user or user[self.pass_key].get("couple", 0) != inviter["user_id"]:
+                if self.pass_key not in user or user[self.pass_key]["state"] != "payed":
                     return await self.show_couple_invitation(inviter)
                 else:
                     inv_update = await self.base.create_update_from_user(inviter["user_id"])
+                    inv_update.set_pass_key(self.pass_key)
                     await inv_update.handle_invitation_declined(user)
-        if PASS_KEY in user:
-            return await self.show_pass_edit(user, user[PASS_KEY])
+        if self.pass_key in user:
+            return await self.show_pass_edit(user, user[self.pass_key])
         else:
             return await self.new_pass()
     
-    async def handle_cq_pay(self):
+    async def handle_cq_pay(self, pass_key: str):
+        self.set_pass_key(pass_key)
         user = await self.get_user()
-        if PASS_KEY not in user or user[PASS_KEY]["state"] != "assigned":
+        if self.pass_key not in user or user[self.pass_key]["state"] != "assigned":
             return await self.handle_cq_exit()
         await self.update.edit_or_reply(
             await self.format_message("passes-payment-request-callback-message"),
@@ -373,33 +453,34 @@ class PassUpdate:
             parse_mode=ParseMode.HTML,
             reply_markup=ReplyKeyboardMarkup([[CANCEL_CHR+self.l("cancel-command")]], resize_keyboard=True),
         )
-        await self.update.require_anything(self.base.name, "handle_payment_proof_input", "", "handle_payment_proof_timeout")
+        await self.update.require_anything(self.base.name, "handle_payment_proof_input", self.pass_key, "handle_payment_proof_timeout")
     
     async def handle_cq_adm_acc(self, key: str, user_id_s: str):
-        if key != PASS_KEY or self.update.user not in self.base.payment_admins:
+        self.set_pass_key(key)
+        if self.update.user not in self.base.payment_admins[self.pass_key]:
             return
         user_id = int(user_id_s)
         user = await self.base.user_db.find_one({
             "user_id": user_id,
             "bot_id": self.bot,
-            PASS_KEY+".state": "payed",
+            self.pass_key+".state": "payed",
         })
         assert user is not None
-        u_pass = user[PASS_KEY]
+        u_pass = user[self.pass_key]
         uids = [user_id]
-        if "couple" in user[PASS_KEY]:
-            uids.append(user[PASS_KEY]["couple"])
+        if "couple" in user[self.pass_key]:
+            uids.append(user[self.pass_key]["couple"])
         result = await self.base.user_db.update_many({
             "user_id": {"$in": uids},
             "bot_id": self.bot,
-            PASS_KEY: {"$exists": True},
+            self.pass_key: {"$exists": True},
         }, {
             "$set": {
-                PASS_KEY+".state": "payed",
-                PASS_KEY+".proof_received": u_pass["proof_received"],
-                PASS_KEY+".proof_file": u_pass["proof_file"],
-                PASS_KEY+".proof_admin": u_pass["proof_admin"],
-                PASS_KEY+".proof_accepted": now_msk(),
+                self.pass_key+".state": "payed",
+                self.pass_key+".proof_received": u_pass["proof_received"],
+                self.pass_key+".proof_file": u_pass["proof_file"],
+                self.pass_key+".proof_admin": u_pass["proof_admin"],
+                self.pass_key+".proof_accepted": now_msk(),
             }
         })
         if result.modified_count <= 0:
@@ -423,30 +504,31 @@ class PassUpdate:
         )
 
     async def handle_cq_adm_rej(self, key: str, user_id_s: str):
-        if key != PASS_KEY or self.update.user not in self.base.payment_admins:
+        self.set_pass_key(key)
+        if self.update.user not in self.base.payment_admins[self.pass_key]:
             return
         user_id = int(user_id_s)
         user = await self.base.user_db.update_one({
             "user_id": user_id,
             "bot_id": self.bot,
-            PASS_KEY+".state": "payed",
+            self.pass_key+".state": "payed",
         })
         assert user is not None
-        u_pass = user[PASS_KEY]
+        u_pass = user[self.pass_key]
         uids = [user_id]
-        if "couple" in user[PASS_KEY]:
-            uids.append(user[PASS_KEY]["couple"])
+        if "couple" in user[self.pass_key]:
+            uids.append(user[self.pass_key]["couple"])
         result = await self.base.user_db.update_one({
             "user_id": {"$in": uids},
             "bot_id": self.bot,
-            PASS_KEY: {"$exists": True},
+            self.pass_key: {"$exists": True},
         }, {
             "$set": {
-                PASS_KEY+".state": "assigned",
-                PASS_KEY+".proof_received": u_pass["proof_received"],
-                PASS_KEY+".proof_file": u_pass["proof_file"],
-                PASS_KEY+".proof_admin": u_pass["proof_admin"],
-                PASS_KEY+".proof_rejected": now_msk(),
+                self.pass_key+".state": "assigned",
+                self.pass_key+".proof_received": u_pass["proof_received"],
+                self.pass_key+".proof_file": u_pass["proof_file"],
+                self.pass_key+".proof_admin": u_pass["proof_admin"],
+                self.pass_key+".proof_rejected": now_msk(),
             }
         })
         if result.modified_count <= 0:
@@ -484,6 +566,7 @@ class PassUpdate:
         )
 
     async def handle_payment_proof_input(self, data):
+        self.set_pass_key(data)
         if filters.TEXT.check_update(self.tgUpdate) and self.update.message.text[0] == CANCEL_CHR:
             return await self.update.reply(
                 self.l("passes-payment-proof-cancelled"),
@@ -506,31 +589,31 @@ class PassUpdate:
             import mimetypes
             file_ext = mimetypes.guess_extension(doc.mime_type)
         user = await self.get_user()
-        if PASS_KEY not in user or user[PASS_KEY]["state"] != "assigned":
+        if self.pass_key not in user or user[self.pass_key]["state"] != "assigned":
             return await self.handle_cq_exit()
         uids = [user["user_id"]]
         req = {
             "bot_id": self.bot,
-            PASS_KEY+".state": "assigned",
-            PASS_KEY+".type": user[PASS_KEY]["type"] if "type" in user[PASS_KEY] else "solo",
+            self.pass_key+".state": "assigned",
+            self.pass_key+".type": user[self.pass_key]["type"] if "type" in user[self.pass_key] else "solo",
         }
-        if "couple" in user[PASS_KEY]:
-            uids.append(user[PASS_KEY]["couple"])
-            req[PASS_KEY+".couple"] = {"$in":uids}
+        if "couple" in user[self.pass_key]:
+            uids.append(user[self.pass_key]["couple"])
+            req[self.pass_key+".couple"] = {"$in":uids}
         req["user_id"] = {"$in": uids}
         result = await self.base.user_db.update_many(req, {
             "$set": {
-                PASS_KEY+".state": "payed",
-                PASS_KEY+".proof_received": now_msk(),
-                PASS_KEY+".proof_file": f"{doc.file_id}{file_ext}",
-                PASS_KEY+".proof_admin": user[PASS_KEY]["proof_admin"],
+                self.pass_key+".state": "payed",
+                self.pass_key+".proof_received": now_msk(),
+                self.pass_key+".proof_file": f"{doc.file_id}{file_ext}",
+                self.pass_key+".proof_admin": user[self.pass_key]["proof_admin"],
             }
         })
         if result.modified_count <= 0:
             return
-        if user[PASS_KEY]["proof_admin"] in self.base.payment_admins:
+        if user[self.pass_key]["proof_admin"] in self.base.payment_admins[self.pass_key]:
             admin = await self.base.user_db.find_one({
-                "user_id": user[PASS_KEY]["proof_admin"],
+                "user_id": user[self.pass_key]["proof_admin"],
                 "bot_id": self.bot,
             })
             lc = "ru"
@@ -549,8 +632,8 @@ class PassUpdate:
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([
                     [
-                        InlineKeyboardButton(l("passes-adm-payment-proof-accept-button"), callback_data=f"{self.base.name}|adm_acc|{PASS_KEY}|{self.update.user}"),
-                        InlineKeyboardButton(l("passes-adm-payment-proof-reject-button"), callback_data=f"{self.base.name}|adm_rej|{PASS_KEY}|{self.update.user}"),
+                        InlineKeyboardButton(l("passes-adm-payment-proof-accept-button"), callback_data=f"{self.base.name}|adm_acc|{self.pass_key}|{self.update.user}"),
+                        InlineKeyboardButton(l("passes-adm-payment-proof-reject-button"), callback_data=f"{self.base.name}|adm_rej|{self.pass_key}|{self.update.user}"),
                     ]
                 ])
             )
@@ -561,30 +644,41 @@ class PassUpdate:
         )
 
     async def new_pass(self):
-        if now_msk() < self.base.config.passes.sell_start:
-            return await self.update.edit_or_reply(self.l("passes-sell-not-started"), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
-        await self.update.edit_or_reply(self.l("passes-pass-create-start-message"), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
+        if now_msk() < self.base.config.passes.events[self.pass_key].sell_start:
+            return await self.update.edit_or_reply(self.l("passes-sell-not-started", passKey=self.pass_key), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
+        await self.update.edit_or_reply(self.l("passes-pass-create-start-message", passKey=self.pass_key), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
         return await self.handle_name_request("pass")
 
     async def handle_start(self):
         logger.debug(f"starting passes for: {self.update.user}")
-        return await self.handle_cq_start()
+        buttons = []
+        for pass_key in PASS_KEYS:
+            buttons.append(InlineKeyboardButton(
+                self.l("passes-select-type-button", passKey=pass_key),
+                callback_data=f"{self.base.name}|start|{pass_key}"
+            ))
+        buttons.append(InlineKeyboardButton(
+            self.l("passes-button-exit"),
+            callback_data=f"{self.base.name}|exit"
+        ))
+        await self.update.reply(self.l("passes-select-type-message"), reply_markup=InlineKeyboardMarkup([buttons]), parse_mode=ParseMode.HTML)
     
     async def handle_cq_name(self):
         logger.debug(f"command to change legal name for: {self.update.user}")
         return await self.handle_name_request("cmd")
     
-    async def handle_cq_couple(self):
+    async def handle_cq_couple(self, key:str):
+        self.set_pass_key(key)
         markup = ReplyKeyboardMarkup(
             [[CANCEL_CHR+self.l("cancel-command")]],
             resize_keyboard=True
         )
         try:
-            await self.update.edit_message_text(self.l("passes-couple-request-edit"), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
+            await self.update.edit_message_text(self.l("passes-couple-request-edit", passKey=self.pass_key), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
         except Exception as err:
             logger.error(f"Exception in handle_cq_couple: {err=}, {self.update.user=}", exc_info=1)
-        await self.update.reply(self.l("passes-couple-request-message"), reply_markup=markup, parse_mode=ParseMode.HTML)
-        await self.update.require_anything(self.base.name, "handle_couple_input", None, "handle_couple_timeout")
+        await self.update.reply(self.l("passes-couple-request-message", passKey=self.pass_key), reply_markup=markup, parse_mode=ParseMode.HTML)
+        await self.update.require_anything(self.base.name, "handle_couple_input", self.pass_key, "handle_couple_timeout")
     
     async def handle_couple_timeout(self, _data):
         await self.update.reply(
@@ -595,32 +689,42 @@ class PassUpdate:
             parse_mode=ParseMode.HTML,
         )
 
-    async def handle_cq_solo(self):
+    async def handle_cq_solo(self, key: str):
+        self.set_pass_key(key)
         user = await self.get_user()
         u_pass = {
             "role": user["role"],
             "state": "waitlist",
             "date_created": now_msk(),
             "type": "solo",
+            "proof_admin": user.get("proof_admins", {}).get(
+                self.pass_key,
+                choice(self.base.payment_admins[self.pass_key]),
+            ),
         }
-        if PASS_KEY in user:
-            u_pass["date_created"] = user[PASS_KEY]["date_created"]
-            u_pass["role"] = user[PASS_KEY]["role"]
+        if self.pass_key in user:
+            u_pass["date_created"] = user[self.pass_key]["date_created"]
+            u_pass["role"] = user[self.pass_key]["role"]
+            u_pass["proof_admin"] = user[self.pass_key].get(
+                "proof_admin",
+                choice(self.base.payment_admins[self.pass_key]),
+            )
         await self.base.user_db.update_one({
             "user_id": self.update.user,
             "bot_id": self.bot
         }, {
             "$set": {
-                PASS_KEY: u_pass,
+                self.pass_key: u_pass,
             }
         })
         keys = dict(u_pass)
         keys["name"] = user["legal_name"]
-        await self.update.edit_or_reply(self.l("passes-solo-saved"), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
+        await self.update.edit_or_reply(self.l("passes-solo-saved", passKey=self.pass_key), reply_markup=InlineKeyboardMarkup([]), parse_mode=ParseMode.HTML)
         
         await self.base.recalculate_queues()
     
-    async def handle_couple_input(self, _data):
+    async def handle_couple_input(self, data):
+        self.set_pass_key(data)
         if filters.TEXT.check_update(self.tgUpdate) and self.update.message.text[0] == CANCEL_CHR:
             return await self.update.reply(
                 self.l("passes-couple-request-cancelled"),
@@ -649,8 +753,8 @@ class PassUpdate:
             "user_id": other_user_id,
             "bot_id": self.update.bot.id,
         })
-        if invitee is not None and PASS_KEY in invitee and invitee[PASS_KEY]["state"]=="payed":
-            return await self.update.reply(self.l("passes-couple-request-invitee-payed"), reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
+        if invitee is not None and self.pass_key in invitee and invitee[self.pass_key]["state"]=="payed":
+            return await self.update.reply(self.l("passes-couple-request-invitee-payed", passKey=self.pass_key), reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
         
         user = await self.get_user()
         u_pass = {
@@ -659,27 +763,36 @@ class PassUpdate:
             "date_created": now_msk(),
             "type": "couple",
             "couple": other_user_id,
+            "proof_admin": user.get("proof_admins", {}).get(
+                self.pass_key,
+                choice(self.base.payment_admins[self.pass_key]),
+            ),
         }
-        if PASS_KEY in user:
-            u_pass["date_created"] = user[PASS_KEY]["date_created"]
-            u_pass["role"] = user[PASS_KEY]["role"]
+        if self.pass_key in user:
+            u_pass["date_created"] = user[self.pass_key]["date_created"]
+            u_pass["role"] = user[self.pass_key]["role"]
+            u_pass["proof_admin"] = user[self.pass_key].get(
+                "proof_admin",
+                choice(self.base.payment_admins[self.pass_key]),
+            )
         await self.base.user_db.update_one({
             "user_id": self.update.user,
             "bot_id": self.bot
         }, {
             "$set": {
-                PASS_KEY: u_pass,
+                self.pass_key: u_pass,
             }
         })
-        user[PASS_KEY] = u_pass
+        user[self.pass_key] = u_pass
         keys = dict(u_pass)
         keys["name"] = user["legal_name"]
         if invitee is not None:
             inv_update = await self.base.create_update_from_user(invitee["user_id"])
+            inv_update.set_pass_key(self.pass_key)
             await inv_update.show_couple_invitation(user)
-            await self.update.reply(self.l("passes-couple-saved-sent"), reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
+            await self.update.reply(self.l("passes-couple-saved-sent", passKey=self.pass_key), reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
         else:
-            await self.update.reply(self.l("passes-couple-saved"), reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
+            await self.update.reply(self.l("passes-couple-saved", passKey=self.pass_key), reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
 
     async def handle_name_request(self, data):
         user = await self.get_user()
@@ -694,9 +807,12 @@ class PassUpdate:
             resize_keyboard=True
         )
         await self.update.reply(self.l("passes-legal-name-request-message"), reply_markup=markup, parse_mode=ParseMode.HTML)
-        await self.update.require_input(self.base.name, "handle_legal_name_input", data, "handle_legal_name_timeout")
+        await self.update.require_input(self.base.name, "handle_legal_name_input", f"{self.pass_key}|{data}", "handle_legal_name_timeout")
     
-    async def handle_legal_name_input(self, data):
+    async def handle_legal_name_input(self, data: str):
+        pass_key, reason = data.split("|", maxsplit=2)
+        if pass_key != "":
+            self.set_pass_key(pass_key)
         user = await self.get_user()
         name = self.update.message.text
         if name[0] == CANCEL_CHR:
@@ -720,7 +836,7 @@ class PassUpdate:
             ),
             reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML,
         )
-        await self.after_legal_name_input(data)
+        await self.after_legal_name_input(reason)
     
     async def after_legal_name_input(self,data):
         if data == "pass":
@@ -730,11 +846,11 @@ class PassUpdate:
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton(
                         self.l("passes-role-button-leader"),
-                        callback_data=f"{self.base.name}|pass_role|l"
+                        callback_data=f"{self.base.name}|pass_role|{self.pass_key}|l"
                     ),
                     InlineKeyboardButton(
                         self.l("passes-role-button-follower"),
-                        callback_data=f"{self.base.name}|pass_role|f"
+                        callback_data=f"{self.base.name}|pass_role|{self.pass_key}|f"
                     ),
                 ],[
                     InlineKeyboardButton(
@@ -746,38 +862,45 @@ class PassUpdate:
         elif data != "cmd":
             await self.accept_invitation(data)
 
-    async def handle_cq_pass_role(self, role: str):
+    async def handle_cq_pass_role(self, key:str, role: str):
+        self.set_pass_key(key)
         new_role = "leader" if role.startswith("l") else "follower"
+        setter = {
+            "role": new_role,
+        }
+        if len(self.base.payment_admins[self.pass_key]) == 1:
+            setter["proof_admins."+self.pass_key] =  self.base.payment_admins[self.pass_key][0]
         await self.base.user_db.update_one({
             "user_id": self.update.user,
             "bot_id": self.bot
         }, {
-            "$set": {
-                "role": new_role,
-            }
+            "$set": setter
         })
-        await self.update.edit_or_reply(
-            self.l(
-                "passes-pass-role-saved",
-                role=new_role,
-            ),
-            parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton(
-                    self.l("passes-button-solo"),
-                    callback_data=f"{self.base.name}|solo"
+        
+        if len(self.base.payment_admins[self.pass_key]) > 1:
+            await self.handle_cq_change_admin(self.pass_key, "passes-pass-role-saved")
+        else:
+            await self.update.edit_or_reply(
+                self.l(
+                    "passes-pass-admin-saved",
                 ),
-                InlineKeyboardButton(
-                    self.l("passes-button-couple"),
-                    callback_data=f"{self.base.name}|couple"
-                ),
-            ],[
-                InlineKeyboardButton(
-                    self.l("passes-button-cancel"),
-                    callback_data=f"{self.base.name}|pass_exit"
-                ),
-            ]]),
-        )
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        self.l("passes-button-solo"),
+                        callback_data=f"{self.base.name}|solo|{self.pass_key}"
+                    ),
+                    InlineKeyboardButton(
+                        self.l("passes-button-couple"),
+                        callback_data=f"{self.base.name}|couple|{self.pass_key}"
+                    ),
+                ],[
+                    InlineKeyboardButton(
+                        self.l("passes-button-cancel"),
+                        callback_data=f"{self.base.name}|pass_exit"
+                    ),
+                ]]),
+            )
 
     async def handle_cq_role(self, role: str):
         new_role = "leader" if role.startswith("l") else "follower"
@@ -808,36 +931,35 @@ class PassUpdate:
             self.user = await self.update.get_user()
         return self.user
 
-    async def assign_pass(self):
+    async def assign_pass(self, pass_key: str):
+        self.set_pass_key(pass_key)
         user = await self.base.user_db.find_one({
             "user_id": self.update.user,
             "bot_id": self.bot,
-            PASS_KEY+".state": "waitlist",
+            self.pass_key+".state": "waitlist",
         })
         if user is None:
             return False
         
         uids = [self.update.user]
-        if "couple" in user[PASS_KEY]:
-            uids.append(user[PASS_KEY]["couple"])
+        if "couple" in user[self.pass_key]:
+            uids.append(user[self.pass_key]["couple"])
         in_q = {"$in": uids}
         matcher = {
             "user_id": in_q,
             "bot_id": self.bot,
-            PASS_KEY+".state": "waitlist",
+            self.pass_key+".state": "waitlist",
         }
-        if "couple" in user[PASS_KEY]:
-            matcher[PASS_KEY+".couple"] = in_q
+        if "couple" in user[self.pass_key]:
+            matcher[self.pass_key+".couple"] = in_q
         else:
-            matcher[PASS_KEY+".couple"] = {"$exists": False}
+            matcher[self.pass_key+".couple"] = {"$exists": False}
 
-        admin_id = choice(self.base.payment_admins)
         result = await self.base.user_db.update_many(matcher, {
             "$set": {
-                PASS_KEY+".state": "assigned",
-                PASS_KEY+".price": CURRENT_PRICE * len(uids),
-                PASS_KEY+".date_assignment": now_msk(),
-                PASS_KEY+".proof_admin": admin_id,
+                self.pass_key+".state": "assigned",
+                self.pass_key+".price": CURRENT_PRICE[self.pass_key] * len(uids),
+                self.pass_key+".date_assignment": now_msk(),
             }
         })
         have_changes = result.modified_count > 0
@@ -846,10 +968,10 @@ class PassUpdate:
                 "user_id": in_q,
                 "bot_id": self.bot,
             }, {
-                "$unset": {PASS_KEY: ""}
+                "$unset": {self.pass_key: ""}
             })
             have_changes = have_changes or r2.modified_count > 0
-        del matcher[PASS_KEY+".state"]
+        del matcher[self.pass_key+".state"]
         users = await self.base.user_db.find(matcher).to_list(None)
         for user in users:
             if result.matched_count < len(uids):
@@ -857,9 +979,10 @@ class PassUpdate:
                     upd = await self.base.create_update_from_user(user["user_id"])
                     await upd.update.reply(upd.l("passes-error-couple-not-found"), parse_mode=ParseMode.HTML)
             else:
-                logger.info(f"assigned pass to {user['user_id']}, role {user[PASS_KEY]['role']}, name {user['legal_name']}")
+                logger.info(f"assigned pass to {user['user_id']}, role {user[self.pass_key]['role']}, name {user['legal_name']}")
                 upd = await self.base.create_update_from_user(user["user_id"])
-                await upd.show_pass_edit(user, user[PASS_KEY], "passes-pass-assigned")
+                upd.set_pass_key(self.pass_key)
+                await upd.show_pass_edit(user, user[self.pass_key], "passes-pass-assigned")
         return have_changes
     
     async def handle_role_cmd(self):
@@ -899,62 +1022,65 @@ class PassUpdate:
         user = await self.base.user_db.find_one({
             "user_id": self.update.user,
             "bot_id": self.bot,
-            PASS_KEY+".state": {"$ne": "payed"},
+            self.pass_key+".state": {"$ne": "payed"},
         })
         uids = [self.update.user]
-        if user is not None and "couple" in user[PASS_KEY] and user[PASS_KEY]["state"] != "waiting-for-couple":
-            uids.append(user[PASS_KEY]["couple"])
-            upd = await self.base.create_update_from_user(user[PASS_KEY]["couple"])
+        if user is not None and "couple" in user[self.pass_key] and user[self.pass_key]["state"] != "waiting-for-couple":
+            uids.append(user[self.pass_key]["couple"])
+            upd = await self.base.create_update_from_user(user[self.pass_key]["couple"])
+            upd.set_pass_key(self.pass_key)
             await upd.inform_pass_cancelled()
         result = await self.base.user_db.update_many({
             "user_id": {"$in": uids},
             "bot_id": self.bot,
-            PASS_KEY+".state": {"$ne": "payed"},
+            self.pass_key+".state": {"$ne": "payed"},
         }, {
             "$unset": {
-                PASS_KEY: "",
+                self.pass_key: "",
             }
         })
         return result.modified_count > 0
 
-    async def notify_no_more_passes(self):
+    async def notify_no_more_passes(self, pass_key):
+        self.set_pass_key(pass_key)
         await self.base.user_db.update_one({
             "user_id": self.update.user,
             "bot_id": self.bot,
-            PASS_KEY+".state": "waitlist",
+            self.pass_key+".state": "waitlist",
         }, {
             "$set": {
-                PASS_KEY+".no_more_passes_notification_sent": now_msk(),
+                self.pass_key+".no_more_passes_notification_sent": now_msk(),
             }
         })
         user = await self.get_user()
-        await self.show_pass_edit(user, user[PASS_KEY], "passes-added-to-waitlist")
+        await self.show_pass_edit(user, user[self.pass_key], "passes-added-to-waitlist")
 
     async def notify_deadline_close(self, suffix:str = ""):
         result = await self.base.user_db.update_one({
             "user_id": self.update.user,
             "bot_id": self.bot,
-            PASS_KEY+".state": "assigned",
-            PASS_KEY + ".notified_deadline_close"+suffix: {"$exists": False},
+            self.pass_key+".state": "assigned",
+            self.pass_key + ".notified_deadline_close"+suffix: {"$exists": False},
         }, {
             "$set": {
-                PASS_KEY + ".notified_deadline_close"+suffix: now_msk(),
+                self.pass_key + ".notified_deadline_close"+suffix: now_msk(),
             }
         })
         if result.modified_count > 0:
             await self.update.reply(
-                self.l("passes-payment-deadline-close"),
+                self.l("passes-payment-deadline-close", passKey=self.pass_key),
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
             )
     
-    async def decline_due_deadline(self):
+    async def decline_due_deadline(self, pass_key):
+        self.set_pass_key(pass_key)
         result = await self.base.user_db.update_one({
             "user_id": self.update.user,
             "bot_id": self.update.bot.id,
-            PASS_KEY+".couple": {"$exists": True},
+            self.pass_key+".couple": {"$exists": True},
         }, {
-            "$unset": {PASS_KEY+".couple": ""},
+            "$unset": {self.pass_key+".couple": ""},
         })
         if result.modified_count > 0:
             await self.update.reply(
@@ -964,11 +1090,11 @@ class PassUpdate:
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton(
                         self.l("passes-button-solo"),
-                        callback_data=f"{self.base.name}|solo"
+                        callback_data=f"{self.base.name}|solo|{self.pass_key}"
                     ),
                     InlineKeyboardButton(
                         self.l("passes-button-couple"),
-                        callback_data=f"{self.base.name}|couple"
+                        callback_data=f"{self.base.name}|couple|{self.pass_key}"
                     ),
                 ],[
                     InlineKeyboardButton(
@@ -979,7 +1105,8 @@ class PassUpdate:
                 parse_mode=ParseMode.HTML,
             )
     
-    async def decline_invitation_due_deadline(self):
+    async def decline_invitation_due_deadline(self, pass_key):
+        self.set_pass_key(pass_key)
         await self.update.reply(
             await self.format_message(
                 "passes-invitation-timeout"
@@ -987,7 +1114,8 @@ class PassUpdate:
             parse_mode=ParseMode.HTML,
         )
 
-    async def cancel_due_deadline(self):
+    async def cancel_due_deadline(self, pass_key):
+        self.set_pass_key(pass_key)
         success = await self.cancel_pass()
         if success:
             await self.update.reply(
@@ -1002,11 +1130,14 @@ class Passes(BasePlugin):
     def __init__(self, base_app):
         super().__init__(base_app)
         self.base_app.passes = self
-        self.payment_admins: list[int] = []
-        if isinstance(self.config.passes.payment_admin, int):
-            self.payment_admins.append(self.config.passes.payment_admin)
-        elif isinstance(self.config.passes.payment_admin, list):
-            self.payment_admins.extend(self.config.passes.payment_admin)
+        self.payment_admins: dict[str,list[int]] = {
+            key:[] for key in PASS_KEYS
+        }
+        for key in PASS_KEYS:
+            if isinstance(self.config.passes.events[key].payment_admin, int):
+                self.payment_admins[key].append(self.config.passes.events[key].payment_admin)
+            elif isinstance(self.config.passes.events[key].payment_admin, list):
+                self.payment_admins[key].extend(self.config.passes.events[key].payment_admin)
         self.user_db: AgnosticCollection = base_app.users_collection
         self._checker = CommandHandler(self.name, self.handle_start)
         self._name_checker = CommandHandler("legal_name", self.handle_name_cmd)
@@ -1017,79 +1148,101 @@ class Passes(BasePlugin):
     
     async def _timeout_processor(self) -> None:
         await sleep(1)
+        for pass_key in PASS_KEYS:
+            async for user in self.user_db.find({
+                "bot_id": self.bot.id,
+                pass_key: {"$exists": True},
+                pass_key + ".proof_admin": {"$exists": False},
+            }):
+                await self.user_db.update_one({
+                    "user_id": user["user_id"],
+                    "bot_id": self.bot.id,
+                }, {
+                    "$set": {
+                        pass_key + ".proof_admin": choice(self.payment_admins[pass_key]),
+                    }
+                })
+
         await self.recalculate_queues()
         while True:
-            try:
-                await sleep(TIMEOUT_PROCESSOR_TICK)
-                async for user in self.user_db.find({
-                        "bot_id": self.bot.id,
-                        PASS_KEY + ".state": "assigned",
-                        PASS_KEY + ".notified_deadline_close": {
-                            "$lt": now_msk() - PAYMENT_TIMEOUT + PAYMENT_TIMEOUT_NOTIFY,
-                        },
-                    }):
-                    upd = await self.create_update_from_user(user["user_id"])
-                    await upd.cancel_due_deadline()
-                async for user in self.user_db.find({
-                        "bot_id": self.bot.id,
-                        PASS_KEY + ".state": "waiting-for-couple",
-                        PASS_KEY + ".date_created": {
-                            "$lt": now_msk() - INVITATION_TIMEOUT,
-                        },
-                    }):
-                    upd = await self.create_update_from_user(user["user_id"])
-                    await upd.decline_due_deadline()
-                    upd = await self.create_update_from_user(user[PASS_KEY]["couple"])
-                    await upd.decline_invitation_due_deadline()
-                async for user in self.user_db.find({
-                        "bot_id": self.bot.id,
-                        PASS_KEY + ".state": "assigned",
-                        PASS_KEY + ".date_assignment": {
-                            "$lt": now_msk() - PAYMENT_TIMEOUT_NOTIFY,
-                        },
-                        PASS_KEY + ".notified_deadline_close": {"$exists": False},
-                    }):
-                    upd = await self.create_update_from_user(user["user_id"])
-                    await upd.notify_deadline_close()
-                async for user in self.user_db.find({
-                        "bot_id": self.bot.id,
-                        PASS_KEY + ".state": "assigned",
-                        PASS_KEY + ".notified_deadline_close": {
-                            "$lt": now_msk() - PAYMENT_TIMEOUT_NOTIFY2 + PAYMENT_TIMEOUT_NOTIFY,
-                        },
-                        PASS_KEY + ".notified_deadline_close2": {"$exists": False},
-                    }):
-                    upd = await self.create_update_from_user(user["user_id"])
-                    await upd.notify_deadline_close("2")
-            except Exception as e:
-                logger.error("Exception in Passes._timeout_processor %s", e, exc_info=1)
+            for pass_key in PASS_KEYS:
+                try:
+                    await sleep(TIMEOUT_PROCESSOR_TICK)
+                    async for user in self.user_db.find({
+                            "bot_id": self.bot.id,
+                            pass_key + ".state": "assigned",
+                            pass_key + ".notified_deadline_close": {
+                                "$lt": now_msk() - PAYMENT_TIMEOUT + PAYMENT_TIMEOUT_NOTIFY,
+                            },
+                        }):
+                        upd = await self.create_update_from_user(user["user_id"])
+                        await upd.cancel_due_deadline(pass_key)
+                    async for user in self.user_db.find({
+                            "bot_id": self.bot.id,
+                            pass_key + ".state": "waiting-for-couple",
+                            pass_key + ".date_created": {
+                                "$lt": now_msk() - INVITATION_TIMEOUT,
+                            },
+                        }):
+                        upd = await self.create_update_from_user(user["user_id"])
+                        await upd.decline_due_deadline(pass_key)
+                        upd = await self.create_update_from_user(user[pass_key]["couple"])
+                        await upd.decline_invitation_due_deadline(pass_key)
+                    async for user in self.user_db.find({
+                            "bot_id": self.bot.id,
+                            pass_key + ".state": "assigned",
+                            pass_key + ".date_assignment": {
+                                "$lt": now_msk() - PAYMENT_TIMEOUT_NOTIFY,
+                            },
+                            pass_key + ".notified_deadline_close": {"$exists": False},
+                        }):
+                        upd = await self.create_update_from_user(user["user_id"])
+                        upd.set_pass_key(pass_key)
+                        await upd.notify_deadline_close()
+                    async for user in self.user_db.find({
+                            "bot_id": self.bot.id,
+                            pass_key + ".state": "assigned",
+                            pass_key + ".notified_deadline_close": {
+                                "$lt": now_msk() - PAYMENT_TIMEOUT_NOTIFY2 + PAYMENT_TIMEOUT_NOTIFY,
+                            },
+                            pass_key + ".notified_deadline_close2": {"$exists": False},
+                        }):
+                        upd = await self.create_update_from_user(user["user_id"])
+                        upd.set_pass_key(pass_key)
+                        await upd.notify_deadline_close("2")
+                except Exception as e:
+                    logger.error("Exception in Passes._timeout_processor %s", e, exc_info=1)
     
     async def recalculate_queues(self) -> None:
+        for key in PASS_KEYS:
+            await self.recalculate_queues_pk(key)
+
+    async def recalculate_queues_pk(self, pass_key: str) -> None:
         try:
             while True:
                 aggregation = await self.user_db.aggregate([{
                     "$match": {
-                        PASS_KEY: {"$exists": True},
+                        pass_key: {"$exists": True},
                         "bot_id": self.bot.id,
                     },
                 },{
                     "$group": {
                         "_id": {
-                            "state": f"${PASS_KEY}.state",
-                            "role": f"${PASS_KEY}.role",
+                            "state": f"${pass_key}.state",
+                            "role": f"${pass_key}.role",
                         },
                         "count": { "$count": {} },
                     }
                 }]).to_list(None)
                 couples = {group["_id"]:group["count"] for group in await self.user_db.aggregate([{
                     "$match": {
-                        PASS_KEY+".couple": {"$exists": True},
-                        PASS_KEY+".role": "leader",
+                        pass_key+".couple": {"$exists": True},
+                        pass_key+".role": "leader",
                         "bot_id": self.bot.id,
                     },
                 },{
                     "$group": {
-                        "_id": f"${PASS_KEY}.state",
+                        "_id": f"${pass_key}.state",
                         "count": { "$count": {} },
                     }
                 }]).to_list(None)}
@@ -1107,12 +1260,12 @@ class Passes(BasePlugin):
                 counts["leader"]["RA"] = counts["leader"].get("payed", 0) + counts["leader"].get("assigned", 0)
                 counts["follower"]["RA"] = counts["follower"].get("payed", 0) + counts["follower"].get("assigned", 0)
                 ra = counts["leader"]["RA"]  if counts["leader"]["RA"] >= counts["follower"]["RA"] else counts["follower"]["RA"]
-                if ra > self.config.passes.amount_cap_per_role:
+                if ra > self.config.passes.events[pass_key].amount_cap_per_role:
                     break
                 max_assigned -= couples.get("assigned", 0)
                 if counts["leader"]["RA"] != counts["follower"]["RA"]:
                     target_group = "follower" if counts["leader"]["RA"] > counts["follower"]["RA"] else "leader"
-                    success = await self.assign_pass(target_group)
+                    success = await self.assign_pass(target_group, pass_key)
                     if not success:
                         break
                     continue
@@ -1120,21 +1273,21 @@ class Passes(BasePlugin):
                     if max_assigned > MAX_CONCURRENT_ASSIGNMENTS:
                         break
                     target_group = "follower" if counts["leader"].get("waitlist", 0) > counts["follower"].get("waitlist", 0) else "leader"
-                    success = await self.assign_pass(target_group)
+                    success = await self.assign_pass(target_group, pass_key)
                     if not success:
                         break
                     continue
             while True:
                 aggregation = await self.user_db.aggregate([{
                     "$match": {
-                        PASS_KEY: {"$exists": True},
+                        pass_key: {"$exists": True},
                         "bot_id": self.bot.id,
                     },
                 },{
                     "$group": {
                         "_id": {
-                            "state": f"${PASS_KEY}.state",
-                            "role": f"${PASS_KEY}.role",
+                            "state": f"${pass_key}.state",
+                            "role": f"${pass_key}.role",
                         },
                         "count": { "$count": {} },
                     }
@@ -1150,9 +1303,9 @@ class Passes(BasePlugin):
                 counts["leader"]["RA"] = counts["leader"].get("payed", 0) + counts["leader"].get("assigned", 0)
                 counts["follower"]["RA"] = counts["follower"].get("payed", 0) + counts["follower"].get("assigned", 0)
                 ra = counts["leader"]["RA"]  if counts["leader"]["RA"] >= counts["follower"]["RA"] else counts["follower"]["RA"]
-                if ra > self.config.passes.amount_cap_per_role:
+                if ra > self.config.passes.events[pass_key].amount_cap_per_role:
                     break
-                success = await self.assign_pass("couple")
+                success = await self.assign_pass("couple", pass_key)
                 if not success:
                     break
                 continue
@@ -1161,48 +1314,49 @@ class Passes(BasePlugin):
             while have_unnotified:
                 selected = await self.user_db.find({
                     "bot_id": self.bot.id,
-                    PASS_KEY + ".state": "waitlist",
-                    PASS_KEY + ".no_more_passes_notification_sent": { "$exists": False },
+                    pass_key + ".state": "waitlist",
+                    pass_key + ".no_more_passes_notification_sent": { "$exists": False },
                 }).to_list(100)
                 if len(selected) == 0:
                     logger.info("no unnotified candidates in the waiting list")
                     break
                 for user in selected:
                     upd = await self.create_update_from_user(user["user_id"])
-                    await upd.notify_no_more_passes()
+                    await upd.notify_no_more_passes(pass_key)
         except Exception as e:
             logger.error(f"Exception in recalculate_queues: {e}", exc_info=1)
             
         try:
             async for user in self.user_db.find({
                     "bot_id": self.bot.id,
-                    PASS_KEY: {"$exists": True},
-                    PASS_KEY + ".sent_to_hype_thread": {"$exists": False},
+                    pass_key: {"$exists": True},
+                    pass_key + ".sent_to_hype_thread": {"$exists": False},
                 }):
                 await self.user_db.update_one({
                     "user_id": user["user_id"],
                     "bot_id": self.bot.id,
-                    PASS_KEY: {"$exists": True},
+                    pass_key: {"$exists": True},
                 }, {"$set":{
-                    PASS_KEY + ".sent_to_hype_thread": now_msk(),
+                    pass_key + ".sent_to_hype_thread": now_msk(),
                 }})
-                if self.config.passes.thread_channel != "":
+                if self.config.passes.events[pass_key].thread_channel != "":
                     try:
-                        ch = self.config.passes.thread_channel
+                        ch = self.config.passes.events[pass_key].thread_channel
                         if isinstance(ch, str):
                             ch = "@" + ch
                         logger.debug(f"chat id: {ch}, type {type(ch)}")
                         args = {
                             "name": client_user_name(user),
-                            "role": user[PASS_KEY]["role"],
+                            "role": user[pass_key]["role"],
+                            "passKey": pass_key,
                         }
                         await self.bot.send_message(
                             chat_id=ch,
-                            message_thread_id=self.config.passes.thread_id,
+                            message_thread_id=self.config.passes.events[pass_key].thread_id,
                             text=self.base_app.localization(
                                 "passes-announce-user-registered",
                                 args=args,
-                                locale=self.config.passes.thread_locale,
+                                locale=self.config.passes.events[pass_key].thread_locale,
                             ),
                             parse_mode=ParseMode.HTML,
                         )
@@ -1211,26 +1365,26 @@ class Passes(BasePlugin):
         except Exception as e:
             logger.error(f"Exception in recalculate_queues: {e}", exc_info=1)
     
-    async def assign_pass(self, role:str) -> bool:
+    async def assign_pass(self, role:str, pass_key: str) -> bool:
         match = {
             "bot_id": self.bot.id,
-            PASS_KEY + ".state": "waitlist",
+            pass_key + ".state": "waitlist",
         }
         if role == "couple":
-            match[PASS_KEY + ".role"] = "leader"
-            match[PASS_KEY + ".couple"] = {"$exists": True}
+            match[pass_key + ".role"] = "leader"
+            match[pass_key + ".couple"] = {"$exists": True}
         else:
-            match[PASS_KEY + ".role"] = role
+            match[pass_key + ".role"] = role
         selected = await self.user_db.aggregate([
             {"$match": match},
-            {"$sort": {PASS_KEY+".date_created": 1, "user_id": 1}},
+            {"$sort": {pass_key+".date_created": 1, "user_id": 1}},
             {"$limit": 1},
         ]).to_list(1)
 
         if len(selected) == 0:
             return False
         upd = await self.create_update_from_user(selected[0]["user_id"])
-        return await upd.assign_pass()
+        return await upd.assign_pass(pass_key)
 
     async def create_update_from_user(self, user: int) -> PassUpdate:
         upd = TGState(user, self.base_app)

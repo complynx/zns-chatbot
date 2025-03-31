@@ -17,7 +17,7 @@ class Party(BaseSettings):
     is_open: bool = Field(False)
     massage_tables: int = Field(0)
 
-class PassesSettings(BaseSettings):
+class PassesEventSettings(BaseSettings):
     amount_cap_per_role: int = Field(80)
     payment_admin: list[int]|int|None = Field(None)
     sell_start: datetime = Field(datetime(2025, 1, 24, 18, 45))
@@ -25,17 +25,31 @@ class PassesSettings(BaseSettings):
     thread_id: int|None = Field(None)
     thread_locale: str = Field("ru")
 
+class PassesSettings(BaseSettings):
+    events: dict[str,PassesEventSettings] = Field({
+        "pass_2025_1": PassesEventSettings(
+            amount_cap_per_role=80,
+            sell_start=datetime(2025, 1, 24, 18, 45),
+        ),
+        "pass_2025_2": PassesEventSettings(
+            amount_cap_per_role=6,
+            sell_start=datetime(2025, 4, 7, 18, 45),
+        ),
+    })
+
 class TelegramSettings(BaseSettings):
     token: SecretStr = Field()
     admins: set[int] = Field({379278985})
 
-class OpenAI(BaseSettings):
-    api_key: SecretStr = Field("")
-    model: str = Field("gpt-4o-mini")
-    simple_model: str = Field("gpt-4o-mini")
-    reply_token_cap: int = Field(2000)
-    message_token_cap: int = Field(2000)
-    temperature: float = Field(1.06)
+class LanguageModel(BaseSettings):
+    openai_api_key: SecretStr = Field("")
+    google_api_key: SecretStr = Field("")
+    model: str = Field("gemini-2.0-flash")
+    simple_model: str = Field("gemini-2.0-flash-lite")
+    tokenizer_model: str = Field("gpt-4o-mini")
+    reply_token_cap: int = Field(3000)
+    message_token_cap: int = Field(5000)
+    temperature: float = Field(0.7)
     max_messages_per_user_per_day: int = Field(15)
 
 class LoggingSettings(BaseSettings):
@@ -96,7 +110,7 @@ class Config(BaseSettings):
     logging: LoggingSettings = LoggingSettings()
     localization: LocalizationSettings = LocalizationSettings()
     mongo_db: MongoDB = MongoDB()
-    openai: OpenAI = OpenAI()
+    language_model: LanguageModel = LanguageModel()
     passes: PassesSettings = PassesSettings()
     server: ServerSettings = ServerSettings()
     photo: Photo = Photo()
