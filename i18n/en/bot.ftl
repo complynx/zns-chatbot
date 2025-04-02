@@ -9,7 +9,7 @@ auth-request =
     Their User-agent: {$useragent}
 start-message =
     <b>Hello, Zoukonaut!</b> I am <b>ZiNuSya</b>, your digital assistant in the world of convenience and technology.
-    Ready to enhance your experience: register a pass, order hot meals, book a massage,
+    Always here to help you register a pass, order hot meals, book a massage,
     create an avatar, and much more — if these features are currently available.
     Want to know what I can do for you right now?
     <b>Click the blue <code>Menu</code> button</b>, and I'll show you all my capabilities!
