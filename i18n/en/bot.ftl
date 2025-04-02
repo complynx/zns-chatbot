@@ -8,7 +8,11 @@ auth-request =
     Their IP: {$ip}
     Their User-agent: {$useragent}
 start-message =
-    Hi, zoukonaut! I will help you create a user image with frame. To do it, just send me your best picture, please.
+    <b>Hello, Zoukonaut!</b> I am <b>ZiNuSya</b>, your digital assistant in the world of convenience and technology.
+    Ready to enhance your experience: register a pass, order hot meals, book a massage,
+    create an avatar, and much more — if these features are currently available.
+    Want to know what I can do for you right now?
+    <b>Click the blue <code>Menu</code> button</b>, and I'll show you all my capabilities!
 cancel-command = Cancel
 cover-caption-message =
     ❗️If you use this photo in the social networks with profile covers, it goes well with this one.
