@@ -27,6 +27,9 @@ setup(
         "langchain-openai>=0.3.11",
         "langchain-huggingface>=0.1.2",
         "langchain-google-genai>=2.1.2",
+        "google-auth-httplib2>=0.2.0",
+        "google-auth-oauthlib>=1.2.1,<2",
+        "google-api-python-client>=2.166.0,<3",
         # "faiss-cpu==1.8.0",
     ],
     dependency_links=[

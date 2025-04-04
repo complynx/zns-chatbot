@@ -4,7 +4,7 @@ from langchain.schema import (
     HumanMessage,
     SystemMessage
 )
-from asyncio import create_task
+from asyncio import create_task, sleep
 from langchain_core.output_parsers import StrOutputParser
 import tiktoken
 import logging
@@ -13,11 +13,14 @@ from ..tg_state import TGState
 from telegram.constants import ParseMode
 from motor.core import AgnosticCollection
 from telegram import Message, Update
+from google.oauth2 import service_account
 from telegram.ext import filters
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 from .avatar import async_thread
 from .massage import split_list, now_msk
 from asyncio import Event
+from json import loads
+from googleapiclient.discovery import build
 
 output_parser = StrOutputParser()
 
@@ -36,14 +39,15 @@ EMBEDDING_MODEL = "Alibaba-NLP/gte-large-en-v1.5"
 RAG_DATABASE_INDEX = "index"
 RAG_DATABASE_FOLDER = "rag_database"
 
+ABOUT_REFRESH_INTERVAL = 3600
+
+
 class Assistant(BasePlugin):
     name = "assistant"
+    about: str = ""
 
     def __init__(self, base_app):
         super().__init__(base_app)
-        with open("static/about.md", "r", encoding="utf-8") as f:
-            self.about = f.read()
-            
         with open("static/rag_data.yaml", "r", encoding="utf-8") as f:
             import yaml
             data = yaml.safe_load(f)
@@ -66,6 +70,28 @@ class Assistant(BasePlugin):
         self.message_db: AgnosticCollection = base_app.mongodb[self.config.mongo_db.messages_collection]
         self.user_db: AgnosticCollection = base_app.users_collection
         self.tokenizer = tiktoken.encoding_for_model(self.config.language_model.tokenizer_model)
+        
+        create_task(self._refresh_about())
+
+    @async_thread
+    def fetch_document(self) -> dict:
+        creds = loads(self.config.google.credentials.get_secret_value())
+        credentials = service_account.Credentials.from_service_account_info(
+            creds, scopes= ['https://www.googleapis.com/auth/drive']
+        )
+        service = build('drive', 'v3', credentials=credentials)
+        document = service.files().export(fileId=self.config.google.about_doc_id, mimeType="text/markdown").execute()
+        return document.decode(encoding="utf-8") if isinstance(document, bytes) else document
+    
+    async def _refresh_about(self) -> None:
+        while True:
+            try:
+                self.about = await self.fetch_document()
+                tokens = len(self.tokenizer.encode(self.about))
+                logger.info(f"refreshed about, length: {len(self.about)}, tokens: {tokens}")
+                await sleep(ABOUT_REFRESH_INTERVAL)
+            except Exception as e:
+                logger.error(f"Exception in _refresh_about: {e}", exc_info=e)
     
     def test_message(self, message: Update, state, web_app_data):
         if (filters.TEXT & ~filters.COMMAND).check_update(message):

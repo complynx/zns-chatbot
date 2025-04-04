@@ -17,6 +17,10 @@ class Party(BaseSettings):
     is_open: bool = Field(False)
     massage_tables: int = Field(0)
 
+class GoogleSettings(BaseSettings):
+    credentials: SecretStr = Field("")
+    about_doc_id: str = Field("1Jfed4yZ-Kv_W_S1e1qMUFZPdh0nsdEEP5J0EKiqZB_Q")
+
 class PassesEventSettings(BaseSettings):
     amount_cap_per_role: int = Field(80)
     payment_admin: list[int]|int|None = Field(None)
@@ -107,6 +111,7 @@ class Massages(BaseSettings):
 class Config(BaseSettings):
     model_config = SettingsConfigDict(env_prefix='zns_', yaml_file="config/config.yaml", env_nested_delimiter='__')
     telegram: TelegramSettings
+    google: GoogleSettings = GoogleSettings()
     logging: LoggingSettings = LoggingSettings()
     localization: LocalizationSettings = LocalizationSettings()
     mongo_db: MongoDB = MongoDB()
