@@ -89,6 +89,7 @@ class Assistant(BasePlugin):
                 self.about = await self.fetch_document()
                 tokens = len(self.tokenizer.encode(self.about))
                 logger.info(f"refreshed about, length: {len(self.about)}, tokens: {tokens}")
+                logger.debug(self.about)
             except Exception as e:
                 logger.error(f"Exception in _refresh_about: {e}", exc_info=e)
             await sleep(ABOUT_REFRESH_INTERVAL)
