@@ -89,9 +89,9 @@ class Assistant(BasePlugin):
                 self.about = await self.fetch_document()
                 tokens = len(self.tokenizer.encode(self.about))
                 logger.info(f"refreshed about, length: {len(self.about)}, tokens: {tokens}")
-                await sleep(ABOUT_REFRESH_INTERVAL)
             except Exception as e:
                 logger.error(f"Exception in _refresh_about: {e}", exc_info=e)
+            await sleep(ABOUT_REFRESH_INTERVAL)
     
     def test_message(self, message: Update, state, web_app_data):
         if (filters.TEXT & ~filters.COMMAND).check_update(message):
