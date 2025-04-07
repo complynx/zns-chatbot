@@ -1,3 +1,4 @@
+from asyncio import Event, sleep
 from datetime import datetime, timedelta
 from typing import Any
 from motor.core import AgnosticCollection
@@ -262,6 +263,13 @@ class TGState:
             self.state["timeout_callback"] = timeout_callback
             self.state["deadline"] = datetime.now() + timedelta(seconds=timeout_time)
         await self.save_state()
+    
+    async def keep_sending_chat_action_until(self, until: Event, chat_id=None, action=ChatAction.TYPING):
+        if chat_id is None:
+            chat_id = self.chat_id
+        while not until.is_set():
+            await self.send_chat_action(chat_id=chat_id, action=action)
+            await sleep(5)
     
     async def send_chat_action(self, chat_id=None, action=ChatAction.TYPING):
         if chat_id is None:

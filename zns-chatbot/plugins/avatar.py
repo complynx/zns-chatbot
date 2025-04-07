@@ -1,4 +1,4 @@
-import asyncio
+from ._fix_torch import functional_tensor as _unused  # noqa: F401
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 import mimetypes
@@ -6,9 +6,13 @@ import os
 import tempfile
 import threading
 import time
-import dlib
+import insightface
+from insightface.app.common import Face
+from gfpgan import GFPGANer
 from motor.core import AgnosticCollection
+from huggingface_hub import hf_hub_download
 from PIL import Image, ImageChops
+from asyncio import Event, create_task, get_event_loop
 from ..config import Config, full_link
 from ..tg_state import TGState
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
@@ -26,22 +30,20 @@ file_cache_timeout = 2*60*60 # 2 hours
 def async_thread(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        return asyncio.get_event_loop().run_in_executor(pool, lambda: func(*args, **kwargs))
+        return get_event_loop().run_in_executor(pool, lambda: func(*args, **kwargs))
     return wrapper
 
 @async_thread
-def join_images(a, b):
+def join_images(a: Image.Image, b: Image.Image) -> Image.Image:
     a = a.convert('RGBA')
     b = b.convert('RGBA')
     # c = c.convert('RGBA')
     joiner = Image.new('RGBA', a.size)
     joiner.alpha_composite(a)
-    joiner.alpha_composite(b)
-    # joiner = ImageChops.screen(joiner, c)
+    # joiner.alpha_composite(b)
+    joiner = ImageChops.screen(joiner, b)
 
     return joiner.convert('RGB')
-
-face_cascade = dlib.get_frontal_face_detector()
 
 def expand_to_square(rect):
     x, y, w, h = rect
@@ -96,50 +98,8 @@ def create_scaled_square(rect, boundaries, scale, shift):
     logger.debug("shrunk_square: %s", shrunk_square)
     return shrunk_square
 
-def rectProd(rect):
-    l = rect.left()
-    t = rect.top()
-    r = rect.right()
-    b = rect.bottom()
-    return (r-l)*(b-t)
-
 @async_thread
-def resize_faces(img: Image.Image, config: Config) -> Image.Image:
-    import numpy as np
-    numpy_image = np.array(img.convert("RGB"))
-    faces = face_cascade(
-        numpy_image,1
-    )
-    
-    if len(faces)>0:
-        logger.debug("faces: %s", faces)
-        faces_sorted = sorted(faces, key=rectProd)
-        logger.debug("sorted: %s", faces_sorted)
-        size = config.photo.frame_size
-        pw, ph = img.size
-        sq = create_scaled_square(faces_sorted[0], (0,0,pw,ph), config.photo.face_expand,
-                                  (config.photo.face_offset_x, config.photo.face_offset_y))
-        
-        cropped_img = img.crop(sq)
-        return cropped_img.resize((size, size), resample=Image.LANCZOS)
-    else:
-        logger.debug("no faces")
-        size = config.photo.frame_size
-        pw, ph = img.size
-        left = right = top = bottom = 0
-        if pw < ph:
-            top = (ph-pw)//2
-            bottom = top+pw
-            right = pw
-        else:
-            left = (pw-ph)//2
-            right = left + ph
-            bottom = ph
-        cropped_img = img.crop((left,top,right,bottom))
-        return cropped_img.resize((size, size), resample=Image.LANCZOS)
-
-@async_thread
-def resize_basic(img, size):
+def resize_basic(img: Image.Image, size: int) -> Image.Image:
     pw, ph = img.size
     left = right = top = bottom = 0
     if pw < ph:
@@ -179,7 +139,6 @@ def touch_file(file_path):
     current_time = time.time()
     os.utime(file_path, times=(current_time, current_time))
 
-
 class Avatar(BasePlugin):
     name = "avatar"
 
@@ -190,6 +149,33 @@ class Avatar(BasePlugin):
         sweep_folder(self.cache_dir)
         self.base_app.avatar = self
         self._command_test = CommandHandler("avatar", self.handle_command)
+        self._is_ready = Event()
+        create_task(self._prepare_models())
+
+    @async_thread
+    def _prepare_models_sync(self):
+        self.detector = insightface.app.FaceAnalysis(name='buffalo_l')
+        self.detector.prepare(ctx_id=0, det_size=(640, 640))
+        fs = hf_hub_download(self.config.photo.face_swap_repo, self.config.photo.face_swap_filename)
+        self.swapper = insightface.model_zoo.get_model(fs, download=False)
+        gan = hf_hub_download(self.config.photo.restoration_gan_repo, self.config.photo.restoration_gan_filename)
+        self.gan = GFPGANer(
+            model_path=gan,
+            upscale=2,
+            arch='clean',
+            channel_multiplier=2,
+            bg_upsampler=None,
+        )
+    
+    async def _prepare_models(self):
+        try:
+            start = time.time()
+            logger.info("preparing models...")
+            await self._prepare_models_sync()
+            self._is_ready.set()
+            logger.info(f"models prepared, took: {time.time() - start} seconds")
+        except Exception as e:
+            logger.error("Failed to prepare models: %s", e, exc_info=1)
     
     def test_message(self, message: Update, state, web_app_data):
         if filters.PHOTO.check_update(message):
@@ -218,17 +204,30 @@ class Avatar(BasePlugin):
         return file_path
     
     async def handle_photo(self, update: TGState):
-        await update.send_chat_action(action=ChatAction.UPLOAD_PHOTO)
+        await update.send_chat_action(action=ChatAction.TYPING)
         document = update.update.message.photo[-1]
         file_name = f"{document.file_id}.jpg"
         await self.handle_image_stage2(update, file_name)
     
     async def handle_document(self, update: TGState):
-        await update.send_chat_action(action=ChatAction.UPLOAD_PHOTO)
+        await update.send_chat_action(action=ChatAction.TYPING)
         document = update.update.message.document
         file_ext = mimetypes.guess_extension(document.mime_type)
         file_name = f"{document.file_id}{file_ext}"
         await self.handle_image_stage2(update, file_name)
+    
+    @async_thread
+    def detect_face(self, img: Image.Image) -> Face:
+        import numpy as np
+        faces: list[Face] = self.detector.get(np.array(img.convert("RGB")))
+        return max(faces, key=lambda face: (face.bbox[2] - face.bbox[0]) * (face.bbox[3] - face.bbox[1]))
+    
+    @async_thread
+    def swap_faces(self, dst_img: Image.Image, src_face: Face, dst_face: Face) -> Image.Image:
+        import numpy as np
+        swapped = self.swapper.get(np.array(dst_img.convert("RGB")), dst_face, src_face, paste_back=True)
+        _, _, restored = self.gan.enhance(swapped, has_aligned=False, only_center_face=False, paste_back=True)
+        return Image.fromarray(restored)
 
     async def handle_image_stage2(self, update: TGState, name):
         tgUpdate = update.update  # type: Update
@@ -241,32 +240,48 @@ class Avatar(BasePlugin):
             }
         })
         file_path = await self.get_file(name)
+        if not self._is_ready.is_set():
+            logger.info("models aren't ready yet...")
+            await self._is_ready.wait()
         with Image.open(file_path) as img:
-            resized_avatar = await resize_faces(img, self.config)
-            with Image.open(self.config.photo.frame_file) as frame:
-                # with Image.open(self.config.photo.flare_file) as flare:
-                resized_frame = await resize_basic(frame, self.config.photo.frame_size)
-                # resized_flare = await resize_basic(flare, self.config.photo.frame_size)
+            try:
+                src_face = await self.detect_face(img)
+            except IndexError:
+                await tgUpdate.message.reply_text(update.l("avatar-no-face"))
+                return
+            
 
-                final = await join_images(resized_avatar, resized_frame)
+            with Image.open(self.config.photo.face_file) as face:
+                swap_start = time.time()
+                
+                face_resized = await resize_basic(face, self.config.photo.frame_size)
+                dst_face = await self.detect_face(face_resized)
 
-                final_name = f"{file_path}_framed.jpg"
-                final.save(final_name, quality=self.config.photo.quality, optimize=True)
-                locale = tgUpdate.effective_user.language_code
-                await tgUpdate.message.reply_document(
-                    final_name,
-                    filename="avatar.jpg",
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton(
-                            update.l("avatar-custom-crop"),
-                            web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}"))
-                        )
-                    ]]),
-                )
-                if os.path.isfile(self.config.photo.cover_file):
+                swapped = await self.swap_faces(face_resized, src_face, dst_face)
+                swapped = await resize_basic(swapped, self.config.photo.frame_size)
+                logger.info(f"face swap for {update.user} took: {time.time() - swap_start} seconds")
+                
+                with Image.open(self.config.photo.frame_file) as frame:
+                    resized_frame = await resize_basic(frame, self.config.photo.frame_size)
+                    final = await join_images(swapped, resized_frame)
+
+                    final_name = f"{file_path}_framed.jpg"
+                    final.save(final_name, quality=self.config.photo.quality, optimize=True)
+                    locale = tgUpdate.effective_user.language_code
                     await tgUpdate.message.reply_document(
-                        self.config.photo.cover_file,
-                        filename="cover.jpg",
-                        caption=update.l("cover-caption-message")
+                        final_name,
+                        filename="avatar.jpg",
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton(
+                                update.l("avatar-custom-crop"),
+                                web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}"))
+                            )
+                        ]]),
                     )
+                    if os.path.isfile(self.config.photo.cover_file):
+                        await tgUpdate.message.reply_document(
+                            self.config.photo.cover_file,
+                            filename="cover.jpg",
+                            caption=update.l("cover-caption-message")
+                        )
 

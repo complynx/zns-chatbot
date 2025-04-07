@@ -1,3 +1,5 @@
+avatar-no-face = No face found on the image. Please try again with another image: either move away from the phone or move closer, or turn the phone straight.
+
 auth-authorize = ✔ Authorize
 auth-authorized = Request authorized
 auth-cancelled = Request cancelled

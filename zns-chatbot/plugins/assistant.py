@@ -10,7 +10,7 @@ import tiktoken
 import logging
 import datetime
 from ..tg_state import TGState
-from telegram.constants import ParseMode
+from telegram.constants import ParseMode, ChatAction
 from motor.core import AgnosticCollection
 from telegram import Message, Update
 from google.oauth2 import service_account
@@ -101,7 +101,7 @@ class Assistant(BasePlugin):
         
     async def handle_message(self, update: TGState):
         stopper = Event()
-        create_task(self.send_typing(update, stopper))
+        create_task(update.keep_sending_chat_action_until(stopper))
         try:
             repl = await self.get_assistant_reply(update.update.message.text_markdown_v2, update.user, update)
         finally:
@@ -132,12 +132,6 @@ class Assistant(BasePlugin):
     
     # async def context_userfood_tomorrow(self, update: TGState) -> str:
     #     return await self.base_app.food.get_user_orders_assist_tomorrow(update.user)
-
-    async def send_typing(self, update: TGState, stop: Event) -> None:
-        from asyncio import sleep
-        while not stop.is_set():
-            await update.send_chat_action()
-            await sleep(5) # action is sent for 5 seconds
     
     async def get_assistant_reply(self, message: str, user_id: int, update: TGState):
         date_1_day_ago = datetime.datetime.now() - datetime.timedelta(days=1)

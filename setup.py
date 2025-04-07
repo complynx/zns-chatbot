@@ -9,7 +9,7 @@ setup(
         "protobuf<6.0dev,>=5.26.1",
         "python-telegram-bot[job-queue]>=21.0.1",
         # "opencv-python>=4.9.0.1",
-        "dlib>=19.24.0",
+        # "dlib>=19.24.0",
         "tokenizers>=0.21,<0.22",
         "numpy==1.26.4,<2.0",
         "tornado==6.4",
@@ -30,6 +30,9 @@ setup(
         "google-auth-httplib2>=0.2.0",
         "google-auth-oauthlib>=1.2.1,<2",
         "google-api-python-client>=2.166.0,<3",
+        "onnxruntime>=1.21,<2",
+        "insightface>=0.7,<0.8",
+        "gfpgan>=1.3",
         # "faiss-cpu==1.8.0",
     ],
     dependency_links=[
