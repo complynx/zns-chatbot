@@ -2,7 +2,7 @@
 FROM python:3.11-slim-buster
 
 RUN pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cpu
-RUN pip install albumentations==1.4.3
+RUN pip install albumentations==1.4.3 Cython
 
 # Install cmake and compiler
 RUN apt-get update && apt-get install -y \
