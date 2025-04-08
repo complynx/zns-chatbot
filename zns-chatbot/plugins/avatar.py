@@ -1,4 +1,4 @@
-from ._fix_torch import functional_tensor as _unused  # noqa: F401
+from ._fix_torch import functional_tensor as _  # noqa: F401
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 import mimetypes
@@ -204,13 +204,19 @@ class Avatar(BasePlugin):
         return file_path
     
     async def handle_photo(self, update: TGState):
-        await update.send_chat_action(action=ChatAction.TYPING)
+        try:
+            await update.send_chat_action(action=ChatAction.TYPING)
+        except Exception as e:
+            logger.error(f"send chat action exception {e}", exc_info=e)
         document = update.update.message.photo[-1]
         file_name = f"{document.file_id}.jpg"
         await self.handle_image_stage2(update, file_name)
     
     async def handle_document(self, update: TGState):
-        await update.send_chat_action(action=ChatAction.TYPING)
+        try:
+            await update.send_chat_action(action=ChatAction.TYPING)
+        except Exception as e:
+            logger.error(f"send chat action exception {e}", exc_info=e)
         document = update.update.message.document
         file_ext = mimetypes.guess_extension(document.mime_type)
         file_name = f"{document.file_id}{file_ext}"

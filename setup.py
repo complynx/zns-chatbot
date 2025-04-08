@@ -11,7 +11,7 @@ setup(
         # "opencv-python>=4.9.0.1",
         # "dlib>=19.24.0",
         "tokenizers>=0.21,<0.22",
-        "numpy==1.26.4,<2.0",
+        "numpy>=1.23,<2.0",
         "tornado==6.4",
         "fluent.runtime>=0.4",
         "pyyaml>=6.0",
