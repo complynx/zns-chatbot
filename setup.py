@@ -5,11 +5,12 @@ setup(
     version="0.3",
     packages=find_packages(),
     install_requires=[
-        "packaging==23.2",
+        "packaging>=23.2,<25",
         "protobuf<6.0dev,>=5.26.1",
         "python-telegram-bot[job-queue]>=21.0.1",
         # "opencv-python>=4.9.0.1",
         # "dlib>=19.24.0",
+        "grpcio<1.60",
         "tokenizers>=0.21,<0.22",
         "numpy>=1.23,<2.0",
         "tornado==6.4",
