@@ -8,6 +8,7 @@ RUN pip install albumentations==1.4.3 Cython
 RUN apt-get update && apt-get install -y \
     cmake \
     build-essential \
+    cython3 python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # install gl
@@ -15,6 +16,8 @@ RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-binary insightface insightface
 
 # Set the working directory to /app
 WORKDIR /app
@@ -25,7 +28,7 @@ COPY setup.py /app
 # Install any needed packages specified in setup.py
 RUN python setup.py install \
     # Remove compiler and related build tools after installation
-    && apt-get purge -y --auto-remove cmake build-essential \
+    && apt-get purge -y --auto-remove cmake build-essential python3-dev \
     && rm -rf /var/lib/apt/lists/* \
     && pip freeze
 
