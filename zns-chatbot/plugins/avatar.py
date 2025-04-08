@@ -29,6 +29,8 @@ face_swap_repo = "ezioruan/inswapper_128.onnx"
 face_swap_filename = "inswapper_128.onnx"
 restoration_gan_repo = "gmk123/GFPGAN"
 restoration_gan_filename = "GFPGANv1.4.pth"
+models_cache_folder = "/cache"
+
 
 file_cache_timeout = 2*60*60 # 2 hours
 
@@ -154,11 +156,18 @@ models_ready = Event()
 @async_thread
 def _prepare_models_sync():
     global detector_model, swapper_model, refiner_model
-    detector_model = insightface.app.FaceAnalysis(name=detector_model_name)
+
+    from os import makedirs, path
+    insightface_cache = path.join(models_cache_folder, "insightface")
+    hf_cache = path.join(models_cache_folder, "hf")
+    makedirs(insightface_cache, exist_ok=True)
+    makedirs(hf_cache, exist_ok=True)
+
+    detector_model = insightface.app.FaceAnalysis(name=detector_model_name, root=insightface_cache)
     detector_model.prepare(ctx_id=0, det_size=(640, 640))
-    fs = hf_hub_download(face_swap_repo, face_swap_filename)
+    fs = hf_hub_download(face_swap_repo, face_swap_filename, cache_dir=hf_cache)
     swapper_model = insightface.model_zoo.get_model(fs, download=False)
-    gan = hf_hub_download(restoration_gan_repo, restoration_gan_filename)
+    gan = hf_hub_download(restoration_gan_repo, restoration_gan_filename, cache_dir=hf_cache)
     refiner_model = GFPGANer(
         model_path=gan,
         upscale=2,
@@ -313,6 +322,6 @@ class Avatar(BasePlugin):
                         )
 
 
-if __name__ == "__main__":
-    from asyncio import run
-    run(_prepare_models())
+# if __name__ == "__main__":
+    # from asyncio import run
+    # run(_prepare_models())
