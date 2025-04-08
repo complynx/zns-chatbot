@@ -12,7 +12,7 @@ from gfpgan import GFPGANer
 from motor.core import AgnosticCollection
 from huggingface_hub import hf_hub_download
 from PIL import Image, ImageChops
-from asyncio import Event, create_task, get_event_loop
+from asyncio import Event, Lock, create_task, get_event_loop
 from ..config import Config, full_link
 from ..tg_state import TGState
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
@@ -24,6 +24,11 @@ import multiprocessing
 
 logger = logging.getLogger(__name__)
 pool = ThreadPoolExecutor(max_workers=max(1,multiprocessing.cpu_count()-1))
+detector_model_name = "buffalo_l"
+face_swap_repo = "ezioruan/inswapper_128.onnx"
+face_swap_filename = "inswapper_128.onnx"
+restoration_gan_repo = "gmk123/GFPGAN"
+restoration_gan_filename = "GFPGANv1.4.pth"
 
 file_cache_timeout = 2*60*60 # 2 hours
 
@@ -139,6 +144,44 @@ def touch_file(file_path):
     current_time = time.time()
     os.utime(file_path, times=(current_time, current_time))
 
+
+models_preparing = Lock()
+detector_model = None
+swapper_model = None
+refiner_model = None
+models_ready = Event()
+
+@async_thread
+def _prepare_models_sync():
+    global detector_model, swapper_model, refiner_model
+    detector_model = insightface.app.FaceAnalysis(name=detector_model_name)
+    detector_model.prepare(ctx_id=0, det_size=(640, 640))
+    fs = hf_hub_download(face_swap_repo, face_swap_filename)
+    swapper_model = insightface.model_zoo.get_model(fs, download=False)
+    gan = hf_hub_download(restoration_gan_repo, restoration_gan_filename)
+    refiner_model = GFPGANer(
+        model_path=gan,
+        upscale=2,
+        arch='clean',
+        channel_multiplier=2,
+        bg_upsampler=None,
+    )
+    
+async def _prepare_models():
+    if models_ready.is_set():
+        return
+    async with models_preparing:
+        if models_ready.is_set():
+            return
+        try:
+            start = time.time()
+            logger.info("preparing models...")
+            await _prepare_models_sync()
+            models_ready.set()
+            logger.info(f"models prepared, took: {time.time() - start} seconds")
+        except Exception as e:
+            logger.error("Failed to prepare models: %s", e, exc_info=1)
+
 class Avatar(BasePlugin):
     name = "avatar"
 
@@ -149,33 +192,7 @@ class Avatar(BasePlugin):
         sweep_folder(self.cache_dir)
         self.base_app.avatar = self
         self._command_test = CommandHandler("avatar", self.handle_command)
-        self._is_ready = Event()
-        create_task(self._prepare_models())
-
-    @async_thread
-    def _prepare_models_sync(self):
-        self.detector = insightface.app.FaceAnalysis(name='buffalo_l')
-        self.detector.prepare(ctx_id=0, det_size=(640, 640))
-        fs = hf_hub_download(self.config.photo.face_swap_repo, self.config.photo.face_swap_filename)
-        self.swapper = insightface.model_zoo.get_model(fs, download=False)
-        gan = hf_hub_download(self.config.photo.restoration_gan_repo, self.config.photo.restoration_gan_filename)
-        self.gan = GFPGANer(
-            model_path=gan,
-            upscale=2,
-            arch='clean',
-            channel_multiplier=2,
-            bg_upsampler=None,
-        )
-    
-    async def _prepare_models(self):
-        try:
-            start = time.time()
-            logger.info("preparing models...")
-            await self._prepare_models_sync()
-            self._is_ready.set()
-            logger.info(f"models prepared, took: {time.time() - start} seconds")
-        except Exception as e:
-            logger.error("Failed to prepare models: %s", e, exc_info=1)
+        create_task(_prepare_models())
     
     def test_message(self, message: Update, state, web_app_data):
         if filters.PHOTO.check_update(message):
@@ -225,14 +242,14 @@ class Avatar(BasePlugin):
     @async_thread
     def detect_face(self, img: Image.Image) -> Face:
         import numpy as np
-        faces: list[Face] = self.detector.get(np.array(img.convert("RGB")))
+        faces: list[Face] = detector_model.get(np.array(img.convert("RGB")))
         return max(faces, key=lambda face: (face.bbox[2] - face.bbox[0]) * (face.bbox[3] - face.bbox[1]))
     
     @async_thread
     def swap_faces(self, dst_img: Image.Image, src_face: Face, dst_face: Face) -> Image.Image:
         import numpy as np
-        swapped = self.swapper.get(np.array(dst_img.convert("RGB")), dst_face, src_face, paste_back=True)
-        _, _, restored = self.gan.enhance(swapped, has_aligned=False, only_center_face=False, paste_back=True)
+        swapped = swapper_model.get(np.array(dst_img.convert("RGB")), dst_face, src_face, paste_back=True)
+        _, _, restored = refiner_model.enhance(swapped, has_aligned=False, only_center_face=False, paste_back=True)
         return Image.fromarray(restored)
 
     async def handle_image_stage2(self, update: TGState, name):
@@ -247,12 +264,12 @@ class Avatar(BasePlugin):
         })
         file_path = await self.get_file(name)
         try:
-            await update.reply(update.l("avatar-processing"))
+            await update.reply(update.l("avatar-processing"), parse_mode=ParseMode.HTML)
         except Exception as e:
             logger.error(f"send processing notification exception {e}", exc_info=e)
-        if not self._is_ready.is_set():
+        if not models_ready.is_set():
             logger.info("models aren't ready yet...")
-            await self._is_ready.wait()
+            await models_ready.wait()
         with Image.open(file_path) as img:
             try:
                 src_face = await self.detect_face(img)
@@ -295,3 +312,7 @@ class Avatar(BasePlugin):
                             caption=update.l("cover-caption-message")
                         )
 
+
+if __name__ == "__main__":
+    from asyncio import run
+    run(_prepare_models())
