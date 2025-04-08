@@ -415,7 +415,10 @@ passes-couple-request-timeout =
 passes-couple-request-cancelled =
     Couple pass is cancelled. You can try again using /passes command.
 passes-couple-request-wrong-data =
-    I expected a message forwarded from your couple. This doesn’t look like one. You can try again using /passes command.
+    I asked to give me a repost of your couple's message, but I can't process the message you just sent me.
+    If it was really a repost as I asked, then it might be that your couple has a limitation on who can view their profile.
+    Please ask them to disable this limitation or to try registering instead of you.
+    You can try again using /passes command.
 passes-couple-request-invitee-payed =
     Oops, this person is already registered and has a pass. You can try again using /passes command.
 passes-couple-invitation =
