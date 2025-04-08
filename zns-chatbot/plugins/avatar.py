@@ -246,6 +246,10 @@ class Avatar(BasePlugin):
             }
         })
         file_path = await self.get_file(name)
+        try:
+            await update.reply(update.l("avatar-processing"))
+        except Exception as e:
+            logger.error(f"send processing notification exception {e}", exc_info=e)
         if not self._is_ready.is_set():
             logger.info("models aren't ready yet...")
             await self._is_ready.wait()

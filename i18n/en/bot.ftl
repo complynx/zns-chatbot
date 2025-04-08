@@ -1,4 +1,7 @@
 avatar-no-face = No face found on the image. Please try again with another image: either move away from the phone or move closer, or turn the phone straight.
+avatar-processing =
+    Your photo is processing...
+    It may take a while.
 
 auth-authorize = ✔ Authorize
 auth-authorized = Request authorized
