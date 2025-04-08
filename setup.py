@@ -11,6 +11,7 @@ setup(
         # "opencv-python>=4.9.0.1",
         # "dlib>=19.24.0",
         "grpcio<1.60",
+        "grpcio-status<1.60",
         "tokenizers>=0.21,<0.22",
         "numpy>=1.23,<2.0",
         "tornado==6.4",
