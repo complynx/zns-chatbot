@@ -421,6 +421,10 @@ passes-couple-request-wrong-data =
     I asked to give me a repost of your couple's message, but I can't process the message you just sent me.
     If it was really a repost as I asked, then it might be that your couple has a limitation on who can view their profile.
     Please ask them to disable this limitation or to try registering instead of you.
+    
+    To disable the limitation, go to ≡ → Settings → Privacy and Security → Forwarded messages,
+    There either disable the limitation, or add me as an exception.
+
     You can try again using /passes command.
 passes-couple-request-invitee-payed =
     Oops, this person is already registered and has a pass. You can try again using /passes command.
