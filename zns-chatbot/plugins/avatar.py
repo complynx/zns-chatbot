@@ -263,6 +263,7 @@ class Avatar(BasePlugin):
 
     async def handle_image_stage2(self, update: TGState, name):
         tgUpdate = update.update  # type: Update
+        return await update.reply(update.l("avatar-processing"), parse_mode=ParseMode.HTML)
         await self.user_db.update_one({
             "user_id": update.user,
             "bot_id": update.context.bot.id,

@@ -2,6 +2,7 @@ avatar-no-face = No face found on the image. Please try again with another image
 avatar-processing =
     Your photo is processing...
     It may take a while.
+avatar-disabled = Creation of userpics temporarily disabled.
 
 auth-authorize = ✔ Authorize
 auth-authorized = Request authorized
