@@ -82,8 +82,8 @@ class Photo(BaseSettings):
     face_expand: float = Field(5)
     face_offset_y: float = Field(-0.2)
     face_offset_x: float = Field(0.2)
-    frame_file: str = Field("frame/zns_astronaut_frame.jpg")
-    # flare_file: str = Field("frame/flare.png")
+    frame_file: str = Field("frame/zns_2025_2_frame.jpg")
+    mask_file: str = Field("frame/zns_2025_2_mask.png")
     quality: int = Field(90)
     # cover_file: str = Field("cover/ZNS2024_2.jpg")
     cover_file: str = Field("")
@@ -91,7 +91,7 @@ class Photo(BaseSettings):
     face_swap_filename: str = Field("inswapper_128.onnx")
     restoration_gan_repo: str = Field("gmk123/GFPGAN")
     restoration_gan_filename: str = Field("GFPGANv1.4.pth")
-    face_file: str = Field("frame/zns_astronaut_face.jpg")
+    face_file: str = Field("frame/zns_2025_2_face.jpg")
 
 
 class Orders(BaseSettings):

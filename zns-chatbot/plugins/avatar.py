@@ -41,14 +41,14 @@ def async_thread(func):
     return wrapper
 
 @async_thread
-def join_images(a: Image.Image, b: Image.Image) -> Image.Image:
+def join_images(a: Image.Image, b: Image.Image, c: Image.Image) -> Image.Image:
     a = a.convert('RGBA')
     b = b.convert('RGBA')
-    # c = c.convert('RGBA')
+    c = c.convert('RGBA')
     joiner = Image.new('RGBA', a.size)
     joiner.alpha_composite(a)
-    # joiner.alpha_composite(b)
-    joiner = ImageChops.screen(joiner, b)
+    joiner.alpha_composite(b)
+    joiner = ImageChops.screen(joiner, c)
 
     return joiner.convert('RGB')
 
@@ -170,7 +170,7 @@ def _prepare_models_sync():
     gan = hf_hub_download(restoration_gan_repo, restoration_gan_filename, cache_dir=hf_cache)
     refiner_model = GFPGANer(
         model_path=gan,
-        upscale=2,
+        upscale=4,
         arch='clean',
         channel_multiplier=2,
         bg_upsampler=None,
@@ -263,7 +263,7 @@ class Avatar(BasePlugin):
 
     async def handle_image_stage2(self, update: TGState, name):
         tgUpdate = update.update  # type: Update
-        return await update.reply(update.l("avatar-processing"), parse_mode=ParseMode.HTML)
+        # return await update.reply(update.l("avatar-processing"), parse_mode=ParseMode.HTML)
         await self.user_db.update_one({
             "user_id": update.user,
             "bot_id": update.context.bot.id,
@@ -299,28 +299,30 @@ class Avatar(BasePlugin):
                 logger.info(f"face swap for {update.user} took: {time.time() - swap_start} seconds")
                 
                 with Image.open(self.config.photo.frame_file) as frame:
-                    resized_frame = await resize_basic(frame, self.config.photo.frame_size)
-                    final = await join_images(swapped, resized_frame)
+                    with Image.open(self.config.photo.mask_file) as mask:
+                        resized_frame = await resize_basic(frame, self.config.photo.frame_size)
+                        resized_mask = await resize_basic(mask, self.config.photo.frame_size)
+                        final = await join_images(swapped, resized_mask, resized_frame)
 
-                    final_name = f"{file_path}_framed.jpg"
-                    final.save(final_name, quality=self.config.photo.quality, optimize=True)
-                    # locale = tgUpdate.effective_user.language_code
-                    await tgUpdate.message.reply_document(
-                        final_name,
-                        filename="avatar.jpg",
-                        # reply_markup=InlineKeyboardMarkup([[
-                        #     InlineKeyboardButton(
-                        #         update.l("avatar-custom-crop"),
-                        #         web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}"))
-                        #     )
-                        # ]]),
-                    )
-                    if os.path.isfile(self.config.photo.cover_file):
+                        final_name = f"{file_path}_framed.jpg"
+                        final.save(final_name, quality=self.config.photo.quality, optimize=True)
+                        # locale = tgUpdate.effective_user.language_code
                         await tgUpdate.message.reply_document(
-                            self.config.photo.cover_file,
-                            filename="cover.jpg",
-                            caption=update.l("cover-caption-message")
+                            final_name,
+                            filename="avatar.jpg",
+                            # reply_markup=InlineKeyboardMarkup([[
+                            #     InlineKeyboardButton(
+                            #         update.l("avatar-custom-crop"),
+                            #         web_app=WebAppInfo(full_link(self.base_app, f"/fit_frame?file={name}&locale={locale}"))
+                            #     )
+                            # ]]),
                         )
+                        if os.path.isfile(self.config.photo.cover_file):
+                            await tgUpdate.message.reply_document(
+                                self.config.photo.cover_file,
+                                filename="cover.jpg",
+                                caption=update.l("cover-caption-message")
+                            )
 
 
 # if __name__ == "__main__":
