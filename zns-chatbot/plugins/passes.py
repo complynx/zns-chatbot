@@ -1147,7 +1147,7 @@ class Passes(BasePlugin):
         create_task(self._timeout_processor())
     
     async def _timeout_processor(self) -> None:
-        await sleep(1)
+        await sleep(2)
         for pass_key in PASS_KEYS:
             async for user in self.user_db.find({
                 "bot_id": self.bot.id,
