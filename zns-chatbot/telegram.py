@@ -451,6 +451,7 @@ async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
         app.bot = application
 
         await app.storage.refresh(application.bot.id)
+        app.bot_started.set()
         asyncio.create_task(check_startup_actions(app))
         asyncio.create_task(deadline_cleaner_task(app, plugins))
         yield application

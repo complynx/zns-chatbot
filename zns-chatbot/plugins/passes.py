@@ -8,7 +8,7 @@ from ..tg_state import TGState
 from motor.core import AgnosticCollection
 from telegram.constants import ParseMode
 from .massage import now_msk, split_list
-from asyncio import Lock, create_task, sleep
+from asyncio import Lock, create_task, sleep, Event
 from ..telegram_links import client_user_link_html, client_user_name
 from random import choice
 
@@ -1147,7 +1147,9 @@ class Passes(BasePlugin):
         create_task(self._timeout_processor())
     
     async def _timeout_processor(self) -> None:
-        await sleep(2)
+        bot_started: Event = self.base_app.bot_started
+        await bot_started.wait()
+        logger.info("timeout processor started")
         for pass_key in PASS_KEYS:
             async for user in self.user_db.find({
                 "bot_id": self.bot.id,

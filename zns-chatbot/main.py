@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class App(object):
     config: Config
+    bot_started: asyncio.Event = asyncio.Event()
     bot = None
     localization = None
     mongodb = None
