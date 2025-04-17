@@ -1427,6 +1427,8 @@ class Passes(BasePlugin):
             return PRIORITY_BASIC, self.handle_role_cmd
         if self._name_checker.check_update(message):
             return PRIORITY_BASIC, self.handle_name_cmd
+        if self._assign_checker.check_update(message):
+            return PRIORITY_BASIC, self.handle_passes_assign_cmd
         return PRIORITY_NOT_ACCEPTING, None
     
     def test_callback_query(self, query: Update, state):
