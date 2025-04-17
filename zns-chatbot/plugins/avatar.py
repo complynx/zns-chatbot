@@ -283,7 +283,7 @@ class Avatar(BasePlugin):
         with Image.open(file_path) as img:
             try:
                 src_face = await self.detect_face(img)
-            except IndexError:
+            except (IndexError, ValueError):
                 await tgUpdate.message.reply_text(update.l("avatar-no-face"))
                 return
             
