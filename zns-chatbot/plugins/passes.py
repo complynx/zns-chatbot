@@ -4,7 +4,7 @@ import logging
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 from telegram.ext import CommandHandler, CallbackQueryHandler, filters
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update, ReplyKeyboardRemove, MessageOriginUser, Contact
-from ..tg_state import TGState
+from ..tg_state import SilentArgumentParser, TGState
 from motor.core import AgnosticCollection
 from telegram.constants import ParseMode
 from .massage import now_msk, split_list
@@ -679,7 +679,7 @@ class PassUpdate:
             logger.error(f"Exception in handle_cq_couple: {err=}, {self.update.user=}", exc_info=1)
         await self.update.reply(self.l("passes-couple-request-message", passKey=self.pass_key), reply_markup=markup, parse_mode=ParseMode.HTML)
         await self.update.require_anything(self.base.name, "handle_couple_input", self.pass_key, "handle_couple_timeout")
-    
+
     async def handle_couple_timeout(self, _data):
         await self.update.reply(
             self.l(
@@ -1124,6 +1124,32 @@ class PassUpdate:
                 reply_markup=InlineKeyboardMarkup([]),
             )
 
+    async def handle_passes_assign(self):
+        assert self.update.user in self.base.config.telegram.admins, f"{self.update.user} is not admin"
+        args_list = self.update.parse_cmd_arguments()
+        
+        parser = SilentArgumentParser()
+        parser.add_argument('--pass_key', type=str, help='Pass key')
+        parser.add_argument('recipients', nargs='*', help='Recipients')
+
+        args = parser.parse_args(args_list[1:])
+        logger.debug(f"passes_assign {args=}, {args_list=}")
+        assert args.pass_key in PASS_KEYS, f"wrong pass key {args.pass_key}"
+        assigned = []
+        for recipient in args.recipients:
+            try:
+                user_id = int(recipient)
+                upd = await self.base.create_update_from_user(user_id)
+                await upd.assign_pass(args.pass_key)
+                logger.info(f"pass {args.pass_key=} assigned to {recipient=}")
+                assigned.append(user_id)
+            except Exception as err:
+                logger.error(f"passes_assign {err=}, {recipient=}", exc_info=1)
+        await self.update.reply(f"passes_assign done: {assigned}", parse_mode=ParseMode.HTML)
+        await self.base.recalculate_queues()
+
+
+
 class Passes(BasePlugin):
     name = "passes"
 
@@ -1140,6 +1166,7 @@ class Passes(BasePlugin):
                 self.payment_admins[key].extend(self.config.passes.events[key].payment_admin)
         self.user_db: AgnosticCollection = base_app.users_collection
         self._checker = CommandHandler(self.name, self.handle_start)
+        self._assign_checker = CommandHandler("passes_assign", self.handle_passes_assign_cmd)
         self._name_checker = CommandHandler("legal_name", self.handle_name_cmd)
         self._role_checker = CommandHandler("role", self.handle_role_cmd)
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
@@ -1418,6 +1445,9 @@ class Passes(BasePlugin):
 
     async def handle_name_cmd(self, update: TGState):
         return await self.create_update(update).handle_cq_name()
+    
+    async def handle_passes_assign_cmd(self, update: TGState):
+        return await self.create_update(update).handle_passes_assign()
 
     async def handle_role_cmd(self, update: TGState):
         return await self.create_update(update).handle_role_cmd()
