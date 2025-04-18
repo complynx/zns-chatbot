@@ -31,6 +31,19 @@ restoration_gan_repo = "gmk123/GFPGAN"
 restoration_gan_filename = "GFPGANv1.4.pth"
 models_cache_folder = "/cache"
 
+FILES = {
+    "leader": {
+        "face_file": "frame/zns_2025_2_face.jpg",
+        "frame_file": "frame/zns_2025_2_frame.jpg",
+        "mask_file": "frame/zns_2025_2_mask.png",
+    },
+    "follower": {
+        "face_file": "frame/zns_2025_2_face_f.jpg",
+        "frame_file": "frame/zns_2025_2_frame_f.jpg",
+        "mask_file": "frame/zns_2025_2_mask_f.png",
+    },
+}
+
 
 file_cache_timeout = 2*60*60 # 2 hours
 
@@ -272,6 +285,14 @@ class Avatar(BasePlugin):
                 "avatars_called": 1,
             }
         })
+        user = await update.get_user()
+        user_role = ""
+        from .passes import PASS_RU
+        if PASS_RU in user and "role" in user[PASS_RU]:
+            user_role = user[PASS_RU]["role"]
+        if user_role == "":
+            return await update.reply(update.l("avatar-no-role"), parse_mode=ParseMode.HTML)
+        files = FILES.get(user_role, None)
         file_path = await self.get_file(name)
         try:
             await update.reply(update.l("avatar-processing"), parse_mode=ParseMode.HTML)
@@ -284,11 +305,9 @@ class Avatar(BasePlugin):
             try:
                 src_face = await self.detect_face(img)
             except (IndexError, ValueError):
-                await tgUpdate.message.reply_text(update.l("avatar-no-face"))
-                return
-            
+                return await update.reply(update.l("avatar-no-face"), parse_mode=ParseMode.HTML)
 
-            with Image.open(self.config.photo.face_file) as face:
+            with Image.open(files["face_file"]) as face:
                 swap_start = time.time()
                 
                 face_resized = await resize_basic(face, self.config.photo.frame_size)
@@ -298,8 +317,8 @@ class Avatar(BasePlugin):
                 swapped = await resize_basic(swapped, self.config.photo.frame_size)
                 logger.info(f"face swap for {update.user} took: {time.time() - swap_start} seconds")
                 
-                with Image.open(self.config.photo.frame_file) as frame:
-                    with Image.open(self.config.photo.mask_file) as mask:
+                with Image.open(files["frame_file"]) as frame:
+                    with Image.open(files["mask_file"]) as mask:
                         resized_frame = await resize_basic(frame, self.config.photo.frame_size)
                         resized_mask = await resize_basic(mask, self.config.photo.frame_size)
                         final = await join_images(swapped, resized_mask, resized_frame)

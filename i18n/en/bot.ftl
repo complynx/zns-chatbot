@@ -1,4 +1,5 @@
 avatar-no-face = No face found on the image. Please try again with another image: either move away from the phone or move closer, or turn the phone straight.
+avatar-no-role = Can't create avatar, because you seem not to be registered to the next ZNS. Please register first using /passes command.
 avatar-processing =
     Your photo is processing...
     It may take a while.
