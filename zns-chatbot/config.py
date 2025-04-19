@@ -83,8 +83,8 @@ class Photo(BaseSettings):
     face_offset_y: float = Field(-0.2)
     face_offset_x: float = Field(0.2)
     quality: int = Field(90)
-    # cover_file: str = Field("cover/ZNS2024_2.jpg")
-    cover_file: str = Field("")
+    cover_file: str = Field("cover/ZNS2025_1.jpg")
+    # cover_file: str = Field("")
 
 
 class Orders(BaseSettings):
