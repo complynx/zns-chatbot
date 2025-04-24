@@ -1159,6 +1159,7 @@ class PassUpdate:
         args = parser.parse_args(args_list[1:])
         logger.debug(f"passes_cancel {args=}, {args_list=}")
         assert args.pass_key in PASS_KEYS, f"wrong pass key {args.pass_key}"
+        self.set_pass_key(args.pass_key)
         cancelled = []
         for recipient in args.recipients:
             try:
@@ -1169,7 +1170,7 @@ class PassUpdate:
                     continue
                 if user[self.pass_key]["type"] == "couple":
                     if user[self.pass_key]["couple"] not in args.recipients:
-                        await self.base.user_db.update_one({
+                        result = await self.base.user_db.update_one({
                             "user_id": user[self.pass_key]["couple"],
                             "bot_id": self.bot,
                             self.pass_key+".couple": {"$eq": user_id},
@@ -1182,18 +1183,24 @@ class PassUpdate:
                                 self.pass_key+".price": {"$divide": 2},
                             },
                         })
-                        logger.info(f"pass {args.pass_key=} for {recipient=} couple {user[self.pass_key]['couple']} was changed to solo")
-                    await self.base.user_db.update_one({
-                        "user_id": user_id,
-                        "bot_id": self.bot,
-                        self.pass_key: {"$exists": True},
-                    }, {
-                        "$unset": {
-                            self.pass_key: "",
-                        },
-                    })
-                logger.info(f"pass {args.pass_key=} cancelled for {recipient=}")
-                cancelled.append(user_id)
+                        if result.modified_count > 0:
+                            logger.info(f"pass {args.pass_key=} for {recipient=} couple {user[self.pass_key]['couple']} was changed to solo")
+                        else:
+                            logger.error(f"pass {args.pass_key=} for {recipient=} couple {user[self.pass_key]['couple']} was not changed to solo")
+                result = await self.base.user_db.update_one({
+                    "user_id": user_id,
+                    "bot_id": self.bot,
+                    self.pass_key: {"$exists": True},
+                }, {
+                    "$unset": {
+                        self.pass_key: "",
+                    },
+                })
+                if result.modified_count <= 0:
+                    logger.info(f"pass {self.pass_key=} for {recipient=} was not cancelled")
+                else:
+                    logger.info(f"pass {self.pass_key=} cancelled for {recipient=}")
+                    cancelled.append(user_id)
             except Exception as err:
                 logger.error(f"passes_cancel {err=}, {recipient=}", exc_info=1)
         await self.update.reply(f"passes_cancel done: {cancelled}", parse_mode=ParseMode.HTML)
