@@ -1161,19 +1161,19 @@ class PassUpdate:
         assert args.pass_key in PASS_KEYS, f"wrong pass key {args.pass_key}"
         self.set_pass_key(args.pass_key)
         cancelled = []
-        for recipient in args.recipients:
+        recipients = map(int, args.recipients)
+        for recipient in recipients:
             try:
-                user_id = int(recipient)
-                upd = await self.base.create_update_from_user(user_id)
+                upd = await self.base.create_update_from_user(recipient)
                 user = await upd.get_user()
                 if self.pass_key not in user:
                     continue
                 if user[self.pass_key]["type"] == "couple":
-                    if user[self.pass_key]["couple"] not in args.recipients:
+                    if user[self.pass_key]["couple"] not in recipients:
                         result = await self.base.user_db.update_one({
                             "user_id": user[self.pass_key]["couple"],
                             "bot_id": self.bot,
-                            self.pass_key+".couple": {"$eq": user_id},
+                            self.pass_key+".couple": {"$eq": recipient},
                         }, {
                             "$unset": {
                                 self.pass_key+".couple": "",
@@ -1188,7 +1188,7 @@ class PassUpdate:
                         else:
                             logger.error(f"pass {args.pass_key=} for {recipient=} couple {user[self.pass_key]['couple']} was not changed to solo")
                 result = await self.base.user_db.update_one({
-                    "user_id": user_id,
+                    "user_id": recipient,
                     "bot_id": self.bot,
                     self.pass_key: {"$exists": True},
                 }, {
@@ -1200,7 +1200,7 @@ class PassUpdate:
                     logger.info(f"pass {self.pass_key=} for {recipient=} was not cancelled")
                 else:
                     logger.info(f"pass {self.pass_key=} cancelled for {recipient=}")
-                    cancelled.append(user_id)
+                    cancelled.append(recipient)
             except Exception as err:
                 logger.error(f"passes_cancel {err=}, {recipient=}", exc_info=1)
         await self.update.reply(f"passes_cancel done: {cancelled}", parse_mode=ParseMode.HTML)
