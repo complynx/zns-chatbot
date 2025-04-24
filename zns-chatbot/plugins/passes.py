@@ -1147,7 +1147,57 @@ class PassUpdate:
                 logger.error(f"passes_assign {err=}, {recipient=}", exc_info=1)
         await self.update.reply(f"passes_assign done: {assigned}", parse_mode=ParseMode.HTML)
         await self.base.recalculate_queues()
+    
+    async def handle_passes_cancel(self):
+        assert self.update.user in self.base.config.telegram.admins, f"{self.update.user} is not admin"
+        args_list = self.update.parse_cmd_arguments()
+        
+        parser = SilentArgumentParser()
+        parser.add_argument('--pass_key', type=str, help='Pass key')
+        parser.add_argument('recipients', nargs='*', help='Recipients')
 
+        args = parser.parse_args(args_list[1:])
+        logger.debug(f"passes_cancel {args=}, {args_list=}")
+        assert args.pass_key in PASS_KEYS, f"wrong pass key {args.pass_key}"
+        cancelled = []
+        for recipient in args.recipients:
+            try:
+                user_id = int(recipient)
+                upd = await self.base.create_update_from_user(user_id)
+                user = await upd.get_user()
+                if self.pass_key not in user:
+                    continue
+                if user[self.pass_key]["type"] == "couple":
+                    if user[self.pass_key]["couple"] not in args.recipients:
+                        await self.base.user_db.update_one({
+                            "user_id": user[self.pass_key]["couple"],
+                            "bot_id": self.bot,
+                            self.pass_key+".couple": {"$eq": user_id},
+                        }, {
+                            "$unset": {
+                                self.pass_key+".couple": "",
+                            },
+                            "$set": {
+                                self.pass_key+".type": "solo",
+                                self.pass_key+".price": {"$divide": 2},
+                            },
+                        })
+                        logger.info(f"pass {args.pass_key=} for {recipient=} couple {user[self.pass_key]['couple']} was changed to solo")
+                    await self.base.user_db.update_one({
+                        "user_id": user_id,
+                        "bot_id": self.bot,
+                        self.pass_key: {"$exists": True},
+                    }, {
+                        "$unset": {
+                            self.pass_key: "",
+                        },
+                    })
+                logger.info(f"pass {args.pass_key=} cancelled for {recipient=}")
+                cancelled.append(user_id)
+            except Exception as err:
+                logger.error(f"passes_cancel {err=}, {recipient=}", exc_info=1)
+        await self.update.reply(f"passes_cancel done: {cancelled}", parse_mode=ParseMode.HTML)
+        await self.base.recalculate_queues()
 
 
 class Passes(BasePlugin):
@@ -1165,10 +1215,13 @@ class Passes(BasePlugin):
             elif isinstance(self.config.passes.events[key].payment_admin, list):
                 self.payment_admins[key].extend(self.config.passes.events[key].payment_admin)
         self.user_db: AgnosticCollection = base_app.users_collection
-        self._checker = CommandHandler(self.name, self.handle_start)
-        self._assign_checker = CommandHandler("passes_assign", self.handle_passes_assign_cmd)
-        self._name_checker = CommandHandler("legal_name", self.handle_name_cmd)
-        self._role_checker = CommandHandler("role", self.handle_role_cmd)
+        self._command_checkers = [
+            CommandHandler(self.name, self.handle_start),
+            CommandHandler("passes_assign", self.handle_passes_assign_cmd),
+            CommandHandler("passes_cancel", self.handle_passes_cancel_cmd),
+            CommandHandler("legal_name", self.handle_name_cmd),
+            CommandHandler("role", self.handle_role_cmd),
+        ]
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self._queue_lock = Lock()
         create_task(self._timeout_processor())
@@ -1421,14 +1474,9 @@ class Passes(BasePlugin):
         return PassUpdate(self, upd)
 
     def test_message(self, message: Update, state, web_app_data):
-        if self._checker.check_update(message):
-            return PRIORITY_BASIC, self.handle_start
-        if self._role_checker.check_update(message):
-            return PRIORITY_BASIC, self.handle_role_cmd
-        if self._name_checker.check_update(message):
-            return PRIORITY_BASIC, self.handle_name_cmd
-        if self._assign_checker.check_update(message):
-            return PRIORITY_BASIC, self.handle_passes_assign_cmd
+        for checker in self._command_checkers:
+            if checker.check_update(message):
+                return PRIORITY_BASIC, checker.callback
         return PRIORITY_NOT_ACCEPTING, None
     
     def test_callback_query(self, query: Update, state):
@@ -1450,6 +1498,9 @@ class Passes(BasePlugin):
     
     async def handle_passes_assign_cmd(self, update: TGState):
         return await self.create_update(update).handle_passes_assign()
+    
+    async def handle_passes_cancel_cmd(self, update: TGState):
+        return await self.create_update(update).handle_passes_cancel()
 
     async def handle_role_cmd(self, update: TGState):
         return await self.create_update(update).handle_role_cmd()
