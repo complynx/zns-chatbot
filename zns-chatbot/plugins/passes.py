@@ -28,6 +28,7 @@ INVITATION_TIMEOUT=timedelta(days=2, hours=10)
 PAYMENT_TIMEOUT=timedelta(days=8)
 PAYMENT_TIMEOUT_NOTIFY2=timedelta(days=7)
 PAYMENT_TIMEOUT_NOTIFY=timedelta(days=6)
+PASS_TYPES_ASSIGNABLE = ["solo", "couple", "sputnik"]
 
 class PassUpdate:
     base: 'Passes'
@@ -1313,6 +1314,7 @@ class Passes(BasePlugin):
                     "$match": {
                         pass_key: {"$exists": True},
                         "bot_id": self.bot.id,
+                        pass_key+".type": {"$in": PASS_TYPES_ASSIGNABLE},
                     },
                 },{
                     "$group": {
