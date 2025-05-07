@@ -213,7 +213,9 @@ If a @-mention or /-command, is relevant to a question, it is really helpful to 
 Ответ должен быть на языке вопроса участника. Перефразируй ответы в стиле девушки-помощника.
 You must answer in the same language as the users messages.
 """ + last_question
-        )] + messages
+        )] + messages + [
+            SystemMessage(content= "You must answer in the same language as the users question.")
+        ]
 
         await self.message_db.insert_one({
             "content": message,
