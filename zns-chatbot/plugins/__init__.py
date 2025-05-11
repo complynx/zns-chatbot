@@ -1,7 +1,7 @@
 from .assistant import Assistant
 from .avatar import Avatar
 from .auth import Auth
-# from .food import Food
+from .food import Food
 from .superuser import Superuser
 # from .orders import Orders
 # from .massage import MassagePlugin
@@ -11,7 +11,7 @@ plugins = [
     Auth,
     Assistant,
     Avatar,
-    # Food,
+    Food,
     Superuser,
     # Orders,
     # MassagePlugin,

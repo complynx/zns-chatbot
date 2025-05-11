@@ -8,264 +8,142 @@
         return parent;
     }
 
-    let menu = await fetch("static/menu.json").then(r=>r.json());
-    let menu_categories = [];
-    for(let i in menu.categories) {
-        if("position" in menu.categories[i]) {
-            menu_categories.push(menu.categories[i]);
-        }
-    }
-    menu_categories.sort((a, b) => a.position - b.position);
-    for(let cat of menu_categories) {
-        let cat_nav = document.createElement("a");
-        let cat_menu = document.createElement("div");
-        cat_menu.id = "cat-menu-"+cat.id;
-        cat_nav.id = "cat-nav-"+cat.id;
-        cat_menu.dataset.id = cat_nav.dataset.id = cat.id;
-        cat_nav.title = cat.name_ru;
-        cat_nav.innerText = cat.icon;
-        cat_menu.innerHTML = `
-            <h3><span>${cat.icon}</span>${cat.name_ru}</h3>
-        `;
-        cat_menu.classList.add("cat-menu");
-        cat_nav.classList.add("cat-nav");
-        cat_nav.href = "#" + cat_menu.id;
-        cat_nav.addEventListener("click", ev=>{
-            ev.preventDefault();
-            document.getElementById(cat_menu.id).scrollIntoView({
-                behavior: 'smooth'
-            });
-        });
-        document.getElementById("menu-nav").appendChild(cat_nav);
-        document.getElementById("menu-items").appendChild(cat_menu);
-    }
-    let menu_items = [];
-    for(let i in menu.items) {
-        menu_items.push(menu.items[i]);
-    }
-    menu_items.sort((a, b) => a.position - b.position);
-    for(let item of menu_items) {
-        let item_el = document.createElement("div");
-        item_el.classList.add("item");
-        item_el.id = "menu-item-"+item.id;
-        item_el.dataset.id = item.id;
-        let weight_icon = item.weight_unit == "Вес, г" ? "K" : "L";
-        item_el.innerHTML = `
-        <img class="image" loading="lazy" src="https://www.mealty.ru${item.image}">
-        <img class="image_big" loading="lazy" src="https://www.mealty.ru${item.image_big}">
-        <div class="name"><span>${item.name}</span> <span class="sub">${item.name_sub}</span></div>
-        <div class="price">${item.price}</div>
-        <button class="add icon">N</button>
-        <div class="description">${item.description}</div>
-        <div class="nutr">
-            <div class="nutr-fats">${item.nutritional_value.fats}</div>
-            <div class="nutr-carbohydrates">${item.nutritional_value.carbohydrates}</div>
-            <div class="nutr-proteins">${item.nutritional_value.proteins}</div>
-        </div>
-        <div class="weight">
-            <div class="weight_icon">${weight_icon}</div>
-            <div class="weight_unit">${item.weight_unit}</div>
-            <div class="weight">${item.weight}</div>
-        </div>
-        <div class="calories">
-            <div class="calories">${item.calories}</div>
-            <div class="calories_per_portion">${item.calories_per_portion}</div>
-        </div>
-        <label class="ingridients">
-        <input type=checkbox>
-        <div>${item.ingridients}</div>
-        </label>
-        `;
-        let cat = "true_category" in item ? item.true_category : item.category;
-        item_el.querySelector(".add").addEventListener("click", (ev)=>{
-            ev.stopPropagation();
-            add_item_to_carts(item.id);
-        });
-        item_el.addEventListener("click", ev=>{
-            if(currentState.state !== "wide-view"){
-                open_item(item.id);
-            }
-        });
-        document.getElementById("cat-menu-"+cat).appendChild(item_el);
-    }
+    let menu = await fetch("static/menu_2025_1.json").then(r=>r.json());
+    for(let day in menu) {
+        let meal = "lunch";
+        let lunch = menu[day][meal];
+        for(let i = 0; i < lunch.length; ++i) {
+            let item = lunch[i];
+            if(item.skip) continue;
 
-    for(let el of document.querySelectorAll("#carts,#carts button.close")){
-        el.addEventListener("click", (ev)=>{
-            ev.stopPropagation();
-            history.back();
-        });
-    }
-    document.querySelector("#carts .days").addEventListener("click", (ev)=>ev.stopPropagation());
-    let carts={};
-    let cart_id = (day,meal)=>day+"_"+meal;
-    function recalculate_total() {
-        let total = 0;
-        for(let cart_id in carts) {
-            let cart_total = 0;
-            let cart = carts[cart_id]
-            for(let item_id of cart.items) {
-                let item = menu.items[item_id];
-                cart_total += item.price;
+            let container = document.createElement("div");
+            container.classList.add("item");
+            container.classList.add(item.category);
+            let url = item.photo;
+            if(url && !url.startsWith("https://")) {
+                url = "static/menu_photos/"+url+".jpg";
             }
-            cart.total = cart_total;
-            total += cart_total;
-        }
-        let total_info = document.querySelector("#carts .edit");
-        if(total>0) {
-            total_info.classList.remove("empty");
-        } else {
-            total_info.classList.add("empty");
-        }
-        total_info.querySelector(".total").innerText = `${total}`;
-    }
-    document.getElementById("btn-back").addEventListener("click", ev=>{
-        ev.stopPropagation();
-        history.back();
-    });
-
-    let currentState = {state:"initial"};
-    window.addEventListener("popstate", ev=>{
-        if(ev.state) {
-            switch(ev.state.state){
-                case "initial":
-                    document.getElementById("carts").classList.remove("open");
-                    document.body.classList.remove("carts-editor");
-                    document.body.classList.remove("wide-view");
-                    break;
-                case "wide-view":
-                    document.getElementById("carts").classList.remove("open");
-                    document.body.classList.remove("carts-editor");
-                    document.body.classList.add("wide-view");
-                    break;
-                case "carts-selector":
-                    document.getElementById("carts").classList.add("open");
-                    break;
-                case "carts-editor":
-                    if(document.querySelector("#carts .edit.empty")) {
-                        history.back();
-                    }
-                    document.body.classList.add("carts-editor");
-                    recalculate_carts_edit();
-                    break;
-            }
-            if(ev.state.scroll) {
-                window.scrollTo(ev.state.scroll.x, ev.state.scroll.y);
-            }
-            currentState = ev.state;
-        } else console.log(ev);
-    });
-
-    function open_item(item_id) {
-        document.body.classList.add("wide-view");
-        pushHistoryState({state:"wide-view"});
-        document.getElementById("menu-item-"+item_id).scrollIntoView();
-    }
-    function open_carts_editor() {
-        recalculate_carts_edit();
-        document.body.classList.add("carts-editor");
-        pushHistoryState({state:"carts-editor"});
-    }
-    document.querySelector("#carts>.edit").addEventListener("click", ev=>{
-        ev.stopPropagation();
-        open_carts_editor();
-    })
-    function pushHistoryState(state){
-        currentState.scroll = {
-            x:window.scrollX,
-            y:window.scrollY
-        }
-        history.replaceState(currentState,"","");
-        history.pushState(state, "", "");
-        currentState = state;
-    }
-    history.replaceState(currentState,"","");
-    function remove_from_carts(cart, item_number) {
-        carts[cart].items.splice(item_number, 1);
-        recalculate_carts_edit_cart(cart);
-        recalculate_total();
-        if(document.querySelector("#carts .edit.empty")) {
-            history.back();
-        }
-    }
-    function recalculate_carts_edit_cart(cart_id) {
-        let cart = carts[cart_id];
-        let cart_el = document.querySelector(`#cart-contents>[data-day="${cart.day}"]>[data-meal="${cart.meal}"]`);
-        let cart_contents = cart_el.querySelector(".contents");
-        let cart_sum = cart_el.querySelector(".sum");
-        let cart_total = 0;
-        cart_contents.innerHTML = "";
-        for(let i=0;i<cart.items.length;++i) {
-            let item_id = cart.items[i];
-            let item = menu.items[item_id];
-            cart_total += item.price;
-
-            let cart_item = document.createElement("div");
-            cart_item.classList.add("item");
-            cart_item.dataset.id = item_id;
-            cart_item.dataset.pos = i;
-            cart_item.innerHTML = `
-            <img class="image" loading="lazy" src="https://www.mealty.ru${item.image}">
-            <div class="name"><span>${item.name}</span> <span class="sub">${item.name_sub}</span></div>
-            <div class="price">${item.price}</div>
-            <button class="del icon">O</button>
+            let innerHTML = `
+                <label>
+                    <input type="radio" name="${day}-${meal}-${item.category}" value="${i}" />
+                    <span class="name" lang="ru">${item.title_ru}</span>
+                    <span class="name" lang="en">${item.title_en}</span>
             `;
-            cart_item.querySelector(".del").addEventListener("click", (ev)=>{
-                ev.stopPropagation();
-                remove_from_carts(cart_id, i);
-            });
-            cart_contents.appendChild(cart_item);
+            if(url) {
+                innerHTML += `
+                    <img class="small_photo" loading="lazy" src="${url}">
+                `;
+            }
+            innerHTML += `
+                </label>
+                <button class="description-button">i</button>
+                <div class="description">
+                    <span class="name" lang="ru">${item.title_ru}</span>
+                    <span class="name" lang="en">${item.title_en}</span>
+            `;
+            if(url) {
+                innerHTML += `
+                    <img class="photo" loading="lazy" src="${url}">
+                `;
+            }
+            if(item.ingredients_en && item.ingredients_en.length > 0) {
+                innerHTML += `
+                    <div class="ingredients">
+                        <span lang="ru">Ингредиенты: ${item.ingredients_ru}</span>
+                        <span lang="en">Ingredients: ${item.ingredients_en}</span>
+                    </div>
+                `;
+            }
+            if(item.weight && item.weight.value > 0) {
+                innerHTML += `
+                    <div class="weight">${item.weight.value}</div>
+                `;
+            }
+            if(item.nutrition) {
+                for(let type of ["calories", "fat", "carbohydrates", "protein"]) {
+                    if(type in item.nutrition) {
+                        innerHTML += `
+                            <div class="nutrition ${type}">${item.nutrition[type]}</div>
+                        `;
+                    }
+                }
+            }
+            innerHTML += `
+                </div>
+            `;
+            container.innerHTML = innerHTML;
+            document.querySelector(`section.${day}.${meal} .combo-class.${item.category} .choices`).appendChild(container);
         }
-        if(cart_total === 0) {
-            cart_el.classList.add("empty");
-        }else{
-            cart_el.classList.remove("empty");
-            cart_sum.innerText = cart_total;
+        meal = "dinner";
+        let dinner = menu[day][meal];
+        for(let i = 0; i < dinner.length; ++i) {
+            let item = dinner[i];
+            if(item.skip) continue;
+            if(!item.price) {
+                console.warn("Item has no price", i, item);
+                continue;
+            }
+
+            let container = document.createElement("div");
+            container.classList.add("item");
+            container.classList.add(item.category);
+            let url = item.photo;
+            if(url && !url.startsWith("https://")) {
+                url = "static/menu_photos/"+url+".jpg";
+            }
+            let innerHTML = `
+                <label>
+                    <input type="checkbox" name="${day}-${meal}-${i}" value="${i}" />
+                    <span class="name" lang="ru">${item.title_ru}</span>
+                    <span class="name" lang="en">${item.title_en}</span>
+                    <span class="price">${item.price}</span>
+            `;
+            if(url) {
+                innerHTML += `
+                    <img class="small_photo" loading="lazy" src="${url}">
+                `;
+            }
+            innerHTML += `
+                </label>
+                <button class="description-button">i</button>
+                <div class="description">
+                    <span class="name" lang="ru">${item.title_ru}</span>
+                    <span class="name" lang="en">${item.title_en}</span>
+            `;
+            if(url) {
+                innerHTML += `
+                    <img class="photo" loading="lazy" src="${url}">
+                `;
+            }
+            if(item.ingredients_en && item.ingredients_en.length > 0) {
+                innerHTML += `
+                    <div class="ingredients">
+                        <span lang="ru">Ингредиенты: ${item.ingredients_ru}</span>
+                        <span lang="en">Ingredients: ${item.ingredients_en}</span>
+                    </div>
+                `;
+            }
+            if(item.weight && item.weight.value > 0) {
+                innerHTML += `
+                    <div class="weight">${item.weight.value}</div>
+                `;
+            }
+            if(item.nutrition) {
+                for(let type of ["calories", "fat", "carbohydrates", "protein"]) {
+                    if(type in item.nutrition) {
+                        innerHTML += `
+                            <div class="nutrition ${type}">${item.nutrition[type]}</div>
+                        `;
+                    }
+                }
+            }
+            innerHTML += `
+                </div>
+            `;
+            container.innerHTML = innerHTML;
+            document.querySelector(`section.${day}.${meal} .meals`).appendChild(container);
         }
     }
-    function recalculate_carts_edit(){
-        for(let cart_id in carts) {
-            recalculate_carts_edit_cart(cart_id);
-        }
-    }
-    function add_item_to_carts(item_id) {
-        let carts = document.getElementById("carts");
-        carts.dataset.selected = item_id;
-        carts.classList.add("open");
-        pushHistoryState({state:"carts-selector"});
-    }
-    function add_item_to_cart(day, meal, item){
-        carts[cart_id(day,meal)].items.push(item);
-        recalculate_total();
-    }
-    function select_cart(event){
-        event.stopPropagation();
-        let cart = event.target;
-        let meal = cart.dataset.meal;
-        let day = findParent(cart, "[data-day]").dataset.day;
-        let carts = document.getElementById("carts")
-        let item = carts.dataset.selected;
-        add_item_to_cart(day,meal,item);
-        history.back();
-    }
-    if(user_carts) {
-        carts = user_carts;
-    }
-    for(let cart of document.querySelectorAll("#carts [data-meal]")) {
-        let meal = cart.dataset.meal;
-        let day = findParent(cart, "[data-day]").dataset.day;
-        cart.addEventListener("click", select_cart);
-        let cid = cart_id(day,meal);
-        if(!(cid in carts)) {
-            carts[cid] = {};
-        }
-        let c = carts[cid];
-        c.day = day;
-        c.meal = meal;
-        if(!c.items) {
-            c.items = [];
-        }
-    }
-    recalculate_total();
 
     function IDQ() {
         return "initData="+encodeURIComponent(Telegram.WebApp.initData)
@@ -278,24 +156,90 @@
         })
     }
 
-    async function save(autosave) {
-        if(read_only) return;
+    async function save(autosave = false) { // Added default for autosave
+        if (read_only && !autosave) { // Allow autosave to proceed if it was somehow called in read_only, but block manual save.
+            console.log("Manual save is disabled in read-only mode.");
+            return;
+        }
+        // If read_only is true, the autosave setup itself in the IIFE already prevents calling save(true).
+        // So, if(read_only) return; is also fine if we assume autosave is never initiated.
+
+        let orderIsIncomplete = false;
+        if (!autosave) { // Validation and highlighting only for manual saves (button press)
+            document.querySelectorAll('.combo-class.unfilled').forEach(el => el.classList.remove('unfilled')); // Clear previous highlights
+
+            const days = Object.keys(menu);
+            const LUNCH_SUB_CATEGORIES = ["main", "side", "salad"];
+
+            days.forEach(day => {
+                const lunchSection = document.querySelector(`section.${day}.lunch`);
+                if (!lunchSection || !menu[day] || !menu[day].lunch) return;
+
+                const noLunchRadio = lunchSection.querySelector(`input[name="${day}-lunch-soup"][value="no-lunch"]:checked`);
+
+                if (noLunchRadio) {
+                    // "No lunch" is selected, remove any unfilled class from this day's lunch categories
+                    lunchSection.querySelectorAll('.combo-class.soup, .combo-class.main, .combo-class.side, .combo-class.salad')
+                        .forEach(el => el.classList.remove('unfilled'));
+                    return; // Skip validation for this day's lunch
+                }
+
+                // "No lunch" is NOT selected. Validate soup, main, side, salad.
+
+                // 1. Validate soup choice (includes "no-soup" or a specific soup)
+                const soupChoiceMade = lunchSection.querySelector(`input[name="${day}-lunch-soup"]:checked`);
+                const soupComboEl = lunchSection.querySelector('.combo-class.soup');
+                if (!soupChoiceMade) { // No selection in the soup radio group
+                    if (soupComboEl) soupComboEl.classList.add('unfilled');
+                    orderIsIncomplete = true;
+                } else {
+                    if (soupComboEl) soupComboEl.classList.remove('unfilled');
+                }
+
+                // 2. Validate main, side, salad choices
+                LUNCH_SUB_CATEGORIES.forEach(category => {
+                    const categoryEl = lunchSection.querySelector(`.combo-class.${category}`);
+                    const itemSelected = lunchSection.querySelector(`.combo-class.${category} .choices input[name="${day}-lunch-${category}"]:checked`);
+                    if (!itemSelected) {
+                        if (categoryEl) categoryEl.classList.add('unfilled');
+                        orderIsIncomplete = true;
+                    } else {
+                        if (categoryEl) categoryEl.classList.remove('unfilled');
+                    }
+                });
+            });
+
+            if (orderIsIncomplete) {
+                console.log("Order is incomplete. Please fill all required lunch items for selected lunches.");
+                // Optionally: Telegram.WebApp.showAlert("Please complete your lunch selections.");
+                return; // Prevent save if incomplete on manual trigger
+            }
+        }
+
         let order_query = "";
-        if(user_order_id) {
-            order_query = "&order="+user_order_id;
+        if (window.user_order_id) {
+            order_query = "&order=" + window.user_order_id;
         }
-        if(autosave) {
-            order_query += "&autosave=autosave"
+        if (autosave) {
+            order_query += "&autosave=autosave";
         }
+
+        // Use window.user_order which is populated by calculateTotalSumAndOrder via collectedOrder
+        const dataToSend = window.user_order; 
+        
+        console.log("Saving order:", dataToSend); // For debugging
+
         const response = await fetch('menu?' + IDQ() + order_query, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(carts)
+            body: JSON.stringify(dataToSend) 
         });
+
         if (!response.ok) {
-            throw new Error(`Network response was not ok: ${response.status} ${response.statusText}\n${response.body}`);
+            const errorBody = await response.text().catch(() => "Could not retrieve error body");
+            throw new Error(`Network response was not ok: ${response.status} ${response.statusText}\n${errorBody}`);
         }
         return response;
     }
@@ -319,7 +263,7 @@
     }
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
-    Telegram.WebApp.MainButton.setText("Сохранить");
+    Telegram.WebApp.MainButton.setText(finish_button_text);
     Telegram.WebApp.MainButton.onClick(()=>{
         save().catch(error => {
             console.error('Save error:', error);
@@ -330,4 +274,121 @@
     });
     Telegram.WebApp.MainButton.enable();
     Telegram.WebApp.MainButton.show();
+
+    // Added sum calculator logic
+    const LUNCH_NO_SOUP_PRICE = 555; // Price for lunch combo without soup
+    const LUNCH_WITH_SOUP_PRICE = 665; // Price for lunch combo with soup
+    
+    let collectedOrder = {}; // This variable will store the details of the current order
+
+    function calculateTotalSumAndOrder() {
+        let totalSum = 0;
+        collectedOrder = {}; // Reset for each calculation
+
+        if (typeof menu === 'undefined' || menu === null) {
+            console.error("Menu data is not available for calculation.");
+            return;
+        }
+
+        const days = Object.keys(menu); // Get days from the menu data itself
+
+        days.forEach(day => {
+            if (!menu[day]) return;
+
+            collectedOrder[day] = {
+                lunch: null,
+                dinner: []
+            };
+
+            const lunchSection = document.querySelector(`section.${day}.lunch`);
+            if (lunchSection) {
+                let lunchOrderDetails = { type: null, items: {} };
+                const selectedLunchOptionRadio = lunchSection.querySelector(`input[name="${day}-lunch-soup"]:checked`);
+                const soupComboEl = lunchSection.querySelector(`.combo-class.soup`);
+
+                if (selectedLunchOptionRadio) {
+                    if (soupComboEl) soupComboEl.classList.remove('unfilled'); // A choice in this group was made
+
+                    const choiceValue = selectedLunchOptionRadio.value;
+                    if (choiceValue === "no-lunch") {
+                        lunchOrderDetails.type = "no-lunch";
+                        // Remove 'unfilled' from all lunch categories for this day
+                        lunchSection.querySelectorAll('.combo-class.main, .combo-class.side, .combo-class.salad')
+                            .forEach(el => el.classList.remove('unfilled'));
+                        // Soup combo element already handled above
+                    } else if (choiceValue === "no-soup") {
+                        totalSum += LUNCH_NO_SOUP_PRICE;
+                        lunchOrderDetails.type = "no-soup";
+                    } else { // A specific soup is selected
+                        totalSum += LUNCH_WITH_SOUP_PRICE;
+                        lunchOrderDetails.type = "with-soup";
+                        lunchOrderDetails.items.soup_index = choiceValue;
+                    }
+                }
+                // If no selectedLunchOptionRadio, save() will handle adding 'unfilled' to soupComboEl on button press.
+
+                if (lunchOrderDetails.type && lunchOrderDetails.type !== "no-lunch") {
+                    const LUNCH_SUB_CATEGORIES = ["main", "side", "salad"];
+                    LUNCH_SUB_CATEGORIES.forEach(category => {
+                        const selectedRadio = lunchSection.querySelector(`.combo-class.${category} .choices input[name="${day}-lunch-${category}"]:checked`);
+                        const comboEl = lunchSection.querySelector(`.combo-class.${category}`);
+                        if (selectedRadio) {
+                            if (comboEl) comboEl.classList.remove('unfilled');
+                            lunchOrderDetails.items[category + '_index'] = selectedRadio.value;
+                        }
+                        // If !selectedRadio, save() will handle adding 'unfilled' on button press.
+                    });
+                }
+                collectedOrder[day].lunch = lunchOrderDetails;
+            }
+
+            // --- DINNER ---
+            const dinnerSection = document.querySelector(`section.${day}.dinner`);
+            if (dinnerSection && menu[day].dinner) {
+                // Assuming dinner items are checkboxes like: <input type="checkbox" name="${day}-dinner-item-${index}" value="${index}">
+                const selectedDinnerInputs = dinnerSection.querySelectorAll(`.meals .item input[type="checkbox"]:checked`);
+                
+                selectedDinnerInputs.forEach(input => {
+                    const itemIndexStr = input.value;
+                    // Ensure the value is a valid index for menu[day].dinner
+                    if (itemIndexStr && menu[day].dinner[parseInt(itemIndexStr)]) {
+                        const itemIndex = parseInt(itemIndexStr);
+                        const menuItem = menu[day].dinner[itemIndex];
+                        if (menuItem && typeof menuItem.price === 'number') {
+                            totalSum += menuItem.price;
+                        }
+                        collectedOrder[day].dinner.push(itemIndex);
+                    }
+                });
+            }
+        });
+
+        const totalSumElement = document.querySelector('#total-sum .value');
+        if (totalSumElement) {
+            totalSumElement.textContent = totalSum.toFixed(0); // Display sum, adjust formatting as needed
+        }
+        
+        // console.log("Current Order:", collectedOrder); // For debugging
+        // If you need to update the global `user_order` variable from menu.html:
+        if (typeof window.user_order !== 'undefined') {
+           // Create a deep copy to avoid direct mutation issues if user_order is complex
+           try {
+             window.user_order = JSON.parse(JSON.stringify(collectedOrder));
+           } catch (e) {
+             console.error("Error updating window.user_order:", e);
+             // Fallback or simpler assignment if deep copy fails or is not needed
+             // window.user_order = collectedOrder;
+           }
+        }
+    }
+
+    // Add event listener to the body to recalculate on any click
+    document.body.addEventListener('click', function() {
+        // Using requestAnimationFrame can help ensure DOM updates are processed before calculation
+        // requestAnimationFrame(calculateTotalSumAndOrder);
+        // Direct call as per "passively if clicked"
+        calculateTotalSumAndOrder();
+    });
+
+    calculateTotalSumAndOrder(); // Already loaded
 })().catch(console.error);

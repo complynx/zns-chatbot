@@ -1,0 +1,779 @@
+{
+  "friday": {
+    "lunch": [
+      {
+        "title_ru": "Рассольник с курицей",
+        "title_en": "Rassolnik Soup with Chicken",
+        "price": null,
+        "ingredients_ru": "",
+        "ingredients_en": "",
+        "photo": "soup_rassolnik",
+        "category": "soup",
+        "weight": { "value": null, "unit": null },
+        "nutrition": { "calories": 214, "protein": 9, "fat": 11, "carbohydrates": 19 }
+      },
+      {
+        "title_ru": "Крем суп из брокколи",
+        "title_en": "Broccoli soup",
+        "price": null,
+        "ingredients_ru": "Брокколи, картофель, лук репчатый, сливки, молоко, соль",
+        "ingredients_en": "Broccoli, potato, onion, cream, milk, salt",
+        "photo": "soup_broccoli",
+        "category": "soup",
+        "weight": { "value": null, "unit": null },
+        "nutrition": { "calories": 130, "protein": 50, "fat": 3, "carbohydrates": 20 }
+      },
+      {
+        "title_ru": "Окунь в кисло-сладком соусе",
+        "title_en": "Sweet and Sour Perch",
+        "price": null,
+        "ingredients_ru": "филе красного окуня, перец болгарский, морковь, лук порей, репчатый лук, кунжут, имбирь, кинза, кисло-сладкий соус, соус чили, соус унаги, масло растительное",
+        "ingredients_en": "Red perch fillet, bell pepper, carrot, leek, onion, sesame, ginger, cilantro, sweet and sour sauce, chili sauce, unagi sauce, vegetable oil",
+        "photo": "fish",
+        "category": "main",
+        "weight": { "value": null, "unit": null },
+        "nutrition": {}
+      },
+      {
+        "title_ru": "Котлета куриная",
+        "title_en": "Chicken Patty",
+        "price": null,
+        "ingredients_ru": "Куриное бедро, куриное филе, хлеб белый, молоко, яйцо, специи, масло растительное, сливки, сухари панировочные.",
+        "ingredients_en": "Chicken thigh, chicken fillet, white bread, milk, egg, spices, vegetable oil, cream, breadcrumbs.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8976-qxpuaf73nic5qzd5gcp5wsjr2fzi55kx5nm2ff0y38.jpg",
+        "category": "main",
+        "weight": { "value": 100, "unit": "г" },
+        "nutrition": { "calories": 409, "protein": 20, "fat": 29, "carbohydrates": 17 }
+      },
+      {
+        "title_ru": "Курица терияки с ананасом",
+        "title_en": "Teriyaki Chicken with Pineapple",
+        "price": null,
+        "ingredients_ru": "Куриное бедро (Соус: имбирь очищенный, перец чили, соевый соус, соус терияки), грибы шампиньоны, морковь очищенная, кабачки/цукини, ростки сои/ пшеницы, ананас консервированный, перец болгарский, масло растительное.",
+        "ingredients_en": "Chicken thigh (sauce: peeled ginger, chili pepper, soy sauce, teriyaki sauce), champignon mushrooms, peeled carrot, zucchini, soy/wheat sprouts, canned pineapple, bell pepper, vegetable oil.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD183D180D0B8D186D0B0_D182D0B5D180D0B8D18FD0BAD0B8_D181_D0B0D0BDD0B0D0BDD0B0D181D0BED0BC-r1w4zb8h5c61cng0i6y7si5uuu21lq3blckazxj0r8.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 215, "protein": 8, "fat": 18, "carbohydrates": 6 }
+      },
+      {
+        "title_ru": "Печень с грибами",
+        "title_en": "Liver and Mushrooms",
+        "price": null,
+        "ingredients_ru": "Говяжья печень, мука пшеничная, лук репчатый, грибы шампиньоны, сметана, соль, зелень",
+        "ingredients_en": "Beef liver, wheat flour, onion, champignon mushrooms, sour cream, salt, herbs",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09FD0B5D187D0B5D0BDD18C_D181_D0B3D180D0B8D0B1D0B0D0BCD0B8-r1w51nty8fdudk14s7in0wtcbih2uhf5wza06u1l78.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 235, "protein": 9, "fat": 18, "carbohydrates": 7 }
+      },
+      {
+        "title_ru": "Котлета пожарская",
+        "title_en": "Pozharsky Cutlet",
+        "price": null,
+        "ingredients_ru": "масло растительное, фарш на котлету Пожарскую (хлеб белый, молоко, соль, лук жаренный, куриное филе)",
+        "ingredients_en": "Vegetable oil, Pozharsky cutlet mince (white bread, milk, salt, fried onion, chicken fillet)",
+        "photo": "kotleta",
+        "category": "main",
+        "weight": { "value": null, "unit": null },
+        "nutrition": { "calories": 429, "protein": 15, "fat": 24, "carbohydrates": 35 }
+      },
+      {
+        "title_ru": "Рис пилав",
+        "title_en": "Rice Pilaf",
+        "price": null,
+        "ingredients_ru": "Рис Басмати, Масло растительное, соль, вермишель-лапша Паутинка, масло сливочное, вода, чеснок гранулированный",
+        "ingredients_en": "Basmati rice, vegetable oil, salt, Pavutinka vermicelli noodles, butter, water, granulated garlic",
+        "photo": "rice_pilav",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 202, "protein": 3, "fat": 7, "carbohydrates": 19 }
+      },
+      {
+        "title_ru": "Овощной букет",
+        "title_en": "Vegetable Medley",
+        "price": null,
+        "ingredients_ru": "капуста цветная, кабачки/цукини, масло растительное, морковь отварная, капуста брокколи, фасоль стручковая",
+        "ingredients_en": "Cauliflower, zucchini, vegetable oil, boiled carrot, broccoli, green beans",
+        "photo": "vegetables",
+        "category": "side",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 87, "protein": 1, "fat": 6, "carbohydrates": 4 }
+      },
+      {
+        "title_ru": "Гречка с грибами",
+        "title_en": "Buckwheat with Mushrooms",
+        "price": null,
+        "ingredients_ru": "Масло растительное, лук репчатый, морковь очищенная, гречка отварная, грибы",
+        "ingredients_en": "Vegetable oil, onion, peeled carrot, boiled buckwheat, mushrooms",
+        "photo": "mushroom_buckwheat",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 152, "protein": 4, "fat": 6, "carbohydrates": 24 }
+      },
+      {
+        "title_ru": "Картофельное пюре",
+        "title_en": "Mashed Potatoes",
+        "price": null,
+        "ingredients_ru": "Картофель, молоко, масло сливочное, соль.",
+        "ingredients_en": "Potatoes, milk, butter, salt.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_1_73-qy9agqjz7zvsx9sa9x6022eys19k54wmpc148ldcwk.jpg",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 94, "protein": 2, "fat": 2, "carbohydrates": 15 }
+      },
+      {
+        "title_ru": "Витаминный салат",
+        "title_en": "Vitamin Salad",
+        "price": null,
+        "ingredients_ru": "Капуста б/к, морковь свежая, огурцы свежие, зелень. Запрвка: масло растительное, соль, сахар.",
+        "ingredients_en": "Cabbage, fresh carrot, fresh cucumbers, herbs. Dressing: vegetable oil, salt, sugar.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8957__1_-r0t6ypffxwz47rpy2mqhwl9mxl3th0cgl57w0zri50.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 47, "protein": 1, "fat": 1, "carbohydrates": 3 }
+      },
+      {
+        "title_ru": "Овощной салат",
+        "title_en": "Vegetable Salad",
+        "price": null,
+        "ingredients_ru": "Базилик, зелень, помидоры черри, огурцы свежие, оливковое масло",
+        "ingredients_en": "Basil, greens, cherry tomatoes, fresh cucumbers, olive oil",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09ED0B2D0BED189D0BDD0BED0B9_D181D0B0D0BBD0B0D182__1_-r30epyhtzf873bmasdxj2vkadr06qcc852a3xvxqj8.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 17, "protein": 0, "fat": 0, "carbohydrates": 3 }
+      },
+      {
+        "title_ru": "Салат со свёклой и тыквой",
+        "title_en": "Beetroot and Pumpkin Salad",
+        "price": null,
+        "ingredients_ru": "Свекла, тыква, рукола, клюква сушеная, семечки тыквенные, специи, заправка (масло оливковое, мед, лимонный концентрат, горчица \"медово-горчичная\")",
+        "ingredients_en": "Beetroot, pumpkin, arugula, dried cranberry, pumpkin seeds, spices, dressing (olive oil, honey, lemon concentrate, honey-mustard)",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_800x800_19-qy9abik994qgf9dcrnwm7duryz05do6bbhk09943h0.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 198, "protein": 1, "fat": 12, "carbohydrates": 19 }
+      },
+      {
+        "title_ru": "Крабовый салат",
+        "title_en": "Surimi Salad",
+        "price": null,
+        "ingredients_ru": "Крабовые палочки, рис отварной, кукуруза конс, яйцо куриное, огурцы свежие, майонез, соль",
+        "ingredients_en": "Surimi sticks, boiled rice, canned corn, egg, fresh cucumbers, mayonnaise, salt",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD180D0B0D0B1D0BED0B2D18BD0B9_D181D0B0D0BBD0B0D182-r1w52njtg4qqmql8zmygnnsuw5l0yzcypw2gfckmms.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 230, "protein": 4, "fat": 18, "carbohydrates": 11 }
+      },
+      {
+        "title_ru": "Салат со свёклой и брынзой",
+        "title_en": "Beetroot and Brynza Salad",
+        "price": null,
+        "ingredients_ru": "сыр Брынза сербская, свекла отварная чищенная, салат рукола, орех кедровый, заправка (горчица зернистая/дижонская, мед, лимонный концентрат, масло оливковое)",
+        "ingredients_en": "Serbian brynza cheese, boiled peeled beetroot, arugula, pine nuts, dressing (grain/Dijon mustard, honey, lemon concentrate, olive oil)",
+        "photo": "salad_cheesebeetroot",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 158, "protein": 5, "fat": 11, "carbohydrates": 7 }
+      }
+    ],
+    "dinner": [
+      {
+        "title_ru": "Салат Цезарь с курицей",
+        "title_en": "Chicken Caesar Salad",
+        "price": 255,
+        "ingredients_ru": "Куриная грудка, помидоры черри, салат айсберг, куриное яйцо, гренки, сыр грана падано, соус Цезарь.",
+        "ingredients_en": "Chicken breast, cherry tomatoes, iceberg lettuce, egg, croutons, Grana Padano cheese, Caesar dressing.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/unnamed-file-16-qy9aezksi3hlbebrhnxzx0b2z7vyteym4obl31yqhg.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 186, "protein": 8, "fat": 14, "carbohydrates": 46 }
+      },
+      {
+        "title_ru": "Салат с креветками и бобами эдамаме",
+        "title_en": "Shrimp and Edamame Salad",
+        "price": 330,
+        "ingredients_ru": "Салат романо, огурцы, креветка маринованная (креветки тигровые отварные, имбирь очищенный, лимон), перец Чили, бобы Эдамами отварные, заправка соус Понзу (соус соевый, лимонный концентрат, имбирь корень, чеснок, перец Чили, кинза, сахар, масло растительное), кинза",
+        "ingredients_en": "Romaine lettuce, cucumbers, marinated shrimp (boiled tiger shrimp, peeled ginger, lemon), chili pepper, boiled edamame beans, Ponzu dressing (soy sauce, lemon concentrate, ginger root, garlic, chili pepper, cilantro, sugar, vegetable oil), cilantro",
+        "photo": "salad_shrimps",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 145, "protein": 10, "fat": 6, "carbohydrates": 11 }
+      },
+      {
+        "title_ru": "Мясо по-французски",
+        "title_en": "Meat Orloff",
+        "price": 255,
+        "ingredients_ru": "Свинина обжаренная, помидоры, лук жареный, сыр гауда тертый, майонез, перец черный, соль, масло растительное.",
+        "ingredients_en": "Fried pork, tomatoes, fried onion, grated Gouda cheese, mayonnaise, black pepper, salt, vegetable oil.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09CD18FD181D0BE_D0BFD0BE-_D184D180D0B0D0BDD0B7D183D181D0BAD0B8-r1w525ovua2ai5b6vx8juab3lu11wqe2bfo8b3b3x0.jpg",
+        "category": "main",
+        "weight": { "value": 120, "unit": "г" },
+        "nutrition": {}
+      },
+      {
+        "title_ru": "Удон с курицей",
+        "title_en": "Udon with Chicken",
+        "price": 270,
+        "ingredients_ru": "Лапша удон, филе куриное, лук репчатый, морковь, перец болгарский, масло растительное, соевый соус, кориандр, чеснок, лук зеленый, шампиньоны, устричный соус, имбирь.",
+        "ingredients_en": "Udon noodles, chicken fillet, onion, carrot, bell pepper, vegetable oil, soy sauce, coriander, garlic, green onion, mushrooms, oyster sauce, ginger.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_red_4-qxpt6lr855tvxn7ayn33sc9t5u8r2qi9ckqlkg2bo4.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 161, "protein": 6, "fat": 5, "carbohydrates": 20 }
+      },
+      {
+        "title_ru": "Тортофа с креветками",
+        "title_en": "Tortofa with Shrimp",
+        "price": 410,
+        "ingredients_ru": "Цукини, картофель мини, креветки тигровые, соус песто, помидоры черри, чеснок, масло растительное, специи в ассортименте.",
+        "ingredients_en": "Zucchini, mini potatoes, tiger shrimp, pesto sauce, cherry tomatoes, garlic, vegetable oil, assorted spices.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D0A2D0BED180D182D0BED184D0B0_D181_D0BAD180D0B5D0B2D0B5D182D0BAD0B0D0BCD0B8-qxptb2hmltxx2yptw2kb4ppmqq8imz8cyoammrg044.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 170, "protein": 7, "fat": 11, "carbohydrates": 10 }
+      },
+      {
+        "title_ru": "Рататуй",
+        "title_en": "Ratatouille",
+        "price": 150,
+        "ingredients_ru": "Идеальное сочетание вкусов баклажана, болгарского перца, цукини и приправ.",
+        "ingredients_en": "Eggplant, bell pepper, zucchini, seasonings.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D0A0D0B0D182D0B0D182D183D0B9-r30eolm841dabllapssxh7wbhpp3m2y6mccuzhy7is.jpg",
+        "category": "main",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 111, "protein": 1, "fat": 8, "carbohydrates": 7 }
+      },
+      {
+        "title_ru": "Эклер шоколадный",
+        "title_en": "Chocolate Éclair",
+        "price": 195,
+        "ingredients_ru": "Крем на основе черного шоколада, сливок, молока, тримолина, глюкозы, какао масло. Покрыты шоколадным глясажем, взбитым ганашом и какао.",
+        "ingredients_en": "Dark chocolate cream, cream, milk, trimoline, glucose, cocoa butter. Covered with chocolate glaze, whipped ganache and cocoa.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_red_38-qy9a3ah3gbh4u3bfslx4vykkuljj10iv6s2233b3x0.jpg",
+        "category": "dessert",
+        "weight": { "value": 80, "unit": "г" },
+        "nutrition": { "calories": 412, "protein": 4, "fat": 25, "carbohydrates": 40 }
+      },
+      {
+        "title_ru": "Эклер ванильный",
+        "title_en": "Vanilla Éclair",
+        "price": 195,
+        "ingredients_ru": "Крем (сливки, ваниль, шоколад белый, глюкоза, тримолин, какао-масло). Покрыты гляссажем белым.",
+        "ingredients_en": "Cream (cream, vanilla, white chocolate, glucose, trimoline, cocoa butter). Covered with white glaze.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_red_42-qy9a3jvhcnu026xs9pzekw76sg975zk6k2kwvux66s.jpg",
+        "category": "dessert",
+        "weight": { "value": 80, "unit": "г" },
+        "nutrition": { "calories": 235, "protein": 2, "fat": 16, "carbohydrates": 18 }
+      }
+    ]
+  },
+  "saturday": {
+    "lunch": [
+      {
+        "title_ru": "Суп куриный",
+        "title_en": "Chicken Soup",
+        "price": null,
+        "ingredients_ru": "Куриное филе, картофель, морковь, лук.",
+        "ingredients_en": "Chicken fillet, potato, carrot, onion.",
+        "photo": "soup_chicken",
+        "category": "soup",
+        "weight": { "value": null, "unit": null },
+        "nutrition": {}
+      },
+      {
+        "title_ru": "Окунь в кисло-сладком соусе",
+        "title_en": "Sweet and Sour Perch",
+        "price": null,
+        "ingredients_ru": "филе красного окуня, перец болгарский, морковь, лук порей, репчатый лук, кунжут, имбирь, кинза, кисло-сладкий соус, соус чили, соус унаги, масло растительное",
+        "ingredients_en": "Red perch fillet, bell pepper, carrot, leek, onion, sesame, ginger, cilantro, sweet and sour sauce, chili sauce, unagi sauce, vegetable oil",
+        "photo": "fish",
+        "category": "main",
+        "weight": { "value": null, "unit": null },
+        "nutrition": {}
+      },
+      {
+        "title_ru": "Котлета куриная",
+        "title_en": "Chicken Patty",
+        "price": null,
+        "ingredients_ru": "Куриное бедро, куриное филе, хлеб белый, молоко, яйцо, специи, масло растительное, сливки, сухари панировочные.",
+        "ingredients_en": "Chicken thigh, chicken fillet, white bread, milk, egg, spices, vegetable oil, cream, breadcrumbs.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8976-qxpuaf73nic5qzd5gcp5wsjr2fzi55kx5nm2ff0y38.jpg",
+        "category": "main",
+        "weight": { "value": 100, "unit": "г" },
+        "nutrition": { "calories": 409, "protein": 20, "fat": 29, "carbohydrates": 17 }
+      },
+      {
+        "title_ru": "Курица терияки с ананасом",
+        "title_en": "Teriyaki Chicken with Pineapple",
+        "price": null,
+        "ingredients_ru": "Куриное бедро (Соус: имбирь очищенный, перец чили, соевый соус, соус терияки), грибы шампиньоны, морковь очищенная, кабачки/цукини, ростки сои/ пшеницы, ананас консервированный, перец болгарский, масло растительное.",
+        "ingredients_en": "Chicken thigh (sauce: peeled ginger, chili pepper, soy sauce, teriyaki sauce), champignon mushrooms, peeled carrot, zucchini, soy/wheat sprouts, canned pineapple, bell pepper, vegetable oil.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD183D180D0B8D186D0B0_D182D0B5D180D0B8D18FD0BAD0B8_D181_D0B0D0BDD0B0D0BDD0B0D181D0BED0BC-r1w4zb8h5c61cng0i6y7si5uuu21lq3blckazxj0r8.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 215, "protein": 8, "fat": 18, "carbohydrates": 6 }
+      },
+      {
+        "title_ru": "Печень с грибами",
+        "title_en": "Liver and Mushrooms",
+        "price": null,
+        "ingredients_ru": "Говяжья печень, мука пшеничная, лук репчатый, грибы шампиньоны, сметана, соль, зелень",
+        "ingredients_en": "Beef liver, wheat flour, onion, champignon mushrooms, sour cream, salt, herbs",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09FD0B5D187D0B5D0BDD18C_D181_D0B3D180D0B8D0B1D0B0D0BCD0B8-r1w51nty8fdudk14s7in0wtcbih2uhf5wza06u1l78.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 235, "protein": 9, "fat": 18, "carbohydrates": 7 }
+      },
+      {
+        "title_ru": "Котлета пожарская",
+        "title_en": "Pozharsky Cutlet",
+        "price": null,
+        "ingredients_ru": "масло растительное, фарш на котлету Пожарскую (хлеб белый, молоко, соль, лук жаренный, куриное филе)",
+        "ingredients_en": "Vegetable oil, Pozharsky cutlet mince (white bread, milk, salt, fried onion, chicken fillet)",
+        "photo": "kotleta",
+        "category": "main",
+        "weight": { "value": null, "unit": null },
+        "nutrition": { "calories": 429, "protein": 15, "fat": 24, "carbohydrates": 35 }
+      },
+      {
+        "title_ru": "Рис пилав",
+        "title_en": "Rice Pilaf",
+        "price": null,
+        "ingredients_ru": "Рис Басмати, Масло растительное, соль, вермишель-лапша Паутинка, масло сливочное, вода, чеснок гранулированный",
+        "ingredients_en": "Basmati rice, vegetable oil, salt, Pavutinka vermicelli noodles, butter, water, granulated garlic",
+        "photo": "rice_pilav",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 202, "protein": 3, "fat": 7, "carbohydrates": 19 }
+      },
+      {
+        "title_ru": "Овощной букет",
+        "title_en": "Vegetable Medley",
+        "price": null,
+        "ingredients_ru": "капуста цветная, кабачки/цукини, масло растительное, морковь отварная, капуста брокколи, фасоль стручковая",
+        "ingredients_en": "Cauliflower, zucchini, vegetable oil, boiled carrot, broccoli, green beans",
+        "photo": "vegetables",
+        "category": "side",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 87, "protein": 1, "fat": 6, "carbohydrates": 4 }
+      },
+      {
+        "title_ru": "Гречка с грибами",
+        "title_en": "Buckwheat with Mushrooms",
+        "price": null,
+        "ingredients_ru": "Масло растительное, лук репчатый, морковь очищенная, гречка отварная, грибы",
+        "ingredients_en": "Vegetable oil, onion, peeled carrot, boiled buckwheat, mushrooms",
+        "photo": "mushroom_buckwheat",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 152, "protein": 4, "fat": 6, "carbohydrates": 24 }
+      },
+      {
+        "title_ru": "Картофельное пюре",
+        "title_en": "Mashed Potatoes",
+        "price": null,
+        "ingredients_ru": "Картофель, молоко, масло сливочное, соль.",
+        "ingredients_en": "Potatoes, milk, butter, salt.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_1_73-qy9agqjz7zvsx9sa9x6022eys19k54wmpc148ldcwk.jpg",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 94, "protein": 2, "fat": 2, "carbohydrates": 15 }
+      },
+      {
+        "title_ru": "Витаминный салат",
+        "title_en": "Vitamin Salad",
+        "price": null,
+        "ingredients_ru": "Капуста б/к, морковь свежая, огурцы свежие, зелень. Запрвка: масло растительное, соль, сахар.",
+        "ingredients_en": "Cabbage, fresh carrot, fresh cucumbers, herbs. Dressing: vegetable oil, salt, sugar.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8957__1_-r0t6ypffxwz47rpy2mqhwl9mxl3th0cgl57w0zri50.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 47, "protein": 1, "fat": 1, "carbohydrates": 3 }
+      },
+      {
+        "title_ru": "Овощной салат",
+        "title_en": "Vegetable Salad",
+        "price": null,
+        "ingredients_ru": "Базилик, зелень, помидоры черри, огурцы свежие, оливковое масло",
+        "ingredients_en": "Basil, greens, cherry tomatoes, fresh cucumbers, olive oil",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09ED0B2D0BED189D0BDD0BED0B9_D181D0B0D0BBD0B0D182__1_-r30epyhtzf873bmasdxj2vkadr06qcc852a3xvxqj8.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 17, "protein": 0, "fat": 0, "carbohydrates": 3 }
+      },
+      {
+        "title_ru": "Салат со свёклой и тыквой",
+        "title_en": "Beetroot and Pumpkin Salad",
+        "price": null,
+        "ingredients_ru": "Свекла, тыква, рукола, клюква сушеная, семечки тыквенные, специи, заправка (масло оливковое, мед, лимонный концентрат, горчица \"медово-горчичная\")",
+        "ingredients_en": "Beetroot, pumpkin, arugula, dried cranberry, pumpkin seeds, spices, dressing (olive oil, honey, lemon concentrate, honey-mustard)",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_800x800_19-qy9abik994qgf9dcrnwm7duryz05do6bbhk09943h0.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 198, "protein": 1, "fat": 12, "carbohydrates": 19 }
+      },
+      {
+        "title_ru": "Крабовый салат",
+        "title_en": "Surimi Salad",
+        "price": null,
+        "ingredients_ru": "Крабовые палочки, рис отварной, кукуруза конс, яйцо куриное, огурцы свежие, майонез, соль",
+        "ingredients_en": "Surimi sticks, boiled rice, canned corn, egg, fresh cucumbers, mayonnaise, salt",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD180D0B0D0B1D0BED0B2D18BD0B9_D181D0B0D0BBD0B0D182-r1w52njtg4qqmql8zmygnnsuw5l0yzcypw2gfckmms.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 230, "protein": 4, "fat": 18, "carbohydrates": 11 }
+      },
+      {
+        "title_ru": "Салат со свёклой и брынзой",
+        "title_en": "Beetroot and Brynza Salad",
+        "price": null,
+        "ingredients_ru": "сыр Брынза сербская, свекла отварная чищенная, салат рукола, орех кедровый, заправка (горчица зернистая/дижонская, мед, лимонный концентрат, масло оливковое)",
+        "ingredients_en": "Serbian brynza cheese, boiled peeled beetroot, arugula, pine nuts, dressing (grain/Dijon mustard, honey, lemon concentrate, olive oil)",
+        "photo": "salad_cheesebeetroot",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 158, "protein": 5, "fat": 11, "carbohydrates": 7 }
+      }
+    ],
+    "dinner": [
+      {
+        "title_ru": "Греческий салат",
+        "title_en": "Greek Salad",
+        "price": 255,
+        "ingredients_ru": "Перец болгарский, помидоры черри, салат романо, лук красный, маслины, брынза сербская, огурцы свежие, заправка (мед, уксус бальзамический, орегано, масло оливковое).",
+        "ingredients_en": "Bell pepper, cherry tomatoes, romaine lettuce, red onion, olives, Serbian brynza cheese, fresh cucumbers, dressing (honey, balsamic vinegar, oregano, olive oil).",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_big_260-1-qy9adyx33k3eqlt0fq3jprk3t6wnh7x2zmvnd9h384.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 143, "protein": 4, "fat": 11, "carbohydrates": 7 }
+      },
+      {
+        "title_ru": "Средиземноморский салат",
+        "title_en": "Mediterranean Salad",
+        "price": 340,
+        "ingredients_ru": "Креветки очищенные, сельдерей стебель, огурец свежий очищенный, сыр фета, сегменты апельсина, заправка (лимонный концентрат, мёд, растительное масло, горчица), фета, апельсин.",
+        "ingredients_en": "Shelled shrimp, celery stalk, peeled cucumber, feta cheese, orange segments, dressing (lemon concentrate, honey, vegetable oil, mustard), feta, orange.",
+        "photo": null,
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 107, "protein": 6, "fat": 12, "carbohydrates": 3 }
+      },
+      {
+        "title_ru": "Гречневая лапша с курицей терияки",
+        "title_en": "Buckwheat Noodles with Teriyaki Chicken",
+        "price": 260,
+        "ingredients_ru": "Гречневая лапша, соус терияки, соус кисло-сладкий, масло кунжутное, соус кимчи, куриное филе, семена кунжута, масло растительное, перец болгарский, кабачки, лук-порей, морковь.",
+        "ingredients_en": "Buckwheat noodles, teriyaki sauce, sweet and sour sauce, sesame oil, kimchi sauce, chicken fillet, sesame seeds, vegetable oil, bell pepper, zucchini, leek, carrot.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A3532-qxpqfkhe2k9aop229bz6ktyfzcdj2scdee9w9wwl90.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 192, "protein": 8, "fat": 11, "carbohydrates": 13 }
+      },
+      {
+        "title_ru": "Пилав из булгура",
+        "title_en": "Bulgur Pilaf",
+        "price": 190,
+        "ingredients_ru": "Булгур отварной, томаты в собственном соку, перец болгарский, лук репчатый, кинза, мята, зира молотая, помидоры черри, сахар.",
+        "ingredients_en": "Boiled bulgur, tomatoes in own juice, bell pepper, onion, cilantro, mint, ground cumin, cherry tomatoes, sugar.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09FD0B8D0BBD0B0D0B2_D0B8D0B7_D0B1D183D0BBD0B3D183D180D0B0-r1w53o7iuo4x7j401kswuwju26kcb6ehuxie5529w4.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 129, "protein": 1, "fat": 3, "carbohydrates": 5 }
+      },
+      {
+        "title_ru": "Бедрышки куриные",
+        "title_en": "Chicken Thighs",
+        "price": 430,
+        "ingredients_ru": "Куриное бедро без кости, соус соевый, соус унаги, соус кимчи, масло растительное, соль, перец, семена кунжута.",
+        "ingredients_en": "Boneless chicken thigh, soy sauce, unagi sauce, kimchi sauce, vegetable oil, salt, pepper, sesame seeds.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_1_47-qxptyn9w187uaugx7rgf69iv5o0ypntz7de2zmhi1g.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 300, "protein": 20, "fat": 22, "carbohydrates": 3 }
+      },
+      {
+        "title_ru": "Кольцо творожное",
+        "title_en": "Curd Ring",
+        "price": 140,
+        "ingredients_ru": "Заварное тесто (яйцо, масло сливочное, молоко, мука, соль) с кремом из творога, сливок, сметаны и сахара. Верх посыпан сахарной пудрой.",
+        "ingredients_en": "Choux pastry (egg, butter, milk, flour, salt) filled with curd, cream, sour cream and sugar. Topped with powdered sugar.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_1x1__27-qy99zx7wyov58e7kgni9gb647w56g25hq3wf6eaw7o.jpg",
+        "category": "dessert",
+        "weight": { "value": 70, "unit": "г" },
+        "nutrition": { "calories": 272, "protein": 5, "fat": 13, "carbohydrates": 32 }
+      },
+      {
+        "title_ru": "Пирог сицилийский апельсин-лимон",
+        "title_en": "Sicilian Orange-Lemon Pie",
+        "price": 300,
+        "ingredients_ru": "Мука пшеничная высшего сорта, мука миндальная, сахарная пудра, соль, апельсины, лимоны, сахарная пудра.",
+        "ingredients_en": "Premium wheat flour, almond flour, powdered sugar, salt, oranges, lemons, powdered sugar.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2E4A7390-qy99iz6nr7o1xgtoette033yotnyohvp28iaptfedw.jpg",
+        "category": "dessert",
+        "weight": { "value": 170, "unit": "г" },
+        "nutrition": { "calories": 405, "protein": 7, "fat": 19, "carbohydrates": 50 }
+      }
+    ]
+  },
+  "sunday": {
+    "lunch": [
+      {
+        "title_ru": "Борщ с курицей",
+        "title_en": "Chicken Borscht",
+        "price": null,
+        "ingredients_ru": "Курица, свекла, капуста, картофель, лук, морковь, томатная паста.",
+        "ingredients_en": "Chicken, beetroot, cabbage, potatoes, onion, carrot, tomato paste.",
+        "photo": "soup_borsh",
+        "category": "soup",
+        "weight": { "value": null, "unit": null },
+        "nutrition": {}
+      },
+      {
+        "title_ru": "Окунь в кисло-сладком соусе",
+        "title_en": "Sweet and Sour Perch",
+        "price": null,
+        "ingredients_ru": "филе красного окуня, перец болгарский, морковь, лук порей, репчатый лук, кунжут, имбирь, кинза, кисло-сладкий соус, соус чили, соус унаги, масло растительное",
+        "ingredients_en": "Red perch fillet, bell pepper, carrot, leek, onion, sesame, ginger, cilantro, sweet and sour sauce, chili sauce, unagi sauce, vegetable oil",
+        "photo": "fish",
+        "category": "main",
+        "weight": { "value": null, "unit": null },
+        "nutrition": {}
+      },
+      {
+        "title_ru": "Котлета куриная",
+        "title_en": "Chicken Patty",
+        "price": null,
+        "ingredients_ru": "Куриное бедро, куриное филе, хлеб белый, молоко, яйцо, специи, масло растительное, сливки, сухари панировочные.",
+        "ingredients_en": "Chicken thigh, chicken fillet, white bread, milk, egg, spices, vegetable oil, cream, breadcrumbs.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8976-qxpuaf73nic5qzd5gcp5wsjr2fzi55kx5nm2ff0y38.jpg",
+        "category": "main",
+        "weight": { "value": 100, "unit": "г" },
+        "nutrition": { "calories": 409, "protein": 20, "fat": 29, "carbohydrates": 17 }
+      },
+      {
+        "title_ru": "Курица терияки с ананасом",
+        "title_en": "Teriyaki Chicken with Pineapple",
+        "price": null,
+        "ingredients_ru": "Куриное бедро (Соус: имбирь очищенный, перец чили, соевый соус, соус терияки), грибы шампиньоны, морковь очищенная, кабачки/цукини, ростки сои/ пшеницы, ананас консервированный, перец болгарский, масло растительное.",
+        "ingredients_en": "Chicken thigh (sauce: peeled ginger, chili pepper, soy sauce, teriyaki sauce), champignon mushrooms, peeled carrot, zucchini, soy/wheat sprouts, canned pineapple, bell pepper, vegetable oil.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD183D180D0B8D186D0B0_D182D0B5D180D0B8D18FD0BAD0B8_D181_D0B0D0BDD0B0D0BDD0B0D181D0BED0BC-r1w4zb8h5c61cng0i6y7si5uuu21lq3blckazxj0r8.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 215, "protein": 8, "fat": 18, "carbohydrates": 6 }
+      },
+      {
+        "title_ru": "Печень с грибами",
+        "title_en": "Liver and Mushrooms",
+        "price": null,
+        "ingredients_ru": "Говяжья печень, мука пшеничная, лук репчатый, грибы шампиньоны, сметана, соль, зелень",
+        "ingredients_en": "Beef liver, wheat flour, onion, champignon mushrooms, sour cream, salt, herbs",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09FD0B5D187D0B5D0BDD18C_D181_D0B3D180D0B8D0B1D0B0D0BCD0B8-r1w51nty8fdudk14s7in0wtcbih2uhf5wza06u1l78.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 235, "protein": 9, "fat": 18, "carbohydrates": 7 }
+      },
+      {
+        "title_ru": "Котлета пожарская",
+        "title_en": "Pozharsky Cutlet",
+        "price": null,
+        "ingredients_ru": "масло растительное, фарш на котлету Пожарскую (хлеб белый, молоко, соль, лук жаренный, куриное филе)",
+        "ingredients_en": "Vegetable oil, Pozharsky cutlet mince (white bread, milk, salt, fried onion, chicken fillet)",
+        "photo": "kotleta",
+        "category": "main",
+        "weight": { "value": null, "unit": null },
+        "nutrition": { "calories": 429, "protein": 15, "fat": 24, "carbohydrates": 35 }
+      },
+      {
+        "title_ru": "Рис пилав",
+        "title_en": "Pilaf Rice",
+        "price": null,
+        "ingredients_ru": "Рис Басмати, Масло растительное, соль, вермишель-лапша Паутинка, масло сливочное, вода, чеснок гранулированный",
+        "ingredients_en": "Basmati rice, vegetable oil, salt, Pavutinka vermicelli noodles, butter, water, granulated garlic",
+        "photo": "rice_pilav",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 202, "protein": 3, "fat": 7, "carbohydrates": 19 }
+      },
+      {
+        "title_ru": "Овощной букет",
+        "title_en": "Vegetable Medley",
+        "price": null,
+        "ingredients_ru": "капуста цветная, кабачки/цукини, масло растительное, морковь отварная, капуста брокколи, фасоль стручковая",
+        "ingredients_en": "Cauliflower, zucchini, vegetable oil, boiled carrot, broccoli, green beans",
+        "photo": "vegetables",
+        "category": "side",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 87, "protein": 1, "fat": 6, "carbohydrates": 4 }
+      },
+      {
+        "title_ru": "Гречка с грибами",
+        "title_en": "Buckwheat with Mushrooms",
+        "price": null,
+        "ingredients_ru": "Масло растительное, лук репчатый, морковь очищенная, гречка отварная, грибы",
+        "ingredients_en": "Vegetable oil, onion, peeled carrot, boiled buckwheat, mushrooms",
+        "photo": "mushroom_buckwheat",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 152, "protein": 4, "fat": 6, "carbohydrates": 24 }
+      },
+      {
+        "title_ru": "Картофельное пюре",
+        "title_en": "Mashed Potatoes",
+        "price": null,
+        "ingredients_ru": "Картофель, молоко, масло сливочное, соль.",
+        "ingredients_en": "Potatoes, milk, butter, salt.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_1_73-qy9agqjz7zvsx9sa9x6022eys19k54wmpc148ldcwk.jpg",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 94, "protein": 2, "fat": 2, "carbohydrates": 15 }
+      },
+      {
+        "title_ru": "Витаминный салат",
+        "title_en": "Vitamin Salad",
+        "price": null,
+        "ingredients_ru": "Капуста б/к, морковь свежая, огурцы свежие, зелень. Запрвка: масло растительное, соль, сахар.",
+        "ingredients_en": "Cabbage, fresh carrot, fresh cucumbers, herbs. Dressing: vegetable oil, salt, sugar.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8957__1_-r0t6ypffxwz47rpy2mqhwl9mxl3th0cgl57w0zri50.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 47, "protein": 1, "fat": 1, "carbohydrates": 3 }
+      },
+      {
+        "title_ru": "Овощной салат",
+        "title_en": "Vegetable Salad",
+        "price": null,
+        "ingredients_ru": "Базилик, зелень, помидоры черри, огурцы свежие, оливковое масло",
+        "ingredients_en": "Basil, greens, cherry tomatoes, fresh cucumbers, olive oil",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09ED0B2D0BED189D0BDD0BED0B9_D181D0B0D0BBD0B0D182__1_-r30epyhtzf873bmasdxj2vkadr06qcc852a3xvxqj8.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 17, "protein": 0, "fat": 0, "carbohydrates": 3 }
+      },
+      {
+        "title_ru": "Салат со свёклой и тыквой",
+        "title_en": "Beetroot and Pumpkin Salad",
+        "price": null,
+        "ingredients_ru": "Свекла, тыква, рукола, клюква сушеная, семечки тыквенные, специи, заправка (масло оливковое, мед, лимонный концентрат, горчица \"медово-горчичная\")",
+        "ingredients_en": "Beetroot, pumpkin, arugula, dried cranberry, pumpkin seeds, spices, dressing (olive oil, honey, lemon concentrate, honey-mustard)",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_800x800_19-qy9abik994qgf9dcrnwm7duryz05do6bbhk09943h0.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 198, "protein": 1, "fat": 12, "carbohydrates": 19 }
+      },
+      {
+        "title_ru": "Крабовый салат",
+        "title_en": "Surimi Salad",
+        "price": null,
+        "ingredients_ru": "Крабовые палочки, рис отварной, кукуруза конс, яйцо куриное, огурцы свежие, майонез, соль",
+        "ingredients_en": "Surimi sticks, boiled rice, canned corn, egg, fresh cucumbers, mayonnaise, salt",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD180D0B0D0B1D0BED0B2D18BD0B9_D181D0B0D0BBD0B0D182-r1w52njtg4qqmql8zmygnnsuw5l0yzcypw2gfckmms.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 230, "protein": 4, "fat": 18, "carbohydrates": 11 }
+      },
+      {
+        "title_ru": "Салат со свёклой и брынзой",
+        "title_en": "Beetroot and Brynza Salad",
+        "price": null,
+        "ingredients_ru": "сыр Брынза сербская, свекла отварная чищенная, салат рукола, орех кедровый, заправка (горчица зернистая/дижонская, мед, лимонный концентрат, масло оливковое)",
+        "ingredients_en": "Serbian brynza cheese, boiled peeled beetroot, arugula, pine nuts, dressing (grain/Dijon mustard, honey, lemon concentrate, olive oil)",
+        "photo": "salad_cheesebeetroot",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 158, "protein": 5, "fat": 11, "carbohydrates": 7 }
+      }
+    ],
+    "dinner": [
+      {
+        "title_ru": "Салат с моцареллой и авокадо",
+        "title_en": "Mozzarella and Avocado Salad",
+        "price": 330,
+        "ingredients_ru": "Помидоры, оливки/маслины, базилик, томаты вяленные сух., сыр Моцарелла, масло оливковое, авокадо",
+        "ingredients_en": "Tomatoes, olives, basil, sun‑dried tomatoes, mozzarella cheese, olive oil, avocado",
+        "photo": "salad_mozzarella",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 150, "protein": 4, "fat": 12, "carbohydrates": 4 }
+      },
+      {
+        "title_ru": "Салат фасоль с сельдереем",
+        "title_en": "Bean and Celery Salad",
+        "price": 165,
+        "ingredients_ru": "Фасоль консервированная, сельдерей, перец болгарский, кинза, зелень, майонез, чеснок.",
+        "ingredients_en": "Canned beans, celery, bell pepper, cilantro, greens, mayonnaise, garlic.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D0A1D0B0D0BBD0B0D182_D184D0B0D181D0BED0BBD18C_D181_D181D0B5D0BBD18CD0B4D0B5D180D0B5D0B5D0BC-1-qy9aiuowlks11opoxc2s617aw8uagmavzsvg408gwk.jpg",
+        "category": "salad",
+        "weight": { "value": 150, "unit": "г" },
+        "nutrition": { "calories": 100, "protein": 3, "fat": 5, "carbohydrates": 8 }
+      },
+      {
+        "title_ru": "Картофельное пюре",
+        "title_en": "Mashed Potatoes",
+        "price": 200,
+        "ingredients_ru": "Картофель, молоко, масло сливочное, соль.",
+        "ingredients_en": "Potatoes, milk, butter, salt.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_1_73-qy9agqjz7zvsx9sa9x6022eys19k54wmpc148ldcwk.jpg",
+        "category": "side",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 94, "protein": 2, "fat": 2, "carbohydrates": 15 }
+      },
+      {
+        "title_ru": "Фунчоза с креветками и овощами",
+        "title_en": "Funchoza with Shrimp and Vegetables",
+        "price": 240,
+        "ingredients_ru": "Лапша фунчоза, огурцы свежие, креветки коктейльные, соевый соус, перец чили, лук зеленый, уксус столовый, сахар песок, корень имбиря, масло растительное, лук красный, кинза, перец болгарский, морковь, соус Лазы (чеснок, масло растительное, специи).",
+        "ingredients_en": "Funchoza noodles, fresh cucumbers, cocktail shrimp, soy sauce, chili pepper, green onion, table vinegar, sugar, ginger root, vegetable oil, red onion, cilantro, bell pepper, carrot, Lazy sauce (garlic, oil, spices).",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/e9c35bd48a09824c6300e9ecf4b9eebf-qxptbuosav0ir9kvber47ilgkadj1wcb2jv712a6xg.jpg",
+        "category": "main",
+        "weight": { "value": 200, "unit": "г" },
+        "nutrition": { "calories": 130, "protein": 4, "fat": 3, "carbohydrates": 19 }
+      },
+      {
+        "title_ru": "Лазанья мясная",
+        "title_en": "Meat Lasagna",
+        "price": 390,
+        "ingredients_ru": "Сыр моцарелла, соус бешамель (сливки, молоко, масло сливочное, мука), соус болоньезе (фарш говяжий, базилик, чеснок, сельдерей, розмарин, тимьян, томатная паста, специи, соус ворчестер, уксус бальзамический, соус демиглас, масло растительное, масло оливковое, соль, лук репчатый, морковь, лук-порей).",
+        "ingredients_en": "Mozzarella cheese, béchamel sauce (cream, milk, butter, flour), Bolognese sauce (beef mince, basil, garlic, celery, rosemary, thyme, tomato paste, spices, Worcestershire sauce, balsamic vinegar, demi‑glace, vegetable oil, olive oil, salt, onion, carrot, leek).",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_800D185800_25-qxptniun5szowymk5ydco2ki3iulmlobobh8jqz7o4.jpg",
+        "category": "main",
+        "weight": { "value": 250, "unit": "г" },
+        "nutrition": { "calories": 161, "protein": 10, "fat": 7, "carbohydrates": 12 }
+      },
+      {
+        "title_ru": "Шницель куриный в сырной панировке",
+        "title_en": "Chicken Schnitzel in Cheese Breading",
+        "price": 200,
+        "ingredients_ru": "Куриное филе, соль, перец, яйцо куриное, мука, масло растительное, сухари панировочные, сыр пармезан.",
+        "ingredients_en": "Chicken fillet, salt, pepper, egg, flour, vegetable oil, breadcrumbs, Parmesan cheese.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_800D185800_27-qxpu5layj5q434dqnrj6lifh65sll5ektqx8n86s2c.jpg",
+        "category": "main",
+        "weight": { "value": 120, "unit": "г" },
+        "nutrition": { "calories": 247, "protein": 17, "fat": 14, "carbohydrates": 11 }
+      },
+      {
+        "title_ru": "Тропикана мусс манго-маракуйя",
+        "title_en": "Tropicana Mango‑Passion Fruit Mousse",
+        "price": 260,
+        "ingredients_ru": "Миндальный бисквит, мусс на основе сыра креметте, взбитых сливок и пюре манго и маракуйя. Верх покрыт гляссажем и украшен физалисом.",
+        "ingredients_en": "Almond sponge, mousse of Cremette cheese, whipped cream and mango‑passion fruit purée. Topped with glaze and physalis.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D0A1D0BDD0B8D0BCD0BED0BA_D18DD0BAD180D0B0D0BDD0B0_2023-03-30_134128-qy99w4xbfpokgxpjkilcwrka30syfy4evdb0l9wz9w.png",
+        "category": "dessert",
+        "weight": { "value": 100, "unit": "г" },
+        "nutrition": { "calories": 406, "protein": 6, "fat": 20, "carbohydrates": 49 }
+      },
+      {
+        "title_ru": "Алое сердце малина-шоколад",
+        "title_en": "Scarlett Heart Raspberry‑Chocolate",
+        "price": 200,
+        "ingredients_ru": "Шоколадный бисквит, мусс из молочного шоколада с нежным малиновым сердцем внутри мусса. Верх покрыт гляссажем.",
+        "ingredients_en": "Chocolate sponge, milk chocolate mousse with a tender raspberry heart inside. Topped with glaze.",
+        "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika__17-R_800x800-qy99x1to2wxlradr8etau19eviasxcr0nw50dyk784.jpg",
+        "category": "dessert",
+        "weight": { "value": 100, "unit": "г" },
+        "nutrition": { "calories": 261, "protein": 3, "fat": 14, "carbohydrates": 29 }
+      }
+    ]
+  }
+}

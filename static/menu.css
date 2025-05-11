@@ -5,7 +5,6 @@
   --tg-theme-button-color: #5288c1;
   --tg-theme-button-text-color: #ffffff;
   --tg-theme-destructive-text-color: #ec3942;
-  --tg-theme-header-bg-color: #17212b;
   --tg-theme-hint-color: #708499;
   --tg-theme-link-color: #6ab3f3;
   --tg-theme-secondary-bg-color: #232e3c;
@@ -32,450 +31,279 @@ body {
   --frame-radius: 35vmin;
   --top-size: calc(100vw/7);
 }
-#menu-nav {
-  display: flex;
-  top: 0px;
-  width: 100%;
-  height: calc(var(--top-size)*0.8);
-  background-color: var(--tg-theme-bg-color);
-/*   background: linear-gradient(180deg, var(--tg-theme-bg-color) 80%, rgba(0,0,0,0) 100%); */
-  z-index: 1;
-  justify-content: space-around;
+
+#total-sum {
   position: fixed;
+  background-color: var(--tg-theme-secondary-bg-color);
+  z-index: 1;
+  right: .2em;
+  top: .2em;
+  box-sizing: border-box;
+  border-radius: .2em;
+  padding: .2em .5em;
+  text-align: right;
 }
-body.wide-view #menu-nav {
-  top: 3em;
-}
-body.wide-view #menu-items>div {
-  scroll-margin: 5em;
-}
-body.wide-view #menu-items {
-  margin-top: 5em;
-}
-#menu-nav a {
-  text-decoration: none;
-  color: var(--tg-theme-button-color);
-  font-family: icons;
-  font-size: calc(var(--top-size)*0.6);
-}
-button {
-  border: none;
-  background-color: var(--tg-theme-button-color);
-  color: var(--tg-theme-button-text-color);
-}
-#btn-back {
-  background: none;
-  border: none;
-  display: none;
-  color: var(--tg-theme-button-color);
-}
-#btn-back span:not(.icon) {
-  display: none;
-}
-button span.icon ,
-button.icon {
+#total-sum .value::after{
+  content: "₽";
+  font-weight: normal;
+  padding: .15em;
+  color: var(--tg-theme-subtitle-text-color);
+} 
+#total-sum .value{
+  content: "₽";
+  font-weight: bold;
+  padding: .15em;
+  color: var(--tg-theme-accent-text-color);
+} 
+.icon {
   font-family: icons;
   font-size: 2em;
 }
-#menu-items {
-  margin-top: calc(var(--top-size)*0.6);
-  width: 100%;
+
+html[lang=en] [lang]:not([lang=en]),
+html[lang=ru] [lang]:not([lang=ru]){
+    display: none;
 }
-h3 {
+
+.item {
+  display: grid;
+  grid-template-columns: auto 2em;
+  height: 3em;
+}
+.item input[type=radio],.item input[type=checkbox] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 1.5em; /* Adjusted for better visual balance with border */
+  height: 1.5em; /* Adjusted for better visual balance with border */
+  align-self: center;
+  justify-self: center;
+  border: .2em solid var(--tg-theme-button-color);
+  background-color: transparent;
+  margin: .25em; /* Ensure border doesn't overlap */
+  position: relative; /* For positioning the checkmark */
+}
+.item input[type=radio] {
+  border-radius: 50%; /* Make radio buttons circular */
+}
+.item input[type=checkbox] {
+  border-radius: .2em; /* Slightly rounded corners for checkbox */
+}
+
+.item input[type=radio]:checked,
+.item input[type=checkbox]:checked {
+  background-color: var(--tg-theme-button-color);
+}
+
+.item input[type=checkbox]:checked::before {
+  content: '\2713'; /* Unicode checkmark character */
+  color: var(--tg-theme-button-text-color);
+  position: absolute;
+  font-size: 1.2em; /* Adjust size of checkmark */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  line-height: 1; /* Ensure proper vertical alignment */
+}
+
+.item input[type=radio]:disabled,
+.item input[type=checkbox]:disabled {
+  filter: grayscale(100%);
+  opacity: 0.6;
+  border-color: var(--tg-theme-hint-color); /* Use a less prominent border color */
+}
+
+.item input[type=checkbox]:disabled:checked::before {
+  color: var(--tg-theme-hint-color); /* Grey out the checkmark as well */
+  opacity: 0.6;
+}
+
+section.meal {
+  margin-top: 1em;
+}
+.lunch .meals>.description {
+  margin: .2em .5em;
+  font-style:  italic;
+  font-size: .8em;
+}
+.day {
   width: 90%;
   color: var(--tg-theme-section-header-text-color);
   grid-column-start: 1;
   grid-column-end: span 3;
+  padding-left: 1em;
   font-size: 1.7rem;
   font-weight: 300;
   border-bottom: 1px solid var(--tg-theme-section-header-text-color);
 }
-#menu-items h3 span,
-h3 span.icon {
-  font-size: 1.5em;
-  font-family: icons;
-  margin: 0 .3em;
-  font-weight: 300;
-}
-#menu-items>div {
-  scroll-margin: 2em;
-  width: 100%;
-  grid-template-columns: 1fr 1fr 1fr;
-  display: grid;
-  row-gap: .4em;
-}
-#menu-items .item {
-  font-size: 0.7em;
-  justify-self: stretch;
-  overflow: hidden;
-  position: relative;
-}
-#menu-items .item .image {
-  width:100%;
-}
-#menu-items .item .add {
-  --margin: .1em;
-  color: var(--tg-theme-button-text-color);
-  cursor: pointer;
-  background-color: var(--tg-theme-button-color);
-  border: none;
-  font-family: icons;
-}
-body:not(.wide-view) #menu-items .item .add {
-  border-radius: 50%;
-  position: absolute;
-  top: var(--margin);
-  right: var(--margin);
-  text-align: center;
-  width: 1.6em;
-  height: 1.6em;
-  font-size: 1.4em;
-  padding: 0;
-/*   --stroke:color-mix(in oklab,  var(--tg-theme-bg-color) 30%,  var(--tg-theme-bg-color) 30%);
-	box-shadow: -2px  2px 2px var(--stroke),
-                2px  2px 2px var(--stroke),
-                2px -2px 2px var(--stroke),
-               -2px -2px 2px var(--stroke); */
-}
-#menu-items .item .price {
-  color: var(--tg-theme-text-color);
-  font-weight: bold;
-}
-body:not(.wide-view) #menu-items .item .price {
-  --stroke: var(--tg-theme-bg-color);
-  position: absolute;
-  font-size: 1.5em;
-	text-shadow: -2px  2px 4px var(--stroke),
-                2px  2px 4px var(--stroke),
-                2px -2px 4px var(--stroke),
-               -2px -2px 4px var(--stroke);
-  top: 0;
-  left: 0;
-  padding: .1em .3em;
-/*   background-color:color-mix(in oklab, var(--tg-theme-bg-color) 35%, var(--tg-theme-bg-color) 35%); */
-}
-#menu-items .item .price:after{
-  content: " р";
-}
-#menu-items .item .name{
-  padding: 0 0.2em;
-}
-.item .name .sub{
-  font-size: .95em;
+.mealtime {
+  width: 90%;
+  padding-left: 1.2em;
   color: var(--tg-theme-subtitle-text-color);
-}
-
-.wide-view #menu-items .item .image,
-body:not(.wide-view) #menu-items .item .description,
-body:not(.wide-view) #menu-items .item .calories,
-body:not(.wide-view) #menu-items .item .ingridients,
-body:not(.wide-view) #menu-items .item .image_big,
-body:not(.wide-view) #menu-items .item .nutr,
-body:not(.wide-view) #menu-items .item .weight,
-#menu-items .item .weight_unit {
-  display: none;
-}
-#menu-items .item .weight_icon {
-  font-family: icons;
-}
-.wide-view #menu-items .item .image_big{
-  display: block;
-  width: 100%;
-  grid-column-start: 1;
-  grid-column-end: -1;
-}
-.wide-view #menu-items .item {
   grid-column-start: 1;
   grid-column-end: span 3;
-  font-size: 1em;
-  width: 100%;
-  scroll-margin: 9em;
-  margin-bottom: .7em;
-  display: grid;
-  grid-template-columns: 3fr 1fr 1fr 1fr;
+  font-size: 1.5rem;
+  font-weight: 300;
 }
-.wide-view #menu-items .item .name {
-  margin: .2em .7em;
-  grid-column-start: 1;
-  grid-column-end: -3;
-}
-.wide-view #menu-items .item .description {
-  margin: .2em .7em;
-  font-size: .8em;
-  grid-column-start: 1;
-  grid-column-end: -1;
+.combo-class .combo-name {
   color: var(--tg-theme-subtitle-text-color);
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-top: .5em;
+  margin-left: 1.6em;
 }
-.wide-view #menu-items .item .price {
-  position: relative;
-  align-self: center;
+/* Added style for unfilled lunch categories */
+.combo-class.unfilled {
+  border: 1px solid red !important; /* Thin red border */
+  box-sizing: border-box; /* Ensures padding and border are within the element's total width and height */
+}
+.with-soup.explanation {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 2em auto 3em 5em;
+  align-content: center;
+}
+.with-soup.explanation> .name {
+  grid-column: 2;
+  font-style: italic;
+}
+.with-soup.explanation> .price {
+  grid-column: 3;
   justify-self: center;
-  font-size: 1.3em;
 }
-.wide-view #menu-items .item .add {
-  position: relative;
-  padding: .1em .2em;
-}
-.wide-view #menu-items .item>.ingridients{
-  grid-column-start: 1;
-  grid-column-end: -1;
-}
-.wide-view #menu-items .item>.weight{
-  justify-self:center;
-  align-self: center;
-  text-align:center;
-  font-size: 1.2em;
-  color: var(--tg-theme-accent-text-color);
-  margin-bottom: .3em;
-}
-.wide-view #menu-items .item>.weight .weight_icon{
-  color: var(--tg-theme-text-color);
-  font-size: 1.4em;
-}
-.wide-view #menu-items .item>.calories{
-  margin-top:.5em;
-  margin-left:1em;
-  position: relative;
-  font-size: 1.2em;
-  grid-column-start: -3;
-  grid-column-end: -1;
-  padding-left:2em;
-  color: var(--tg-theme-accent-text-color);
-}
-.wide-view #menu-items .item>.calories:before{
-  content:"S";
-  left:0;
-  top:.07em;
-  position:absolute;
-  font-family: icons;
-  font-size: 1.7em;
-  color: var(--tg-theme-text-color);
-}
-.wide-view #menu-items .item>.calories .calories:after{
-  content:"/100";
-  font-size: .7em;
-  color: var(--tg-theme-subtitle-text-color);
-}
-.wide-view #menu-items .nutr {
-  position: relative;
-  justify-self:center;
-  align-self: center;
-  font-size: 1.2em;
-  grid-column-start: 1;
-  height: 4em;
-  color: var(--tg-theme-accent-text-color);
-  width: 5em;
-}
-.wide-view #menu-items .nutr:before{
-  content:"A";
-  font-family: icons;
-  position:absolute;
-  color: var(--tg-theme-text-color);
-  font-size: 2em;
-  left:50%;
-  top:43%;
-  transform: translate(-50%,-50%);
-}
-.wide-view #menu-items .nutr div:after {
-  content:"%";
-  font-size: .7em;
-  color: var(--tg-theme-subtitle-text-color);
-}
-.wide-view #menu-items .nutr .nutr-carbohydrates {
-  position:absolute;
-  left:50%;
-  top:65%;
-  transform: translateX(-50%);
-}
-.wide-view #menu-items .nutr .nutr-fats {
-  position:absolute;
-  left:70%;
-  top:7%;
-}
-.wide-view #menu-items .nutr .nutr-proteins {
-  position:absolute;
-  left:32%;
-  top:7%;
-  transform: translateX(-100%);
-}
-
-#menu-items .item input[type=checkbox] {
-  display: none;
-}
-#menu-items .item input[type=checkbox] + div {
-  margin: 0 1em;
-  overflow:hidden;
-  height: 2em;
-  transition: ease-in .1s;
-  background: linear-gradient(to bottom, var(--tg-theme-subtitle-text-color), rgba(255, 255, 255, 0));
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-}
-#menu-items .item input[type=checkbox]:checked + div {
-  height: auto;
-  transition: ease-in .1s;
-  color: var(--tg-theme-subtitle-text-color);
-}
-
-body.carts-editor #menu-nav,
-body.carts-editor #menu-items,
-body:not(.carts-editor) #cart-contents,
-body.carts-editor #carts>.edit {
-  display: none;
-}
-body.wide-view #btn-back,
-body.carts-editor #btn-back {
-  display: block;
-  cursor: pointer;
-  position: fixed;
-  top: 0;
-  font-size:1.2em;
-  background-color: var(--tg-theme-bg-color);
-  text-align: left;
-  padding: 0 .5em;
-  width: 100%;
-  height: 2.5em;
-  z-index:2;
-}
-#cart-contents {
-  margin-top: 3.5em;
-}
-
-#cart-contents .empty {
-  display: none;
-}
-#cart-contents>div{
-  position: relative;
-  width: 100%;
-}
-#cart-contents h3 {
-  font-size: 1.4em;
-}
-#cart-contents h3 .meal {
-  color: var(--tg-theme-subtitle-text-color);
-}
-#cart-contents h3 .day:after {
-  content:"/";
-  opacity: .2;
-  margin: 0 0.3em;
-}
-#cart-contents [data-meal]{
-  position:relative;
-}
-#cart-contents .sum {
-  font-weight: bold;
-  position: absolute;
-  top: .5em;
-  right: .5em;
-  font-size: 1.3em;
-}
-#cart-contents .sum:after {
-  content: " р";
-}
-#cart-contents .item {
+.item label {
   display: grid;
-  grid-template-columns: 5em auto 4em 3em;
-  grid-gap: .5em;
+  grid-template-columns: 2em auto 3em 3em;
+  height: 3em;
 }
-#cart-contents .item .name {
-  font-size: .9em;
-  margin: .5em 0;
-}
-#cart-contents .item .price {
-  font-weight: bold;
+.item .price {
   justify-self: center;
   align-self: center;
 }
-#cart-contents .item .price:after {
-  content: " р";
-}
-#cart-contents .item img.image {
-  width: 100%;
-}
-#cart-contents .item .del {
+.with-soup.explanation> .price::after,
+.item .price::after{
+  content: "₽";
   padding: .15em;
-  cursor: pointer;
-  justify-self: center;
+  color: var(--tg-theme-subtitle-text-color);
+} 
+.item.no-soup .name{
+  font-style: italic;
+}
+.lunch .item:not(.no-soup) label .name {
+  grid-column: 2/ span 2;
+}
+.item label .name {
   align-self: center;
 }
-
-#carts{
-  position: fixed;
-  z-index: 1;
-  width: 100%;
-  height: 0;
-  bottom: 0;
-  pointer-events: none;
-  overflow: hidden;
-  height: 100%;
-  transition: ease-in .1s;
-}
-#carts.open{
-  pointer-events: initial;
-  background-color: color-mix(in oklab,  var(--tg-theme-bg-color) 35%,  var(--tg-theme-bg-color) 35%);
-}
-#carts .close {
-  background: none;
-  align-self: start;
-  justify-self: stretch;
-  cursor: pointer;
-  color: var(--tg-theme-button-color);
-  height: 1.2em;
-  padding-right: .2em;
-  font-size: 3em;
-}
-#carts>.edit{
-  position:fixed;
-  cursor: pointer;
-  z-index: 3;
-  border-radius: .7em;
-  width: calc(100%/6);
-  bottom: .5em;
-  right: .5em;
-  color: var(--tg-theme-button-text-color);
-  background-color: var(--tg-theme-button-color);
-  align-self: end;
-  padding: .3em 0;
-  overflow: hidden;
-  justify-self: stretch;
-  pointer-events: initial;
-}
-#carts>.edit.empty{
-  display: none;
-}
-#carts>.edit .total {
-  text-align: center;
+.item .description-button {
+  width: 1.3em;
+  justify-self: center;
+  height: 1.3em;
+  font-size: 1.3em;
+  border-radius: 50%;
   font-weight: bold;
+  border: black none 0px;
+  background-color: var(--tg-theme-button-color);
+  color: var(--tg-theme-button-text-color);
+  align-self: center;
 }
-#carts>.edit .total:after {
-  content:" р";
-}
-#carts>.edit button {
-  cursor: pointer;
-  width: 100%;
-  background: none;
-}
-#carts>.days {
+.item .description {
+  display: none;
+  z-index: 2;
   position: fixed;
-  z-index: 1;
-  width: 100%;
-  bottom: -12em;
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1.2fr;
-  align-items: end;
-  justify-items: center;
-  text-align:center;
-  background-color: var(--tg-theme-bg-color);
-  transition: ease-in .1s;
+  background-color: var(--tg-theme-secondary-bg-color);
+  --offset: .4em;
+  top:var(--offset);
+  left:var(--offset);
+  width: calc(100% - 2 * var(--offset) - 2em);
+  height: calc(100% - 2 * var(--offset));
+  border-radius: var(--offset);
+  padding: calc(var(--offset) * 1.5);
+  box-sizing: border-box;
+  pointer-events: none;
+  gap: .2em;
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+  grid-template-rows: [name] auto [image] 50% [ingredients] auto [nutrition1] 1fr [nutrition2] 1fr [nutrition3];
 }
-#carts.open>.days{
-  bottom: 0;
+.description .name {
+  grid-column: 1 / span 5;
+  grid-row: name / image;
+  font-size: 1.3em;
+  color: var(--tg-theme-section-header-text-color);
 }
-#carts>.days [data-meal]{
-  cursor: pointer;
-  color: var(--tg-theme-button-color);
+.description img {
+  grid-column: 1 / span 5;
+  grid-row: image / span 1;
+  border-radius: 0.2em;
+  place-self: center;
+  max-height: 100%;
+  max-width: 100%;
+}
+.description .ingredients {
+  grid-column: 1 / span 5;
+  font-size: .9em;
+}
+.description .weight::before {
+  content: "K";
+}
+.description .weight {
+  grid-row: nutrition2;
+  grid-column: 1;
+}
+
+.description .carbohydrates::before,
+.description .calories::after,
+.description .weight::before {
   font-family: icons;
-  font-size: 2.5em;
-  margin: .3em 0;
+  font-size:1.3em;
+  margin: 0 0.2em;
+  color:var(--tg-theme-hint-color);
+}
+.description .weight, .description .nutrition {
+  font-size: 1.4em;
+  color:var(--tg-theme-section-header-text-color);
+}
+.description .carbohydrates::before {
+  height: 1.4em;
+  content: "A";
+  display: block;
+}
+.description .carbohydrates {
+  align-self: start;
+  text-align: center;
+  justify-self: center;
+  grid-row: nutrition2;
+  grid-column: 3;
+}
+.description .fat {
+  align-self: end;
+  text-align: center;
+  justify-self: start;
+  grid-row: nutrition1;
+  grid-column: 4;
+}
+.description .protein {
+  align-self: end;
+  text-align: center;
+  justify-self: end;
+  grid-row: nutrition1;
+  grid-column: 2;
+}
+.description .calories::after {
+  content: "S";
+}
+.description .calories {
+  grid-row: nutrition2;
+  grid-column: 5;
+}
+.item .description-button:active + .description {
+  display: grid;
+}
+.item img.small_photo {
+  grid-column: 4;
+  justify-self: center;
+  align-self: center;
+  max-height: 3em;
+  max-width: 3em;
+  border-radius: 0.3em;
 }

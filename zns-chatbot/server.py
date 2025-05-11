@@ -246,7 +246,13 @@ class GetCompensationsHandler(RequestHandlerWithApp):
 
 class MenuHandler(RequestHandlerWithApp):
     async def get(self):
-        order_id = self.get_query_argument("order", default="")
+        order_id = self.get_query_argument("order_id", default="")
+        debug_id = self.get_query_argument("debug_id", default="")
+        locale_str = self.get_query_argument("locale", default="en")
+        l = lambda s: self.app.localization(s, locale=locale_str)
+        lang = "en"
+        if locale_str.startswith("ru"):
+            lang = "ru"
         carts = None
         read_only = False
         if order_id != "":
@@ -255,13 +261,19 @@ class MenuHandler(RequestHandlerWithApp):
                 carts = order["carts"]
             if "proof_received_at" in order:
                 read_only = True
-
+        from random import randbytes
+        random = randbytes(16).hex()
         try:
             self.render(
                 "menu.html",
-                order_id=json.dumps(order_id),
-                user_carts=json.dumps(carts),
-                read_only=json.dumps(read_only),
+                read_only=read_only,
+                user_order=carts,
+                user_order_id=order_id,
+                debug_id=debug_id,
+                random=random,
+                lang=lang,
+                finish_button_text=l("orders-finish-button-text"),
+                next_button_text=l("orders-next-button-text"),
             )
         except (KeyError, ValueError):
             raise tornado.web.HTTPError(404)
@@ -536,7 +548,7 @@ async def create_server(config: Config, base_app):
         (r"/auth", AuthHandler, {"app": base_app}),
         (r"/orders", OrdersHandler, {"app": base_app}),
         # (r"/food_get_orders", FoodGetOrders, {"app": base_app}),
-        # (r"/menu", MenuHandler, {"app": base_app}),
+        (r"/menu", MenuHandler, {"app": base_app}),
         (r"/error", ErrorHandler, {"app": base_app}),
         (r"/photos/(.*)", PhotoHandler),
         (r"/static/x/(.*)",CustomStaticFileHandler, {"path": "static/x/"}),
