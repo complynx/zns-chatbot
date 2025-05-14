@@ -6,7 +6,10 @@
             const read_only = {% raw json_encode(read_only) %};
             const user_order_id = {% raw json_encode(user_order_id) %};
             const finish_button_text={% raw json_encode(finish_button_text) %};
-            const next_button_text={% raw json_encode(next_button_text) %};
+            const alert_lunch_incomplete_text = {% raw json_encode(alert_lunch_incomplete_text) %};
+            const confirm_dinner_empty_text = {% raw json_encode(confirm_dinner_empty_text) %};
+            const orig_msg_id = {% raw json_encode(orig_msg_id) %};
+            const orig_chat_id = {% raw json_encode(orig_chat_id) %};
         </script>
         <title>Zouk Non Stop Menu</title>
         <meta charset="utf-8" />
@@ -267,5 +270,24 @@
             <div class="meals">
             </div>
         </section>
+        <div id="custom-dialog-overlay" class="hidden"></div>
+        <div id="custom-alert-dialog" class="custom-dialog hidden">
+            <p id="custom-alert-message"></p>
+            <button id="custom-alert-ok-button">OK</button>
+        </div>
+
+        <div id="custom-confirm-dialog" class="custom-dialog hidden">
+            <p id="custom-confirm-message"></p>
+            <div class="dialog-buttons">
+                <button id="custom-confirm-cancel-button">
+                    <span lang="ru">Отмена</span>
+                    <span lang="en">Cancel</span>
+                </button>
+                <button id="custom-confirm-ok-button">
+                    <span lang="ru">Подтвердить</span>
+                    <span lang="en">Confirm</span>
+                </button>
+            </div>
+        </div>
     </body>
 </html>

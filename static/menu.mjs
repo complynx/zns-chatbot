@@ -164,6 +164,9 @@
         // If read_only is true, the autosave setup itself in the IIFE already prevents calling save(true).
         // So, if(read_only) return; is also fine if we assume autosave is never initiated.
 
+        // Ensure window.user_order is up-to-date before any save logic, for both manual and auto saves.
+        calculateTotalSumAndOrder();
+
         let orderIsIncomplete = false;
         if (!autosave) { // Validation and highlighting only for manual saves (button press)
             document.querySelectorAll('.combo-class.unfilled').forEach(el => el.classList.remove('unfilled')); // Clear previous highlights
@@ -210,9 +213,36 @@
             });
 
             if (orderIsIncomplete) {
-                console.log("Order is incomplete. Please fill all required lunch items for selected lunches.");
-                // Optionally: Telegram.WebApp.showAlert("Please complete your lunch selections.");
-                return; // Prevent save if incomplete on manual trigger
+                const message = (typeof alert_lunch_incomplete_text !== 'undefined' && alert_lunch_incomplete_text)
+                                ? alert_lunch_incomplete_text
+                                : "Order is incomplete. Please fill all required lunch items for selected lunches.";
+                await showCustomAlert(message);
+                return "user_validation_failed";
+            }
+
+            let someDinnerIsEmpty = false;
+            if (collectedOrder) {
+                for (const day in menu) { // Iterate through days defined in the master menu
+                    // Check if dinner is offered for this day in the menu
+                    if (menu[day] && menu[day].dinner && menu[day].dinner.length > 0) {
+                        // Check if the order for this day has an empty dinner array
+                        if (collectedOrder[day] && collectedOrder[day].dinner && collectedOrder[day].dinner.length === 0) {
+                            someDinnerIsEmpty = true;
+                            break; // Found one, no need to check further
+                        }
+                    }
+                }
+            }
+
+            if (someDinnerIsEmpty) {
+                const dinnerConfirmText = (typeof confirm_dinner_empty_text !== 'undefined' && confirm_dinner_empty_text)
+                                     ? confirm_dinner_empty_text
+                                     : "You have not selected any items for dinner on one or more days. Proceed anyway?";
+                const proceedWithEmptyDinner = await showCustomConfirm(dinnerConfirmText);
+
+                if (!proceedWithEmptyDinner) {
+                    return "user_validation_failed"; // MODIFIED HERE
+                }
             }
         }
 
@@ -224,17 +254,22 @@
             order_query += "&autosave=autosave";
         }
 
-        // Use window.user_order which is populated by calculateTotalSumAndOrder via collectedOrder
-        const dataToSend = window.user_order; 
+        // Add orig_msg_id and orig_chat_id if they are available
+        if (typeof orig_msg_id !== 'undefined' && orig_msg_id !== null) {
+            order_query += `&orig_msg_id=${orig_msg_id}`;
+        }
+        if (typeof orig_chat_id !== 'undefined' && orig_chat_id !== null) {
+            order_query += `&orig_chat_id=${orig_chat_id}`;
+        }
         
-        console.log("Saving order:", dataToSend); // For debugging
+        console.log("Saving order:", collectedOrder); // For debugging
 
         const response = await fetch('menu?' + IDQ() + order_query, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(dataToSend) 
+            body: JSON.stringify(collectedOrder)
         });
 
         if (!response.ok) {
@@ -243,14 +278,147 @@
         }
         return response;
     }
+
+    // ALWAYS try to pre-fill from user_order if it exists
+    if (typeof user_order !== 'undefined' && user_order !== null) {
+        // FIRST PASS: Check appropriate inputs based on user_order
+        for (const day in user_order) {
+            if (user_order[day].lunch) { // Check if lunch object exists for the day
+                const lunchDetails = user_order[day].lunch;
+                const lunchItems = lunchDetails.items; // items might be null/undefined
+                const lunchType = lunchDetails.type;
+
+                if (lunchType === 'no-lunch') {
+                    const noLunchRadio = document.querySelector(`input[name="${day}-lunch-soup"][value="no-lunch"]`);
+                    if (noLunchRadio) noLunchRadio.checked = true;
+                } else {
+                    // Lunch is selected, determine soup status
+                    if (lunchType === 'no-soup') {
+                        const noSoupRadio = document.querySelector(`input[name="${day}-lunch-soup"][value="no-soup"]`);
+                        if (noSoupRadio) noSoupRadio.checked = true;
+                    } else if (lunchItems && lunchItems.soup_index !== undefined && lunchItems.soup_index !== null) {
+                        // Assumes lunchType is 'with-soup' or similar if a specific soup is chosen
+                        const soupRadio = document.querySelector(`input[name="${day}-lunch-soup"][value="${lunchItems.soup_index}"]`);
+                        if (soupRadio) soupRadio.checked = true;
+                    }
+
+                    // Handle main, side, salad if lunchItems are present
+                    if (lunchItems) {
+                        ['main', 'side', 'salad'].forEach(category => {
+                            if (lunchItems[`${category}_index`] !== undefined && lunchItems[`${category}_index`] !== null) {
+                                const itemRadio = document.querySelector(`input[name="${day}-lunch-${category}"][value="${lunchItems[`${category}_index`]}"]`);
+                                if (itemRadio) itemRadio.checked = true;
+                            }
+                        });
+                    }
+                }
+            }
+            if (user_order[day].dinner) {
+                user_order[day].dinner.forEach(itemIndex => {
+                    const dinnerCheckbox = document.querySelector(`input[name="${day}-dinner-${itemIndex}"]`);
+                    if (dinnerCheckbox) dinnerCheckbox.checked = true;
+                });
+            }
+        }
+    }
+
     if(read_only){
         document.body.classList.add("read-only");
         
-        for(let cart_id in carts) {
-            let cart = carts[cart_id]
-            for(let item_id of cart.items) {
-                document.getElementById(`menu-item-${item_id}`).classList.add("in-cart")
+        // Pre-filling is now done above.
+        // We still need to ensure user_order was present for the hiding logic to make sense.
+        if (typeof user_order !== 'undefined' && user_order !== null) {
+            // SECOND PASS: Hide unselected items based on user_order
+            for (const day in user_order) {
+                const dayData = user_order[day];
+                const lunchSection = document.querySelector(`section.${day}.lunch`);
+                const dinnerSection = document.querySelector(`section.${day}.dinner`);
+
+                if (lunchSection && dayData.lunch) {
+                    const lunchOrderDetails = dayData.lunch;
+                    const lunchType = lunchOrderDetails.type;
+                    const lunchItems = lunchOrderDetails.items; // Might be {} or contain selections
+
+                    const noLunchItemContainer = lunchSection.querySelector(`.meals .item.no-lunch`);
+
+                    if (lunchType === 'no-lunch') {
+                        // Hide all .combo-class divs (soup, main, side, salad groups)
+                        lunchSection.querySelectorAll(`.meals .combo-class`).forEach(el => el.style.display = 'none');
+                        // The "no-lunch" item itself remains visible.
+                    } else {
+                        // A specific lunch was chosen (with or without soup), so hide the "no-lunch" option
+                        if (noLunchItemContainer) noLunchItemContainer.style.display = 'none';
+
+                        const soupComboClass = lunchSection.querySelector(`.combo-class.soup`);
+                        if (soupComboClass) {
+                            const noSoupItemContainer = soupComboClass.querySelector(`.item.no-soup`);
+                            if (lunchType === 'no-soup') {
+                                // "No-soup" was chosen for lunch. Hide all specific soup items.
+                                soupComboClass.querySelectorAll(`.choices .item`).forEach(itemEl => itemEl.style.display = 'none');
+                                // The "no-soup" item itself remains visible.
+                            } else if (lunchType === 'with-soup') {
+                                // A specific soup was chosen. Hide the "no-soup" option.
+                                if (noSoupItemContainer) noSoupItemContainer.style.display = 'none';
+                                // Hide unselected specific soups
+                                const selectedSoupIndex = lunchItems?.soup_index;
+                                soupComboClass.querySelectorAll(`.choices .item`).forEach(itemEl => {
+                                    const radio = itemEl.querySelector('input[type="radio"]');
+                                    if (!radio || radio.value !== selectedSoupIndex) {
+                                        itemEl.style.display = 'none';
+                                    }
+                                });
+                            } else {
+                                // Unclear or incomplete lunchType regarding soup, hide both no-soup and specific soup options if not explicitly chosen
+                                if (noSoupItemContainer) noSoupItemContainer.style.display = 'none';
+                                soupComboClass.querySelectorAll(`.choices .item`).forEach(itemEl => itemEl.style.display = 'none');
+                            }
+                        }
+
+                        // Handle Main, Side, Salad visibility - these are expected if lunchType is 'no-soup' or 'with-soup'
+                        if (lunchType === 'no-soup' || lunchType === 'with-soup') {
+                            ['main', 'side', 'salad'].forEach(category => {
+                                const categoryChoicesContainer = lunchSection.querySelector(`.combo-class.${category} .choices`);
+                                if (categoryChoicesContainer) {
+                                    const selectedItemIndex = lunchItems ? lunchItems[`${category}_index`] : undefined;
+                                    categoryChoicesContainer.querySelectorAll('.item').forEach(itemEl => {
+                                        const radio = itemEl.querySelector('input[type="radio"]');
+                                        if (!radio || radio.value !== selectedItemIndex) {
+                                            itemEl.style.display = 'none';
+                                        }
+                                    });
+                                }
+                            });
+                        } else {
+                             // If lunchType is not 'no-soup' or 'with-soup' (e.g. some error or different type), hide main/side/salad groups
+                             ['main', 'side', 'salad'].forEach(category => {
+                                const categoryGroup = lunchSection.querySelector(`.combo-class.${category}`);
+                                if (categoryGroup) categoryGroup.style.display = 'none';
+                            });
+                        }
+                    }
+                } else if (lunchSection) { // No lunch data for this day in user_order, hide all lunch options
+                    lunchSection.querySelectorAll(`.meals .item, .meals .combo-class`).forEach(el => el.style.display = 'none');
+                }
+
+
+                if (dinnerSection && dayData.dinner) {
+                    const selectedDinnerIndices = (dayData.dinner || []).map(val => String(val)); // map to string for comparison
+                    dinnerSection.querySelectorAll(`.meals .item`).forEach(itemEl => {
+                        const checkbox = itemEl.querySelector('input[type="checkbox"]');
+                        if (!checkbox || !selectedDinnerIndices.includes(checkbox.value)) {
+                            itemEl.style.display = 'none';
+                        }
+                    });
+                } else if (dinnerSection) { // No dinner data for this day, hide all dinner items
+                     dinnerSection.querySelectorAll(`.meals .item`).forEach(el => el.style.display = 'none');
+                }
             }
+
+            // Disable all inputs and hide description buttons in read-only mode
+            document.querySelectorAll('section.meal input[type="radio"], section.meal input[type="checkbox"]')
+                .forEach(input => input.disabled = true);
+            document.querySelectorAll('section.meal button.description-button')
+                .forEach(button => button.style.display = 'none');
         }
     } else if (user_order_id) {
         const autosaveInterval = 60*1000; // every minute
@@ -264,12 +432,17 @@
     Telegram.WebApp.ready();
     Telegram.WebApp.expand();
     Telegram.WebApp.MainButton.setText(finish_button_text);
+    window.save = save;
     Telegram.WebApp.MainButton.onClick(()=>{
-        save().catch(error => {
-            console.error('Save error:', error);
-            return send_error(error);
-        }).finally(()=>{
-            Telegram.WebApp.close();
+        let shouldClose = true;
+        save().then(saveResult => {
+            if (saveResult === "user_validation_failed") {
+                shouldClose = false;
+            }
+        }).catch(error => send_error(error)).finally(()=>{
+            if (shouldClose) {
+                Telegram.WebApp.close();
+            }
         });
     });
     Telegram.WebApp.MainButton.enable();
@@ -280,6 +453,63 @@
     const LUNCH_WITH_SOUP_PRICE = 665; // Price for lunch combo with soup
     
     let collectedOrder = {}; // This variable will store the details of the current order
+
+
+    const customDialogOverlay = document.getElementById('custom-dialog-overlay');
+    const customAlertDialog = document.getElementById('custom-alert-dialog');
+    const customAlertMessage = document.getElementById('custom-alert-message');
+    const customAlertOkButton = document.getElementById('custom-alert-ok-button');
+
+    const customConfirmDialog = document.getElementById('custom-confirm-dialog');
+    const customConfirmMessage = document.getElementById('custom-confirm-message');
+    const customConfirmOkButton = document.getElementById('custom-confirm-ok-button');
+    const customConfirmCancelButton = document.getElementById('custom-confirm-cancel-button');
+
+    async function showCustomAlert(message) {
+        return new Promise((resolve) => {
+            customAlertMessage.textContent = message;
+            customDialogOverlay.classList.remove('hidden');
+            customAlertDialog.classList.remove('hidden');
+
+            const listener = () => {
+                customDialogOverlay.classList.add('hidden');
+                customAlertDialog.classList.add('hidden');
+                customAlertOkButton.removeEventListener('click', listener);
+                resolve();
+            };
+            customAlertOkButton.addEventListener('click', listener);
+        });
+    }
+
+    async function showCustomConfirm(message) {
+        return new Promise((resolve) => {
+            customConfirmMessage.textContent = message;
+            customDialogOverlay.classList.remove('hidden');
+            customConfirmDialog.classList.remove('hidden');
+
+            const okListener = () => {
+                customDialogOverlay.classList.add('hidden');
+                customConfirmDialog.classList.add('hidden');
+                customConfirmOkButton.removeEventListener('click', okListener);
+                customConfirmCancelButton.removeEventListener('click', cancelListener);
+                resolve(true);
+            };
+
+            const cancelListener = () => {
+                customDialogOverlay.classList.add('hidden');
+                customConfirmDialog.classList.add('hidden');
+                customConfirmOkButton.removeEventListener('click', okListener);
+                customConfirmCancelButton.removeEventListener('click', cancelListener);
+                resolve(false);
+            };
+
+            customConfirmOkButton.addEventListener('click', okListener);
+            customConfirmCancelButton.addEventListener('click', cancelListener);
+        });
+    }
+
+
+
 
     function calculateTotalSumAndOrder() {
         let totalSum = 0;
@@ -368,18 +598,7 @@
             totalSumElement.textContent = totalSum.toFixed(0); // Display sum, adjust formatting as needed
         }
         
-        // console.log("Current Order:", collectedOrder); // For debugging
-        // If you need to update the global `user_order` variable from menu.html:
-        if (typeof window.user_order !== 'undefined') {
-           // Create a deep copy to avoid direct mutation issues if user_order is complex
-           try {
-             window.user_order = JSON.parse(JSON.stringify(collectedOrder));
-           } catch (e) {
-             console.error("Error updating window.user_order:", e);
-             // Fallback or simpler assignment if deep copy fails or is not needed
-             // window.user_order = collectedOrder;
-           }
-        }
+        return collectedOrder;
     }
 
     // Add event listener to the body to recalculate on any click

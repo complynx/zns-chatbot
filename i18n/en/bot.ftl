@@ -93,67 +93,70 @@ max-assistant-messages-reached = You've reached your questions limit for a day, 
 avatar-custom-crop = Crop differently
 avatar-without-command = No need to send this command anymore, sending the picture right away is better.
 something-went-wrong = Something went wrong. Try again.
+
+# Food Plugin Entries
+# Entries are sorted alphabetically, with admin-specific entries (food-adm-) first.
+
+# Admin messages
+food-adm-payment-accepted-msg = Payment for order {$orderId} accepted.
+food-adm-payment-already-processed-or-error = Order already processed or an error occurred.
 food-adm-payment-proof-accept-button = ✅ Accept
-food-adm-payment-proof-confirmed = Order payment from user {$link} for <i>{$name}</i> is confirmed.
+# food-adm-payment-proof-confirmed = Order payment from user {$link} for <i>{$name}</i> is confirmed. # Retained, but not directly used by current food.py review scope
 food-adm-payment-proof-received =
-    User {$link} sent payment for food order
-    Total order sum: {$total} ₽
-    order is in the name <i>{$name}</i>. Confirmation required.
+    User {$link} sent payment proof for their food order.
+    Total order sum: {$total} RUB. Confirmation required.
     <b>Attention</b>, do not mark proof as rejected, wait a bit and try to find the payment first.
 food-adm-payment-proof-reject-button = ❌ Reject
-food-adm-payment-proof-rejected = Order payment from user {$link} for <i>{$name}</i> is rejected.
-food-back-button = To the beginning.
-food-cancel-order-button = Cancel order.
-food-command-description = Your space meal at ZNS
-food-confirm-payment-button = Pay for the order
-food-created-write-for-who = Your order has been saved, write your name, so we can easily identify your meal and give it to you.
-food-day-wednesday = Wednesday
-food-day-friday = Friday
-food-day-saturday = Saturday
-food-day-sunday = Sunday
-food-edit-order-button = Edit order.
-food-meal-lunch = lunch
-food-meal-dinner = dinner
-food-name-update-cancelled = Recipient name is left unchanged.
-food-name-updated = The new recipient name <i>{$name}</i> was saved.
-food-new-order-button = Create new
-food-no-orders-yet = 
-    For the full immersion, zoukonaut has to have a good meal!
-    Press the button to choose yourself lunch and or dinner
-food-order-button = {$created}|{$name}
-food-order-for = Order for <b>{$name}</b>
-food-order-message-begin = This is your order, here you can view it or edit.
-food-order-new-message-begin = This is a new order, you can open up menu and choose meals.
-food-order-saved = Your order has been saved, you can now proceed with the payment transfer.
-food-payment-instructions =
-    To pay for the meal, you need to make a transaction using SBP to the Sber account bound to phone number
-    <code>+79175295923</code>
-    Recipient: <i>Ушакова Дарья Евгеньевна/Ushakova Daria Evgenievna</i>.
-    <b>Amount to pay:</b> <code>{$total}</code> ₽
-food-payment-instructions-proof =
-    ⚠ When you're done with the transfer, you will need to send me the confirmation —
-    with all the data about the transaction: from who, amount, date and time, and other relevant data.
-    If you don't have the confirmation now, press cancel.
-    You'll be able to come back through the menu.
-food-payment-proof-cancelled = Ok, you will have to send proof using menu, when you'll have it.
-food-payment-proof-confirmed =
-    Administrator confirmed your order payment for <i>{$name}</i>.
-    Happy to see you at ZNS.
-food-payment-proof-failed = I was waiting for your payment proof and received something else. You will have to send the proof using menu, when you'll have it.
-food-payment-proof-forwarded = I sent the proof to our administrators. They will check it and I'll come back with the result.
-food-payment-proof-rejected = 
-    Administrator rejected payment proof for <i>{$name}</i>.
-    You can create another order or try sending another confirmation.
-food-remind-about-order =
-    I noticed that you have an order that hasn't been paid for yet. If you still plan to have these meals at the marathon, please make the payment and send me the receipt. Otherwise, the order will not be placed and won't be delivered.
+# food-adm-payment-proof-rejected = Order payment from user {$link} for <i>{$name}</i> is rejected. # Retained, but not directly used by current food.py review scope
+food-adm-payment-rejected-msg = Payment for order {$orderId} rejected.
 
-    You can pay up until June 4th. If you don't want your order, you can simply cancel it.
+# User messages
+food-button-create-order = 📝 Create Order
+food-button-delete-order = 🗑️ Delete Order
+food-button-edit-order = ✏️ Edit Order
+food-button-pay = 💸 Pay for Order
+food-button-view-order = 👁️ View Order
+food-cannot-submit-proof-now = Cannot submit payment proof for this order at this time.
+food-no-order = You have no active food order. Create one using the button below.
+food-not-authorized-admin = You are not authorized for this action.
+food-order-already-paid = This order has already been paid.
+food-order-cannot-delete-paid-submitted = This order is already paid or proof has been submitted, and it cannot be deleted.
+food-order-deleted-successfully = Order successfully deleted. To create a new one, use the /food command.
+food-order-exists-not-complete = Your current order total is {$total} RUB. View or edit your order below.
+food-order-exists-payable = Your order (Total: {$total} RUB) is ready for payment. If a previous attempt failed, you can try again.
+food-order-is-paid = Your order is paid. Total: {$total} RUB.
+food-order-not-complete-for-payment = The order is not complete and cannot be paid yet.
+food-order-not-found = Order not found.
+food-order-not-found-admin = Order not found. (Admin mode)
+food-order-proof-already-submitted = Payment proof for this order has already been submitted.
+food-order-proof-submitted = Your payment proof (Total: {$total} RUB) has been submitted and is awaiting review.
+food-payment-admin-error = Error communicating with the payment administrator. Please try again or contact support.
+food-payment-admins-not-configured = The payment system is currently unavailable. Please contact support.
+food-payment-proof-accepted = Your payment for the order (<i>{$name}</i>, Total: {$total} RUB) has been accepted!
+food-payment-proof-cancelled = Payment proof submission cancelled. You can try again from the menu or by using the /food command.
+food-payment-proof-forwarded = Your payment proof has been sent for review.
+food-payment-proof-rejected-retry = Your payment proof for the order (<i>{$name}</i>, Total: {$total} RUB) was rejected. Please try to pay again or contact support.
+food-payment-proof-timeout = You did not send the payment proof in time. Please try again if you still wish to pay.
+food-payment-proof-wrong-data =
+    I was expecting a PDF file or an image as proof of payment, but this message doesn't seem to match that.
+    Sorry about the confusion.
+    To try again, please use the /food command and submit a PDF file or an image.
 
-    Here is your order:
-food-rename-button = Rename order
-food-select-order = Here you can view your order or create a new one.
-food-total = <b>Total:</b> <code>{$total}</code> ₽
-food-write-for-who = Please write <b>full name</b> of the person, for who we are creating the order. This will help to identify it at the event.
+food-payment-method =
+    {$phoneSBP ->
+        [nosbp] Ambassador {$adminLink} receives payments only in cash or by prior agreement. Send them a message or call on {$phoneContact}.
+        *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}), contact {$adminLink}.
+    }
+
+food-payment-request-callback-message =
+    Your order total is <code>{$total}</code> ₽.
+    {food-payment-method}
+    Please prepare your payment proof (screenshot or PDF).
+
+food-payment-request-waiting-message =
+    Please send a screenshot or a PDF file as proof of payment for your order of <code>{$total}</code> ₽.
+    {food-payment-method}
+
 dow-short =
     { $dow ->
         [0] mo
@@ -318,7 +321,7 @@ passes-button-pay = 💸 Payment proof
 passes-command-description = Register to ZNS or manage your registration
 passes-added-to-waitlist =
     Hello, <i>{$name}</i>!
-    Unfortunately, all the passes are currently sold out. However, you’ve been added to the waiting list for the next {passes-pass-description}.
+    Unfortunately, all the passes are currently sold out. However, you've been added to the waiting list for the next {passes-pass-description}.
     
     Your ambassador: {$adminLink}
     
@@ -326,7 +329,7 @@ passes-added-to-waitlist =
     - Cancel your spot (note that this will permanently remove you from the waitlist)
     - Change the name associated with your spot
     
-    Stay tuned — if a pass becomes available, you’ll be notified!
+    Stay tuned — if a pass becomes available, you'll be notified!
 passes-pass-edit-waitlist=
     Hello, <i>{$name}</i>!
     You are currently on the waiting list for a {passes-pass-description}.
@@ -337,7 +340,7 @@ passes-pass-edit-waitlist=
     - Cancel your spot (this will remove you from the waitlist permanently)
     - Change the name associated with your spot
     
-    We’ll notify you as soon as a pass becomes available!
+    We'll notify you as soon as a pass becomes available!
 passes-pass-edit-waiting-for-couple=
     Hello, <i>{$name}</i>!
     You've selected a couple pass to {passes-pass-title-long} as a {$role} and invited {$coupleLink}.
@@ -479,7 +482,7 @@ passes-payment-request-waiting-message =
     {passes-payment-method}
     Please send the proof of payment in PDF format or as an image.
 passes-payment-proof-timeout =
-    I haven’t received your payment proof in time. Please use the /passes command to try again.
+    I haven't received your payment proof in time. Please use the /passes command to try again.
     Don't worry, your position in the waitlist hasn't changed.
 passes-payment-proof-cancelled =
     If you need to resubmit your payment proof or view your pass details, use the /passes command.
@@ -492,15 +495,15 @@ passes-payment-proof-rejected =
     Hello, <i>{$name}</i>!
     Unfortunately, your payment proof was rejected by the administrator.
     You can view your pass details or submit another proof by using the /passes command.
-    Don’t wait too long — secure your spot before it’s gone!
+    Don't wait too long — secure your spot before it's gone!
 passes-name-timeout =
-    I haven’t received your name in time. Please use the /passes command to try again.
+    I haven't received your name in time. Please use the /passes command to try again.
 passes-payment-proof-wrong-data =
-    I was expecting a PDF file or an image as proof of payment, but this message doesn’t seem to match that.
+    I was expecting a PDF file or an image as proof of payment, but this message doesn't seem to match that.
     Sorry about the confusion.
     To try again, please use the /passes command and submit a PDF file or an image.
 passes-payment-proof-forwarded =
-    I’ve sent your payment proof to our administrators for verification. They will review it, and I’ll update you with the result soon.
+    I've sent your payment proof to our administrators for verification. They will review it, and I'll update you with the result soon.
     If you need to view your pass details in the meantime, use the /passes command.
 passes-select-type-message =
     Select, which Zouk Non Stop marathon we will work with:
@@ -565,3 +568,9 @@ passes-invitation-timeout =
 
 user-is-restricted = Some actions have been disabled.
 user-is-none = Maybe run /start first?
+
+menu-alert-lunch-incomplete = Order is incomplete. Please fill all required lunch items for selected lunches.
+menu-confirm-dinner-empty = You have not selected any items for dinner on one or more days. Proceed anyway?
+
+food-button-exit = 🚪 Exit
+food-message-exited = If you need to manage your food order again, you can always use the /food command.
