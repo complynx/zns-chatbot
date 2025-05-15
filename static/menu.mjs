@@ -1,5 +1,5 @@
-(async function(){
-    
+(async function () {
+
     function findParent(element, query) {
         let parent = element.parentElement;
         while (parent && !parent.matches(query)) {
@@ -8,20 +8,20 @@
         return parent;
     }
 
-    let menu = await fetch("static/menu_2025_1.json").then(r=>r.json());
-    for(let day in menu) {
+    let menu = await fetch("static/menu_2025_1.json").then(r => r.json());
+    for (let day in menu) {
         let meal = "lunch";
         let lunch = menu[day][meal];
-        for(let i = 0; i < lunch.length; ++i) {
+        for (let i = 0; i < lunch.length; ++i) {
             let item = lunch[i];
-            if(item.skip) continue;
+            if (item.skip) continue;
 
             let container = document.createElement("div");
             container.classList.add("item");
             container.classList.add(item.category);
             let url = item.photo;
-            if(url && !url.startsWith("https://")) {
-                url = "static/menu_photos/"+url+".jpg";
+            if (url && !url.startsWith("https://")) {
+                url = "static/menu_photos/" + url + ".jpg";
             }
             let innerHTML = `
                 <label>
@@ -29,7 +29,7 @@
                     <span class="name" lang="ru">${item.title_ru}</span>
                     <span class="name" lang="en">${item.title_en}</span>
             `;
-            if(url) {
+            if (url) {
                 innerHTML += `
                     <img class="small_photo" loading="lazy" src="${url}">
                 `;
@@ -41,12 +41,12 @@
                     <span class="name" lang="ru">${item.title_ru}</span>
                     <span class="name" lang="en">${item.title_en}</span>
             `;
-            if(url) {
+            if (url) {
                 innerHTML += `
                     <img class="photo" loading="lazy" src="${url}">
                 `;
             }
-            if(item.ingredients_en && item.ingredients_en.length > 0) {
+            if (item.ingredients_en && item.ingredients_en.length > 0) {
                 innerHTML += `
                     <div class="ingredients">
                         <span lang="ru">Ингредиенты: ${item.ingredients_ru}</span>
@@ -54,14 +54,14 @@
                     </div>
                 `;
             }
-            if(item.weight && item.weight.value > 0) {
+            if (item.weight && item.weight.value > 0) {
                 innerHTML += `
                     <div class="weight">${item.weight.value}</div>
                 `;
             }
-            if(item.nutrition) {
-                for(let type of ["calories", "fat", "carbohydrates", "protein"]) {
-                    if(type in item.nutrition) {
+            if (item.nutrition) {
+                for (let type of ["calories", "fat", "carbohydrates", "protein"]) {
+                    if (type in item.nutrition) {
                         innerHTML += `
                             <div class="nutrition ${type}">${item.nutrition[type]}</div>
                         `;
@@ -76,10 +76,10 @@
         }
         meal = "dinner";
         let dinner = menu[day][meal];
-        for(let i = 0; i < dinner.length; ++i) {
+        for (let i = 0; i < dinner.length; ++i) {
             let item = dinner[i];
-            if(item.skip) continue;
-            if(!item.price) {
+            if (item.skip) continue;
+            if (!item.price) {
                 console.warn("Item has no price", i, item);
                 continue;
             }
@@ -88,8 +88,8 @@
             container.classList.add("item");
             container.classList.add(item.category);
             let url = item.photo;
-            if(url && !url.startsWith("https://")) {
-                url = "static/menu_photos/"+url+".jpg";
+            if (url && !url.startsWith("https://")) {
+                url = "static/menu_photos/" + url + ".jpg";
             }
             let innerHTML = `
                 <label>
@@ -98,7 +98,7 @@
                     <span class="name" lang="en">${item.title_en}</span>
                     <span class="price">${item.price}</span>
             `;
-            if(url) {
+            if (url) {
                 innerHTML += `
                     <img class="small_photo" loading="lazy" src="${url}">
                 `;
@@ -110,12 +110,12 @@
                     <span class="name" lang="ru">${item.title_ru}</span>
                     <span class="name" lang="en">${item.title_en}</span>
             `;
-            if(url) {
+            if (url) {
                 innerHTML += `
                     <img class="photo" loading="lazy" src="${url}">
                 `;
             }
-            if(item.ingredients_en && item.ingredients_en.length > 0) {
+            if (item.ingredients_en && item.ingredients_en.length > 0) {
                 innerHTML += `
                     <div class="ingredients">
                         <span lang="ru">Ингредиенты: ${item.ingredients_ru}</span>
@@ -123,14 +123,14 @@
                     </div>
                 `;
             }
-            if(item.weight && item.weight.value > 0) {
+            if (item.weight && item.weight.value > 0) {
                 innerHTML += `
                     <div class="weight">${item.weight.value}</div>
                 `;
             }
-            if(item.nutrition) {
-                for(let type of ["calories", "fat", "carbohydrates", "protein"]) {
-                    if(type in item.nutrition) {
+            if (item.nutrition) {
+                for (let type of ["calories", "fat", "carbohydrates", "protein"]) {
+                    if (type in item.nutrition) {
                         innerHTML += `
                             <div class="nutrition ${type}">${item.nutrition[type]}</div>
                         `;
@@ -146,11 +146,11 @@
     }
 
     function IDQ() {
-        return "initData="+encodeURIComponent(Telegram.WebApp.initData)
+        return "initData=" + encodeURIComponent(Telegram.WebApp.initData)
     }
-    
+
     function send_error(err) {
-        return fetch("error?"+IDQ(), {
+        return fetch("error?" + IDQ(), {
             method: "POST",
             body: err
         })
@@ -214,8 +214,8 @@
 
             if (orderIsIncomplete) {
                 const message = (typeof alert_lunch_incomplete_text !== 'undefined' && alert_lunch_incomplete_text)
-                                ? alert_lunch_incomplete_text
-                                : "Order is incomplete. Please fill all required lunch items for selected lunches.";
+                    ? alert_lunch_incomplete_text
+                    : "Order is incomplete. Please fill all required lunch items for selected lunches.";
                 await showCustomAlert(message);
                 return "user_validation_failed";
             }
@@ -236,8 +236,8 @@
 
             if (someDinnerIsEmpty) {
                 const dinnerConfirmText = (typeof confirm_dinner_empty_text !== 'undefined' && confirm_dinner_empty_text)
-                                     ? confirm_dinner_empty_text
-                                     : "You have not selected any items for dinner on one or more days. Proceed anyway?";
+                    ? confirm_dinner_empty_text
+                    : "You have not selected any items for dinner on one or more days. Proceed anyway?";
                 const proceedWithEmptyDinner = await showCustomConfirm(dinnerConfirmText);
 
                 if (!proceedWithEmptyDinner) {
@@ -261,7 +261,7 @@
         if (typeof orig_chat_id !== 'undefined' && orig_chat_id !== null) {
             order_query += `&orig_chat_id=${orig_chat_id}`;
         }
-        
+
         console.log("Saving order:", collectedOrder); // For debugging
 
         const response = await fetch('menu?' + IDQ() + order_query, {
@@ -322,9 +322,9 @@
         }
     }
 
-    if(read_only){
+    if (read_only) {
         document.body.classList.add("read-only");
-        
+
         // Pre-filling is now done above.
         // We still need to ensure user_order was present for the hiding logic to make sense.
         if (typeof user_order !== 'undefined' && user_order !== null) {
@@ -389,8 +389,8 @@
                                 }
                             });
                         } else {
-                             // If lunchType is not 'no-soup' or 'with-soup' (e.g. some error or different type), hide main/side/salad groups
-                             ['main', 'side', 'salad'].forEach(category => {
+                            // If lunchType is not 'no-soup' or 'with-soup' (e.g. some error or different type), hide main/side/salad groups
+                            ['main', 'side', 'salad'].forEach(category => {
                                 const categoryGroup = lunchSection.querySelector(`.combo-class.${category}`);
                                 if (categoryGroup) categoryGroup.style.display = 'none';
                             });
@@ -410,7 +410,7 @@
                         }
                     });
                 } else if (dinnerSection) { // No dinner data for this day, hide all dinner items
-                     dinnerSection.querySelectorAll(`.meals .item`).forEach(el => el.style.display = 'none');
+                    dinnerSection.querySelectorAll(`.meals .item`).forEach(el => el.style.display = 'none');
                 }
             }
 
@@ -421,10 +421,10 @@
                 .forEach(button => button.style.display = 'none');
         }
     } else if (user_order_id) {
-        const autosaveInterval = 60*1000; // every minute
+        const autosaveInterval = 60 * 1000; // every minute
         function autosave() {
-            setTimeout(()=>{
-                save(true).catch(rej=>{console.warn("autosave error", rej)}).finally(()=>autosave());
+            setTimeout(() => {
+                save(true).catch(rej => { console.warn("autosave error", rej) }).finally(() => autosave());
             }, autosaveInterval);
         }
         autosave();
@@ -433,13 +433,13 @@
     Telegram.WebApp.expand();
     Telegram.WebApp.MainButton.setText(finish_button_text);
     window.save = save;
-    Telegram.WebApp.MainButton.onClick(()=>{
+    Telegram.WebApp.MainButton.onClick(() => {
         let shouldClose = true;
         save().then(saveResult => {
             if (saveResult === "user_validation_failed") {
                 shouldClose = false;
             }
-        }).catch(error => send_error(error)).finally(()=>{
+        }).catch(error => send_error(error)).finally(() => {
             if (shouldClose) {
                 Telegram.WebApp.close();
             }
@@ -451,7 +451,7 @@
     // Added sum calculator logic
     const LUNCH_NO_SOUP_PRICE = 555; // Price for lunch combo without soup
     const LUNCH_WITH_SOUP_PRICE = 665; // Price for lunch combo with soup
-    
+
     let collectedOrder = {}; // This variable will store the details of the current order
 
 
@@ -577,7 +577,7 @@
             if (dinnerSection && menu[day].dinner) {
                 // Assuming dinner items are checkboxes like: <input type="checkbox" name="${day}-dinner-item-${index}" value="${index}">
                 const selectedDinnerInputs = dinnerSection.querySelectorAll(`.meals .item input[type="checkbox"]:checked`);
-                
+
                 selectedDinnerInputs.forEach(input => {
                     const itemIndexStr = input.value;
                     // Ensure the value is a valid index for menu[day].dinner
@@ -597,12 +597,12 @@
         if (totalSumElement) {
             totalSumElement.textContent = totalSum.toFixed(0); // Display sum, adjust formatting as needed
         }
-        
+
         return collectedOrder;
     }
 
     // Add event listener to the body to recalculate on any click
-    document.body.addEventListener('click', function() {
+    document.body.addEventListener('click', function () {
         // Using requestAnimationFrame can help ensure DOM updates are processed before calculation
         // requestAnimationFrame(calculateTotalSumAndOrder);
         // Direct call as per "passively if clicked"

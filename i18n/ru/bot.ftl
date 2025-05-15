@@ -98,29 +98,14 @@ food-adm-payment-proof-accept-button = ✅ Подтверждено
 food-adm-payment-proof-confirmed = Заказ от пользователя {$link} для зуконавта по имени <i>{$name}</i> подтверждён.
 food-adm-payment-proof-received =
     Пользователь {$link} отправил подтверждение оплаты для своего заказа еды.
-    Общая сумма заказа: {$total} RUB. Требуется подтверждение.
+    Общая сумма заказа: {$total} ₽. Требуется подтверждение.
     <b>Внимание</b>, не отклоняйте подтверждение сразу, подождите немного и сначала попытайтесь найти платеж.
 food-adm-payment-proof-reject-button = ❌ Отказ
 food-adm-payment-proof-rejected = Заказ от пользователя {$link} для зуконавта по имени <i>{$name}</i> был отклонён.
-food-adm-payment-accepted-msg = Оплата заказа {$orderId} принята.
+food-adm-payment-accepted-msg = Оплата заказа на сумму {$total} ₽ от пользователя {$link} принята.
 food-adm-payment-already-processed-or-error = Заказ уже обработан или произошла ошибка.
-food-adm-payment-rejected-msg = Оплата заказа {$orderId} отклонена.
+food-adm-payment-rejected-msg = Оплата заказа на сумму {$total} ₽ от пользователя {$link} отклонена.
 
-food-payment-admin-desc = Оплатить: {$adminLink}
-food-payment-request-callback-message =
-    Сумма к оплате: <code>{$total}</code> RUB.
-    Детали платежа:
-    Контакт: {$adminLink}
-    Телефон для СБП: <code>{$phoneSBP}</code>
-    Банки: {$banks}
-food-payment-request-waiting-message =
-    Пожалуйста, оплати <code>{$total}</code> RUB.
-    Детали платежа:
-    Контакт: {$adminLink}
-    Телефон для СБП: <code>{$phoneSBP}</code>
-    Банки: {$banks}
-
-    Затем, отправь подтверждение оплаты (изображение или PDF).
 food-back-button = К началу.
 food-cancel-order-button = Отменить заказ.
 food-command-description = Твой космический пайёк на ZNS.
@@ -151,7 +136,7 @@ food-payment-instructions =
     <b>Сумма к оплате:</b> <code>{$total}</code> ₽
 food-payment-instructions-proof =
     Сюда можно будет снова вернуться.
-food-payment-proof-cancelled = Отправка подтверждения оплаты отменена. Ты можешь попробовать снова из меню или с помощью команды /food.
+food-payment-proof-cancelled = Отправка подтверждения оплаты отменена. Вы можете попробовать снова или управлять своим заказом с помощью команды /food.
 food-payment-proof-confirmed =
     Администратор подтвердил заказ для зуконавта по имени <i>{$name}</i>.
     Ждём тебя на ZNS.
@@ -160,8 +145,6 @@ food-payment-proof-rejected =
     Админинстратор отменил заказ для зуконавта по имени <i>{$name}</i>.
     Можно заказать заново, или попробовать прислать другое подтверждение.
 food-payment-admin-desc = Оплатить: {$adminLink}
-food-payment-request-callback-message = Сумма к оплате: <code>{$total}</code> RUB. Детали платежа: {$paymentMethodDetails}
-food-payment-request-waiting-message = Пожалуйста, оплати <code>{$total}</code> RUB используя: {$paymentMethodDetails}. Затем, отправь подтверждение оплаты (изображение или PDF).
 food-remind-about-order =
     Я заметила, что у тебя есть заказ, который не оплачен.
     Если ты всё ещё хочешь получить этот заказ на марафоне, то тебе следует оплатить его и прислать мне чек.
@@ -185,20 +168,20 @@ food-not-authorized-admin = У вас нет прав для этого дейс
 food-order-already-paid = Этот заказ уже оплачен.
 food-order-cannot-delete-paid-submitted = Этот заказ уже оплачен или подтверждение отправлено, и его нельзя удалить.
 food-order-deleted-successfully = Заказ успешно удалён. Чтобы создать новый, используйте команду /food.
-food-order-exists-not-complete = Сумма твоего текущего заказа {$total} RUB. Посмотри или измени заказ ниже.
-food-order-exists-payable = Твой заказ (Сумма: {$total} RUB) готов к оплате. Если предыдущая попытка не удалась, можешь попробовать снова.
-food-order-is-paid = Твой заказ оплачен. Сумма: {$total} RUB.
+food-order-exists-not-complete = Сумма твоего текущего заказа {$total} ₽. Посмотри или измени заказ ниже.
+food-order-exists-payable = Твой заказ (Сумма: {$total} ₽) готов к оплате. Если предыдущая попытка не удалась, можешь попробовать снова.
+food-order-is-paid = Твой заказ оплачен. Сумма: {$total} ₽.
 food-order-not-complete-for-payment = Заказ не завершён и пока не может быть оплачен.
 food-order-not-found = Заказ не найден.
 food-order-not-found-admin = Заказ не найден. (Режим администратора)
 food-order-proof-already-submitted = Подтверждение оплаты для этого заказа уже было отправлено.
-food-order-proof-submitted = Твоё подтверждение оплаты (Сумма: {$total} RUB) отправлено и ожидает проверки.
+food-order-proof-submitted = Твоё подтверждение оплаты (Сумма: {$total} ₽) отправлено и ожидает проверки.
 food-payment-admin-error = Ошибка связи с администратором платежей. Пожалуйста, попробуй ещё раз или обратись в поддержку.
 food-payment-admins-not-configured = Платёжная система в данный момент недоступна. Пожалуйста, обратись в поддержку.
-food-payment-proof-accepted = Оплата твоего заказа (<i>{$name}</i>, Сумма: {$total} RUB) принята!
+food-payment-proof-accepted = Оплата твоего заказа еды на сумму {$total} ₽ принята! Вы можете посмотреть детали вашего заказа с помощью команды /food.
 food-payment-proof-forwarded = Твоё подтверждение оплаты отправлено на проверку.
-food-payment-proof-rejected-retry = Твоё подтверждение оплаты для заказа (<i>{$name}</i>, Сумма: {$total} RUB) было отклонено. Пожалуйста, попробуй оплатить снова или обратись в поддержку.
-food-payment-proof-timeout = Ты не отправил(а) подтверждение оплаты вовремя. Пожалуйста, попробуй снова, если всё ещё хочешь оплатить.
+food-payment-proof-rejected-retry = Твоё подтверждение оплаты для заказа еды на сумму {$total} ₽ было отклонено. Пожалуйста, попробуйте оплатить снова с помощью команды /food или обратитесь в поддержку.
+food-payment-proof-timeout = Ты не отправил(а) подтверждение оплаты вовремя. Пожалуйста, попробуйте снова с помощью команды /food, если всё ещё хотите оплатить.
 food-payment-proof-wrong-data =
     Я ожидала PDF-файл или изображение в качестве подтверждения оплаты, а получила что-то другое, чего не ожидала.
     Извините за недоразумение.
@@ -206,7 +189,10 @@ food-payment-proof-wrong-data =
 
 food-payment-method =
     {$phoneSBP ->
-        [nosbp] Амбассадор {$adminLink} принимает платежи только наличными или по предварительной договоренности. Напишите ему сообщение или позвоните по номеру {$phoneContact}.
+        [nosbp] Амбассадор {$adminLink} принимает платежи только наличными или по предварительной договоренности. {$phoneContact ->
+            [nophone] Напишите ему сообщение.
+           *[other] Напишите ему сообщение или позвоните по номеру {$phoneContact}.
+        }
         *[sbp] Оплату можно произвести через СБП по номеру телефона <code>{$phoneSBP}</code> ({$banks}), контакт {$adminLink}.
     }
 
@@ -219,7 +205,7 @@ food-payment-request-waiting-message =
     Пожалуйста, отправьте скриншот или PDF-файл в качестве подтверждения оплаты вашего заказа на сумму <code>{$total}</code> ₽.
     {food-payment-method}
 
-food-payment-rejected = Ваш платеж за заказ (<i>{$name}</i>, Итого: {$total} RUB) был отклонен. Пожалуйста, свяжитесь с {$adminLink} для уточнения деталей.
+food-payment-rejected = Ваш платеж за заказ на сумму {$total} ₽ был отклонен. Пожалуйста, свяжитесь с {$adminLink} для уточнения деталей.
 
 dow-short =
     {$dow ->
@@ -409,7 +395,10 @@ passes-pass-edit-waitlist=
     Мы уведомим вас, как только пасс станет доступен!
 passes-payment-method =
     {$phoneSBP ->
-        [nosbp] Амбассадор {$adminLink} принимает платежи только наличными или по предварительной договоренности. Напишите ему сообщение или позвоните по номеру {$phoneContact}.
+        [nosbp] Амбассадор {$adminLink} принимает платежи только наличными или по предварительной договоренности. {$phoneContact ->
+            [nophone] Напишите ему сообщение.
+           *[other] Напишите ему сообщение или позвоните по номеру {$phoneContact}.
+        }
         *[sbp] Оплату можно произвести через СБП по номеру телефона <code>{$phoneSBP}</code> ({$banks}), контакт {$adminLink}.
     }
 passes-pass-assigned =

@@ -98,17 +98,17 @@ something-went-wrong = Something went wrong. Try again.
 # Entries are sorted alphabetically, with admin-specific entries (food-adm-) first.
 
 # Admin messages
-food-adm-payment-accepted-msg = Payment for order {$orderId} accepted.
+food-adm-payment-accepted-msg = Payment for order of {$total} RUB from user {$link} accepted.
 food-adm-payment-already-processed-or-error = Order already processed or an error occurred.
 food-adm-payment-proof-accept-button = ✅ Accept
 # food-adm-payment-proof-confirmed = Order payment from user {$link} for <i>{$name}</i> is confirmed. # Retained, but not directly used by current food.py review scope
 food-adm-payment-proof-received =
-    User {$link} sent payment proof for their food order.
-    Total order sum: {$total} RUB. Confirmation required.
+    User {$link} sent payment for their food order.
+    Total order sum: {$total} ₽. Confirmation required.
     <b>Attention</b>, do not mark proof as rejected, wait a bit and try to find the payment first.
 food-adm-payment-proof-reject-button = ❌ Reject
 # food-adm-payment-proof-rejected = Order payment from user {$link} for <i>{$name}</i> is rejected. # Retained, but not directly used by current food.py review scope
-food-adm-payment-rejected-msg = Payment for order {$orderId} rejected.
+food-adm-payment-rejected-msg = Payment for order of {$total} RUB from user {$link} rejected.
 
 # User messages
 food-button-create-order = 📝 Create Order
@@ -122,21 +122,21 @@ food-not-authorized-admin = You are not authorized for this action.
 food-order-already-paid = This order has already been paid.
 food-order-cannot-delete-paid-submitted = This order is already paid or proof has been submitted, and it cannot be deleted.
 food-order-deleted-successfully = Order successfully deleted. To create a new one, use the /food command.
-food-order-exists-not-complete = Your current order total is {$total} RUB. View or edit your order below.
-food-order-exists-payable = Your order (Total: {$total} RUB) is ready for payment. If a previous attempt failed, you can try again.
-food-order-is-paid = Your order is paid. Total: {$total} RUB.
+food-order-exists-not-complete = Your current order total is {$total} ₽. View or edit your order below.
+food-order-exists-payable = Your order (Total: {$total} ₽) is ready for payment. If a previous attempt failed, you can try again.
+food-order-is-paid = Your order is paid. Total: {$total} ₽.
 food-order-not-complete-for-payment = The order is not complete and cannot be paid yet.
 food-order-not-found = Order not found.
 food-order-not-found-admin = Order not found. (Admin mode)
 food-order-proof-already-submitted = Payment proof for this order has already been submitted.
-food-order-proof-submitted = Your payment proof (Total: {$total} RUB) has been submitted and is awaiting review.
+food-order-proof-submitted = Your payment proof on order with sum of {$total} ₽ has been submitted and is awaiting review.
 food-payment-admin-error = Error communicating with the payment administrator. Please try again or contact support.
 food-payment-admins-not-configured = The payment system is currently unavailable. Please contact support.
-food-payment-proof-accepted = Your payment for the order (<i>{$name}</i>, Total: {$total} RUB) has been accepted!
-food-payment-proof-cancelled = Payment proof submission cancelled. You can try again from the menu or by using the /food command.
+food-payment-proof-accepted = Your payment for the food order with a total of {$total} ₽ has been accepted! You can view your order details using the /food command.
+food-payment-proof-cancelled = Payment proof submission cancelled. You can try to pay again or manage your order using the /food command.
 food-payment-proof-forwarded = Your payment proof has been sent for review.
-food-payment-proof-rejected-retry = Your payment proof for the order (<i>{$name}</i>, Total: {$total} RUB) was rejected. Please try to pay again or contact support.
-food-payment-proof-timeout = You did not send the payment proof in time. Please try again if you still wish to pay.
+food-payment-proof-rejected-retry = Your payment proof for the food order with a total of {$total} ₽ was rejected. You can try to pay again using the /food command, or contact support.
+food-payment-proof-timeout = You did not send the payment proof in time. You can try again using the /food command if you still wish to pay.
 food-payment-proof-wrong-data =
     I was expecting a PDF file or an image as proof of payment, but this message doesn't seem to match that.
     Sorry about the confusion.
@@ -144,7 +144,10 @@ food-payment-proof-wrong-data =
 
 food-payment-method =
     {$phoneSBP ->
-        [nosbp] Ambassador {$adminLink} receives payments only in cash or by prior agreement. Send them a message or call on {$phoneContact}.
+        [nosbp] Ambassador {$adminLink} receives payments only in cash or by prior agreement. {$phoneContact ->
+            [nophone] Send them a message.
+           *[other] Send them a message or call on {$phoneContact}.
+        }
         *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}), contact {$adminLink}.
     }
 
@@ -354,7 +357,10 @@ passes-pass-edit-waiting-for-couple=
     - Change the name associated with your spot
 passes-payment-method =
     {$phoneSBP ->
-        [nosbp] Ambassador {$adminLink} receives payments only in cash or by prior agreement. Send them a message or call on {$phoneContact}.
+        [nosbp] Ambassador {$adminLink} receives payments only in cash or by prior agreement. {$phoneContact ->
+            [nophone] Send them a message.
+           *[other] Send them a message or call on {$phoneContact}.
+        }
         *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}), contact {$adminLink}.
     }
 passes-pass-assigned =
