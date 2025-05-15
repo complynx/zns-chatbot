@@ -932,7 +932,13 @@ class PassUpdate:
             self.user = await self.update.get_user()
         return self.user
 
-    async def assign_pass(self, pass_key: str):
+    async def assign_pass(
+        self,
+        pass_key: str,
+        price: int|None = None,
+        type: str|None = None,
+        comment: str|None = None,
+    ):
         self.set_pass_key(pass_key)
         user = await self.base.user_db.find_one({
             "user_id": self.update.user,
@@ -956,12 +962,17 @@ class PassUpdate:
         else:
             matcher[self.pass_key+".couple"] = {"$exists": False}
 
+        sets = {
+            self.pass_key+".state": "assigned",
+            self.pass_key+".price": price if price is not None else CURRENT_PRICE[self.pass_key] * len(uids),
+            self.pass_key+".date_assignment": now_msk(),
+        }
+        if comment is not None:
+            sets[self.pass_key+".comment"] = comment
+        if type is not None:
+            sets[self.pass_key+".type"] = type
         result = await self.base.user_db.update_many(matcher, {
-            "$set": {
-                self.pass_key+".state": "assigned",
-                self.pass_key+".price": CURRENT_PRICE[self.pass_key] * len(uids),
-                self.pass_key+".date_assignment": now_msk(),
-            }
+            "$set": sets
         })
         have_changes = result.modified_count > 0
         if result.matched_count < len(uids):
@@ -1131,17 +1142,21 @@ class PassUpdate:
         
         parser = SilentArgumentParser()
         parser.add_argument('--pass_key', type=str, help='Pass key')
+        parser.add_argument('--price', type=int, help='Custom price')
+        parser.add_argument('--type', type=str, help='Custom type')
+        parser.add_argument('--comment', type=str, help='Comment message')
         parser.add_argument('recipients', nargs='*', help='Recipients')
 
         args = parser.parse_args(args_list[1:])
         logger.debug(f"passes_assign {args=}, {args_list=}")
         assert args.pass_key in PASS_KEYS, f"wrong pass key {args.pass_key}"
+        assert args.price is None or args.price >= 0, f"wrong price {args.price}"
         assigned = []
         for recipient in args.recipients:
             try:
                 user_id = int(recipient)
                 upd = await self.base.create_update_from_user(user_id)
-                await upd.assign_pass(args.pass_key)
+                await upd.assign_pass(args.pass_key, args.price, args.type, args.comment)
                 logger.info(f"pass {args.pass_key=} assigned to {recipient=}")
                 assigned.append(user_id)
             except Exception as err:
