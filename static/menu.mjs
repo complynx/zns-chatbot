@@ -325,101 +325,137 @@
     if (read_only) {
         document.body.classList.add("read-only");
 
-        // Pre-filling is now done above.
-        // We still need to ensure user_order was present for the hiding logic to make sense.
-        if (typeof user_order !== 'undefined' && user_order !== null) {
-            // SECOND PASS: Hide unselected items based on user_order
-            for (const day in user_order) {
-                const dayData = user_order[day];
+        // Pre-filling is done above.
+        // We need user_order and menu to be available for the hiding logic.
+        if (typeof user_order !== 'undefined' && user_order !== null && typeof menu !== 'undefined' && menu !== null) {
+            const allDaysFromMenu = Object.keys(menu);
+
+            allDaysFromMenu.forEach(day => {
+                const dayData = user_order[day]; // User's order for this specific day
                 const lunchSection = document.querySelector(`section.${day}.lunch`);
                 const dinnerSection = document.querySelector(`section.${day}.dinner`);
 
-                if (lunchSection && dayData.lunch) {
-                    const lunchOrderDetails = dayData.lunch;
-                    const lunchType = lunchOrderDetails.type;
-                    const lunchItems = lunchOrderDetails.items; // Might be {} or contain selections
+                // --- LUNCH SECTION VISIBILITY ---
+                if (lunchSection) {
+                    // Condition for lunch section to be VISIBLE:
+                    // 1. Order for the day exists.
+                    // 2. Lunch details for the day exist.
+                    // 3. Lunch type is NOT 'no-lunch'.
+                    if (dayData && dayData.lunch && dayData.lunch.type && dayData.lunch.type !== 'no-lunch') {
+                        lunchSection.style.display = ''; // Show section
 
-                    const noLunchItemContainer = lunchSection.querySelector(`.meals .item.no-lunch`);
+                        const lunchOrderDetails = dayData.lunch;
+                        const lunchType = lunchOrderDetails.type; // Will be 'no-soup' or 'with-soup'
+                        const lunchItems = lunchOrderDetails.items || {}; // Items for main, side, salad, soup
 
-                    if (lunchType === 'no-lunch') {
-                        // Hide all .combo-class divs (soup, main, side, salad groups)
-                        lunchSection.querySelectorAll(`.meals .combo-class`).forEach(el => el.style.display = 'none');
-                        // The "no-lunch" item itself remains visible.
-                    } else {
-                        // A specific lunch was chosen (with or without soup), so hide the "no-lunch" option
+                        // Hide the "no-lunch" radio option container as a specific lunch is chosen
+                        const noLunchItemContainer = lunchSection.querySelector(`.meals .item.no-lunch`);
                         if (noLunchItemContainer) noLunchItemContainer.style.display = 'none';
 
+                        // Manage visibility within the .combo-class.soup
                         const soupComboClass = lunchSection.querySelector(`.combo-class.soup`);
                         if (soupComboClass) {
-                            const noSoupItemContainer = soupComboClass.querySelector(`.item.no-soup`);
-                            if (lunchType === 'no-soup') {
-                                // "No-soup" was chosen for lunch. Hide all specific soup items.
-                                soupComboClass.querySelectorAll(`.choices .item`).forEach(itemEl => itemEl.style.display = 'none');
-                                // The "no-soup" item itself remains visible.
-                            } else if (lunchType === 'with-soup') {
-                                // A specific soup was chosen. Hide the "no-soup" option.
-                                if (noSoupItemContainer) noSoupItemContainer.style.display = 'none';
-                                // Hide unselected specific soups
-                                const selectedSoupIndex = lunchItems?.soup_index;
-                                soupComboClass.querySelectorAll(`.choices .item`).forEach(itemEl => {
-                                    const radio = itemEl.querySelector('input[type="radio"]');
-                                    if (!radio || radio.value !== selectedSoupIndex) {
-                                        itemEl.style.display = 'none';
-                                    }
-                                });
-                            } else {
-                                // Unclear or incomplete lunchType regarding soup, hide both no-soup and specific soup options if not explicitly chosen
-                                if (noSoupItemContainer) noSoupItemContainer.style.display = 'none';
-                                soupComboClass.querySelectorAll(`.choices .item`).forEach(itemEl => itemEl.style.display = 'none');
-                            }
-                        }
+                            const noSoupRadioItemContainer = soupComboClass.querySelector(`.item.no-soup`);
+                            const specificSoupChoicesContainer = soupComboClass.querySelector(`.choices`);
 
-                        // Handle Main, Side, Salad visibility - these are expected if lunchType is 'no-soup' or 'with-soup'
-                        if (lunchType === 'no-soup' || lunchType === 'with-soup') {
-                            ['main', 'side', 'salad'].forEach(category => {
-                                const categoryChoicesContainer = lunchSection.querySelector(`.combo-class.${category} .choices`);
-                                if (categoryChoicesContainer) {
-                                    const selectedItemIndex = lunchItems ? lunchItems[`${category}_index`] : undefined;
-                                    categoryChoicesContainer.querySelectorAll('.item').forEach(itemEl => {
+                            if (lunchType === 'no-soup') {
+                                // "No soup" is selected: Show "no-soup" item, hide all specific soup items/choices
+                                if (noSoupRadioItemContainer) noSoupRadioItemContainer.style.display = '';
+                                if (specificSoupChoicesContainer) {
+                                    specificSoupChoicesContainer.style.display = 'none'; // Hide the whole choices div
+                                    specificSoupChoicesContainer.querySelectorAll('.item').forEach(itemEl => itemEl.style.display = 'none'); // And its items
+                                }
+                                // Also ensure the "with-soup explanation" is hidden if "no-soup" is chosen
+                                const withSoupExplanation = soupComboClass.querySelector('.with-soup.explanation');
+                                if (withSoupExplanation) withSoupExplanation.style.display = 'none';
+
+
+                            } else if (lunchType === 'with-soup') {
+                                // Specific soup is selected: Hide "no-soup" item, show only the selected specific soup
+                                if (noSoupRadioItemContainer) noSoupRadioItemContainer.style.display = 'none';
+                                // Ensure "with-soup explanation" is visible
+                                const withSoupExplanation = soupComboClass.querySelector('.with-soup.explanation');
+                                if (withSoupExplanation) withSoupExplanation.style.display = '';
+
+
+                                if (specificSoupChoicesContainer) {
+                                    specificSoupChoicesContainer.style.display = ''; // Show the choices div
+                                    const selectedSoupIndexStr = lunchItems.soup_index !== undefined ? String(lunchItems.soup_index) : null;
+                                    specificSoupChoicesContainer.querySelectorAll('.item').forEach(itemEl => {
                                         const radio = itemEl.querySelector('input[type="radio"]');
-                                        if (!radio || radio.value !== selectedItemIndex) {
-                                            itemEl.style.display = 'none';
+                                        if (selectedSoupIndexStr && radio && String(radio.value) === selectedSoupIndexStr) {
+                                            itemEl.style.display = ''; // Show selected soup
+                                        } else {
+                                            itemEl.style.display = 'none'; // Hide other soups
                                         }
                                     });
                                 }
-                            });
-                        } else {
-                            // If lunchType is not 'no-soup' or 'with-soup' (e.g. some error or different type), hide main/side/salad groups
-                            ['main', 'side', 'salad'].forEach(category => {
-                                const categoryGroup = lunchSection.querySelector(`.combo-class.${category}`);
-                                if (categoryGroup) categoryGroup.style.display = 'none';
-                            });
+                            }
                         }
+
+                        // Manage visibility for main, side, salad combo classes
+                        ['main', 'side', 'salad'].forEach(category => {
+                            const categoryComboClass = lunchSection.querySelector(`.combo-class.${category}`);
+                            if (categoryComboClass) {
+                                categoryComboClass.style.display = ''; // Show the whole category block
+                                const choicesContainer = categoryComboClass.querySelector('.choices');
+                                if (choicesContainer) {
+                                    const selectedItemIndexStr = lunchItems[`${category}_index`] !== undefined ? String(lunchItems[`${category}_index`]) : null;
+                                    choicesContainer.querySelectorAll('.item').forEach(itemEl => {
+                                        const radio = itemEl.querySelector('input[type="radio"]');
+                                        if (selectedItemIndexStr && radio && String(radio.value) === selectedItemIndexStr) {
+                                            itemEl.style.display = ''; // Show selected item
+                                        } else {
+                                            itemEl.style.display = 'none'; // Hide other items
+                                        }
+                                    });
+                                }
+                            }
+                        });
+
+                    } else {
+                        // Lunch section should be hidden (no order for this day, or 'no-lunch' selected)
+                        lunchSection.style.display = 'none';
                     }
-                } else if (lunchSection) { // No lunch data for this day in user_order, hide all lunch options
-                    lunchSection.querySelectorAll(`.meals .item, .meals .combo-class`).forEach(el => el.style.display = 'none');
                 }
 
+                // --- DINNER SECTION VISIBILITY ---
+                if (dinnerSection) {
+                    // Condition for dinner section to be VISIBLE:
+                    // 1. Order for the day exists.
+                    // 2. Dinner details for the day exist.
+                    // 3. Dinner array is not empty.
+                    if (dayData && dayData.dinner && dayData.dinner.length > 0) {
+                        dinnerSection.style.display = ''; // Show section
 
-                if (dinnerSection && dayData.dinner) {
-                    const selectedDinnerIndices = (dayData.dinner || []).map(val => String(val)); // map to string for comparison
-                    dinnerSection.querySelectorAll(`.meals .item`).forEach(itemEl => {
-                        const checkbox = itemEl.querySelector('input[type="checkbox"]');
-                        if (!checkbox || !selectedDinnerIndices.includes(checkbox.value)) {
-                            itemEl.style.display = 'none';
-                        }
-                    });
-                } else if (dinnerSection) { // No dinner data for this day, hide all dinner items
-                    dinnerSection.querySelectorAll(`.meals .item`).forEach(el => el.style.display = 'none');
+                        const selectedDinnerIndices = dayData.dinner.map(val => String(val));
+                        dinnerSection.querySelectorAll(`.meals .item`).forEach(itemEl => {
+                            const checkbox = itemEl.querySelector('input[type="checkbox"]');
+                            if (checkbox && selectedDinnerIndices.includes(String(checkbox.value))) {
+                                itemEl.style.display = ''; // Show selected dinner item
+                            } else {
+                                itemEl.style.display = 'none'; // Hide other dinner items
+                            }
+                        });
+                    } else {
+                        // Dinner section should be hidden (no order, or empty dinner array)
+                        dinnerSection.style.display = 'none';
+                    }
                 }
-            }
+            });
 
-            // Disable all inputs and hide description buttons in read-only mode
-            document.querySelectorAll('section.meal input[type="radio"], section.meal input[type="checkbox"]')
-                .forEach(input => input.disabled = true);
-            document.querySelectorAll('section.meal button.description-button')
-                .forEach(button => button.style.display = 'none');
+        } else {
+            // user_order or menu is not available, hide all meal sections
+            document.querySelectorAll('section.meal').forEach(section => {
+                section.style.display = 'none';
+            });
         }
+
+        // Disable all inputs and hide description buttons in read-only mode
+        document.querySelectorAll('section.meal input[type="radio"], section.meal input[type="checkbox"]')
+            .forEach(input => input.disabled = true);
+        document.querySelectorAll('section.meal button.description-button')
+            .forEach(button => button.style.display = 'none');
     } else if (user_order_id) {
         const autosaveInterval = 60 * 1000; // every minute
         function autosave() {
@@ -556,6 +592,33 @@
                     }
                 }
                 // If no selectedLunchOptionRadio, save() will handle adding 'unfilled' to soupComboEl on button press.
+
+                // Manage visibility of main, side, salad based on lunch type selection
+                if (!read_only) {
+                    const mainComboEl = lunchSection.querySelector(`.combo-class.main`);
+                    const sideComboEl = lunchSection.querySelector(`.combo-class.side`);
+                    const saladComboEl = lunchSection.querySelector(`.combo-class.salad`);
+                    const subCategoriesToToggle = ["main", "side", "salad"];
+
+                    if (lunchOrderDetails.type === "no-lunch") {
+                        if (mainComboEl) mainComboEl.style.display = 'none';
+                        if (sideComboEl) sideComboEl.style.display = 'none';
+                        if (saladComboEl) saladComboEl.style.display = 'none';
+
+                        subCategoriesToToggle.forEach(category => {
+                            const radios = lunchSection.querySelectorAll(`.combo-class.${category} .choices input[name="${day}-lunch-${category}"]`);
+                            radios.forEach(radio => {
+                                if (radio.checked) {
+                                    radio.checked = false;
+                                }
+                            });
+                        });
+                    } else { // Covers "no-soup", "with-soup", or if lunch type is null (nothing selected yet)
+                        if (mainComboEl) mainComboEl.style.display = ''; // Reset to default CSS display
+                        if (sideComboEl) sideComboEl.style.display = '';
+                        if (saladComboEl) saladComboEl.style.display = '';
+                    }
+                }
 
                 if (lunchOrderDetails.type && lunchOrderDetails.type !== "no-lunch") {
                     const LUNCH_SUB_CATEGORIES = ["main", "side", "salad"];
