@@ -265,7 +265,7 @@ class Avatar(BasePlugin):
         self._command_test = CommandHandler("avatar", self.handle_command)
         self._cq_handler = CallbackQueryHandler(
             self.handle_avatar_callback_query,
-            pattern=f"^{self.name}\\\\|avatar_choice\\\\|.*",
+            pattern=f"^{self.name}\\|.*",
         )
         create_task(_prepare_models())
 
@@ -392,17 +392,17 @@ class Avatar(BasePlugin):
             [
                 InlineKeyboardButton(
                     update.l("avatar-method-simple"),
-                    callback_data=f"{self.name}|avatar_choice|{db_id_str}|simple",
+                    callback_data=f"{self.name}|{db_id_str}|simple",
                 ),
                 InlineKeyboardButton(
                     update.l("avatar-method-detailed"),
-                    callback_data=f"{self.name}|avatar_choice|{db_id_str}|detailed",
+                    callback_data=f"{self.name}|{db_id_str}|detailed",
                 ),
             ],
             [
                 InlineKeyboardButton(
                     update.l("avatar-cancel-button"),
-                    callback_data=f"{self.name}|avatar_choice|{db_id_str}|cancel",
+                    callback_data=f"{self.name}|{db_id_str}|cancel",
                 )
             ],
         ]
@@ -417,7 +417,7 @@ class Avatar(BasePlugin):
         query = update.update.callback_query
         await query.answer()
         try:
-            _, _, db_id_str, method = query.data.split("|", 3)
+            _, db_id_str, method = query.data.split("|", 2)
         except ValueError:
             logger.error(f"Invalid callback data structure: {query.data}")
             await query.edit_message_text(
