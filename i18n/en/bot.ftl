@@ -4,6 +4,17 @@ avatar-processing =
     Your photo is processing...
     It may take a while.
 avatar-disabled = Creation of userpics temporarily disabled.
+avatar-choose-method = Personal portholes are available for the Zukerion crew. The bravest zoukonauts can go into outer space; for this, it will be necessary to wear a spacesuit.
+avatar-method-simple = 🪞 Porthole
+avatar-method-detailed = 🧑‍🚀 Spacesuit
+avatar-cancel-button = ❌ Cancel
+avatar-error-generic = Something went wrong. Please try again.
+avatar-cancelled-message = Avatar creation cancelled.
+avatar-processing-initial = Processing your request...
+avatar-error-file-expired-or-missing = Unfortunately, the file was not found or has expired. Please try uploading it again.
+avatar-simple-caption = You are in the porthole!
+avatar-error-frame-missing = Error: Frame file for simple avatar is missing. Please contact an administrator.
+avatar-error-config-role = Error: Configuration for your role is missing or incomplete. Please contact an administrator.
 
 auth-authorize = ✔ Authorize
 auth-authorized = Request authorized

@@ -90,6 +90,9 @@ class MongoDB(BaseSettings):
     food_collection: str = Field(
         "zns_bot_food", validation_alias="ZNS_BOT_FOOD_COLLECTION"
     )
+    files_collection: str = Field(
+        "zns_bot_files", validation_alias="ZNS_BOT_FILES_COLLECTION"
+    )
     massage_collection: str = Field(
         "zns_bot_massage", validation_alias="ZNS_BOT_MASSAGE_COLLECTION"
     )
@@ -108,6 +111,7 @@ class Photo(BaseSettings):
     face_offset_x: float = Field(0.2)
     quality: int = Field(90)
     cover_file: str = Field("cover/ZNS2025_1.jpg")
+    frame_file: str = Field("frame/zns_2025_simple.png")
     # cover_file: str = Field("")
 
 
