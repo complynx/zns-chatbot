@@ -1010,56 +1010,114 @@ class Food(BasePlugin):
         )
 
         calculated_total_sum = 0
-        order_is_complete = True
+        order_is_complete = True  # Assume complete initially
 
-        # --- Existing loop to calculate calculated_total_sum and order_is_complete from new order_data ---
+        # --- Loop to calculate calculated_total_sum and order_is_complete from new order_data ---
         for day_key, day_menu_config in self.menu.items():
             day_has_lunch_in_menu = bool(day_menu_config.get("lunch"))
             order_for_this_day = order_data.get(day_key)
 
-            # --- Lunch Completeness & Sum Calculation ---
+            # --- Lunch Processing ---
             if day_has_lunch_in_menu:
-                if not order_for_this_day or "lunch" not in order_for_this_day:
-                    order_is_complete = (
-                        False  # Lunch data missing for a day that offers lunch
-                    )
-                    # Continue to check other days, but order is already incomplete
+                if not order_for_this_day or order_for_this_day.get("lunch") is None:
+                    # If menu offers lunch for this day, but order data has no lunch entry or it's null
+                    order_is_complete = False
                 else:
-                    lunch_order_details = order_for_this_day["lunch"]
-                    if not lunch_order_details:  # e.g. "lunch": null
-                        order_is_complete = False
-                    else:
-                        lunch_type = lunch_order_details.get("type")
-                        lunch_items = lunch_order_details.get("items", {})
-                        day_lunch_combo_complete_for_pricing = True
+                    lunch_details = order_for_this_day["lunch"]
+                    lunch_type = lunch_details.get("type")
+                    # Default items to appropriate empty type if not provided or null
+                    if lunch_type == "individual-items":
+                        lunch_items_payload = lunch_details.get("items", [])
+                    else:  # For combos or potentially other types if items were a dict
+                        lunch_items_payload = lunch_details.get("items", {})
 
-                        if lunch_type == "no-lunch":
-                            pass  # Considered complete for this day\'s lunch, no combo price added
-                        elif lunch_type == "with-soup":
-                            if lunch_items.get("soup_index") is None:
-                                order_is_complete = False
-                                day_lunch_combo_complete_for_pricing = False
-                            for category in LUNCH_SUB_CATEGORIES:
-                                if lunch_items.get(f"{category}_index") is None:
-                                    order_is_complete = False
-                                    day_lunch_combo_complete_for_pricing = False
+                    if lunch_type == "no-lunch":
+                        pass  # Complete for this day's lunch, no price added.
+                    elif lunch_type == "individual-items":
+                        if isinstance(lunch_items_payload, list):
+                            day_lunch_menu_items = day_menu_config.get("lunch", [])
+                            for item_index_obj in lunch_items_payload:
+                                try:
+                                    item_index = int(
+                                        item_index_obj
+                                    )  # Client might send string indices
+                                    if 0 <= item_index < len(day_lunch_menu_items):
+                                        lunch_item_config = day_lunch_menu_items[
+                                            item_index
+                                        ]
+                                        if lunch_item_config and isinstance(
+                                            lunch_item_config.get("price"), (int, float)
+                                        ):
+                                            calculated_total_sum += lunch_item_config[
+                                                "price"
+                                            ]
+                                        else:
+                                            logger.warning(
+                                                f"Individual lunch item {day_key}-lunch-{item_index} selected but has no/invalid price in menu config."
+                                            )
+                                    else:
+                                        logger.warning(
+                                            f"Invalid individual lunch item index {item_index} for {day_key} (max: {len(day_lunch_menu_items) - 1})."
+                                        )
+                                except (ValueError, TypeError):
+                                    logger.warning(
+                                        f"Invalid individual lunch item index format: '{item_index_obj}' for {day_key}."
+                                    )
+                        else:
+                            logger.warning(
+                                f"Malformed 'items' for 'individual-items' lunch on {day_key}. Expected list, got {type(lunch_items_payload)}."
+                            )
+                            order_is_complete = (
+                                False  # Treat as an error making order incomplete
+                            )
+
+                    elif lunch_type == "combo-with-soup":
+                        current_day_combo_complete = True
+                        if (
+                            not isinstance(lunch_items_payload, dict)
+                            or lunch_items_payload.get("soup_index") is None
+                        ):
+                            current_day_combo_complete = False
+                        if (
+                            current_day_combo_complete
+                        ):  # Only check sub-categories if soup is present
+                            for category in LUNCH_SUB_CATEGORIES:  # main, side, salad
+                                if lunch_items_payload.get(f"{category}_index") is None:
+                                    current_day_combo_complete = False
                                     break
-                            if day_lunch_combo_complete_for_pricing:
-                                calculated_total_sum += LUNCH_WITH_SOUP_PRICE
-                        elif lunch_type == "no-soup":
-                            for category in LUNCH_SUB_CATEGORIES:
-                                if lunch_items.get(f"{category}_index") is None:
-                                    order_is_complete = False
-                                    day_lunch_combo_complete_for_pricing = False
-                                    break
-                            if day_lunch_combo_complete_for_pricing:
-                                calculated_total_sum += LUNCH_NO_SOUP_PRICE
-                        else:  # Invalid or missing lunch type (e.g. null, or something else)
+
+                        if current_day_combo_complete:
+                            calculated_total_sum += LUNCH_WITH_SOUP_PRICE
+                        else:
                             order_is_complete = False
 
-            # --- Dinner Sum Calculation ---
+                    elif lunch_type == "combo-no-soup":
+                        current_day_combo_complete = True
+                        if not isinstance(lunch_items_payload, dict):
+                            current_day_combo_complete = (
+                                False  # items payload itself is wrong type
+                            )
+                        else:
+                            for category in LUNCH_SUB_CATEGORIES:  # main, side, salad
+                                if lunch_items_payload.get(f"{category}_index") is None:
+                                    current_day_combo_complete = False
+                                    break
+
+                        if current_day_combo_complete:
+                            calculated_total_sum += LUNCH_NO_SOUP_PRICE
+                        else:
+                            order_is_complete = False
+                    else:  # Invalid or missing lunch type when lunch_details object itself exists
+                        logger.warning(
+                            f"Invalid or missing lunch_type '{lunch_type}' for {day_key}."
+                        )
+                        order_is_complete = False
+
+            # --- Dinner Sum Calculation (remains largely the same, but ensure robustness) ---
             if order_for_this_day and "dinner" in order_for_this_day:
-                dinner_order_indices = order_for_this_day.get("dinner", [])
+                dinner_order_indices = order_for_this_day.get(
+                    "dinner", []
+                )  # Default to empty list
                 dinner_menu_items_config = day_menu_config.get("dinner", [])
 
                 if isinstance(dinner_order_indices, list) and dinner_menu_items_config:
@@ -1078,27 +1136,22 @@ class Food(BasePlugin):
                                     calculated_total_sum += dinner_item_details["price"]
                                 else:
                                     logger.warning(
-                                        f"Dinner item {day_key}-dinner-{item_index} in order is"
-                                        " missing price or has invalid price in menu config: "
-                                        f"{dinner_item_details}"
+                                        f"Dinner item {day_key}-dinner-{item_index} in order is missing price or has invalid price in menu config: {dinner_item_details}"
                                     )
                             else:
                                 logger.warning(
-                                    f"Invalid dinner item index {item_index} for day "
-                                    f"{day_key} in order data. Max index: "
-                                    f"{len(dinner_menu_items_config) - 1}"
+                                    f"Invalid dinner item index {item_index} for day {day_key} in order data. Max index: {len(dinner_menu_items_config) - 1}"
                                 )
                         except (ValueError, TypeError) as e:
                             logger.warning(
-                                f"Invalid dinner item index format: '{item_index_obj}' for day "
-                                f"{day_key}. Error: {e}"
+                                f"Invalid dinner item index format: '{item_index_obj}' for day {day_key}. Error: {e}"
                             )
             elif day_menu_config.get("dinner") and not (
                 order_for_this_day and "dinner" in order_for_this_day
             ):
-                # Dinner is offered in menu, but no dinner data in order for this day. This is fine, dinner is optional.
+                # Dinner is offered in menu, but no dinner data in order for this day. This is fine, dinner is optional and doesn't affect completeness.
                 pass
-        # --- End of existing calculation loop ---
+        # --- End of calculation loop ---
 
         # Check for modification attempts on paid/proof_submitted orders
         if existing_order and current_payment_status_from_db in [

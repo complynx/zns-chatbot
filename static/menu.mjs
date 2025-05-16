@@ -8,72 +8,159 @@
         return parent;
     }
 
+    // Helper function to uncheck inputs in a hidden section
+    function uncheckInputsInSection(sectionElement) {
+        if (!sectionElement) return;
+        sectionElement.querySelectorAll('input[type="radio"], input[type="checkbox"]').forEach(input => {
+            if (input.checked) {
+                input.checked = false;
+                // Consider dispatching a 'change' event if other listeners depend on it,
+                // though our main recalculateTotalSumAndOrder is triggered by body click or explicit calls.
+            }
+        });
+    }
+
+    function createMenuItemHTML(item, day, mealContext, index, category = null) { // category is item.category
+        let url = item.photo;
+        if (url && !url.startsWith("https://")) {
+            url = "static/menu_photos/" + url + ".jpg";
+        }
+
+        let inputType;
+        let nameAttribute;
+        let valueAttribute = index; // Value is always the item's index in its original menu array
+        let displayPrice = false;
+
+        if (mealContext === "lunch-individual") { // New: For individual lunch item selection
+            inputType = "checkbox";
+            nameAttribute = `${day}-lunch-individual-${index}`; // e.g., friday-lunch-individual-0
+            if (item.price) displayPrice = true;
+        } else if (mealContext === "lunch") { // For components of a combo lunch
+            inputType = "radio";
+            if (category === "soup") { // Special handling for actual soup choice within combo
+                nameAttribute = `${day}-lunch-actual-soup`; // e.g., friday-lunch-actual-soup
+            } else { // main, side, salad components of a combo
+                nameAttribute = `${day}-lunch-${category}`; // e.g., friday-lunch-main
+            }
+            // Price is not displayed for individual combo components; price is for the combo itself
+        } else if (mealContext === "dinner") { // Original dinner logic
+            inputType = "checkbox";
+            nameAttribute = `${day}-dinner-${index}`; // e.g., friday-dinner-0
+            if (item.price) displayPrice = true;
+        } else {
+            console.warn("Unknown meal context in createMenuItemHTML:", mealContext, "for item", item);
+            // Fallback, though ideally, this should not be reached with controlled calls
+            inputType = "checkbox";
+            nameAttribute = `${day}-${mealContext}-${index}`;
+        }
+
+        let innerHTML = `
+            <label>
+                <input type="${inputType}" name="${nameAttribute}" value="${valueAttribute}" data-item-index="${index}" />
+                <span class="name" lang="ru">${item.title_ru}</span>
+                <span class="name" lang="en">${item.title_en}</span>
+        `;
+        if (displayPrice && typeof item.price === 'number') { // Display price if applicable
+            innerHTML += `
+                    <span class="price">${item.price}</span>
+            `;
+        }
+        if (url) {
+            innerHTML += `
+                <img class="small_photo" loading="lazy" src="${url}">
+            `;
+        }
+        innerHTML += `
+            </label>
+            <button class="description-button">i</button>
+            <div class="description">
+                <span class="name" lang="ru">${item.title_ru}</span>
+                <span class="name" lang="en">${item.title_en}</span>
+        `;
+        if (url) {
+            innerHTML += `
+                <img class="photo" loading="lazy" src="${url}">
+            `;
+        }
+        if (item.ingredients_en && item.ingredients_en.length > 0) {
+            innerHTML += `
+                <div class="ingredients">
+                    <span lang="ru">Ингредиенты: ${item.ingredients_ru}</span>
+                    <span lang="en">Ingredients: ${item.ingredients_en}</span>
+                </div>
+            `;
+        }
+        if (item.weight && item.weight.value > 0) {
+            innerHTML += `
+                <div class="weight">${item.weight.value}</div>
+            `;
+        }
+        if (item.nutrition) {
+            for (let type of ["calories", "fat", "carbohydrates", "protein"]) {
+                if (type in item.nutrition) {
+                    innerHTML += `
+                        <div class="nutrition ${type}">${item.nutrition[type]}</div>
+                    `;
+                }
+            }
+        }
+        innerHTML += `
+            </div>
+        `;
+        return innerHTML;
+    }
+
     let menu = await fetch("static/menu_2025_1.json").then(r => r.json());
     for (let day in menu) {
         let meal = "lunch";
-        let lunch = menu[day][meal];
-        for (let i = 0; i < lunch.length; ++i) {
-            let item = lunch[i];
-            if (item.skip) continue;
+        let lunchItemsFromMenu = menu[day][meal];
+        const lunchSection = document.querySelector(`section.${day}.lunch`);
+        let hasPricedIndividualLunchItems = false;
 
-            let container = document.createElement("div");
-            container.classList.add("item");
-            container.classList.add(item.category);
-            let url = item.photo;
-            if (url && !url.startsWith("https://")) {
-                url = "static/menu_photos/" + url + ".jpg";
-            }
-            let innerHTML = `
-                <label>
-                    <input type="radio" name="${day}-${meal}-${item.category}" value="${i}" />
-                    <span class="name" lang="ru">${item.title_ru}</span>
-                    <span class="name" lang="en">${item.title_en}</span>
-            `;
-            if (url) {
-                innerHTML += `
-                    <img class="small_photo" loading="lazy" src="${url}">
-                `;
-            }
-            innerHTML += `
-                </label>
-                <button class="description-button">i</button>
-                <div class="description">
-                    <span class="name" lang="ru">${item.title_ru}</span>
-                    <span class="name" lang="en">${item.title_en}</span>
-            `;
-            if (url) {
-                innerHTML += `
-                    <img class="photo" loading="lazy" src="${url}">
-                `;
-            }
-            if (item.ingredients_en && item.ingredients_en.length > 0) {
-                innerHTML += `
-                    <div class="ingredients">
-                        <span lang="ru">Ингредиенты: ${item.ingredients_ru}</span>
-                        <span lang="en">Ingredients: ${item.ingredients_en}</span>
-                    </div>
-                `;
-            }
-            if (item.weight && item.weight.value > 0) {
-                innerHTML += `
-                    <div class="weight">${item.weight.value}</div>
-                `;
-            }
-            if (item.nutrition) {
-                for (let type of ["calories", "fat", "carbohydrates", "protein"]) {
-                    if (type in item.nutrition) {
-                        innerHTML += `
-                            <div class="nutrition ${type}">${item.nutrition[type]}</div>
-                        `;
+        if (lunchSection && lunchItemsFromMenu) {
+            const individualChoicesContainer = lunchSection.querySelector('.individual-items-selection-container .choices.individual-lunch-choices'); // Assumed HTML
+            const comboSoupChoicesContainer = lunchSection.querySelector('.combo-details-container .actual-soup-choices'); // Assumed HTML
+
+            for (let i = 0; i < lunchItemsFromMenu.length; ++i) {
+                let item = lunchItemsFromMenu[i];
+                if (item.skip) continue;
+
+                // Populate "Individual Items" if item has a price
+                if (typeof item.price === 'number' && individualChoicesContainer) {
+                    hasPricedIndividualLunchItems = true;
+                    let container = document.createElement("div");
+                    container.classList.add("item");
+                    if (item.category) container.classList.add(item.category); // Add category for potential styling
+                    container.innerHTML = createMenuItemHTML(item, day, "lunch-individual", i, item.category);
+                    individualChoicesContainer.appendChild(container);
+                }
+
+                // Populate "Combo" choices
+                if (item.category) {
+                    if (item.category === 'soup' && comboSoupChoicesContainer) {
+                        let container = document.createElement("div");
+                        container.classList.add("item");
+                        container.innerHTML = createMenuItemHTML(item, day, "lunch", i, "soup");
+                        comboSoupChoicesContainer.appendChild(container);
+                    } else if (['main', 'side', 'salad'].includes(item.category)) {
+                        const comboCategoryChoicesContainer = lunchSection.querySelector(`.combo-details-container .combo-class.${item.category} .choices`); // Assumed HTML
+                        if (comboCategoryChoicesContainer) {
+                            let container = document.createElement("div");
+                            container.classList.add("item");
+                            // container.classList.add(item.category); // Already handled by querySelector path
+                            container.innerHTML = createMenuItemHTML(item, day, "lunch", i, item.category);
+                            comboCategoryChoicesContainer.appendChild(container);
+                        }
                     }
                 }
             }
-            innerHTML += `
-                </div>
-            `;
-            container.innerHTML = innerHTML;
-            document.querySelector(`section.${day}.${meal} .combo-class.${item.category} .choices`).appendChild(container);
+            // Show/hide the "Individual Items" radio button *option* based on availability
+            const individualItemsModeOption = lunchSection.querySelector('.individual-items-mode-option'); // Assumed HTML
+            if (individualItemsModeOption) {
+                individualItemsModeOption.style.display = hasPricedIndividualLunchItems ? '' : 'none';
+            }
         }
+
         meal = "dinner";
         let dinner = menu[day][meal];
         for (let i = 0; i < dinner.length; ++i) {
@@ -87,60 +174,7 @@
             let container = document.createElement("div");
             container.classList.add("item");
             container.classList.add(item.category);
-            let url = item.photo;
-            if (url && !url.startsWith("https://")) {
-                url = "static/menu_photos/" + url + ".jpg";
-            }
-            let innerHTML = `
-                <label>
-                    <input type="checkbox" name="${day}-${meal}-${i}" value="${i}" />
-                    <span class="name" lang="ru">${item.title_ru}</span>
-                    <span class="name" lang="en">${item.title_en}</span>
-                    <span class="price">${item.price}</span>
-            `;
-            if (url) {
-                innerHTML += `
-                    <img class="small_photo" loading="lazy" src="${url}">
-                `;
-            }
-            innerHTML += `
-                </label>
-                <button class="description-button">i</button>
-                <div class="description">
-                    <span class="name" lang="ru">${item.title_ru}</span>
-                    <span class="name" lang="en">${item.title_en}</span>
-            `;
-            if (url) {
-                innerHTML += `
-                    <img class="photo" loading="lazy" src="${url}">
-                `;
-            }
-            if (item.ingredients_en && item.ingredients_en.length > 0) {
-                innerHTML += `
-                    <div class="ingredients">
-                        <span lang="ru">Ингредиенты: ${item.ingredients_ru}</span>
-                        <span lang="en">Ingredients: ${item.ingredients_en}</span>
-                    </div>
-                `;
-            }
-            if (item.weight && item.weight.value > 0) {
-                innerHTML += `
-                    <div class="weight">${item.weight.value}</div>
-                `;
-            }
-            if (item.nutrition) {
-                for (let type of ["calories", "fat", "carbohydrates", "protein"]) {
-                    if (type in item.nutrition) {
-                        innerHTML += `
-                            <div class="nutrition ${type}">${item.nutrition[type]}</div>
-                        `;
-                    }
-                }
-            }
-            innerHTML += `
-                </div>
-            `;
-            container.innerHTML = innerHTML;
+            container.innerHTML = createMenuItemHTML(item, day, meal, i);
             document.querySelector(`section.${day}.${meal} .meals`).appendChild(container);
         }
     }
@@ -167,81 +201,94 @@
         // Ensure window.user_order is up-to-date before any save logic, for both manual and auto saves.
         calculateTotalSumAndOrder();
 
-        let orderIsIncomplete = false;
+        let orderIsIncompleteForCombos = false;
+        let someSelectionsAreEmpty = false; // For individual lunch or dinner
+
         if (!autosave) { // Validation and highlighting only for manual saves (button press)
-            document.querySelectorAll('.combo-class.unfilled').forEach(el => el.classList.remove('unfilled')); // Clear previous highlights
+            document.querySelectorAll('.combo-class.unfilled, .individual-items-selection-container.unfilled').forEach(el => el.classList.remove('unfilled')); // Clear previous highlights
 
             const days = Object.keys(menu);
-            const LUNCH_SUB_CATEGORIES = ["main", "side", "salad"];
+            const LUNCH_COMBO_SUB_CATEGORIES = ["main", "side", "salad"]; // Renamed for clarity
 
             days.forEach(day => {
+                if (!menu[day] || !menu[day].lunch) return;
+
+                const lunchOrderDetails = collectedOrder[day] ? collectedOrder[day].lunch : null;
                 const lunchSection = document.querySelector(`section.${day}.lunch`);
-                if (!lunchSection || !menu[day] || !menu[day].lunch) return;
+                if (!lunchSection || !lunchOrderDetails) return;
 
-                const noLunchRadio = lunchSection.querySelector(`input[name="${day}-lunch-soup"][value="no-lunch"]:checked`);
-
-                if (noLunchRadio) {
-                    // "No lunch" is selected, remove any unfilled class from this day's lunch categories
-                    lunchSection.querySelectorAll('.combo-class.soup, .combo-class.main, .combo-class.side, .combo-class.salad')
-                        .forEach(el => el.classList.remove('unfilled'));
-                    return; // Skip validation for this day's lunch
-                }
-
-                // "No lunch" is NOT selected. Validate soup, main, side, salad.
-
-                // 1. Validate soup choice (includes "no-soup" or a specific soup)
-                const soupChoiceMade = lunchSection.querySelector(`input[name="${day}-lunch-soup"]:checked`);
-                const soupComboEl = lunchSection.querySelector('.combo-class.soup');
-                if (!soupChoiceMade) { // No selection in the soup radio group
-                    if (soupComboEl) soupComboEl.classList.add('unfilled');
-                    orderIsIncomplete = true;
-                } else {
-                    if (soupComboEl) soupComboEl.classList.remove('unfilled');
-                }
-
-                // 2. Validate main, side, salad choices
-                LUNCH_SUB_CATEGORIES.forEach(category => {
-                    const categoryEl = lunchSection.querySelector(`.combo-class.${category}`);
-                    const itemSelected = lunchSection.querySelector(`.combo-class.${category} .choices input[name="${day}-lunch-${category}"]:checked`);
-                    if (!itemSelected) {
-                        if (categoryEl) categoryEl.classList.add('unfilled');
-                        orderIsIncomplete = true;
+                // Validation for COMBO lunches
+                if (lunchOrderDetails.type === "combo-no-soup" || lunchOrderDetails.type === "combo-with-soup") {
+                    // 1. Validate soup choice if it's a "combo-with-soup"
+                    if (lunchOrderDetails.type === "combo-with-soup" && lunchOrderDetails.items.soup_index === undefined) {
+                        const soupComboEl = lunchSection.querySelector('.combo-details-container .actual-soup-choices'); // Target the actual choices
+                        if (soupComboEl) soupComboEl.classList.add('unfilled'); // Or a more general combo container
+                        orderIsIncompleteForCombos = true;
                     } else {
-                        if (categoryEl) categoryEl.classList.remove('unfilled');
+                        const soupComboEl = lunchSection.querySelector('.combo-details-container .actual-soup-choices');
+                        if (soupComboEl) soupComboEl.classList.remove('unfilled');
                     }
-                });
+
+                    // 2. Validate main, side, salad choices for combos
+                    LUNCH_COMBO_SUB_CATEGORIES.forEach(category => {
+                        const categoryEl = lunchSection.querySelector(`.combo-details-container .combo-class.${category}`);
+                        if (lunchOrderDetails.items[`${category}_index`] === undefined) {
+                            if (categoryEl) categoryEl.classList.add('unfilled');
+                            orderIsIncompleteForCombos = true;
+                        } else {
+                            if (categoryEl) categoryEl.classList.remove('unfilled');
+                        }
+                    });
+                } else if (lunchOrderDetails.type === "no-lunch") {
+                    // Clear unfilled from combo sections if "no lunch" is chosen for this day
+                    lunchSection.querySelectorAll('.combo-details-container .combo-class, .combo-details-container .actual-soup-choices')
+                        .forEach(el => el.classList.remove('unfilled'));
+                }
+
+                // Check for empty "Individual Items" lunch selection
+                if (lunchOrderDetails.type === "individual-items" && (!lunchOrderDetails.items || lunchOrderDetails.items.length === 0)) {
+                    someSelectionsAreEmpty = true;
+                    // Optionally, highlight the individual items section
+                    const individualContainer = lunchSection.querySelector('.individual-items-selection-container');
+                    if (individualContainer) individualContainer.classList.add('unfilled'); // Or some other visual cue
+                } else {
+                    const individualContainer = lunchSection.querySelector('.individual-items-selection-container');
+                    if (individualContainer) individualContainer.classList.remove('unfilled');
+                }
             });
 
-            if (orderIsIncomplete) {
+            if (orderIsIncompleteForCombos) {
                 const message = (typeof alert_lunch_incomplete_text !== 'undefined' && alert_lunch_incomplete_text)
                     ? alert_lunch_incomplete_text
-                    : "Order is incomplete. Please fill all required lunch items for selected lunches.";
+                    : "Order is incomplete. Please fill all required items for selected combo lunches.";
                 await showCustomAlert(message);
                 return "user_validation_failed";
             }
 
-            let someDinnerIsEmpty = false;
+            // Check for empty dinner selections
             if (collectedOrder) {
-                for (const day in menu) { // Iterate through days defined in the master menu
-                    // Check if dinner is offered for this day in the menu
+                for (const day in menu) {
                     if (menu[day] && menu[day].dinner && menu[day].dinner.length > 0) {
-                        // Check if the order for this day has an empty dinner array
                         if (collectedOrder[day] && collectedOrder[day].dinner && collectedOrder[day].dinner.length === 0) {
-                            someDinnerIsEmpty = true;
-                            break; // Found one, no need to check further
+                            // Check if user actually intended to have dinner, i.e. didn't uncheck everything deliberately
+                            // This check might be too aggressive if user can deselect all dinners.
+                            // For now, if dinner is offered and order has empty dinner array for it, flag for confirm.
+                            someSelectionsAreEmpty = true;
+                            break;
                         }
                     }
                 }
             }
 
-            if (someDinnerIsEmpty) {
-                const dinnerConfirmText = (typeof confirm_dinner_empty_text !== 'undefined' && confirm_dinner_empty_text)
+            if (someSelectionsAreEmpty) {
+                const DEFAULT_CONFIRM_EMPTY_TEXT = "You have selected 'Individual Items' for lunch or opted for dinner on one or more days, but haven't chosen any specific items. Proceed anyway?";
+                const confirmationMessage = (typeof confirm_dinner_empty_text !== 'undefined' && confirm_dinner_empty_text)
                     ? confirm_dinner_empty_text
-                    : "You have not selected any items for dinner on one or more days. Proceed anyway?";
-                const proceedWithEmptyDinner = await showCustomConfirm(dinnerConfirmText);
+                    : DEFAULT_CONFIRM_EMPTY_TEXT;
+                const proceedWithEmpty = await showCustomConfirm(confirmationMessage);
 
-                if (!proceedWithEmptyDinner) {
-                    return "user_validation_failed"; // MODIFIED HERE
+                if (!proceedWithEmpty) {
+                    return "user_validation_failed";
                 }
             }
         }
@@ -283,27 +330,25 @@
     if (typeof user_order !== 'undefined' && user_order !== null) {
         // FIRST PASS: Check appropriate inputs based on user_order
         for (const day in user_order) {
-            if (user_order[day].lunch) { // Check if lunch object exists for the day
+            if (user_order[day] && user_order[day].lunch) {
                 const lunchDetails = user_order[day].lunch;
-                const lunchItems = lunchDetails.items; // items might be null/undefined
-                const lunchType = lunchDetails.type;
+                const lunchMode = lunchDetails.type; // e.g., "no-lunch", "individual-items", "combo-no-soup", "combo-with-soup"
+                const lunchItems = lunchDetails.items; // object for combos, array for individual-items
 
-                if (lunchType === 'no-lunch') {
-                    const noLunchRadio = document.querySelector(`input[name="${day}-lunch-soup"][value="no-lunch"]`);
-                    if (noLunchRadio) noLunchRadio.checked = true;
-                } else {
-                    // Lunch is selected, determine soup status
-                    if (lunchType === 'no-soup') {
-                        const noSoupRadio = document.querySelector(`input[name="${day}-lunch-soup"][value="no-soup"]`);
-                        if (noSoupRadio) noSoupRadio.checked = true;
-                    } else if (lunchItems && lunchItems.soup_index !== undefined && lunchItems.soup_index !== null) {
-                        // Assumes lunchType is 'with-soup' or similar if a specific soup is chosen
-                        const soupRadio = document.querySelector(`input[name="${day}-lunch-soup"][value="${lunchItems.soup_index}"]`);
-                        if (soupRadio) soupRadio.checked = true;
-                    }
+                const modeRadio = document.querySelector(`input[name="${day}-lunch-mode"][value="${lunchMode}"]`);
+                if (modeRadio) modeRadio.checked = true;
 
-                    // Handle main, side, salad if lunchItems are present
+                if (lunchMode === "individual-items" && lunchItems && Array.isArray(lunchItems)) {
+                    lunchItems.forEach(itemIndex => {
+                        const itemCheckbox = document.querySelector(`input[name="${day}-lunch-individual-${itemIndex}"]`);
+                        if (itemCheckbox) itemCheckbox.checked = true;
+                    });
+                } else if (lunchMode === "combo-no-soup" || lunchMode === "combo-with-soup") {
                     if (lunchItems) {
+                        if (lunchMode === "combo-with-soup" && lunchItems.soup_index !== undefined && lunchItems.soup_index !== null) {
+                            const soupRadio = document.querySelector(`input[name="${day}-lunch-actual-soup"][value="${lunchItems.soup_index}"]`);
+                            if (soupRadio) soupRadio.checked = true;
+                        }
                         ['main', 'side', 'salad'].forEach(category => {
                             if (lunchItems[`${category}_index`] !== undefined && lunchItems[`${category}_index`] !== null) {
                                 const itemRadio = document.querySelector(`input[name="${day}-lunch-${category}"][value="${lunchItems[`${category}_index`]}"]`);
@@ -312,6 +357,7 @@
                         });
                     }
                 }
+                // "no-lunch" is handled by checking the modeRadio.
             }
             if (user_order[day].dinner) {
                 user_order[day].dinner.forEach(itemIndex => {
@@ -335,91 +381,99 @@
                 const lunchSection = document.querySelector(`section.${day}.lunch`);
                 const dinnerSection = document.querySelector(`section.${day}.dinner`);
 
-                // --- LUNCH SECTION VISIBILITY ---
-                if (lunchSection) {
-                    // Condition for lunch section to be VISIBLE:
-                    // 1. Order for the day exists.
-                    // 2. Lunch details for the day exist.
-                    // 3. Lunch type is NOT 'no-lunch'.
-                    if (dayData && dayData.lunch && dayData.lunch.type && dayData.lunch.type !== 'no-lunch') {
-                        lunchSection.style.display = ''; // Show section
+                // --- LUNCH SECTION VISIBILITY (READ-ONLY) ---
+                if (lunchSection && dayData && dayData.lunch) {
+                    const lunchDetails = dayData.lunch;
+                    const lunchMode = lunchDetails.type;
+                    const lunchItems = lunchDetails.items;
 
-                        const lunchOrderDetails = dayData.lunch;
-                        const lunchType = lunchOrderDetails.type; // Will be 'no-soup' or 'with-soup'
-                        const lunchItems = lunchOrderDetails.items || {}; // Items for main, side, salad, soup
+                    const individualItemsContainer = lunchSection.querySelector('.individual-items-selection-container');
+                    const comboDetailsContainer = lunchSection.querySelector('.combo-details-container');
+                    const noLunchDisplayItem = lunchSection.querySelector('.no-lunch-display'); // Assumed HTML for displaying "No Lunch" text
 
-                        // Hide the "no-lunch" radio option container as a specific lunch is chosen
-                        const noLunchItemContainer = lunchSection.querySelector(`.meals .item.no-lunch`);
-                        if (noLunchItemContainer) noLunchItemContainer.style.display = 'none';
+                    if (individualItemsContainer) individualItemsContainer.style.display = 'none';
+                    if (comboDetailsContainer) comboDetailsContainer.style.display = 'none';
+                    if (noLunchDisplayItem) noLunchDisplayItem.style.display = 'none';
 
-                        // Manage visibility within the .combo-class.soup
-                        const soupComboClass = lunchSection.querySelector(`.combo-class.soup`);
-                        if (soupComboClass) {
-                            const noSoupRadioItemContainer = soupComboClass.querySelector(`.item.no-soup`);
-                            const specificSoupChoicesContainer = soupComboClass.querySelector(`.choices`);
+                    if (lunchMode === "no-lunch") {
+                        lunchSection.style.display = ''; // Show the day's lunch section to indicate "No lunch"
+                        if (noLunchDisplayItem) noLunchDisplayItem.style.display = ''; // Show "No lunch" text
+                        // Hide combo and individual sections explicitly
+                        if (comboDetailsContainer) comboDetailsContainer.style.display = 'none';
+                        if (individualItemsContainer) individualItemsContainer.style.display = 'none';
 
-                            if (lunchType === 'no-soup') {
-                                // "No soup" is selected: Show "no-soup" item, hide all specific soup items/choices
-                                if (noSoupRadioItemContainer) noSoupRadioItemContainer.style.display = '';
-                                if (specificSoupChoicesContainer) {
-                                    specificSoupChoicesContainer.style.display = 'none'; // Hide the whole choices div
-                                    specificSoupChoicesContainer.querySelectorAll('.item').forEach(itemEl => itemEl.style.display = 'none'); // And its items
+                    } else if (lunchMode === "individual-items") {
+                        lunchSection.style.display = '';
+                        if (individualItemsContainer) individualItemsContainer.style.display = '';
+                        if (comboDetailsContainer) comboDetailsContainer.style.display = 'none';
+
+                        if (lunchItems && Array.isArray(lunchItems) && individualItemsContainer) {
+                            const selectedIndices = lunchItems.map(val => String(val));
+                            individualItemsContainer.querySelectorAll(`.choices.individual-lunch-choices .item`).forEach(itemEl => {
+                                const checkbox = itemEl.querySelector('input[type="checkbox"]');
+                                if (checkbox && selectedIndices.includes(String(checkbox.value))) {
+                                    itemEl.style.display = '';
+                                } else {
+                                    itemEl.style.display = 'none';
                                 }
-                                // Also ensure the "with-soup explanation" is hidden if "no-soup" is chosen
-                                const withSoupExplanation = soupComboClass.querySelector('.with-soup.explanation');
-                                if (withSoupExplanation) withSoupExplanation.style.display = 'none';
+                            });
+                        }
+                    } else if (lunchMode === "combo-no-soup" || lunchMode === "combo-with-soup") {
+                        lunchSection.style.display = '';
+                        if (comboDetailsContainer) comboDetailsContainer.style.display = '';
+                        if (individualItemsContainer) individualItemsContainer.style.display = 'none';
 
+                        // Soup visibility within combo
+                        const actualSoupChoices = comboDetailsContainer.querySelector('.actual-soup-choices');
+                        const noSoupInComboDisplay = comboDetailsContainer.querySelector('.no-soup-in-combo-display'); // Assumed HTML
 
-                            } else if (lunchType === 'with-soup') {
-                                // Specific soup is selected: Hide "no-soup" item, show only the selected specific soup
-                                if (noSoupRadioItemContainer) noSoupRadioItemContainer.style.display = 'none';
-                                // Ensure "with-soup explanation" is visible
-                                const withSoupExplanation = soupComboClass.querySelector('.with-soup.explanation');
-                                if (withSoupExplanation) withSoupExplanation.style.display = '';
+                        if (actualSoupChoices) actualSoupChoices.style.display = 'none';
+                        if (noSoupInComboDisplay) noSoupInComboDisplay.style.display = 'none';
 
-
-                                if (specificSoupChoicesContainer) {
-                                    specificSoupChoicesContainer.style.display = ''; // Show the choices div
-                                    const selectedSoupIndexStr = lunchItems.soup_index !== undefined ? String(lunchItems.soup_index) : null;
-                                    specificSoupChoicesContainer.querySelectorAll('.item').forEach(itemEl => {
-                                        const radio = itemEl.querySelector('input[type="radio"]');
-                                        if (selectedSoupIndexStr && radio && String(radio.value) === selectedSoupIndexStr) {
-                                            itemEl.style.display = ''; // Show selected soup
-                                        } else {
-                                            itemEl.style.display = 'none'; // Hide other soups
-                                        }
-                                    });
-                                }
+                        if (lunchMode === "combo-with-soup") {
+                            if (actualSoupChoices) actualSoupChoices.style.display = '';
+                            if (lunchItems && lunchItems.soup_index !== undefined) {
+                                const selectedSoupIndexStr = String(lunchItems.soup_index);
+                                actualSoupChoices.querySelectorAll('.item').forEach(itemEl => {
+                                    const radio = itemEl.querySelector('input[type="radio"]');
+                                    if (radio && String(radio.value) === selectedSoupIndexStr) {
+                                        itemEl.style.display = '';
+                                    } else {
+                                        itemEl.style.display = 'none';
+                                    }
+                                });
                             }
+                        } else { // combo-no-soup
+                            if (noSoupInComboDisplay) noSoupInComboDisplay.style.display = '';
                         }
 
-                        // Manage visibility for main, side, salad combo classes
+                        // Main, Side, Salad visibility within combo
                         ['main', 'side', 'salad'].forEach(category => {
-                            const categoryComboClass = lunchSection.querySelector(`.combo-class.${category}`);
-                            if (categoryComboClass) {
-                                categoryComboClass.style.display = ''; // Show the whole category block
-                                const choicesContainer = categoryComboClass.querySelector('.choices');
-                                if (choicesContainer) {
-                                    const selectedItemIndexStr = lunchItems[`${category}_index`] !== undefined ? String(lunchItems[`${category}_index`]) : null;
-                                    choicesContainer.querySelectorAll('.item').forEach(itemEl => {
+                            const categoryChoicesContainer = comboDetailsContainer.querySelector(`.combo-class.${category} .choices`);
+                            if (categoryChoicesContainer) {
+                                if (lunchItems && lunchItems[`${category}_index`] !== undefined) {
+                                    const selectedItemIndexStr = String(lunchItems[`${category}_index`]);
+                                    categoryChoicesContainer.querySelectorAll('.item').forEach(itemEl => {
                                         const radio = itemEl.querySelector('input[type="radio"]');
-                                        if (selectedItemIndexStr && radio && String(radio.value) === selectedItemIndexStr) {
-                                            itemEl.style.display = ''; // Show selected item
+                                        if (radio && String(radio.value) === selectedItemIndexStr) {
+                                            itemEl.style.display = '';
                                         } else {
-                                            itemEl.style.display = 'none'; // Hide other items
+                                            itemEl.style.display = 'none';
                                         }
                                     });
+                                } else { // Whole category not selected, hide all its items
+                                    categoryChoicesContainer.querySelectorAll('.item').forEach(itemEl => itemEl.style.display = 'none');
                                 }
                             }
                         });
-
-                    } else {
-                        // Lunch section should be hidden (no order for this day, or 'no-lunch' selected)
+                    } else { // No valid lunch order for this day, hide the entire lunch section for this day
                         lunchSection.style.display = 'none';
                     }
+                } else if (lunchSection) { // No dayOrderData or no lunch in order for this day
+                    lunchSection.style.display = 'none';
                 }
 
-                // --- DINNER SECTION VISIBILITY ---
+                // --- DINNER SECTION VISIBILITY (READ-ONLY) ---
                 if (dinnerSection) {
                     // Condition for dinner section to be VISIBLE:
                     // 1. Order for the day exists.
@@ -490,7 +544,6 @@
 
     let collectedOrder = {}; // This variable will store the details of the current order
 
-
     const customDialogOverlay = document.getElementById('custom-dialog-overlay');
     const customAlertDialog = document.getElementById('custom-alert-dialog');
     const customAlertMessage = document.getElementById('custom-alert-message');
@@ -544,95 +597,106 @@
         });
     }
 
-
-
-
     function calculateTotalSumAndOrder() {
         let totalSum = 0;
         collectedOrder = {}; // Reset for each calculation
 
         if (typeof menu === 'undefined' || menu === null) {
             console.error("Menu data is not available for calculation.");
+            document.querySelector('#total-sum .value').textContent = 'Error';
             return;
         }
 
-        const days = Object.keys(menu); // Get days from the menu data itself
+        const days = Object.keys(menu);
 
         days.forEach(day => {
-            if (!menu[day]) return;
+            if (!menu[day]) {
+                collectedOrder[day] = { lunch: null, dinner: [] }; // Still init day in order
+                return;
+            }
 
             collectedOrder[day] = {
-                lunch: null,
+                lunch: null, // Will be populated based on mode
                 dinner: []
             };
 
             const lunchSection = document.querySelector(`section.${day}.lunch`);
             if (lunchSection) {
-                let lunchOrderDetails = { type: null, items: {} };
-                const selectedLunchOptionRadio = lunchSection.querySelector(`input[name="${day}-lunch-soup"]:checked`);
-                const soupComboEl = lunchSection.querySelector(`.combo-class.soup`);
+                let currentLunchOrderDetails = { type: null, items: null }; // items: {} for combo, [] for individual
+                const selectedLunchModeRadio = lunchSection.querySelector(`input[name="${day}-lunch-mode"]:checked`);
 
-                if (selectedLunchOptionRadio) {
-                    if (soupComboEl) soupComboEl.classList.remove('unfilled'); // A choice in this group was made
+                const individualItemsContainer = lunchSection.querySelector('.individual-items-selection-container');
+                const comboDetailsContainer = lunchSection.querySelector('.combo-details-container');
+                const actualSoupChoicesContainer = comboDetailsContainer ? comboDetailsContainer.querySelector('.actual-soup-choices') : null;
+                // const noSoupInComboDisplay = comboDetailsContainer ? comboDetailsContainer.querySelector('.no-soup-in-combo-display') : null; // For display only
 
-                    const choiceValue = selectedLunchOptionRadio.value;
-                    if (choiceValue === "no-lunch") {
-                        lunchOrderDetails.type = "no-lunch";
-                        // Remove 'unfilled' from all lunch categories for this day
-                        lunchSection.querySelectorAll('.combo-class.main, .combo-class.side, .combo-class.salad')
-                            .forEach(el => el.classList.remove('unfilled'));
-                        // Soup combo element already handled above
-                    } else if (choiceValue === "no-soup") {
-                        totalSum += LUNCH_NO_SOUP_PRICE;
-                        lunchOrderDetails.type = "no-soup";
-                    } else { // A specific soup is selected
-                        totalSum += LUNCH_WITH_SOUP_PRICE;
-                        lunchOrderDetails.type = "with-soup";
-                        lunchOrderDetails.items.soup_index = choiceValue;
-                    }
-                }
-                // If no selectedLunchOptionRadio, save() will handle adding 'unfilled' to soupComboEl on button press.
-
-                // Manage visibility of main, side, salad based on lunch type selection
-                if (!read_only) {
-                    const mainComboEl = lunchSection.querySelector(`.combo-class.main`);
-                    const sideComboEl = lunchSection.querySelector(`.combo-class.side`);
-                    const saladComboEl = lunchSection.querySelector(`.combo-class.salad`);
-                    const subCategoriesToToggle = ["main", "side", "salad"];
-
-                    if (lunchOrderDetails.type === "no-lunch") {
-                        if (mainComboEl) mainComboEl.style.display = 'none';
-                        if (sideComboEl) sideComboEl.style.display = 'none';
-                        if (saladComboEl) saladComboEl.style.display = 'none';
-
-                        subCategoriesToToggle.forEach(category => {
-                            const radios = lunchSection.querySelectorAll(`.combo-class.${category} .choices input[name="${day}-lunch-${category}"]`);
-                            radios.forEach(radio => {
-                                if (radio.checked) {
-                                    radio.checked = false;
-                                }
-                            });
-                        });
-                    } else { // Covers "no-soup", "with-soup", or if lunch type is null (nothing selected yet)
-                        if (mainComboEl) mainComboEl.style.display = ''; // Reset to default CSS display
-                        if (sideComboEl) sideComboEl.style.display = '';
-                        if (saladComboEl) saladComboEl.style.display = '';
-                    }
+                // Default visibility: hide both specific sections first
+                if (!read_only) { // Only manipulate display if not in read_only mode
+                    if (individualItemsContainer) individualItemsContainer.style.display = 'none';
+                    if (comboDetailsContainer) comboDetailsContainer.style.display = 'none';
+                    if (actualSoupChoicesContainer) actualSoupChoicesContainer.style.display = 'none';
+                    // if (noSoupInComboDisplay) noSoupInComboDisplay.style.display = 'none';
                 }
 
-                if (lunchOrderDetails.type && lunchOrderDetails.type !== "no-lunch") {
-                    const LUNCH_SUB_CATEGORIES = ["main", "side", "salad"];
-                    LUNCH_SUB_CATEGORIES.forEach(category => {
-                        const selectedRadio = lunchSection.querySelector(`.combo-class.${category} .choices input[name="${day}-lunch-${category}"]:checked`);
-                        const comboEl = lunchSection.querySelector(`.combo-class.${category}`);
-                        if (selectedRadio) {
-                            if (comboEl) comboEl.classList.remove('unfilled');
-                            lunchOrderDetails.items[category + '_index'] = selectedRadio.value;
+                if (selectedLunchModeRadio) {
+                    const mode = selectedLunchModeRadio.value;
+                    currentLunchOrderDetails.type = mode;
+
+                    if (mode === "no-lunch") {
+                        currentLunchOrderDetails.items = {}; // Or null
+                        if (!read_only) {
+                            uncheckInputsInSection(individualItemsContainer);
+                            uncheckInputsInSection(comboDetailsContainer); // Clears all combo radios
                         }
-                        // If !selectedRadio, save() will handle adding 'unfilled' on button press.
-                    });
+                    } else if (mode === "individual-items") {
+                        currentLunchOrderDetails.items = [];
+                        if (!read_only && individualItemsContainer) individualItemsContainer.style.display = '';
+                        if (!read_only) uncheckInputsInSection(comboDetailsContainer);
+
+                        const selectedIndividualItems = lunchSection.querySelectorAll(`.individual-items-selection-container .choices.individual-lunch-choices input[type="checkbox"]:checked`);
+                        selectedIndividualItems.forEach(input => {
+                            const itemIndex = parseInt(input.value);
+                            if (!isNaN(itemIndex) && menu[day].lunch && menu[day].lunch[itemIndex]) {
+                                const menuItem = menu[day].lunch[itemIndex];
+                                if (menuItem && typeof menuItem.price === 'number') {
+                                    totalSum += menuItem.price;
+                                }
+                                currentLunchOrderDetails.items.push(itemIndex);
+                            }
+                        });
+                    } else if (mode === "combo-no-soup" || mode === "combo-with-soup") {
+                        currentLunchOrderDetails.items = {}; // For main, side, salad, soup_index
+                        if (!read_only && comboDetailsContainer) comboDetailsContainer.style.display = '';
+                        if (!read_only) uncheckInputsInSection(individualItemsContainer);
+
+                        if (mode === "combo-no-soup") {
+                            totalSum += LUNCH_NO_SOUP_PRICE;
+                            // if (!read_only && noSoupInComboDisplay) noSoupInComboDisplay.style.display = '';
+                            if (!read_only && actualSoupChoicesContainer) {
+                                actualSoupChoicesContainer.style.display = 'none';
+                                uncheckInputsInSection(actualSoupChoicesContainer);
+                            }
+                        } else { // combo-with-soup
+                            totalSum += LUNCH_WITH_SOUP_PRICE;
+                            if (!read_only && actualSoupChoicesContainer) actualSoupChoicesContainer.style.display = '';
+                            // if (!read_only && noSoupInComboDisplay) noSoupInComboDisplay.style.display = 'none';
+
+                            const selectedSoupRadio = lunchSection.querySelector(`input[name="${day}-lunch-actual-soup"]:checked`);
+                            if (selectedSoupRadio) {
+                                currentLunchOrderDetails.items.soup_index = selectedSoupRadio.value;
+                            }
+                        }
+
+                        const LUNCH_COMBO_SUB_CATEGORIES = ["main", "side", "salad"];
+                        LUNCH_COMBO_SUB_CATEGORIES.forEach(category => {
+                            const selectedRadio = lunchSection.querySelector(`.combo-details-container .combo-class.${category} .choices input[name="${day}-lunch-${category}"]:checked`);
+                            if (selectedRadio) {
+                                currentLunchOrderDetails.items[category + '_index'] = selectedRadio.value;
+                            }
+                        });
+                    }
                 }
-                collectedOrder[day].lunch = lunchOrderDetails;
+                collectedOrder[day].lunch = currentLunchOrderDetails;
             }
 
             // --- DINNER ---
@@ -665,12 +729,25 @@
     }
 
     // Add event listener to the body to recalculate on any click
-    document.body.addEventListener('click', function () {
-        // Using requestAnimationFrame can help ensure DOM updates are processed before calculation
-        // requestAnimationFrame(calculateTotalSumAndOrder);
-        // Direct call as per "passively if clicked"
-        calculateTotalSumAndOrder();
+    document.body.addEventListener('click', function (event) {
+        // Recalculate unless the click was on a description button or inside a description popup.
+        if (!event.target.closest('.description-button') && !event.target.closest('.description.active')) {
+            // Using requestAnimationFrame can help ensure DOM updates are processed before calculation
+            // requestAnimationFrame(calculateTotalSumAndOrder);
+            // Direct call as per "passively if clicked"
+            calculateTotalSumAndOrder();
+        }
     });
 
-    calculateTotalSumAndOrder(); // Already loaded
-})().catch(console.error);
+    calculateTotalSumAndOrder(); // Initial calculation on load
+    // Pre-fill must happen BEFORE the first calculateTotalSumAndOrder if it's to influence the first view,
+    // or call calculate again after prefill.
+    // The current structure pre-fills, then adds event listeners, then calls calculate. This is okay.
+})().catch(err => {
+    console.error("Top level error in menu.mjs:", err);
+    // Try to send error to backend if possible, even if Telegram object might not be ready.
+    fetch("error?initData=" + encodeURIComponent(Telegram.WebApp.initData || "undefined"), {
+        method: "POST",
+        body: "Top level menu.mjs error: " + (err.message ? err.message : String(err)) + (err.stack ? "\\n" + err.stack : "")
+    }).catch(e => console.error("Failed to send top level error", e));
+});

@@ -189,9 +189,6 @@ section.meal {
 .item.no-soup .name{
   font-style: italic;
 }
-.lunch .item:not(.no-soup) label .name {
-  grid-column: 2/ span 2;
-}
 .item label .name {
   align-self: center;
 }

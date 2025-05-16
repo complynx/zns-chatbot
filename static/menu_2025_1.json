@@ -4,7 +4,7 @@
       {
         "title_ru": "Рассольник с курицей",
         "title_en": "Rassolnik Soup with Chicken",
-        "price": null,
+        "price": 42,
         "ingredients_ru": "",
         "ingredients_en": "",
         "photo": "soup_rassolnik",
@@ -23,7 +23,7 @@
       {
         "title_ru": "Крем суп из брокколи",
         "title_en": "Broccoli soup",
-        "price": null,
+        "price": 42,
         "ingredients_ru": "Брокколи, картофель, лук репчатый, сливки, молоко, соль",
         "ingredients_en": "Broccoli, potato, onion, cream, milk, salt",
         "photo": "soup_broccoli",
@@ -75,7 +75,7 @@
       {
         "title_ru": "Курица терияки с ананасом",
         "title_en": "Teriyaki Chicken with Pineapple",
-        "price": null,
+        "price": 42,
         "ingredients_ru": "Куриное бедро (Соус: имбирь очищенный, перец чили, соевый соус, соус терияки), грибы шампиньоны, морковь очищенная, кабачки/цукини, ростки сои/ пшеницы, ананас консервированный, перец болгарский, масло растительное.",
         "ingredients_en": "Chicken thigh (sauce: peeled ginger, chili pepper, soy sauce, teriyaki sauce), champignon mushrooms, peeled carrot, zucchini, soy/wheat sprouts, canned pineapple, bell pepper, vegetable oil.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD183D180D0B8D186D0B0_D182D0B5D180D0B8D18FD0BAD0B8_D181_D0B0D0BDD0B0D0BDD0B0D181D0BED0BC-r1w4zb8h5c61cng0i6y7si5uuu21lq3blckazxj0r8.jpg",
@@ -546,7 +546,7 @@
       {
         "title_ru": "Котлета пожарская",
         "title_en": "Pozharsky Cutlet",
-        "price": null,
+        "price": 42,
         "ingredients_ru": "масло растительное, фарш на котлету Пожарскую (хлеб белый, молоко, соль, лук жаренный, куриное филе)",
         "ingredients_en": "Vegetable oil, Pozharsky cutlet mince (white bread, milk, salt, fried onion, chicken fillet)",
         "photo": "kotleta",
@@ -603,7 +603,7 @@
       {
         "title_ru": "Гречка с грибами",
         "title_en": "Buckwheat with Mushrooms",
-        "price": null,
+        "price": 42,
         "ingredients_ru": "Масло растительное, лук репчатый, морковь очищенная, гречка отварная, грибы",
         "ingredients_en": "Vegetable oil, onion, peeled carrot, boiled buckwheat, mushrooms",
         "photo": "mushroom_buckwheat",
@@ -998,7 +998,7 @@
       {
         "title_ru": "Овощной букет",
         "title_en": "Vegetable Medley",
-        "price": null,
+        "price": 42,
         "ingredients_ru": "капуста цветная, кабачки/цукини, масло растительное, морковь отварная, капуста брокколи, фасоль стручковая",
         "ingredients_en": "Cauliflower, zucchini, vegetable oil, boiled carrot, broccoli, green beans",
         "photo": "vegetables",
@@ -1017,7 +1017,7 @@
       {
         "title_ru": "Гречка с грибами",
         "title_en": "Buckwheat with Mushrooms",
-        "price": null,
+        "price": 42,
         "ingredients_ru": "Масло растительное, лук репчатый, морковь очищенная, гречка отварная, грибы",
         "ingredients_en": "Vegetable oil, onion, peeled carrot, boiled buckwheat, mushrooms",
         "photo": "mushroom_buckwheat",
@@ -1036,7 +1036,7 @@
       {
         "title_ru": "Картофельное пюре",
         "title_en": "Mashed Potatoes",
-        "price": null,
+        "price": 42,
         "ingredients_ru": "Картофель, молоко, масло сливочное, соль.",
         "ingredients_en": "Potatoes, milk, butter, salt.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_1_73-qy9agqjz7zvsx9sa9x6022eys19k54wmpc148ldcwk.jpg",
