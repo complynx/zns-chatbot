@@ -20,6 +20,7 @@ from huggingface_hub import hf_hub_download
 from insightface.app.common import Face
 from motor.core import AgnosticCollection
 from PIL import Image, ImageChops
+from pymongo import ReturnDocument
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ChatAction, ParseMode
 from telegram.ext import CallbackQueryHandler, CommandHandler, filters
@@ -336,9 +337,14 @@ class Avatar(BasePlugin):
     async def _store_file_metadata(
         self, update: TGState, document, original_file_name: str, mime_type: str
     ) -> str:
-        file_record = {
-            "tg_file_id": document.file_id,
+        query = {
             "tg_file_unique_id": document.file_unique_id,
+            "user_id": update.user,
+            "bot_id": update.bot.id,
+        }
+
+        set_on_insert_fields = {
+            "tg_file_id": document.file_id,
             "original_file_name": original_file_name,
             "mime_type": mime_type,
             "user_id": update.user,
@@ -347,10 +353,29 @@ class Avatar(BasePlugin):
             "status": "received",
         }
         if hasattr(document, "file_size") and document.file_size:
-            file_record["file_size"] = document.file_size
+            set_on_insert_fields["file_size"] = document.file_size
 
-        result = await self.files_db.insert_one(file_record)
-        return str(result.inserted_id)
+        update_payload = {"$setOnInsert": set_on_insert_fields}
+
+        stored_document = await self.files_db.find_one_and_update(
+            query, update_payload, upsert=True, return_document=ReturnDocument.AFTER
+        )
+
+        if stored_document:
+            logger.info(
+                f"Ensured file record (ID: {stored_document['_id']}) for "
+                f"tg_file_unique_id: {document.file_unique_id}, user: {update.user}, bot: {update.bot.id}"
+            )
+            return str(stored_document["_id"])
+        else:
+            log_message = (
+                f"CRITICAL: find_one_and_update with upsert=True and ReturnDocument.AFTER returned None. "
+                f"Query: {query}"
+            )
+            logger.critical(log_message)
+            raise RuntimeError(
+                f"Upsert operation failed to return a document for tg_file_unique_id: {document.file_unique_id}"
+            )
 
     async def handle_photo(self, update: TGState):
         try:
