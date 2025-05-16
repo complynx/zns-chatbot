@@ -265,7 +265,7 @@ class Avatar(BasePlugin):
         self._command_test = CommandHandler("avatar", self.handle_command)
         self._cq_handler = CallbackQueryHandler(
             self.handle_avatar_callback_query,
-            pattern=f"^{self.name}\\|.*",
+            pattern=f"^{self.name}\\\\|avatar_choice\\\\|.*",
         )
         create_task(_prepare_models())
 
@@ -279,6 +279,10 @@ class Avatar(BasePlugin):
         return PRIORITY_NOT_ACCEPTING, None
 
     def test_callback_query(self, update_obj: Update, state):
+        if hasattr(super(), "test_callback_query"):
+            prio, cb = super().test_callback_query(update_obj, state)
+            if cb:
+                return prio, cb
         if self._cq_handler.check_update(update_obj):
             return PRIORITY_BASIC, self.handle_avatar_callback_query
         return PRIORITY_NOT_ACCEPTING, None
@@ -388,17 +392,17 @@ class Avatar(BasePlugin):
             [
                 InlineKeyboardButton(
                     update.l("avatar-method-simple"),
-                    callback_data=f"{self.name}|{db_id_str}|simple",
+                    callback_data=f"{self.name}|avatar_choice|{db_id_str}|simple",
                 ),
                 InlineKeyboardButton(
                     update.l("avatar-method-detailed"),
-                    callback_data=f"{self.name}|{db_id_str}|detailed",
+                    callback_data=f"{self.name}|avatar_choice|{db_id_str}|detailed",
                 ),
             ],
             [
                 InlineKeyboardButton(
                     update.l("avatar-cancel-button"),
-                    callback_data=f"{self.name}|{db_id_str}|cancel",
+                    callback_data=f"{self.name}|avatar_choice|{db_id_str}|cancel",
                 )
             ],
         ]
@@ -563,6 +567,15 @@ class Avatar(BasePlugin):
                     await self.files_db.update_one(
                         {"_id": db_id}, {"$set": {"status": "completed_simple"}}
                     )
+                    if os.path.isfile(self.config.photo.cover_file):
+                        await update.bot.send_document(
+                            chat_id=update.chat_id,
+                            document=self.config.photo.cover_file,
+                            filename="cover.jpg",
+                            caption=update.l("cover-caption-message"),
+                            parse_mode=ParseMode.HTML,
+                            reply_to_message_id=update.message_id,
+                        )
         except FileNotFoundError as e:
             if str(e) == FILES["simple"]:
                 logger.error(
