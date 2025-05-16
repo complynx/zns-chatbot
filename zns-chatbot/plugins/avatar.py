@@ -265,7 +265,7 @@ class Avatar(BasePlugin):
         self._command_test = CommandHandler("avatar", self.handle_command)
         self._cq_handler = CallbackQueryHandler(
             self.handle_avatar_callback_query,
-            pattern=f"^{self.name}\\\\|avatar_choice\\\\|.*",
+            pattern=f"^{self.name}\\|.*",
         )
         create_task(_prepare_models())
 
@@ -279,10 +279,6 @@ class Avatar(BasePlugin):
         return PRIORITY_NOT_ACCEPTING, None
 
     def test_callback_query(self, update_obj: Update, state):
-        if hasattr(super(), "test_callback_query"):
-            prio, cb = super().test_callback_query(update_obj, state)
-            if cb:
-                return prio, cb
         if self._cq_handler.check_update(update_obj):
             return PRIORITY_BASIC, self.handle_avatar_callback_query
         return PRIORITY_NOT_ACCEPTING, None
@@ -392,17 +388,17 @@ class Avatar(BasePlugin):
             [
                 InlineKeyboardButton(
                     update.l("avatar-method-simple"),
-                    callback_data=f"{self.name}|avatar_choice|{db_id_str}|simple",
+                    callback_data=f"{self.name}|{db_id_str}|simple",
                 ),
                 InlineKeyboardButton(
                     update.l("avatar-method-detailed"),
-                    callback_data=f"{self.name}|avatar_choice|{db_id_str}|detailed",
+                    callback_data=f"{self.name}|{db_id_str}|detailed",
                 ),
             ],
             [
                 InlineKeyboardButton(
                     update.l("avatar-cancel-button"),
-                    callback_data=f"{self.name}|avatar_choice|{db_id_str}|cancel",
+                    callback_data=f"{self.name}|{db_id_str}|cancel",
                 )
             ],
         ]
