@@ -1448,7 +1448,7 @@ class PassUpdate:
                                     args.pass_key: {
                                         "state": "waitlist",
                                         "type": "solo",
-                                        "proof_admin": self.payment_admins[
+                                        "proof_admin": self.base.payment_admins[
                                             args.pass_key
                                         ][0],
                                         "role": "leader" if args.leader else "follower",
