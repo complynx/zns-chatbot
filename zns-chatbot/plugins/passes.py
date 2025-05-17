@@ -1402,14 +1402,19 @@ class PassUpdate:
         parser.add_argument("--price", type=int, help="Custom price")
         parser.add_argument("--type", type=str, help="Custom type")
         parser.add_argument(
-            "--create_role",
-            choices=["leader", "follower"],
-            help="Create if not exists, with role",
+            "--leader",
+            action="store_true",
+            help="Create if not exists, with role leader",
+        )
+        parser.add_argument(
+            "--follower",
+            action="store_true",
+            help="Create if not exists, with role follower",
         )
         parser.add_argument(
             "--create_name", type=str, help="Create with this legal name"
         )
-        parser.add_argument("--skip", type=bool, help="Skip in balance count")
+        parser.add_argument("--skip", action="store_true", help="Skip in balance count")
         parser.add_argument("--comment", type=str, help="Comment message")
         parser.add_argument("recipients", nargs="*", help="Recipients")
 
