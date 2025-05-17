@@ -1403,6 +1403,9 @@ class PassUpdate:
             choices=["leader", "follower"],
             help="Create if not exists, with role",
         )
+        parser.add_argument(
+            "--create_name", type=str, help="Create with this legal name"
+        )
         parser.add_argument("--skip", type=bool, help="Skip in balance count")
         parser.add_argument("--comment", type=str, help="Comment message")
         parser.add_argument("recipients", nargs="*", help="Recipients")
@@ -1423,7 +1426,7 @@ class PassUpdate:
                     }
                 )
                 if user is None:
-                    if args.create_role is not None:
+                    if args.create_role is not None and args.create_name is not None:
                         await self.base.user_db.update_one(
                             {
                                 "user_id": user_id,
@@ -1431,12 +1434,13 @@ class PassUpdate:
                             },
                             {
                                 "$set": {
+                                    "legal_name": args.create_name,
                                     args.pass_key: {
                                         "state": "waitlist",
                                         "type": "solo",
                                         "role": args.create_role,
                                         "date_created": now_msk(),
-                                    }
+                                    },
                                 },
                             },
                         )
