@@ -1511,8 +1511,8 @@ class PassUpdate:
                                 },
                                 "$set": {
                                     self.pass_key + ".type": "solo",
-                                    self.pass_key + ".price": {"$divide": 2},
                                 },
+                                "$mul": {self.pass_key + ".price": 0.5},
                             },
                         )
                         if result.modified_count > 0:
