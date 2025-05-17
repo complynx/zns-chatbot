@@ -34,62 +34,88 @@
                 <span lang="en">Lunch</span>
             </div>
             <div class="meals">
-                <div class="item no-lunch">
-                    <div class="item no-lunch">
+                <!-- Lunch Mode Selection -->
+                <div class="lunch-mode-selection">
+                    <div class="item">
                         <label>
-                            <input type="radio" name="friday-lunch-soup" value="no-lunch" />
+                            <input type="radio" name="friday-lunch-mode" value="no-lunch">
                             <span class="name" lang="ru">Без обеда</span>
-                            <span class="name" lang="en">Without lunch</span>
+                            <span class="name" lang="en">No lunch</span>
                         </label>
                     </div>
-                </div>
-                <div class="description">
-                    <span lang="ru">Комбо обед из основного блюда, гарнира, салата и булочки</span>
-                    <span lang="en">Combo lunch with main dish, side dish, salad, and a bun</span>
-                </div>
-                <div class="combo-class soup">
-                    <div class="combo-name">
-                        <span lang="ru">Суп</span>
-                        <span lang="en">Soup</span>
-                    </div>
-                    <div class="item no-soup">
+                    <div class="item individual-items-mode-option" style="display: none;">
                         <label>
-                            <input type="radio" name="friday-lunch-soup" value="no-soup" />
-                            <span class="name" lang="ru">Без супа</span>
-                            <span class="name" lang="en">Without soup</span>
+                            <input type="radio" name="friday-lunch-mode" value="individual-items">
+                            <span class="name" lang="ru">Отдельные блюда</span>
+                            <span class="name" lang="en">Individual Items</span>
+                        </label>
+                    </div>
+                    <div class="item">
+                        <label>
+                            <input type="radio" name="friday-lunch-mode" value="combo-no-soup">
+                            <span class="name" lang="ru">Комбо (без супа)</span>
+                            <span class="name" lang="en">Combo (no soup)</span>
                             <span class="price">555</span>
                         </label>
                     </div>
-                    <div class="with-soup explanation">
-                        <span class="name" lang="ru">С супом:</span>
-                        <span class="name" lang="en">With soup:</span>
-                        <span class="price">665</span>
-                    </div>
-                    <div class="with-soup choices">
-                    </div>
-                </div>
-                <div class="combo-class main">
-                    <div class="combo-name">
-                        <span lang="ru">Второе</span>
-                        <span lang="en">Main dish</span>
-                    </div>
-                    <div class="choices">
+                    <div class="item">
+                        <label>
+                            <input type="radio" name="friday-lunch-mode" value="combo-with-soup">
+                            <span class="name" lang="ru">Комбо (с супом)</span>
+                            <span class="name" lang="en">Combo (with soup)</span>
+                            <span class="price">665</span>
+                        </label>
                     </div>
                 </div>
-                <div class="combo-class side">
-                    <div class="combo-name">
-                        <span lang="ru">Гарнир</span>
-                        <span lang="en">Side dish</span>
+
+                <!-- Read-only text for "No Lunch" -->
+                <div class="no-lunch-display" style="display: none;">
+                    <h4><span lang="ru">Обед не выбран</span><span lang="en">No lunch selected</span></h4>
+                </div>
+
+                <!-- Container for Individual Item Selection (Initially Hidden) -->
+                <div class="individual-items-selection-container" style="display: none;">
+                    <div class="description">
+                        <span lang="ru">Выберите блюда из обеденного меню:</span>
+                        <span lang="en">Select items from the lunch menu:</span>
                     </div>
-                    <div class="choices">
+                    <div class="choices individual-lunch-choices">
+                        <!-- JS will populate checkboxes here -->
                     </div>
                 </div>
-                <div class="combo-class salad">
-                    <div class="combo-name">
-                        <span lang="ru">Салат</span>
-                        <span lang="en">Salad</span>
+
+                <!-- Container for Combo Details (Initially Hidden) -->
+                <div class="combo-details-container" style="display: none;">
+                    <div class="description">
+                        <span lang="ru">Комбо обед из основного блюда, гарнира, салата и булочки.</span>
+                        <span lang="en">Combo lunch with main dish, side dish, salad, and a bun.</span>
                     </div>
-                    <div class="choices">
+
+                    <div class="no-soup-in-combo-display" style="display: none;">
+                         <h4><span lang="ru">Комбо без супа</span><span lang="en">Combo without soup</span></h4>
+                    </div>
+
+                    <div class="combo-class soup-selection">
+                         <div class="combo-name">
+                            <span lang="ru">Суп для комбо:</span>
+                            <span lang="en">Soup for combo:</span>
+                        </div>
+                        <div class="choices actual-soup-choices">
+                            <!-- JS will populate soup radio buttons here -->
+                        </div>
+                    </div>
+
+                    <div class="combo-class main">
+                        <div class="combo-name"><span lang="ru">Второе</span><span lang="en">Main dish</span></div>
+                        <div class="choices"></div>
+                    </div>
+                    <div class="combo-class side">
+                        <div class="combo-name"><span lang="ru">Гарнир</span><span lang="en">Side dish</span></div>
+                        <div class="choices"></div>
+                    </div>
+                    <div class="combo-class salad">
+                        <div class="combo-name"><span lang="ru">Салат</span><span lang="en">Salad</span></div>
+                        <div class="choices"></div>
                     </div>
                 </div>
             </div>
@@ -116,62 +142,88 @@
                 <span lang="en">Lunch</span>
             </div>
             <div class="meals">
-                <div class="item no-lunch">
-                    <div class="item no-lunch">
+                <!-- Lunch Mode Selection -->
+                <div class="lunch-mode-selection">
+                    <div class="item">
                         <label>
-                            <input type="radio" name="saturday-lunch-soup" value="no-lunch" />
+                            <input type="radio" name="saturday-lunch-mode" value="no-lunch">
                             <span class="name" lang="ru">Без обеда</span>
-                            <span class="name" lang="en">Without lunch</span>
+                            <span class="name" lang="en">No lunch</span>
                         </label>
                     </div>
-                </div>
-                <div class="description">
-                    <span lang="ru">Комбо обед из основного блюда, гарнира, салата и булочки</span>
-                    <span lang="en">Combo lunch with main dish, side dish, salad, and a bun</span>
-                </div>
-                <div class="combo-class soup">
-                    <div class="combo-name">
-                        <span lang="ru">Суп</span>
-                        <span lang="en">Soup</span>
-                    </div>
-                    <div class="item no-soup">
+                    <div class="item individual-items-mode-option" style="display: none;">
                         <label>
-                            <input type="radio" name="saturday-lunch-soup" value="no-soup" />
-                            <span class="name" lang="ru">Без супа</span>
-                            <span class="name" lang="en">Without soup</span>
+                            <input type="radio" name="saturday-lunch-mode" value="individual-items">
+                            <span class="name" lang="ru">Отдельные блюда</span>
+                            <span class="name" lang="en">Individual Items</span>
+                        </label>
+                    </div>
+                    <div class="item">
+                        <label>
+                            <input type="radio" name="saturday-lunch-mode" value="combo-no-soup">
+                            <span class="name" lang="ru">Комбо (без супа)</span>
+                            <span class="name" lang="en">Combo (no soup)</span>
                             <span class="price">555</span>
                         </label>
                     </div>
-                    <div class="with-soup explanation">
-                        <span class="name" lang="ru">С супом</span>
-                        <span class="name" lang="en">With soup</span>
-                        <span class="price">665</span>
-                    </div>
-                    <div class="with-soup choices">
-                    </div>
-                </div>
-                <div class="combo-class main">
-                    <div class="combo-name">
-                        <span lang="ru">Второе</span>
-                        <span lang="en">Main dish</span>
-                    </div>
-                    <div class="choices">
+                    <div class="item">
+                        <label>
+                            <input type="radio" name="saturday-lunch-mode" value="combo-with-soup">
+                            <span class="name" lang="ru">Комбо (с супом)</span>
+                            <span class="name" lang="en">Combo (with soup)</span>
+                            <span class="price">665</span>
+                        </label>
                     </div>
                 </div>
-                <div class="combo-class side">
-                    <div class="combo-name">
-                        <span lang="ru">Гарнир</span>
-                        <span lang="en">Side dish</span>
+
+                <!-- Read-only text for "No Lunch" -->
+                <div class="no-lunch-display" style="display: none;">
+                    <h4><span lang="ru">Обед не выбран</span><span lang="en">No lunch selected</span></h4>
+                </div>
+
+                <!-- Container for Individual Item Selection (Initially Hidden) -->
+                <div class="individual-items-selection-container" style="display: none;">
+                    <div class="description">
+                        <span lang="ru">Выберите блюда из обеденного меню:</span>
+                        <span lang="en">Select items from the lunch menu:</span>
                     </div>
-                    <div class="choices">
+                    <div class="choices individual-lunch-choices">
+                        <!-- JS will populate checkboxes here -->
                     </div>
                 </div>
-                <div class="combo-class salad">
-                    <div class="combo-name">
-                        <span lang="ru">Салат</span>
-                        <span lang="en">Salad</span>
+
+                <!-- Container for Combo Details (Initially Hidden) -->
+                <div class="combo-details-container" style="display: none;">
+                    <div class="description">
+                        <span lang="ru">Комбо обед из основного блюда, гарнира, салата и булочки.</span>
+                        <span lang="en">Combo lunch with main dish, side dish, salad, and a bun.</span>
                     </div>
-                    <div class="choices">
+
+                    <div class="no-soup-in-combo-display" style="display: none;">
+                         <h4><span lang="ru">Комбо без супа</span><span lang="en">Combo without soup</span></h4>
+                    </div>
+
+                    <div class="combo-class soup-selection">
+                         <div class="combo-name">
+                            <span lang="ru">Суп для комбо:</span>
+                            <span lang="en">Soup for combo:</span>
+                        </div>
+                        <div class="choices actual-soup-choices">
+                            <!-- JS will populate soup radio buttons here -->
+                        </div>
+                    </div>
+
+                    <div class="combo-class main">
+                        <div class="combo-name"><span lang="ru">Второе</span><span lang="en">Main dish</span></div>
+                        <div class="choices"></div>
+                    </div>
+                    <div class="combo-class side">
+                        <div class="combo-name"><span lang="ru">Гарнир</span><span lang="en">Side dish</span></div>
+                        <div class="choices"></div>
+                    </div>
+                    <div class="combo-class salad">
+                        <div class="combo-name"><span lang="ru">Салат</span><span lang="en">Salad</span></div>
+                        <div class="choices"></div>
                     </div>
                 </div>
             </div>
@@ -198,62 +250,88 @@
                 <span lang="en">Lunch</span>
             </div>
             <div class="meals">
-                <div class="item no-lunch">
-                    <div class="item no-lunch">
+                <!-- Lunch Mode Selection -->
+                <div class="lunch-mode-selection">
+                    <div class="item">
                         <label>
-                            <input type="radio" name="sunday-lunch-soup" value="no-lunch" />
+                            <input type="radio" name="sunday-lunch-mode" value="no-lunch">
                             <span class="name" lang="ru">Без обеда</span>
-                            <span class="name" lang="en">Without lunch</span>
+                            <span class="name" lang="en">No lunch</span>
                         </label>
                     </div>
-                </div>
-                <div class="description">
-                    <span lang="ru">Комбо обед из основного блюда, гарнира, салата и булочки</span>
-                    <span lang="en">Combo lunch with main dish, side dish, salad, and a bun</span>
-                </div>
-                <div class="combo-class soup">
-                    <div class="combo-name">
-                        <span lang="ru">Суп</span>
-                        <span lang="en">Soup</span>
-                    </div>
-                    <div class="item no-soup">
+                    <div class="item individual-items-mode-option" style="display: none;">
                         <label>
-                            <input type="radio" name="sunday-lunch-soup" value="no-soup" />
-                            <span class="name" lang="ru">Без супа</span>
-                            <span class="name" lang="en">Without soup</span>
+                            <input type="radio" name="sunday-lunch-mode" value="individual-items">
+                            <span class="name" lang="ru">Отдельные блюда</span>
+                            <span class="name" lang="en">Individual Items</span>
+                        </label>
+                    </div>
+                    <div class="item">
+                        <label>
+                            <input type="radio" name="sunday-lunch-mode" value="combo-no-soup">
+                            <span class="name" lang="ru">Комбо (без супа)</span>
+                            <span class="name" lang="en">Combo (no soup)</span>
                             <span class="price">555</span>
                         </label>
                     </div>
-                    <div class="with-soup explanation">
-                        <span class="name" lang="ru">С супом</span>
-                        <span class="name" lang="en">With soup</span>
-                        <span class="price">665</span>
-                    </div>
-                    <div class="with-soup choices">
-                    </div>
-                </div>
-                <div class="combo-class main">
-                    <div class="combo-name">
-                        <span lang="ru">Второе</span>
-                        <span lang="en">Main dish</span>
-                    </div>
-                    <div class="choices">
+                    <div class="item">
+                        <label>
+                            <input type="radio" name="sunday-lunch-mode" value="combo-with-soup">
+                            <span class="name" lang="ru">Комбо (с супом)</span>
+                            <span class="name" lang="en">Combo (with soup)</span>
+                            <span class="price">665</span>
+                        </label>
                     </div>
                 </div>
-                <div class="combo-class side">
-                    <div class="combo-name">
-                        <span lang="ru">Гарнир</span>
-                        <span lang="en">Side dish</span>
+
+                <!-- Read-only text for "No Lunch" -->
+                <div class="no-lunch-display" style="display: none;">
+                    <h4><span lang="ru">Обед не выбран</span><span lang="en">No lunch selected</span></h4>
+                </div>
+
+                <!-- Container for Individual Item Selection (Initially Hidden) -->
+                <div class="individual-items-selection-container" style="display: none;">
+                    <div class="description">
+                        <span lang="ru">Выберите блюда из обеденного меню:</span>
+                        <span lang="en">Select items from the lunch menu:</span>
                     </div>
-                    <div class="choices">
+                    <div class="choices individual-lunch-choices">
+                        <!-- JS will populate checkboxes here -->
                     </div>
                 </div>
-                <div class="combo-class salad">
-                    <div class="combo-name">
-                        <span lang="ru">Салат</span>
-                        <span lang="en">Salad</span>
+
+                <!-- Container for Combo Details (Initially Hidden) -->
+                <div class="combo-details-container" style="display: none;">
+                    <div class="description">
+                        <span lang="ru">Комбо обед из основного блюда, гарнира, салата и булочки.</span>
+                        <span lang="en">Combo lunch with main dish, side dish, salad, and a bun.</span>
                     </div>
-                    <div class="choices">
+
+                    <div class="no-soup-in-combo-display" style="display: none;">
+                         <h4><span lang="ru">Комбо без супа</span><span lang="en">Combo without soup</span></h4>
+                    </div>
+
+                    <div class="combo-class soup-selection">
+                         <div class="combo-name">
+                            <span lang="ru">Суп для комбо:</span>
+                            <span lang="en">Soup for combo:</span>
+                        </div>
+                        <div class="choices actual-soup-choices">
+                            <!-- JS will populate soup radio buttons here -->
+                        </div>
+                    </div>
+
+                    <div class="combo-class main">
+                        <div class="combo-name"><span lang="ru">Второе</span><span lang="en">Main dish</span></div>
+                        <div class="choices"></div>
+                    </div>
+                    <div class="combo-class side">
+                        <div class="combo-name"><span lang="ru">Гарнир</span><span lang="en">Side dish</span></div>
+                        <div class="choices"></div>
+                    </div>
+                    <div class="combo-class salad">
+                        <div class="combo-name"><span lang="ru">Салат</span><span lang="en">Salad</span></div>
+                        <div class="choices"></div>
                     </div>
                 </div>
             </div>
