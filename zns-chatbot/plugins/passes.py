@@ -1448,6 +1448,9 @@ class PassUpdate:
                                     args.pass_key: {
                                         "state": "waitlist",
                                         "type": "solo",
+                                        "proof_admin": self.payment_admins[
+                                            args.pass_key
+                                        ][0],
                                         "role": "leader" if args.leader else "follower",
                                         "date_created": now_msk(),
                                     },
