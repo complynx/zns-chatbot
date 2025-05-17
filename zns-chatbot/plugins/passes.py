@@ -1434,7 +1434,9 @@ class PassUpdate:
                     }
                 )
                 if user is None:
-                    if args.create_role is not None and args.create_name is not None:
+                    if (
+                        args.leader is not None or args.follower is not None
+                    ) and args.create_name is not None:
                         await self.base.user_db.update_one(
                             {
                                 "user_id": user_id,
@@ -1446,7 +1448,7 @@ class PassUpdate:
                                     args.pass_key: {
                                         "state": "waitlist",
                                         "type": "solo",
-                                        "role": args.create_role,
+                                        "role": "leader" if args.leader else "follower",
                                         "date_created": now_msk(),
                                     },
                                 },
