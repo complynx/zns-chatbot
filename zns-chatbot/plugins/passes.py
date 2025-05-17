@@ -1398,6 +1398,12 @@ class PassUpdate:
         parser.add_argument("--pass_key", type=str, help="Pass key")
         parser.add_argument("--price", type=int, help="Custom price")
         parser.add_argument("--type", type=str, help="Custom type")
+        parser.add_argument(
+            "--create_role",
+            choices=["leader", "follower"],
+            help="Create if not exists, with role",
+        )
+        parser.add_argument("--skip", type=bool, help="Skip in balance count")
         parser.add_argument("--comment", type=str, help="Comment message")
         parser.add_argument("recipients", nargs="*", help="Recipients")
 
@@ -1409,7 +1415,37 @@ class PassUpdate:
         for recipient in args.recipients:
             try:
                 user_id = int(recipient)
+                user = await self.base.user_db.find_one(
+                    {
+                        "user_id": user_id,
+                        "bot_id": self.bot,
+                        args.pass_key + ".state": "waitlist",
+                    }
+                )
+                if user is None:
+                    if args.create_role is not None:
+                        await self.base.user_db.update_one(
+                            {
+                                "user_id": user_id,
+                                "bot_id": self.bot,
+                            },
+                            {
+                                "$set": {
+                                    args.pass_key: {
+                                        "state": "waitlist",
+                                        "type": "solo",
+                                        "role": args.create_role,
+                                        "date_created": now_msk(),
+                                    }
+                                },
+                            },
+                        )
+                    else:
+                        raise ValueError(
+                            f"user {user_id} with pass {args.pass_key} not found"
+                        )
                 upd = await self.base.create_update_from_user(user_id)
+
                 await upd.assign_pass(
                     args.pass_key, args.price, args.type, args.comment
                 )
@@ -1630,9 +1666,24 @@ class Passes(BasePlugin):
                     [
                         {
                             "$match": {
-                                pass_key: {"$exists": True},
-                                "bot_id": self.bot.id,
-                                pass_key + ".type": {"$in": PASS_TYPES_ASSIGNABLE},
+                                "$and": [
+                                    {"bot_id": self.bot.id},
+                                    {pass_key: {"$exists": True}},
+                                    {
+                                        "$or": [
+                                            {
+                                                pass_key + ".skip_in_balance_count": {
+                                                    "$ne": True
+                                                }
+                                            },
+                                            {
+                                                pass_key + ".skip_in_balance_count": {
+                                                    " $exists": False
+                                                }
+                                            },
+                                        ]
+                                    },
+                                ],
                             },
                         },
                         {
