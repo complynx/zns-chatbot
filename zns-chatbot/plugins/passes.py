@@ -1153,6 +1153,7 @@ class PassUpdate:
         price: int | None = None,
         type: str | None = None,
         comment: str | None = None,
+        skip_in_balance_count: bool = False,
     ):
         self.set_pass_key(pass_key)
         user = await self.base.user_db.find_one(
@@ -1190,6 +1191,8 @@ class PassUpdate:
             sets[self.pass_key + ".comment"] = comment
         if type is not None:
             sets[self.pass_key + ".type"] = type
+        if skip_in_balance_count:
+            sets[self.pass_key + ".skip_in_balance_count"] = True
         result = await self.base.user_db.update_many(matcher, {"$set": sets})
         have_changes = result.modified_count > 0
         if result.matched_count < len(uids):
@@ -1451,7 +1454,7 @@ class PassUpdate:
                 upd = await self.base.create_update_from_user(user_id)
 
                 await upd.assign_pass(
-                    args.pass_key, args.price, args.type, args.comment
+                    args.pass_key, args.price, args.type, args.comment, args.skip
                 )
                 logger.info(f"pass {args.pass_key=} assigned to {recipient=}")
                 assigned.append(user_id)
