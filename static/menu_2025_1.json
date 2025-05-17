@@ -4,7 +4,7 @@
       {
         "title_ru": "Рассольник с курицей",
         "title_en": "Rassolnik Soup with Chicken",
-        "price": 42,
+        "price": 185,
         "ingredients_ru": "",
         "ingredients_en": "",
         "photo": "soup_rassolnik",
@@ -23,7 +23,7 @@
       {
         "title_ru": "Крем суп из брокколи",
         "title_en": "Broccoli soup",
-        "price": 42,
+        "price": 185,
         "ingredients_ru": "Брокколи, картофель, лук репчатый, сливки, молоко, соль",
         "ingredients_en": "Broccoli, potato, onion, cream, milk, salt",
         "photo": "soup_broccoli",
@@ -42,7 +42,7 @@
       {
         "title_ru": "Окунь в кисло-сладком соусе",
         "title_en": "Sweet and Sour Perch",
-        "price": null,
+        "price": 380,
         "ingredients_ru": "филе красного окуня, перец болгарский, морковь, лук порей, репчатый лук, кунжут, имбирь, кинза, кисло-сладкий соус, соус чили, соус унаги, масло растительное",
         "ingredients_en": "Red perch fillet, bell pepper, carrot, leek, onion, sesame, ginger, cilantro, sweet and sour sauce, chili sauce, unagi sauce, vegetable oil",
         "photo": "fish",
@@ -56,7 +56,7 @@
       {
         "title_ru": "Котлета куриная",
         "title_en": "Chicken Patty",
-        "price": null,
+        "price": 195,
         "ingredients_ru": "Куриное бедро, куриное филе, хлеб белый, молоко, яйцо, специи, масло растительное, сливки, сухари панировочные.",
         "ingredients_en": "Chicken thigh, chicken fillet, white bread, milk, egg, spices, vegetable oil, cream, breadcrumbs.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8976-qxpuaf73nic5qzd5gcp5wsjr2fzi55kx5nm2ff0y38.jpg",
@@ -75,7 +75,7 @@
       {
         "title_ru": "Курица терияки с ананасом",
         "title_en": "Teriyaki Chicken with Pineapple",
-        "price": 42,
+        "price": 300,
         "ingredients_ru": "Куриное бедро (Соус: имбирь очищенный, перец чили, соевый соус, соус терияки), грибы шампиньоны, морковь очищенная, кабачки/цукини, ростки сои/ пшеницы, ананас консервированный, перец болгарский, масло растительное.",
         "ingredients_en": "Chicken thigh (sauce: peeled ginger, chili pepper, soy sauce, teriyaki sauce), champignon mushrooms, peeled carrot, zucchini, soy/wheat sprouts, canned pineapple, bell pepper, vegetable oil.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD183D180D0B8D186D0B0_D182D0B5D180D0B8D18FD0BAD0B8_D181_D0B0D0BDD0B0D0BDD0B0D181D0BED0BC-r1w4zb8h5c61cng0i6y7si5uuu21lq3blckazxj0r8.jpg",
@@ -94,7 +94,7 @@
       {
         "title_ru": "Печень с грибами",
         "title_en": "Liver and Mushrooms",
-        "price": null,
+        "price": 240,
         "ingredients_ru": "Говяжья печень, мука пшеничная, лук репчатый, грибы шампиньоны, сметана, соль, зелень",
         "ingredients_en": "Beef liver, wheat flour, onion, champignon mushrooms, sour cream, salt, herbs",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09FD0B5D187D0B5D0BDD18C_D181_D0B3D180D0B8D0B1D0B0D0BCD0B8-r1w51nty8fdudk14s7in0wtcbih2uhf5wza06u1l78.jpg",
@@ -113,7 +113,7 @@
       {
         "title_ru": "Котлета пожарская",
         "title_en": "Pozharsky Cutlet",
-        "price": null,
+        "price": 135,
         "ingredients_ru": "масло растительное, фарш на котлету Пожарскую (хлеб белый, молоко, соль, лук жаренный, куриное филе)",
         "ingredients_en": "Vegetable oil, Pozharsky cutlet mince (white bread, milk, salt, fried onion, chicken fillet)",
         "photo": "kotleta",
@@ -132,7 +132,7 @@
       {
         "title_ru": "Рис пилав",
         "title_en": "Rice Pilaf",
-        "price": null,
+        "price": 160,
         "ingredients_ru": "Рис Басмати, Масло растительное, соль, вермишель-лапша Паутинка, масло сливочное, вода, чеснок гранулированный",
         "ingredients_en": "Basmati rice, vegetable oil, salt, Pavutinka vermicelli noodles, butter, water, granulated garlic",
         "photo": "rice_pilav",
@@ -151,7 +151,7 @@
       {
         "title_ru": "Овощной букет",
         "title_en": "Vegetable Medley",
-        "price": null,
+        "price": 150,
         "ingredients_ru": "капуста цветная, кабачки/цукини, масло растительное, морковь отварная, капуста брокколи, фасоль стручковая",
         "ingredients_en": "Cauliflower, zucchini, vegetable oil, boiled carrot, broccoli, green beans",
         "photo": "vegetables",
@@ -170,7 +170,7 @@
       {
         "title_ru": "Гречка с грибами",
         "title_en": "Buckwheat with Mushrooms",
-        "price": null,
+        "price": 190,
         "ingredients_ru": "Масло растительное, лук репчатый, морковь очищенная, гречка отварная, грибы",
         "ingredients_en": "Vegetable oil, onion, peeled carrot, boiled buckwheat, mushrooms",
         "photo": "mushroom_buckwheat",
@@ -189,7 +189,7 @@
       {
         "title_ru": "Картофельное пюре",
         "title_en": "Mashed Potatoes",
-        "price": null,
+        "price": 200,
         "ingredients_ru": "Картофель, молоко, масло сливочное, соль.",
         "ingredients_en": "Potatoes, milk, butter, salt.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_1_73-qy9agqjz7zvsx9sa9x6022eys19k54wmpc148ldcwk.jpg",
@@ -208,7 +208,7 @@
       {
         "title_ru": "Витаминный салат",
         "title_en": "Vitamin Salad",
-        "price": null,
+        "price": 135,
         "ingredients_ru": "Капуста б/к, морковь свежая, огурцы свежие, зелень. Запрвка: масло растительное, соль, сахар.",
         "ingredients_en": "Cabbage, fresh carrot, fresh cucumbers, herbs. Dressing: vegetable oil, salt, sugar.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8957__1_-r0t6ypffxwz47rpy2mqhwl9mxl3th0cgl57w0zri50.jpg",
@@ -227,7 +227,7 @@
       {
         "title_ru": "Овощной салат",
         "title_en": "Vegetable Salad",
-        "price": null,
+        "price": 220,
         "ingredients_ru": "Базилик, зелень, помидоры черри, огурцы свежие, оливковое масло",
         "ingredients_en": "Basil, greens, cherry tomatoes, fresh cucumbers, olive oil",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09ED0B2D0BED189D0BDD0BED0B9_D181D0B0D0BBD0B0D182__1_-r30epyhtzf873bmasdxj2vkadr06qcc852a3xvxqj8.jpg",
@@ -246,7 +246,7 @@
       {
         "title_ru": "Салат со свёклой и тыквой",
         "title_en": "Beetroot and Pumpkin Salad",
-        "price": null,
+        "price": 190,
         "ingredients_ru": "Свекла, тыква, рукола, клюква сушеная, семечки тыквенные, специи, заправка (масло оливковое, мед, лимонный концентрат, горчица \"медово-горчичная\")",
         "ingredients_en": "Beetroot, pumpkin, arugula, dried cranberry, pumpkin seeds, spices, dressing (olive oil, honey, lemon concentrate, honey-mustard)",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_800x800_19-qy9abik994qgf9dcrnwm7duryz05do6bbhk09943h0.jpg",
@@ -265,7 +265,7 @@
       {
         "title_ru": "Крабовый салат",
         "title_en": "Surimi Salad",
-        "price": null,
+        "price": 165,
         "ingredients_ru": "Крабовые палочки, рис отварной, кукуруза конс, яйцо куриное, огурцы свежие, майонез, соль",
         "ingredients_en": "Surimi sticks, boiled rice, canned corn, egg, fresh cucumbers, mayonnaise, salt",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD180D0B0D0B1D0BED0B2D18BD0B9_D181D0B0D0BBD0B0D182-r1w52njtg4qqmql8zmygnnsuw5l0yzcypw2gfckmms.jpg",
@@ -284,7 +284,7 @@
       {
         "title_ru": "Салат со свёклой и брынзой",
         "title_en": "Beetroot and Brynza Salad",
-        "price": null,
+        "price": 165,
         "ingredients_ru": "сыр Брынза сербская, свекла отварная чищенная, салат рукола, орех кедровый, заправка (горчица зернистая/дижонская, мед, лимонный концентрат, масло оливковое)",
         "ingredients_en": "Serbian brynza cheese, boiled peeled beetroot, arugula, pine nuts, dressing (grain/Dijon mustard, honey, lemon concentrate, olive oil)",
         "photo": "salad_cheesebeetroot",
@@ -461,7 +461,7 @@
       {
         "title_ru": "Суп куриный",
         "title_en": "Chicken Soup",
-        "price": null,
+        "price": 185,
         "ingredients_ru": "Куриное филе, картофель, морковь, лук.",
         "ingredients_en": "Chicken fillet, potato, carrot, onion.",
         "photo": "soup_chicken",
@@ -475,7 +475,7 @@
       {
         "title_ru": "Окунь в кисло-сладком соусе",
         "title_en": "Sweet and Sour Perch",
-        "price": null,
+        "price": 380,
         "ingredients_ru": "филе красного окуня, перец болгарский, морковь, лук порей, репчатый лук, кунжут, имбирь, кинза, кисло-сладкий соус, соус чили, соус унаги, масло растительное",
         "ingredients_en": "Red perch fillet, bell pepper, carrot, leek, onion, sesame, ginger, cilantro, sweet and sour sauce, chili sauce, unagi sauce, vegetable oil",
         "photo": "fish",
@@ -489,7 +489,7 @@
       {
         "title_ru": "Котлета куриная",
         "title_en": "Chicken Patty",
-        "price": null,
+        "price": 195,
         "ingredients_ru": "Куриное бедро, куриное филе, хлеб белый, молоко, яйцо, специи, масло растительное, сливки, сухари панировочные.",
         "ingredients_en": "Chicken thigh, chicken fillet, white bread, milk, egg, spices, vegetable oil, cream, breadcrumbs.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8976-qxpuaf73nic5qzd5gcp5wsjr2fzi55kx5nm2ff0y38.jpg",
@@ -508,7 +508,7 @@
       {
         "title_ru": "Курица терияки с ананасом",
         "title_en": "Teriyaki Chicken with Pineapple",
-        "price": null,
+        "price": 300,
         "ingredients_ru": "Куриное бедро (Соус: имбирь очищенный, перец чили, соевый соус, соус терияки), грибы шампиньоны, морковь очищенная, кабачки/цукини, ростки сои/ пшеницы, ананас консервированный, перец болгарский, масло растительное.",
         "ingredients_en": "Chicken thigh (sauce: peeled ginger, chili pepper, soy sauce, teriyaki sauce), champignon mushrooms, peeled carrot, zucchini, soy/wheat sprouts, canned pineapple, bell pepper, vegetable oil.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD183D180D0B8D186D0B0_D182D0B5D180D0B8D18FD0BAD0B8_D181_D0B0D0BDD0B0D0BDD0B0D181D0BED0BC-r1w4zb8h5c61cng0i6y7si5uuu21lq3blckazxj0r8.jpg",
@@ -527,7 +527,7 @@
       {
         "title_ru": "Печень с грибами",
         "title_en": "Liver and Mushrooms",
-        "price": null,
+        "price": 240,
         "ingredients_ru": "Говяжья печень, мука пшеничная, лук репчатый, грибы шампиньоны, сметана, соль, зелень",
         "ingredients_en": "Beef liver, wheat flour, onion, champignon mushrooms, sour cream, salt, herbs",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09FD0B5D187D0B5D0BDD18C_D181_D0B3D180D0B8D0B1D0B0D0BCD0B8-r1w51nty8fdudk14s7in0wtcbih2uhf5wza06u1l78.jpg",
@@ -546,7 +546,7 @@
       {
         "title_ru": "Котлета пожарская",
         "title_en": "Pozharsky Cutlet",
-        "price": 42,
+        "price": 135,
         "ingredients_ru": "масло растительное, фарш на котлету Пожарскую (хлеб белый, молоко, соль, лук жаренный, куриное филе)",
         "ingredients_en": "Vegetable oil, Pozharsky cutlet mince (white bread, milk, salt, fried onion, chicken fillet)",
         "photo": "kotleta",
@@ -565,7 +565,7 @@
       {
         "title_ru": "Рис пилав",
         "title_en": "Rice Pilaf",
-        "price": null,
+        "price": 160,
         "ingredients_ru": "Рис Басмати, Масло растительное, соль, вермишель-лапша Паутинка, масло сливочное, вода, чеснок гранулированный",
         "ingredients_en": "Basmati rice, vegetable oil, salt, Pavutinka vermicelli noodles, butter, water, granulated garlic",
         "photo": "rice_pilav",
@@ -584,7 +584,7 @@
       {
         "title_ru": "Овощной букет",
         "title_en": "Vegetable Medley",
-        "price": null,
+        "price": 150,
         "ingredients_ru": "капуста цветная, кабачки/цукини, масло растительное, морковь отварная, капуста брокколи, фасоль стручковая",
         "ingredients_en": "Cauliflower, zucchini, vegetable oil, boiled carrot, broccoli, green beans",
         "photo": "vegetables",
@@ -603,7 +603,7 @@
       {
         "title_ru": "Гречка с грибами",
         "title_en": "Buckwheat with Mushrooms",
-        "price": 42,
+        "price": 190,
         "ingredients_ru": "Масло растительное, лук репчатый, морковь очищенная, гречка отварная, грибы",
         "ingredients_en": "Vegetable oil, onion, peeled carrot, boiled buckwheat, mushrooms",
         "photo": "mushroom_buckwheat",
@@ -622,7 +622,7 @@
       {
         "title_ru": "Картофельное пюре",
         "title_en": "Mashed Potatoes",
-        "price": null,
+        "price": 200,
         "ingredients_ru": "Картофель, молоко, масло сливочное, соль.",
         "ingredients_en": "Potatoes, milk, butter, salt.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_1_73-qy9agqjz7zvsx9sa9x6022eys19k54wmpc148ldcwk.jpg",
@@ -641,7 +641,7 @@
       {
         "title_ru": "Витаминный салат",
         "title_en": "Vitamin Salad",
-        "price": null,
+        "price": 135,
         "ingredients_ru": "Капуста б/к, морковь свежая, огурцы свежие, зелень. Запрвка: масло растительное, соль, сахар.",
         "ingredients_en": "Cabbage, fresh carrot, fresh cucumbers, herbs. Dressing: vegetable oil, salt, sugar.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8957__1_-r0t6ypffxwz47rpy2mqhwl9mxl3th0cgl57w0zri50.jpg",
@@ -660,7 +660,7 @@
       {
         "title_ru": "Овощной салат",
         "title_en": "Vegetable Salad",
-        "price": null,
+        "price": 220,
         "ingredients_ru": "Базилик, зелень, помидоры черри, огурцы свежие, оливковое масло",
         "ingredients_en": "Basil, greens, cherry tomatoes, fresh cucumbers, olive oil",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09ED0B2D0BED189D0BDD0BED0B9_D181D0B0D0BBD0B0D182__1_-r30epyhtzf873bmasdxj2vkadr06qcc852a3xvxqj8.jpg",
@@ -679,7 +679,7 @@
       {
         "title_ru": "Салат со свёклой и тыквой",
         "title_en": "Beetroot and Pumpkin Salad",
-        "price": null,
+        "price": 190,
         "ingredients_ru": "Свекла, тыква, рукола, клюква сушеная, семечки тыквенные, специи, заправка (масло оливковое, мед, лимонный концентрат, горчица \"медово-горчичная\")",
         "ingredients_en": "Beetroot, pumpkin, arugula, dried cranberry, pumpkin seeds, spices, dressing (olive oil, honey, lemon concentrate, honey-mustard)",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_800x800_19-qy9abik994qgf9dcrnwm7duryz05do6bbhk09943h0.jpg",
@@ -698,7 +698,7 @@
       {
         "title_ru": "Крабовый салат",
         "title_en": "Surimi Salad",
-        "price": null,
+        "price": 165,
         "ingredients_ru": "Крабовые палочки, рис отварной, кукуруза конс, яйцо куриное, огурцы свежие, майонез, соль",
         "ingredients_en": "Surimi sticks, boiled rice, canned corn, egg, fresh cucumbers, mayonnaise, salt",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD180D0B0D0B1D0BED0B2D18BD0B9_D181D0B0D0BBD0B0D182-r1w52njtg4qqmql8zmygnnsuw5l0yzcypw2gfckmms.jpg",
@@ -717,7 +717,7 @@
       {
         "title_ru": "Салат со свёклой и брынзой",
         "title_en": "Beetroot and Brynza Salad",
-        "price": null,
+        "price": 165,
         "ingredients_ru": "сыр Брынза сербская, свекла отварная чищенная, салат рукола, орех кедровый, заправка (горчица зернистая/дижонская, мед, лимонный концентрат, масло оливковое)",
         "ingredients_en": "Serbian brynza cheese, boiled peeled beetroot, arugula, pine nuts, dressing (grain/Dijon mustard, honey, lemon concentrate, olive oil)",
         "photo": "salad_cheesebeetroot",
@@ -875,7 +875,7 @@
       {
         "title_ru": "Борщ с курицей",
         "title_en": "Chicken Borscht",
-        "price": null,
+        "price": 185,
         "ingredients_ru": "Курица, свекла, капуста, картофель, лук, морковь, томатная паста.",
         "ingredients_en": "Chicken, beetroot, cabbage, potatoes, onion, carrot, tomato paste.",
         "photo": "soup_borsh",
@@ -889,7 +889,7 @@
       {
         "title_ru": "Окунь в кисло-сладком соусе",
         "title_en": "Sweet and Sour Perch",
-        "price": null,
+        "price": 380,
         "ingredients_ru": "филе красного окуня, перец болгарский, морковь, лук порей, репчатый лук, кунжут, имбирь, кинза, кисло-сладкий соус, соус чили, соус унаги, масло растительное",
         "ingredients_en": "Red perch fillet, bell pepper, carrot, leek, onion, sesame, ginger, cilantro, sweet and sour sauce, chili sauce, unagi sauce, vegetable oil",
         "photo": "fish",
@@ -903,7 +903,7 @@
       {
         "title_ru": "Котлета куриная",
         "title_en": "Chicken Patty",
-        "price": null,
+        "price": 195,
         "ingredients_ru": "Куриное бедро, куриное филе, хлеб белый, молоко, яйцо, специи, масло растительное, сливки, сухари панировочные.",
         "ingredients_en": "Chicken thigh, chicken fillet, white bread, milk, egg, spices, vegetable oil, cream, breadcrumbs.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8976-qxpuaf73nic5qzd5gcp5wsjr2fzi55kx5nm2ff0y38.jpg",
@@ -922,7 +922,7 @@
       {
         "title_ru": "Курица терияки с ананасом",
         "title_en": "Teriyaki Chicken with Pineapple",
-        "price": null,
+        "price": 300,
         "ingredients_ru": "Куриное бедро (Соус: имбирь очищенный, перец чили, соевый соус, соус терияки), грибы шампиньоны, морковь очищенная, кабачки/цукини, ростки сои/ пшеницы, ананас консервированный, перец болгарский, масло растительное.",
         "ingredients_en": "Chicken thigh (sauce: peeled ginger, chili pepper, soy sauce, teriyaki sauce), champignon mushrooms, peeled carrot, zucchini, soy/wheat sprouts, canned pineapple, bell pepper, vegetable oil.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD183D180D0B8D186D0B0_D182D0B5D180D0B8D18FD0BAD0B8_D181_D0B0D0BDD0B0D0BDD0B0D181D0BED0BC-r1w4zb8h5c61cng0i6y7si5uuu21lq3blckazxj0r8.jpg",
@@ -941,7 +941,7 @@
       {
         "title_ru": "Печень с грибами",
         "title_en": "Liver and Mushrooms",
-        "price": null,
+        "price": 240,
         "ingredients_ru": "Говяжья печень, мука пшеничная, лук репчатый, грибы шампиньоны, сметана, соль, зелень",
         "ingredients_en": "Beef liver, wheat flour, onion, champignon mushrooms, sour cream, salt, herbs",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09FD0B5D187D0B5D0BDD18C_D181_D0B3D180D0B8D0B1D0B0D0BCD0B8-r1w51nty8fdudk14s7in0wtcbih2uhf5wza06u1l78.jpg",
@@ -960,7 +960,7 @@
       {
         "title_ru": "Котлета пожарская",
         "title_en": "Pozharsky Cutlet",
-        "price": null,
+        "price": 135,
         "ingredients_ru": "масло растительное, фарш на котлету Пожарскую (хлеб белый, молоко, соль, лук жаренный, куриное филе)",
         "ingredients_en": "Vegetable oil, Pozharsky cutlet mince (white bread, milk, salt, fried onion, chicken fillet)",
         "photo": "kotleta",
@@ -979,7 +979,7 @@
       {
         "title_ru": "Рис пилав",
         "title_en": "Pilaf Rice",
-        "price": null,
+        "price": 160,
         "ingredients_ru": "Рис Басмати, Масло растительное, соль, вермишель-лапша Паутинка, масло сливочное, вода, чеснок гранулированный",
         "ingredients_en": "Basmati rice, vegetable oil, salt, Pavutinka vermicelli noodles, butter, water, granulated garlic",
         "photo": "rice_pilav",
@@ -998,7 +998,7 @@
       {
         "title_ru": "Овощной букет",
         "title_en": "Vegetable Medley",
-        "price": 42,
+        "price": 150,
         "ingredients_ru": "капуста цветная, кабачки/цукини, масло растительное, морковь отварная, капуста брокколи, фасоль стручковая",
         "ingredients_en": "Cauliflower, zucchini, vegetable oil, boiled carrot, broccoli, green beans",
         "photo": "vegetables",
@@ -1017,7 +1017,7 @@
       {
         "title_ru": "Гречка с грибами",
         "title_en": "Buckwheat with Mushrooms",
-        "price": 42,
+        "price": 190,
         "ingredients_ru": "Масло растительное, лук репчатый, морковь очищенная, гречка отварная, грибы",
         "ingredients_en": "Vegetable oil, onion, peeled carrot, boiled buckwheat, mushrooms",
         "photo": "mushroom_buckwheat",
@@ -1036,7 +1036,7 @@
       {
         "title_ru": "Картофельное пюре",
         "title_en": "Mashed Potatoes",
-        "price": 42,
+        "price": 200,
         "ingredients_ru": "Картофель, молоко, масло сливочное, соль.",
         "ingredients_en": "Potatoes, milk, butter, salt.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_small_1_73-qy9agqjz7zvsx9sa9x6022eys19k54wmpc148ldcwk.jpg",
@@ -1055,7 +1055,7 @@
       {
         "title_ru": "Витаминный салат",
         "title_en": "Vitamin Salad",
-        "price": null,
+        "price": 135,
         "ingredients_ru": "Капуста б/к, морковь свежая, огурцы свежие, зелень. Запрвка: масло растительное, соль, сахар.",
         "ingredients_en": "Cabbage, fresh carrot, fresh cucumbers, herbs. Dressing: vegetable oil, salt, sugar.",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/2H6A8957__1_-r0t6ypffxwz47rpy2mqhwl9mxl3th0cgl57w0zri50.jpg",
@@ -1074,7 +1074,7 @@
       {
         "title_ru": "Овощной салат",
         "title_en": "Vegetable Salad",
-        "price": null,
+        "price": 220,
         "ingredients_ru": "Базилик, зелень, помидоры черри, огурцы свежие, оливковое масло",
         "ingredients_en": "Basil, greens, cherry tomatoes, fresh cucumbers, olive oil",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09ED0B2D0BED189D0BDD0BED0B9_D181D0B0D0BBD0B0D182__1_-r30epyhtzf873bmasdxj2vkadr06qcc852a3xvxqj8.jpg",
@@ -1093,7 +1093,7 @@
       {
         "title_ru": "Салат со свёклой и тыквой",
         "title_en": "Beetroot and Pumpkin Salad",
-        "price": null,
+        "price": 190,
         "ingredients_ru": "Свекла, тыква, рукола, клюква сушеная, семечки тыквенные, специи, заправка (масло оливковое, мед, лимонный концентрат, горчица \"медово-горчичная\")",
         "ingredients_en": "Beetroot, pumpkin, arugula, dried cranberry, pumpkin seeds, spices, dressing (olive oil, honey, lemon concentrate, honey-mustard)",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/Brusnika_800x800_19-qy9abik994qgf9dcrnwm7duryz05do6bbhk09943h0.jpg",
@@ -1112,7 +1112,7 @@
       {
         "title_ru": "Крабовый салат",
         "title_en": "Surimi Salad",
-        "price": null,
+        "price": 165,
         "ingredients_ru": "Крабовые палочки, рис отварной, кукуруза конс, яйцо куриное, огурцы свежие, майонез, соль",
         "ingredients_en": "Surimi sticks, boiled rice, canned corn, egg, fresh cucumbers, mayonnaise, salt",
         "photo": "https://delivery.brusnikacafe.ru/wp-content/uploads/elementor/thumbs/D09AD180D0B0D0B1D0BED0B2D18BD0B9_D181D0B0D0BBD0B0D182-r1w52njtg4qqmql8zmygnnsuw5l0yzcypw2gfckmms.jpg",
@@ -1131,7 +1131,7 @@
       {
         "title_ru": "Салат со свёклой и брынзой",
         "title_en": "Beetroot and Brynza Salad",
-        "price": null,
+        "price": 165,
         "ingredients_ru": "сыр Брынза сербская, свекла отварная чищенная, салат рукола, орех кедровый, заправка (горчица зернистая/дижонская, мед, лимонный концентрат, масло оливковое)",
         "ingredients_en": "Serbian brynza cheese, boiled peeled beetroot, arugula, pine nuts, dressing (grain/Dijon mustard, honey, lemon concentrate, olive oil)",
         "photo": "salad_cheesebeetroot",

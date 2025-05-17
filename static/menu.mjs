@@ -65,34 +65,39 @@
                     <span class="price">${item.price}</span>
             `;
         }
+        innerHTML += `
+            </label>
+            <div class="item-details">
+        `;
+
         if (url) {
             innerHTML += `
                 <img class="small_photo" loading="lazy" src="${url}">
             `;
         }
+
         innerHTML += `
-            </label>
-            <button class="description-button">i</button>
-            <div class="description">
-                <span class="name" lang="ru">${item.title_ru}</span>
-                <span class="name" lang="en">${item.title_en}</span>
+                <button class="description-button">i</button>
+                <div class="description">
+                    <span class="name" lang="ru">${item.title_ru}</span>
+                    <span class="name" lang="en">${item.title_en}</span>
         `;
         if (url) {
             innerHTML += `
-                <img class="photo" loading="lazy" src="${url}">
+                    <img class="photo" loading="lazy" src="${url}">
             `;
         }
         if (item.ingredients_en && item.ingredients_en.length > 0) {
             innerHTML += `
-                <div class="ingredients">
-                    <span lang="ru">Ингредиенты: ${item.ingredients_ru}</span>
-                    <span lang="en">Ingredients: ${item.ingredients_en}</span>
-                </div>
+                    <div class="ingredients">
+                        <span lang="ru">Ингредиенты: ${item.ingredients_ru}</span>
+                        <span lang="en">Ingredients: ${item.ingredients_en}</span>
+                    </div>
             `;
         }
         if (item.weight && item.weight.value > 0) {
             innerHTML += `
-                <div class="weight">${item.weight.value}</div>
+                    <div class="weight">${item.weight.value}</div>
             `;
         }
         if (item.nutrition) {
@@ -105,9 +110,74 @@
             }
         }
         innerHTML += `
+                </div>
             </div>
         `;
         return innerHTML;
+    }
+
+    // Add this function after createMenuItemHTML but before the IIFE
+    function setupDescriptionHandlers() {
+        document.querySelectorAll('.item-details').forEach(detailsContainer => {
+            let description = detailsContainer.querySelector('.description');
+            let isShowingDescription = false;
+            let touchStarted = false;
+
+            // Helper function to show/hide description
+            function toggleDescription(show) {
+                if (!description) return;
+
+                if (show && !isShowingDescription) {
+                    // Hide any other shown descriptions first
+                    document.querySelectorAll('.description.show').forEach(desc => {
+                        if (desc !== description) {
+                            desc.classList.remove('show');
+                        }
+                    });
+                    description.classList.add('show');
+                    isShowingDescription = true;
+                } else if (!show && isShowingDescription) {
+                    description.classList.remove('show');
+                    isShowingDescription = false;
+                }
+            }
+
+            // Mouse events
+            detailsContainer.addEventListener('mousedown', () => {
+                toggleDescription(true);
+            });
+
+            detailsContainer.addEventListener('mouseup', () => {
+                toggleDescription(false);
+            });
+
+            detailsContainer.addEventListener('mouseleave', () => {
+                toggleDescription(false);
+            });
+
+            // Touch events
+            detailsContainer.addEventListener('touchstart', (e) => {
+                if (!touchStarted) {  // Only respond to first touch
+                    touchStarted = true;
+                    toggleDescription(true);
+                    e.preventDefault(); // Prevent mouse events from firing
+                }
+            }, { passive: false });
+
+            detailsContainer.addEventListener('touchend', () => {
+                if (touchStarted) {
+                    touchStarted = false;
+                    toggleDescription(false);
+                }
+            });
+
+            detailsContainer.addEventListener('touchcancel', () => {
+                if (touchStarted) {
+                    touchStarted = false;
+                    toggleDescription(false);
+                }
+            });
+        });
     }
 
     let menu = await fetch("static/menu_2025_1.json").then(r => r.json());
@@ -178,6 +248,9 @@
             document.querySelector(`section.${day}.${meal} .meals`).appendChild(container);
         }
     }
+
+    // Call setupDescriptionHandlers after all items are created
+    setupDescriptionHandlers();
 
     function IDQ() {
         return "initData=" + encodeURIComponent(Telegram.WebApp.initData)
