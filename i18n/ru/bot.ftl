@@ -119,7 +119,7 @@ food-adm-payment-rejected-msg = Оплата заказа на сумму {$tota
 
 food-back-button = К началу.
 food-cancel-order-button = Отменить заказ.
-food-command-description = Твой космический пайёк на ZNS.
+food-command-description = Твой космический паёк на ZNS.
 food-confirm-payment-button = Оплатить заказ
 food-created-write-for-who = Твой заказ сохранён. Напиши своё имя, чтобы мы могли идентифицировать твой заказ и выдать его тебе.
 food-day-wednesday = Среда
