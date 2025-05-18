@@ -548,7 +548,6 @@ class Avatar(BasePlugin):
                     resized_frame_img = await resize_basic(
                         frame_img, self.config.photo.frame_size
                     )
-                    resized_frame_img = resized_frame_img.convert("RGBA")
                     final_image = await join_images(
                         resized_user_img, resized_frame_img, None
                     )
@@ -564,6 +563,7 @@ class Avatar(BasePlugin):
                         final_local_path,
                         quality=self.config.photo.quality,
                         optimize=True,
+                        keep_rgb=True,
                     )
 
                     locale = (
