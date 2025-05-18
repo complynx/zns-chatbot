@@ -1,13 +1,13 @@
 Telegram.WebApp.ready();
 Telegram.WebApp.expand();
 
-const ETransform = [[1,0,0],[0,1,0]];
+const ETransform = [[1, 0, 0], [0, 1, 0]];
 
 let ph, pw;
 let transformationMatrix = ETransform;
 let frameTransformationMatrix = ETransform;
 const frame_size_fraction = 1;
-let W,H, Vmax, Vmin;
+let W, H, Vmax, Vmin;
 let frame_size, f_top, f_left;
 let help_div = document.querySelector(".help");
 let screen_size_source = document.querySelector(".photo");
@@ -116,104 +116,104 @@ function generateCroppedImage(returnCanvas) {
     // Restore the original transformation matrix
     ctx.restore();
     ctx.drawImage(frame_source, 0, 0, real_frame_size, real_frame_size);
-    
+
     // Draw the flare image on top with the screen blending mode
     // ctx.globalCompositeOperation = 'screen';
     // ctx.drawImage(flare_source, 0, 0, real_frame_size, real_frame_size);
     ctx.globalCompositeOperation = 'source-over';
 
-    if(returnCanvas)
+    if (returnCanvas)
         return croppedCanvas;
-    
+
     // Get the data URL of the cropped image
-    const croppedDataURL = croppedCanvas.toDataURL("image/png");
+    const croppedDataURL = croppedCanvas.toDataURL("image/png", 0.95);
 
     return croppedDataURL;
 }
 
 {// DEBUG
-window.DEBUG = false;
-let debug_countdown = 10;
-function remove_from_dom (el) {
-    el?.parentElement?.removeChild(el);
-}
-
-function init_debug() {
-    if(DEBUG) return;
-
-    DEBUG = true;
-    document.body.classList.add("debug");
-    let dbg_layer = document.querySelector('.debug-layer');
-    let uuid_validator = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-    let debug_code_input = dbg_layer.querySelector('input[name=remotejs]');
-    debug_code_input.value = debug_code;
-
-    dbg_layer.querySelector('.link').innerText = window.location.href;
-    navigator.clipboard.writeText(window.location.href)
-    .catch((error) => {
-        console.error('Failed to copy text: ', error);
-    });
-    dbg_layer.querySelector('.remotejs').addEventListener("click", ()=>{
-        let rjs_uuid = debug_code_input.value.trim();
-        if(uuid_validator.test(rjs_uuid)){
-            remove_from_dom(dbg_layer.querySelector('.remotejs'));
-            remove_from_dom(debug_code_input);
-            let s=document.createElement("script");
-            s.src="https://remotejs.com/agent/agent.js";
-            s.setAttribute("data-consolejs-channel",rjs_uuid);
-            document.head.appendChild(s);
-        }
-    });  
-    
-    dbg_layer.querySelector("button.canvas").addEventListener("click", () => {
-        console.log(transformationMatrix);
-        const [a, c, e] = transformationMatrix[0];
-        const [b, d, f] = transformationMatrix[1];
-        const croppedImage = new Image();
-        croppedImage.src = generateCroppedImage();
-        // croppedImage.src = `./crop_frame?id=${photo_id}&a=${a}&b=${b}&c=${c}&d=${d}&e=${e}&f=${f}`;
-        croppedImage.style.position="fixed";
-        croppedImage.style.left = f_left + "px";
-        croppedImage.style.top = f_top + "px";
-        croppedImage.style.height = croppedImage.style.width = frame_size + "px";
-        croppedImage.style.zIndex=4;
-        document.body.appendChild(croppedImage);
-        croppedImage.addEventListener("click", ()=>{
-            remove_from_dom(croppedImage);
-        }, false);
-    });
-    
-    dbg_layer.querySelector("button.realign").addEventListener("click", () => {
-        if(document.body.classList.contains("realign")) {
-            stopRealign();
-        }else startRealign();
-    });
-}
-document.addEventListener('contextmenu', function(event) {
-    if (event.altKey && !DEBUG) {
-        if(--debug_countdown <= 0) {
-            init_debug();
-        }else{
-            console.log(debug_countdown);
-        }
-        event.preventDefault();
+    window.DEBUG = false;
+    let debug_countdown = 10;
+    function remove_from_dom(el) {
+        el?.parentElement?.removeChild(el);
     }
-});
-document.body.addEventListener('touchstart', function(e) {
-    if(!DEBUG && e.touches.length === 5) {
-        if(--debug_countdown <= 0) {
-            init_debug();
-        }else{
-            console.log(debug_countdown);
-        }
+
+    function init_debug() {
+        if (DEBUG) return;
+
+        DEBUG = true;
+        document.body.classList.add("debug");
+        let dbg_layer = document.querySelector('.debug-layer');
+        let uuid_validator = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+        let debug_code_input = dbg_layer.querySelector('input[name=remotejs]');
+        debug_code_input.value = debug_code;
+
+        dbg_layer.querySelector('.link').innerText = window.location.href;
+        navigator.clipboard.writeText(window.location.href)
+            .catch((error) => {
+                console.error('Failed to copy text: ', error);
+            });
+        dbg_layer.querySelector('.remotejs').addEventListener("click", () => {
+            let rjs_uuid = debug_code_input.value.trim();
+            if (uuid_validator.test(rjs_uuid)) {
+                remove_from_dom(dbg_layer.querySelector('.remotejs'));
+                remove_from_dom(debug_code_input);
+                let s = document.createElement("script");
+                s.src = "https://remotejs.com/agent/agent.js";
+                s.setAttribute("data-consolejs-channel", rjs_uuid);
+                document.head.appendChild(s);
+            }
+        });
+
+        dbg_layer.querySelector("button.canvas").addEventListener("click", () => {
+            console.log(transformationMatrix);
+            const [a, c, e] = transformationMatrix[0];
+            const [b, d, f] = transformationMatrix[1];
+            const croppedImage = new Image();
+            croppedImage.src = generateCroppedImage();
+            // croppedImage.src = `./crop_frame?id=${photo_id}&a=${a}&b=${b}&c=${c}&d=${d}&e=${e}&f=${f}`;
+            croppedImage.style.position = "fixed";
+            croppedImage.style.left = f_left + "px";
+            croppedImage.style.top = f_top + "px";
+            croppedImage.style.height = croppedImage.style.width = frame_size + "px";
+            croppedImage.style.zIndex = 4;
+            document.body.appendChild(croppedImage);
+            croppedImage.addEventListener("click", () => {
+                remove_from_dom(croppedImage);
+            }, false);
+        });
+
+        dbg_layer.querySelector("button.realign").addEventListener("click", () => {
+            if (document.body.classList.contains("realign")) {
+                stopRealign();
+            } else startRealign();
+        });
     }
-}, {
-    capture: true
-});
+    document.addEventListener('contextmenu', function (event) {
+        if (event.altKey && !DEBUG) {
+            if (--debug_countdown <= 0) {
+                init_debug();
+            } else {
+                console.log(debug_countdown);
+            }
+            event.preventDefault();
+        }
+    });
+    document.body.addEventListener('touchstart', function (e) {
+        if (!DEBUG && e.touches.length === 5) {
+            if (--debug_countdown <= 0) {
+                init_debug();
+            } else {
+                console.log(debug_countdown);
+            }
+        }
+    }, {
+        capture: true
+    });
 }
 
 
-if(Telegram.WebApp.platform === "tdesktop") {
+if (Telegram.WebApp.platform === "tdesktop") {
     help_div.innerText = help_desktop;
 } else {
     help_div.innerText = help_mobile;
@@ -231,28 +231,28 @@ if(Telegram.WebApp.platform === "tdesktop") {
  */
 function M(A, B) {
     return [
-      [
-        A[0][0] * B[0][0] + A[0][1] * B[1][0],
-        A[0][0] * B[0][1] + A[0][1] * B[1][1],
-        A[0][0] * B[0][2] + A[0][1] * B[1][2] + A[0][2],
-      ],
-      [
-        A[1][0] * B[0][0] + A[1][1] * B[1][0],
-        A[1][0] * B[0][1] + A[1][1] * B[1][1],
-        A[1][0] * B[0][2] + A[1][1] * B[1][2] + A[1][2],
-      ]
+        [
+            A[0][0] * B[0][0] + A[0][1] * B[1][0],
+            A[0][0] * B[0][1] + A[0][1] * B[1][1],
+            A[0][0] * B[0][2] + A[0][1] * B[1][2] + A[0][2],
+        ],
+        [
+            A[1][0] * B[0][0] + A[1][1] * B[1][0],
+            A[1][0] * B[0][1] + A[1][1] * B[1][1],
+            A[1][0] * B[0][2] + A[1][1] * B[1][2] + A[1][2],
+        ]
     ];
 }
 
 function MM(...matrices) {
     if (matrices.length < 1) return ETransform;
-    if(matrices.length == 1) return matrices[0];
-  
+    if (matrices.length == 1) return matrices[0];
+
     let result = matrices[0];
-  
+
     for (let i = 1; i < matrices.length; i++)
         result = M(result, matrices[i]);
-  
+
     return result;
 }
 
@@ -265,21 +265,21 @@ function createCSSTransform(transformationMatrix) {
         transformationMatrix[0][2],
         transformationMatrix[1][2],
     ];
-  
+
     return `matrix(${a}, ${c}, ${e}, ${b}, ${d}, ${f})`;
 }
 
-function translate2matrix(x,y) {
+function translate2matrix(x, y) {
     return [
-        [1,0,x],
-        [0,1,y]
+        [1, 0, x],
+        [0, 1, y]
     ];
 }
 
 
 function movePhoto(deltaX, deltaY) {
     let translationMatrix = translate2matrix(deltaX / frame_size * real_frame_size, deltaY / frame_size * real_frame_size);
-    
+
     transformationMatrix = M(translationMatrix, transformationMatrix);
 
     recalculate_photo();
@@ -291,13 +291,13 @@ function rotatePhotoStart() {
     transformationMatrixPreRotate = transformationMatrix;
 }
 
-function ajustCursorClientPosition(cursorX,cursorY) {
+function ajustCursorClientPosition(cursorX, cursorY) {
     const photoCenterX = parseFloat(photo_ancor.style.left) + parseFloat(photo.style.left) + pw / 2;
     const photoCenterY = parseFloat(photo_ancor.style.top) + parseFloat(photo.style.top) + ph / 2;
 
     const adjustedMouseClientX = cursorX - photoCenterX;
     const adjustedMouseClientY = cursorY - photoCenterY;
-    
+
     return [adjustedMouseClientX, adjustedMouseClientY];
 }
 
@@ -336,12 +336,12 @@ function scalePhoto(scaleFactor, mouseClientX, mouseClientY) {
 }
 
 function recalculate_photo() {
-    if(ph === 0 && photo.naturalWidth === 0) return;
-    if(ph !== photo.naturalHeight || pw !== photo.naturalWidth) {
+    if (ph === 0 && photo.naturalWidth === 0) return;
+    if (ph !== photo.naturalHeight || pw !== photo.naturalWidth) {
         ph = photo.naturalHeight;
         pw = photo.naturalWidth;
-        photo.style.top = (-ph/2) + 'px';
-        photo.style.left = (-pw/2) + 'px';
+        photo.style.top = (-ph / 2) + 'px';
+        photo.style.left = (-pw / 2) + 'px';
 
         const smallerSide = Math.min(pw, ph);
         const F = real_frame_size / smallerSide;
@@ -361,13 +361,13 @@ function recalculate_photo() {
 function recalculate_all() {
     W = screen_size_source.clientWidth;
     H = screen_size_source.clientHeight;
-    Vmin = Math.min(W,H);
-    Vmax = Math.max(W,H);
-    frame_size = frame_size_fraction*Vmin;
-    f_top = ((H - frame_size)/2);
-    f_left = ((W - frame_size)/2);
-    const F =  frame_size / real_frame_size;
-    
+    Vmin = Math.min(W, H);
+    Vmax = Math.max(W, H);
+    frame_size = frame_size_fraction * Vmin;
+    f_top = ((H - frame_size) / 2);
+    f_left = ((W - frame_size) / 2);
+    const F = frame_size / real_frame_size;
+
     frameTransformationMatrix = [
         [F, 0, 0],
         [0, F, 0]
@@ -377,8 +377,8 @@ function recalculate_all() {
 
     // frame.style.left = f_left + "px";
     // frame.style.top = f_top + "px";
-    photo_ancor.style.left = (f_left + frame_size/2) + "px";
-    photo_ancor.style.top = (f_top + frame_size/2) + "px";
+    photo_ancor.style.left = (f_left + frame_size / 2) + "px";
+    photo_ancor.style.top = (f_top + frame_size / 2) + "px";
 
     recalculate_photo();
 }
@@ -467,12 +467,12 @@ function onMouseDown(e) {
 
 function onMouseMove(e) {
     if (!isMouseDown) return;
-  
+
     e.preventDefault();
-  
+
     let deltaX = e.clientX - initialX;
     let deltaY = e.clientY - initialY;
-  
+
     if (e.shiftKey) {
         let rotationAngle = Math.atan2(deltaY, deltaX);
         rotatePhoto(rotationAngle, initialX, initialY);
@@ -481,7 +481,7 @@ function onMouseMove(e) {
         initialX = e.clientX;
         initialY = e.clientY;
     }
-  
+
 }
 
 function onMouseUp(e) {
@@ -494,13 +494,13 @@ function onMouseWheel(e) {
     let scaleAddition = 0.1;
     if (e.shiftKey) {
         scaleAddition = 0.005;
-    } 
-    let scaleFactor = e.deltaY > 0 ? 1-scaleAddition : 1 + scaleAddition;
+    }
+    let scaleFactor = e.deltaY > 0 ? 1 - scaleAddition : 1 + scaleAddition;
     scalePhoto(scaleFactor, e.clientX, e.clientY);
 }
 
-photo.addEventListener("load", recalculate_photo, {passive:true});
-window.addEventListener("resize", recalculate_all, {passive:true});
+photo.addEventListener("load", recalculate_photo, { passive: true });
+window.addEventListener("resize", recalculate_all, { passive: true });
 
 screen_size_source.addEventListener('mousedown', onMouseDown, false);
 screen_size_source.addEventListener('mousemove', onMouseMove, false);
@@ -513,19 +513,19 @@ screen_size_source.addEventListener('touchmove', onTouchMove, false);
 screen_size_source.addEventListener('touchend', onTouchEnd, false);
 
 function AlignmentSave() {
-    if(alignment.changed) {
-        return "&compensations="+encodeURIComponent(JSON.stringify(alignment))
+    if (alignment.changed) {
+        return "&compensations=" + encodeURIComponent(JSON.stringify(alignment))
     }
     return "";
 }
 
 function IDQ() {
-    return "initData="+encodeURIComponent(Telegram.WebApp.initData)
+    return "initData=" + encodeURIComponent(Telegram.WebApp.initData)
 }
 
 
 function send_error(err) {
-    return fetch("error?"+IDQ(), {
+    return fetch("error?" + IDQ(), {
         method: "POST",
         body: err
     })
@@ -533,14 +533,14 @@ function send_error(err) {
 
 Telegram.WebApp.MainButton.setText(finish_button_text);
 Telegram.WebApp.MainButton.show();
-Telegram.WebApp.MainButton.onClick(()=>{
-    try{
-        if(document.body.classList.contains("realign")) {
+Telegram.WebApp.MainButton.onClick(() => {
+    try {
+        if (document.body.classList.contains("realign")) {
             stopRealign();
             return;
         }
-        generateCroppedImage(true).toBlob(function(blob) {
-            fetch('fit_frame?'+IDQ()+AlignmentSave(), {
+        generateCroppedImage(true).toBlob(function (blob) {
+            fetch('fit_frame?' + IDQ() + AlignmentSave(), {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'image/jpeg'
@@ -553,11 +553,11 @@ Telegram.WebApp.MainButton.onClick(()=>{
             }).catch(error => {
                 console.error('Error:', error);
                 return send_error(error);
-            }).finally(()=>{
+            }).finally(() => {
                 Telegram.WebApp.close();
             });
-        }, 'image/jpeg', quality/100.);
-    }catch(error){
+        }, 'image/jpeg', quality / 100.);
+    } catch (error) {
         send_error(error);
     };
 });
@@ -565,7 +565,7 @@ Telegram.WebApp.MainButton.enable();
 Telegram.WebApp.MainButton.show();
 
 
-Telegram.WebApp.BackButton.onClick(()=>{
+Telegram.WebApp.BackButton.onClick(() => {
     Telegram.WebApp.close();
 });
 Telegram.WebApp.BackButton.show();
