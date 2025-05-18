@@ -128,6 +128,7 @@ food-button-edit-order = ✏️ Edit Order
 food-button-pay = 💸 Pay for Order
 food-button-view-order = 👁️ View Order
 food-cannot-submit-proof-now = Cannot submit payment proof for this order at this time.
+food-command-description = Your cosmic snack on ZNS.
 food-no-order = You have no active food order. Create one using the button below.
 food-not-authorized-admin = You are not authorized for this action.
 food-order-already-paid = This order has already been paid.
