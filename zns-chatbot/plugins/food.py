@@ -30,6 +30,7 @@ LUNCH_WITH_SOUP_PRICE = 665
 LUNCH_SUB_CATEGORIES = ["main", "side", "salad"]
 CANCEL_CHR = chr(0xE007F)
 ACTIVITIES = ["open", "yoga", "cacao", "soundhealing"]
+CLASS_ACTIVITIES = ["yoga", "cacao", "soundhealing"]
 
 
 class FoodUpdate:
@@ -907,10 +908,22 @@ class FoodUpdate:
 
         # Create 2x2 grid of activity buttons
         buttons = []
+        untoggled_activities = ACTIVITIES.copy()
+        untoggled_class_activities = CLASS_ACTIVITIES.copy()
         for i in range(0, len(ACTIVITIES), 2):
             row = []
             for activity in ACTIVITIES[i : i + 2]:
                 status = "☑️" if order.get("activities", {}).get(activity) else "❌"
+                if (
+                    order.get("activities", {}).get(activity)
+                    and activity in untoggled_activities
+                ):
+                    untoggled_activities.remove(activity)
+                if (
+                    order.get("activities", {}).get(activity)
+                    and activity in untoggled_class_activities
+                ):
+                    untoggled_class_activities.remove(activity)
                 row.append(
                     InlineKeyboardButton(
                         f"{status} {self.l(f'activity-{activity}')}",
@@ -918,6 +931,21 @@ class FoodUpdate:
                     )
                 )
             buttons.append(row)
+
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    ("☑️" if len(untoggled_activities) == 0 else "❌")
+                    + self.l("activity-button-all"),
+                    callback_data=f"{self.base.name}|toggle_activity|all",
+                ),
+                InlineKeyboardButton(
+                    ("☑️" if len(untoggled_class_activities) == 0 else "❌")
+                    + self.l("activity-button-classes"),
+                    callback_data=f"{self.base.name}|toggle_activity|classes",
+                ),
+            ]
+        )
 
         # Add submit button
         buttons.append(
@@ -950,7 +978,16 @@ class FoodUpdate:
 
         # Toggle activity state
         activities = order.get("activities", {})
-        activities[activity] = not activities.get(activity, False)
+        if activity == "all":
+            activities = {}
+            for act in ACTIVITIES:
+                activities[act] = True
+        elif activity == "classes":
+            activities = {}
+            for act in CLASS_ACTIVITIES:
+                activities[act] = True
+        else:
+            activities[activity] = not activities.get(activity, False)
         order["activities"] = activities
 
         # Save order with updated activities

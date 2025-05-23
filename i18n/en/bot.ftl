@@ -179,11 +179,13 @@ activity-select-message =
 
     Cost:
     🌟<code>2500 ₽</code> - party + practices
+    🌟<code>2000 ₽</code> - just party
     🌟<code>2000 ₽</code> - practices without party
     🌟<code> 750 ₽</code> - yoga separately
     🌟<code>1000 ₽</code> - cacao ceremony separately
     🌟<code>1000 ₽</code> - soundhealing separately
-    Included in full pass, for others payment at the event.
+    Party and practices are included in the full pass, for others payment at the event.
+    Mark where you are going to exactly:
 activity-button-submit = ✅ Confirm selection
 activity-finished-message =
     Selected activities:
@@ -211,6 +213,8 @@ activity-open = Party
 activity-yoga = Fitness yoga
 activity-cacao = Cacao ceremony
 activity-soundhealing = Soundhealing
+activity-button-all = Party + practices
+activity-button-classes = Only practices
 activities-command-description = Select activities
 
 dow-short =
