@@ -29,6 +29,7 @@ LUNCH_NO_SOUP_PRICE = 555
 LUNCH_WITH_SOUP_PRICE = 665
 LUNCH_SUB_CATEGORIES = ["main", "side", "salad"]
 CANCEL_CHR = chr(0xE007F)
+ACTIVITIES = ["open", "yoga", "cacao", "soundhealing"]
 
 
 class FoodUpdate:
@@ -886,6 +887,116 @@ class FoodUpdate:
                     exc_info=True,
                 )
 
+    async def handle_activities(self):
+        """Handle the activities command."""
+        user = await self.get_user()
+        if not user:
+            return
+
+        # Get or create empty order
+        order = await self.base.food_db.find_one(
+            {"user_id": user["_id"], "pass_key": self.pass_key}
+        )
+        if not order:
+            order = {}
+
+        await self.activities_message(order)
+
+    async def activities_message(self, order: dict):
+        """Generate the activities message."""
+
+        # Create 2x2 grid of activity buttons
+        buttons = []
+        for i in range(0, len(ACTIVITIES), 2):
+            row = []
+            for activity in ACTIVITIES[i : i + 2]:
+                status = "☑️" if order.get("activities", {}).get(activity) else "❌"
+                row.append(
+                    InlineKeyboardButton(
+                        f"{status} {self.l(f'activity-{activity}')}",
+                        callback_data=f"{self.base.name}|toggle_activity|{activity}",
+                    )
+                )
+            buttons.append(row)
+
+        # Add submit button
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    self.l("activity-button-submit"),
+                    callback_data=f"{self.base.name}|submit_activities",
+                )
+            ]
+        )
+
+        await self.update.edit_or_reply(
+            self.l("activity-select-message"),
+            reply_markup=InlineKeyboardMarkup(buttons),
+            parse_mode=ParseMode.HTML,
+        )
+
+    async def handle_cq_toggle_activity(self, activity: str):
+        """Handle activity toggle button press."""
+        user = await self.get_user()
+        if not user:
+            raise Exception("User not found")
+
+        # Get or create empty order
+        order = await self.base.food_db.find_one(
+            {"user_id": user["_id"], "pass_key": self.pass_key}
+        )
+        if not order:
+            order = {"activities": {}}
+
+        # Toggle activity state
+        activities = order.get("activities", {})
+        activities[activity] = not activities.get(activity, False)
+        order["activities"] = activities
+
+        # Save order with updated activities
+        result = await self.base.food_db.update_one(
+            {
+                "user_id": user["_id"],
+                "pass_key": self.pass_key,
+            },
+            {
+                "$set": {"activities": activities},
+                "$setOnInsert": {
+                    "created_at": datetime.datetime.now(datetime.timezone.utc)
+                },
+            },
+            upsert=True,
+        )
+        if result.modified_count < 1:
+            logger.warning(
+                f"Failed to update activities for user {user['_id']} with pass_key {self.pass_key}"
+            )
+
+        await self.activities_message(order)
+
+    async def handle_cq_submit_activities(self):
+        """Handle activities submission."""
+        user = await self.get_user()
+        assert user is not None, "User not found"
+
+        order = await self.base.food_db.find_one(
+            {"user_id": user["_id"], "pass_key": self.pass_key}
+        )
+        if not order:
+            order = {}
+        # Get selected activities
+        activities = order.get("activities", {})
+
+        selected_activities = {
+            act: str(activities.get(act, False)) for act in ACTIVITIES
+        }
+
+        await self.update.edit_message_text(
+            self.l("activity-finished-message", **selected_activities),
+            reply_markup=None,
+            parse_mode=ParseMode.HTML,
+        )
+
 
 class Food(BasePlugin):
     name = "food"
@@ -908,7 +1019,10 @@ class Food(BasePlugin):
         if len(self.food_admins) == 0:
             self.food_admins = [int(admin_id) for admin_id in self.config.food.admins]
 
-        self._command_checkers = [CommandHandler("food", self.handle_food_start_cmd)]
+        self._command_checkers = [
+            CommandHandler("food", self.handle_food_start_cmd),
+            CommandHandler("activities", self.handle_activities_cmd),
+        ]
         self._cbq_handler = CallbackQueryHandler(
             self.handle_food_callback_query_entry, pattern=f"^{self.name}\\|.*"
         )
@@ -1343,3 +1457,6 @@ class Food(BasePlugin):
         return await self.create_update(update).handle_payment_proof_timeout(
             order_id_str
         )
+
+    async def handle_activities_cmd(self, update: TGState):
+        return await self.create_update(update).handle_activities()

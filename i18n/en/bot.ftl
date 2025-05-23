@@ -172,6 +172,47 @@ food-payment-request-waiting-message =
     Please send a screenshot or a PDF file as proof of payment for your order of <code>{$total}</code> ₽.
     {food-payment-method}
 
+# Activities
+activity-select-message =
+    At Zouk Non Stop Picnic, there will be several activities. Some of them require a prior booking, even if you have a full pass and they are included in its cost.
+    Mark the ones you want to attend, by toggling the buttons below between ☑️ and ❌.
+
+    Cost:
+    🌟<code>2500 ₽</code> - party + practices
+    🌟<code>2000 ₽</code> - practices without party
+    🌟<code> 750 ₽</code> - yoga separately
+    🌟<code>1000 ₽</code> - cacao ceremony separately
+    🌟<code>1000 ₽</code> - soundhealing separately
+    Included in full pass, for others payment at the event.
+activity-button-submit = ✅ Confirm selection
+activity-finished-message =
+    Selected activities:
+    {$open ->
+        [True] ✅
+        *[False] ❌
+    } {activity-open}
+    {$yoga ->
+        [True] ✅
+        *[False] ❌
+    } {activity-yoga}
+    {$cacao ->
+        [True] ✅
+        *[False] ❌
+    } {activity-cacao}
+    {$soundhealing ->
+        [True] ✅
+        *[False] ❌
+    } {activity-soundhealing}
+
+    If you need to change something, use the /activities command.
+
+# Activity Names
+activity-open = Picnic
+activity-yoga = Fitness yoga
+activity-cacao = Cacao ceremony
+activity-soundhealing = Soundhealing
+activities-command-description = Select activities
+
 dow-short =
     { $dow ->
         [0] mo

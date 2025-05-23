@@ -409,7 +409,7 @@ async def check_startup_actions(app):
     #             except Exception as e:
     #                 logger.error("Error in sender: %s", e, exc_info=1)
     #         await app.storage.set("sent_announcement", 1)
-    new_menu_version = 7
+    new_menu_version = 8
     if (
         "menu_version" not in app.storage
         or app.storage["menu_version"] != new_menu_version
@@ -424,6 +424,9 @@ async def check_startup_actions(app):
             commands = [
                 BotCommand("passes", description=l("passes-command-description")),
                 BotCommand("food", description=l("food-command-description")),
+                BotCommand(
+                    "activities", description=l("activities-command-description")
+                ),
             ]
             if lc != "en":
                 await bot.set_my_commands(commands, language_code=lc)
