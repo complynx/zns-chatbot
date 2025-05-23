@@ -207,7 +207,7 @@ activity-finished-message =
     If you need to change something, use the /activities command.
 
 # Activity Names
-activity-open = Picnic
+activity-open = Party
 activity-yoga = Fitness yoga
 activity-cacao = Cacao ceremony
 activity-soundhealing = Soundhealing

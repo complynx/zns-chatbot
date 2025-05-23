@@ -253,7 +253,7 @@ activity-finished-message =
     Если нужно что-то изменить, используй команду /activities.
 
 # Activity Names
-activity-open = Шатёр
+activity-open = Вечеринка
 activity-yoga = Фитнес йога
 activity-cacao = Какао церемония
 activity-soundhealing = Саундхилинг 
