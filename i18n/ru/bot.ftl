@@ -252,6 +252,8 @@ activity-finished-message =
         *[False] ❌
     } {activity-soundhealing}
 
+    Сумма заказа: <code>{$totalPrice}</code> ₽.
+
     Если нужно что-то изменить, используй команду /activities.
 
 # Activity Names

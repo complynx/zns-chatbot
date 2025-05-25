@@ -1011,6 +1011,29 @@ class FoodUpdate:
 
         await self.activities_message(order)
 
+    def activities_price(self, activities: dict) -> int:
+        # Calculate minimal price
+        has_party = activities.get("open", False)
+        selected_practices = [
+            act for act in CLASS_ACTIVITIES if activities.get(act, False)
+        ]
+
+        total_price = 0
+        if has_party and len(selected_practices) > 0:
+            total_price = 2500
+        elif has_party:
+            total_price = 2000
+        elif len(selected_practices) > 2:
+            total_price = 2000
+        else:
+            if activities.get("yoga", False):
+                total_price += 750
+            if activities.get("cacao", False):
+                total_price += 1000
+            if activities.get("soundhealing", False):
+                total_price += 1000
+        return total_price
+
     async def handle_cq_submit_activities(self):
         """Handle activities submission."""
         user = await self.get_user()
@@ -1023,13 +1046,16 @@ class FoodUpdate:
             order = {}
         # Get selected activities
         activities = order.get("activities", {})
-
         selected_activities = {
             act: str(activities.get(act, False)) for act in ACTIVITIES
         }
 
-        await self.update.edit_message_text(
-            self.l("activity-finished-message", **selected_activities),
+        await self.update.edit_or_reply(
+            self.l(
+                "activity-finished-message",
+                **selected_activities,
+                totalPrice=self.activities_price(activities),
+            ),
             reply_markup=None,
             parse_mode=ParseMode.HTML,
         )

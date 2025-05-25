@@ -206,6 +206,8 @@ activity-finished-message =
         *[False] ❌
     } {activity-soundhealing}
 
+    Total price: <code>{$totalPrice}</code> ₽.
+
     If you need to change something, use the /activities command.
 
 # Activity Names
