@@ -674,7 +674,7 @@ passes-couple-didnt-answer =
 passes-invitation-timeout =
     Sorry, the invitation I've sent earlier has timed out. You can register again or see your pass in /passes.
 passes-passport-request-message=
-    Please enter your passport series and number, like <code>AB 1234567</code>.
+    Please enter your passport series and number, like <code>AB 1234567</code>. If you have it different, write exactly as it is in your passport.
     It is required to enter the event venue.
 passes-passport-changed-message =
     Your passport series and number are updated: <b>{$passportNumber}</b>.
