@@ -1015,6 +1015,87 @@ class PassUpdate:
             f"{self.pass_key}|{data}",
             "handle_legal_name_timeout",
         )
+    
+    async def require_passport_data(self):
+        await self.update.reply(
+            self.l("passes-passport-data-required"),
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    self.l("passes-passport-data-button"),
+                    callback_data=f"{self.base.name}|passport_data|{self.pass_key}"
+                )
+            ]]),
+        )
+
+    async def handle_cq_passport_data(self, pass_key: str):
+        self.set_pass_key(pass_key)
+        logger.debug(f"command to change passport data for: {self.update.user}")
+        if self.pass_key not in PASS_KEYS:
+            return await self.update.reply(
+                self.l("passes-passport-data-required-beginning-message"),
+                parse_mode=ParseMode.HTML,
+                reply_markup=ReplyKeyboardRemove(),
+            )
+        return await self.handle_name_request("passport_data")
+
+    async def handle_passport_request(self, data: str):
+        user = await self.get_user()
+        if "legal_name_frozen" in user:
+            return await self.after_legal_name_input(data)
+        btns = []
+        if "passport_number" in user:
+            btns.append([user["passport_number"]])
+        btns.append([CANCEL_CHR + self.l("cancel-command")])
+        markup = ReplyKeyboardMarkup(btns, resize_keyboard=True)
+        await self.update.reply(
+            self.l("passes-passport-request-message"),
+            reply_markup=markup,
+            parse_mode=ParseMode.HTML,
+        )
+        await self.update.require_input(
+            self.base.name,
+            "handle_passport_input",
+            f"{self.pass_key}|{data}",
+            "handle_passport_timeout",
+        )
+    
+    async def handle_passport_input(self, data: str):
+        pass_key, reason = data.split("|", maxsplit=2)
+        if pass_key != "":
+            self.set_pass_key(pass_key)
+        user = await self.get_user()
+        passport_number = self.update.message.text
+        if passport_number[0] == CANCEL_CHR:
+            return await self.update.reply(
+                self.l("passes-pass-create-cancel"),
+                parse_mode=ParseMode.HTML,
+                reply_markup=ReplyKeyboardRemove(),
+            )
+        old_passport = user.get("passport_number", "")
+        logger.debug(
+            f"changing passport number for: {self.update.user} from {old_passport} to {passport_number}"
+        )
+        await self.base.user_db.update_one(
+            {"user_id": self.update.user, "bot_id": self.bot},
+            {"$set": {"passport_number": passport_number}},
+        )
+        await self.update.reply(
+            self.l(
+                "passes-passport-changed-message",
+                passportNumber=passport_number,
+            ),
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.HTML,
+        )
+        await self.after_legal_name_input(reason, "passport")
+    
+    async def handle_passport_timeout(self, data):
+        return await self.update.reply(
+            self.l("passes-passport-timeout"),
+            parse_mode=ParseMode.HTML,
+            reply_markup=ReplyKeyboardRemove(),
+        )
 
     async def handle_legal_name_input(self, data: str):
         pass_key, reason = data.split("|", maxsplit=2)
@@ -1046,7 +1127,11 @@ class PassUpdate:
         )
         await self.after_legal_name_input(reason)
 
-    async def after_legal_name_input(self, data):
+    async def after_legal_name_input(self, data, input_type: str = "name"):
+        if data == "cmd":
+            return
+        if input_type == "name" and self.pass_key == PASS_RU:
+            return await self.handle_passport_request(data)
         if data == "pass":
             await self.update.reply(
                 self.l("passes-pass-role-select"),
@@ -1072,7 +1157,7 @@ class PassUpdate:
                     ]
                 ),
             )
-        elif data != "cmd":
+        elif data not in ["cmd", "passport_data"]:
             await self.accept_invitation(data)
 
     async def handle_cq_pass_role(self, key: str, role: str):
@@ -1605,6 +1690,17 @@ class Passes(BasePlugin):
                         }
                     },
                 )
+        
+        async for user in self.user_db.find(
+            {
+                "bot_id": self.bot.id,
+                "passport_number": {"$exists": False},
+                PASS_RU: {"$exists": True},
+            }
+        ):
+            upd = await self.create_update_from_user(user["user_id"])
+            upd.set_pass_key(PASS_RU)
+            await upd.require_passport_data()
 
         await self.recalculate_queues()
         while True:
@@ -1966,6 +2062,15 @@ class Passes(BasePlugin):
     async def handle_legal_name_input(self, update, data):
         return await self.create_update(update).handle_legal_name_input(data)
 
+    async def handle_legal_name_timeout(self, update, data):
+        return await self.create_update(update).handle_legal_name_timeout(data)
+
+    async def handle_passport_input(self, update, data):
+        return await self.create_update(update).handle_passport_input(data)
+
+    async def handle_passport_timeout(self, update, data):
+        return await self.create_update(update).handle_passport_timeout(data)
+
     async def handle_payment_proof_input(self, update, data):
         return await self.create_update(update).handle_payment_proof_input(data)
 
@@ -1974,9 +2079,6 @@ class Passes(BasePlugin):
 
     async def handle_couple_timeout(self, update, data):
         return await self.create_update(update).handle_couple_timeout(data)
-
-    async def handle_legal_name_timeout(self, update, data):
-        return await self.create_update(update).handle_legal_name_timeout(data)
 
     async def handle_payment_proof_timeout(self, update, data):
         return await self.create_update(update).handle_payment_proof_timeout(data)

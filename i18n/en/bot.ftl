@@ -673,6 +673,23 @@ passes-couple-didnt-answer =
     You can send them an invitation again, or choose another person, or a solo pass.
 passes-invitation-timeout =
     Sorry, the invitation I've sent earlier has timed out. You can register again or see your pass in /passes.
+passes-passport-request-message=
+    Please enter your passport series and number, like <code>AB 1234567</code>.
+    It is required to enter the event venue.
+passes-passport-changed-message =
+    Your passport series and number are updated: <b>{$passportNumber}</b>.
+passes-passport-timeout =
+    I haven't received your passport number in time. Please use the /passes command to try again.
+passes-passport-data-required-beginning-message = 
+    Please enter your passport data.
+passes-passport-data-required =
+    For you to be able to enter the event, I need to collect your passport data.
+    This information must be provided as soon as possible and will be transferred
+    to the venue security control.
+
+    Please take a moment and review or enter your passport data using a button below.
+    Wrong data may result in you being unable to enter the event.
+passes-passport-data-button = 📝 Enter passport data
 
 
 user-is-restricted = Some actions have been disabled.
