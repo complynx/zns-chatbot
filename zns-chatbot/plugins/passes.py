@@ -1028,6 +1028,9 @@ class PassUpdate:
             ]]),
         )
 
+    async def handle_passport_data_cmd(self):
+        return await self.handle_cq_passport_data(PASS_RU)
+
     async def handle_cq_passport_data(self, pass_key: str):
         self.set_pass_key(pass_key)
         logger.debug(f"command to change passport data for: {self.update.user}")
@@ -1657,6 +1660,7 @@ class Passes(BasePlugin):
             CommandHandler("passes_assign", self.handle_passes_assign_cmd),
             CommandHandler("passes_cancel", self.handle_passes_cancel_cmd),
             CommandHandler("legal_name", self.handle_name_cmd),
+            CommandHandler("passport", self.handle_passport_data_cmd),
             CommandHandler("role", self.handle_role_cmd),
         ]
         self._cbq_handler = CallbackQueryHandler(
@@ -1691,16 +1695,16 @@ class Passes(BasePlugin):
                     },
                 )
         
-        async for user in self.user_db.find(
-            {
-                "bot_id": self.bot.id,
-                "passport_number": {"$exists": False},
-                PASS_RU: {"$exists": True},
-            }
-        ):
-            upd = await self.create_update_from_user(user["user_id"])
-            upd.set_pass_key(PASS_RU)
-            await upd.require_passport_data()
+        # async for user in self.user_db.find(
+        #     {
+        #         "bot_id": self.bot.id,
+        #         "passport_number": {"$exists": False},
+        #         PASS_RU: {"$exists": True},
+        #     }
+        # ):
+        #     upd = await self.create_update_from_user(user["user_id"])
+        #     upd.set_pass_key(PASS_RU)
+        #     await upd.require_passport_data()
 
         await self.recalculate_queues()
         while True:
@@ -2040,6 +2044,9 @@ class Passes(BasePlugin):
 
     def create_update(self, update) -> PassUpdate:
         return PassUpdate(self, update)
+    
+    async def handle_passport_data_cmd(self, update: TGState):
+        return await self.create_update(update).handle_passport_data_cmd()
 
     async def handle_callback_query(self, updater):
         return await self.create_update(updater).handle_callback_query()
