@@ -173,6 +173,17 @@ food-payment-request-waiting-message =
     {food-payment-method}
 
 # Activities
+activity-adm-payment-proof-received =
+    User {$link} sent payment for their selected activities.
+    Total activities sum: {$activitiesTotal} ₽. Confirmation required.
+    <b>Attention</b>, do not mark proof as rejected, wait a bit and try to find the payment first.
+activity-adm-payment-proof-accept-button = ✅ Accept
+activity-adm-payment-proof-reject-button = ❌ Reject
+activity-adm-payment-accepted-msg =
+    Payment for {$link}'s activities with a total of <code>{$activitiesTotal}</code> ₽ is confirmed.
+activity-adm-payment-rejected-msg =
+    Payment for {$link}'s activities with a total of <code>{$activitiesTotal}</code> ₽ is rejected.
+
 activity-select-message =
     At Zouk Non Stop Picnic, there will be several activities. Some of them require a prior booking, even if you have a full pass and they are included in its cost.
     Mark the ones you want to attend, by toggling the buttons below between ☑️ and ❌.
@@ -206,9 +217,42 @@ activity-finished-message =
         *[False] ❌
     } {activity-soundhealing}
 
-    Total price: <code>{$totalPrice}</code> ₽.
+    {$needPayment ->
+        [true] {activity-finished-message-need-payment}
+        *[false]  
+    }
+activity-finished-message-need-payment =
+    Total price: <code>{$totalPrice}</code> ₽. (only if you don't have a full pass)
+    {food-payment-method}
+activity-button-pay = 💸 Pay for activities
+activity-button-exit = 🚪 Exit
+activity-message-exited = If you need to see or change your activities selection, you can always use the /activities command.
+activity-payment-request-callback-message =
+    You need to pay <code>{$totalPrice}</code> ₽ for the selected activities.
+    {food-payment-method}
+    Scroll down to send the proof of payment.
+activity-payment-request-waiting-message =
+    You need to pay <code>{$totalPrice}</code> ₽ for the selected activities.
+    {food-payment-method}
+    Please send the proof of payment in PDF format or as an image.
+activity-payment-proof-timeout =
+    I haven't received your payment proof in time. Please use the /activities command to try again.
+    Don't worry, your selection hasn't changed.
+activity-payment-proof-cancelled =
+    If you need to resubmit your payment proof or view your activities selection, use the /activities command.
+    Don't worry, your selection hasn't changed.
+activity-payment-proof-wrong-data =
+    I was expecting a PDF file or an image as proof of payment, but this message doesn't seem to match that.
+    Sorry about the confusion.
+    To try again, please use the /activities command and submit a PDF file or an image.
+activity-payment-proof-forwarded =
+    I've sent your payment proof to our administrators for verification. They will review it, and I'll update you with the result soon.
+    If you need to view your activities selection in the meantime, use the /activities command.
+activity-payment-proof-accepted =
+    Your payment for the selected activities with a total of <code>{$activitiesTotal}</code> ₽ has been accepted! You can view your selection using the /activities command.
+activity-payment-proof-rejected-retry =
+    Your payment proof for the selected activities with a total of <code>{$activitiesTotal}</code> ₽ was rejected. You can try to pay again using the /activities command, or contact support.
 
-    If you need to change something, use the /activities command.
 
 # Activity Names
 activity-open = Party

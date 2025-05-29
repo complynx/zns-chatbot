@@ -546,7 +546,9 @@ class FoodUpdate:
             )
             return
 
-        order = await self.base.get_order(client_user_id, self.pass_key)
+        order = await self.base.food_db.find_one(
+            {"user_id": client_user_id, "pass_key": self.pass_key}
+        )
 
         if not order:
             logger.warning(
@@ -557,6 +559,7 @@ class FoodUpdate:
 
         order_id = order["_id"]
         order_total = order.get("total", 0.0)
+        activities_total = self.activities_price(order.get("activities", {}))
 
         client_user_obj = await self.update.get_user()
 
@@ -572,6 +575,7 @@ class FoodUpdate:
             status_key,
             name=client_name_on_order,
             total=order_total,
+            activitiesTotal=activities_total,
             orderId=str(order_id),
         )
 
@@ -896,12 +900,17 @@ class FoodUpdate:
 
         # Get or create empty order
         order = await self.base.food_db.find_one(
-            {"user_id": user["_id"], "pass_key": self.pass_key}
+            {"user_id": user["user_id"], "pass_key": self.pass_key}
         )
         if not order:
             order = {}
 
-        await self.activities_message(order)
+        # Check if activities have been paid for
+        if order.get("activities_payment_status") in ["paid", "proof_submitted"]:
+            await self.handle_cq_submit_activities()
+        else:
+            # Proceed to activity selection
+            await self.activities_message(order)
 
     async def activities_message(self, order: dict):
         """Generate the activities message."""
@@ -971,7 +980,7 @@ class FoodUpdate:
 
         # Get or create empty order
         order = await self.base.food_db.find_one(
-            {"user_id": user["_id"], "pass_key": self.pass_key}
+            {"user_id": user["user_id"], "pass_key": self.pass_key}
         )
         if not order:
             order = {"activities": {}}
@@ -993,7 +1002,7 @@ class FoodUpdate:
         # Save order with updated activities
         result = await self.base.food_db.update_one(
             {
-                "user_id": user["_id"],
+                "user_id": user["user_id"],
                 "pass_key": self.pass_key,
             },
             {
@@ -1006,7 +1015,7 @@ class FoodUpdate:
         )
         if result.modified_count < 1:
             logger.warning(
-                f"Failed to update activities for user {user['_id']} with pass_key {self.pass_key}"
+                f"Failed to update activities for user {self.user} with pass_key {self.pass_key}"
             )
 
         await self.activities_message(order)
@@ -1040,26 +1049,376 @@ class FoodUpdate:
         assert user is not None, "User not found"
 
         order = await self.base.food_db.find_one(
-            {"user_id": user["_id"], "pass_key": self.pass_key}
+            {"user_id": user["user_id"], "pass_key": self.pass_key}
         )
         if not order:
             order = {}
         # Get selected activities
         activities = order.get("activities", {})
-        selected_activities = {
+        keys = {
             act: str(activities.get(act, False)) for act in ACTIVITIES
         }
+
+        # Check and assign proof_admin if not set
+        if not order.get("proof_admin"):
+            if self.base.food_admins:
+                assigned_admin_id = choice(self.base.food_admins)
+                await self.base.food_db.update_one(
+                    {"_id": order["_id"]},
+                    {"$set": {"proof_admin": assigned_admin_id}},
+                )
+                order["proof_admin"] = assigned_admin_id
+            else:
+                logger.error("No food_admins configured to assign for activities.")
+                # Optionally inform the user that admin assignment failed
+                # await self.update.reply(self.l("food-payment-admins-not-configured"), parse_mode=ParseMode.HTML)
+
+        proof_admin_id = order.get("proof_admin")
+        admin_details = {}
+        if proof_admin_id:
+            admin_user_obj = await self.base.user_db.find_one(
+                {"user_id": proof_admin_id, "bot_id": self.bot}
+            )
+            if admin_user_obj:
+                admin_details = self.admin_to_keys(admin_user_obj, self.update.language_code)
+            else:
+                logger.error(f"Food admin user object not found for ID: {proof_admin_id}")
+        keys.update(admin_details)
+
+        action_buttons = []
+        order_id = order.get("_id")
+        total_price = self.activities_price(activities)
+
+        if( order_id and total_price > 0 and
+            order.get("activities_payment_status") not in ["paid", "proof_submitted"]):
+            pay_button = InlineKeyboardButton(
+                self.l("activity-button-pay"),  # Assuming this localization key will be added
+                callback_data=f"{self.base.name}|activities_pay|{order_id}",
+            )
+            action_buttons.append([pay_button])
+            keys["needPayment"] = "true"
+        else:
+            keys["needPayment"] = "false"
+
+        exit_button = InlineKeyboardButton(
+            self.l("activity-button-exit"),  # Assuming this localization key will be added
+            callback_data=f"{self.base.name}|activities_exit",
+        )
+        action_buttons.append([exit_button])
+
+        reply_markup = InlineKeyboardMarkup(action_buttons)
 
         await self.update.edit_or_reply(
             self.l(
                 "activity-finished-message",
-                **selected_activities,
-                totalPrice=self.activities_price(activities),
+                **keys,
+                totalPrice=total_price,
             ),
-            reply_markup=None,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
             parse_mode=ParseMode.HTML,
         )
 
+    async def handle_cq_activities_exit(self):
+        """Handle the exit button press from the activities finished message."""
+        await self.update.edit_message_text(
+            self.l("activity-message-exited"),  # Assuming this localization key will be added
+            reply_markup=None,  # Remove buttons
+            parse_mode=ParseMode.HTML,
+        )
+
+    async def handle_cq_activities_pay(self, order_id_str: str):
+        """Handle the pay button press for activities."""
+        order_id = ObjectId(order_id_str)
+
+        order = await self.base.food_db.find_one(
+            {"_id": order_id, "user_id": self.update.user}
+        )
+        assert order is not None, "Order not found"
+
+        activities_payment_status = order.get("activities_payment_status")
+        activities_total = self.activities_price(order.get("activities", {}))
+
+        assert activities_payment_status not in ["paid", "proof_submitted"], "Activities already paid"
+        assert activities_total > 0, "Activities total must be greater than zero"
+
+        # Ensure proof_admin is assigned (can reuse logic from food payment if applicable)
+        if not order.get("proof_admin"):
+            assigned_admin_id = choice(self.base.food_admins)
+            await self.base.food_db.update_one(
+                {"_id": order_id}, {"$set": {"proof_admin": assigned_admin_id}}
+            )
+            order["proof_admin"] = assigned_admin_id
+
+        proof_admin_id = order.get("proof_admin")
+        assert proof_admin_id, "Proof admin must be assigned for activities payment"
+
+        proof_admin_user_obj = await self.base.user_db.find_one(
+            {"user_id": proof_admin_id, "bot_id": self.bot}
+        )
+        assert proof_admin_user_obj, "Proof admin user object must exist"
+
+        payment_detail_keys = self.admin_to_keys(
+            proof_admin_user_obj, self.update.language_code
+        )
+        payment_detail_keys["total"] = activities_total
+
+        await self.update.edit_message_text(
+            self.l("activity-payment-request-callback-message", **payment_detail_keys), # Placeholder
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([]),
+            disable_web_page_preview=True,
+        )
+
+        await self.update.reply(
+            self.l("activity-payment-request-waiting-message", **payment_detail_keys), # Placeholder
+            parse_mode=ParseMode.HTML,
+            reply_markup=ReplyKeyboardMarkup(
+                [[CANCEL_CHR + self.l("cancel-command")]], resize_keyboard=True
+            ),
+            disable_web_page_preview=True,
+        )
+        await self.update.require_anything(
+            self.base.name,
+            "handle_activities_payment_proof_input",
+            f"{order_id_str}",
+            "handle_activities_payment_proof_timeout",
+        )
+
+    async def handle_activities_payment_proof_input(self, order_id_str: str):
+        if (
+            self.update.message
+            and self.update.message.text
+            and self.update.message.text.startswith(CANCEL_CHR)
+        ):
+            await self.update.reply(
+                self.l("activity-payment-proof-cancelled"), # Placeholder
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        
+        order_id = ObjectId(order_id_str)
+
+        if not (
+            self.update.message
+            and (self.update.message.photo or self.update.message.document)
+        ):
+            await self.update.reply(
+                self.l("activity-payment-proof-wrong-data"), # Placeholder
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        file_id = ""
+        file_ext = ".dat"
+        if self.update.message.photo:
+            file_id = self.update.message.photo[-1].file_id
+            file_ext = ".jpg"
+        elif self.update.message.document:
+            doc = self.update.message.document
+            file_id = doc.file_id
+            if doc.mime_type == "application/pdf":
+                file_ext = ".pdf"
+            elif doc.file_name:
+                import os
+                _, ext = os.path.splitext(doc.file_name)
+                if ext:
+                    file_ext = ext.lower()
+
+        order = await self.base.food_db.find_one(
+            {"_id": order_id, "user_id": self.update.user}
+        )
+        assert order is not None, "Order not found"
+        assert order.get("activities_payment_status") in [None, "rejected"], \
+            "Activities payment must be in pending state to submit proof"
+        
+        proof_admin_id = order.get("proof_admin")
+        assert proof_admin_id, "Proof admin must be assigned for activities payment"
+
+        await self.base.food_db.update_one(
+            {"_id": order_id},
+            {
+                "$set": {
+                    "activities_payment_status": "proof_submitted",
+                    "activities_proof_file": f"{file_id}{file_ext}",
+                    "activities_proof_received_date": datetime.datetime.now(datetime.timezone.utc),
+                }
+            },
+        )
+
+        admin_user_obj = await self.base.user_db.find_one(
+            {"user_id": proof_admin_id, "bot_id": self.bot}
+        )
+        client_user_obj = await self.get_user()
+        activities_total = self.activities_price(order.get("activities", {}))
+        assert admin_user_obj, "Admin user object must exist for activities payment proof"
+        assert client_user_obj, "Client user object must exist for activities payment proof"
+
+        admin_lang = admin_user_obj.get("language_code", "en")
+        admin_tg_state = TGState(admin_user_obj["user_id"], self.base.base_app)
+        admin_tg_state.language_code = admin_lang
+        admin_l = admin_tg_state.l
+
+        forward_message = await self.update.forward_message(proof_admin_id)
+        if forward_message:
+            await self.update.bot.send_message(
+                chat_id=proof_admin_id,
+                text=admin_l(
+                    "activity-adm-payment-proof-received", # Placeholder
+                    link=client_user_link_html(client_user_obj, language_code=admin_lang),
+                    total=activities_total,
+                ),
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                admin_l("activity-adm-payment-proof-accept-button"), # Placeholder
+                                callback_data=f"{self.base.name}|adm_activities_acc|{order_id_str}",
+                            ),
+                            InlineKeyboardButton(
+                                admin_l("activity-adm-payment-proof-reject-button"), # Placeholder
+                                callback_data=f"{self.base.name}|adm_activities_rej|{order_id_str}",
+                            ),
+                        ]
+                    ]
+                ),
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+
+            await self.update.reply(
+                self.l("activity-payment-proof-forwarded"), # Placeholder
+                reply_markup=ReplyKeyboardRemove(),
+                parse_mode=ParseMode.HTML,
+            )
+        else:
+            raise Exception(
+                f"Failed to forward activities payment proof for order {order_id_str} to admin"
+            )
+
+    async def handle_activities_payment_proof_timeout(self, order_id_str: str):
+        # order_id_str = prefixed_order_id_str.replace("activities_", "", 1) # Not strictly needed for generic message
+        await self.update.reply(
+            self.l("activity-payment-proof-timeout"), # Placeholder
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode=ParseMode.HTML,
+        )
+
+    async def handle_cq_adm_activities_acc(self, order_id_str: str):
+        """Handles the admin acceptance of an activities payment proof."""
+        order_id = ObjectId(order_id_str)
+        
+        assert self.update.user in self.base.food_admins, "User is not a food admin."
+
+        order = await self.base.food_db.find_one({"_id": order_id})
+        assert order is not None, f"Order {order_id_str} not found."
+        
+        result = await self.base.food_db.update_one(
+            {"_id": order_id, "activities_payment_status": "proof_submitted"}, # Assuming 'proof_submitted' is the status before acceptance
+            {
+                "$set": {
+                    "activities_payment_status": "paid",
+                    "activities_payment_confirmed_by": self.update.user,
+                    "activities_payment_confirmed_date": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ),
+                }
+            },
+        )
+
+        if result.modified_count > 0:
+            client_user_id = order.get("user_id")
+            client_user_obj = None
+            if client_user_id:
+                client_user_obj = await self.base.user_db.find_one(
+                    {"user_id": client_user_id, "bot_id": self.bot}
+                )
+
+            admin_lang = self.update.language_code
+
+            await self.update.edit_message_text(
+                self.l(
+                    "activity-adm-payment-accepted-msg", # Placeholder
+                    orderId=order_id_str,
+                    link=client_user_link_html(
+                        client_user_obj,
+                        language_code=admin_lang,
+                    ),
+                    total=self.activities_price(order.get("activities", {})),
+                ),
+                reply_markup=None,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+
+            if client_user_id:
+                client_update = await self.base.create_food_update_for_user(
+                    client_user_id
+                )
+                if client_update:
+                    # Need a new notification status key for activities payment accepted
+                    await client_update.notify_payment_status(
+                        "activity-payment-proof-accepted" # Placeholder
+                    )
+
+    async def handle_cq_adm_activities_rej(self, order_id_str: str):
+        """Handles the admin rejection of an activities payment proof."""
+        order_id = ObjectId(order_id_str)
+
+        assert self.update.user in self.base.food_admins, "User is not a food admin."
+
+        order = await self.base.food_db.find_one({"_id": order_id})
+        assert order is not None, f"Order {order_id_str} not found."
+
+        result = await self.base.food_db.update_one(
+            {"_id": order_id, "activities_payment_status": "proof_submitted"},
+            {
+                "$set": {
+                    "activities_payment_status": "rejected",
+                    "activities_payment_rejected_by": self.update.user,
+                    "activities_payment_rejected_date": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ),
+                }
+            },
+        )
+
+        if result.modified_count > 0:
+            client_user_id = order.get("user_id")
+            client_user_obj = None
+            if client_user_id:
+                client_user_obj = await self.base.user_db.find_one(
+                    {"user_id": client_user_id, "bot_id": self.bot}
+                )
+
+            admin_lang = self.update.language_code
+
+            await self.update.edit_message_text(
+                self.l(
+                    "activity-adm-payment-rejected-msg",  # Placeholder
+                    orderId=order_id_str,
+                    link=client_user_link_html(
+                        client_user_obj,
+                        language_code=admin_lang,
+                    ),
+                    total=self.activities_price(order.get("activities", {})),
+                ),
+                reply_markup=None,
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+
+            if client_user_id:
+                client_update = await self.base.create_food_update_for_user(
+                    client_user_id
+                )
+                if client_update:
+                    # Need a new notification status key for activities payment rejected
+                    await client_update.notify_payment_status(
+                        "activity-payment-proof-rejected-retry"  # Placeholder
+                    )
 
 class Food(BasePlugin):
     name = "food"
@@ -1523,3 +1882,11 @@ class Food(BasePlugin):
 
     async def handle_activities_cmd(self, update: TGState):
         return await self.create_update(update).handle_activities()
+
+    async def handle_activities_payment_proof_input(self, update: TGState, order_id_str: str):
+        """Registered callback for TGState.require_anything for activities payment proof."""
+        return await self.create_update(update).handle_activities_payment_proof_input(order_id_str)
+
+    async def handle_activities_payment_proof_timeout(self, update: TGState, order_id_str: str):
+        """Registered callback for TGState.require_anything for activities payment proof timeout."""
+        return await self.create_update(update).handle_activities_payment_proof_timeout(order_id_str)
