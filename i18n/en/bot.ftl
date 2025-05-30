@@ -160,7 +160,7 @@ food-payment-method =
             [nophone] Send them a message.
            *[other] Send them a message or call on {$phoneContact}.
         }
-        *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}), contact {$adminLink}.
+        *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}, please don't send to other banks, your money may not arrive!), contact {$adminLink}.
     }
 
 food-payment-request-callback-message =

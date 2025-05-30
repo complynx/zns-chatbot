@@ -204,7 +204,7 @@ food-payment-method =
             [nophone] Напишите ему сообщение.
            *[other] Напишите ему сообщение или позвоните по номеру {$phoneContact}.
         }
-        *[sbp] Оплату можно произвести через СБП по номеру телефона <code>{$phoneSBP}</code> ({$banks}), контакт {$adminLink}.
+        *[sbp] Оплату можно произвести через СБП по номеру телефона <code>{$phoneSBP}</code> ({$banks}, пожалуйста, не отправляйте на другие банки, ваши деньги могут не дойти!), контакт {$adminLink}.
     }
 
 food-payment-request-callback-message =
