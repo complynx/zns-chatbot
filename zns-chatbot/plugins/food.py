@@ -605,7 +605,8 @@ class FoodUpdate:
             )
             return
 
-        if self.update.user not in self.base.food_admins:
+        if (self.update.user not in self.base.food_admins or
+             self.update.user not in self.base.food_admins_old):
             await self.update.reply(
                 self.l("food-not-authorized-admin"), parse_mode=ParseMode.HTML
             )
@@ -688,7 +689,8 @@ class FoodUpdate:
             )
             return
 
-        if self.update.user not in self.base.food_admins:
+        if (self.update.user not in self.base.food_admins or
+             self.update.user not in self.base.food_admins_old):
             await self.update.reply(
                 self.l("food-not-authorized-admin"), parse_mode=ParseMode.HTML
             )
@@ -1309,8 +1311,9 @@ class FoodUpdate:
     async def handle_cq_adm_activities_acc(self, order_id_str: str):
         """Handles the admin acceptance of an activities payment proof."""
         order_id = ObjectId(order_id_str)
-        
-        assert self.update.user in self.base.food_admins, "User is not a food admin."
+
+        assert (self.update.user in self.base.food_admins or
+                self.update.user in self.base.food_admins_old), "User is not a food admin."
 
         order = await self.base.food_db.find_one({"_id": order_id})
         assert order is not None, f"Order {order_id_str} not found."
@@ -1367,7 +1370,8 @@ class FoodUpdate:
         """Handles the admin rejection of an activities payment proof."""
         order_id = ObjectId(order_id_str)
 
-        assert self.update.user in self.base.food_admins, "User is not a food admin."
+        assert (self.update.user in self.base.food_admins or
+                self.update.user in self.base.food_admins_old), "User is not a food admin."
 
         order = await self.base.food_db.find_one({"_id": order_id})
         assert order is not None, f"Order {order_id_str} not found."
@@ -1440,6 +1444,9 @@ class Food(BasePlugin):
         ]
         if len(self.food_admins) == 0:
             self.food_admins = [int(admin_id) for admin_id in self.config.food.admins]
+        self.food_admins_old = [
+            int(admin_id) for admin_id in self.config.food.payment_admins_old
+        ]
 
         self._command_checkers = [
             CommandHandler("food", self.handle_food_start_cmd),

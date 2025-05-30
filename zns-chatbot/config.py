@@ -128,6 +128,7 @@ class Food(BaseSettings):
     lunch_time: time = Field(time(17, 0, 0))
     dinner_time: time = Field(time(22, 0, 0))
     payment_admins: set[int] = Field(set())
+    payment_admins_old: set[int] = Field(set())
     out_of_stock_admin: int = Field(379278985)
     admins: set[int] = Field({379278985})
 
