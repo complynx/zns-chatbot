@@ -1,3 +1,4 @@
+from asyncio import Event, create_task, sleep
 import datetime
 import json
 import logging
@@ -19,6 +20,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler
 
 from ..config import full_link
 from ..plugins.passes import PASS_KEY
+from ..plugins.massage import now_msk
 from ..telegram_links import client_user_link_html, client_user_name
 from ..tg_state import TGState
 from .base_plugin import PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING, BasePlugin
@@ -31,6 +33,7 @@ LUNCH_SUB_CATEGORIES = ["main", "side", "salad"]
 CANCEL_CHR = chr(0xE007F)
 ACTIVITIES = ["open", "yoga", "cacao", "soundhealing"]
 CLASS_ACTIVITIES = ["yoga", "cacao", "soundhealing"]
+NOTIFICATION_CHECK_INTERVAL = 30  # 30 seconds
 
 
 class FoodUpdate:
@@ -114,6 +117,10 @@ class FoodUpdate:
         """
         buttons = []
         message_text = ""
+        if not order_doc and self.base.deadline < now_msk():
+            # If no order and deadline has passed, show not accepting orders
+            message_text = self.l("food-not-accepting-orders")
+            return message_text, buttons
 
         # Base parameters for the WebApp URL
         menu_url_params_base = f"pass_key={pass_key}"
@@ -278,6 +285,12 @@ class FoodUpdate:
         order = await self.base.food_db.find_one(
             {"_id": order_id, "user_id": self.update.user}
         )
+
+        if now_msk() > self.base.deadline:
+            await self.update.reply(
+                self.l("food-not-accepting-orders"), parse_mode=ParseMode.HTML
+            )
+            return
 
         if not order:
             await self.update.reply(
@@ -908,7 +921,8 @@ class FoodUpdate:
             order = {}
 
         # Check if activities have been paid for
-        if order.get("activities_payment_status") in ["paid", "proof_submitted"]:
+        if (order.get("activities_payment_status") in ["paid", "proof_submitted"]
+            or now_msk() > self.base.deadline):
             await self.handle_cq_submit_activities()
         else:
             # Proceed to activity selection
@@ -1423,6 +1437,16 @@ class FoodUpdate:
                     await client_update.notify_payment_status(
                         "activity-payment-proof-rejected-retry"  # Placeholder
                     )
+    
+    async def send_notification(self, notification_type: str) -> None:
+        await self.update.reply(
+            self.l(f"food-notification-message-{notification_type}"),
+            parse_mode=ParseMode.HTML,
+        )
+        await self.base.food_db.update_one(
+            {"user_id": self.update.user, "pass_key": self.pass_key},
+            {"$set": {f"notification_{notification_type}_sent": True}},
+        )
 
 class Food(BasePlugin):
     name = "food"
@@ -1436,6 +1460,8 @@ class Food(BasePlugin):
         self.food_db = base_app.mongodb[self.config.mongo_db.food_collection]
         self.user_db = base_app.users_collection
         self.base_app.food = self
+
+        self.deadline = self.config.food.deadline
 
         self.menu = self._load_menu()
 
@@ -1455,6 +1481,127 @@ class Food(BasePlugin):
         self._cbq_handler = CallbackQueryHandler(
             self.handle_food_callback_query_entry, pattern=f"^{self.name}\\|.*"
         )
+        create_task(self._notification_sender())
+
+    async def _notification_sender(self) -> None:
+        from .passes import Passes
+        bot_started: Event = self.base_app.bot_started
+        await bot_started.wait()
+        passes_plugin: Passes = self.base_app.passes
+        while True:
+            try:
+                # Wait for the next notification time
+                await sleep(NOTIFICATION_CHECK_INTERVAL)
+                passes = await passes_plugin.get_all_passes(with_unpaid=True)
+                # Send notifications to users with pending orders
+                if (now_msk() > ( # after the first notification time
+                        self.deadline - self.config.food.notification_first_time
+                    )
+                    and now_msk() < ( # don't send double notifications, and add a gap
+                        self.deadline - self.config.food.notification_last_time - self.config.food.notify_after
+                    )):
+                    async for order in self.food_db.find(
+                        {
+                            "pass_key": PASS_KEY,
+                            "payment_status": {"$nin": ["paid", "proof_submitted"]},
+                            "notification_first_sent": {"$ne": True},
+                            "total": {"$gt": 0},  # Only notify if total > 0
+                            "last_updated": {  # do not notify if user just updated order
+                                "$lte": datetime.datetime.now(datetime.timezone.utc)
+                                - self.config.food.notify_after
+                            }
+                        }
+                    ):
+                        user = order["user_id"]
+                        try:
+                            upd = await self.create_food_update_for_user(user)
+                            await upd.send_notification(
+                                "first"
+                            )  # Notify with first notification
+                        except Exception as e:
+                            logger.error(
+                                f"Error notifying {user=}: {e}",
+                                exc_info=True,
+                            )
+                            continue
+                    for user in passes:
+                        try:
+                            upd = await self.create_food_update_for_user(user["user_id"])
+                            order = await self.get_order(
+                                user_id=user["user_id"]
+                            )
+                            if (not order and
+                                 not user.get(PASS_KEY, {}).get("notified_food_first", False)):
+                                await upd.update.reply(
+                                    upd.l("food-no-order-notification-first"),
+                                    parse_mode=ParseMode.HTML
+                                )
+                                await self.user_db.update_one(
+                                    {"user_id": user["user_id"]},
+                                    {"$set": {f"{PASS_KEY}.notified_food_first": True}}
+                                )
+                        except Exception as e:
+                            logger.error(
+                                f"Error notifying {user=}: {e}",
+                                exc_info=True,
+                            )
+                            continue
+                # Send notifications to users with pending orders
+                if (now_msk() > ( # after the last notification time
+                        self.deadline - self.config.food.notification_last_time
+                    )
+                    and now_msk() < ( # don't send after the deadline
+                        self.deadline
+                    )):
+                    async for order in self.food_db.find(
+                        {
+                            "pass_key": PASS_KEY,
+                            "payment_status": {"$nin": ["paid", "proof_submitted"]},
+                            "notification_last_sent": {"$ne": True},
+                            "total": {"$gt": 0},  # Only notify if total > 0
+                            "last_updated": {  # do not notify if user just updated order
+                                "$lte": datetime.datetime.now(datetime.timezone.utc)
+                                - self.config.food.notify_after
+                            }
+                        }
+                    ):
+                        user = order["user_id"]
+                        try:
+                            upd = await self.create_food_update_for_user(user)
+                            await upd.send_notification(
+                                "last"
+                            )  # Notify with last notification
+                        except Exception as e:
+                            logger.error(
+                                f"Error notifying {user=}: {e}",
+                                exc_info=True,
+                            )
+                            continue
+                    for user in passes:
+                        try:
+                            upd = await self.create_food_update_for_user(user["user_id"])
+                            order = await self.get_order(
+                                user_id=user["user_id"]
+                            )
+                            if (not order and
+                                 not user.get(PASS_KEY, {}).get("notified_food_last", False)):
+                                await upd.update.reply(
+                                    upd.l("food-no-order-notification-last"),
+                                    parse_mode=ParseMode.HTML
+                                )
+                                await self.user_db.update_one(
+                                    {"user_id": user["user_id"]},
+                                    {"$set": {f"{PASS_KEY}.notified_food_last": True}}
+                                )
+                        except Exception as e:
+                            logger.error(
+                                f"Error notifying {user=}: {e}",
+                                exc_info=True,
+                            )
+                            continue
+            except Exception as e:
+                logger.error(f"Error in food notification sender: {e}", exc_info=True)
+
 
     def _load_menu(self) -> dict:
         import os
@@ -1479,6 +1626,22 @@ class Food(BasePlugin):
                 f"Order found for user_id: {user_id}, pass_key: {pass_key}. Order ID: "
                 f"{order.get('_id')}"
             )
+            if now_msk() > self.deadline:
+                if not order.get("order_details") or order.get("total", 0) <= 0:
+                    logger.info(
+                        f"Order {order.get('_id')} for user {user_id} is past the deadline"
+                        " and has no details or total <= 0. Treating as no order."
+                    )
+                    return None
+                if order.get("payment_status") not in [
+                    "paid",
+                    "proof_submitted",
+                ]:
+                    logger.info(
+                        f"Order {order.get('_id')} for user {user_id} is past the deadline"
+                        " and not paid/proof_submitted. Treating as no order."
+                    )
+                    return None
             # If order_details is None or an empty dict, and status is not protective, treat as no order.
             # An order with explicit "no-lunch" selections will have order_details populated.
             if not order.get("order_details") and order.get("payment_status") not in [

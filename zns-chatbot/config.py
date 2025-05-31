@@ -123,7 +123,6 @@ class Orders(BaseSettings):
 
 
 class Food(BaseSettings):
-    deadline: date = Field(date(2024, 6, 7))
     start_day: date = Field(date(2024, 6, 12))
     lunch_time: time = Field(time(17, 0, 0))
     dinner_time: time = Field(time(22, 0, 0))
@@ -131,6 +130,10 @@ class Food(BaseSettings):
     payment_admins_old: set[int] = Field(set())
     out_of_stock_admin: int = Field(379278985)
     admins: set[int] = Field({379278985})
+    deadline: datetime = Field(datetime(2025, 6, 4, 23, 59, 59))
+    notification_last_time: timedelta = Field(timedelta(days=1))
+    notification_first_time: timedelta = Field(timedelta(days=3))
+    notify_after: timedelta = Field(timedelta(hours=3))
 
 
 class Massages(BaseSettings):

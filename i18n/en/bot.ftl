@@ -171,6 +171,15 @@ food-payment-request-callback-message =
 food-payment-request-waiting-message =
     Please send a screenshot or a PDF file as proof of payment for your order of <code>{$total}</code> ₽.
     {food-payment-method}
+food-notification-message-first =
+    Hello, zoukonaut!
+    Last day to place a food order for the marathon is <b>June 4th</b>.
+    If you want your order to be delivered to the marathon, you need to pay for it and send me the payment confirmation by the end of the day.
+    Don't miss out!
+food-notification-message-last = {food-notification-message-first}
+food-no-order-notification-first = {food-notification-message-first}
+food-no-order-notification-last = {food-notification-message-last}
+food-not-accepting-orders = Sorry, you can no longer place food orders for the marathon. The deadline was June 4th.
 
 # Activities
 activity-adm-payment-proof-received =

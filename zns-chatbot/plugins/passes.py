@@ -1669,6 +1669,18 @@ class Passes(BasePlugin):
         self._queue_lock = Lock()
         create_task(self._timeout_processor())
 
+    async def get_all_passes(self, pass_key: str = PASS_RU, with_unpaid: bool = False, with_waitlist: bool = False) -> list[dict]:
+        states = ["payed"]
+        if with_unpaid:
+            states.append("assigned")
+        query = {
+            "bot_id": self.bot.id,
+            pass_key: {"$exists": True},
+        }
+        if not with_waitlist:
+            query[pass_key + ".state"] = {"$in": states}
+        return await self.user_db.find(query).to_list(None)
+
     async def _timeout_processor(self) -> None:
         bot_started: Event = self.base_app.bot_started
         await bot_started.wait()

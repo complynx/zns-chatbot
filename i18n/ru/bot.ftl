@@ -217,6 +217,15 @@ food-payment-request-waiting-message =
     {food-payment-method}
 
 food-payment-rejected = Ваш платеж за заказ на сумму {$total} ₽ был отклонен. Пожалуйста, свяжитесь с {$adminLink} для уточнения деталей.
+food-notification-message-first =
+    Привет, зуконавт!
+    Последний день, когда можно оставить заказ еды на марафон — <b>4 июня</b>.
+    Если ты хочешь, чтобы твой заказ был доставлен на марафон, тебе нужно оплатить его и прислать подтверждение оплаты до конца дня.
+    Успей!
+food-notification-message-last = {food-notification-message-first}
+food-no-order-notification-first = {food-notification-message-first}
+food-no-order-notification-last = {food-notification-message-last}
+food-not-accepting-orders = Извините, вы больше не можете размещать заказы на еду для марафона. Крайний срок был 4 июня.
 
 # Activities
 
