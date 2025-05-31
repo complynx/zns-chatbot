@@ -173,7 +173,7 @@ food-payment-request-waiting-message =
     {food-payment-method}
 food-notification-message-first =
     Hello, zoukonaut!
-    Last day to place a food order for the marathon is <b>June 4th</b>.
+    Last day to place a food order for the marathon is <b>June 4th</b> (till the end of the day).
     If you want your order to be delivered to the marathon, you need to pay for it and send me the payment confirmation by the end of the day.
     Don't miss out!
 food-notification-message-last = {food-notification-message-first}
