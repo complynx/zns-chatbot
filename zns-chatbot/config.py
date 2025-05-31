@@ -132,7 +132,7 @@ class Food(BaseSettings):
     admins: set[int] = Field({379278985})
     deadline: datetime = Field(datetime(2025, 6, 4, 23, 59, 59))
     notification_last_time: timedelta = Field(timedelta(days=1))
-    notification_first_time: timedelta = Field(timedelta(days=3))
+    notification_first_time: timedelta = Field(timedelta(days=4))
     notify_after: timedelta = Field(timedelta(hours=3))
 
 
