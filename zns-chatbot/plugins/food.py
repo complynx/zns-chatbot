@@ -618,13 +618,8 @@ class FoodUpdate:
             )
             return
 
-        if ((self.update.user not in self.base.food_admins) or
+        if ((self.update.user not in self.base.food_admins) and
              (self.update.user not in self.base.food_admins_old)):
-            logger.warning(
-                f"Unauthorized admin {self.update.user} attempted to accept payment proof for"
-                f" order {order_id_str}."+
-                f" Only authorized admins {self.base.food_admins} or {self.base.food_admins_old} can process payment proofs."
-            )
             await self.update.reply(
                 self.l("food-not-authorized-admin"), parse_mode=ParseMode.HTML
             )
@@ -707,7 +702,7 @@ class FoodUpdate:
             )
             return
 
-        if ((self.update.user not in self.base.food_admins) or
+        if ((self.update.user not in self.base.food_admins) and
              (self.update.user not in self.base.food_admins_old)):
             await self.update.reply(
                 self.l("food-not-authorized-admin"), parse_mode=ParseMode.HTML
@@ -1331,7 +1326,7 @@ class FoodUpdate:
         """Handles the admin acceptance of an activities payment proof."""
         order_id = ObjectId(order_id_str)
 
-        assert ((self.update.user in self.base.food_admins) or
+        assert ((self.update.user in self.base.food_admins) and
                 (self.update.user in self.base.food_admins_old)), "User is not a food admin."
 
         order = await self.base.food_db.find_one({"_id": order_id})
@@ -1389,7 +1384,7 @@ class FoodUpdate:
         """Handles the admin rejection of an activities payment proof."""
         order_id = ObjectId(order_id_str)
 
-        assert ((self.update.user in self.base.food_admins) or
+        assert ((self.update.user in self.base.food_admins) and
                 (self.update.user in self.base.food_admins_old)), "User is not a food admin."
 
         order = await self.base.food_db.find_one({"_id": order_id})
