@@ -1707,16 +1707,38 @@ class Passes(BasePlugin):
                     },
                 )
         
-        # async for user in self.user_db.find(
-        #     {
-        #         "bot_id": self.bot.id,
-        #         "passport_number": {"$exists": False},
-        #         PASS_RU: {"$exists": True},
-        #     }
-        # ):
-        #     upd = await self.create_update_from_user(user["user_id"])
-        #     upd.set_pass_key(PASS_RU)
-        #     await upd.require_passport_data()
+        async for user in self.user_db.find(
+            {
+                "bot_id": self.bot.id,
+                "passport_number": {"$exists": False},
+                PASS_RU: {"$exists": True},
+                PASS_RU + ".state": {"$in": ["assigned", "payed"]},
+                "notified_passport_data_required": {"$exists": False},
+            }
+        ):
+            try:
+                upd = await self.create_update_from_user(user["user_id"])
+                upd.set_pass_key(PASS_RU)
+                await upd.require_passport_data()
+                await self.user_db.update_one(
+                    {
+                        "bot_id": self.bot.id,
+                        "user_id": user["user_id"],
+                        "passport_number": {"$exists": False},
+                        PASS_RU: {"$exists": True},
+                    },
+                    {
+                        "$set": {
+                            "notified_passport_data_required": True
+                        }
+                    }
+                )
+            except Exception as e:
+                logger.error(
+                    "Exception in Passes._timeout_processor passport notification "+
+                    f"for user {user['user_id']}: {e}",
+                    exc_info=1,
+                )
 
         await self.recalculate_queues()
         while True:
