@@ -879,7 +879,7 @@ class FoodUpdate:
                 f" after order save for user {self.update.user}."
             )
         except TelegramError as e:
-            if e.message == "Message is not modified":
+            if "Message is not modified" in str(e):
                 pass
             else:
                 raise e
