@@ -41,7 +41,7 @@ def price_from_length(length:int=1)->int:
         return 1400
     if length == 3:
         return 1800
-    if length == 4:
+    if length == 5:
         return 2700
     raise ValueError(f"Unsupported length {length} for price calculation")
 
@@ -866,7 +866,7 @@ class UserMassages:
                 ), callback_data=f"{self.plugin.name}|ed|{massage.id}|{length}")
         keyboard = [
             [len_btn(1),len_btn(2)],
-            [len_btn(3),len_btn(4)],
+            [len_btn(3),len_btn(5)],
             # [len_btn(5),len_btn(6)],
             [
                 InlineKeyboardButton(self.l("massage-edit-back-button"), callback_data=f"{self.plugin.name}|back|{massage.id}"),
