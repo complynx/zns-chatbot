@@ -292,9 +292,12 @@ dow-long =
         [5] saturday
         *[6] sunday
     }
+massage-price-b = <b>{$price}</b> ₽
+massage-price = {$price} ₽
+massage-pd = {$durationicon} {massage-price-b} / <b>{$duration}</b> minutes
 massage-booking-cancel-button = ❌ Cancel booking
 massage-client-about =
-    Massage type: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Massage type: {massage-pd}.
     Party: <b>{$party}</b>
     Time: <b>{$time}</b>
     Specialist: {$specialist}
@@ -311,14 +314,14 @@ massage-edit-choose-party-button = {$party}
 massage-edit-error-too-many-massages = Only { $max} massages allowed a day for one client.
 massage-edit-error-slot-timeout = Cannot book this late, choose another time slot.
 massage-edit-error-slot-unavailable = Somebody just reserved this slot, choose another one.
-massage-edit-length-button = {$icon} Br {$price} / {$minutes} minutes.
+massage-edit-length-button = {$icon} {massage-price} / {$minutes} minutes.
 massage-edit-next-button = ➡ Next
 massage-edit-no-slots-available = No slots available...
 massage-edit-page = page {$page} of {$leng}
 massage-edit-page-next-button = Next ▶
 massage-edit-page-previous-button = ◀ Previous
 massage-edit-select-slot =
-    Selected massage: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Selected massage: {massage-pd}.
 
     Now you can select a party, tick or untick specialists to find available slots in their schedules.
     By default everyone is enabled ✅, but you can exclude some of them ❌ by clicking on their names.
@@ -331,7 +334,7 @@ massage-exited = If you need it again, you can always click: /massage
 massage-notification-additional =
     Hi, zoukonaut!
     You have a massage booking:
-    Massage type: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Massage type: {massage-pd}.
     Party: <b>{$party}</b>
     Time: <b>{$time}</b>
     Specialist: {$specialist}
@@ -341,7 +344,7 @@ massage-notification-additional =
 massage-notification-prior-long =
     Hi, zoukonaut!
     I remind you that you have a massage in {$inminutes} minutes, at <b>{$time}</b>:
-    Massage type: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Massage type: {massage-pd}.
     Specialist: {$specialist}
 
     Come <u>on time</u> because there is somebody after you. If you can't come, please cancel in advance.
@@ -349,7 +352,7 @@ massage-notification-prior-long =
 massage-notification-prior =
     Hi, zoukonaut!
     I remind you that you have a massage in {$inminutes} minutes, at <b>{$time}</b>:
-    Massage type: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Massage type: {massage-pd}.
     Specialist: {$specialist}
 
     Come <u>on time</u> because there is somebody after you. If you can't come, please cancel in advance.
@@ -361,7 +364,7 @@ massage-notification-toggle = {$pos ->
 massage-notifications-edit = You can switch on and off your notifications:
 massage-specialist-booking-cancelled =
     Client <i>{$client}</i> <u>cancelled</u> booking:
-    Massage type: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Massage type: {massage-pd}.
     Party: <b>{$party}</b>
     Time: <b>{$time}</b>
 
@@ -373,7 +376,7 @@ massage-specialist-instantbook = Instant booking:
 massage-specialist-instantbook-button = {$icon} {$minutes}+5
 massage-specialist-new-booking =
     Client <i>{$client}</i> booked a massage:
-    Massage type: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Massage type: {massage-pd}.
     Party: <b>{$party}</b>
     Time: <b>{$time}</b>
 massage-specialist-no-party-or-slot = No party or slot could have been calculated — error.
@@ -382,17 +385,17 @@ massage-specialist-notification-notify-next = Upcoming session (5 min before)
 massage-specialist-notification-soon =
     You have upcoming massage in {$inminutes} minutes, at <b>{$time}</b>.
     Client <i>{$client}</i>:
-    Massage type: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Massage type: {massage-pd}.
 massage-specialist-notifications-button = 🔔 Notifications
 massage-specialist-reserved =
     Successfully reserved:
-    Massage type: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Massage type: {massage-pd}.
     Time: <b>{$time}</b>
 massage-specialist-timetable-button = 📅 Timetable
 massage-specialist-to-start-button = ⬅ To start
 massage-specialist-view =
     Client: <i>{$client}</i>
-    Massage type: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> minutes.
+    Massage type: {massage-pd}.
     Party: <b>{$party}</b>
     Time: <b>{$time}</b>
 massage-specialist-view-booking-button = 📝 View booking

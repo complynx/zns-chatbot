@@ -339,9 +339,12 @@ dow-long =
         [5] суббота
         *[6] воскресенье
     }
+massage-price = {$price} ₽
+massage-price-b = <b>{$price}</b> ₽
+massage-pd = {$durationicon} {massage-price-b} / <b>{$duration}</b> минут
 massage-booking-cancel-button = ❌ Отменить бронирование
 massage-client-about =
-    Тип массажа: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+    Тип массажа: {massage-pd}.
     Вечеринка: <b>{$party}</b>
     Время: <b>{$time}</b>
     Специалист: {$specialist}
@@ -358,14 +361,14 @@ massage-edit-choose-party-button = {$party}
 massage-edit-error-too-many-massages = Не более {$max} массажей в день на одного клиента.
 massage-edit-error-slot-timeout = Нельзя забронировать так поздно, выбери другой слот.
 massage-edit-error-slot-unavailable = Кто-то только что зарезервировал этот слот, выбери другой.
-massage-edit-length-button = {$icon} Br {$price} / {$minutes} минут.
+massage-edit-length-button = {$icon} {massage-price} / {$minutes} минут.
 massage-edit-next-button = ➡ Дальше
 massage-edit-no-slots-available = Свободных слотов нет...
 massage-edit-page = страница {$page} из {$leng}
 massage-edit-page-next-button = Следующая ▶
 massage-edit-page-previous-button = ◀ Предыдущая
-massage-edit-select-specialists =
-    Выбран массаж: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+massage-edit-select-slot =
+    Выбран массаж: {massage-pd}.
 
     Здесь можно выбрать вечеринку, отфильтровать массажистов, чтобы найти свободные слоты в их расписании.
     По умолчанию, выбраны все ✅, но можно исключить некоторых ❌, нажав на их имя.
@@ -378,7 +381,7 @@ massage-exited = Если ещё понадобится, можно всегда
 massage-notification-additional =
     Привет зуконавт!
     Ты записан на массаж:
-    Тип массажа: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+    Тип массажа: {massage-pd}.
     Вечеринка: <b>{$party}</b>
     Время: <b>{$time}</b>
     Специалист: {$specialist}
@@ -388,7 +391,7 @@ massage-notification-additional =
 massage-notification-prior-long =
     Привет зуконавт!
     Напоминаю, что у тебя есть запись на массаж через {$inminutes} минут, в <b>{$time}</b>:
-    Тип массажа: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+    Тип массажа: {massage-pd}.
     Специалист: {$specialist}
 
     Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.
@@ -396,7 +399,7 @@ massage-notification-prior-long =
 massage-notification-prior =
     Привет зуконавт!
     Напоминаю, что у тебя есть запись на массаж через {$inminutes} минут, в <b>{$time}</b>:
-    Тип массажа: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+    Тип массажа: {massage-pd}.
     Специалист: {$specialist}
 
     Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.
@@ -408,7 +411,7 @@ massage-notification-toggle = {$pos ->
 massage-notifications-edit = Здесь можно включить или выключить напоминания:
 massage-specialist-booking-cancelled =
     Пользователь <i>{$client}</i> <u>отменил</u> бронирование:
-    Тип массажа: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+    Тип массажа: {massage-pd}.
     Вечеринка: <b>{$party}</b>
     Время: <b>{$time}</b>
 
@@ -420,7 +423,7 @@ massage-specialist-instantbook = Моментальная бронь:
 massage-specialist-instantbook-button = {$icon} {$minutes}+5
 massage-specialist-new-booking =
     Пользователь <i>{$client}</i> записался на массаж:
-    Тип массажа: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+    Тип массажа: {massage-pd}.
     Вечеринка: <b>{$party}</b>
     Время: <b>{$time}</b>
 massage-specialist-no-party-or-slot = Не получилось определить вечеринку и слот — ошибка.
@@ -429,17 +432,17 @@ massage-specialist-notification-notify-next = О грядущей сессии (
 massage-specialist-notification-soon =
     Через {$inminutes} минут, в <b>{$time}</b> следующий массаж.
     Пользователь <i>{$client}</i>:
-    Тип массажа: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+    Тип массажа: {massage-pd}.
 massage-specialist-notifications-button = 🔔 Напоминания
 massage-specialist-reserved =
     Успешно зарезервировано:
-    Тип массажа: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+    Тип массажа: {massage-pd}.
     Время: <b>{$time}</b>
 massage-specialist-timetable-button = 📅 Расписание
 massage-specialist-to-start-button = ⬅ На старт
 massage-specialist-view =
     Пользователь: <i>{$client}</i>
-    Тип массажа: {$durationicon} Br <b>{$price}</b> / <b>{$duration}</b> минут.
+    Тип массажа: {massage-pd}.
     Вечеринка: <b>{$party}</b>
     Время: <b>{$time}</b>
 massage-specialist-view-booking-button = 📝 К бронированию

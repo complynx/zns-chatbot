@@ -35,8 +35,15 @@ logger.debug(f"ctime {ctime}, ctime msk {ctime_msk}, msk offset {MSK_OFFSET}")
 logger.debug(f"now msk {now_msk()}")
 
 def price_from_length(length:int=1)->int:
-    price = 15*length +5
-    return price
+    if length == 1:
+        return 900
+    if length == 2:
+        return 1400
+    if length == 3:
+        return 1800
+    if length == 4:
+        return 2700
+    raise ValueError(f"Unsupported length {length} for price calculation")
 
 def min_from_length(length:int =1)->int:
     return (length*SLOT_LENGTH)-SLOT_BUFFER
@@ -860,7 +867,7 @@ class UserMassages:
         keyboard = [
             [len_btn(1),len_btn(2)],
             [len_btn(3),len_btn(4)],
-            [len_btn(5),len_btn(6)],
+            # [len_btn(5),len_btn(6)],
             [
                 InlineKeyboardButton(self.l("massage-edit-back-button"), callback_data=f"{self.plugin.name}|back|{massage.id}"),
                 InlineKeyboardButton(self.l("massage-edit-cancel-button"), callback_data=f"{self.plugin.name}|xed|{massage.id}")

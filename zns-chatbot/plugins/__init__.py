@@ -4,7 +4,7 @@ from .auth import Auth
 from .food import Food
 from .superuser import Superuser
 # from .orders import Orders
-# from .massage import MassagePlugin
+from .massage import MassagePlugin
 from .passes import Passes
 
 plugins = [
@@ -14,6 +14,6 @@ plugins = [
     Food,
     Superuser,
     # Orders,
-    # MassagePlugin,
+    MassagePlugin,
     Passes,
 ]
