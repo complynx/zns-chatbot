@@ -1,7 +1,10 @@
+from dataclasses import dataclass
 import datetime
 import logging
 from asyncio import Event, create_task, sleep
 from json import loads
+import csv
+from functools import lru_cache
 
 import tiktoken
 from google.oauth2 import service_account
@@ -37,12 +40,126 @@ EMBEDDING_MODEL = "Alibaba-NLP/gte-large-en-v1.5"
 RAG_DATABASE_INDEX = "index"
 RAG_DATABASE_FOLDER = "rag_database"
 
+DJ_DAY_CUTOFF_HOUR = 7  # DJs before this hour belong to the previous day
+
 ABOUT_REFRESH_INTERVAL = 3600
 
 
 class Assistant(BasePlugin):
     name = "assistant"
     about: str = ""
+
+    @dataclass
+    class DJTime:
+        start: datetime.datetime
+        dj: str
+        room: str
+
+    def _parse_column_date(self, col_name:str, year:int|None=None) -> datetime.date:
+        """
+        Extracts the date from a column name of format 'день, DD.MM' and returns a datetime.date.
+        If year is None, uses current year.
+        """
+        try:
+            # Split on comma and take the part after, e.g. '11.06'
+            date_part = col_name.split(',')[1].strip()
+            day_str, month_str = date_part.split('.')
+            day = int(day_str)
+            month = int(month_str)
+            if year is None:
+                year = datetime.datetime.now().year
+            return datetime.datetime(year, month, day).date()
+        except Exception:
+            raise ValueError(f"Unable to parse date from column name '{col_name}'")
+
+    @lru_cache(maxsize=1)
+    def load_schedule(self) -> list[DJTime]:
+        """
+        Loads and caches the schedule from the given CSV file.
+        Returns a list of DJTime sorted by start time.
+        """
+        entries = []
+        # Read entire CSV into memory
+        with open(self.config.line_up, newline='', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            rows = list(reader)
+
+        if not rows:
+            return []
+
+        header = rows[0]
+        rooms = rows[1]
+        current_year = datetime.datetime.now().year
+
+        # Iterate through each schedule column (skip time column at index 0)
+        num_cols = len(header)
+        for col_index in range(1, num_cols):
+            room = rooms[col_index].strip()
+            base_date = self._parse_column_date(header[col_index], year=current_year)
+            for row in rows[2:]:
+                # Ensure row has enough columns
+                if col_index >= len(row):
+                    continue
+                time_str = row[0].strip() if row[0] else ''
+                dj = row[col_index].strip() if row[col_index] else ''
+                if not time_str or not dj:
+                    continue
+                try:
+                    t = datetime.datetime.strptime(time_str, "%H:%M").time()
+                except ValueError:
+                    continue
+                # Determine correct date: times before DJ_DAY_CUTOFF_HOUR belong to next calendar day
+                if t.hour < DJ_DAY_CUTOFF_HOUR:
+                    entry_date = base_date + datetime.timedelta(days=1)
+                else:
+                    entry_date = base_date
+                start_dt = datetime.datetime(entry_date.year, entry_date.month, entry_date.day, t.hour, t.minute)
+                entries.append(Assistant.DJTime(
+                    start=start_dt,
+                    dj=dj,
+                    room=room
+                ))
+        # Sort entries by start time
+        entries.sort(key=lambda x: x.start)
+        return entries
+
+    def get_daily_djs(self, current_dt: datetime.datetime) -> dict[str, list[str]]:
+        """
+        Given a datetime, returns a dict mapping room names to lists of DJs scheduled for that calendar day,
+        including DJs whose set starts before the cutoff hour the next day (as per timetable logic).
+        If the incoming datetime is before the cutoff hour on the next day, treat it as belonging to the previous day.
+        """
+        cutoff = datetime.time(DJ_DAY_CUTOFF_HOUR, 0)
+        # If current_dt is before cutoff hour, treat as previous day
+        if current_dt.time() < cutoff:
+            target_date = (current_dt - datetime.timedelta(days=1)).date()
+        else:
+            target_date = current_dt.date()
+        next_date = target_date + datetime.timedelta(days=1)
+        schedule = self.load_schedule()
+        result = {}
+        for entry in schedule:
+            entry_date = entry.start.date()
+            entry_time = entry.start.time()
+            # Include entries for the target date, and for the next day before cutoff hour
+            if entry_date == target_date or (entry_date == next_date and entry_time < cutoff):
+                room = entry.room
+                result.setdefault(room, []).append(f"{entry_time:%H:%M} {entry.dj}")
+        return result
+
+    def get_current_djs(self, current_dt: datetime.datetime) -> list[dict[str, str]]:
+        """
+        Given a datetime, returns a list of dicts for DJs currently playing at that moment.
+        Each dict has keys 'room' and 'dj'. If no DJs are playing, returns an empty list.
+        """
+        schedule = self.load_schedule()
+        now_entries = []
+        for entry in schedule:
+            start = entry.start
+            end = start + datetime.timedelta(hours=1)
+            if start <= current_dt < end:
+                now_entries.append({'room': entry.room, 'dj': entry.dj})
+        return now_entries
 
     def __init__(self, base_app):
         super().__init__(base_app)
@@ -218,7 +335,55 @@ class Assistant(BasePlugin):
         await cursor.close()
         tokens_history = length - tokens_message
 
-        ctx_date = "\n\nnow it's " + now_msk().strftime("%A, %d %B %Y, %H:%M") + "\n"
+        ctx_now = now_msk()
+
+        ctx_date = "\n\nnow it's " + ctx_now.strftime("%A, %d %B %Y, %H:%M") + "\n"
+
+        lineups = ""
+        current_djs_str = ""
+        current_djs = self.get_current_djs(ctx_now)
+        if current_djs:
+            current_djs_str += "\n\ncurrent DJs:\n" + "\n".join(
+                f"{entry['room']}: {entry['dj']}"
+                for entry in current_djs
+            )
+        else:
+            current_djs_str += ("\n\nno party right now, no one is playing, "+
+            "don't answer somebody is playing if nobody is playing right now!"+
+            "If the question is who's playing right now, just say no one is playing!")
+        day_lineups = ""
+        daily_djs = self.get_daily_djs(ctx_now)
+        if daily_djs:
+            day_lineups += "\n\n"
+            if not current_djs:
+                day_lineups += "no one is playing right now, but "
+            day_lineups += "here are the DJs scheduled for today:\n"
+            day_lineups += "\n".join(
+                f"{room}:\n " + "\n ".join(djs)
+                for room, djs in daily_djs.items()
+            )
+        else:
+            day_lineups += "\n\nno party today"
+        # Group entries by (date, room)
+        from collections import defaultdict
+        grouped = defaultdict(list)
+        for entry in self.load_schedule():
+            entry_date = entry.start.date()
+            if entry.start.hour < DJ_DAY_CUTOFF_HOUR:
+                entry_date -= datetime.timedelta(days=1)
+            key = (entry_date, entry.room)
+            grouped[key].append(entry)
+        lineups += "\n\n"
+        if not daily_djs:
+            lineups += "today is not yet a marathon day, but "
+        lineups += "here are the full lineups for the marathon:\n"
+        for (date, room), entries in sorted(grouped.items()):
+            lineups += f"\n{date:%a %d.%m}, {room}"
+            for entry in entries:
+                lineups += f"\n {entry.start.strftime('%H:%M')} {entry.dj}"
+        lineups += day_lineups + current_djs_str
+        logger.debug(f"lineups: {lineups}")
+        ctx += lineups
 
         messages = (
             [

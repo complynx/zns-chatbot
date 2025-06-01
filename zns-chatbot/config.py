@@ -146,6 +146,7 @@ class Config(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="zns_", yaml_file="config/config.yaml", env_nested_delimiter="__"
     )
+    line_up: str = Field("static/line-up.csv")
     telegram: TelegramSettings
     google: GoogleSettings = GoogleSettings()
     logging: LoggingSettings = LoggingSettings()
