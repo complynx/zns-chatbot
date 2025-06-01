@@ -169,7 +169,7 @@ food-payment-request-callback-message =
     Please prepare your payment proof (screenshot or PDF).
 
 food-payment-request-waiting-message =
-    Please send a screenshot or a PDF file as proof of payment for your order of <code>{$total}</code> ₽.
+    Please send a screenshot or a PDF file <u>here, to the bot,</u> as proof of payment for your order of <code>{$total}</code> ₽.
     {food-payment-method}
 food-notification-message-first =
     Hello, zoukonaut!
