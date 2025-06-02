@@ -698,10 +698,11 @@ passes-passport-data-required =
     For you to be able to enter the event, I need to collect your passport data.
     This information must be provided as soon as possible and will be transferred
     to the venue security control.
+    ⚠️‼️ <b>Deadline tomorrow, <u>June 3rd, 23:59.</u></b> ⚠️‼️
 
     Please take a moment and review or enter your passport data using a button below.
     Wrong data may result in you being unable to enter the event.
-passes-passport-data-button = 📝 Enter passport data
+passes-passport-data-button = ⚠️‼️📝 Enter passport data⚠️
 
 
 user-is-restricted = Some actions have been disabled.
