@@ -49,7 +49,7 @@ ABOUT_REFRESH_INTERVAL = 3600
 
 
 # Compile once for efficiency
-ESCAPABLE = r"[\\`*_{}\[\]()#\+\-\.\!]"
+ESCAPABLE = r"[\\`*_{}\[\]()#\+\-\.\!=\~>]"
 # This pattern matches a backslash followed by any escapable character
 _unescape_pattern = re.compile(rf"\\({ESCAPABLE})")
 
