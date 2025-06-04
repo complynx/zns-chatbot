@@ -130,7 +130,7 @@ class Food(BaseSettings):
     payment_admins_old: set[int] = Field(set())
     out_of_stock_admin: int = Field(379278985)
     admins: set[int] = Field({379278985})
-    deadline: datetime = Field(datetime(2025, 6, 4, 23, 59, 59))
+    deadline: datetime = Field(datetime(2025, 6, 5, 1, 0, 0))
     notification_last_time: timedelta = Field(timedelta(days=1))
     notification_first_time: timedelta = Field(timedelta(days=4))
     notify_after: timedelta = Field(timedelta(hours=3))
