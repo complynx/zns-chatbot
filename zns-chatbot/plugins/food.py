@@ -2255,9 +2255,12 @@ class Food(BasePlugin):
             # Count occurrences of each meal item
             meal_counts = {}  # Structure: {day: {meal_type: {item_key: count}}}
             combo_counts = {}  # Structure: {day: {combo_type: count}}
-            
             # Process all orders
-            orders_cursor = self.food_db.find({"pass_key": PASS_KEY})
+            orders_cursor = self.food_db.find({
+                "pass_key": PASS_KEY,
+                "payment_status": "paid",
+                "payment_confirmed_date": {"$exists": True},
+            })
             async for order in orders_cursor:
                 order_details = order.get("order_details", {})
                 
