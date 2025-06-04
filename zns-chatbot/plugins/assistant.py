@@ -5,6 +5,7 @@ from asyncio import Event, create_task, sleep
 from json import loads
 import csv
 from functools import lru_cache
+import re
 
 import tiktoken
 from google.oauth2 import service_account
@@ -43,6 +44,40 @@ RAG_DATABASE_FOLDER = "rag_database"
 DJ_DAY_CUTOFF_HOUR = 7  # DJs before this hour belong to the previous day
 
 ABOUT_REFRESH_INTERVAL = 3600
+
+
+
+
+# Compile once for efficiency
+ESCAPABLE = r"[\\`*_{}\[\]()#\+\-\.\!]"
+# This pattern matches a backslash followed by any escapable character
+_unescape_pattern = re.compile(rf"\\({ESCAPABLE})")
+
+def _unescape_match(match: re.Match) -> str:
+    """
+    Replacement function: return only the escaped character
+    by discarding the leading backslash.
+    """
+    return match.group(1)
+
+def unescape_markdown(md_text: str) -> str:
+    """
+    Remove unnecessary backslashes from Markdown text while preserving
+    backslashes inside code spans.
+
+    1. Split on inline code spans (backtick-delimited).
+    2. Unescape only non-code parts.
+    3. Rejoin all parts.
+    """
+    # Split on segments that are enclosed in backticks (keep the delimiters)
+    # The regex (`+[^`]*`+) matches any inline code, including multiple backticks.
+    parts = re.split(r"(`+[^`]*`+)", md_text)
+
+    # Process only the non-code segments (even indices)
+    for i in range(0, len(parts), 2):
+        parts[i] = _unescape_pattern.sub(_unescape_match, parts[i])
+
+    return "".join(parts)
 
 
 class Assistant(BasePlugin):
@@ -205,7 +240,7 @@ class Assistant(BasePlugin):
             .export(fileId=self.config.google.about_doc_id, mimeType="text/markdown")
             .execute()
         )
-        return (
+        return unescape_markdown(
             document.decode(encoding="utf-8")
             if isinstance(document, bytes)
             else document
@@ -406,6 +441,7 @@ Answer the questions with the help of the following context:
 Avoid long and formal answers. If some details are not known, for instance sex of the participant, their region or anything,
 please ask a clarification question.
 If a @-mention or /-command, is relevant to a question, it is really helpful to include them.
+Do not use markdown, use plain text and emojis for decoration.
 Ответ должен быть на языке вопроса участника. Перефразируй ответы в стиле девушки-помощника.
 You must answer in the same language as the users messages.
 """
