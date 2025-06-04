@@ -2,6 +2,8 @@ from asyncio import Event, create_task, sleep
 import datetime
 import json
 import logging
+import csv
+import io
 from random import choice
 
 from bson import ObjectId
@@ -13,6 +15,7 @@ from telegram import (
     ReplyKeyboardRemove,
     Update,
     WebAppInfo,
+    InputFile,
 )
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
@@ -1455,6 +1458,10 @@ class Food(BasePlugin):
     menu: dict
     food_admins: list[int]
 
+    NO_LUNCH_RU = "Без обеда"
+    COMBO_WITH_SOUP_RU = "Комбо с супом"
+    COMBO_NO_SOUP_RU = "Комбо без супа"
+
     def __init__(self, base_app):
         super().__init__(base_app)
         self.food_db = base_app.mongodb[self.config.mongo_db.food_collection]
@@ -1477,6 +1484,7 @@ class Food(BasePlugin):
         self._command_checkers = [
             CommandHandler("food", self.handle_food_start_cmd),
             CommandHandler("activities", self.handle_activities_cmd),
+            CommandHandler("exportfoodorders", self.handle_export_orders_cmd),
         ]
         self._cbq_handler = CallbackQueryHandler(
             self.handle_food_callback_query_entry, pattern=f"^{self.name}\\|.*"
@@ -2060,3 +2068,366 @@ class Food(BasePlugin):
     async def handle_activities_payment_proof_timeout(self, update: TGState, order_id_str: str):
         """Registered callback for TGState.require_anything for activities payment proof timeout."""
         return await self.create_update(update).handle_activities_payment_proof_timeout(order_id_str)
+
+    async def handle_export_orders_cmd(self, update: TGState):
+        assert update.user in self.config.food.admins, f"User {update.user} is not an admin."
+
+        try:
+            header = [
+                "ID Пользователя",
+                "Username",
+                "Print Name",
+                "Legal Name",
+                "Оплачено",
+                "Платеж Подтвержден",
+                "Итого Сумма",
+            ]
+            
+            day_meal_columns_info = [] # To store (day_key, meal_type, column_header_name)
+
+            if self.menu:
+                for day_key in self.menu.keys():
+                    day_menu_config = self.menu[day_key]
+                    day_name_ru = {
+                        "friday": "Пятница",
+                        "saturday": "Суббота",
+                        "sunday": "Воскресенье",
+                    }[day_key]
+                    if day_menu_config.get("lunch"):
+                        lunch_col_name = f"{day_name_ru} Обед"
+                        header.append(lunch_col_name)
+                        day_meal_columns_info.append({"day_key": day_key, "meal": "lunch", "header": lunch_col_name})
+                    if day_menu_config.get("dinner"):
+                        dinner_col_name = f"{day_name_ru} Ужин"
+                        header.append(dinner_col_name)
+                        day_meal_columns_info.append({"day_key": day_key, "meal": "dinner", "header": dinner_col_name})
+            
+            csv_rows = []
+            csv_rows.append(header)
+
+            orders_cursor = self.food_db.find({"pass_key": PASS_KEY})
+            async for order in orders_cursor:
+                user_id = order.get("user_id")
+                user_doc = await self.user_db.find_one({"user_id": user_id, "bot_id": self.bot.bot.id})
+
+                username = user_doc.get("username", "") if user_doc else ""
+                print_name = user_doc.get("print_name", "") if user_doc else ""
+                legal_name = user_doc.get("legal_name", "") if user_doc else ""
+
+                is_paid = order.get("payment_status") == "paid"
+                payment_confirmed = order.get("payment_confirmed_date") is not None
+                total = order.get("total", 0.0)
+
+                row_data = [
+                    user_id,
+                    username,
+                    print_name,
+                    legal_name,
+                    "Да" if is_paid else "Нет",
+                    "Да" if payment_confirmed else "Нет",
+                    total,
+                ]
+
+                order_details = order.get("order_details", {})
+                
+                for col_info in day_meal_columns_info:
+                    day_key = col_info["day_key"]
+                    meal_type = col_info["meal"] 
+                    
+                    day_menu_config = self.menu.get(day_key, {})
+                    order_details_for_day = order_details.get(day_key, {})
+                    
+                    items_str = ""
+
+                    if meal_type == "lunch":
+                        lunch_details = order_details_for_day.get("lunch")
+                        if lunch_details:
+                            lunch_type_selection = lunch_details.get("type")
+                            lunch_items_payload = lunch_details.get("items") 
+
+                            if lunch_type_selection == "no-lunch":
+                                items_str = self.NO_LUNCH_RU
+                            elif lunch_type_selection == "individual-items":
+                                item_indices = lunch_items_payload if isinstance(lunch_items_payload, list) else []
+                                day_lunch_menu_config_individual = day_menu_config.get("lunch", [])
+                                names = []
+                                for item_index_obj in item_indices:
+                                    try:
+                                        item_index = int(item_index_obj)
+                                        if 0 <= item_index < len(day_lunch_menu_config_individual):
+                                            names.append(day_lunch_menu_config_individual[item_index].get("title_ru", f"Item {item_index}"))
+                                    except (ValueError, TypeError):
+                                        pass 
+                                items_str = ", ".join(names)
+                            elif lunch_type_selection == "combo-with-soup" or lunch_type_selection == "combo-no-soup":
+                                combo_base_name = self.COMBO_WITH_SOUP_RU if lunch_type_selection == "combo-with-soup" else self.COMBO_NO_SOUP_RU
+                                combo_item_names = []
+                                current_combo_items_payload = lunch_items_payload if isinstance(lunch_items_payload, dict) else {}
+                                day_lunch_combo_menu_config = day_menu_config.get("lunch", {}) 
+                                
+                                lunch_sub_categories_for_combo = ["main", "side", "salad"]
+
+                                if lunch_type_selection == "combo-with-soup":
+                                    soup_index_obj = current_combo_items_payload.get("soup_index")
+                                    if soup_index_obj is not None:
+                                        try:
+                                            soup_index = int(soup_index_obj)
+                                            if 0 <= soup_index < len(day_lunch_combo_menu_config):
+                                                combo_item_names.append(day_lunch_combo_menu_config[soup_index].get("title_ru", f"Soup {soup_index}"))
+                                        except (ValueError, TypeError):
+                                            pass 
+
+                                for category in lunch_sub_categories_for_combo:
+                                    item_index_obj = current_combo_items_payload.get(f"{category}_index")
+                                    if item_index_obj is not None:
+                                        try:
+                                            item_index = int(item_index_obj)
+                                            if 0 <= item_index < len(day_lunch_combo_menu_config):
+                                                combo_item_names.append(day_lunch_combo_menu_config[item_index].get("title_ru", f"{category.capitalize()} {item_index}"))
+                                        except (ValueError, TypeError):
+                                            pass 
+                                
+                                if combo_item_names:
+                                    items_str = f"{combo_base_name}; {', '.join(combo_item_names)}"
+                                else:
+                                    items_str = combo_base_name
+                    elif meal_type == "dinner":
+                        dinner_indices = order_details_for_day.get("dinner", [])
+                        day_dinner_menu_config = day_menu_config.get("dinner", [])
+                        if dinner_indices and day_dinner_menu_config:
+                            names = []
+                            for item_index_obj in dinner_indices:
+                                try:
+                                    item_index = int(item_index_obj)
+                                    if 0 <= item_index < len(day_dinner_menu_config):
+                                        names.append(day_dinner_menu_config[item_index].get("title_ru", f"Item {item_index}"))
+                                except (ValueError, TypeError):
+                                    pass 
+                            items_str = ", ".join(names)
+                    row_data.append(items_str)
+                csv_rows.append(row_data)
+
+            if not csv_rows or len(csv_rows) <= 1: 
+                await update.reply("Нет заказов для экспорта.")
+                return
+
+            # Create the first CSV (orders export)
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerows(csv_rows)
+            csv_data_bytes = output.getvalue().encode('utf-8')
+            output.close()
+
+            filename = f"food_orders_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+            
+            input_file = InputFile(io.BytesIO(csv_data_bytes), filename=filename)
+            await update.update.effective_message.reply_document(document=input_file, caption="Экспорт заказов на питание завершен.")
+
+            # Create the second CSV (meal summary)
+            await self._export_meal_summary(update)
+
+        except Exception as e:
+            logger.error(f"Error exporting food orders: {e}", exc_info=True)
+            await update.reply(f"Произошла ошибка при экспорте заказов: {e}")
+
+    async def _export_meal_summary(self, update: TGState):
+        """Create and send a CSV export with meal summary statistics."""
+        try:
+            # Headers for the summary CSV
+            summary_header = [
+                "День",
+                "Прием пищи", 
+                "Название блюда",
+                "Цена",
+                "Количество заказов",
+                "Сумма"
+            ]
+            
+            summary_rows = [summary_header]
+            
+            # Day names mapping
+            day_names_ru = {
+                "friday": "Пятница",
+                "saturday": "Суббота", 
+                "sunday": "Воскресенье",
+            }
+            
+            # Count occurrences of each meal item
+            meal_counts = {}  # Structure: {day: {meal_type: {item_key: count}}}
+            combo_counts = {}  # Structure: {day: {combo_type: count}}
+            
+            # Process all orders
+            orders_cursor = self.food_db.find({"pass_key": PASS_KEY})
+            async for order in orders_cursor:
+                order_details = order.get("order_details", {})
+                
+                for day_key, day_order in order_details.items():
+                    if day_key not in meal_counts:
+                        meal_counts[day_key] = {"lunch": {}, "dinner": {}}
+                    if day_key not in combo_counts:
+                        combo_counts[day_key] = {}
+                    
+                    # Process lunch
+                    if day_order and "lunch" in day_order:
+                        lunch_details = day_order["lunch"]
+                        if lunch_details:
+                            lunch_type = lunch_details.get("type")
+                            lunch_items = lunch_details.get("items")
+                            
+                            if lunch_type == "individual-items" and isinstance(lunch_items, list):
+                                # Count individual lunch items
+                                day_lunch_menu = self.menu.get(day_key, {}).get("lunch", [])
+                                for item_index_obj in lunch_items:
+                                    try:
+                                        item_index = int(item_index_obj)
+                                        if 0 <= item_index < len(day_lunch_menu):
+                                            item_key = f"lunch_individual_{item_index}"
+                                            meal_counts[day_key]["lunch"][item_key] = meal_counts[day_key]["lunch"].get(item_key, 0) + 1
+                                    except (ValueError, TypeError):
+                                        pass
+                            
+                            elif lunch_type in ["combo-with-soup", "combo-no-soup"]:
+                                # Count combos
+                                combo_counts[day_key][lunch_type] = combo_counts[day_key].get(lunch_type, 0) + 1
+                                
+                                # Count individual items within combos
+                                if isinstance(lunch_items, dict):
+                                    day_lunch_menu = self.menu.get(day_key, {}).get("lunch", [])
+                                    
+                                    # Count soup for combo-with-soup
+                                    if lunch_type == "combo-with-soup":
+                                        soup_index_obj = lunch_items.get("soup_index")
+                                        if soup_index_obj is not None:
+                                            try:
+                                                soup_index = int(soup_index_obj)
+                                                if 0 <= soup_index < len(day_lunch_menu):
+                                                    item_key = f"lunch_combo_soup_{soup_index}"
+                                                    meal_counts[day_key]["lunch"][item_key] = meal_counts[day_key]["lunch"].get(item_key, 0) + 1
+                                            except (ValueError, TypeError):
+                                                pass
+                                    
+                                    # Count main, side, salad for combos
+                                    for category in ["main", "side", "salad"]:
+                                        item_index_obj = lunch_items.get(f"{category}_index")
+                                        if item_index_obj is not None:
+                                            try:
+                                                item_index = int(item_index_obj)
+                                                if 0 <= item_index < len(day_lunch_menu):
+                                                    item_key = f"lunch_combo_{category}_{item_index}"
+                                                    meal_counts[day_key]["lunch"][item_key] = meal_counts[day_key]["lunch"].get(item_key, 0) + 1
+                                            except (ValueError, TypeError):
+                                                pass
+                    
+                    # Process dinner
+                    if day_order and "dinner" in day_order:
+                        dinner_indices = day_order.get("dinner", [])
+                        day_dinner_menu = self.menu.get(day_key, {}).get("dinner", [])
+                        for item_index_obj in dinner_indices:
+                            try:
+                                item_index = int(item_index_obj)
+                                if 0 <= item_index < len(day_dinner_menu):
+                                    item_key = f"dinner_{item_index}"
+                                    meal_counts[day_key]["dinner"][item_key] = meal_counts[day_key]["dinner"].get(item_key, 0) + 1
+                            except (ValueError, TypeError):
+                                pass
+            
+            # Generate summary rows
+            for day_key in sorted(meal_counts.keys()):
+                day_name_ru = day_names_ru.get(day_key, day_key.capitalize())
+                
+                # Add combo summary rows first
+                if day_key in combo_counts:
+                    for combo_type, count in combo_counts[day_key].items():
+                        combo_name = self.COMBO_WITH_SOUP_RU if combo_type == "combo-with-soup" else self.COMBO_NO_SOUP_RU
+                        combo_price = LUNCH_WITH_SOUP_PRICE if combo_type == "combo-with-soup" else LUNCH_NO_SOUP_PRICE
+                        total = combo_price * count
+                        
+                        summary_rows.append([
+                            day_name_ru,
+                            "Обед",
+                            combo_name, 
+                            combo_price,
+                            count,
+                            total
+                        ])
+                
+                # Add individual meal items
+                day_menu_config = self.menu.get(day_key, {})
+                
+                # Lunch items
+                lunch_menu = day_menu_config.get("lunch", [])
+                for item_key, count in meal_counts[day_key]["lunch"].items():
+                    if item_key.startswith("lunch_individual_"):
+                        item_index = int(item_key.split("_")[-1])
+                        if 0 <= item_index < len(lunch_menu):
+                            item = lunch_menu[item_index]
+                            price = item.get("price", 0)
+                            total = price * count
+                            
+                            summary_rows.append([
+                                day_name_ru,
+                                "Обед",
+                                item.get("title_ru", f"Item {item_index}"),
+                                price,
+                                count, 
+                                total
+                            ])
+                    
+                    elif item_key.startswith("lunch_combo_"):
+                        # For combo items, mark price as "Комбо" and no sum
+                        parts = item_key.split("_")
+                        if len(parts) >= 4:
+                            category = parts[2]  # soup, main, side, salad
+                            item_index = int(parts[3])
+                            if 0 <= item_index < len(lunch_menu):
+                                item = lunch_menu[item_index]
+                                
+                                summary_rows.append([
+                                    day_name_ru,
+                                    "Обед",
+                                    item.get("title_ru", f"Item {item_index}"),
+                                    "Комбо",
+                                    count,
+                                    ""  # No sum for combo components
+                                ])
+                
+                # Dinner items  
+                dinner_menu = day_menu_config.get("dinner", [])
+                for item_key, count in meal_counts[day_key]["dinner"].items():
+                    if item_key.startswith("dinner_"):
+                        item_index = int(item_key.split("_")[-1])
+                        if 0 <= item_index < len(dinner_menu):
+                            item = dinner_menu[item_index]
+                            price = item.get("price", 0)
+                            total = price * count
+                            
+                            summary_rows.append([
+                                day_name_ru,
+                                "Ужин",
+                                item.get("title_ru", f"Item {item_index}"),
+                                price,
+                                count,
+                                total
+                            ])
+            
+            if len(summary_rows) <= 1:
+                await update.reply("Нет данных для сводки по блюдам.")
+                return
+            
+            # Create and send the summary CSV
+            summary_output = io.StringIO()
+            summary_writer = csv.writer(summary_output)
+            summary_writer.writerows(summary_rows)
+            summary_csv_data = summary_output.getvalue().encode('utf-8')
+            summary_output.close()
+            
+            summary_filename = f"meal_summary_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv"
+            summary_input_file = InputFile(io.BytesIO(summary_csv_data), filename=summary_filename)
+            await update.update.effective_message.reply_document(
+                document=summary_input_file, 
+                caption="Сводка по блюдам экспортирована."
+            )
+            
+        except Exception as e:
+            logger.error(f"Error exporting meal summary: {e}", exc_info=True)
+            await update.reply(f"Произошла ошибка при экспорте сводки: {e}")
