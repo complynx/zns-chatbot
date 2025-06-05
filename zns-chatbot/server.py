@@ -15,7 +15,7 @@ from telegram import Bot
 from tornado.httputil import HTTPServerRequest
 
 from .config import Config
-from .plugins.passes import PASS_KEY  # For food.save_order
+from .plugins.pass_keys import PASS_KEY  # For food.save_order
 
 logger = logging.getLogger(__name__)
 
