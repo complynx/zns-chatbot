@@ -13,6 +13,7 @@ from ..config import Party, full_link
 from datetime import datetime, timedelta
 from asyncio import Lock, create_task, gather
 from math import floor, ceil
+from .passes import PASS_RU as PASS_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,7 @@ class Specialist:
             "specialist": self.id,
             "deleted": {"$exists":False},
             "start": {"$gt": now_msk()},
+            "pass_key": PASS_KEY,
         }).sort('start', 1).to_list(length=1)
         if len(ret) == 0:
             return None
@@ -191,6 +193,7 @@ class Specialist:
             "deleted": {"$exists":False},
             "start": {"$lte": now},
             "end": {"$gte": now},
+            "pass_key": PASS_KEY,
         })
         if ret is None:
             return None
@@ -210,7 +213,8 @@ class Specialist:
         cursor = self.base.massage_db.find({
             "specialist": self.id,
             "deleted": {"$exists":False},
-            "party": day
+            "party": day,
+            "pass_key": PASS_KEY
         }).sort('start', 1)
         ret = []
         async for massage in cursor:
@@ -258,6 +262,7 @@ class MassageRecord:
     
     async def init(self, clean=False):
         if not "_id" in self.record:
+            self.record["pass_key"] = PASS_KEY
             rec = await self.plugin.massage_db.insert_one(self.record)
             self.record["_id"] = rec.inserted_id
         if self.client is None:
@@ -488,6 +493,7 @@ class UserMassages:
         async for massage in self.plugin.massage_db.find({
             "user_id": self.user["user_id"],
             "deleted": {"$exists":False},
+            "pass_key": PASS_KEY,
             "start": {
                 "$gte": self.plugin.parties_begin,
                 "$lte": self.plugin.parties_end
@@ -521,6 +527,7 @@ class UserMassages:
         rec = MassageRecord({
             "user_id": self.update.user,
             "created_at": datetime.now(),
+            "pass_key": PASS_KEY,
         }, self.plugin, user)
         await rec.init()
         await self.edit_massage(rec)
@@ -972,6 +979,7 @@ class UserMassages:
             "user_id": self.update.user,
             "length": num_slots,
             "party": party.start.day,
+            "pass_key": PASS_KEY,
         }
         user = await self.get_user()
         massage = MassageRecord(massage_record, self.plugin, user)
@@ -1098,6 +1106,7 @@ class MassagePlugin(BasePlugin):
                         "$lt": now+self.config.massages.notify_client_prior_long,
                         "$gte": self.parties_begin,
                     },
+                    "pass_key": PASS_KEY,
                     "client_notified_prior_long": {"$exists":False},
                 }):
                     rec = MassageRecord(doc, self)
@@ -1108,6 +1117,7 @@ class MassagePlugin(BasePlugin):
                         "$lt": now+self.config.massages.notify_client_prior,
                         "$gte": self.parties_begin
                     },
+                    "pass_key": PASS_KEY,
                     "client_notified": {"$exists":False},
                 }):
                     rec = MassageRecord(doc, self)
@@ -1118,6 +1128,7 @@ class MassagePlugin(BasePlugin):
                         "$lt": now+timedelta(minutes=SLOT_BUFFER),
                         "$gte": self.parties_begin
                     },
+                    "pass_key": PASS_KEY,
                     "specialist_notified": {"$exists":False},
                 }):
                     rec = MassageRecord(doc, self)
@@ -1127,6 +1138,7 @@ class MassagePlugin(BasePlugin):
                     "start": {
                         "$gte": now,
                     },
+                    "pass_key": PASS_KEY,
                     "notify": {"$eq":True},
                 }):
                     rec = MassageRecord(doc, self)
@@ -1237,6 +1249,7 @@ class MassagePlugin(BasePlugin):
         speaialists: List[Specialist] = await self.get_specialists()
         async for massage in self.massage_db.find({
             "deleted": {"$exists":False},
+            "pass_key": PASS_KEY,
             "start": {
                 "$gte": self.parties_begin,
                 "$lte": self.parties_end
