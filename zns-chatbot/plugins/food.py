@@ -924,8 +924,7 @@ class FoodUpdate:
             order = {}
 
         # Check if activities have been paid for
-        if (order.get("activities_payment_status") in ["paid", "proof_submitted"]
-            or now_msk() > self.base.deadline):
+        if (order.get("activities_payment_status") in ["paid", "proof_submitted"]):
             await self.handle_cq_submit_activities()
         else:
             # Proceed to activity selection
@@ -942,6 +941,8 @@ class FoodUpdate:
             row = []
             for activity in ACTIVITIES[i : i + 2]:
                 status = "☑️" if order.get("activities", {}).get(activity) else "❌"
+                if activity == "cacao" and now_msk() > self.base.deadline:
+                    status = "🚫"
                 if (
                     order.get("activities", {}).get(activity)
                     and activity in untoggled_activities
@@ -1009,11 +1010,15 @@ class FoodUpdate:
         if activity == "all":
             activities = {}
             for act in ACTIVITIES:
-                activities[act] = True
+                if act != "cacao" or now_msk() > self.base.deadline:
+                    activities[act] = True
         elif activity == "classes":
             activities = {}
             for act in CLASS_ACTIVITIES:
-                activities[act] = True
+                if act != "cacao" or now_msk() > self.base.deadline:
+                    activities[act] = True
+        elif activity == "cacao" and now_msk() > self.base.deadline:
+            activities["cacao"] = False
         else:
             activities[activity] = not activities.get(activity, False)
         order["activities"] = activities
