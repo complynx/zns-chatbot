@@ -1010,12 +1010,12 @@ class FoodUpdate:
         if activity == "all":
             activities = {}
             for act in ACTIVITIES:
-                if act != "cacao" or now_msk() > self.base.deadline:
+                if act != "cacao" or now_msk() < self.base.deadline:
                     activities[act] = True
         elif activity == "classes":
             activities = {}
             for act in CLASS_ACTIVITIES:
-                if act != "cacao" or now_msk() > self.base.deadline:
+                if act != "cacao" or now_msk() < self.base.deadline:
                     activities[act] = True
         elif activity == "cacao" and now_msk() > self.base.deadline:
             activities["cacao"] = False
