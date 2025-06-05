@@ -20,13 +20,15 @@ from ..telegram_links import client_user_link_html, client_user_name
 from ..tg_state import SilentArgumentParser, TGState
 from .base_plugin import PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING, BasePlugin
 from .massage import now_msk, split_list
+from .pass_keys import (
+    PASS_RU,
+    PASS_BY,
+    PASS_KEYS,
+)
 
 logger = logging.getLogger(__name__)
 
 CANCEL_CHR = chr(0xE007F)  # Tag cancel
-PASS_KEY = "pass_2025_1"
-PASS_RU, PASS_BY = "pass_2025_1", "pass_2025_2"
-PASS_KEYS = [PASS_RU, PASS_BY]
 MAX_CONCURRENT_ASSIGNMENTS = 5
 
 CURRENT_PRICE = {

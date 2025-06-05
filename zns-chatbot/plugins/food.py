@@ -22,7 +22,7 @@ from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, CommandHandler
 
 from ..config import full_link
-from ..plugins.passes import PASS_KEY
+from ..plugins.pass_keys import PASS_KEY
 from ..plugins.massage import now_msk
 from ..telegram_links import client_user_link_html, client_user_name
 from ..tg_state import TGState

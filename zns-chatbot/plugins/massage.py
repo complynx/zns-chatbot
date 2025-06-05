@@ -13,7 +13,7 @@ from ..config import Party, full_link
 from datetime import datetime, timedelta
 from asyncio import Lock, create_task, gather
 from math import floor, ceil
-from .passes import PASS_RU as PASS_KEY
+from .pass_keys import PASS_KEY
 
 logger = logging.getLogger(__name__)
 

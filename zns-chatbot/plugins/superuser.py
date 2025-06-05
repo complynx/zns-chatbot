@@ -7,7 +7,7 @@ from telegram.constants import ParseMode
 from ..telegram_links import client_user_link_html
 import logging
 from typing import Literal
-from .passes import PASS_KEY
+from .pass_keys import PASS_KEY
 from json import loads
 
 logger = logging.getLogger(__name__)
