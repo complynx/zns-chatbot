@@ -2142,73 +2142,8 @@ class Food(BasePlugin):
                     day_menu_config = self.menu.get(day_key, {})
                     order_details_for_day = order_details.get(day_key, {})
                     
-                    items_str = ""
+                    items_str = self._extract_meal_textual_contents(meal_type, day_key, order_details_for_day, day_menu_config)
 
-                    if meal_type == "lunch":
-                        lunch_details = order_details_for_day.get("lunch")
-                        if lunch_details:
-                            lunch_type_selection = lunch_details.get("type")
-                            lunch_items_payload = lunch_details.get("items") 
-
-                            if lunch_type_selection == "no-lunch":
-                                items_str = self.NO_LUNCH_RU
-                            elif lunch_type_selection == "individual-items":
-                                item_indices = lunch_items_payload if isinstance(lunch_items_payload, list) else []
-                                day_lunch_menu_config_individual = day_menu_config.get("lunch", [])
-                                names = []
-                                for item_index_obj in item_indices:
-                                    try:
-                                        item_index = int(item_index_obj)
-                                        if 0 <= item_index < len(day_lunch_menu_config_individual):
-                                            names.append(day_lunch_menu_config_individual[item_index].get("title_ru", f"Item {item_index}"))
-                                    except (ValueError, TypeError):
-                                        pass 
-                                items_str = ", ".join(names)
-                            elif lunch_type_selection == "combo-with-soup" or lunch_type_selection == "combo-no-soup":
-                                combo_base_name = self.COMBO_WITH_SOUP_RU if lunch_type_selection == "combo-with-soup" else self.COMBO_NO_SOUP_RU
-                                combo_item_names = []
-                                current_combo_items_payload = lunch_items_payload if isinstance(lunch_items_payload, dict) else {}
-                                day_lunch_combo_menu_config = day_menu_config.get("lunch", {}) 
-                                
-                                lunch_sub_categories_for_combo = ["main", "side", "salad"]
-
-                                if lunch_type_selection == "combo-with-soup":
-                                    soup_index_obj = current_combo_items_payload.get("soup_index")
-                                    if soup_index_obj is not None:
-                                        try:
-                                            soup_index = int(soup_index_obj)
-                                            if 0 <= soup_index < len(day_lunch_combo_menu_config):
-                                                combo_item_names.append(day_lunch_combo_menu_config[soup_index].get("title_ru", f"Soup {soup_index}"))
-                                        except (ValueError, TypeError):
-                                            pass 
-
-                                for category in lunch_sub_categories_for_combo:
-                                    item_index_obj = current_combo_items_payload.get(f"{category}_index")
-                                    if item_index_obj is not None:
-                                        try:
-                                            item_index = int(item_index_obj)
-                                            if 0 <= item_index < len(day_lunch_combo_menu_config):
-                                                combo_item_names.append(day_lunch_combo_menu_config[item_index].get("title_ru", f"{category.capitalize()} {item_index}"))
-                                        except (ValueError, TypeError):
-                                            pass 
-                                
-                                if combo_item_names:
-                                    items_str = f"{combo_base_name}; {', '.join(combo_item_names)}"
-                                else:
-                                    items_str = combo_base_name
-                    elif meal_type == "dinner":
-                        dinner_indices = order_details_for_day.get("dinner", [])
-                        day_dinner_menu_config = day_menu_config.get("dinner", [])
-                        if dinner_indices and day_dinner_menu_config:
-                            names = []
-                            for item_index_obj in dinner_indices:
-                                try:
-                                    item_index = int(item_index_obj)
-                                    if 0 <= item_index < len(day_dinner_menu_config):
-                                        names.append(day_dinner_menu_config[item_index].get("title_ru", f"Item {item_index}"))
-                                except (ValueError, TypeError):
-                                    pass 
-                            items_str = ", ".join(names)
                     row_data.append(items_str)
                 csv_rows.append(row_data)
 
@@ -2439,3 +2374,152 @@ class Food(BasePlugin):
         except Exception as e:
             logger.error(f"Error exporting meal summary: {e}", exc_info=True)
             await update.reply(f"Произошла ошибка при экспорте сводки: {e}")
+
+    def _extract_meal_textual_contents(self, meal_type: str, day_key: str, order_details_for_day: dict, day_menu_config: dict) -> str:
+        """
+        Extract textual contents for a specific meal type and day.
+        
+        Args:
+            meal_type: Either "lunch" or "dinner"
+            day_key: Day identifier (e.g., "friday", "saturday", "sunday")
+            order_details_for_day: Order details for the specific day
+            day_menu_config: Menu configuration for the specific day
+            
+        Returns:
+            String description of the meal contents
+        """
+        items_str = ""
+
+        if meal_type == "lunch":
+            lunch_details = order_details_for_day.get("lunch")
+            if lunch_details:
+                lunch_type_selection = lunch_details.get("type")
+                lunch_items_payload = lunch_details.get("items") 
+
+                if lunch_type_selection == "no-lunch":
+                    items_str = self.NO_LUNCH_RU
+                elif lunch_type_selection == "individual-items":
+                    item_indices = lunch_items_payload if isinstance(lunch_items_payload, list) else []
+                    day_lunch_menu_config_individual = day_menu_config.get("lunch", [])
+                    names = []
+                    for item_index_obj in item_indices:
+                        try:
+                            item_index = int(item_index_obj)
+                            if 0 <= item_index < len(day_lunch_menu_config_individual):
+                                names.append(day_lunch_menu_config_individual[item_index].get("title_ru", f"Item {item_index}"))
+                        except (ValueError, TypeError):
+                            pass 
+                    items_str = ", ".join(names)
+                elif lunch_type_selection == "combo-with-soup" or lunch_type_selection == "combo-no-soup":
+                    combo_base_name = self.COMBO_WITH_SOUP_RU if lunch_type_selection == "combo-with-soup" else self.COMBO_NO_SOUP_RU
+                    combo_item_names = []
+                    current_combo_items_payload = lunch_items_payload if isinstance(lunch_items_payload, dict) else {}
+                    day_lunch_combo_menu_config = day_menu_config.get("lunch", {}) 
+                    
+                    lunch_sub_categories_for_combo = ["main", "side", "salad"]
+
+                    if lunch_type_selection == "combo-with-soup":
+                        soup_index_obj = current_combo_items_payload.get("soup_index")
+                        if soup_index_obj is not None:
+                            try:
+                                soup_index = int(soup_index_obj)
+                                if 0 <= soup_index < len(day_lunch_combo_menu_config):
+                                    combo_item_names.append(day_lunch_combo_menu_config[soup_index].get("title_ru", f"Soup {soup_index}"))
+                            except (ValueError, TypeError):
+                                pass 
+
+                    for category in lunch_sub_categories_for_combo:
+                        item_index_obj = current_combo_items_payload.get(f"{category}_index")
+                        if item_index_obj is not None:
+                            try:
+                                item_index = int(item_index_obj)
+                                if 0 <= item_index < len(day_lunch_combo_menu_config):
+                                    combo_item_names.append(day_lunch_combo_menu_config[item_index].get("title_ru", f"{category.capitalize()} {item_index}"))
+                            except (ValueError, TypeError):
+                                pass 
+                    
+                    if combo_item_names:
+                        items_str = f"{combo_base_name}: {', '.join(combo_item_names)}"
+                    else:
+                        items_str = combo_base_name
+        elif meal_type == "dinner":
+            dinner_indices = order_details_for_day.get("dinner", [])
+            day_dinner_menu_config = day_menu_config.get("dinner", [])
+            if dinner_indices and day_dinner_menu_config:
+                names = []
+                for item_index_obj in dinner_indices:
+                    try:
+                        item_index = int(item_index_obj)
+                        if 0 <= item_index < len(day_dinner_menu_config):
+                            names.append(day_dinner_menu_config[item_index].get("title_ru", f"Item {item_index}"))
+                    except (ValueError, TypeError):
+                        pass 
+                items_str = ", ".join(names)
+
+        return items_str
+
+    async def get_order_contents_by_user(self, user_id: int) -> dict:
+        """
+        Get the order contents for a specific user.
+        Args:
+            user_id: The ID of the user whose order contents are to be retrieved.
+        
+        Returns:
+            Dictionary in format {day: {meal: "textual contents"}, "activities": [list of selected activities]}
+            Example: {"friday": {"lunch": "Комбо с супом; Борщ, Котлета, Рис, Салат", "dinner": "Суп, Хлеб"}, "activities": ["Вечеринка", "Какао церемония"]}
+        """
+        if not self.menu:
+            return {}
+            
+        # Find the user's order
+        order = await self.food_db.find_one({
+            "user_id": user_id,
+            "pass_key": PASS_KEY,
+            "payment_status": "paid",
+            "payment_confirmed_date": {"$exists": True},
+        })
+        if not order:
+            return {}
+            
+        result = {}
+        order_details = order.get("order_details", {})
+        
+        # Process each day in the menu
+        for day_key in self.menu.keys():
+            day_menu_config = self.menu[day_key]
+            order_details_for_day = order_details.get(day_key, {})
+            day_result = {}
+            
+            # Process lunch if available for this day
+            if day_menu_config.get("lunch"):
+                lunch_contents = self._extract_meal_textual_contents("lunch", day_key, order_details_for_day, day_menu_config)
+                if lunch_contents:  # Only add if there's content
+                    day_result["lunch"] = lunch_contents
+                    
+            # Process dinner if available for this day  
+            if day_menu_config.get("dinner"):
+                dinner_contents = self._extract_meal_textual_contents("dinner", day_key, order_details_for_day, day_menu_config)
+                if dinner_contents:  # Only add if there's content
+                    day_result["dinner"] = dinner_contents
+                    
+            # Only add the day if it has meal contents
+            if day_result:
+                result[day_key] = day_result
+        
+        # Process activities - add selected activities with localization pattern
+        activities = order.get("activities", {})
+        selected_activities = []
+        for activity_key in ACTIVITIES:
+            if activities.get(activity_key, False):
+                act_name = self.base_app.localization(
+                    f"activity-{activity_key}",
+                    args={},
+                    locale="ru",
+                )
+                selected_activities.append(act_name)
+
+        # Only add activities if any are selected
+        if selected_activities:
+            result["activities"] = selected_activities
+                
+        return result

@@ -61,7 +61,7 @@ class LanguageModel(BaseSettings):
     reply_token_cap: int = Field(3000)
     message_token_cap: int = Field(5000)
     temperature: float = Field(0.7)
-    max_messages_per_user_per_day: int = Field(15)
+    max_messages_per_user_per_day: int = Field(50)
 
 
 class LoggingSettings(BaseSettings):
@@ -123,9 +123,10 @@ class Orders(BaseSettings):
 
 
 class Food(BaseSettings):
-    start_day: date = Field(date(2024, 6, 12))
+    activities_day: date = Field(date(2025, 6, 12))
+    start_day: date = Field(date(2025, 6, 13))
     lunch_time: time = Field(time(17, 0, 0))
-    dinner_time: time = Field(time(22, 0, 0))
+    dinner_time: time = Field(time(21, 0, 0))
     payment_admins: set[int] = Field(set())
     payment_admins_old: set[int] = Field(set())
     out_of_stock_admin: int = Field(379278985)

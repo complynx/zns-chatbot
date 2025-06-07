@@ -420,6 +420,61 @@ class Assistant(BasePlugin):
         logger.debug(f"lineups: {lineups}")
         ctx += lineups
 
+        try:
+            ctx_order = ""
+            # ex: {"friday": {"lunch": "Комбо с супом; Борщ, Котлета, Рис, Салат", "dinner": "Суп, Хлеб"}, "activities": ["Вечеринка", "Какао церемония"]}
+            food_orders = await self.base_app.food.get_order_contents_by_user(update.user)
+            friday = self.config.food.start_day
+            lunch_time = datetime.datetime.now().replace(hour=self.config.food.lunch_time.hour, minute=self.config.food.lunch_time.minute)
+            dinner_time = datetime.datetime.now().replace(hour=self.config.food.dinner_time.hour, minute=self.config.food.dinner_time.minute)
+            if food_orders:
+                ctx_order += "\n\n"
+                ctx_order += "еда заказанная пользователем:\n"
+                for day, meals in food_orders.items():
+                    if day == "activities":
+                        continue
+                    if day == "friday":
+                        ctx_order += "пятница:\n"
+                    elif day == "saturday":
+                        ctx_order += "суббота:\n"
+                    elif day == "sunday":
+                        ctx_order += "воскресенье:\n"
+                    for meal_type, meal in meals.items():
+                        if meal == "Без обеда":
+                            continue
+                        if meal_type == "lunch":
+                            ctx_order += f" обед: {meal}\n"
+                        else:
+                            ctx_order += f" ужин: {meal}\n"
+
+                today_weekday = datetime.datetime.now().strftime("%A").lower()
+                if today_weekday in food_orders and friday <= datetime.datetime.now().date() <= self.config.food.start_day + datetime.timedelta(days=3):
+                    ctx_order += "\n\nна сегодня заказано:\n"
+                    if "lunch" in food_orders[today_weekday] and food_orders[today_weekday]["lunch"] != "Без обеда":
+                        ctx_order += f" обед: {food_orders[today_weekday]['lunch']}"
+                        if lunch_time - datetime.timedelta(hours=1) < ctx_now < lunch_time:
+                            ctx_order += f" (скоро, в {lunch_time.strftime('%H:%M')})"
+                        elif lunch_time < ctx_now < lunch_time + datetime.timedelta(hours=1):
+                            ctx_order += f" (сейчас в {ctx_now.strftime('%H:%M')})"
+
+                    if "dinner" in food_orders[today_weekday]:
+                        ctx_order += f" ужин: {food_orders[today_weekday]['dinner']}"
+                        if dinner_time - datetime.timedelta(hours=1) < ctx_now < dinner_time:
+                            ctx_order += f" (скоро, в {dinner_time.strftime('%H:%M')})"
+                        elif dinner_time < ctx_now < dinner_time + datetime.timedelta(hours=1):
+                            ctx_order += f" (сейчас в {ctx_now.strftime('%H:%M')})"
+                else:
+                    ctx_order += "\n\nу пользователя нет заказов на еду на сегодня.\n"
+
+                if (food_orders.get("activities") and
+                    self.config.food.activities_day >= datetime.datetime.now().date()):
+                    ctx_order += "\n\nвыбранные пользователем активности на опен в четверг:\n"
+                    for activity in food_orders["activities"]:
+                        ctx_order += f" {activity}\n"
+            ctx += ctx_order
+        except Exception as e:
+            logger.error(f"Error fetching user food orders: {e}", exc_info=e)
+
         messages = (
             [
                 SystemMessage(
