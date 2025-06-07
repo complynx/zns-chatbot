@@ -930,6 +930,12 @@ class FoodUpdate:
             # Proceed to activity selection
             await self.activities_message(order)
 
+    async def can_reserve_cacao(self) -> bool:
+        return await self.base.food_db.count_documents({
+            "pass_key": self.pass_key,
+            "activities.cacao": True
+        }) < 37
+
     async def activities_message(self, order: dict):
         """Generate the activities message."""
 
@@ -937,11 +943,12 @@ class FoodUpdate:
         buttons = []
         untoggled_activities = ACTIVITIES.copy()
         untoggled_class_activities = CLASS_ACTIVITIES.copy()
+        no_cacao = not await self.can_reserve_cacao()
         for i in range(0, len(ACTIVITIES), 2):
             row = []
             for activity in ACTIVITIES[i : i + 2]:
                 status = "☑️" if order.get("activities", {}).get(activity) else "❌"
-                if activity == "cacao" and now_msk() > self.base.deadline:
+                if activity == "cacao" and no_cacao:
                     status = "🚫"
                 if (
                     order.get("activities", {}).get(activity)
@@ -1005,19 +1012,20 @@ class FoodUpdate:
         if not order:
             order = {"activities": {}}
 
+        no_cacao = not await self.can_reserve_cacao()
         # Toggle activity state
         activities = order.get("activities", {})
         if activity == "all":
             activities = {}
             for act in ACTIVITIES:
-                if act != "cacao" or now_msk() < self.base.deadline:
+                if act != "cacao" or not no_cacao:
                     activities[act] = True
         elif activity == "classes":
             activities = {}
             for act in CLASS_ACTIVITIES:
-                if act != "cacao" or now_msk() < self.base.deadline:
+                if act != "cacao" or not no_cacao:
                     activities[act] = True
-        elif activity == "cacao" and now_msk() > self.base.deadline:
+        elif activity == "cacao" and no_cacao:
             activities["cacao"] = False
         else:
             activities[activity] = not activities.get(activity, False)
