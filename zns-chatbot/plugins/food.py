@@ -934,7 +934,7 @@ class FoodUpdate:
         return await self.base.food_db.count_documents({
             "pass_key": self.pass_key,
             "activities.cacao": True
-        }) < 37
+        }) < 38
 
     async def activities_message(self, order: dict):
         """Generate the activities message."""
