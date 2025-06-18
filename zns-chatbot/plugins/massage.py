@@ -42,8 +42,12 @@ def price_from_length(length:int=1)->int:
         return 1400
     if length == 3:
         return 1800
+    if length == 4:
+        return 2400
     if length == 5:
         return 2700
+    if length == 6:
+        return 3000
     raise ValueError(f"Unsupported length {length} for price calculation")
 
 def min_from_length(length:int =1)->int:
