@@ -32,8 +32,8 @@ CANCEL_CHR = chr(0xE007F)  # Tag cancel
 MAX_CONCURRENT_ASSIGNMENTS = 5
 
 CURRENT_PRICE = {
-    PASS_RU: 12200,
-    PASS_BY: 9500,
+    # PASS_RU: 12200,
+    PASS_BY: 10500,
 }
 TIMEOUT_PROCESSOR_TICK = 3600
 INVITATION_TIMEOUT = timedelta(days=2, hours=10)
@@ -1566,19 +1566,20 @@ class PassUpdate:
         await self.base.recalculate_queues()
 
     async def handle_passes_cancel(self):
-        assert self.update.user in self.base.config.telegram.admins, (
-            f"{self.update.user} is not admin"
-        )
         args_list = self.update.parse_cmd_arguments()
 
         parser = SilentArgumentParser()
-        parser.add_argument("--pass_key", type=str, help="Pass key")
+        parser.add_argument("--pass_key", type=str, help="Pass key", default=PASS_BY)
         parser.add_argument("recipients", nargs="*", help="Recipients")
 
         args = parser.parse_args(args_list[1:])
         logger.debug(f"passes_cancel {args=}, {args_list=}")
         assert args.pass_key in PASS_KEYS, f"wrong pass key {args.pass_key}"
         self.set_pass_key(args.pass_key)
+        assert (self.update.user in self.base.config.telegram.admins or
+                self.update.user in self.base.payment_admins[self.pass_key]), (
+            f"{self.update.user} is not admin"
+        )
         cancelled = []
         recipients = map(int, args.recipients)
         for recipient in recipients:
