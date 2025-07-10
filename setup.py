@@ -23,6 +23,7 @@ setup(
         "pydantic>=2.7,<2.10",
         "pydantic-settings>=2.3",
         "openai>=1.30.1",
+        "openpyxl>=3.1.5",
         "tiktoken>=0.7.0",
         "langchain>=0.3.22",
         "langchain-community>=0.3.20",

@@ -1639,6 +1639,105 @@ class PassUpdate:
             f"passes_cancel done: {cancelled}", parse_mode=ParseMode.HTML
         )
         await self.base.recalculate_queues()
+    
+    async def handle_passes_table_cmd(self):
+        if self.update.user in self.base.config.telegram.admins:
+            pass_keys_for_this_user = PASS_KEYS
+        else:
+            pass_keys_for_this_user = [
+                key for key in PASS_KEYS if key in self.base.payment_admins and
+                self.update.user in self.base.payment_admins[key]
+            ]
+        assert pass_keys_for_this_user, (
+            f"{self.update.user} is not admin for any pass key"
+        )
+        import openpyxl
+        from openpyxl.styles import Font, Alignment
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Passes"
+
+        fields = {
+            "user_id": {"name": "User ID", "location": "user"},
+            "first_name": {"name": "First Name", "location": "user"},
+            "last_name": {"name": "Last Name", "location": "user"},
+            "print_name": {"name": "Print Name", "location": "user"},
+            "legal_name": {"name": "Legal Name", "location": "user"},
+            "language_code": {"name": "Language code", "location": "user", "length": 2},
+            "pass_key": {
+                "func": lambda u, pk: pk,
+                "name": "Pass Key",
+            },
+            "state": {"name": "State", "location": "pass"},
+            "type": {"name": "Type", "location": "pass"},
+            "role": {"name": "Role", "location": "pass"},
+            "couple": {"name": "Couple", "location": "pass"},
+            "price": {"name": "Price", "location": "pass"},
+            "price_per_one": {
+                "func": lambda u, pk: u[pk].get("price",0) / 2 if u[pk].get('type') == 'couple' else u[pk].get('price',""),
+                "name": "Price per one",
+            },
+            "date_created": {"name": "Date Created", "location": "pass"},
+            "date_assignment": {"name": "Date Assignment", "location": "pass"},
+            "proof_admin": {"name": "Proof Admin", "location": "pass"},
+            "proof_received": {"name": "Proof Received", "location": "pass"},
+            "proof_accepted": {"name": "Proof Accepted", "location": "pass"},
+            "proof_rejected": {"name": "Proof Rejected", "location": "pass"},
+            "proof_file": {"name": "Proof File ID", "location": "pass", "length": 5},
+            "skip_in_balance_count": {"name": "Skip in Balance Count", "location": "pass"},
+            "comment": {"name": "Comment", "location": "pass"},
+        }
+
+
+        bold = Font(bold=True)
+        center = Alignment(horizontal="center")
+        ws.append([field["name"] for field in fields.values()])
+        for cell in ws["1:1"]:
+            cell.font = bold
+            cell.alignment = center
+
+        for i, field in enumerate(fields.values()):
+            field["column_number"] = i + 1
+            field["column_letter"] = ws.cell(row=1, column=i + 1).column_letter
+
+        for pass_key in pass_keys_for_this_user:
+            async for user in self.base.user_db.find(
+                    {
+                        "bot_id": self.bot,
+                        pass_key: {"$exists": True},
+                    }
+                ):
+                    row = []
+                    for field, info in fields.items():
+                        if "func" in info:
+                            row.append(info["func"](user, pass_key))
+                        elif info["location"] == "user":
+                            row.append(user.get(field, ""))
+                        elif info["location"] == "pass":
+                            row.append(user[pass_key].get(field, ""))
+                    ws.append(row)
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+        ws.auto_filter.add_sort_condition(fields["date_created"]["column_letter"] + "2:" + fields["date_created"]["column_letter"] + str(ws.max_row))
+        for i, field in enumerate(fields.values()):
+            if "length" in field:
+                ws.column_dimensions[field["column_letter"]].width = field["length"]
+            else: # auto width
+                max_length = max(
+                    len(str(cell.value)) if cell.value is not None else 0
+                    for cell in ws[field["column_letter"]]
+                )
+                ws.column_dimensions[field["column_letter"]].width = max(max_length, 3)
+
+        wb.save("passes.xlsx")
+        await self.update.bot.send_document(
+            self.update.user,
+            open("passes.xlsx", "rb"),
+            caption="Passes table",
+        )
+        import os
+        os.remove("passes.xlsx")
 
 
 class Passes(BasePlugin):
@@ -1662,6 +1761,7 @@ class Passes(BasePlugin):
             CommandHandler(self.name, self.handle_start),
             CommandHandler("passes_assign", self.handle_passes_assign_cmd),
             CommandHandler("passes_cancel", self.handle_passes_cancel_cmd),
+            CommandHandler("passes_table", self.handle_passes_table_cmd),
             CommandHandler("legal_name", self.handle_name_cmd),
             CommandHandler("passport", self.handle_passport_data_cmd),
             CommandHandler("role", self.handle_role_cmd),
@@ -2126,3 +2226,6 @@ class Passes(BasePlugin):
 
     async def handle_payment_proof_timeout(self, update, data):
         return await self.create_update(update).handle_payment_proof_timeout(data)
+    
+    async def handle_passes_table_cmd(self, update: TGState):
+        return await self.create_update(update).handle_passes_table_cmd()
