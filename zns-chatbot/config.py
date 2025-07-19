@@ -203,13 +203,15 @@ class Config(BaseSettings):
 
 def full_link(app, link):
     link = f"{app.config.server.base}{link}"
-    match = re.match(r"http://localhost(:(\d+))?/", link)
+    match = re.match(r"http://(([a-z]+)\.)?localhost(:(\d+))?/", link)
     if match:
-        port = match.group(2)
-        if port is None:
-            port = "80"
+        host = match.group(2)
+        port = match.group(4)
         # Replace the localhost part with your custom URL and port
-        link = re.sub(
-            r"http://localhost(:\d+)?/", f"https://complynx.net/testbot/{port}/", link
-        )
+        if host is None:
+            if port is None:
+                port = "80"
+            link = re.sub(r"http://(([a-z]+)\.)?localhost(:\d+)?/", f"https://complynx.net/testbot/{port}/", link)
+        elif port is None:
+            link = re.sub(r"http://(([a-z]+)\.)?localhost(:\d+)?/", f"https://complynx.net/testbot/{host}/", link)
     return link
