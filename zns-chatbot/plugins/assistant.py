@@ -6,6 +6,7 @@ from json import loads
 import csv
 from functools import lru_cache
 import re
+import base64
 
 import tiktoken
 from google.oauth2 import service_account
@@ -230,7 +231,8 @@ class Assistant(BasePlugin):
 
     @async_thread
     def fetch_document(self) -> dict:
-        creds = loads(self.config.google.credentials.get_secret_value())
+        base64_cred = self.config.google.credentials.get_secret_value()
+        creds = loads(base64.b64decode(base64_cred))
         credentials = service_account.Credentials.from_service_account_info(
             creds, scopes=["https://www.googleapis.com/auth/drive"]
         )
