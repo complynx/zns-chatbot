@@ -155,6 +155,8 @@ class FitFrameHandler(RequestHandlerWithApp):
 
 class OrdersHandler(RequestHandlerWithApp):
     async def get(self):
+        from .plugins.orders import Orders
+        orders: Orders = self.app.orders
         order_id = self.get_query_argument("order_id", default="")
         debug_id = self.get_query_argument("debug_id", default="")
         locale_str = self.get_query_argument("locale", default="en")
@@ -163,12 +165,12 @@ class OrdersHandler(RequestHandlerWithApp):
             return self.app.localization(s, locale=locale_str)
 
         choice = None
-        read_only = True
+        read_only = False
         if order_id != "":
-            order = await self.app.orders.order_by_id(order_id)
+            order = await orders.order_by_id(order_id)
             if "choice" in order:
                 choice = order["choice"]
-            # read_only="proof_file" in order
+            read_only="proof_file" in order
         lang = "en"
         if locale_str.startswith("ru"):
             lang = "ru"
@@ -193,6 +195,8 @@ class OrdersHandler(RequestHandlerWithApp):
             raise tornado.web.HTTPError(404)
 
     async def post(self):
+        from .plugins.orders import Orders
+        orders: Orders = self.app.orders
         initData = self.get_argument("initData", default=None, strip=False)
 
         if initData:
@@ -210,19 +214,19 @@ class OrdersHandler(RequestHandlerWithApp):
 
             if order_id == "":
                 logger.info(f"creating order for {user['id']}")
-                # await self.app.orders.create_order(user['id'], choice)
+                await orders.create_order(user['id'], choice)
                 return
-            # order = await self.app.orders.order_by_id(order_id)
-            # if order is None:
-            #     self.set_status(404)
-            #     logger.info("order not found")
-            #     return
-            # if order["user_id"] != user["id"]:
-            #     self.set_status(403)
-            #     logger.error(f"user ID doesn't match")
-            #     return
-            # logger.info(f"updating order {order_id} for {user['id']}")
-            # await self.app.orders.set_choice(order, choice)
+            order = await orders.order_by_id(order_id)
+            if order is None:
+                self.set_status(404)
+                logger.info("order not found")
+                return
+            if order["user_id"] != user["id"]:
+                self.set_status(403)
+                logger.error("user ID doesn't match")
+                return
+            logger.info(f"updating order {order_id} for {user['id']}")
+            await orders.set_choice(order, choice)
 
             self.set_status(200)
             self.write({"message": "order saved"})

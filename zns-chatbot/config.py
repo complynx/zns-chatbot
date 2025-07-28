@@ -99,8 +99,8 @@ class MongoDB(BaseSettings):
 
 
 class ServerSettings(BaseSettings):
-    base: str = Field("http://localhost:8080")
-    port: int = Field(8080)
+    base: str = Field("http://localhost:8085")
+    port: int = Field(8085)
     auth_timeout: float = Field(1, description="days till auth expire")
 
 
@@ -116,10 +116,10 @@ class Photo(BaseSettings):
 
 
 class Orders(BaseSettings):
-    deadline: date = Field(date(2024, 6, 7))
+    deadline: date = Field(date(2025, 9, 7))
     payment_admin_ru: int = Field(-1)
     admins: set[int] = Field({379278985})
-    event_number: int = Field(8)
+    event_number: int = Field(10)
 
 
 class Food(BaseSettings):
