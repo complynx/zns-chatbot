@@ -1,0 +1,62 @@
+# Use an official Python runtime as a parent image
+FROM python:3.11-bookworm
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+# Install system dependencies and Python packages in optimized layers
+RUN apt-get update && apt-get install -y \
+    cmake \
+    build-essential \
+    cython3 python3-dev \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set UV cache directory to be cleaned up later
+ENV UV_CACHE_DIR=/tmp/uv-cache
+
+# Install PyTorch first with specific index URL
+RUN uv pip install --system torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cpu \
+    && uv pip install --system albumentations==1.4.3 Cython \
+    && rm -rf /tmp/uv-cache
+
+# Install insightface separately to avoid conflicts
+RUN uv pip install --system --no-binary insightface insightface \
+    && rm -rf /tmp/uv-cache
+
+# Set the working directory to /app
+WORKDIR /app
+
+# Copy the pyproject.toml file into the container at /app
+COPY pyproject.toml /app
+
+# Install application dependencies and clean up in single layer
+RUN uv pip install --system . \
+    && apt-get purge -y --auto-remove cmake build-essential python3-dev \
+    && apt-get autoremove -y \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/uv-cache \
+    && rm -rf /root/.cache \
+    && rm -rf /tmp/* \
+    && find /usr/local -name "*.pyc" -delete \
+    && find /usr/local -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+
+# Copy the current directory contents into the container at /app
+COPY . /app
+
+# Bootstrap RAG model
+# RUN python -m zns-chatbot.plugins.assistant
+
+# Bootstrap face models
+# RUN python -m zns-chatbot.plugins.avatar
+
+# Make port 80 available to the world outside this container
+EXPOSE 80
+
+# Define environment variable
+ENV NAME=zns-chatbot
+
+# Run python -m zns-chatbot.main when the container launches
+CMD ["sh", "-c", "TELEGRAM_TOKEN=$TELEGRAM_TOKEN python -m zns-chatbot.main"]
