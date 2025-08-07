@@ -43,7 +43,7 @@
                 "steak_iz_semgi_s_asparzhevoy_fasolyu_i_tomatami_so_slivочным_sousom": {
                   "name_ru": "Стейк из семги со спаржевой фасолью и томатами со сливочным соусом",
                   "name_en": "Salmon Steak with Asparagus and Tomatoes in Cream Sauce",
-                  "output": "160/100/30/20",
+                  "output": "60/100/30/20",
                   "price": 40.6
                 },
                 "medalion_iz_vyrezki_svinoy_s_gribnym_sousom": {
@@ -57,7 +57,7 @@
                 "draniki": {
                     "name_ru": "Драники",
                     "name_en": "Potato Pancakes",
-                    "output": "4pcs/240g",
+                    "output": "×4/240g",
                     "price": 10.45
                 },
                 "grechnevaya_kasha_s_maslom": {
@@ -157,20 +157,20 @@
                     "price": 10.6
                 },
                 "ryba_v_syire": {
-                    "name_ru": "Рыба Хек в сыре",
-                    "name_en": "Hake in Cheese",
+                    "name_ru": "Рыба в сыре",
+                    "name_en": "Fish in Cheese",
                     "output": "150",
                     "price": 10.6
                 },
                 "steak_iz_semgi_s_asparzhevoy_fasolyu_i_tomatami_so_slivочным_sousom": {
                   "name_ru": "Стейк из семги со спажевой фасолью и томатами со сливочным соусом",
                   "name_en": "Salmon Steak with Green Beans and Tomatoes in Cream Sauce",
-                  "output": "160/100/30/20",
+                  "output": "60/100/30/20",
                   "price": 40.6
                 },
-                "grudka_kurichya": {
-                    "name_ru": "Грудка куриная",
-                    "name_en": "Chicken Breast",
+                "chicken_fillet": {
+                    "name_ru": "Филе курицы с помидорами",
+                    "name_en": "Chicken Fillet with Tomatoes",
                     "output": "150",
                     "price": 10.6
                 }
@@ -179,7 +179,7 @@
                 "draniki": {
                     "name_ru": "Драники",
                     "name_en": "Potato Pancakes",
-                    "output": "4pcs/240g",
+                    "output": "×4/240g",
                     "price": 10.45
                 },
                 "grechnevaya_kasha_s_maslom": {
@@ -287,7 +287,7 @@
                 "steak_iz_semgi_s_asparzhevoy_fasolyu_i_tomatami_so_slivочным_sousom": {
                   "name_ru": "Стейк из семги со спажевой фасолью и томатами со сливочным соусом",
                   "name_en": "Salmon Steak with Asparagus and Tomatoes in Cream Sauce",
-                  "output": "160/100/30/20",
+                  "output": "60/100/30/20",
                   "price": 40.6
                 },
                 "kurinye_kolbaski": {
@@ -301,7 +301,7 @@
                 "draniki": {
                     "name_ru": "Драники",
                     "name_en": "Potato Pancakes",
-                    "output": "4pcs/240g",
+                    "output": "×4/240g",
                     "price": 10.45
                 },
                 "grechnevaya_kasha_s_maslom": {

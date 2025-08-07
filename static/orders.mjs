@@ -176,27 +176,27 @@ function collectOrdersWithExtras() {
     const grodnoExcursion = document.querySelector('.excursions input[name="excursion_grodno"]').checked;
 
     if (preparty) {
-        orders.extras.preparty = 25;
+        orders.extras.preparty = 35;
+        orders.extras.total += 35;
+        orders.total += 35;
+    }
+
+    if (minskExcursion) {
+        orders.extras.excursion_minsk = 25;
         orders.extras.total += 25;
         orders.total += 25;
     }
 
-    if (minskExcursion) {
-        orders.extras.excursion_minsk = 14;
-        orders.extras.total += 14;
-        orders.total += 14;
-    }
-
     if (shuttleBus) {
-        orders.extras.shuttle = 52;
-        orders.extras.total += 52;
-        orders.total += 52;
+        orders.extras.shuttle = 55;
+        orders.extras.total += 55;
+        orders.total += 55;
     }
 
     if (grodnoExcursion) {
-        orders.extras.excursion_grodno = 14;
-        orders.extras.total += 14;
-        orders.total += 14;
+        orders.extras.excursion_grodno = 15;
+        orders.extras.total += 15;
+        orders.total += 15;
     }
 
     return orders;
@@ -403,7 +403,7 @@ updateSections();
 function currencyCeil(sum) {
     return sum;
 }
-const BYN_TO_RUB = 30;
+const BYN_TO_RUB = 33;
 
 document.body.addEventListener("click", ()=>{
     let orders = collectOrdersWithExtras();
