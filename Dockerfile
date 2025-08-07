@@ -40,10 +40,10 @@ RUN uv pip install --system . \
 COPY . /app
 
 # Bootstrap RAG model
-RUN python -m zns-chatbot.plugins.assistant
+# RUN python -m zns-chatbot.plugins.assistant
 
 # Bootstrap face models
-RUN python -m zns-chatbot.plugins.avatar
+# RUN python -m zns-chatbot.plugins.avatar
 
 # Make port 80 available to the world outside this container
 EXPOSE 80
