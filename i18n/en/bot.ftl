@@ -160,6 +160,7 @@ food-payment-method =
             [nophone] Send them a message.
            *[other] Send them a message or call on {$phoneContact}.
         }
+        [paypal] Ambassador {$adminLink} accepts payments via PayPal, please contact them for details and pricing including conversion and fees.
         *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}, please don't send to other banks, your money may not arrive!), contact {$adminLink}.
     }
 
@@ -476,6 +477,7 @@ passes-payment-method =
             [nophone] Send them a message.
            *[other] Send them a message or call on {$phoneContact}.
         }
+        [paypal] Ambassador {$adminLink} accepts payments via PayPal, please contact them for details and pricing including conversion and fees.
         *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}), contact {$adminLink}.
     }
 passes-pass-assigned =
@@ -520,6 +522,7 @@ passes-payment-admin-button = {$adminEmoji} {$adminName}
 passes-payment-admin-desc=
     {$adminEmoji} {$adminLink} {$phoneSBP ->
         [nosbp] — payment: mostly only cash.
+        [paypal] — payment: PayPal transfers.
         *[sbp] — paymnent: SBP transfers by phone number.
     }
 passes-pass-role-saved =

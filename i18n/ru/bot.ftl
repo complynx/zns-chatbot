@@ -204,6 +204,7 @@ food-payment-method =
             [nophone] Напишите ему сообщение.
            *[other] Напишите ему сообщение или позвоните по номеру {$phoneContact}.
         }
+        [paypal] Амбассадор {$adminLink} принимает платежи на PayPal, свяжитесь с ним для получения реквизитов и стоимости с учётом конверсии и комиссии.
         *[sbp] Оплату можно произвести через СБП по номеру телефона <code>{$phoneSBP}</code> ({$banks}, пожалуйста, не отправляйте на другие банки, ваши деньги могут не дойти!), контакт {$adminLink}.
     }
 
@@ -512,6 +513,7 @@ passes-payment-method =
             [nophone] Напишите ему сообщение.
            *[other] Напишите ему сообщение или позвоните по номеру {$phoneContact}.
         }
+        [paypal] Амбассадор {$adminLink} принимает платежи на PayPal, свяжитесь с ним для получения реквизитов и стоимости с учётом конверсии и комиссии.
         *[sbp] Оплату можно произвести через СБП по номеру телефона <code>{$phoneSBP}</code> ({$banks}), контакт {$adminLink}.
     }
 passes-pass-assigned =
@@ -608,6 +610,7 @@ passes-payment-admin-button = {$adminEmoji} {$adminName}
 passes-payment-admin-desc=
     {$adminEmoji} {$adminLink} {$phoneSBP ->
         [nosbp] — оплата в основном наличкой.
+        [paypal] — оплата через PayPal.
         *[sbp] — оплата переводом СБП по номеру телефона.
     }
 passes-pass-role-saved =

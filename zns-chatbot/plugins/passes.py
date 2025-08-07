@@ -82,6 +82,8 @@ class PassUpdate:
         keys["adminName"] = client_user_name(admin, language_code=lc)
         keys["phoneContact"] = admin.get("phone_contact", "nophone")
         keys["phoneSBP"] = admin.get("phone_sbp", "nosbp")
+        if admin.get("paypal", "") != "" and keys["phoneSBP"] == "nosbp":
+            keys["phoneSBP"] = "paypal"
         keys["banks"] = admin.get("banks_en", "")
         if lc is not None:
             keys["banks"] = admin.get("banks_" + lc, keys["banks"])
