@@ -118,6 +118,28 @@ section:not(.active){
     box-sizing: border-box;
     margin: .2em;
 }
+
+/* Reorder name fields for Russian language: last, first, patronymic (LFP) */
+html[lang=ru] .for-who label {
+    display: flex;
+    flex-direction: column;
+}
+
+html[lang=ru] .for-who label > span {
+    order: 0;
+}
+
+html[lang=ru] .for-who input[name="for_who_last_name"] {
+    order: 1;
+}
+
+html[lang=ru] .for-who input[name="for_who_first_name"] {
+    order: 2;
+}
+
+html[lang=ru] .for-who input[name="for_who_patronymus"] {
+    order: 3;
+}
 .excursions label{
     display: block;
 }
