@@ -55,7 +55,7 @@ class Superuser(BasePlugin):
             args_list = update.parse_cmd_arguments()
             assert args_list is not None
             parser = SilentArgumentParser()
-            
+
             parser.add_argument('--template', action='store_true', help='The message is a template')
 
             group = parser.add_mutually_exclusive_group(required=False)
@@ -262,8 +262,6 @@ class Superuser(BasePlugin):
         )
         return informal_name
         
-
-
     async def send_message_to__stage2(
             self,
             update: TGState,
