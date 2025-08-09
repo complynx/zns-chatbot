@@ -199,6 +199,7 @@ class Assistant(BasePlugin):
 
     def __init__(self, base_app):
         super().__init__(base_app)
+        self.base_app.assistant = self
         with open("static/rag_data.yaml", "r", encoding="utf-8") as f:
             import yaml
 

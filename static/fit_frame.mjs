@@ -1,571 +1,409 @@
+
+// All-canvas, WYSIWYG version of fit_frame.mjs
+// - Live preview and export are rendered by the same drawing pipeline
+// - No CSS transforms are used for the photo or frame
+// - Fixes Safari rounding/skew mismatches between CSS and Canvas
+
 Telegram.WebApp.ready();
 Telegram.WebApp.expand();
 
 const ETransform = [[1, 0, 0], [0, 1, 0]];
 
-let ph, pw;
+// DOM
+const help_div = document.querySelector(".help");
+const screen_size_source = document.querySelector(".photo");
+const photoEl = document.querySelector(".photo img");
+const frameSourceEl = document.querySelector(".frame_source");
+// const flareSourceEl = document.querySelector(".flare_source"); // optional
+const overlayEl = document.querySelector(".overlay");
+
+// State (sizes in CSS pixels unless noted)
+let W = 0, H = 0, Vmin = 0;
+let frame_size = 0;          // CSS px
+let f_top = 0, f_left = 0;   // CSS px
+let ph = 0, pw = 0;          // photo intrinsic pixels
+
+// Transforms are expressed in "real frame units" (0..real_frame_size)
 let transformationMatrix = ETransform;
-let frameTransformationMatrix = ETransform;
-const frame_size_fraction = 1;
-let W, H, Vmax, Vmin;
-let frame_size, f_top, f_left;
-let help_div = document.querySelector(".help");
-let screen_size_source = document.querySelector(".photo");
-let photo_ancor = document.querySelector(".photo .ancor");
-let photo = document.querySelector(".photo img");
-let frame_source = document.querySelector(".frame_source");
-// let flare_source = document.querySelector(".flare_source");
-let frame = document.querySelector(".overlay");
-let cancel_btn = document.querySelector(".button button[name=cancel]");
-let submit_btn = document.querySelector(".button button[name=done]");
-console.log(photo, frame, cancel_btn, submit_btn);
 
-function isIOS() {
-    return /iPad|iPhone|iPod/.test(navigator.userAgent);
-}
+// Compensations for iOS alignment (also in real frame units)
+const alignment = { x: 0, y: 0, changed: false, scale: {x:1, y:1} };
 
-let alignment = {
-    x: 0,
-    y: 0,
-    changed: false,
-};
+// Canvas: on-screen viewer and offscreen square for the frame area
+const DPR = Math.max(1, window.devicePixelRatio || 1);
+const viewer = document.createElement("canvas");
+viewer.className = "viewer-canvas";
+Object.assign(viewer.style, {
+  position: "fixed",
+  inset: "0",
+  width: "100vw",
+  height: "100vh",
+  zIndex: "0",          // below overlay/help
+});
+document.body.appendChild(viewer);
+const vctx = viewer.getContext("2d");
 
-let photo_src;
-function startRealign() {
-    console.log(alignment);
-    document.body.classList.add("realign");
-    photo_src = photo.src;
-    photo.src = "./static/marker.png";
-}
-function stopRealign() {
-    const decomposition = decomposeTransformMatrix(transformationMatrix);
-    alignment.x = decomposition.translation.x;
-    alignment.y = decomposition.translation.y;
-    alignment.changed = true;
-    alignment.scale = decomposition.scaling;
-    console.log(alignment);
-    document.body.classList.remove("realign");
-    photo.src = photo_src;
-}
-// fetch("get_compensations?"+IDQ()).then(r=>r.json()).then(r=>{
-//     if("x" in r) {
-//         alignment.x = r.x;
-//     }
-//     if("y" in r) {
-//         alignment.y = r.y;
-//     }
-//     if((!("x" in r) || !("y" in r))
-//          && isIOS()
-//     ) {
-//         startRealign();
-//     }
-// }).catch(send_error);
+let offscreen = document.createElement("canvas");
+let offctx = offscreen.getContext("2d");
 
-function decomposeTransformMatrix(transformationMatrix) {
-    const [a, c, e] = transformationMatrix[0];
-    const [b, d, f] = transformationMatrix[1];
-
-    const scalingX = Math.sqrt(a * a + c * c);
-    const scalingY = Math.sqrt(b * b + d * d);
-
-    const rotation = Math.atan2(b, a);
-
-    // const new_a = scalingX * Math.cos(rotation);
-    // const new_b = scalingX * Math.sin(rotation);
-    // const new_c = -scalingY * Math.sin(rotation);
-    // const new_d = scalingY * Math.cos(rotation);
-    // const new_e = e * new_a + f * new_c + e;
-    // const new_f = e * new_b + f * new_d + f;
-    // console.log(e,f,new_e, new_f);
-
-    return {
-        scaling: { x: scalingX, y: scalingY },
-        rotation: rotation,
-        translation: { x: e, y: f }
-    };
-}
-
-function generateCroppedImage(returnCanvas) {
-    // Create a new canvas for the cropped image
-    const croppedCanvas = document.createElement("canvas");
-    croppedCanvas.width = real_frame_size;
-    croppedCanvas.height = real_frame_size;
-    const ctx = croppedCanvas.getContext("2d");
-
-    // Save the current transformation matrix and set it to identity
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-    // Apply the transforms and draw the photo on the canvas
-    ctx.translate(real_frame_size / 2., real_frame_size / 2.);
-
-    // Calculate the necessary transforms
-    // const [a, c, e] = transformationMatrix[0];
-    // const [b, d, f] = transformationMatrix[1];
-    // ctx.transform(a, b, c, d, e, f);
-
-    const decomposition = decomposeTransformMatrix(transformationMatrix);
-
-    const { scaling, rotation, translation } = decomposition;
-    ctx.translate(translation.x + alignment.x, translation.y + alignment.y);
-    ctx.scale(scaling.x, scaling.y);
-    ctx.rotate(rotation);
-
-    ctx.drawImage(photo, -pw / 2., -ph / 2., pw, ph);
-
-    // Restore the original transformation matrix
-    ctx.restore();
-    ctx.drawImage(frame_source, 0, 0, real_frame_size, real_frame_size);
-
-    // Draw the flare image on top with the screen blending mode
-    // ctx.globalCompositeOperation = 'screen';
-    // ctx.drawImage(flare_source, 0, 0, real_frame_size, real_frame_size);
-    ctx.globalCompositeOperation = 'source-over';
-
-    if (returnCanvas)
-        return croppedCanvas;
-
-    // Get the data URL of the cropped image
-    const croppedDataURL = croppedCanvas.toDataURL("image/png", 0.95);
-
-    return croppedDataURL;
-}
-
-{// DEBUG
-    window.DEBUG = false;
-    let debug_countdown = 10;
-    function remove_from_dom(el) {
-        el?.parentElement?.removeChild(el);
-    }
-
-    function init_debug() {
-        if (DEBUG) return;
-
-        DEBUG = true;
-        document.body.classList.add("debug");
-        let dbg_layer = document.querySelector('.debug-layer');
-        let uuid_validator = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-        let debug_code_input = dbg_layer.querySelector('input[name=remotejs]');
-        debug_code_input.value = debug_code;
-
-        dbg_layer.querySelector('.link').innerText = window.location.href;
-        navigator.clipboard.writeText(window.location.href)
-            .catch((error) => {
-                console.error('Failed to copy text: ', error);
-            });
-        dbg_layer.querySelector('.remotejs').addEventListener("click", () => {
-            let rjs_uuid = debug_code_input.value.trim();
-            if (uuid_validator.test(rjs_uuid)) {
-                remove_from_dom(dbg_layer.querySelector('.remotejs'));
-                remove_from_dom(debug_code_input);
-                let s = document.createElement("script");
-                s.src = "https://remotejs.com/agent/agent.js";
-                s.setAttribute("data-consolejs-channel", rjs_uuid);
-                document.head.appendChild(s);
-            }
-        });
-
-        dbg_layer.querySelector("button.canvas").addEventListener("click", () => {
-            console.log(transformationMatrix);
-            const [a, c, e] = transformationMatrix[0];
-            const [b, d, f] = transformationMatrix[1];
-            const croppedImage = new Image();
-            croppedImage.src = generateCroppedImage();
-            // croppedImage.src = `./crop_frame?id=${photo_id}&a=${a}&b=${b}&c=${c}&d=${d}&e=${e}&f=${f}`;
-            croppedImage.style.position = "fixed";
-            croppedImage.style.left = f_left + "px";
-            croppedImage.style.top = f_top + "px";
-            croppedImage.style.height = croppedImage.style.width = frame_size + "px";
-            croppedImage.style.zIndex = 4;
-            document.body.appendChild(croppedImage);
-            croppedImage.addEventListener("click", () => {
-                remove_from_dom(croppedImage);
-            }, false);
-        });
-
-        dbg_layer.querySelector("button.realign").addEventListener("click", () => {
-            if (document.body.classList.contains("realign")) {
-                stopRealign();
-            } else startRealign();
-        });
-    }
-    document.addEventListener('contextmenu', function (event) {
-        if (event.altKey && !DEBUG) {
-            if (--debug_countdown <= 0) {
-                init_debug();
-            } else {
-                console.log(debug_countdown);
-            }
-            event.preventDefault();
-        }
-    });
-    document.body.addEventListener('touchstart', function (e) {
-        if (!DEBUG && e.touches.length === 5) {
-            if (--debug_countdown <= 0) {
-                init_debug();
-            } else {
-                console.log(debug_countdown);
-            }
-        }
-    }, {
-        capture: true
-    });
-}
-
-
-if (Telegram.WebApp.platform === "tdesktop") {
-    help_div.innerText = help_desktop;
-} else {
-    help_div.innerText = help_mobile;
-}
-
-
-/**
- * The `M` function is a matrix multiplication function that takes
- * two matrices `A` and `B` as input and returns their product as
- * a new matrix. The function uses the standard formula for matrix
- * multiplication, where each element of the resulting matrix is
- * the sum of the products of the corresponding elements of the
- * input matrices. The resulting matrix has dimensions `2x3`, which
- * is the standard size for transformation matrices in 2D graphics.
- */
+// Helpers: matrices are [[a,c,e],[b,d,f]]
 function M(A, B) {
-    return [
-        [
-            A[0][0] * B[0][0] + A[0][1] * B[1][0],
-            A[0][0] * B[0][1] + A[0][1] * B[1][1],
-            A[0][0] * B[0][2] + A[0][1] * B[1][2] + A[0][2],
-        ],
-        [
-            A[1][0] * B[0][0] + A[1][1] * B[1][0],
-            A[1][0] * B[0][1] + A[1][1] * B[1][1],
-            A[1][0] * B[0][2] + A[1][1] * B[1][2] + A[1][2],
-        ]
-    ];
+  return [
+    [
+      A[0][0] * B[0][0] + A[0][1] * B[1][0],
+      A[0][0] * B[0][1] + A[0][1] * B[1][1],
+      A[0][0] * B[0][2] + A[0][1] * B[1][2] + A[0][2],
+    ],
+    [
+      A[1][0] * B[0][0] + A[1][1] * B[1][0],
+      A[1][0] * B[0][1] + A[1][1] * B[1][1],
+      A[1][0] * B[0][2] + A[1][1] * B[1][2] + A[1][2],
+    ]
+  ];
 }
-
 function MM(...matrices) {
-    if (matrices.length < 1) return ETransform;
-    if (matrices.length == 1) return matrices[0];
-
-    let result = matrices[0];
-
-    for (let i = 1; i < matrices.length; i++)
-        result = M(result, matrices[i]);
-
-    return result;
+  if (matrices.length < 1) return ETransform;
+  let result = matrices[0];
+  for (let i = 1; i < matrices.length; i++) result = M(result, matrices[i]);
+  return result;
 }
-
-function createCSSTransform(transformationMatrix) {
-    const [a, c, e, b, d, f] = [
-        transformationMatrix[0][0],
-        transformationMatrix[1][0],
-        transformationMatrix[0][1],
-        transformationMatrix[1][1],
-        transformationMatrix[0][2],
-        transformationMatrix[1][2],
-    ];
-
-    return `matrix(${a}, ${c}, ${e}, ${b}, ${d}, ${f})`;
-}
-
 function translate2matrix(x, y) {
-    return [
-        [1, 0, x],
-        [0, 1, y]
-    ];
+  return [[1,0,x],[0,1,y]];
+}
+function scale2matrix(sx, sy) {
+  return [[sx,0,0],[0,sy,0]];
+}
+function rotate2matrix(theta) {
+  const c = Math.cos(theta), s = Math.sin(theta);
+  return [[c,-s,0],[s,c,0]];
+}
+function decomposeTransformMatrix(T) {
+  const [a,c,e] = T[0];
+  const [b,d,f] = T[1];
+  const scalingX = Math.hypot(a,c);
+  const scalingY = Math.hypot(b,d);
+  const rotation = Math.atan2(b,a);
+  return { scaling: {x: scalingX, y: scalingY}, rotation, translation: {x:e, y:f} };
 }
 
-
-function movePhoto(deltaX, deltaY) {
-    let translationMatrix = translate2matrix(deltaX / frame_size * real_frame_size, deltaY / frame_size * real_frame_size);
-
-    transformationMatrix = M(translationMatrix, transformationMatrix);
-
-    recalculate_photo();
+// Coords conversions
+function viewportDeltaToReal(dx_css, dy_css) {
+  // CSS px delta -> real frame units
+  const factor = real_frame_size / frame_size;
+  return [dx_css * factor, dy_css * factor];
+}
+function viewportPointToReal(x_css, y_css) {
+  // CSS px point -> real frame units, relative to frame center
+  const cx = f_left + frame_size/2;
+  const cy = f_top + frame_size/2;
+  const [dx, dy] = [x_css - cx, y_css - cy];
+  const factor = real_frame_size / frame_size;
+  return [dx * factor, dy * factor];
 }
 
-let transformationMatrixPreRotate;
+// Sizing + initial fit
+function recalcLayout() {
+  W = screen_size_source.clientWidth;
+  H = screen_size_source.clientHeight;
+  Vmin = Math.min(W,H);
+  frame_size = Vmin; // full vmin
+  f_left = (W - frame_size)/2;
+  f_top = (H - frame_size)/2;
 
-function rotatePhotoStart() {
-    transformationMatrixPreRotate = transformationMatrix;
+  // Resize canvases
+  viewer.width = Math.max(1, Math.round(W * DPR));
+  viewer.height = Math.max(1, Math.round(H * DPR));
+  viewer.style.width = W + "px";
+  viewer.style.height = H + "px";
+
+  const squarePx = Math.max(1, Math.round(frame_size * DPR));
+  offscreen.width = squarePx;
+  offscreen.height = squarePx;
+
+  // Hide CSS overlayed frame; we render it ourselves.
+  if (overlayEl) overlayEl.style.backgroundImage = "none";
+
+  // Initial photo fit (if not set yet)
+  recalcPhoto();
+  draw();
 }
 
-function ajustCursorClientPosition(cursorX, cursorY) {
-    const photoCenterX = parseFloat(photo_ancor.style.left) + parseFloat(photo.style.left) + pw / 2;
-    const photoCenterY = parseFloat(photo_ancor.style.top) + parseFloat(photo.style.top) + ph / 2;
-
-    const adjustedMouseClientX = cursorX - photoCenterX;
-    const adjustedMouseClientY = cursorY - photoCenterY;
-
-    return [adjustedMouseClientX, adjustedMouseClientY];
+function recalcPhoto() {
+  if (!photoEl.naturalWidth || !photoEl.naturalHeight) return;
+  if (pw !== photoEl.naturalWidth || ph !== photoEl.naturalHeight) {
+    pw = photoEl.naturalWidth;
+    ph = photoEl.naturalHeight;
+    const smaller = Math.min(pw, ph);
+    const F = real_frame_size / smaller; // scale to cover frame at export size
+    transformationMatrix = [[F,0,0],[0,F,0]];
+  }
 }
 
-function rotatePhoto(rotationAtan2, mouseClientX, mouseClientY) {
-    const [adjustedMouseClientX, adjustedMouseClientY] = ajustCursorClientPosition(mouseClientX, mouseClientY);
+// Unified renderer used for both preview and export
+function renderToSquareCanvas(ctx, targetPx) {
+  // targetPx: canvas width/height in pixels (already set on ctx.canvas)
+  ctx.clearRect(0,0,targetPx,targetPx);
 
-    let rotationMatrix = MM(
-        translate2matrix(adjustedMouseClientX, adjustedMouseClientY),
-        [
-            [Math.cos(rotationAtan2), -Math.sin(rotationAtan2), 0],
-            [Math.sin(rotationAtan2), Math.cos(rotationAtan2), 0]
-        ],
-        translate2matrix(-adjustedMouseClientX, -adjustedMouseClientY)
-    );
+  // Compose photo under frame
+  ctx.save();
+  // Center of frame
+  ctx.translate(targetPx/2, targetPx/2);
 
-    transformationMatrix = M(rotationMatrix, transformationMatrixPreRotate);
+  // Map real-frame units to target pixels
+  const S = targetPx / real_frame_size;
+  ctx.scale(S, S);
 
-    recalculate_photo();
+  // Apply user transform + optional alignment
+  const { scaling, rotation, translation } = decomposeTransformMatrix(transformationMatrix);
+  ctx.translate(translation.x + alignment.x, translation.y + alignment.y);
+  ctx.scale(scaling.x, scaling.y);
+  ctx.rotate(rotation);
+
+  // Draw the photo
+  ctx.drawImage(photoEl, -pw/2, -ph/2, pw, ph);
+  ctx.restore();
+
+  // Frame on top (sized to the square)
+  if (frameSourceEl && frameSourceEl.complete) {
+    ctx.drawImage(frameSourceEl, 0, 0, targetPx, targetPx);
+  }
+  // Optional flare:
+  // if (flareSourceEl && flareSourceEl.complete) {
+  //   ctx.globalCompositeOperation = "screen";
+  //   ctx.drawImage(flareSourceEl, 0, 0, targetPx, targetPx);
+  //   ctx.globalCompositeOperation = "source-over";
+  // }
 }
 
-function scalePhoto(scaleFactor, mouseClientX, mouseClientY) {
-    const [adjustedMouseClientX, adjustedMouseClientY] = ajustCursorClientPosition(mouseClientX, mouseClientY);
+function draw() {
+  // Draw frame square into offscreen, then blit to viewer at correct place
+  renderToSquareCanvas(offctx, offscreen.width);
 
-    let scaleMatrix = MM(
-        translate2matrix(adjustedMouseClientX, adjustedMouseClientY),
-        [
-            [scaleFactor, 0, 0],
-            [0, scaleFactor, 0]
-        ],
-        translate2matrix(-adjustedMouseClientX, -adjustedMouseClientY)
-    );
-
-    transformationMatrix = M(transformationMatrix, scaleMatrix);
-
-    recalculate_photo();
+  vctx.clearRect(0,0,viewer.width, viewer.height);
+  // Account for device pixel ratio
+  const dx = Math.round(f_left * DPR);
+  const dy = Math.round(f_top * DPR);
+  vctx.drawImage(offscreen, dx, dy);
 }
 
-function recalculate_photo() {
-    if (ph === 0 && photo.naturalWidth === 0) return;
-    if (ph !== photo.naturalHeight || pw !== photo.naturalWidth) {
-        ph = photo.naturalHeight;
-        pw = photo.naturalWidth;
-        photo.style.top = (-ph / 2) + 'px';
-        photo.style.left = (-pw / 2) + 'px';
+// ----- Interaction (always update transform in REAL frame units) -----
+let isMouseDown = false, lastMouseX = 0, lastMouseY = 0;
 
-        const smallerSide = Math.min(pw, ph);
-        const F = real_frame_size / smallerSide;
-
-        // Create the transformation matrix
-        transformationMatrix = [
-            [F, 0, 0],
-            [0, F, 0]
-        ];
-    }
-
-    photo.style.transform = createCSSTransform(MM(
-        frameTransformationMatrix,
-        transformationMatrix
-    ));
-}
-function recalculate_all() {
-    W = screen_size_source.clientWidth;
-    H = screen_size_source.clientHeight;
-    Vmin = Math.min(W, H);
-    Vmax = Math.max(W, H);
-    frame_size = frame_size_fraction * Vmin;
-    f_top = ((H - frame_size) / 2);
-    f_left = ((W - frame_size) / 2);
-    const F = frame_size / real_frame_size;
-
-    frameTransformationMatrix = [
-        [F, 0, 0],
-        [0, F, 0]
-    ];
-
-    // frame.style.height = frame.style.width = frame_size + "px";
-
-    // frame.style.left = f_left + "px";
-    // frame.style.top = f_top + "px";
-    photo_ancor.style.left = (f_left + frame_size / 2) + "px";
-    photo_ancor.style.top = (f_top + frame_size / 2) + "px";
-
-    recalculate_photo();
+function movePhoto(dx_css, dy_css) {
+  const [dx, dy] = viewportDeltaToReal(dx_css, dy_css);
+  transformationMatrix = M(translate2matrix(dx, dy), transformationMatrix);
+  draw();
 }
 
-recalculate_all();
-
-
-
-let isMouseDown = false, initialX, initialY, initialAngle;
-
-let initialTouch1, initialTouch2, initialTouchDistance, initialTouchAngle;
-
-function onTouchStart(e) {
-    e.preventDefault();
-    if (e.touches.length === 1) {
-        initialX = e.touches[0].clientX;
-        initialY = e.touches[0].clientY;
-        isMouseDown = true;
-    } else if (e.touches.length === 2) {
-        isMouseDown = false;
-        const [adjustedTouch1ClientX, adjustedTouch1ClientY] = ajustCursorClientPosition(e.touches[0].clientX, e.touches[0].clientY);
-        const [adjustedTouch2ClientX, adjustedTouch2ClientY] = ajustCursorClientPosition(e.touches[1].clientX, e.touches[1].clientY);
-
-        initialTouch1 = { x: adjustedTouch1ClientX, y: adjustedTouch1ClientY };
-        initialTouch2 = { x: adjustedTouch2ClientX, y: adjustedTouch2ClientY };
-
-        initialTouchDistance = Math.hypot(initialTouch2.x - initialTouch1.x, initialTouch2.y - initialTouch1.y);
-        initialTouchAngle = Math.atan2(initialTouch2.y - initialTouch1.y, initialTouch2.x - initialTouch1.x);
-    }
+function rotatePhoto(angle, pivotX_css, pivotY_css) {
+  const [px, py] = viewportPointToReal(pivotX_css, pivotY_css);
+  const R = MM(translate2matrix(px,py), rotate2matrix(angle), translate2matrix(-px,-py));
+  transformationMatrix = M(R, transformationMatrix);
+  draw();
 }
 
-function onTouchMove(e) {
-    e.preventDefault();
-    if (e.touches.length === 1 && isMouseDown) {
-        let deltaX = e.touches[0].clientX - initialX;
-        let deltaY = e.touches[0].clientY - initialY;
-        movePhoto(deltaX, deltaY);
-        initialX = e.touches[0].clientX;
-        initialY = e.touches[0].clientY;
-    } else if (e.touches.length === 2) {
-        const [adjustedTouch1ClientX, adjustedTouch1ClientY] = ajustCursorClientPosition(e.touches[0].clientX, e.touches[0].clientY);
-        const [adjustedTouch2ClientX, adjustedTouch2ClientY] = ajustCursorClientPosition(e.touches[1].clientX, e.touches[1].clientY);
-
-        let touch1 = { x: adjustedTouch1ClientX, y: adjustedTouch1ClientY };
-        let touch2 = { x: adjustedTouch2ClientX, y: adjustedTouch2ClientY };
-
-        let touchDistance = Math.hypot(touch2.x - touch1.x, touch2.y - touch1.y);
-        let scaleFactor = touchDistance / initialTouchDistance;
-        let centerX = (touch1.x + touch2.x) / 2;
-        let centerY = (touch1.y + touch2.y) / 2;
-
-        let touchAngle = Math.atan2(touch2.y - touch1.y, touch2.x - touch1.x);
-        let rotationAngle = touchAngle - initialTouchAngle;
-
-        let transformMatrix = MM(
-            translate2matrix(centerX, centerY),
-            [
-                [scaleFactor * Math.cos(rotationAngle), -scaleFactor * Math.sin(rotationAngle), 0],
-                [scaleFactor * Math.sin(rotationAngle), scaleFactor * Math.cos(rotationAngle), 0]
-            ],
-            translate2matrix(-centerX, -centerY)
-        );
-
-        transformationMatrix = M(transformationMatrix, transformMatrix);
-        recalculate_photo();
-
-        initialTouchDistance = touchDistance;
-        initialTouchAngle = touchAngle;
-    }
+function scalePhoto(scaleFactor, pivotX_css, pivotY_css) {
+  const [px, py] = viewportPointToReal(pivotX_css, pivotY_css);
+  const S = MM(translate2matrix(px,py), scale2matrix(scaleFactor, scaleFactor), translate2matrix(-px,-py));
+  transformationMatrix = M(S, transformationMatrix);
+  draw();
 }
 
-function onTouchEnd(e) {
-    e.preventDefault();
-    if (e.touches.length === 0) {
-        isMouseDown = false;
-    }
-}
-
+// Mouse
 function onMouseDown(e) {
-    e.preventDefault();
-    initialX = e.clientX;
-    initialY = e.clientY;
-    rotatePhotoStart();
-    isMouseDown = true;
+  e.preventDefault();
+  isMouseDown = true;
+  lastMouseX = e.clientX; lastMouseY = e.clientY;
 }
-
 function onMouseMove(e) {
-    if (!isMouseDown) return;
-
-    e.preventDefault();
-
-    let deltaX = e.clientX - initialX;
-    let deltaY = e.clientY - initialY;
-
-    if (e.shiftKey) {
-        let rotationAngle = Math.atan2(deltaY, deltaX);
-        rotatePhoto(rotationAngle, initialX, initialY);
-    } else {
-        movePhoto(deltaX, deltaY);
-        initialX = e.clientX;
-        initialY = e.clientY;
-    }
-
+  if (!isMouseDown) return;
+  e.preventDefault();
+  if (e.shiftKey) {
+    const angle = Math.atan2(e.clientY - lastMouseY, e.clientX - lastMouseX);
+    rotatePhoto(angle, e.clientX, e.clientY);
+  } else {
+    movePhoto(e.clientX - lastMouseX, e.clientY - lastMouseY);
+    lastMouseX = e.clientX; lastMouseY = e.clientY;
+  }
 }
-
-function onMouseUp(e) {
-    e.preventDefault();
-    isMouseDown = false;
-}
+function onMouseUp(e){ e.preventDefault(); isMouseDown=false; }
 
 function onMouseWheel(e) {
-    e.preventDefault();
-    let scaleAddition = 0.1;
-    if (e.shiftKey) {
-        scaleAddition = 0.005;
+  e.preventDefault();
+  const step = e.shiftKey ? 0.005 : 0.1;
+  const k = (e.deltaY < 0) ? (1 + step) : (1 - step);
+  scalePhoto(k, e.clientX, e.clientY);
+}
+
+// Touch
+let initialTouchDist = 0, initialTouchAngle = 0;
+
+function getTouches(e) {
+  const t = e.touches;
+  return Array.from(t).map(ti => ({x: ti.clientX, y: ti.clientY}));
+}
+function onTouchStart(e) {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    lastMouseX = t.clientX; lastMouseY = t.clientY;
+  } else if (e.touches.length === 2) {
+    const [t1, t2] = getTouches(e);
+    initialTouchDist = Math.hypot(t2.x - t1.x, t2.y - t1.y);
+    initialTouchAngle = Math.atan2(t2.y - t1.y, t2.x - t1.x);
+  }
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    const t = e.touches[0];
+    movePhoto(t.clientX - lastMouseX, t.clientY - lastMouseY);
+    lastMouseX = t.clientX; lastMouseY = t.clientY;
+  } else if (e.touches.length === 2) {
+    const [t1, t2] = getTouches(e);
+    const dist = Math.hypot(t2.x - t1.x, t2.y - t1.y);
+    const angle = Math.atan2(t2.y - t1.y, t2.x - t1.x);
+
+    const k = dist / Math.max(1e-6, initialTouchDist);
+    const cx = (t1.x + t2.x)/2, cy = (t1.y + t2.y)/2;
+
+    // scale around center, then rotate around same center
+    scalePhoto(k, cx, cy);
+    rotatePhoto(angle - initialTouchAngle, cx, cy);
+
+    initialTouchDist = dist;
+    initialTouchAngle = angle;
+  }
+}
+function onTouchEnd(e){ e.preventDefault(); /* noop */ }
+
+// ----- Realign flow -----
+function startRealign() {
+  document.body.classList.add("realign");
+  // Allow CSS to show the marker overlay by clearing inline override:
+  if (overlayEl) overlayEl.style.backgroundImage = "";
+}
+function stopRealign() {
+  const d = decomposeTransformMatrix(transformationMatrix);
+  alignment.x = d.translation.x;
+  alignment.y = d.translation.y;
+  alignment.changed = true;
+  alignment.scale = d.scaling;
+  document.body.classList.remove("realign");
+  if (overlayEl) overlayEl.style.backgroundImage = "none";
+}
+
+// ----- Export (same renderer => WYSIWYG) -----
+function generateCroppedImage(returnCanvas) {
+  const out = document.createElement("canvas");
+  out.width = real_frame_size;
+  out.height = real_frame_size;
+  const ctx = out.getContext("2d");
+  renderToSquareCanvas(ctx, out.width);
+  return returnCanvas ? out : out.toDataURL("image/png", 0.95);
+}
+
+// ----- Debug toggles (kept mostly as-is) -----
+(function debugInit(){
+  window.DEBUG = false;
+  let debug_countdown = 10;
+  function remove_from_dom(el){ el?.parentElement?.removeChild(el); }
+
+  function init_debug(){
+    if (DEBUG) return;
+    DEBUG = true;
+    document.body.classList.add("debug");
+    const dbg = document.querySelector(".debug-layer");
+    dbg.querySelector("button.canvas").addEventListener("click", () => {
+      const img = new Image();
+      img.src = generateCroppedImage(false);
+      img.onload = () => {
+        remove_from_dom(dbg.querySelector("img.debug-export"));
+        img.className = "debug-export";
+        img.style.position = "fixed";
+        img.style.top = (f_top + frame_size + 10) + "px";
+        img.style.left = (f_left) + "px";
+        img.style.width = frame_size + "px";
+        document.body.appendChild(img);
+      };
+    });
+    dbg.querySelector("button.realign").addEventListener("click", () => {
+      if (document.body.classList.contains("realign")) stopRealign();
+      else startRealign();
+    });
+  }
+
+  document.addEventListener("contextmenu", (e) => {
+    if (e.altKey && !DEBUG) {
+      if (--debug_countdown <= 0) init_debug();
+      e.preventDefault();
     }
-    let scaleFactor = e.deltaY > 0 ? 1 - scaleAddition : 1 + scaleAddition;
-    scalePhoto(scaleFactor, e.clientX, e.clientY);
-}
-
-photo.addEventListener("load", recalculate_photo, { passive: true });
-window.addEventListener("resize", recalculate_all, { passive: true });
-
-screen_size_source.addEventListener('mousedown', onMouseDown, false);
-screen_size_source.addEventListener('mousemove', onMouseMove, false);
-screen_size_source.addEventListener('mouseup', onMouseUp, false);
-screen_size_source.addEventListener('mouseleave', onMouseUp, false);
-screen_size_source.addEventListener('wheel', onMouseWheel, false);
-
-screen_size_source.addEventListener('touchstart', onTouchStart, false);
-screen_size_source.addEventListener('touchmove', onTouchMove, false);
-screen_size_source.addEventListener('touchend', onTouchEnd, false);
-
-function AlignmentSave() {
-    if (alignment.changed) {
-        return "&compensations=" + encodeURIComponent(JSON.stringify(alignment))
+  }, {capture:true});
+  document.body.addEventListener("touchstart", (e) => {
+    if (!DEBUG && e.touches.length === 5) {
+      if (--debug_countdown <= 0) init_debug();
     }
-    return "";
+  }, {capture:true});
+})();
+
+// ----- Wire up -----
+function IDQ(){ return "initData=" + encodeURIComponent(Telegram.WebApp.initData); }
+function AlignmentSave(){
+  if (!alignment.changed) return "";
+  return `&x=${encodeURIComponent(alignment.x)}&y=${encodeURIComponent(alignment.y)}`;
 }
-
-function IDQ() {
-    return "initData=" + encodeURIComponent(Telegram.WebApp.initData)
-}
-
-
-function send_error(err) {
-    return fetch("error?" + IDQ(), {
-        method: "POST",
-        body: err
-    })
+function send_error(err){
+  return fetch("error?" + IDQ(), { method:"POST", body: err });
 }
 
 Telegram.WebApp.MainButton.setText(finish_button_text);
 Telegram.WebApp.MainButton.show();
 Telegram.WebApp.MainButton.onClick(() => {
-    try {
-        if (document.body.classList.contains("realign")) {
-            stopRealign();
-            return;
-        }
-        generateCroppedImage(true).toBlob(function (blob) {
-            fetch('fit_frame?' + IDQ() + AlignmentSave(), {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'image/jpeg'
-                },
-                body: blob
-            }).then(response => {
-                if (!response.ok) {
-                    throw new Error(`Network response was not ok: ${response.status} ${response.statusText}\n${response.body}`);
-                }
-            }).catch(error => {
-                console.error('Error:', error);
-                return send_error(error);
-            }).finally(() => {
-                Telegram.WebApp.close();
-            });
-        }, 'image/jpeg', quality / 100.);
-    } catch (error) {
-        send_error(error);
-    };
+  try {
+    if (document.body.classList.contains("realign")) { stopRealign(); return; }
+    generateCroppedImage(true).toBlob(function(blob){
+      fetch('fit_frame?' + IDQ() + AlignmentSave(), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: blob
+      }).then(resp => {
+        if (!resp.ok) throw new Error(`Network response was not ok...: ${resp.status} ${resp.statusText}\n${resp.body}`);
+      }).catch(err => {
+        console.error('Error:', err);
+        return send_error(err);
+      }).finally(() => {
+        Telegram.WebApp.close();
+      });
+    }, 'image/jpeg', quality / 100.);
+  } catch (error) {
+    send_error(error);
+  };
 });
 Telegram.WebApp.MainButton.enable();
 Telegram.WebApp.MainButton.show();
 
-
-Telegram.WebApp.BackButton.onClick(() => {
-    Telegram.WebApp.close();
-});
+Telegram.WebApp.BackButton.onClick(() => Telegram.WebApp.close());
 Telegram.WebApp.BackButton.show();
+
+// Event listeners for interaction
+viewer.addEventListener("mousedown", onMouseDown);
+window.addEventListener("mousemove", onMouseMove);
+window.addEventListener("mouseup", onMouseUp);
+viewer.addEventListener("wheel", onMouseWheel, {passive:false});
+viewer.addEventListener("touchstart", onTouchStart, {passive:false});
+viewer.addEventListener("touchmove", onTouchMove, {passive:false});
+viewer.addEventListener("touchend", onTouchEnd, {passive:false});
+
+// Resize / orientation
+window.addEventListener("resize", () => { recalcLayout(); });
+
+// Wait for assets then init
+function whenReady(){
+  if (photoEl.complete && frameSourceEl.complete) {
+    recalcLayout();
+    draw();
+    return;
+  }
+  setTimeout(whenReady, 50);
+}
+whenReady();

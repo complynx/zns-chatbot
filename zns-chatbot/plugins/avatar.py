@@ -51,7 +51,7 @@ FILES = {
         "frame_file": "frame/zns_2025_2_frame_f.jpg",
         "mask_file": "frame/zns_2025_2_mask_f.png",
     },
-    "simple": "frame/zns_2025_simple.png",
+    "simple": "frame/zns_2025_2_simple.png",
 }
 
 
@@ -413,6 +413,8 @@ class Avatar(BasePlugin):
         await self.prompt_avatar_method(update, db_id_str)
 
     async def prompt_avatar_method(self, update: TGState, db_id_str: str):
+        if self.config.photo.no_face_swap:
+            return await self.process_avatar_method(update, db_id_str, "simple")
         buttons = [
             [
                 InlineKeyboardButton(
@@ -468,7 +470,9 @@ class Avatar(BasePlugin):
             reply_markup=None,
             parse_mode=ParseMode.HTML,
         )
-
+        await self.process_avatar_method(update, db_id_str, method)
+    
+    async def process_avatar_method(self, update: TGState, db_id_str: str, method: str):
         try:
             object_id = ObjectId(db_id_str)
         except Exception as e:
@@ -476,7 +480,7 @@ class Avatar(BasePlugin):
                 f"Invalid ObjectId string in callback data: {db_id_str} - {e}",
                 exc_info=True,
             )
-            await query.edit_message_text(
+            await update.edit_or_reply(
                 update.l("avatar-error-generic"), parse_mode=ParseMode.HTML
             )
             return
@@ -485,7 +489,7 @@ class Avatar(BasePlugin):
 
         if not file_doc:
             logger.error(f"File record not found in DB for _id: {db_id_str}")
-            await query.edit_message_text(
+            await update.edit_or_reply(
                 update.l("avatar-error-file-expired-or-missing"),
                 parse_mode=ParseMode.HTML,
             )
@@ -505,8 +509,8 @@ class Avatar(BasePlugin):
         elif method == "detailed":
             await self.handle_detailed_avatar_flow(update, file_doc)
         else:
-            logger.error(f"Unknown avatar method: {method} from data: {query.data}")
-            await query.edit_message_text(
+            logger.error(f"Unknown {method=} from {update=}")
+            await update.edit_or_reply(
                 update.l("avatar-error-generic"), parse_mode=ParseMode.HTML
             )
             await self.files_db.update_one(
