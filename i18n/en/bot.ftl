@@ -12,7 +12,7 @@ avatar-error-generic = Something went wrong. Please try again.
 avatar-cancelled-message = Avatar creation cancelled.
 avatar-processing-initial = Processing your request...
 avatar-error-file-expired-or-missing = Unfortunately, the file was not found or has expired. Please try uploading it again.
-avatar-simple-caption = You are in the porthole!
+avatar-simple-caption = I won't draw you a sheep, but here's what a beauty turned out!
 avatar-error-frame-missing = Error: Frame file for simple avatar is missing. Please contact an administrator.
 avatar-error-config-role = Error: Configuration for your role is missing or incomplete. Please contact an administrator.
 
