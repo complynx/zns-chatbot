@@ -489,6 +489,13 @@ passes-pass-assigned =
     
     If you do not pay within this period or fail to send proof of payment, the pass will be offered to someone else.
     Please act quickly to secure your spot!
+passes-pass-free-assigned =
+    Hello, <i>{$name}</i>!
+    Congratulations! The {passes-pass-description} has just been assigned to you.
+
+    Since this is a free pass, you don't need to pay anything.
+    You can change the name associated with the pass if necessary.
+    If you need to cancel the pass, please contact the administrator.
 passes-pass-cancelled-by-other =
     Your couple just cancelled the couple pass to {passes-pass-title-long}. Unfortunately, you have to register again using the command /passes.
 passes-pass-description=

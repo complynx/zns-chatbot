@@ -1320,7 +1320,7 @@ class PassUpdate:
                 upd = await self.base.create_update_from_user(user["user_id"])
                 upd.set_pass_key(self.pass_key)
                 await upd.show_pass_edit(
-                    user, user[self.pass_key], "passes-pass-assigned"
+                    user, user[self.pass_key], "passes-pass-assigned" if price is None or price > 0 else "passes-pass-free-assigned"
                 )
         return have_changes
 
