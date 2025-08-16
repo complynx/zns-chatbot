@@ -18,6 +18,14 @@
                     "output": "150",
                     "price": 6.45
                 },
+                "salad_with_chicken_and_mushrooms": {
+                    "name_ru": "Салат с курицей и грибами",
+                    "name_en": "Chicken and Mushroom Salad",
+                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, pickled onions, mayonnaise",
+                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, лук репчатый маринованный, майонез",
+                    "output": "150",
+                    "price": 6.45
+                },
                 "salad_cezar": {
                     "name_ru": "Салат \"Цезарь\"",
                     "name_en": "Caesar Salad",
@@ -25,18 +33,26 @@
                     "ingredients_ru": "салат, куриное филе, томаты, соус, сухарики",
                     "output": "200",
                     "price": 10.45
+                },
+                "salad_molodezhny": {
+                    "name_ru": "Салат \"Молодежный\"",
+                    "name_en": "Youth Salad",
+                    "ingredients_en": "peking cabbage, ham, canned corn, fresh tomatoes, mayonnaise",
+                    "ingredients_ru": "капуста пекинская, ветчина к/в, кукурузаконсервированная, томаты свежие, майонез",
+                    "output": "150",
+                    "price": 3.45
                 }
             },
             "hot-dishes": {
                 "shnitsel_kuriny": {
-                    "name_ru": "Шницель куриный",
+                    "name_ru": "Шницель из куриной грудки",
                     "name_en": "Chicken Schnitzel",
                     "output": "120",
                     "price": 10.6
                 },
                 "ryba_v_syire": {
-                    "name_ru": "Рыба в сыре",
-                    "name_en": "Fish in Cheese",
+                    "name_ru": "Филе белой рыбы под сыром",
+                    "name_en": "White Fish Fillet with Cheese",
                     "output": "150",
                     "price": 10.6
                 },
@@ -54,6 +70,14 @@
                 }
             },
             "side-dishes": {
+                "bread_with_fish": {
+                    "name_ru": "Брускетты с рыбкой",
+                    "name_en": "Bruschetta with Fish",
+                    "ingredients_en": "white bread, cheese, lightly salted salmon, cucumber",
+                    "ingredients_ru": "Белый хлеб, сыр, семга слабосоленая, огурец",
+                    "output": "50g",
+                    "price": 3.60
+                },
                 "draniki": {
                     "name_ru": "Драники",
                     "name_en": "Potato Pancakes",
@@ -61,14 +85,14 @@
                     "price": 10.45
                 },
                 "grechnevaya_kasha_s_maslom": {
-                    "name_ru": "Гречневая каша с маслом",
+                    "name_ru": "Гречка со сливочным маслом",
                     "name_en": "Buckwheat Porridge with Butter",
                     "output": "200",
                     "price": 3.45
                 },
                 "ovoschi_vesennie": {
-                    "name_ru": "Овощи весенние",
-                    "name_en": "Spring Vegetables",
+                    "name_ru": "Нарезка из весенних овощей",
+                    "name_en": "Spring Vegetable Medley",
                     "output": "200",
                     "price": 6.45
                 }
@@ -133,6 +157,22 @@
                     "ingredients_ru": "томаты, огурцы свежие, лук, зелень, сметана",
                     "output": "200",
                     "price": 6.45
+                },
+                "salad_with_chicken_and_mushrooms": {
+                    "name_ru": "Салат с курицей и грибами",
+                    "name_en": "Chicken and Mushroom Salad",
+                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, pickled onions, mayonnaise",
+                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, лук репчатый маринованный, майонез",
+                    "output": "150",
+                    "price": 6.45
+                },
+                "salad_molodezhny": {
+                    "name_ru": "Салат \"Молодежный\"",
+                    "name_en": "Youth Salad",
+                    "ingredients_en": "peking cabbage, ham, canned corn, fresh tomatoes, mayonnaise",
+                    "ingredients_ru": "капуста пекинская, ветчина к/в, кукурузаконсервированная, томаты свежие, майонез",
+                    "output": "150",
+                    "price": 3.45
                 }
             },
             "soups": {
@@ -157,8 +197,8 @@
                     "price": 10.6
                 },
                 "ryba_v_syire": {
-                    "name_ru": "Рыба в сыре",
-                    "name_en": "Fish in Cheese",
+                    "name_ru": "Филе белой рыбы под сыром",
+                    "name_en": "Fillet of White Fish with Cheese",
                     "output": "150",
                     "price": 10.6
                 },
@@ -176,6 +216,14 @@
                 }
             },
             "side-dishes": {
+                "bread_with_fish": {
+                    "name_ru": "Брускетты с рыбкой",
+                    "name_en": "Bruschetta with Fish",
+                    "ingredients_en": "white bread, cheese, lightly salted salmon, cucumber",
+                    "ingredients_ru": "Белый хлеб, сыр, семга слабосоленая, огурец",
+                    "output": "50g",
+                    "price": 3.60
+                },
                 "draniki": {
                     "name_ru": "Драники",
                     "name_en": "Potato Pancakes",
@@ -183,14 +231,14 @@
                     "price": 10.45
                 },
                 "grechnevaya_kasha_s_maslom": {
-                    "name_ru": "Гречневая каша с маслом",
+                    "name_ru": "Гречка со сливочным маслом",
                     "name_en": "Buckwheat Porridge with Butter",
                     "output": "200",
                     "price": 3.45
                 },
                 "ovoschi_vesennie": {
-                    "name_ru": "Овощи весенние",
-                    "name_en": "Spring Vegetables",
+                    "name_ru": "Нарезка из весенних овощей",
+                    "name_en": "Spring Vegetable Medley",
                     "output": "200",
                     "price": 6.45
                 }
@@ -233,7 +281,7 @@
         "sunday": {
             "salads": {
                 "salat_vinegret": {
-                    "name_ru": "Cалат \"Винегрет\"",
+                    "name_ru": "Винегрет",
                     "name_en": "Vinaigrette Salad",
                     "ingredients_en": "beets, potatoes, cucumbers, onions, parsley, carrots",
                     "ingredients_ru": "свекла, картофель, огурец, лук, петрушка, морковь",
@@ -255,6 +303,22 @@
                     "ingredients_ru": "томаты, огурцы св, лук, зелень,сметана",
                     "output": "200",
                     "price": 6.45
+                },
+                "salad_with_chicken_and_mushrooms": {
+                    "name_ru": "Салат с курицей и грибами",
+                    "name_en": "Chicken and Mushroom Salad",
+                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, pickled onions, mayonnaise",
+                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, лук репчатый маринованный, майонез",
+                    "output": "150",
+                    "price": 6.45
+                },
+                "salad_molodezhny": {
+                    "name_ru": "Салат \"Молодежный\"",
+                    "name_en": "Youth Salad",
+                    "ingredients_en": "peking cabbage, ham, canned corn, fresh tomatoes, mayonnaise",
+                    "ingredients_ru": "капуста пекинская, ветчина к/в, кукурузаконсервированная, томаты свежие, майонез",
+                    "output": "150",
+                    "price": 3.45
                 }
             },
             "soups": {
@@ -279,8 +343,8 @@
                     "price": 10.6
                 },
                 "ryba_v_syire": {
-                    "name_ru": "Рыба в сыре",
-                    "name_en": "Fish with Cheese",
+                    "name_ru": "Филе белой рыбы под сыром",
+                    "name_en": "Fillet of White Fish with Cheese",
                     "output": "150",
                     "price": 10.6
                 },
@@ -298,6 +362,14 @@
                 }
             },
             "side-dishes": {
+                "bread_with_fish": {
+                    "name_ru": "Брускетты с рыбкой",
+                    "name_en": "Bruschetta with Fish",
+                    "ingredients_en": "white bread, cheese, lightly salted salmon, cucumber",
+                    "ingredients_ru": "Белый хлеб, сыр, семга слабосоленая, огурец",
+                    "output": "50g",
+                    "price": 3.60
+                },
                 "draniki": {
                     "name_ru": "Драники",
                     "name_en": "Potato Pancakes",
@@ -305,14 +377,14 @@
                     "price": 10.45
                 },
                 "grechnevaya_kasha_s_maslom": {
-                    "name_ru": "Гречневая каша с маслом",
+                    "name_ru": "Гречка со сливочным маслом",
                     "name_en": "Buckwheat Porridge with Butter",
                     "output": "200",
                     "price": 3.45
                 },
                 "ovoschi_vesennie": {
-                    "name_ru": "Овощи весенние",
-                    "name_en": "Spring Vegetables",
+                    "name_ru": "Нарезка из весенних овощей",
+                    "name_en": "Spring Vegetable Medley",
                     "output": "200",
                     "price": 6.45
                 }
