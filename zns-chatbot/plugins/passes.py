@@ -1246,6 +1246,7 @@ class PassUpdate:
         type: str | None = None,
         comment: str | None = None,
         skip_in_balance_count: bool = False,
+        proof_admin: int | None = None,
     ):
         self.set_pass_key(pass_key)
         user = await self.base.user_db.find_one(
@@ -1273,12 +1274,18 @@ class PassUpdate:
             matcher[self.pass_key + ".couple"] = {"$exists": False}
 
         sets = {
-            self.pass_key + ".state": "assigned",
+            self.pass_key + ".state": "assigned" if price is None or price > 0 else "payed",
             self.pass_key + ".price": price
             if price is not None
             else CURRENT_PRICE[self.pass_key] * len(uids),
             self.pass_key + ".date_assignment": now_msk(),
         }
+        if price is not None and price == 0:
+            assert proof_admin is not None, "proof_admin must be set for free pass"
+            sets[self.pass_key + ".proof_received"] = now_msk()
+            sets[self.pass_key + ".proof_file"] = "free_pass"
+            sets[self.pass_key + ".proof_admin"] = proof_admin
+            sets[self.pass_key + ".proof_accepted"] = now_msk()
         if comment is not None:
             sets[self.pass_key + ".comment"] = comment
         if type is not None:
@@ -1556,7 +1563,7 @@ class PassUpdate:
                 upd = await self.base.create_update_from_user(user_id)
 
                 await upd.assign_pass(
-                    args.pass_key, args.price, args.type, args.comment, args.skip
+                    args.pass_key, args.price, args.type, args.comment, args.skip, self.update.user
                 )
                 logger.info(f"pass {args.pass_key=} assigned to {recipient=}")
                 assigned.append(user_id)
