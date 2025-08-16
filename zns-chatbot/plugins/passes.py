@@ -1662,6 +1662,7 @@ class PassUpdate:
 
         fields = {
             "user_id": {"name": "User ID", "location": "user"},
+            "username": {"name": "Username", "location": "user"},
             "first_name": {"name": "First Name", "location": "user"},
             "last_name": {"name": "Last Name", "location": "user"},
             "print_name": {"name": "Print Name", "location": "user"},
@@ -1690,7 +1691,6 @@ class PassUpdate:
             "skip_in_balance_count": {"name": "Skip in Balance Count", "location": "pass"},
             "comment": {"name": "Comment", "location": "pass"},
         }
-
 
         bold = Font(bold=True)
         center = Alignment(horizontal="center")
