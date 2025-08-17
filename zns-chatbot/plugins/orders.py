@@ -12,22 +12,23 @@ import logging
 from math import ceil
 
 def currency_ceil(sum):
-    if sum < 100:
-        return ceil(sum)
+    # if sum < 100:
+    #     return ceil(sum)
     
-    # Get the magnitude (order of the largest digit) of the number
-    magnitude = 10 ** (len(str(int(sum))) - 2)
+    # # Get the magnitude (order of the largest digit) of the number
+    # magnitude = 10 ** (len(str(int(sum))) - 2)
     
-    # Normalize the number by dividing by the magnitude
-    normalized = sum / magnitude
+    # # Normalize the number by dividing by the magnitude
+    # normalized = sum / magnitude
     
-    # Round up to the nearest 0 or 5
-    ceil_normalized = ceil(normalized * 2) / 2
+    # # Round up to the nearest 0 or 5
+    # ceil_normalized = ceil(normalized * 2) / 2
     
-    # Scale back to the original magnitude
-    rounded = ceil_normalized * magnitude
+    # # Scale back to the original magnitude
+    # rounded = ceil_normalized * magnitude
     
-    return rounded
+    # return rounded
+    return ceil(sum * 100) / 100
 
 logger = logging.getLogger(__name__)
 

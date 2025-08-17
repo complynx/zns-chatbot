@@ -401,23 +401,24 @@ function validateSection(index) {
 updateSections();
 
 function currencyCeil(sum) {
-    if (sum < 100) {
-        return Math.ceil(sum);
-    }
+    // if (sum < 100) {
+    //     return Math.ceil(sum);
+    // }
 
-    // Get the magnitude (order of the largest digit) of the number
-    const magnitude = 10 ** (Math.floor(Math.log10(sum)) - 1);
+    // // Get the magnitude (order of the largest digit) of the number
+    // const magnitude = 10 ** (Math.floor(Math.log10(sum)) - 1);
 
-    // Normalize the number by dividing by the magnitude
-    const normalized = sum / magnitude;
+    // // Normalize the number by dividing by the magnitude
+    // const normalized = sum / magnitude;
 
-    // Round up to the nearest 0 or 5
-    const ceilNormalized = Math.ceil(normalized * 2) / 2;
+    // // Round up to the nearest 0 or 5
+    // const ceilNormalized = Math.ceil(normalized * 2) / 2;
 
-    // Scale back to the original magnitude
-    const rounded = ceilNormalized * magnitude;
+    // // Scale back to the original magnitude
+    // const rounded = ceilNormalized * magnitude;
 
-    return rounded;
+    // return rounded;
+    return Math.ceil(sum * 100) / 100; // Round to two decimal places
 }
 const BYN_TO_RUB = 33;
 
