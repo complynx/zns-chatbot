@@ -420,7 +420,7 @@ function currencyCeil(sum) {
     // return rounded;
     return Math.ceil(sum * 100) / 100; // Round to two decimal places
 }
-const BYN_TO_RUB = 33;
+const BYN_TO_RUB = 30;
 
 document.body.addEventListener("click", ()=>{
     let orders = collectOrdersWithExtras();
