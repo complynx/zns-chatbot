@@ -194,9 +194,9 @@ function collectOrdersWithExtras() {
     }
 
     if (grodnoExcursion) {
-        orders.extras.excursion_grodno = 15;
-        orders.extras.total += 15;
-        orders.total += 15;
+        orders.extras.excursion_grodno = 20;
+        orders.extras.total += 20;
+        orders.total += 20;
     }
 
     return orders;
