@@ -60,6 +60,7 @@ orders-admin-belarus = {$name}/{$region}
 orders-back-button = Back
 orders-closed = If you need to see your orders or change something, you can always use /orders command
 orders-close-button = Exit
+orders-command-description = Order food, transportation and activities.
 orders-edit-button = Change order
 orders-finish-button-text = Submit
 orders-message-list = Your orders are listed here
