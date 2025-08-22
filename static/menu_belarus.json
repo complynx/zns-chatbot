@@ -5,24 +5,24 @@
                 "salad_fresh_veggies": {
                     "name_ru": "Салат «Из свежих овощей»",
                     "name_en": "Fresh Vegetable Salad",
-                    "ingredients_en": "tomatoes, fresh cucumbers, onions, greens, sour cream",
-                    "ingredients_ru": "томаты, огурцы св, лук, зелень, сметана",
+                    "ingredients_en": "tomatoes, fresh cucumbers, greens, sour cream",
+                    "ingredients_ru": "томаты, огурцы св, зелень, сметана",
                     "output": "200",
                     "price": 6.45
                 },
                 "salad_grecheskiy": {
                     "name_ru": "Салат \"Греческий\"",
                     "name_en": "Greek Salad",
-                    "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, onions, dressing, parsley",
-                    "ingredients_ru": "томаты свежие, перец сладкий, огурцы свежие, маслины консервированные, сыр, лук репчатый, заправка, петрушка",
+                    "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, dressing, parsley",
+                    "ingredients_ru": "томаты свежие, перец сладкий, огурцы свежие, маслины консервированные, сыр репчатый, заправка, петрушка",
                     "output": "150",
                     "price": 6.45
                 },
                 "salad_with_chicken_and_mushrooms": {
                     "name_ru": "Салат с курицей и грибами",
                     "name_en": "Chicken and Mushroom Salad",
-                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, pickled onions, mayonnaise",
-                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, лук репчатый маринованный, майонез",
+                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, mayonnaise",
+                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, майонез",
                     "output": "150",
                     "price": 6.45
                 },
@@ -137,32 +137,32 @@
                 "salad_grecheskiy": {
                     "name_ru": "Салат \"Греческий\"",
                     "name_en": "Greek Salad",
-                    "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, onions, dressing, parsley",
-                    "ingredients_ru": "томаты свежие, перец сладкий, огурец свежий, маслины консервированные, сыр, лук репчатый, заправка, петрушка",
+                    "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, dressing, parsley",
+                    "ingredients_ru": "томаты свежие, перец сладкий, огурец свежий, маслины консервированные, сыр, заправка, петрушка",
                     "output": "150",
                     "price": 6.45
                 },
                 "salad_vitaminniy": {
                     "name_ru": "Салат \"Витаминный\"",
                     "name_en": "Vitamin Salad",
-                    "ingredients_en": "white cabbage, carrots, sweet peppers, onions, fresh cucumbers, lemon juice, mayonnaise-sour cream dressing",
-                    "ingredients_ru": "белокочанная капуста, морковь, перец сладкий, лук, огурцы свежие, сок лимона, заправка майонезно-сметанная",
+                    "ingredients_en": "white cabbage, carrots, sweet peppers, fresh cucumbers, lemon juice, mayonnaise-sour cream dressing",
+                    "ingredients_ru": "белокочанная капуста, морковь, перец сладкий, огурцы свежие, сок лимона, заправка майонезно-сметанная",
                     "output": "150",
                     "price": 6.45
                 },
                 "salad_iz_svezhih_ovoshey": {
                     "name_ru": "Салат \"Из свежих овощей\"",
                     "name_en": "Fresh Vegetable Salad",
-                    "ingredients_en": "tomatoes, fresh cucumbers, onions, greens, sour cream",
-                    "ingredients_ru": "томаты, огурцы свежие, лук, зелень, сметана",
+                    "ingredients_en": "tomatoes, fresh cucumbers, greens, sour cream",
+                    "ingredients_ru": "томаты, огурцы свежие, зелень, сметана",
                     "output": "200",
                     "price": 6.45
                 },
                 "salad_with_chicken_and_mushrooms": {
                     "name_ru": "Салат с курицей и грибами",
                     "name_en": "Chicken and Mushroom Salad",
-                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, pickled onions, mayonnaise",
-                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, лук репчатый маринованный, майонез",
+                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, mayonnaise",
+                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, майонез",
                     "output": "150",
                     "price": 6.45
                 },
@@ -283,32 +283,32 @@
                 "salat_vinegret": {
                     "name_ru": "Винегрет",
                     "name_en": "Vinaigrette Salad",
-                    "ingredients_en": "beets, potatoes, cucumbers, onions, parsley, carrots",
-                    "ingredients_ru": "свекла, картофель, огурец, лук, петрушка, морковь",
+                    "ingredients_en": "beets, potatoes, cucumbers, parsley, carrots",
+                    "ingredients_ru": "свекла, картофель, огурец, петрушка, морковь",
                     "output": "200",
                     "price": 6.45
                 },
                 "salad_grecheskiy": {
                     "name_ru": "Салат \"Греческий\"",
                     "name_en": "Greek Salad",
-                    "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, onions, dressing, parsley",
-                    "ingredients_ru": "томаты свежие, перец сладкий, огурцы свежие, маслины консервированные, сыр, лук репчатый, заправка, петрушка",
+                    "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, dressing, parsley",
+                    "ingredients_ru": "томаты свежие, перец сладкий, огурцы свежие, маслины консервированные, сыр, заправка, петрушка",
                     "output": "150",
                     "price": 6.45
                 },
                 "salat_is_svezhih_ovoschey": {
                     "name_ru": "Салат «Из свежих овощей»",
                     "name_en": "Fresh Vegetable Salad",
-                    "ingredients_en": "tomatoes, fresh cucumbers, onions, greens, sour cream",
-                    "ingredients_ru": "томаты, огурцы св, лук, зелень,сметана",
+                    "ingredients_en": "tomatoes, fresh cucumbers, greens, sour cream",
+                    "ingredients_ru": "томаты, огурцы свежие, зелень, сметана",
                     "output": "200",
                     "price": 6.45
                 },
                 "salad_with_chicken_and_mushrooms": {
                     "name_ru": "Салат с курицей и грибами",
                     "name_en": "Chicken and Mushroom Salad",
-                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, pickled onions, mayonnaise",
-                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, лук репчатый маринованный, майонез",
+                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, mayonnaise",
+                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, майонез",
                     "output": "150",
                     "price": 6.45
                 },
