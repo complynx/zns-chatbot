@@ -61,6 +61,7 @@ orders-admin-belarus = {$name}/{$region}
 orders-back-button = Назад
 orders-closed = Если надо посмотреть свои заказы или что-то изменить, можно снова использовать команду /orders
 orders-close-button = Выйти
+orders-command-description = Заказ еды, транспорта и активностей.
 orders-edit-button = Изменить заказ
 orders-finish-button-text = Готово
 orders-message-list = Ваши заказы
