@@ -509,7 +509,9 @@ You must answer in the same language as the users messages.
             + messages
             + [
                 SystemMessage(
-                    content="You must answer in the same language as the users question."
+                    content="You must answer in the same language as the users question. " +
+                    "Important: context is more relevant than history, as history of replies may contain "+
+                    "your replies to older events or outdated information. Always refer to the context."
                 )
             ]
         )

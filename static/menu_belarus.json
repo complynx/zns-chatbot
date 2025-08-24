@@ -8,7 +8,8 @@
                     "ingredients_en": "tomatoes, fresh cucumbers, greens, sour cream",
                     "ingredients_ru": "томаты, огурцы св, зелень, сметана",
                     "output": "200",
-                    "price": 6.45
+                    "price": 6.45,
+                    "image": "salad_fresh_veggies.jpg"
                 },
                 "salad_grecheskiy": {
                     "name_ru": "Салат \"Греческий\"",
@@ -16,7 +17,8 @@
                     "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, dressing, parsley",
                     "ingredients_ru": "томаты свежие, перец сладкий, огурцы свежие, маслины консервированные, сыр репчатый, заправка, петрушка",
                     "output": "150",
-                    "price": 6.45
+                    "price": 6.45,
+                    "image": "salad_grecheskiy.jpg"
                 },
                 "salad_with_chicken_and_mushrooms": {
                     "name_ru": "Салат с курицей и грибами",
@@ -140,7 +142,8 @@
                     "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, dressing, parsley",
                     "ingredients_ru": "томаты свежие, перец сладкий, огурец свежий, маслины консервированные, сыр, заправка, петрушка",
                     "output": "150",
-                    "price": 6.45
+                    "price": 6.45,
+                    "image": "salad_grecheskiy.jpg"
                 },
                 "salad_vitaminniy": {
                     "name_ru": "Салат \"Витаминный\"",
@@ -156,7 +159,8 @@
                     "ingredients_en": "tomatoes, fresh cucumbers, greens, sour cream",
                     "ingredients_ru": "томаты, огурцы свежие, зелень, сметана",
                     "output": "200",
-                    "price": 6.45
+                    "price": 6.45,
+                    "image": "salad_fresh_veggies.jpg"
                 },
                 "salad_with_chicken_and_mushrooms": {
                     "name_ru": "Салат с курицей и грибами",
@@ -294,7 +298,8 @@
                     "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, dressing, parsley",
                     "ingredients_ru": "томаты свежие, перец сладкий, огурцы свежие, маслины консервированные, сыр, заправка, петрушка",
                     "output": "150",
-                    "price": 6.45
+                    "price": 6.45,
+                    "image": "salad_grecheskiy.jpg"
                 },
                 "salat_is_svezhih_ovoschey": {
                     "name_ru": "Салат «Из свежих овощей»",
@@ -302,7 +307,8 @@
                     "ingredients_en": "tomatoes, fresh cucumbers, greens, sour cream",
                     "ingredients_ru": "томаты, огурцы свежие, зелень, сметана",
                     "output": "200",
-                    "price": 6.45
+                    "price": 6.45,
+                    "image": "salad_fresh_veggies.jpg"
                 },
                 "salad_with_chicken_and_mushrooms": {
                     "name_ru": "Салат с курицей и грибами",
