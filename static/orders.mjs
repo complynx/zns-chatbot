@@ -14,7 +14,10 @@ fetch("static/menu_belarus.json").then(r=>r.json()).then(menu=>{
 
             // Iterate over each dish type in the section (e.g., salads, hot-dishes)
             for (let dishType in menu.choices[day]) {
-                let dishContainer = section.querySelector(`.${dishType} .dishes`);
+                const dishWrapper = section.querySelector(`.${dishType}`);
+                if(!dishWrapper) continue;
+                let dishContainer = dishWrapper.querySelector('.dishes');
+                if(!dishContainer) continue;
                 let dishes = menu.choices[day][dishType];
 
                 // Clear the existing content
@@ -23,40 +26,52 @@ fetch("static/menu_belarus.json").then(r=>r.json()).then(menu=>{
                 // Iterate over the dishes and create the HTML structure
                 for (let dishKey in dishes) {
                     let dish = dishes[dishKey];
+                    if(!dish) continue;
 
                     // Create the dish container
                     let dishDiv = document.createElement("div");
                     dishDiv.setAttribute("data-name", dishKey);
+                    dishDiv.classList.add('dish');
 
-                    // Add the name
+                    // Name + (optional) image container
                     let nameDiv = document.createElement("div");
                     nameDiv.classList.add("name");
-                    nameDiv.innerHTML = `
-                        <span lang="ru">${dish.name_ru}</span>
-                        <span lang="en">${dish.name_en}</span>
+
+                    // Thumbnail if image exists
+                    let hasImage = !!dish.image;
+                    if(hasImage){
+                        const img = document.createElement('img');
+                        img.classList.add('dish-thumb');
+                        img.loading = 'lazy';
+                        img.alt = (dish.name_en||'') + ' / ' + (dish.name_ru||'');
+                        img.src = `static/orders_photos/${dish.image}`;
+                        img.dataset.fullImage = img.src; // store for toggle
+                        nameDiv.appendChild(img);
+                    }
+                    // Localized names
+                    const nameText = document.createElement('div');
+                    nameText.innerHTML = `
+                        <span lang="ru">${dish.name_ru||''}</span>
+                        <span lang="en">${dish.name_en||''}</span>
                     `;
+                    nameText.classList.add('name-text');
+                    nameDiv.appendChild(nameText);
                     dishDiv.appendChild(nameDiv);
 
-                    // Add the output
-                    let outputDiv = document.createElement("div");
-                    outputDiv.classList.add("output");
-                    outputDiv.textContent = dish.output;
-                    dishDiv.appendChild(outputDiv);
-
-                    // Add the price
+                    // Price (row 1)
                     let priceDiv = document.createElement("div");
                     priceDiv.classList.add("price");
-                    priceDiv.textContent = dish.price;
+                    priceDiv.textContent = dish.price ?? '';
                     dishDiv.appendChild(priceDiv);
 
-                    // Add the counter
+                    // Counter (row 1)
                     let counterDiv = document.createElement("div");
                     counterDiv.classList.add("counter");
-                    counterDiv.textContent = 0; // Initialize counter to 0
+                    counterDiv.textContent = 0;
                     dishDiv.appendChild(counterDiv);
 
                     if(!read_only) {
-                        // Add the buttons and listeners
+                        // Buttons
                         let addButton = document.createElement("button");
                         addButton.classList.add("add");
                         addButton.textContent = '+';
@@ -72,24 +87,32 @@ fetch("static/menu_belarus.json").then(r=>r.json()).then(menu=>{
                         clearButton.textContent = '🗑';
                         dishDiv.appendChild(clearButton);
 
-                        // Add event listeners to the buttons
                         addButton.addEventListener('click', () => {
                             counterDiv.textContent = parseInt(counterDiv.textContent) + 1;
                         });
-
                         removeButton.addEventListener('click', () => {
-                            let count = parseInt(counterDiv.textContent);
-                            if (count > 0) {
-                                counterDiv.textContent = count - 1;
-                            }
+                            const count = parseInt(counterDiv.textContent);
+                            if(count>0) counterDiv.textContent = count - 1;
                         });
-
                         clearButton.addEventListener('click', () => {
                             counterDiv.textContent = 0;
                         });
                     }
 
-                    // Append the dish div to the corresponding dish type container
+                    // Output (row 2 under price + counter)
+                    let outputDiv = document.createElement('div');
+                    outputDiv.classList.add('output');
+                    outputDiv.textContent = dish.output || '';
+                    dishDiv.appendChild(outputDiv);
+
+                    // Image expand on name / image click
+                    if(hasImage){
+                        const toggleFull = () => toggleFullImage(`static/orders_photos/${dish.image}`, (dish.name_en||'') + ' / ' + (dish.name_ru||''));
+                        nameDiv.addEventListener('click', toggleFull);
+                        const thumb = nameDiv.querySelector('img.dish-thumb');
+                        if(thumb) thumb.addEventListener('click', toggleFull);
+                    }
+
                     dishContainer.appendChild(dishDiv);
                 }
             }
@@ -495,3 +518,27 @@ Telegram.WebApp.BackButton.onClick(backButtonClick);
 Telegram.WebApp.BackButton.show();
 window.mainButtonClick = mainButtonClick;
 window.backButtonClick = backButtonClick;
+
+// --- Image full width overlay (no pointer events) ---
+function toggleFullImage(src, alt='') {
+    const existing = document.getElementById('image-overlay');
+    if(existing){
+        existing.remove();
+        // If same image requested again, treat as toggle off
+        if(existing.dataset.src === src) return;
+    }
+    const overlay = document.createElement('div');
+    overlay.id = 'image-overlay';
+    overlay.dataset.src = src;
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = alt;
+    overlay.appendChild(img);
+    // Click overlay to close
+    overlay.addEventListener('click', ()=>overlay.remove());
+    document.body.appendChild(overlay);
+    // Auto remove after 3s to avoid permanent cover
+    setTimeout(()=>{
+        if(overlay.parentNode) overlay.remove();
+    }, 3000);
+}
