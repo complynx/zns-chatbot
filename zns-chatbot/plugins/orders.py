@@ -211,6 +211,16 @@ class OrdersUpdate:
                 self.l("orders-new-button"),
                 web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?locale={self.update.language_code}{debug_param}"))
             )])
+        # Admin download button
+        admins_be = await self.base.base_app.users_collection.find({
+            "bot_id": self.bot,
+            "payment_administrator_belarus": {"$exists": True},
+        }).to_list(None)
+        admins_be_ids = {a["user_id"] for a in admins_be}
+        if (self.user in self.config.admins or
+            (self.config.payment_admin_ru and self.user == self.config.payment_admin_ru) or
+            self.user in admins_be_ids):
+            btns.append([InlineKeyboardButton("📥 XLSX", callback_data=f"{self.base.name}|xlsx")])
         btns.append([InlineKeyboardButton(
             self.l("orders-close-button"),
             callback_data=f"{self.base.name}|close"
@@ -295,6 +305,14 @@ class OrdersUpdate:
         )
 
     async def handle_cq_adm_acc(self, order_id):
+        # Guard: only RU / BE payment admins or orders admins (assert style)
+        admins_be_ids = {a["user_id"] for a in await self.base.base_app.users_collection.find({
+            "bot_id": self.bot,
+            "payment_administrator_belarus": {"$exists": True},
+        }).to_list(None)}
+        assert (self.user in self.config.admins or
+                (self.config.payment_admin_ru and self.user == self.config.payment_admin_ru) or
+                self.user in admins_be_ids), f"{self.user} is not orders admin"
         await self.base.food_db.update_one({
             "_id": ObjectId(order_id)
         },{
@@ -311,10 +329,10 @@ class OrdersUpdate:
         ls = 'en'
         if "language_code" in user:
             ls=user["language_code"]
-        def l(s, **kwargs):
+        def loc(s, **kwargs):
             return self.base.base_app.localization(s, args=kwargs, locale=ls)
         await self.update.reply(
-            l(
+            loc(
                 "food-payment-proof-confirmed",
                 name=order["choice"]["customer"],
             ),
@@ -332,6 +350,14 @@ class OrdersUpdate:
         )
 
     async def handle_cq_adm_rej(self, order_id):
+        # Guard: only RU / BE payment admins or orders admins (assert style)
+        admins_be_ids = {a["user_id"] for a in await self.base.base_app.users_collection.find({
+            "bot_id": self.bot,
+            "payment_administrator_belarus": {"$exists": True},
+        }).to_list(None)}
+        assert (self.user in self.config.admins or
+                (self.config.payment_admin_ru and self.user == self.config.payment_admin_ru) or
+                self.user in admins_be_ids), f"{self.user} is not orders admin"
         await self.base.food_db.update_one({
             "_id": ObjectId(order_id)
         },{
@@ -354,10 +380,10 @@ class OrdersUpdate:
         ls = 'en'
         if "language_code" in user:
             ls=user["language_code"]
-        def l(s, **kwargs):
+        def loc(s, **kwargs):
             return self.base.base_app.localization(s, args=kwargs, locale=ls)
         await self.update.reply(
-            l(
+            loc(
                 "food-payment-proof-rejected",
                 name=order["choice"]["customer"],
             ),
@@ -423,6 +449,179 @@ class OrdersUpdate:
                 callback_data=f"{self.base.name}|pcancel|{order['_id']}"
             )]]),
         )
+
+    async def handle_cq_xlsx(self):
+        # Guard (assert style like passes)
+        admins_be = await self.base.base_app.users_collection.find({
+            "bot_id": self.bot,
+            "payment_administrator_belarus": {"$exists": True},
+        }).to_list(None)
+        admins_be_ids = {a["user_id"] for a in admins_be}
+        assert (self.user in self.config.admins or
+                (self.config.payment_admin_ru and self.user == self.config.payment_admin_ru) or
+                self.user in admins_be_ids), f"{self.user} is not orders admin"
+        import openpyxl
+        from openpyxl.styles import Font, Alignment
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Заказы"
+        # Collect dish keys and russian names
+        dish_keys = []
+        dish_names_ru: dict[str,str] = {}
+        for day, day_data in self.base.menu.get("choices", {}).items():
+            for dish_type, dishes in day_data.items():
+                if not isinstance(dishes, dict):
+                    continue
+                for dk, dv in dishes.items():
+                    if dk not in dish_keys:
+                        dish_keys.append(dk)
+                        dish_names_ru[dk] = dv.get("name_ru", dk)
+        # Base columns (english keys -> russian headers)
+        base_fields = [
+            ("order_id", "ID заказа"),
+            ("user_id", "Пользователь"),
+            ("customer", "Клиент"),
+            ("created_at", "Создан"),
+            ("updated_at", "Обновлён"),
+            ("proof_country", "Страна оплаты"),
+            ("validation", "Подтверждено"),
+            ("total_byn", "Сумма BYN"),
+            ("total_rub", "Сумма RUB"),
+            ("extras_preparty", "Препати"),
+            ("extras_excursion_minsk", "Экскурсия Минск"),
+            ("extras_shuttle", "Шаттл"),
+            ("extras_excursion_grodno", "Экскурсия Гродно"),
+        ]
+        header = [ru for _k, ru in base_fields] + [dish_names_ru.get(k, k) for k in dish_keys]
+        ws.append(header)
+        bold = Font(bold=True)
+        center = Alignment(horizontal="center")
+        for cell in ws["1:1"]:
+            cell.font = bold
+            cell.alignment = center
+        totals = {k: {"count":0,"sum":0} for k in dish_keys}
+        extras_totals = {"preparty":0,"excursion_minsk":0,"shuttle":0,"excursion_grodno":0}
+        # Second sheet with detailed contents
+        ws_details = wb.create_sheet("Содержимое")
+        ws_details.append(["Пользователь","ID заказа","Клиент","День","Приём пищи","Блюдо / Активность","Количество"])
+        for cell in ws_details["1:1"]:
+            cell.font = bold
+            cell.alignment = center
+        day_ru = {"friday":"Пятница","saturday":"Суббота","sunday":"Воскресенье"}
+        meal_ru = {"lunch":"Обед","dinner":"Ужин"}
+        extras_ru = {
+            "preparty":"Препати",
+            "excursion_minsk":"Экскурсия по Минску",
+            "shuttle":"Автобус Минск–Гродно",
+            "excursion_grodno":"Экскурсия по Гродно",
+        }
+        async for order in self.base.food_db.find({"event_number": self.config.event_number}):
+            choice = order.get("choice", {})
+            total_byn = choice.get("total", 0)
+            total_rub = total_byn * BYN_TO_RUB
+            dish_counts = {k:0 for k in dish_keys}
+            # Detailed dishes
+            for day_key, day_data in choice.get("days", {}).items():
+                for mealtime_key, mealtime in day_data.get("mealtimes", {}).items():
+                    for dish in mealtime.get("dishes", []):
+                        name_key = dish.get("name")
+                        cnt = dish.get("count",0)
+                        price = dish.get("price",0)
+                        ru_name = dish_names_ru.get(name_key, name_key)
+                        ws_details.append([
+                            order.get("user_id",""),
+                            str(order.get("_id")),
+                            choice.get("customer",""),
+                            day_ru.get(day_key, day_key),
+                            meal_ru.get(mealtime_key, mealtime_key),
+                            ru_name,
+                            cnt,
+                        ])
+                        if name_key in dish_counts:
+                            dish_counts[name_key] += cnt
+                            totals[name_key]["count"] += cnt
+                            totals[name_key]["sum"] += cnt*price
+            # Extras rows
+            extras = choice.get("extras", {})
+            for ex_key, ex_ru in extras_ru.items():
+                if ex_key in extras:
+                    ws_details.append([
+                        order.get("user_id",""),
+                        str(order.get("_id")),
+                        choice.get("customer",""),
+                        day_ru.get("friday","Пятница"),  # day not specified -> reuse first day label or blank
+                        "активности",
+                        ex_ru,
+                        1,
+                    ])
+                    extras_totals[ex_key]+=1
+            row = [
+                str(order.get("_id")),
+                order.get("user_id",""),
+                choice.get("customer",""),
+                order.get("created_at",""),
+                order.get("updated_at",""),
+                order.get("proof_country",""),
+                order.get("validation",""),
+                currency_ceil(total_byn),
+                currency_ceil(total_rub),
+                1 if "preparty" in extras else 0,
+                1 if "excursion_minsk" in extras else 0,
+                1 if "shuttle" in extras else 0,
+                1 if "excursion_grodno" in extras else 0,
+            ] + [dish_counts[k] for k in dish_keys]
+            ws.append(row)
+        ws.freeze_panes = "A2"
+        for col in ws.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if cell.value is None:
+                        continue
+                    length = len(str(cell.value))
+                    if length>max_length:
+                        max_length=length
+                except Exception:
+                    pass
+            ws.column_dimensions[col_letter].width = min(max(max_length, 6), 40)
+        for col in ws_details.columns:
+            max_length = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    if cell.value is None:
+                        continue
+                    length = len(str(cell.value))
+                    if length>max_length:
+                        max_length=length
+                except Exception:
+                    pass
+            ws_details.column_dimensions[col_letter].width = min(max(max_length, 6), 40)
+        ws_totals = wb.create_sheet("Итоги")
+        ws_totals.append(["Блюдо","Количество","Сумма BYN"])
+        for cell in ws_totals["1:1"]:
+            cell.font = bold
+            cell.alignment = center
+        for k,v in totals.items():
+            ws_totals.append([dish_names_ru.get(k,k), v["count"], currency_ceil(v["sum"])])
+        ws_extras = wb.create_sheet("Активности")
+        ws_extras.append(["Активность","Кол-во заказов"])
+        for cell in ws_extras["1:1"]:
+            cell.font = bold
+            cell.alignment = center
+        for k,v in extras_totals.items():
+            ws_extras.append([extras_ru.get(k,k), v])
+        file_name = "orders.xlsx"
+        wb.save(file_name)
+        await self.update.bot.send_document(
+            self.update.user,
+            open(file_name, "rb"),
+            caption="Orders XLSX",
+        )
+        import os
+        os.remove(file_name)
+        await self.handle_cq_start()
 
 class Orders(BasePlugin):
     name = "orders"
