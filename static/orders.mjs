@@ -1,3 +1,8 @@
+// Feature flags / configurable constants
+// When true, users who have NOT previously selected shuttle bus (no 'shuttle' in user_order.extras)
+// will NOT see the shuttle bus option. Set to false to always show the option.
+const ENABLE_SHUTTLE_BUS_HIDING = true;
+
 fetch("static/menu_belarus.json").then(r=>r.json()).then(menu=>{
     // Function to fill in all sections by looping through the <section> elements
     function fillAllSections() {
@@ -122,6 +127,22 @@ fetch("static/menu_belarus.json").then(r=>r.json()).then(menu=>{
     // Run the function to fill all sections
     fillAllSections();
     fillInOrders(user_order);
+
+    // Conditional hiding of shuttle bus option for users who did not previously select it
+    try {
+        if (ENABLE_SHUTTLE_BUS_HIDING) {
+            const hadShuttle = !!(user_order && user_order.extras && ("shuttle" in user_order.extras));
+            if (!hadShuttle) {
+                const shuttleInput = document.querySelector('.excursions input[name="shuttle_bus"]');
+                if (shuttleInput) {
+                    const shuttleLabel = shuttleInput.closest('label');
+                    if (shuttleLabel) {
+                        shuttleLabel.style.display = 'none';
+                    }
+                }
+            }
+        }
+    } catch(e) { send_error(e); }
 }).catch(send_error);
 
 function collectOrdersWithExtras() {
