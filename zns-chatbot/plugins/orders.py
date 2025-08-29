@@ -503,7 +503,7 @@ class OrdersUpdate:
         extras_totals = {"preparty":0,"excursion_minsk":0,"shuttle":0,"excursion_grodno":0}
         # Second sheet with detailed contents
         ws_details = wb.create_sheet("Содержимое")
-        ws_details.append(["Пользователь","ID заказа","Клиент","День","Приём пищи","Блюдо / Активность","Количество"])
+        ws_details.append(["Пользователь","ID заказа","Клиент","День","Приём пищи","Блюдо / Активность","Оплата","Количество"])
         for cell in ws_details["1:1"]:
             cell.font = bold
             cell.alignment = center
@@ -535,6 +535,7 @@ class OrdersUpdate:
                             day_ru.get(day_key, day_key),
                             meal_ru.get(mealtime_key, mealtime_key),
                             ru_name,
+                            order.get("validation",""),
                             cnt,
                         ])
                         if name_key in dish_counts:
@@ -552,6 +553,7 @@ class OrdersUpdate:
                         day_ru.get("friday","Пятница"),  # day not specified -> reuse first day label or blank
                         "активности",
                         ex_ru,
+                        order.get("validation",""),
                         1,
                     ])
                     extras_totals[ex_key]+=1
