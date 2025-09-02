@@ -1,7 +1,7 @@
-import logging
 from asyncio import Event, Lock, create_task, sleep
 from datetime import timedelta
 from random import choice
+import logging
 
 from motor.core import AgnosticCollection
 from telegram import (
@@ -1573,6 +1573,96 @@ class PassUpdate:
             f"passes_assign done: {assigned}", parse_mode=ParseMode.HTML
         )
         await self.base.recalculate_queues()
+    
+    async def handle_passes_uncouple(self):
+        """Admin command: /passes_uncouple <pass_key> <user_id>
+        Splits a couple pass into two solo passes for the specified user and their partner.
+        Logic:
+          - Validate admin rights
+          - Load user doc with couple pass (type == couple)
+          - Load coupled user doc; ensure both have pass entries
+          - Split total price in half (integer division) if present
+          - Update both passes: set type solo, remove couple link, set new price
+        """
+        assert self.update.user in self.base.config.telegram.admins, (
+            f"{self.update.user} is not admin"
+        )
+        args_list = self.update.parse_cmd_arguments()
+        # Expect: ['/passes_uncouple', pass_key, user_id]
+        if len(args_list) < 3:
+            return await self.update.reply(
+                "Usage: /passes_uncouple <pass_key> <user_id>",
+                parse_mode=ParseMode.HTML,
+            )
+        pass_key = args_list[1]
+        if pass_key not in PASS_KEYS:
+            return await self.update.reply(
+                f"Unknown pass_key {pass_key}", parse_mode=ParseMode.HTML
+            )
+        self.set_pass_key(pass_key)
+        try:
+            target_user_id = int(args_list[2])
+        except ValueError:
+            return await self.update.reply(
+                f"Invalid user id: {args_list[2]}", parse_mode=ParseMode.HTML
+            )
+
+        # Load target user with couple pass
+        user = await self.base.user_db.find_one(
+            {
+                "user_id": target_user_id,
+                "bot_id": self.bot,
+                pass_key: {"$exists": True},
+                pass_key + ".type": "couple",
+            }
+        )
+        if user is None:
+            return await self.update.reply(
+                f"User {target_user_id} does not have a couple pass {pass_key}",
+                parse_mode=ParseMode.HTML,
+            )
+        couple_id = user[pass_key].get("couple")
+        if couple_id is None:
+            return await self.update.reply(
+                f"User {target_user_id} does not have a couple partner recorded", parse_mode=ParseMode.HTML
+            )
+        couple_user = await self.base.user_db.find_one(
+            {
+                "user_id": couple_id,
+                "bot_id": self.bot,
+                pass_key: {"$exists": True},
+            }
+        )
+        if couple_user is None or couple_user.get(pass_key, {}).get("type") != "couple":
+            return await self.update.reply(
+                f"Couple user {couple_id} does not have a matching couple pass", parse_mode=ParseMode.HTML
+            )
+        # Optional: verify reciprocal link if present
+        # Compute new price per person
+        total_price = user[pass_key].get("price")
+        new_price = None
+        if isinstance(total_price, (int, float)) and total_price > 0:
+            new_price = int(total_price / 2)
+
+        # Prepare updates
+        set_updates = {pass_key + ".type": "solo"}
+        if new_price is not None:
+            set_updates[pass_key + ".price"] = new_price
+
+        # Update both users
+        await self.base.user_db.update_one(
+            {"user_id": target_user_id, "bot_id": self.bot},
+            {"$set": set_updates, "$unset": {pass_key + ".couple": ""}},
+        )
+        await self.base.user_db.update_one(
+            {"user_id": couple_id, "bot_id": self.bot},
+            {"$set": set_updates, "$unset": {pass_key + ".couple": ""}},
+        )
+        await self.update.reply(
+            f"Uncoupled users {target_user_id} and {couple_id} for pass {pass_key}. New price per user: {new_price if new_price is not None else 'unchanged'}",
+            parse_mode=ParseMode.HTML,
+        )
+        await self.base.recalculate_queues()
 
     async def handle_passes_cancel(self):
         args_list = self.update.parse_cmd_arguments()
@@ -1770,6 +1860,7 @@ class Passes(BasePlugin):
             CommandHandler(self.name, self.handle_start),
             CommandHandler("passes_assign", self.handle_passes_assign_cmd),
             CommandHandler("passes_cancel", self.handle_passes_cancel_cmd),
+            CommandHandler("passes_uncouple", self.handle_passes_uncouple_cmd),
             CommandHandler("passes_table", self.handle_passes_table_cmd),
             CommandHandler("legal_name", self.handle_name_cmd),
             CommandHandler("passport", self.handle_passport_data_cmd),
@@ -2208,6 +2299,9 @@ class Passes(BasePlugin):
 
     async def handle_passes_cancel_cmd(self, update: TGState):
         return await self.create_update(update).handle_passes_cancel()
+    
+    async def handle_passes_uncouple_cmd(self, update: TGState):
+        return await self.create_update(update).handle_passes_uncouple()
 
     async def handle_role_cmd(self, update: TGState):
         return await self.create_update(update).handle_role_cmd()
