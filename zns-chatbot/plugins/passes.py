@@ -1592,19 +1592,19 @@ class PassUpdate:
         if len(args_list) < 3:
             return await self.update.reply(
                 "Usage: /passes_uncouple <pass_key> <user_id>",
-                parse_mode=ParseMode.HTML,
+                parse_mode=None,
             )
         pass_key = args_list[1]
         if pass_key not in PASS_KEYS:
             return await self.update.reply(
-                f"Unknown pass_key {pass_key}", parse_mode=ParseMode.HTML
+                f"Unknown pass_key {pass_key}", parse_mode=None
             )
         self.set_pass_key(pass_key)
         try:
             target_user_id = int(args_list[2])
         except ValueError:
             return await self.update.reply(
-                f"Invalid user id: {args_list[2]}", parse_mode=ParseMode.HTML
+                f"Invalid user id: {args_list[2]}", parse_mode=None
             )
 
         # Load target user with couple pass
@@ -1619,12 +1619,12 @@ class PassUpdate:
         if user is None:
             return await self.update.reply(
                 f"User {target_user_id} does not have a couple pass {pass_key}",
-                parse_mode=ParseMode.HTML,
+                parse_mode=None,
             )
         couple_id = user[pass_key].get("couple")
         if couple_id is None:
             return await self.update.reply(
-                f"User {target_user_id} does not have a couple partner recorded", parse_mode=ParseMode.HTML
+                f"User {target_user_id} does not have a couple partner recorded", parse_mode=None
             )
         couple_user = await self.base.user_db.find_one(
             {
@@ -1635,7 +1635,7 @@ class PassUpdate:
         )
         if couple_user is None or couple_user.get(pass_key, {}).get("type") != "couple":
             return await self.update.reply(
-                f"Couple user {couple_id} does not have a matching couple pass", parse_mode=ParseMode.HTML
+                f"Couple user {couple_id} does not have a matching couple pass", parse_mode=None
             )
         # Optional: verify reciprocal link if present
         # Compute new price per person
@@ -1660,7 +1660,7 @@ class PassUpdate:
         )
         await self.update.reply(
             f"Uncoupled users {target_user_id} and {couple_id} for pass {pass_key}. New price per user: {new_price if new_price is not None else 'unchanged'}",
-            parse_mode=ParseMode.HTML,
+            parse_mode=None,
         )
         await self.base.recalculate_queues()
 
