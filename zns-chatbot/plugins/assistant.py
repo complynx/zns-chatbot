@@ -17,16 +17,18 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from motor.core import AgnosticCollection
 from telegram import Update
 from telegram.ext import filters
+from telegram.constants import ParseMode
 
 from ..tg_state import TGState
 from .avatar import async_thread
 from .base_plugin import PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING, BasePlugin
 from .massage import now_msk
 
+import telegramify_markdown
+
 output_parser = StrOutputParser()
 
 logger = logging.getLogger(__name__)
-
 
 class MessageTooLong(Exception):
     pass
@@ -276,7 +278,7 @@ class Assistant(BasePlugin):
             )
         finally:
             stopper.set()
-        await update.reply(repl, parse_mode=None)
+        await update.reply(repl, parse_mode=ParseMode.MARKDOWN_V2)
 
     async def userinfo(self, update: TGState) -> str:
         from ..telegram_links import client_user_name
@@ -541,4 +543,6 @@ You must answer in the same language as the users messages.
                 "date": datetime.datetime.now(),
             }
         )
-        return result.content
+        return telegramify_markdown.markdownify(
+            result.content,
+        )

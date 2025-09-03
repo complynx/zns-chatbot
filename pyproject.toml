@@ -42,6 +42,7 @@ dependencies = [
     "onnxruntime>=1.21,<2",
     "insightface>=0.7,<0.8",
     "gfpgan>=1.3",
+    "telegramify-markdown>=0.5.1",
     # "faiss-cpu==1.8.0",
 ]
 
