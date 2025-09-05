@@ -1495,8 +1495,8 @@ class Food(BasePlugin):
         ]
 
         self._command_checkers = [
-            CommandHandler("food", self.handle_food_start_cmd),
-            CommandHandler("activities", self.handle_activities_cmd),
+            # CommandHandler("food", self.handle_food_start_cmd),
+            # CommandHandler("activities", self.handle_activities_cmd),
             CommandHandler("exportfoodorders", self.handle_export_orders_cmd),
         ]
         self._cbq_handler = CallbackQueryHandler(

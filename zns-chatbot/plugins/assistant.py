@@ -18,6 +18,11 @@ from motor.core import AgnosticCollection
 from telegram import Update
 from telegram.ext import filters
 from telegram.constants import ParseMode
+from telegramify_markdown.interpreters import (
+    TextInterpreter, FileInterpreter, 
+    InterpreterChain
+)
+from telegramify_markdown.type import ContentTypes
 
 from ..tg_state import TGState
 from .avatar import async_thread
@@ -276,9 +281,38 @@ class Assistant(BasePlugin):
             repl = await self.get_assistant_reply(
                 update.update.message.text_markdown_v2, update.user, update
             )
-        finally:
+        except Exception as e:
             stopper.set()
-        await update.reply(repl, parse_mode=ParseMode.MARKDOWN_V2)
+            raise e
+        for index, item in enumerate(repl):
+            if index >= len(repl)-1:
+                stopper.set()
+            try:
+                if item.content_type == ContentTypes.TEXT:
+                    await update.reply(
+                        item.content,
+                        parse_mode=ParseMode.MARKDOWN_V2,
+                    )
+                elif item.content_type == ContentTypes.PHOTO:
+                    await update.bot.send_photo(
+                        update.chat_id if update.chat_id else update.user,
+                        (item.file_name, item.file_data),
+                        caption=item.caption,
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                elif item.content_type == ContentTypes.FILE:
+                    await update.bot.send_document(
+                        update.chat_id if update.chat_id else update.user,
+                        (item.file_name, item.file_data),
+                        caption=item.caption,
+                        parse_mode=ParseMode.MARKDOWN_V2
+                    )
+                else:
+                    logger.error(f"Unknown content type: {item.content_type}")
+                await sleep(0.5)  # slight delay to avoid hitting rate limits
+            except Exception as e:
+                logger.error(f"Error sending content item {index}: {e}", exc_info=e)
+        # await update.reply(repl, parse_mode=ParseMode.MARKDOWN_V2)
 
     async def userinfo(self, update: TGState) -> str:
         from ..telegram_links import client_user_name
@@ -543,6 +577,16 @@ You must answer in the same language as the users messages.
                 "date": datetime.datetime.now(),
             }
         )
-        return telegramify_markdown.markdownify(
-            result.content,
+
+        interpreter_chain = InterpreterChain([
+            TextInterpreter(),  # Use pure text first
+            FileInterpreter(),  # Handle code blocks
+        ])
+        boxs = await telegramify_markdown.telegramify(
+            content=result.content,
+            interpreters_use=interpreter_chain,
+            latex_escape=True,
+            normalize_whitespace=True,
+            max_word_count=4090  # The maximum number of words in a single message.
         )
+        return boxs
