@@ -294,9 +294,10 @@ dow-long =
         [5] saturday
         *[6] sunday
     }
-massage-price-b = <b>{$price}</b> ₽
-massage-price = {$price} ₽
-massage-pd = {$durationicon} {massage-price-b} / <b>{$duration}</b> minutes
+massage-price-b = <b>{$price}</b> Byn / <b>{$priceRu}</b> Rub
+massage-price = {$price}/{$priceRu}
+massage-pd = {$durationicon} <b>{$duration}</b> minutes / 💰 {massage-price-b}
+massage-edit-length-button = {$icon} {$minutes} minutes / 💰 {massage-price}
 massage-booking-cancel-button = ❌ Cancel booking
 massage-client-about =
     Massage type: {massage-pd}.
@@ -316,7 +317,6 @@ massage-edit-choose-party-button = {$party}
 massage-edit-error-too-many-massages = Only { $max} massages allowed a day for one client.
 massage-edit-error-slot-timeout = Cannot book this late, choose another time slot.
 massage-edit-error-slot-unavailable = Somebody just reserved this slot, choose another one.
-massage-edit-length-button = {$icon} {massage-price} / {$minutes} minutes.
 massage-edit-next-button = ➡ Next
 massage-edit-no-slots-available = No slots available...
 massage-edit-page = page {$page} of {$leng}

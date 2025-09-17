@@ -35,19 +35,33 @@ def now_msk() -> datetime:
 logger.debug(f"ctime {ctime}, ctime msk {ctime_msk}, msk offset {MSK_OFFSET}")
 logger.debug(f"now msk {now_msk()}")
 
-def price_from_length(length:int=1)->int:
-    if length == 1:
-        return 900
-    if length == 2:
-        return 1400
-    if length == 3:
-        return 1800
-    if length == 4:
-        return 2400
-    if length == 5:
-        return 2700
-    if length == 6:
-        return 3000
+def price_from_length(length:int=1, currency:str="BYN")->int:
+    if currency == "BYN":
+        if length == 1:
+            return 35
+        if length == 2:
+            return 55
+        if length == 3:
+            return 70
+        if length == 4:
+            return 90
+        if length == 5:
+            return 100
+        if length == 6:
+            return 110
+    if currency == "RUB":
+        if length == 1:
+            return 960
+        if length == 2:
+            return 1500
+        if length == 3:
+            return 1900
+        if length == 4:
+            return 2450
+        if length == 5:
+            return 2750
+        if length == 6:
+            return 3000
     raise ValueError(f"Unsupported length {length} for price calculation")
 
 def min_from_length(length:int =1)->int:
@@ -97,7 +111,7 @@ class Specialist:
         self._set_user(user)
 
     def _set_user(self, user):
-        if user is not None and not "massage_specialist" in user:
+        if user is not None and "massage_specialist" not in user:
             raise Exception("user not massage specialist")
         if user is not None:
             self.user = user
@@ -248,7 +262,7 @@ class Specialist:
             ),
             InlineKeyboardButton(
                 self.l("massage-specialist-timetable-button"),
-                web_app=WebAppInfo(full_link(self.base.base_app, f"/massage_timetable"))
+                web_app=WebAppInfo(full_link(self.base.base_app, "/massage_timetable"))
             ),
         ]]
 
@@ -265,7 +279,7 @@ class MassageRecord:
         self._set_specialist(specialist)
     
     async def init(self, clean=False):
-        if not "_id" in self.record:
+        if "_id" not in self.record:
             self.record["pass_key"] = PASS_KEY
             rec = await self.plugin.massage_db.insert_one(self.record)
             self.record["_id"] = rec.inserted_id
@@ -333,6 +347,7 @@ class MassageRecord:
             key,
             duration=self.duration,
             price=self.price,
+            priceRu=self.price_ru,
             durationicon=length_icon(self.length),
             client=client_user_link_html(self.client),
             party=self.specialist.l("dow-long", dow=self.party.start.weekday())+
@@ -358,6 +373,7 @@ class MassageRecord:
             key,
             duration=self.duration,
             price=self.price,
+            priceRu=self.price_ru,
             durationicon=length_icon(self.length),
             specialist=self.specialist.about(self.client_language_code),
             party=self.cl("dow-long", dow=self.party.start.weekday())+
@@ -432,6 +448,12 @@ class MassageRecord:
     def price(self):
         if "length" in self.record:
             return price_from_length(self.record["length"])
+        return None
+
+    @property
+    def price_ru(self):
+        if "length" in self.record:
+            return price_from_length(self.record["length"], currency="RUB")
         return None
     
     @property
@@ -572,7 +594,7 @@ class UserMassages:
             InlineKeyboardButton(self.l("massage-edit-back-button"), callback_data=f"{self.plugin.name}|start"),
             InlineKeyboardButton(
                 self.l("massage-specialist-timetable-button"),
-                web_app=WebAppInfo(full_link(self.plugin.base_app, f"/massage_timetable"))
+                web_app=WebAppInfo(full_link(self.plugin.base_app, "/massage_timetable"))
             ),
             InlineKeyboardButton(self.l("massage-exit-button"), callback_data=f"{self.plugin.name}|exit"),
         ])
@@ -615,6 +637,7 @@ class UserMassages:
                     "massage-specialist-booking-cancelled",
                     duration=massage.duration,
                     price=massage.price,
+                    priceRu=massage.price_ru,
                     durationicon=length_icon(massage.length),
                     client=client_user_link_html(massage.client),
                     party=self.l("dow-long", dow=massage.party.start.weekday())+"-"+self.l("dow-long", dow=massage.party.end.weekday()),
@@ -633,7 +656,7 @@ class UserMassages:
 
     async def edit_massage(self, massage: MassageRecord, choice = 0):
         just_finalized=False
-        if not "length" in massage.record:
+        if "length" not in massage.record:
             logger.info(f"massage edit length {massage.id}, choice {choice}")
             if choice == 0:
                 return await self.render_choose_length(massage)
@@ -645,7 +668,7 @@ class UserMassages:
             massage.record["length"] = choice
             await massage.save()
             return await self.render_select_slot(massage)
-        if not "start" in massage.record:
+        if "start" not in massage.record:
             logger.info(f"massage edit select slot {massage.id}, choice {choice}")
             if choice < 0:
                 del massage.record["length"]
@@ -665,7 +688,7 @@ class UserMassages:
                 elif "specialist" in ch:
                     sp_id = str(ch["specialist"])
                     massage.record["specialists_choices"][sp_id] = not massage.record["specialists_choices"][sp_id]
-        if not "start" in massage.record:
+        if "start" not in massage.record:
             return await self.render_select_slot(massage)
         if choice == 1:
             return await self.delete_massage(massage)
@@ -702,11 +725,11 @@ class UserMassages:
                 my_occupied_extended = my_occupied.copy()
                 for slot_id in my_occupied:
                     for i in range(1, massage.length+1):
-                        if not slot_id-i in my_occupied:
+                        if slot_id-i not in my_occupied:
                             my_occupied_extended.add(slot_id-i)
             else:
                 my_occupied_extended = set[int]()
-            if not slot in available or not specialist_id in available[slot] and not slot in my_occupied_extended:
+            if slot not in available or specialist_id not in available[slot] and slot not in my_occupied_extended:
                 massage.record["error"] = self.l("massage-edit-error-slot-unavailable")
                 return False
             massage.record["slot"] = slot
@@ -795,7 +818,7 @@ class UserMassages:
             my_occupied_extended = my_occupied.copy()
             for slot_id in my_occupied:
                 for i in range(1, massage.length+1):
-                    if not slot_id-i in my_occupied:
+                    if slot_id-i not in my_occupied:
                         my_occupied_extended.add(slot_id-i)
         else:
             my_occupied_extended = set[int]()
@@ -809,7 +832,7 @@ class UserMassages:
             for specialist_id in available[slot]:
                 if specialist_id in specialists_dict and \
                     massage.record["specialists_choices"][str(specialist_id)] and \
-                        not slot in my_occupied_extended:
+                        slot not in my_occupied_extended:
                     buttons.append(InlineKeyboardButton(
                         specialists_dict[specialist_id].icon + " " + self.plugin.slot_time(massage.day, slot).strftime("%H:%M"),
                         callback_data=add_choice({
@@ -817,7 +840,7 @@ class UserMassages:
                             "specialist": specialist_id
                         })
                     ))
-        if not "page" in massage.record or massage.record["page"] < 0:
+        if "page" not in massage.record or massage.record["page"] < 0:
             massage.record["page"] = 0
         buttons = split_list(buttons, SLOT_PAGE_SIZE)
         if massage.record["page"] >= len(buttons):
@@ -850,6 +873,7 @@ class UserMassages:
             "massage-edit-select-slot",
             duration=massage.duration,
             price=massage.price,
+            priceRu=massage.price_ru,
             durationicon=length_icon(massage.length),
             specialists="   " + "\n   ".join([s.about(self.update.language_code) for s in specialists]),
             filtered=("\n\n"+self.l("massage-edit-select-specialists-filtered")) if hidden_specialists else "",
@@ -873,7 +897,8 @@ class UserMassages:
                 self.l("massage-edit-length-button",
                         icon=length_icon(length),
                         minutes=min_from_length(length),
-                        price=price_from_length(length)
+                        price=price_from_length(length),
+                        priceRu=price_from_length(length, currency="RUB")
                 ), callback_data=f"{self.plugin.name}|ed|{massage.id}|{length}")
         keyboard = [
             [len_btn(1),len_btn(2)],
@@ -1013,7 +1038,7 @@ class UserMassages:
             keyboard.append([
                 InlineKeyboardButton(
                     self.l("massage-specialist-timetable-button"),
-                    web_app=WebAppInfo(full_link(self.plugin.base_app, f"/massage_timetable"))
+                    web_app=WebAppInfo(full_link(self.plugin.base_app, "/massage_timetable"))
                 ),
                 InlineKeyboardButton(self.l("massage-specialist-clientlist-button"), callback_data=f"{self.plugin.name}|clientlist"),
             ])
@@ -1030,7 +1055,8 @@ class UserMassages:
                         self.l("massage-specialist-instantbook-button",
                             icon=length_icon(length),
                             minutes=min_from_length(length),
-                            price=price_from_length(length)
+                            price=price_from_length(length),
+                            priceRu=price_from_length(length, currency="RUB")
                         ), callback_data=f"{self.plugin.name}|instant|{length}")
                 keyboard.extend(split_list([instant_book(i+1) for i in range(0, possible_slots)], 3))
             keyboard.append([InlineKeyboardButton(self.l("massage-specialist-notifications-button"),
@@ -1039,7 +1065,7 @@ class UserMassages:
             keyboard.append([
                 InlineKeyboardButton(
                     self.l("massage-specialist-timetable-button"),
-                    web_app=WebAppInfo(full_link(self.plugin.base_app, f"/massage_timetable"))
+                    web_app=WebAppInfo(full_link(self.plugin.base_app, "/massage_timetable"))
                 ),
             ])
         massages = await self.get_massages()
@@ -1098,7 +1124,7 @@ class MassagePlugin(BasePlugin):
 
     async def _notifier(self):
         from asyncio import sleep
-        logger.info(f"starting MassagePlugin.notifier loop ")
+        logger.info("starting MassagePlugin.notifier loop ")
         while True:
             await sleep(NOTIFICATOR_LOOP)
             try:
@@ -1186,7 +1212,7 @@ class MassagePlugin(BasePlugin):
             for specialist_id in available[slot]:
                 for i in range(1, length):
                     next_slot = slot + i
-                    if not next_slot in available or not specialist_id in available[next_slot]:
+                    if next_slot not in available or specialist_id not in available[next_slot]:
                         break
                 else:
                     slot_set.add(specialist_id)
@@ -1205,11 +1231,11 @@ class MassagePlugin(BasePlugin):
             occupied, available = await specialist.get_both_slots(day)
             logger.info(f"slots for {day} for {specialist.id}: {available}, {occupied}")
             for slot in available:
-                if not slot in all_available:
+                if slot not in all_available:
                     all_available[slot] = set[int]()
                 all_available[slot].add(specialist.id)
             for slot in occupied:
-                if not slot in all_occupied:
+                if slot not in all_occupied:
                     all_occupied[slot] = set[int]()
                 all_occupied[slot].add(specialist.id)
         
@@ -1243,7 +1269,7 @@ class MassagePlugin(BasePlugin):
             "user_id": id,
             "bot_id": self.bot.id,
         })
-        if specialist is None or not "massage_specialist" in specialist:
+        if specialist is None or "massage_specialist" not in specialist:
             return None
         return Specialist(self, id, specialist)
 
@@ -1274,6 +1300,7 @@ class MassagePlugin(BasePlugin):
                 "end": massage.end.strftime("%Y-%m-%d %H:%M:%S"),
                 "duration": massage.duration,
                 "price": massage.price,
+                "priceRu": massage.price_ru,
                 "user": {
                     "name": client_user_name(massage.client),
                     "id": massage.client["user_id"]

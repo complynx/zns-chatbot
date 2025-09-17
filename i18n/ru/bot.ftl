@@ -341,9 +341,10 @@ dow-long =
         [5] суббота
         *[6] воскресенье
     }
-massage-price = {$price} ₽
-massage-price-b = <b>{$price}</b> ₽
-massage-pd = {$durationicon} {massage-price-b} / <b>{$duration}</b> минут
+massage-price = {$price}/{$priceRu}
+massage-price-b = <b>{$price}</b> Бел.Руб / <b>{$priceRu}</b> Рос.Руб
+massage-pd = {$durationicon} <b>{$duration}</b> минут / 💰 {massage-price-b}
+massage-edit-length-button = {$icon} {$minutes} минут / 💰 {massage-price}
 massage-booking-cancel-button = ❌ Отменить бронирование
 massage-client-about =
     Тип массажа: {massage-pd}.
@@ -363,7 +364,6 @@ massage-edit-choose-party-button = {$party}
 massage-edit-error-too-many-massages = Не более {$max} массажей в день на одного клиента.
 massage-edit-error-slot-timeout = Нельзя забронировать так поздно, выбери другой слот.
 massage-edit-error-slot-unavailable = Кто-то только что зарезервировал этот слот, выбери другой.
-massage-edit-length-button = {$icon} {massage-price} / {$minutes} минут.
 massage-edit-next-button = ➡ Дальше
 massage-edit-no-slots-available = Свободных слотов нет...
 massage-edit-page = страница {$page} из {$leng}
