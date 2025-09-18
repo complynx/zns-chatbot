@@ -159,7 +159,7 @@ class Specialist:
             or self.specialist["notify_next"]
         return True
 
-    def l(self, s, **kwargs):
+    def l(self, s, **kwargs):  # noqa: E743
         return self.base.base_app.localization(s, args=kwargs, locale=self.language_code)
 
     async def init(self):

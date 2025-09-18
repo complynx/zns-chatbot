@@ -1,14 +1,15 @@
 import datetime
 from motor.core import AgnosticCollection
-from ..config import Config, full_link, Party
+from ..config import full_link
 from ..tg_state import TGState
-from telegram import InlineKeyboardMarkup, Update,ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, WebAppInfo
+from telegram import InlineKeyboardMarkup, Update, InlineKeyboardButton, WebAppInfo
 from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from telegram.constants import ParseMode
 from bson.objectid import ObjectId
 from ..telegram_links import client_user_link_html, client_user_name
 import logging
+from .massage import now_msk
 from math import ceil
 
 def currency_ceil(sum):
@@ -34,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 BYN_TO_RUB = 30
 
+DEADLINE=datetime.datetime(2025, 9, 19, 0, 0, 0)
+
 class OrdersUpdate:
     base: 'Orders'
     tgUpdate: Update
@@ -52,6 +55,13 @@ class OrdersUpdate:
         self.bot = self.update.bot.id
 
     async def create_order(self, choice):
+        # Block creating orders after deadline
+        if now_msk() > DEADLINE:
+            return await self.update.reply(
+                self.l("orders-closed"),
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([]),
+            )
         await self.base.food_db.insert_one({
             "user_id": self.user,
             "event_number": self.config.event_number,
@@ -61,6 +71,13 @@ class OrdersUpdate:
         return await self.handle_cq_start()
 
     async def set_choice(self, order_id, choice):
+        # Block modifying orders after deadline
+        if now_msk() > DEADLINE:
+            return await self.update.reply(
+                self.l("orders-closed"),
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([]),
+            )
         await self.base.food_db.update_one({
             "_id": ObjectId(order_id),
         },{
@@ -72,6 +89,9 @@ class OrdersUpdate:
         return await self.handle_cq_start()
 
     async def handle_cq_del(self, order_id):
+        # Disallow deleting after deadline
+        if now_msk() > DEADLINE:
+            return await self.handle_cq_start()
         order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
         if "proof_file" in order:
             return await self.handle_cq_start()
@@ -119,6 +139,9 @@ class OrdersUpdate:
         )
 
     async def handle_cq_cash(self, order_id, admin_id):
+        # Block cash confirmation creation after deadline
+        if now_msk() > DEADLINE:
+            return await self.handle_cq_start()
         # return await self.handle_cq_start()
         await self.base.food_db.update_one({
             "_id": ObjectId(order_id),
@@ -141,10 +164,10 @@ class OrdersUpdate:
             lc = "ru"
             if "language_code" in admin:
                 lc = admin["language_code"]
-            def l(s, **kwargs):
+            def loc(s, **kwargs):
                 return self.base.base_app.localization(s, args=kwargs, locale=lc)
             await self.update.reply(
-                l(
+                loc(
                     "orders-adm-payment-cash-requested",
                     link=client_user_link_html(user),
                     total=total,
@@ -154,8 +177,8 @@ class OrdersUpdate:
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([
                     [
-                        InlineKeyboardButton(l("food-adm-payment-proof-accept-button"), callback_data=f"{self.base.name}|adm_acc|{order_id}"),
-                        InlineKeyboardButton(l("food-adm-payment-proof-reject-button"), callback_data=f"{self.base.name}|adm_rej|{order_id}"),
+                        InlineKeyboardButton(loc("food-adm-payment-proof-accept-button"), callback_data=f"{self.base.name}|adm_acc|{order_id}"),
+                        InlineKeyboardButton(loc("food-adm-payment-proof-reject-button"), callback_data=f"{self.base.name}|adm_rej|{order_id}"),
                     ]
                 ])
             )
@@ -190,27 +213,28 @@ class OrdersUpdate:
                     created=order["created_at"].strftime("%d.%m"),
                     name=order["choice"]["customer"],
                 ), web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}")))])
-        if current_order is not None:
-            btns.append([InlineKeyboardButton(self.l(
-                "orders-order-pay-button",
-            ), callback_data=f"{self.base.name}|pay|{str(order['_id'])}")])
-            btns.append([InlineKeyboardButton(self.l(
-                "orders-order-unpaid-button",
-                created=order["created_at"].strftime("%d.%m"),
-                name=order["choice"]["customer"],
-            ), web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}")))])
-            btns.append([InlineKeyboardButton(
-                self.l("orders-edit-button"),
-                web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}"))
-            )])
-            btns.append([InlineKeyboardButton(self.l(
-                "orders-order-delete-button",
-            ), callback_data=f"{self.base.name}|del|{str(order['_id'])}")])
-        else:
-            btns.append([InlineKeyboardButton(
-                self.l("orders-new-button"),
-                web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?locale={self.update.language_code}{debug_param}"))
-            )])
+        if now_msk() <= DEADLINE:
+            if current_order is not None:
+                btns.append([InlineKeyboardButton(self.l(
+                    "orders-order-pay-button",
+                ), callback_data=f"{self.base.name}|pay|{str(order['_id'])}")])
+                btns.append([InlineKeyboardButton(self.l(
+                    "orders-order-unpaid-button",
+                    created=order["created_at"].strftime("%d.%m"),
+                    name=order["choice"]["customer"],
+                ), web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}")))])
+                btns.append([InlineKeyboardButton(
+                    self.l("orders-edit-button"),
+                    web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}"))
+                )])
+                btns.append([InlineKeyboardButton(self.l(
+                    "orders-order-delete-button",
+                ), callback_data=f"{self.base.name}|del|{str(order['_id'])}")])
+            else:
+                btns.append([InlineKeyboardButton(
+                    self.l("orders-new-button"),
+                    web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?locale={self.update.language_code}{debug_param}"))
+                )])
         # Admin download button
         admins_be = await self.base.base_app.users_collection.find({
             "bot_id": self.bot,
@@ -275,7 +299,7 @@ class OrdersUpdate:
             lc = "ru"
             if admin is not None and "language_code" in admin:
                 lc = admin["language_code"]
-            def l(s, **kwargs):
+            def loc(s, **kwargs):
                 return self.base.base_app.localization(s, args=kwargs, locale=lc)
             await self.update.forward_message(
                 adm,
@@ -283,7 +307,7 @@ class OrdersUpdate:
                 order["proof_message_id"]
             )
             await self.update.reply(
-                l(
+                loc(
                     "orders-adm-payment-proof-received",
                     link=client_user_link_html(user),
                     total=total,
@@ -293,8 +317,8 @@ class OrdersUpdate:
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([
                     [
-                        InlineKeyboardButton(l("food-adm-payment-proof-accept-button"), callback_data=f"{self.base.name}|adm_acc|{order_id}"),
-                        InlineKeyboardButton(l("food-adm-payment-proof-reject-button"), callback_data=f"{self.base.name}|adm_rej|{order_id}"),
+                        InlineKeyboardButton(loc("food-adm-payment-proof-accept-button"), callback_data=f"{self.base.name}|adm_acc|{order_id}"),
+                        InlineKeyboardButton(loc("food-adm-payment-proof-reject-button"), callback_data=f"{self.base.name}|adm_rej|{order_id}"),
                     ]
                 ])
             )
@@ -401,6 +425,12 @@ class OrdersUpdate:
         )
     
     async def handle_cq_pcancel(self, order_id):
+        # Block canceling proof after deadline
+        if now_msk() > DEADLINE:
+            return await self.update.edit_or_reply(self.l("orders-closed"),
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([]),
+            )
         await self.base.food_db.update_one({"_id": ObjectId(order_id)}, {
             "$unset": {
                 "proof_file": "",
@@ -416,6 +446,13 @@ class OrdersUpdate:
 
     async def handle_payment(self):
         logger.debug(f"handling payment for: {self.user}")
+        # After deadline, ignore new payment proofs
+        if now_msk() > DEADLINE:
+            return await self.update.edit_or_reply(
+                self.l("orders-closed"),
+                parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([]),
+            )
         order = await self.base.food_db.find_one({
             "user_id": self.user,
             "event_number": self.config.event_number,

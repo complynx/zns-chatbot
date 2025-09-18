@@ -1,5 +1,5 @@
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from langchain.schema import HumanMessage, SystemMessage
 from motor.core import AgnosticCollection
 from ..tg_state import TGState, SilentArgumentParser
 from telegram import ReplyKeyboardMarkup, Update, ReplyKeyboardRemove

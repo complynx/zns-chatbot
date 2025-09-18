@@ -103,7 +103,7 @@ class TGUpdate(TGState):
             context=context,
         )
 
-    def l(self, s, **kwargs):
+    def l(self, s, **kwargs):  # noqa: E743
         return self.app.localization(
             s, args=kwargs, locale=self.update.effective_user.language_code
         )
@@ -409,7 +409,7 @@ async def check_startup_actions(app):
     #             except Exception as e:
     #                 logger.error("Error in sender: %s", e, exc_info=1)
     #         await app.storage.set("sent_announcement", 1)
-    new_menu_version = 10
+    new_menu_version = 11
     if (
         "menu_version" not in app.storage
         or app.storage["menu_version"] != new_menu_version
@@ -418,17 +418,17 @@ async def check_startup_actions(app):
         await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
         for lc in ["ru", "en"]:
 
-            def l(s, **kwargs):
+            def loc(s, **kwargs):
                 return app.localization(s, args=kwargs, locale=lc)
 
             commands = [
-                BotCommand("passes", description=l("passes-command-description")),
-                # BotCommand("massage", description=l("massage-command-description")),
+                BotCommand("passes", description=loc("passes-command-description")),
+                BotCommand("massage", description=loc("massage-command-description")),
                 # BotCommand("food", description=l("food-command-description")),
                 # BotCommand(
                     # "activities", description=l("activities-command-description")
                 # ),
-                BotCommand("orders", description=l("orders-command-description")),
+                # BotCommand("orders", description=l("orders-command-description")),
             ]
             if lc != "en":
                 await bot.set_my_commands(commands, language_code=lc)
@@ -479,7 +479,7 @@ async def parse_callback_query_task(tgupdate: Update, context: CallbackContext):
 
 
 @asynccontextmanager
-async def create_telegram_bot(config: Config, app, plugins) -> TGApplication:
+async def create_telegram_bot(config: Config, app, plugins) -> TGApplication: # type: ignore
     global web_app_base
     application = (
         ApplicationBuilder()

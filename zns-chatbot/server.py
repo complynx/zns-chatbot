@@ -16,6 +16,8 @@ from tornado.httputil import HTTPServerRequest
 
 from .config import Config
 from .plugins.pass_keys import PASS_KEY  # For food.save_order
+from .plugins.massage import now_msk
+from .plugins.orders import DEADLINE
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +173,9 @@ class OrdersHandler(RequestHandlerWithApp):
             if "choice" in order:
                 choice = order["choice"]
             read_only="proof_file" in order
+        # After deadline, force read-only regardless of order state
+        if now_msk() > DEADLINE:
+            read_only = True
         lang = "en"
         if locale_str.startswith("ru"):
             lang = "ru"
@@ -211,6 +216,12 @@ class OrdersHandler(RequestHandlerWithApp):
             order_id = self.get_query_argument("order_id", default="")
             choice = json.loads(self.request.body)
             logger.info(f"user {user['id']} order {order_id} choice {choice}")
+
+            # Block all modifications and creations after deadline
+            if now_msk() > DEADLINE:
+                self.set_status(403)
+                self.write({"error": "orders closed by deadline"})
+                return
 
             if order_id == "":
                 logger.info(f"creating order for {user['id']}")
