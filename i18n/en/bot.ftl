@@ -297,7 +297,7 @@ dow-long =
 massage-price-b = <b>{$price}</b> Byn / <b>{$priceRu}</b> Rub
 massage-price = {$price}/{$priceRu}
 massage-pd = {$durationicon} <b>{$duration}</b> minutes / 💰 {massage-price-b}
-massage-edit-length-button = {$icon} {$minutes} minutes / 💰 {massage-price}
+massage-edit-length-button = {$icon}{$minutes}m/💰{massage-price}
 massage-booking-cancel-button = ❌ Cancel booking
 massage-client-about =
     Massage type: {massage-pd}.
