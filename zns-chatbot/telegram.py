@@ -424,11 +424,11 @@ async def check_startup_actions(app):
             commands = [
                 BotCommand("passes", description=loc("passes-command-description")),
                 BotCommand("massage", description=loc("massage-command-description")),
-                # BotCommand("food", description=l("food-command-description")),
+                # BotCommand("food", description=loc("food-command-description")),
                 # BotCommand(
-                    # "activities", description=l("activities-command-description")
+                    # "activities", description=loc("activities-command-description")
                 # ),
-                # BotCommand("orders", description=l("orders-command-description")),
+                BotCommand("orders", description=loc("orders-command-description")),
             ]
             if lc != "en":
                 await bot.set_my_commands(commands, language_code=lc)
