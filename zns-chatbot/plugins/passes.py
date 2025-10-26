@@ -1564,7 +1564,13 @@ class PassUpdate:
                                 "bot_id": self.bot,
                             }
                         )
-                        last_role = user.get("role", user.get("pass_2025_1").get("role", user.get("pass_2025_2").get("role", None)))
+                        last_role = user.get(
+                            "role",
+                            user.get("pass_2025_1", {}).get(
+                                "role",
+                                user.get("pass_2025_2", {}).get(
+                                    "role", None,
+                                )))
                         if last_role is None:
                             raise ValueError(
                                 f"user {user_id} has no last role to create pass from"
