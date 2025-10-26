@@ -143,23 +143,24 @@ class OrdersUpdate:
         if now_msk() > DEADLINE:
             return await self.handle_cq_start()
         # return await self.handle_cq_start()
-        await self.base.food_db.update_one({
-            "_id": ObjectId(order_id),
-        }, {
-            "$set": {
-                "proof_country": "be",
-                "proof_file": "cash",
-                "proof_received": datetime.datetime.now(),
-            }
-        })
-        order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
-        total, _total_rub = self.get_order_total(order)
         admin = await self.base.base_app.users_collection.find_one({
             "user_id": int(admin_id),
             "bot_id": self.bot,
             "payment_administrator_belarus": {"$exists":True},
         })
         if admin is not None:
+            await self.base.food_db.update_one({
+                "_id": ObjectId(order_id),
+            }, {
+                "$set": {
+                    "proof_country": "be",
+                    "proof_admin": int(admin_id),
+                    "proof_file": "cash",
+                    "proof_received": datetime.datetime.now(),
+                }
+            })
+            order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+            total, _total_rub = self.get_order_total(order)
             user = await self.update.get_user()
             lc = "ru"
             if "language_code" in admin:
@@ -521,6 +522,7 @@ class OrdersUpdate:
             ("created_at", "Создан"),
             ("updated_at", "Обновлён"),
             ("proof_country", "Страна оплаты"),
+            ("proof_admin", "Администратор оплаты"),
             ("validation", "Подтверждено"),
             ("total_byn", "Сумма BYN"),
             ("total_rub", "Сумма RUB"),
@@ -601,6 +603,7 @@ class OrdersUpdate:
                 order.get("created_at",""),
                 order.get("updated_at",""),
                 order.get("proof_country",""),
+                order.get("proof_admin",""),
                 order.get("validation",""),
                 currency_ceil(total_byn),
                 currency_ceil(total_rub),

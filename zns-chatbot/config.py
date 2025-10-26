@@ -35,9 +35,9 @@ class PassesEventSettings(BaseSettings):
 class PassesSettings(BaseSettings):
     events: dict[str, PassesEventSettings] = Field(
         {
-            "pass_2025_1": PassesEventSettings(
-                amount_cap_per_role=80,
-                sell_start=datetime(2025, 1, 24, 18, 45),
+            "pass_2026_1": PassesEventSettings(
+                amount_cap_per_role=1,
+                sell_start=datetime(2026, 1, 24, 18, 45),
             ),
             "pass_2025_2": PassesEventSettings(
                 amount_cap_per_role=6,
