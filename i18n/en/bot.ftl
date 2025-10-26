@@ -651,11 +651,13 @@ passes-pass-create-start-message =
 passes-pass-title-long =
     {$passKey ->
         [pass_2025_2] Zouk Non Stop in Grodno
+        [pass_2026_1] Zouk Non Stop in Yekaterinburg
         *[pass20251] Zouk Non Stop in Moscow
     }
 passes-pass-title-short =
     {$passKey ->
         [pass_2025_2] ZNS Grodno
+        [pass_2026_1] ZNS Yekaterinburg
         *[pass20251] ZNS Moscow
     }
 passes-pass-country-emoji =

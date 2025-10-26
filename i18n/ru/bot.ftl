@@ -709,11 +709,13 @@ passes-role =
 passes-pass-title-long =
     {$passKey ->
         [pass_2025_2] Зук Нон Стоп в Гродно
+        [pass_2026_1] Зук Нон Стоп в Екатеринбурге
         *[pass_2025_1] Зук Нон Стоп в Москве
     }
 passes-pass-title-short =
     {$passKey ->
         [pass_2025_2] ZNS Гродно
+        [pass_2026_1] ZNS Екатеринбург
         *[pass_2025_1] ZNS Москва
     }
 passes-pass-country-emoji =
