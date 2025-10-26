@@ -1500,6 +1500,7 @@ class PassUpdate:
         parser.add_argument("--pass_key", type=str, help="Pass key")
         parser.add_argument("--price", type=int, help="Custom price")
         parser.add_argument("--type", type=str, help="Custom type")
+        parser.add_argument("--create_last", action="store_true", help="Create using last settings")
         parser.add_argument(
             "--leader",
             action="store_true",
@@ -1533,9 +1534,9 @@ class PassUpdate:
                     }
                 )
                 if user is None:
-                    if (
+                    if ((
                         args.leader is not None or args.follower is not None
-                    ) and args.create_name is not None:
+                    ) and args.create_name is not None):
                         await self.base.user_db.update_one(
                             {
                                 "user_id": user_id,
@@ -1551,6 +1552,37 @@ class PassUpdate:
                                             args.pass_key
                                         ][0],
                                         "role": "leader" if args.leader else "follower",
+                                        "date_created": now_msk(),
+                                    },
+                                },
+                            },
+                        )
+                    elif args.create_last:
+                        user = await self.base.user_db.find_one(
+                            {
+                                "user_id": user_id,
+                                "bot_id": self.bot,
+                            }
+                        )
+                        last_role = user.get("role", user.get("pass_2025_1").get("role", user.get("pass_2025_2").get("role", None)))
+                        if last_role is None:
+                            raise ValueError(
+                                f"user {user_id} has no last role to create pass from"
+                            )
+                        await self.base.user_db.update_one(
+                            {
+                                "user_id": user_id,
+                                "bot_id": self.bot,
+                            },
+                            {
+                                "$set": {
+                                    args.pass_key: {
+                                        "state": "waitlist",
+                                        "type": "solo",
+                                        "proof_admin": self.base.payment_admins[
+                                            args.pass_key
+                                        ][0],
+                                        "role": last_role,
                                         "date_created": now_msk(),
                                     },
                                 },
