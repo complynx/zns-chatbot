@@ -29,7 +29,7 @@ from .pass_keys import (
 logger = logging.getLogger(__name__)
 
 CANCEL_CHR = chr(0xE007F)  # Tag cancel
-MAX_CONCURRENT_ASSIGNMENTS = 7
+MAX_CONCURRENT_ASSIGNMENTS = 1000
 
 CURRENT_PRICE = {
     PASS_RU: 10500, #x20=22, 11500x40=42, 12500x40=62, 13000x40=82, 13500x40=102
