@@ -30,6 +30,7 @@ class PassesEventSettings(BaseSettings):
     thread_channel: int | str = Field("")
     thread_id: int | None = Field(None)
     thread_locale: str = Field("ru")
+    require_passport: bool = Field(False)
 
 
 class PassesSettings(BaseSettings):

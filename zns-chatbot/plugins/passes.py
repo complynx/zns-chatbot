@@ -58,6 +58,12 @@ class PassUpdate:
         self.pass_key = ""
         self.user = None
 
+    def is_passport_required(self) -> bool:
+        try:
+            return self.base.config.passes.events[self.pass_key].require_passport
+        except Exception:
+            return True
+
     async def handle_callback_query(self):
         q = self.update.callback_query
         await q.answer()
@@ -385,6 +391,8 @@ class PassUpdate:
             reply_markup=InlineKeyboardMarkup([]),
             parse_mode=ParseMode.HTML,
         )
+        if not self.is_passport_required():
+            return await self.after_legal_name_input(inviter_id, "skip")
         await self.handle_name_request(inviter_id)
 
     async def accept_invitation(self, inviter_id):
@@ -801,6 +809,8 @@ class PassUpdate:
             reply_markup=InlineKeyboardMarkup([]),
             parse_mode=ParseMode.HTML,
         )
+        if not self.is_passport_required():
+            return await self.after_legal_name_input("pass", "skip")
         return await self.handle_name_request("pass")
 
     async def handle_start(self):
@@ -894,7 +904,8 @@ class PassUpdate:
             },
         )
         keys = dict(u_pass)
-        keys["name"] = user["legal_name"]
+        if self.is_passport_required():
+            keys["name"] = user.get("legal_name", "")
         await self.update.edit_or_reply(
             self.l("passes-solo-saved", passKey=self.pass_key),
             reply_markup=InlineKeyboardMarkup([]),
@@ -982,7 +993,8 @@ class PassUpdate:
         )
         user[self.pass_key] = u_pass
         keys = dict(u_pass)
-        keys["name"] = user["legal_name"]
+        if self.is_passport_required():
+            keys["name"] = user.get("legal_name", "")
         if invitee is not None:
             inv_update = await self.base.create_update_from_user(invitee["user_id"])
             inv_update.set_pass_key(self.pass_key)
@@ -1137,7 +1149,7 @@ class PassUpdate:
     async def after_legal_name_input(self, data, input_type: str = "name"):
         if data == "cmd":
             return
-        if input_type == "name" and self.pass_key == PASS_RU:
+        if input_type == "name" and self.is_passport_required():
             return await self.handle_passport_request(data)
         if data == "pass":
             await self.update.reply(
@@ -1315,7 +1327,7 @@ class PassUpdate:
                     )
             else:
                 logger.info(
-                    f"assigned pass to {user['user_id']}, role {user[self.pass_key]['role']}, name {user['legal_name']}"
+                    f"assigned pass to {user['user_id']}, role {user[self.pass_key]['role']}, name {user.get('legal_name', client_user_name(user))}"
                 )
                 upd = await self.base.create_update_from_user(user["user_id"])
                 upd.set_pass_key(self.pass_key)
@@ -1948,38 +1960,39 @@ class Passes(BasePlugin):
                     },
                 )
         
-        async for user in self.user_db.find(
-            {
-                "bot_id": self.bot.id,
-                "passport_number": {"$exists": False},
-                PASS_RU: {"$exists": True},
-                PASS_RU + ".state": {"$in": ["assigned", "payed"]},
-                "notified_passport_data_required": {"$exists": False},
-            }
-        ):
-            try:
-                upd = await self.create_update_from_user(user["user_id"])
-                upd.set_pass_key(PASS_RU)
-                await upd.require_passport_data()
-                await self.user_db.update_one(
-                    {
-                        "bot_id": self.bot.id,
-                        "user_id": user["user_id"],
-                        "passport_number": {"$exists": False},
-                        PASS_RU: {"$exists": True},
-                    },
-                    {
-                        "$set": {
-                            "notified_passport_data_required": True
+        if self.config.passes.events[PASS_RU].require_passport:
+            async for user in self.user_db.find(
+                {
+                    "bot_id": self.bot.id,
+                    "passport_number": {"$exists": False},
+                    PASS_RU: {"$exists": True},
+                    PASS_RU + ".state": {"$in": ["assigned", "payed"]},
+                    "notified_passport_data_required": {"$exists": False},
+                }
+            ):
+                try:
+                    upd = await self.create_update_from_user(user["user_id"])
+                    upd.set_pass_key(PASS_RU)
+                    await upd.require_passport_data()
+                    await self.user_db.update_one(
+                        {
+                            "bot_id": self.bot.id,
+                            "user_id": user["user_id"],
+                            "passport_number": {"$exists": False},
+                            PASS_RU: {"$exists": True},
+                        },
+                        {
+                            "$set": {
+                                "notified_passport_data_required": True
+                            }
                         }
-                    }
-                )
-            except Exception as e:
-                logger.error(
-                    "Exception in Passes._timeout_processor passport notification "+
-                    f"for user {user['user_id']}: {e}",
-                    exc_info=1,
-                )
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Exception in Passes._timeout_processor passport notification "+
+                        f"for user {user['user_id']}: {e}",
+                        exc_info=1,
+                    )
 
         await self.recalculate_queues()
         while True:
