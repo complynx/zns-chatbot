@@ -1,19 +1,16 @@
-# Multi-stage build for minimal final image size
-FROM python:3.11-bookworm AS builder
+FROM python:3.11-slim-bookworm AS builder
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Set UV cache directory
-ENV UV_CACHE_DIR=/tmp/uv-cache
+ENV UV_CACHE_DIR=/tmp/uv-cache PIP_NO_CACHE_DIR=1
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y \
-    cmake \
-    build-essential \
-    cython3 python3-dev \
+# Minimal native deps only for runtime libs (avoid heavy build toolchain)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
@@ -26,8 +23,8 @@ RUN uv pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-ur
 # Install other dependencies
 RUN uv pip install albumentations==1.4.3 Cython
 
-# Install insightface
-RUN uv pip install --no-binary insightface insightface
+# Install insightface from wheels (skip source build to save space)
+RUN uv pip install "insightface>=0.7,<0.8"
 
 # Copy pyproject.toml and install application
 COPY pyproject.toml /tmp/
@@ -36,11 +33,10 @@ RUN cd /tmp && uv pip install .
 # Clean up
 RUN rm -rf /tmp/uv-cache /root/.cache /tmp/*
 
-# Final stage
 FROM python:3.11-slim-bookworm
 
 # Install minimal runtime dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libgomp1 \
