@@ -6,11 +6,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 # Set UV cache directory
 ENV UV_CACHE_DIR=/tmp/uv-cache PIP_NO_CACHE_DIR=1
 
-# Minimal native deps only for runtime libs (avoid heavy build toolchain)
+# Minimal native deps for runtime plus lightweight build chain for insightface
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libgomp1 \
+    build-essential \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
