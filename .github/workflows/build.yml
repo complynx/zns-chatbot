@@ -25,8 +25,8 @@ jobs:
           context: .
           push: true
           tags: complynx/${{ github.event.repository.name }}:latest
-          cache-from: type=registry,ref=complynx/${{ github.event.repository.name }}:buildcache
-          cache-to: type=registry,ref=complynx/${{ github.event.repository.name }}:buildcache,mode=max
+          # cache-from: type=registry,ref=complynx/${{ github.event.repository.name }}:buildcache
+          # cache-to: type=registry,ref=complynx/${{ github.event.repository.name }}:buildcache,mode=max
 
       - name: Dispatch event to server
         uses: peter-evans/repository-dispatch@v3
