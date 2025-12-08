@@ -533,6 +533,8 @@ passes-payment-admin-desc=
         [paypal] — payment: PayPal transfers.
         *[sbp] — paymnent: SBP transfers by phone number.
     }
+passes-admin-changed =
+    Your ambassador for the {passes-pass-description} has been changed to {$adminLink}.
 passes-pass-role-saved =
     Now select your preferred ambassador. You can also change them afterwards.
     

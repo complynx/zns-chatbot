@@ -24,6 +24,7 @@ from .pass_keys import (
     PASS_RU,
     PASS_BY,
     PASS_KEYS,
+    PASS_KEY,
 )
 
 logger = logging.getLogger(__name__)
@@ -577,7 +578,7 @@ class PassUpdate:
 
     async def handle_cq_adm_acc(self, key: str, user_id_s: str):
         self.set_pass_key(key)
-        if self.update.user not in self.base.payment_admins[self.pass_key]:
+        if not self.base.is_payment_admin(self.update.user, self.pass_key):
             return
         user_id = int(user_id_s)
         user = await self.base.user_db.find_one(
@@ -630,7 +631,7 @@ class PassUpdate:
 
     async def handle_cq_adm_rej(self, key: str, user_id_s: str):
         self.set_pass_key(key)
-        if self.update.user not in self.base.payment_admins[self.pass_key]:
+        if not self.base.is_payment_admin(self.update.user, self.pass_key):
             return
         user_id = int(user_id_s)
         user = await self.base.user_db.update_one(
@@ -750,9 +751,8 @@ class PassUpdate:
         )
         if result.modified_count <= 0:
             return
-        if (
-            user[self.pass_key]["proof_admin"]
-            in self.base.payment_admins[self.pass_key]
+        if user[self.pass_key]["proof_admin"] in self.base.get_all_payment_admins(
+            self.pass_key
         ):
             admin = await self.base.user_db.find_one(
                 {
@@ -1726,7 +1726,7 @@ class PassUpdate:
         assert args.pass_key in PASS_KEYS, f"wrong pass key {args.pass_key}"
         self.set_pass_key(args.pass_key)
         assert (self.update.user in self.base.config.telegram.admins or
-                self.update.user in self.base.payment_admins[self.pass_key]), (
+                self.base.is_payment_admin(self.update.user, self.pass_key)), (
             f"{self.update.user} is not admin"
         )
         cancelled = []
@@ -1789,13 +1789,106 @@ class PassUpdate:
         )
         await self.base.recalculate_queues()
     
+    async def handle_passes_switch_to_me_cmd(self):
+        args_list = self.update.parse_cmd_arguments()
+        tail = args_list[1:]
+        if len(tail) == 0:
+            return await self.update.reply(
+                "Usage: /passes_switch_to_me [<pass_key>=PASS_KEY] <user_id>",
+                parse_mode=None,
+            )
+        pass_key = PASS_KEY
+        target_user_raw = None
+        if len(tail) == 1:
+            target_user_raw = tail[0]
+        else:
+            if tail[0] in PASS_KEYS:
+                pass_key = tail[0]
+                target_user_raw = tail[1]
+            else:
+                target_user_raw = tail[0]
+        if pass_key not in PASS_KEYS:
+            return await self.update.reply(
+                f"Unknown pass key {pass_key}", parse_mode=None
+            )
+        try:
+            target_user_id = int(target_user_raw)
+        except Exception:
+            return await self.update.reply(
+                "Invalid user id", parse_mode=None,
+            )
+        self.set_pass_key(pass_key)
+        if not (
+            self.update.user in self.base.config.telegram.admins
+            or self.base.is_payment_admin(self.update.user, self.pass_key)
+        ):
+            return await self.update.reply(
+                f"{self.update.user} is not admin for {self.pass_key}",
+                parse_mode=None,
+            )
+        user_doc = await self.base.user_db.find_one(
+            {
+                "bot_id": self.bot,
+                "user_id": target_user_id,
+                self.pass_key: {"$exists": True},
+            }
+        )
+        if user_doc is None:
+            return await self.update.reply(
+                f"User {target_user_id} does not have pass {self.pass_key}",
+                parse_mode=None,
+            )
+        uids = [user_doc["user_id"]]
+        if "couple" in user_doc[self.pass_key]:
+            uids.append(user_doc[self.pass_key]["couple"])
+        admin_doc = await self.base.user_db.find_one(
+            {
+                "bot_id": self.bot,
+                "user_id": self.update.user,
+            }
+        )
+        await self.base.user_db.update_many(
+            {
+                "bot_id": self.bot,
+                "user_id": {"$in": uids},
+                self.pass_key: {"$exists": True},
+            },
+            {
+                "$set": {
+                    self.pass_key + ".proof_admin": self.update.user,
+                    "proof_admins." + self.pass_key: self.update.user,
+                }
+            },
+        )
+        for uid in uids:
+            try:
+                upd = await self.base.create_update_from_user(uid)
+                upd.set_pass_key(self.pass_key)
+                await upd.update.reply(
+                    await upd.format_message(
+                        "passes-admin-changed",
+                        admin=admin_doc,
+                    ),
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception as err:
+                logger.error(
+                    "Failed to notify user %s about new admin: %s", uid, err, exc_info=1
+                )
+        await self.update.reply(
+            f"Admin for pass {self.pass_key} switched to you for users {uids}",
+            parse_mode=None,
+        )
+    
     async def handle_passes_table_cmd(self):
         if self.update.user in self.base.config.telegram.admins:
             pass_keys_for_this_user = PASS_KEYS
         else:
             pass_keys_for_this_user = [
-                key for key in PASS_KEYS if key in self.base.payment_admins and
-                self.update.user in self.base.payment_admins[key]
+                key
+                for key in PASS_KEYS
+                if key in self.base.payment_admins
+                and self.base.is_payment_admin(self.update.user, key)
             ]
         assert pass_keys_for_this_user, (
             f"{self.update.user} is not admin for any pass key"
@@ -1896,6 +1989,9 @@ class Passes(BasePlugin):
         super().__init__(base_app)
         self.base_app.passes = self
         self.payment_admins: dict[str, list[int]] = {key: [] for key in PASS_KEYS}
+        self.hidden_payment_admins: dict[str, list[int]] = {
+            key: [] for key in PASS_KEYS
+        }
         for key in PASS_KEYS:
             if isinstance(self.config.passes.events[key].payment_admin, int):
                 self.payment_admins[key].append(
@@ -1905,11 +2001,21 @@ class Passes(BasePlugin):
                 self.payment_admins[key].extend(
                     self.config.passes.events[key].payment_admin
                 )
+            hidden_admins = (
+                self.config.passes.events[key].hidden_payment_admins
+                if hasattr(self.config.passes.events[key], "hidden_payment_admins")
+                else None
+            )
+            if isinstance(hidden_admins, int):
+                self.hidden_payment_admins[key].append(hidden_admins)
+            elif isinstance(hidden_admins, list):
+                self.hidden_payment_admins[key].extend(hidden_admins)
         self.user_db: AgnosticCollection = base_app.users_collection
         self._command_checkers = [
             CommandHandler(self.name, self.handle_start),
             CommandHandler("passes_assign", self.handle_passes_assign_cmd),
             CommandHandler("passes_cancel", self.handle_passes_cancel_cmd),
+            CommandHandler("passes_switch_to_me", self.handle_passes_switch_to_me_cmd),
             CommandHandler("passes_uncouple", self.handle_passes_uncouple_cmd),
             CommandHandler("passes_table", self.handle_passes_table_cmd),
             CommandHandler("legal_name", self.handle_name_cmd),
@@ -1921,6 +2027,28 @@ class Passes(BasePlugin):
         )
         self._queue_lock = Lock()
         create_task(self._timeout_processor())
+
+    def get_all_payment_admins(self, pass_key: str) -> list[int]:
+        admins = self.payment_admins.get(pass_key, [])
+        hidden = self.hidden_payment_admins.get(pass_key, [])
+        # dict.fromkeys preserves order while removing duplicates
+        return list(dict.fromkeys(admins + hidden))
+
+    def is_payment_admin(self, user_id: int, pass_key: str) -> bool:
+        return user_id in self.get_all_payment_admins(pass_key)
+
+    def pick_payment_admin(self, pass_key: str) -> int | None:
+        visible = self.payment_admins.get(pass_key, [])
+        if len(visible) > 0:
+            return choice(visible)
+        hidden = self.hidden_payment_admins.get(pass_key, [])
+        if len(hidden) > 0:
+            logger.warning(
+                "No visible payment_admins for %s, falling back to hidden_payment_admins",
+                pass_key,
+            )
+            return choice(hidden)
+        raise Exception("No payment admins configured for pass %s", pass_key)
 
     async def get_all_passes(self, pass_key: str = PASS_RU, with_unpaid: bool = False, with_waitlist: bool = False) -> list[dict]:
         states = ["payed"]
@@ -1946,19 +2074,95 @@ class Passes(BasePlugin):
                     pass_key + ".proof_admin": {"$exists": False},
                 }
             ):
-                await self.user_db.update_one(
-                    {
-                        "user_id": user["user_id"],
-                        "bot_id": self.bot.id,
-                    },
-                    {
-                        "$set": {
-                            pass_key + ".proof_admin": choice(
-                                self.payment_admins[pass_key]
-                            ),
+                try:
+                    new_admin = self.pick_payment_admin(pass_key)
+                    await self.user_db.update_one(
+                        {
+                            "user_id": user["user_id"],
+                            "bot_id": self.bot.id,
+                        },
+                        {
+                            "$set": {
+                                pass_key + ".proof_admin": new_admin,
+                            }
+                        },
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Exception in Passes._timeout_processor setting initial proof_admin "+
+                        f"for user {user['user_id']}, pass {pass_key}: {e}",
+                        exc_info=1,
+                    )
+        processed_waiting: set[int] = set()
+        for pass_key in PASS_KEYS:
+            async for user in self.user_db.find(
+                {
+                    "bot_id": self.bot.id,
+                    pass_key + ".state": "waitlist",
+                    pass_key: {"$exists": True},
+                }
+            ):
+                try:
+                    if user["user_id"] in processed_waiting:
+                        continue
+                    uids = [user["user_id"]]
+                    if "couple" in user[pass_key]:
+                        uids.append(user[pass_key]["couple"])
+                    processed_waiting.update(uids)
+                    current_admin = user[pass_key].get("proof_admin")
+                    if current_admin in self.get_all_payment_admins(pass_key):
+                        continue
+                    new_admin = self.pick_payment_admin(pass_key)
+                    if new_admin is None:
+                        logger.error(
+                            "Cannot reassign proof_admin for waitlist user %s, pass %s: no admins configured",
+                            user["user_id"],
+                            pass_key,
+                        )
+                        continue
+                    await self.user_db.update_many(
+                        {
+                            "bot_id": self.bot.id,
+                            "user_id": {"$in": uids},
+                            pass_key + ".state": "waitlist",
+                        },
+                        {
+                            "$set": {
+                                pass_key + ".proof_admin": new_admin,
+                            }
+                        },
+                    )
+                    admin_doc = await self.user_db.find_one(
+                        {
+                            "bot_id": self.bot.id,
+                            "user_id": new_admin,
                         }
-                    },
-                )
+                    )
+                    for uid in uids:
+                        try:
+                            upd = await self.create_update_from_user(uid)
+                            upd.set_pass_key(pass_key)
+                            await upd.update.reply(
+                                await upd.format_message(
+                                    "passes-admin-changed",
+                                    admin=admin_doc,
+                                ),
+                                parse_mode=ParseMode.HTML,
+                            )
+                        except Exception as e:
+                            logger.error(
+                                "Failed to notify user %s about new admin for %s: %s",
+                                uid,
+                                pass_key,
+                                e,
+                                exc_info=1,
+                            )
+                except Exception as e:
+                    logger.error(
+                        "Exception in Passes._timeout_processor reassigning proof_admin "+
+                        f"for waitlist user {user['user_id']}, pass {pass_key}: {e}",
+                        exc_info=1,
+                    )
         
         if self.config.passes.events[PASS_RU].require_passport:
             async for user in self.user_db.find(
@@ -2350,6 +2554,9 @@ class Passes(BasePlugin):
 
     async def handle_passes_cancel_cmd(self, update: TGState):
         return await self.create_update(update).handle_passes_cancel()
+    
+    async def handle_passes_switch_to_me_cmd(self, update: TGState):
+        return await self.create_update(update).handle_passes_switch_to_me_cmd()
     
     async def handle_passes_uncouple_cmd(self, update: TGState):
         return await self.create_update(update).handle_passes_uncouple()

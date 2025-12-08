@@ -621,6 +621,8 @@ passes-payment-admin-desc=
         [paypal] — оплата через PayPal.
         *[sbp] — оплата переводом СБП по номеру телефона.
     }
+passes-admin-changed =
+    Ваш амбассадор по {passes-pass-description} сменился: теперь это {$adminLink}.
 passes-pass-role-saved =
     Теперь выберите амбассадора. Потом можно будет сменить его, если что.
     
