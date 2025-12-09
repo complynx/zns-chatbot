@@ -2270,6 +2270,7 @@ class Passes(BasePlugin):
 
     async def recalculate_queues_pk(self, pass_key: str) -> None:
         try:
+            natural_queue_exhausted = False
             while True:
                 aggregation = await self.user_db.aggregate(
                     [
@@ -2362,6 +2363,7 @@ class Passes(BasePlugin):
                     )
                     success = await self.assign_pass(target_group, pass_key)
                     if not success:
+                        natural_queue_exhausted = True
                         break
                     continue
                 else:
@@ -2375,53 +2377,57 @@ class Passes(BasePlugin):
                     )
                     success = await self.assign_pass(target_group, pass_key)
                     if not success:
+                        natural_queue_exhausted = True
                         break
                     continue
-            while True:
-                aggregation = await self.user_db.aggregate(
-                    [
-                        {
-                            "$match": {
-                                pass_key: {"$exists": True},
-                                "bot_id": self.bot.id,
-                            },
-                        },
-                        {
-                            "$group": {
-                                "_id": {
-                                    "state": f"${pass_key}.state",
-                                    "role": f"${pass_key}.role",
+            if natural_queue_exhausted:
+                while True:
+                    aggregation = await self.user_db.aggregate(
+                        [
+                            {
+                                "$match": {
+                                    pass_key: {"$exists": True},
+                                    "bot_id": self.bot.id,
                                 },
-                                "count": {"$count": {}},
-                            }
-                        },
-                    ]
-                ).to_list(None)
-                counts = {
-                    "leader": dict(),
-                    "follower": dict(),
-                }
-                for group in aggregation:
-                    if len(group["_id"]) == 0:
-                        continue
-                    counts[group["_id"]["role"]][group["_id"]["state"]] = group["count"]
-                counts["leader"]["RA"] = counts["leader"].get("payed", 0) + counts[
-                    "leader"
-                ].get("assigned", 0)
-                counts["follower"]["RA"] = counts["follower"].get("payed", 0) + counts[
-                    "follower"
-                ].get("assigned", 0)
-                ra = (
-                    counts["leader"]["RA"]
-                    if counts["leader"]["RA"] >= counts["follower"]["RA"]
-                    else counts["follower"]["RA"]
-                )
-                if ra > self.config.passes.events[pass_key].amount_cap_per_role:
-                    break
-                success = await self.assign_pass("couple", pass_key)
-                if not success:
-                    break
-                continue
+                            },
+                            {
+                                "$group": {
+                                    "_id": {
+                                        "state": f"${pass_key}.state",
+                                        "role": f"${pass_key}.role",
+                                    },
+                                    "count": {"$count": {}},
+                                }
+                            },
+                        ]
+                    ).to_list(None)
+                    counts = {
+                        "leader": dict(),
+                        "follower": dict(),
+                    }
+                    for group in aggregation:
+                        if len(group["_id"]) == 0:
+                            continue
+                        counts[group["_id"]["role"]][group["_id"]["state"]] = group[
+                            "count"
+                        ]
+                    counts["leader"]["RA"] = counts["leader"].get("payed", 0) + counts[
+                        "leader"
+                    ].get("assigned", 0)
+                    counts["follower"]["RA"] = counts["follower"].get(
+                        "payed", 0
+                    ) + counts["follower"].get("assigned", 0)
+                    ra = (
+                        counts["leader"]["RA"]
+                        if counts["leader"]["RA"] >= counts["follower"]["RA"]
+                        else counts["follower"]["RA"]
+                    )
+                    if ra > self.config.passes.events[pass_key].amount_cap_per_role:
+                        break
+                    success = await self.assign_pass("couple", pass_key)
+                    if not success:
+                        break
+                    continue
 
             have_unnotified = True
             while have_unnotified:
