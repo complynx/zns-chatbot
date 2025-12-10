@@ -622,7 +622,9 @@ passes-payment-admin-desc=
         *[sbp] — оплата переводом СБП по номеру телефона.
     }
 passes-admin-changed =
-    Ваш амбассадор по {passes-pass-description} сменился: теперь это {$adminLink}.
+    Ваш амбассадор сменился: теперь это {$adminLink}.
+    Это касается следующего пасса: {passes-pass-description}
+    Обращайтесь к новому амбассадору, либо смените его в ваших пассах: /passes.
 passes-pass-role-saved =
     Теперь выберите амбассадора. Потом можно будет сменить его, если что.
     
