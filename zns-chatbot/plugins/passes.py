@@ -605,6 +605,7 @@ class PassUpdate:
                     self.pass_key + ".proof_received": u_pass["proof_received"],
                     self.pass_key + ".proof_file": u_pass["proof_file"],
                     self.pass_key + ".proof_admin": u_pass["proof_admin"],
+                    self.pass_key + ".proof_admin_accepted": self.update.user,
                     self.pass_key + ".proof_accepted": now_msk(),
                 }
             },
