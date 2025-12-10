@@ -534,7 +534,9 @@ passes-payment-admin-desc=
         *[sbp] — paymnent: SBP transfers by phone number.
     }
 passes-admin-changed =
-    Your ambassador for the {passes-pass-description} has been changed to {$adminLink}.
+    Your ambassador has been changed to {$adminLink}.
+    This is related to the pass: {passes-pass-description}.
+    Please consult the new ambassador or change them in the /passes interface if needed.
 passes-pass-role-saved =
     Now select your preferred ambassador. You can also change them afterwards.
     
