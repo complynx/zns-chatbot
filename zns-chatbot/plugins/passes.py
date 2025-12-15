@@ -635,7 +635,7 @@ class PassUpdate:
         if not self.base.is_payment_admin(self.update.user, self.pass_key):
             return
         user_id = int(user_id_s)
-        user = await self.base.user_db.update_one(
+        user = await self.base.user_db.find_one(
             {
                 "user_id": user_id,
                 "bot_id": self.bot,
