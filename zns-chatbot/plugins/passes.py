@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 CANCEL_CHR = chr(0xE007F)  # Tag cancel
 MAX_CONCURRENT_ASSIGNMENTS = 6
+QUEUE_LOOKAHEAD = 0  # 0 = scan the whole queue when searching for an assignable pass
 
 CURRENT_PRICE = {
     PASS_RU: 12500,#x40=67, 13000,#x40=82, 13500,#x15=90
@@ -2362,7 +2363,7 @@ class Passes(BasePlugin):
                         if counts["leader"]["RA"] > counts["follower"]["RA"]
                         else "leader"
                     )
-                    success = await self.assign_pass(target_group, pass_key)
+                    success = await self.assign_pass(target_group, pass_key, counts)
                     if not success:
                         natural_queue_exhausted = True
                         break
@@ -2376,7 +2377,7 @@ class Passes(BasePlugin):
                         > counts["follower"].get("waitlist", 0)
                         else "leader"
                     )
-                    success = await self.assign_pass(target_group, pass_key)
+                    success = await self.assign_pass(target_group, pass_key, counts)
                     if not success:
                         natural_queue_exhausted = True
                         break
@@ -2425,7 +2426,7 @@ class Passes(BasePlugin):
                     )
                     if ra > self.config.passes.events[pass_key].amount_cap_per_role:
                         break
-                    success = await self.assign_pass("couple", pass_key)
+                    success = await self.assign_pass("couple", pass_key, counts)
                     if not success:
                         break
                     continue
@@ -2502,7 +2503,12 @@ class Passes(BasePlugin):
         except Exception as e:
             logger.error(f"Exception in recalculate_queues: {e}", exc_info=1)
 
-    async def assign_pass(self, role: str, pass_key: str) -> bool:
+    async def assign_pass(
+        self,
+        role: str,
+        pass_key: str,
+        counts: dict[str, dict[str, int]] | None = None,
+    ) -> bool:
         match = {
             "bot_id": self.bot.id,
             pass_key + ".state": "waitlist",
@@ -2512,18 +2518,32 @@ class Passes(BasePlugin):
             match[pass_key + ".couple"] = {"$exists": True}
         else:
             match[pass_key + ".role"] = role
-        selected = await self.user_db.aggregate(
-            [
-                {"$match": match},
-                {"$sort": {pass_key + ".date_created": 1, "user_id": 1}},
-                {"$limit": 1},
-            ]
-        ).to_list(1)
-
-        if len(selected) == 0:
-            return False
-        upd = await self.create_update_from_user(selected[0]["user_id"])
-        return await upd.assign_pass(pass_key)
+        pipeline = [
+            {"$match": match},
+            {"$sort": {pass_key + ".date_created": 1, "user_id": 1}},
+        ]
+        cap_per_role = self.config.passes.events[pass_key].amount_cap_per_role
+        role_counts = counts or {}
+        leader_ra = role_counts.get("leader", {}).get("RA", 0)
+        follower_ra = role_counts.get("follower", {}).get("RA", 0)
+        scanned = 0
+        async for candidate in self.user_db.aggregate(pipeline):
+            scanned += 1
+            pass_info = candidate.get(pass_key, {})
+            is_couple = "couple" in pass_info
+            if counts is not None:
+                if is_couple or role == "couple":
+                    if leader_ra >= cap_per_role or follower_ra >= cap_per_role:
+                        continue
+                elif role_counts.get(role, {}).get("RA", 0) >= cap_per_role:
+                    return False
+            upd = await self.create_update_from_user(candidate["user_id"])
+            assigned = await upd.assign_pass(pass_key)
+            if assigned:
+                return True
+            if QUEUE_LOOKAHEAD and scanned >= QUEUE_LOOKAHEAD:
+                break
+        return False
 
     async def create_update_from_user(self, user: int) -> PassUpdate:
         upd = TGState(user, self.base_app)
