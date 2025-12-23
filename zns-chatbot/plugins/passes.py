@@ -2290,7 +2290,7 @@ class Passes(BasePlugin):
                                             },
                                             {
                                                 pass_key + ".skip_in_balance_count": {
-                                                    " $exists": False
+                                                    "$exists": False
                                                 }
                                             },
                                         ]
@@ -2343,18 +2343,13 @@ class Passes(BasePlugin):
                         and max_assigned < group["count"]
                     ):
                         max_assigned = group["count"]
-                counts["leader"]["RA"] = counts["leader"].get("payed", 0) + counts[
-                    "leader"
-                ].get("assigned", 0)
-                counts["follower"]["RA"] = counts["follower"].get("payed", 0) + counts[
-                    "follower"
-                ].get("assigned", 0)
-                ra = (
-                    counts["leader"]["RA"]
-                    if counts["leader"]["RA"] >= counts["follower"]["RA"]
-                    else counts["follower"]["RA"]
-                )
-                if ra > self.config.passes.events[pass_key].amount_cap_per_role:
+                counts["leader"]["RA"] = (counts["leader"].get("payed", 0) +
+                                          counts["leader"].get("assigned", 0))
+                counts["follower"]["RA"] = (counts["follower"].get("payed", 0) +
+                                            counts["follower"].get("assigned", 0))
+                cap_per_role = self.config.passes.events[pass_key].amount_cap_per_role
+                if (counts["leader"]["RA"] >= cap_per_role and
+                        counts["follower"]["RA"] >= cap_per_role):
                     break
                 max_assigned -= couples.get("assigned", 0)
                 if counts["leader"]["RA"] != counts["follower"]["RA"]:
@@ -2410,21 +2405,17 @@ class Passes(BasePlugin):
                     for group in aggregation:
                         if len(group["_id"]) == 0:
                             continue
-                        counts[group["_id"]["role"]][group["_id"]["state"]] = group[
-                            "count"
-                        ]
-                    counts["leader"]["RA"] = counts["leader"].get("payed", 0) + counts[
-                        "leader"
-                    ].get("assigned", 0)
-                    counts["follower"]["RA"] = counts["follower"].get(
-                        "payed", 0
-                    ) + counts["follower"].get("assigned", 0)
-                    ra = (
-                        counts["leader"]["RA"]
-                        if counts["leader"]["RA"] >= counts["follower"]["RA"]
-                        else counts["follower"]["RA"]
-                    )
-                    if ra > self.config.passes.events[pass_key].amount_cap_per_role:
+                        counts[group["_id"]["role"]][group["_id"]["state"]] = \
+                            group["count"]
+                    counts["leader"]["RA"] = (counts["leader"].get("payed", 0) +
+                                              counts["leader"].get("assigned", 0))
+                    counts["follower"]["RA"] = (counts["follower"].get("payed", 0) +
+                                                counts["follower"].get("assigned", 0))
+                    cap_per_role = self.config.passes.events[
+                        pass_key
+                    ].amount_cap_per_role
+                    if (counts["leader"]["RA"] >= cap_per_role and
+                            counts["follower"]["RA"] >= cap_per_role):
                         break
                     success = await self.assign_pass("couple", pass_key, counts)
                     if not success:
