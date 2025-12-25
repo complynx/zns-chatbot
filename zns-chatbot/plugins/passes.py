@@ -1926,7 +1926,7 @@ class PassUpdate:
             "legal_name": {"name": "Legal Name", "location": "user"},
             "language_code": {"name": "Language code", "location": "user", "length": 2},
             "pass_key": {
-                "func": lambda u, p: p.get("pass_key", ""),
+                "func": lambda u, p, k: k,
                 "name": "Pass Key",
             },
             "state": {"name": "State", "location": "pass"},
@@ -1935,7 +1935,7 @@ class PassUpdate:
             "couple": {"name": "Couple", "location": "pass"},
             "price": {"name": "Price", "location": "pass"},
             "price_per_one": {
-                "func": lambda u, p: p.get("price",0) / 2 if p.get('type') == 'couple' else p.get('price',""),
+                "func": lambda u, p, k: p.get("price",0) / 2 if p.get('type') == 'couple' else p.get('price',""),
                 "name": "Price per one",
             },
             "date_created": {"name": "Date Created", "location": "pass"},
@@ -1974,7 +1974,7 @@ class PassUpdate:
                 row = []
                 for field, info in fields.items():
                     if "func" in info:
-                        row.append(info["func"](user, pass_data))
+                        row.append(info["func"](user, pass_data, pass_key))
                     elif info["location"] == "user":
                         row.append(user.get(field, ""))
                     elif info["location"] == "pass":
