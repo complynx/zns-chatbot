@@ -279,7 +279,7 @@ class OrdersUpdate:
         logger.debug(f"starting orders for: {self.user}")
         await self.handle_cq_start()
     
-    async def handle_cq_payed(self, order_id):
+    async def handle_cq_paid(self, order_id):
         # return await self.handle_cq_start()
         await self.base.food_db.update_one({
             "_id": ObjectId(order_id),
@@ -477,11 +477,11 @@ class OrdersUpdate:
             }
         })
         await self.update.edit_or_reply(
-            self.l("orders-message-payed-where"),
+            self.l("orders-message-paid-where"),
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
-                self.l("orders-payed-button"),
-                callback_data=f"{self.base.name}|payed|{order['_id']}"
+                self.l("orders-paid-button"),
+                callback_data=f"{self.base.name}|paid|{order['_id']}"
             )],[InlineKeyboardButton(
                 self.l("orders-pay-cancel"),
                 callback_data=f"{self.base.name}|pcancel|{order['_id']}"

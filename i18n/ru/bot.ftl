@@ -65,7 +65,7 @@ orders-command-description = Заказ еды, транспорта и акти
 orders-edit-button = Изменить заказ
 orders-finish-button-text = Готово
 orders-message-list = Ваши заказы
-orders-message-payed-where =
+orders-message-paid-where =
     Я получила PDF, который видимо является подтверждением оплаты. Я права?
 
 orders-message-payment-options =
@@ -94,7 +94,7 @@ orders-payment-cash-requested =
     Сумма к оплате: Br {$total}
     заказ на имя <i>{$name}</i>.
     Администратор отметит заказ как оплаченный после получения оплаты.
-orders-payed-button = Это подтверждение оплаты
+orders-paid-button = Это подтверждение оплаты
 orders-placeholder-first-name=Имя
 orders-placeholder-last-name=Фамилия
 orders-placeholder-patronymus=Отчество
@@ -557,7 +557,7 @@ passes-pass-edit-waiting-for-couple=
     - Изменения вашего имени
     - Отмены пасса
     - Смены его на соло пасс
-passes-pass-edit-payed=
+passes-pass-edit-paid=
     Привет, <i>{$name}</i>!
     Поздравляем! {passes-pass-description} теперь официально ваш, так как вы успешно оплатили его.
     Вы можете изменить имя, связанное с пассом, если это необходимо.
@@ -695,7 +695,7 @@ passes-couple-saved-sent =
     Я отправила вашей паре приглашение.
     Попросите вашу пару подтвердить его. Если приглашение не пришло, ваша пара может найти его по команде /passes и выбрать {passes-pass-title-short}.
     Приглашение действительно в течение двух дней.
-passes-couple-request-invitee-payed =
+passes-couple-request-invitee-paid =
     Упс, этот человек уже зарегистрирован и получил свой пасс. Чтобы попробовать ещё раз, введите команду /passes снова.
 passes-couple-request-timeout =
     Я не дождалась пересланного сообщения от вашей пары. Чтобы попробовать ещё раз, введите команду /passes снова.

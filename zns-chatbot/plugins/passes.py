@@ -193,7 +193,7 @@ class PassUpdate:
                     callback_data=f"{self.base.name}|pay|{self.pass_key}",
                 )
             )
-        if u_pass["state"] != "payed":
+        if u_pass["state"] != "paid":
             if len(self.base.payment_admins[self.pass_key]) > 1:
                 buttons.append(
                     InlineKeyboardButton(
@@ -514,7 +514,7 @@ class PassUpdate:
                 existing_pass is None
                 or existing_pass.get("couple", 0) != inviter_id
             ):
-                if existing_pass is None or existing_pass.get("state") != "payed":
+                if existing_pass is None or existing_pass.get("state") != "paid":
                     return await self.show_couple_invitation(inviter_user or {"user_id": inviter_id})
                 else:
                     inv_update = await self.base.create_update_from_user(inviter_id)
@@ -559,7 +559,7 @@ class PassUpdate:
                 "bot_id": self.bot,
                 "user_id": user_id,
                 "pass_key": self.pass_key,
-                "state": "payed",
+                "state": "paid",
             }
         )
         if pass_doc is None:
@@ -573,7 +573,7 @@ class PassUpdate:
             uids,
             self.pass_key,
             set_fields={
-                "state": "payed",
+                "state": "paid",
                 "proof_received": u_pass.get("proof_received"),
                 "proof_file": u_pass.get("proof_file"),
                 "proof_admin": u_pass.get("proof_admin"),
@@ -609,7 +609,7 @@ class PassUpdate:
                 "bot_id": self.bot,
                 "user_id": user_id,
                 "pass_key": self.pass_key,
-                "state": "payed",
+                "state": "paid",
             }
         )
         if pass_doc is None:
@@ -708,7 +708,7 @@ class PassUpdate:
             req,
             {
                 "$set": {
-                    "state": "payed",
+                    "state": "paid",
                     "proof_received": proof_received,
                     "proof_file": f"{doc.file_id}{file_ext}",
                     "proof_admin": pass_data.get("proof_admin"),
@@ -922,9 +922,9 @@ class PassUpdate:
             )
             if invitee is not None and self.pass_key in invitee:
                 invitee_pass = invitee[self.pass_key]
-        if isinstance(invitee_pass, dict) and invitee_pass.get("state") == "payed":
+        if isinstance(invitee_pass, dict) and invitee_pass.get("state") == "paid":
             return await self.update.reply(
-                self.l("passes-couple-request-invitee-payed", passKey=self.pass_key),
+                self.l("passes-couple-request-invitee-paid", passKey=self.pass_key),
                 reply_markup=ReplyKeyboardRemove(),
                 parse_mode=ParseMode.HTML,
             )
@@ -1269,7 +1269,7 @@ class PassUpdate:
             matcher["couple"] = {"$exists": False}
 
         sets = {
-            "state": "assigned" if price is None or price > 0 else "payed",
+            "state": "assigned" if price is None or price > 0 else "paid",
             "price": price
             if price is not None
             else CURRENT_PRICE[self.pass_key] * len(uids),
@@ -1375,7 +1375,7 @@ class PassUpdate:
         pass_data = await self.get_pass()
         if not isinstance(pass_data, dict):
             return False
-        if pass_data.get("state") == "payed":
+        if pass_data.get("state") == "paid":
             return False
         uids = [self.update.user]
         if (
@@ -1391,7 +1391,7 @@ class PassUpdate:
                 "bot_id": self.bot,
                 "pass_key": self.pass_key,
                 "user_id": {"$in": uids},
-                "state": {"$ne": "payed"},
+                "state": {"$ne": "paid"},
             }
         )
         return delete_result.deleted_count > 0
@@ -2111,7 +2111,7 @@ class Passes(BasePlugin):
         raise Exception("No payment admins configured for pass %s", pass_key)
 
     async def get_all_passes(self, pass_key: str = PASS_RU, with_unpaid: bool = False, with_waitlist: bool = False) -> list[dict]:
-        states = ["payed"]
+        states = ["paid"]
         if with_unpaid:
             states.append("assigned")
         query = {
@@ -2126,6 +2126,18 @@ class Passes(BasePlugin):
         bot_started: Event = self.base_app.bot_started
         await bot_started.wait()
         logger.info("timeout processor started")
+        migration_result = await self.pass_db.update_many(
+            {
+                "bot_id": self.bot.id,
+                "state": "payed",
+            },
+            {"$set": {"state": "paid"}},
+        )
+        if migration_result.modified_count:
+            logger.info(
+                "Migrated %s passes for from payed to paid",
+                migration_result.modified_count,
+            )
         # await self.migrate_embedded_passes()
         for pass_key in PASS_KEYS:
             async for pass_doc in self.pass_db.find(
@@ -2216,7 +2228,7 @@ class Passes(BasePlugin):
                 {
                     "bot_id": self.bot.id,
                     "pass_key": PASS_RU,
-                    "state": {"$in": ["assigned", "payed"]},
+                    "state": {"$in": ["assigned", "paid"]},
                 }
             ):
                 try:
@@ -2390,9 +2402,9 @@ class Passes(BasePlugin):
                         and max_assigned < group["count"]
                     ):
                         max_assigned = group["count"]
-                counts["leader"]["RA"] = (counts["leader"].get("payed", 0) +
+                counts["leader"]["RA"] = (counts["leader"].get("paid", 0) +
                                           counts["leader"].get("assigned", 0))
-                counts["follower"]["RA"] = (counts["follower"].get("payed", 0) +
+                counts["follower"]["RA"] = (counts["follower"].get("paid", 0) +
                                             counts["follower"].get("assigned", 0))
                 cap_per_role = self.config.passes.events[pass_key].amount_cap_per_role
                 if (counts["leader"]["RA"] >= cap_per_role and
@@ -2458,9 +2470,9 @@ class Passes(BasePlugin):
                             continue
                         counts[group["_id"]["role"]][group["_id"]["state"]] = \
                             group["count"]
-                    counts["leader"]["RA"] = (counts["leader"].get("payed", 0) +
+                    counts["leader"]["RA"] = (counts["leader"].get("paid", 0) +
                                               counts["leader"].get("assigned", 0))
-                    counts["follower"]["RA"] = (counts["follower"].get("payed", 0) +
+                    counts["follower"]["RA"] = (counts["follower"].get("paid", 0) +
                                                 counts["follower"].get("assigned", 0))
                     cap_per_role = self.config.passes.events[
                         pass_key

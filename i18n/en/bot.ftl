@@ -64,7 +64,7 @@ orders-command-description = Order food, transportation and activities.
 orders-edit-button = Change order
 orders-finish-button-text = Submit
 orders-message-list = Your orders are listed here
-orders-message-payed-where =
+orders-message-paid-where =
     I received a PDF, which may be a payment proof. Am I right?
 
 orders-message-payment-options =
@@ -93,7 +93,7 @@ orders-payment-cash-requested =
     Total order sum: Br {$total}
     order is in the name <i>{$name}</i>.
     After cash is collected, the admin will mark your order as paid.
-orders-payed-button = It's payment proof
+orders-paid-button = It's payment proof
 orders-placeholder-first-name=First name
 orders-placeholder-last-name=Last name
 orders-placeholder-patronymus=Second name(s)
@@ -517,7 +517,7 @@ passes-pass-edit-assigned=
     - Cancel the assignment
     
     Please note that cancellations or missing the payment deadline are irreversible.
-passes-pass-edit-payed=
+passes-pass-edit-paid=
     Hello, <i>{$name}</i>!
     Congratulations! The {passes-pass-description} is now officially yours as you have successfully paid for it.
     You can change the name associated with the pass if necessary.
@@ -567,7 +567,7 @@ passes-couple-request-wrong-data =
     There either disable the limitation, or add me as an exception.
 
     You can try again using /passes command.
-passes-couple-request-invitee-payed =
+passes-couple-request-invitee-paid =
     Oops, this person is already registered and has a pass. You can try again using /passes command.
 passes-couple-invitation =
     A user <i>{$coupleName}</i>, {$coupleLink} invited you to {passes-pass-title-long}.
