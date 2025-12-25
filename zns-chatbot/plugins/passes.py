@@ -2135,7 +2135,7 @@ class Passes(BasePlugin):
         )
         if migration_result.modified_count:
             logger.info(
-                "Migrated %s passes for from payed to paid",
+                "Migrated %s passes from payed to paid",
                 migration_result.modified_count,
             )
         # await self.migrate_embedded_passes()
