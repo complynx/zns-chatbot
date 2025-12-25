@@ -456,13 +456,6 @@ class PassUpdate:
                 {"$unset": {"couple": ""}},
             )
             if result.modified_count > 0:
-                await self.base.user_db.update_one(
-                    {
-                        "user_id": self.update.user,
-                        "bot_id": self.bot,
-                    },
-                    {"$unset": {self.pass_key + ".couple": ""}},
-                )
                 success = True
 
         if success:
@@ -1233,21 +1226,6 @@ class PassUpdate:
         if self.pass_data is not None and self.pass_owner_id == uid:
             return self.pass_data
         pass_doc = await self.base.get_pass_for_user(uid, pass_key)
-        if pass_doc is None:
-            # Legacy fallback: try to migrate from embedded user doc
-            user = await self.base.user_db.find_one(
-                {
-                    "user_id": uid,
-                    "bot_id": self.bot,
-                    pass_key: {"$exists": True},
-                }
-            )
-            if user is not None and pass_key in user:
-                logger.warning(
-                    f"pass data for user {uid} and pass {pass_key} not found in pass DB, migrating from user document"
-                )
-                pass_doc = user[pass_key]
-                await self.base.save_pass_data(uid, pass_key, pass_doc)
         if pass_doc is not None and uid == self.update.user:
             self.pass_data = pass_doc
             self.pass_owner_id = uid
@@ -1416,22 +1394,7 @@ class PassUpdate:
                 "state": {"$ne": "payed"},
             }
         )
-        user_result = await self.base.user_db.update_many(
-            {
-                "user_id": {"$in": uids},
-                "bot_id": self.bot,
-                self.pass_key + ".state": {"$ne": "payed"},
-            },
-            {
-                "$unset": {
-                    self.pass_key: "",
-                }
-            },
-        )
-        return (
-            delete_result.deleted_count > 0
-            or user_result.modified_count > 0
-        )
+        return delete_result.deleted_count > 0
 
     async def notify_no_more_passes(self, pass_key):
         self.set_pass_key(pass_key)
@@ -1600,15 +1563,6 @@ class PassUpdate:
                             if last_pass is not None:
                                 last_pass_data = self.base._pass_doc_to_data(last_pass) or {}
                                 last_role = last_pass_data.get("role")
-                        if last_role is None:
-                            last_role = user.get("pass_2026_1", {}).get(
-                                    "role",
-                                    user.get("pass_2025_2", {}).get(
-                                        "role",
-                                        user.get("pass_2025_1", {}).get(
-                                            "role", None,
-                                        ),
-                                    ))
                         if last_role is None:
                             raise ValueError(
                                 f"user {user_id} has no last role to create pass from"
@@ -1788,18 +1742,7 @@ class PassUpdate:
                         "pass_key": self.pass_key,
                     }
                 )
-                upd_result = await self.base.user_db.update_one(
-                    {
-                        "user_id": recipient,
-                        "bot_id": self.bot,
-                    },
-                    {
-                        "$unset": {
-                            self.pass_key: "",
-                        },
-                    },
-                )
-                if result.deleted_count <= 0 and upd_result.modified_count <= 0:
+                if result.deleted_count <= 0:
                     logger.info(
                         f"pass {self.pass_key=} for {recipient=} was not cancelled"
                     )
@@ -2144,59 +2087,6 @@ class Passes(BasePlugin):
                 "user_id": {"$in": user_ids},
             }
         )
-        await self.user_db.update_many(
-            {
-                "bot_id": self.bot.id,
-                "user_id": {"$in": user_ids},
-            },
-            {"$unset": {pass_key: ""}},
-        )
-
-    async def migrate_embedded_passes(self) -> None:
-        """One-time helper to mirror embedded passes into the dedicated collection."""
-        migrated = 0
-        try:
-            for pass_key in ["pass_2025_1", "pass_2025_2"] + PASS_KEYS:
-                async for user in self.user_db.find(
-                    {
-                        "bot_id": self.bot.id,
-                        pass_key: {"$exists": True},
-                    }
-                ):
-                    pass_data = user.get(pass_key)
-                    if not isinstance(pass_data, dict):
-                        continue
-                    doc = dict(pass_data)
-                    doc["user_id"] = user["user_id"]
-                    doc["pass_key"] = pass_key
-                    doc["bot_id"] = self.bot.id
-                    result = await self.pass_db.update_one(
-                        {
-                            "bot_id": self.bot.id,
-                            "user_id": user["user_id"],
-                            "pass_key": pass_key,
-                        },
-                        {"$set": doc},
-                        upsert=True,
-                    )
-                    if result.upserted_id is not None:
-                        migrated += 1
-                    if result.modified_count > 0 or result.upserted_id is not None:
-                        await self.user_db.update_one(
-                            {
-                                "bot_id": self.bot.id,
-                                "user_id": user["user_id"],
-                            },
-                            {
-                                "$unset": {
-                                    pass_key: "",
-                                }
-                            },
-                        )
-            if migrated:
-                logger.info("Migrated %s embedded passes into the passes collection", migrated)
-        except Exception as e:
-            logger.error("Exception while migrating embedded passes: %s", e, exc_info=1)
 
     def get_all_payment_admins(self, pass_key: str) -> list[int]:
         admins = self.payment_admins.get(pass_key, [])
@@ -2236,7 +2126,7 @@ class Passes(BasePlugin):
         bot_started: Event = self.base_app.bot_started
         await bot_started.wait()
         logger.info("timeout processor started")
-        await self.migrate_embedded_passes()
+        # await self.migrate_embedded_passes()
         for pass_key in PASS_KEYS:
             async for pass_doc in self.pass_db.find(
                 {
