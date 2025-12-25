@@ -19,6 +19,7 @@ class App(object):
     bot = None
     localization = None
     mongodb = None
+    passes_collection = None
     users_collection = None
     storage = None
 
@@ -32,6 +33,7 @@ async def main(cfg: Config):
     if cfg.mongo_db.address != "":
         logger.info(f"db address {cfg.mongo_db.address}")
         app.mongodb = AsyncIOMotorClient(cfg.mongo_db.address).get_database()
+        app.passes_collection = app.mongodb[cfg.mongo_db.passes_collection]
         app.users_collection = app.mongodb[cfg.mongo_db.users_collection]
         app.storage = Storage(app.mongodb[cfg.mongo_db.bots_storage])
 

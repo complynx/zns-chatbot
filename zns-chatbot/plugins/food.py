@@ -1514,6 +1514,7 @@ class Food(BasePlugin):
                 # Wait for the next notification time
                 await sleep(NOTIFICATION_CHECK_INTERVAL)
                 passes = await passes_plugin.get_all_passes(with_unpaid=True)
+                pass_users = {p["user_id"]: p for p in passes}
                 # Send notifications to users with pending orders
                 if (now_msk() > ( # after the first notification time
                         self.deadline - self.config.food.notification_first_time
@@ -1545,21 +1546,23 @@ class Food(BasePlugin):
                                 exc_info=True,
                             )
                             continue
-                    for user in passes:
+                    for user_id, pass_doc in pass_users.items():
                         try:
-                            upd = await self.create_food_update_for_user(user["user_id"])
+                            upd = await self.create_food_update_for_user(user_id)
                             order = await self.get_order(
-                                user_id=user["user_id"]
+                                user_id=user_id
                             )
-                            if (not order and
-                                 not user.get(PASS_KEY, {}).get("notified_food_first", False)):
+                            pass_data = passes_plugin._pass_doc_to_data(pass_doc) or {}
+                            notified_first = pass_data.get("notified_food_first", False)
+                            if (not order and not notified_first):
                                 await upd.update.reply(
                                     upd.l("food-no-order-notification-first"),
                                     parse_mode=ParseMode.HTML
                                 )
-                                await self.user_db.update_one(
-                                    {"user_id": user["user_id"]},
-                                    {"$set": {f"{PASS_KEY}.notified_food_first": True}}
+                                await passes_plugin.update_pass_fields(
+                                    [user_id],
+                                    PASS_KEY,
+                                    set_fields={"notified_food_first": True},
                                 )
                         except Exception as e:
                             logger.error(
@@ -1598,21 +1601,23 @@ class Food(BasePlugin):
                                 exc_info=True,
                             )
                             continue
-                    for user in passes:
+                    for user_id, pass_doc in pass_users.items():
                         try:
-                            upd = await self.create_food_update_for_user(user["user_id"])
+                            upd = await self.create_food_update_for_user(user_id)
                             order = await self.get_order(
-                                user_id=user["user_id"]
+                                user_id=user_id
                             )
-                            if (not order and
-                                 not user.get(PASS_KEY, {}).get("notified_food_last", False)):
+                            pass_data = passes_plugin._pass_doc_to_data(pass_doc) or {}
+                            notified_last = pass_data.get("notified_food_last", False)
+                            if (not order and not notified_last):
                                 await upd.update.reply(
                                     upd.l("food-no-order-notification-last"),
                                     parse_mode=ParseMode.HTML
                                 )
-                                await self.user_db.update_one(
-                                    {"user_id": user["user_id"]},
-                                    {"$set": {f"{PASS_KEY}.notified_food_last": True}}
+                                await passes_plugin.update_pass_fields(
+                                    [user_id],
+                                    PASS_KEY,
+                                    set_fields={"notified_food_last": True},
                                 )
                         except Exception as e:
                             logger.error(

@@ -59,6 +59,8 @@ class PassUpdate:
         self.bot = self.update.bot.id
         self.pass_key = ""
         self.user = None
+        self.pass_owner_id: int | None = None
+        self.pass_data: dict | None = None
 
     def is_passport_required(self) -> bool:
         try:
@@ -132,17 +134,15 @@ class PassUpdate:
             l = upd.l  # noqa: E741
             lc = upd.update.language_code
         if not isinstance(u_pass, dict):
-            if pass_key in user:
-                u_pass = user[pass_key]
-            else:
-                u_pass = {}
+            u_pass = await self.get_pass(pass_key, user.get("user_id"))
+        if not isinstance(u_pass, dict):
+            u_pass = {}
         keys = dict(u_pass)
         keys["passKey"] = pass_key
         keys["name"] = user.get("legal_name", "")
         keys["link"] = client_user_link_html(user, language_code=lc)
         if couple is None:
-            if "couple" in u_pass:
-                couple = u_pass["couple"]
+            couple = u_pass.get("couple")
         if isinstance(couple, int):
             couple = await self.base.user_db.find_one(
                 {
@@ -151,8 +151,11 @@ class PassUpdate:
                 }
             )
         if isinstance(couple, dict):
+            couple_pass = await self.get_pass(
+                pass_key, couple.get("user_id")
+            )
             keys["coupleName"] = couple.get("legal_name")
-            keys["coupleRole"] = couple.get(pass_key, dict()).get("role")
+            keys["coupleRole"] = couple_pass.get("role") if isinstance(couple_pass, dict) else ""
             keys["coupleLink"] = client_user_link_html(couple, language_code=lc)
             if "type" not in keys:
                 keys["type"] = "couple"
@@ -270,32 +273,18 @@ class PassUpdate:
         self.set_pass_key(key)
         admin_id = int(admin_id_str)
         assert admin_id in self.base.payment_admins[self.pass_key]
-        updated = await self.base.user_db.update_one(
-            {
-                "user_id": self.update.user,
-                "bot_id": self.update.bot.id,
-                self.pass_key: {"$exists": True},
-            },
-            {
-                "$set": {
-                    self.pass_key + ".proof_admin": admin_id,
-                }
-            },
-        )
-        if updated.matched_count > 0:  # has pass
-            user = await self.base.user_db.find_one(
-                {
-                    "user_id": self.update.user,
-                    "bot_id": self.update.bot.id,
-                }
-            )
-            await self.show_pass_edit(user, user[self.pass_key])
+        pass_data = await self.get_pass(key)
+        if pass_data is not None:  # has pass
+            pass_data = dict(pass_data)
+            pass_data["proof_admin"] = admin_id
+            await self.base.save_pass_data(self.update.user, self.pass_key, pass_data)
+            user, _ = await self.base.get_user_with_pass(self.update.user, self.pass_key)
+            await self.show_pass_edit(user or {}, pass_data)
         else:  # no pass yet
             updated = await self.base.user_db.update_one(
                 {
                     "user_id": self.update.user,
                     "bot_id": self.update.bot.id,
-                    self.pass_key: {"$exists": False},
                 },
                 {
                     "$set": {
@@ -400,55 +389,27 @@ class PassUpdate:
     async def accept_invitation(self, inviter_id):
         inviter_id = int(inviter_id)
         user = await self.get_user()
-        updated = await self.base.user_db.update_one(
-            {
-                "user_id": inviter_id,
-                "bot_id": self.update.bot.id,
-                self.pass_key + ".couple": self.update.user,
-            },
-            {
-                "$set": {
-                    self.pass_key + ".state": "waitlist",
-                }
-            },
-        )
-        if updated.matched_count > 0:
-            inviter = await self.base.user_db.find_one(
-                {
-                    "user_id": inviter_id,
-                    "bot_id": self.update.bot.id,
-                    self.pass_key + ".couple": self.update.user,
-                }
+        inviter, inviter_pass = await self.base.get_user_with_pass(inviter_id, self.pass_key)
+        if inviter is not None and isinstance(inviter_pass, dict):
+            inviter_pass = dict(inviter_pass)
+            inviter_pass["state"] = "waitlist"
+            inviter_pass["couple"] = self.update.user
+            await self.base.save_pass_data(inviter_id, self.pass_key, inviter_pass)
+            u_pass = dict(inviter_pass)
+            u_pass["role"] = "leader" if u_pass["role"].startswith("f") else "follower"
+            u_pass["couple"] = inviter_id
+            await self.base.save_pass_data(self.update.user, self.pass_key, u_pass)
+            inv_update = await self.base.create_update_from_user(inviter_id)
+            inv_update.set_pass_key(self.pass_key)
+            await inv_update.handle_invitation_accepted(user)
+            await self.update.reply(
+                self.l(
+                    "passes-invitation-successfully-accepted", passKey=self.pass_key
+                ),
+                parse_mode=ParseMode.HTML,
             )
-            if inviter is not None:
-                u_pass = dict(inviter[self.pass_key])
-                u_pass["role"] = (
-                    "leader" if u_pass["role"].startswith("f") else "follower"
-                )
-                u_pass["couple"] = inviter_id
-                await self.base.user_db.update_one(
-                    {
-                        "user_id": self.update.user,
-                        "bot_id": self.update.bot.id,
-                    },
-                    {
-                        "$set": {
-                            self.pass_key: u_pass,
-                        }
-                    },
-                )
-                user[self.pass_key] = u_pass
-                inv_update = await self.base.create_update_from_user(inviter_id)
-                inv_update.set_pass_key(self.pass_key)
-                await inv_update.handle_invitation_accepted(user)
-                await self.update.reply(
-                    self.l(
-                        "passes-invitation-successfully-accepted", passKey=self.pass_key
-                    ),
-                    parse_mode=ParseMode.HTML,
-                )
 
-                return await self.base.recalculate_queues()
+            return await self.base.recalculate_queues()
         await self.update.reply(
             self.l("passes-invitation-accept-failed", passKey=self.pass_key),
             parse_mode=ParseMode.HTML,
@@ -458,14 +419,8 @@ class PassUpdate:
         self.set_pass_key(key)
         inviter_id = int(inviter_id)
         user = await self.get_user()
-        inviter = await self.base.user_db.find_one(
-            {
-                "user_id": inviter_id,
-                "bot_id": self.update.bot.id,
-                self.pass_key + ".couple": self.update.user,
-            }
-        )
-        if inviter is not None:
+        inviter_pass = await self.base.get_pass_for_user(inviter_id, self.pass_key)
+        if inviter_pass is not None and inviter_pass.get("couple") == self.update.user:
             inv_update = await self.base.create_update_from_user(inviter_id)
             inv_update.set_pass_key(key)
             await inv_update.handle_invitation_declined(user)
@@ -482,17 +437,35 @@ class PassUpdate:
         )
 
     async def handle_invitation_declined(self, invitee):
-        result = await self.base.user_db.update_one(
-            {
-                "user_id": self.update.user,
-                "bot_id": self.update.bot.id,
-                self.pass_key + ".couple": invitee["user_id"],
-            },
-            {
-                "$unset": {self.pass_key + ".couple": ""},
-            },
-        )
-        if result.modified_count > 0:
+        pass_data = await self.get_pass()
+        success = False
+        if isinstance(pass_data, dict):
+            success = pass_data.get("couple") == invitee["user_id"]
+            if success:
+                updated_pass = dict(pass_data)
+                updated_pass.pop("couple", None)
+                await self.base.save_pass_data(self.update.user, self.pass_key, updated_pass)
+        else:
+            result = await self.base.pass_db.update_one(
+                {
+                    "bot_id": self.bot,
+                    "user_id": self.update.user,
+                    "pass_key": self.pass_key,
+                    "couple": invitee["user_id"],
+                },
+                {"$unset": {"couple": ""}},
+            )
+            if result.modified_count > 0:
+                await self.base.user_db.update_one(
+                    {
+                        "user_id": self.update.user,
+                        "bot_id": self.bot,
+                    },
+                    {"$unset": {self.pass_key + ".couple": ""}},
+                )
+                success = True
+
+        if success:
             await self.update.reply(
                 await self.format_message(
                     "passes-invitation-was-declined", couple=invitee
@@ -528,35 +501,41 @@ class PassUpdate:
     async def handle_cq_start(self, pass_key: str):
         self.set_pass_key(pass_key)
         user = await self.get_user()
-        inviter = await self.base.user_db.find_one(
+        inviter_pass = await self.base.pass_db.find_one(
             {
-                "user_id": {"$ne": self.update.user},
-                "bot_id": self.update.bot.id,
-                self.pass_key + ".couple": self.update.user,
+                "bot_id": self.bot,
+                "pass_key": self.pass_key,
+                "couple": self.update.user,
             }
         )
-        if inviter is not None:
+        if inviter_pass is not None:
+            inviter_user = await self.base.user_db.find_one(
+                {
+                    "user_id": inviter_pass.get("user_id"),
+                    "bot_id": self.bot,
+                }
+            )
+            inviter_id = inviter_pass.get("user_id")
+            existing_pass = await self.get_pass()
             if (
-                self.pass_key not in user
-                or user[self.pass_key].get("couple", 0) != inviter["user_id"]
+                existing_pass is None
+                or existing_pass.get("couple", 0) != inviter_id
             ):
-                if self.pass_key not in user or user[self.pass_key]["state"] != "payed":
-                    return await self.show_couple_invitation(inviter)
+                if existing_pass is None or existing_pass.get("state") != "payed":
+                    return await self.show_couple_invitation(inviter_user or {"user_id": inviter_id})
                 else:
-                    inv_update = await self.base.create_update_from_user(
-                        inviter["user_id"]
-                    )
+                    inv_update = await self.base.create_update_from_user(inviter_id)
                     inv_update.set_pass_key(self.pass_key)
                     await inv_update.handle_invitation_declined(user)
-        if self.pass_key in user:
-            return await self.show_pass_edit(user, user[self.pass_key])
+        existing_pass = await self.get_pass()
+        if existing_pass is not None:
+            return await self.show_pass_edit(user, existing_pass)
         else:
             return await self.new_pass()
 
     async def handle_cq_pay(self, pass_key: str):
-        self.set_pass_key(pass_key)
-        user = await self.get_user()
-        if self.pass_key not in user or user[self.pass_key]["state"] != "assigned":
+        pass_data = await self.get_pass(pass_key)
+        if pass_data is None or pass_data.get("state") != "assigned":
             return await self.handle_cq_exit()
         await self.update.edit_or_reply(
             await self.format_message("passes-payment-request-callback-message"),
@@ -582,37 +561,33 @@ class PassUpdate:
         if not self.base.is_payment_admin(self.update.user, self.pass_key):
             return
         user_id = int(user_id_s)
-        user = await self.base.user_db.find_one(
+        pass_doc = await self.base.pass_db.find_one(
             {
-                "user_id": user_id,
                 "bot_id": self.bot,
-                self.pass_key + ".state": "payed",
+                "user_id": user_id,
+                "pass_key": self.pass_key,
+                "state": "payed",
             }
         )
-        assert user is not None
-        u_pass = user[self.pass_key]
+        if pass_doc is None:
+            return
+        u_pass = self.base._pass_doc_to_data(pass_doc) or {}
         uids = [user_id]
-        if "couple" in user[self.pass_key]:
-            uids.append(user[self.pass_key]["couple"])
-        result = await self.base.user_db.update_many(
-            {
-                "user_id": {"$in": uids},
-                "bot_id": self.bot,
-                self.pass_key: {"$exists": True},
-            },
-            {
-                "$set": {
-                    self.pass_key + ".state": "payed",
-                    self.pass_key + ".proof_received": u_pass["proof_received"],
-                    self.pass_key + ".proof_file": u_pass["proof_file"],
-                    self.pass_key + ".proof_admin": u_pass["proof_admin"],
-                    self.pass_key + ".proof_admin_accepted": self.update.user,
-                    self.pass_key + ".proof_accepted": now_msk(),
-                }
+        if "couple" in u_pass:
+            uids.append(u_pass["couple"])
+        accepted_ts = now_msk()
+        await self.base.update_pass_fields(
+            uids,
+            self.pass_key,
+            set_fields={
+                "state": "payed",
+                "proof_received": u_pass.get("proof_received"),
+                "proof_file": u_pass.get("proof_file"),
+                "proof_admin": u_pass.get("proof_admin"),
+                "proof_admin_accepted": self.update.user,
+                "proof_accepted": accepted_ts,
             },
         )
-        if result.modified_count <= 0:
-            return
         await self.update.reply(
             await self.format_message(
                 "passes-payment-proof-accepted",
@@ -636,36 +611,32 @@ class PassUpdate:
         if not self.base.is_payment_admin(self.update.user, self.pass_key):
             return
         user_id = int(user_id_s)
-        user = await self.base.user_db.find_one(
+        pass_doc = await self.base.pass_db.find_one(
             {
-                "user_id": user_id,
                 "bot_id": self.bot,
-                self.pass_key + ".state": "payed",
+                "user_id": user_id,
+                "pass_key": self.pass_key,
+                "state": "payed",
             }
         )
-        assert user is not None
-        u_pass = user[self.pass_key]
+        if pass_doc is None:
+            return
+        u_pass = self.base._pass_doc_to_data(pass_doc) or {}
         uids = [user_id]
-        if "couple" in user[self.pass_key]:
-            uids.append(user[self.pass_key]["couple"])
-        result = await self.base.user_db.update_one(
-            {
-                "user_id": {"$in": uids},
-                "bot_id": self.bot,
-                self.pass_key: {"$exists": True},
-            },
-            {
-                "$set": {
-                    self.pass_key + ".state": "assigned",
-                    self.pass_key + ".proof_received": u_pass["proof_received"],
-                    self.pass_key + ".proof_file": u_pass["proof_file"],
-                    self.pass_key + ".proof_admin": u_pass["proof_admin"],
-                    self.pass_key + ".proof_rejected": now_msk(),
-                }
+        if "couple" in u_pass:
+            uids.append(u_pass["couple"])
+        rejected_ts = now_msk()
+        await self.base.update_pass_fields(
+            uids,
+            self.pass_key,
+            set_fields={
+                "state": "assigned",
+                "proof_received": u_pass.get("proof_received"),
+                "proof_file": u_pass.get("proof_file"),
+                "proof_admin": u_pass.get("proof_admin"),
+                "proof_rejected": rejected_ts,
             },
         )
-        if result.modified_count <= 0:
-            return
         await self.update.reply(
             await self.format_message(
                 "passes-payment-proof-rejected",
@@ -725,40 +696,40 @@ class PassUpdate:
             import mimetypes
 
             file_ext = mimetypes.guess_extension(doc.mime_type)
-        user = await self.get_user()
-        if self.pass_key not in user or user[self.pass_key]["state"] != "assigned":
+        pass_data = await self.get_pass()
+        if pass_data is None or pass_data.get("state") != "assigned":
             return await self.handle_cq_exit()
-        uids = [user["user_id"]]
+        uids = [self.update.user]
         req = {
             "bot_id": self.bot,
-            self.pass_key + ".state": "assigned",
-            self.pass_key + ".type": user[self.pass_key]["type"]
-            if "type" in user[self.pass_key]
-            else "solo",
+            "pass_key": self.pass_key,
+            "state": "assigned",
+            "type": pass_data.get("type", "solo"),
         }
-        if "couple" in user[self.pass_key]:
-            uids.append(user[self.pass_key]["couple"])
-            req[self.pass_key + ".couple"] = {"$in": uids}
+        if "couple" in pass_data:
+            uids.append(pass_data["couple"])
+            req["couple"] = {"$in": uids}
         req["user_id"] = {"$in": uids}
-        result = await self.base.user_db.update_many(
+        proof_received = now_msk()
+        result = await self.base.pass_db.update_many(
             req,
             {
                 "$set": {
-                    self.pass_key + ".state": "payed",
-                    self.pass_key + ".proof_received": now_msk(),
-                    self.pass_key + ".proof_file": f"{doc.file_id}{file_ext}",
-                    self.pass_key + ".proof_admin": user[self.pass_key]["proof_admin"],
+                    "state": "payed",
+                    "proof_received": proof_received,
+                    "proof_file": f"{doc.file_id}{file_ext}",
+                    "proof_admin": pass_data.get("proof_admin"),
                 }
             },
         )
         if result.modified_count <= 0:
             return
-        if user[self.pass_key]["proof_admin"] in self.base.get_all_payment_admins(
+        if pass_data.get("proof_admin") in self.base.get_all_payment_admins(
             self.pass_key
         ):
             admin = await self.base.user_db.find_one(
                 {
-                    "user_id": user[self.pass_key]["proof_admin"],
+                    "user_id": pass_data.get("proof_admin"),
                     "bot_id": self.bot,
                 }
             )
@@ -773,7 +744,7 @@ class PassUpdate:
             await self.update.reply(
                 await self.format_message(
                     "passes-adm-payment-proof-received",
-                    user=user,
+                    user=self.update.user,
                     for_user=admin["user_id"],
                 ),
                 chat_id=admin["user_id"],
@@ -880,6 +851,9 @@ class PassUpdate:
     async def handle_cq_solo(self, key: str):
         self.set_pass_key(key)
         user = await self.get_user()
+        existing_pass = await self.base.get_pass_for_user(self.update.user, self.pass_key)
+        if existing_pass is None and self.pass_key in user and isinstance(user[self.pass_key], dict):
+            existing_pass = user[self.pass_key]
         u_pass = {
             "role": user["role"],
             "state": "waitlist",
@@ -887,24 +861,19 @@ class PassUpdate:
             "type": "solo",
             "proof_admin": user.get("proof_admins", {}).get(
                 self.pass_key,
-                choice(self.base.payment_admins[self.pass_key]),
+                self.base.pick_payment_admin(self.pass_key),
             ),
         }
-        if self.pass_key in user:
-            u_pass["date_created"] = user[self.pass_key]["date_created"]
-            u_pass["role"] = user[self.pass_key]["role"]
-            u_pass["proof_admin"] = user[self.pass_key].get(
+        if isinstance(existing_pass, dict):
+            u_pass["date_created"] = existing_pass.get("date_created", u_pass["date_created"])
+            u_pass["role"] = existing_pass.get("role", u_pass["role"])
+            u_pass["proof_admin"] = existing_pass.get(
                 "proof_admin",
-                choice(self.base.payment_admins[self.pass_key]),
+                u_pass["proof_admin"],
             )
-        await self.base.user_db.update_one(
-            {"user_id": self.update.user, "bot_id": self.bot},
-            {
-                "$set": {
-                    self.pass_key: u_pass,
-                }
-            },
-        )
+            if u_pass["proof_admin"] not in self.base.payment_admins[self.pass_key]:
+                u_pass["proof_admin"] = self.base.pick_payment_admin(self.pass_key)
+        await self.base.save_pass_data(self.update.user, self.pass_key, u_pass)
         keys = dict(u_pass)
         if self.is_passport_required():
             keys["name"] = user.get("legal_name", "")
@@ -949,17 +918,18 @@ class PassUpdate:
             )
         other_user_id = msg.forward_origin.sender_user.id
 
-        invitee = await self.base.user_db.find_one(
-            {
-                "user_id": other_user_id,
-                "bot_id": self.update.bot.id,
-            }
-        )
-        if (
-            invitee is not None
-            and self.pass_key in invitee
-            and invitee[self.pass_key]["state"] == "payed"
-        ):
+        invitee_pass = await self.base.get_pass_for_user(other_user_id, self.pass_key)
+        invitee = None
+        if invitee_pass is None:
+            invitee = await self.base.user_db.find_one(
+                {
+                    "user_id": other_user_id,
+                    "bot_id": self.update.bot.id,
+                }
+            )
+            if invitee is not None and self.pass_key in invitee:
+                invitee_pass = invitee[self.pass_key]
+        if isinstance(invitee_pass, dict) and invitee_pass.get("state") == "payed":
             return await self.update.reply(
                 self.l("passes-couple-request-invitee-payed", passKey=self.pass_key),
                 reply_markup=ReplyKeyboardRemove(),
@@ -967,6 +937,9 @@ class PassUpdate:
             )
 
         user = await self.get_user()
+        existing_pass = await self.base.get_pass_for_user(self.update.user, self.pass_key)
+        if existing_pass is None and self.pass_key in user and isinstance(user[self.pass_key], dict):
+            existing_pass = user[self.pass_key]
         u_pass = {
             "role": user["role"],
             "state": "waiting-for-couple",
@@ -975,25 +948,19 @@ class PassUpdate:
             "couple": other_user_id,
             "proof_admin": user.get("proof_admins", {}).get(
                 self.pass_key,
-                choice(self.base.payment_admins[self.pass_key]),
+                self.base.pick_payment_admin(self.pass_key),
             ),
         }
-        if self.pass_key in user:
-            u_pass["date_created"] = user[self.pass_key]["date_created"]
-            u_pass["role"] = user[self.pass_key]["role"]
-            u_pass["proof_admin"] = user[self.pass_key].get(
+        if isinstance(existing_pass, dict):
+            u_pass["date_created"] = existing_pass.get("date_created", u_pass["date_created"])
+            u_pass["role"] = existing_pass.get("role", u_pass["role"])
+            u_pass["proof_admin"] = existing_pass.get(
                 "proof_admin",
-                choice(self.base.payment_admins[self.pass_key]),
+                u_pass["proof_admin"],
             )
-        await self.base.user_db.update_one(
-            {"user_id": self.update.user, "bot_id": self.bot},
-            {
-                "$set": {
-                    self.pass_key: u_pass,
-                }
-            },
-        )
-        user[self.pass_key] = u_pass
+            if u_pass["proof_admin"] not in self.base.payment_admins[self.pass_key]:
+                u_pass["proof_admin"] = self.base.pick_payment_admin(self.pass_key)
+        await self.base.save_pass_data(self.update.user, self.pass_key, u_pass)
         keys = dict(u_pass)
         if self.is_passport_required():
             keys["name"] = user.get("legal_name", "")
@@ -1188,20 +1155,18 @@ class PassUpdate:
             "role": new_role,
         }
         if len(self.base.payment_admins[self.pass_key]) == 1:
-            setter["proof_admins." + self.pass_key] = self.base.payment_admins[
-                self.pass_key
-            ][0]
+            setter["proof_admins." + self.pass_key] = \
+                self.base.payment_admins[self.pass_key][0]
         await self.base.user_db.update_one(
-            {"user_id": self.update.user, "bot_id": self.bot}, {"$set": setter}
+            {"user_id": self.update.user, "bot_id": self.bot},
+            {"$set": setter},
         )
 
         if len(self.base.payment_admins[self.pass_key]) > 1:
             await self.handle_cq_change_admin(self.pass_key, "passes-pass-role-saved")
         else:
             await self.update.edit_or_reply(
-                self.l(
-                    "passes-pass-admin-saved",
-                ),
+                self.l("passes-pass-admin-saved"),
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup(
                     [
@@ -1251,7 +1216,42 @@ class PassUpdate:
     async def get_user(self):
         if self.user is None:
             self.user = await self.update.get_user()
+        if self.pass_key and self.pass_data is None and self.pass_owner_id is None:
+            cached = await self.base.get_pass_for_user(self.update.user, self.pass_key)
+            if cached is not None:
+                self.pass_data = cached
+                self.pass_owner_id = self.update.user
         return self.user
+
+    async def get_pass(self, pass_key: str | None = None, user_id: int | None = None):
+        if pass_key is not None:
+            self.set_pass_key(pass_key)
+        else:
+            pass_key = self.pass_key
+        assert pass_key is not None, "pass_key must be set"
+        uid = user_id or self.update.user
+        if self.pass_data is not None and self.pass_owner_id == uid:
+            return self.pass_data
+        pass_doc = await self.base.get_pass_for_user(uid, pass_key)
+        if pass_doc is None:
+            # Legacy fallback: try to migrate from embedded user doc
+            user = await self.base.user_db.find_one(
+                {
+                    "user_id": uid,
+                    "bot_id": self.bot,
+                    pass_key: {"$exists": True},
+                }
+            )
+            if user is not None and pass_key in user:
+                logger.warning(
+                    f"pass data for user {uid} and pass {pass_key} not found in pass DB, migrating from user document"
+                )
+                pass_doc = user[pass_key]
+                await self.base.save_pass_data(uid, pass_key, pass_doc)
+        if pass_doc is not None and uid == self.update.user:
+            self.pass_data = pass_doc
+            self.pass_owner_id = uid
+        return pass_doc
 
     async def assign_pass(
         self,
@@ -1263,78 +1263,92 @@ class PassUpdate:
         proof_admin: int | None = None,
     ):
         self.set_pass_key(pass_key)
-        user = await self.base.user_db.find_one(
+        pass_doc = await self.base.pass_db.find_one(
             {
-                "user_id": self.update.user,
                 "bot_id": self.bot,
-                self.pass_key + ".state": "waitlist",
+                "user_id": self.update.user,
+                "pass_key": self.pass_key,
+                "state": "waitlist",
             }
         )
-        if user is None:
+        if pass_doc is None:
             return False
 
+        pass_data = self.base._pass_doc_to_data(pass_doc) or {}
         uids = [self.update.user]
-        if "couple" in user[self.pass_key]:
-            uids.append(user[self.pass_key]["couple"])
+        if "couple" in pass_data:
+            uids.append(pass_data["couple"])
         in_q = {"$in": uids}
         matcher = {
-            "user_id": in_q,
             "bot_id": self.bot,
-            self.pass_key + ".state": "waitlist",
+            "pass_key": self.pass_key,
+            "user_id": in_q,
+            "state": "waitlist",
         }
-        if "couple" in user[self.pass_key]:
-            matcher[self.pass_key + ".couple"] = in_q
+        if "couple" in pass_data:
+            matcher["couple"] = in_q
         else:
-            matcher[self.pass_key + ".couple"] = {"$exists": False}
+            matcher["couple"] = {"$exists": False}
 
         sets = {
-            self.pass_key + ".state": "assigned" if price is None or price > 0 else "payed",
-            self.pass_key + ".price": price
+            "state": "assigned" if price is None or price > 0 else "payed",
+            "price": price
             if price is not None
             else CURRENT_PRICE[self.pass_key] * len(uids),
-            self.pass_key + ".date_assignment": now_msk(),
+            "date_assignment": now_msk(),
         }
         if price is not None and price == 0:
             assert proof_admin is not None, "proof_admin must be set for free pass"
-            sets[self.pass_key + ".proof_received"] = now_msk()
-            sets[self.pass_key + ".proof_file"] = "free_pass"
-            sets[self.pass_key + ".proof_admin"] = proof_admin
-            sets[self.pass_key + ".proof_accepted"] = now_msk()
+            sets["proof_received"] = now_msk()
+            sets["proof_file"] = "free_pass"
+            sets["proof_admin"] = proof_admin
+            sets["proof_accepted"] = now_msk()
         if comment is not None:
-            sets[self.pass_key + ".comment"] = comment
+            sets["comment"] = comment
         if type is not None:
-            sets[self.pass_key + ".type"] = type
+            sets["type"] = type
         if skip_in_balance_count:
-            sets[self.pass_key + ".skip_in_balance_count"] = True
-        result = await self.base.user_db.update_many(matcher, {"$set": sets})
-        have_changes = result.modified_count > 0
-        if result.matched_count < len(uids):
-            r2 = await self.base.user_db.update_many(
-                {
-                    "user_id": in_q,
-                    "bot_id": self.bot,
-                },
-                {"$unset": {self.pass_key: ""}},
-            )
-            have_changes = have_changes or r2.modified_count > 0
-        del matcher[self.pass_key + ".state"]
-        users = await self.base.user_db.find(matcher).to_list(None)
-        for user in users:
-            if result.matched_count < len(uids):
+            sets["skip_in_balance_count"] = True
+        pass_sets = dict(sets)
+        update_result = await self.base.pass_db.update_many(matcher, {"$set": pass_sets})
+        have_changes = update_result.modified_count > 0
+
+        current_count = await self.base.pass_db.count_documents(
+            {"bot_id": self.bot, "pass_key": self.pass_key, "user_id": {"$in": uids}}
+        )
+        if update_result.matched_count < len(uids) or current_count < len(uids):
+            await self.base.delete_passes(uids, self.pass_key)
+            have_changes = True
+
+        users = []
+        async for doc in self.base.user_db.find({"bot_id": self.bot, "user_id": {"$in": uids}}):
+            users.append(doc)
+        pass_docs_after = {
+            d["user_id"]: self.base._pass_doc_to_data(d)
+            for d in await self.base.pass_db.find(
+                {"bot_id": self.bot, "pass_key": self.pass_key, "user_id": {"$in": uids}}
+            ).to_list(None)
+        }
+        for user_doc in users:
+            uid = user_doc["user_id"]
+            if current_count < len(uids):
                 if len(uids) > 1:
-                    upd = await self.base.create_update_from_user(user["user_id"])
+                    upd = await self.base.create_update_from_user(uid)
                     await upd.update.reply(
                         upd.l("passes-error-couple-not-found"),
                         parse_mode=ParseMode.HTML,
                     )
             else:
+                pass_info = pass_docs_after.get(uid, pass_data)
                 logger.info(
-                    f"assigned pass to {user['user_id']}, role {user[self.pass_key]['role']}, name {user.get('legal_name', client_user_name(user))}"
+                    f"assigned pass to {uid}, role {pass_info.get('role')}, name {user_doc.get('legal_name', client_user_name(user_doc))}"
                 )
-                upd = await self.base.create_update_from_user(user["user_id"])
+                upd = await self.base.create_update_from_user(uid)
                 upd.set_pass_key(self.pass_key)
                 await upd.show_pass_edit(
-                    user, user[self.pass_key], "passes-pass-assigned" if price is None or price > 0 else "passes-pass-free-assigned"
+                    user_doc,
+                    pass_info,
+                    "passes-pass-assigned" if price is None or price > 0 else "passes-pass-free-assigned",
                 )
         return have_changes
 
@@ -1380,24 +1394,29 @@ class PassUpdate:
         )
 
     async def cancel_pass(self) -> bool:
-        user = await self.base.user_db.find_one(
-            {
-                "user_id": self.update.user,
-                "bot_id": self.bot,
-                self.pass_key + ".state": {"$ne": "payed"},
-            }
-        )
+        pass_data = await self.get_pass()
+        if not isinstance(pass_data, dict):
+            return False
+        if pass_data.get("state") == "payed":
+            return False
         uids = [self.update.user]
         if (
-            user is not None
-            and "couple" in user[self.pass_key]
-            and user[self.pass_key]["state"] != "waiting-for-couple"
+            "couple" in pass_data
+            and pass_data.get("state") != "waiting-for-couple"
         ):
-            uids.append(user[self.pass_key]["couple"])
-            upd = await self.base.create_update_from_user(user[self.pass_key]["couple"])
+            uids.append(pass_data["couple"])
+            upd = await self.base.create_update_from_user(pass_data["couple"])
             upd.set_pass_key(self.pass_key)
             await upd.inform_pass_cancelled()
-        result = await self.base.user_db.update_many(
+        delete_result = await self.base.pass_db.delete_many(
+            {
+                "bot_id": self.bot,
+                "pass_key": self.pass_key,
+                "user_id": {"$in": uids},
+                "state": {"$ne": "payed"},
+            }
+        )
+        user_result = await self.base.user_db.update_many(
             {
                 "user_id": {"$in": uids},
                 "bot_id": self.bot,
@@ -1409,83 +1428,80 @@ class PassUpdate:
                 }
             },
         )
-        return result.modified_count > 0
+        return (
+            delete_result.deleted_count > 0
+            or user_result.modified_count > 0
+        )
 
     async def notify_no_more_passes(self, pass_key):
         self.set_pass_key(pass_key)
-        await self.base.user_db.update_one(
-            {
-                "user_id": self.update.user,
-                "bot_id": self.bot,
-                self.pass_key + ".state": "waitlist",
-            },
-            {
-                "$set": {
-                    self.pass_key + ".no_more_passes_notification_sent": now_msk(),
-                }
-            },
+        ts = now_msk()
+        pass_data = await self.get_pass()
+        if pass_data is None or pass_data.get("state") != "waitlist":
+            return
+        await self.base.update_pass_fields(
+            [self.update.user],
+            self.pass_key,
+            set_fields={"no_more_passes_notification_sent": ts},
         )
-        user = await self.get_user()
-        await self.show_pass_edit(user, user[self.pass_key], "passes-added-to-waitlist")
+        await self.show_pass_edit(
+            await self.get_user(),
+            {**pass_data, "no_more_passes_notification_sent": ts},
+            "passes-added-to-waitlist",
+        )
 
     async def notify_deadline_close(self, suffix: str = ""):
-        result = await self.base.user_db.update_one(
-            {
-                "user_id": self.update.user,
-                "bot_id": self.bot,
-                self.pass_key + ".state": "assigned",
-                self.pass_key + ".notified_deadline_close" + suffix: {"$exists": False},
-            },
-            {
-                "$set": {
-                    self.pass_key + ".notified_deadline_close" + suffix: now_msk(),
-                }
-            },
+        ts = now_msk()
+        pass_data = await self.get_pass()
+        if pass_data is None or pass_data.get("state") != "assigned":
+            return
+        if ("notified_deadline_close" + suffix) in pass_data:
+            return
+        await self.base.update_pass_fields(
+            [self.update.user],
+            self.pass_key,
+            set_fields={"notified_deadline_close" + suffix: ts},
         )
-        if result.modified_count > 0:
-            await self.update.reply(
-                self.l("passes-payment-deadline-close", passKey=self.pass_key),
-                parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup([]),
-            )
+        await self.update.reply(
+            self.l("passes-payment-deadline-close", passKey=self.pass_key),
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([]),
+        )
 
     async def decline_due_deadline(self, pass_key):
         self.set_pass_key(pass_key)
-        result = await self.base.user_db.update_one(
-            {
-                "user_id": self.update.user,
-                "bot_id": self.update.bot.id,
-                self.pass_key + ".couple": {"$exists": True},
-            },
-            {
-                "$unset": {self.pass_key + ".couple": ""},
-            },
+        pass_data = await self.get_pass()
+        if pass_data is None or "couple" not in pass_data:
+            return
+        await self.base.update_pass_fields(
+            [self.update.user],
+            self.pass_key,
+            unset_fields=["couple"],
         )
-        if result.modified_count > 0:
-            await self.update.reply(
-                await self.format_message("passes-couple-didnt-answer"),
-                reply_markup=InlineKeyboardMarkup(
+        await self.update.reply(
+            await self.format_message("passes-couple-didnt-answer"),
+            reply_markup=InlineKeyboardMarkup(
+                [
                     [
-                        [
-                            InlineKeyboardButton(
-                                self.l("passes-button-solo"),
-                                callback_data=f"{self.base.name}|solo|{self.pass_key}",
-                            ),
-                            InlineKeyboardButton(
-                                self.l("passes-button-couple"),
-                                callback_data=f"{self.base.name}|couple|{self.pass_key}",
-                            ),
-                        ],
-                        [
-                            InlineKeyboardButton(
-                                self.l("passes-button-cancel"),
-                                callback_data=f"{self.base.name}|pass_exit",
-                            ),
-                        ],
-                    ]
-                ),
-                parse_mode=ParseMode.HTML,
-            )
+                        InlineKeyboardButton(
+                            self.l("passes-button-solo"),
+                            callback_data=f"{self.base.name}|solo|{self.pass_key}",
+                        ),
+                        InlineKeyboardButton(
+                            self.l("passes-button-couple"),
+                            callback_data=f"{self.base.name}|couple|{self.pass_key}",
+                        ),
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            self.l("passes-button-cancel"),
+                            callback_data=f"{self.base.name}|pass_exit",
+                        ),
+                    ],
+                ]
+            ),
+            parse_mode=ParseMode.HTML,
+        )
 
     async def decline_invitation_due_deadline(self, pass_key):
         self.set_pass_key(pass_key)
@@ -1540,78 +1556,83 @@ class PassUpdate:
         for recipient in args.recipients:
             try:
                 user_id = int(recipient)
-                user = await self.base.user_db.find_one(
+                created_pass_data = None
+                pass_doc = await self.base.pass_db.find_one(
                     {
                         "user_id": user_id,
                         "bot_id": self.bot,
-                        args.pass_key + ".state": "waitlist",
+                        "pass_key": args.pass_key,
+                        "state": "waitlist",
                     }
                 )
-                if user is None:
+                if pass_doc is None:
                     if ((
                         args.leader is not None or args.follower is not None
                     ) and args.create_name is not None):
-                        await self.base.user_db.update_one(
-                            {
-                                "user_id": user_id,
-                                "bot_id": self.bot,
-                            },
-                            {
-                                "$set": {
-                                    "legal_name": args.create_name,
-                                    args.pass_key: {
-                                        "state": "waitlist",
-                                        "type": "solo",
-                                        "proof_admin": self.base.payment_admins[
-                                            args.pass_key
-                                        ][0],
-                                        "role": "leader" if args.leader else "follower",
-                                        "date_created": now_msk(),
-                                    },
-                                },
-                            },
-                        )
+                        created_pass_data = {
+                            "state": "waitlist",
+                            "type": "solo",
+                            "proof_admin": self.base.payment_admins[args.pass_key][0],
+                            "role": "leader" if args.leader else "follower",
+                            "date_created": now_msk(),
+                        }
                     elif args.create_last:
+                        last_role = None
                         user = await self.base.user_db.find_one(
                             {
                                 "user_id": user_id,
                                 "bot_id": self.bot,
                             }
                         )
-                        last_role = user.get(
-                            "role",
-                            user.get("pass_2025_1", {}).get(
+                        if user is not None:
+                            last_role = user.get(
                                 "role",
-                                user.get("pass_2025_2", {}).get(
-                                    "role", None,
-                                )))
+                                user.get("pass_2025_1", {}).get(
+                                    "role",
+                                    user.get("pass_2025_2", {}).get(
+                                        "role", None,
+                                    )))
+                        if last_role is None:
+                            last_pass = await self.base.pass_db.find_one(
+                                {"bot_id": self.bot, "user_id": user_id},
+                                sort=[("date_created", -1)],
+                            )
+                            if last_pass is not None:
+                                last_pass_data = self.base._pass_doc_to_data(last_pass) or {}
+                                last_role = last_pass_data.get("role")
+                        if last_role is None:
+                            last_role = user.get("pass_2026_1", {}).get(
+                                    "role",
+                                    user.get("pass_2025_2", {}).get(
+                                        "role",
+                                        user.get("pass_2025_1", {}).get(
+                                            "role", None,
+                                        ),
+                                    ))
                         if last_role is None:
                             raise ValueError(
                                 f"user {user_id} has no last role to create pass from"
                             )
-                        await self.base.user_db.update_one(
-                            {
-                                "user_id": user_id,
-                                "bot_id": self.bot,
-                            },
-                            {
-                                "$set": {
-                                    args.pass_key: {
-                                        "state": "waitlist",
-                                        "type": "solo",
-                                        "proof_admin": self.base.payment_admins[
-                                            args.pass_key
-                                        ][0],
-                                        "role": last_role,
-                                        "date_created": now_msk(),
-                                    },
-                                },
-                            },
-                        )
+                        created_pass_data = {
+                            "state": "waitlist",
+                            "type": "solo",
+                            "proof_admin": self.base.pick_payment_admin(args.pass_key),
+                            "role": last_role,
+                            "date_created": now_msk(),
+                        }
                     else:
                         raise ValueError(
                             f"user {user_id} with pass {args.pass_key} not found"
                         )
+                if created_pass_data is not None:
+                    if args.create_name is not None:
+                        await self.base.user_db.update_one(
+                            {"user_id": user_id, "bot_id": self.bot},
+                            {"$set": {"legal_name": args.create_name}},
+                        )
+                    await self.base.save_pass_data(
+                        user_id, args.pass_key, created_pass_data
+                    )
                 upd = await self.base.create_update_from_user(user_id)
 
                 await upd.assign_pass(
@@ -1660,56 +1681,43 @@ class PassUpdate:
             )
 
         # Load target user with couple pass
-        user = await self.base.user_db.find_one(
-            {
-                "user_id": target_user_id,
-                "bot_id": self.bot,
-                pass_key: {"$exists": True},
-                pass_key + ".type": "couple",
-            }
-        )
-        if user is None:
+        user, user_pass = await self.base.get_user_with_pass(target_user_id, pass_key)
+        if user is None or not isinstance(user_pass, dict) or user_pass.get("type") != "couple":
             return await self.update.reply(
                 f"User {target_user_id} does not have a couple pass {pass_key}",
                 parse_mode=None,
             )
-        couple_id = user[pass_key].get("couple")
+        couple_id = user_pass.get("couple")
         if couple_id is None:
             return await self.update.reply(
                 f"User {target_user_id} does not have a couple partner recorded", parse_mode=None
             )
-        couple_user = await self.base.user_db.find_one(
-            {
-                "user_id": couple_id,
-                "bot_id": self.bot,
-                pass_key: {"$exists": True},
-            }
-        )
-        if couple_user is None or couple_user.get(pass_key, {}).get("type") != "couple":
+        couple_user, couple_pass = await self.base.get_user_with_pass(couple_id, pass_key)
+        if couple_user is None or not isinstance(couple_pass, dict) or couple_pass.get("type") != "couple":
             return await self.update.reply(
                 f"Couple user {couple_id} does not have a matching couple pass", parse_mode=None
             )
         # Optional: verify reciprocal link if present
         # Compute new price per person
-        total_price = user[pass_key].get("price")
+        total_price = user_pass.get("price")
         new_price = None
         if isinstance(total_price, (int, float)) and total_price > 0:
             new_price = int(total_price / 2)
 
         # Prepare updates
-        set_updates = {pass_key + ".type": "solo"}
+        base_updates = {"type": "solo"}
         if new_price is not None:
-            set_updates[pass_key + ".price"] = new_price
+            base_updates["price"] = new_price
 
         # Update both users
-        await self.base.user_db.update_one(
-            {"user_id": target_user_id, "bot_id": self.bot},
-            {"$set": set_updates, "$unset": {pass_key + ".couple": ""}},
-        )
-        await self.base.user_db.update_one(
-            {"user_id": couple_id, "bot_id": self.bot},
-            {"$set": set_updates, "$unset": {pass_key + ".couple": ""}},
-        )
+        updated_first = dict(user_pass)
+        updated_first.update(base_updates)
+        updated_first.pop("couple", None)
+        updated_second = dict(couple_pass)
+        updated_second.update(base_updates)
+        updated_second.pop("couple", None)
+        await self.base.save_pass_data(target_user_id, pass_key, updated_first)
+        await self.base.save_pass_data(couple_id, pass_key, updated_second)
         await self.update.reply(
             f"Uncoupled users {target_user_id} and {couple_id} for pass {pass_key}. New price per user: {new_price if new_price is not None else 'unchanged'}",
             parse_mode=None,
@@ -1720,7 +1728,7 @@ class PassUpdate:
         args_list = self.update.parse_cmd_arguments()
 
         parser = SilentArgumentParser()
-        parser.add_argument("--pass_key", type=str, help="Pass key", default=PASS_BY)
+        parser.add_argument("--pass_key", type=str, help="Pass key", default=PASS_KEY)
         parser.add_argument("recipients", nargs="*", help="Recipients")
 
         args = parser.parse_args(args_list[1:])
@@ -1735,41 +1743,55 @@ class PassUpdate:
         recipients = map(int, args.recipients)
         for recipient in recipients:
             try:
-                upd = await self.base.create_update_from_user(recipient)
-                user = await upd.get_user()
-                if self.pass_key not in user:
+                pass_doc = await self.base.pass_db.find_one(
+                    {
+                        "bot_id": self.bot,
+                        "user_id": recipient,
+                        "pass_key": self.pass_key,
+                    }
+                )
+                if pass_doc is None:
                     continue
-                if user[self.pass_key]["type"] == "couple":
-                    if user[self.pass_key]["couple"] not in recipients:
-                        result = await self.base.user_db.update_one(
+                pass_data = self.base._pass_doc_to_data(pass_doc) or {}
+                if pass_data.get("type") == "couple":
+                    partner_id = pass_data.get("couple")
+                    if partner_id is not None and int(partner_id) not in recipients:
+                        result = await self.base.pass_db.update_one(
                             {
-                                "user_id": user[self.pass_key]["couple"],
                                 "bot_id": self.bot,
-                                self.pass_key + ".couple": {"$eq": recipient},
+                                "user_id": partner_id,
+                                "pass_key": self.pass_key,
+                                "couple": {"$eq": recipient},
                             },
                             {
                                 "$unset": {
-                                    self.pass_key + ".couple": "",
+                                    "couple": "",
                                 },
                                 "$set": {
-                                    self.pass_key + ".type": "solo",
+                                    "type": "solo",
                                 },
-                                "$mul": {self.pass_key + ".price": 0.5},
+                                "$mul": {"price": 0.5},
                             },
                         )
                         if result.modified_count > 0:
                             logger.info(
-                                f"pass {args.pass_key=} for {recipient=} couple {user[self.pass_key]['couple']} was changed to solo"
+                                f"pass {args.pass_key=} for {recipient=} couple {partner_id} was changed to solo"
                             )
                         else:
                             logger.error(
-                                f"pass {args.pass_key=} for {recipient=} couple {user[self.pass_key]['couple']} was not changed to solo"
+                                f"pass {args.pass_key=} for {recipient=} couple {partner_id} was not changed to solo"
                             )
-                result = await self.base.user_db.update_one(
+                result = await self.base.pass_db.delete_one(
+                    {
+                        "bot_id": self.bot,
+                        "user_id": recipient,
+                        "pass_key": self.pass_key,
+                    }
+                )
+                upd_result = await self.base.user_db.update_one(
                     {
                         "user_id": recipient,
                         "bot_id": self.bot,
-                        self.pass_key: {"$exists": True},
                     },
                     {
                         "$unset": {
@@ -1777,7 +1799,7 @@ class PassUpdate:
                         },
                     },
                 )
-                if result.modified_count <= 0:
+                if result.deleted_count <= 0 and upd_result.modified_count <= 0:
                     logger.info(
                         f"pass {self.pass_key=} for {recipient=} was not cancelled"
                     )
@@ -1828,39 +1850,32 @@ class PassUpdate:
                 f"{self.update.user} is not admin for {self.pass_key}",
                 parse_mode=None,
             )
-        user_doc = await self.base.user_db.find_one(
+        pass_doc = await self.base.pass_db.find_one(
             {
                 "bot_id": self.bot,
                 "user_id": target_user_id,
-                self.pass_key: {"$exists": True},
+                "pass_key": self.pass_key,
             }
         )
-        if user_doc is None:
+        if pass_doc is None:
             return await self.update.reply(
                 f"User {target_user_id} does not have pass {self.pass_key}",
                 parse_mode=None,
             )
-        uids = [user_doc["user_id"]]
-        if "couple" in user_doc[self.pass_key]:
-            uids.append(user_doc[self.pass_key]["couple"])
+        pass_data = self.base._pass_doc_to_data(pass_doc) or {}
+        uids = [pass_doc["user_id"]]
+        if "couple" in pass_data:
+            uids.append(pass_data["couple"])
         admin_doc = await self.base.user_db.find_one(
             {
                 "bot_id": self.bot,
                 "user_id": self.update.user,
             }
         )
-        await self.base.user_db.update_many(
-            {
-                "bot_id": self.bot,
-                "user_id": {"$in": uids},
-                self.pass_key: {"$exists": True},
-            },
-            {
-                "$set": {
-                    self.pass_key + ".proof_admin": self.update.user,
-                    "proof_admins." + self.pass_key: self.update.user,
-                }
-            },
+        await self.base.update_pass_fields(
+            uids,
+            self.pass_key,
+            set_fields={"proof_admin": self.update.user},
         )
         for uid in uids:
             try:
@@ -1911,7 +1926,7 @@ class PassUpdate:
             "legal_name": {"name": "Legal Name", "location": "user"},
             "language_code": {"name": "Language code", "location": "user", "length": 2},
             "pass_key": {
-                "func": lambda u, pk: pk,
+                "func": lambda u, p: p.get("pass_key", ""),
                 "name": "Pass Key",
             },
             "state": {"name": "State", "location": "pass"},
@@ -1920,7 +1935,7 @@ class PassUpdate:
             "couple": {"name": "Couple", "location": "pass"},
             "price": {"name": "Price", "location": "pass"},
             "price_per_one": {
-                "func": lambda u, pk: u[pk].get("price",0) / 2 if u[pk].get('type') == 'couple' else u[pk].get('price',""),
+                "func": lambda u, p: p.get("price",0) / 2 if p.get('type') == 'couple' else p.get('price',""),
                 "name": "Price per one",
             },
             "date_created": {"name": "Date Created", "location": "pass"},
@@ -1946,21 +1961,25 @@ class PassUpdate:
             field["column_letter"] = ws.cell(row=1, column=i + 1).column_letter
 
         for pass_key in pass_keys_for_this_user:
-            async for user in self.base.user_db.find(
-                    {
-                        "bot_id": self.bot,
-                        pass_key: {"$exists": True},
-                    }
-                ):
-                    row = []
-                    for field, info in fields.items():
-                        if "func" in info:
-                            row.append(info["func"](user, pass_key))
-                        elif info["location"] == "user":
-                            row.append(user.get(field, ""))
-                        elif info["location"] == "pass":
-                            row.append(user[pass_key].get(field, ""))
-                    ws.append(row)
+            async for pass_doc in self.base.pass_db.find(
+                {
+                    "bot_id": self.bot,
+                    "pass_key": pass_key,
+                }
+            ):
+                user = await self.base.user_db.find_one(
+                    {"bot_id": self.bot, "user_id": pass_doc.get("user_id")}
+                ) or {}
+                pass_data = self.base._pass_doc_to_data(pass_doc) or {}
+                row = []
+                for field, info in fields.items():
+                    if "func" in info:
+                        row.append(info["func"](user, pass_data))
+                    elif info["location"] == "user":
+                        row.append(user.get(field, ""))
+                    elif info["location"] == "pass":
+                        row.append(pass_data.get(field, ""))
+                ws.append(row)
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
         ws.auto_filter.add_sort_condition(fields["date_created"]["column_letter"] + "2:" + fields["date_created"]["column_letter"] + str(ws.max_row))
@@ -1994,6 +2013,9 @@ class Passes(BasePlugin):
         self.hidden_payment_admins: dict[str, list[int]] = {
             key: [] for key in PASS_KEYS
         }
+        if base_app.passes_collection is None:
+            raise RuntimeError("passes_collection is not configured")
+        self.pass_db: AgnosticCollection = base_app.passes_collection
         for key in PASS_KEYS:
             if isinstance(self.config.passes.events[key].payment_admin, int):
                 self.payment_admins[key].append(
@@ -2030,6 +2052,152 @@ class Passes(BasePlugin):
         self._queue_lock = Lock()
         create_task(self._timeout_processor())
 
+    def _pass_doc_to_data(self, pass_doc: dict | None) -> dict | None:
+        if pass_doc is None:
+            return None
+        data = dict(pass_doc)
+        for key in ["_id", "user_id", "pass_key", "bot_id"]:
+            data.pop(key, None)
+        return data
+
+    async def get_pass_for_user(self, user_id: int, pass_key: str) -> dict | None:
+        doc = await self.pass_db.find_one(
+            {
+                "bot_id": self.bot.id,
+                "user_id": user_id,
+                "pass_key": pass_key,
+            }
+        )
+        if doc is None or "pass_key" not in doc:
+            return None
+        return self._pass_doc_to_data(doc)
+
+    async def save_pass_data(
+        self,
+        user_id: int,
+        pass_key: str,
+        pass_data: dict,
+    ) -> None:
+        doc = dict(pass_data)
+        doc["user_id"] = user_id
+        doc["pass_key"] = pass_key
+        doc["bot_id"] = self.bot.id
+        await self.pass_db.update_one(
+            {"bot_id": self.bot.id, "user_id": user_id, "pass_key": pass_key},
+            {"$set": doc},
+            upsert=True,
+        )
+
+    async def get_user_with_pass(self, user_id: int, pass_key: str) -> tuple[dict | None, dict | None]:
+        user = await self.user_db.find_one(
+            {
+                "bot_id": self.bot.id,
+                "user_id": user_id,
+            }
+        )
+        if user is None:
+            return None, None
+        pass_data = await self.get_pass_for_user(user_id, pass_key)
+        if pass_data is None and pass_key in user:
+            pass_data = user.get(pass_key)
+            if isinstance(pass_data, dict):
+                logger.warning("Found embedded passes data for user %s pass %s, migrating", user_id, pass_key)
+                await self.save_pass_data(user_id, pass_key, pass_data)
+        return user, pass_data
+
+    async def update_pass_fields(
+        self,
+        user_ids: list[int],
+        pass_key: str,
+        *,
+        set_fields: dict | None = None,
+        unset_fields: list[str] | None = None,
+    ) -> None:
+        if not user_ids:
+            return
+        update: dict = {}
+        if set_fields:
+            update["$set"] = dict(set_fields)
+        if unset_fields:
+            update.setdefault("$unset", {})
+            for field in unset_fields:
+                update["$unset"][field] = ""
+        if update:
+            for uid in user_ids:
+                await self.pass_db.update_one(
+                    {
+                        "bot_id": self.bot.id,
+                        "pass_key": pass_key,
+                        "user_id": uid,
+                    },
+                    update,
+                    upsert=True,
+                )
+
+    async def delete_passes(self, user_ids: list[int], pass_key: str) -> None:
+        if not user_ids:
+            return
+        await self.pass_db.delete_many(
+            {
+                "bot_id": self.bot.id,
+                "pass_key": pass_key,
+                "user_id": {"$in": user_ids},
+            }
+        )
+        await self.user_db.update_many(
+            {
+                "bot_id": self.bot.id,
+                "user_id": {"$in": user_ids},
+            },
+            {"$unset": {pass_key: ""}},
+        )
+
+    async def migrate_embedded_passes(self) -> None:
+        """One-time helper to mirror embedded passes into the dedicated collection."""
+        migrated = 0
+        try:
+            for pass_key in ["pass_2025_1", "pass_2025_2"] + PASS_KEYS:
+                async for user in self.user_db.find(
+                    {
+                        "bot_id": self.bot.id,
+                        pass_key: {"$exists": True},
+                    }
+                ):
+                    pass_data = user.get(pass_key)
+                    if not isinstance(pass_data, dict):
+                        continue
+                    doc = dict(pass_data)
+                    doc["user_id"] = user["user_id"]
+                    doc["pass_key"] = pass_key
+                    doc["bot_id"] = self.bot.id
+                    result = await self.pass_db.update_one(
+                        {
+                            "bot_id": self.bot.id,
+                            "user_id": user["user_id"],
+                            "pass_key": pass_key,
+                        },
+                        {"$set": doc},
+                        upsert=True,
+                    )
+                    if result.upserted_id is not None:
+                        migrated += 1
+                    if result.modified_count > 0 or result.upserted_id is not None:
+                        await self.user_db.update_one(
+                            {
+                                "bot_id": self.bot.id,
+                                "user_id": user["user_id"],
+                            },
+                            {
+                                "$unset": {
+                                    pass_key: "",
+                                }
+                            },
+                        )
+            if migrated:
+                logger.info("Migrated %s embedded passes into the passes collection", migrated)
+        except Exception as e:
+            logger.error("Exception while migrating embedded passes: %s", e, exc_info=1)
+
     def get_all_payment_admins(self, pass_key: str) -> list[int]:
         admins = self.payment_admins.get(pass_key, [])
         hidden = self.hidden_payment_admins.get(pass_key, [])
@@ -2058,81 +2226,71 @@ class Passes(BasePlugin):
             states.append("assigned")
         query = {
             "bot_id": self.bot.id,
-            pass_key: {"$exists": True},
+            "pass_key": pass_key,
         }
         if not with_waitlist:
-            query[pass_key + ".state"] = {"$in": states}
-        return await self.user_db.find(query).to_list(None)
+            query["state"] = {"$in": states}
+        return await self.pass_db.find(query).to_list(None)
 
     async def _timeout_processor(self) -> None:
         bot_started: Event = self.base_app.bot_started
         await bot_started.wait()
         logger.info("timeout processor started")
+        await self.migrate_embedded_passes()
         for pass_key in PASS_KEYS:
-            async for user in self.user_db.find(
+            async for pass_doc in self.pass_db.find(
                 {
                     "bot_id": self.bot.id,
-                    pass_key: {"$exists": True},
-                    pass_key + ".proof_admin": {"$exists": False},
+                    "pass_key": pass_key,
+                    "proof_admin": {"$exists": False},
                 }
             ):
                 try:
                     new_admin = self.pick_payment_admin(pass_key)
-                    await self.user_db.update_one(
-                        {
-                            "user_id": user["user_id"],
-                            "bot_id": self.bot.id,
-                        },
-                        {
-                            "$set": {
-                                pass_key + ".proof_admin": new_admin,
-                            }
-                        },
+                    await self.update_pass_fields(
+                        [pass_doc["user_id"]],
+                        pass_key,
+                        set_fields={"proof_admin": new_admin},
                     )
                 except Exception as e:
                     logger.error(
                         "Exception in Passes._timeout_processor setting initial proof_admin "+
-                        f"for user {user['user_id']}, pass {pass_key}: {e}",
+                        f"for user {pass_doc['user_id']}, pass {pass_key}: {e}",
                         exc_info=1,
                     )
         processed_waiting: set[int] = set()
         for pass_key in PASS_KEYS:
-            async for user in self.user_db.find(
+            all_payment_admins = self.get_all_payment_admins(pass_key)
+            async for pass_doc in self.pass_db.find(
                 {
                     "bot_id": self.bot.id,
-                    pass_key + ".state": "waitlist",
-                    pass_key: {"$exists": True},
+                    "pass_key": pass_key,
+                    "state": "waitlist",
+                    "$or": [
+                        {"proof_admin": {"$nin": all_payment_admins}},
+                        {"proof_admin": {"$exists": False}},
+                    ],
                 }
             ):
                 try:
-                    if user["user_id"] in processed_waiting:
+                    if pass_doc["user_id"] in processed_waiting:
                         continue
-                    uids = [user["user_id"]]
-                    if "couple" in user[pass_key]:
-                        uids.append(user[pass_key]["couple"])
+                    uids = [pass_doc["user_id"]]
+                    if "couple" in pass_doc:
+                        uids.append(pass_doc["couple"])
                     processed_waiting.update(uids)
-                    current_admin = user[pass_key].get("proof_admin")
-                    if current_admin in self.get_all_payment_admins(pass_key):
-                        continue
                     new_admin = self.pick_payment_admin(pass_key)
                     if new_admin is None:
                         logger.error(
                             "Cannot reassign proof_admin for waitlist user %s, pass %s: no admins configured",
-                            user["user_id"],
+                            pass_doc["user_id"],
                             pass_key,
                         )
                         continue
-                    await self.user_db.update_many(
-                        {
-                            "bot_id": self.bot.id,
-                            "user_id": {"$in": uids},
-                            pass_key + ".state": "waitlist",
-                        },
-                        {
-                            "$set": {
-                                pass_key + ".proof_admin": new_admin,
-                            }
-                        },
+                    await self.update_pass_fields(
+                        uids,
+                        pass_key,
+                        set_fields={"proof_admin": new_admin},
                     )
                     admin_doc = await self.user_db.find_one(
                         {
@@ -2154,38 +2312,43 @@ class Passes(BasePlugin):
                         except Exception as e:
                             logger.error(
                                 "Failed to notify user %s about new admin for %s: %s",
-                                uid,
-                                pass_key,
-                                e,
-                                exc_info=1,
+                                uid, pass_key, e, exc_info=1,
                             )
                 except Exception as e:
                     logger.error(
                         "Exception in Passes._timeout_processor reassigning proof_admin "+
-                        f"for waitlist user {user['user_id']}, pass {pass_key}: {e}",
+                        f"for waitlist user {pass_doc['user_id']}, pass {pass_key}: {e}",
                         exc_info=1,
                     )
-        
+
         if self.config.passes.events[PASS_RU].require_passport:
-            async for user in self.user_db.find(
+            async for pass_doc in self.pass_db.find(
                 {
                     "bot_id": self.bot.id,
-                    "passport_number": {"$exists": False},
-                    PASS_RU: {"$exists": True},
-                    PASS_RU + ".state": {"$in": ["assigned", "payed"]},
-                    "notified_passport_data_required": {"$exists": False},
+                    "pass_key": PASS_RU,
+                    "state": {"$in": ["assigned", "payed"]},
                 }
             ):
                 try:
-                    upd = await self.create_update_from_user(user["user_id"])
+                    user = await self.user_db.find_one(
+                        {
+                            "bot_id": self.bot.id,
+                            "user_id": pass_doc["user_id"],
+                            "passport_number": {"$exists": False},
+                            "notified_passport_data_required": {"$exists": False},
+                        }
+                    )
+                    if user is None:
+                        continue
+                    upd = await self.create_update_from_user(pass_doc["user_id"])
                     upd.set_pass_key(PASS_RU)
                     await upd.require_passport_data()
                     await self.user_db.update_one(
                         {
                             "bot_id": self.bot.id,
-                            "user_id": user["user_id"],
+                            "user_id": pass_doc["user_id"],
                             "passport_number": {"$exists": False},
-                            PASS_RU: {"$exists": True},
+                            "notified_passport_data_required": {"$exists": False},
                         },
                         {
                             "$set": {
@@ -2196,7 +2359,7 @@ class Passes(BasePlugin):
                 except Exception as e:
                     logger.error(
                         "Exception in Passes._timeout_processor passport notification "+
-                        f"for user {user['user_id']}: {e}",
+                        f"for user {pass_doc['user_id']}: {e}",
                         exc_info=1,
                     )
 
@@ -2205,60 +2368,65 @@ class Passes(BasePlugin):
             for pass_key in PASS_KEYS:
                 try:
                     await sleep(TIMEOUT_PROCESSOR_TICK)
-                    async for user in self.user_db.find(
+                    async for pass_doc in self.pass_db.find(
                         {
                             "bot_id": self.bot.id,
-                            pass_key + ".state": "assigned",
-                            pass_key + ".notified_deadline_close": {
+                            "pass_key": pass_key,
+                            "state": "assigned",
+                            "notified_deadline_close": {
                                 "$lt": now_msk()
                                 - PAYMENT_TIMEOUT
                                 + PAYMENT_TIMEOUT_NOTIFY,
                             },
                         }
                     ):
-                        upd = await self.create_update_from_user(user["user_id"])
+                        upd = await self.create_update_from_user(pass_doc["user_id"])
                         await upd.cancel_due_deadline(pass_key)
-                    async for user in self.user_db.find(
+                    async for pass_doc in self.pass_db.find(
                         {
                             "bot_id": self.bot.id,
-                            pass_key + ".state": "waiting-for-couple",
-                            pass_key + ".date_created": {
+                            "pass_key": pass_key,
+                            "state": "waiting-for-couple",
+                            "date_created": {
                                 "$lt": now_msk() - INVITATION_TIMEOUT,
                             },
                         }
                     ):
-                        upd = await self.create_update_from_user(user["user_id"])
+                        upd = await self.create_update_from_user(pass_doc["user_id"])
                         await upd.decline_due_deadline(pass_key)
-                        upd = await self.create_update_from_user(
-                            user[pass_key]["couple"]
-                        )
-                        await upd.decline_invitation_due_deadline(pass_key)
-                    async for user in self.user_db.find(
+                        if "couple" in pass_doc:
+                            upd_c = await self.create_update_from_user(
+                                pass_doc["couple"]
+                            )
+                            await upd_c.decline_invitation_due_deadline(pass_key)
+                    async for pass_doc in self.pass_db.find(
                         {
                             "bot_id": self.bot.id,
-                            pass_key + ".state": "assigned",
-                            pass_key + ".date_assignment": {
+                            "pass_key": pass_key,
+                            "state": "assigned",
+                            "date_assignment": {
                                 "$lt": now_msk() - PAYMENT_TIMEOUT_NOTIFY,
                             },
-                            pass_key + ".notified_deadline_close": {"$exists": False},
+                            "notified_deadline_close": {"$exists": False},
                         }
                     ):
-                        upd = await self.create_update_from_user(user["user_id"])
+                        upd = await self.create_update_from_user(pass_doc["user_id"])
                         upd.set_pass_key(pass_key)
                         await upd.notify_deadline_close()
-                    async for user in self.user_db.find(
+                    async for pass_doc in self.pass_db.find(
                         {
                             "bot_id": self.bot.id,
-                            pass_key + ".state": "assigned",
-                            pass_key + ".notified_deadline_close": {
+                            "pass_key": pass_key,
+                            "state": "assigned",
+                            "notified_deadline_close": {
                                 "$lt": now_msk()
                                 - PAYMENT_TIMEOUT_NOTIFY2
                                 + PAYMENT_TIMEOUT_NOTIFY,
                             },
-                            pass_key + ".notified_deadline_close2": {"$exists": False},
+                            "notified_deadline_close2": {"$exists": False},
                         }
                     ):
-                        upd = await self.create_update_from_user(user["user_id"])
+                        upd = await self.create_update_from_user(pass_doc["user_id"])
                         upd.set_pass_key(pass_key)
                         await upd.notify_deadline_close("2")
                 except Exception as e:
@@ -2274,35 +2442,23 @@ class Passes(BasePlugin):
         try:
             natural_queue_exhausted = False
             while True:
-                aggregation = await self.user_db.aggregate(
+                aggregation = await self.pass_db.aggregate(
                     [
                         {
                             "$match": {
-                                "$and": [
-                                    {"bot_id": self.bot.id},
-                                    {pass_key: {"$exists": True}},
-                                    {
-                                        "$or": [
-                                            {
-                                                pass_key + ".skip_in_balance_count": {
-                                                    "$ne": True
-                                                }
-                                            },
-                                            {
-                                                pass_key + ".skip_in_balance_count": {
-                                                    "$exists": False
-                                                }
-                                            },
-                                        ]
-                                    },
+                                "bot_id": self.bot.id,
+                                "pass_key": pass_key,
+                                "$or": [
+                                    {"skip_in_balance_count": {"$ne": True}},
+                                    {"skip_in_balance_count": {"$exists": False}},
                                 ],
                             },
                         },
                         {
                             "$group": {
                                 "_id": {
-                                    "state": f"${pass_key}.state",
-                                    "role": f"${pass_key}.role",
+                                    "state": "$state",
+                                    "role": "$role",
                                 },
                                 "count": {"$count": {}},
                             }
@@ -2311,18 +2467,19 @@ class Passes(BasePlugin):
                 ).to_list(None)
                 couples = {
                     group["_id"]: group["count"]
-                    for group in await self.user_db.aggregate(
+                    for group in await self.pass_db.aggregate(
                         [
                             {
                                 "$match": {
-                                    pass_key + ".couple": {"$exists": True},
-                                    pass_key + ".role": "leader",
+                                    "couple": {"$exists": True},
+                                    "role": "leader",
                                     "bot_id": self.bot.id,
+                                    "pass_key": pass_key,
                                 },
                             },
                             {
                                 "$group": {
-                                    "_id": f"${pass_key}.state",
+                                    "_id": "$state",
                                     "count": {"$count": {}},
                                 }
                             },
@@ -2379,19 +2536,23 @@ class Passes(BasePlugin):
                     continue
             if natural_queue_exhausted:
                 while True:
-                    aggregation = await self.user_db.aggregate(
+                    aggregation = await self.pass_db.aggregate(
                         [
                             {
                                 "$match": {
-                                    pass_key: {"$exists": True},
+                                    "pass_key": pass_key,
                                     "bot_id": self.bot.id,
+                                    "$or": [
+                                        {"skip_in_balance_count": {"$ne": True}},
+                                        {"skip_in_balance_count": {"$exists": False}},
+                                    ],
                                 },
                             },
                             {
                                 "$group": {
                                     "_id": {
-                                        "state": f"${pass_key}.state",
-                                        "role": f"${pass_key}.role",
+                                        "state": "$state",
+                                        "role": "$role",
                                     },
                                     "count": {"$count": {}},
                                 }
@@ -2424,11 +2585,12 @@ class Passes(BasePlugin):
 
             have_unnotified = True
             while have_unnotified:
-                selected = await self.user_db.find(
+                selected = await self.pass_db.find(
                     {
                         "bot_id": self.bot.id,
-                        pass_key + ".state": "waitlist",
-                        pass_key + ".no_more_passes_notification_sent": {
+                        "pass_key": pass_key,
+                        "state": "waitlist",
+                        "no_more_passes_notification_sent": {
                             "$exists": False
                         },
                     }
@@ -2436,32 +2598,30 @@ class Passes(BasePlugin):
                 if len(selected) == 0:
                     logger.info("no unnotified candidates in the waiting list")
                     break
-                for user in selected:
-                    upd = await self.create_update_from_user(user["user_id"])
+                for pass_doc in selected:
+                    upd = await self.create_update_from_user(pass_doc["user_id"])
+                    upd.set_pass_key(pass_key)
                     await upd.notify_no_more_passes(pass_key)
         except Exception as e:
             logger.error(f"Exception in recalculate_queues: {e}", exc_info=1)
 
         try:
-            async for user in self.user_db.find(
+            async for pass_doc in self.pass_db.find(
                 {
                     "bot_id": self.bot.id,
-                    pass_key: {"$exists": True},
-                    pass_key + ".sent_to_hype_thread": {"$exists": False},
+                    "pass_key": pass_key,
+                    "sent_to_hype_thread": {"$exists": False},
                 }
             ):
-                await self.user_db.update_one(
-                    {
-                        "user_id": user["user_id"],
-                        "bot_id": self.bot.id,
-                        pass_key: {"$exists": True},
-                    },
-                    {
-                        "$set": {
-                            pass_key + ".sent_to_hype_thread": now_msk(),
-                        }
-                    },
+                sent_ts = now_msk()
+                await self.update_pass_fields(
+                    [pass_doc["user_id"]],
+                    pass_key,
+                    set_fields={"sent_to_hype_thread": sent_ts},
                 )
+                user = await self.user_db.find_one(
+                    {"bot_id": self.bot.id, "user_id": pass_doc["user_id"]}
+                ) or {}
                 if self.config.passes.events[pass_key].thread_channel != "":
                     try:
                         ch = self.config.passes.events[pass_key].thread_channel
@@ -2470,7 +2630,7 @@ class Passes(BasePlugin):
                         logger.debug(f"chat id: {ch}, type {type(ch)}")
                         args = {
                             "name": client_user_name(user),
-                            "role": user[pass_key]["role"],
+                            "role": pass_doc.get("role", ""),
                             "passKey": pass_key,
                         }
                         await self.bot.send_message(
@@ -2502,25 +2662,26 @@ class Passes(BasePlugin):
     ) -> bool:
         match = {
             "bot_id": self.bot.id,
-            pass_key + ".state": "waitlist",
+            "pass_key": pass_key,
+            "state": "waitlist",
         }
         if role == "couple":
-            match[pass_key + ".role"] = "leader"
-            match[pass_key + ".couple"] = {"$exists": True}
+            match["role"] = "leader"
+            match["couple"] = {"$exists": True}
         else:
-            match[pass_key + ".role"] = role
+            match["role"] = role
         pipeline = [
             {"$match": match},
-            {"$sort": {pass_key + ".date_created": 1, "user_id": 1}},
+            {"$sort": {"date_created": 1, "user_id": 1}},
         ]
         cap_per_role = self.config.passes.events[pass_key].amount_cap_per_role
         role_counts = counts or {}
         leader_ra = role_counts.get("leader", {}).get("RA", 0)
         follower_ra = role_counts.get("follower", {}).get("RA", 0)
         scanned = 0
-        async for candidate in self.user_db.aggregate(pipeline):
+        async for candidate in self.pass_db.aggregate(pipeline):
             scanned += 1
-            pass_info = candidate.get(pass_key, {})
+            pass_info = self._pass_doc_to_data(candidate) or {}
             is_couple = "couple" in pass_info
             if counts is not None:
                 if is_couple or role == "couple":

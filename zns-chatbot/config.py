@@ -80,6 +80,9 @@ class MongoDB(BaseSettings):
     address: str = Field(
         "", validation_alias=AliasChoices("address", "BOT_MONGODB_ADDRESS")
     )
+    passes_collection: str = Field(
+        "zns_bot_passes", validation_alias="ZNS_BOT_PASSES_COLLECTION"
+    )
     users_collection: str = Field(
         "zns_bot_users", validation_alias="ZNS_BOT_MONGODB_USERS_COLLECTION"
     )

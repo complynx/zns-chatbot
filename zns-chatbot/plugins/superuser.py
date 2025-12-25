@@ -9,7 +9,6 @@ from telegram.constants import ParseMode
 from ..telegram_links import client_user_link_html,client_user_name
 import logging
 from typing import Literal
-from .pass_keys import PASS_KEY
 from json import loads
 from tornado.template import Template
 
@@ -18,12 +17,6 @@ logger = logging.getLogger(__name__)
 CANCEL_CHR = chr(0xE007F) # Tag cancel
 
 RECIPIENT_ALIASES = {
-    "registered": {
-        PASS_KEY: {"$exists": True}
-    },
-    "paid": {
-        PASS_KEY+".state": "payed"
-    },
 }
 
 class Superuser(BasePlugin):
