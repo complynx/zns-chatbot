@@ -270,9 +270,9 @@ collection:
 
   # - question: How to change the order?
   #   answer: |
-  #     You can change your order if you haven't payed it yet. Just go to /orders and change it.
+  #     You can change your order if you haven't paid it yet. Just go to /orders and change it.
   #     If you've selected a manager to pay, ask them to cancel and change the order.
-  #     If you've payed it, you can place another order on top of the previous one.
+  #     If you've paid it, you can place another order on top of the previous one.
 
   # - question: How can I book a massage at ZNS?
   #   answer: |

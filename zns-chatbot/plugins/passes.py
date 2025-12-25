@@ -193,7 +193,7 @@ class PassUpdate:
                     callback_data=f"{self.base.name}|pay|{self.pass_key}",
                 )
             )
-        if u_pass["state"] != "payed":
+        if u_pass["state"] != "paid":
             if len(self.base.payment_admins[self.pass_key]) > 1:
                 buttons.append(
                     InlineKeyboardButton(
@@ -456,13 +456,6 @@ class PassUpdate:
                 {"$unset": {"couple": ""}},
             )
             if result.modified_count > 0:
-                await self.base.user_db.update_one(
-                    {
-                        "user_id": self.update.user,
-                        "bot_id": self.bot,
-                    },
-                    {"$unset": {self.pass_key + ".couple": ""}},
-                )
                 success = True
 
         if success:
@@ -521,7 +514,7 @@ class PassUpdate:
                 existing_pass is None
                 or existing_pass.get("couple", 0) != inviter_id
             ):
-                if existing_pass is None or existing_pass.get("state") != "payed":
+                if existing_pass is None or existing_pass.get("state") != "paid":
                     return await self.show_couple_invitation(inviter_user or {"user_id": inviter_id})
                 else:
                     inv_update = await self.base.create_update_from_user(inviter_id)
@@ -566,7 +559,7 @@ class PassUpdate:
                 "bot_id": self.bot,
                 "user_id": user_id,
                 "pass_key": self.pass_key,
-                "state": "payed",
+                "state": "paid",
             }
         )
         if pass_doc is None:
@@ -580,7 +573,7 @@ class PassUpdate:
             uids,
             self.pass_key,
             set_fields={
-                "state": "payed",
+                "state": "paid",
                 "proof_received": u_pass.get("proof_received"),
                 "proof_file": u_pass.get("proof_file"),
                 "proof_admin": u_pass.get("proof_admin"),
@@ -616,7 +609,7 @@ class PassUpdate:
                 "bot_id": self.bot,
                 "user_id": user_id,
                 "pass_key": self.pass_key,
-                "state": "payed",
+                "state": "paid",
             }
         )
         if pass_doc is None:
@@ -715,7 +708,7 @@ class PassUpdate:
             req,
             {
                 "$set": {
-                    "state": "payed",
+                    "state": "paid",
                     "proof_received": proof_received,
                     "proof_file": f"{doc.file_id}{file_ext}",
                     "proof_admin": pass_data.get("proof_admin"),
@@ -929,9 +922,9 @@ class PassUpdate:
             )
             if invitee is not None and self.pass_key in invitee:
                 invitee_pass = invitee[self.pass_key]
-        if isinstance(invitee_pass, dict) and invitee_pass.get("state") == "payed":
+        if isinstance(invitee_pass, dict) and invitee_pass.get("state") == "paid":
             return await self.update.reply(
-                self.l("passes-couple-request-invitee-payed", passKey=self.pass_key),
+                self.l("passes-couple-request-invitee-paid", passKey=self.pass_key),
                 reply_markup=ReplyKeyboardRemove(),
                 parse_mode=ParseMode.HTML,
             )
@@ -1233,21 +1226,6 @@ class PassUpdate:
         if self.pass_data is not None and self.pass_owner_id == uid:
             return self.pass_data
         pass_doc = await self.base.get_pass_for_user(uid, pass_key)
-        if pass_doc is None:
-            # Legacy fallback: try to migrate from embedded user doc
-            user = await self.base.user_db.find_one(
-                {
-                    "user_id": uid,
-                    "bot_id": self.bot,
-                    pass_key: {"$exists": True},
-                }
-            )
-            if user is not None and pass_key in user:
-                logger.warning(
-                    f"pass data for user {uid} and pass {pass_key} not found in pass DB, migrating from user document"
-                )
-                pass_doc = user[pass_key]
-                await self.base.save_pass_data(uid, pass_key, pass_doc)
         if pass_doc is not None and uid == self.update.user:
             self.pass_data = pass_doc
             self.pass_owner_id = uid
@@ -1291,7 +1269,7 @@ class PassUpdate:
             matcher["couple"] = {"$exists": False}
 
         sets = {
-            "state": "assigned" if price is None or price > 0 else "payed",
+            "state": "assigned" if price is None or price > 0 else "paid",
             "price": price
             if price is not None
             else CURRENT_PRICE[self.pass_key] * len(uids),
@@ -1397,7 +1375,7 @@ class PassUpdate:
         pass_data = await self.get_pass()
         if not isinstance(pass_data, dict):
             return False
-        if pass_data.get("state") == "payed":
+        if pass_data.get("state") == "paid":
             return False
         uids = [self.update.user]
         if (
@@ -1413,25 +1391,10 @@ class PassUpdate:
                 "bot_id": self.bot,
                 "pass_key": self.pass_key,
                 "user_id": {"$in": uids},
-                "state": {"$ne": "payed"},
+                "state": {"$ne": "paid"},
             }
         )
-        user_result = await self.base.user_db.update_many(
-            {
-                "user_id": {"$in": uids},
-                "bot_id": self.bot,
-                self.pass_key + ".state": {"$ne": "payed"},
-            },
-            {
-                "$unset": {
-                    self.pass_key: "",
-                }
-            },
-        )
-        return (
-            delete_result.deleted_count > 0
-            or user_result.modified_count > 0
-        )
+        return delete_result.deleted_count > 0
 
     async def notify_no_more_passes(self, pass_key):
         self.set_pass_key(pass_key)
@@ -1600,15 +1563,6 @@ class PassUpdate:
                             if last_pass is not None:
                                 last_pass_data = self.base._pass_doc_to_data(last_pass) or {}
                                 last_role = last_pass_data.get("role")
-                        if last_role is None:
-                            last_role = user.get("pass_2026_1", {}).get(
-                                    "role",
-                                    user.get("pass_2025_2", {}).get(
-                                        "role",
-                                        user.get("pass_2025_1", {}).get(
-                                            "role", None,
-                                        ),
-                                    ))
                         if last_role is None:
                             raise ValueError(
                                 f"user {user_id} has no last role to create pass from"
@@ -1788,18 +1742,7 @@ class PassUpdate:
                         "pass_key": self.pass_key,
                     }
                 )
-                upd_result = await self.base.user_db.update_one(
-                    {
-                        "user_id": recipient,
-                        "bot_id": self.bot,
-                    },
-                    {
-                        "$unset": {
-                            self.pass_key: "",
-                        },
-                    },
-                )
-                if result.deleted_count <= 0 and upd_result.modified_count <= 0:
+                if result.deleted_count <= 0:
                     logger.info(
                         f"pass {self.pass_key=} for {recipient=} was not cancelled"
                     )
@@ -2144,59 +2087,6 @@ class Passes(BasePlugin):
                 "user_id": {"$in": user_ids},
             }
         )
-        await self.user_db.update_many(
-            {
-                "bot_id": self.bot.id,
-                "user_id": {"$in": user_ids},
-            },
-            {"$unset": {pass_key: ""}},
-        )
-
-    async def migrate_embedded_passes(self) -> None:
-        """One-time helper to mirror embedded passes into the dedicated collection."""
-        migrated = 0
-        try:
-            for pass_key in ["pass_2025_1", "pass_2025_2"] + PASS_KEYS:
-                async for user in self.user_db.find(
-                    {
-                        "bot_id": self.bot.id,
-                        pass_key: {"$exists": True},
-                    }
-                ):
-                    pass_data = user.get(pass_key)
-                    if not isinstance(pass_data, dict):
-                        continue
-                    doc = dict(pass_data)
-                    doc["user_id"] = user["user_id"]
-                    doc["pass_key"] = pass_key
-                    doc["bot_id"] = self.bot.id
-                    result = await self.pass_db.update_one(
-                        {
-                            "bot_id": self.bot.id,
-                            "user_id": user["user_id"],
-                            "pass_key": pass_key,
-                        },
-                        {"$set": doc},
-                        upsert=True,
-                    )
-                    if result.upserted_id is not None:
-                        migrated += 1
-                    if result.modified_count > 0 or result.upserted_id is not None:
-                        await self.user_db.update_one(
-                            {
-                                "bot_id": self.bot.id,
-                                "user_id": user["user_id"],
-                            },
-                            {
-                                "$unset": {
-                                    pass_key: "",
-                                }
-                            },
-                        )
-            if migrated:
-                logger.info("Migrated %s embedded passes into the passes collection", migrated)
-        except Exception as e:
-            logger.error("Exception while migrating embedded passes: %s", e, exc_info=1)
 
     def get_all_payment_admins(self, pass_key: str) -> list[int]:
         admins = self.payment_admins.get(pass_key, [])
@@ -2221,7 +2111,7 @@ class Passes(BasePlugin):
         raise Exception("No payment admins configured for pass %s", pass_key)
 
     async def get_all_passes(self, pass_key: str = PASS_RU, with_unpaid: bool = False, with_waitlist: bool = False) -> list[dict]:
-        states = ["payed"]
+        states = ["paid"]
         if with_unpaid:
             states.append("assigned")
         query = {
@@ -2236,7 +2126,19 @@ class Passes(BasePlugin):
         bot_started: Event = self.base_app.bot_started
         await bot_started.wait()
         logger.info("timeout processor started")
-        await self.migrate_embedded_passes()
+        migration_result = await self.pass_db.update_many(
+            {
+                "bot_id": self.bot.id,
+                "state": "payed",
+            },
+            {"$set": {"state": "paid"}},
+        )
+        if migration_result.modified_count:
+            logger.info(
+                "Migrated %s passes from payed to paid",
+                migration_result.modified_count,
+            )
+        # await self.migrate_embedded_passes()
         for pass_key in PASS_KEYS:
             async for pass_doc in self.pass_db.find(
                 {
@@ -2326,7 +2228,7 @@ class Passes(BasePlugin):
                 {
                     "bot_id": self.bot.id,
                     "pass_key": PASS_RU,
-                    "state": {"$in": ["assigned", "payed"]},
+                    "state": {"$in": ["assigned", "paid"]},
                 }
             ):
                 try:
@@ -2500,9 +2402,9 @@ class Passes(BasePlugin):
                         and max_assigned < group["count"]
                     ):
                         max_assigned = group["count"]
-                counts["leader"]["RA"] = (counts["leader"].get("payed", 0) +
+                counts["leader"]["RA"] = (counts["leader"].get("paid", 0) +
                                           counts["leader"].get("assigned", 0))
-                counts["follower"]["RA"] = (counts["follower"].get("payed", 0) +
+                counts["follower"]["RA"] = (counts["follower"].get("paid", 0) +
                                             counts["follower"].get("assigned", 0))
                 cap_per_role = self.config.passes.events[pass_key].amount_cap_per_role
                 if (counts["leader"]["RA"] >= cap_per_role and
@@ -2568,9 +2470,9 @@ class Passes(BasePlugin):
                             continue
                         counts[group["_id"]["role"]][group["_id"]["state"]] = \
                             group["count"]
-                    counts["leader"]["RA"] = (counts["leader"].get("payed", 0) +
+                    counts["leader"]["RA"] = (counts["leader"].get("paid", 0) +
                                               counts["leader"].get("assigned", 0))
-                    counts["follower"]["RA"] = (counts["follower"].get("payed", 0) +
+                    counts["follower"]["RA"] = (counts["follower"].get("paid", 0) +
                                                 counts["follower"].get("assigned", 0))
                     cap_per_role = self.config.passes.events[
                         pass_key
