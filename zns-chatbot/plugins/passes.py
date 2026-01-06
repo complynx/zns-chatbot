@@ -34,7 +34,7 @@ MAX_CONCURRENT_ASSIGNMENTS = 6
 QUEUE_LOOKAHEAD = 0  # 0 = scan the whole queue when searching for an assignable pass
 
 CURRENT_PRICE = {
-    PASS_RU: 12500,#x40=67, 13000,#x40=82, 13500,#x15=90
+    PASS_RU: 13000,#x40=82, 13500,#x15=90
     # PASS_BY: 10900,
 }
 TIMEOUT_PROCESSOR_TICK = 3600
