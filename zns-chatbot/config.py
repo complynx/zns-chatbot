@@ -57,8 +57,8 @@ class TelegramSettings(BaseSettings):
 class LanguageModel(BaseSettings):
     openai_api_key: SecretStr = Field("")
     google_api_key: SecretStr = Field("")
-    model: str = Field("gemini-2.0-flash")
-    simple_model: str = Field("gemini-2.0-flash-lite")
+    model: str = Field("gemini-2.5-flash")
+    simple_model: str = Field("gemini-2.5-flash-lite")
     tokenizer_model: str = Field("gpt-4o-mini")
     reply_token_cap: int = Field(3000)
     message_token_cap: int = Field(5000)
