@@ -182,6 +182,8 @@ class PassUpdate:
     async def show_pass_edit(self, user, u_pass, text_key: str | None = None):
         if text_key is None:
             text_key = f"passes-pass-edit-{u_pass['state']}"
+        state = u_pass.get("state")
+        pass_type = u_pass.get("type", "solo")
 
         buttons = [
             InlineKeyboardButton(
@@ -189,14 +191,28 @@ class PassUpdate:
                 callback_data=f"{self.base.name}|name",
             ),
         ]
-        if u_pass["state"] == "assigned":
+        if state == "assigned":
             buttons.append(
                 InlineKeyboardButton(
                     self.l("passes-button-pay"),
                     callback_data=f"{self.base.name}|pay|{self.pass_key}",
                 )
             )
-        if u_pass["state"] != "paid":
+        if state == "waitlist" and pass_type == "solo" and "couple" not in u_pass:
+            buttons.append(
+                InlineKeyboardButton(
+                    self.l("passes-button-couple"),
+                    callback_data=f"{self.base.name}|couple|{self.pass_key}",
+                )
+            )
+        if state == "waiting-for-couple":
+            buttons.append(
+                InlineKeyboardButton(
+                    self.l("passes-button-solo"),
+                    callback_data=f"{self.base.name}|solo|{self.pass_key}",
+                )
+            )
+        if state != "paid":
             if len(self.base.payment_admins[self.pass_key]) > 1:
                 buttons.append(
                     InlineKeyboardButton(
@@ -809,6 +825,16 @@ class PassUpdate:
 
     async def handle_cq_couple(self, key: str):
         self.set_pass_key(key)
+        existing_pass = await self.get_pass()
+        if isinstance(existing_pass, dict):
+            state = existing_pass.get("state")
+            is_waitlist_solo = (
+                state == "waitlist"
+                and existing_pass.get("type", "solo") == "solo"
+                and "couple" not in existing_pass
+            )
+            if not is_waitlist_solo and state != "waiting-for-couple":
+                return await self.handle_cq_exit()
         markup = ReplyKeyboardMarkup(
             [[CANCEL_CHR + self.l("cancel-command")]], resize_keyboard=True
         )
@@ -850,6 +876,15 @@ class PassUpdate:
         existing_pass = await self.base.get_pass_for_user(self.update.user, self.pass_key)
         if existing_pass is None and self.pass_key in user and isinstance(user[self.pass_key], dict):
             existing_pass = user[self.pass_key]
+        if isinstance(existing_pass, dict):
+            state = existing_pass.get("state")
+            is_waitlist_solo = (
+                state == "waitlist"
+                and existing_pass.get("type", "solo") == "solo"
+                and "couple" not in existing_pass
+            )
+            if not is_waitlist_solo and state != "waiting-for-couple":
+                return await self.handle_cq_exit()
         u_pass = {
             "role": user["role"],
             "state": "waitlist",
