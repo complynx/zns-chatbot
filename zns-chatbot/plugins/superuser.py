@@ -31,6 +31,7 @@ class Superuser(BasePlugin):
         self._checker = CommandHandler("user_echo", self.handle_message)
         self._checker_gf = CommandHandler("get_file", self.handle_get_file)
         self._checker_send_message_to = CommandHandler("send_message_to", self.send_message_to)
+        self._checker_refresh_events = CommandHandler("refresh_events", self.refresh_events)
 
     def test_message(self, message: Update, state, web_app_data):
         if message.effective_user.id not in self.admins:
@@ -41,7 +42,30 @@ class Superuser(BasePlugin):
             return PRIORITY_BASIC, self.handle_get_file
         if self._checker_send_message_to.check_update(message):
             return PRIORITY_BASIC, self.send_message_to
+        if self._checker_refresh_events.check_update(message):
+            return PRIORITY_BASIC, self.refresh_events
         return PRIORITY_NOT_ACCEPTING, None
+
+    async def refresh_events(self, update: TGState):
+        try:
+            events = self.base_app.events
+            if events is None:
+                await update.reply("Events are not initialized.", parse_mode=None)
+                return
+            await events.refresh()
+            if hasattr(self.base_app, "passes") and self.base_app.passes is not None:
+                self.base_app.passes.refresh_events_cache()
+            all_keys = events.all_pass_keys()
+            active_keys = events.active_pass_keys()
+            await update.reply(
+                "Events refreshed.\n"
+                + f"All pass keys: {all_keys}\n"
+                + f"Active pass keys: {active_keys}",
+                parse_mode=None,
+            )
+        except Exception as err:
+            logger.error("Error in refresh_events %s", err, exc_info=1)
+            await update.reply(f"Error in refresh_events {err=}", parse_mode=None)
     
     async def send_message_to(self, update: TGState):
         try:
