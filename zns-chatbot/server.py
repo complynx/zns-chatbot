@@ -15,7 +15,7 @@ from telegram import Bot
 from tornado.httputil import HTTPServerRequest
 
 from .config import Config
-from .plugins.pass_keys import PASS_KEY  # For food.save_order
+from .events import Events
 from .plugins.massage import now_msk
 from .plugins.orders import DEADLINE
 
@@ -62,6 +62,7 @@ def validate(init_data: str, bot_token: str) -> dict[str, Any]:
 class RequestHandlerWithApp(tornado.web.RequestHandler):
     def initialize(self, app):
         self.app = app
+        self.events: Events = app.events
         self.config: Config = app.config
 
     @property
@@ -82,6 +83,15 @@ class RequestHandlerWithApp(tornado.web.RequestHandler):
         if user_id is None:
             return None
         return int(user_id.decode("utf-8"))
+
+    def default_pass_key(self) -> str:
+        return self.events.closest_active_pass_key(now_msk())
+
+    def is_active_pass_key(self, pass_key: str) -> bool:
+        event = self.events.get_event(pass_key)
+        if event is None:
+            return False
+        return event.is_active(now_msk())
 
 
 class FitFrameHandler(RequestHandlerWithApp):
@@ -319,7 +329,10 @@ class MenuHandler(RequestHandlerWithApp):
 
         order_to_load = None
         # pass_key should be present in the URL if order_id is, as constructed by food.py
-        pass_key_from_query = self.get_query_argument("pass_key", default=PASS_KEY)
+        pass_key_from_query = self.get_query_argument(
+            "pass_key",
+            default=self.default_pass_key(),
+        )
         order_id_str_from_query = self.get_query_argument("order_id", default=None)
 
         if order_id_str_from_query:
@@ -381,6 +394,18 @@ class MenuHandler(RequestHandlerWithApp):
     async def post(self):
         initData_str = self.get_argument("initData", default=None, strip=False)
         user_id_from_init_data = None
+        pass_key_from_query = self.get_query_argument(
+            "pass_key",
+            default=self.default_pass_key(),
+        )
+        if not self.is_active_pass_key(pass_key_from_query):
+            self.set_status(400)
+            logger.info(
+                "Menu POST: Rejected invalid or inactive pass_key '%s'.",
+                pass_key_from_query,
+            )
+            self.write({"error": "Invalid or inactive pass_key."})
+            return
 
         if not initData_str:
             self.set_status(400)
@@ -464,13 +489,13 @@ class MenuHandler(RequestHandlerWithApp):
             # autosave_str = self.get_query_argument("autosave", default="") # Not used by food.save_order
 
             logger.info(
-                f"Menu POST: Attempting to save order for user {user_id_from_init_data}. Origin msg: {original_message_id}, chat: {chat_id}"
+                f"Menu POST: Attempting to save order for user {user_id_from_init_data}. Pass key: {pass_key_from_query}. Origin msg: {original_message_id}, chat: {chat_id}"
             )
 
             # food.save_order handles ownership via user_id and editability of paid/proof_submitted orders.
             await self.app.food.save_order(
                 user_id=user_id_from_init_data,
-                pass_key=PASS_KEY,  # Imported from .plugins.passes
+                pass_key=pass_key_from_query,
                 order_data=carts_data,
                 original_message_id=original_message_id,
                 chat_id=chat_id,

@@ -1,3 +1,0 @@
-PASS_RU, PASS_BY = "pass_2026_1", ""
-PASS_KEYS = [PASS_RU]
-PASS_KEY = PASS_RU

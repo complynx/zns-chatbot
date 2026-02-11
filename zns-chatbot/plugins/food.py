@@ -22,7 +22,7 @@ from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, CommandHandler
 
 from ..config import full_link
-from ..plugins.pass_keys import PASS_KEY
+from ..events import Events
 from ..plugins.massage import now_msk
 from ..telegram_links import client_user_link_html, client_user_name
 from ..tg_state import TGState
@@ -53,7 +53,7 @@ class FoodUpdate:
         self.tgUpdate = update.update
         self.bot = self.update.bot.id
         self.user = None
-        self.pass_key = PASS_KEY
+        self.pass_key = self.base.default_pass_key()
 
     async def get_user(self):
         if self.user is None:
@@ -1480,6 +1480,7 @@ class Food(BasePlugin):
         self.food_db = base_app.mongodb[self.config.mongo_db.food_collection]
         self.user_db = base_app.users_collection
         self.base_app.food = self
+        self.events: Events = base_app.events
 
         self.deadline = self.config.food.deadline
 
@@ -1504,6 +1505,9 @@ class Food(BasePlugin):
         )
         create_task(self._notification_sender())
 
+    def default_pass_key(self) -> str:
+        return self.events.closest_active_pass_key(now_msk())
+
     async def _notification_sender(self) -> None:
         from .passes import Passes
         bot_started: Event = self.base_app.bot_started
@@ -1513,6 +1517,7 @@ class Food(BasePlugin):
             try:
                 # Wait for the next notification time
                 await sleep(NOTIFICATION_CHECK_INTERVAL)
+                current_pass_key = self.default_pass_key()
                 passes = await passes_plugin.get_all_passes(with_unpaid=True)
                 pass_users = {p["user_id"]: p for p in passes}
                 # Send notifications to users with pending orders
@@ -1524,7 +1529,7 @@ class Food(BasePlugin):
                     )):
                     async for order in self.food_db.find(
                         {
-                            "pass_key": PASS_KEY,
+                            "pass_key": current_pass_key,
                             "payment_status": {"$nin": ["paid", "proof_submitted"]},
                             "notification_first_sent": {"$ne": True},
                             "total": {"$gt": 0},  # Only notify if total > 0
@@ -1561,7 +1566,7 @@ class Food(BasePlugin):
                                 )
                                 await passes_plugin.update_pass_fields(
                                     [user_id],
-                                    PASS_KEY,
+                                    current_pass_key,
                                     set_fields={"notified_food_first": True},
                                 )
                         except Exception as e:
@@ -1579,7 +1584,7 @@ class Food(BasePlugin):
                     )):
                     async for order in self.food_db.find(
                         {
-                            "pass_key": PASS_KEY,
+                            "pass_key": current_pass_key,
                             "payment_status": {"$nin": ["paid", "proof_submitted"]},
                             "notification_last_sent": {"$ne": True},
                             "total": {"$gt": 0},  # Only notify if total > 0
@@ -1616,7 +1621,7 @@ class Food(BasePlugin):
                                 )
                                 await passes_plugin.update_pass_fields(
                                     [user_id],
-                                    PASS_KEY,
+                                    current_pass_key,
                                     set_fields={"notified_food_last": True},
                                 )
                         except Exception as e:
@@ -1642,14 +1647,17 @@ class Food(BasePlugin):
 
         return menu_data
 
-    async def get_order(self, user_id: int, pass_key: str = PASS_KEY) -> dict | None:
+    async def get_order(self, user_id: int, pass_key: str | None = None) -> dict | None:
+        pass_key_to_use = pass_key or self.default_pass_key()
         logger.debug(
-            f"Attempting to get order for user_id: {user_id}, pass_key: {pass_key}"
+            f"Attempting to get order for user_id: {user_id}, pass_key: {pass_key_to_use}"
         )
-        order = await self.food_db.find_one({"user_id": user_id, "pass_key": pass_key})
+        order = await self.food_db.find_one(
+            {"user_id": user_id, "pass_key": pass_key_to_use}
+        )
         if order:
             logger.debug(
-                f"Order found for user_id: {user_id}, pass_key: {pass_key}. Order ID: "
+                f"Order found for user_id: {user_id}, pass_key: {pass_key_to_use}. Order ID: "
                 f"{order.get('_id')}"
             )
             if now_msk() > self.deadline:
@@ -1680,7 +1688,9 @@ class Food(BasePlugin):
                 )
                 return None
         else:
-            logger.debug(f"No order found for user_id: {user_id}, pass_key: {pass_key}")
+            logger.debug(
+                f"No order found for user_id: {user_id}, pass_key: {pass_key_to_use}"
+            )
         return order
 
     async def get_order_by_id(self, order_id: ObjectId, pass_key: str) -> dict | None:
@@ -1722,6 +1732,10 @@ class Food(BasePlugin):
         original_message_id: int | None = None,
         chat_id: int | None = None,
     ) -> dict | None:
+        event = self.events.get_event(pass_key)
+        if event is None or not event.is_active(now_msk()):
+            raise ValueError(f"invalid or inactive pass_key: {pass_key}")
+
         if not self.menu:
             logger.error("Menu not loaded. Cannot save order.")
             return None
@@ -2123,7 +2137,7 @@ class Food(BasePlugin):
             csv_rows = []
             csv_rows.append(header)
 
-            orders_cursor = self.food_db.find({"pass_key": PASS_KEY})
+            orders_cursor = self.food_db.find({"pass_key": self.default_pass_key()})
             async for order in orders_cursor:
                 user_id = order.get("user_id")
                 user_doc = await self.user_db.find_one({"user_id": user_id, "bot_id": self.bot.bot.id})
@@ -2210,7 +2224,7 @@ class Food(BasePlugin):
             combo_counts = {}  # Structure: {day: {combo_type: count}}
             # Process all orders
             orders_cursor = self.food_db.find({
-                "pass_key": PASS_KEY,
+                "pass_key": self.default_pass_key(),
                 "payment_status": "paid",
                 "payment_confirmed_date": {"$exists": True},
             })
@@ -2487,7 +2501,7 @@ class Food(BasePlugin):
         # Find the user's order
         order = await self.food_db.find_one({
             "user_id": user_id,
-            "pass_key": PASS_KEY,
+            "pass_key": self.default_pass_key(),
             "payment_status": "paid",
             "payment_confirmed_date": {"$exists": True},
         })

@@ -10,10 +10,10 @@ from telegram.constants import ParseMode
 import logging
 from bson.objectid import ObjectId
 from ..config import Party, full_link
+from ..events import Events
 from datetime import datetime, timedelta
 from asyncio import Lock, create_task, gather
 from math import floor, ceil
-from .pass_keys import PASS_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ class Specialist:
             "specialist": self.id,
             "deleted": {"$exists":False},
             "start": {"$gt": now_msk()},
-            "pass_key": PASS_KEY,
+            "pass_key": self.base.default_pass_key(),
         }).sort('start', 1).to_list(length=1)
         if len(ret) == 0:
             return None
@@ -211,7 +211,7 @@ class Specialist:
             "deleted": {"$exists":False},
             "start": {"$lte": now},
             "end": {"$gte": now},
-            "pass_key": PASS_KEY,
+            "pass_key": self.base.default_pass_key(),
         })
         if ret is None:
             return None
@@ -232,7 +232,7 @@ class Specialist:
             "specialist": self.id,
             "deleted": {"$exists":False},
             "party": day,
-            "pass_key": PASS_KEY
+            "pass_key": self.base.default_pass_key(),
         }).sort('start', 1)
         ret = []
         async for massage in cursor:
@@ -280,7 +280,7 @@ class MassageRecord:
     
     async def init(self, clean=False):
         if "_id" not in self.record:
-            self.record["pass_key"] = PASS_KEY
+            self.record["pass_key"] = self.plugin.default_pass_key()
             rec = await self.plugin.massage_db.insert_one(self.record)
             self.record["_id"] = rec.inserted_id
         if self.client is None:
@@ -519,7 +519,7 @@ class UserMassages:
         async for massage in self.plugin.massage_db.find({
             "user_id": self.user["user_id"],
             "deleted": {"$exists":False},
-            "pass_key": PASS_KEY,
+            "pass_key": self.plugin.default_pass_key(),
             "start": {
                 "$gte": self.plugin.parties_begin,
                 "$lte": self.plugin.parties_end
@@ -553,7 +553,7 @@ class UserMassages:
         rec = MassageRecord({
             "user_id": self.update.user,
             "created_at": datetime.now(),
-            "pass_key": PASS_KEY,
+            "pass_key": self.plugin.default_pass_key(),
         }, self.plugin, user)
         await rec.init()
         await self.edit_massage(rec)
@@ -1008,7 +1008,7 @@ class UserMassages:
             "user_id": self.update.user,
             "length": num_slots,
             "party": party.start.day,
-            "pass_key": PASS_KEY,
+            "pass_key": self.plugin.default_pass_key(),
         }
         user = await self.get_user()
         massage = MassageRecord(massage_record, self.plugin, user)
@@ -1105,6 +1105,7 @@ class MassagePlugin(BasePlugin):
         self.finalizer_lock = Lock()
         self.admins = self.config.telegram.admins
         self.user_db = base_app.users_collection
+        self.events: Events = base_app.events
         self.massage_db = base_app.mongodb[self.config.mongo_db.massage_collection]
         self.parties_by_day = dict[int,Party]()
         self.parties_begin = self.config.parties[0].start
@@ -1122,6 +1123,9 @@ class MassagePlugin(BasePlugin):
         create_task(self._notifier())
         base_app.massages = self
 
+    def default_pass_key(self) -> str:
+        return self.events.closest_active_pass_key(now_msk())
+
     async def _notifier(self):
         from asyncio import sleep
         logger.info("starting MassagePlugin.notifier loop ")
@@ -1129,6 +1133,7 @@ class MassagePlugin(BasePlugin):
             await sleep(NOTIFICATOR_LOOP)
             try:
                 now = now_msk()
+                current_pass_key = self.default_pass_key()
                 logger.debug(f"notificator tick {now}")
                 async for doc in self.massage_db.find({
                     "deleted": {"$exists":False},
@@ -1136,7 +1141,7 @@ class MassagePlugin(BasePlugin):
                         "$lt": now+self.config.massages.notify_client_prior_long,
                         "$gte": self.parties_begin,
                     },
-                    "pass_key": PASS_KEY,
+                    "pass_key": current_pass_key,
                     "client_notified_prior_long": {"$exists":False},
                 }):
                     rec = MassageRecord(doc, self)
@@ -1147,7 +1152,7 @@ class MassagePlugin(BasePlugin):
                         "$lt": now+self.config.massages.notify_client_prior,
                         "$gte": self.parties_begin
                     },
-                    "pass_key": PASS_KEY,
+                    "pass_key": current_pass_key,
                     "client_notified": {"$exists":False},
                 }):
                     rec = MassageRecord(doc, self)
@@ -1158,7 +1163,7 @@ class MassagePlugin(BasePlugin):
                         "$lt": now+timedelta(minutes=SLOT_BUFFER),
                         "$gte": self.parties_begin
                     },
-                    "pass_key": PASS_KEY,
+                    "pass_key": current_pass_key,
                     "specialist_notified": {"$exists":False},
                 }):
                     rec = MassageRecord(doc, self)
@@ -1168,7 +1173,7 @@ class MassagePlugin(BasePlugin):
                     "start": {
                         "$gte": now,
                     },
-                    "pass_key": PASS_KEY,
+                    "pass_key": current_pass_key,
                     "notify": {"$eq":True},
                 }):
                     rec = MassageRecord(doc, self)
@@ -1279,7 +1284,7 @@ class MassagePlugin(BasePlugin):
         speaialists: List[Specialist] = await self.get_specialists()
         async for massage in self.massage_db.find({
             "deleted": {"$exists":False},
-            "pass_key": PASS_KEY,
+            "pass_key": self.default_pass_key(),
             "start": {
                 "$gte": self.parties_begin,
                 "$lte": self.parties_end

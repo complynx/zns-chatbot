@@ -16,16 +16,11 @@ from telegram import (
 from telegram.constants import ParseMode
 from telegram.ext import CallbackQueryHandler, CommandHandler, filters
 
+from ..events import EventInfo, Events
 from ..telegram_links import client_user_link_html, client_user_name
 from ..tg_state import SilentArgumentParser, TGState
 from .base_plugin import PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING, BasePlugin
 from .massage import now_msk, split_list
-from .pass_keys import (
-    PASS_RU,
-    PASS_BY,
-    PASS_KEYS,
-    PASS_KEY,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +30,7 @@ QUEUE_LOOKAHEAD = 0  # 0 = scan the whole queue when searching for an assignable
 
 # Per-person default pass prices by pass key.
 CURRENT_PRICE = {
-    PASS_RU: 12500,
-    # PASS_BY: 10900,
+    "pass_2026_1": 12500,
 }
 TIMEOUT_PROCESSOR_TICK = 3600
 INVITATION_TIMEOUT = timedelta(days=2, hours=10)
@@ -64,10 +58,8 @@ class PassUpdate:
         self.pass_data: dict | None = None
 
     def is_passport_required(self) -> bool:
-        try:
-            return self.base.config.passes.events[self.pass_key].require_passport
-        except Exception:
-            return True
+        event = self.base.get_event(self.pass_key)
+        return event.require_passport if event is not None else True
 
     async def handle_callback_query(self):
         q = self.update.callback_query
@@ -506,7 +498,8 @@ class PassUpdate:
             )
 
     def set_pass_key(self, pass_key: str) -> None:
-        if pass_key not in PASS_KEYS:
+        self.base.refresh_events_cache()
+        if pass_key not in self.base.pass_keys:
             raise Exception(f"wrong pass key {pass_key}")
         self.pass_key = pass_key
 
@@ -783,7 +776,8 @@ class PassUpdate:
         )
 
     async def new_pass(self):
-        if now_msk() < self.base.config.passes.events[self.pass_key].sell_start:
+        event = self.base.require_event(self.pass_key)
+        if now_msk() < event.sell_start:
             return await self.update.edit_or_reply(
                 self.l("passes-sell-not-started", passKey=self.pass_key),
                 reply_markup=InlineKeyboardMarkup([]),
@@ -800,8 +794,9 @@ class PassUpdate:
 
     async def handle_start(self):
         logger.debug(f"starting passes for: {self.update.user}")
+        self.base.refresh_events_cache()
         buttons = []
-        for pass_key in PASS_KEYS:
+        for pass_key in self.base.pass_keys:
             buttons.append(
                 InlineKeyboardButton(
                     self.l("passes-select-type-button", passKey=pass_key),
@@ -1045,12 +1040,12 @@ class PassUpdate:
         )
 
     async def handle_passport_data_cmd(self):
-        return await self.handle_cq_passport_data(PASS_RU)
+        return await self.handle_cq_passport_data(self.base.default_pass_key())
 
     async def handle_cq_passport_data(self, pass_key: str):
         self.set_pass_key(pass_key)
         logger.debug(f"command to change passport data for: {self.update.user}")
-        if self.pass_key not in PASS_KEYS:
+        if self.pass_key not in self.base.pass_keys:
             return await self.update.reply(
                 self.l("passes-passport-data-required-beginning-message"),
                 parse_mode=ParseMode.HTML,
@@ -1539,6 +1534,7 @@ class PassUpdate:
         assert self.update.user in self.base.config.telegram.admins, (
             f"{self.update.user} is not admin"
         )
+        self.base.refresh_events_cache()
         args_list = self.update.parse_cmd_arguments()
 
         parser = SilentArgumentParser()
@@ -1565,7 +1561,7 @@ class PassUpdate:
 
         args = parser.parse_args(args_list[1:])
         logger.debug(f"passes_assign {args=}, {args_list=}")
-        assert args.pass_key in PASS_KEYS, f"wrong pass key {args.pass_key}"
+        assert args.pass_key in self.base.pass_keys, f"wrong pass key {args.pass_key}"
         assert args.price is None or args.price >= 0, f"wrong price {args.price}"
         assigned = []
         for recipient in args.recipients:
@@ -1600,13 +1596,14 @@ class PassUpdate:
                             }
                         )
                         if user is not None:
-                            last_role = user.get(
-                                "role",
-                                user.get("pass_2025_1", {}).get(
-                                    "role",
-                                    user.get("pass_2025_2", {}).get(
-                                        "role", None,
-                                    )))
+                            last_role = user.get("role")
+                            if last_role is None:
+                                for event_key in self.base.all_pass_keys():
+                                    embedded_pass = user.get(event_key)
+                                    if isinstance(embedded_pass, dict):
+                                        last_role = embedded_pass.get("role")
+                                        if last_role is not None:
+                                            break
                         if last_role is None:
                             last_pass = await self.base.pass_db.find_one(
                                 {"bot_id": self.bot, "user_id": user_id},
@@ -1667,6 +1664,7 @@ class PassUpdate:
             f"{self.update.user} is not admin"
         )
         args_list = self.update.parse_cmd_arguments()
+        self.base.refresh_events_cache()
         # Expect: ['/passes_uncouple', pass_key, user_id]
         if len(args_list) < 3:
             return await self.update.reply(
@@ -1674,7 +1672,7 @@ class PassUpdate:
                 parse_mode=None,
             )
         pass_key = args_list[1]
-        if pass_key not in PASS_KEYS:
+        if pass_key not in self.base.pass_keys:
             return await self.update.reply(
                 f"Unknown pass_key {pass_key}", parse_mode=None
             )
@@ -1721,14 +1719,20 @@ class PassUpdate:
 
     async def handle_passes_cancel(self):
         args_list = self.update.parse_cmd_arguments()
+        self.base.refresh_events_cache()
 
         parser = SilentArgumentParser()
-        parser.add_argument("--pass_key", type=str, help="Pass key", default=PASS_KEY)
+        parser.add_argument(
+            "--pass_key",
+            type=str,
+            help="Pass key",
+            default=self.base.default_pass_key(),
+        )
         parser.add_argument("recipients", nargs="*", help="Recipients")
 
         args = parser.parse_args(args_list[1:])
         logger.debug(f"passes_cancel {args=}, {args_list=}")
-        assert args.pass_key in PASS_KEYS, f"wrong pass key {args.pass_key}"
+        assert args.pass_key in self.base.pass_keys, f"wrong pass key {args.pass_key}"
         self.set_pass_key(args.pass_key)
         assert (self.update.user in self.base.config.telegram.admins or
                 self.base.is_payment_admin(self.update.user, self.pass_key)), (
@@ -1799,23 +1803,24 @@ class PassUpdate:
     
     async def handle_passes_switch_to_me_cmd(self):
         args_list = self.update.parse_cmd_arguments()
+        self.base.refresh_events_cache()
         tail = args_list[1:]
         if len(tail) == 0:
             return await self.update.reply(
-                "Usage: /passes_switch_to_me [<pass_key>=PASS_KEY] <user_id>",
+                "Usage: /passes_switch_to_me [<pass_key>=active] <user_id>",
                 parse_mode=None,
             )
-        pass_key = PASS_KEY
+        pass_key = self.base.default_pass_key()
         target_user_raw = None
         if len(tail) == 1:
             target_user_raw = tail[0]
         else:
-            if tail[0] in PASS_KEYS:
+            if tail[0] in self.base.pass_keys:
                 pass_key = tail[0]
                 target_user_raw = tail[1]
             else:
                 target_user_raw = tail[0]
-        if pass_key not in PASS_KEYS:
+        if pass_key not in self.base.pass_keys:
             return await self.update.reply(
                 f"Unknown pass key {pass_key}", parse_mode=None
             )
@@ -1882,12 +1887,13 @@ class PassUpdate:
         )
     
     async def handle_passes_table_cmd(self):
+        self.base.refresh_events_cache()
         if self.update.user in self.base.config.telegram.admins:
-            pass_keys_for_this_user = PASS_KEYS
+            pass_keys_for_this_user = self.base.pass_keys
         else:
             pass_keys_for_this_user = [
                 key
-                for key in PASS_KEYS
+                for key in self.base.pass_keys
                 if key in self.base.payment_admins
                 and self.base.is_payment_admin(self.update.user, key)
             ]
@@ -2001,31 +2007,14 @@ class Passes(BasePlugin):
     def __init__(self, base_app):
         super().__init__(base_app)
         self.base_app.passes = self
-        self.payment_admins: dict[str, list[int]] = {key: [] for key in PASS_KEYS}
-        self.hidden_payment_admins: dict[str, list[int]] = {
-            key: [] for key in PASS_KEYS
-        }
+        self.events: Events = self.base_app.events
+        self.pass_keys: list[str] = []
+        self.payment_admins: dict[str, list[int]] = {}
+        self.hidden_payment_admins: dict[str, list[int]] = {}
         if base_app.passes_collection is None:
             raise RuntimeError("passes_collection is not configured")
         self.pass_db: AgnosticCollection = base_app.passes_collection
-        for key in PASS_KEYS:
-            if isinstance(self.config.passes.events[key].payment_admin, int):
-                self.payment_admins[key].append(
-                    self.config.passes.events[key].payment_admin
-                )
-            elif isinstance(self.config.passes.events[key].payment_admin, list):
-                self.payment_admins[key].extend(
-                    self.config.passes.events[key].payment_admin
-                )
-            hidden_admins = (
-                self.config.passes.events[key].hidden_payment_admins
-                if hasattr(self.config.passes.events[key], "hidden_payment_admins")
-                else None
-            )
-            if isinstance(hidden_admins, int):
-                self.hidden_payment_admins[key].append(hidden_admins)
-            elif isinstance(hidden_admins, list):
-                self.hidden_payment_admins[key].extend(hidden_admins)
+        self.refresh_events_cache()
         self.user_db: AgnosticCollection = base_app.users_collection
         self._command_checkers = [
             CommandHandler(self.name, self.handle_start),
@@ -2043,6 +2032,31 @@ class Passes(BasePlugin):
         )
         self._queue_lock = Lock()
         create_task(self._timeout_processor())
+
+    def refresh_events_cache(self) -> None:
+        active_events: list[EventInfo] = list(self.events.active_events(now_msk()))
+        self.pass_keys = [event.key for event in active_events]
+        self.payment_admins = {
+            event.key: list(event.payment_admin) for event in active_events
+        }
+        self.hidden_payment_admins = {
+            event.key: list(event.hidden_payment_admins) for event in active_events
+        }
+
+    def all_pass_keys(self) -> list[str]:
+        return self.events.all_pass_keys()
+
+    def default_pass_key(self) -> str:
+        return self.events.closest_active_pass_key(now_msk())
+
+    def get_event(self, pass_key: str) -> EventInfo | None:
+        return self.events.get_event(pass_key)
+
+    def require_event(self, pass_key: str) -> EventInfo:
+        event = self.get_event(pass_key)
+        if event is None:
+            raise KeyError(f"Unknown event for pass key {pass_key}")
+        return event
 
     def _pass_doc_to_data(self, pass_doc: dict | None) -> dict | None:
         if pass_doc is None:
@@ -2090,10 +2104,10 @@ class Passes(BasePlugin):
         }
 
     def default_price_per_person(self, pass_key: str) -> int:
-        event_settings = self.config.passes.events.get(pass_key)
-        event_price = getattr(event_settings, "price", None) if event_settings is not None else None
-        if isinstance(event_price, (int, float)) and not isinstance(event_price, bool):
-            return int(event_price)
+        event = self.get_event(pass_key)
+        event_price = event.price if event is not None else None
+        if isinstance(event_price, int):
+            return event_price
         if pass_key in CURRENT_PRICE:
             return CURRENT_PRICE[pass_key]
         raise KeyError(f"no default price configured for pass key {pass_key}")
@@ -2215,7 +2229,13 @@ class Passes(BasePlugin):
             return choice(hidden)
         raise Exception("No payment admins configured for pass %s", pass_key)
 
-    async def get_all_passes(self, pass_key: str = PASS_RU, with_unpaid: bool = False, with_waitlist: bool = False) -> list[dict]:
+    async def get_all_passes(
+        self,
+        pass_key: str | None = None,
+        with_unpaid: bool = False,
+        with_waitlist: bool = False,
+    ) -> list[dict]:
+        pass_key = pass_key or self.default_pass_key()
         states = ["paid"]
         if with_unpaid:
             states.append("assigned")
@@ -2230,6 +2250,7 @@ class Passes(BasePlugin):
     async def _timeout_processor(self) -> None:
         bot_started: Event = self.base_app.bot_started
         await bot_started.wait()
+        self.refresh_events_cache()
         logger.info("timeout processor started")
         migration_result = await self.pass_db.update_many(
             {
@@ -2244,7 +2265,7 @@ class Passes(BasePlugin):
                 migration_result.modified_count,
             )
         # await self.migrate_embedded_passes()
-        for pass_key in PASS_KEYS:
+        for pass_key in self.pass_keys:
             async for pass_doc in self.pass_db.find(
                 {
                     "bot_id": self.bot.id,
@@ -2266,7 +2287,7 @@ class Passes(BasePlugin):
                         exc_info=1,
                     )
         processed_waiting: set[int] = set()
-        for pass_key in PASS_KEYS:
+        for pass_key in self.pass_keys:
             all_payment_admins = self.get_all_payment_admins(pass_key)
             async for pass_doc in self.pass_db.find(
                 {
@@ -2328,11 +2349,14 @@ class Passes(BasePlugin):
                         exc_info=1,
                     )
 
-        if self.config.passes.events[PASS_RU].require_passport:
+        for pass_key in self.pass_keys:
+            event = self.get_event(pass_key)
+            if event is None or not event.require_passport:
+                continue
             async for pass_doc in self.pass_db.find(
                 {
                     "bot_id": self.bot.id,
-                    "pass_key": PASS_RU,
+                    "pass_key": pass_key,
                     "state": {"$in": ["assigned", "paid"]},
                 }
             ):
@@ -2348,7 +2372,7 @@ class Passes(BasePlugin):
                     if user is None:
                         continue
                     upd = await self.create_update_from_user(pass_doc["user_id"])
-                    upd.set_pass_key(PASS_RU)
+                    upd.set_pass_key(pass_key)
                     await upd.require_passport_data()
                     await self.user_db.update_one(
                         {
@@ -2372,7 +2396,11 @@ class Passes(BasePlugin):
 
         await self.recalculate_queues()
         while True:
-            for pass_key in PASS_KEYS:
+            self.refresh_events_cache()
+            if len(self.pass_keys) == 0:
+                await sleep(TIMEOUT_PROCESSOR_TICK)
+                continue
+            for pass_key in self.pass_keys:
                 try:
                     await sleep(TIMEOUT_PROCESSOR_TICK)
                     async for pass_doc in self.pass_db.find(
@@ -2442,10 +2470,12 @@ class Passes(BasePlugin):
                     )
 
     async def recalculate_queues(self) -> None:
-        for key in PASS_KEYS:
+        self.refresh_events_cache()
+        for key in self.pass_keys:
             await self.recalculate_queues_pk(key)
 
     async def recalculate_queues_pk(self, pass_key: str) -> None:
+        event = self.require_event(pass_key)
         try:
             natural_queue_exhausted = False
             while True:
@@ -2511,7 +2541,7 @@ class Passes(BasePlugin):
                                           counts["leader"].get("assigned", 0))
                 counts["follower"]["RA"] = (counts["follower"].get("paid", 0) +
                                             counts["follower"].get("assigned", 0))
-                cap_per_role = self.config.passes.events[pass_key].amount_cap_per_role
+                cap_per_role = event.amount_cap_per_role
                 if (counts["leader"]["RA"] >= cap_per_role and
                         counts["follower"]["RA"] >= cap_per_role):
                     break
@@ -2579,9 +2609,7 @@ class Passes(BasePlugin):
                                               counts["leader"].get("assigned", 0))
                     counts["follower"]["RA"] = (counts["follower"].get("paid", 0) +
                                                 counts["follower"].get("assigned", 0))
-                    cap_per_role = self.config.passes.events[
-                        pass_key
-                    ].amount_cap_per_role
+                    cap_per_role = event.amount_cap_per_role
                     if (counts["leader"]["RA"] >= cap_per_role and
                             counts["follower"]["RA"] >= cap_per_role):
                         break
@@ -2629,9 +2657,9 @@ class Passes(BasePlugin):
                 user = await self.user_db.find_one(
                     {"bot_id": self.bot.id, "user_id": pass_doc["user_id"]}
                 ) or {}
-                if self.config.passes.events[pass_key].thread_channel != "":
+                if event.thread_channel != "":
                     try:
-                        ch = self.config.passes.events[pass_key].thread_channel
+                        ch = event.thread_channel
                         if isinstance(ch, str):
                             ch = "@" + ch
                         logger.debug(f"chat id: {ch}, type {type(ch)}")
@@ -2642,15 +2670,11 @@ class Passes(BasePlugin):
                         }
                         await self.bot.send_message(
                             chat_id=ch,
-                            message_thread_id=self.config.passes.events[
-                                pass_key
-                            ].thread_id,
+                            message_thread_id=event.thread_id,
                             text=self.base_app.localization(
                                 "passes-announce-user-registered",
                                 args=args,
-                                locale=self.config.passes.events[
-                                    pass_key
-                                ].thread_locale,
+                                locale=event.thread_locale,
                             ),
                             parse_mode=ParseMode.HTML,
                         )
@@ -2667,6 +2691,7 @@ class Passes(BasePlugin):
         pass_key: str,
         counts: dict[str, dict[str, int]] | None = None,
     ) -> bool:
+        event = self.require_event(pass_key)
         match = {
             "bot_id": self.bot.id,
             "pass_key": pass_key,
@@ -2681,7 +2706,7 @@ class Passes(BasePlugin):
             {"$match": match},
             {"$sort": {"date_created": 1, "user_id": 1}},
         ]
-        cap_per_role = self.config.passes.events[pass_key].amount_cap_per_role
+        cap_per_role = event.amount_cap_per_role
         role_counts = counts or {}
         leader_ra = role_counts.get("leader", {}).get("RA", 0)
         follower_ra = role_counts.get("follower", {}).get("RA", 0)

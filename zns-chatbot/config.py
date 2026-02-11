@@ -23,27 +23,26 @@ class GoogleSettings(BaseSettings):
     about_doc_id: str = Field("1Jfed4yZ-Kv_W_S1e1qMUFZPdh0nsdEEP5J0EKiqZB_Q")
 
 
-class PassesEventSettings(BaseSettings):
+class EventSettings(BaseSettings):
     amount_cap_per_role: int = Field(80)
     payment_admin: list[int] | int | None = Field(None)
     hidden_payment_admins: list[int] | int | None = Field(None)
     sell_start: datetime = Field(datetime(2025, 1, 24, 18, 45))
+    finish_date: datetime | None = Field(None)
     thread_channel: int | str = Field("")
     thread_id: int | None = Field(None)
     thread_locale: str = Field("ru")
     require_passport: bool = Field(False)
+    price: int | None = Field(None)
 
 
 class PassesSettings(BaseSettings):
-    events: dict[str, PassesEventSettings] = Field(
+    events: dict[str, EventSettings] = Field(
         {
-            "pass_2026_1": PassesEventSettings(
+            "pass_2026_1": EventSettings(
                 amount_cap_per_role=1,
                 sell_start=datetime(2026, 1, 24, 18, 45),
-            ),
-            "pass_2025_2": PassesEventSettings(
-                amount_cap_per_role=6,
-                sell_start=datetime(2025, 4, 7, 18, 45),
+                finish_date=datetime(2026, 5, 13, 23, 59),
             ),
         }
     )
@@ -100,6 +99,9 @@ class MongoDB(BaseSettings):
     )
     massage_collection: str = Field(
         "zns_bot_massage", validation_alias="ZNS_BOT_MASSAGE_COLLECTION"
+    )
+    events_collection: str = Field(
+        "zns_bot_events", validation_alias="ZNS_BOT_EVENTS_COLLECTION"
     )
 
 

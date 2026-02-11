@@ -3,6 +3,7 @@ import hashlib
 import logging
 import random
 from .config import Config
+from .events import Events
 from .telegram import create_telegram_bot
 from .cached_localization import Localization
 from fluent.runtime import FluentResourceLoader
@@ -22,6 +23,7 @@ class App(object):
     passes_collection = None
     users_collection = None
     storage = None
+    events = None
 
 async def main(cfg: Config):
     app = App()
@@ -36,9 +38,10 @@ async def main(cfg: Config):
         app.passes_collection = app.mongodb[cfg.mongo_db.passes_collection]
         app.users_collection = app.mongodb[cfg.mongo_db.users_collection]
         app.storage = Storage(app.mongodb[cfg.mongo_db.bots_storage])
-
-    await create_server(cfg, app)
+    app.events = Events(app)
     try:
+        await app.events.start()
+        await create_server(cfg, app)
         async with create_telegram_bot(cfg, app, {plugin.name: plugin for plugin in [plugin(app) for plugin in plugins]}) as bot:
             logger.info("running event loop")
 
@@ -47,6 +50,9 @@ async def main(cfg: Config):
         pass
     except Exception as e:
         logger.exception(f"got exception {e}")
+    finally:
+        if app.events is not None:
+            await app.events.stop()
 
 if __name__ == "__main__":
     cfg = Config()
