@@ -41,15 +41,10 @@ restoration_gan_filename = "GFPGANv1.4.pth"
 models_cache_folder = "/cache"
 
 FILES = {
-    "leader": {
+    "detailed": {
         "face_file": "frame/zns_2025_2_face.jpg",
         "frame_file": "frame/zns_2025_2_frame.jpg",
         "mask_file": "frame/zns_2025_2_mask.png",
-    },
-    "follower": {
-        "face_file": "frame/zns_2025_2_face_f.jpg",
-        "frame_file": "frame/zns_2025_2_frame_f.jpg",
-        "mask_file": "frame/zns_2025_2_mask_f.png",
     },
     "simple": "frame/zns_2025_2_simple.png",
 }
@@ -709,39 +704,12 @@ class Avatar(BasePlugin):
                 }
             },
         )
-        user = await update.get_user()
-        user_role = ""
-        try:
-            from .passes import PASS_RU
-
-            if PASS_RU in user and "role" in user[PASS_RU]:
-                user_role = user[PASS_RU]["role"]
-        except ImportError:
-            logger.warning(
-                "Passes plugin not available for role determination in detailed avatar."
-            )
-        except KeyError:
-            logger.warning(
-                f"User object for {update.user} does not contain PASS_RU or role information."
-            )
-
-        if not user_role:
-            await update.reply(
-                text=update.l("avatar-no-role"),
-                parse_mode=ParseMode.HTML,
-                reply_to_message_id=update.message_id,
-            )
-            await self.files_db.update_one(
-                {"_id": db_id}, {"$set": {"status": "error_no_role"}}
-            )
-            return
-
-        files_config = FILES.get(user_role, None)
+        files_config = FILES.get("detailed", None)
         if not files_config or not all(
             k in files_config for k in ["face_file", "frame_file", "mask_file"]
         ):
             logger.error(
-                f"Configuration for role '{user_role}' for detailed avatar is missing or incomplete."
+                "Detailed avatar configuration is missing or incomplete."
             )
             await update.reply(
                 text=update.l("avatar-error-config-role"),
@@ -749,7 +717,7 @@ class Avatar(BasePlugin):
                 reply_to_message_id=update.message_id,
             )
             await self.files_db.update_one(
-                {"_id": db_id}, {"$set": {"status": "error_role_config_missing"}}
+                {"_id": db_id}, {"$set": {"status": "error_detailed_config_missing"}}
             )
             return
 
@@ -837,14 +805,9 @@ class Avatar(BasePlugin):
                                 {"$set": {"status": "completed_detailed"}},
                             )
         except FileNotFoundError as e:
-            if (
-                str(e) in files_config.values()
-                or str(e) == FILES.get(user_role, {}).get("face_file")
-                or str(e) == FILES.get(user_role, {}).get("frame_file")
-                or str(e) == FILES.get(user_role, {}).get("mask_file")
-            ):
+            if str(e) in files_config.values():
                 logger.error(
-                    f"Frame/mask/face file not found for role {user_role}: {e}",
+                    f"Frame/mask/face file not found for detailed avatar: {e}",
                     exc_info=True,
                 )
                 await update.reply(
