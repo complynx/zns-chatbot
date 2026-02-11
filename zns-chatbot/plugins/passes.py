@@ -33,8 +33,9 @@ CANCEL_CHR = chr(0xE007F)  # Tag cancel
 MAX_CONCURRENT_ASSIGNMENTS = 6
 QUEUE_LOOKAHEAD = 0  # 0 = scan the whole queue when searching for an assignable pass
 
+# Per-person default pass prices by pass key.
 CURRENT_PRICE = {
-    PASS_RU: 12500,#81, 13000,#x40=97, 13500,#x15=105
+    PASS_RU: 12500,
     # PASS_BY: 10900,
 }
 TIMEOUT_PROCESSOR_TICK = 3600
@@ -43,7 +44,6 @@ PAYMENT_TIMEOUT = timedelta(days=8)
 PAYMENT_TIMEOUT_NOTIFY2 = timedelta(days=7)
 PAYMENT_TIMEOUT_NOTIFY = timedelta(days=6)
 PASS_TYPES_ASSIGNABLE = ["solo", "couple", "sputnik"]
-MIGRATION_COUPLE_PRICE_PER_PERSON_V1 = "passes_migration_couple_price_per_person_v1"
 
 
 class PassUpdate:
@@ -1287,8 +1287,7 @@ class PassUpdate:
             sets["type"] = type
         if skip_in_balance_count:
             sets["skip_in_balance_count"] = True
-        pass_sets = dict(sets)
-        update_result = await self.base.pass_db.update_many(matcher, {"$set": pass_sets})
+        update_result = await self.base.pass_db.update_many(matcher, {"$set": sets})
         have_changes = update_result.modified_count > 0
 
         current_count = await self.base.pass_db.count_documents(
@@ -1298,8 +1297,10 @@ class PassUpdate:
             await self.base.delete_passes(uids, self.pass_key)
             have_changes = True
         else:
-            total_price = (
-                price if price is not None else CURRENT_PRICE[self.pass_key] * len(uids)
+            total_price = self.base.resolve_total_pass_price(
+                self.pass_key,
+                uids,
+                custom_total_price=price,
             )
             prices = self.base.split_total_price(total_price, uids)
             for uid, uid_price in prices.items():
@@ -2053,103 +2054,24 @@ class Passes(BasePlugin):
             for i, uid in enumerate(sorted_uids)
         }
 
-    async def migrate_couple_prices_to_per_person(self) -> None:
-        if self.base_app.storage is None:
-            logger.warning(
-                "Storage is unavailable, skipping %s migration",
-                MIGRATION_COUPLE_PRICE_PER_PERSON_V1,
-            )
-            return
-        if (
-            MIGRATION_COUPLE_PRICE_PER_PERSON_V1 in self.base_app.storage
-            and self.base_app.storage[MIGRATION_COUPLE_PRICE_PER_PERSON_V1]
-        ):
-            return
+    def default_price_per_person(self, pass_key: str) -> int:
+        event_settings = self.config.passes.events.get(pass_key)
+        event_price = getattr(event_settings, "price", None) if event_settings is not None else None
+        if isinstance(event_price, (int, float)) and not isinstance(event_price, bool):
+            return int(event_price)
+        if pass_key in CURRENT_PRICE:
+            return CURRENT_PRICE[pass_key]
+        raise KeyError(f"no default price configured for pass key {pass_key}")
 
-        migrated_pairs = 0
-        processed_pairs: set[tuple[str, int, int]] = set()
-        async for pass_doc in self.pass_db.find(
-            {
-                "bot_id": self.bot.id,
-                "type": "couple",
-                "couple": {"$exists": True},
-                "price": {"$type": "number"},
-            }
-        ):
-            user_id = pass_doc.get("user_id")
-            couple_id = pass_doc.get("couple")
-            pass_key = pass_doc.get("pass_key")
-            if (
-                not isinstance(user_id, int)
-                or not isinstance(couple_id, int)
-                or not isinstance(pass_key, str)
-            ):
-                continue
-            pair_key = (pass_key, min(user_id, couple_id), max(user_id, couple_id))
-            if pair_key in processed_pairs:
-                continue
-            processed_pairs.add(pair_key)
-
-            couple_doc = await self.pass_db.find_one(
-                {
-                    "bot_id": self.bot.id,
-                    "user_id": couple_id,
-                    "pass_key": pass_key,
-                    "type": "couple",
-                    "couple": user_id,
-                    "price": {"$type": "number"},
-                }
-            )
-            if couple_doc is None:
-                continue
-
-            first_price = self._price_value(pass_doc.get("price"))
-            second_price = self._price_value(couple_doc.get("price"))
-            if (
-                first_price is None
-                or second_price is None
-                or first_price != second_price
-            ):
-                continue
-
-            total_price = first_price
-            if isinstance(total_price, float):
-                if not total_price.is_integer():
-                    logger.warning(
-                        "Skipping %s for %s pair (%s, %s): non-integer duplicated price %s",
-                        MIGRATION_COUPLE_PRICE_PER_PERSON_V1,
-                        pass_key,
-                        user_id,
-                        couple_id,
-                        total_price,
-                    )
-                    continue
-                total_price = int(total_price)
-            prices = self.split_total_price(int(total_price), [user_id, couple_id])
-            await self.pass_db.update_one(
-                {
-                    "bot_id": self.bot.id,
-                    "user_id": user_id,
-                    "pass_key": pass_key,
-                },
-                {"$set": {"price": prices[user_id]}},
-            )
-            await self.pass_db.update_one(
-                {
-                    "bot_id": self.bot.id,
-                    "user_id": couple_id,
-                    "pass_key": pass_key,
-                },
-                {"$set": {"price": prices[couple_id]}},
-            )
-            migrated_pairs += 1
-
-        await self.base_app.storage.set(MIGRATION_COUPLE_PRICE_PER_PERSON_V1, True)
-        logger.info(
-            "Migration %s completed, migrated %s couple pair(s)",
-            MIGRATION_COUPLE_PRICE_PER_PERSON_V1,
-            migrated_pairs,
-        )
+    def resolve_total_pass_price(
+        self,
+        pass_key: str,
+        user_ids: list[int],
+        custom_total_price: int | None = None,
+    ) -> int:
+        if custom_total_price is not None:
+            return custom_total_price
+        return self.default_price_per_person(pass_key) * len(user_ids)
 
     async def get_pass_for_user(self, user_id: int, pass_key: str) -> dict | None:
         doc = await self.pass_db.find_one(
@@ -2285,15 +2207,6 @@ class Passes(BasePlugin):
             logger.info(
                 "Migrated %s passes from payed to paid",
                 migration_result.modified_count,
-            )
-        try:
-            await self.migrate_couple_prices_to_per_person()
-        except Exception as e:
-            logger.error(
-                "Exception in Passes._timeout_processor while running %s: %s",
-                MIGRATION_COUPLE_PRICE_PER_PERSON_V1,
-                e,
-                exc_info=1,
             )
         # await self.migrate_embedded_passes()
         for pass_key in PASS_KEYS:
