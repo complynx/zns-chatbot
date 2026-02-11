@@ -8,12 +8,27 @@ import logging
 from typing import Protocol, cast
 
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
-from .config import Config, EventSettings
+from .config import Config
 
 logger = logging.getLogger(__name__)
 
 EVENTS_REFRESH_INTERVAL_SECONDS: int = 3600
+
+
+class EventSettings(BaseSettings):
+    amount_cap_per_role: int = Field(80)
+    payment_admin: list[int] | int | None = Field(None)
+    hidden_payment_admins: list[int] | int | None = Field(None)
+    sell_start: datetime = Field(datetime(2025, 1, 24, 18, 45))
+    finish_date: datetime | None = Field(None)
+    thread_channel: int | str = Field("")
+    thread_id: int | None = Field(None)
+    thread_locale: str = Field("ru")
+    require_passport: bool = Field(False)
+    price: int | None = Field(None)
 
 
 def _normalize_admins(raw: list[int] | int | None) -> list[int]:
@@ -69,13 +84,12 @@ class Events:
         mongodb: AsyncIOMotorDatabase | None
 
     def __init__(self, app: _AppProtocol) -> None:
-        self._db: AsyncIOMotorDatabase | None = app.mongodb
         self._collection_name: str = app.config.mongo_db.events_collection
+        db: AsyncIOMotorDatabase | None = app.mongodb
         self._collection: AsyncIOMotorCollection | None = (
-            self._db[self._collection_name] if self._db is not None else None
+            db[self._collection_name] if db is not None else None
         )
-        self._bootstrap_events: dict[str, EventSettings] = dict(app.config.passes.events)
-        self._events: dict[str, EventInfo] = self._from_bootstrap_settings()
+        self._events: dict[str, EventInfo] = {}
         self._refresh_lock: Lock = Lock()
         self._refresh_task: Task[None] | None = None
 
@@ -105,21 +119,19 @@ class Events:
                 )
 
     async def refresh(self) -> None:
-        if self._collection is None or self._db is None:
-            self._events = self._from_bootstrap_settings()
+        if self._collection is None:
+            if self._events:
+                logger.warning("MongoDB is unavailable. Event cache has been cleared.")
+            self._events = {}
             return
         async with self._refresh_lock:
-            await self._bootstrap_collection_if_needed()
             docs = cast(list[dict[str, object]], await self._collection.find({}).to_list(None))
             loaded: dict[str, EventInfo] = self._parse_event_docs(docs)
             if loaded:
                 self._events = loaded
                 return
-            logger.warning(
-                "No events loaded from collection %s. Falling back to config bootstrap.",
-                self._collection_name,
-            )
-            self._events = self._from_bootstrap_settings()
+            logger.warning("No events loaded from collection %s.", self._collection_name)
+            self._events = {}
 
     def all_events(self) -> tuple[EventInfo, ...]:
         return tuple(sorted(self._events.values(), key=lambda item: item.sell_start))
@@ -152,40 +164,6 @@ class Events:
         if event is None:
             raise RuntimeError("No events configured")
         return event.key
-
-    def _from_bootstrap_settings(self) -> dict[str, EventInfo]:
-        return {
-            key: EventInfo.from_settings(key, settings)
-            for key, settings in self._bootstrap_events.items()
-        }
-
-    async def _bootstrap_collection_if_needed(self) -> None:
-        assert self._db is not None
-        assert self._collection is not None
-        names: list[str] = await self._db.list_collection_names()
-        if self._collection_name in names:
-            return
-        docs: list[dict[str, object]] = [
-            self._event_doc_from_settings(key, settings)
-            for key, settings in self._bootstrap_events.items()
-        ]
-        if docs:
-            await self._collection.insert_many(docs)
-
-    def _event_doc_from_settings(self, key: str, settings: EventSettings) -> dict[str, object]:
-        return {
-            "key": key,
-            "amount_cap_per_role": settings.amount_cap_per_role,
-            "payment_admin": settings.payment_admin,
-            "hidden_payment_admins": settings.hidden_payment_admins,
-            "sell_start": settings.sell_start,
-            "finish_date": settings.finish_date,
-            "thread_channel": settings.thread_channel,
-            "thread_id": settings.thread_id,
-            "thread_locale": settings.thread_locale,
-            "require_passport": settings.require_passport,
-            "price": settings.price,
-        }
 
     def _parse_event_docs(self, docs: list[dict[str, object]]) -> dict[str, EventInfo]:
         parsed: dict[str, EventInfo] = {}
