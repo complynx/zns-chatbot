@@ -9,7 +9,7 @@ from typing import Protocol, cast
 
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .config import Config
 
@@ -19,11 +19,15 @@ EVENTS_REFRESH_INTERVAL_SECONDS: int = 3600
 
 
 class EventSettings(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
     amount_cap_per_role: int = Field(80)
     payment_admin: list[int] | int | None = Field(None)
     hidden_payment_admins: list[int] | int | None = Field(None)
     sell_start: datetime = Field(datetime(2025, 1, 24, 18, 45))
     finish_date: datetime | None = Field(None)
+    title_long: dict[str, str] | str | None = Field(None)
+    title_short: dict[str, str] | str | None = Field(None)
+    country_emoji: str = Field("")
     thread_channel: int | str = Field("")
     thread_id: int | None = Field(None)
     thread_locale: str = Field("ru")
@@ -39,6 +43,67 @@ def _normalize_admins(raw: list[int] | int | None) -> list[int]:
     return [int(admin_id) for admin_id in raw]
 
 
+def _normalize_locale(locale: str) -> str:
+    return locale.strip().lower().replace("_", "-")
+
+
+def _normalize_localized_text(
+    raw: dict[str, str] | str | None,
+    fallback: str,
+) -> dict[str, str]:
+    if isinstance(raw, str):
+        value = raw.strip()
+        if value:
+            return {"default": value}
+        return {"default": fallback}
+    if isinstance(raw, dict):
+        localized: dict[str, str] = {}
+        for locale, text in raw.items():
+            if not isinstance(locale, str) or not isinstance(text, str):
+                continue
+            locale_key = _normalize_locale(locale)
+            text_value = text.strip()
+            if locale_key and text_value:
+                localized[locale_key] = text_value
+        if localized:
+            return localized
+    return {"default": fallback}
+
+
+def _pick_localized_text(
+    localized: dict[str, str],
+    locale: str | None,
+    fallback: str,
+) -> str:
+    candidates: list[str] = []
+    base_language: str | None = None
+    if isinstance(locale, str) and locale.strip():
+        normalized = _normalize_locale(locale)
+        candidates.append(normalized)
+        if "-" in normalized:
+            base_language = normalized.split("-", maxsplit=1)[0]
+            candidates.append(base_language)
+        else:
+            base_language = normalized
+
+    # Prefer same-language regional variants if exact/base key is not present.
+    # This covers cases like locale "en" with stored key "en-us".
+    if base_language:
+        regional_keys = sorted(
+            key for key in localized if key.startswith(f"{base_language}-")
+        )
+        candidates.extend(regional_keys)
+
+    candidates.extend(["en", "ru", "default"])
+    for candidate in candidates:
+        value = localized.get(candidate)
+        if isinstance(value, str) and value:
+            return value
+    if localized:
+        return next(iter(localized.values()))
+    return fallback
+
+
 @dataclass(frozen=True, slots=True)
 class EventInfo:
     key: str
@@ -47,6 +112,9 @@ class EventInfo:
     hidden_payment_admins: list[int]
     sell_start: datetime
     finish_date: datetime | None
+    title_long: dict[str, str]
+    title_short: dict[str, str]
+    country_emoji: str
     thread_channel: int | str
     thread_id: int | None
     thread_locale: str
@@ -62,12 +130,22 @@ class EventInfo:
             hidden_payment_admins=_normalize_admins(settings.hidden_payment_admins),
             sell_start=settings.sell_start,
             finish_date=settings.finish_date,
+            title_long=_normalize_localized_text(settings.title_long, key),
+            title_short=_normalize_localized_text(settings.title_short, key),
+            country_emoji=settings.country_emoji,
             thread_channel=settings.thread_channel,
             thread_id=settings.thread_id,
             thread_locale=settings.thread_locale,
             require_passport=settings.require_passport,
             price=settings.price,
         )
+
+    def title_long_for_locale(self, locale: str | None) -> str:
+        return _pick_localized_text(self.title_long, locale, self.key)
+
+    def title_short_for_locale(self, locale: str | None) -> str:
+        fallback = self.title_long_for_locale(locale)
+        return _pick_localized_text(self.title_short, locale, fallback)
 
     def is_active(self, reference_time: datetime) -> bool:
         if self.finish_date is None:

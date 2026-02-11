@@ -11,24 +11,28 @@ from pydantic_settings import (
 )
 
 
-class Party(BaseSettings):
+class IgnoreExtraSettings(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+
+
+class Party(IgnoreExtraSettings):
     start: datetime
     end: datetime
     is_open: bool = Field(False)
     massage_tables: int = Field(0)
 
 
-class GoogleSettings(BaseSettings):
+class GoogleSettings(IgnoreExtraSettings):
     credentials: SecretStr = Field("")
     about_doc_id: str = Field("1Jfed4yZ-Kv_W_S1e1qMUFZPdh0nsdEEP5J0EKiqZB_Q")
 
 
-class TelegramSettings(BaseSettings):
+class TelegramSettings(IgnoreExtraSettings):
     token: SecretStr = Field()
     admins: set[int] = Field({379278985})
 
 
-class LanguageModel(BaseSettings):
+class LanguageModel(IgnoreExtraSettings):
     openai_api_key: SecretStr = Field("")
     google_api_key: SecretStr = Field("")
     model: str = Field("gemini-2.5-flash")
@@ -40,17 +44,17 @@ class LanguageModel(BaseSettings):
     max_messages_per_user_per_day: int = Field(50)
 
 
-class LoggingSettings(BaseSettings):
+class LoggingSettings(IgnoreExtraSettings):
     level: str = Field("WARNING")
 
 
-class LocalizationSettings(BaseSettings):
+class LocalizationSettings(IgnoreExtraSettings):
     path: str = Field("i18n/{locale}", validation_alias="LOCALIZATION_PATH")
     fallbacks: list[str] = Field(["en-US", "en"])
     file: str = Field("bot.ftl")
 
 
-class MongoDB(BaseSettings):
+class MongoDB(IgnoreExtraSettings):
     address: str = Field(
         "", validation_alias=AliasChoices("address", "BOT_MONGODB_ADDRESS")
     )
@@ -80,13 +84,13 @@ class MongoDB(BaseSettings):
     )
 
 
-class ServerSettings(BaseSettings):
+class ServerSettings(IgnoreExtraSettings):
     base: str = Field("http://localhost:8085")
     port: int = Field(8085)
     auth_timeout: float = Field(1, description="days till auth expire")
 
 
-class Photo(BaseSettings):
+class Photo(IgnoreExtraSettings):
     no_face_swap: bool = Field(True)
     frame_size: int = Field(2000)
     face_expand: float = Field(5)
@@ -98,14 +102,14 @@ class Photo(BaseSettings):
     frame_file: str = Field("frame/zns_2025_2_simple.png")
 
 
-class Orders(BaseSettings):
+class Orders(IgnoreExtraSettings):
     deadline: date = Field(date(2025, 9, 7))
     payment_admin_ru: int = Field(-1)
     admins: set[int] = Field({379278985})
     event_number: int = Field(10)
 
 
-class Food(BaseSettings):
+class Food(IgnoreExtraSettings):
     activities_day: date = Field(date(2025, 6, 12))
     start_day: date = Field(date(2025, 6, 13))
     lunch_time: time = Field(time(17, 0, 0))
@@ -120,15 +124,18 @@ class Food(BaseSettings):
     notify_after: timedelta = Field(timedelta(hours=3))
 
 
-class Massages(BaseSettings):
+class Massages(IgnoreExtraSettings):
     max_massages_a_day: int = Field(3)
     notify_client_prior_long: timedelta = Field(timedelta(hours=1))
     notify_client_prior: timedelta = Field(timedelta(minutes=10))
 
 
-class Config(BaseSettings):
+class Config(IgnoreExtraSettings):
     model_config = SettingsConfigDict(
-        env_prefix="zns_", yaml_file="config/config.yaml", env_nested_delimiter="__"
+        env_prefix="zns_",
+        yaml_file="config/config.yaml",
+        env_nested_delimiter="__",
+        extra="ignore",
     )
     line_up: str = Field("static/line-up.csv")
     telegram: TelegramSettings

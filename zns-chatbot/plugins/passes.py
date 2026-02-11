@@ -57,6 +57,34 @@ class PassUpdate:
         self.pass_owner_id: int | None = None
         self.pass_data: dict | None = None
 
+    def _pass_localization_keys(
+        self,
+        pass_key: str | None = None,
+        locale: str | None = None,
+    ) -> dict[str, str]:
+        key = pass_key if pass_key is not None else self.pass_key
+        if key == "":
+            return {}
+        locale_code = locale if locale is not None else self.update.language_code
+        return self.base.get_event_localization_keys(key, locale_code)
+
+    def l_pass(
+        self,
+        message_id: str,
+        pass_key: str | None = None,
+        locale: str | None = None,
+        **kwargs,
+    ) -> str:
+        key = pass_key if pass_key is not None else self.pass_key
+        if key:
+            kwargs.setdefault("passKey", key)
+            for loc_key, loc_value in self._pass_localization_keys(
+                pass_key=key,
+                locale=locale,
+            ).items():
+                kwargs.setdefault(loc_key, loc_value)
+        return self.l(message_id, **kwargs)
+
     def is_passport_required(self) -> bool:
         event = self.base.get_event(self.pass_key)
         return event.require_passport if event is not None else True
@@ -133,6 +161,7 @@ class PassUpdate:
         keys = dict(u_pass)
         couple_pass = None
         keys["passKey"] = pass_key
+        keys.update(self.base.get_event_localization_keys(pass_key, lc))
         keys["name"] = user.get("legal_name", "")
         keys["link"] = client_user_link_html(user, language_code=lc)
         if couple is None:
@@ -414,15 +443,13 @@ class PassUpdate:
             inv_update.set_pass_key(self.pass_key)
             await inv_update.handle_invitation_accepted(user)
             await self.update.reply(
-                self.l(
-                    "passes-invitation-successfully-accepted", passKey=self.pass_key
-                ),
+                self.l_pass("passes-invitation-successfully-accepted"),
                 parse_mode=ParseMode.HTML,
             )
 
             return await self.base.recalculate_queues()
         await self.update.reply(
-            self.l("passes-invitation-accept-failed", passKey=self.pass_key),
+            self.l_pass("passes-invitation-accept-failed"),
             parse_mode=ParseMode.HTML,
         )
 
@@ -436,7 +463,7 @@ class PassUpdate:
             inv_update.set_pass_key(key)
             await inv_update.handle_invitation_declined(user)
         await self.update.edit_or_reply(
-            self.l("passes-invitation-successfully-declined", passKey=self.pass_key),
+            self.l_pass("passes-invitation-successfully-declined"),
             reply_markup=InlineKeyboardMarkup([]),
             parse_mode=ParseMode.HTML,
         )
@@ -779,12 +806,12 @@ class PassUpdate:
         event = self.base.require_event(self.pass_key)
         if now_msk() < event.sell_start:
             return await self.update.edit_or_reply(
-                self.l("passes-sell-not-started", passKey=self.pass_key),
+                self.l_pass("passes-sell-not-started"),
                 reply_markup=InlineKeyboardMarkup([]),
                 parse_mode=ParseMode.HTML,
             )
         await self.update.edit_or_reply(
-            self.l("passes-pass-create-start-message", passKey=self.pass_key),
+            self.l_pass("passes-pass-create-start-message"),
             reply_markup=InlineKeyboardMarkup([]),
             parse_mode=ParseMode.HTML,
         )
@@ -799,7 +826,7 @@ class PassUpdate:
         for pass_key in self.base.pass_keys:
             buttons.append(
                 InlineKeyboardButton(
-                    self.l("passes-select-type-button", passKey=pass_key),
+                    self.l_pass("passes-select-type-button", pass_key=pass_key),
                     callback_data=f"{self.base.name}|start|{pass_key}",
                 )
             )
@@ -835,7 +862,7 @@ class PassUpdate:
         )
         try:
             await self.update.edit_message_text(
-                self.l("passes-couple-request-edit", passKey=self.pass_key),
+                self.l_pass("passes-couple-request-edit"),
                 reply_markup=InlineKeyboardMarkup([]),
                 parse_mode=ParseMode.HTML,
             )
@@ -845,7 +872,7 @@ class PassUpdate:
                 exc_info=1,
             )
         await self.update.reply(
-            self.l("passes-couple-request-message", passKey=self.pass_key),
+            self.l_pass("passes-couple-request-message"),
             reply_markup=markup,
             parse_mode=ParseMode.HTML,
         )
@@ -904,7 +931,7 @@ class PassUpdate:
         if self.is_passport_required():
             keys["name"] = user.get("legal_name", "")
         await self.update.edit_or_reply(
-            self.l("passes-solo-saved", passKey=self.pass_key),
+            self.l_pass("passes-solo-saved"),
             reply_markup=InlineKeyboardMarkup([]),
             parse_mode=ParseMode.HTML,
         )
@@ -957,7 +984,7 @@ class PassUpdate:
                 invitee_pass = invitee[self.pass_key]
         if isinstance(invitee_pass, dict) and invitee_pass.get("state") == "paid":
             return await self.update.reply(
-                self.l("passes-couple-request-invitee-paid", passKey=self.pass_key),
+                self.l_pass("passes-couple-request-invitee-paid"),
                 reply_markup=ReplyKeyboardRemove(),
                 parse_mode=ParseMode.HTML,
             )
@@ -995,13 +1022,13 @@ class PassUpdate:
             inv_update.set_pass_key(self.pass_key)
             await inv_update.show_couple_invitation(user)
             await self.update.reply(
-                self.l("passes-couple-saved-sent", passKey=self.pass_key),
+                self.l_pass("passes-couple-saved-sent"),
                 reply_markup=ReplyKeyboardRemove(),
                 parse_mode=ParseMode.HTML,
             )
         else:
             await self.update.reply(
-                self.l("passes-couple-saved", passKey=self.pass_key),
+                self.l_pass("passes-couple-saved"),
                 reply_markup=ReplyKeyboardRemove(),
                 parse_mode=ParseMode.HTML,
             )
@@ -1473,7 +1500,7 @@ class PassUpdate:
             set_fields={"notified_deadline_close" + suffix: ts},
         )
         await self.update.reply(
-            self.l("passes-payment-deadline-close", passKey=self.pass_key),
+            self.l_pass("passes-payment-deadline-close"),
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([]),
         )
@@ -2057,6 +2084,24 @@ class Passes(BasePlugin):
         if event is None:
             raise KeyError(f"Unknown event for pass key {pass_key}")
         return event
+
+    def get_event_localization_keys(
+        self,
+        pass_key: str,
+        locale: str | None = None,
+    ) -> dict[str, str]:
+        event = self.get_event(pass_key)
+        if event is None:
+            return {
+                "eventTitleLong": pass_key,
+                "eventTitleShort": pass_key,
+                "eventCountryEmoji": "",
+            }
+        return {
+            "eventTitleLong": event.title_long_for_locale(locale),
+            "eventTitleShort": event.title_short_for_locale(locale),
+            "eventCountryEmoji": event.country_emoji,
+        }
 
     def _pass_doc_to_data(self, pass_doc: dict | None) -> dict | None:
         if pass_doc is None:

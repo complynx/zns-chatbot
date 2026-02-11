@@ -417,8 +417,8 @@ passes-adm-payment-proof-accept-button = ✅ Accept
 passes-adm-payment-proof-reject-button = ❌ Reject
 passes-adm-pass-description=
     {$type ->
-        [couple] couple pass to {passes-pass-title-long} from user {$link} for <i>{$name}</i> as {$role} and {$coupleLink} (<i>{$coupleName}</i>)
-        *[solo] {$role} pass to {passes-pass-title-long} from user {$link} for <i>{$name}</i>
+        [couple] couple pass to {$eventTitleLong} from user {$link} for <i>{$name}</i> as {$role} and {$coupleLink} (<i>{$coupleName}</i>)
+        *[solo] {$role} pass to {$eventTitleLong} from user {$link} for <i>{$name}</i>
     }
 passes-adm-payment-proof-accepted =
     Payment for {passes-adm-pass-description} is confirmed.
@@ -463,7 +463,7 @@ passes-pass-edit-waitlist=
     We'll notify you as soon as a pass becomes available!
 passes-pass-edit-waiting-for-couple=
     Hello, <i>{$name}</i>!
-    You've selected a couple pass to {passes-pass-title-long} as a {$role} and invited {$coupleLink}.
+    You've selected a couple pass to {$eventTitleLong} as a {$role} and invited {$coupleLink}.
     They haven't yet answered your invitation.
 
     Your ambassador: {$adminLink}
@@ -498,11 +498,11 @@ passes-pass-free-assigned =
     You can change the name associated with the pass if necessary.
     If you need to cancel the pass, please contact the administrator.
 passes-pass-cancelled-by-other =
-    Your couple just cancelled the couple pass to {passes-pass-title-long}. Unfortunately, you have to register again using the command /passes.
+    Your couple just cancelled the couple pass to {$eventTitleLong}. Unfortunately, you have to register again using the command /passes.
 passes-pass-description=
     {$type ->
-        [couple] couple pass to {passes-pass-title-long} with you as a {$role} and your couple {$coupleLink}
-        *[solo] {$role} pass to {passes-pass-title-long}
+        [couple] couple pass to {$eventTitleLong} with you as a {$role} and your couple {$coupleLink}
+        *[solo] {$role} pass to {$eventTitleLong}
     }
 passes-pass-edit-assigned=
     Hello, <i>{$name}</i>!
@@ -572,7 +572,7 @@ passes-couple-request-wrong-data =
 passes-couple-request-invitee-paid =
     Oops, this person is already registered and has a pass. You can try again using /passes command.
 passes-couple-invitation =
-    A user <i>{$coupleName}</i>, {$coupleLink} invited you to {passes-pass-title-long}.
+    A user <i>{$coupleName}</i>, {$coupleLink} invited you to {$eventTitleLong}.
     They invited you as a couple for a couple pass, for a role of {$coupleRole ->
         [leader] follower
         *[follower] leader
@@ -589,19 +589,19 @@ passes-invitation-successfully-accepted =
 passes-invitation-accept-failed =
     Seems like the invitation is no longer valid. Either it has timed out or was cancelled by the inviter.
 passes-invitation-successfully-declined =
-    The invitation to {passes-pass-title-long} was successfully declined.
+    The invitation to {$eventTitleLong} was successfully declined.
 passes-invitation-was-accepted =
-    A user <i>{$coupleName}</i>, {$couplelink} accepted your invitation for a couple pass to {passes-pass-title-long}.
+    A user <i>{$coupleName}</i>, {$coupleLink} accepted your invitation for a couple pass to {$eventTitleLong}.
 passes-invitation-was-declined =
-    Unfortunately, the user <i>{$coupleName}</i>, {$couplelink} declined your invitation for a couple pass to {passes-pass-title-long}.
+    Unfortunately, the user <i>{$coupleName}</i>, {$coupleLink} declined your invitation for a couple pass to {$eventTitleLong}.
     You can choose a solo pass or select another person.
 passes-couple-saved =
     I saved your invitation, but your couple is not registered and I can't send them the invitation.
-    Ask them to start conversation with me by sending me the /start command, and then accept your invitation by sending me the /passes command and selecting {passes-pass-title-short}.
+    Ask them to start conversation with me by sending me the /start command, and then accept your invitation by sending me the /passes command and selecting {$eventTitleShort}.
     The invitation is valid for 2 days.
 passes-couple-saved-sent =
     I sent your invitation to your couple.
-    Ask them to accept it. If it didn't appear in their messages, they can access it through the /passes command, in {passes-pass-title-short}.
+    Ask them to accept it. If it didn't appear in their messages, they can access it through the /passes command, in {$eventTitleShort}.
     The invitation is valid for 2 days.
 passes-pass-create-cancel=
     If you want to register for a pass, you can come back using /passes command.
@@ -646,7 +646,7 @@ passes-payment-proof-forwarded =
 passes-select-type-message =
     Select, which Zouk Non Stop marathon we will work with:
 passes-select-type-button =
-    {passes-pass-country-emoji} {passes-pass-title-short}
+    {$eventCountryEmoji} {$eventTitleShort}
 passes-sell-not-started =
     Please be patient; sales have not opened yet.
 passes-solo-saved =
@@ -654,23 +654,6 @@ passes-solo-saved =
 passes-pass-create-start-message =
     First, I need some information from you.
     Scroll down and enter your full name as it appears in your passport.
-passes-pass-title-long =
-    {$passKey ->
-        [pass_2025_2] Zouk Non Stop in Grodno
-        [pass_2026_1] Zouk Non Stop in Yekaterinburg
-        *[pass20251] Zouk Non Stop in Moscow
-    }
-passes-pass-title-short =
-    {$passKey ->
-        [pass_2025_2] ZNS Grodno
-        [pass_2026_1] ZNS Yekaterinburg
-        *[pass20251] ZNS Moscow
-    }
-passes-pass-country-emoji =
-    {$passKey ->
-        [pass_2025_2] 🇧🇾
-        *[pass20251] 🇷🇺
-    }
 passes-legal-name-request-message =
     First, I need some information from you.
     Please enter your full name as it appears in your passport.
