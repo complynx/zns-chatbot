@@ -201,14 +201,14 @@ class PassUpdate:
         if state == "waitlist" and pass_type == "solo" and "couple" not in u_pass:
             buttons.append(
                 InlineKeyboardButton(
-                    self.l("passes-button-couple"),
+                    self.l("passes-button-make-couple"),
                     callback_data=f"{self.base.name}|couple|{self.pass_key}",
                 )
             )
         if state == "waiting-for-couple":
             buttons.append(
                 InlineKeyboardButton(
-                    self.l("passes-button-solo"),
+                    self.l("passes-button-make-solo"),
                     callback_data=f"{self.base.name}|solo|{self.pass_key}",
                 )
             )

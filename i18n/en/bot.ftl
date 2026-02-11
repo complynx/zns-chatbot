@@ -545,6 +545,8 @@ passes-pass-admin-saved =
     Now select pass type:
 passes-button-solo = 👤 Solo
 passes-button-couple = 👥 Couple
+passes-button-make-solo = 👤 Make solo
+passes-button-make-couple = 👥 Make couple
 passes-choose-admin =
     Please select the paymet admin for your region or the one you trust the most.
     Do not change the admin if you've already paid, or change back to the one you've paid.
