@@ -38,7 +38,7 @@ PAYMENT_TIMEOUT = timedelta(days=8)
 PAYMENT_TIMEOUT_NOTIFY2 = timedelta(days=7)
 PAYMENT_TIMEOUT_NOTIFY = timedelta(days=6)
 PASS_TYPES_ASSIGNABLE = ["solo", "couple", "sputnik"]
-ROLE_BALANCE_TOLERANCE = 56  # percent of higher_role/total
+ROLE_BALANCE_TOLERANCE = 52  # percent of higher_role/total
 
 
 class PassUpdate:
