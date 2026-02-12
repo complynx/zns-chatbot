@@ -2285,12 +2285,12 @@ class Passes(BasePlugin):
         return event.pass_types
 
     @staticmethod
-    def _safe_tier_index(raw_index: object) -> int:
+    def _safe_tier_index(raw_index: object) -> int | None:
         if isinstance(raw_index, bool):
-            return 0
-        if isinstance(raw_index, int):
-            return max(raw_index, 0)
-        return 0
+            return None
+        if isinstance(raw_index, int) and raw_index >= 0:
+            return raw_index
+        return None
 
     @staticmethod
     def _role_total_from_counts(
@@ -2348,6 +2348,72 @@ class Passes(BasePlugin):
             return sum(pass_type.amount // 2 for pass_type in pass_types[:tier_index])
         return sum(pass_type.amount for pass_type in pass_types[:tier_index])
 
+    @staticmethod
+    def _tier_capacity_for_rule(
+        pass_type: EventPassType,
+        assignment_rule: str,
+    ) -> int:
+        if assignment_rule == "paired":
+            return pass_type.amount // 2
+        return pass_type.amount
+
+    def _tier_implied_usage(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        assignment_rule: str,
+        tier_index: int,
+        participants: int,
+    ) -> int:
+        if participants <= 0:
+            return 0
+        tier_limit = self._tier_capacity_for_rule(pass_types[tier_index], assignment_rule)
+        if tier_limit <= 0:
+            return 0
+        sold_before = self._tier_prior_capacity(pass_types, tier_index, assignment_rule)
+        usage = participants - sold_before
+        if usage <= 0:
+            return 0
+        return min(usage, tier_limit)
+
+    def _effective_tier_usage(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        assignment_rule: str,
+        tier_usage: dict[int, int],
+        tier_index: int,
+        participants: int,
+    ) -> int:
+        explicit_usage = int(tier_usage.get(tier_index, 0))
+        implied_usage = self._tier_implied_usage(
+            pass_types=pass_types,
+            assignment_rule=assignment_rule,
+            tier_index=tier_index,
+            participants=participants,
+        )
+        return max(explicit_usage, implied_usage)
+
+    def _time_floor_tier_index(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        allow_promo: bool,
+    ) -> int | None:
+        now = now_msk()
+        floor_index: int | None = None
+        first_assignable: int | None = None
+        for tier_index, pass_type in enumerate(pass_types):
+            if not allow_promo and pass_type.promo:
+                continue
+            if first_assignable is None:
+                first_assignable = tier_index
+            if pass_type.start <= now:
+                floor_index = tier_index
+        if floor_index is not None:
+            return floor_index
+        return first_assignable
+
     def _is_tier_effective(
         self,
         *,
@@ -2377,13 +2443,20 @@ class Passes(BasePlugin):
         increment: int,
         allow_promo: bool,
     ) -> int | None:
-        for tier_index, pass_type in enumerate(pass_types):
+        start_tier_index = self._time_floor_tier_index(
+            pass_types=pass_types,
+            allow_promo=allow_promo,
+        )
+        if start_tier_index is None:
+            return None
+        for tier_index in range(start_tier_index, len(pass_types)):
+            pass_type = pass_types[tier_index]
             if not allow_promo and pass_type.promo:
                 continue
             if assignment_rule == "paired":
                 if role not in {"leader", "follower"}:
                     return None
-                tier_limit = pass_type.amount // 2
+                tier_limit = self._tier_capacity_for_rule(pass_type, assignment_rule)
                 if tier_limit <= 0:
                     continue
                 projected_participants = participants_by_role.get(role, 0) + increment
@@ -2394,12 +2467,18 @@ class Passes(BasePlugin):
                     projected_participants=projected_participants,
                 ):
                     continue
-                tier_used = tier_usage_by_role.get(role, {}).get(tier_index, 0)
+                tier_used = self._effective_tier_usage(
+                    pass_types=pass_types,
+                    assignment_rule=assignment_rule,
+                    tier_usage=tier_usage_by_role.get(role, {}),
+                    tier_index=tier_index,
+                    participants=participants_by_role.get(role, 0),
+                )
                 if tier_used + increment <= tier_limit:
                     return tier_index
                 continue
 
-            tier_limit = pass_type.amount
+            tier_limit = self._tier_capacity_for_rule(pass_type, assignment_rule)
             if tier_limit <= 0:
                 continue
             projected_participants = participants_total + increment
@@ -2410,7 +2489,13 @@ class Passes(BasePlugin):
                 projected_participants=projected_participants,
             ):
                 continue
-            tier_used = tier_usage_total.get(tier_index, 0)
+            tier_used = self._effective_tier_usage(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage=tier_usage_total,
+                tier_index=tier_index,
+                participants=participants_total,
+            )
             if tier_used + increment <= tier_limit:
                 return tier_index
         return None
@@ -2546,12 +2631,14 @@ class Passes(BasePlugin):
             tier_index = self._safe_tier_index(group_id.get("pass_type_index"))
             count = int(group["count"])
             participants_total += count
-            tier_usage_total[tier_index] = tier_usage_total.get(tier_index, 0) + count
+            if tier_index is not None:
+                tier_usage_total[tier_index] = tier_usage_total.get(tier_index, 0) + count
             role = group_id.get("role")
             if role in {"leader", "follower"}:
                 participants_by_role[role] = participants_by_role.get(role, 0) + count
-                role_tiers = tier_usage_by_role[role]
-                role_tiers[tier_index] = role_tiers.get(tier_index, 0) + count
+                if tier_index is not None:
+                    role_tiers = tier_usage_by_role[role]
+                    role_tiers[tier_index] = role_tiers.get(tier_index, 0) + count
 
         return {
             "role_counts": role_counts,
@@ -2681,8 +2768,14 @@ class Passes(BasePlugin):
                 lines.append("current_tier=none (no assignable tiers left)")
                 return "\n".join(lines)
             tier_info = pass_types[tier_index]
-            tier_limit = tier_info.amount
-            tier_used = tier_usage_total.get(tier_index, 0)
+            tier_limit = self._tier_capacity_for_rule(tier_info, assignment_rule)
+            tier_used = self._effective_tier_usage(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage=tier_usage_total,
+                tier_index=tier_index,
+                participants=participants_total,
+            )
             tier_left = max(tier_limit - tier_used, 0)
             lines.append(
                 "current_tier="
@@ -2708,8 +2801,14 @@ class Passes(BasePlugin):
                 lines.append(f"{role}: current_tier=none (no assignable tiers left)")
                 continue
             tier_info = pass_types[tier_index]
-            tier_limit = tier_info.amount // 2
-            tier_used = tier_usage_by_role.get(role, {}).get(tier_index, 0)
+            tier_limit = self._tier_capacity_for_rule(tier_info, assignment_rule)
+            tier_used = self._effective_tier_usage(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage=tier_usage_by_role.get(role, {}),
+                tier_index=tier_index,
+                participants=participants_by_role.get(role, 0),
+            )
             tier_left = max(tier_limit - tier_used, 0)
             lines.append(
                 f"{role}: current_tier={tier_index + 1} "
