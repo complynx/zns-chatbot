@@ -16,7 +16,7 @@ from telegram import (
 from telegram.constants import ParseMode
 from telegram.ext import CallbackQueryHandler, CommandHandler, filters
 
-from ..events import EventInfo, Events
+from ..events import EventInfo, EventPassType, Events
 from ..telegram_links import client_user_link_html, client_user_name
 from ..tg_state import SilentArgumentParser, TGState
 from .base_plugin import PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING, BasePlugin
@@ -38,6 +38,7 @@ PAYMENT_TIMEOUT = timedelta(days=8)
 PAYMENT_TIMEOUT_NOTIFY2 = timedelta(days=7)
 PAYMENT_TIMEOUT_NOTIFY = timedelta(days=6)
 PASS_TYPES_ASSIGNABLE = ["solo", "couple", "sputnik"]
+ROLE_BALANCE_TOLERANCE = 56  # percent of higher_role/total
 
 
 class PassUpdate:
@@ -1299,6 +1300,8 @@ class PassUpdate:
         comment: str | None = None,
         skip_in_balance_count: bool = False,
         proof_admin: int | None = None,
+        price_by_user: dict[int, int] | None = None,
+        pass_type_index_by_user: dict[int, int] | None = None,
     ):
         self.set_pass_key(pass_key)
         pass_doc = await self.base.pass_db.find_one(
@@ -1316,43 +1319,33 @@ class PassUpdate:
         uids = [self.update.user]
         if "couple" in pass_data:
             uids.append(pass_data["couple"])
-        in_q = {"$in": uids}
-        matcher = {
-            "bot_id": self.bot,
-            "pass_key": self.pass_key,
-            "user_id": in_q,
-            "state": "waitlist",
-        }
-        if "couple" in pass_data:
-            matcher["couple"] = in_q
-        else:
-            matcher["couple"] = {"$exists": False}
-
-        sets = {
-            "state": "assigned" if price is None or price > 0 else "paid",
-            "date_assignment": now_msk(),
-        }
-        if price is not None and price == 0:
-            assert proof_admin is not None, "proof_admin must be set for free pass"
-            sets["proof_received"] = now_msk()
-            sets["proof_file"] = "free_pass"
-            sets["proof_admin"] = proof_admin
-            sets["proof_accepted"] = now_msk()
-        if comment is not None:
-            sets["comment"] = comment
-        if type is not None:
-            sets["type"] = type
-        if skip_in_balance_count:
-            sets["skip_in_balance_count"] = True
-        update_result = await self.base.pass_db.update_many(matcher, {"$set": sets})
-        have_changes = update_result.modified_count > 0
-
-        current_count = await self.base.pass_db.count_documents(
-            {"bot_id": self.bot, "pass_key": self.pass_key, "user_id": {"$in": uids}}
+        is_couple = "couple" in pass_data and len(uids) > 1
+        resolved_pass_type_index_by_user: dict[int, int] | None = (
+            dict(pass_type_index_by_user) if pass_type_index_by_user is not None else None
         )
-        if update_result.matched_count < len(uids) or current_count < len(uids):
-            await self.base.delete_passes(uids, self.pass_key)
-            have_changes = True
+
+        if price_by_user is not None:
+            missing_uids = [uid for uid in uids if uid not in price_by_user]
+            if missing_uids:
+                raise ValueError(
+                    f"price_by_user is missing values for {missing_uids}"
+                )
+            prices = {uid: int(price_by_user[uid]) for uid in uids}
+        elif price is None:
+            tier_pricing = await self.base.resolve_candidate_tier_prices(
+                self.pass_key,
+                self.update.user,
+                pass_data,
+            )
+            if tier_pricing is None:
+                logger.warning(
+                    "Cannot resolve current tier pricing for admin assignment: "
+                    "user=%s pass=%s",
+                    self.update.user,
+                    self.pass_key,
+                )
+                return False
+            prices, resolved_pass_type_index_by_user = tier_pricing
         else:
             total_price = self.base.resolve_total_pass_price(
                 self.pass_key,
@@ -1360,14 +1353,83 @@ class PassUpdate:
                 custom_total_price=price,
             )
             prices = self.base.split_total_price(total_price, uids)
+
+        state_by_user = {
+            uid: ("paid" if prices.get(uid, 0) == 0 else "assigned")
+            for uid in uids
+        }
+        split_couple_for_free = (
+            is_couple
+            and any(prices.get(uid, 0) == 0 for uid in uids)
+        )
+        assignment_ts = now_msk()
+        update_matched_count = 0
+        have_changes = False
+        for uid in uids:
+            set_fields: dict[str, object] = {
+                "state": state_by_user.get(uid, "assigned"),
+                "date_assignment": assignment_ts,
+            }
+            if comment is not None:
+                set_fields["comment"] = comment
+            if split_couple_for_free:
+                set_fields["type"] = "solo"
+            elif type is not None:
+                set_fields["type"] = type
+            if skip_in_balance_count:
+                set_fields["skip_in_balance_count"] = True
+
+            if state_by_user.get(uid) == "paid":
+                free_proof_admin = proof_admin
+                if free_proof_admin is None:
+                    free_proof_admin = pass_data.get("proof_admin")
+                if free_proof_admin is None:
+                    free_proof_admin = self.base.pick_payment_admin(self.pass_key)
+                set_fields["proof_received"] = assignment_ts
+                set_fields["proof_file"] = "free_pass"
+                set_fields["proof_admin"] = free_proof_admin
+                set_fields["proof_accepted"] = assignment_ts
+
+            match_fields: dict[str, object] = {
+                "bot_id": self.bot,
+                "pass_key": self.pass_key,
+                "user_id": uid,
+                "state": "waitlist",
+            }
+            if is_couple:
+                match_fields["couple"] = {"$in": uids}
+            update_doc: dict[str, object] = {"$set": set_fields}
+            if split_couple_for_free:
+                update_doc["$unset"] = {"couple": ""}
+
+            result = await self.base.pass_db.update_one(match_fields, update_doc)
+            update_matched_count += result.matched_count
+            if result.modified_count > 0:
+                have_changes = True
+
+        current_count = await self.base.pass_db.count_documents(
+            {"bot_id": self.bot, "pass_key": self.pass_key, "user_id": {"$in": uids}}
+        )
+        if update_matched_count < len(uids) or current_count < len(uids):
+            await self.base.delete_passes(uids, self.pass_key)
+            have_changes = True
+        else:
             for uid, uid_price in prices.items():
+                set_payload: dict[str, int] = {"price": uid_price}
+                if (
+                    resolved_pass_type_index_by_user is not None
+                    and uid in resolved_pass_type_index_by_user
+                ):
+                    set_payload["pass_type_index"] = int(
+                        resolved_pass_type_index_by_user[uid]
+                    )
                 result = await self.base.pass_db.update_one(
                     {
                         "bot_id": self.bot,
                         "pass_key": self.pass_key,
                         "user_id": uid,
                     },
-                    {"$set": {"price": uid_price}},
+                    {"$set": set_payload},
                 )
                 if result.modified_count > 0:
                     have_changes = True
@@ -1400,7 +1462,11 @@ class PassUpdate:
                 await upd.show_pass_edit(
                     user_doc,
                     pass_info,
-                    "passes-pass-assigned" if price is None or price > 0 else "passes-pass-free-assigned",
+                    (
+                        "passes-pass-free-assigned"
+                        if prices.get(uid, 0) == 0
+                        else "passes-pass-assigned"
+                    ),
                 )
         return have_changes
 
@@ -1665,11 +1731,18 @@ class PassUpdate:
                     )
                 upd = await self.base.create_update_from_user(user_id)
 
-                await upd.assign_pass(
+                assigned_ok = await upd.assign_pass(
                     args.pass_key, args.price, args.type, args.comment, args.skip, self.update.user
                 )
-                logger.info(f"pass {args.pass_key=} assigned to {recipient=}")
-                assigned.append(user_id)
+                if assigned_ok:
+                    logger.info(f"pass {args.pass_key=} assigned to {recipient=}")
+                    assigned.append(user_id)
+                else:
+                    logger.warning(
+                        "pass %s was not assigned to recipient=%s",
+                        args.pass_key,
+                        recipient,
+                    )
             except Exception as err:
                 logger.error(f"passes_assign {err=}, {recipient=}", exc_info=1)
         await self.update.reply(
@@ -2150,11 +2223,30 @@ class Passes(BasePlugin):
 
     def default_price_per_person(self, pass_key: str) -> int:
         event = self.get_event(pass_key)
+        if event is not None and event.pass_types:
+            tier_price = event.pass_types[0].price
+            if tier_price <= 0:
+                raise ValueError(
+                    f"invalid tier price for pass key {pass_key}: {tier_price}; "
+                    "tier prices must be > 0"
+                )
+            return tier_price
         event_price = event.price if event is not None else None
         if isinstance(event_price, int):
+            if event_price <= 0:
+                raise ValueError(
+                    f"invalid default event price for pass key {pass_key}: {event_price}; "
+                    "automatic pricing must be > 0"
+                )
             return event_price
         if pass_key in CURRENT_PRICE:
-            return CURRENT_PRICE[pass_key]
+            fallback_price = CURRENT_PRICE[pass_key]
+            if fallback_price <= 0:
+                raise ValueError(
+                    f"invalid fallback price for pass key {pass_key}: {fallback_price}; "
+                    "automatic pricing must be > 0"
+                )
+            return fallback_price
         raise KeyError(f"no default price configured for pass key {pass_key}")
 
     def resolve_total_pass_price(
@@ -2166,6 +2258,421 @@ class Passes(BasePlugin):
         if custom_total_price is not None:
             return custom_total_price
         return self.default_price_per_person(pass_key) * len(user_ids)
+
+    def _event_assignment_rule(self, event: EventInfo) -> str:
+        if event.pass_assignment_rule in {"paired", "distributed"}:
+            return event.pass_assignment_rule
+        return "paired"
+
+    def _event_pass_types(self, event: EventInfo) -> tuple[EventPassType, ...]:
+        return event.pass_types
+
+    @staticmethod
+    def _safe_tier_index(raw_index: object) -> int:
+        if isinstance(raw_index, bool):
+            return 0
+        if isinstance(raw_index, int):
+            return max(raw_index, 0)
+        return 0
+
+    @staticmethod
+    def _role_total_from_counts(
+        role_counts: dict[str, dict[str, int]],
+        role: str,
+    ) -> int:
+        return role_counts.get(role, {}).get("RA", 0)
+
+    @staticmethod
+    def _is_within_balance_tolerance(leader_count: int, follower_count: int) -> bool:
+        total = leader_count + follower_count
+        if total <= 1:
+            return True
+        higher_role = max(leader_count, follower_count)
+        return higher_role * 100 <= ROLE_BALANCE_TOLERANCE * total
+
+    def _can_assign_with_balance(
+        self,
+        role_counts: dict[str, dict[str, int]],
+        *,
+        leader_delta: int = 0,
+        follower_delta: int = 0,
+    ) -> bool:
+        leader_count = self._role_total_from_counts(role_counts, "leader")
+        follower_count = self._role_total_from_counts(role_counts, "follower")
+        next_leader_count = leader_count + leader_delta
+        next_follower_count = follower_count + follower_delta
+
+        if self._is_within_balance_tolerance(leader_count, follower_count):
+            return self._is_within_balance_tolerance(
+                next_leader_count,
+                next_follower_count,
+            )
+
+        # When already outside tolerance, allow only non-worsening moves.
+        current_diff = abs(leader_count - follower_count)
+        next_diff = abs(next_leader_count - next_follower_count)
+        if next_diff > current_diff:
+            return False
+        current_total = leader_count + follower_count
+        next_total = next_leader_count + next_follower_count
+        if current_total <= 0 or next_total <= 0:
+            return True
+        current_higher = max(leader_count, follower_count)
+        next_higher = max(next_leader_count, next_follower_count)
+        return next_higher * current_total <= current_higher * next_total
+
+    @staticmethod
+    def _tier_prior_capacity(
+        pass_types: tuple[EventPassType, ...],
+        tier_index: int,
+        assignment_rule: str,
+    ) -> int:
+        if assignment_rule == "paired":
+            return sum(pass_type.amount // 2 for pass_type in pass_types[:tier_index])
+        return sum(pass_type.amount for pass_type in pass_types[:tier_index])
+
+    def _is_tier_effective(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        tier_index: int,
+        assignment_rule: str,
+        projected_participants: int,
+    ) -> bool:
+        pass_type = pass_types[tier_index]
+        if pass_type.start <= now_msk():
+            return True
+        if tier_index == 0:
+            return False
+        sold_before = self._tier_prior_capacity(pass_types, tier_index, assignment_rule)
+        return sold_before < projected_participants
+
+    def _pick_tier_for_assignment(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        assignment_rule: str,
+        tier_usage_total: dict[int, int],
+        tier_usage_by_role: dict[str, dict[int, int]],
+        participants_total: int,
+        participants_by_role: dict[str, int],
+        role: str | None,
+        increment: int,
+        allow_promo: bool,
+    ) -> int | None:
+        for tier_index, pass_type in enumerate(pass_types):
+            if not allow_promo and pass_type.promo:
+                continue
+            if assignment_rule == "paired":
+                if role not in {"leader", "follower"}:
+                    return None
+                tier_limit = pass_type.amount // 2
+                if tier_limit <= 0:
+                    continue
+                projected_participants = participants_by_role.get(role, 0) + increment
+                if not self._is_tier_effective(
+                    pass_types=pass_types,
+                    tier_index=tier_index,
+                    assignment_rule=assignment_rule,
+                    projected_participants=projected_participants,
+                ):
+                    continue
+                tier_used = tier_usage_by_role.get(role, {}).get(tier_index, 0)
+                if tier_used + increment <= tier_limit:
+                    return tier_index
+                continue
+
+            tier_limit = pass_type.amount
+            if tier_limit <= 0:
+                continue
+            projected_participants = participants_total + increment
+            if not self._is_tier_effective(
+                pass_types=pass_types,
+                tier_index=tier_index,
+                assignment_rule=assignment_rule,
+                projected_participants=projected_participants,
+            ):
+                continue
+            tier_used = tier_usage_total.get(tier_index, 0)
+            if tier_used + increment <= tier_limit:
+                return tier_index
+        return None
+
+    async def _collect_queue_stats(self, pass_key: str) -> dict[str, object]:
+        aggregation = await self.pass_db.aggregate(
+            [
+                {
+                    "$match": {
+                        "bot_id": self.bot.id,
+                        "pass_key": pass_key,
+                        "$and": [self._balance_counter_match()],
+                    },
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "state": "$state",
+                            "role": "$role",
+                        },
+                        "count": {"$count": {}},
+                    }
+                },
+            ]
+        ).to_list(None)
+        couples = {
+            group["_id"]: group["count"]
+            for group in await self.pass_db.aggregate(
+                [
+                    {
+                        "$match": {
+                            "couple": {"$exists": True},
+                            "role": "leader",
+                            "bot_id": self.bot.id,
+                            "pass_key": pass_key,
+                            "$and": [self._balance_counter_match()],
+                        },
+                    },
+                    {
+                        "$group": {
+                            "_id": "$state",
+                            "count": {"$count": {}},
+                        }
+                    },
+                ]
+            ).to_list(None)
+        }
+        role_counts: dict[str, dict[str, int]] = {
+            "leader": {},
+            "follower": {},
+        }
+        max_assigned = 0
+        for group in aggregation:
+            group_id = group.get("_id")
+            if not isinstance(group_id, dict):
+                continue
+            role = group_id.get("role")
+            state = group_id.get("state")
+            if role not in {"leader", "follower"} or not isinstance(state, str):
+                continue
+            count = int(group["count"])
+            role_counts[role][state] = count
+            if state == "assigned" and max_assigned < count:
+                max_assigned = count
+        role_counts["leader"]["RA"] = (
+            role_counts["leader"].get("paid", 0)
+            + role_counts["leader"].get("assigned", 0)
+        )
+        role_counts["follower"]["RA"] = (
+            role_counts["follower"].get("paid", 0)
+            + role_counts["follower"].get("assigned", 0)
+        )
+
+        sold_aggregation = await self.pass_db.aggregate(
+            [
+                {
+                    "$match": {
+                        "bot_id": self.bot.id,
+                        "pass_key": pass_key,
+                        "state": {"$in": ["assigned", "paid"]},
+                    },
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "role": "$role",
+                            "pass_type_index": "$pass_type_index",
+                        },
+                        "count": {"$count": {}},
+                    }
+                },
+            ]
+        ).to_list(None)
+        participants_total = 0
+        participants_by_role: dict[str, int] = {"leader": 0, "follower": 0}
+        tier_usage_total: dict[int, int] = {}
+        tier_usage_by_role: dict[str, dict[int, int]] = {
+            "leader": {},
+            "follower": {},
+        }
+        for group in sold_aggregation:
+            group_id = group.get("_id")
+            if not isinstance(group_id, dict):
+                continue
+            tier_index = self._safe_tier_index(group_id.get("pass_type_index"))
+            count = int(group["count"])
+            participants_total += count
+            tier_usage_total[tier_index] = tier_usage_total.get(tier_index, 0) + count
+            role = group_id.get("role")
+            if role in {"leader", "follower"}:
+                participants_by_role[role] = participants_by_role.get(role, 0) + count
+                role_tiers = tier_usage_by_role[role]
+                role_tiers[tier_index] = role_tiers.get(tier_index, 0) + count
+
+        return {
+            "role_counts": role_counts,
+            "max_single_assigned": max_assigned - couples.get("assigned", 0),
+            "participants_total": participants_total,
+            "participants_by_role": participants_by_role,
+            "tier_usage_total": tier_usage_total,
+            "tier_usage_by_role": tier_usage_by_role,
+        }
+
+    @staticmethod
+    def _extract_tier_stats(
+        stats: dict[str, object] | None,
+    ) -> tuple[int, dict[str, int], dict[int, int], dict[str, dict[int, int]]]:
+        if stats is None:
+            return 0, {"leader": 0, "follower": 0}, {}, {"leader": {}, "follower": {}}
+        participants_total = int(stats.get("participants_total", 0))
+        raw_participants_by_role = stats.get("participants_by_role", {})
+        if isinstance(raw_participants_by_role, dict):
+            participants_by_role = {
+                "leader": int(raw_participants_by_role.get("leader", 0)),
+                "follower": int(raw_participants_by_role.get("follower", 0)),
+            }
+        else:
+            participants_by_role = {"leader": 0, "follower": 0}
+        raw_tier_usage_total = stats.get("tier_usage_total", {})
+        if isinstance(raw_tier_usage_total, dict):
+            tier_usage_total = {
+                int(k): int(v) for k, v in raw_tier_usage_total.items()
+            }
+        else:
+            tier_usage_total = {}
+        raw_tier_usage_by_role = stats.get("tier_usage_by_role", {})
+        tier_usage_by_role: dict[str, dict[int, int]] = {
+            "leader": {},
+            "follower": {},
+        }
+        if isinstance(raw_tier_usage_by_role, dict):
+            for role_key in ("leader", "follower"):
+                role_map = raw_tier_usage_by_role.get(role_key, {})
+                if isinstance(role_map, dict):
+                    tier_usage_by_role[role_key] = {
+                        int(k): int(v) for k, v in role_map.items()
+                    }
+        return (
+            participants_total,
+            participants_by_role,
+            tier_usage_total,
+            tier_usage_by_role,
+        )
+
+    async def resolve_candidate_tier_prices(
+        self,
+        pass_key: str,
+        user_id: int,
+        pass_data: dict,
+    ) -> tuple[dict[int, int], dict[int, int]] | None:
+        event = self.require_event(pass_key)
+        pass_types = self._event_pass_types(event)
+        assignment_rule = self._event_assignment_rule(event)
+        if len(pass_types) == 0:
+            return None
+
+        user_roles: dict[int, str] = {}
+        role = pass_data.get("role")
+        if role not in {"leader", "follower"}:
+            return None
+        user_roles[user_id] = role
+
+        is_couple = "couple" in pass_data
+        if is_couple:
+            couple_user_id = pass_data.get("couple")
+            if not isinstance(couple_user_id, int):
+                return None
+            couple_pass_doc = await self.pass_db.find_one(
+                {
+                    "bot_id": self.bot.id,
+                    "pass_key": pass_key,
+                    "user_id": couple_user_id,
+                    "state": "waitlist",
+                    "couple": user_id,
+                }
+            )
+            if not isinstance(couple_pass_doc, dict):
+                return None
+            couple_pass_info = self._pass_doc_to_data(couple_pass_doc) or {}
+            couple_role = couple_pass_info.get("role")
+            if couple_role not in {"leader", "follower"}:
+                return None
+            user_roles[couple_user_id] = couple_role
+
+        (
+            participants_total,
+            participants_by_role,
+            tier_usage_total,
+            tier_usage_by_role,
+        ) = self._extract_tier_stats(await self._collect_queue_stats(pass_key))
+
+        price_by_user: dict[int, int] = {}
+        pass_type_index_by_user: dict[int, int] = {}
+        if assignment_rule == "distributed":
+            tier_index = self._pick_tier_for_assignment(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage_total=tier_usage_total,
+                tier_usage_by_role=tier_usage_by_role,
+                participants_total=participants_total,
+                participants_by_role=participants_by_role,
+                role=None,
+                increment=len(user_roles),
+                allow_promo=not is_couple,
+            )
+            if tier_index is None:
+                return None
+            tier_price = pass_types[tier_index].price
+            for uid in user_roles:
+                price_by_user[uid] = tier_price
+                pass_type_index_by_user[uid] = tier_index
+            return price_by_user, pass_type_index_by_user
+
+        allow_promo = not is_couple
+        for uid, user_role in sorted(user_roles.items()):
+            tier_index = self._pick_tier_for_assignment(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage_total=tier_usage_total,
+                tier_usage_by_role=tier_usage_by_role,
+                participants_total=participants_total,
+                participants_by_role=participants_by_role,
+                role=user_role,
+                increment=1,
+                allow_promo=allow_promo,
+            )
+            if tier_index is None:
+                return None
+            price_by_user[uid] = pass_types[tier_index].price
+            pass_type_index_by_user[uid] = tier_index
+        return price_by_user, pass_type_index_by_user
+
+    def _target_role(self, role_counts: dict[str, dict[str, int]]) -> str:
+        leader_ra = self._role_total_from_counts(role_counts, "leader")
+        follower_ra = self._role_total_from_counts(role_counts, "follower")
+        total_ra = leader_ra + follower_ra
+
+        if total_ra > 0 and not self._is_within_balance_tolerance(leader_ra, follower_ra):
+            return "follower" if leader_ra > follower_ra else "leader"
+
+        leader_waitlist = role_counts.get("leader", {}).get("waitlist", 0)
+        follower_waitlist = role_counts.get("follower", {}).get("waitlist", 0)
+        if leader_waitlist == follower_waitlist:
+            return "leader" if leader_ra <= follower_ra else "follower"
+        return "leader" if leader_waitlist > follower_waitlist else "follower"
+
+    @staticmethod
+    def _balance_counter_match() -> dict[str, object]:
+        return {
+            "$or": [
+                {"skip_in_balance_count": False},
+                {
+                    "$and": [
+                        {"skip_in_balance_count": {"$ne": True}},
+                        {"price": {"$ne": 0}},
+                    ]
+                },
+            ]
+        }
 
     async def get_pass_for_user(self, user_id: int, pass_key: str) -> dict | None:
         doc = await self.pass_db.find_one(
@@ -2522,146 +3029,34 @@ class Passes(BasePlugin):
     async def recalculate_queues_pk(self, pass_key: str) -> None:
         event = self.require_event(pass_key)
         try:
-            natural_queue_exhausted = False
             while True:
-                aggregation = await self.pass_db.aggregate(
-                    [
-                        {
-                            "$match": {
-                                "bot_id": self.bot.id,
-                                "pass_key": pass_key,
-                                "$or": [
-                                    {"skip_in_balance_count": {"$ne": True}},
-                                    {"skip_in_balance_count": {"$exists": False}},
-                                ],
-                            },
-                        },
-                        {
-                            "$group": {
-                                "_id": {
-                                    "state": "$state",
-                                    "role": "$role",
-                                },
-                                "count": {"$count": {}},
-                            }
-                        },
-                    ]
-                ).to_list(None)
-                couples = {
-                    group["_id"]: group["count"]
-                    for group in await self.pass_db.aggregate(
-                        [
-                            {
-                                "$match": {
-                                    "couple": {"$exists": True},
-                                    "role": "leader",
-                                    "bot_id": self.bot.id,
-                                    "pass_key": pass_key,
-                                },
-                            },
-                            {
-                                "$group": {
-                                    "_id": "$state",
-                                    "count": {"$count": {}},
-                                }
-                            },
-                        ]
-                    ).to_list(None)
-                }
-                counts = {
-                    "leader": dict(),
-                    "follower": dict(),
-                }
-                max_assigned = 0
-                for group in aggregation:
-                    if len(group["_id"]) == 0:
-                        continue
-                    counts[group["_id"]["role"]][group["_id"]["state"]] = group["count"]
-                    if (
-                        group["_id"]["state"] == "assigned"
-                        and max_assigned < group["count"]
-                    ):
-                        max_assigned = group["count"]
-                counts["leader"]["RA"] = (counts["leader"].get("paid", 0) +
-                                          counts["leader"].get("assigned", 0))
-                counts["follower"]["RA"] = (counts["follower"].get("paid", 0) +
-                                            counts["follower"].get("assigned", 0))
-                cap_per_role = event.amount_cap_per_role
-                if (counts["leader"]["RA"] >= cap_per_role and
-                        counts["follower"]["RA"] >= cap_per_role):
+                stats = await self._collect_queue_stats(pass_key)
+                role_counts = stats.get("role_counts", {})
+                if not isinstance(role_counts, dict):
                     break
-                max_assigned -= couples.get("assigned", 0)
-                if counts["leader"]["RA"] != counts["follower"]["RA"]:
-                    target_group = (
-                        "follower"
-                        if counts["leader"]["RA"] > counts["follower"]["RA"]
-                        else "leader"
-                    )
-                    success = await self.assign_pass(target_group, pass_key, counts)
-                    if not success:
-                        natural_queue_exhausted = True
-                        break
+                max_single_assigned = int(stats.get("max_single_assigned", 0))
+                leader_ra = self._role_total_from_counts(role_counts, "leader")
+                follower_ra = self._role_total_from_counts(role_counts, "follower")
+                if (
+                    max_single_assigned > MAX_CONCURRENT_ASSIGNMENTS
+                    and self._is_within_balance_tolerance(leader_ra, follower_ra)
+                ):
+                    break
+
+                target_group = self._target_role(role_counts)
+                success = await self.assign_pass(target_group, pass_key, stats)
+                if success:
                     continue
-                else:
-                    if max_assigned > MAX_CONCURRENT_ASSIGNMENTS:
-                        break
-                    target_group = (
-                        "follower"
-                        if counts["leader"].get("waitlist", 0)
-                        > counts["follower"].get("waitlist", 0)
-                        else "leader"
-                    )
-                    success = await self.assign_pass(target_group, pass_key, counts)
-                    if not success:
-                        natural_queue_exhausted = True
-                        break
+
+                other_group = "follower" if target_group == "leader" else "leader"
+                success = await self.assign_pass(other_group, pass_key, stats)
+                if success:
                     continue
-            if natural_queue_exhausted:
-                while True:
-                    aggregation = await self.pass_db.aggregate(
-                        [
-                            {
-                                "$match": {
-                                    "pass_key": pass_key,
-                                    "bot_id": self.bot.id,
-                                    "$or": [
-                                        {"skip_in_balance_count": {"$ne": True}},
-                                        {"skip_in_balance_count": {"$exists": False}},
-                                    ],
-                                },
-                            },
-                            {
-                                "$group": {
-                                    "_id": {
-                                        "state": "$state",
-                                        "role": "$role",
-                                    },
-                                    "count": {"$count": {}},
-                                }
-                            },
-                        ]
-                    ).to_list(None)
-                    counts = {
-                        "leader": dict(),
-                        "follower": dict(),
-                    }
-                    for group in aggregation:
-                        if len(group["_id"]) == 0:
-                            continue
-                        counts[group["_id"]["role"]][group["_id"]["state"]] = \
-                            group["count"]
-                    counts["leader"]["RA"] = (counts["leader"].get("paid", 0) +
-                                              counts["leader"].get("assigned", 0))
-                    counts["follower"]["RA"] = (counts["follower"].get("paid", 0) +
-                                                counts["follower"].get("assigned", 0))
-                    cap_per_role = event.amount_cap_per_role
-                    if (counts["leader"]["RA"] >= cap_per_role and
-                            counts["follower"]["RA"] >= cap_per_role):
-                        break
-                    success = await self.assign_pass("couple", pass_key, counts)
-                    if not success:
-                        break
+
+                success = await self.assign_pass("couple", pass_key, stats)
+                if success:
                     continue
+                break
 
             have_unnotified = True
             while have_unnotified:
@@ -2734,9 +3129,14 @@ class Passes(BasePlugin):
         self,
         role: str,
         pass_key: str,
-        counts: dict[str, dict[str, int]] | None = None,
+        stats: dict[str, object] | None = None,
     ) -> bool:
         event = self.require_event(pass_key)
+        pass_types = self._event_pass_types(event)
+        assignment_rule = self._event_assignment_rule(event)
+        if len(pass_types) == 0:
+            return False
+
         match = {
             "bot_id": self.bot.id,
             "pass_key": pass_key,
@@ -2751,23 +3151,113 @@ class Passes(BasePlugin):
             {"$match": match},
             {"$sort": {"date_created": 1, "user_id": 1}},
         ]
-        cap_per_role = event.amount_cap_per_role
-        role_counts = counts or {}
-        leader_ra = role_counts.get("leader", {}).get("RA", 0)
-        follower_ra = role_counts.get("follower", {}).get("RA", 0)
+        if stats is None:
+            stats = await self._collect_queue_stats(pass_key)
+        role_counts = stats.get("role_counts", {})
+        if not isinstance(role_counts, dict):
+            role_counts = {"leader": {}, "follower": {}}
+        (
+            participants_total,
+            participants_by_role,
+            tier_usage_total,
+            tier_usage_by_role,
+        ) = self._extract_tier_stats(stats)
+
         scanned = 0
         async for candidate in self.pass_db.aggregate(pipeline):
             scanned += 1
             pass_info = self._pass_doc_to_data(candidate) or {}
             is_couple = "couple" in pass_info
-            if counts is not None:
-                if is_couple or role == "couple":
-                    if leader_ra >= cap_per_role or follower_ra >= cap_per_role:
-                        continue
-                elif role_counts.get(role, {}).get("RA", 0) >= cap_per_role:
-                    return False
+            candidate_user_id = candidate.get("user_id")
+            if not isinstance(candidate_user_id, int):
+                continue
+
+            price_by_user: dict[int, int] = {}
+            pass_type_index_by_user: dict[int, int] = {}
+            user_roles: dict[int, str] = {}
+
+            candidate_role = pass_info.get("role")
+            if candidate_role not in {"leader", "follower"}:
+                continue
+            user_roles[candidate_user_id] = candidate_role
+
+            if is_couple:
+                couple_user_id = pass_info.get("couple")
+                if not isinstance(couple_user_id, int):
+                    continue
+                couple_pass_doc = await self.pass_db.find_one(
+                    {
+                        "bot_id": self.bot.id,
+                        "pass_key": pass_key,
+                        "user_id": couple_user_id,
+                        "state": "waitlist",
+                        "couple": candidate_user_id,
+                    }
+                )
+                if couple_pass_doc is None:
+                    continue
+                couple_pass_info = self._pass_doc_to_data(couple_pass_doc) or {}
+                couple_role = couple_pass_info.get("role")
+                if couple_role not in {"leader", "follower"}:
+                    continue
+                user_roles[couple_user_id] = couple_role
+
+            leader_delta = 1 if "leader" in user_roles.values() else 0
+            follower_delta = 1 if "follower" in user_roles.values() else 0
+            if not self._can_assign_with_balance(
+                role_counts,
+                leader_delta=leader_delta,
+                follower_delta=follower_delta,
+            ):
+                continue
+
+            if assignment_rule == "distributed":
+                tier_index = self._pick_tier_for_assignment(
+                    pass_types=pass_types,
+                    assignment_rule=assignment_rule,
+                    tier_usage_total=tier_usage_total,
+                    tier_usage_by_role=tier_usage_by_role,
+                    participants_total=participants_total,
+                    participants_by_role=participants_by_role,
+                    role=None,
+                    increment=len(user_roles),
+                    allow_promo=not is_couple,
+                )
+                if tier_index is None:
+                    continue
+                tier_price = pass_types[tier_index].price
+                for uid in user_roles:
+                    price_by_user[uid] = tier_price
+                    pass_type_index_by_user[uid] = tier_index
+            else:
+                allow_promo = not is_couple
+                for uid, user_role in user_roles.items():
+                    tier_index = self._pick_tier_for_assignment(
+                        pass_types=pass_types,
+                        assignment_rule=assignment_rule,
+                        tier_usage_total=tier_usage_total,
+                        tier_usage_by_role=tier_usage_by_role,
+                        participants_total=participants_total,
+                        participants_by_role=participants_by_role,
+                        role=user_role,
+                        increment=1,
+                        allow_promo=allow_promo,
+                    )
+                    if tier_index is None:
+                        price_by_user = {}
+                        pass_type_index_by_user = {}
+                        break
+                    price_by_user[uid] = pass_types[tier_index].price
+                    pass_type_index_by_user[uid] = tier_index
+                if not price_by_user:
+                    continue
+
             upd = await self.create_update_from_user(candidate["user_id"])
-            assigned = await upd.assign_pass(pass_key)
+            assigned = await upd.assign_pass(
+                pass_key,
+                price_by_user=price_by_user,
+                pass_type_index_by_user=pass_type_index_by_user,
+            )
             if assigned:
                 return True
             if QUEUE_LOOKAHEAD and scanned >= QUEUE_LOOKAHEAD:

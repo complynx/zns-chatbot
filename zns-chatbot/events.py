@@ -8,7 +8,7 @@ import logging
 from typing import Protocol, cast
 
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .config import Config
@@ -18,12 +18,22 @@ logger = logging.getLogger(__name__)
 EVENTS_REFRESH_INTERVAL_SECONDS: int = 3600
 
 
+class EventPassTypeSettings(BaseModel):
+    model_config = SettingsConfigDict(extra="ignore")
+
+    amount: int = Field(0, ge=0)
+    price: int = Field(..., gt=0)
+    start: datetime = Field(datetime.max)
+    promo: bool = Field(False)
+
+
 class EventSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
+
     amount_cap_per_role: int = Field(80)
     payment_admin: list[int] | int | None = Field(None)
     hidden_payment_admins: list[int] | int | None = Field(None)
-    sell_start: datetime = Field(datetime(2025, 1, 24, 18, 45))
+    pass_assignment_rule: str = Field("paired")
     finish_date: datetime | None = Field(None)
     title_long: dict[str, str] | str | None = Field(None)
     title_short: dict[str, str] | str | None = Field(None)
@@ -33,6 +43,15 @@ class EventSettings(BaseSettings):
     thread_locale: str = Field("ru")
     require_passport: bool = Field(False)
     price: int | None = Field(None)
+    pass_types: list[EventPassTypeSettings] = Field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True)
+class EventPassType:
+    amount: int
+    price: int
+    start: datetime
+    promo: bool = False
 
 
 def _normalize_admins(raw: list[int] | int | None) -> list[int]:
@@ -110,7 +129,6 @@ class EventInfo:
     amount_cap_per_role: int
     payment_admin: list[int]
     hidden_payment_admins: list[int]
-    sell_start: datetime
     finish_date: datetime | None
     title_long: dict[str, str]
     title_short: dict[str, str]
@@ -120,15 +138,39 @@ class EventInfo:
     thread_locale: str
     require_passport: bool
     price: int | None
+    pass_types: tuple[EventPassType, ...]
+    pass_assignment_rule: str
+
+    @property
+    def sell_start(self) -> datetime:
+        if not self.pass_types:
+            return datetime.max
+        return min(pass_type.start for pass_type in self.pass_types)
 
     @classmethod
     def from_settings(cls, key: str, settings: EventSettings) -> "EventInfo":
+        pass_types: tuple[EventPassType, ...] = tuple(
+            EventPassType(
+                amount=pass_type.amount,
+                price=pass_type.price,
+                start=pass_type.start,
+                promo=pass_type.promo,
+            )
+            for pass_type in settings.pass_types
+        )
+        pass_assignment_rule = settings.pass_assignment_rule.strip().lower()
+        if pass_assignment_rule not in {"paired", "distributed"}:
+            logger.warning(
+                "Event %s has unsupported pass_assignment_rule=%s, using 'paired'",
+                key,
+                settings.pass_assignment_rule,
+            )
+            pass_assignment_rule = "paired"
         return cls(
             key=key,
             amount_cap_per_role=settings.amount_cap_per_role,
             payment_admin=_normalize_admins(settings.payment_admin),
             hidden_payment_admins=_normalize_admins(settings.hidden_payment_admins),
-            sell_start=settings.sell_start,
             finish_date=settings.finish_date,
             title_long=_normalize_localized_text(settings.title_long, key),
             title_short=_normalize_localized_text(settings.title_short, key),
@@ -138,6 +180,8 @@ class EventInfo:
             thread_locale=settings.thread_locale,
             require_passport=settings.require_passport,
             price=settings.price,
+            pass_types=pass_types,
+            pass_assignment_rule=pass_assignment_rule,
         )
 
     def title_long_for_locale(self, locale: str | None) -> str:
