@@ -2394,6 +2394,30 @@ class Passes(BasePlugin):
         )
         return max(explicit_usage, implied_usage)
 
+    def _tier_display_left(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        assignment_rule: str,
+        tier_usage: dict[int, int],
+        tier_index: int,
+        participants: int,
+    ) -> int:
+        """Display left count, including unsold capacity carried from prior tiers."""
+        tier_limit = self._tier_capacity_for_rule(pass_types[tier_index], assignment_rule)
+        if tier_limit <= 0:
+            return 0
+        tier_used = self._effective_tier_usage(
+            pass_types=pass_types,
+            assignment_rule=assignment_rule,
+            tier_usage=tier_usage,
+            tier_index=tier_index,
+            participants=participants,
+        )
+        sold_before = self._tier_prior_capacity(pass_types, tier_index, assignment_rule)
+        carryover = max(sold_before - participants, 0)
+        return max(tier_limit - tier_used, 0) + carryover
+
     def _time_floor_tier_index(
         self,
         *,
@@ -2769,18 +2793,17 @@ class Passes(BasePlugin):
                 return "\n".join(lines)
             tier_info = pass_types[tier_index]
             tier_limit = self._tier_capacity_for_rule(tier_info, assignment_rule)
-            tier_used = self._effective_tier_usage(
+            tier_left = self._tier_display_left(
                 pass_types=pass_types,
                 assignment_rule=assignment_rule,
                 tier_usage=tier_usage_total,
                 tier_index=tier_index,
                 participants=participants_total,
             )
-            tier_left = max(tier_limit - tier_used, 0)
             lines.append(
                 "current tier: "
                 f"{tier_index + 1} "
-                f"(price={tier_info.price}, left_total={tier_left}/{tier_limit}, "
+                f"(price={tier_info.price}, left/total={tier_left}/{tier_limit}, "
                 f"promo={tier_info.promo}, start={self._format_tier_start(tier_info.start)})"
             )
             return "\n".join(lines)
@@ -2802,17 +2825,16 @@ class Passes(BasePlugin):
                 continue
             tier_info = pass_types[tier_index]
             tier_limit = self._tier_capacity_for_rule(tier_info, assignment_rule)
-            tier_used = self._effective_tier_usage(
+            tier_left = self._tier_display_left(
                 pass_types=pass_types,
                 assignment_rule=assignment_rule,
                 tier_usage=tier_usage_by_role.get(role, {}),
                 tier_index=tier_index,
                 participants=participants_by_role.get(role, 0),
             )
-            tier_left = max(tier_limit - tier_used, 0)
             lines.append(
                 f"{role}: current tier: {tier_index + 1} "
-                f"(price={tier_info.price}, left={tier_left}/{tier_limit}, "
+                f"(price={tier_info.price}, left/total={tier_left}/{tier_limit}, "
                 f"promo={tier_info.promo}, start={self._format_tier_start(tier_info.start)})"
             )
         return "\n".join(lines)
