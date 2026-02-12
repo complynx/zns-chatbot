@@ -1398,11 +1398,21 @@ class PassUpdate:
             }
             if is_couple:
                 match_fields["couple"] = {"$in": uids}
-            update_doc: dict[str, object] = {"$set": set_fields}
+            set_fields["price"] = int(prices.get(uid, 0))
+            if (
+                resolved_pass_type_index_by_user is not None
+                and uid in resolved_pass_type_index_by_user
+            ):
+                tier_index = int(resolved_pass_type_index_by_user[uid])
+                set_fields["pass_type_index"] = {"$ifNull": ["$pass_type_index", tier_index]}
+                set_fields["assignment_tier_number"] = {
+                    "$ifNull": ["$assignment_tier_number", tier_index + 1]
+                }
+            update_pipeline: list[dict[str, object]] = [{"$set": set_fields}]
             if split_couple_for_free:
-                update_doc["$unset"] = {"couple": ""}
+                update_pipeline.append({"$unset": "couple"})
 
-            result = await self.base.pass_db.update_one(match_fields, update_doc)
+            result = await self.base.pass_db.update_one(match_fields, update_pipeline)
             update_matched_count += result.matched_count
             if result.modified_count > 0:
                 have_changes = True
@@ -1413,26 +1423,6 @@ class PassUpdate:
         if update_matched_count < len(uids) or current_count < len(uids):
             await self.base.delete_passes(uids, self.pass_key)
             have_changes = True
-        else:
-            for uid, uid_price in prices.items():
-                set_payload: dict[str, int] = {"price": uid_price}
-                if (
-                    resolved_pass_type_index_by_user is not None
-                    and uid in resolved_pass_type_index_by_user
-                ):
-                    set_payload["pass_type_index"] = int(
-                        resolved_pass_type_index_by_user[uid]
-                    )
-                result = await self.base.pass_db.update_one(
-                    {
-                        "bot_id": self.bot,
-                        "pass_key": self.pass_key,
-                        "user_id": uid,
-                    },
-                    {"$set": set_payload},
-                )
-                if result.modified_count > 0:
-                    have_changes = True
 
         users = []
         async for doc in self.base.user_db.find({"bot_id": self.bot, "user_id": {"$in": uids}}):
@@ -1749,6 +1739,30 @@ class PassUpdate:
             f"passes_assign done: {assigned}", parse_mode=ParseMode.HTML
         )
         await self.base.recalculate_queues()
+
+    async def handle_passes_tier(self):
+        args_list = self.update.parse_cmd_arguments()
+        self.base.refresh_events_cache()
+
+        parser = SilentArgumentParser()
+        parser.add_argument(
+            "--pass_key",
+            type=str,
+            help="Pass key",
+            default=self.base.default_pass_key(),
+        )
+        args = parser.parse_args(args_list[1:])
+        logger.debug(f"passes_tier {args=}, {args_list=}")
+        assert args.pass_key in self.base.pass_keys, f"wrong pass key {args.pass_key}"
+        self.set_pass_key(args.pass_key)
+        assert (
+            self.update.user in self.base.config.telegram.admins
+            or self.base.is_payment_admin(self.update.user, self.pass_key)
+        ), f"{self.update.user} is not admin"
+        await self.update.reply(
+            await self.base.format_current_tier_status(self.pass_key),
+            parse_mode=None,
+        )
     
     async def handle_passes_uncouple(self):
         """Admin command: /passes_uncouple <pass_key> <user_id>
@@ -2025,6 +2039,7 @@ class PassUpdate:
             "couple": {"name": "Couple", "location": "pass"},
             "price": {"name": "Price", "location": "pass"},
             "price_per_one": {"name": "Price per one", "location": "pass"},
+            "assignment_tier_number": {"name": "Assignment Tier", "location": "pass"},
             "date_created": {"name": "Date Created", "location": "pass"},
             "date_assignment": {"name": "Date Assignment", "location": "pass"},
             "proof_admin": {"name": "Proof Admin", "location": "pass"},
@@ -2120,6 +2135,7 @@ class Passes(BasePlugin):
             CommandHandler(self.name, self.handle_start),
             CommandHandler("passes_assign", self.handle_passes_assign_cmd),
             CommandHandler("passes_cancel", self.handle_passes_cancel_cmd),
+            CommandHandler("passes_tier", self.handle_passes_tier_cmd),
             CommandHandler("passes_switch_to_me", self.handle_passes_switch_to_me_cmd),
             CommandHandler("passes_uncouple", self.handle_passes_uncouple_cmd),
             CommandHandler("passes_table", self.handle_passes_table_cmd),
@@ -2131,6 +2147,7 @@ class Passes(BasePlugin):
             self.handle_callback_query, pattern=f"^{self.name}\\|.*"
         )
         self._queue_lock = Lock()
+        self._queue_recalc_pending = False
         create_task(self._timeout_processor())
 
     def refresh_events_cache(self) -> None:
@@ -2398,6 +2415,37 @@ class Passes(BasePlugin):
                 return tier_index
         return None
 
+    @staticmethod
+    def _role_counts_from_aggregation(
+        aggregation: list[dict[str, object]],
+    ) -> tuple[dict[str, dict[str, int]], int]:
+        role_counts: dict[str, dict[str, int]] = {
+            "leader": {},
+            "follower": {},
+        }
+        max_assigned = 0
+        for group in aggregation:
+            group_id = group.get("_id")
+            if not isinstance(group_id, dict):
+                continue
+            role = group_id.get("role")
+            state = group_id.get("state")
+            if role not in {"leader", "follower"} or not isinstance(state, str):
+                continue
+            count = int(group["count"])
+            role_counts[role][state] = count
+            if state == "assigned" and max_assigned < count:
+                max_assigned = count
+        role_counts["leader"]["RA"] = (
+            role_counts["leader"].get("paid", 0)
+            + role_counts["leader"].get("assigned", 0)
+        )
+        role_counts["follower"]["RA"] = (
+            role_counts["follower"].get("paid", 0)
+            + role_counts["follower"].get("assigned", 0)
+        )
+        return role_counts, max_assigned
+
     async def _collect_queue_stats(self, pass_key: str) -> dict[str, object]:
         aggregation = await self.pass_db.aggregate(
             [
@@ -2441,31 +2489,28 @@ class Passes(BasePlugin):
                 ]
             ).to_list(None)
         }
-        role_counts: dict[str, dict[str, int]] = {
-            "leader": {},
-            "follower": {},
-        }
-        max_assigned = 0
-        for group in aggregation:
-            group_id = group.get("_id")
-            if not isinstance(group_id, dict):
-                continue
-            role = group_id.get("role")
-            state = group_id.get("state")
-            if role not in {"leader", "follower"} or not isinstance(state, str):
-                continue
-            count = int(group["count"])
-            role_counts[role][state] = count
-            if state == "assigned" and max_assigned < count:
-                max_assigned = count
-        role_counts["leader"]["RA"] = (
-            role_counts["leader"].get("paid", 0)
-            + role_counts["leader"].get("assigned", 0)
-        )
-        role_counts["follower"]["RA"] = (
-            role_counts["follower"].get("paid", 0)
-            + role_counts["follower"].get("assigned", 0)
-        )
+        role_counts, max_assigned = self._role_counts_from_aggregation(aggregation)
+        full_aggregation = await self.pass_db.aggregate(
+            [
+                {
+                    "$match": {
+                        "bot_id": self.bot.id,
+                        "pass_key": pass_key,
+                        "state": {"$in": ["waitlist", "assigned", "paid"]},
+                    }
+                },
+                {
+                    "$group": {
+                        "_id": {
+                            "state": "$state",
+                            "role": "$role",
+                        },
+                        "count": {"$count": {}},
+                    }
+                },
+            ]
+        ).to_list(None)
+        full_role_counts, _ = self._role_counts_from_aggregation(full_aggregation)
 
         sold_aggregation = await self.pass_db.aggregate(
             [
@@ -2510,6 +2555,7 @@ class Passes(BasePlugin):
 
         return {
             "role_counts": role_counts,
+            "full_role_counts": full_role_counts,
             "max_single_assigned": max_assigned - couples.get("assigned", 0),
             "participants_total": participants_total,
             "participants_by_role": participants_by_role,
@@ -2557,6 +2603,120 @@ class Passes(BasePlugin):
             tier_usage_total,
             tier_usage_by_role,
         )
+
+    @staticmethod
+    def _format_tier_start(dt) -> str:
+        return dt.strftime("%Y-%m-%d %H:%M")
+
+    @staticmethod
+    def _format_balance_details(role_counts: dict[str, dict[str, int]]) -> str:
+        leader = int(role_counts.get("leader", {}).get("RA", 0))
+        follower = int(role_counts.get("follower", {}).get("RA", 0))
+        total = leader + follower
+        if total <= 0:
+            return "L|F=0|0 (L=0.0%, F=0.0%)"
+        leader_pct = (leader * 100.0) / total
+        follower_pct = (follower * 100.0) / total
+        return f"L|F={leader}|{follower} (L={leader_pct:.1f}%, F={follower_pct:.1f}%)"
+
+    async def format_current_tier_status(self, pass_key: str) -> str:
+        event = self.require_event(pass_key)
+        pass_types = self._event_pass_types(event)
+        assignment_rule = self._event_assignment_rule(event)
+        if len(pass_types) == 0:
+            return f"pass_key={pass_key}\nNo tiers are configured for this event."
+        stats = await self._collect_queue_stats(pass_key)
+        (
+            participants_total,
+            participants_by_role,
+            tier_usage_total,
+            tier_usage_by_role,
+        ) = self._extract_tier_stats(stats)
+        role_counts = stats.get("role_counts", {})
+        if not isinstance(role_counts, dict):
+            role_counts = {"leader": {}, "follower": {}}
+        full_role_counts = stats.get("full_role_counts", {})
+        if not isinstance(full_role_counts, dict):
+            full_role_counts = {"leader": {}, "follower": {}}
+        assigned_leader = int(role_counts.get("leader", {}).get("assigned", 0))
+        assigned_follower = int(role_counts.get("follower", {}).get("assigned", 0))
+        waitlist_leader = int(role_counts.get("leader", {}).get("waitlist", 0))
+        waitlist_follower = int(role_counts.get("follower", {}).get("waitlist", 0))
+        waitlist_total = waitlist_leader + waitlist_follower
+        waitlist_role = "none"
+        if waitlist_total > 0:
+            waitlist_role = self._target_role(role_counts)
+        lines = [
+            f"pass_key={pass_key}",
+            f"assignment_rule={assignment_rule}",
+            f"balance={self._format_balance_details(role_counts)}",
+            "balance_full_including_skipped="
+            f"{self._format_balance_details(full_role_counts)}",
+            f"assigned_state_L|F={assigned_leader}|{assigned_follower}",
+            (
+                "waitlist_current: "
+                f"number={waitlist_total}, role={waitlist_role}, "
+                f"L|F={waitlist_leader}|{waitlist_follower}"
+            ),
+            (
+                "assigned_or_paid: "
+                f"total={participants_total}, "
+                f"leader={participants_by_role.get('leader', 0)}, "
+                f"follower={participants_by_role.get('follower', 0)}"
+            ),
+        ]
+        if assignment_rule == "distributed":
+            tier_index = self._pick_tier_for_assignment(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage_total=tier_usage_total,
+                tier_usage_by_role=tier_usage_by_role,
+                participants_total=participants_total,
+                participants_by_role=participants_by_role,
+                role=None,
+                increment=1,
+                allow_promo=True,
+            )
+            if tier_index is None:
+                lines.append("current_tier=none (no assignable tiers left)")
+                return "\n".join(lines)
+            tier_info = pass_types[tier_index]
+            tier_limit = tier_info.amount
+            tier_used = tier_usage_total.get(tier_index, 0)
+            tier_left = max(tier_limit - tier_used, 0)
+            lines.append(
+                "current_tier="
+                f"{tier_index + 1} "
+                f"(price={tier_info.price}, left_total={tier_left}/{tier_limit}, "
+                f"promo={tier_info.promo}, start={self._format_tier_start(tier_info.start)})"
+            )
+            return "\n".join(lines)
+
+        for role in ("leader", "follower"):
+            tier_index = self._pick_tier_for_assignment(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage_total=tier_usage_total,
+                tier_usage_by_role=tier_usage_by_role,
+                participants_total=participants_total,
+                participants_by_role=participants_by_role,
+                role=role,
+                increment=1,
+                allow_promo=True,
+            )
+            if tier_index is None:
+                lines.append(f"{role}: current_tier=none (no assignable tiers left)")
+                continue
+            tier_info = pass_types[tier_index]
+            tier_limit = tier_info.amount // 2
+            tier_used = tier_usage_by_role.get(role, {}).get(tier_index, 0)
+            tier_left = max(tier_limit - tier_used, 0)
+            lines.append(
+                f"{role}: current_tier={tier_index + 1} "
+                f"(price={tier_info.price}, left={tier_left}/{tier_limit}, "
+                f"promo={tier_info.promo}, start={self._format_tier_start(tier_info.start)})"
+            )
+        return "\n".join(lines)
 
     async def resolve_candidate_tier_prices(
         self,
@@ -3022,9 +3182,23 @@ class Passes(BasePlugin):
                     )
 
     async def recalculate_queues(self) -> None:
-        self.refresh_events_cache()
-        for key in self.pass_keys:
-            await self.recalculate_queues_pk(key)
+        if self._queue_lock.locked():
+            self._queue_recalc_pending = True
+            logger.debug(
+                "recalculate_queues coalesced: queued rerun after current recalculation"
+            )
+            return
+        async with self._queue_lock:
+            while True:
+                self._queue_recalc_pending = False
+                self.refresh_events_cache()
+                for key in self.pass_keys:
+                    await self.recalculate_queues_pk(key)
+                if not self._queue_recalc_pending:
+                    break
+                logger.debug(
+                    "recalculate_queues rerunning due to coalesced recalculation request"
+                )
 
     async def recalculate_queues_pk(self, pass_key: str) -> None:
         event = self.require_event(pass_key)
@@ -3300,7 +3474,10 @@ class Passes(BasePlugin):
 
     async def handle_passes_cancel_cmd(self, update: TGState):
         return await self.create_update(update).handle_passes_cancel()
-    
+
+    async def handle_passes_tier_cmd(self, update: TGState):
+        return await self.create_update(update).handle_passes_tier()
+
     async def handle_passes_switch_to_me_cmd(self, update: TGState):
         return await self.create_update(update).handle_passes_switch_to_me_cmd()
     

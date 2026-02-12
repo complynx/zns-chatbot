@@ -33,7 +33,7 @@ class EventSettings(BaseSettings):
     amount_cap_per_role: int = Field(80)
     payment_admin: list[int] | int | None = Field(None)
     hidden_payment_admins: list[int] | int | None = Field(None)
-    pass_assignment_rule: str = Field("paired")
+    pass_assignment_rule: str = Field("distributed")
     finish_date: datetime | None = Field(None)
     title_long: dict[str, str] | str | None = Field(None)
     title_short: dict[str, str] | str | None = Field(None)
