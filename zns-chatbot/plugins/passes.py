@@ -2765,7 +2765,7 @@ class Passes(BasePlugin):
                 allow_promo=True,
             )
             if tier_index is None:
-                lines.append("current tier=none (no assignable tiers left)")
+                lines.append("current tier: none (no assignable tiers left)")
                 return "\n".join(lines)
             tier_info = pass_types[tier_index]
             tier_limit = self._tier_capacity_for_rule(tier_info, assignment_rule)
@@ -2778,7 +2778,7 @@ class Passes(BasePlugin):
             )
             tier_left = max(tier_limit - tier_used, 0)
             lines.append(
-                "current tier="
+                "current tier: "
                 f"{tier_index + 1} "
                 f"(price={tier_info.price}, left_total={tier_left}/{tier_limit}, "
                 f"promo={tier_info.promo}, start={self._format_tier_start(tier_info.start)})"
@@ -2798,7 +2798,7 @@ class Passes(BasePlugin):
                 allow_promo=True,
             )
             if tier_index is None:
-                lines.append(f"{role}: current tier=none (no assignable tiers left)")
+                lines.append(f"{role}: current tier: none (no assignable tiers left)")
                 continue
             tier_info = pass_types[tier_index]
             tier_limit = self._tier_capacity_for_rule(tier_info, assignment_rule)
@@ -2811,7 +2811,7 @@ class Passes(BasePlugin):
             )
             tier_left = max(tier_limit - tier_used, 0)
             lines.append(
-                f"{role}: current tier={tier_index + 1} "
+                f"{role}: current tier: {tier_index + 1} "
                 f"(price={tier_info.price}, left={tier_left}/{tier_limit}, "
                 f"promo={tier_info.promo}, start={self._format_tier_start(tier_info.start)})"
             )
