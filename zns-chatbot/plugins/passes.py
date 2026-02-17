@@ -1638,7 +1638,20 @@ class PassUpdate:
         parser.add_argument(
             "--create_name", type=str, help="Create with this legal name"
         )
-        parser.add_argument("--skip", action="store_true", help="Skip in balance count")
+        assign_mode_group = parser.add_mutually_exclusive_group(required=False)
+        assign_mode_group.add_argument(
+            "--skip",
+            action="store_true",
+            help="Skip in balance count",
+        )
+        assign_mode_group.add_argument(
+            "--append_to_tier",
+            type=int,
+            help=(
+                "Increase tier amount by number of successful assigned passes "
+                "(including both users in couples)"
+            ),
+        )
         parser.add_argument("--comment", type=str, help="Comment message")
         parser.add_argument("recipients", nargs="*", help="Recipients")
 
@@ -1646,10 +1659,24 @@ class PassUpdate:
         logger.debug(f"passes_assign {args=}, {args_list=}")
         assert args.pass_key in self.base.pass_keys, f"wrong pass key {args.pass_key}"
         assert args.price is None or args.price >= 0, f"wrong price {args.price}"
+        if args.append_to_tier is not None:
+            assert args.append_to_tier > 0, (
+                f"wrong append_to_tier {args.append_to_tier}, must be >= 1"
+            )
+            current_tier = await self.base.current_assignment_tier_number(args.pass_key)
+            assert current_tier is not None, (
+                f"no current tier for pass {args.pass_key}"
+            )
+            assert args.append_to_tier <= current_tier, (
+                f"append_to_tier {args.append_to_tier} must be <= current tier "
+                f"{current_tier}"
+            )
         assigned = []
+        successful_assigned_passes = 0
         for recipient in args.recipients:
             try:
                 user_id = int(recipient)
+                assignment_targets: set[int] = {user_id}
                 created_pass_data = None
                 pass_doc = await self.base.pass_db.find_one(
                     {
@@ -1659,6 +1686,21 @@ class PassUpdate:
                         "state": "waitlist",
                     }
                 )
+                if pass_doc is not None:
+                    pass_data_existing = self.base._pass_doc_to_data(pass_doc) or {}
+                    couple_id = pass_data_existing.get("couple")
+                    if isinstance(couple_id, int):
+                        couple_pass_doc = await self.base.pass_db.find_one(
+                            {
+                                "user_id": couple_id,
+                                "bot_id": self.bot,
+                                "pass_key": args.pass_key,
+                                "state": "waitlist",
+                                "couple": user_id,
+                            }
+                        )
+                        if couple_pass_doc is not None:
+                            assignment_targets.add(couple_id)
                 if pass_doc is None:
                     if ((
                         args.leader is not None or args.follower is not None
@@ -1727,6 +1769,15 @@ class PassUpdate:
                 if assigned_ok:
                     logger.info(f"pass {args.pass_key=} assigned to {recipient=}")
                     assigned.append(user_id)
+                    if args.append_to_tier is not None:
+                        successful_assigned_passes += await self.base.pass_db.count_documents(
+                            {
+                                "bot_id": self.bot,
+                                "pass_key": args.pass_key,
+                                "user_id": {"$in": sorted(assignment_targets)},
+                                "state": {"$in": ["assigned", "paid"]},
+                            }
+                        )
                 else:
                     logger.warning(
                         "pass %s was not assigned to recipient=%s",
@@ -1735,9 +1786,18 @@ class PassUpdate:
                     )
             except Exception as err:
                 logger.error(f"passes_assign {err=}, {recipient=}", exc_info=1)
-        await self.update.reply(
-            f"passes_assign done: {assigned}", parse_mode=ParseMode.HTML
-        )
+        reply_lines = [f"passes_assign done: {assigned}"]
+        if args.append_to_tier is not None:
+            new_amount = await self.base.append_tier_amount(
+                args.pass_key,
+                args.append_to_tier,
+                successful_assigned_passes,
+            )
+            reply_lines.append(
+                f"append_to_tier: tier={args.append_to_tier}, "
+                f"appended={successful_assigned_passes}, new_amount={new_amount}"
+            )
+        await self.update.reply("\n".join(reply_lines), parse_mode=ParseMode.HTML)
         await self.base.recalculate_queues()
 
     async def handle_passes_tier(self):
@@ -2729,6 +2789,88 @@ class Passes(BasePlugin):
         leader_pct = (leader * 100.0) / total
         follower_pct = (follower * 100.0) / total
         return f"L|F={leader}|{follower} (L={leader_pct:.1f}%, F={follower_pct:.1f}%)"
+
+    async def current_assignment_tier_number(self, pass_key: str) -> int | None:
+        event = self.require_event(pass_key)
+        pass_types = self._event_pass_types(event)
+        assignment_rule = self._event_assignment_rule(event)
+        if len(pass_types) == 0:
+            return None
+        stats = await self._collect_queue_stats(pass_key)
+        (
+            participants_total,
+            participants_by_role,
+            tier_usage_total,
+            tier_usage_by_role,
+        ) = self._extract_tier_stats(stats)
+
+        if assignment_rule == "distributed":
+            tier_index = self._pick_tier_for_assignment(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage_total=tier_usage_total,
+                tier_usage_by_role=tier_usage_by_role,
+                participants_total=participants_total,
+                participants_by_role=participants_by_role,
+                role=None,
+                increment=1,
+                allow_promo=True,
+            )
+            if tier_index is None:
+                # Fully sold out: treat the last configured tier as current.
+                return len(pass_types)
+            return tier_index + 1
+
+        role_tiers: list[int] = []
+        for role in ("leader", "follower"):
+            tier_index = self._pick_tier_for_assignment(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage_total=tier_usage_total,
+                tier_usage_by_role=tier_usage_by_role,
+                participants_total=participants_total,
+                participants_by_role=participants_by_role,
+                role=role,
+                increment=1,
+                allow_promo=True,
+            )
+            if tier_index is not None:
+                role_tiers.append(tier_index + 1)
+        if not role_tiers:
+            # Fully sold out for both roles: treat the last configured tier as current.
+            return len(pass_types)
+        return max(role_tiers)
+
+    async def append_tier_amount(
+        self,
+        pass_key: str,
+        tier_number: int,
+        amount: int,
+    ) -> int:
+        event = self.require_event(pass_key)
+        pass_types = self._event_pass_types(event)
+        tier_index = tier_number - 1
+        if tier_number <= 0 or tier_index >= len(pass_types):
+            raise ValueError(
+                f"wrong tier number {tier_number}, expected from 1 to {len(pass_types)}"
+            )
+        if amount < 0:
+            raise ValueError(f"wrong tier append amount {amount}")
+        if amount == 0:
+            return pass_types[tier_index].amount
+        events_collection = getattr(self.events, "_collection", None)
+        if events_collection is None:
+            raise RuntimeError("events collection is not configured")
+        result = await events_collection.update_one(
+            {"key": pass_key},
+            {"$inc": {f"pass_types.{tier_index}.amount": int(amount)}},
+        )
+        if result.matched_count <= 0:
+            raise KeyError(f"event {pass_key} not found")
+        await self.events.refresh()
+        self.refresh_events_cache()
+        updated_event = self.require_event(pass_key)
+        return updated_event.pass_types[tier_index].amount
 
     async def format_current_tier_status(self, pass_key: str) -> str:
         event = self.require_event(pass_key)
