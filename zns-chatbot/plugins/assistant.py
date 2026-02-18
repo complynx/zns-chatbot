@@ -311,7 +311,7 @@ class Assistant(BasePlugin):
                     logger.error(f"Unknown content type: {item.content_type}")
                 await sleep(0.5)  # slight delay to avoid hitting rate limits
             except Exception as e:
-                logger.error(f"Error sending content item {index}: {e}", exc_info=e)
+                logger.error(f"Error sending content item {index=} {item=}: {e}", exc_info=e)
         # await update.reply(repl, parse_mode=ParseMode.MARKDOWN_V2)
 
     async def userinfo(self, update: TGState) -> str:
