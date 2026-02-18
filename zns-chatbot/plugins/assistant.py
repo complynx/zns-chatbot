@@ -553,15 +553,9 @@ You must answer in the same language as the users messages.
             }
         )
 
-        interpreter_chain = InterpreterChain([
-            TextInterpreter(),  # Use pure text first
-            FileInterpreter(),  # Handle code blocks
-        ])
         boxs = await telegramify_markdown.markdownify(
             content=result.content,
-            interpreters_use=interpreter_chain,
             latex_escape=True,
             normalize_whitespace=True,
-            max_word_count=4090  # The maximum number of words in a single message.
         )
         return boxs
