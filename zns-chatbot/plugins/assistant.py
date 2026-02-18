@@ -281,39 +281,12 @@ class Assistant(BasePlugin):
             repl = await self.get_assistant_reply(
                 update.update.message.text_markdown_v2, update.user, update
             )
-        except Exception as e:
+            await update.reply(
+                repl,
+                parse_mode=ParseMode.MARKDOWN_V2,
+            )
+        finally:
             stopper.set()
-            raise e
-        for index, item in enumerate(repl):
-            if index >= len(repl)-1:
-                stopper.set()
-            try:
-                if item.content_type == ContentTypes.TEXT:
-                    await update.reply(
-                        item.content,
-                        parse_mode=ParseMode.MARKDOWN_V2,
-                    )
-                elif item.content_type == ContentTypes.PHOTO:
-                    await update.bot.send_photo(
-                        update.chat_id if update.chat_id else update.user,
-                        item.file_data,
-                        filename=item.file_name,
-                        caption=item.caption,
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-                elif item.content_type == ContentTypes.FILE:
-                    await update.bot.send_document(
-                        update.chat_id if update.chat_id else update.user,
-                        item.file_data,
-                        filename=item.file_name,
-                        caption=item.caption,
-                        parse_mode=ParseMode.MARKDOWN_V2
-                    )
-                else:
-                    logger.error(f"Unknown content type: {item.content_type}")
-                await sleep(0.5)  # slight delay to avoid hitting rate limits
-            except Exception as e:
-                logger.error(f"Error sending content item {index=} {item=}: {e}", exc_info=e)
         # await update.reply(repl, parse_mode=ParseMode.MARKDOWN_V2)
 
     async def userinfo(self, update: TGState) -> str:
@@ -584,7 +557,7 @@ You must answer in the same language as the users messages.
             TextInterpreter(),  # Use pure text first
             FileInterpreter(),  # Handle code blocks
         ])
-        boxs = await telegramify_markdown.telegramify(
+        boxs = await telegramify_markdown.markdownify(
             content=result.content,
             interpreters_use=interpreter_chain,
             latex_escape=True,
