@@ -1,16 +1,20 @@
+from asyncio import gather
+from datetime import datetime, timedelta
+from html import escape
+import logging
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.schema import HumanMessage, SystemMessage
 from motor.core import AgnosticCollection
-from ..tg_state import TGState, SilentArgumentParser
-from telegram import ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
-from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
-from telegram.ext import CommandHandler, filters
-from telegram.constants import ParseMode
-from ..telegram_links import client_user_link_html,client_user_name
-import logging
-from typing import Literal
-from json import loads
 from tornado.template import Template
+from telegram import ReplyKeyboardMarkup, Update, ReplyKeyboardRemove
+from telegram.constants import ParseMode
+from telegram.ext import CommandHandler, filters
+from json import loads
+from typing import Literal
+
+from ..telegram_links import client_user_link_html, client_user_link_url, client_user_name
+from ..tg_state import TGState, SilentArgumentParser
+from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,17 @@ class Superuser(BasePlugin):
         super().__init__(base_app)
         self.admins = self.config.telegram.admins
         self.user_db = base_app.users_collection
+        self.pass_db = base_app.passes_collection
+        self.message_db = (
+            base_app.mongodb[self.config.mongo_db.messages_collection]
+            if base_app.mongodb is not None
+            else None
+        )
+        self.files_db = (
+            base_app.mongodb[self.config.mongo_db.files_collection]
+            if base_app.mongodb is not None
+            else None
+        )
         self._checker = CommandHandler("user_echo", self.handle_message)
         self._checker_gf = CommandHandler("get_file", self.handle_get_file)
         self._checker_send_message_to = CommandHandler("send_message_to", self.send_message_to)
@@ -367,15 +382,250 @@ class Superuser(BasePlugin):
             filename=data,
         )
 
+    @staticmethod
+    def _format_datetime(raw) -> str:
+        if not isinstance(raw, datetime):
+            return ""
+        return raw.isoformat(sep=" ", timespec="seconds")
+
+    @staticmethod
+    def _format_name_value(raw) -> str:
+        if raw is None:
+            return ""
+        if isinstance(raw, str):
+            return raw.strip()
+        if isinstance(raw, list):
+            parts = [Superuser._format_name_value(v) for v in raw]
+            parts = [p for p in parts if p]
+            return ", ".join(parts)
+        return str(raw)
+
+    @staticmethod
+    def _safe_int(raw, default: int = 0) -> int:
+        if raw is None:
+            return default
+        if isinstance(raw, (int, float)):
+            return int(raw)
+        if isinstance(raw, str):
+            value = raw.strip()
+            if value == "":
+                return default
+            try:
+                return int(value)
+            except ValueError:
+                return default
+        return default
+
+    def _pass_label(self, pass_key: str, locale: str | None = None) -> str:
+        events = getattr(self.base_app, "events", None)
+        if events is None:
+            return pass_key
+        event = events.get_event(pass_key)
+        if event is None:
+            return pass_key
+        title = event.title_short_for_locale(locale)
+        emoji = event.country_emoji.strip()
+        if title and title != pass_key:
+            label = f"{title} [{pass_key}]"
+        else:
+            label = pass_key
+        if emoji:
+            return f"{label} {emoji}"
+        return label
+
+    async def _collect_pass_stats_lines(
+        self,
+        uid: int,
+        bot_id: int,
+        locale: str | None = None,
+    ) -> list[str]:
+        if self.pass_db is None:
+            return ["passes: unavailable"]
+        pass_docs = await self.pass_db.find(
+            {
+                "user_id": uid,
+                "bot_id": bot_id,
+            }
+        ).sort([("pass_key", 1), ("date_created", 1)]).to_list(None)
+        if len(pass_docs) == 0:
+            return ["passes: 0"]
+
+        state_counts: dict[str, int] = {}
+        registered_where: set[str] = set()
+        paid_where: set[str] = set()
+        details: list[str] = []
+        for pass_doc in pass_docs:
+            pass_key = str(pass_doc.get("pass_key", "unknown"))
+            state = str(pass_doc.get("state", "unknown"))
+            state_counts[state] = state_counts.get(state, 0) + 1
+            label = self._pass_label(pass_key, locale=locale)
+            registered_where.add(label)
+            if state in {"paid", "payed"}:
+                paid_where.add(label)
+
+            parts = [f"state={state}"]
+            for field in ["role", "type", "price"]:
+                if field in pass_doc and pass_doc[field] not in [None, ""]:
+                    parts.append(f"{field}={pass_doc[field]}")
+            for field in [
+                "date_created",
+                "date_assignment",
+                "proof_received",
+                "proof_accepted",
+            ]:
+                formatted_date = self._format_datetime(pass_doc.get(field))
+                if formatted_date:
+                    parts.append(f"{field}={formatted_date}")
+            if "proof_admin" in pass_doc and pass_doc["proof_admin"] not in [None, ""]:
+                parts.append(f"proof_admin={pass_doc['proof_admin']}")
+            details.append(f"{label}: " + ", ".join(parts))
+
+        state_summary = ", ".join(
+            f"{state}:{count}" for state, count in sorted(state_counts.items())
+        )
+        registered_summary = ", ".join(sorted(registered_where)) if registered_where else "none"
+        paid_summary = ", ".join(sorted(paid_where)) if paid_where else "none"
+        lines = [
+            f"passes: {len(pass_docs)} ({state_summary})",
+            f"passes registered in: {registered_summary}",
+            f"passes paid in: {paid_summary}",
+        ]
+        for detail in details:
+            lines.append(f"  - {detail}")
+        return lines
+
+    async def _collect_message_stats_lines(self, uid: int) -> list[str]:
+        if self.message_db is None:
+            return ["assistant requests: unavailable"]
+        one_day_ago = datetime.now() - timedelta(days=1)
+        requests_total, requests_last_day, replies_total, latest_request = await gather(
+            self.message_db.count_documents({"user_id": uid, "role": "user"}),
+            self.message_db.count_documents(
+                {
+                    "user_id": uid,
+                    "role": "user",
+                    "date": {"$gte": one_day_ago},
+                }
+            ),
+            self.message_db.count_documents({"user_id": uid, "role": "assistant"}),
+            self.message_db.find_one(
+                {"user_id": uid, "role": "user"},
+                sort=[("date", -1)],
+            ),
+        )
+        latest_request_date = self._format_datetime(
+            latest_request.get("date") if latest_request is not None else None
+        )
+        lines = [
+            f"assistant requests: {requests_total} total, {requests_last_day} in last 24h",
+            f"assistant replies: {replies_total}",
+        ]
+        if latest_request_date:
+            lines.append(f"last assistant request: {latest_request_date}")
+        return lines
+
+    async def _collect_avatar_stats_lines(self, uid: int, bot_id: int, user: dict | None) -> list[str]:
+        avatars_called = self._safe_int((user or {}).get("avatars_called"))
+        avatars_simple = self._safe_int((user or {}).get("avatars_simple"))
+        avatars_detailed = self._safe_int((user or {}).get("avatars_detailed"))
+        lines = [
+            f"avatars counters: called={avatars_called}, simple={avatars_simple}, detailed={avatars_detailed}",
+        ]
+        if self.files_db is None:
+            return lines
+        uploads_total, done_simple, done_detailed = await gather(
+            self.files_db.count_documents({"user_id": uid, "bot_id": bot_id}),
+            self.files_db.count_documents(
+                {"user_id": uid, "bot_id": bot_id, "status": "completed_simple"}
+            ),
+            self.files_db.count_documents(
+                {"user_id": uid, "bot_id": bot_id, "status": "completed_detailed"}
+            ),
+        )
+        lines.append(
+            f"avatar files: uploaded={uploads_total}, completed_simple={done_simple}, completed_detailed={done_detailed}"
+        )
+        return lines
+
+    def _collect_name_lines(self, user: dict | None) -> list[str]:
+        if user is None:
+            return ["known names: user not found in users collection"]
+        lines: list[str] = []
+        username = user.get("username")
+        if isinstance(username, str) and username.strip():
+            lines.append(f"username=@{username.strip()}")
+
+        preferred_keys = [
+            "legal_name",
+            "informal_name",
+            "known_names",
+            "first_name",
+            "last_name",
+            "print_name",
+            "inner_name_ru",
+            "inner_name_en",
+        ]
+        seen: set[str] = set()
+        for key in preferred_keys:
+            value = self._format_name_value(user.get(key))
+            if value:
+                lines.append(f"{key}={value}")
+                seen.add(key)
+
+        extra_name_keys = sorted(
+            key
+            for key in user.keys()
+            if "name" in key and key not in {"bot_username", "username"} and key not in seen
+        )
+        for key in extra_name_keys:
+            value = self._format_name_value(user.get(key))
+            if value:
+                lines.append(f"{key}={value}")
+        if len(lines) == 0:
+            return ["known names: none"]
+        return lines
+
     async def handle_message(self, update: TGState):
-        data = update.message.text.split(" ", maxsplit=1)[1]
-        uid = int(data)
+        parts = update.message.text.split(maxsplit=1)
+        if len(parts) < 2:
+            await update.reply("Usage: /user_echo <user_id>", parse_mode=None)
+            return
+        try:
+            uid = int(parts[1].strip())
+        except ValueError:
+            await update.reply("Usage: /user_echo <user_id>", parse_mode=None)
+            return
+
         user = await self.user_db.find_one({
             "user_id": uid,
             "bot_id": update.bot.id,
         })
+        locale = user.get("language_code") if isinstance(user, dict) else None
         if user is not None:
-            await update.reply(client_user_link_html(user), parse_mode=ParseMode.HTML)
+            user_url = client_user_link_url(user)
+            user_name = client_user_name(user, language_code=locale)
         else:
-            await update.reply(f"<a href=\"tg://user?id={uid}\">Unknown</a>", parse_mode=ParseMode.HTML)
+            user_url = f"tg://user?id={uid}"
+            user_name = "Unknown"
+
+        pass_lines, message_lines, avatar_lines = await gather(
+            self._collect_pass_stats_lines(uid, update.bot.id, locale=locale),
+            self._collect_message_stats_lines(uid),
+            self._collect_avatar_stats_lines(uid, update.bot.id, user),
+        )
+        name_lines = self._collect_name_lines(user)
+
+        lines = [
+            f"<b>User</b>: <a href=\"{escape(user_url, quote=True)}\">{escape(str(user_name))}</a> (<code>{uid}</code>)",
+            "",
+            "<b>Known names</b>:",
+        ]
+        lines.extend(f"• {escape(line)}" for line in name_lines)
+        lines.extend(["", "<b>Passes</b>:"])
+        lines.extend(f"• {escape(line)}" for line in pass_lines)
+        lines.extend(["", "<b>Messages</b>:"])
+        lines.extend(f"• {escape(line)}" for line in message_lines)
+        lines.extend(["", "<b>Avatars</b>:"])
+        lines.extend(f"• {escape(line)}" for line in avatar_lines)
+        await update.reply("\n".join(lines), parse_mode=ParseMode.HTML)
             
