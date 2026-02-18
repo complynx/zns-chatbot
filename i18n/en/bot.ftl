@@ -583,6 +583,8 @@ passes-button-couple-accept = ✅ Accept
 passes-button-couple-decline = 🙅 Decline
 passes-accept-pass-request-name =
     To accept the invitation, first enter your full name please:
+passes-accept-pass-request-continue =
+    To accept the invitation, please scroll down to continue:
 passes-invitation-successfully-accepted =
     The invitation was successfully accepted.
     To view or manage your pass, use command /passes.
@@ -654,6 +656,9 @@ passes-solo-saved =
 passes-pass-create-start-message =
     First, I need some information from you.
     Scroll down and enter your full name as it appears in your passport.
+passes-pass-create-start-message-continue =
+    First, I need some information from you.
+    Scroll down to continue.
 passes-legal-name-request-message =
     First, I need some information from you.
     Please enter your full name as it appears in your passport.

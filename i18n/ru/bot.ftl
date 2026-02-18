@@ -605,6 +605,9 @@ passes-sell-not-started =
 passes-pass-create-start-message =
     Сначала мне нужно немного информации от вас.
     Прокрутите вниз и введите ваше полное имя, как указано в паспорте.
+passes-pass-create-start-message-continue =
+    Сначала мне нужно немного информации от вас.
+    Прокрутите вниз, чтобы продолжить.
 passes-legal-name-request-message =
     Сначала мне нужно немного информации от вас.
     Пожалуйста, введите ваше полное ФИО, как указано в паспорте.
@@ -681,6 +684,8 @@ passes-button-couple-accept = ✅ Принять
 passes-button-couple-decline = 🙅 Отклонить
 passes-accept-pass-request-name =
     Чтобы принять приглашение, сначала введите ваше полное ФИО, как в паспорте:
+passes-accept-pass-request-continue =
+    Чтобы принять приглашение, прокрутите вниз, чтобы продолжить:
 passes-invitation-successfully-accepted =
     Приглашение было успешно принято.
     Для просмотра вашего пасса или управления им, используйте команду /passes.

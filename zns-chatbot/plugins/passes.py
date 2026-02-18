@@ -418,12 +418,17 @@ class PassUpdate:
     async def handle_cq_cp_acc(self, key, inviter_id):
         self.set_pass_key(key)
         inviter_id = int(inviter_id)
+        name_required = self.is_passport_required()
         await self.update.edit_message_text(
-            self.l("passes-accept-pass-request-name"),
+            self.l(
+                "passes-accept-pass-request-name"
+                if name_required
+                else "passes-accept-pass-request-continue"
+            ),
             reply_markup=InlineKeyboardMarkup([]),
             parse_mode=ParseMode.HTML,
         )
-        if not self.is_passport_required():
+        if not name_required:
             return await self.after_legal_name_input(inviter_id, "skip")
         await self.handle_name_request(inviter_id)
 
@@ -811,12 +816,17 @@ class PassUpdate:
                 reply_markup=InlineKeyboardMarkup([]),
                 parse_mode=ParseMode.HTML,
             )
+        name_required = self.is_passport_required()
         await self.update.edit_or_reply(
-            self.l_pass("passes-pass-create-start-message"),
+            self.l_pass(
+                "passes-pass-create-start-message"
+                if name_required
+                else "passes-pass-create-start-message-continue"
+            ),
             reply_markup=InlineKeyboardMarkup([]),
             parse_mode=ParseMode.HTML,
         )
-        if not self.is_passport_required():
+        if not name_required:
             return await self.after_legal_name_input("pass", "skip")
         return await self.handle_name_request("pass")
 
