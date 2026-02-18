@@ -553,9 +553,8 @@ You must answer in the same language as the users messages.
             }
         )
 
-        boxs = await telegramify_markdown.markdownify(
+        return telegramify_markdown.markdownify(
             content=result.content,
             latex_escape=True,
             normalize_whitespace=True,
         )
-        return boxs
