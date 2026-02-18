@@ -296,14 +296,16 @@ class Assistant(BasePlugin):
                 elif item.content_type == ContentTypes.PHOTO:
                     await update.bot.send_photo(
                         update.chat_id if update.chat_id else update.user,
-                        (item.file_name, item.file_data),
+                        item.file_data,
+                        filename=item.file_name,
                         caption=item.caption,
                         parse_mode=ParseMode.MARKDOWN_V2
                     )
                 elif item.content_type == ContentTypes.FILE:
                     await update.bot.send_document(
                         update.chat_id if update.chat_id else update.user,
-                        (item.file_name, item.file_data),
+                        item.file_data,
+                        filename=item.file_name,
                         caption=item.caption,
                         parse_mode=ParseMode.MARKDOWN_V2
                     )
