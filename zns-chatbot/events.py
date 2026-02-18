@@ -25,6 +25,7 @@ class EventPassTypeSettings(BaseModel):
     price: int = Field(..., gt=0)
     start: datetime = Field(datetime.max)
     promo: bool = Field(False)
+    blocked_by_date: bool = Field(False)
 
 
 class EventSettings(BaseSettings):
@@ -52,6 +53,7 @@ class EventPassType:
     price: int
     start: datetime
     promo: bool = False
+    blocked_by_date: bool = False
 
 
 def _normalize_admins(raw: list[int] | int | None) -> list[int]:
@@ -155,6 +157,7 @@ class EventInfo:
                 price=pass_type.price,
                 start=pass_type.start,
                 promo=pass_type.promo,
+                blocked_by_date=pass_type.blocked_by_date,
             )
             for pass_type in settings.pass_types
         )

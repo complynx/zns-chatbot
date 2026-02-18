@@ -2498,6 +2498,10 @@ class Passes(BasePlugin):
             return floor_index
         return first_assignable
 
+    @staticmethod
+    def _tier_is_date_blocked(pass_type: EventPassType, reference_time) -> bool:
+        return pass_type.blocked_by_date and pass_type.start > reference_time
+
     def _is_tier_effective(
         self,
         *,
@@ -2533,8 +2537,11 @@ class Passes(BasePlugin):
         )
         if start_tier_index is None:
             return None
+        now = now_msk()
         for tier_index in range(start_tier_index, len(pass_types)):
             pass_type = pass_types[tier_index]
+            if self._tier_is_date_blocked(pass_type, now):
+                break
             if not allow_promo and pass_type.promo:
                 continue
             if assignment_rule == "paired":
@@ -2946,7 +2953,9 @@ class Passes(BasePlugin):
                 "current tier: "
                 f"{tier_index + 1} "
                 f"(price={tier_info.price}, left/total={tier_left}/{tier_limit}, "
-                f"promo={tier_info.promo}, start={self._format_tier_start(tier_info.start)})"
+                "promo="
+                f"{tier_info.promo}, blocked_by_date={tier_info.blocked_by_date}, "
+                f"start={self._format_tier_start(tier_info.start)})"
             )
             return "\n".join(lines)
 
@@ -2977,7 +2986,9 @@ class Passes(BasePlugin):
             lines.append(
                 f"{role}: current tier: {tier_index + 1} "
                 f"(price={tier_info.price}, left/total={tier_left}/{tier_limit}, "
-                f"promo={tier_info.promo}, start={self._format_tier_start(tier_info.start)})"
+                "promo="
+                f"{tier_info.promo}, blocked_by_date={tier_info.blocked_by_date}, "
+                f"start={self._format_tier_start(tier_info.start)})"
             )
         return "\n".join(lines)
 
@@ -3443,6 +3454,14 @@ class Passes(BasePlugin):
                     logger.error(
                         "Exception in Passes._timeout_processor %s", e, exc_info=1
                     )
+            try:
+                await self.recalculate_queues()
+            except Exception as e:
+                logger.error(
+                    "Exception in Passes._timeout_processor recalculate_queues %s",
+                    e,
+                    exc_info=1,
+                )
 
     async def recalculate_queues(self) -> None:
         if self._queue_lock.locked():
