@@ -32,6 +32,11 @@ RUN uv pip install "insightface>=0.7,<0.8"
 COPY pyproject.toml /tmp/
 RUN cd /tmp && uv pip install .
 
+# Copy source and run tests during build
+WORKDIR /src
+COPY . /src
+RUN python -m unittest discover -s tests -v
+
 # Clean up
 RUN rm -rf /tmp/uv-cache /root/.cache /tmp/*
 
@@ -53,6 +58,7 @@ WORKDIR /app
 
 # Copy application code
 COPY . /app
+RUN rm -rf /app/tests
 
 # Create non-root user
 RUN groupadd -r appuser && useradd -r -g appuser appuser
@@ -64,6 +70,7 @@ EXPOSE 80
 
 # Define environment variable
 ENV NAME=zns-chatbot
+ENV NO_ALBUMENTATIONS_UPDATE=1
 
 # Run the application
 CMD ["python", "-m", "zns-chatbot.main"]

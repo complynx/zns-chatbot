@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 CANCEL_CHR = chr(0xE007F)  # Tag cancel
 MAX_CONCURRENT_ASSIGNMENTS = 6
-QUEUE_LOOKAHEAD = 0  # 0 = scan the whole queue when searching for an assignable pass
 
 # Per-person default pass prices by pass key.
 CURRENT_PRICE = {
@@ -1312,6 +1311,7 @@ class PassUpdate:
         proof_admin: int | None = None,
         price_by_user: dict[int, int] | None = None,
         pass_type_index_by_user: dict[int, int] | None = None,
+        ignore_date_blocks: bool = False,
     ):
         self.set_pass_key(pass_key)
         pass_doc = await self.base.pass_db.find_one(
@@ -1346,6 +1346,7 @@ class PassUpdate:
                 self.pass_key,
                 self.update.user,
                 pass_data,
+                enforce_date_blocks=not ignore_date_blocks,
             )
             if tier_pricing is None:
                 logger.warning(
@@ -1774,7 +1775,13 @@ class PassUpdate:
                 upd = await self.base.create_update_from_user(user_id)
 
                 assigned_ok = await upd.assign_pass(
-                    args.pass_key, args.price, args.type, args.comment, args.skip, self.update.user
+                    args.pass_key,
+                    args.price,
+                    args.type,
+                    args.comment,
+                    args.skip,
+                    self.update.user,
+                    ignore_date_blocks=True,
                 )
                 if assigned_ok:
                     logger.info(f"pass {args.pass_key=} assigned to {recipient=}")
@@ -2383,11 +2390,22 @@ class Passes(BasePlugin):
         *,
         leader_delta: int = 0,
         follower_delta: int = 0,
+        strict: bool = False,
     ) -> bool:
         leader_count = self._role_total_from_counts(role_counts, "leader")
         follower_count = self._role_total_from_counts(role_counts, "follower")
         next_leader_count = leader_count + leader_delta
         next_follower_count = follower_count + follower_delta
+
+        if strict:
+            # Strict: must be within tolerance before AND after.
+            # Used for double-solo assignments.
+            if not self._is_within_balance_tolerance(leader_count, follower_count):
+                return False
+            return self._is_within_balance_tolerance(
+                next_leader_count,
+                next_follower_count,
+            )
 
         if self._is_within_balance_tolerance(leader_count, follower_count):
             return self._is_within_balance_tolerance(
@@ -2492,14 +2510,13 @@ class Passes(BasePlugin):
         self,
         *,
         pass_types: tuple[EventPassType, ...],
-        allow_promo: bool,
     ) -> int | None:
         now = now_msk()
         floor_index: int | None = None
         first_assignable: int | None = None
         for tier_index, pass_type in enumerate(pass_types):
-            if not allow_promo and pass_type.promo:
-                continue
+            # Keep promo tiers in the scan so that blocked promo tiers
+            # can still stop automatic couple assignments.
             if first_assignable is None:
                 first_assignable = tier_index
             if pass_type.start <= now:
@@ -2540,17 +2557,17 @@ class Passes(BasePlugin):
         role: str | None,
         increment: int,
         allow_promo: bool,
+        enforce_date_blocks: bool = True,
     ) -> int | None:
         start_tier_index = self._time_floor_tier_index(
             pass_types=pass_types,
-            allow_promo=allow_promo,
         )
         if start_tier_index is None:
             return None
         now = now_msk()
         for tier_index in range(start_tier_index, len(pass_types)):
             pass_type = pass_types[tier_index]
-            if self._tier_is_date_blocked(pass_type, now):
+            if enforce_date_blocks and self._tier_is_date_blocked(pass_type, now):
                 break
             if not allow_promo and pass_type.promo:
                 continue
@@ -2653,29 +2670,7 @@ class Passes(BasePlugin):
                 },
             ]
         ).to_list(None)
-        couples = {
-            group["_id"]: group["count"]
-            for group in await self.pass_db.aggregate(
-                [
-                    {
-                        "$match": {
-                            "couple": {"$exists": True},
-                            "role": "leader",
-                            "bot_id": self.bot.id,
-                            "pass_key": pass_key,
-                            "$and": [self._balance_counter_match()],
-                        },
-                    },
-                    {
-                        "$group": {
-                            "_id": "$state",
-                            "count": {"$count": {}},
-                        }
-                    },
-                ]
-            ).to_list(None)
-        }
-        role_counts, max_assigned = self._role_counts_from_aggregation(aggregation)
+        role_counts, _ = self._role_counts_from_aggregation(aggregation)
         full_aggregation = await self.pass_db.aggregate(
             [
                 {
@@ -2744,7 +2739,6 @@ class Passes(BasePlugin):
         return {
             "role_counts": role_counts,
             "full_role_counts": full_role_counts,
-            "max_single_assigned": max_assigned - couples.get("assigned", 0),
             "participants_total": participants_total,
             "participants_by_role": participants_by_role,
             "tier_usage_total": tier_usage_total,
@@ -3007,6 +3001,8 @@ class Passes(BasePlugin):
         pass_key: str,
         user_id: int,
         pass_data: dict,
+        *,
+        enforce_date_blocks: bool = True,
     ) -> tuple[dict[int, int], dict[int, int]] | None:
         event = self.require_event(pass_key)
         pass_types = self._event_pass_types(event)
@@ -3062,6 +3058,7 @@ class Passes(BasePlugin):
                 role=None,
                 increment=len(user_roles),
                 allow_promo=not is_couple,
+                enforce_date_blocks=enforce_date_blocks,
             )
             if tier_index is None:
                 return None
@@ -3083,6 +3080,7 @@ class Passes(BasePlugin):
                 role=user_role,
                 increment=1,
                 allow_promo=allow_promo,
+                enforce_date_blocks=enforce_date_blocks,
             )
             if tier_index is None:
                 return None
@@ -3493,59 +3491,300 @@ class Passes(BasePlugin):
                 )
 
     async def recalculate_queues_pk(self, pass_key: str) -> None:
+        """Recalculate the assignment queue for a single pass key.
+
+        Downloads all waitlist applications and finds the next assignments
+        according to the following rules:
+
+        Restrictions
+        ------------
+        * Balance of roles (paid+assigned) <= ROLE_BALANCE_TOLERANCE after
+          new assignment **or** imbalance is strictly lower than before.
+        * Can't assign double-solo when already in imbalance.
+        * total assigned-not-paid <= MAX_CONCURRENT_ASSIGNMENTS after new
+          assignment.
+        * blocked_by_date → must not assign further (even couples when the
+          block is inside a promo tier).
+        * No more tickets → must not assign.
+        * Strict improvement applies to double-solos; non-worsening applies
+          to couples and single solos.
+
+        Assignment rules (applied in priority order each iteration)
+        -----------------------------------------------------------
+        1. If any WL has a top solo that improves the imbalance and can be
+           assigned → assign it.
+        2. If **both** WLs have a pass at the top:
+           a. If both are solo **and** balance is currently met → try
+              double-solo.
+           b. If one is a couple → try couple.  Couples are assigned to the
+              next tier when the current one is promo.
+        3. Fallback: try assigning a single solo (target role first, then
+           other role), then a couple.
+
+        Assignment mechanisms
+        ---------------------
+        * distributed — assign both roles in a couple pass at the same tier.
+        * paired — split each tier amount in halves and assign each role
+          independently based on the half-amount of each tier.
+
+        Exceptions
+        ----------
+        * If a double-solo assignment partially fails it is acceptable to
+          leave partial imbalance.
+        """
         event = self.require_event(pass_key)
+
         try:
+            # ── Main assignment loop ─────────────────────────────────
             while True:
                 stats = await self._collect_queue_stats(pass_key)
                 role_counts = stats.get("role_counts", {})
                 if not isinstance(role_counts, dict):
                     break
-                max_single_assigned = int(stats.get("max_single_assigned", 0))
-                leader_ra = self._role_total_from_counts(role_counts, "leader")
-                follower_ra = self._role_total_from_counts(role_counts, "follower")
-                if (
-                    max_single_assigned > MAX_CONCURRENT_ASSIGNMENTS
-                    and self._is_within_balance_tolerance(leader_ra, follower_ra)
-                ):
+
+                # Download ALL waitlist applications sorted by sign-up date
+                all_waitlist = await self.pass_db.find(
+                    {
+                        "bot_id": self.bot.id,
+                        "pass_key": pass_key,
+                        "state": "waitlist",
+                    }
+                ).sort(
+                    [("date_created", 1), ("user_id", 1)]
+                ).to_list(None)
+
+                if not all_waitlist:
                     break
 
-                target_group = self._target_role(role_counts)
-                success = await self.assign_pass(target_group, pass_key, stats)
-                if success:
-                    continue
+                leader_wl = [
+                    p for p in all_waitlist if p.get("role") == "leader"
+                ]
+                follower_wl = [
+                    p for p in all_waitlist if p.get("role") == "follower"
+                ]
+                if not leader_wl and not follower_wl:
+                    break
 
-                other_group = "follower" if target_group == "leader" else "leader"
-                success = await self.assign_pass(other_group, pass_key, stats)
-                if success:
-                    continue
+                leader_ra = self._role_total_from_counts(role_counts, "leader")
+                follower_ra = self._role_total_from_counts(
+                    role_counts, "follower"
+                )
+                in_balance = self._is_within_balance_tolerance(
+                    leader_ra, follower_ra
+                )
 
-                success = await self.assign_pass("couple", pass_key, stats)
-                if success:
-                    continue
-                break
+                # Total passes in "assigned" state (not yet paid).
+                # Use full_role_counts so skip_in_balance_count passes are
+                # still counted toward the concurrency limit.
+                full_rc = stats.get("full_role_counts", {})
+                if not isinstance(full_rc, dict):
+                    full_rc = {"leader": {}, "follower": {}}
+                total_assigned_not_paid = (
+                    full_rc.get("leader", {}).get("assigned", 0)
+                    + full_rc.get("follower", {}).get("assigned", 0)
+                )
 
-            have_unnotified = True
-            while have_unnotified:
+                assigned = False
+
+                # ── Rule 1: imbalance-improving solo ─────────────────
+                if not in_balance:
+                    minority = (
+                        "follower" if leader_ra > follower_ra else "leader"
+                    )
+                    minority_wl = (
+                        leader_wl if minority == "leader" else follower_wl
+                    )
+                    if minority_wl and "couple" not in minority_wl[0]:
+                        if (
+                            total_assigned_not_paid + 1
+                            <= MAX_CONCURRENT_ASSIGNMENTS
+                        ):
+                            delta_kw = (
+                                {"leader_delta": 1}
+                                if minority == "leader"
+                                else {"follower_delta": 1}
+                            )
+                            if self._can_assign_with_balance(
+                                role_counts, **delta_kw
+                            ):
+                                result = await self._assign_wl_candidate(
+                                    pass_key,
+                                    event,
+                                    stats,
+                                    minority_wl[0],
+                                    allow_promo=True,
+                                )
+                                if result:
+                                    assigned = True
+
+                # ── Rule 2: both WLs have a pass ────────────────────
+                if not assigned and leader_wl and follower_wl:
+                    top_leader = leader_wl[0]
+                    top_follower = follower_wl[0]
+                    leader_is_solo = "couple" not in top_leader
+                    follower_is_solo = "couple" not in top_follower
+
+                    # 2a: both solo + balance met → double-solo
+                    if (
+                        leader_is_solo
+                        and follower_is_solo
+                        and in_balance
+                    ):
+                        if (
+                            total_assigned_not_paid + 2
+                            <= MAX_CONCURRENT_ASSIGNMENTS
+                        ):
+                            if self._can_assign_with_balance(
+                                role_counts,
+                                leader_delta=1,
+                                follower_delta=1,
+                                strict=True,
+                            ):
+                                result = (
+                                    await self._try_double_solo_assignment(
+                                        pass_key,
+                                        event,
+                                        stats,
+                                        top_leader,
+                                        top_follower,
+                                    )
+                                )
+                                if result:
+                                    assigned = True
+
+                    # 2b: at least one is a couple → try couple
+                    if not assigned and (
+                        not leader_is_solo or not follower_is_solo
+                    ):
+                        if (
+                            total_assigned_not_paid + 2
+                            <= MAX_CONCURRENT_ASSIGNMENTS
+                        ):
+                            couple_candidates_2b = []
+                            if not leader_is_solo:
+                                couple_candidates_2b.append(top_leader)
+                            if not follower_is_solo:
+                                couple_candidates_2b.append(top_follower)
+                            couple_candidate = min(
+                                couple_candidates_2b,
+                                key=lambda p: (
+                                    p.get("date_created"),
+                                    p.get("user_id", 0),
+                                ),
+                            )
+                            if self._can_assign_with_balance(
+                                role_counts,
+                                leader_delta=1,
+                                follower_delta=1,
+                            ):
+                                result = await self._assign_wl_candidate(
+                                    pass_key,
+                                    event,
+                                    stats,
+                                    couple_candidate,
+                                    allow_promo=False,
+                                )
+                                if result:
+                                    assigned = True
+
+                # ── Rule 3: fallback single solo / couple ───────
+                if not assigned:
+                    target_group = self._target_role(role_counts)
+                    other_group = (
+                        "follower" if target_group == "leader" else "leader"
+                    )
+                    for try_role in (target_group, other_group):
+                        if total_assigned_not_paid + 1 > MAX_CONCURRENT_ASSIGNMENTS:
+                            break
+                        try_wl = (
+                            leader_wl if try_role == "leader" else follower_wl
+                        )
+                        solo_candidates = [
+                            p for p in try_wl if "couple" not in p
+                        ]
+                        if not solo_candidates:
+                            continue
+                        delta_kw = (
+                            {"leader_delta": 1}
+                            if try_role == "leader"
+                            else {"follower_delta": 1}
+                        )
+                        if not self._can_assign_with_balance(
+                            role_counts, **delta_kw
+                        ):
+                            continue
+                        result = await self._assign_wl_candidate(
+                            pass_key,
+                            event,
+                            stats,
+                            solo_candidates[0],
+                            allow_promo=True,
+                        )
+                        if result:
+                            assigned = True
+                            break
+
+                if not assigned and (
+                    total_assigned_not_paid + 2 <= MAX_CONCURRENT_ASSIGNMENTS
+                ):
+                    # Try couple from queue top only (do not scan deep).
+                    top_couple_candidates = []
+                    if leader_wl and "couple" in leader_wl[0]:
+                        top_couple_candidates.append(leader_wl[0])
+                    if follower_wl and "couple" in follower_wl[0]:
+                        top_couple_candidates.append(follower_wl[0])
+                    if top_couple_candidates:
+                        couple_candidate = min(
+                            top_couple_candidates,
+                            key=lambda p: (p.get("date_created"), p.get("user_id", 0)),
+                        )
+                        if self._can_assign_with_balance(
+                            role_counts,
+                            leader_delta=1,
+                            follower_delta=1,
+                        ):
+                            result = await self._assign_wl_candidate(
+                                pass_key,
+                                event,
+                                stats,
+                                couple_candidate,
+                                allow_promo=False,
+                            )
+                            if result:
+                                assigned = True
+
+                if not assigned:
+                    break
+
+            # ── Notify remaining waitlisted users ────────────────────
+            while True:
                 selected = await self.pass_db.find(
                     {
                         "bot_id": self.bot.id,
                         "pass_key": pass_key,
                         "state": "waitlist",
                         "no_more_passes_notification_sent": {
-                            "$exists": False
+                            "$exists": False,
                         },
                     }
                 ).to_list(100)
                 if len(selected) == 0:
-                    logger.info("no unnotified candidates in the waiting list")
+                    logger.info(
+                        "no unnotified candidates in the waiting list"
+                    )
                     break
                 for pass_doc in selected:
-                    upd = await self.create_update_from_user(pass_doc["user_id"])
+                    upd = await self.create_update_from_user(
+                        pass_doc["user_id"]
+                    )
                     upd.set_pass_key(pass_key)
                     await upd.notify_no_more_passes(pass_key)
         except Exception as e:
-            logger.error(f"Exception in recalculate_queues: {e}", exc_info=1)
+            logger.error(
+                f"Exception in recalculate_queues: {e}", exc_info=1
+            )
 
+        # ── Hype-thread announcements ────────────────────────────────
         try:
             async for pass_doc in self.pass_db.find(
                 {
@@ -3560,15 +3799,23 @@ class Passes(BasePlugin):
                     pass_key,
                     set_fields={"sent_to_hype_thread": sent_ts},
                 )
-                user = await self.user_db.find_one(
-                    {"bot_id": self.bot.id, "user_id": pass_doc["user_id"]}
-                ) or {}
+                user = (
+                    await self.user_db.find_one(
+                        {
+                            "bot_id": self.bot.id,
+                            "user_id": pass_doc["user_id"],
+                        }
+                    )
+                    or {}
+                )
                 if event.thread_channel != "":
                     try:
                         ch = event.thread_channel
                         if isinstance(ch, str):
                             ch = "@" + ch
-                        logger.debug(f"chat id: {ch}, type {type(ch)}")
+                        logger.debug(
+                            f"chat id: {ch}, type {type(ch)}"
+                        )
                         args = {
                             "name": client_user_name(user),
                             "role": pass_doc.get("role", ""),
@@ -3586,42 +3833,68 @@ class Passes(BasePlugin):
                         )
                     except Exception as e:
                         logger.error(
-                            f"Exception in recalculate_queues: {e}", exc_info=1
+                            f"Exception in recalculate_queues: {e}",
+                            exc_info=1,
                         )
         except Exception as e:
-            logger.error(f"Exception in recalculate_queues: {e}", exc_info=1)
+            logger.error(
+                f"Exception in recalculate_queues: {e}", exc_info=1
+            )
 
-    async def assign_pass(
+    # ── Assignment helper methods ────────────────────────────────────
+
+    async def _assign_wl_candidate(
         self,
-        role: str,
         pass_key: str,
-        stats: dict[str, object] | None = None,
+        event: EventInfo,
+        stats: dict[str, object],
+        candidate_doc: dict,
+        *,
+        allow_promo: bool,
     ) -> bool:
-        event = self.require_event(pass_key)
+        """Resolve tier pricing for *candidate_doc* and assign the pass.
+
+        For couples the partner's waitlist document is fetched automatically.
+        Returns ``True`` when the assignment succeeds.
+        """
         pass_types = self._event_pass_types(event)
         assignment_rule = self._event_assignment_rule(event)
-        if len(pass_types) == 0:
+        if not pass_types:
             return False
 
-        match = {
-            "bot_id": self.bot.id,
-            "pass_key": pass_key,
-            "state": "waitlist",
-        }
-        if role == "couple":
-            match["role"] = "leader"
-            match["couple"] = {"$exists": True}
-        else:
-            match["role"] = role
-        pipeline = [
-            {"$match": match},
-            {"$sort": {"date_created": 1, "user_id": 1}},
-        ]
-        if stats is None:
-            stats = await self._collect_queue_stats(pass_key)
-        role_counts = stats.get("role_counts", {})
-        if not isinstance(role_counts, dict):
-            role_counts = {"leader": {}, "follower": {}}
+        pass_data = self._pass_doc_to_data(candidate_doc) or {}
+        candidate_user_id = candidate_doc.get("user_id")
+        if not isinstance(candidate_user_id, int):
+            return False
+
+        is_couple = "couple" in pass_data
+        user_roles: dict[int, str] = {}
+        role = pass_data.get("role")
+        if role not in {"leader", "follower"}:
+            return False
+        user_roles[candidate_user_id] = role
+
+        if is_couple:
+            couple_user_id = pass_data.get("couple")
+            if not isinstance(couple_user_id, int):
+                return False
+            couple_pass_doc = await self.pass_db.find_one(
+                {
+                    "bot_id": self.bot.id,
+                    "pass_key": pass_key,
+                    "user_id": couple_user_id,
+                    "state": "waitlist",
+                    "couple": candidate_user_id,
+                }
+            )
+            if couple_pass_doc is None:
+                return False
+            couple_pass_info = self._pass_doc_to_data(couple_pass_doc) or {}
+            couple_role = couple_pass_info.get("role")
+            if couple_role not in {"leader", "follower"}:
+                return False
+            user_roles[couple_user_id] = couple_role
+
         (
             participants_total,
             participants_by_role,
@@ -3629,55 +3902,29 @@ class Passes(BasePlugin):
             tier_usage_by_role,
         ) = self._extract_tier_stats(stats)
 
-        scanned = 0
-        async for candidate in self.pass_db.aggregate(pipeline):
-            scanned += 1
-            pass_info = self._pass_doc_to_data(candidate) or {}
-            is_couple = "couple" in pass_info
-            candidate_user_id = candidate.get("user_id")
-            if not isinstance(candidate_user_id, int):
-                continue
+        price_by_user: dict[int, int] = {}
+        pass_type_index_by_user: dict[int, int] = {}
 
-            price_by_user: dict[int, int] = {}
-            pass_type_index_by_user: dict[int, int] = {}
-            user_roles: dict[int, str] = {}
-
-            candidate_role = pass_info.get("role")
-            if candidate_role not in {"leader", "follower"}:
-                continue
-            user_roles[candidate_user_id] = candidate_role
-
-            if is_couple:
-                couple_user_id = pass_info.get("couple")
-                if not isinstance(couple_user_id, int):
-                    continue
-                couple_pass_doc = await self.pass_db.find_one(
-                    {
-                        "bot_id": self.bot.id,
-                        "pass_key": pass_key,
-                        "user_id": couple_user_id,
-                        "state": "waitlist",
-                        "couple": candidate_user_id,
-                    }
-                )
-                if couple_pass_doc is None:
-                    continue
-                couple_pass_info = self._pass_doc_to_data(couple_pass_doc) or {}
-                couple_role = couple_pass_info.get("role")
-                if couple_role not in {"leader", "follower"}:
-                    continue
-                user_roles[couple_user_id] = couple_role
-
-            leader_delta = 1 if "leader" in user_roles.values() else 0
-            follower_delta = 1 if "follower" in user_roles.values() else 0
-            if not self._can_assign_with_balance(
-                role_counts,
-                leader_delta=leader_delta,
-                follower_delta=follower_delta,
-            ):
-                continue
-
-            if assignment_rule == "distributed":
+        if assignment_rule == "distributed":
+            tier_index = self._pick_tier_for_assignment(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage_total=tier_usage_total,
+                tier_usage_by_role=tier_usage_by_role,
+                participants_total=participants_total,
+                participants_by_role=participants_by_role,
+                role=None,
+                increment=len(user_roles),
+                allow_promo=allow_promo,
+            )
+            if tier_index is None:
+                return False
+            tier_price = pass_types[tier_index].price
+            for uid in user_roles:
+                price_by_user[uid] = tier_price
+                pass_type_index_by_user[uid] = tier_index
+        else:
+            for uid, user_role in user_roles.items():
                 tier_index = self._pick_tier_for_assignment(
                     pass_types=pass_types,
                     assignment_rule=assignment_rule,
@@ -3685,50 +3932,47 @@ class Passes(BasePlugin):
                     tier_usage_by_role=tier_usage_by_role,
                     participants_total=participants_total,
                     participants_by_role=participants_by_role,
-                    role=None,
-                    increment=len(user_roles),
-                    allow_promo=not is_couple,
+                    role=user_role,
+                    increment=1,
+                    allow_promo=allow_promo,
                 )
                 if tier_index is None:
-                    continue
-                tier_price = pass_types[tier_index].price
-                for uid in user_roles:
-                    price_by_user[uid] = tier_price
-                    pass_type_index_by_user[uid] = tier_index
-            else:
-                allow_promo = not is_couple
-                for uid, user_role in user_roles.items():
-                    tier_index = self._pick_tier_for_assignment(
-                        pass_types=pass_types,
-                        assignment_rule=assignment_rule,
-                        tier_usage_total=tier_usage_total,
-                        tier_usage_by_role=tier_usage_by_role,
-                        participants_total=participants_total,
-                        participants_by_role=participants_by_role,
-                        role=user_role,
-                        increment=1,
-                        allow_promo=allow_promo,
-                    )
-                    if tier_index is None:
-                        price_by_user = {}
-                        pass_type_index_by_user = {}
-                        break
-                    price_by_user[uid] = pass_types[tier_index].price
-                    pass_type_index_by_user[uid] = tier_index
-                if not price_by_user:
-                    continue
+                    return False
+                price_by_user[uid] = pass_types[tier_index].price
+                pass_type_index_by_user[uid] = tier_index
 
-            upd = await self.create_update_from_user(candidate["user_id"])
-            assigned = await upd.assign_pass(
-                pass_key,
-                price_by_user=price_by_user,
-                pass_type_index_by_user=pass_type_index_by_user,
-            )
-            if assigned:
-                return True
-            if QUEUE_LOOKAHEAD and scanned >= QUEUE_LOOKAHEAD:
-                break
-        return False
+        upd = await self.create_update_from_user(candidate_user_id)
+        return await upd.assign_pass(
+            pass_key,
+            price_by_user=price_by_user,
+            pass_type_index_by_user=pass_type_index_by_user,
+        )
+
+    async def _try_double_solo_assignment(
+        self,
+        pass_key: str,
+        event: EventInfo,
+        stats: dict[str, object],
+        leader_doc: dict,
+        follower_doc: dict,
+    ) -> bool:
+        """Try to assign both a leader solo and a follower solo together.
+
+        If one of the two assignments fails the other is still kept
+        (partial imbalance is acceptable for double-solo).
+        Returns ``True`` when at least one assignment succeeded.
+        """
+        leader_ok = await self._assign_wl_candidate(
+            pass_key, event, stats, leader_doc, allow_promo=True,
+        )
+        # Re-collect stats after the first assignment so that tier
+        # usage is up-to-date for the second one.
+        if leader_ok:
+            stats = await self._collect_queue_stats(pass_key)
+        follower_ok = await self._assign_wl_candidate(
+            pass_key, event, stats, follower_doc, allow_promo=True,
+        )
+        return leader_ok or follower_ok
 
     async def create_update_from_user(self, user: int) -> PassUpdate:
         upd = TGState(user, self.base_app)
