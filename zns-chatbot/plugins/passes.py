@@ -2516,8 +2516,8 @@ class Passes(BasePlugin):
         floor_index: int | None = None
         first_assignable: int | None = None
         for tier_index, pass_type in enumerate(pass_types):
-            if not allow_promo and pass_type.promo:
-                continue
+            # Keep promo tiers in the scan so that blocked promo tiers
+            # can still stop automatic couple assignments.
             if first_assignable is None:
                 first_assignable = tier_index
             if pass_type.start <= now:
