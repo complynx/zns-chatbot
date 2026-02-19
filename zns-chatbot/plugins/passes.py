@@ -1311,6 +1311,7 @@ class PassUpdate:
         proof_admin: int | None = None,
         price_by_user: dict[int, int] | None = None,
         pass_type_index_by_user: dict[int, int] | None = None,
+        ignore_date_blocks: bool = False,
     ):
         self.set_pass_key(pass_key)
         pass_doc = await self.base.pass_db.find_one(
@@ -1345,6 +1346,7 @@ class PassUpdate:
                 self.pass_key,
                 self.update.user,
                 pass_data,
+                enforce_date_blocks=not ignore_date_blocks,
             )
             if tier_pricing is None:
                 logger.warning(
@@ -1773,7 +1775,13 @@ class PassUpdate:
                 upd = await self.base.create_update_from_user(user_id)
 
                 assigned_ok = await upd.assign_pass(
-                    args.pass_key, args.price, args.type, args.comment, args.skip, self.update.user
+                    args.pass_key,
+                    args.price,
+                    args.type,
+                    args.comment,
+                    args.skip,
+                    self.update.user,
+                    ignore_date_blocks=True,
                 )
                 if assigned_ok:
                     logger.info(f"pass {args.pass_key=} assigned to {recipient=}")
@@ -2550,6 +2558,7 @@ class Passes(BasePlugin):
         role: str | None,
         increment: int,
         allow_promo: bool,
+        enforce_date_blocks: bool = True,
     ) -> int | None:
         start_tier_index = self._time_floor_tier_index(
             pass_types=pass_types,
@@ -2560,7 +2569,7 @@ class Passes(BasePlugin):
         now = now_msk()
         for tier_index in range(start_tier_index, len(pass_types)):
             pass_type = pass_types[tier_index]
-            if self._tier_is_date_blocked(pass_type, now):
+            if enforce_date_blocks and self._tier_is_date_blocked(pass_type, now):
                 break
             if not allow_promo and pass_type.promo:
                 continue
@@ -3017,6 +3026,8 @@ class Passes(BasePlugin):
         pass_key: str,
         user_id: int,
         pass_data: dict,
+        *,
+        enforce_date_blocks: bool = True,
     ) -> tuple[dict[int, int], dict[int, int]] | None:
         event = self.require_event(pass_key)
         pass_types = self._event_pass_types(event)
@@ -3072,6 +3083,7 @@ class Passes(BasePlugin):
                 role=None,
                 increment=len(user_roles),
                 allow_promo=not is_couple,
+                enforce_date_blocks=enforce_date_blocks,
             )
             if tier_index is None:
                 return None
@@ -3093,6 +3105,7 @@ class Passes(BasePlugin):
                 role=user_role,
                 increment=1,
                 allow_promo=allow_promo,
+                enforce_date_blocks=enforce_date_blocks,
             )
             if tier_index is None:
                 return None
@@ -3735,12 +3748,17 @@ class Passes(BasePlugin):
                 if not assigned and (
                     total_assigned_not_paid + 2 <= MAX_CONCURRENT_ASSIGNMENTS
                 ):
-                    # Try couple from either WL
-                    couple_candidates = [
-                        p for p in all_waitlist if "couple" in p
-                        and p.get("role") == "leader"
-                    ]
-                    if couple_candidates:
+                    # Try couple from queue top only (do not scan deep).
+                    top_couple_candidates = []
+                    if leader_wl and "couple" in leader_wl[0]:
+                        top_couple_candidates.append(leader_wl[0])
+                    if follower_wl and "couple" in follower_wl[0]:
+                        top_couple_candidates.append(follower_wl[0])
+                    if top_couple_candidates:
+                        couple_candidate = min(
+                            top_couple_candidates,
+                            key=lambda p: (p.get("date_created"), p.get("user_id", 0)),
+                        )
                         if self._can_assign_with_balance(
                             role_counts,
                             leader_delta=1,
@@ -3750,7 +3768,7 @@ class Passes(BasePlugin):
                                 pass_key,
                                 event,
                                 stats,
-                                couple_candidates[0],
+                                couple_candidate,
                                 allow_promo=False,
                             )
                             if result:
