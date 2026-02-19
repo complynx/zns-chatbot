@@ -3518,7 +3518,6 @@ class Passes(BasePlugin):
         * blocked_by_date → must not assign further (even couples when the
           block is inside a promo tier).
         * No more tickets → must not assign.
-        * Sales not started → log and skip.
         * Strict improvement applies to double-solos; non-worsening applies
           to couples and single solos.
 
@@ -3531,6 +3530,8 @@ class Passes(BasePlugin):
               double-solo.
            b. If one is a couple → try couple.  Couples are assigned to the
               next tier when the current one is promo.
+        3. Fallback: try assigning a single solo (target role first, then
+           other role), then a couple.
 
         Assignment mechanisms
         ---------------------
@@ -3549,11 +3550,6 @@ class Passes(BasePlugin):
             return
 
         try:
-            # ── Gate: sales not started ──────────────────────────────
-            if event.sell_start > now_msk():
-                logger.info("Sales not started for %s", pass_key)
-                return
-
             # ── Main assignment loop ─────────────────────────────────
             while True:
                 stats = await self._collect_queue_stats(pass_key)
@@ -3698,6 +3694,67 @@ class Passes(BasePlugin):
                                 )
                                 if result:
                                     assigned = True
+
+                # ── Rule 3: fallback single solo / couple ───────
+                if not assigned:
+                    target_group = self._target_role(role_counts)
+                    other_group = (
+                        "follower" if target_group == "leader" else "leader"
+                    )
+                    for try_role in (target_group, other_group):
+                        if total_assigned_not_paid + 1 > MAX_CONCURRENT_ASSIGNMENTS:
+                            break
+                        try_wl = (
+                            leader_wl if try_role == "leader" else follower_wl
+                        )
+                        solo_candidates = [
+                            p for p in try_wl if "couple" not in p
+                        ]
+                        if not solo_candidates:
+                            continue
+                        delta_kw = (
+                            {"leader_delta": 1}
+                            if try_role == "leader"
+                            else {"follower_delta": 1}
+                        )
+                        if not self._can_assign_with_balance(
+                            role_counts, **delta_kw
+                        ):
+                            continue
+                        result = await self._assign_wl_candidate(
+                            pass_key,
+                            event,
+                            stats,
+                            solo_candidates[0],
+                            allow_promo=True,
+                        )
+                        if result:
+                            assigned = True
+                            break
+
+                if not assigned and (
+                    total_assigned_not_paid + 2 <= MAX_CONCURRENT_ASSIGNMENTS
+                ):
+                    # Try couple from either WL
+                    couple_candidates = [
+                        p for p in all_waitlist if "couple" in p
+                        and p.get("role") == "leader"
+                    ]
+                    if couple_candidates:
+                        if self._can_assign_with_balance(
+                            role_counts,
+                            leader_delta=1,
+                            follower_delta=1,
+                        ):
+                            result = await self._assign_wl_candidate(
+                                pass_key,
+                                event,
+                                stats,
+                                couple_candidates[0],
+                                allow_promo=False,
+                            )
+                            if result:
+                                assigned = True
 
                 if not assigned:
                     break
