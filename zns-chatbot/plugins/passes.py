@@ -1,5 +1,5 @@
 from asyncio import Event, Lock, create_task, sleep
-from datetime import timedelta
+from datetime import datetime, timedelta
 from random import choice
 import logging
 
@@ -2163,6 +2163,12 @@ class PassUpdate:
                         row.append(display_price)
                     elif field == "price_per_one":
                         row.append(pass_data.get("price", ""))
+                    elif field == "date_created":
+                        created_at = pass_data.get(field, "")
+                        if isinstance(created_at, datetime):
+                            row.append(created_at.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3])
+                        else:
+                            row.append(created_at)
                     elif "func" in info:
                         row.append(info["func"](user, pass_data, pass_key))
                     elif info["location"] == "user":
