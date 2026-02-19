@@ -2510,7 +2510,6 @@ class Passes(BasePlugin):
         self,
         *,
         pass_types: tuple[EventPassType, ...],
-        allow_promo: bool,
     ) -> int | None:
         now = now_msk()
         floor_index: int | None = None
@@ -2562,7 +2561,6 @@ class Passes(BasePlugin):
     ) -> int | None:
         start_tier_index = self._time_floor_tier_index(
             pass_types=pass_types,
-            allow_promo=allow_promo,
         )
         if start_tier_index is None:
             return None
@@ -2672,29 +2670,7 @@ class Passes(BasePlugin):
                 },
             ]
         ).to_list(None)
-        couples = {
-            group["_id"]: group["count"]
-            for group in await self.pass_db.aggregate(
-                [
-                    {
-                        "$match": {
-                            "couple": {"$exists": True},
-                            "role": "leader",
-                            "bot_id": self.bot.id,
-                            "pass_key": pass_key,
-                            "$and": [self._balance_counter_match()],
-                        },
-                    },
-                    {
-                        "$group": {
-                            "_id": "$state",
-                            "count": {"$count": {}},
-                        }
-                    },
-                ]
-            ).to_list(None)
-        }
-        role_counts, max_assigned = self._role_counts_from_aggregation(aggregation)
+        role_counts, _ = self._role_counts_from_aggregation(aggregation)
         full_aggregation = await self.pass_db.aggregate(
             [
                 {
@@ -2763,7 +2739,6 @@ class Passes(BasePlugin):
         return {
             "role_counts": role_counts,
             "full_role_counts": full_role_counts,
-            "max_single_assigned": max_assigned - couples.get("assigned", 0),
             "participants_total": participants_total,
             "participants_by_role": participants_by_role,
             "tier_usage_total": tier_usage_total,
@@ -3688,10 +3663,17 @@ class Passes(BasePlugin):
                             total_assigned_not_paid + 2
                             <= MAX_CONCURRENT_ASSIGNMENTS
                         ):
-                            couple_candidate = (
-                                top_leader
-                                if not leader_is_solo
-                                else top_follower
+                            couple_candidates_2b = []
+                            if not leader_is_solo:
+                                couple_candidates_2b.append(top_leader)
+                            if not follower_is_solo:
+                                couple_candidates_2b.append(top_follower)
+                            couple_candidate = min(
+                                couple_candidates_2b,
+                                key=lambda p: (
+                                    p.get("date_created"),
+                                    p.get("user_id", 0),
+                                ),
                             )
                             if self._can_assign_with_balance(
                                 role_counts,
