@@ -64,6 +64,7 @@ EXPOSE 80
 
 # Define environment variable
 ENV NAME=zns-chatbot
+ENV NO_ALBUMENTATIONS_UPDATE=1
 
 # Run the application
 CMD ["python", "-m", "zns-chatbot.main"]
