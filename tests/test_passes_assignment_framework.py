@@ -159,6 +159,24 @@ class FakeQueueUpdate:
         if live is not None:
             live["no_more_passes_notification_sent"] = BASE_TS
 
+    async def assign_pass(
+        self,
+        pass_key: str,
+        price: int | None = None,
+        type: str | None = None,
+        comment: str | None = None,
+        skip_in_balance_count: bool = False,
+        proof_admin: int | None = None,
+        price_by_user: dict[int, int] | None = None,
+        pass_type_index_by_user: dict[int, int] | None = None,
+        ignore_date_blocks: bool = False,
+    ):
+        _ = (price, type, comment, skip_in_balance_count, proof_admin, ignore_date_blocks)
+        return await self.rig.assign_from_update(
+            self.user_id,
+            pass_type_index_by_user=pass_type_index_by_user or {},
+        )
+
 
 @dataclass
 class QueueScenarioRig:
@@ -171,7 +189,16 @@ class QueueScenarioRig:
     failed_assignments: set[int] = field(default_factory=set)
     assignments: list[tuple[str, tuple[int, ...]]] = field(default_factory=list)
     assignment_attempts: list[int] = field(default_factory=list)
+    assignment_calls: list[tuple[int, bool]] = field(default_factory=list)
     notifications: list[int] = field(default_factory=list)
+    participants_total: int = 0
+    participants_by_role: dict[str, int] = field(
+        default_factory=lambda: {"leader": 0, "follower": 0}
+    )
+    tier_usage_total: dict[int, int] = field(default_factory=dict)
+    tier_usage_by_role: dict[str, dict[int, int]] = field(
+        default_factory=lambda: {"leader": {}, "follower": {}}
+    )
     bot_id: int = 777
     pass_key: str = "pass_2026_1"
 
@@ -244,10 +271,16 @@ class QueueScenarioRig:
         return {
             "role_counts": role_counts,
             "full_role_counts": full_role_counts,
-            "participants_total": 0,
-            "participants_by_role": {"leader": 0, "follower": 0},
-            "tier_usage_total": {},
-            "tier_usage_by_role": {"leader": {}, "follower": {}},
+            "participants_total": self.participants_total,
+            "participants_by_role": {
+                "leader": int(self.participants_by_role.get("leader", 0)),
+                "follower": int(self.participants_by_role.get("follower", 0)),
+            },
+            "tier_usage_total": dict(self.tier_usage_total),
+            "tier_usage_by_role": {
+                "leader": dict(self.tier_usage_by_role.get("leader", {})),
+                "follower": dict(self.tier_usage_by_role.get("follower", {})),
+            },
         }
 
     async def assign_candidate(
@@ -277,6 +310,79 @@ class QueueScenarioRig:
         self.follower_ra += follower_inc
         self.assigned_leader += leader_inc
         self.assigned_follower += follower_inc
+
+        assigned_users = tuple(sorted(int(doc["user_id"]) for doc in docs))
+        assignment_kind = "couple" if len(docs) == 2 else "solo"
+        self.assignments.append((assignment_kind, assigned_users))
+        self.remove_waitlist_docs(set(assigned_users))
+        return True
+
+    async def assign_from_update(
+        self,
+        candidate_user_id: int,
+        *,
+        pass_type_index_by_user: dict[int, int],
+    ) -> bool:
+        if candidate_user_id in self.failed_assignments:
+            self.assignment_attempts.append(candidate_user_id)
+            return False
+        main_doc = self.find_waitlist_doc(candidate_user_id)
+        if main_doc is None:
+            self.assignment_attempts.append(candidate_user_id)
+            return False
+        return await self.assign_candidate_with_tiers(
+            main_doc,
+            pass_type_index_by_user=pass_type_index_by_user,
+        )
+
+    async def assign_candidate_with_tiers(
+        self,
+        candidate_doc: dict[str, object],
+        *,
+        pass_type_index_by_user: dict[int, int],
+    ) -> bool:
+        uid = int(candidate_doc["user_id"])
+        self.assignment_attempts.append(uid)
+        if uid in self.failed_assignments:
+            return False
+
+        main_doc = self.find_waitlist_doc(uid)
+        if main_doc is None:
+            return False
+
+        docs = [main_doc]
+        if "couple" in main_doc:
+            couple_user = int(main_doc["couple"])
+            couple_doc = self.find_waitlist_doc(couple_user, couple=uid)
+            if couple_doc is None:
+                return False
+            docs.append(couple_doc)
+
+        leader_inc = sum(1 for doc in docs if doc.get("role") == "leader")
+        follower_inc = sum(1 for doc in docs if doc.get("role") == "follower")
+        self.leader_ra += leader_inc
+        self.follower_ra += follower_inc
+        self.assigned_leader += leader_inc
+        self.assigned_follower += follower_inc
+        self.participants_total += len(docs)
+        self.participants_by_role["leader"] = (
+            self.participants_by_role.get("leader", 0) + leader_inc
+        )
+        self.participants_by_role["follower"] = (
+            self.participants_by_role.get("follower", 0) + follower_inc
+        )
+
+        for doc in docs:
+            user_id = int(doc["user_id"])
+            tier_index = pass_type_index_by_user.get(user_id)
+            if isinstance(tier_index, int):
+                self.tier_usage_total[tier_index] = (
+                    self.tier_usage_total.get(tier_index, 0) + 1
+                )
+                role = doc.get("role")
+                if role in {"leader", "follower"}:
+                    role_tiers = self.tier_usage_by_role.setdefault(role, {})
+                    role_tiers[tier_index] = role_tiers.get(tier_index, 0) + 1
 
         assigned_users = tuple(sorted(int(doc["user_id"]) for doc in docs))
         assignment_kind = "couple" if len(docs) == 2 else "solo"
@@ -326,6 +432,7 @@ class QueueScenarioRig:
             *,
             allow_promo: bool,
         ) -> bool:
+            self.assignment_calls.append((int(candidate_doc["user_id"]), allow_promo))
             return await self.assign_candidate(candidate_doc)
 
         passes.update_pass_fields = MethodType(update_pass_fields, passes)
@@ -341,6 +448,9 @@ class QueueScenarioRig:
 
 @unittest.skipIf(passes_module is None or events_module is None, _skip_reason())
 class QueueAssignmentScenarioTests(unittest.IsolatedAsyncioTestCase):
+    def _use_real_assigner(self, passes):
+        passes._assign_wl_candidate = MethodType(Passes._assign_wl_candidate, passes)
+
     async def test_rule1_imbalance_assigns_top_minority_solo(self):
         rig = QueueScenarioRig(
             event=make_event(),
@@ -375,6 +485,54 @@ class QueueAssignmentScenarioTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rig.assignments, [("solo", (1,))])
         self.assertIn(2, rig.notifications)
 
+    async def test_rule2a_double_solo_success_assigns_both(self):
+        rig = QueueScenarioRig(
+            event=make_event(),
+            leader_ra=5,
+            follower_ra=5,
+            waitlist_docs=[
+                wl_doc(1, "leader", sec=0),
+                wl_doc(2, "follower", sec=0),
+            ],
+        )
+        passes = rig.build_passes()
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        self.assertEqual(rig.assignments, [("solo", (1,)), ("solo", (2,))])
+
+    async def test_double_solo_not_used_when_queue_is_imbalanced(self):
+        rig = QueueScenarioRig(
+            event=make_event(),
+            leader_ra=9,
+            follower_ra=6,
+            waitlist_docs=[
+                wl_doc(1, "leader", sec=0),
+                wl_doc(2, "follower", sec=0),
+            ],
+        )
+        passes = rig.build_passes()
+        original_try_double = passes._try_double_solo_assignment
+        double_calls = {"count": 0}
+
+        async def wrapped_try_double(
+            _self,
+            pass_key: str,
+            event,
+            stats: dict[str, object],
+            leader_doc: dict,
+            follower_doc: dict,
+        ) -> bool:
+            double_calls["count"] += 1
+            return await original_try_double(
+                pass_key, event, stats, leader_doc, follower_doc
+            )
+
+        passes._try_double_solo_assignment = MethodType(wrapped_try_double, passes)
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        self.assertEqual(double_calls["count"], 0)
+        self.assertEqual(rig.assignments[0], ("solo", (2,)))
+
     async def test_rule2b_top_couple_is_selected_when_present(self):
         rig = QueueScenarioRig(
             event=make_event(),
@@ -392,6 +550,22 @@ class QueueAssignmentScenarioTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertGreaterEqual(len(rig.assignments), 1)
         self.assertEqual(rig.assignments[0], ("couple", (10, 11)))
+
+    async def test_rule1_skips_minority_top_couple_then_rule2b_assigns_couple(self):
+        rig = QueueScenarioRig(
+            event=make_event(),
+            leader_ra=9,
+            follower_ra=7,
+            waitlist_docs=[
+                wl_doc(10, "leader", sec=0),
+                wl_doc(20, "follower", sec=0, couple=30),
+                wl_doc(30, "leader", sec=1, couple=20),
+            ],
+        )
+        passes = rig.build_passes()
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        self.assertEqual(rig.assignments[0], ("couple", (20, 30)))
 
     async def test_shadowed_couple_eventually_reaches_top(self):
         rig = QueueScenarioRig(
@@ -430,6 +604,116 @@ class QueueAssignmentScenarioTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rig.assignments, [])
         self.assertEqual(set(rig.notifications), {1, 2})
 
+    async def test_fallback_order_target_then_other_role(self):
+        rig = QueueScenarioRig(
+            event=make_event(),
+            leader_ra=49,
+            follower_ra=49,
+            waitlist_docs=[
+                wl_doc(1, "leader", sec=0),
+                wl_doc(2, "follower", sec=0),
+            ],
+            assigned_leader=3,
+            assigned_follower=2,
+            failed_assignments={1},
+        )
+        passes = rig.build_passes()
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        # Rule 2a is skipped due concurrency (+2 would exceed MAX), then
+        # fallback tries target role first and then the other role.
+        self.assertEqual(rig.assignment_attempts[:2], [1, 2])
+        self.assertEqual(rig.assignments[0], ("solo", (2,)))
+
+    async def test_no_deep_couple_search_when_tops_are_solo(self):
+        rig = QueueScenarioRig(
+            event=make_event(),
+            leader_ra=4,
+            follower_ra=4,
+            waitlist_docs=[
+                wl_doc(1, "leader", sec=0),
+                wl_doc(2, "follower", sec=0),
+                wl_doc(30, "leader", sec=1, couple=40),
+                wl_doc(40, "follower", sec=1, couple=30),
+            ],
+            failed_assignments={1, 2},
+        )
+        passes = rig.build_passes()
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        self.assertFalse(any(kind == "couple" for kind, _ in rig.assignments))
+        self.assertEqual(set(rig.notifications), {1, 2, 30, 40})
+
+    async def test_waitlist_notified_when_no_tickets_left(self):
+        event = make_event(
+            assignment_rule="paired",
+            pass_types=(
+                EventPassType(
+                    amount=2,
+                    price=100,
+                    start=BASE_TS - timedelta(days=1),
+                    promo=False,
+                    blocked_by_date=False,
+                ),
+            ),
+        )
+        rig = QueueScenarioRig(
+            event=event,
+            leader_ra=6,
+            follower_ra=6,
+            waitlist_docs=[wl_doc(1, "leader", sec=0)],
+            participants_total=1,
+            participants_by_role={"leader": 1, "follower": 0},
+            tier_usage_total={0: 1},
+            tier_usage_by_role={"leader": {0: 1}, "follower": {}},
+        )
+        passes = rig.build_passes()
+        self._use_real_assigner(passes)
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        self.assertEqual(rig.assignments, [])
+        self.assertEqual(rig.notifications, [1])
+
+    async def test_waitlist_notified_when_date_block_prevents_assignment(self):
+        event = make_event(
+            pass_types=(
+                EventPassType(
+                    amount=100,
+                    price=100,
+                    start=BASE_TS + timedelta(days=1),
+                    promo=False,
+                    blocked_by_date=True,
+                ),
+            ),
+        )
+        rig = QueueScenarioRig(
+            event=event,
+            leader_ra=6,
+            follower_ra=6,
+            waitlist_docs=[wl_doc(1, "leader", sec=0)],
+        )
+        passes = rig.build_passes()
+        self._use_real_assigner(passes)
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        self.assertEqual(rig.assignments, [])
+        self.assertEqual(rig.notifications, [1])
+
+    async def test_waitlist_notified_when_event_has_no_tiers(self):
+        event = make_event(pass_types=())
+        rig = QueueScenarioRig(
+            event=event,
+            leader_ra=6,
+            follower_ra=6,
+            waitlist_docs=[wl_doc(1, "leader", sec=0)],
+        )
+        passes = rig.build_passes()
+        self._use_real_assigner(passes)
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        self.assertEqual(rig.assignments, [])
+        self.assertEqual(rig.notifications, [1])
+
 
 @unittest.skipIf(passes_module is None or events_module is None, _skip_reason())
 class TierAndBalanceTests(unittest.TestCase):
@@ -446,6 +730,26 @@ class TierAndBalanceTests(unittest.TestCase):
                 follower_delta=1,
                 strict=True,
             )
+        )
+        self.assertTrue(
+            passes._can_assign_with_balance(
+                role_counts,
+                leader_delta=1,
+                follower_delta=1,
+            )
+        )
+
+    def test_non_worsening_logic_for_single_and_couple_when_imbalanced(self):
+        passes = Passes.__new__(Passes)
+        role_counts = {
+            "leader": {"RA": 10},
+            "follower": {"RA": 7},
+        }
+        self.assertTrue(
+            passes._can_assign_with_balance(role_counts, follower_delta=1)
+        )
+        self.assertFalse(
+            passes._can_assign_with_balance(role_counts, leader_delta=1)
         )
         self.assertTrue(
             passes._can_assign_with_balance(
@@ -594,6 +898,185 @@ class TierAndBalanceTests(unittest.TestCase):
         _, pass_type_index_by_user = unblocked
         self.assertEqual(pass_type_index_by_user[42], 1)
 
+    def test_resolve_couple_skips_promo_tier(self):
+        now = datetime.now()
+        pass_types = (
+            EventPassType(
+                amount=100,
+                price=100,
+                start=now - timedelta(days=1),
+                promo=True,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=100,
+                price=200,
+                start=now - timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+        )
+        event = make_event(pass_types=pass_types, assignment_rule="distributed")
+        passes = Passes.__new__(Passes)
+
+        def require_event(_self, pass_key: str):
+            return event
+
+        async def collect_queue_stats(_self, pass_key: str):
+            return {
+                "participants_total": 0,
+                "participants_by_role": {"leader": 0, "follower": 0},
+                "tier_usage_total": {},
+                "tier_usage_by_role": {"leader": {}, "follower": {}},
+            }
+
+        async def find_one(query):
+            return {
+                "bot_id": 1,
+                "pass_key": "pass_2026_1",
+                "user_id": 2,
+                "state": "waitlist",
+                "role": "follower",
+                "couple": 1,
+            }
+
+        passes.require_event = MethodType(require_event, passes)
+        passes._collect_queue_stats = MethodType(collect_queue_stats, passes)
+        passes.pass_db = SimpleNamespace(find_one=find_one)
+        passes.base_app = SimpleNamespace(bot=SimpleNamespace(bot=SimpleNamespace(id=1)))
+
+        resolved = self._run(
+            passes.resolve_candidate_tier_prices(
+                "pass_2026_1",
+                1,
+                {"role": "leader", "couple": 2},
+            )
+        )
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        _, pass_type_index_by_user = resolved
+        self.assertEqual(pass_type_index_by_user[1], 1)
+        self.assertEqual(pass_type_index_by_user[2], 1)
+
+    def test_distributed_couple_uses_same_tier_for_both_roles(self):
+        now = datetime.now()
+        pass_types = (
+            EventPassType(
+                amount=100,
+                price=100,
+                start=now - timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=100,
+                price=200,
+                start=now - timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+        )
+        event = make_event(pass_types=pass_types, assignment_rule="distributed")
+        passes = Passes.__new__(Passes)
+
+        def require_event(_self, pass_key: str):
+            return event
+
+        async def collect_queue_stats(_self, pass_key: str):
+            return {
+                "participants_total": 0,
+                "participants_by_role": {"leader": 0, "follower": 0},
+                "tier_usage_total": {},
+                "tier_usage_by_role": {"leader": {}, "follower": {}},
+            }
+
+        async def find_one(query):
+            return {
+                "bot_id": 1,
+                "pass_key": "pass_2026_1",
+                "user_id": 2,
+                "state": "waitlist",
+                "role": "follower",
+                "couple": 1,
+            }
+
+        passes.require_event = MethodType(require_event, passes)
+        passes._collect_queue_stats = MethodType(collect_queue_stats, passes)
+        passes.pass_db = SimpleNamespace(find_one=find_one)
+        passes.base_app = SimpleNamespace(bot=SimpleNamespace(bot=SimpleNamespace(id=1)))
+
+        resolved = self._run(
+            passes.resolve_candidate_tier_prices(
+                "pass_2026_1",
+                1,
+                {"role": "leader", "couple": 2},
+            )
+        )
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        _, pass_type_index_by_user = resolved
+        self.assertEqual(pass_type_index_by_user[1], pass_type_index_by_user[2])
+
+    def test_paired_couple_can_split_into_different_tiers_by_role(self):
+        now = datetime.now()
+        pass_types = (
+            EventPassType(
+                amount=2,
+                price=100,
+                start=now - timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=2,
+                price=200,
+                start=now + timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+        )
+        event = make_event(pass_types=pass_types, assignment_rule="paired")
+        passes = Passes.__new__(Passes)
+
+        def require_event(_self, pass_key: str):
+            return event
+
+        async def collect_queue_stats(_self, pass_key: str):
+            return {
+                "participants_total": 1,
+                "participants_by_role": {"leader": 1, "follower": 0},
+                "tier_usage_total": {0: 1},
+                "tier_usage_by_role": {"leader": {0: 1}, "follower": {}},
+            }
+
+        async def find_one(query):
+            return {
+                "bot_id": 1,
+                "pass_key": "pass_2026_1",
+                "user_id": 2,
+                "state": "waitlist",
+                "role": "follower",
+                "couple": 1,
+            }
+
+        passes.require_event = MethodType(require_event, passes)
+        passes._collect_queue_stats = MethodType(collect_queue_stats, passes)
+        passes.pass_db = SimpleNamespace(find_one=find_one)
+        passes.base_app = SimpleNamespace(bot=SimpleNamespace(bot=SimpleNamespace(id=1)))
+
+        resolved = self._run(
+            passes.resolve_candidate_tier_prices(
+                "pass_2026_1",
+                1,
+                {"role": "leader", "couple": 2},
+            )
+        )
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        _, pass_type_index_by_user = resolved
+        self.assertEqual(pass_type_index_by_user[1], 1)
+        self.assertEqual(pass_type_index_by_user[2], 0)
+
     async def _unused_find_one(self, query):
         return None
 
@@ -673,6 +1156,89 @@ class RegistrationGuardTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result, "show-pass")
         self.assertEqual(calls, {"show": 1, "new": 0})
+
+
+@unittest.skipIf(passes_module is None or events_module is None, _skip_reason())
+class ManualAdminAssignmentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_passes_assign_forces_ignore_date_blocks(self):
+        PassUpdate = passes_module.PassUpdate
+        captured: dict[str, object] = {}
+
+        class FakeAssignTarget:
+            async def assign_pass(self, *args, **kwargs):
+                captured["ignore_date_blocks"] = kwargs.get("ignore_date_blocks")
+                return True
+
+        class FakePassDB:
+            async def find_one(self, query, sort=None):
+                _ = sort
+                if (
+                    query.get("user_id") == 123
+                    and query.get("pass_key") == "pass_2026_1"
+                    and query.get("state") == "waitlist"
+                ):
+                    return {
+                        "bot_id": 777,
+                        "pass_key": "pass_2026_1",
+                        "user_id": 123,
+                        "state": "waitlist",
+                        "role": "leader",
+                        "date_created": BASE_TS,
+                    }
+                return None
+
+        class FakeAdminBase:
+            def __init__(self):
+                self.config = SimpleNamespace(
+                    telegram=SimpleNamespace(admins=[999])
+                )
+                self.pass_keys = ["pass_2026_1"]
+                self.pass_db = FakePassDB()
+
+            def refresh_events_cache(self):
+                return None
+
+            def _pass_doc_to_data(self, pass_doc: dict):
+                data = dict(pass_doc)
+                for key in ("_id", "user_id", "pass_key", "bot_id"):
+                    data.pop(key, None)
+                return data
+
+            async def create_update_from_user(self, user_id: int):
+                _ = user_id
+                return FakeAssignTarget()
+
+            async def recalculate_queues(self):
+                captured["recalculate_queues"] = True
+
+        class FakeAdminUpdate:
+            def __init__(self):
+                self.user = 999
+                self.bot = SimpleNamespace(id=777)
+                self.update = SimpleNamespace()
+
+            def l(self, message_id: str, **kwargs):
+                _ = kwargs
+                return message_id
+
+            def parse_cmd_arguments(self):
+                return [
+                    "/passes_assign",
+                    "--pass_key",
+                    "pass_2026_1",
+                    "123",
+                ]
+
+            async def reply(self, text: str, **kwargs):
+                _ = kwargs
+                captured["reply"] = text
+                return text
+
+        upd = PassUpdate(FakeAdminBase(), FakeAdminUpdate())
+        await upd.handle_passes_assign()
+
+        self.assertIs(captured.get("ignore_date_blocks"), True)
+        self.assertIs(captured.get("recalculate_queues"), True)
 
 
 class _FakePassUpdateContext:

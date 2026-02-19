@@ -3533,9 +3533,6 @@ class Passes(BasePlugin):
           leave partial imbalance.
         """
         event = self.require_event(pass_key)
-        pass_types = self._event_pass_types(event)
-        if not pass_types:
-            return
 
         try:
             # ── Main assignment loop ─────────────────────────────────
