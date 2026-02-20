@@ -13,3 +13,4 @@ __pycache__
 /rag_database
 /gfpgan
 .vscode/
+.codex/local*

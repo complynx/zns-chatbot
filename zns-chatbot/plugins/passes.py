@@ -1326,10 +1326,12 @@ class PassUpdate:
             return False
 
         pass_data = self.base._pass_doc_to_data(pass_doc) or {}
+        had_couple_link = "couple" in pass_data
         uids = [self.update.user]
         if "couple" in pass_data:
             uids.append(pass_data["couple"])
         is_couple = "couple" in pass_data and len(uids) > 1
+        price_subset_solo_fallback = False
         resolved_pass_type_index_by_user: dict[int, int] | None = (
             dict(pass_type_index_by_user) if pass_type_index_by_user is not None else None
         )
@@ -1337,9 +1339,18 @@ class PassUpdate:
         if price_by_user is not None:
             missing_uids = [uid for uid in uids if uid not in price_by_user]
             if missing_uids:
-                raise ValueError(
-                    f"price_by_user is missing values for {missing_uids}"
+                can_fallback_to_solo = (
+                    had_couple_link
+                    and self.update.user in price_by_user
+                    and len(price_by_user) == 1
                 )
+                if not can_fallback_to_solo:
+                    raise ValueError(
+                        f"price_by_user is missing values for {missing_uids}"
+                    )
+                uids = sorted(int(uid) for uid in price_by_user.keys())
+                is_couple = len(uids) > 1
+                price_subset_solo_fallback = True
             prices = {uid: int(price_by_user[uid]) for uid in uids}
         elif price is None:
             tier_pricing = await self.base.resolve_candidate_tier_prices(
@@ -1357,6 +1368,8 @@ class PassUpdate:
                 )
                 return False
             prices, resolved_pass_type_index_by_user = tier_pricing
+            uids = sorted(prices.keys())
+            is_couple = len(uids) > 1
         else:
             total_price = self.base.resolve_total_pass_price(
                 self.pass_key,
@@ -1364,6 +1377,11 @@ class PassUpdate:
                 custom_total_price=price,
             )
             prices = self.base.split_total_price(total_price, uids)
+        stale_couple_fallback = (
+            had_couple_link
+            and not is_couple
+            and (ignore_date_blocks or price_subset_solo_fallback)
+        )
 
         state_by_user = {
             uid: ("paid" if prices.get(uid, 0) == 0 else "assigned")
@@ -1387,6 +1405,8 @@ class PassUpdate:
                 set_fields["type"] = "solo"
             elif type is not None:
                 set_fields["type"] = type
+            elif stale_couple_fallback and uid == self.update.user:
+                set_fields["type"] = "solo"
             if skip_in_balance_count:
                 set_fields["skip_in_balance_count"] = True
 
@@ -1421,6 +1441,8 @@ class PassUpdate:
                 }
             update_pipeline: list[dict[str, object]] = [{"$set": set_fields}]
             if split_couple_for_free:
+                update_pipeline.append({"$unset": "couple"})
+            elif stale_couple_fallback and uid == self.update.user:
                 update_pipeline.append({"$unset": "couple"})
 
             result = await self.base.pass_db.update_one(match_fields, update_pipeline)
@@ -3018,6 +3040,16 @@ class Passes(BasePlugin):
 
         user_roles: dict[int, str] = {}
         role = pass_data.get("role")
+        if role not in {"leader", "follower"} and not enforce_date_blocks:
+            user_doc = await self.user_db.find_one(
+                {
+                    "bot_id": self.bot.id,
+                    "user_id": user_id,
+                }
+            )
+            recovered_role = user_doc.get("role") if isinstance(user_doc, dict) else None
+            if recovered_role in {"leader", "follower"}:
+                role = recovered_role
         if role not in {"leader", "follower"}:
             return None
         user_roles[user_id] = role
@@ -3026,23 +3058,32 @@ class Passes(BasePlugin):
         if is_couple:
             couple_user_id = pass_data.get("couple")
             if not isinstance(couple_user_id, int):
-                return None
-            couple_pass_doc = await self.pass_db.find_one(
-                {
-                    "bot_id": self.bot.id,
-                    "pass_key": pass_key,
-                    "user_id": couple_user_id,
-                    "state": "waitlist",
-                    "couple": user_id,
-                }
-            )
-            if not isinstance(couple_pass_doc, dict):
-                return None
-            couple_pass_info = self._pass_doc_to_data(couple_pass_doc) or {}
-            couple_role = couple_pass_info.get("role")
-            if couple_role not in {"leader", "follower"}:
-                return None
-            user_roles[couple_user_id] = couple_role
+                if enforce_date_blocks:
+                    return None
+                is_couple = False
+            else:
+                couple_pass_doc = await self.pass_db.find_one(
+                    {
+                        "bot_id": self.bot.id,
+                        "pass_key": pass_key,
+                        "user_id": couple_user_id,
+                        "state": "waitlist",
+                        "couple": user_id,
+                    }
+                )
+                if not isinstance(couple_pass_doc, dict):
+                    if enforce_date_blocks:
+                        return None
+                    is_couple = False
+                else:
+                    couple_pass_info = self._pass_doc_to_data(couple_pass_doc) or {}
+                    couple_role = couple_pass_info.get("role")
+                    if couple_role not in {"leader", "follower"}:
+                        if enforce_date_blocks:
+                            return None
+                        is_couple = False
+                    else:
+                        user_roles[couple_user_id] = couple_role
 
         (
             participants_total,
@@ -3872,6 +3913,8 @@ class Passes(BasePlugin):
         candidate_user_id = candidate_doc.get("user_id")
         if not isinstance(candidate_user_id, int):
             return False
+        if pass_data.get("state") != "waitlist":
+            return False
 
         is_couple = "couple" in pass_data
         user_roles: dict[int, str] = {}
@@ -3883,23 +3926,48 @@ class Passes(BasePlugin):
         if is_couple:
             couple_user_id = pass_data.get("couple")
             if not isinstance(couple_user_id, int):
-                return False
-            couple_pass_doc = await self.pass_db.find_one(
-                {
-                    "bot_id": self.bot.id,
-                    "pass_key": pass_key,
-                    "user_id": couple_user_id,
-                    "state": "waitlist",
-                    "couple": candidate_user_id,
-                }
-            )
-            if couple_pass_doc is None:
-                return False
-            couple_pass_info = self._pass_doc_to_data(couple_pass_doc) or {}
-            couple_role = couple_pass_info.get("role")
-            if couple_role not in {"leader", "follower"}:
-                return False
-            user_roles[couple_user_id] = couple_role
+                logger.warning(
+                    "stale couple data for user=%s pass=%s: invalid couple=%r, "
+                    "fallback to solo",
+                    candidate_user_id,
+                    pass_key,
+                    couple_user_id,
+                )
+                is_couple = False
+            else:
+                couple_pass_doc = await self.pass_db.find_one(
+                    {
+                        "bot_id": self.bot.id,
+                        "pass_key": pass_key,
+                        "user_id": couple_user_id,
+                        "state": "waitlist",
+                        "couple": candidate_user_id,
+                    }
+                )
+                if couple_pass_doc is None:
+                    logger.warning(
+                        "stale couple data for user=%s pass=%s: no reciprocal waitlist "
+                        "for couple=%s, fallback to solo",
+                        candidate_user_id,
+                        pass_key,
+                        couple_user_id,
+                    )
+                    is_couple = False
+                else:
+                    couple_pass_info = self._pass_doc_to_data(couple_pass_doc) or {}
+                    couple_role = couple_pass_info.get("role")
+                    if couple_role not in {"leader", "follower"}:
+                        logger.warning(
+                            "stale couple data for user=%s pass=%s: invalid couple role "
+                            "for couple=%s, fallback to solo",
+                            candidate_user_id,
+                            pass_key,
+                            couple_user_id,
+                        )
+                        is_couple = False
+                    else:
+                        user_roles[couple_user_id] = couple_role
+        effective_allow_promo = allow_promo if is_couple else True
 
         (
             participants_total,
@@ -3921,7 +3989,7 @@ class Passes(BasePlugin):
                 participants_by_role=participants_by_role,
                 role=None,
                 increment=len(user_roles),
-                allow_promo=allow_promo,
+                allow_promo=effective_allow_promo,
             )
             if tier_index is None:
                 return False
@@ -3940,7 +4008,7 @@ class Passes(BasePlugin):
                     participants_by_role=participants_by_role,
                     role=user_role,
                     increment=1,
-                    allow_promo=allow_promo,
+                    allow_promo=effective_allow_promo,
                 )
                 if tier_index is None:
                     return False

@@ -898,6 +898,200 @@ class TierAndBalanceTests(unittest.TestCase):
         _, pass_type_index_by_user = unblocked
         self.assertEqual(pass_type_index_by_user[42], 1)
 
+    def test_resolve_candidate_tier_prices_admin_mode_recovers_role_and_stale_couple(self):
+        now = datetime.now()
+        pass_types = (
+            EventPassType(
+                amount=10,
+                price=100,
+                start=now - timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+        )
+        event = make_event(pass_types=pass_types, assignment_rule="distributed")
+        passes = Passes.__new__(Passes)
+
+        def require_event(_self, pass_key: str):
+            return event
+
+        async def collect_queue_stats(_self, pass_key: str):
+            return {
+                "participants_total": 0,
+                "participants_by_role": {"leader": 0, "follower": 0},
+                "tier_usage_total": {},
+                "tier_usage_by_role": {"leader": {}, "follower": {}},
+            }
+
+        async def find_couple_waitlist(query):
+            _ = query
+            return None
+
+        async def find_user(query):
+            _ = query
+            return {
+                "bot_id": 1,
+                "user_id": 42,
+                "role": "leader",
+            }
+
+        passes.require_event = MethodType(require_event, passes)
+        passes._collect_queue_stats = MethodType(collect_queue_stats, passes)
+        passes.pass_db = SimpleNamespace(find_one=find_couple_waitlist)
+        passes.user_db = SimpleNamespace(find_one=find_user)
+        passes.base_app = SimpleNamespace(bot=SimpleNamespace(bot=SimpleNamespace(id=1)))
+
+        blocked = self._run(
+            passes.resolve_candidate_tier_prices(
+                "pass_2026_1",
+                42,
+                {"couple": 777},
+                enforce_date_blocks=True,
+            )
+        )
+        self.assertIsNone(blocked)
+
+        unblocked = self._run(
+            passes.resolve_candidate_tier_prices(
+                "pass_2026_1",
+                42,
+                {"couple": 777},
+                enforce_date_blocks=False,
+            )
+        )
+        self.assertIsNotNone(unblocked)
+        assert unblocked is not None
+        price_by_user, pass_type_index_by_user = unblocked
+        self.assertEqual(set(price_by_user.keys()), {42})
+        self.assertEqual(pass_type_index_by_user[42], 0)
+
+    def test_assign_wl_candidate_stale_couple_falls_back_to_solo(self):
+        now = datetime.now()
+        event = make_event(
+            assignment_rule="distributed",
+            pass_types=(
+                EventPassType(
+                    amount=10,
+                    price=100,
+                    start=now - timedelta(days=1),
+                    promo=True,
+                    blocked_by_date=False,
+                ),
+            ),
+        )
+        passes = Passes.__new__(Passes)
+        captured: dict[str, object] = {}
+
+        async def find_couple_waitlist(query):
+            _ = query
+            return None
+
+        async def create_update_from_user(_self, user_id: int):
+            class FakeUpdate:
+                async def assign_pass(
+                    self,
+                    pass_key: str,
+                    *,
+                    price_by_user=None,
+                    pass_type_index_by_user=None,
+                ):
+                    captured["pass_key"] = pass_key
+                    captured["price_by_user"] = dict(price_by_user or {})
+                    captured["pass_type_index_by_user"] = dict(pass_type_index_by_user or {})
+                    return True
+
+            captured["user_id"] = user_id
+            return FakeUpdate()
+
+        passes.pass_db = SimpleNamespace(find_one=find_couple_waitlist)
+        passes.create_update_from_user = MethodType(create_update_from_user, passes)
+        passes.base_app = SimpleNamespace(bot=SimpleNamespace(bot=SimpleNamespace(id=1)))
+
+        result = self._run(
+            passes._assign_wl_candidate(
+                "pass_2026_1",
+                event,
+                {
+                    "participants_total": 0,
+                    "participants_by_role": {"leader": 0, "follower": 0},
+                    "tier_usage_total": {},
+                    "tier_usage_by_role": {"leader": {}, "follower": {}},
+                },
+                {
+                    "bot_id": 1,
+                    "pass_key": "pass_2026_1",
+                    "user_id": 100,
+                    "state": "waitlist",
+                    "role": "leader",
+                    "couple": 200,
+                },
+                allow_promo=False,
+            )
+        )
+        self.assertTrue(result)
+        self.assertEqual(captured.get("user_id"), 100)
+        self.assertEqual(captured.get("price_by_user"), {100: 100})
+        self.assertEqual(captured.get("pass_type_index_by_user"), {100: 0})
+
+    def test_assign_wl_candidate_waiting_for_couple_is_not_assigned(self):
+        now = datetime.now()
+        event = make_event(
+            assignment_rule="distributed",
+            pass_types=(
+                EventPassType(
+                    amount=10,
+                    price=100,
+                    start=now - timedelta(days=1),
+                    promo=False,
+                    blocked_by_date=False,
+                ),
+            ),
+        )
+        passes = Passes.__new__(Passes)
+        called = {"create_update": 0}
+
+        async def create_update_from_user(_self, user_id: int):
+            _ = user_id
+            called["create_update"] += 1
+
+            class FakeUpdate:
+                async def assign_pass(self, *args, **kwargs):
+                    _ = (args, kwargs)
+                    return True
+
+            return FakeUpdate()
+
+        candidate = {
+            "bot_id": 1,
+            "pass_key": "pass_2026_1",
+            "user_id": 100,
+            "state": "waiting-for-couple",
+            "type": "couple",
+            "role": "leader",
+            "couple": 200,
+        }
+        passes.create_update_from_user = MethodType(create_update_from_user, passes)
+        passes.base_app = SimpleNamespace(bot=SimpleNamespace(bot=SimpleNamespace(id=1)))
+
+        result = self._run(
+            passes._assign_wl_candidate(
+                "pass_2026_1",
+                event,
+                {
+                    "participants_total": 0,
+                    "participants_by_role": {"leader": 0, "follower": 0},
+                    "tier_usage_total": {},
+                    "tier_usage_by_role": {"leader": {}, "follower": {}},
+                },
+                candidate,
+                allow_promo=False,
+            )
+        )
+
+        self.assertFalse(result)
+        self.assertEqual(called.get("create_update"), 0)
+        self.assertEqual(candidate.get("couple"), 200)
+
     def test_resolve_couple_skips_promo_tier(self):
         now = datetime.now()
         pass_types = (
