@@ -487,6 +487,9 @@ class PassUpdate:
             if success:
                 updated_pass = dict(pass_data)
                 updated_pass.pop("couple", None)
+                if updated_pass.get("state") == "waiting-for-couple":
+                    updated_pass["state"] = "waitlist"
+                    updated_pass["type"] = "solo"
                 await self.base.save_pass_data(self.update.user, self.pass_key, updated_pass)
         else:
             result = await self.base.pass_db.update_one(
@@ -494,9 +497,13 @@ class PassUpdate:
                     "bot_id": self.bot,
                     "user_id": self.update.user,
                     "pass_key": self.pass_key,
+                    "state": "waiting-for-couple",
                     "couple": invitee["user_id"],
                 },
-                {"$unset": {"couple": ""}},
+                {
+                    "$unset": {"couple": ""},
+                    "$set": {"state": "waitlist", "type": "solo"},
+                },
             )
             if result.modified_count > 0:
                 success = True
@@ -982,17 +989,18 @@ class PassUpdate:
         other_user_id = msg.forward_origin.sender_user.id
 
         invitee_pass = await self.base.get_pass_for_user(other_user_id, self.pass_key)
-        invitee = None
-        if invitee_pass is None:
-            invitee = await self.base.user_db.find_one(
-                {
-                    "user_id": other_user_id,
-                    "bot_id": self.update.bot.id,
-                }
-            )
-            if invitee is not None and self.pass_key in invitee:
-                invitee_pass = invitee[self.pass_key]
-        if isinstance(invitee_pass, dict) and invitee_pass.get("state") == "paid":
+        invitee = await self.base.user_db.find_one(
+            {
+                "user_id": other_user_id,
+                "bot_id": self.update.bot.id,
+            }
+        )
+        if invitee_pass is None and invitee is not None and self.pass_key in invitee:
+            invitee_pass = invitee[self.pass_key]
+        if (
+            isinstance(invitee_pass, dict)
+            and invitee_pass.get("state") in {"assigned", "paid"}
+        ):
             return await self.update.reply(
                 self.l_pass("passes-couple-request-invitee-paid"),
                 reply_markup=ReplyKeyboardRemove(),
@@ -1602,6 +1610,7 @@ class PassUpdate:
         await self.base.update_pass_fields(
             [self.update.user],
             self.pass_key,
+            set_fields={"state": "waitlist", "type": "solo"},
             unset_fields=["couple"],
         )
         await self.update.reply(
