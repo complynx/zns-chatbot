@@ -78,6 +78,7 @@ class Superuser(BasePlugin):
                 + f"Active pass keys: {active_keys}",
                 parse_mode=None,
             )
+            await self.base_app.passes.recalculate_queues()
         except Exception as err:
             logger.error("Error in refresh_events %s", err, exc_info=1)
             await update.reply(f"Error in refresh_events {err=}", parse_mode=None)
