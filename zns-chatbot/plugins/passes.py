@@ -3558,7 +3558,7 @@ class Passes(BasePlugin):
           new assignment **or** imbalance is strictly lower than before.
         * Can't assign double-solo when already in imbalance.
         * total assigned-not-paid <= MAX_CONCURRENT_ASSIGNMENTS after new
-          assignment.
+          assignment unless the event disables this limit.
         * blocked_by_date → must not assign further (even couples when the
           block is inside a promo tier).
         * No more tickets → must not assign.
@@ -3589,6 +3589,9 @@ class Passes(BasePlugin):
           leave partial imbalance.
         """
         event = self.require_event(pass_key)
+        enforce_max_concurrent_assignments = (
+            not event.disable_max_concurrent_assignments
+        )
 
         try:
             # ── Main assignment loop ─────────────────────────────────
@@ -3640,6 +3643,14 @@ class Passes(BasePlugin):
                     + full_rc.get("follower", {}).get("assigned", 0)
                 )
 
+                def has_concurrency_capacity(increment: int) -> bool:
+                    if not enforce_max_concurrent_assignments:
+                        return True
+                    return (
+                        total_assigned_not_paid + increment
+                        <= MAX_CONCURRENT_ASSIGNMENTS
+                    )
+
                 assigned = False
 
                 # ── Rule 1: imbalance-improving solo ─────────────────
@@ -3651,10 +3662,7 @@ class Passes(BasePlugin):
                         leader_wl if minority == "leader" else follower_wl
                     )
                     if minority_wl and "couple" not in minority_wl[0]:
-                        if (
-                            total_assigned_not_paid + 1
-                            <= MAX_CONCURRENT_ASSIGNMENTS
-                        ):
+                        if has_concurrency_capacity(1):
                             delta_kw = (
                                 {"leader_delta": 1}
                                 if minority == "leader"
@@ -3686,10 +3694,7 @@ class Passes(BasePlugin):
                         and follower_is_solo
                         and in_balance
                     ):
-                        if (
-                            total_assigned_not_paid + 2
-                            <= MAX_CONCURRENT_ASSIGNMENTS
-                        ):
+                        if has_concurrency_capacity(2):
                             if self._can_assign_with_balance(
                                 role_counts,
                                 leader_delta=1,
@@ -3712,10 +3717,7 @@ class Passes(BasePlugin):
                     if not assigned and (
                         not leader_is_solo or not follower_is_solo
                     ):
-                        if (
-                            total_assigned_not_paid + 2
-                            <= MAX_CONCURRENT_ASSIGNMENTS
-                        ):
+                        if has_concurrency_capacity(2):
                             couple_candidates_2b = []
                             if not leader_is_solo:
                                 couple_candidates_2b.append(top_leader)
@@ -3750,7 +3752,7 @@ class Passes(BasePlugin):
                         "follower" if target_group == "leader" else "leader"
                     )
                     for try_role in (target_group, other_group):
-                        if total_assigned_not_paid + 1 > MAX_CONCURRENT_ASSIGNMENTS:
+                        if not has_concurrency_capacity(1):
                             break
                         try_wl = (
                             leader_wl if try_role == "leader" else follower_wl
@@ -3780,9 +3782,7 @@ class Passes(BasePlugin):
                             assigned = True
                             break
 
-                if not assigned and (
-                    total_assigned_not_paid + 2 <= MAX_CONCURRENT_ASSIGNMENTS
-                ):
+                if not assigned and has_concurrency_capacity(2):
                     # Try couple from queue top only (do not scan deep).
                     top_couple_candidates = []
                     if leader_wl and "couple" in leader_wl[0]:

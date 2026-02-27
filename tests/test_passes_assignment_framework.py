@@ -46,6 +46,7 @@ def make_event(
     key: str = "pass_2026_1",
     pass_types: tuple | None = None,
     assignment_rule: str = "paired",
+    disable_max_concurrent_assignments: bool = False,
 ):
     if pass_types is None:
         pass_types = (
@@ -73,6 +74,7 @@ def make_event(
         price=None,
         pass_types=pass_types,
         pass_assignment_rule=assignment_rule,
+        disable_max_concurrent_assignments=disable_max_concurrent_assignments,
     )
 
 
@@ -603,6 +605,24 @@ class QueueAssignmentScenarioTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(rig.assignments, [])
         self.assertEqual(set(rig.notifications), {1, 2})
+
+    async def test_concurrency_limit_can_be_disabled_per_event(self):
+        rig = QueueScenarioRig(
+            event=make_event(disable_max_concurrent_assignments=True),
+            leader_ra=8,
+            follower_ra=8,
+            waitlist_docs=[
+                wl_doc(1, "leader", sec=0),
+                wl_doc(2, "follower", sec=0),
+            ],
+            assigned_leader=MAX_CONCURRENT_ASSIGNMENTS // 2,
+            assigned_follower=MAX_CONCURRENT_ASSIGNMENTS // 2,
+        )
+        passes = rig.build_passes()
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        self.assertEqual(rig.assignments, [("solo", (1,)), ("solo", (2,))])
+        self.assertEqual(rig.notifications, [])
 
     async def test_fallback_order_target_then_other_role(self):
         rig = QueueScenarioRig(

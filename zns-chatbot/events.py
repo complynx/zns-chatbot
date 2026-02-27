@@ -35,6 +35,7 @@ class EventSettings(BaseSettings):
     payment_admin: list[int] | int | None = Field(None)
     hidden_payment_admins: list[int] | int | None = Field(None)
     pass_assignment_rule: str = Field("distributed")
+    disable_max_concurrent_assignments: bool = Field(False)
     finish_date: datetime | None = Field(None)
     title_long: dict[str, str] | str | None = Field(None)
     title_short: dict[str, str] | str | None = Field(None)
@@ -142,6 +143,7 @@ class EventInfo:
     price: int | None
     pass_types: tuple[EventPassType, ...]
     pass_assignment_rule: str
+    disable_max_concurrent_assignments: bool = False
 
     @property
     def sell_start(self) -> datetime:
@@ -185,6 +187,9 @@ class EventInfo:
             price=settings.price,
             pass_types=pass_types,
             pass_assignment_rule=pass_assignment_rule,
+            disable_max_concurrent_assignments=(
+                settings.disable_max_concurrent_assignments
+            ),
         )
 
     def title_long_for_locale(self, locale: str | None) -> str:
