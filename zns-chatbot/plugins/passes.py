@@ -25,7 +25,7 @@ from .massage import now_msk, split_list
 logger = logging.getLogger(__name__)
 
 CANCEL_CHR = chr(0xE007F)  # Tag cancel
-MAX_CONCURRENT_ASSIGNMENTS = 6
+MAX_CONCURRENT_ASSIGNMENTS = 10
 
 # Per-person default pass prices by pass key.
 CURRENT_PRICE = {
