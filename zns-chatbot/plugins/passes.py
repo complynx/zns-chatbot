@@ -1744,6 +1744,51 @@ class PassUpdate:
                         if couple_pass_doc is not None:
                             assignment_targets.add(couple_id)
                 if pass_doc is None:
+                    existing_pass_doc = await self.base.pass_db.find_one(
+                        {
+                            "user_id": user_id,
+                            "bot_id": self.bot,
+                            "pass_key": args.pass_key,
+                        }
+                    )
+                    if existing_pass_doc is not None:
+                        existing_pass_data = self.base._pass_doc_to_data(existing_pass_doc) or {}
+                        existing_state = existing_pass_data.get("state")
+                        if existing_state in {"assigned", "paid"}:
+                            assigned_ok = await self._reassign_existing_pass(
+                                user_id=user_id,
+                                pass_key=args.pass_key,
+                                pass_data=existing_pass_data,
+                                price=args.price,
+                                pass_type=args.type,
+                                comment=args.comment,
+                                skip_in_balance_count=args.skip,
+                                proof_admin=self.update.user,
+                            )
+                            if assigned_ok:
+                                logger.info(
+                                    "pass %s reassigned for recipient=%s in state=%s",
+                                    args.pass_key,
+                                    recipient,
+                                    existing_state,
+                                )
+                                assigned.append(user_id)
+                                if args.append_to_tier is not None:
+                                    successful_assigned_passes += await self.base.pass_db.count_documents(
+                                        {
+                                            "bot_id": self.bot,
+                                            "pass_key": args.pass_key,
+                                            "user_id": {"$in": sorted(assignment_targets)},
+                                            "state": {"$in": ["assigned", "paid"]},
+                                        }
+                                    )
+                            else:
+                                logger.warning(
+                                    "pass %s was not reassigned to recipient=%s",
+                                    args.pass_key,
+                                    recipient,
+                                )
+                            continue
                     if ((
                         args.leader is not None or args.follower is not None
                     ) and args.create_name is not None):
@@ -1847,6 +1892,82 @@ class PassUpdate:
             )
         await self.update.reply("\n".join(reply_lines), parse_mode=ParseMode.HTML)
         await self.base.recalculate_queues()
+
+    async def _reassign_existing_pass(
+        self,
+        *,
+        user_id: int,
+        pass_key: str,
+        pass_data: dict,
+        price: int | None = None,
+        pass_type: str | None = None,
+        comment: str | None = None,
+        skip_in_balance_count: bool = False,
+        proof_admin: int | None = None,
+    ) -> bool:
+        assignment_ts = now_msk()
+        set_fields: dict[str, object] = {"date_assignment": assignment_ts}
+        unset_fields: dict[str, str] = {}
+        have_changes = False
+
+        couple_id = pass_data.get("couple")
+        if (
+            pass_data.get("type") == "couple"
+            and isinstance(couple_id, int)
+        ):
+            partner_result = await self.base.pass_db.update_one(
+                {
+                    "bot_id": self.bot,
+                    "pass_key": pass_key,
+                    "user_id": couple_id,
+                    "couple": user_id,
+                },
+                {
+                    "$set": {"type": "solo"},
+                    "$unset": {"couple": ""},
+                },
+            )
+            if partner_result.modified_count > 0:
+                have_changes = True
+            set_fields["type"] = "solo"
+            unset_fields["couple"] = ""
+        if pass_type is not None:
+            set_fields["type"] = pass_type
+        if comment is not None:
+            set_fields["comment"] = comment
+        if skip_in_balance_count:
+            set_fields["skip_in_balance_count"] = True
+        if price is not None:
+            set_fields["price"] = int(price)
+            if int(price) == 0:
+                set_fields["state"] = "paid"
+                free_proof_admin = proof_admin
+                if free_proof_admin is None:
+                    free_proof_admin = pass_data.get("proof_admin")
+                if free_proof_admin is None:
+                    free_proof_admin = self.base.pick_payment_admin(pass_key)
+                set_fields["proof_received"] = assignment_ts
+                set_fields["proof_file"] = "free_pass"
+                set_fields["proof_admin"] = free_proof_admin
+                set_fields["proof_accepted"] = assignment_ts
+            else:
+                set_fields["state"] = "assigned"
+                unset_fields["proof_received"] = ""
+                unset_fields["proof_file"] = ""
+                unset_fields["proof_accepted"] = ""
+
+        update_doc: dict[str, object] = {"$set": set_fields}
+        if len(unset_fields) > 0:
+            update_doc["$unset"] = unset_fields
+        result = await self.base.pass_db.update_one(
+            {
+                "bot_id": self.bot,
+                "pass_key": pass_key,
+                "user_id": user_id,
+            },
+            update_doc,
+        )
+        return have_changes or result.modified_count > 0
 
     async def handle_passes_tier(self):
         args_list = self.update.parse_cmd_arguments()

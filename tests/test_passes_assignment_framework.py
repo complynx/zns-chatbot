@@ -1454,6 +1454,163 @@ class ManualAdminAssignmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(captured.get("ignore_date_blocks"), True)
         self.assertIs(captured.get("recalculate_queues"), True)
 
+    async def test_passes_assign_splits_assigned_couple_and_updates_recipient(self):
+        PassUpdate = passes_module.PassUpdate
+        captured: dict[str, object] = {}
+
+        class FakePassDB:
+            def __init__(self):
+                self.docs = [
+                    {
+                        "bot_id": 777,
+                        "pass_key": "pass_2026_1",
+                        "user_id": 123,
+                        "state": "assigned",
+                        "type": "couple",
+                        "couple": 456,
+                        "price": 200,
+                    },
+                    {
+                        "bot_id": 777,
+                        "pass_key": "pass_2026_1",
+                        "user_id": 456,
+                        "state": "assigned",
+                        "type": "couple",
+                        "couple": 123,
+                        "price": 200,
+                    },
+                ]
+
+            @staticmethod
+            def _matches(doc: dict[str, object], query: dict[str, object]) -> bool:
+                for key, expected in query.items():
+                    actual = doc.get(key)
+                    if isinstance(expected, dict):
+                        if "$in" in expected:
+                            if actual not in expected["$in"]:
+                                return False
+                            continue
+                        return False
+                    if actual != expected:
+                        return False
+                return True
+
+            async def find_one(self, query, sort=None):
+                _ = sort
+                for doc in self.docs:
+                    if self._matches(doc, query):
+                        return dict(doc)
+                return None
+
+            async def update_one(self, query, update):
+                matched = 0
+                modified = 0
+                for doc in self.docs:
+                    if not self._matches(doc, query):
+                        continue
+                    matched = 1
+                    before = dict(doc)
+                    set_data = update.get("$set", {})
+                    unset_data = update.get("$unset", {})
+                    for key, value in set_data.items():
+                        doc[key] = value
+                    for key in unset_data.keys():
+                        doc.pop(key, None)
+                    if doc != before:
+                        modified = 1
+                    break
+                return SimpleNamespace(matched_count=matched, modified_count=modified)
+
+            async def count_documents(self, query):
+                return sum(1 for doc in self.docs if self._matches(doc, query))
+
+        class FakeAdminBase:
+            def __init__(self):
+                self.config = SimpleNamespace(
+                    telegram=SimpleNamespace(admins=[999])
+                )
+                self.pass_keys = ["pass_2026_1"]
+                self.pass_db = FakePassDB()
+
+            def refresh_events_cache(self):
+                return None
+
+            def _pass_doc_to_data(self, pass_doc: dict):
+                data = dict(pass_doc)
+                for key in ("_id", "user_id", "pass_key", "bot_id"):
+                    data.pop(key, None)
+                return data
+
+            async def create_update_from_user(self, user_id: int):
+                raise AssertionError(f"create_update_from_user should not be called: {user_id}")
+
+            async def recalculate_queues(self):
+                captured["recalculate_queues"] = True
+
+            async def current_assignment_tier_number(self, pass_key: str):
+                _ = pass_key
+                return 3
+
+            async def append_tier_amount(self, pass_key: str, tier: int, increment: int):
+                captured["append_call"] = (pass_key, tier, increment)
+                return 100 + increment
+
+        class FakeAdminUpdate:
+            def __init__(self):
+                self.user = 999
+                self.bot = SimpleNamespace(id=777)
+                self.update = SimpleNamespace()
+
+            def l(self, message_id: str, **kwargs):
+                _ = kwargs
+                return message_id
+
+            def parse_cmd_arguments(self):
+                return [
+                    "/passes_assign",
+                    "--pass_key",
+                    "pass_2026_1",
+                    "--price",
+                    "150",
+                    "--comment",
+                    "manual",
+                    "--skip",
+                    "--append_to_tier",
+                    "1",
+                    "123",
+                ]
+
+            async def reply(self, text: str, **kwargs):
+                _ = kwargs
+                captured["reply"] = text
+                return text
+
+        fake_base = FakeAdminBase()
+        upd = PassUpdate(fake_base, FakeAdminUpdate())
+        await upd.handle_passes_assign()
+
+        recipient_doc = next(d for d in fake_base.pass_db.docs if d["user_id"] == 123)
+        partner_doc = next(d for d in fake_base.pass_db.docs if d["user_id"] == 456)
+
+        self.assertEqual(recipient_doc.get("state"), "assigned")
+        self.assertEqual(recipient_doc.get("type"), "solo")
+        self.assertEqual(recipient_doc.get("price"), 150)
+        self.assertEqual(recipient_doc.get("comment"), "manual")
+        self.assertIs(recipient_doc.get("skip_in_balance_count"), True)
+        self.assertNotIn("couple", recipient_doc)
+        self.assertIn("date_assignment", recipient_doc)
+
+        self.assertEqual(partner_doc.get("state"), "assigned")
+        self.assertEqual(partner_doc.get("type"), "solo")
+        self.assertNotIn("couple", partner_doc)
+
+        self.assertEqual(
+            captured.get("reply"),
+            "passes_assign done: [123]\nappend_to_tier: tier=1, appended=1, new_amount=101",
+        )
+        self.assertEqual(captured.get("append_call"), ("pass_2026_1", 1, 1))
+        self.assertIs(captured.get("recalculate_queues"), True)
+
 
 class _FakePassUpdateContext:
     def __init__(self, user_id: int):
