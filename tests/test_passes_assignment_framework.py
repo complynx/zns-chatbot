@@ -1574,7 +1574,6 @@ class ManualAdminAssignmentTests(unittest.IsolatedAsyncioTestCase):
                     "150",
                     "--comment",
                     "manual",
-                    "--skip",
                     "--append_to_tier",
                     "1",
                     "123",
@@ -1596,7 +1595,7 @@ class ManualAdminAssignmentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(recipient_doc.get("type"), "solo")
         self.assertEqual(recipient_doc.get("price"), 150)
         self.assertEqual(recipient_doc.get("comment"), "manual")
-        self.assertIs(recipient_doc.get("skip_in_balance_count"), True)
+        self.assertIsNone(recipient_doc.get("skip_in_balance_count"))
         self.assertNotIn("couple", recipient_doc)
         self.assertIn("date_assignment", recipient_doc)
 
