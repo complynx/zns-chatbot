@@ -99,7 +99,7 @@ class Photo(IgnoreExtraSettings):
     quality: int = Field(95)
     # cover_file: str = Field("cover/ZNS.jpg")
     cover_file: str = Field("")
-    frame_file: str = Field("frame/zns_2025_2_simple.png")
+    frame_file: str = Field("frame/zns_frame.png")
 
 
 class Orders(IgnoreExtraSettings):
