@@ -25,8 +25,8 @@ RUN uv pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-ur
 # Install other dependencies
 RUN uv pip install albumentations==1.4.3 Cython
 
-# Install insightface from wheels (skip source build to save space)
-RUN uv pip install "insightface>=0.7,<0.8"
+# # Install insightface from wheels (skip source build to save space)
+# RUN uv pip install "insightface>=0.7,<0.8"
 
 # Copy pyproject.toml and install application
 COPY pyproject.toml /tmp/

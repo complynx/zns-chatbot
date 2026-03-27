@@ -18,11 +18,6 @@ from motor.core import AgnosticCollection
 from telegram import Update
 from telegram.ext import filters
 from telegram.constants import ParseMode
-from telegramify_markdown.interpreters import (
-    TextInterpreter, FileInterpreter, 
-    InterpreterChain
-)
-from telegramify_markdown.type import ContentTypes
 
 from ..tg_state import TGState
 from .avatar import async_thread
