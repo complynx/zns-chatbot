@@ -303,6 +303,34 @@ function generateCroppedImage(returnCanvas) {
   return returnCanvas ? out : out.toDataURL("image/png", 0.95);
 }
 
+function canvasToBlob(canvas, type, qualityValue) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error(`Canvas export failed for ${type}`));
+    }, type, qualityValue);
+  });
+}
+
+async function exportCroppedImageBlob() {
+  const canvas = generateCroppedImage(true);
+  const qualityValue = quality / 100;
+  const preferredTypes = ["image/avif", "image/webp", "image/jpeg"];
+
+  for (const type of preferredTypes) {
+    try {
+      const blob = await canvasToBlob(canvas, type, qualityValue);
+      if (blob.type === type) {
+        return blob;
+      }
+    } catch (error) {
+      console.warn(`Export format ${type} failed`, error);
+    }
+  }
+
+  throw new Error("No supported export image format found");
+}
+
 // ----- Debug toggles (kept mostly as-is) -----
 (function debugInit(){
   window.DEBUG = false;
@@ -358,23 +386,22 @@ function send_error(err){
 
 Telegram.WebApp.MainButton.setText(finish_button_text);
 Telegram.WebApp.MainButton.show();
-Telegram.WebApp.MainButton.onClick(() => {
+Telegram.WebApp.MainButton.onClick(async () => {
   try {
     if (document.body.classList.contains("realign")) { stopRealign(); return; }
-    generateCroppedImage(true).toBlob(function(blob){
-      fetch('fit_frame?' + IDQ() + AlignmentSave(), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'image/jpeg' },
-        body: blob
-      }).then(resp => {
-        if (!resp.ok) throw new Error(`Network response was not ok...: ${resp.status} ${resp.statusText}\n${resp.body}`);
-      }).catch(err => {
-        console.error('Error:', err);
-        return send_error(err);
-      }).finally(() => {
-        Telegram.WebApp.close();
-      });
-    }, 'image/jpeg', quality / 100.);
+    const blob = await exportCroppedImageBlob();
+    fetch('fit_frame?' + IDQ() + AlignmentSave(), {
+      method: 'PUT',
+      headers: { 'Content-Type': blob.type || 'application/octet-stream' },
+      body: blob
+    }).then(resp => {
+      if (!resp.ok) throw new Error(`Network response was not ok...: ${resp.status} ${resp.statusText}\n${resp.body}`);
+    }).catch(err => {
+      console.error('Error:', err);
+      return send_error(err);
+    }).finally(() => {
+      Telegram.WebApp.close();
+    });
   } catch (error) {
     send_error(error);
   };

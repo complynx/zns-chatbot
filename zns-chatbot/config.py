@@ -92,13 +92,13 @@ class ServerSettings(IgnoreExtraSettings):
 
 class Photo(IgnoreExtraSettings):
     no_face_swap: bool = Field(True)
-    frame_size: int = Field(2000)
+    frame_size: int = Field(1024)
     face_expand: float = Field(5)
     face_offset_y: float = Field(-0.2)
     face_offset_x: float = Field(0.2)
     quality: int = Field(95)
-    cover_file: str = Field("cover/ZNS.jpg")
-    # cover_file: str = Field("")
+    # cover_file: str = Field("cover/ZNS.jpg")
+    cover_file: str = Field("")
     frame_file: str = Field("frame/zns_2025_2_simple.png")
 
 

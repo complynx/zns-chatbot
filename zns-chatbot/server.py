@@ -21,6 +21,12 @@ from .plugins.orders import DEADLINE
 
 logger = logging.getLogger(__name__)
 
+FIT_FRAME_MIME_EXTENSIONS = {
+    "image/avif": ".avif",
+    "image/webp": ".webp",
+    "image/jpeg": ".jpg",
+}
+
 
 class AuthError(Exception):
     status: ClassVar[int] = 403
@@ -131,13 +137,16 @@ class FitFrameHandler(RequestHandlerWithApp):
             return
         try:
             user = json.loads(initData["user"])
-            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
+            content_type = self.request.headers.get("Content-Type", "image/jpeg")
+            suffix = FIT_FRAME_MIME_EXTENSIONS.get(content_type, ".jpg")
+            filename = "avatar" + suffix
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
                 temp_name = temp_file.name
                 temp_file.write(self.request.body)
             await self.bot.send_document(
                 user["id"],
                 temp_name,
-                filename="avatar.jpg",
+                filename=filename,
             )
             os.remove(temp_name)
 
