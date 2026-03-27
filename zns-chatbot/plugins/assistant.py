@@ -45,7 +45,6 @@ QUESTION_PREFIX = "Q: "
 ANSWER_PREFIX = "A: "
 COMMAND_PREFIX = "%"
 RECALCULATOR_LOOP = 600  # every 10 minutes
-EMBEDDING_MODEL = "Alibaba-NLP/gte-large-en-v1.5"
 RAG_DATABASE_INDEX = "index"
 RAG_DATABASE_FOLDER = "rag_database"
 
