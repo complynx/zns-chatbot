@@ -325,7 +325,11 @@ function canvasToBlob(canvas, type, qualityValue) {
 async function exportCroppedImageBlob() {
   const canvas = generateCroppedImage(true);
   const qualityValue = quality / 100;
-  const preferredTypes = ["image/avif", "image/webp", "image/jpeg"];
+  const preferredTypes = [];
+
+  if (upload_capabilities?.avif) preferredTypes.push("image/avif");
+  if (upload_capabilities?.webp) preferredTypes.push("image/webp");
+  preferredTypes.push("image/jpeg");
 
   for (const type of preferredTypes) {
     try {

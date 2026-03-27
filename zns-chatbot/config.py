@@ -96,7 +96,7 @@ class Photo(IgnoreExtraSettings):
     face_expand: float = Field(5)
     face_offset_y: float = Field(-0.2)
     face_offset_x: float = Field(0.2)
-    quality: int = Field(95)
+    quality: int = Field(100)
     # cover_file: str = Field("cover/ZNS.jpg")
     cover_file: str = Field("")
     frame_file: str = Field("frame/zns_frame.png")

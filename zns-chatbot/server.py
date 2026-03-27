@@ -1,3 +1,4 @@
+import io
 import hashlib
 import hmac
 import json
@@ -11,6 +12,7 @@ from urllib.parse import parse_qsl, urlparse
 import tornado.platform.asyncio
 import tornado.web
 from bson import ObjectId
+from PIL import Image, features as pil_features
 from telegram import Bot
 from tornado.httputil import HTTPServerRequest
 
@@ -21,11 +23,19 @@ from .plugins.orders import DEADLINE
 
 logger = logging.getLogger(__name__)
 
-FIT_FRAME_MIME_EXTENSIONS = {
-    "image/avif": ".avif",
-    "image/webp": ".webp",
-    "image/jpeg": ".jpg",
-}
+
+def fit_frame_upload_capabilities() -> dict[str, bool]:
+    def check(feature_name: str) -> bool:
+        try:
+            return bool(pil_features.check(feature_name))
+        except Exception:
+            logger.warning("Pillow feature check failed for %s", feature_name, exc_info=1)
+            return False
+
+    return {
+        "avif": check("avif"),
+        "webp": check("webp"),
+    }
 
 
 class AuthError(Exception):
@@ -104,6 +114,7 @@ class FitFrameHandler(RequestHandlerWithApp):
     async def get(self):
         file = self.get_query_argument("file", default="")
         locale_str = self.get_query_argument("locale", default="en")
+        upload_capabilities = fit_frame_upload_capabilities()
 
         def localize(s):
             return self.app.localization(s, locale=locale_str)
@@ -114,6 +125,7 @@ class FitFrameHandler(RequestHandlerWithApp):
                 file=file,
                 real_frame_size=self.config.photo.frame_size,
                 quality=self.config.photo.quality,
+                upload_capabilities=upload_capabilities,
                 debug_code="",
                 help_desktop=localize("frame-mover-help-desktop"),
                 help_mobile=localize("frame-mover-help-mobile"),
@@ -137,16 +149,31 @@ class FitFrameHandler(RequestHandlerWithApp):
             return
         try:
             user = json.loads(initData["user"])
-            content_type = self.request.headers.get("Content-Type", "image/jpeg")
-            suffix = FIT_FRAME_MIME_EXTENSIONS.get(content_type, ".jpg")
-            filename = "avatar" + suffix
-            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
-                temp_name = temp_file.name
-                temp_file.write(self.request.body)
+
+            with Image.open(io.BytesIO(self.request.body)) as uploaded_image:
+                if uploaded_image.mode in ("RGBA", "LA"):
+                    background = Image.new("RGB", uploaded_image.size, (255, 255, 255))
+                    alpha_channel = uploaded_image.getchannel("A")
+                    background.paste(uploaded_image.convert("RGBA"), mask=alpha_channel)
+                    final_image = background
+                else:
+                    final_image = uploaded_image.convert("RGB")
+
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
+                    temp_name = temp_file.name
+                    final_image.save(
+                        temp_file,
+                        format="JPEG",
+                        quality=self.config.photo.quality,
+                        subsampling=0,
+                        optimize=True,
+                        progressive=True,
+                    )
+
             await self.bot.send_document(
                 user["id"],
                 temp_name,
-                filename=filename,
+                filename="avatar.jpg",
             )
             os.remove(temp_name)
 
