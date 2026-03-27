@@ -16,6 +16,10 @@ const photoEl = document.querySelector(".photo img");
 const frameSourceEl = document.querySelector(".frame_source");
 // const flareSourceEl = document.querySelector(".flare_source"); // optional
 const overlayEl = document.querySelector(".overlay");
+const assetState = {
+  photoError: false,
+  frameError: false,
+};
 
 // State (sizes in CSS pixels unless noted)
 let W = 0, H = 0, Vmin = 0;
@@ -86,6 +90,10 @@ function decomposeTransformMatrix(T) {
   return { scaling: {x: scalingX, y: scalingY}, rotation, translation: {x:e, y:f} };
 }
 
+function isRenderableImage(img) {
+  return Boolean(img && img.complete && img.naturalWidth > 0 && img.naturalHeight > 0);
+}
+
 // Coords conversions
 function viewportDeltaToReal(dx_css, dy_css) {
   // CSS px delta -> real frame units
@@ -129,7 +137,7 @@ function recalcLayout() {
 }
 
 function recalcPhoto() {
-  if (!photoEl.naturalWidth || !photoEl.naturalHeight) return;
+  if (!isRenderableImage(photoEl)) return;
   if (pw !== photoEl.naturalWidth || ph !== photoEl.naturalHeight) {
     pw = photoEl.naturalWidth;
     ph = photoEl.naturalHeight;
@@ -143,6 +151,8 @@ function recalcPhoto() {
 function renderToSquareCanvas(ctx, targetPx) {
   // targetPx: canvas width/height in pixels (already set on ctx.canvas)
   ctx.clearRect(0,0,targetPx,targetPx);
+
+  if (!isRenderableImage(photoEl)) return;
 
   // Compose photo under frame
   ctx.save();
@@ -164,7 +174,7 @@ function renderToSquareCanvas(ctx, targetPx) {
   ctx.restore();
 
   // Frame on top (sized to the square)
-  if (frameSourceEl && frameSourceEl.complete) {
+  if (isRenderableImage(frameSourceEl)) {
     ctx.drawImage(frameSourceEl, 0, 0, targetPx, targetPx);
   }
   // Optional flare:
@@ -384,6 +394,14 @@ function send_error(err){
   return fetch("error?" + IDQ(), { method:"POST", body: err });
 }
 
+function failAssetLoad(kind, src) {
+  assetState[`${kind}Error`] = true;
+  Telegram.WebApp.MainButton.disable();
+  const err = new Error(`Failed to load ${kind}: ${src}`);
+  console.error(err);
+  send_error(err.message);
+}
+
 Telegram.WebApp.MainButton.setText(finish_button_text);
 Telegram.WebApp.MainButton.show();
 Telegram.WebApp.MainButton.onClick(async () => {
@@ -421,12 +439,18 @@ viewer.addEventListener("touchstart", onTouchStart, {passive:false});
 viewer.addEventListener("touchmove", onTouchMove, {passive:false});
 viewer.addEventListener("touchend", onTouchEnd, {passive:false});
 
+photoEl.addEventListener("error", () => failAssetLoad("photo", photoEl.currentSrc || photoEl.src));
+frameSourceEl?.addEventListener("error", () => failAssetLoad("frame", frameSourceEl.currentSrc || frameSourceEl.src));
+
 // Resize / orientation
 window.addEventListener("resize", () => { recalcLayout(); });
 
 // Wait for assets then init
 function whenReady(){
-  if (photoEl.complete && frameSourceEl.complete) {
+  if (assetState.photoError || assetState.frameError) {
+    return;
+  }
+  if (isRenderableImage(photoEl) && isRenderableImage(frameSourceEl)) {
     recalcLayout();
     draw();
     return;
