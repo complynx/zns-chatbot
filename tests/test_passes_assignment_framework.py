@@ -553,6 +553,47 @@ class QueueAssignmentScenarioTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(len(rig.assignments), 1)
         self.assertEqual(rig.assignments[0], ("couple", (10, 11)))
 
+    async def test_distributed_couple_unblocker_uses_current_tier_with_one_slot_left(self):
+        event = make_event(
+            assignment_rule="distributed",
+            pass_types=(
+                EventPassType(
+                    amount=2,
+                    price=100,
+                    start=BASE_TS - timedelta(days=1),
+                    promo=False,
+                    blocked_by_date=False,
+                ),
+                EventPassType(
+                    amount=100,
+                    price=200,
+                    start=BASE_TS + timedelta(days=365),
+                    promo=False,
+                    blocked_by_date=False,
+                ),
+            ),
+        )
+        rig = QueueScenarioRig(
+            event=event,
+            leader_ra=6,
+            follower_ra=6,
+            waitlist_docs=[
+                wl_doc(1, "leader", sec=0, couple=2),
+                wl_doc(2, "follower", sec=0, couple=1),
+            ],
+            participants_total=1,
+            participants_by_role={"leader": 1, "follower": 0},
+            tier_usage_total={0: 1},
+            tier_usage_by_role={"leader": {0: 1}, "follower": {}},
+        )
+        passes = rig.build_passes()
+        self._use_real_assigner(passes)
+        await passes.recalculate_queues_pk(rig.pass_key)
+
+        self.assertEqual(rig.assignments, [("couple", (1, 2))])
+        self.assertEqual(rig.tier_usage_total.get(0), 3)
+        self.assertNotIn(1, rig.tier_usage_total)
+
     async def test_rule1_skips_minority_top_couple_then_rule2b_assigns_couple(self):
         rig = QueueScenarioRig(
             event=make_event(),
@@ -1307,6 +1348,129 @@ class TierAndBalanceTests(unittest.TestCase):
         assert resolved is not None
         _, pass_type_index_by_user = resolved
         self.assertEqual(pass_type_index_by_user[1], pass_type_index_by_user[2])
+
+    def test_distributed_couple_unblocker_keeps_both_on_current_tier(self):
+        now = datetime.now()
+        pass_types = (
+            EventPassType(
+                amount=2,
+                price=100,
+                start=now - timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=100,
+                price=200,
+                start=now + timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+        )
+        event = make_event(pass_types=pass_types, assignment_rule="distributed")
+        passes = Passes.__new__(Passes)
+
+        def require_event(_self, pass_key: str):
+            return event
+
+        async def collect_queue_stats(_self, pass_key: str):
+            return {
+                "participants_total": 1,
+                "participants_by_role": {"leader": 1, "follower": 0},
+                "tier_usage_total": {0: 1},
+                "tier_usage_by_role": {"leader": {0: 1}, "follower": {}},
+            }
+
+        async def find_one(query):
+            return {
+                "bot_id": 1,
+                "pass_key": "pass_2026_1",
+                "user_id": 2,
+                "state": "waitlist",
+                "role": "follower",
+                "couple": 1,
+            }
+
+        passes.require_event = MethodType(require_event, passes)
+        passes._collect_queue_stats = MethodType(collect_queue_stats, passes)
+        passes.pass_db = SimpleNamespace(find_one=find_one)
+        passes.base_app = SimpleNamespace(bot=SimpleNamespace(bot=SimpleNamespace(id=1)))
+
+        resolved = self._run(
+            passes.resolve_candidate_tier_prices(
+                "pass_2026_1",
+                1,
+                {"role": "leader", "couple": 2},
+            )
+        )
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        _, pass_type_index_by_user = resolved
+        self.assertEqual(pass_type_index_by_user[1], 0)
+        self.assertEqual(pass_type_index_by_user[2], 0)
+
+    def test_distributed_couple_unblocker_requires_next_tier_assignable_now(self):
+        now = datetime.now()
+        pass_types = (
+            EventPassType(
+                amount=2,
+                price=100,
+                start=now - timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=100,
+                price=200,
+                start=now - timedelta(days=1),
+                promo=True,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=100,
+                price=300,
+                start=now + timedelta(days=1),
+                promo=False,
+                blocked_by_date=True,
+            ),
+        )
+        event = make_event(pass_types=pass_types, assignment_rule="distributed")
+        passes = Passes.__new__(Passes)
+
+        def require_event(_self, pass_key: str):
+            return event
+
+        async def collect_queue_stats(_self, pass_key: str):
+            return {
+                "participants_total": 1,
+                "participants_by_role": {"leader": 1, "follower": 0},
+                "tier_usage_total": {0: 1},
+                "tier_usage_by_role": {"leader": {0: 1}, "follower": {}},
+            }
+
+        async def find_one(query):
+            return {
+                "bot_id": 1,
+                "pass_key": "pass_2026_1",
+                "user_id": 2,
+                "state": "waitlist",
+                "role": "follower",
+                "couple": 1,
+            }
+
+        passes.require_event = MethodType(require_event, passes)
+        passes._collect_queue_stats = MethodType(collect_queue_stats, passes)
+        passes.pass_db = SimpleNamespace(find_one=find_one)
+        passes.base_app = SimpleNamespace(bot=SimpleNamespace(bot=SimpleNamespace(id=1)))
+
+        resolved = self._run(
+            passes.resolve_candidate_tier_prices(
+                "pass_2026_1",
+                1,
+                {"role": "leader", "couple": 2},
+            )
+        )
+        self.assertIsNone(resolved)
 
     def test_paired_couple_can_split_into_different_tiers_by_role(self):
         now = datetime.now()

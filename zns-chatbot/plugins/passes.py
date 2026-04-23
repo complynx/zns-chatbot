@@ -2603,6 +2603,36 @@ class Passes(BasePlugin):
             return pass_type.amount // 2
         return pass_type.amount
 
+    def _has_following_assignable_tier(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        assignment_rule: str,
+        tier_index: int,
+        participants_total: int,
+        increment: int,
+        allow_promo: bool,
+        enforce_date_blocks: bool,
+    ) -> bool:
+        now = now_msk()
+        projected_participants = participants_total + increment
+        for next_tier_index in range(tier_index + 1, len(pass_types)):
+            next_tier = pass_types[next_tier_index]
+            if enforce_date_blocks and self._tier_is_date_blocked(next_tier, now):
+                break
+            if not allow_promo and next_tier.promo:
+                continue
+            if self._tier_capacity_for_rule(next_tier, assignment_rule) <= 0:
+                continue
+            if self._is_tier_effective(
+                pass_types=pass_types,
+                tier_index=next_tier_index,
+                assignment_rule=assignment_rule,
+                projected_participants=projected_participants,
+            ):
+                return True
+        return False
+
     def _tier_implied_usage(
         self,
         *,
@@ -2716,6 +2746,7 @@ class Passes(BasePlugin):
         increment: int,
         allow_promo: bool,
         enforce_date_blocks: bool = True,
+        allow_distributed_couple_unblocker: bool = False,
     ) -> int | None:
         start_tier_index = self._time_floor_tier_index(
             pass_types=pass_types,
@@ -2773,6 +2804,23 @@ class Passes(BasePlugin):
                 participants=participants_total,
             )
             if tier_used + increment <= tier_limit:
+                return tier_index
+            if (
+                allow_distributed_couple_unblocker
+                and increment == 2
+                and tier_used + 1 == tier_limit
+                and self._has_following_assignable_tier(
+                    pass_types=pass_types,
+                    assignment_rule=assignment_rule,
+                    tier_index=tier_index,
+                    participants_total=participants_total,
+                    increment=increment,
+                    allow_promo=allow_promo,
+                    enforce_date_blocks=enforce_date_blocks,
+                )
+            ):
+                # Keep a distributed couple together on the current tier when
+                # exactly one slot remains and there is a later tier to unblock.
                 return tier_index
         return None
 
@@ -3348,6 +3396,7 @@ class Passes(BasePlugin):
                 increment=len(user_roles),
                 allow_promo=not is_couple,
                 enforce_date_blocks=enforce_date_blocks,
+                allow_distributed_couple_unblocker=is_couple,
             )
             if tier_index is None:
                 return None
@@ -4232,6 +4281,7 @@ class Passes(BasePlugin):
                 role=None,
                 increment=len(user_roles),
                 allow_promo=effective_allow_promo,
+                allow_distributed_couple_unblocker=is_couple,
             )
             if tier_index is None:
                 return False
