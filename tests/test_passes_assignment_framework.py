@@ -858,6 +858,83 @@ class TierAndBalanceTests(unittest.TestCase):
         )
         self.assertIsNone(tier_index)
 
+    def test_format_current_tier_status_shows_next_future_tier_gate(self):
+        now = datetime.now()
+        pass_types = (
+            EventPassType(
+                amount=70,
+                price=10500,
+                start=now - timedelta(days=200),
+                promo=True,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=50,
+                price=12000,
+                start=now - timedelta(days=150),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=40,
+                price=12500,
+                start=now - timedelta(days=100),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=26,
+                price=13000,
+                start=now - timedelta(days=50),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=15,
+                price=13500,
+                start=now - timedelta(days=20),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=9999,
+                price=14000,
+                start=now + timedelta(days=15),
+                promo=False,
+                blocked_by_date=False,
+            ),
+        )
+        event = make_event(pass_types=pass_types, assignment_rule="distributed")
+        passes = Passes.__new__(Passes)
+
+        def require_event(_self, pass_key: str):
+            return event
+
+        async def collect_queue_stats(_self, pass_key: str):
+            return {
+                "participants_total": 196,
+                "participants_by_role": {"leader": 93, "follower": 103},
+                "tier_usage_total": {4: 15},
+                "tier_usage_by_role": {"leader": {4: 7}, "follower": {4: 8}},
+                "role_counts": {
+                    "leader": {"RA": 76, "assigned": 4, "waitlist": 1},
+                    "follower": {"RA": 89, "assigned": 3, "waitlist": 27},
+                },
+                "full_role_counts": {
+                    "leader": {"RA": 93},
+                    "follower": {"RA": 103},
+                },
+            }
+
+        passes.require_event = MethodType(require_event, passes)
+        passes._collect_queue_stats = MethodType(collect_queue_stats, passes)
+
+        status = self._run(passes.format_current_tier_status("pass_2026_1"))
+
+        self.assertIn("current tier: none (no assignable tiers left)", status)
+        self.assertIn("next configured tier: 6 (price=14000, total=9999", status)
+        self.assertIn("assigned+paid reaches 201 (current=196)", status)
+
     def test_resolve_candidate_tier_prices_can_ignore_date_blocks(self):
         now = datetime.now()
         pass_types = (

@@ -2948,6 +2948,63 @@ class Passes(BasePlugin):
     def _format_tier_start(dt) -> str:
         return dt.strftime("%Y-%m-%d %H:%M")
 
+    def _next_configured_tier_index(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        assignment_rule: str,
+        tier_usage: dict[int, int],
+        participants: int,
+    ) -> int | None:
+        start_tier_index = self._time_floor_tier_index(pass_types=pass_types)
+        if start_tier_index is None:
+            return None
+        now = now_msk()
+        for tier_index in range(start_tier_index, len(pass_types)):
+            pass_type = pass_types[tier_index]
+            tier_limit = self._tier_capacity_for_rule(pass_type, assignment_rule)
+            if tier_limit <= 0:
+                continue
+            tier_used = self._effective_tier_usage(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage=tier_usage,
+                tier_index=tier_index,
+                participants=participants,
+            )
+            if tier_used < tier_limit or pass_type.start > now:
+                return tier_index
+        return None
+
+    def _format_next_tier_gate(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        assignment_rule: str,
+        tier_index: int,
+        participants: int,
+    ) -> str | None:
+        pass_type = pass_types[tier_index]
+        now = now_msk()
+        if pass_type.start <= now:
+            return None
+        if pass_type.blocked_by_date:
+            return (
+                "next tier gate: "
+                f"blocked by date until {self._format_tier_start(pass_type.start)}"
+            )
+        prior_capacity = self._tier_prior_capacity(
+            pass_types,
+            tier_index,
+            assignment_rule,
+        )
+        return (
+            "next tier gate: "
+            f"start={self._format_tier_start(pass_type.start)}, "
+            "becomes assignable once assigned+paid reaches "
+            f"{prior_capacity} (current={participants})"
+        )
+
     @staticmethod
     def _format_balance_details(role_counts: dict[str, dict[str, int]]) -> str:
         leader = int(role_counts.get("leader", {}).get("RA", 0))
@@ -3101,6 +3158,34 @@ class Passes(BasePlugin):
             )
             if tier_index is None:
                 lines.append("current tier: none (no assignable tiers left)")
+                next_tier_index = self._next_configured_tier_index(
+                    pass_types=pass_types,
+                    assignment_rule=assignment_rule,
+                    tier_usage=tier_usage_total,
+                    participants=participants_total,
+                )
+                if next_tier_index is not None:
+                    next_tier = pass_types[next_tier_index]
+                    next_tier_limit = self._tier_capacity_for_rule(
+                        next_tier,
+                        assignment_rule,
+                    )
+                    lines.append(
+                        "next configured tier: "
+                        f"{next_tier_index + 1} "
+                        f"(price={next_tier.price}, total={next_tier_limit}, "
+                        "promo="
+                        f"{next_tier.promo}, blocked_by_date={next_tier.blocked_by_date}, "
+                        f"start={self._format_tier_start(next_tier.start)})"
+                    )
+                    gate_line = self._format_next_tier_gate(
+                        pass_types=pass_types,
+                        assignment_rule=assignment_rule,
+                        tier_index=next_tier_index,
+                        participants=participants_total,
+                    )
+                    if gate_line is not None:
+                        lines.append(gate_line)
                 return "\n".join(lines)
             tier_info = pass_types[tier_index]
             tier_limit = self._tier_capacity_for_rule(tier_info, assignment_rule)
@@ -3135,6 +3220,33 @@ class Passes(BasePlugin):
             )
             if tier_index is None:
                 lines.append(f"{role}: current tier: none (no assignable tiers left)")
+                next_tier_index = self._next_configured_tier_index(
+                    pass_types=pass_types,
+                    assignment_rule=assignment_rule,
+                    tier_usage=tier_usage_by_role.get(role, {}),
+                    participants=participants_by_role.get(role, 0),
+                )
+                if next_tier_index is not None:
+                    next_tier = pass_types[next_tier_index]
+                    next_tier_limit = self._tier_capacity_for_rule(
+                        next_tier,
+                        assignment_rule,
+                    )
+                    lines.append(
+                        f"{role}: next configured tier: {next_tier_index + 1} "
+                        f"(price={next_tier.price}, total={next_tier_limit}, "
+                        "promo="
+                        f"{next_tier.promo}, blocked_by_date={next_tier.blocked_by_date}, "
+                        f"start={self._format_tier_start(next_tier.start)})"
+                    )
+                    gate_line = self._format_next_tier_gate(
+                        pass_types=pass_types,
+                        assignment_rule=assignment_rule,
+                        tier_index=next_tier_index,
+                        participants=participants_by_role.get(role, 0),
+                    )
+                    if gate_line is not None:
+                        lines.append(f"{role}: {gate_line}")
                 continue
             tier_info = pass_types[tier_index]
             tier_limit = self._tier_capacity_for_rule(tier_info, assignment_rule)
