@@ -2609,13 +2609,10 @@ class Passes(BasePlugin):
         pass_types: tuple[EventPassType, ...],
         assignment_rule: str,
         tier_index: int,
-        participants_total: int,
-        increment: int,
         allow_promo: bool,
         enforce_date_blocks: bool,
     ) -> bool:
         now = now_msk()
-        projected_participants = participants_total + increment
         for next_tier_index in range(tier_index + 1, len(pass_types)):
             next_tier = pass_types[next_tier_index]
             if enforce_date_blocks and self._tier_is_date_blocked(next_tier, now):
@@ -2624,13 +2621,7 @@ class Passes(BasePlugin):
                 continue
             if self._tier_capacity_for_rule(next_tier, assignment_rule) <= 0:
                 continue
-            if self._is_tier_effective(
-                pass_types=pass_types,
-                tier_index=next_tier_index,
-                assignment_rule=assignment_rule,
-                projected_participants=projected_participants,
-            ):
-                return True
+            return True
         return False
 
     def _tier_implied_usage(
@@ -2813,8 +2804,6 @@ class Passes(BasePlugin):
                     pass_types=pass_types,
                     assignment_rule=assignment_rule,
                     tier_index=tier_index,
-                    participants_total=participants_total,
-                    increment=increment,
                     allow_promo=allow_promo,
                     enforce_date_blocks=enforce_date_blocks,
                 )
@@ -3204,8 +3193,49 @@ class Passes(BasePlugin):
                 increment=1,
                 allow_promo=True,
             )
+            couple_tier_index: int | None = None
+            if waitlist_leader > 0 and waitlist_follower > 0:
+                couple_tier_index = self._pick_tier_for_assignment(
+                    pass_types=pass_types,
+                    assignment_rule=assignment_rule,
+                    tier_usage_total=tier_usage_total,
+                    tier_usage_by_role=tier_usage_by_role,
+                    participants_total=participants_total,
+                    participants_by_role=participants_by_role,
+                    role=None,
+                    increment=2,
+                    allow_promo=False,
+                    allow_distributed_couple_unblocker=True,
+                )
             if tier_index is None:
                 lines.append("current tier: none (no assignable tiers left)")
+                if couple_tier_index is None:
+                    lines.append(
+                        "couple tier: none (no assignable tier for a distributed couple)"
+                    )
+                else:
+                    couple_tier = pass_types[couple_tier_index]
+                    couple_tier_limit = self._tier_capacity_for_rule(
+                        couple_tier,
+                        assignment_rule,
+                    )
+                    couple_tier_used = self._effective_tier_usage(
+                        pass_types=pass_types,
+                        assignment_rule=assignment_rule,
+                        tier_usage=tier_usage_total,
+                        tier_index=couple_tier_index,
+                        participants=participants_total,
+                    )
+                    overflow_unblocker = couple_tier_used + 2 > couple_tier_limit
+                    lines.append(
+                        "couple tier: "
+                        f"{couple_tier_index + 1} "
+                        f"(price={couple_tier.price}, left/total="
+                        f"{self._tier_display_left(pass_types=pass_types, assignment_rule=assignment_rule, tier_usage=tier_usage_total, tier_index=couple_tier_index, participants=participants_total)}/{couple_tier_limit}, "
+                        f"overflow_unblocker={overflow_unblocker}, promo={couple_tier.promo}, "
+                        f"blocked_by_date={couple_tier.blocked_by_date}, "
+                        f"start={self._format_tier_start(couple_tier.start)})"
+                    )
                 next_tier_index = self._next_configured_tier_index(
                     pass_types=pass_types,
                     assignment_rule=assignment_rule,
@@ -3252,6 +3282,39 @@ class Passes(BasePlugin):
                 f"{tier_info.promo}, blocked_by_date={tier_info.blocked_by_date}, "
                 f"start={self._format_tier_start(tier_info.start)})"
             )
+            if couple_tier_index is None:
+                lines.append(
+                    "couple tier: none (no assignable tier for a distributed couple)"
+                )
+            else:
+                couple_tier = pass_types[couple_tier_index]
+                couple_tier_limit = self._tier_capacity_for_rule(
+                    couple_tier,
+                    assignment_rule,
+                )
+                couple_tier_left = self._tier_display_left(
+                    pass_types=pass_types,
+                    assignment_rule=assignment_rule,
+                    tier_usage=tier_usage_total,
+                    tier_index=couple_tier_index,
+                    participants=participants_total,
+                )
+                couple_tier_used = self._effective_tier_usage(
+                    pass_types=pass_types,
+                    assignment_rule=assignment_rule,
+                    tier_usage=tier_usage_total,
+                    tier_index=couple_tier_index,
+                    participants=participants_total,
+                )
+                overflow_unblocker = couple_tier_used + 2 > couple_tier_limit
+                lines.append(
+                    "couple tier: "
+                    f"{couple_tier_index + 1} "
+                    f"(price={couple_tier.price}, left/total={couple_tier_left}/{couple_tier_limit}, "
+                    f"overflow_unblocker={overflow_unblocker}, promo={couple_tier.promo}, "
+                    f"blocked_by_date={couple_tier.blocked_by_date}, "
+                    f"start={self._format_tier_start(couple_tier.start)})"
+                )
             return "\n".join(lines)
 
         for role in ("leader", "follower"):
