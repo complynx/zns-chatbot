@@ -479,6 +479,13 @@ class Superuser(BasePlugin):
                     parts.append(f"{field}={formatted_date}")
             if "proof_admin" in pass_doc and pass_doc["proof_admin"] not in [None, ""]:
                 parts.append(f"proof_admin={pass_doc['proof_admin']}")
+            if (
+                "proof_admin_received" in pass_doc
+                and pass_doc["proof_admin_received"] not in [None, ""]
+            ):
+                parts.append(
+                    f"proof_admin_received={pass_doc['proof_admin_received']}"
+                )
             details.append(f"{label}: " + ", ".join(parts))
 
         state_summary = ", ".join(

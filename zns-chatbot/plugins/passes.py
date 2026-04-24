@@ -628,6 +628,10 @@ class PassUpdate:
                 "proof_received": u_pass.get("proof_received"),
                 "proof_file": u_pass.get("proof_file"),
                 "proof_admin": u_pass.get("proof_admin"),
+                "proof_admin_received": u_pass.get(
+                    "proof_admin_received",
+                    u_pass.get("proof_admin"),
+                ),
                 "proof_admin_accepted": self.update.user,
                 "proof_accepted": accepted_ts,
             },
@@ -678,6 +682,10 @@ class PassUpdate:
                 "proof_received": u_pass.get("proof_received"),
                 "proof_file": u_pass.get("proof_file"),
                 "proof_admin": u_pass.get("proof_admin"),
+                "proof_admin_received": u_pass.get(
+                    "proof_admin_received",
+                    u_pass.get("proof_admin"),
+                ),
                 "proof_rejected": rejected_ts,
             },
         )
@@ -743,6 +751,7 @@ class PassUpdate:
         pass_data = await self.get_pass()
         if pass_data is None or pass_data.get("state") != "assigned":
             return await self.handle_cq_exit()
+        assigned_proof_admin = pass_data.get("proof_admin")
         uids = [self.update.user]
         req = {
             "bot_id": self.bot,
@@ -762,18 +771,19 @@ class PassUpdate:
                     "state": "paid",
                     "proof_received": proof_received,
                     "proof_file": f"{doc.file_id}{file_ext}",
-                    "proof_admin": pass_data.get("proof_admin"),
+                    "proof_admin": assigned_proof_admin,
+                    "proof_admin_received": assigned_proof_admin,
                 }
             },
         )
         if result.modified_count <= 0:
             return
-        if pass_data.get("proof_admin") in self.base.get_all_payment_admins(
+        if assigned_proof_admin in self.base.get_all_payment_admins(
             self.pass_key
         ):
             admin = await self.base.user_db.find_one(
                 {
-                    "user_id": pass_data.get("proof_admin"),
+                    "user_id": assigned_proof_admin,
                     "bot_id": self.bot,
                 }
             )
@@ -1427,6 +1437,7 @@ class PassUpdate:
                 set_fields["proof_received"] = assignment_ts
                 set_fields["proof_file"] = "free_pass"
                 set_fields["proof_admin"] = free_proof_admin
+                set_fields["proof_admin_received"] = free_proof_admin
                 set_fields["proof_accepted"] = assignment_ts
 
             match_fields: dict[str, object] = {
@@ -1949,11 +1960,13 @@ class PassUpdate:
                 set_fields["proof_received"] = assignment_ts
                 set_fields["proof_file"] = "free_pass"
                 set_fields["proof_admin"] = free_proof_admin
+                set_fields["proof_admin_received"] = free_proof_admin
                 set_fields["proof_accepted"] = assignment_ts
             else:
                 set_fields["state"] = "assigned"
                 unset_fields["proof_received"] = ""
                 unset_fields["proof_file"] = ""
+                unset_fields["proof_admin_received"] = ""
                 unset_fields["proof_accepted"] = ""
 
         update_doc: dict[str, object] = {"$set": set_fields}
@@ -2147,23 +2160,49 @@ class PassUpdate:
     async def handle_passes_switch_to_me_cmd(self):
         args_list = self.update.parse_cmd_arguments()
         self.base.refresh_events_cache()
-        tail = args_list[1:]
+        parser = SilentArgumentParser()
+        parser.add_argument(
+            "--pass_key",
+            type=str,
+            help="Pass key",
+            default=None,
+        )
+        parser.add_argument(
+            "--received_only",
+            action="store_true",
+            help=(
+                "Set proof_admin_received without changing proof_admin "
+                "for paid passes missing that field"
+            ),
+        )
+        parser.add_argument("tail", nargs="*")
+        args = parser.parse_args(args_list[1:])
+        all_pass_keys = self.base.all_pass_keys()
+        tail = list(args.tail)
         if len(tail) == 0:
             return await self.update.reply(
-                "Usage: /passes_switch_to_me [<pass_key>=active] <user_id>",
+                "Usage: /passes_switch_to_me [--received_only] [--pass_key <pass_key>] [<pass_key>] <user_id>",
                 parse_mode=None,
             )
-        pass_key = self.base.default_pass_key()
+        pass_key = args.pass_key or self.base.default_pass_key()
         target_user_raw = None
         if len(tail) == 1:
             target_user_raw = tail[0]
-        else:
-            if tail[0] in self.base.pass_keys:
+        elif len(tail) == 2 and args.pass_key is None:
+            if tail[0] in all_pass_keys:
                 pass_key = tail[0]
                 target_user_raw = tail[1]
             else:
-                target_user_raw = tail[0]
-        if pass_key not in self.base.pass_keys:
+                return await self.update.reply(
+                    "Usage: /passes_switch_to_me [--received_only] [--pass_key <pass_key>] [<pass_key>] <user_id>",
+                    parse_mode=None,
+                )
+        else:
+            return await self.update.reply(
+                "Usage: /passes_switch_to_me [--received_only] [--pass_key <pass_key>] [<pass_key>] <user_id>",
+                parse_mode=None,
+            )
+        if pass_key not in all_pass_keys:
             return await self.update.reply(
                 f"Unknown pass key {pass_key}", parse_mode=None
             )
@@ -2173,7 +2212,7 @@ class PassUpdate:
             return await self.update.reply(
                 "Invalid user id", parse_mode=None,
             )
-        self.set_pass_key(pass_key)
+        self.pass_key = pass_key
         if not (
             self.update.user in self.base.config.telegram.admins
             or self.base.is_payment_admin(self.update.user, self.pass_key)
@@ -2204,6 +2243,47 @@ class PassUpdate:
                 "user_id": self.update.user,
             }
         )
+        if args.received_only:
+            if pass_data.get("state") != "paid":
+                return await self.update.reply(
+                    (
+                        f"User {target_user_id} pass {self.pass_key} is not in paid state; "
+                        "cannot backfill proof_admin_received"
+                    ),
+                    parse_mode=None,
+                )
+            missing_received_filter = {
+                "$or": [
+                    {"proof_admin_received": {"$exists": False}},
+                    {"proof_admin_received": None},
+                    {"proof_admin_received": ""},
+                ]
+            }
+            update_result = await self.base.pass_db.update_many(
+                {
+                    "bot_id": self.bot,
+                    "pass_key": self.pass_key,
+                    "user_id": {"$in": uids},
+                    "state": "paid",
+                    **missing_received_filter,
+                },
+                {"$set": {"proof_admin_received": self.update.user}},
+            )
+            if update_result.modified_count <= 0:
+                return await self.update.reply(
+                    (
+                        f"proof_admin_received already set for paid pass {self.pass_key} "
+                        f"for users {uids}"
+                    ),
+                    parse_mode=None,
+                )
+            return await self.update.reply(
+                (
+                    f"proof_admin_received for pass {self.pass_key} switched to you "
+                    f"for users {uids}"
+                ),
+                parse_mode=None,
+            )
         await self.base.update_pass_fields(
             uids,
             self.pass_key,
@@ -2212,7 +2292,7 @@ class PassUpdate:
         for uid in uids:
             try:
                 upd = await self.base.create_update_from_user(uid)
-                upd.set_pass_key(self.pass_key)
+                upd.pass_key = self.pass_key
                 await upd.update.reply(
                     await upd.format_message(
                         "passes-admin-changed",
@@ -2271,7 +2351,8 @@ class PassUpdate:
             "assignment_tier_number": {"name": "Assignment Tier", "location": "pass"},
             "date_created": {"name": "Date Created", "location": "pass"},
             "date_assignment": {"name": "Date Assignment", "location": "pass"},
-            "proof_admin": {"name": "Proof Admin", "location": "pass"},
+            "proof_admin": {"name": "Current Ambassador", "location": "pass"},
+            "proof_admin_received": {"name": "Proven By", "location": "pass"},
             "proof_received": {"name": "Proof Received", "location": "pass"},
             "proof_accepted": {"name": "Proof Accepted", "location": "pass"},
             "proof_rejected": {"name": "Proof Rejected", "location": "pass"},
@@ -2315,6 +2396,12 @@ class PassUpdate:
                         row.append(display_price)
                     elif field == "price_per_one":
                         row.append(pass_data.get("price", ""))
+                    elif (
+                        field == "proof_admin_received"
+                        and pass_data.get(field) in [None, ""]
+                        and pass_data.get("state") == "paid"
+                    ):
+                        row.append(pass_data.get("proof_admin", ""))
                     elif field == "date_created":
                         created_at = pass_data.get(field, "")
                         if isinstance(created_at, datetime):
@@ -3603,8 +3690,17 @@ class Passes(BasePlugin):
         )
 
     def get_all_payment_admins(self, pass_key: str) -> list[int]:
-        admins = self.payment_admins.get(pass_key, [])
-        hidden = self.hidden_payment_admins.get(pass_key, [])
+        admins = self.payment_admins.get(pass_key)
+        hidden = self.hidden_payment_admins.get(pass_key)
+        if admins is None or hidden is None:
+            event = self.get_event(pass_key)
+            if event is not None:
+                admins = list(event.payment_admin)
+                hidden = list(event.hidden_payment_admins)
+        if admins is None:
+            admins = []
+        if hidden is None:
+            hidden = []
         # dict.fromkeys preserves order while removing duplicates
         return list(dict.fromkeys(admins + hidden))
 
@@ -3612,10 +3708,16 @@ class Passes(BasePlugin):
         return user_id in self.get_all_payment_admins(pass_key)
 
     def pick_payment_admin(self, pass_key: str) -> int | None:
-        visible = self.payment_admins.get(pass_key, [])
+        visible = self.payment_admins.get(pass_key)
+        if visible is None:
+            event = self.get_event(pass_key)
+            visible = list(event.payment_admin) if event is not None else []
         if len(visible) > 0:
             return choice(visible)
-        hidden = self.hidden_payment_admins.get(pass_key, [])
+        hidden = self.hidden_payment_admins.get(pass_key)
+        if hidden is None:
+            event = self.get_event(pass_key)
+            hidden = list(event.hidden_payment_admins) if event is not None else []
         if len(hidden) > 0:
             logger.warning(
                 "No visible payment_admins for %s, falling back to hidden_payment_admins",
