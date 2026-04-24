@@ -22,6 +22,17 @@ CANCEL_CHR = chr(0xE007F) # Tag cancel
 
 RECIPIENT_ALIASES = {
 }
+PASS_SHORTCUT_DEFAULT_CATEGORY = "assigned"
+PASS_SHORTCUT_PAID_STATES = ["paid", "payed"]
+PASS_SHORTCUT_ASSIGNED_STATES = ["assigned", *PASS_SHORTCUT_PAID_STATES]
+PASS_SHORTCUT_CATEGORIES = {
+    "admins",
+    "paid",
+    "assigned",
+    "unpaid",
+    "waitlist",
+    "all",
+}
 
 class Superuser(BasePlugin):
     name = "superuser"
@@ -97,7 +108,11 @@ class Superuser(BasePlugin):
             group.add_argument('--md', type=str, help='Parse text as MD v1')
             group.add_argument('--forward', action='store_true', help='Forward next incoming message')
 
-            parser.add_argument('recipients', nargs='*', help='Recipients')
+            parser.add_argument(
+                'recipients',
+                nargs='*',
+                help='Recipients or $pass_key[:admins|paid|assigned|unpaid|waitlist|all] shortcuts',
+            )
 
             args = parser.parse_args(args_list[1:])
             logger.debug(f"send_message_to {args=}, {args_list=}")
@@ -147,8 +162,74 @@ class Superuser(BasePlugin):
 
     async def send_message_to__timeout(self, update: TGState, data):
         await update.reply("/send_message_to timeout.", reply_markup=ReplyKeyboardRemove())
+
+    @staticmethod
+    def _parse_pass_shortcut(recipient: str) -> tuple[str, str] | None:
+        if not recipient.startswith("$"):
+            return None
+        shortcut = recipient[1:].strip()
+        if shortcut == "":
+            raise ValueError("Pass shortcut must include a pass key.")
+        pass_key, separator, category = shortcut.partition(":")
+        if pass_key == "":
+            raise ValueError("Pass shortcut must include a pass key.")
+        if separator == "":
+            return pass_key, PASS_SHORTCUT_DEFAULT_CATEGORY
+        category = category.strip().lower()
+        if category == "":
+            raise ValueError("Pass shortcut category can not be empty.")
+        if category not in PASS_SHORTCUT_CATEGORIES:
+            raise ValueError(
+                "Unknown pass shortcut category "
+                f"'{category}'. Use one of: {', '.join(sorted(PASS_SHORTCUT_CATEGORIES))}."
+            )
+        return pass_key, category
+
+    async def _get_pass_shortcut_recipients(
+        self,
+        pass_key: str,
+        category: str,
+    ) -> list[int]:
+        if category == "admins":
+            passes = getattr(self.base_app, "passes", None)
+            if passes is not None:
+                return passes.get_all_payment_admins(pass_key)
+            events = getattr(self.base_app, "events", None)
+            event = events.get_event(pass_key) if events is not None else None
+            if event is None:
+                return []
+            return list(dict.fromkeys(event.payment_admin + event.hidden_payment_admins))
+        if self.pass_db is None:
+            raise ValueError("Passes database is not configured.")
+        query: dict = {
+            "bot_id": self.bot.id,
+            "pass_key": pass_key,
+        }
+        if category == "paid":
+            query["state"] = {"$in": PASS_SHORTCUT_PAID_STATES}
+        elif category == "assigned":
+            query["state"] = {"$in": PASS_SHORTCUT_ASSIGNED_STATES}
+        elif category == "unpaid":
+            query["state"] = "assigned"
+        elif category == "waitlist":
+            query["state"] = {"$nin": PASS_SHORTCUT_ASSIGNED_STATES}
+
+        recipients: list[int] = []
+        seen: set[int] = set()
+        async for pass_doc in self.pass_db.find(query).sort(
+            [("date_created", 1), ("user_id", 1)]
+        ):
+            user_id = pass_doc.get("user_id")
+            if not isinstance(user_id, int) or user_id in seen:
+                continue
+            seen.add(user_id)
+            recipients.append(user_id)
+        return recipients
     
     async def get_recipients(self, recipient: str) -> list[int|str|tuple[int|str,int]]:
+        shortcut = self._parse_pass_shortcut(recipient)
+        if shortcut is not None:
+            return await self._get_pass_shortcut_recipients(*shortcut)
         try:
             return [int(recipient)]
         except ValueError:
