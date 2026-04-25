@@ -2748,6 +2748,59 @@ class Passes(BasePlugin):
         )
         return max(explicit_usage, implied_usage)
 
+    def _prior_tier_capacity_left(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        assignment_rule: str,
+        tier_usage: dict[int, int],
+        tier_index: int,
+        participants: int,
+    ) -> int:
+        capacity_left = 0
+        for prior_tier_index in range(tier_index):
+            tier_limit = self._tier_capacity_for_rule(
+                pass_types[prior_tier_index],
+                assignment_rule,
+            )
+            if tier_limit <= 0:
+                continue
+            tier_used = self._effective_tier_usage(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage=tier_usage,
+                tier_index=prior_tier_index,
+                participants=participants,
+            )
+            capacity_left += max(tier_limit - tier_used, 0)
+        return capacity_left
+
+    def _previous_capacity_tier_is_full(
+        self,
+        *,
+        pass_types: tuple[EventPassType, ...],
+        assignment_rule: str,
+        tier_usage: dict[int, int],
+        tier_index: int,
+        participants: int,
+    ) -> bool:
+        for previous_tier_index in range(tier_index - 1, -1, -1):
+            tier_limit = self._tier_capacity_for_rule(
+                pass_types[previous_tier_index],
+                assignment_rule,
+            )
+            if tier_limit <= 0:
+                continue
+            tier_used = self._effective_tier_usage(
+                pass_types=pass_types,
+                assignment_rule=assignment_rule,
+                tier_usage=tier_usage,
+                tier_index=previous_tier_index,
+                participants=participants,
+            )
+            return tier_used >= tier_limit
+        return False
+
     def _tier_display_left(
         self,
         *,
@@ -2768,8 +2821,13 @@ class Passes(BasePlugin):
             tier_index=tier_index,
             participants=participants,
         )
-        sold_before = self._tier_prior_capacity(pass_types, tier_index, assignment_rule)
-        carryover = max(sold_before - participants, 0)
+        carryover = self._prior_tier_capacity_left(
+            pass_types=pass_types,
+            assignment_rule=assignment_rule,
+            tier_usage=tier_usage,
+            tier_index=tier_index,
+            participants=participants,
+        )
         return max(tier_limit - tier_used, 0) + carryover
 
     def _time_floor_tier_index(
@@ -2801,6 +2859,8 @@ class Passes(BasePlugin):
         pass_types: tuple[EventPassType, ...],
         tier_index: int,
         assignment_rule: str,
+        tier_usage: dict[int, int],
+        participants: int,
         projected_participants: int,
     ) -> bool:
         pass_type = pass_types[tier_index]
@@ -2809,7 +2869,15 @@ class Passes(BasePlugin):
         if tier_index == 0:
             return False
         sold_before = self._tier_prior_capacity(pass_types, tier_index, assignment_rule)
-        return sold_before < projected_participants
+        if sold_before < projected_participants:
+            return True
+        return self._previous_capacity_tier_is_full(
+            pass_types=pass_types,
+            assignment_rule=assignment_rule,
+            tier_usage=tier_usage,
+            tier_index=tier_index,
+            participants=participants,
+        )
 
     def _pick_tier_for_assignment(
         self,
@@ -2849,6 +2917,8 @@ class Passes(BasePlugin):
                     pass_types=pass_types,
                     tier_index=tier_index,
                     assignment_rule=assignment_rule,
+                    tier_usage=tier_usage_by_role.get(role, {}),
+                    participants=participants_by_role.get(role, 0),
                     projected_participants=projected_participants,
                 ):
                     continue
@@ -2871,6 +2941,8 @@ class Passes(BasePlugin):
                 pass_types=pass_types,
                 tier_index=tier_index,
                 assignment_rule=assignment_rule,
+                tier_usage=tier_usage_total,
+                participants=participants_total,
                 projected_participants=projected_participants,
             ):
                 continue

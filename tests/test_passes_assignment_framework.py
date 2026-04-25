@@ -899,7 +899,7 @@ class TierAndBalanceTests(unittest.TestCase):
         )
         self.assertIsNone(tier_index)
 
-    def test_format_current_tier_status_shows_next_future_tier_gate(self):
+    def test_format_current_tier_status_opens_next_unblocked_tier_when_current_full(self):
         now = datetime.now()
         pass_types = (
             EventPassType(
@@ -972,9 +972,8 @@ class TierAndBalanceTests(unittest.TestCase):
 
         status = self._run(passes.format_current_tier_status("pass_2026_1"))
 
-        self.assertIn("current tier: none (no assignable tiers left)", status)
-        self.assertIn("next configured tier: 6 (price=14000, total=9999", status)
-        self.assertIn("assigned+paid reaches 201 (current=196)", status)
+        self.assertIn("current tier: 6 (price=14000, left/total=9999/9999", status)
+        self.assertIn("couple tier: 6 (price=14000, left/total=9999/9999", status)
 
     def test_format_current_tier_status_shows_couple_unblocker_view(self):
         now = datetime.now()
@@ -1487,6 +1486,73 @@ class TierAndBalanceTests(unittest.TestCase):
         _, pass_type_index_by_user = resolved
         self.assertEqual(pass_type_index_by_user[1], 0)
         self.assertEqual(pass_type_index_by_user[2], 0)
+
+    def test_distributed_couple_uses_next_unblocked_tier_when_current_tier_full(self):
+        now = datetime.now()
+        pass_types = (
+            EventPassType(
+                amount=3,
+                price=100,
+                start=now - timedelta(days=2),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=2,
+                price=200,
+                start=now - timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+            EventPassType(
+                amount=100,
+                price=300,
+                start=now + timedelta(days=1),
+                promo=False,
+                blocked_by_date=False,
+            ),
+        )
+        event = make_event(pass_types=pass_types, assignment_rule="distributed")
+        passes = Passes.__new__(Passes)
+
+        def require_event(_self, pass_key: str):
+            return event
+
+        async def collect_queue_stats(_self, pass_key: str):
+            return {
+                "participants_total": 3,
+                "participants_by_role": {"leader": 2, "follower": 1},
+                "tier_usage_total": {1: 2},
+                "tier_usage_by_role": {"leader": {1: 1}, "follower": {1: 1}},
+            }
+
+        async def find_one(query):
+            return {
+                "bot_id": 1,
+                "pass_key": "pass_2026_1",
+                "user_id": 2,
+                "state": "waitlist",
+                "role": "follower",
+                "couple": 1,
+            }
+
+        passes.require_event = MethodType(require_event, passes)
+        passes._collect_queue_stats = MethodType(collect_queue_stats, passes)
+        passes.pass_db = SimpleNamespace(find_one=find_one)
+        passes.base_app = SimpleNamespace(bot=SimpleNamespace(bot=SimpleNamespace(id=1)))
+
+        resolved = self._run(
+            passes.resolve_candidate_tier_prices(
+                "pass_2026_1",
+                1,
+                {"role": "leader", "couple": 2},
+            )
+        )
+        self.assertIsNotNone(resolved)
+        assert resolved is not None
+        _, pass_type_index_by_user = resolved
+        self.assertEqual(pass_type_index_by_user[1], 2)
+        self.assertEqual(pass_type_index_by_user[2], 2)
 
     def test_distributed_couple_unblocker_requires_next_tier_assignable_now(self):
         now = datetime.now()
