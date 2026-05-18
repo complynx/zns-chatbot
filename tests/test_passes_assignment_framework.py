@@ -7,6 +7,10 @@ from types import MethodType, SimpleNamespace
 import unittest
 
 
+payment_methods_module = importlib.import_module("zns-chatbot.payment_methods")
+normalize_iban_profile_value = payment_methods_module.normalize_iban_profile_value
+payment_iban_to_key = payment_methods_module.payment_iban_to_key
+
 IMPORT_ERROR: Exception | None = None
 passes_module = None
 events_module = None
@@ -28,17 +32,34 @@ def _skip_reason() -> str:
 
 if passes_module is not None and events_module is not None:
     Passes = passes_module.Passes
+    PassUpdate = passes_module.PassUpdate
     EventInfo = events_module.EventInfo
     EventPassType = events_module.EventPassType
     MAX_CONCURRENT_ASSIGNMENTS = passes_module.MAX_CONCURRENT_ASSIGNMENTS
 else:  # pragma: no cover - guard for missing runtime deps
     Passes = object
+    PassUpdate = object
     EventInfo = object
     EventPassType = object
     MAX_CONCURRENT_ASSIGNMENTS = 0
 
 
 BASE_TS = datetime(2026, 1, 1, 12, 0, 0)
+
+
+class PaymentMethodsTests(unittest.TestCase):
+    def test_normalize_iban_profile_value_handles_private(self):
+        self.assertEqual(normalize_iban_profile_value(" private "), "private")
+
+    def test_payment_iban_to_key_defaults_to_noiban(self):
+        self.assertEqual(payment_iban_to_key(None), "noiban")
+        self.assertEqual(payment_iban_to_key(""), "noiban")
+
+    def test_payment_iban_to_key_normalizes_and_escapes_public_value(self):
+        self.assertEqual(
+            payment_iban_to_key("nl91 abna 0417 <1643> 00"),
+            "NL91 ABNA 0417 &lt;1643&gt; 00",
+        )
 
 
 def make_event(
@@ -2060,6 +2081,41 @@ class _FakePassUpdateBase:
 
     async def get_pass_for_user(self, user_id: int, pass_key: str):
         return None
+
+
+@unittest.skipIf(IMPORT_ERROR is not None, _skip_reason())
+class PaymentAdminProfileTests(unittest.TestCase):
+    def make_update(self):
+        event = make_event()
+        return PassUpdate(
+            _FakePassUpdateBase(event),
+            _FakePassUpdateContext(user_id=42),
+        )
+
+    def test_admin_to_keys_defaults_to_no_iban(self):
+        update = self.make_update()
+        keys = update.admin_to_keys({"user_id": 1, "first_name": "Admin"}, "en")
+        self.assertEqual(keys["iban"], "noiban")
+
+    def test_admin_to_keys_keeps_private_iban_marker(self):
+        update = self.make_update()
+        keys = update.admin_to_keys(
+            {"user_id": 1, "first_name": "Admin", "iban": " private "},
+            "en",
+        )
+        self.assertEqual(keys["iban"], "private")
+
+    def test_admin_to_keys_normalizes_published_iban(self):
+        update = self.make_update()
+        keys = update.admin_to_keys(
+            {
+                "user_id": 1,
+                "first_name": "Admin",
+                "iban": "nl91 abna 0417 1643 00",
+            },
+            "en",
+        )
+        self.assertEqual(keys["iban"], "NL91 ABNA 0417 1643 00")
 
 
 if __name__ == "__main__":

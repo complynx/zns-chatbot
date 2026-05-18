@@ -23,6 +23,7 @@ from telegram.ext import CallbackQueryHandler, CommandHandler
 
 from ..config import full_link
 from ..events import Events
+from ..payment_methods import payment_iban_to_key
 from ..plugins.massage import now_msk
 from ..telegram_links import client_user_link_html, client_user_name
 from ..tg_state import TGState
@@ -274,6 +275,7 @@ class FoodUpdate:
         keys["phoneContact"] = admin.get("phone_contact", "nophone")
         keys["phoneSBP"] = admin.get("phone_sbp", "nosbp")
         keys["banks"] = admin.get(f"banks_{lc}", admin.get("banks_en", ""))
+        keys["iban"] = payment_iban_to_key(admin.get("iban"))
         return keys
 
     async def handle_cq_pay(self, order_id_str: str):
@@ -2077,6 +2079,7 @@ class Food(BasePlugin):
         keys["banks"] = admin.get("banks_en", "")
         if lc is not None:
             keys["banks"] = admin.get(f"banks_{lc}", keys["banks"])
+        keys["iban"] = payment_iban_to_key(admin.get("iban"))
         return keys
 
     # Wrapper methods for require_anything callbacks

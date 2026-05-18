@@ -156,13 +156,17 @@ food-payment-proof-wrong-data =
     To try again, please use the /food command and submit a PDF file or an image.
 
 food-payment-method =
-    {$phoneSBP ->
-        [nosbp] Ambassador {$adminLink} receives payments only in cash or by prior agreement. {$phoneContact ->
-            [nophone] Send them a message.
-           *[other] Send them a message or call on {$phoneContact}.
+    {$iban ->
+        [noiban] {$phoneSBP ->
+            [nosbp] Ambassador {$adminLink} receives payments only in cash or by prior agreement. {$phoneContact ->
+                [nophone] Send them a message.
+               *[other] Send them a message or call on {$phoneContact}.
+            }
+            [paypal] Ambassador {$adminLink} accepts payments via PayPal, please contact them for details and pricing including conversion and fees.
+           *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}, please don't send to other banks, your money may not arrive!), contact {$adminLink}.
         }
-        [paypal] Ambassador {$adminLink} accepts payments via PayPal, please contact them for details and pricing including conversion and fees.
-        *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}, please don't send to other banks, your money may not arrive!), contact {$adminLink}.
+        [private] Ambassador {$adminLink} accepts IBAN transfers. Send them a message to get the payment details.
+       *[iban] Payment can be made by IBAN transfer to <code>{$iban}</code>, contact {$adminLink}.
     }
 
 food-payment-request-callback-message =
@@ -473,13 +477,17 @@ passes-pass-edit-waiting-for-couple=
     - Change it for solo
     - Change the name associated with your spot
 passes-payment-method =
-    {$phoneSBP ->
-        [nosbp] Ambassador {$adminLink} receives payments only in cash or by prior agreement. {$phoneContact ->
-            [nophone] Send them a message.
-           *[other] Send them a message or call on {$phoneContact}.
+    {$iban ->
+        [noiban] {$phoneSBP ->
+            [nosbp] Ambassador {$adminLink} receives payments only in cash or by prior agreement. {$phoneContact ->
+                [nophone] Send them a message.
+               *[other] Send them a message or call on {$phoneContact}.
+            }
+            [paypal] Ambassador {$adminLink} accepts payments via PayPal, please contact them for details and pricing including conversion and fees.
+           *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}), contact {$adminLink}.
         }
-        [paypal] Ambassador {$adminLink} accepts payments via PayPal, please contact them for details and pricing including conversion and fees.
-        *[sbp] Payment can be made via SBP using the phone number <code>{$phoneSBP}</code> ({$banks}), contact {$adminLink}.
+        [private] Ambassador {$adminLink} accepts IBAN transfers. Send them a message to get the payment details.
+       *[iban] Payment can be made by IBAN transfer to <code>{$iban}</code>, contact {$adminLink}.
     }
 passes-pass-assigned =
     Hello, <i>{$name}</i>!
@@ -528,10 +536,14 @@ passes-error-couple-not-found =
     Please register again if possible using the command /passes.
 passes-payment-admin-button = {$adminEmoji} {$adminName}
 passes-payment-admin-desc=
-    {$adminEmoji} {$adminLink} {$phoneSBP ->
-        [nosbp] — payment: mostly only cash.
-        [paypal] — payment: PayPal transfers.
-        *[sbp] — paymnent: SBP transfers by phone number.
+    {$adminEmoji} {$adminLink} {$iban ->
+        [noiban] {$phoneSBP ->
+            [nosbp] — payment: mostly only cash.
+            [paypal] — payment: PayPal transfers.
+            *[sbp] — paymnent: SBP transfers by phone number.
+        }
+        [private] — payment: IBAN transfer; message them for details.
+       *[iban] — payment: IBAN transfer.
     }
 passes-admin-changed =
     Your ambassador has been changed to {$adminLink}.

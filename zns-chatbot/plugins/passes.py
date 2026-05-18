@@ -17,6 +17,7 @@ from telegram.constants import ParseMode
 from telegram.ext import CallbackQueryHandler, CommandHandler, filters
 
 from ..events import EventInfo, EventPassType, Events
+from ..payment_methods import payment_iban_to_key
 from ..telegram_links import client_user_link_html, client_user_name
 from ..tg_state import SilentArgumentParser, TGState
 from .base_plugin import PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING, BasePlugin
@@ -118,6 +119,7 @@ class PassUpdate:
         keys["banks"] = admin.get("banks_en", "")
         if lc is not None:
             keys["banks"] = admin.get("banks_" + lc, keys["banks"])
+        keys["iban"] = payment_iban_to_key(admin.get("iban"))
         return keys
 
     async def format_message(
