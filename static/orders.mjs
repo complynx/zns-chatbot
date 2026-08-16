@@ -10,6 +10,32 @@ const EXTRA_PRICES = {
 const BYN_TO_RUB = 30;
 
 let menuData = null;
+let activeContentIcon = null;
+
+function currentLanguage() {
+    return document.documentElement.lang.toLowerCase().startsWith("en") ? "en" : "ru";
+}
+
+function closeContentCaption() {
+    if (!activeContentIcon) return;
+    activeContentIcon.classList.remove("active");
+    activeContentIcon.setAttribute("aria-expanded", "false");
+    const caption = activeContentIcon.closest(".name-text")?.querySelector(".content-caption");
+    if (caption) caption.hidden = true;
+    activeContentIcon = null;
+}
+
+function toggleContentCaption(icon, caption, label, emoji) {
+    const shouldClose = activeContentIcon === icon;
+    closeContentCaption();
+    if (shouldClose) return;
+
+    caption.textContent = `${emoji} ${label}`;
+    caption.hidden = false;
+    icon.classList.add("active");
+    icon.setAttribute("aria-expanded", "true");
+    activeContentIcon = icon;
+}
 
 function appendLocalizedText(container, ru, en) {
     const ruText = document.createElement("span");
@@ -24,6 +50,7 @@ function appendLocalizedText(container, ru, en) {
 }
 
 function createDish(dishKey, dish) {
+    const language = currentLanguage();
     const dishDiv = document.createElement("div");
     dishDiv.dataset.name = dishKey;
     dishDiv.dataset.service = JSON.stringify(dish.service || []);
@@ -36,7 +63,7 @@ function createDish(dishKey, dish) {
         const img = document.createElement("img");
         img.classList.add("dish-thumb");
         img.loading = "lazy";
-        img.alt = `${dish.name_ru || ""} / ${dish.name_en || ""}`;
+        img.alt = dish[`name_${language}`] || dish.name_en || dish.name_ru || "";
         img.src = `static/orders_photos/${dish.image}`;
         nameDiv.appendChild(img);
         nameDiv.addEventListener("click", () => toggleFullImage(img.src, img.alt));
@@ -48,18 +75,36 @@ function createDish(dishKey, dish) {
 
     const contents = document.createElement("div");
     contents.classList.add("contents");
+    const contentCaption = document.createElement("div");
+    contentCaption.classList.add("content-caption");
+    contentCaption.hidden = true;
+    contentCaption.setAttribute("aria-live", "polite");
     for (const contentKey of dish.contents || []) {
         const content = menuData.content_icons[contentKey];
         if (!content) continue;
         const icon = document.createElement("span");
         icon.classList.add("content-icon");
         icon.textContent = content.icon;
-        icon.title = `${content.ru} / ${content.en}`;
-        icon.setAttribute("role", "img");
-        icon.setAttribute("aria-label", icon.title);
+        const label = content[language] || content.en || content.ru;
+        icon.title = label;
+        icon.tabIndex = 0;
+        icon.setAttribute("role", "button");
+        icon.setAttribute("aria-label", label);
+        icon.setAttribute("aria-expanded", "false");
+        icon.addEventListener("click", event => {
+            event.stopPropagation();
+            toggleContentCaption(icon, contentCaption, label, content.icon);
+        });
+        icon.addEventListener("keydown", event => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            event.stopPropagation();
+            toggleContentCaption(icon, contentCaption, label, content.icon);
+        });
         contents.appendChild(icon);
     }
     nameText.appendChild(contents);
+    nameText.appendChild(contentCaption);
     nameDiv.appendChild(nameText);
     dishDiv.appendChild(nameDiv);
 
@@ -427,6 +472,7 @@ Telegram.WebApp.BackButton.show();
 window.mainButtonClick = mainButtonClick;
 window.backButtonClick = backButtonClick;
 document.body.addEventListener("change", refreshOrderPreview);
+document.body.addEventListener("click", closeContentCaption);
 updateSections();
 setReadOnly();
 

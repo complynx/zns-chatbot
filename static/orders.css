@@ -183,13 +183,36 @@ html[lang=ru] .for-who input[name="for_who_patronymus"] {
 .meal .dishes>div.dish .contents{
     display: flex;
     flex-wrap: wrap;
-    gap: .2em;
+    gap: .25em;
     margin-top: .2em;
     font-size: .9em;
     line-height: 1;
 }
 .meal .dishes>div.dish .content-icon{
-    cursor: help;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.2em;
+    min-height: 2.2em;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.meal .dishes>div.dish .content-icon:focus-visible,
+.meal .dishes>div.dish .content-icon.active{
+    border-color: var(--tg-theme-hint-color);
+    background-color: var(--tg-theme-section-bg-color);
+    outline: none;
+}
+.meal .dishes>div.dish .content-caption{
+    margin-top: .2em;
+    color: var(--tg-theme-subtitle-text-color);
+    font-size: .75em;
+    line-height: 1.2;
+}
+.meal .dishes>div.dish .content-caption[hidden]{
+    display: none;
 }
 
 .meal .dishes>div.dish .price,
