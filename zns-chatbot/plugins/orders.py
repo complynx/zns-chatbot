@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 from motor.core import AgnosticCollection
 from ..config import full_link
@@ -7,6 +8,7 @@ from .base_plugin import BasePlugin, PRIORITY_BASIC, PRIORITY_NOT_ACCEPTING
 from telegram.ext import CommandHandler, CallbackQueryHandler, MessageHandler, filters
 from telegram.constants import ParseMode
 from bson.objectid import ObjectId
+from pymongo.errors import DuplicateKeyError
 from ..telegram_links import client_user_link_html, client_user_name
 import logging
 from .massage import now_msk
@@ -34,8 +36,19 @@ def currency_ceil(sum):
 logger = logging.getLogger(__name__)
 
 BYN_TO_RUB = 30
+SHUTTLE_CAPACITY = 43
+SHUTTLE_SERVICE = "shuttle"
 
 DEADLINE=datetime.datetime(2026, 9, 19, 0, 0, 0)
+
+
+class ShuttleFullError(Exception):
+    pass
+
+
+def choice_has_shuttle(choice):
+    extras = choice.get("extras", {}) if isinstance(choice, dict) else {}
+    return isinstance(extras, dict) and SHUTTLE_SERVICE in extras
 
 class OrdersUpdate:
     base: 'Orders'
@@ -62,12 +75,24 @@ class OrdersUpdate:
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
             )
-        await self.base.food_db.insert_one({
-            "user_id": self.user,
-            "event_number": self.config.event_number,
-            "created_at": datetime.datetime.now(),
-            "choice": choice,
-        })
+        order_id = ObjectId()
+        shuttle_reserved = False
+        if choice_has_shuttle(choice):
+            shuttle_reserved = await self.base.reserve_shuttle_seat(order_id)
+            if not shuttle_reserved:
+                raise ShuttleFullError()
+        try:
+            await self.base.food_db.insert_one({
+                "_id": order_id,
+                "user_id": self.user,
+                "event_number": self.config.event_number,
+                "created_at": datetime.datetime.now(),
+                "choice": choice,
+            })
+        except Exception:
+            if shuttle_reserved:
+                await self.base.release_shuttle_seat(order_id)
+            raise
         return await self.handle_cq_start()
 
     async def set_choice(self, order_id, choice):
@@ -78,14 +103,34 @@ class OrdersUpdate:
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
             )
-        await self.base.food_db.update_one({
-            "_id": ObjectId(order_id),
-        },{
-            "$set":{
-                "choice": choice,
-                "updated_at": datetime.datetime.now(),
-            }
-        })
+        order_oid = ObjectId(order_id)
+        previous_order = await self.base.food_db.find_one({"_id": order_oid})
+        previous_has_shuttle = choice_has_shuttle(
+            previous_order.get("choice", {}) if previous_order else {}
+        )
+        next_has_shuttle = choice_has_shuttle(choice)
+        shuttle_reserved = False
+        if next_has_shuttle and not previous_has_shuttle:
+            shuttle_reserved = await self.base.reserve_shuttle_seat(order_oid)
+            if not shuttle_reserved:
+                raise ShuttleFullError()
+        try:
+            result = await self.base.food_db.update_one({
+                "_id": order_oid,
+            },{
+                "$set":{
+                    "choice": choice,
+                    "updated_at": datetime.datetime.now(),
+                }
+            })
+            if result.matched_count == 0:
+                raise ValueError(f"order {order_id} not found")
+        except Exception:
+            if shuttle_reserved:
+                await self.base.release_shuttle_seat(order_oid)
+            raise
+        if previous_has_shuttle and not next_has_shuttle:
+            await self.base.release_shuttle_seat(order_oid)
         return await self.handle_cq_start()
 
     async def handle_cq_del(self, order_id):
@@ -96,6 +141,8 @@ class OrdersUpdate:
         if "proof_file" in order:
             return await self.handle_cq_start()
         await self.base.food_db.delete_one({"_id": ObjectId(order_id)})
+        if choice_has_shuttle(order.get("choice", {})):
+            await self.base.release_shuttle_seat(order["_id"])
         return await self.handle_cq_start()
 
     def get_order_total(self, order):
@@ -710,10 +757,147 @@ class Orders(BasePlugin):
         super().__init__(base_app)
         self.base_app.orders = self
         self.food_db = base_app.mongodb[self.config.mongo_db.food_collection]
+        self.capacity_db = base_app.mongodb[
+            self.config.mongo_db.food_collection + "_capacity"
+        ]
+        self._shuttle_slots_ready = set()
+        self._shuttle_slots_lock = asyncio.Lock()
         self._checker = CommandHandler(self.name, self.handle_start)
         self._file_checker = MessageHandler(filters.Document.PDF, self.handle_payment)
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self.menu = self.get_menu()
+
+    def _shuttle_event_number(self):
+        return self.config.event_number
+
+    async def _ensure_shuttle_slots(self):
+        event_number = self._shuttle_event_number()
+        if event_number in self._shuttle_slots_ready:
+            return
+        async with self._shuttle_slots_lock:
+            if event_number in self._shuttle_slots_ready:
+                return
+
+            await self.capacity_db.create_index(
+                [
+                    ("event_number", 1),
+                    ("service", 1),
+                    ("reservation_id", 1),
+                ],
+                unique=True,
+                partialFilterExpression={"reservation_id": {"$exists": True}},
+            )
+            for seat in range(SHUTTLE_CAPACITY):
+                await self.capacity_db.update_one(
+                    {"_id": f"{event_number}:{SHUTTLE_SERVICE}:{seat}"},
+                    {"$setOnInsert": {
+                        "event_number": event_number,
+                        "service": SHUTTLE_SERVICE,
+                        "seat": seat,
+                    }},
+                    upsert=True,
+                )
+
+            existing_orders = await self.food_db.find(
+                {
+                    "event_number": event_number,
+                    "choice.extras.shuttle": {"$exists": True},
+                },
+                {"_id": 1},
+            ).to_list(None)
+            existing_order_ids = {order["_id"] for order in existing_orders}
+            reserved_slots = await self.capacity_db.find(
+                {
+                    "event_number": event_number,
+                    "service": SHUTTLE_SERVICE,
+                    "reservation_id": {"$exists": True},
+                },
+                {"reservation_id": 1},
+            ).to_list(None)
+            reserved_order_ids = {
+                slot["reservation_id"] for slot in reserved_slots
+                if slot.get("reservation_id") in existing_order_ids
+            }
+            for slot in reserved_slots:
+                reservation_id = slot.get("reservation_id")
+                if reservation_id not in existing_order_ids:
+                    await self.capacity_db.update_one(
+                        {
+                            "_id": slot["_id"],
+                            "reservation_id": reservation_id,
+                        },
+                        {"$unset": {"reservation_id": "", "reserved_at": ""}},
+                    )
+
+            for order_id in existing_order_ids - reserved_order_ids:
+                await self.capacity_db.find_one_and_update(
+                    {
+                        "event_number": event_number,
+                        "service": SHUTTLE_SERVICE,
+                        "reservation_id": {"$exists": False},
+                    },
+                    {"$set": {
+                        "reservation_id": order_id,
+                        "reserved_at": datetime.datetime.now(),
+                    }},
+                    sort=[("seat", 1)],
+                )
+
+            self._shuttle_slots_ready.add(event_number)
+
+    async def reserve_shuttle_seat(self, order_id):
+        await self._ensure_shuttle_slots()
+        event_number = self._shuttle_event_number()
+        existing = await self.capacity_db.find_one({
+            "event_number": event_number,
+            "service": SHUTTLE_SERVICE,
+            "reservation_id": order_id,
+        })
+        if existing is not None:
+            return True
+        try:
+            claimed = await self.capacity_db.find_one_and_update(
+                {
+                    "event_number": event_number,
+                    "service": SHUTTLE_SERVICE,
+                    "reservation_id": {"$exists": False},
+                },
+                {"$set": {
+                    "reservation_id": order_id,
+                    "reserved_at": datetime.datetime.now(),
+                }},
+                sort=[("seat", 1)],
+            )
+        except DuplicateKeyError:
+            # A concurrent request may have reserved another slot for this order.
+            claimed = await self.capacity_db.find_one({
+                "event_number": event_number,
+                "service": SHUTTLE_SERVICE,
+                "reservation_id": order_id,
+            })
+        return claimed is not None
+
+    async def release_shuttle_seat(self, order_id):
+        await self._ensure_shuttle_slots()
+        await self.capacity_db.update_one(
+            {
+                "event_number": self._shuttle_event_number(),
+                "service": SHUTTLE_SERVICE,
+                "reservation_id": order_id,
+            },
+            {"$unset": {"reservation_id": "", "reserved_at": ""}},
+        )
+
+    async def shuttle_available(self, current_choice=None):
+        if choice_has_shuttle(current_choice or {}):
+            return True
+        await self._ensure_shuttle_slots()
+        free_slot = await self.capacity_db.find_one({
+            "event_number": self._shuttle_event_number(),
+            "service": SHUTTLE_SERVICE,
+            "reservation_id": {"$exists": False},
+        })
+        return free_slot is not None
 
     def get_menu(self):
         from os.path import dirname as d

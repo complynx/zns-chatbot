@@ -19,7 +19,7 @@ from tornado.httputil import HTTPServerRequest
 from .config import Config
 from .events import Events
 from .plugins.massage import now_msk
-from .plugins.orders import DEADLINE
+from .plugins.orders import DEADLINE, ShuttleFullError
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +226,8 @@ class OrdersHandler(RequestHandlerWithApp):
         if locale_str.startswith("ru"):
             lang = "ru"
 
+        shuttle_available = await orders.shuttle_available(choice)
+
         try:
             self.render(
                 "orders.html",
@@ -241,6 +243,8 @@ class OrdersHandler(RequestHandlerWithApp):
                 placeholder_patronymus=localize("orders-placeholder-patronymus"),
                 validity_error_first_name=localize("orders-validity-error-first-name"),
                 validity_error_last_name=localize("orders-validity-error-last-name"),
+                shuttle_available=shuttle_available,
+                shuttle_full_error=localize("orders-shuttle-full-error"),
             )
         except (KeyError, ValueError):
             raise tornado.web.HTTPError(404)
@@ -288,6 +292,10 @@ class OrdersHandler(RequestHandlerWithApp):
             self.set_status(200)
             self.write({"message": "order saved"})
 
+        except ShuttleFullError:
+            self.set_status(409)
+            self.write({"error": "shuttle_full"})
+            logger.info("shuttle is full for user %s", user.get("id"))
         except Exception as e:
             self.set_status(500)
             self.write({"error": "internal error"})

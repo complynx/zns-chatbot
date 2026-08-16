@@ -1,6 +1,5 @@
 import {calculateMealService} from "./orders_service.mjs";
 
-const ENABLE_SHUTTLE_BUS_HIDING = false;
 const EXTRA_PRICES = {
     preparty: 35,
     excursion_minsk: 25,
@@ -11,6 +10,7 @@ const BYN_TO_RUB = 30;
 
 let menuData = null;
 let activeContentIcon = null;
+let orderSubmissionPending = false;
 
 function currentLanguage() {
     return document.documentElement.lang.toLowerCase().startsWith("en") ? "en" : "ru";
@@ -407,24 +407,61 @@ function sendError(error) {
     });
 }
 
+function hideShuttleOption() {
+    const shuttleInput = document.querySelector('.excursions input[name="shuttle_bus"]');
+    shuttleInput.checked = false;
+    shuttleInput.closest("label").hidden = true;
+    refreshOrderPreview();
+}
+
+function showUserAlert(message) {
+    if (typeof Telegram.WebApp.showAlert === "function") {
+        Telegram.WebApp.showAlert(message);
+    } else {
+        window.alert(message);
+    }
+}
+
+async function submitOrder() {
+    if (orderSubmissionPending) return;
+    orderSubmissionPending = true;
+    Telegram.WebApp.MainButton.disable();
+    Telegram.WebApp.MainButton.showProgress?.();
+    try {
+        const orders = collectOrdersWithExtras();
+        const response = await fetch(`orders?${initDataQuery()}&order_id=${user_order_id}`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(orders),
+        });
+        if (response.status === 409) {
+            const result = await response.json().catch(() => ({}));
+            if (result.error === "shuttle_full") {
+                hideShuttleOption();
+                showUserAlert(shuttle_full_error);
+                return;
+            }
+        }
+        if (!response.ok) {
+            throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
+        }
+        Telegram.WebApp.close();
+    } catch (error) {
+        sendError(error);
+    } finally {
+        orderSubmissionPending = false;
+        Telegram.WebApp.MainButton.hideProgress?.();
+        Telegram.WebApp.MainButton.enable();
+    }
+}
+
 function mainButtonClick() {
     if (currentIndex === sections.length - 1) {
         if (read_only) {
             Telegram.WebApp.close();
             return;
         }
-        try {
-            const orders = collectOrdersWithExtras();
-            fetch(`orders?${initDataQuery()}&order_id=${user_order_id}`, {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify(orders),
-            }).then(response => {
-                if (!response.ok) throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
-            }).catch(sendError).finally(() => Telegram.WebApp.close());
-        } catch (error) {
-            sendError(error);
-        }
+        submitOrder();
         return;
     }
 
@@ -485,9 +522,7 @@ fetch("static/menu_belarus.json")
         menuData = menu;
         fillAllSections();
         fillInOrders(user_order);
-        if (ENABLE_SHUTTLE_BUS_HIDING && !(user_order?.extras && "shuttle" in user_order.extras)) {
-            document.querySelector('.excursions input[name="shuttle_bus"]').closest("label").hidden = true;
-        }
+        if (!shuttle_available) hideShuttleOption();
         refreshOrderPreview();
     })
     .catch(sendError);

@@ -99,6 +99,7 @@ orders-placeholder-last-name=Last name
 orders-placeholder-patronymus=Second name(s)
 orders-validity-error-first-name=First name should contain one upper case letter and then at least one lowercase
 orders-validity-error-last-name=Last name should contain one upper case letter and then at least one lowercase
+orders-shuttle-full-error=Unfortunately, all 43 transfer seats have already been taken. The transfer was removed from your order and the total was recalculated. Please review and submit the order again.
 undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
 max-assistant-messages-reached = You've reached your questions limit for a day, please come back in 24 hours.

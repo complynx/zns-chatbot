@@ -146,6 +146,9 @@ html[lang=ru] .for-who input[name="for_who_patronymus"] {
 .excursions label{
     display: block;
 }
+.excursions label[hidden]{
+    display: none;
+}
 .meal .day {
     font-size: 1.8em;
     color:var(--tg-theme-section-header-text-color);
