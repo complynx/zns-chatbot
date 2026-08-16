@@ -1,565 +1,447 @@
-// Feature flags / configurable constants
-// When true, users who have NOT previously selected shuttle bus (no 'shuttle' in user_order.extras)
-// will NOT see the shuttle bus option. Set to false to always show the option.
-const ENABLE_SHUTTLE_BUS_HIDING = true;
+import {calculateMealService} from "./orders_service.mjs";
 
-fetch("static/menu_belarus.json").then(r=>r.json()).then(menu=>{
-    // Function to fill in all sections by looping through the <section> elements
-    function fillAllSections() {
-        // Get all sections with the "meal" class
-        let sections = document.querySelectorAll('section.meal');
+const ENABLE_SHUTTLE_BUS_HIDING = false;
+const EXTRA_PRICES = {
+    preparty: 35,
+    excursion_minsk: 25,
+    shuttle: 60,
+    excursion_grodno: 25,
+};
+const BYN_TO_RUB = 30;
 
-        // Iterate over each section
-        sections.forEach(section => {
-            // Extract the day and mealType from the section's class list
-            let day = [...section.classList].find(cls => menu.choices[cls]);
-            let mealType = [...section.classList].find(cls => cls !== 'meal' && cls !== day);
+let menuData = null;
 
-            if (!day || !mealType) return; // Skip if day or mealType is not found
+function appendLocalizedText(container, ru, en) {
+    const ruText = document.createElement("span");
+    ruText.lang = "ru";
+    ruText.textContent = ru || "";
+    container.appendChild(ruText);
 
-            // Iterate over each dish type in the section (e.g., salads, hot-dishes)
-            for (let dishType in menu.choices[day]) {
-                const dishWrapper = section.querySelector(`.${dishType}`);
-                if(!dishWrapper) continue;
-                let dishContainer = dishWrapper.querySelector('.dishes');
-                if(!dishContainer) continue;
-                let dishes = menu.choices[day][dishType];
+    const enText = document.createElement("span");
+    enText.lang = "en";
+    enText.textContent = en || "";
+    container.appendChild(enText);
+}
 
-                // Clear the existing content
-                dishContainer.innerHTML = '';
+function createDish(dishKey, dish) {
+    const dishDiv = document.createElement("div");
+    dishDiv.dataset.name = dishKey;
+    dishDiv.dataset.service = JSON.stringify(dish.service || []);
+    dishDiv.classList.add("dish");
 
-                // Iterate over the dishes and create the HTML structure
-                for (let dishKey in dishes) {
-                    let dish = dishes[dishKey];
-                    if(!dish) continue;
+    const nameDiv = document.createElement("div");
+    nameDiv.classList.add("name");
 
-                    // Create the dish container
-                    let dishDiv = document.createElement("div");
-                    dishDiv.setAttribute("data-name", dishKey);
-                    dishDiv.classList.add('dish');
-
-                    // Name + (optional) image container
-                    let nameDiv = document.createElement("div");
-                    nameDiv.classList.add("name");
-
-                    // Thumbnail if image exists
-                    let hasImage = !!dish.image;
-                    if(hasImage){
-                        const img = document.createElement('img');
-                        img.classList.add('dish-thumb');
-                        img.loading = 'lazy';
-                        img.alt = (dish.name_en||'') + ' / ' + (dish.name_ru||'');
-                        img.src = `static/orders_photos/${dish.image}`;
-                        img.dataset.fullImage = img.src; // store for toggle
-                        nameDiv.appendChild(img);
-                    }
-                    // Localized names
-                    const nameText = document.createElement('div');
-                    nameText.innerHTML = `
-                        <span lang="ru">${dish.name_ru||''}</span>
-                        <span lang="en">${dish.name_en||''}</span>
-                    `;
-                    nameText.classList.add('name-text');
-                    nameDiv.appendChild(nameText);
-                    dishDiv.appendChild(nameDiv);
-
-                    // Price (row 1)
-                    let priceDiv = document.createElement("div");
-                    priceDiv.classList.add("price");
-                    priceDiv.textContent = dish.price ?? '';
-                    dishDiv.appendChild(priceDiv);
-
-                    // Counter (row 1)
-                    let counterDiv = document.createElement("div");
-                    counterDiv.classList.add("counter");
-                    counterDiv.textContent = 0;
-                    dishDiv.appendChild(counterDiv);
-
-                    if(!read_only) {
-                        // Buttons
-                        let addButton = document.createElement("button");
-                        addButton.classList.add("add");
-                        addButton.textContent = '+';
-                        dishDiv.appendChild(addButton);
-
-                        let removeButton = document.createElement("button");
-                        removeButton.classList.add("remove");
-                        removeButton.textContent = '-';
-                        dishDiv.appendChild(removeButton);
-
-                        let clearButton = document.createElement("button");
-                        clearButton.classList.add("clear");
-                        clearButton.textContent = '🗑';
-                        dishDiv.appendChild(clearButton);
-
-                        addButton.addEventListener('click', () => {
-                            counterDiv.textContent = parseInt(counterDiv.textContent) + 1;
-                        });
-                        removeButton.addEventListener('click', () => {
-                            const count = parseInt(counterDiv.textContent);
-                            if(count>0) counterDiv.textContent = count - 1;
-                        });
-                        clearButton.addEventListener('click', () => {
-                            counterDiv.textContent = 0;
-                        });
-                    }
-
-                    // Output (row 2 under price + counter)
-                    let outputDiv = document.createElement('div');
-                    outputDiv.classList.add('output');
-                    outputDiv.textContent = dish.output || '';
-                    dishDiv.appendChild(outputDiv);
-
-                    // Image expand on name / image click
-                    if(hasImage){
-                        const toggleFull = () => toggleFullImage(`static/orders_photos/${dish.image}`, (dish.name_en||'') + ' / ' + (dish.name_ru||''));
-                        nameDiv.addEventListener('click', toggleFull);
-                        const thumb = nameDiv.querySelector('img.dish-thumb');
-                        if(thumb) thumb.addEventListener('click', toggleFull);
-                    }
-
-                    dishContainer.appendChild(dishDiv);
-                }
-            }
-        });
+    if (dish.image) {
+        const img = document.createElement("img");
+        img.classList.add("dish-thumb");
+        img.loading = "lazy";
+        img.alt = `${dish.name_ru || ""} / ${dish.name_en || ""}`;
+        img.src = `static/orders_photos/${dish.image}`;
+        nameDiv.appendChild(img);
+        nameDiv.addEventListener("click", () => toggleFullImage(img.src, img.alt));
     }
 
-    // Run the function to fill all sections
-    fillAllSections();
-    fillInOrders(user_order);
+    const nameText = document.createElement("div");
+    nameText.classList.add("name-text");
+    appendLocalizedText(nameText, dish.name_ru, dish.name_en);
 
-    // Conditional hiding of shuttle bus option for users who did not previously select it
-    try {
-        if (ENABLE_SHUTTLE_BUS_HIDING) {
-            const hadShuttle = !!(user_order && user_order.extras && ("shuttle" in user_order.extras));
-            if (!hadShuttle) {
-                const shuttleInput = document.querySelector('.excursions input[name="shuttle_bus"]');
-                if (shuttleInput) {
-                    const shuttleLabel = shuttleInput.closest('label');
-                    if (shuttleLabel) {
-                        shuttleLabel.style.display = 'none';
-                    }
-                }
+    const contents = document.createElement("div");
+    contents.classList.add("contents");
+    for (const contentKey of dish.contents || []) {
+        const content = menuData.content_icons[contentKey];
+        if (!content) continue;
+        const icon = document.createElement("span");
+        icon.classList.add("content-icon");
+        icon.textContent = content.icon;
+        icon.title = `${content.ru} / ${content.en}`;
+        icon.setAttribute("role", "img");
+        icon.setAttribute("aria-label", icon.title);
+        contents.appendChild(icon);
+    }
+    nameText.appendChild(contents);
+    nameDiv.appendChild(nameText);
+    dishDiv.appendChild(nameDiv);
+
+    const priceDiv = document.createElement("div");
+    priceDiv.classList.add("price");
+    priceDiv.textContent = dish.price;
+    dishDiv.appendChild(priceDiv);
+
+    const counterDiv = document.createElement("div");
+    counterDiv.classList.add("counter");
+    counterDiv.textContent = "0";
+    dishDiv.appendChild(counterDiv);
+
+    if (!read_only) {
+        const addButton = document.createElement("button");
+        addButton.classList.add("add");
+        addButton.type = "button";
+        addButton.textContent = "+";
+        addButton.addEventListener("click", () => {
+            counterDiv.textContent = String(Number(counterDiv.textContent) + 1);
+            refreshOrderPreview();
+        });
+        dishDiv.appendChild(addButton);
+
+        const removeButton = document.createElement("button");
+        removeButton.classList.add("remove");
+        removeButton.type = "button";
+        removeButton.textContent = "−";
+        removeButton.addEventListener("click", () => {
+            counterDiv.textContent = String(Math.max(0, Number(counterDiv.textContent) - 1));
+            refreshOrderPreview();
+        });
+        dishDiv.appendChild(removeButton);
+
+        const clearButton = document.createElement("button");
+        clearButton.classList.add("clear");
+        clearButton.type = "button";
+        clearButton.textContent = "🗑";
+        clearButton.addEventListener("click", () => {
+            counterDiv.textContent = "0";
+            refreshOrderPreview();
+        });
+        dishDiv.appendChild(clearButton);
+    }
+
+    const outputDiv = document.createElement("div");
+    outputDiv.classList.add("output");
+    outputDiv.textContent = dish.output || "";
+    dishDiv.appendChild(outputDiv);
+
+    return dishDiv;
+}
+
+function createServiceSummary() {
+    const summary = document.createElement("div");
+    summary.classList.add("service-summary");
+    summary.hidden = true;
+
+    const title = document.createElement("div");
+    title.classList.add("service-title");
+    appendLocalizedText(title, "Автоматически к этому приёму пищи", "Added automatically to this meal");
+    summary.appendChild(title);
+
+    const items = document.createElement("ul");
+    items.classList.add("service-items");
+    summary.appendChild(items);
+    return summary;
+}
+
+function fillAllSections() {
+    for (const section of document.querySelectorAll("section.meal")) {
+        const day = [...section.classList].find(className => menuData.choices[className]);
+        const mealtime = [...section.classList].find(className => ["lunch", "dinner"].includes(className));
+        const choices = menuData.choices[day]?.[mealtime];
+        if (!choices) continue;
+
+        section.querySelectorAll(".dish-group, .service-summary").forEach(element => element.remove());
+
+        for (const [dishType, dishKeys] of Object.entries(choices)) {
+            const group = document.createElement("div");
+            group.classList.add("dish-group", dishType);
+
+            const typeName = document.createElement("div");
+            typeName.classList.add("dish-type");
+            const label = menuData.category_labels[dishType] || {};
+            appendLocalizedText(typeName, label.ru || dishType, label.en || dishType);
+            group.appendChild(typeName);
+
+            const dishes = document.createElement("div");
+            dishes.classList.add("dishes");
+            for (const dishKey of dishKeys) {
+                const dish = menuData.dishes[dishKey];
+                if (dish) dishes.appendChild(createDish(dishKey, dish));
             }
+            group.appendChild(dishes);
+            section.appendChild(group);
         }
-    } catch(e) { send_error(e); }
-}).catch(send_error);
+
+        section.appendChild(createServiceSummary());
+    }
+}
 
 function collectOrdersWithExtras() {
     const orders = {
         total: 0,
         days: {},
-        extras: {
-            total: 0
-        },
-        customer: ""
+        extras: {total: 0},
+        customer: "",
     };
 
-    // Collect customer name
     orders.customer_first_name = document.querySelector('.for-who input[name="for_who_first_name"]').value.trim();
     orders.customer_last_name = document.querySelector('.for-who input[name="for_who_last_name"]').value.trim();
     orders.customer_patronymus = document.querySelector('.for-who input[name="for_who_patronymus"]').value.trim();
-    orders.customer = orders.customer_first_name + " " +
-        (orders.customer_patronymus!==""?orders.customer_patronymus+" ":"") +
-        orders.customer_last_name;
+    orders.customer = `${orders.customer_first_name} ${orders.customer_patronymus ? `${orders.customer_patronymus} ` : ""}${orders.customer_last_name}`;
 
-    // Select all meal sections
-    const meals = document.querySelectorAll('.meal');
+    for (const meal of document.querySelectorAll(".meal")) {
+        const day = [...meal.classList].find(className => ["friday", "saturday", "sunday"].includes(className));
+        const mealtime = [...meal.classList].find(className => ["lunch", "dinner"].includes(className));
+        if (!orders.days[day]) orders.days[day] = {total: 0, mealtimes: {}};
 
-    meals.forEach(meal => {
-        // Get the day and mealtime in English
-        const day = [...meal.classList].find(cls => ['friday', 'saturday', 'sunday'].includes(cls));
-        const mealtime = [...meal.classList].find(cls => cls !== 'meal' && cls !== day);
+        const mealOrder = {total: 0, dishes: []};
+        const selectedForService = [];
+        for (const dish of meal.querySelectorAll(".dishes > .dish")) {
+            const count = Number.parseInt(dish.querySelector(".counter").textContent.trim(), 10);
+            if (count <= 0) continue;
 
-        // Initialize day and mealtime if not already done
-        if (!orders.days[day]) {
-            orders.days[day] = {
-                total: 0,
-                mealtimes: {}
+            const price = Number.parseFloat(dish.querySelector(".price").textContent.trim());
+            const dishInfo = {
+                name: dish.dataset.name,
+                count,
+                price,
+                total: count * price,
             };
+            mealOrder.dishes.push(dishInfo);
+            mealOrder.total += dishInfo.total;
+            selectedForService.push({
+                count,
+                service: JSON.parse(dish.dataset.service || "[]"),
+            });
         }
 
-        if (!orders.days[day].mealtimes[mealtime]) {
-            orders.days[day].mealtimes[mealtime] = {
-                total: 0,
-                dishes: []
-            };
+        mealOrder.service = calculateMealService(selectedForService, menuData.service_items);
+        mealOrder.total += mealOrder.service.total;
+        orders.days[day].mealtimes[mealtime] = mealOrder;
+        orders.days[day].total += mealOrder.total;
+        orders.total += mealOrder.total;
+    }
+
+    const extras = [
+        ["preparty", "preparty"],
+        ["excursion_minsk", "excursion_minsk"],
+        ["shuttle_bus", "shuttle"],
+        ["excursion_grodno", "excursion_grodno"],
+    ];
+    for (const [inputName, orderKey] of extras) {
+        if (document.querySelector(`.excursions input[name="${inputName}"]`).checked) {
+            const price = EXTRA_PRICES[orderKey];
+            orders.extras[orderKey] = price;
+            orders.extras.total += price;
+            orders.total += price;
         }
-
-        // Collect all dishes in the current meal
-        const dishes = meal.querySelectorAll('.dishes > div');
-
-        dishes.forEach(dish => {
-            const name = dish.dataset.name;
-            const price = parseFloat(dish.querySelector('.price').textContent.trim());
-            const count = parseInt(dish.querySelector('.counter').textContent.trim());
-
-            if (count > 0) {
-                const dishInfo = {
-                    name: name,
-                    count: count,
-                    price: price,
-                    total: count * price
-                };
-
-                // Add the dish to the mealtime's dishes array
-                orders.days[day].mealtimes[mealtime].dishes.push(dishInfo);
-
-                // Update the totals
-                orders.days[day].mealtimes[mealtime].total += dishInfo.total;
-                orders.days[day].total += dishInfo.total;
-                orders.total += dishInfo.total;
-            }
-        });
-    });
-
-    // Collect excursion and shuttle data
-    const preparty = document.querySelector('.excursions input[name="preparty"]').checked;
-    const minskExcursion = document.querySelector('.excursions input[name="excursion_minsk"]').checked;
-    const shuttleBus = document.querySelector('.excursions input[name="shuttle_bus"]').checked;
-    const grodnoExcursion = document.querySelector('.excursions input[name="excursion_grodno"]').checked;
-
-    if (preparty) {
-        orders.extras.preparty = 35;
-        orders.extras.total += 35;
-        orders.total += 35;
-    }
-
-    if (minskExcursion) {
-        orders.extras.excursion_minsk = 25;
-        orders.extras.total += 25;
-        orders.total += 25;
-    }
-
-    if (shuttleBus) {
-        orders.extras.shuttle = 55;
-        orders.extras.total += 55;
-        orders.total += 55;
-    }
-
-    if (grodnoExcursion) {
-        orders.extras.excursion_grodno = 20;
-        orders.extras.total += 20;
-        orders.total += 20;
     }
 
     return orders;
 }
 
-if(read_only){
-    document.querySelector('.for-who input[name="for_who_first_name"]').disabled = true;
-    document.querySelector('.for-who input[name="for_who_last_name"]').disabled = true;
-    document.querySelector('.for-who input[name="for_who_patronymus"]').disabled = true;
-    document.querySelector('.excursions input[name="preparty"]').disabled = true;
-    document.querySelector('.excursions input[name="excursion_minsk"]').disabled = true;
-    document.querySelector('.excursions input[name="shuttle_bus"]').disabled = true;
-    document.querySelector('.excursions input[name="excursion_grodno"]').disabled = true;
+function formatPrice(value) {
+    return Number(value.toFixed(2)).toString();
+}
+
+function renderServiceSummaries(orders) {
+    for (const meal of document.querySelectorAll(".meal")) {
+        const day = [...meal.classList].find(className => ["friday", "saturday", "sunday"].includes(className));
+        const mealtime = [...meal.classList].find(className => ["lunch", "dinner"].includes(className));
+        const service = orders.days[day]?.mealtimes[mealtime]?.service;
+        const summary = meal.querySelector(".service-summary");
+        const list = summary.querySelector(".service-items");
+        list.replaceChildren();
+
+        if (!service || service.items.length === 0) {
+            summary.hidden = true;
+            continue;
+        }
+
+        for (const item of service.items) {
+            const definition = menuData.service_items[item.name];
+            const row = document.createElement("li");
+            const name = document.createElement("span");
+            name.textContent = `${definition.icon} `;
+            appendLocalizedText(name, definition.name_ru, definition.name_en);
+            row.appendChild(name);
+
+            const amount = document.createElement("span");
+            amount.textContent = `×${item.count} · ${formatPrice(item.total)} BYN`;
+            row.appendChild(amount);
+            list.appendChild(row);
+        }
+        summary.hidden = false;
+    }
+}
+
+function refreshOrderPreview() {
+    if (!menuData) return;
+    const orders = collectOrdersWithExtras();
+    renderServiceSummaries(orders);
+    const total = currencyCeil(orders.total);
+    const totalRub = currencyCeil(orders.total * BYN_TO_RUB);
+    document.getElementById("total-sum").textContent = `${total} BYN ${totalRub} RUB`;
 }
 
 function fillInOrders(orders) {
-    // Validate the orders object
-    if (!orders || typeof orders !== 'object') {
-        console.error('Invalid orders object:', orders);
-        return;
-    }
+    if (!orders || typeof orders !== "object") return;
 
-    // Validate customer first name
-    if (typeof orders.customer_first_name !== 'string' || orders.customer_first_name.trim() === '') {
-        console.error('Invalid customer first name:', orders.customer_first_name);
-    } else {
-        const customerInput = document.querySelector('.for-who input[name="for_who_first_name"]');
-        customerInput.value = orders.customer_first_name;
-    }
-
-    // Validate customer last name
-    if (typeof orders.customer_last_name !== 'string' || orders.customer_last_name.trim() === '') {
-        console.error('Invalid customer last name:', orders.customer_last_name);
-    } else {
-        const customerInput = document.querySelector('.for-who input[name="for_who_last_name"]');
-        customerInput.value = orders.customer_last_name;
-    }
-
-    // Validate customer patronymus
-    if (typeof orders.customer_patronymus !== 'string') {
-        console.error('Invalid customer patronymus:', orders.customer_patronymus);
-    } else {
-        const customerInput = document.querySelector('.for-who input[name="for_who_patronymus"]');
-        customerInput.value = orders.customer_patronymus.trim();
-    }
-
-    // Validate days
-    if (!orders.days || typeof orders.days !== 'object') {
-        console.error('Invalid days structure:', orders.days);
-        return;
-    }
-
-    Object.keys(orders.days).forEach(day => {
-        const mealtimes = orders.days[day].mealtimes;
-
-        // Validate mealtimes
-        if (!mealtimes || typeof mealtimes !== 'object') {
-            console.error(`Invalid mealtimes for day ${day}:`, mealtimes);
-            return;
+    const fields = ["first_name", "last_name", "patronymus"];
+    for (const field of fields) {
+        const value = orders[`customer_${field}`];
+        if (typeof value === "string") {
+            document.querySelector(`.for-who input[name="for_who_${field}"]`).value = value.trim();
         }
+    }
 
-        Object.keys(mealtimes).forEach(mealtime => {
-            const dishes = mealtimes[mealtime].dishes;
-
-            // Validate dishes array
-            if (!Array.isArray(dishes)) {
-                console.error(`Invalid dishes array for ${day}, ${mealtime}:`, dishes);
-                return;
+    for (const [day, dayOrder] of Object.entries(orders.days || {})) {
+        for (const [mealtime, mealOrder] of Object.entries(dayOrder.mealtimes || {})) {
+            const meal = document.querySelector(`.${day}.${mealtime}.meal`);
+            if (!meal) continue;
+            for (const dish of mealOrder.dishes || []) {
+                const dishElement = [...meal.querySelectorAll(".dishes > .dish")]
+                    .find(element => element.dataset.name === dish.name);
+                if (dishElement) dishElement.querySelector(".counter").textContent = dish.count;
             }
-
-            dishes.forEach(dish => {
-                // Validate dish properties
-                if (typeof dish !== 'object' || typeof dish.name !== 'string' ||
-                    typeof dish.count !== 'number') {
-                    console.error(`Invalid dish data for ${day}, ${mealtime}:`, dish);
-                    return;
-                }
-
-                // Find the corresponding meal section based on the day and mealtime
-                const mealSection = document.querySelector(`.${day}.${mealtime}.meal`);
-
-                if (!mealSection) {
-                    console.error(`Meal section not found for ${day}, ${mealtime}`);
-                    return;
-                }
-
-                const dishElement = Array.from(mealSection.querySelectorAll('.dishes > div')).find(el => el.dataset.name === dish.name);
-
-                if (dishElement) {
-                    // Update the counter element with the dish count
-                    const counterElement = dishElement.querySelector('.counter');
-                    counterElement.textContent = dish.count;
-                } else {
-                    console.error(`Dish element not found for ${day}, ${mealtime}:`, dish);
-                }
-            });
-        });
-    });
-
-    // Validate extras
-    if (!orders.extras || typeof orders.extras !== 'object') {
-        console.error('Invalid extras structure:', orders.extras);
-        return;
+        }
     }
 
-    const prepartyCheckbox = document.querySelector('.excursions input[name="preparty"]');
-    const minskExcursionCheckbox = document.querySelector('.excursions input[name="excursion_minsk"]');
-    const shuttleBusCheckbox = document.querySelector('.excursions input[name="shuttle_bus"]');
-    const grodnoExcursionCheckbox = document.querySelector('.excursions input[name="excursion_grodno"]');
-
-    if ("preparty" in orders.extras) {
-        prepartyCheckbox.checked = true;
-    }
-
-    if ("excursion_minsk" in orders.extras) {
-        minskExcursionCheckbox.checked = true;
-    }
-
-    if ("shuttle" in orders.extras) {
-        shuttleBusCheckbox.checked = true;
-    }
-
-    if ("excursion_grodno" in orders.extras) {
-        grodnoExcursionCheckbox.checked = true;
-    }
-
-    let total = currencyCeil(orders.total);
-    let total_rub = currencyCeil(orders.total*BYN_TO_RUB);
-    
-    document.getElementById("total-sum").innerText = total + " BYN "+ total_rub + " RUB";
+    const extras = orders.extras || {};
+    document.querySelector('.excursions input[name="preparty"]').checked = "preparty" in extras;
+    document.querySelector('.excursions input[name="excursion_minsk"]').checked = "excursion_minsk" in extras;
+    document.querySelector('.excursions input[name="shuttle_bus"]').checked = "shuttle" in extras;
+    document.querySelector('.excursions input[name="excursion_grodno"]').checked = "excursion_grodno" in extras;
 }
 
-Telegram.WebApp.ready();
-Telegram.WebApp.expand();
+function setReadOnly() {
+    if (!read_only) return;
+    document.querySelectorAll(".for-who input, .excursions input").forEach(input => {
+        input.disabled = true;
+    });
+}
 
-const sections = document.querySelectorAll('body>section');
-
+const sections = document.querySelectorAll("body > section");
 let currentIndex = 0;
 
 function updateSections() {
-    // Remove .active from all sections
-    sections.forEach((section, index) => {
-        section.classList.toggle('active', index === currentIndex);
-    });
-
-    if(currentIndex === sections.length - 1) {
-        Telegram.WebApp.MainButton.setText(finish_button_text);
-    } else {
-        Telegram.WebApp.MainButton.setText(next_button_text);
-    }
+    sections.forEach((section, index) => section.classList.toggle("active", index === currentIndex));
+    Telegram.WebApp.MainButton.setText(currentIndex === sections.length - 1 ? finish_button_text : next_button_text);
 }
 
-let name_validity;
-try{
-    let pattern="^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}+\s*$";
-    let name_re=/^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}+\s*$/u;
-    name_validity=function(el, err) {
-        if(name_re.test(el.value)) {
-            if(!el.checkValidity()) {
-                el.setCustomValidity("");
-            }
-        } else {
-            el.setAttribute("pattern", pattern);
-            el.setCustomValidity(err);
-        }
-    }
-    
+let nameValidity;
+try {
+    const pattern = "^\\s*\\p{Uppercase_Letter}\\p{Lowercase_Letter}+\\s*$";
+    const namePattern = /^\s*\p{Uppercase_Letter}\p{Lowercase_Letter}+\s*$/u;
+    nameValidity = (element, error) => {
+        element.setCustomValidity(namePattern.test(element.value) ? "" : error);
+    };
     document.querySelector('.for-who input[name="for_who_first_name"]').setAttribute("pattern", pattern);
     document.querySelector('.for-who input[name="for_who_last_name"]').setAttribute("pattern", pattern);
-}catch(e) {
-    send_error(e)
-    let pattern="^\s*[A-ZА-ЯЁ][a-zа-яё]+\s*$";
-    let name_re=/^\s*[A-ZА-ЯЁ][a-zа-яё]+\s*$/u;
-    name_validity=function(el, err) {
-        if(name_re.test(el.value)) {
-            if(!el.checkValidity()) {
-                el.setCustomValidity("");
-            }
-        } else {
-            el.setAttribute("pattern", pattern);
-            el.setCustomValidity(err);
-        }
-    }
-    
+} catch (error) {
+    sendError(error);
+    const pattern = "^\\s*[A-ZА-ЯЁ][a-zа-яё]+\\s*$";
+    const namePattern = /^\s*[A-ZА-ЯЁ][a-zа-яё]+\s*$/u;
+    nameValidity = (element, message) => {
+        element.setCustomValidity(namePattern.test(element.value) ? "" : message);
+    };
     document.querySelector('.for-who input[name="for_who_first_name"]').setAttribute("pattern", pattern);
     document.querySelector('.for-who input[name="for_who_last_name"]').setAttribute("pattern", pattern);
 }
 
 function validateSection(index) {
-    name_validity(document.querySelector('.for-who input[name="for_who_first_name"]'),validity_error_first_name);
-    name_validity(document.querySelector('.for-who input[name="for_who_last_name"]'),validity_error_last_name);
-    const inputs = sections[index].querySelectorAll('input');
-    for (let input of inputs) {
+    nameValidity(document.querySelector('.for-who input[name="for_who_first_name"]'), validity_error_first_name);
+    nameValidity(document.querySelector('.for-who input[name="for_who_last_name"]'), validity_error_last_name);
+    for (const input of sections[index].querySelectorAll("input")) {
         if (!input.checkValidity()) {
-            input.reportValidity();  // Show the validation message
+            input.reportValidity();
             return false;
         }
     }
     return true;
 }
 
-updateSections();
-
 function currencyCeil(sum) {
-    // if (sum < 100) {
-    //     return Math.ceil(sum);
-    // }
-
-    // // Get the magnitude (order of the largest digit) of the number
-    // const magnitude = 10 ** (Math.floor(Math.log10(sum)) - 1);
-
-    // // Normalize the number by dividing by the magnitude
-    // const normalized = sum / magnitude;
-
-    // // Round up to the nearest 0 or 5
-    // const ceilNormalized = Math.ceil(normalized * 2) / 2;
-
-    // // Scale back to the original magnitude
-    // const rounded = ceilNormalized * magnitude;
-
-    // return rounded;
-    return Math.ceil(sum * 100) / 100; // Round to two decimal places
-}
-const BYN_TO_RUB = 30;
-
-document.body.addEventListener("click", ()=>{
-    let orders = collectOrdersWithExtras();
-    let total = currencyCeil(orders.total);
-    let total_rub = currencyCeil(orders.total*BYN_TO_RUB);
-    
-    document.getElementById("total-sum").innerText = total + " BYN "+ total_rub + " RUB";
-}, {passive:true});
-
-function IDQ() {
-    return "initData="+encodeURIComponent(Telegram.WebApp.initData)
+    return Math.ceil(sum * 100) / 100;
 }
 
-function send_error(err) {
-    return fetch("error?"+IDQ(), {
+function initDataQuery() {
+    return `initData=${encodeURIComponent(Telegram.WebApp.initData)}`;
+}
+
+function sendError(error) {
+    return fetch(`error?${initDataQuery()}`, {
         method: "POST",
-        body: err
-    })
+        body: String(error),
+    });
 }
 
 function mainButtonClick() {
-    if(currentIndex === sections.length - 1){
-        if(read_only){
+    if (currentIndex === sections.length - 1) {
+        if (read_only) {
             Telegram.WebApp.close();
+            return;
         }
-        try{
-            let orders = collectOrdersWithExtras();
-            fetch('orders?'+IDQ()+`&order_id=${user_order_id}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(orders)
+        try {
+            const orders = collectOrdersWithExtras();
+            fetch(`orders?${initDataQuery()}&order_id=${user_order_id}`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify(orders),
             }).then(response => {
-                if (!response.ok) {
-                    throw new Error(`Network response was not ok: ${response.status} ${response.statusText}\n${response.body}`);
-                }
-            }).catch(error => {
-                console.error('Error:', error);
-                return send_error(error);
-            }).finally(()=>{
-                Telegram.WebApp.close();
-            });
-        }catch(error){
-            send_error(error);
-        };
-        return
+                if (!response.ok) throw new Error(`Network response was not ok: ${response.status} ${response.statusText}`);
+            }).catch(sendError).finally(() => Telegram.WebApp.close());
+        } catch (error) {
+            sendError(error);
+        }
+        return;
     }
-    if (currentIndex < sections.length - 1  && validateSection(currentIndex)) {
-        currentIndex++;
+
+    if (currentIndex < sections.length - 1 && validateSection(currentIndex)) {
+        currentIndex += 1;
         updateSections();
     }
 }
 
-function backButtonClick(){
+function backButtonClick() {
     if (currentIndex > 0) {
-        currentIndex--;
+        currentIndex -= 1;
         updateSections();
     } else {
         Telegram.WebApp.close();
     }
 }
 
+function toggleFullImage(src, alt = "") {
+    const existing = document.getElementById("image-overlay");
+    if (existing) {
+        const sameImage = existing.dataset.src === src;
+        existing.remove();
+        if (sameImage) return;
+    }
 
-Telegram.WebApp.MainButton.show();
+    const overlay = document.createElement("div");
+    overlay.id = "image-overlay";
+    overlay.dataset.src = src;
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = alt;
+    overlay.appendChild(img);
+    overlay.addEventListener("click", () => overlay.remove());
+    document.body.appendChild(overlay);
+}
+
+Telegram.WebApp.ready();
+Telegram.WebApp.expand();
 Telegram.WebApp.MainButton.onClick(mainButtonClick);
-
 Telegram.WebApp.MainButton.enable();
 Telegram.WebApp.MainButton.show();
-
 Telegram.WebApp.BackButton.onClick(backButtonClick);
 Telegram.WebApp.BackButton.show();
 window.mainButtonClick = mainButtonClick;
 window.backButtonClick = backButtonClick;
+document.body.addEventListener("change", refreshOrderPreview);
+updateSections();
+setReadOnly();
 
-// --- Image full width overlay (no pointer events) ---
-function toggleFullImage(src, alt='') {
-    const existing = document.getElementById('image-overlay');
-    if(existing){
-        existing.remove();
-        // If same image requested again, treat as toggle off
-        if(existing.dataset.src === src) return;
-    }
-    const overlay = document.createElement('div');
-    overlay.id = 'image-overlay';
-    overlay.dataset.src = src;
-    const img = document.createElement('img');
-    img.src = src;
-    img.alt = alt;
-    overlay.appendChild(img);
-    // Click overlay to close
-    overlay.addEventListener('click', ()=>overlay.remove());
-    document.body.appendChild(overlay);
-    // Auto remove after 3s to avoid permanent cover
-    setTimeout(()=>{
-        if(overlay.parentNode) overlay.remove();
-    }, 3000);
-}
+fetch("static/menu_belarus.json")
+    .then(response => {
+        if (!response.ok) throw new Error(`Menu response was not ok: ${response.status}`);
+        return response.json();
+    })
+    .then(menu => {
+        menuData = menu;
+        fillAllSections();
+        fillInOrders(user_order);
+        if (ENABLE_SHUTTLE_BUS_HIDING && !(user_order?.extras && "shuttle" in user_order.extras)) {
+            document.querySelector('.excursions input[name="shuttle_bus"]').closest("label").hidden = true;
+        }
+        refreshOrderPreview();
+    })
+    .catch(sendError);

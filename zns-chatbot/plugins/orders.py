@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 BYN_TO_RUB = 30
 
-DEADLINE=datetime.datetime(2025, 9, 19, 0, 0, 0)
+DEADLINE=datetime.datetime(2026, 9, 19, 0, 0, 0)
 
 class OrdersUpdate:
     base: 'Orders'
@@ -503,17 +503,19 @@ class OrdersUpdate:
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Заказы"
-        # Collect dish keys and russian names
-        dish_keys = []
-        dish_names_ru: dict[str,str] = {}
-        for day, day_data in self.base.menu.get("choices", {}).items():
-            for dish_type, dishes in day_data.items():
-                if not isinstance(dishes, dict):
-                    continue
-                for dk, dv in dishes.items():
-                    if dk not in dish_keys:
-                        dish_keys.append(dk)
-                        dish_names_ru[dk] = dv.get("name_ru", dk)
+        # Collect menu and disposable-service columns.
+        menu_dishes = self.base.menu.get("dishes", {})
+        dish_keys = list(menu_dishes)
+        dish_names_ru = {
+            dish_key: dish.get("name_ru", dish_key)
+            for dish_key, dish in menu_dishes.items()
+        }
+        service_items = self.base.menu.get("service_items", {})
+        service_keys = list(service_items)
+        service_names_ru = {
+            service_key: service.get("name_ru", service_key)
+            for service_key, service in service_items.items()
+        }
         # Base columns (english keys -> russian headers)
         base_fields = [
             ("order_id", "ID заказа"),
@@ -528,10 +530,14 @@ class OrdersUpdate:
             ("total_rub", "Сумма RUB"),
             ("extras_preparty", "Препати"),
             ("extras_excursion_minsk", "Экскурсия Минск"),
-            ("extras_shuttle", "Шаттл"),
+            ("extras_shuttle", "Трансфер"),
             ("extras_excursion_grodno", "Экскурсия Гродно"),
         ]
-        header = [ru for _k, ru in base_fields] + [dish_names_ru.get(k, k) for k in dish_keys]
+        header = (
+            [ru for _k, ru in base_fields]
+            + [dish_names_ru.get(k, k) for k in dish_keys]
+            + [service_names_ru.get(k, k) for k in service_keys]
+        )
         ws.append(header)
         bold = Font(bold=True)
         center = Alignment(horizontal="center")
@@ -539,6 +545,7 @@ class OrdersUpdate:
             cell.font = bold
             cell.alignment = center
         totals = {k: {"count":0,"sum":0} for k in dish_keys}
+        service_totals = {k: {"count":0,"sum":0} for k in service_keys}
         extras_totals = {"preparty":0,"excursion_minsk":0,"shuttle":0,"excursion_grodno":0}
         # Second sheet with detailed contents
         ws_details = wb.create_sheet("Содержимое")
@@ -551,7 +558,7 @@ class OrdersUpdate:
         extras_ru = {
             "preparty":"Препати",
             "excursion_minsk":"Экскурсия по Минску",
-            "shuttle":"Автобус Минск–Гродно",
+            "shuttle":"Трансфер Минск–Гродно",
             "excursion_grodno":"Экскурсия по Гродно",
         }
         async for order in self.base.food_db.find({"event_number": self.config.event_number}):
@@ -559,6 +566,7 @@ class OrdersUpdate:
             total_byn = choice.get("total", 0)
             total_rub = total_byn * BYN_TO_RUB
             dish_counts = {k:0 for k in dish_keys}
+            service_counts = {k:0 for k in service_keys}
             # Detailed dishes
             for day_key, day_data in choice.get("days", {}).items():
                 for mealtime_key, mealtime in day_data.get("mealtimes", {}).items():
@@ -581,6 +589,24 @@ class OrdersUpdate:
                             dish_counts[name_key] += cnt
                             totals[name_key]["count"] += cnt
                             totals[name_key]["sum"] += cnt*price
+                    for service in mealtime.get("service", {}).get("items", []):
+                        name_key = service.get("name")
+                        cnt = service.get("count", 0)
+                        price = service.get("price", 0)
+                        ws_details.append([
+                            order.get("user_id", ""),
+                            str(order.get("_id")),
+                            choice.get("customer", ""),
+                            day_ru.get(day_key, day_key),
+                            meal_ru.get(mealtime_key, mealtime_key),
+                            service_names_ru.get(name_key, name_key),
+                            order.get("validation", ""),
+                            cnt,
+                        ])
+                        if name_key in service_counts:
+                            service_counts[name_key] += cnt
+                            service_totals[name_key]["count"] += cnt
+                            service_totals[name_key]["sum"] += cnt * price
             # Extras rows
             extras = choice.get("extras", {})
             for ex_key, ex_ru in extras_ru.items():
@@ -611,7 +637,7 @@ class OrdersUpdate:
                 1 if "excursion_minsk" in extras else 0,
                 1 if "shuttle" in extras else 0,
                 1 if "excursion_grodno" in extras else 0,
-            ] + [dish_counts[k] for k in dish_keys]
+            ] + [dish_counts[k] for k in dish_keys] + [service_counts[k] for k in service_keys]
             ws.append(row)
         ws.freeze_panes = "A2"
         for col in ws.columns:
@@ -647,6 +673,17 @@ class OrdersUpdate:
             cell.alignment = center
         for k,v in totals.items():
             ws_totals.append([dish_names_ru.get(k,k), v["count"], currency_ceil(v["sum"])])
+        ws_service = wb.create_sheet("Посуда")
+        ws_service.append(["Позиция", "Количество", "Сумма BYN"])
+        for cell in ws_service["1:1"]:
+            cell.font = bold
+            cell.alignment = center
+        for k, v in service_totals.items():
+            ws_service.append([
+                service_names_ru.get(k, k),
+                v["count"],
+                currency_ceil(v["sum"]),
+            ])
         ws_extras = wb.create_sheet("Активности")
         ws_extras.append(["Активность","Кол-во заказов"])
         for cell in ws_extras["1:1"]:

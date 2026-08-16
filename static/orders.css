@@ -180,6 +180,17 @@ html[lang=ru] .for-who input[name="for_who_patronymus"] {
 .meal .dishes>div.dish .name{ display:flex; align-items:center; gap:.4em; }
 .meal .dishes>div.dish .name-text{ display:flex; flex-direction:column; line-height:1.05; }
 .meal .dishes>div.dish .dish-thumb{ width:2.8em; height:2.8em; object-fit:cover; border-radius:.25em; flex:0 0 auto; }
+.meal .dishes>div.dish .contents{
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2em;
+    margin-top: .2em;
+    font-size: .9em;
+    line-height: 1;
+}
+.meal .dishes>div.dish .content-icon{
+    cursor: help;
+}
 
 .meal .dishes>div.dish .price,
 .meal .dishes>div.dish .counter,
@@ -197,6 +208,26 @@ html[lang=ru] .for-who input[name="for_who_patronymus"] {
 /* Buttons */
 .meal .dishes>div.dish button{ padding:.3em .2em; font-size:1em; }
 .meal .dishes>div.dish button.clear{ font-size:.9em; }
+
+.service-summary{
+    margin-top: 1em;
+    padding-top: .7em;
+    border-top: 1px solid var(--tg-theme-hint-color);
+}
+.service-title{
+    color: var(--tg-theme-subtitle-text-color);
+}
+.service-items{
+    margin: .4em 0 0;
+    padding: 0;
+    list-style: none;
+}
+.service-items li{
+    display: flex;
+    justify-content: space-between;
+    gap: .8em;
+    padding: .2em 0;
+}
 
 /* Full image overlay */
 #image-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.85); display:flex; justify-content:center; align-items:center; z-index:9999; animation:fadeIn .15s ease; cursor: zoom-out; }

@@ -1,471 +1,118 @@
 {
-    "choices": {
-        "friday": {
-            "salads": {
-                "salad_fresh_veggies": {
-                    "name_ru": "Салат «Из свежих овощей»",
-                    "name_en": "Fresh Vegetable Salad",
-                    "ingredients_en": "tomatoes, fresh cucumbers, greens, sour cream",
-                    "ingredients_ru": "томаты, огурцы св, зелень, сметана",
-                    "output": "200",
-                    "price": 6.45,
-                    "image": "salad_fresh_veggies.jpg"
-                },
-                "salad_grecheskiy": {
-                    "name_ru": "Салат \"Греческий\"",
-                    "name_en": "Greek Salad",
-                    "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, dressing, parsley",
-                    "ingredients_ru": "томаты свежие, перец сладкий, огурцы свежие, маслины консервированные, сыр репчатый, заправка, петрушка",
-                    "output": "150",
-                    "price": 6.45,
-                    "image": "salad_grecheskiy.jpg"
-                },
-                "salad_with_chicken_and_mushrooms": {
-                    "name_ru": "Салат с курицей и грибами",
-                    "name_en": "Chicken and Mushroom Salad",
-                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, mayonnaise",
-                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, майонез",
-                    "output": "150",
-                    "price": 6.45,
-                    "image": "salat_s_kuritsey_i_gribami.webp"
-                },
-                "salad_cezar": {
-                    "name_ru": "Салат \"Цезарь\"",
-                    "name_en": "Caesar Salad",
-                    "ingredients_en": "lettuce, chicken fillet, tomatoes, sauce, croutons",
-                    "ingredients_ru": "салат, куриное филе, томаты, соус, сухарики",
-                    "output": "200",
-                    "price": 10.45,
-                    "image": "salat_tsezar.jpg"
-                },
-                "salad_molodezhny": {
-                    "name_ru": "Салат \"Молодежный\"",
-                    "name_en": "Youth Salad",
-                    "ingredients_en": "peking cabbage, ham, canned corn, fresh tomatoes, mayonnaise",
-                    "ingredients_ru": "капуста пекинская, ветчина к/в, кукурузаконсервированная, томаты свежие, майонез",
-                    "output": "150",
-                    "price": 3.45,
-                    "image": "salat_s_pekinskoy_kapustoy_i_vetchinoy.jpg"
-                }
-            },
-            "hot-dishes": {
-                "shnitsel_kuriny": {
-                    "name_ru": "Шницель из куриной грудки",
-                    "name_en": "Chicken Schnitzel",
-                    "output": "120",
-                    "price": 10.6,
-                    "image": "shnitsel_iz_kurinoy_grudki.jpg"
-                },
-                "ryba_v_syire": {
-                    "name_ru": "Филе белой рыбы под сыром",
-                    "name_en": "White Fish Fillet with Cheese",
-                    "output": "150",
-                    "price": 10.6,
-                    "image": "file_beloy_ryby_pod_syrom.jpg"
-                },
-                "steak_iz_semgi_s_asparzhevoy_fasolyu_i_tomatami_so_slivочным_sousom": {
-                  "name_ru": "Стейк из семги со спаржевой фасолью и томатами со сливочным соусом",
-                  "name_en": "Salmon Steak with Asparagus and Tomatoes in Cream Sauce",
-                  "output": "60/100/30/20",
-                  "price": 40.6,
-                  "image": "steyk_iz_semgi_so_sparzhevoy_fasolyu_i_tomatami_so_slivochnym_sousom.jpg"
-                },
-                "medalion_iz_vyrezki_svinoy_s_gribnym_sousom": {
-                    "name_ru": "Медальон из вырезки свиной с грибным соусом",
-                    "name_en": "Pork Tenderloin Medallion with Mushroom Sauce",
-                    "output": "170/40",
-                    "price": 12.6,
-                    "image": "medalon_iz_svinoy_vyrezki_pod_gribnym_sousom.jpg"
-                }
-            },
-            "side-dishes": {
-                "bread_with_fish": {
-                    "name_ru": "Брускетты с рыбкой",
-                    "name_en": "Bruschetta with Fish",
-                    "ingredients_en": "white bread, cheese, lightly salted salmon, cucumber",
-                    "ingredients_ru": "Белый хлеб, сыр, семга слабосоленая, огурец",
-                    "output": "50g",
-                    "price": 3.60,
-                    "image": "brusketty_s_krasnoy_rybkoy_svezhim_ogurtsom_i_syrom.jpg"
-                },
-                "draniki": {
-                    "name_ru": "Драники",
-                    "name_en": "Potato Pancakes",
-                    "output": "×4/240g",
-                    "price": 10.45,
-                    "image": "draniki.jpg"
-                },
-                "grechnevaya_kasha_s_maslom": {
-                    "name_ru": "Гречка со сливочным маслом",
-                    "name_en": "Buckwheat Porridge with Butter",
-                    "output": "200",
-                    "price": 3.45,
-                    "image": "grechka_so_slivochnym_maslom.webp"
-                },
-                "ovoschi_vesennie": {
-                    "name_ru": "Нарезка из весенних овощей",
-                    "name_en": "Spring Vegetable Medley",
-                    "output": "200",
-                    "price": 6.45,
-                    "image": "narezka_iz_vesennikh_ovoshchey.jpg"
-                }
-            },
-            "drinks": {
-                "chai_s_sakharom": {
-                    "name_ru": "Чай, сахар",
-                    "name_en": "Tea with Sugar",
-                    "output": "0.2L",
-                    "price": 1.5
-                },
-                "voda_pitevaya": {
-                    "name_ru": "Вода питьевая",
-                    "name_en": "Drinking Water",
-                    "output": "0.5L",
-                    "price": 3
-                },
-                "sok_yabloko": {
-                    "name_ru": "Сок яблоко",
-                    "name_en": "Apple Juice",
-                    "output": "0.2L",
-                    "price": 1.2
-                },
-                "mors_klyukva": {
-                    "name_ru": "Морс клюква",
-                    "name_en": "Cranberry Juice",
-                    "output": "0.2L",
-                    "price": 1.2
-                }
-            },
-            "bread": {
-                "khleb": {
-                    "name_ru": "Хлеб",
-                    "name_en": "Bread",
-                    "output": "0.05kg",
-                    "price": 0.5
-                }
-            }
-        },
-        "saturday": {
-            "salads": {
-                "salad_grecheskiy": {
-                    "name_ru": "Салат \"Греческий\"",
-                    "name_en": "Greek Salad",
-                    "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, dressing, parsley",
-                    "ingredients_ru": "томаты свежие, перец сладкий, огурец свежий, маслины консервированные, сыр, заправка, петрушка",
-                    "output": "150",
-                    "price": 6.45,
-                    "image": "salad_grecheskiy.jpg"
-                },
-                "salad_vitaminniy": {
-                    "name_ru": "Салат \"Витаминный\"",
-                    "name_en": "Vitamin Salad",
-                    "ingredients_en": "white cabbage, carrots, sweet peppers, fresh cucumbers, lemon juice, mayonnaise-sour cream dressing",
-                    "ingredients_ru": "белокочанная капуста, морковь, перец сладкий, огурцы свежие, сок лимона, заправка майонезно-сметанная",
-                    "output": "150",
-                    "price": 6.45,
-                    "image": "salat_vitaminnyy.jpg"
-                },
-                "salad_iz_svezhih_ovoshey": {
-                    "name_ru": "Салат \"Из свежих овощей\"",
-                    "name_en": "Fresh Vegetable Salad",
-                    "ingredients_en": "tomatoes, fresh cucumbers, greens, sour cream",
-                    "ingredients_ru": "томаты, огурцы свежие, зелень, сметана",
-                    "output": "200",
-                    "price": 6.45,
-                    "image": "salad_fresh_veggies.jpg"
-                },
-                "salad_with_chicken_and_mushrooms": {
-                    "name_ru": "Салат с курицей и грибами",
-                    "name_en": "Chicken and Mushroom Salad",
-                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, mayonnaise",
-                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, майонез",
-                    "output": "150",
-                    "price": 6.45,
-                    "image": "salat_s_kuritsey_i_gribami.webp"
-                },
-                "salad_molodezhny": {
-                    "name_ru": "Салат \"Молодежный\"",
-                    "name_en": "Youth Salad",
-                    "ingredients_en": "peking cabbage, ham, canned corn, fresh tomatoes, mayonnaise",
-                    "ingredients_ru": "капуста пекинская, ветчина к/в, кукурузаконсервированная, томаты свежие, майонез",
-                    "output": "150",
-                    "price": 3.45,
-                    "image": "salat_s_pekinskoy_kapustoy_i_vetchinoy.jpg"
-                }
-            },
-            "soups": {
-                "borshch": {
-                    "name_ru": "Борщ",
-                    "name_en": "Borscht",
-                    "output": "250/20",
-                    "price": 5.65,
-                    "image": "borshch.jpg"
-                },
-                "mushroom_soup": {
-                    "name_ru": "Суп грибной",
-                    "name_en": "Mushroom Soup",
-                    "output": "250",
-                    "price": 5.65,
-                    "image": "sup_gribnoy.jpg"
-                }
-            },
-            "hot-dishes": {
-                "svinina_s_gribami": {
-                    "name_ru": "Свинина с грибами",
-                    "name_en": "Pork with Mushrooms",
-                    "output": "120",
-                    "price": 10.6,
-                    "image": "svinina_s_gribami.jpg"
-                },
-                "ryba_v_syire": {
-                    "name_ru": "Филе белой рыбы под сыром",
-                    "name_en": "Fillet of White Fish with Cheese",
-                    "output": "150",
-                    "price": 10.6,
-                    "image": "file_beloy_ryby_pod_syrom.jpg"
-                },
-                "steak_iz_semgi_s_asparzhevoy_fasolyu_i_tomatami_so_slivочным_sousom": {
-                  "name_ru": "Стейк из семги со спажевой фасолью и томатами со сливочным соусом",
-                  "name_en": "Salmon Steak with Green Beans and Tomatoes in Cream Sauce",
-                  "output": "60/100/30/20",
-                  "price": 40.6,
-                  "image": "steyk_iz_semgi_so_sparzhevoy_fasolyu_i_tomatami_so_slivochnym_sousom.jpg"
-                },
-                "chicken_fillet": {
-                    "name_ru": "Филе курицы с помидорами",
-                    "name_en": "Chicken Fillet with Tomatoes",
-                    "output": "150",
-                    "price": 10.6,
-                    "image": "kurinoe_file_s_pomidorami.jpg"
-                }
-            },
-            "side-dishes": {
-                "bread_with_fish": {
-                    "name_ru": "Брускетты с рыбкой",
-                    "name_en": "Bruschetta with Fish",
-                    "ingredients_en": "white bread, cheese, lightly salted salmon, cucumber",
-                    "ingredients_ru": "Белый хлеб, сыр, семга слабосоленая, огурец",
-                    "output": "50g",
-                    "price": 3.60,
-                    "image": "brusketty_s_krasnoy_rybkoy_svezhim_ogurtsom_i_syrom.jpg"
-                },
-                "draniki": {
-                    "name_ru": "Драники",
-                    "name_en": "Potato Pancakes",
-                    "output": "×4/240g",
-                    "price": 10.45,
-                    "image": "draniki.jpg"
-                },
-                "grechnevaya_kasha_s_maslom": {
-                    "name_ru": "Гречка со сливочным маслом",
-                    "name_en": "Buckwheat Porridge with Butter",
-                    "output": "200",
-                    "price": 3.45,
-                    "image": "grechka_so_slivochnym_maslom.webp"
-                },
-                "ovoschi_vesennie": {
-                    "name_ru": "Нарезка из весенних овощей",
-                    "name_en": "Spring Vegetable Medley",
-                    "output": "200",
-                    "price": 6.45,
-                    "image": "narezka_iz_vesennikh_ovoshchey.jpg"
-                }
-            },
-            "drinks": {
-                "chai_s_sakharom": {
-                    "name_ru": "Чай, сахар",
-                    "name_en": "Tea with Sugar",
-                    "output": "0.2L",
-                    "price": 1.5
-                },
-                "voda_pitevaya": {
-                    "name_ru": "Вода питьевая",
-                    "name_en": "Drinking Water",
-                    "output": "0.5L",
-                    "price": 3
-                },
-                "sok_yabloko": {
-                    "name_ru": "Сок яблоко",
-                    "name_en": "Apple Juice",
-                    "output": "0.2L",
-                    "price": 1.2
-                },
-                "mors_klyukva": {
-                    "name_ru": "Морс клюква",
-                    "name_en": "Cranberry Juice",
-                    "output": "0.2L",
-                    "price": 1.2
-                }
-            },
-            "bread": {
-                "khleb": {
-                    "name_ru": "Хлеб",
-                    "name_en": "Bread",
-                    "output": "0.05kg",
-                    "price": 0.5
-                }
-            }
-        },
-        "sunday": {
-            "salads": {
-                "salat_vinegret": {
-                    "name_ru": "Винегрет",
-                    "name_en": "Vinaigrette Salad",
-                    "ingredients_en": "beets, potatoes, cucumbers, parsley, carrots",
-                    "ingredients_ru": "свекла, картофель, огурец, петрушка, морковь",
-                    "output": "200",
-                    "price": 6.45,
-                    "image": "vinegret.jpg"
-                },
-                "salad_grecheskiy": {
-                    "name_ru": "Салат \"Греческий\"",
-                    "name_en": "Greek Salad",
-                    "ingredients_en": "fresh tomatoes, sweet peppers, fresh cucumbers, canned olives, cheese, dressing, parsley",
-                    "ingredients_ru": "томаты свежие, перец сладкий, огурцы свежие, маслины консервированные, сыр, заправка, петрушка",
-                    "output": "150",
-                    "price": 6.45,
-                    "image": "salad_grecheskiy.jpg"
-                },
-                "salat_is_svezhih_ovoschey": {
-                    "name_ru": "Салат «Из свежих овощей»",
-                    "name_en": "Fresh Vegetable Salad",
-                    "ingredients_en": "tomatoes, fresh cucumbers, greens, sour cream",
-                    "ingredients_ru": "томаты, огурцы свежие, зелень, сметана",
-                    "output": "200",
-                    "price": 6.45,
-                    "image": "salad_fresh_veggies.jpg"
-                },
-                "salad_with_chicken_and_mushrooms": {
-                    "name_ru": "Салат с курицей и грибами",
-                    "name_en": "Chicken and Mushroom Salad",
-                    "ingredients_en": "chicken fillet, pickled cucumbers, pickled mushrooms, canned corn, mayonnaise",
-                    "ingredients_ru": "филе птицы, огурцы консервированные, грибы маринованные, кукуруза консервированная, майонез",
-                    "output": "150",
-                    "price": 6.45,
-                    "image": "salat_s_kuritsey_i_gribami.webp"
-                },
-                "salad_molodezhny": {
-                    "name_ru": "Салат \"Молодежный\"",
-                    "name_en": "Youth Salad",
-                    "ingredients_en": "peking cabbage, ham, canned corn, fresh tomatoes, mayonnaise",
-                    "ingredients_ru": "капуста пекинская, ветчина к/в, кукурузаконсервированная, томаты свежие, майонез",
-                    "output": "150",
-                    "price": 3.45,
-                    "image": "salat_s_pekinskoy_kapustoy_i_vetchinoy.jpg"
-                }
-            },
-            "soups": {
-                "sup_gribnoy": {
-                    "name_ru": "Суп грибной",
-                    "name_en": "Mushroom Soup",
-                    "output": "250",
-                    "price": 5.65,
-                    "image": "sup_gribnoy.jpg"
-                },
-                "rassolnik": {
-                    "name_ru": "Рассольник",
-                    "name_en": "Rassolnik",
-                    "output": "250",
-                    "price": 5.65,
-                    "image": "rassolnik.jpg"
-                }
-            },
-            "hot-dishes": {
-                "svinina_s_gribami": {
-                    "name_ru": "Свинина с грибами",
-                    "name_en": "Pork with Mushrooms",
-                    "output": "120",
-                    "price": 10.6,
-                    "image": "svinina_s_gribami.jpg"
-                },
-                "ryba_v_syire": {
-                    "name_ru": "Филе белой рыбы под сыром",
-                    "name_en": "Fillet of White Fish with Cheese",
-                    "output": "150",
-                    "price": 10.6,
-                    "image": "file_beloy_ryby_pod_syrom.jpg"
-                },
-                "steak_iz_semgi_s_asparzhevoy_fasolyu_i_tomatami_so_slivочным_sousom": {
-                  "name_ru": "Стейк из семги со спажевой фасолью и томатами со сливочным соусом",
-                  "name_en": "Salmon Steak with Asparagus and Tomatoes in Cream Sauce",
-                  "output": "60/100/30/20",
-                  "price": 40.6,
-                  "image": "steyk_iz_semgi_so_sparzhevoy_fasolyu_i_tomatami_so_slivochnym_sousom.jpg"
-                },
-                "kurinye_kolbaski": {
-                    "name_ru": "Куриные колбаски",
-                    "name_en": "Chicken Sausages",
-                    "output": "150",
-                    "price": 8.6,
-                    "image": "kurinye_kolbaski.jpg"
-                }
-            },
-            "side-dishes": {
-                "bread_with_fish": {
-                    "name_ru": "Брускетты с рыбкой",
-                    "name_en": "Bruschetta with Fish",
-                    "ingredients_en": "white bread, cheese, lightly salted salmon, cucumber",
-                    "ingredients_ru": "Белый хлеб, сыр, семга слабосоленая, огурец",
-                    "output": "50g",
-                    "price": 3.60,
-                    "image": "brusketty_s_krasnoy_rybkoy_svezhim_ogurtsom_i_syrom.jpg"
-                },
-                "draniki": {
-                    "name_ru": "Драники",
-                    "name_en": "Potato Pancakes",
-                    "output": "×4/240g",
-                    "price": 10.45,
-                    "image": "draniki.jpg"
-                },
-                "grechnevaya_kasha_s_maslom": {
-                    "name_ru": "Гречка со сливочным маслом",
-                    "name_en": "Buckwheat Porridge with Butter",
-                    "output": "200",
-                    "price": 3.45,
-                    "image": "grechka_so_slivochnym_maslom.webp"
-                },
-                "ovoschi_vesennie": {
-                    "name_ru": "Нарезка из весенних овощей",
-                    "name_en": "Spring Vegetable Medley",
-                    "output": "200",
-                    "price": 6.45,
-                    "image": "narezka_iz_vesennikh_ovoshchey.jpg"
-                }
-            },
-            "drinks": {
-                "chai_s_sakharom": {
-                    "name_ru": "Чай, сахар",
-                    "name_en": "Tea with Sugar",
-                    "output": "0.2L",
-                    "price": 1.5
-                },
-                "voda_pitevaya": {
-                    "name_ru": "Вода питьевая",
-                    "name_en": "Drinking Water",
-                    "output": "0.5L",
-                    "price": 3
-                },
-                "sok_yabloko": {
-                    "name_ru": "Сок яблоко",
-                    "name_en": "Apple Juice",
-                    "output": "0.2L",
-                    "price": 1.2
-                },
-                "mors_klyukva": {
-                    "name_ru": "Морс клюква",
-                    "name_en": "Cranberry Juice",
-                    "output": "0.2L",
-                    "price": 1.2
-                }
-            },
-            "bread": {
-                "khleb": {
-                    "name_ru": "Хлеб",
-                    "name_en": "Bread",
-                    "output": "0.05kg",
-                    "price": 0.5
-                }
-            }
-        }
+  "category_labels": {
+    "salads": {"ru": "Салаты", "en": "Salads"},
+    "soups": {"ru": "Супы", "en": "Soups"},
+    "hot-dishes": {"ru": "Горячие блюда", "en": "Hot dishes"},
+    "side-dishes": {"ru": "Гарниры", "en": "Side dishes"},
+    "drinks": {"ru": "Напитки", "en": "Drinks"}
+  },
+  "content_icons": {
+    "vegetarian": {"icon": "🌱", "ru": "без мяса", "en": "vegetarian"},
+    "vegetables": {"icon": "🥦", "ru": "овощи", "en": "vegetables"},
+    "potato": {"icon": "🥔", "ru": "картофель", "en": "potato"},
+    "rice": {"icon": "🍚", "ru": "рис", "en": "rice"},
+    "mushrooms": {"icon": "🍄", "ru": "грибы", "en": "mushrooms"},
+    "meat": {"icon": "🥩", "ru": "мясо", "en": "meat"},
+    "chicken": {"icon": "🐔", "ru": "курица", "en": "chicken"},
+    "pork": {"icon": "🐷", "ru": "свинина", "en": "pork"},
+    "fish": {"icon": "🐟", "ru": "рыба", "en": "fish"},
+    "dairy": {"icon": "🥛", "ru": "молочное", "en": "dairy"},
+    "egg": {"icon": "🥚", "ru": "яйцо", "en": "egg"},
+    "mayonnaise": {"icon": "🫙", "ru": "майонез", "en": "mayonnaise"},
+    "gluten": {"icon": "🌾", "ru": "глютен", "en": "gluten"},
+    "gluten_possible": {"icon": "🌾?", "ru": "возможен глютен", "en": "may contain gluten"},
+    "unknown_broth": {"icon": "🥣?", "ru": "состав бульона уточняется", "en": "broth ingredients to be confirmed"},
+    "juice": {"icon": "🍊🍎", "ru": "апельсин или яблоко", "en": "orange or apple"},
+    "cranberry": {"icon": "🫐", "ru": "клюква", "en": "cranberry"},
+    "tea": {"icon": "🍵", "ru": "чай", "en": "tea"},
+    "sugar": {"icon": "🍬", "ru": "сахар", "en": "sugar"},
+    "premium": {"icon": "💎", "ru": "премиум", "en": "premium"}
+  },
+  "service_items": {
+    "soup_container": {"kind": "container", "icon": "🥣", "name_ru": "Супница с крышкой", "name_en": "Soup container with lid", "price": 1.5},
+    "hot_container": {"kind": "container", "icon": "🍱", "name_ru": "Контейнер для горячего", "name_en": "Hot food container", "price": 1.5},
+    "salad_container": {"kind": "container", "icon": "🥗", "name_ru": "Контейнер для салата", "name_en": "Salad container", "price": 1.5},
+    "spoon": {"kind": "utensil", "icon": "🥄", "name_ru": "Ложка", "name_en": "Spoon", "price": 0.3},
+    "fork": {"kind": "utensil", "icon": "🍴", "name_ru": "Вилка", "name_en": "Fork", "price": 0.3},
+    "knife": {"kind": "utensil", "icon": "🔪", "name_ru": "Нож", "name_en": "Knife", "price": 0.3}
+  },
+  "dishes": {
+    "caesar": {"name_ru": "Цезарь", "name_en": "Caesar Salad", "output": "≈170 г", "price": 10, "contents": ["chicken", "dairy", "gluten"], "service": ["salad_container", "fork"], "image": "salat_tsezar.jpg"},
+    "greek": {"name_ru": "Греческий", "name_en": "Greek Salad", "output": "≈200 г", "price": 7, "contents": ["vegetarian", "dairy"], "service": ["salad_container", "fork"], "image": "salad_grecheskiy.jpg"},
+    "vinaigrette": {"name_ru": "Винегрет", "name_en": "Vinaigrette Salad", "output": "≈200 г", "price": 6, "contents": ["vegetarian", "vegetables", "potato"], "service": ["salad_container", "fork"], "image": "vinegret.jpg"},
+    "white_dew": {"name_ru": "Белые росы", "name_en": "White Dew Salad", "output": "≈150 г", "price": 7, "contents": ["chicken", "pork", "egg", "mayonnaise"], "service": ["salad_container", "fork"], "image": "salat_belye_rosy.jpg"},
+    "paparats_kvetka": {"name_ru": "Папараць-кветка", "name_en": "Paparats Kvetka Salad", "output": "≈150 г", "price": 7, "contents": ["pork", "chicken", "mayonnaise"], "service": ["salad_container", "fork"]},
+    "vegetable_salad": {"name_ru": "Овощной", "name_en": "Vegetable Salad", "output": "≈150 г", "price": 6, "contents": ["vegetarian", "vegetables"], "service": ["salad_container", "fork"], "image": "salat_iz_svezhikh_ovoshchey.webp"},
+    "olivier": {"name_ru": "Оливье", "name_en": "Olivier Salad", "output": "≈150 г", "price": 7, "contents": ["pork", "chicken", "egg", "mayonnaise"], "service": ["salad_container", "fork"]},
+    "original_salad": {"name_ru": "Оригинальный", "name_en": "Original Salad", "output": "≈150 г", "price": 7, "contents": ["chicken", "mushrooms", "mayonnaise"], "service": ["salad_container", "fork"], "image": "salat_s_kuritsey_i_gribami.webp"},
+    "solyanka": {"name_ru": "Солянка", "name_en": "Solyanka", "output": "≈270 г", "price": 7, "contents": ["meat"], "service": ["soup_container", "spoon"]},
+    "pearl_barley_mushroom_soup": {"name_ru": "Перловый суп с грибами", "name_en": "Pearl Barley Mushroom Soup", "output": "≈260 г", "price": 3, "contents": ["mushrooms", "unknown_broth"], "service": ["soup_container", "spoon"], "image": "sup_gribnoy.jpg"},
+    "borscht_meat": {"name_ru": "Борщ с мясом", "name_en": "Borscht with Meat", "output": "≈270 г", "price": 4, "contents": ["meat"], "service": ["soup_container", "spoon"], "image": "borshch.jpg"},
+    "rassolnik": {"name_ru": "Рассольник", "name_en": "Rassolnik", "output": "≈250 г", "price": 4, "contents": ["unknown_broth"], "service": ["soup_container", "spoon"], "image": "rassolnik.jpg"},
+    "potato_rice_meat_soup": {"name_ru": "Картофельный суп с рисом и мясом", "name_en": "Potato and Rice Soup with Meat", "output": "≈250 г", "price": 3, "contents": ["meat", "potato", "rice"], "service": ["soup_container", "spoon"]},
+    "shchi_meat": {"name_ru": "Щи с мясом", "name_en": "Cabbage Soup with Meat", "output": "≈270 г", "price": 4, "contents": ["meat"], "service": ["soup_container", "spoon"]},
+    "pork_baked_mushrooms": {"name_ru": "Свинина, запечённая с грибами", "name_en": "Baked Pork with Mushrooms", "output": "120 г", "price": 12, "contents": ["pork", "mushrooms"], "service": ["hot_container", "fork", "knife"], "image": "svinina_s_gribami.jpg"},
+    "poultry_tomato": {"name_ru": "Филе птицы, запечённое с томатом", "name_en": "Baked Chicken Fillet with Tomato", "output": "110 г", "price": 10, "contents": ["chicken"], "service": ["hot_container", "fork", "knife"], "image": "kurinoe_file_s_pomidorami.jpg"},
+    "fish_cheese": {"name_ru": "Рыба в сыре", "name_en": "Fish with Cheese", "output": "150 г", "price": 10, "contents": ["fish", "dairy"], "service": ["hot_container", "fork", "knife"], "image": "file_beloy_ryby_pod_syrom.jpg"},
+    "pork_steak": {"name_ru": "Стейк из свинины", "name_en": "Pork Steak", "output": "≈210 г", "price": 17, "contents": ["pork"], "service": ["hot_container", "fork", "knife"]},
+    "buckwheat_vegetables": {"name_ru": "Гречка с овощами (морковь, лук, перец)", "name_en": "Buckwheat with Vegetables", "output": "300 г", "price": 10, "contents": ["vegetarian", "vegetables"], "service": ["hot_container", "fork"]},
+    "pasta_mushrooms_cheese": {"name_ru": "Макароны с шампиньонами и сыром", "name_en": "Pasta with Mushrooms and Cheese", "output": "300 г", "price": 10, "contents": ["vegetarian", "mushrooms", "dairy", "gluten"], "service": ["hot_container", "fork"]},
+    "chicken_rolls_bacon": {"name_ru": "Куриные рулетики в беконе", "name_en": "Chicken Rolls in Bacon", "output": "145 г", "price": 10, "contents": ["chicken", "pork"], "service": ["hot_container", "fork", "knife"]},
+    "pork_sausage": {"name_ru": "Колбаса свиная жареная", "name_en": "Fried Pork Sausage", "output": "250 г", "price": 10, "contents": ["pork"], "service": ["hot_container", "fork", "knife"]},
+    "fish_vegetables": {"name_ru": "Рыба с овощами", "name_en": "Fish with Vegetables", "output": "≈175 г", "price": 10, "contents": ["fish", "vegetables"], "service": ["hot_container", "fork", "knife"]},
+    "chicken_schnitzel": {"name_ru": "Шницель куриный", "name_en": "Chicken Schnitzel", "output": "120 г", "price": 10, "contents": ["chicken", "gluten_possible"], "service": ["hot_container", "fork", "knife"], "image": "shnitsel_iz_kurinoy_grudki.jpg"},
+    "trout_steak_cream": {"name_ru": "Стейк из форели со сливочным соусом", "name_en": "Trout Steak with Cream Sauce", "output": "160 г", "price": 35, "contents": ["fish", "dairy", "premium"], "service": ["hot_container", "fork", "knife"]},
+    "chicken_pineapple": {"name_ru": "Куриное филе с ананасом", "name_en": "Chicken Fillet with Pineapple", "output": "220 г", "price": 14, "contents": ["chicken"], "service": ["hot_container", "fork", "knife"]},
+    "pork_schnitzel": {"name_ru": "Шницель из свинины", "name_en": "Pork Schnitzel", "output": "130 г", "price": 10, "contents": ["pork", "gluten_possible"], "service": ["hot_container", "fork", "knife"]},
+    "chicken_sausage": {"name_ru": "Колбаса куриная жареная", "name_en": "Fried Chicken Sausage", "output": "250 г", "price": 10, "contents": ["chicken"], "service": ["hot_container", "fork", "knife"], "image": "kurinye_kolbaski.jpg"},
+    "draniki": {"name_ru": "Драники (4 шт.) со сметаной и зеленью", "name_en": "Potato Pancakes with Sour Cream and Herbs (4 pcs)", "output": "4 шт. / ≈260 г", "price": 10, "contents": ["vegetarian", "potato", "dairy"], "service": ["hot_container", "fork"], "image": "draniki.jpg"},
+    "potato_wedges": {"name_ru": "Картофельные дольки", "name_en": "Potato Wedges", "output": "≈190 г", "price": 7, "contents": ["potato"], "service": ["hot_container", "fork"]},
+    "spring_vegetables": {"name_ru": "Овощи весенние", "name_en": "Spring Vegetables", "output": "≈220 г", "price": 7, "contents": ["vegetables"], "service": ["hot_container", "fork"]},
+    "rice_butter": {"name_ru": "Рис с маслом", "name_en": "Rice with Butter", "output": "≈185 г", "price": 3, "contents": ["vegetarian", "rice", "dairy"], "service": ["hot_container", "fork"]},
+    "buckwheat_butter": {"name_ru": "Гречневая каша с маслом", "name_en": "Buckwheat Porridge with Butter", "output": "≈185 г", "price": 3, "contents": ["vegetarian", "dairy"], "service": ["hot_container", "fork"], "image": "grechka_so_slivochnym_maslom.webp"},
+    "orange_apple_juice": {"name_ru": "Сок: апельсиновый / яблочный", "name_en": "Orange / Apple Juice", "output": "200 мл", "price": 2, "contents": ["juice"], "service": []},
+    "cranberry_drink": {"name_ru": "Морс клюквенный", "name_en": "Cranberry Drink", "output": "200 мл", "price": 2, "contents": ["cranberry"], "service": []},
+    "tea_sugar": {"name_ru": "Чай с сахаром", "name_en": "Tea with Sugar", "output": "200 мл", "price": 1.5, "contents": ["tea", "sugar"], "service": []}
+  },
+  "choices": {
+    "friday": {"dinner": {
+      "salads": ["caesar", "greek", "vinaigrette"],
+      "soups": ["solyanka", "pearl_barley_mushroom_soup", "borscht_meat"],
+      "hot-dishes": ["pork_baked_mushrooms", "poultry_tomato", "fish_cheese", "pork_steak", "buckwheat_vegetables", "pasta_mushrooms_cheese"],
+      "side-dishes": ["potato_wedges", "spring_vegetables", "rice_butter"],
+      "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+    }},
+    "saturday": {
+      "lunch": {
+        "salads": ["white_dew", "paparats_kvetka", "vegetable_salad", "greek"],
+        "soups": ["solyanka", "rassolnik", "potato_rice_meat_soup"],
+        "hot-dishes": ["chicken_rolls_bacon", "pork_sausage", "fish_vegetables", "chicken_schnitzel", "buckwheat_vegetables", "draniki"],
+        "side-dishes": ["rice_butter", "buckwheat_butter", "spring_vegetables"],
+        "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+      },
+      "dinner": {
+        "salads": ["olivier", "vegetable_salad", "caesar"],
+        "soups": ["shchi_meat", "pearl_barley_mushroom_soup", "solyanka"],
+        "hot-dishes": ["trout_steak_cream", "chicken_pineapple", "pork_schnitzel", "chicken_sausage", "pasta_mushrooms_cheese", "draniki"],
+        "side-dishes": ["spring_vegetables", "buckwheat_butter", "rice_butter"],
+        "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+      }
+    },
+    "sunday": {
+      "lunch": {
+        "salads": ["paparats_kvetka", "white_dew", "vinaigrette", "vegetable_salad"],
+        "soups": ["borscht_meat", "rassolnik", "potato_rice_meat_soup"],
+        "hot-dishes": ["chicken_pineapple", "pork_baked_mushrooms", "fish_cheese", "pork_sausage", "buckwheat_vegetables", "pasta_mushrooms_cheese"],
+        "side-dishes": ["buckwheat_butter", "rice_butter", "spring_vegetables"],
+        "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+      },
+      "dinner": {
+        "salads": ["caesar", "original_salad", "greek"],
+        "soups": ["pearl_barley_mushroom_soup", "borscht_meat", "shchi_meat"],
+        "hot-dishes": ["pork_schnitzel", "poultry_tomato", "fish_vegetables", "chicken_rolls_bacon", "buckwheat_vegetables", "draniki"],
+        "side-dishes": ["spring_vegetables", "potato_wedges", "rice_butter"],
+        "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+      }
     }
+  }
 }
