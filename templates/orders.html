@@ -11,6 +11,8 @@
             const validity_error_last_name = {% raw json_encode(validity_error_last_name) %};
             const shuttle_available = {% raw json_encode(shuttle_available) %};
             const shuttle_full_error = {% raw json_encode(shuttle_full_error) %};
+            const grodno_excursion_availability = {% raw json_encode(grodno_excursion_availability) %};
+            const grodno_excursion_full_errors = {% raw json_encode(grodno_excursion_full_errors) %};
         </script>
         <title>Zouk Non Stop orders</title>
         <meta charset="utf-8">
@@ -58,12 +60,58 @@
                 60 BYN
                 <input type="checkbox" name="shuttle_bus">
             </label>
-            <label>
+            <label class="grodno-excursion-toggle">
                 <span lang="ru">Экскурсия по Гродно</span>
                 <span lang="en">Grodno excursion</span>
                 25 BYN
                 <input type="checkbox" name="excursion_grodno">
             </label>
+            <div class="grodno-excursion-options" hidden>
+                <fieldset>
+                    <legend>
+                        <span lang="ru">Выбери экскурсию в Гродно</span>
+                        <span lang="en">Choose a Grodno excursion</span>
+                    </legend>
+                    <label data-excursion-service="excursion_grodno_overview">
+                        <input type="radio" name="grodno_excursion_variant" value="excursion_grodno_overview">
+                        <span class="excursion-copy">
+                            <strong>
+                                <span lang="ru">Обзорная экскурсия</span>
+                                <span lang="en">Grodno highlights tour</span>
+                            </strong>
+                            <span lang="ru">Для тех, кто впервые в Гродно. Маршрут проходит по самым знаковым местам исторического центра: Замки королей, Фарный костёл, Советская площадь с многовековой историей и Борисоглебская церковь — древнейший православный храм XII века, занесённый в Список объектов Всемирного наследия ЮНЕСКО.</span>
+                            <span lang="en">For first-time visitors. The route covers the main sights of the historic centre: the Royal Castles, the Farny Church, historic Sovetskaya Square and the 12th-century Borisoglebskaya Church.</span>
+                            <span class="excursion-details">
+                                <span lang="ru">2 часа · 25 BYN с человека · группа 10–20 человек</span>
+                                <span lang="en">2 hours · 25 BYN per person · group of 10–20</span>
+                            </span>
+                            <span class="excursion-sold-out" hidden>
+                                <span lang="ru">Мест нет</span>
+                                <span lang="en">Sold out</span>
+                            </span>
+                        </span>
+                    </label>
+                    <label data-excursion-service="excursion_grodno_gorodnitsa">
+                        <input type="radio" name="grodno_excursion_variant" value="excursion_grodno_gorodnitsa">
+                        <span class="excursion-copy">
+                            <strong>
+                                <span lang="ru">Экскурсия «Городница»</span>
+                                <span lang="en">Gorodnitsa tour</span>
+                            </strong>
+                            <span lang="ru">Для тех, кто уже бывал в Гродно. Пройдём по дворикам и улицам XVIII века, Швейцарской долине и территории первого Ботанического сада в Беларуси, увидим Кафедральный собор и единственную действующую в стране неоготическую лютеранскую кирху.</span>
+                            <span lang="en">For returning visitors. We will explore 18th-century courtyards and streets, the Swiss Valley and the site of Belarus's first Botanical Garden, as well as the Cathedral and the country's only active Neo-Gothic Lutheran church.</span>
+                            <span class="excursion-details">
+                                <span lang="ru">2 часа · 25 BYN с человека · группа 10–25 человек</span>
+                                <span lang="en">2 hours · 25 BYN per person · group of 10–25</span>
+                            </span>
+                            <span class="excursion-sold-out" hidden>
+                                <span lang="ru">Мест нет</span>
+                                <span lang="en">Sold out</span>
+                            </span>
+                        </span>
+                    </label>
+                </fieldset>
+            </div>
             <span lang="ru">Выбор еды будет далее.</span>
             <span lang="en">Food selection will follow.</span>
         </section>

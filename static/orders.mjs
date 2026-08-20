@@ -5,12 +5,15 @@ const EXTRA_PRICES = {
     excursion_minsk: 25,
     shuttle: 60,
     excursion_grodno: 25,
+    excursion_grodno_overview: 25,
+    excursion_grodno_gorodnitsa: 25,
 };
 const BYN_TO_RUB = 30;
 
 let menuData = null;
 let activeContentIcon = null;
 let orderSubmissionPending = false;
+let legacyGrodnoExcursion = false;
 
 function currentLanguage() {
     return document.documentElement.lang.toLowerCase().startsWith("en") ? "en" : "ru";
@@ -257,7 +260,6 @@ function collectOrdersWithExtras() {
         ["preparty", "preparty"],
         ["excursion_minsk", "excursion_minsk"],
         ["shuttle_bus", "shuttle"],
-        ["excursion_grodno", "excursion_grodno"],
     ];
     for (const [inputName, orderKey] of extras) {
         if (document.querySelector(`.excursions input[name="${inputName}"]`).checked) {
@@ -266,6 +268,21 @@ function collectOrdersWithExtras() {
             orders.extras.total += price;
             orders.total += price;
         }
+    }
+
+    const grodnoToggle = document.querySelector('.excursions input[name="excursion_grodno"]');
+    const grodnoVariant = document.querySelector('.excursions input[name="grodno_excursion_variant"]:checked');
+    if (grodnoToggle.checked && grodnoVariant) {
+        const orderKey = grodnoVariant.value;
+        const price = EXTRA_PRICES[orderKey];
+        orders.extras[orderKey] = price;
+        orders.extras.total += price;
+        orders.total += price;
+    } else if (grodnoToggle.checked && legacyGrodnoExcursion) {
+        const price = EXTRA_PRICES.excursion_grodno;
+        orders.extras.excursion_grodno = price;
+        orders.extras.total += price;
+        orders.total += price;
     }
 
     return orders;
@@ -342,7 +359,14 @@ function fillInOrders(orders) {
     document.querySelector('.excursions input[name="preparty"]').checked = "preparty" in extras;
     document.querySelector('.excursions input[name="excursion_minsk"]').checked = "excursion_minsk" in extras;
     document.querySelector('.excursions input[name="shuttle_bus"]').checked = "shuttle" in extras;
-    document.querySelector('.excursions input[name="excursion_grodno"]').checked = "excursion_grodno" in extras;
+    const grodnoServices = ["excursion_grodno_overview", "excursion_grodno_gorodnitsa"];
+    const grodnoToggle = document.querySelector('.excursions input[name="excursion_grodno"]');
+    legacyGrodnoExcursion = "excursion_grodno" in extras;
+    grodnoToggle.checked = legacyGrodnoExcursion || grodnoServices.some(service => service in extras);
+    for (const service of grodnoServices) {
+        document.querySelector(`.excursions input[name="grodno_excursion_variant"][value="${service}"]`).checked = service in extras;
+    }
+    syncGrodnoExcursionChoice();
 }
 
 function setReadOnly() {
@@ -414,6 +438,48 @@ function hideShuttleOption() {
     refreshOrderPreview();
 }
 
+function syncGrodnoExcursionChoice() {
+    const toggle = document.querySelector('.excursions input[name="excursion_grodno"]');
+    const options = document.querySelector(".grodno-excursion-options");
+    const radios = options.querySelectorAll('input[name="grodno_excursion_variant"]');
+    options.hidden = !toggle.checked;
+    for (const radio of radios) radio.required = toggle.checked;
+    if (!toggle.checked) {
+        for (const radio of radios) radio.checked = false;
+    }
+}
+
+function setGrodnoExcursionAvailability() {
+    const services = ["excursion_grodno_overview", "excursion_grodno_gorodnitsa"];
+    for (const service of services) {
+        if (grodno_excursion_availability[service] !== false) continue;
+        const label = document.querySelector(`[data-excursion-service="${service}"]`);
+        const radio = label.querySelector('input[name="grodno_excursion_variant"]');
+        radio.disabled = true;
+        label.classList.add("unavailable");
+        label.querySelector(".excursion-sold-out").hidden = false;
+    }
+    const toggle = document.querySelector('.excursions input[name="excursion_grodno"]');
+    const hasAvailableVariant = services.some(service => grodno_excursion_availability[service] !== false);
+    if (!hasAvailableVariant && !toggle.checked) toggle.disabled = true;
+}
+
+function markGrodnoExcursionFull(service) {
+    grodno_excursion_availability[service] = false;
+    const radio = document.querySelector(`input[name="grodno_excursion_variant"][value="${service}"]`);
+    radio.checked = false;
+    setGrodnoExcursionAvailability();
+    const hasAvailableVariant = [...document.querySelectorAll('input[name="grodno_excursion_variant"]')]
+        .some(input => !input.disabled);
+    if (!hasAvailableVariant) {
+        document.querySelector('input[name="excursion_grodno"]').checked = false;
+        syncGrodnoExcursionChoice();
+    }
+    refreshOrderPreview();
+    currentIndex = [...sections].indexOf(document.querySelector("section.excursions"));
+    updateSections();
+}
+
 function showUserAlert(message) {
     if (typeof Telegram.WebApp.showAlert === "function") {
         Telegram.WebApp.showAlert(message);
@@ -439,6 +505,11 @@ async function submitOrder() {
             if (result.error === "shuttle_full") {
                 hideShuttleOption();
                 showUserAlert(shuttle_full_error);
+                return;
+            }
+            if (result.error === "capacity_full" && result.service in grodno_excursion_full_errors) {
+                markGrodnoExcursionFull(result.service);
+                showUserAlert(grodno_excursion_full_errors[result.service]);
                 return;
             }
         }
@@ -508,7 +579,16 @@ Telegram.WebApp.BackButton.onClick(backButtonClick);
 Telegram.WebApp.BackButton.show();
 window.mainButtonClick = mainButtonClick;
 window.backButtonClick = backButtonClick;
-document.body.addEventListener("change", refreshOrderPreview);
+document.body.addEventListener("change", event => {
+    if (event.target.matches('input[name="excursion_grodno"]')) {
+        if (!event.target.checked) legacyGrodnoExcursion = false;
+        syncGrodnoExcursionChoice();
+    }
+    if (event.target.matches('input[name="grodno_excursion_variant"]')) {
+        legacyGrodnoExcursion = false;
+    }
+    refreshOrderPreview();
+});
 document.body.addEventListener("click", closeContentCaption);
 updateSections();
 setReadOnly();
@@ -522,6 +602,7 @@ fetch("static/menu_belarus.json")
         menuData = menu;
         fillAllSections();
         fillInOrders(user_order);
+        setGrodnoExcursionAvailability();
         if (!shuttle_available) hideShuttleOption();
         refreshOrderPreview();
     })

@@ -38,17 +38,60 @@ logger = logging.getLogger(__name__)
 BYN_TO_RUB = 30
 SHUTTLE_CAPACITY = 43
 SHUTTLE_SERVICE = "shuttle"
+GRODNO_OVERVIEW_SERVICE = "excursion_grodno_overview"
+GRODNO_GORODNITSA_SERVICE = "excursion_grodno_gorodnitsa"
+CAPACITY_LIMITS = {
+    SHUTTLE_SERVICE: SHUTTLE_CAPACITY,
+    GRODNO_OVERVIEW_SERVICE: 20,
+    GRODNO_GORODNITSA_SERVICE: 25,
+}
 
 DEADLINE=datetime.datetime(2026, 9, 19, 0, 0, 0)
 
 
-class ShuttleFullError(Exception):
+class CapacityFullError(Exception):
+    def __init__(self, service):
+        super().__init__(f"capacity is full for {service}")
+        self.service = service
+
+
+class ShuttleFullError(CapacityFullError):
+    def __init__(self):
+        super().__init__(SHUTTLE_SERVICE)
+
+
+class InvalidExcursionChoiceError(ValueError):
     pass
 
 
 def choice_has_shuttle(choice):
     extras = choice.get("extras", {}) if isinstance(choice, dict) else {}
     return isinstance(extras, dict) and SHUTTLE_SERVICE in extras
+
+
+def choice_capacity_services(choice):
+    extras = choice.get("extras", {}) if isinstance(choice, dict) else {}
+    if not isinstance(extras, dict):
+        return set()
+    return {service for service in CAPACITY_LIMITS if service in extras}
+
+
+def validate_excursion_choice(choice):
+    extras = choice.get("extras", {}) if isinstance(choice, dict) else {}
+    if not isinstance(extras, dict):
+        raise InvalidExcursionChoiceError("extras must be an object")
+    selected = {
+        service for service in (GRODNO_OVERVIEW_SERVICE, GRODNO_GORODNITSA_SERVICE)
+        if service in extras
+    }
+    if "excursion_grodno" in extras or len(selected) > 1:
+        raise InvalidExcursionChoiceError("select exactly one Grodno excursion variant")
+
+
+def capacity_full_error(service):
+    if service == SHUTTLE_SERVICE:
+        return ShuttleFullError()
+    return CapacityFullError(service)
 
 class OrdersUpdate:
     base: 'Orders'
@@ -75,12 +118,15 @@ class OrdersUpdate:
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
             )
+        validate_excursion_choice(choice)
         order_id = ObjectId()
-        shuttle_reserved = False
-        if choice_has_shuttle(choice):
-            shuttle_reserved = await self.base.reserve_shuttle_seat(order_id)
-            if not shuttle_reserved:
-                raise ShuttleFullError()
+        reserved_services = []
+        for service in sorted(choice_capacity_services(choice)):
+            if not await self.base.reserve_service_seat(service, order_id):
+                for reserved_service in reserved_services:
+                    await self.base.release_service_seat(reserved_service, order_id)
+                raise capacity_full_error(service)
+            reserved_services.append(service)
         try:
             await self.base.food_db.insert_one({
                 "_id": order_id,
@@ -90,8 +136,8 @@ class OrdersUpdate:
                 "choice": choice,
             })
         except Exception:
-            if shuttle_reserved:
-                await self.base.release_shuttle_seat(order_id)
+            for service in reserved_services:
+                await self.base.release_service_seat(service, order_id)
             raise
         return await self.handle_cq_start()
 
@@ -103,17 +149,20 @@ class OrdersUpdate:
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
             )
+        validate_excursion_choice(choice)
         order_oid = ObjectId(order_id)
         previous_order = await self.base.food_db.find_one({"_id": order_oid})
-        previous_has_shuttle = choice_has_shuttle(
+        previous_services = choice_capacity_services(
             previous_order.get("choice", {}) if previous_order else {}
         )
-        next_has_shuttle = choice_has_shuttle(choice)
-        shuttle_reserved = False
-        if next_has_shuttle and not previous_has_shuttle:
-            shuttle_reserved = await self.base.reserve_shuttle_seat(order_oid)
-            if not shuttle_reserved:
-                raise ShuttleFullError()
+        next_services = choice_capacity_services(choice)
+        reserved_services = []
+        for service in sorted(next_services - previous_services):
+            if not await self.base.reserve_service_seat(service, order_oid):
+                for reserved_service in reserved_services:
+                    await self.base.release_service_seat(reserved_service, order_oid)
+                raise capacity_full_error(service)
+            reserved_services.append(service)
         try:
             result = await self.base.food_db.update_one({
                 "_id": order_oid,
@@ -126,11 +175,11 @@ class OrdersUpdate:
             if result.matched_count == 0:
                 raise ValueError(f"order {order_id} not found")
         except Exception:
-            if shuttle_reserved:
-                await self.base.release_shuttle_seat(order_oid)
+            for service in reserved_services:
+                await self.base.release_service_seat(service, order_oid)
             raise
-        if previous_has_shuttle and not next_has_shuttle:
-            await self.base.release_shuttle_seat(order_oid)
+        for service in previous_services - next_services:
+            await self.base.release_service_seat(service, order_oid)
         return await self.handle_cq_start()
 
     async def handle_cq_del(self, order_id):
@@ -141,8 +190,8 @@ class OrdersUpdate:
         if "proof_file" in order:
             return await self.handle_cq_start()
         await self.base.food_db.delete_one({"_id": ObjectId(order_id)})
-        if choice_has_shuttle(order.get("choice", {})):
-            await self.base.release_shuttle_seat(order["_id"])
+        for service in choice_capacity_services(order.get("choice", {})):
+            await self.base.release_service_seat(service, order["_id"])
         return await self.handle_cq_start()
 
     def get_order_total(self, order):
@@ -578,7 +627,9 @@ class OrdersUpdate:
             ("extras_preparty", "Препати"),
             ("extras_excursion_minsk", "Экскурсия Минск"),
             ("extras_shuttle", "Трансфер"),
-            ("extras_excursion_grodno", "Экскурсия Гродно"),
+            ("extras_excursion_grodno_overview", "Гродно: обзорная"),
+            ("extras_excursion_grodno_gorodnitsa", "Гродно: Городница"),
+            ("extras_excursion_grodno", "Гродно: вариант не указан"),
         ]
         header = (
             [ru for _k, ru in base_fields]
@@ -593,7 +644,14 @@ class OrdersUpdate:
             cell.alignment = center
         totals = {k: {"count":0,"sum":0} for k in dish_keys}
         service_totals = {k: {"count":0,"sum":0} for k in service_keys}
-        extras_totals = {"preparty":0,"excursion_minsk":0,"shuttle":0,"excursion_grodno":0}
+        extras_totals = {
+            "preparty": 0,
+            "excursion_minsk": 0,
+            "shuttle": 0,
+            GRODNO_OVERVIEW_SERVICE: 0,
+            GRODNO_GORODNITSA_SERVICE: 0,
+            "excursion_grodno": 0,
+        }
         # Second sheet with detailed contents
         ws_details = wb.create_sheet("Содержимое")
         ws_details.append(["Пользователь","ID заказа","Клиент","День","Приём пищи","Блюдо / Активность","Оплата","Количество"])
@@ -606,7 +664,9 @@ class OrdersUpdate:
             "preparty":"Препати",
             "excursion_minsk":"Экскурсия по Минску",
             "shuttle":"Трансфер Минск–Гродно",
-            "excursion_grodno":"Экскурсия по Гродно",
+            GRODNO_OVERVIEW_SERVICE: "Гродно: обзорная экскурсия",
+            GRODNO_GORODNITSA_SERVICE: "Гродно: экскурсия «Городница»",
+            "excursion_grodno":"Экскурсия по Гродно (вариант не указан)",
         }
         async for order in self.base.food_db.find({"event_number": self.config.event_number}):
             choice = order.get("choice", {})
@@ -683,6 +743,8 @@ class OrdersUpdate:
                 1 if "preparty" in extras else 0,
                 1 if "excursion_minsk" in extras else 0,
                 1 if "shuttle" in extras else 0,
+                1 if GRODNO_OVERVIEW_SERVICE in extras else 0,
+                1 if GRODNO_GORODNITSA_SERVICE in extras else 0,
                 1 if "excursion_grodno" in extras else 0,
             ] + [dish_counts[k] for k in dish_keys] + [service_counts[k] for k in service_keys]
             ws.append(row)
@@ -760,22 +822,24 @@ class Orders(BasePlugin):
         self.capacity_db = base_app.mongodb[
             self.config.mongo_db.food_collection + "_capacity"
         ]
-        self._shuttle_slots_ready = set()
-        self._shuttle_slots_lock = asyncio.Lock()
+        self._capacity_slots_ready = set()
+        self._capacity_slots_lock = asyncio.Lock()
         self._checker = CommandHandler(self.name, self.handle_start)
         self._file_checker = MessageHandler(filters.Document.PDF, self.handle_payment)
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self.menu = self.get_menu()
 
-    def _shuttle_event_number(self):
+    def _capacity_event_number(self):
         return self.config.event_number
 
-    async def _ensure_shuttle_slots(self):
-        event_number = self._shuttle_event_number()
-        if event_number in self._shuttle_slots_ready:
+    async def _ensure_capacity_slots(self, service):
+        capacity = CAPACITY_LIMITS[service]
+        event_number = self._capacity_event_number()
+        ready_key = (event_number, service)
+        if ready_key in self._capacity_slots_ready:
             return
-        async with self._shuttle_slots_lock:
-            if event_number in self._shuttle_slots_ready:
+        async with self._capacity_slots_lock:
+            if ready_key in self._capacity_slots_ready:
                 return
 
             await self.capacity_db.create_index(
@@ -787,12 +851,12 @@ class Orders(BasePlugin):
                 unique=True,
                 partialFilterExpression={"reservation_id": {"$exists": True}},
             )
-            for seat in range(SHUTTLE_CAPACITY):
+            for seat in range(capacity):
                 await self.capacity_db.update_one(
-                    {"_id": f"{event_number}:{SHUTTLE_SERVICE}:{seat}"},
+                    {"_id": f"{event_number}:{service}:{seat}"},
                     {"$setOnInsert": {
                         "event_number": event_number,
-                        "service": SHUTTLE_SERVICE,
+                        "service": service,
                         "seat": seat,
                     }},
                     upsert=True,
@@ -801,7 +865,7 @@ class Orders(BasePlugin):
             existing_orders = await self.food_db.find(
                 {
                     "event_number": event_number,
-                    "choice.extras.shuttle": {"$exists": True},
+                    f"choice.extras.{service}": {"$exists": True},
                 },
                 {"_id": 1},
             ).to_list(None)
@@ -809,7 +873,7 @@ class Orders(BasePlugin):
             reserved_slots = await self.capacity_db.find(
                 {
                     "event_number": event_number,
-                    "service": SHUTTLE_SERVICE,
+                    "service": service,
                     "reservation_id": {"$exists": True},
                 },
                 {"reservation_id": 1},
@@ -833,7 +897,7 @@ class Orders(BasePlugin):
                 await self.capacity_db.find_one_and_update(
                     {
                         "event_number": event_number,
-                        "service": SHUTTLE_SERVICE,
+                        "service": service,
                         "reservation_id": {"$exists": False},
                     },
                     {"$set": {
@@ -843,14 +907,14 @@ class Orders(BasePlugin):
                     sort=[("seat", 1)],
                 )
 
-            self._shuttle_slots_ready.add(event_number)
+            self._capacity_slots_ready.add(ready_key)
 
-    async def reserve_shuttle_seat(self, order_id):
-        await self._ensure_shuttle_slots()
-        event_number = self._shuttle_event_number()
+    async def reserve_service_seat(self, service, order_id):
+        await self._ensure_capacity_slots(service)
+        event_number = self._capacity_event_number()
         existing = await self.capacity_db.find_one({
             "event_number": event_number,
-            "service": SHUTTLE_SERVICE,
+            "service": service,
             "reservation_id": order_id,
         })
         if existing is not None:
@@ -859,7 +923,7 @@ class Orders(BasePlugin):
             claimed = await self.capacity_db.find_one_and_update(
                 {
                     "event_number": event_number,
-                    "service": SHUTTLE_SERVICE,
+                    "service": service,
                     "reservation_id": {"$exists": False},
                 },
                 {"$set": {
@@ -872,32 +936,41 @@ class Orders(BasePlugin):
             # A concurrent request may have reserved another slot for this order.
             claimed = await self.capacity_db.find_one({
                 "event_number": event_number,
-                "service": SHUTTLE_SERVICE,
+                "service": service,
                 "reservation_id": order_id,
             })
         return claimed is not None
 
-    async def release_shuttle_seat(self, order_id):
-        await self._ensure_shuttle_slots()
+    async def release_service_seat(self, service, order_id):
+        await self._ensure_capacity_slots(service)
         await self.capacity_db.update_one(
             {
-                "event_number": self._shuttle_event_number(),
-                "service": SHUTTLE_SERVICE,
+                "event_number": self._capacity_event_number(),
+                "service": service,
                 "reservation_id": order_id,
             },
             {"$unset": {"reservation_id": "", "reserved_at": ""}},
         )
 
-    async def shuttle_available(self, current_choice=None):
-        if choice_has_shuttle(current_choice or {}):
+    async def service_available(self, service, current_choice=None):
+        if service in choice_capacity_services(current_choice or {}):
             return True
-        await self._ensure_shuttle_slots()
+        await self._ensure_capacity_slots(service)
         free_slot = await self.capacity_db.find_one({
-            "event_number": self._shuttle_event_number(),
-            "service": SHUTTLE_SERVICE,
+            "event_number": self._capacity_event_number(),
+            "service": service,
             "reservation_id": {"$exists": False},
         })
         return free_slot is not None
+
+    async def reserve_shuttle_seat(self, order_id):
+        return await self.reserve_service_seat(SHUTTLE_SERVICE, order_id)
+
+    async def release_shuttle_seat(self, order_id):
+        await self.release_service_seat(SHUTTLE_SERVICE, order_id)
+
+    async def shuttle_available(self, current_choice=None):
+        return await self.service_available(SHUTTLE_SERVICE, current_choice)
 
     def get_menu(self):
         from os.path import dirname as d

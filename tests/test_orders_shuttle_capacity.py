@@ -121,8 +121,8 @@ def _orders_service(event_number=2026):
     service.config = SimpleNamespace(event_number=event_number)
     service.food_db = _Collection()
     service.capacity_db = _Collection()
-    service._shuttle_slots_ready = set()
-    service._shuttle_slots_lock = asyncio.Lock()
+    service._capacity_slots_ready = set()
+    service._capacity_slots_lock = asyncio.Lock()
     return service
 
 
@@ -171,6 +171,67 @@ class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
             await update.create_order(choice)
 
         self.assertEqual(service.food_db.documents, [])
+
+
+class GrodnoExcursionCapacityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_overview_tour_is_limited_to_20_places(self):
+        service = _orders_service()
+        order_ids = [ObjectId() for _ in range(21)]
+
+        results = await asyncio.gather(*(
+            service.reserve_service_seat(
+                orders_module.GRODNO_OVERVIEW_SERVICE,
+                order_id,
+            )
+            for order_id in order_ids
+        ))
+
+        self.assertEqual(sum(results), 20)
+        self.assertFalse(await service.service_available(
+            orders_module.GRODNO_OVERVIEW_SERVICE
+        ))
+
+    async def test_gorodnitsa_tour_is_limited_to_25_places(self):
+        service = _orders_service()
+        order_ids = [ObjectId() for _ in range(26)]
+
+        results = await asyncio.gather(*(
+            service.reserve_service_seat(
+                orders_module.GRODNO_GORODNITSA_SERVICE,
+                order_id,
+            )
+            for order_id in order_ids
+        ))
+
+        self.assertEqual(sum(results), 25)
+
+    async def test_full_overview_tour_rejects_order_without_saving_it(self):
+        service = _orders_service()
+        for _ in range(20):
+            self.assertTrue(await service.reserve_service_seat(
+                orders_module.GRODNO_OVERVIEW_SERVICE,
+                ObjectId(),
+            ))
+        update = orders_module.OrdersUpdate.__new__(orders_module.OrdersUpdate)
+        update.base = service
+        update.user = 123
+        update.config = SimpleNamespace(event_number=2026)
+        choice = {"extras": {orders_module.GRODNO_OVERVIEW_SERVICE: 25}}
+
+        with self.assertRaises(orders_module.CapacityFullError) as context:
+            await update.create_order(choice)
+
+        self.assertEqual(context.exception.service, orders_module.GRODNO_OVERVIEW_SERVICE)
+        self.assertEqual(service.food_db.documents, [])
+
+    def test_two_grodno_variants_are_rejected(self):
+        choice = {"extras": {
+            orders_module.GRODNO_OVERVIEW_SERVICE: 25,
+            orders_module.GRODNO_GORODNITSA_SERVICE: 25,
+        }}
+
+        with self.assertRaises(orders_module.InvalidExcursionChoiceError):
+            orders_module.validate_excursion_choice(choice)
 
 
 if __name__ == "__main__":

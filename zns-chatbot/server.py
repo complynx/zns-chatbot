@@ -19,7 +19,12 @@ from tornado.httputil import HTTPServerRequest
 from .config import Config
 from .events import Events
 from .plugins.massage import now_msk
-from .plugins.orders import DEADLINE, ShuttleFullError
+from .plugins.orders import (
+    DEADLINE,
+    CapacityFullError,
+    InvalidExcursionChoiceError,
+    ShuttleFullError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +208,11 @@ class FitFrameHandler(RequestHandlerWithApp):
 
 class OrdersHandler(RequestHandlerWithApp):
     async def get(self):
-        from .plugins.orders import Orders
+        from .plugins.orders import (
+            GRODNO_GORODNITSA_SERVICE,
+            GRODNO_OVERVIEW_SERVICE,
+            Orders,
+        )
         orders: Orders = self.app.orders
         order_id = self.get_query_argument("order_id", default="")
         debug_id = self.get_query_argument("debug_id", default="")
@@ -227,6 +236,10 @@ class OrdersHandler(RequestHandlerWithApp):
             lang = "ru"
 
         shuttle_available = await orders.shuttle_available(choice)
+        grodno_excursion_availability = {
+            service: await orders.service_available(service, choice)
+            for service in (GRODNO_OVERVIEW_SERVICE, GRODNO_GORODNITSA_SERVICE)
+        }
 
         try:
             self.render(
@@ -245,6 +258,11 @@ class OrdersHandler(RequestHandlerWithApp):
                 validity_error_last_name=localize("orders-validity-error-last-name"),
                 shuttle_available=shuttle_available,
                 shuttle_full_error=localize("orders-shuttle-full-error"),
+                grodno_excursion_availability=grodno_excursion_availability,
+                grodno_excursion_full_errors={
+                    GRODNO_OVERVIEW_SERVICE: localize("orders-grodno-overview-full-error"),
+                    GRODNO_GORODNITSA_SERVICE: localize("orders-grodno-gorodnitsa-full-error"),
+                },
             )
         except (KeyError, ValueError):
             raise tornado.web.HTTPError(404)
@@ -296,6 +314,14 @@ class OrdersHandler(RequestHandlerWithApp):
             self.set_status(409)
             self.write({"error": "shuttle_full"})
             logger.info("shuttle is full for user %s", user.get("id"))
+        except CapacityFullError as error:
+            self.set_status(409)
+            self.write({"error": "capacity_full", "service": error.service})
+            logger.info("%s is full for user %s", error.service, user.get("id"))
+        except InvalidExcursionChoiceError as error:
+            self.set_status(400)
+            self.write({"error": "invalid_excursion_choice"})
+            logger.info("invalid excursion choice for user %s: %s", user.get("id"), error)
         except Exception as e:
             self.set_status(500)
             self.write({"error": "internal error"})
