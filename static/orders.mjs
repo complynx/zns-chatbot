@@ -2,7 +2,7 @@ import {calculateMealService} from "./orders_service.mjs";
 
 const EXTRA_PRICES = {
     preparty: 35,
-    excursion_minsk: 25,
+    excursion_minsk: 30,
     shuttle: 60,
     excursion_grodno: 25,
     excursion_grodno_overview: 25,

@@ -625,7 +625,7 @@ class OrdersUpdate:
             ("total_byn", "Сумма BYN"),
             ("total_rub", "Сумма RUB"),
             ("extras_preparty", "Препати"),
-            ("extras_excursion_minsk", "Экскурсия Минск"),
+            ("extras_excursion_minsk", "Экскурсия-квест Минск"),
             ("extras_shuttle", "Трансфер"),
             ("extras_excursion_grodno_overview", "Гродно: обзорная"),
             ("extras_excursion_grodno_gorodnitsa", "Гродно: Городница"),
@@ -662,7 +662,7 @@ class OrdersUpdate:
         meal_ru = {"lunch":"Обед","dinner":"Ужин"}
         extras_ru = {
             "preparty":"Препати",
-            "excursion_minsk":"Экскурсия по Минску",
+            "excursion_minsk":"Экскурсия-квест Минск",
             "shuttle":"Трансфер Минск–Гродно",
             GRODNO_OVERVIEW_SERVICE: "Гродно: обзорная экскурсия",
             GRODNO_GORODNITSA_SERVICE: "Гродно: экскурсия «Городница»",
