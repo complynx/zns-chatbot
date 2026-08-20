@@ -118,7 +118,9 @@ class _Collection:
 
 def _orders_service(event_number=2026):
     service = orders_module.Orders.__new__(orders_module.Orders)
-    service.config = SimpleNamespace(event_number=event_number)
+    service.config = SimpleNamespace(
+        orders=SimpleNamespace(event_number=event_number),
+    )
     service.food_db = _Collection()
     service.capacity_db = _Collection()
     service._capacity_slots_ready = set()
@@ -127,6 +129,11 @@ def _orders_service(event_number=2026):
 
 
 class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
+    def test_capacity_uses_nested_orders_config(self):
+        service = _orders_service(event_number=2030)
+
+        self.assertEqual(service._capacity_event_number(), 2030)
+
     async def test_only_43_concurrent_reservations_succeed(self):
         service = _orders_service()
         order_ids = [ObjectId() for _ in range(44)]

@@ -830,7 +830,7 @@ class Orders(BasePlugin):
         self.menu = self.get_menu()
 
     def _capacity_event_number(self):
-        return self.config.event_number
+        return self.config.orders.event_number
 
     async def _ensure_capacity_slots(self, service):
         capacity = CAPACITY_LIMITS[service]
