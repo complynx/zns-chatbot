@@ -173,7 +173,7 @@ class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
         update.base = service
         update.user = 123
         update.config = SimpleNamespace(event_key="grodno_26")
-        choice = {"extras": {"shuttle": 60}}
+        choice = {"extras": {"shuttle": 65}}
 
         with self.assertRaises(orders_module.ShuttleFullError):
             await update.create_order(choice)

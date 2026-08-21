@@ -49,6 +49,28 @@ class OrdersMenuCatalogTests(unittest.TestCase):
                 with self.subTest(dish=dish_key):
                     self.assertTrue((photo_directory / image).is_file())
 
+    def test_juices_are_separate_in_every_meal(self):
+        for day_menu in self.menu["choices"].values():
+            for categories in day_menu.values():
+                with self.subTest(drinks=categories["drinks"]):
+                    self.assertIn("orange_juice", categories["drinks"])
+                    self.assertIn("apple_juice", categories["drinks"])
+                    self.assertNotIn("orange_apple_juice", categories["drinks"])
+
+    def test_content_icons_have_no_question_marks(self):
+        for content_key, content in self.menu["content_icons"].items():
+            with self.subTest(content=content_key):
+                self.assertNotIn("?", content["icon"])
+                self.assertNotIn("?", content["ru"])
+                self.assertNotIn("?", content["en"])
+
+    def test_spring_vegetables_have_ingredients(self):
+        dish = self.menu["dishes"]["spring_vegetables"]
+        self.assertEqual(
+            dish["ingredients_ru"],
+            "цветная капуста, стручковая фасоль, морковь, зелёный горошек и брюссельская капуста",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

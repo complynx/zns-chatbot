@@ -21,9 +21,10 @@
     "egg": {"icon": "🥚", "ru": "яйцо", "en": "egg"},
     "mayonnaise": {"icon": "🫙", "ru": "майонез", "en": "mayonnaise"},
     "gluten": {"icon": "🌾", "ru": "глютен", "en": "gluten"},
-    "gluten_possible": {"icon": "🌾?", "ru": "возможен глютен", "en": "may contain gluten"},
-    "unknown_broth": {"icon": "🥣?", "ru": "состав бульона уточняется", "en": "broth ingredients to be confirmed"},
-    "juice": {"icon": "🍊🍎", "ru": "апельсин или яблоко", "en": "orange or apple"},
+    "gluten_possible": {"icon": "🌾", "ru": "глютен", "en": "gluten"},
+    "unknown_broth": {"icon": "🥣", "ru": "бульон", "en": "broth"},
+    "orange": {"icon": "🍊", "ru": "апельсин", "en": "orange"},
+    "apple": {"icon": "🍎", "ru": "яблоко", "en": "apple"},
     "cranberry": {"icon": "🫐", "ru": "клюква", "en": "cranberry"},
     "tea": {"icon": "🍵", "ru": "чай", "en": "tea"},
     "sugar": {"icon": "🍬", "ru": "сахар", "en": "sugar"},
@@ -68,13 +69,14 @@
     "chicken_sausage": {"name_ru": "Куриная колбаска", "name_en": "Chicken Sausage", "output": "250 г", "price": 10, "contents": ["chicken"], "service": ["hot_container", "fork", "knife"], "image": "chicken_sausage.webp"},
     "draniki": {"name_ru": "Драники (4 шт.) со сметаной и зеленью", "name_en": "Potato Pancakes with Sour Cream and Herbs (4 pcs)", "output": "4 шт. / ≈260 г", "price": 10, "contents": ["vegetarian", "potato", "dairy"], "service": ["hot_container", "fork"], "image": "draniki.webp"},
     "potato_wedges": {"name_ru": "Картофельные дольки", "name_en": "Potato Wedges", "output": "≈190 г", "price": 7, "contents": ["potato"], "service": ["hot_container", "fork"], "image": "potato_wedges.webp"},
-    "spring_vegetables": {"name_ru": "Овощи весенние", "name_en": "Spring Vegetables", "output": "≈220 г", "price": 7, "contents": ["vegetables"], "service": ["hot_container", "fork"], "image": "spring_vegetables.jpeg"},
+    "spring_vegetables": {"name_ru": "Овощи весенние", "name_en": "Spring Vegetables", "ingredients_ru": "цветная капуста, стручковая фасоль, морковь, зелёный горошек и брюссельская капуста", "ingredients_en": "cauliflower, green beans, carrots, green peas, and Brussels sprouts", "output": "≈220 г", "price": 7, "contents": ["vegetables"], "service": ["hot_container", "fork"], "image": "spring_vegetables.jpeg"},
     "rice_butter": {"name_ru": "Рис с маслом", "name_en": "Rice with Butter", "output": "≈185 г", "price": 3, "contents": ["vegetarian", "rice", "dairy"], "service": ["hot_container", "fork"], "image": "rice_butter.jpeg"},
     "buckwheat_butter": {"name_ru": "Гречневая каша с маслом", "name_en": "Buckwheat Porridge with Butter", "output": "≈185 г", "price": 3, "contents": ["vegetarian", "dairy"], "service": ["hot_container", "fork"], "image": "buckwheat_butter.jpg"},
     "trout_sandwich": {"name_ru": "Бутерброд с форелью", "name_en": "Trout Sandwich", "ingredients_ru": "тостовый хлеб, форель, творожный сыр, свежий огурец, зелень, кунжут", "ingredients_en": "toast bread, trout, cream cheese, fresh cucumber, herbs, sesame", "output": "≈90 г", "price": 8, "contents": ["fish", "dairy", "gluten"], "service": [], "image": "trout_sandwich.jpg"},
     "black_bread": {"name_ru": "Хлеб (чёрный)", "name_en": "Black Bread", "output": "1 ломтик / 50 г", "price": 0.5, "contents": ["gluten"], "service": []},
     "white_bread": {"name_ru": "Батон (белый хлеб)", "name_en": "White Bread", "output": "1 ломтик / 25 г", "price": 0.5, "contents": ["gluten"], "service": []},
-    "orange_apple_juice": {"name_ru": "Сок: апельсиновый / яблочный", "name_en": "Orange / Apple Juice", "output": "200 мл", "price": 2, "contents": ["juice"], "service": []},
+    "orange_juice": {"name_ru": "Сок апельсиновый", "name_en": "Orange Juice", "output": "200 мл", "price": 2, "contents": ["orange"], "service": []},
+    "apple_juice": {"name_ru": "Сок яблочный", "name_en": "Apple Juice", "output": "200 мл", "price": 2, "contents": ["apple"], "service": []},
     "cranberry_drink": {"name_ru": "Морс клюквенный", "name_en": "Cranberry Drink", "output": "200 мл", "price": 2, "contents": ["cranberry"], "service": []},
     "tea_sugar": {"name_ru": "Чай с сахаром", "name_en": "Tea with Sugar", "output": "200 мл", "price": 1.5, "contents": ["tea", "sugar"], "service": []}
   },
@@ -85,7 +87,7 @@
       "hot-dishes": ["pork_baked_mushrooms", "poultry_tomato", "fish_cheese", "pork_steak", "buckwheat_vegetables", "pasta_mushrooms_cheese"],
       "side-dishes": ["potato_wedges", "spring_vegetables", "rice_butter"],
       "bread": ["trout_sandwich", "black_bread", "white_bread"],
-      "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+      "drinks": ["orange_juice", "apple_juice", "cranberry_drink", "tea_sugar"]
     }},
     "saturday": {
       "lunch": {
@@ -94,7 +96,7 @@
         "hot-dishes": ["chicken_rolls_bacon", "pork_sausage", "fish_vegetables", "chicken_schnitzel", "buckwheat_vegetables", "draniki"],
         "side-dishes": ["rice_butter", "buckwheat_butter", "spring_vegetables"],
         "bread": ["trout_sandwich", "black_bread", "white_bread"],
-        "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+        "drinks": ["orange_juice", "apple_juice", "cranberry_drink", "tea_sugar"]
       },
       "dinner": {
         "salads": ["olivier", "vegetable_salad", "caesar"],
@@ -102,7 +104,7 @@
         "hot-dishes": ["trout_steak_cream", "chicken_pineapple", "pork_schnitzel", "chicken_sausage", "pasta_mushrooms_cheese", "draniki"],
         "side-dishes": ["spring_vegetables", "buckwheat_butter", "rice_butter"],
         "bread": ["trout_sandwich", "black_bread", "white_bread"],
-        "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+        "drinks": ["orange_juice", "apple_juice", "cranberry_drink", "tea_sugar"]
       }
     },
     "sunday": {
@@ -112,7 +114,7 @@
         "hot-dishes": ["chicken_pineapple", "pork_baked_mushrooms", "fish_cheese", "pork_sausage", "buckwheat_vegetables", "pasta_mushrooms_cheese"],
         "side-dishes": ["buckwheat_butter", "rice_butter", "spring_vegetables"],
         "bread": ["trout_sandwich", "black_bread", "white_bread"],
-        "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+        "drinks": ["orange_juice", "apple_juice", "cranberry_drink", "tea_sugar"]
       },
       "dinner": {
         "salads": ["caesar", "original_salad", "greek"],
@@ -120,7 +122,7 @@
         "hot-dishes": ["pork_schnitzel", "poultry_tomato", "fish_vegetables", "chicken_rolls_bacon", "buckwheat_vegetables", "draniki"],
         "side-dishes": ["spring_vegetables", "potato_wedges", "rice_butter"],
         "bread": ["trout_sandwich", "black_bread", "white_bread"],
-        "drinks": ["orange_apple_juice", "cranberry_drink", "tea_sugar"]
+        "drinks": ["orange_juice", "apple_juice", "cranberry_drink", "tea_sugar"]
       }
     }
   }
