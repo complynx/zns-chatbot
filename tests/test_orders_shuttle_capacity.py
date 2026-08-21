@@ -3,6 +3,7 @@ import copy
 import importlib
 import unittest
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from bson import ObjectId
 
@@ -116,10 +117,10 @@ class _Collection:
             document.pop(key, None)
 
 
-def _orders_service(event_number=2026):
+def _orders_service(event_key="grodno_26"):
     service = orders_module.Orders.__new__(orders_module.Orders)
     service.config = SimpleNamespace(
-        orders=SimpleNamespace(event_number=event_number),
+        orders=SimpleNamespace(event_key=event_key),
     )
     service.food_db = _Collection()
     service.capacity_db = _Collection()
@@ -130,9 +131,9 @@ def _orders_service(event_number=2026):
 
 class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
     def test_capacity_uses_nested_orders_config(self):
-        service = _orders_service(event_number=2030)
+        service = _orders_service(event_key="grodno_30")
 
-        self.assertEqual(service._capacity_event_number(), 2030)
+        self.assertEqual(service._capacity_event_key(), "grodno_30")
 
     async def test_only_43_concurrent_reservations_succeed(self):
         service = _orders_service()
@@ -171,7 +172,7 @@ class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
         update = orders_module.OrdersUpdate.__new__(orders_module.OrdersUpdate)
         update.base = service
         update.user = 123
-        update.config = SimpleNamespace(event_number=2026)
+        update.config = SimpleNamespace(event_key="grodno_26")
         choice = {"extras": {"shuttle": 60}}
 
         with self.assertRaises(orders_module.ShuttleFullError):
@@ -179,6 +180,34 @@ class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(service.food_db.documents, [])
 
+
+class OrderEventScopingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_order_lookup_excludes_previous_events(self):
+        service = _orders_service()
+        old_order_id = ObjectId()
+        current_order_id = ObjectId()
+        service.food_db.documents.extend([
+            {"_id": old_order_id, "user_id": 123, "event_number": 10},
+            {"_id": current_order_id, "user_id": 123, "event_key": "grodno_26"},
+        ])
+
+        self.assertIsNone(await service.order_by_id(old_order_id))
+        current_order = await service.order_by_id(current_order_id)
+        self.assertEqual(current_order["event_key"], "grodno_26")
+
+    async def test_new_order_is_tagged_with_current_event(self):
+        service = _orders_service()
+        update = orders_module.OrdersUpdate.__new__(orders_module.OrdersUpdate)
+        update.base = service
+        update.user = 123
+        update.config = SimpleNamespace(event_key="grodno_26")
+        update.handle_cq_start = AsyncMock()
+
+        await update.create_order({"extras": {}})
+
+        self.assertEqual(len(service.food_db.documents), 1)
+        self.assertEqual(service.food_db.documents[0]["event_key"], "grodno_26")
+        self.assertNotIn("event_number", service.food_db.documents[0])
 
 class GrodnoExcursionCapacityTests(unittest.IsolatedAsyncioTestCase):
     async def test_overview_tour_is_limited_to_20_places(self):
@@ -222,7 +251,7 @@ class GrodnoExcursionCapacityTests(unittest.IsolatedAsyncioTestCase):
         update = orders_module.OrdersUpdate.__new__(orders_module.OrdersUpdate)
         update.base = service
         update.user = 123
-        update.config = SimpleNamespace(event_number=2026)
+        update.config = SimpleNamespace(event_key="grodno_26")
         choice = {"extras": {orders_module.GRODNO_OVERVIEW_SERVICE: 25}}
 
         with self.assertRaises(orders_module.CapacityFullError) as context:

@@ -76,6 +76,17 @@ function createDish(dishKey, dish) {
     nameText.classList.add("name-text");
     appendLocalizedText(nameText, dish.name_ru, dish.name_en);
 
+    if (dish.ingredients_ru || dish.ingredients_en) {
+        const ingredients = document.createElement("div");
+        ingredients.classList.add("ingredients");
+        appendLocalizedText(
+            ingredients,
+            dish.ingredients_ru ? `Состав: ${dish.ingredients_ru}` : "",
+            dish.ingredients_en ? `Ingredients: ${dish.ingredients_en}` : "",
+        );
+        nameText.appendChild(ingredients);
+    }
+
     const contents = document.createElement("div");
     contents.classList.add("contents");
     const contentCaption = document.createElement("div");
@@ -431,10 +442,13 @@ function sendError(error) {
     });
 }
 
-function hideShuttleOption() {
+function markShuttleUnavailable() {
     const shuttleInput = document.querySelector('.excursions input[name="shuttle_bus"]');
     shuttleInput.checked = false;
-    shuttleInput.closest("label").hidden = true;
+    shuttleInput.disabled = true;
+    const label = shuttleInput.closest("label");
+    label.classList.add("unavailable");
+    label.querySelector(".shuttle-sold-out").hidden = false;
     refreshOrderPreview();
 }
 
@@ -503,7 +517,7 @@ async function submitOrder() {
         if (response.status === 409) {
             const result = await response.json().catch(() => ({}));
             if (result.error === "shuttle_full") {
-                hideShuttleOption();
+                markShuttleUnavailable();
                 showUserAlert(shuttle_full_error);
                 return;
             }
@@ -603,7 +617,7 @@ fetch("static/menu_belarus.json")
         fillAllSections();
         fillInOrders(user_order);
         setGrodnoExcursionAvailability();
-        if (!shuttle_available) hideShuttleOption();
+        if (!shuttle_available) markShuttleUnavailable();
         refreshOrderPreview();
     })
     .catch(sendError);

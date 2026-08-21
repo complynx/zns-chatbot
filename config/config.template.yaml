@@ -12,6 +12,9 @@ localization:
   fallbacks: ["en-US", "en"]
   file: bot.ftl
 
+orders:
+  event_key: grodno_26
+
 mongo_db:
   address: mongodb://admin:test@mongo:27017/bots_db
   collection: bots_users

@@ -106,7 +106,7 @@ class Orders(IgnoreExtraSettings):
     deadline: date = Field(date(2025, 9, 7))
     payment_admin_ru: int = Field(-1)
     admins: set[int] = Field({379278985})
-    event_number: int = Field(10)
+    event_key: str = Field("grodno_26", min_length=1)
 
 
 class Food(IgnoreExtraSettings):

@@ -225,6 +225,8 @@ class OrdersHandler(RequestHandlerWithApp):
         read_only = False
         if order_id != "":
             order = await orders.order_by_id(order_id)
+            if order is None:
+                raise tornado.web.HTTPError(404)
             if "choice" in order:
                 choice = order["choice"]
             read_only="proof_file" in order

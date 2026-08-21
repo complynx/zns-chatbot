@@ -110,6 +110,9 @@ class OrdersUpdate:
         self.tgUpdate = update.update
         self.bot = self.update.bot.id
 
+    def current_event_filter(self, **fields):
+        return {"event_key": self.config.event_key, **fields}
+
     async def create_order(self, choice):
         # Block creating orders after deadline
         if now_msk() > DEADLINE:
@@ -131,7 +134,7 @@ class OrdersUpdate:
             await self.base.food_db.insert_one({
                 "_id": order_id,
                 "user_id": self.user,
-                "event_number": self.config.event_number,
+                "event_key": self.config.event_key,
                 "created_at": datetime.datetime.now(),
                 "choice": choice,
             })
@@ -151,9 +154,12 @@ class OrdersUpdate:
             )
         validate_excursion_choice(choice)
         order_oid = ObjectId(order_id)
-        previous_order = await self.base.food_db.find_one({"_id": order_oid})
+        order_filter = self.current_event_filter(_id=order_oid, user_id=self.user)
+        previous_order = await self.base.food_db.find_one(order_filter)
+        if previous_order is None:
+            raise ValueError(f"order {order_id} not found in current event")
         previous_services = choice_capacity_services(
-            previous_order.get("choice", {}) if previous_order else {}
+            previous_order.get("choice", {})
         )
         next_services = choice_capacity_services(choice)
         reserved_services = []
@@ -164,9 +170,7 @@ class OrdersUpdate:
                 raise capacity_full_error(service)
             reserved_services.append(service)
         try:
-            result = await self.base.food_db.update_one({
-                "_id": order_oid,
-            },{
+            result = await self.base.food_db.update_one(order_filter, {
                 "$set":{
                     "choice": choice,
                     "updated_at": datetime.datetime.now(),
@@ -186,10 +190,15 @@ class OrdersUpdate:
         # Disallow deleting after deadline
         if now_msk() > DEADLINE:
             return await self.handle_cq_start()
-        order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+        order_filter = self.current_event_filter(
+            _id=ObjectId(order_id), user_id=self.user
+        )
+        order = await self.base.food_db.find_one(order_filter)
+        if order is None:
+            return await self.handle_cq_start()
         if "proof_file" in order:
             return await self.handle_cq_start()
-        await self.base.food_db.delete_one({"_id": ObjectId(order_id)})
+        await self.base.food_db.delete_one(order_filter)
         for service in choice_capacity_services(order.get("choice", {})):
             await self.base.release_service_seat(service, order["_id"])
         return await self.handle_cq_start()
@@ -200,7 +209,11 @@ class OrdersUpdate:
         return total, total_rub
     
     async def handle_cq_pay(self, order_id):
-        order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+        order = await self.base.food_db.find_one(self.current_event_filter(
+            _id=ObjectId(order_id), user_id=self.user
+        ))
+        if order is None:
+            return await self.handle_cq_start()
         if "proof_file" in order:
             return await self.handle_cq_start()
         total, total_rub = self.get_order_total(order)
@@ -245,9 +258,10 @@ class OrdersUpdate:
             "payment_administrator_belarus": {"$exists":True},
         })
         if admin is not None:
-            await self.base.food_db.update_one({
-                "_id": ObjectId(order_id),
-            }, {
+            order_filter = self.current_event_filter(
+                _id=ObjectId(order_id), user_id=self.user
+            )
+            await self.base.food_db.update_one(order_filter, {
                 "$set": {
                     "proof_country": "be",
                     "proof_admin": int(admin_id),
@@ -255,7 +269,9 @@ class OrdersUpdate:
                     "proof_received": datetime.datetime.now(),
                 }
             })
-            order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+            order = await self.base.food_db.find_one(order_filter)
+            if order is None:
+                return await self.handle_cq_start()
             total, _total_rub = self.get_order_total(order)
             user = await self.update.get_user()
             lc = "ru"
@@ -292,7 +308,7 @@ class OrdersUpdate:
     async def handle_cq_start(self):
         orders = await self.base.food_db.find({
             "user_id": self.user,
-            "event_number": self.config.event_number,
+            "event_key": self.config.event_key,
         }).sort("created_at", 1).to_list(None)
         user = await self.update.get_user()
         debug_param = ""
@@ -377,14 +393,17 @@ class OrdersUpdate:
     
     async def handle_cq_paid(self, order_id):
         # return await self.handle_cq_start()
-        await self.base.food_db.update_one({
-            "_id": ObjectId(order_id),
-        }, {
+        order_filter = self.current_event_filter(
+            _id=ObjectId(order_id), user_id=self.user
+        )
+        await self.base.food_db.update_one(order_filter, {
             "$set": {
                 "proof_country": "ru",
             }
         })
-        order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+        order = await self.base.food_db.find_one(order_filter)
+        if order is None:
+            return await self.handle_cq_start()
         _total_be, total = self.get_order_total(order)
         adm = self.base.config.orders.payment_admin_ru
         if adm>0:
@@ -434,15 +453,16 @@ class OrdersUpdate:
         assert (self.user in self.config.admins or
                 (self.config.payment_admin_ru and self.user == self.config.payment_admin_ru) or
                 self.user in admins_be_ids), f"{self.user} is not orders admin"
-        await self.base.food_db.update_one({
-            "_id": ObjectId(order_id)
-        },{
+        order_filter = self.current_event_filter(_id=ObjectId(order_id))
+        await self.base.food_db.update_one(order_filter, {
             "$set":{
                 "validated_at": datetime.datetime.now(),
                 "validation": True,
             }
         })
-        order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+        order = await self.base.food_db.find_one(order_filter)
+        if order is None:
+            return await self.handle_cq_start()
         user = await self.base.base_app.users_collection.find_one({
             "user_id": order["user_id"],
             "bot_id": self.bot,
@@ -479,9 +499,8 @@ class OrdersUpdate:
         assert (self.user in self.config.admins or
                 (self.config.payment_admin_ru and self.user == self.config.payment_admin_ru) or
                 self.user in admins_be_ids), f"{self.user} is not orders admin"
-        await self.base.food_db.update_one({
-            "_id": ObjectId(order_id)
-        },{
+        order_filter = self.current_event_filter(_id=ObjectId(order_id))
+        await self.base.food_db.update_one(order_filter, {
             "$set":{
                 "validated_at": datetime.datetime.now(),
                 "validation": False,
@@ -493,7 +512,9 @@ class OrdersUpdate:
                 "proof_message_id": "",
             },
         })
-        order = await self.base.food_db.find_one({"_id": ObjectId(order_id)})
+        order = await self.base.food_db.find_one(order_filter)
+        if order is None:
+            return await self.handle_cq_start()
         user = await self.base.base_app.users_collection.find_one({
             "user_id": order["user_id"],
             "bot_id": self.bot,
@@ -528,7 +549,9 @@ class OrdersUpdate:
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
             )
-        await self.base.food_db.update_one({"_id": ObjectId(order_id)}, {
+        await self.base.food_db.update_one(self.current_event_filter(
+            _id=ObjectId(order_id), user_id=self.user
+        ), {
             "$unset": {
                 "proof_file": "",
                 "proof_received": "",
@@ -552,7 +575,7 @@ class OrdersUpdate:
             )
         order = await self.base.food_db.find_one({
             "user_id": self.user,
-            "event_number": self.config.event_number,
+            "event_key": self.config.event_key,
             "proof_file": { "$exists": False },
         })
         if order is None:
@@ -562,9 +585,9 @@ class OrdersUpdate:
                 reply_markup=InlineKeyboardMarkup([]),
             )
         doc = self.update.message.document
-        await self.base.food_db.update_one({
-            "_id": order["_id"]
-        }, {
+        await self.base.food_db.update_one(self.current_event_filter(
+            _id=order["_id"], user_id=self.user
+        ), {
             "$set": {
                 "proof_file": doc.file_id,
                 "proof_chat_id": self.update.chat_id if self.update.chat_id is not None else self.update.user,
@@ -668,7 +691,7 @@ class OrdersUpdate:
             GRODNO_GORODNITSA_SERVICE: "Гродно: экскурсия «Городница»",
             "excursion_grodno":"Экскурсия по Гродно (вариант не указан)",
         }
-        async for order in self.base.food_db.find({"event_number": self.config.event_number}):
+        async for order in self.base.food_db.find({"event_key": self.config.event_key}):
             choice = order.get("choice", {})
             total_byn = choice.get("total", 0)
             total_rub = total_byn * BYN_TO_RUB
@@ -829,13 +852,13 @@ class Orders(BasePlugin):
         self._cbq_handler = CallbackQueryHandler(self.handle_callback_query, pattern=f"^{self.name}\\|.*")
         self.menu = self.get_menu()
 
-    def _capacity_event_number(self):
-        return self.config.orders.event_number
+    def _capacity_event_key(self):
+        return self.config.orders.event_key
 
     async def _ensure_capacity_slots(self, service):
         capacity = CAPACITY_LIMITS[service]
-        event_number = self._capacity_event_number()
-        ready_key = (event_number, service)
+        event_key = self._capacity_event_key()
+        ready_key = (event_key, service)
         if ready_key in self._capacity_slots_ready:
             return
         async with self._capacity_slots_lock:
@@ -844,7 +867,7 @@ class Orders(BasePlugin):
 
             await self.capacity_db.create_index(
                 [
-                    ("event_number", 1),
+                    ("event_key", 1),
                     ("service", 1),
                     ("reservation_id", 1),
                 ],
@@ -853,9 +876,9 @@ class Orders(BasePlugin):
             )
             for seat in range(capacity):
                 await self.capacity_db.update_one(
-                    {"_id": f"{event_number}:{service}:{seat}"},
+                    {"_id": f"{event_key}:{service}:{seat}"},
                     {"$setOnInsert": {
-                        "event_number": event_number,
+                        "event_key": event_key,
                         "service": service,
                         "seat": seat,
                     }},
@@ -864,7 +887,7 @@ class Orders(BasePlugin):
 
             existing_orders = await self.food_db.find(
                 {
-                    "event_number": event_number,
+                    "event_key": event_key,
                     f"choice.extras.{service}": {"$exists": True},
                 },
                 {"_id": 1},
@@ -872,7 +895,7 @@ class Orders(BasePlugin):
             existing_order_ids = {order["_id"] for order in existing_orders}
             reserved_slots = await self.capacity_db.find(
                 {
-                    "event_number": event_number,
+                    "event_key": event_key,
                     "service": service,
                     "reservation_id": {"$exists": True},
                 },
@@ -896,7 +919,7 @@ class Orders(BasePlugin):
             for order_id in existing_order_ids - reserved_order_ids:
                 await self.capacity_db.find_one_and_update(
                     {
-                        "event_number": event_number,
+                        "event_key": event_key,
                         "service": service,
                         "reservation_id": {"$exists": False},
                     },
@@ -911,9 +934,9 @@ class Orders(BasePlugin):
 
     async def reserve_service_seat(self, service, order_id):
         await self._ensure_capacity_slots(service)
-        event_number = self._capacity_event_number()
+        event_key = self._capacity_event_key()
         existing = await self.capacity_db.find_one({
-            "event_number": event_number,
+            "event_key": event_key,
             "service": service,
             "reservation_id": order_id,
         })
@@ -922,7 +945,7 @@ class Orders(BasePlugin):
         try:
             claimed = await self.capacity_db.find_one_and_update(
                 {
-                    "event_number": event_number,
+                    "event_key": event_key,
                     "service": service,
                     "reservation_id": {"$exists": False},
                 },
@@ -935,7 +958,7 @@ class Orders(BasePlugin):
         except DuplicateKeyError:
             # A concurrent request may have reserved another slot for this order.
             claimed = await self.capacity_db.find_one({
-                "event_number": event_number,
+                "event_key": event_key,
                 "service": service,
                 "reservation_id": order_id,
             })
@@ -945,7 +968,7 @@ class Orders(BasePlugin):
         await self._ensure_capacity_slots(service)
         await self.capacity_db.update_one(
             {
-                "event_number": self._capacity_event_number(),
+                "event_key": self._capacity_event_key(),
                 "service": service,
                 "reservation_id": order_id,
             },
@@ -957,7 +980,7 @@ class Orders(BasePlugin):
             return True
         await self._ensure_capacity_slots(service)
         free_slot = await self.capacity_db.find_one({
-            "event_number": self._capacity_event_number(),
+            "event_key": self._capacity_event_key(),
             "service": service,
             "reservation_id": {"$exists": False},
         })
@@ -994,7 +1017,10 @@ class Orders(BasePlugin):
         return await upd.set_choice(order["_id"], choice)
 
     async def order_by_id(self, order_id):
-        return await self.food_db.find_one({"_id": ObjectId(order_id)})
+        return await self.food_db.find_one({
+            "_id": ObjectId(order_id),
+            "event_key": self.config.orders.event_key,
+        })
 
     def test_message(self, message: Update, state, web_app_data):
         if self._checker.check_update(message):

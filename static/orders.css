@@ -149,6 +149,14 @@ html[lang=ru] .for-who input[name="for_who_patronymus"] {
 .excursions label[hidden]{
     display: none;
 }
+.excursions label.unavailable{
+    cursor: not-allowed;
+    opacity: .7;
+}
+.shuttle-sold-out{
+    color: var(--tg-theme-destructive-text-color);
+    font-weight: bold;
+}
 .grodno-excursion-options[hidden]{
     display: none;
 }
@@ -229,6 +237,12 @@ html[lang=ru] .for-who input[name="for_who_patronymus"] {
 .meal .dishes>div.dish .name{ display:flex; align-items:center; gap:.4em; }
 .meal .dishes>div.dish .name-text{ display:flex; flex-direction:column; line-height:1.05; }
 .meal .dishes>div.dish .dish-thumb{ width:2.8em; height:2.8em; object-fit:cover; border-radius:.25em; flex:0 0 auto; }
+.meal .dishes>div.dish .ingredients{
+    margin-top: .25em;
+    color: var(--tg-theme-subtitle-text-color);
+    font-size: .72em;
+    line-height: 1.25;
+}
 .meal .dishes>div.dish .contents{
     display: flex;
     flex-wrap: wrap;
