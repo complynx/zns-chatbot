@@ -116,13 +116,13 @@ something-went-wrong = Something went wrong. Try again.
 food-adm-payment-accepted-msg = Payment for order of {$total} RUB from user {$link} accepted.
 food-adm-payment-already-processed-or-error = Order already processed or an error occurred.
 food-adm-payment-proof-accept-button = ✅ Accept
-# food-adm-payment-proof-confirmed = Order payment from user {$link} for <i>{$name}</i> is confirmed. # Retained, but not directly used by current food.py review scope
+food-adm-payment-proof-confirmed = Order from user {$link} for participant <i>{$name}</i> has been confirmed.
 food-adm-payment-proof-received =
     User {$link} sent payment for their food order.
     Total order sum: {$total} ₽. Confirmation required.
     <b>Attention</b>, do not mark proof as rejected, wait a bit and try to find the payment first.
 food-adm-payment-proof-reject-button = ❌ Reject
-# food-adm-payment-proof-rejected = Order payment from user {$link} for <i>{$name}</i> is rejected. # Retained, but not directly used by current food.py review scope
+food-adm-payment-proof-rejected = Order from user {$link} for participant <i>{$name}</i> has been rejected.
 food-adm-payment-rejected-msg = Payment for order of {$total} RUB from user {$link} rejected.
 
 # User messages
@@ -150,7 +150,13 @@ food-payment-admin-error = Error communicating with the payment administrator. P
 food-payment-admins-not-configured = The payment system is currently unavailable. Please contact support.
 food-payment-proof-accepted = Your payment for the food order with a total of {$total} ₽ has been accepted! You can view your order details using the /food command.
 food-payment-proof-cancelled = Payment proof submission cancelled. You can try to pay again or manage your order using the /food command.
+food-payment-proof-confirmed =
+    The administrator has confirmed the order for participant <i>{$name}</i>.
+    See you at ZNS.
 food-payment-proof-forwarded = Your payment proof has been sent for review.
+food-payment-proof-rejected =
+    The administrator has rejected the order for participant <i>{$name}</i>.
+    You can place the order again or submit another payment proof.
 food-payment-proof-rejected-retry = Your payment proof for the food order with a total of {$total} ₽ was rejected. You can try to pay again using the /food command, or contact support.
 food-payment-proof-timeout = You did not send the payment proof in time. You can try again using the /food command if you still wish to pay.
 food-payment-proof-wrong-data =
