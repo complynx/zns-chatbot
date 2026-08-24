@@ -23,6 +23,7 @@ from .plugins.orders import (
     DEADLINE,
     CapacityFullError,
     InvalidExcursionChoiceError,
+    InvalidOrderChoiceError,
     ShuttleFullError,
 )
 
@@ -212,6 +213,7 @@ class OrdersHandler(RequestHandlerWithApp):
             GRODNO_GORODNITSA_SERVICE,
             GRODNO_OVERVIEW_SERVICE,
             Orders,
+            order_has_payment_proof,
         )
         orders: Orders = self.app.orders
         order_id = self.get_query_argument("order_id", default="")
@@ -222,6 +224,7 @@ class OrdersHandler(RequestHandlerWithApp):
             return self.app.localization(s, locale=locale_str)
 
         choice = None
+        order = None
         read_only = False
         if order_id != "":
             order = await orders.order_by_id(order_id)
@@ -229,7 +232,7 @@ class OrdersHandler(RequestHandlerWithApp):
                 raise tornado.web.HTTPError(404)
             if "choice" in order:
                 choice = order["choice"]
-            read_only="proof_file" in order
+            read_only = order_has_payment_proof(order)
         # After deadline, force read-only regardless of order state
         if now_msk() > DEADLINE:
             read_only = True
@@ -237,9 +240,10 @@ class OrdersHandler(RequestHandlerWithApp):
         if locale_str.startswith("ru"):
             lang = "ru"
 
-        shuttle_available = await orders.shuttle_available(choice)
+        order_paid = order_has_payment_proof(order or {})
+        shuttle_available = await orders.shuttle_available(choice, order_paid)
         grodno_excursion_availability = {
-            service: await orders.service_available(service, choice)
+            service: await orders.service_available(service, choice, order_paid)
             for service in (GRODNO_OVERVIEW_SERVICE, GRODNO_GORODNITSA_SERVICE)
         }
 
@@ -270,7 +274,7 @@ class OrdersHandler(RequestHandlerWithApp):
             raise tornado.web.HTTPError(404)
 
     async def post(self):
-        from .plugins.orders import Orders
+        from .plugins.orders import Orders, order_has_payment_proof
         orders: Orders = self.app.orders
         initData = self.get_argument("initData", default=None, strip=False)
 
@@ -306,6 +310,10 @@ class OrdersHandler(RequestHandlerWithApp):
                 self.set_status(403)
                 logger.error("user ID doesn't match")
                 return
+            if order_has_payment_proof(order):
+                self.set_status(409)
+                self.write({"error": "paid order cannot be changed"})
+                return
             logger.info(f"updating order {order_id} for {user['id']}")
             await orders.set_choice(order, choice)
 
@@ -324,6 +332,10 @@ class OrdersHandler(RequestHandlerWithApp):
             self.set_status(400)
             self.write({"error": "invalid_excursion_choice"})
             logger.info("invalid excursion choice for user %s: %s", user.get("id"), error)
+        except InvalidOrderChoiceError as error:
+            self.set_status(400)
+            self.write({"error": "invalid_order_choice"})
+            logger.info("invalid order choice for user %s: %s", user.get("id"), error)
         except Exception as e:
             self.set_status(500)
             self.write({"error": "internal error"})

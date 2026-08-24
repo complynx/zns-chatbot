@@ -102,6 +102,18 @@ orders-validity-error-last-name=Last name should contain one upper case letter a
 orders-shuttle-full-error=Unfortunately, all 43 transfer seats have already been taken. The transfer was removed from your order and the total was recalculated. Please review and submit the order again.
 orders-grodno-overview-full-error=Unfortunately, all 20 places on the Grodno highlights tour have been taken. Choose the Gorodnitsa tour or remove the Grodno excursion from your order.
 orders-grodno-gorodnitsa-full-error=Unfortunately, all 25 places on the Gorodnitsa tour have been taken. Choose the Grodno highlights tour or remove the Grodno excursion from your order.
+orders-capacity-service-shuttle = the Minsk — Grodno transfer
+orders-capacity-service-grodno-overview = the Grodno highlights tour
+orders-capacity-service-grodno-gorodnitsa = the Gorodnitsa tour
+orders-payment-reminder =
+    The order for <i>{$name}</i>, totalling <b>{$total} BYN</b>, has not been paid yet.
+    Transfer and excursion places are secured after payment proof is submitted. If payment is delayed, available places may run out and the order will be recalculated.
+orders-capacity-unpaid-removed =
+    Payment proof was not submitted in time, and places for {$services} have run out.
+    We removed the unavailable service from the order. The new order total is <b>{$total} BYN</b>.
+orders-capacity-proof-too-late =
+    By the time we received the payment proof, places for {$services} had already run out.
+    We removed the unavailable service from the order. The new order total is <b>{$total} BYN</b>.
 undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
 max-assistant-messages-reached = You've reached your questions limit for a day, please come back in 24 hours.

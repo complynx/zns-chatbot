@@ -107,6 +107,10 @@ class Orders(IgnoreExtraSettings):
     payment_admin_ru: int = Field(-1)
     admins: set[int] = Field({379278985})
     event_key: str = Field("grodno_26", min_length=1)
+    payment_reminder_after: timedelta = Field(timedelta(days=2), gt=timedelta(0))
+    notification_check_interval: timedelta = Field(
+        timedelta(minutes=5), gt=timedelta(0)
+    )
 
 
 class Food(IgnoreExtraSettings):
