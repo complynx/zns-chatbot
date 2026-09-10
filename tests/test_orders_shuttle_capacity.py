@@ -192,6 +192,38 @@ def _orders_service(event_key="grodno_26"):
 
 
 class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deleted_order_frees_capacity_without_restart(self):
+        for check_availability in (True, False):
+            with self.subTest(check_availability=check_availability):
+                service = _orders_service()
+                old_order = {
+                    "_id": ObjectId(),
+                    "event_key": "grodno_26",
+                    "proof_file": "proof.jpg",
+                    "proof_received": datetime.datetime(2026, 1, 1),
+                    "choice": {"extras": {"shuttle": 65}},
+                }
+                await service.food_db.insert_one(old_order)
+                with patch.dict(orders_module.CAPACITY_LIMITS, {"shuttle": 1}):
+                    await service._ensure_capacity_slots("shuttle")
+                    self.assertFalse(await service.shuttle_available())
+                    await service.food_db.delete_one({"_id": old_order["_id"]})
+                    if check_availability:
+                        self.assertTrue(await service.shuttle_available())
+                    new_order = {
+                        **old_order,
+                        "_id": ObjectId(),
+                        "proof_received": datetime.datetime(2026, 1, 2),
+                    }
+                    await service.food_db.insert_one(new_order)
+                    self.assertTrue(await service.reserve_service_seat(
+                        "shuttle", new_order["_id"], new_order
+                    ))
+                    self.assertFalse(await service.shuttle_available())
+                    self.assertIsNone(await service.capacity_db.find_one({
+                        "reservation_id": old_order["_id"],
+                    }))
+
     def test_capacity_uses_nested_orders_config(self):
         service = _orders_service(event_key="grodno_30")
 

@@ -1371,8 +1371,44 @@ class Orders(BasePlugin):
 
             self._capacity_slots_ready.add(ready_key)
 
+    async def _release_deleted_order_reservations(self, service):
+        event_key = self._capacity_event_key()
+        # Payment reservations refer to persisted orders. Bare reservations may
+        # still be in flight and must not be treated as deleted orders.
+        slots = await self.capacity_db.find({
+            "event_key": event_key,
+            "service": service,
+            "reservation_id": {"$exists": True},
+            "reservation_attempt_token": {"$exists": True},
+        }).to_list(None)
+        if not slots:
+            return
+        orders = await self.food_db.find({
+            "_id": {"$in": [slot["reservation_id"] for slot in slots]},
+            "event_key": event_key,
+        }, {"_id": 1}).to_list(None)
+        existing_ids = {order["_id"] for order in orders}
+        for slot in slots:
+            if slot["reservation_id"] in existing_ids:
+                continue
+            await self.capacity_db.update_one(
+                {
+                    "_id": slot["_id"],
+                    "reservation_id": slot["reservation_id"],
+                    "reservation_attempt_token": slot["reservation_attempt_token"],
+                    "reserved_at": slot.get("reserved_at"),
+                },
+                {"$unset": {
+                    "reservation_id": "",
+                    "reservation_attempt_token": "",
+                    "reservation_attempt_created_at": "",
+                    "reserved_at": "",
+                }},
+            )
+
     async def reserve_service_seat(self, service, order_id, order_snapshot=None):
         await self._ensure_capacity_slots(service)
+        await self._release_deleted_order_reservations(service)
         event_key = self._capacity_event_key()
         reservation_token = (
             payment_reservation_token(order_snapshot) if order_snapshot else None
@@ -1580,6 +1616,7 @@ class Orders(BasePlugin):
         ):
             return True
         await self._ensure_capacity_slots(service)
+        await self._release_deleted_order_reservations(service)
         free_slot = await self.capacity_db.find_one({
             "event_key": self._capacity_event_key(),
             "service": service,
