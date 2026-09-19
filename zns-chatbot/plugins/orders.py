@@ -70,7 +70,8 @@ CAPACITY_SERVICE_LABEL_KEYS = {
 NOTIFICATION_CLAIM_TTL = datetime.timedelta(minutes=15)
 ILLEGAL_XML_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
-DEADLINE=datetime.datetime(2026, 9, 19, 0, 0, 0)
+# Local Grodno time (Europe/Minsk).
+DEADLINE=datetime.datetime(2026, 9, 22, 0, 0, 0)
 
 
 class CapacityFullError(Exception):

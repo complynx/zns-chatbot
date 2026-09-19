@@ -1,6 +1,6 @@
 from typing import List
 from motor.core import AgnosticCollection
-import pytz
+from zoneinfo import ZoneInfo
 from ..tg_state import TGState
 from ..telegram_links import client_user_link_html, client_user_name
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
@@ -25,15 +25,13 @@ SPECIALIST_SLOT_FLYOVER=timedelta(minutes=5)
 CLIENT_SLOT_RESTRICTION=timedelta(minutes=15)
 NOTIFICATOR_LOOP=30
 
-ctime = datetime.now()
-ctime_msk = datetime.now(tz=pytz.timezone("Europe/Moscow")).replace(tzinfo=None)
-MSK_OFFSET = timedelta(seconds=round((ctime_msk-ctime).total_seconds()))
+LOCAL_TIMEZONE = ZoneInfo("Europe/Minsk")
 
 def now_msk() -> datetime:
-    return datetime.now() + MSK_OFFSET
+    """Return Grodno wall time, keeping the legacy name and naive datetime API."""
+    return datetime.now(tz=LOCAL_TIMEZONE).replace(tzinfo=None)
 
-logger.debug(f"ctime {ctime}, ctime msk {ctime_msk}, msk offset {MSK_OFFSET}")
-logger.debug(f"now msk {now_msk()}")
+logger.debug(f"now Grodno {now_msk()}")
 
 def price_from_length(length:int=1, currency:str="BYN")->int:
     if currency == "BYN":
