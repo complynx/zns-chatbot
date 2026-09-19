@@ -71,7 +71,7 @@ NOTIFICATION_CLAIM_TTL = datetime.timedelta(minutes=15)
 ILLEGAL_XML_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 # Local Grodno time (Europe/Minsk).
-DEADLINE=datetime.datetime(2026, 9, 24, 0, 0, 0)
+DEADLINE=datetime.datetime(2026, 9, 25, 0, 0, 0)
 
 
 class CapacityFullError(Exception):
