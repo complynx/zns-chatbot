@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 SLOT_LENGTH=20
 SLOT_BUFFER=5
+BOOKING_LENGTHS = (1, 2, 3, 5)
 SLOT_DURATION=timedelta(minutes=SLOT_LENGTH)
 EARLY_COMER_TOLERANCE=timedelta(hours=2)
 SPECIALIST_SLOT_FLYOVER=timedelta(minutes=5)
@@ -36,30 +37,30 @@ logger.debug(f"now Grodno {now_msk()}")
 def price_from_length(length:int=1, currency:str="BYN")->int:
     if currency == "BYN":
         if length == 1:
-            return 35
+            return 43
         if length == 2:
-            return 55
+            return 57
         if length == 3:
-            return 70
-        if length == 4:
             return 90
-        if length == 5:
-            return 100
-        if length == 6:
+        if length == 4:
             return 110
+        if length == 5:
+            return 125
+        if length == 6:
+            return 150
     if currency == "RUB":
         if length == 1:
-            return 960
+            return 1200
         if length == 2:
-            return 1500
+            return 1600
         if length == 3:
-            return 1900
+            return 2500
         if length == 4:
-            return 2450
-        if length == 5:
-            return 2750
-        if length == 6:
             return 3000
+        if length == 5:
+            return 3500
+        if length == 6:
+            return 4000
     raise ValueError(f"Unsupported length {length} for price calculation")
 
 def min_from_length(length:int =1)->int:
@@ -899,9 +900,7 @@ class UserMassages:
                         priceRu=price_from_length(length, currency="RUB")
                 ), callback_data=f"{self.plugin.name}|ed|{massage.id}|{length}")
         keyboard = [
-            [len_btn(1),len_btn(2)],
-            [len_btn(3),len_btn(5)],
-            # [len_btn(5),len_btn(6)],
+            *split_list([len_btn(length) for length in BOOKING_LENGTHS], 2),
             [
                 InlineKeyboardButton(self.l("massage-edit-back-button"), callback_data=f"{self.plugin.name}|back|{massage.id}"),
                 InlineKeyboardButton(self.l("massage-edit-cancel-button"), callback_data=f"{self.plugin.name}|xed|{massage.id}")
@@ -1056,7 +1055,9 @@ class UserMassages:
                             price=price_from_length(length),
                             priceRu=price_from_length(length, currency="RUB")
                         ), callback_data=f"{self.plugin.name}|instant|{length}")
-                keyboard.extend(split_list([instant_book(i+1) for i in range(0, possible_slots)], 3))
+                keyboard.extend(split_list([
+                    instant_book(length) for length in range(1, possible_slots + 1)
+                ], 3))
             keyboard.append([InlineKeyboardButton(self.l("massage-specialist-notifications-button"),
                                                    callback_data=f"{self.plugin.name}|notifications")])
         elif self.update.user in self.plugin.config.food.admins:
