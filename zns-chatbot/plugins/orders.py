@@ -40,7 +40,7 @@ def currency_ceil(sum):
 logger = logging.getLogger(__name__)
 
 BYN_TO_RUB = 30
-SHUTTLE_CAPACITY = 43
+SHUTTLE_CAPACITY = 53
 SHUTTLE_SERVICE = "shuttle"
 GRODNO_OVERVIEW_SERVICE = "excursion_grodno_overview"
 GRODNO_GORODNITSA_SERVICE = "excursion_grodno_gorodnitsa"
