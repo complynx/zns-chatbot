@@ -191,7 +191,22 @@ def _orders_service(event_key="grodno_26"):
     return service
 
 
-class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
+class CapacityTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        super().setUp()
+        # Keep capacity scenarios independent of production event limits.
+        self.capacity_limits = {
+            orders_module.SHUTTLE_SERVICE: 3,
+            orders_module.GRODNO_OVERVIEW_SERVICE: 4,
+            orders_module.GRODNO_GORODNITSA_SERVICE: 5,
+        }
+        self.shuttle_capacity = self.capacity_limits[orders_module.SHUTTLE_SERVICE]
+        self.enterContext(patch.dict(
+            orders_module.CAPACITY_LIMITS, self.capacity_limits, clear=True
+        ))
+
+
+class ShuttleCapacityTests(CapacityTestCase):
     async def test_deleted_order_frees_capacity_without_restart(self):
         for check_availability in (True, False):
             with self.subTest(check_availability=check_availability):
@@ -229,20 +244,20 @@ class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(service._capacity_event_key(), "grodno_30")
 
-    async def test_only_43_concurrent_reservations_succeed(self):
+    async def test_concurrent_reservations_respect_shuttle_capacity(self):
         service = _orders_service()
-        order_ids = [ObjectId() for _ in range(44)]
+        order_ids = [ObjectId() for _ in range(self.shuttle_capacity + 1)]
 
         results = await asyncio.gather(*(
             service.reserve_shuttle_seat(order_id) for order_id in order_ids
         ))
 
-        self.assertEqual(sum(results), orders_module.SHUTTLE_CAPACITY)
+        self.assertEqual(sum(results), self.shuttle_capacity)
         self.assertFalse(await service.shuttle_available())
 
     async def test_releasing_a_seat_allows_another_order(self):
         service = _orders_service()
-        order_ids = [ObjectId() for _ in range(orders_module.SHUTTLE_CAPACITY)]
+        order_ids = [ObjectId() for _ in range(self.shuttle_capacity)]
         for order_id in order_ids:
             self.assertTrue(await service.reserve_shuttle_seat(order_id))
 
@@ -252,7 +267,7 @@ class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_only_paid_existing_transfer_can_still_open_when_full(self):
         service = _orders_service()
-        for _ in range(orders_module.SHUTTLE_CAPACITY):
+        for _ in range(self.shuttle_capacity):
             self.assertTrue(await service.reserve_shuttle_seat(ObjectId()))
 
         choice = {"extras": {"shuttle": {"count": 1}}}
@@ -282,7 +297,7 @@ class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_full_transfer_rejects_order_without_saving_it(self):
         service = _orders_service()
-        for _ in range(orders_module.SHUTTLE_CAPACITY):
+        for _ in range(self.shuttle_capacity):
             self.assertTrue(await service.reserve_shuttle_seat(ObjectId()))
         update = orders_module.OrdersUpdate.__new__(orders_module.OrdersUpdate)
         update.base = service
@@ -296,7 +311,7 @@ class ShuttleCapacityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.food_db.documents, [])
 
 
-class PaidOrderCapacityTests(unittest.IsolatedAsyncioTestCase):
+class PaidOrderCapacityTests(CapacityTestCase):
     @staticmethod
     def _notification_update(reply):
         return SimpleNamespace(
@@ -372,7 +387,7 @@ class PaidOrderCapacityTests(unittest.IsolatedAsyncioTestCase):
         service = _orders_service()
         paid_orders = []
         start = datetime.datetime(2026, 8, 20, 12, 0)
-        for index in range(orders_module.SHUTTLE_CAPACITY + 1):
+        for index in range(self.shuttle_capacity + 1):
             order = {
                 "_id": ObjectId(),
                 "user_id": index,
@@ -404,7 +419,7 @@ class PaidOrderCapacityTests(unittest.IsolatedAsyncioTestCase):
         service = _orders_service()
         proof_time = datetime.datetime(2026, 8, 20, 12, 0)
         orders = []
-        for index in range(orders_module.SHUTTLE_CAPACITY + 1):
+        for index in range(self.shuttle_capacity + 1):
             order = {
                 "_id": ObjectId(),
                 "user_id": index,
@@ -566,7 +581,7 @@ class PaidOrderCapacityTests(unittest.IsolatedAsyncioTestCase):
     async def test_full_paid_capacity_recalculates_and_notifies_unpaid_order(self):
         service = _orders_service()
         proof_time = datetime.datetime(2026, 8, 21)
-        for user_id in range(orders_module.SHUTTLE_CAPACITY):
+        for user_id in range(self.shuttle_capacity):
             service.food_db.documents.append({
                 "_id": ObjectId(),
                 "user_id": user_id,
@@ -626,7 +641,7 @@ class PaidOrderCapacityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_proof_submitted_after_capacity_is_full_is_recalculated(self):
         service = _orders_service()
-        for _ in range(orders_module.SHUTTLE_CAPACITY):
+        for _ in range(self.shuttle_capacity):
             self.assertTrue(await service.reserve_shuttle_seat(ObjectId()))
         order_id = ObjectId()
         service.food_db.documents.append({
@@ -683,7 +698,7 @@ class PaidOrderCapacityTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_malformed_order_does_not_block_other_reconciliation(self):
         service = _orders_service()
-        for _ in range(orders_module.SHUTTLE_CAPACITY):
+        for _ in range(self.shuttle_capacity):
             self.assertTrue(await service.reserve_shuttle_seat(ObjectId()))
         malformed_id = ObjectId()
         valid_id = ObjectId()
@@ -777,7 +792,7 @@ class PaidOrderCapacityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(choice["total"], 2)
 
 
-class PaymentAttemptTests(unittest.IsolatedAsyncioTestCase):
+class PaymentAttemptTests(CapacityTestCase):
     @staticmethod
     def _admin_update(service, admin_id=999):
         service.base_app = SimpleNamespace(
@@ -1206,7 +1221,7 @@ class PaymentAttemptTests(unittest.IsolatedAsyncioTestCase):
         service = _orders_service()
         capacity_service = orders_module.GRODNO_OVERVIEW_SERVICE
         await service._ensure_capacity_slots(capacity_service)
-        for _ in range(orders_module.CAPACITY_LIMITS[capacity_service] - 1):
+        for _ in range(self.capacity_limits[capacity_service] - 1):
             self.assertTrue(await service.reserve_service_seat(
                 capacity_service, ObjectId()
             ))
@@ -1253,7 +1268,7 @@ class PaymentAttemptTests(unittest.IsolatedAsyncioTestCase):
         service = _orders_service()
         capacity_service = orders_module.GRODNO_OVERVIEW_SERVICE
         await service._ensure_capacity_slots(capacity_service)
-        for _ in range(orders_module.CAPACITY_LIMITS[capacity_service] - 1):
+        for _ in range(self.capacity_limits[capacity_service] - 1):
             self.assertTrue(await service.reserve_service_seat(
                 capacity_service, ObjectId()
             ))
@@ -1311,7 +1326,7 @@ class PaymentAttemptTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_priority_displacement_outlasts_capacity_many_cas_conflicts(self):
         capacity_service = orders_module.GRODNO_OVERVIEW_SERVICE
-        conflict_count = orders_module.CAPACITY_LIMITS[capacity_service] + 1
+        conflict_count = self.capacity_limits[capacity_service] + 1
         earlier_time = datetime.datetime(2026, 8, 23, 10, 0)
         earlier_id = ObjectId()
 
@@ -1347,7 +1362,7 @@ class PaymentAttemptTests(unittest.IsolatedAsyncioTestCase):
         }
         service.food_db.documents.append(order)
         later_slots = []
-        for seat in range(orders_module.CAPACITY_LIMITS[capacity_service]):
+        for seat in range(self.capacity_limits[capacity_service]):
             later_slots.append({
                 "_id": f"grodno_26:{capacity_service}:{seat}",
                 "event_key": "grodno_26",
@@ -1423,7 +1438,7 @@ class PaymentAttemptTests(unittest.IsolatedAsyncioTestCase):
                     proof_time - datetime.timedelta(minutes=seat + 1)
                 ),
             }
-            for seat in range(orders_module.CAPACITY_LIMITS[capacity_service])
+            for seat in range(self.capacity_limits[capacity_service])
         ]
         service.capacity_db = ReleaseAfterInitialClaimsCollection(earlier_slots)
         service._capacity_slots_ready.add(("grodno_26", capacity_service))
@@ -1491,7 +1506,7 @@ class PaymentAttemptTests(unittest.IsolatedAsyncioTestCase):
                     proof_time - datetime.timedelta(minutes=seat + 1)
                 ),
             }
-            for seat in range(orders_module.CAPACITY_LIMITS[capacity_service])
+            for seat in range(self.capacity_limits[capacity_service])
         ]
         service.capacity_db = ReplaceAfterSnapshotCollection(earlier_slots)
         service._capacity_slots_ready.add(("grodno_26", capacity_service))
@@ -1840,10 +1855,11 @@ class OrderEventScopingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.food_db.documents[0]["event_key"], "grodno_26")
         self.assertNotIn("event_number", service.food_db.documents[0])
 
-class GrodnoExcursionCapacityTests(unittest.IsolatedAsyncioTestCase):
-    async def test_overview_tour_is_limited_to_20_places(self):
+class GrodnoExcursionCapacityTests(CapacityTestCase):
+    async def test_overview_tour_respects_capacity(self):
         service = _orders_service()
-        order_ids = [ObjectId() for _ in range(21)]
+        capacity = self.capacity_limits[orders_module.GRODNO_OVERVIEW_SERVICE]
+        order_ids = [ObjectId() for _ in range(capacity + 1)]
 
         results = await asyncio.gather(*(
             service.reserve_service_seat(
@@ -1853,14 +1869,15 @@ class GrodnoExcursionCapacityTests(unittest.IsolatedAsyncioTestCase):
             for order_id in order_ids
         ))
 
-        self.assertEqual(sum(results), 20)
+        self.assertEqual(sum(results), capacity)
         self.assertFalse(await service.service_available(
             orders_module.GRODNO_OVERVIEW_SERVICE
         ))
 
-    async def test_gorodnitsa_tour_is_limited_to_25_places(self):
+    async def test_gorodnitsa_tour_respects_capacity(self):
         service = _orders_service()
-        order_ids = [ObjectId() for _ in range(26)]
+        capacity = self.capacity_limits[orders_module.GRODNO_GORODNITSA_SERVICE]
+        order_ids = [ObjectId() for _ in range(capacity + 1)]
 
         results = await asyncio.gather(*(
             service.reserve_service_seat(
@@ -1870,11 +1887,14 @@ class GrodnoExcursionCapacityTests(unittest.IsolatedAsyncioTestCase):
             for order_id in order_ids
         ))
 
-        self.assertEqual(sum(results), 25)
+        self.assertEqual(sum(results), capacity)
+        self.assertFalse(await service.service_available(
+            orders_module.GRODNO_GORODNITSA_SERVICE
+        ))
 
     async def test_full_overview_tour_rejects_order_without_saving_it(self):
         service = _orders_service()
-        for _ in range(20):
+        for _ in range(self.capacity_limits[orders_module.GRODNO_OVERVIEW_SERVICE]):
             self.assertTrue(await service.reserve_service_seat(
                 orders_module.GRODNO_OVERVIEW_SERVICE,
                 ObjectId(),
