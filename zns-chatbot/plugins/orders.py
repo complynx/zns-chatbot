@@ -71,7 +71,23 @@ NOTIFICATION_CLAIM_TTL = datetime.timedelta(minutes=15)
 ILLEGAL_XML_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 # Local Grodno time (Europe/Minsk).
-DEADLINE=datetime.datetime(2026, 9, 25, 0, 0, 0)
+DEADLINE = datetime.datetime(2026, 9, 25)
+EXTRAS_DEADLINE = datetime.datetime(2026, 10, 1)
+
+
+def choice_has_food(choice):
+    """Empty meal sections from the web form do not count as food."""
+    return any(
+        meal.get("dishes")
+        for day in (choice or {}).get("days", {}).values()
+        for meal in day.get("mealtimes", {}).values()
+    )
+
+
+def orders_open(choice=None):
+    """Deadlines are exclusive and use local Grodno time."""
+    deadline = DEADLINE if choice_has_food(choice) else EXTRAS_DEADLINE
+    return now_msk() < deadline
 
 
 class CapacityFullError(Exception):
@@ -425,15 +441,21 @@ class OrdersUpdate:
     def current_event_filter(self, **fields):
         return {"event_key": self.config.event_key, **fields}
 
+    async def order_is_open(self, order_id):
+        order = await self.base.food_db.find_one(self.current_event_filter(
+            _id=ObjectId(order_id), user_id=self.user,
+        ))
+        return order is not None and orders_open(order.get("choice"))
+
     async def create_order(self, choice):
+        choice = canonicalize_choice(choice, self.base.menu)
         # Block creating orders after deadline
-        if now_msk() > DEADLINE:
+        if not orders_open(choice):
             return await self.update.reply(
                 self.l("orders-closed"),
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
             )
-        choice = canonicalize_choice(choice, self.base.menu)
         validate_excursion_choice(choice)
         for service in sorted(choice_capacity_services(choice)):
             if not await self.base.service_available(service):
@@ -448,14 +470,14 @@ class OrdersUpdate:
         return await self.handle_cq_start()
 
     async def set_choice(self, order_id, choice):
+        choice = canonicalize_choice(choice, self.base.menu)
         # Block modifying orders after deadline
-        if now_msk() > DEADLINE:
+        if not orders_open(choice) or not await self.order_is_open(order_id):
             return await self.update.reply(
                 self.l("orders-closed"),
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
             )
-        choice = canonicalize_choice(choice, self.base.menu)
         validate_excursion_choice(choice)
         order_oid = ObjectId(order_id)
         order_filter = self.current_event_filter(_id=order_oid, user_id=self.user)
@@ -494,7 +516,7 @@ class OrdersUpdate:
 
     async def handle_cq_del(self, order_id):
         # Disallow deleting after deadline
-        if now_msk() > DEADLINE:
+        if not await self.order_is_open(order_id):
             return await self.handle_cq_start()
         guarded_filter = unpaid_order_filter(
             _id=ObjectId(order_id),
@@ -522,7 +544,7 @@ class OrdersUpdate:
         ))
         if order is None:
             return await self.handle_cq_start()
-        if order_has_payment_proof(order):
+        if order_has_payment_proof(order) or not orders_open(order.get("choice")):
             return await self.handle_cq_start()
         total, total_rub = self.get_order_total(order)
         admins_be = await self.base.base_app.users_collection.find({
@@ -557,7 +579,7 @@ class OrdersUpdate:
 
     async def handle_cq_cash(self, order_id, admin_id):
         # Block cash confirmation creation after deadline
-        if now_msk() > DEADLINE:
+        if not await self.order_is_open(order_id):
             return await self.handle_cq_start()
         # return await self.handle_cq_start()
         admin = await self.base.base_app.users_collection.find_one({
@@ -638,17 +660,18 @@ class OrdersUpdate:
         current_order = None
         btns = []
         for order in orders:
-            if not order_has_payment_proof(order):
-                current_order = order
-                break
+            if not order_has_payment_proof(order) and orders_open(order.get("choice")):
+                if current_order is None:
+                    current_order = order
             else:
                 btns.append([InlineKeyboardButton(self.l(
                     "orders-order-button",
                     created=order["created_at"].strftime("%d.%m"),
                     name=order["choice"]["customer"],
                 ), web_app=WebAppInfo(full_link(self.base.base_app, f"/orders?order_id={str(order['_id'])}&locale={self.update.language_code}{debug_param}")))])
-        if now_msk() <= DEADLINE:
+        if orders_open():
             if current_order is not None:
+                order = current_order
                 btns.append([InlineKeyboardButton(self.l(
                     "orders-order-pay-button",
                 ), callback_data=f"{self.base.name}|pay|{str(order['_id'])}")])
@@ -890,7 +913,7 @@ class OrdersUpdate:
     
     async def handle_cq_pcancel(self, order_id, attempt_token=None):
         # Block canceling proof after deadline
-        if now_msk() > DEADLINE:
+        if not await self.order_is_open(order_id):
             return await self.update.edit_or_reply(self.l("orders-closed"),
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
@@ -932,16 +955,20 @@ class OrdersUpdate:
     async def handle_payment(self):
         logger.debug(f"handling payment for: {self.user}")
         # After deadline, ignore new payment proofs
-        if now_msk() > DEADLINE:
+        if not orders_open():
             return await self.update.edit_or_reply(
                 self.l("orders-closed"),
                 parse_mode=ParseMode.HTML,
                 reply_markup=InlineKeyboardMarkup([]),
             )
-        order = await self.base.food_db.find_one(unpaid_order_filter(
+        order = None
+        async for candidate in self.base.food_db.find(unpaid_order_filter(
             user_id=self.user,
             event_key=self.config.event_key,
-        ))
+        )).sort("created_at", 1):
+            if orders_open(candidate.get("choice")):
+                order = candidate
+                break
         if order is None:
             return await self.update.edit_or_reply(
                 self.l("unsupported-message-error"),

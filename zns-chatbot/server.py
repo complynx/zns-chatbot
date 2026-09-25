@@ -21,6 +21,9 @@ from .events import Events
 from .plugins.massage import now_msk
 from .plugins.orders import (
     DEADLINE,
+    canonicalize_choice,
+    choice_has_food,
+    orders_open,
     CapacityFullError,
     InvalidExcursionChoiceError,
     InvalidOrderChoiceError,
@@ -234,7 +237,7 @@ class OrdersHandler(RequestHandlerWithApp):
                 choice = order["choice"]
             read_only = order_has_payment_proof(order)
         # After deadline, force read-only regardless of order state
-        if now_msk() > DEADLINE:
+        if not orders_open(choice):
             read_only = True
         lang = "en"
         if locale_str.startswith("ru"):
@@ -251,6 +254,7 @@ class OrdersHandler(RequestHandlerWithApp):
             self.render(
                 "orders.html",
                 read_only=read_only,
+                show_food=now_msk() < DEADLINE or choice_has_food(choice),
                 user_order=choice,
                 user_order_id=order_id,
                 debug_id=debug_id,
@@ -292,9 +296,15 @@ class OrdersHandler(RequestHandlerWithApp):
             logger.info(f"user {user['id']} order {order_id} choice {choice}")
 
             # Block all modifications and creations after deadline
-            if now_msk() > DEADLINE:
+            if not orders_open():
                 self.set_status(403)
                 self.write({"error": "orders closed by deadline"})
+                return
+
+            choice = canonicalize_choice(choice, orders.menu)
+            if not orders_open(choice):
+                self.set_status(403)
+                self.write({"error": "food orders closed by deadline"})
                 return
 
             if order_id == "":
@@ -309,6 +319,10 @@ class OrdersHandler(RequestHandlerWithApp):
             if order["user_id"] != user["id"]:
                 self.set_status(403)
                 logger.error("user ID doesn't match")
+                return
+            if not orders_open(order.get("choice")):
+                self.set_status(403)
+                self.write({"error": "orders closed by deadline"})
                 return
             if order_has_payment_proof(order):
                 self.set_status(409)
