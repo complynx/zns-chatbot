@@ -37,15 +37,15 @@ logger.debug(f"now Grodno {now_msk()}")
 def price_from_length(length:int=1, currency:str="BYN")->int:
     if currency == "BYN":
         if length == 1:
-            return 43
+            return 45
         if length == 2:
-            return 57
+            return 60
         if length == 3:
             return 90
         if length == 4:
             return 110
         if length == 5:
-            return 125
+            return 130
         if length == 6:
             return 150
     if currency == "RUB":
