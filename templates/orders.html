@@ -22,7 +22,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="stylesheet" type="text/css" href="./static/orders.css">
         <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <script type="module" src="./static/orders.mjs"></script>
+        <script type="module" src="./static/orders.mjs?v=extras-deadline-20260930"></script>
     </head>
     <body>
         <div id="total-sum">0</div>
@@ -40,6 +40,10 @@
         </section>
 
         <section class="excursions">
+            {% if not show_food %}
+            <p lang="ru">Заказ еды закрыт. Дополнительные активности можно заказать до 30 сентября включительно (время Минска).</p>
+            <p lang="en">Food orders are closed. You can order additional activities through September 30 (Minsk time).</p>
+            {% end %}
             <span lang="ru">Выбери, что тебе нужно</span>
             <span lang="en">Choose what you need</span>
             <label>
@@ -120,6 +124,7 @@
             <span lang="en">Food selection will follow.</span>
         </section>
 
+        {% if show_food %}
         <section class="friday dinner meal">
             <div class="day"><span lang="ru">Пятница</span><span lang="en">Friday</span></div>
             <div class="mealtime"><span lang="ru">Ужин</span><span lang="en">Dinner</span></div>
@@ -144,5 +149,6 @@
             <div class="day"><span lang="ru">Воскресенье</span><span lang="en">Sunday</span></div>
             <div class="mealtime"><span lang="ru">Ужин</span><span lang="en">Dinner</span></div>
         </section>
+        {% end %}
     </body>
 </html>
