@@ -15,3 +15,53 @@ __pycache__
 .vscode/
 .codex/local*
 *.local
+*.local.*
+.cache/
+# Local caches at any module depth.
+.go-cache/
+.gocache/
+.gocache-*/
+.lintcache/
+.lintcache-*/
+.cache-*/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+node_modules/
+
+# Local environments and generated test/build output.
+.venv/
+.venv-*/
+*.egg-info/
+*.py[cod]
+.coverage
+.coverage.*
+coverage/
+test-results/
+playwright-report/
+blob-report/
+*.exe
+*.test
+/dist/
+/tools/migrate/zns-migrate
+.DS_Store
+Thumbs.db
+
+# Operator credentials; keep distributable examples visible.
+.env
+.env.*
+*.env
+!.env.example
+!.env.template
+
+# Local candidate assembly evidence.
+/tools/migrate/passes-runtime.patch
+/tools/migrate/passes-candidate-manifest.json
+
+# Disposable bootstrap outputs.
+/synthetic-bootstrap-migrator
+/synthetic-bootstrap-owner
+/synthetic-bootstrap-runtime
+/.tmp/
+/.worktrees/
