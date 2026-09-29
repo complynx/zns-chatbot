@@ -1,0 +1,42 @@
+# Sandbox bot example. Supply credentials through the environment.
+# Required: ZNS_DATABASE__URL and ZNS_AUTH__SIGNING_KEY (at least 32 bytes).
+env: sandbox
+parent_stdin: false
+synthetic_only: false
+server:
+  host: 127.0.0.1
+  port: 8080
+  read_header_timeout: 5s
+  read_timeout: 15s
+  write_timeout: 45s
+  idle_timeout: 30s
+  health_timeout: 3s
+core:
+  url: http://api:8080
+telegram:
+  base_url: http://fake:8080
+  web_app_url: http://127.0.0.1:8090/miniapp/
+sandbox:
+  mini_app_url: http://bot:8080
+model:
+  provider: remote
+  url: http://model:8080
+sticker:
+  cache:
+    capacity: 5000
+    half_life: 168h
+orders:
+  active_event: sandbox-festival
+  reminder_after: 48h
+script:
+  enabled: false
+  socket: /run/script-ipc/evaluate.sock
+shutdown:
+  drain: 5s
+  telemetry_flush: 5s
+log:
+  level: info
+otel:
+  enabled: false
+  endpoint: ''
+  sample_ratio: 0.1

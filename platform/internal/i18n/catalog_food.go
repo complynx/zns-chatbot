@@ -1,0 +1,27 @@
+package i18n
+
+const (
+	FoodCard          ID = "food.card"
+	FoodCardClosed    ID = "food.card_closed"
+	FoodPayMeals      ID = "food.pay_meals"
+	FoodPayActivities ID = "food.pay_activities"
+	FoodDelete        ID = "food.delete"
+	FoodClosed        ID = "food.closed"
+	FoodUnavailable   ID = "food.unavailable"
+	FoodUpdated       ID = "food.updated"
+	FoodReceipt       ID = "food.receipt"
+	FoodExported      ID = "food.exported"
+	FoodInstructions  ID = "food.instructions"
+	FoodSubmit        ID = "food.submit"
+	FoodAll           ID = "food.all"
+	FoodClasses       ID = "food.classes"
+	FoodOpen          ID = "food.open"
+	FoodYoga          ID = "food.yoga"
+	FoodCacao         ID = "food.cacao"
+	FoodSound         ID = "food.sound"
+	FoodMeals         ID = "food.meals"
+	FoodActivities    ID = "food.activities"
+	FoodAccept        ID = "food.accept"
+	FoodReject        ID = "food.reject"
+	FoodNotice        ID = "food.notice"
+)

@@ -1,0 +1,8 @@
+.git
+*.local
+coverage*
+*.exe
+node_modules
+.cache
+test-results
+build.local.log

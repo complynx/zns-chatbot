@@ -1,0 +1,186 @@
+name: zns-product
+x-runtime: &runtime
+  image: zns-product:local
+  build: ./platform
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  networks: [product]
+x-environment: &environment
+  ZNS_CONFIG_FILE: /etc/zns/product.yaml
+  ZNS_DATABASE__URL: postgres://zns_app:sandbox-product-only@postgres/zns?sslmode=disable
+  ZNS_AUTH__SIGNING_KEY: sandbox-product-only-not-for-production-123456789
+  TELEGRAM_TOKEN: sandbox
+x-decoder: &decoder
+  network_mode: none
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  cpus: 1
+  pids_limit: 32
+  restart: unless-stopped
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: sandbox-product-owner-only
+      POSTGRES_DB: zns
+    volumes:
+      - product-pgdata:/var/lib/postgresql/data
+      - ./platform/sandbox/product-roles.sql:/docker-entrypoint-initdb.d/roles.sql:ro
+    networks: [product, front]
+    ports: ["127.0.0.1:55434:5432"]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d zns"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  migrate:
+    <<: *runtime
+    command: migrate
+    environment:
+      <<: *environment
+      ZNS_DATABASE__URL: postgres://postgres:sandbox-product-owner-only@postgres/zns?sslmode=disable
+    volumes: ["./platform/sandbox/product.yaml:/etc/zns/product.yaml:ro"]
+    depends_on:
+      postgres: { condition: service_healthy }
+  fixtures:
+    <<: *runtime
+    command: product-fixture
+    environment:
+      <<: *environment
+      ZNS_DATABASE__URL: postgres://postgres:sandbox-product-owner-only@postgres/zns?sslmode=disable
+    volumes: ["./platform/sandbox/product.yaml:/etc/zns/product.yaml:ro"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+  fake:
+    <<: *runtime
+    command: fake
+    environment: *environment
+    volumes: ["./platform/sandbox/product.yaml:/etc/zns/product.yaml:ro"]
+    networks: [product, front]
+    ports: ["127.0.0.1:8118:8080"]
+    depends_on:
+      fixtures: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, zns, health]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  app:
+    <<: *runtime
+    command: app
+    environment:
+      <<: *environment
+      MEDIA_WORKER_URL: http://media-broker:8091
+      MEDIA_WORKER_SECRET: sandbox-product-media-only
+      STICKER_WORKER_URL: http://sticker-broker:8098
+      STICKER_WORKER_SECRET: sandbox-product-sticker-only
+    group_add: ["10002"]
+    volumes:
+      - ./platform/sandbox/product.yaml:/etc/zns/product.yaml:ro
+      - script-ipc:/run/script-ipc:ro
+    networks: [product, front]
+    ports: ["127.0.0.1:8117:8080"]
+    stop_grace_period: 20s
+    depends_on:
+      fake: { condition: service_healthy }
+      evaluator: { condition: service_healthy }
+      media-broker: { condition: service_started }
+      sticker-broker: { condition: service_started }
+    healthcheck:
+      test: [CMD, zns, health]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  evaluator:
+    <<: *decoder
+    build: { context: ./platform, dockerfile: Dockerfile.script }
+    volumes: ["script-ipc:/run/script-ipc"]
+    mem_limit: 128m
+    memswap_limit: 128m
+    healthcheck:
+      test: [CMD, /usr/local/bin/scriptservice, health]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+  media-decoder:
+    <<: *decoder
+    build: { context: ./platform, dockerfile: Dockerfile.media }
+    volumes: ["media-ipc:/run/media-ipc"]
+    mem_limit: 512m
+    cpus: 2
+    pids_limit: 256
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,uid=10002,gid=10002,mode=0700"]
+    healthcheck:
+      test: [CMD, test, -S, /run/media-ipc/decoder.sock]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+  media-broker:
+    <<: *runtime
+    image: zns-product-media-broker:local
+    build: { context: ./platform, dockerfile: Dockerfile.media-broker }
+    mem_limit: 256m
+    pids_limit: 64
+    volumes: ["media-ipc:/run/media-ipc:ro"]
+    environment:
+      MEDIA_WORKER_SECRET: sandbox-product-media-only
+      OPENAI_API_KEY: sandbox-only-synthetic-asr
+      OPENAI_TRANSCRIPTION_MODEL: gpt-transcribe
+      OPENAI_TRANSCRIPTION_URL: http://fake:8080/lab/asr
+    depends_on:
+      fake: { condition: service_healthy }
+      media-decoder: { condition: service_healthy }
+  sticker-native:
+    entrypoint: [/bin/true]
+    network_mode: none
+    build:
+      { context: ./platform, dockerfile: Dockerfile.sticker, target: runtime }
+    image: zns-product-sticker-native:local
+  sticker-decoder:
+    <<: *decoder
+    build:
+      context: ./platform
+      dockerfile: Dockerfile.sticker-worker
+      additional_contexts:
+        sticker-native: service:sticker-native
+    environment:
+      STICKER_WORKER_MODE: decoder
+    volumes: ["sticker-ipc:/run/sticker-ipc"]
+    tmpfs: ["/tmp:rw,nosuid,noexec,size=32m,uid=10002,gid=10002,mode=0700"]
+    mem_limit: 256m
+  sticker-broker:
+    <<: *runtime
+    image: zns-product-sticker-broker:local
+    build: { context: ./platform, dockerfile: Dockerfile.sticker-broker }
+    environment:
+      STICKER_WORKER_MODE: broker
+      STICKER_WORKER_SECRET: sandbox-product-sticker-only
+    volumes: ["sticker-ipc:/run/sticker-ipc:ro"]
+    mem_limit: 256m
+    pids_limit: 16
+    depends_on: [sticker-decoder]
+networks:
+  product: { internal: true }
+  front: {}
+volumes:
+  product-pgdata: {}
+  script-ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0770,nosuid,nodev,noexec
+  media-ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec
+  sticker-ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec

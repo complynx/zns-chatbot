@@ -1,0 +1,35 @@
+# Full synthetic AV path. No real OpenAI key or external model request.
+services:
+  decoder:
+    extends:
+      file: compose.media.yaml
+      service: decoder
+  broker:
+    extends:
+      file: compose.media.yaml
+      service: broker
+    ports: !reset []
+    networks: [sandbox]
+    environment:
+      MEDIA_WORKER_SECRET: sandbox-only-media-broker
+      DATABASE_URL: postgres://zns_meter:sandbox-meter-only@postgres/zns?sslmode=disable
+      OPENAI_API_KEY: sandbox-only-synthetic-asr
+      OPENAI_TRANSCRIPTION_MODEL: gpt-transcribe
+      OPENAI_TRANSCRIPTION_URL: http://fake:8080/lab/asr
+    depends_on:
+      decoder: { condition: service_healthy }
+      fake: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+  bot:
+    environment:
+      MEDIA_WORKER_URL: http://broker:8091
+      MEDIA_WORKER_SECRET: sandbox-only-media-broker
+    depends_on:
+      broker: { condition: service_started }
+volumes:
+  decoder-ipc-bounded:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec

@@ -1,0 +1,9 @@
+*.local.*
+*.out
+*.exe
+node_modules/
+test-results/
+/zns
+/.lintcache-model/
+/.gocache-model/
+/.cache-diagnostics/

@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "scope": "Stage B coverage seed; lead must reconcile with the complete frozen acceptance scope",
+  "source": "docs/architecture-stage-b-plan.md: Complete scenario, Behavior and security invariants, Final Functional QA",
+  "scenarios": [
+    {
+      "id": "stage-b.orders.handoff",
+      "expectation": "Two editable orders; explicit manual selection, agent extra change, Mini App edit, stale callback refusal and refreshed Telegram cards. Include original voice selection evidence and subsequent manual continuation.",
+      "cells": [
+        { "locale": "en", "input": "mouse" },
+        { "locale": "en", "input": "touch" },
+        { "locale": "ru", "input": "mouse" },
+        { "locale": "ru", "input": "touch" }
+      ],
+      "requiredEvidence": [
+        "ui-journey",
+        "authoritative-state",
+        "input-selection"
+      ],
+      "resources": ["distinct-owner-event-orders"],
+      "barriers": []
+    },
+    {
+      "id": "stage-b.orders.edit-guards",
+      "expectation": "Paid/proof edits are refused; current version, deadline, capacity and owner authority govern all entry points.",
+      "cells": [{ "locale": "independent", "input": "none" }],
+      "requiredEvidence": ["observed-refusals", "authoritative-state"]
+    },
+    {
+      "id": "stage-b.turn.saved-plan-restart",
+      "expectation": "Crash after saved bound plan; resume unchanged command/key without another model invocation or duplicate mutation; current cards and subsequent manual continuation.",
+      "cells": [{ "locale": "independent", "input": "none" }],
+      "requiredEvidence": [
+        "observed-boundary",
+        "restart-replay",
+        "authoritative-state",
+        "ui-journey"
+      ],
+      "barriers": ["lead-owned-restart"]
+    },
+    {
+      "id": "stage-b.turn.domain-commit-restart",
+      "expectation": "Crash after domain commit before outcome persistence; replay one mutation with unchanged command/key. Repeat with revoked rights and changed version.",
+      "cells": [{ "locale": "independent", "input": "none" }],
+      "requiredEvidence": [
+        "observed-boundary",
+        "restart-replay",
+        "authoritative-state",
+        "revocation-version"
+      ],
+      "barriers": ["lead-owned-restart", "permission-change"]
+    },
+    {
+      "id": "stage-b.turn.outcome-restart",
+      "expectation": "Crash after outcome before Telegram completion; resume without replanning or duplicate mutation, showing current cards.",
+      "cells": [{ "locale": "independent", "input": "none" }],
+      "requiredEvidence": [
+        "observed-boundary",
+        "restart-replay",
+        "authoritative-state",
+        "ui-journey"
+      ],
+      "barriers": ["lead-owned-restart"]
+    },
+    {
+      "id": "stage-b.identity.boundaries",
+      "expectation": "Actual test Zitadel verifies equivalent HTTP and typed admission: foreign/missing principal, inactive user before private intake, wrong issuer/audience/actor, revocation after discovery/binding, user denial of host-only operations and retryable provider outage.",
+      "cells": [{ "locale": "independent", "input": "none" }],
+      "requiredEvidence": [
+        "identity-verifier",
+        "admission-matrix",
+        "private-intake",
+        "revocation-outage"
+      ],
+      "barriers": ["permission-change", "identity-outage"]
+    },
+    {
+      "id": "stage-b.privacy.current-authority",
+      "expectation": "Interrupted model/script work, registration replay/discovery and deletion races enforce current history/access authority before context, output or derived mutation. Durable terminal state preserves committed business effects.",
+      "cells": [{ "locale": "independent", "input": "none" }],
+      "requiredEvidence": [
+        "observed-boundary",
+        "privacy-matrix",
+        "authoritative-state"
+      ],
+      "barriers": ["history-deletion", "permission-change"]
+    },
+    {
+      "id": "stage-b.turn.final-format",
+      "expectation": "Final saved state retains full authority/provenance, concurrent saves return one winner, invalid authority fails closed, and consumed voice cleanup does not trigger replanning.",
+      "cells": [{ "locale": "independent", "input": "none" }],
+      "requiredEvidence": [
+        "durable-state",
+        "concurrent-winner",
+        "authority-refusals",
+        "voice-resume"
+      ]
+    },
+    {
+      "id": "stage-b.runtime.continuity",
+      "expectation": "Preserve enabled Mini App timetable/food/onboarding, bounded large results, native proof/upload/export, whole-batch inbox ordering and Python source identities in the final runtime.",
+      "cells": [{ "locale": "independent", "input": "none" }],
+      "requiredEvidence": [
+        "enabled-flows",
+        "bounds",
+        "inbox-ordering",
+        "source-reconciliation"
+      ]
+    }
+  ]
+}

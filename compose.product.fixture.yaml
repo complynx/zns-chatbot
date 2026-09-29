@@ -1,0 +1,6 @@
+services:
+  app:
+    environment:
+      ZNS_MODEL__PROVIDER: fixture
+      ZNS_MODEL__URL: http://fake:8080/lab/model
+      ZNS_SYNTHETIC_ONLY: "true"

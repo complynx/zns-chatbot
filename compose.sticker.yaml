@@ -1,0 +1,54 @@
+name: zns-sticker
+services:
+  sticker-native:
+    entrypoint: [/bin/true]
+    network_mode: none
+    build:
+      context: ./platform
+      dockerfile: Dockerfile.sticker
+      target: runtime
+    image: zns-sticker-native:local
+  decoder:
+    build:
+      context: ./platform
+      dockerfile: Dockerfile.sticker-worker
+      additional_contexts:
+        sticker-native: service:sticker-native
+    network_mode: none
+    environment:
+      STICKER_WORKER_MODE: decoder
+    volumes:
+      - sticker-ipc-bounded:/run/sticker-ipc
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ["/tmp:rw,nosuid,noexec,size=32m,uid=10002,gid=10002,mode=0700"]
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 32
+    restart: unless-stopped
+  broker:
+    build:
+      context: ./platform
+      dockerfile: Dockerfile.sticker-broker
+    environment:
+      STICKER_WORKER_MODE: broker
+      STICKER_WORKER_SECRET: ${STICKER_WORKER_SECRET:?Set a dedicated sticker worker secret}
+    ports: [127.0.0.1:8098:8098]
+    volumes:
+      - sticker-ipc-bounded:/run/sticker-ipc:ro
+    depends_on: [decoder]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 16
+    restart: unless-stopped
+volumes:
+  sticker-ipc-bounded:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec

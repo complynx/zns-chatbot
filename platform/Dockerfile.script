@@ -1,0 +1,19 @@
+FROM golang:1.27-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -o /out/scriptworker ./cmd/scriptworker && \
+    CGO_ENABLED=0 go build -trimpath -o /out/scriptservice ./cmd/scriptservice && \
+    CGO_ENABLED=0 go test -c -o /out/scriptclient.test ./internal/scriptclient
+
+FROM scratch AS test
+COPY --from=build /out/scriptclient.test /usr/local/bin/scriptclient.test
+USER 10001:10002
+ENTRYPOINT ["/usr/local/bin/scriptclient.test"]
+
+FROM scratch AS runtime
+COPY --from=build /out/scriptworker /usr/local/bin/scriptworker
+COPY --from=build /out/scriptservice /usr/local/bin/scriptservice
+USER 10002:10002
+ENTRYPOINT ["/usr/local/bin/scriptservice"]

@@ -1,0 +1,37 @@
+#days section {
+  border-top: 1px solid #b5bfb7;
+  padding: 16px 0;
+}
+#days label {
+  margin: 8px 0;
+}
+#days label select {
+  display: block;
+  width: 100%;
+}
+#days input {
+  margin-right: 8px;
+}
+#days fieldset {
+  margin-top: 12px;
+}
+#days legend {
+  font-weight: 600;
+}
+#days details {
+  margin: 4px 0 12px 24px;
+}
+#days details p {
+  margin: 4px 0;
+}
+#days details img {
+  display: block;
+  max-width: 100%;
+  width: 320px;
+  height: auto;
+  margin-top: 8px;
+}
+#menu footer {
+  border-top: 1px solid #b5bfb7;
+  padding: 16px 0;
+}

@@ -1,0 +1,16 @@
+FROM golang:1.27-alpine3.23@sha256:0908ac9b9319e09d7c238aabe914e0395c51d63c4e3d0ae8c554fda9158a5769 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY internal/stickermedia ./internal/stickermedia
+COPY internal/stickerclient ./internal/stickerclient
+COPY internal/stickerworker ./internal/stickerworker
+COPY cmd/stickerworker ./cmd/stickerworker
+RUN CGO_ENABLED=0 go build -trimpath -o /stickerworker ./cmd/stickerworker
+FROM sticker-native
+USER root
+RUN rm /usr/local/bin/sticker-tests /usr/local/bin/sticker-slow-test && mkdir -p /run/sticker-ipc && chown 10002:10002 /run/sticker-ipc && chmod 0700 /run/sticker-ipc
+COPY --from=build /stickerworker /usr/local/bin/stickerworker
+USER 10002:10002
+ENV STICKER_NATIVE_TEST=0
+ENTRYPOINT ["stickerworker"]

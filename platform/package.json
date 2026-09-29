@@ -1,0 +1,26 @@
+{
+  "name": "zns-sandbox-browser-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "format:check": "prettier --check '**/*.{js,mjs,html,json,yml,yaml,md}'",
+    "format": "prettier --write '**/*.{js,mjs,html,json,yml,yaml,md}'",
+    "quality": "npm run lint && npm run format:check",
+    "quality:all": "node scripts/quality.mjs",
+    "test:browser": "node tests/entities.mjs && node tests/browser.mjs && node tests/orders.mjs && node tests/meals.mjs && node tests/proofs.mjs && node tests/notifications.mjs && node tests/exports.mjs",
+    "fqa": "node scripts/fqa/cli.mjs",
+    "test:fqa": "node --test scripts/fqa/client.test.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-promise": "7.3.0",
+    "eslint-plugin-security": "4.0.1",
+    "eslint-plugin-unicorn": "76.0.0",
+    "globals": "17.12.0",
+    "playwright": "1.62.1",
+    "prettier": "3.9.9"
+  }
+}

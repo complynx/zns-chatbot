@@ -1,0 +1,115 @@
+# Architecture stage A: ownership and first extraction contract
+
+Source inspection: 2026-09-26. This is an implementation plan for [the required architectural stages](architecture-refactor-plan.md), not a QA acceptance report. Product code and running stands were not changed. Paths below refer to the current working tree, which has concurrent feature work; verify symbols against the frozen candidate before extraction. This document owns no production files.
+
+The tables below retain the stage A baseline inventory. The [combined stage B
+plan](architecture-stage-b-plan.md) supersedes its temporary extraction contracts:
+intermediate Go APIs and saved formats need no compatibility layer, typed local
+calls are in scope, and final saved turns replace the earlier `bot.replies`
+adapter proposal. Domain ownership, live authorization, durable receipts and
+original Python data remain requirements.
+
+The developing stage B candidate also composes source-authority locks with target
+mutation locks. Its proposed order is source registration events, target order
+events, sorted actors, domain authorization and receipt lookup, then source and
+history fences for new effects through commit. Manual and derived order mutations
+must share the event-before-actor order; retaining the baseline actor-before-event
+path would introduce an inversion. This change requires concurrency proof and
+independent acceptance; the historical sequence below is not a requirement to
+preserve that inversion.
+
+## Current ownership
+
+All paths in the following map are relative to `platform/`. Table names are schema-qualified; grouped families include their operation receipts, audit and notification tables. SQL migrations in `internal/store/migrations` define storage, but `store` is not the owner of domain decisions.
+
+| Area | Current command/query owner and evidence | Data and transaction owner | Intended disposition |
+| --- | --- | --- | --- |
+| Orders | `internal/orders/service.go`: `Execute`, `Quote`, `Event`, `List`; additional reads/history/proofs/notifications in the same package. HTTP adaptation: `internal/api/orders.go`; client: `internal/bot/orders_client.go`. | `orders`, `order_events`, `order_admins`, `order_operations`, `order_audit`, `order_capacity_slots`, `order_notices`, `order_notifications`, `order_proofs` in `core`. `Execute` owns the event-wide mutation transaction. | Keep authoritative operations and SQL together. Extract interaction coordination first; do not add a second order executor. Shared proof storage is an explicit exception below. |
+| Legacy food | `internal/legacyfood`; `internal/miniapp/legacy_food.go` and `legacy_food_post.go` adapt historical web ordering. | `core.food_*`, `core.legacy_food_import_references`; own payment/operation/notification transactions. Reads profiles, registration events/bookings and shared proofs. | A distinct compatibility module. Do not silently fold historical food semantics into modern orders. |
+| Registration | `internal/passbooking/service.go`: `Execute`, `executeInTx`; admin assignment, payments, deadlines and navigation in that package. Pure allocation lives in `internal/passallocation`. | `core.pass_bookings`, `pass_events`, `pass_event_tiers`, booking/admin operations, assignments/batches, payments/participants, notifications, deadline/reminder/contact/announcement records. `Execute` owns event locking, coupled changes and queue allocation. | Keep registration's transaction scope, including explicitly coordinated profile changes. Allocation stays pure. |
+| Person/pass profile | `internal/passes/profiles.go`, `history.go`. | `core.pass_profiles`, `pass_profile_operations`, `pass_profile_history`. Profile commands own version checking and updates. | Profile rules have one owner; registration currently has a real transactional write exception, described below. |
+| Massage | `internal/massage/commands.go`, `read.go`, `calendar.go`, `navigation.go`, `delivery.go`. | `core.massage_events`, parties, specialists, work, bookings, operations, notices and notification attempts. `Execute` owns authentication, actor advisory lock, replay receipt and booking/cancellation transaction. | Keep domain-specific capacity, work/calendar rules and delivery eligibility; do not homogenize with order payments/outboxes. |
+| Knowledge, memory, sources | `internal/knowledge/service.go`, `mutations.go`, `hierarchy_sources.go`, `assistant_sources.go`; external source retrieval in `internal/assistantsource`. | `core.knowledge_*`, `memory_*`, `assistant_sources`, source documents/versions. Knowledge owns permission checks, mutations and provenance. | Agent host consumes scoped projections. Source adapters supply content; they do not become permission authorities. |
+| Conversation history | `internal/conversation/read.go`, `write.go`, `privacy.go`. | `core.conversation_events`, `conversation_summaries`. | Durable conversation is distinct from UI delivery state. Preserve privacy filtering for agent context and memory provenance. |
+| Identity/browser authentication | `internal/identity/links.go`, `zitadel.go`, `browser.go`; `internal/browserauth`; delegated client logic currently in `internal/bot/auth.go`. | `core.zitadel_identities`, `telegram_identities`; `bot.browser_auth`. `Links.Bind` is operator/importer provisioning, with an explicit transaction, not a model tool. | Identity owns verified identity resolution; domains own object/action permissions. Move client ownership without changing authentication. |
+| User preferences/metadata/shared reads | `internal/core/preferences.go`, `telegram_metadata.go`, `capabilities.go`, `privileged_reads.go`, `read_navigation.go`. | Preferences and Telegram metadata write separate fields of `core.users`; language receipts in `core.language_operations`. Capability/navigation queries read multiple domain ACL tables. | Separate profile/preferences and projection responsibilities over subsequent stages; do not call the entire `core` package a domain. |
+| Initial booking fixture | `internal/core/core.go`: catalog/current/execute. | `core.slots`, `workflows`, `operations`, `audit`, `outbox`. | Mark as fixture behavior. Its acceptance does not establish registration/massage/orders parity. Keep separate from shared errors and production projections. |
+| Administrative messaging and model settings | `internal/adminmessage`, `internal/modelsettings`, `internal/broadcastprofile/write.go`. | `core.admin_message_*`, `admin_messages`, `admin_broadcast_profiles`; `model_settings`, grants and operations. Read registration roles/recipients; broadcast profile writes are shared derived-data maintenance. | Retain explicit service/user authority and live audience checks. Do not expose arbitrary administrative SQL through agent tools. |
+| Administrative diagnostics and refresh | `internal/adminutilities/service.go`; HTTP adaptation in `internal/api/admin_utilities.go`. | Reads names/legal names, registration/payment records and conversation activity statistics, never conversation bodies. Owns no independent mutation transaction; `Refresh` delegates deadline changes to `passbooking.Service.ProcessDeadlines`. | Recheck global `core.pass_booking_admins` membership for each request; payment-admin status is insufficient. Runtime composition must supply this concrete service and its registration-maintenance dependency. Preserve the personal-data projection boundary. |
+| Media | `internal/media`; isolated `scriptworker`, `stickermedia` and AV helper packages. | Owner-authorized `core.media`; bot media intake/refinement state is separate. | Media service owns authorized objects. Helpers own bounded computation only, never domain mutation authority. |
+| Canonical sticker descriptions | `internal/stickercache`; consumed by `internal/stickerassets`, composed with the bot database. | Shared `bot.sticker_descriptions`, keyed by `(kind, asset_id, descriptor_version)` with no owner; API database role has no access. | Store canonical asset descriptions only: never captions, sender identity, conversation or private context. Preserve per-asset session locking and the separate cache admission transaction; this is not a `core.media` object transaction. |
+| Interaction and UI | `internal/bot/bot.go`, `order_agent.go`, `plan_binding.go`, `orders.go`, `order_cards.go`, `order_paging.go`; other domain-specific bot handlers. | `bot.interactions`, `replies`, buttons, cards/views/pages, proof/food pending state, media intake/results, quota, messages and delivery receipts. | Split durable turn/plan coordination from Telegram parsing/rendering. Keep existing serialized records readable; no schema rename required for the first slice. |
+| Runtime and delivery | `cmd/zns/app.go`, `api.go`, `product_maintenance.go`; `internal/bot/bot.go` Run/poll/reconcile and `inbox.go`. | Runtime starts/stops services; bot owns `bot.telegram_inbox` and cursors today. Domains enqueue/qualify notifications; bot delivery tables track transport outcomes. | Stage D assigns explicit loop ownership; stage B preserves scheduling/order and existing delivery semantics. |
+| Importer | Separate `tools/migrate` module, especially `users_apply.go`, `events_configuration_apply.go`, `orders_apply.go`, `passes_apply.go`, `food_apply_rows.go`. | Offline cross-domain writes plus temporary `migrate_import` receipts and permanent `core.legacy_*` references/metadata. | A deliberate offline writer exception under stopped runtime writers; never a runtime service/repository dependency. |
+
+### Cross-domain exceptions that must remain explicit
+
+1. **Registration writes profile state.** `platform/internal/passbooking/admin_assignment_profile.go` creates/locks `core.pass_profiles`, checks its version, and updates legal name/version; registration also records profile history. `passes` is therefore not the only current writer. Keep the admin assignment's atomic registration/profile change. A later profile-owned helper may take the existing transaction and a concrete typed change, but must not start a nested independent commit or invert locks. `passbooking/service.go:lockRegistrationProfile` also holds a profile read lock before registration decisions. This is not a reason to build a generic transaction framework.
+2. **Proof bytes are shared.** Runtime upload storage is in `orders/proofs.go`; orders, registration and legacy food link owner-bound `core.order_proofs`. Importers insert immutable proof bytes as part of their domain import. Keep existing proof IDs, ownership checks and access routes. A future shared proof module is optional and separate from the first orders extraction; moving the table alone would not establish authority.
+3. **Capabilities are projections, not grants.** `core/capabilities.go` and `privileged_reads.go` read order administrators, pass payment administrators and massage specialists. Agent visibility uses these results, but each domain must still re-check live authorization when executing. Preserve this split even if context assembly moves out of `bot`.
+4. **Read joins need named consumers.** Legacy food consumes registration/profile projections; administrative messaging consumes registered recipients; knowledge consumes event lifecycle and conversation provenance. `core.events` is shared event metadata populated through configuration/import paths, while `order_events`, `pass_events` and `massage_events` retain different domain configuration. No current single runtime event aggregate has been established. Stage A must not invent one or unify event transactions by renaming tables.
+5. **Derived recipient profiles have multiple callers.** `broadcastprofile/write.go` is a shared write helper called by `core/telegram_metadata.go`, `core/preferences.go`, `passes/profiles.go` and `passbooking/admin_assignment_profile.go`. Keep its transaction passed by the caller and classify the derived row separately from profile truth. Recheck these callers on the frozen candidate before a later extraction.
+6. **Schema ownership differs from delivery ownership.** Domain notification rows encode eligibility and business state. Bot delivery receipts encode Telegram attempts/messages. A successful HTTP/domain operation is not proof of Telegram delivery; retaining both sides is necessary for uncertain outcomes and replay.
+
+## First complete vertical slice: order extras edit
+
+Select an existing unpaid/cash order, add/remove an extra through the agent, edit through Mini App/manual controls, then refresh the same Telegram cards. Include durable proposal binding and restart/replay. This is narrow enough to extract without moving registration or memory, but includes the actual application responsibility rather than only relocating an HTTP client.
+
+Current sequence:
+
+1. `bot/auth.go:authenticatedUpdate` parses a supported Telegram update and resolves its verified principal. Mini App validates Telegram/browser identity before `AuthenticateTelegram`.
+2. `order_agent.go:addOrderContext` loads preferences, current-event orders/history and extras. Summaries are bounded; editable count and request evidence constrain target selection.
+3. `proposedOrderCommand` verifies explicit selection when multiple editable orders exist, re-reads the selected order, compares the observed version, and derives the full choice from stored state. Model output cannot supply authoritative prices or overwrite unobserved choices. `plan_binding.go` uses refreshed host state after script writes while retaining utterance/voice evidence.
+4. `bot.go:planForUpdate` restores `bot.replies.plan`, or saves it with a conflict clause that returns the already stored winner. Cached `OrderCommand` survives restart. `executePlan` derives `tg-order-<update ID>`; manual callbacks load owner-scoped `bot.order_buttons` and derive the same per-update key convention.
+5. `orders_client.go:ExecuteOrder` crosses authenticated HTTP to `orders.Service.Execute`. `orders.go:executeOrder` records expected domain errors, updates order paging focus on success, and creates localized output; renderers update/retire durable cards.
+
+### Minimal target contracts
+
+Keep `orders.Command`, `ChoiceInput`, `Choice`, `Order`, `Event` and existing stable error codes. Do not replace these with `any`, maps, a generic command bus or duplicated transport/domain DTOs. Proposed contracts below describe responsibility, not a request to create every interface now:
+
+| Consumer | Small contract | Implementation and authority |
+| --- | --- | --- |
+| Orders interaction | Existing `Order`, `Orders`, `OrderEvent`, `ExecuteOrder` method signatures from `orders_client.go`; context input additionally needs `OrderHistory` and `Preferences`. | Extracted delegated HTTP client; context carries the verified principal. An `owner string` parameter alone never authenticates a call. |
+| Mini App order editor | `AuthenticateTelegram`, `Order`, `OrderEvent`, `QuoteOrder`, `ExecuteOrder`, plus actual methods used by its other enabled routes. | Consumer-owned interface accepting the independent client. Inventory timetable and legacy-food routes before replacing `Gateway.API`; do not break them by narrowing to orders-only methods. |
+| Bound order turn | Concrete record carrying update identity, event, selected order/version, bound `orders.Command`, and existing reply/evidence metadata needed for replay. | Interaction persistence adapter over current `bot.replies`/`interactions`. Preserve the existing cached-plan JSON envelope and winner semantics; other plan variants remain readable. |
+| Telegram rendering | Concrete result/error plus current domain view; existing i18n keys and card delivery routines. | Telegram retains callback parsing/acknowledgement, markup, send/edit/fallback and message IDs. No `telegram.Update` in the extracted binder. |
+| HTTP router | Ready service dependencies and health/auth dependencies assembled by runtime. | Start with concrete service fields. An interface is justified at a consumer boundary, not for every service/table. |
+
+The first extraction moves orders context/binding and durable execution coordination into one small application package. The outer agent loop may remain in `bot` until stage C, but the orders slice must actually call the extracted binder/executor. The binder accepts a proposal plus host-observed typed context and original request evidence, never a trusted model-supplied actor, version or total. Shared plan storage can initially be an adapter; do not duplicate ownership of `bot.replies` between independent writers. Keep read-only instructions/export dispatch separate from order mutation commands.
+
+### Transaction and ordering constraints
+
+`orders/service.go:Execute` currently validates the command, begins a transaction, locks actor `core.users` with `FOR NO KEY UPDATE`, locks the event `FOR UPDATE`, and checks relevant admin membership before replay lookup. Then it reads the post-lock clock, validates deadline/version, applies canonicalization and capacity rules, and persists order state, reconciliation of other affected orders, audit, notifications and idempotency result before commit. Preserve that entire boundary and lock order. Reconciliation prioritizes proof/paid orders, then `COALESCE(attempt_at,created_at),id`; no re-sorting in the new application layer.
+
+Replay hashes the full command and keys receipts by actor/key. A different payload under a reused key must remain a conflict; a saved application plan is not a substitute for a domain receipt. A crash after domain commit but before reply/card persistence must reuse the same command/key. No capability snapshot can bypass the domain's live checks, including on replay.
+
+`bot/inbox.go` currently persists the complete batch plus received cursor atomically and drains globally by update ID. A failed update leaves its successors pending. This first structural move preserves that order; it must not introduce per-conversation workers or parallel model execution. Business commit, application reply persistence and Telegram delivery remain separate crash boundaries. Do not claim exactly-once external delivery.
+
+Delegation stays per API request through `bot/auth.go:userToken` and the HTTP verifier. Preserve issuer/audience/actor checks, active identity links, principal-owner agreement, service-only notification endpoints, and background recipient resolution. Sandbox signer behavior must remain confined to the existing sandbox configuration. Direct in-process domain calls from Telegram/Mini App are outside this slice.
+
+## Bounded file ownership for stage B
+
+Assign only after the current functional candidate has passed its affected gates and its writers release these paths. This plan does not reserve them against current work.
+
+| Future work item | Owned paths/symbols | Boundary |
+| --- | --- | --- |
+| Composition/client extraction | `platform/cmd/zns/api.go`, `app.go`; `platform/internal/api/api.go`; client/auth code currently in `platform/internal/bot`; new independent client package; `platform/internal/miniapp/handler.go` and affected compile-time consumers. | One writer for shared wiring. Preserve routes, external authentication and wire errors. Inventory all `APIClient` methods before a physical move; do not make parallel owners edit the same client struct. |
+| Orders application extraction | New small orders-interaction package; orders branches in `bot/bot.go`, `order_agent.go`, `plan_binding.go`, `orders.go`; focused tests adjacent to those paths. | Sequential after composition, or a single writer across both items. Other domain branches and envelope serialization remain compatible. |
+| Render/persistence adaptation | Existing `order_cards.go`, `order_paging.go`, `orders_locale.go` only where dependency adaptation requires it; existing reply persistence adapter. | No redesign or schema churn. Must coordinate with the same interaction writer because `bot.go` is shared. |
+| Independent QA | Separately assigned reports and test/stand paths. | Read-only product candidate. One sandbox writer; no rebuild while either review observes that stand. |
+
+`orders/service.go`, capacity/payment algorithms, registration/profile writes, importer contracts, lifecycle scheduling and product UI assets are excluded from stage-B behavioral edits. If an extraction reveals a defect there, reproduce and fix it as a separately scoped change; then re-freeze and request fresh affected reviews. Do not hide a policy or lock-order change in a move.
+
+## Acceptance checklist and exit conditions
+
+- [x] Stage A independent Code QA v3 (qa.local/architecture-stagea-v3-codeqa/report.md) confirms this map against a frozen source candidate, including cross-domain writes, ownership exceptions and client consumers. This document alone does not satisfy that gate.
+- [ ] Runtime constructs domain services; HTTP routes no longer construct them from `core.Service.DB`. Product and synthetic composition differences are explicit external adapters/configuration.
+- [ ] Mini App no longer imports `bot` for its concrete API client; all currently enabled routes still compile and behave, including timetable/legacy food.
+- [ ] Extracted orders interaction owns context/binding/execution coordination; Telegram owns rendering and callbacks; one existing authoritative `orders.Execute` remains the mutation path for manual, agent and HTTP requests.
+- [ ] Focused real-PG tests prove unchanged canonical totals, version/attempt checks, event isolation, full-command idempotency, live ACL on replay, capacity reconciliation order and concurrent edits. Run race checks if shared mutable state changes.
+- [ ] Restart after durable plan save, after domain commit and before card persistence reuses the winning plan/key; the model is not rerun to replace an already saved proposal. Existing serialized plans still replay.
+- [ ] Source-blind Functional Senior QA exercises EN/RU manual → agent → Mini App/manual edits in a Telegram-like UI, stale buttons/cards, explicit target selection, proof/paid edit rejection, uploads/voice continuation where applicable, and refreshed localized prior messages.
+- [ ] Functional permission cases cover revoked identity/domain role, actor mismatch, wrong event/owner, service-only route denial, and visibility changing after model/script reads. Use real test Zitadel for the identity acceptance portion; a stub does not establish that portion.
+- [ ] Focused formatting/lint/build/tests and both fresh stage-B QA gates pass on the same frozen candidate. Preserve stage-A map and observed exceptions; update PROGRESS through its designated owner. Built or skipped is not accepted.
+
+Stage E separately rehearses removal of `tools/migrate`, its temporary receipts/credentials/CI while retaining SQL history, durable identity links, legacy references and representative imported business state. Build/run the normal app and relevant imported-state scenarios without the importer tree. Do not drop temporary receipts during current import acceptance. Local structural work requires no production deployment; this plan provides no push/publication authorization.

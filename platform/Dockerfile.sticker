@@ -1,0 +1,19 @@
+FROM golang:1.27-alpine3.23@sha256:0908ac9b9319e09d7c238aabe914e0395c51d63c4e3d0ae8c554fda9158a5769 AS build
+RUN apk add --no-cache git cmake make g++ clang ffmpeg=8.0.1-r1
+RUN git clone https://github.com/TelegramMessenger/rlottie.git /rlottie && cd /rlottie && git checkout 67f103bc8b625f2a4a9e94f1d8c7bd84c5a08d1d && sed -i 's/colorPoints > size \/ 4/static_cast<size_t>(colorPoints) > size \/ 4/; s/colorPoints > opacityArraySize \/ 2/static_cast<size_t>(colorPoints) > opacityArraySize \/ 2/' src/lottie/lottiemodel.cpp && cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_FLAGS="-include limits" -DLIB_INSTALL_DIR=/usr/local/lib -DLOTTIE_MODULE=ON -DLOTTIE_THREAD=OFF && cmake --build build -j2 && cmake --install build
+COPY tools/stickermedia/render.cpp /render.cpp
+RUN g++ -std=c++17 -Wall -Wextra -Wpedantic -Wconversion -Werror -fanalyzer -I/usr/local/include /render.cpp -L/usr/local/lib -lrlottie -o /usr/local/bin/tgs-render
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY internal/stickermedia ./internal/stickermedia
+RUN go test -c -o /sticker-tests ./internal/stickermedia
+FROM alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0 AS runtime
+RUN apk add --no-cache ffmpeg=8.0.1-r1 libstdc++ && adduser -D -u 10002 sticker
+COPY --from=build /usr/local/lib/librlottie.so* /usr/local/lib/
+COPY --from=build /usr/local/bin/tgs-render /usr/local/bin/
+COPY --from=build /sticker-tests /usr/local/bin/sticker-tests
+RUN printf '#!/bin/sh\nexec sleep 30\n' > /usr/local/bin/sticker-slow-test && chmod 0555 /usr/local/bin/sticker-slow-test
+USER 10002:10002
+ENV STICKER_NATIVE_TEST=1
+ENTRYPOINT ["sticker-tests", "-test.v", "-test.parallel=1"]

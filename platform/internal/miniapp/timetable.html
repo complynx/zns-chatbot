@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Massage timetable</title>
+    <link rel="stylesheet" href="{{.MiniAppPath}}timetable.css" />
+    <script type="module" src="{{.MiniAppPath}}timetable.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 data-label="title">Massage timetable</h1>
+        <label
+          ><span data-label="language">Language</span>
+          <select id="language">
+            <option value="en">English</option>
+            <option value="ru">Русский</option>
+          </select>
+        </label>
+      </header>
+      <div class="controls">
+        <label
+          ><span data-label="party">Party</span
+          ><select id="party" disabled></select
+        ></label>
+        <label class="mine"
+          ><input id="mine" type="checkbox" disabled /><span data-label="mine"
+            >Only mine</span
+          ></label
+        >
+        <button id="refresh" type="button" data-label="refresh">Refresh</button>
+        <button id="zoom-out" type="button" data-label="zoomOut" disabled>
+          Zoom out
+        </button>
+        <button id="zoom-in" type="button" data-label="zoomIn" disabled>
+          Zoom in
+        </button>
+      </div>
+      <p data-label="timezone">Times are shown in Minsk (UTC+3).</p>
+      <p id="status" role="status" aria-live="polite"></p>
+      <p id="legend" hidden data-label="legend">
+        Shaded areas: working hours. Bookings show client, time, duration and
+        price.
+      </p>
+      <div
+        id="timetable"
+        tabindex="0"
+        role="region"
+        aria-label="Massage timetable"
+      ></div>
+    </main>
+  </body>
+</html>

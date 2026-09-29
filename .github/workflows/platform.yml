@@ -1,0 +1,116 @@
+name: Go platform
+on:
+  pull_request:
+    paths: ['platform/**', '.github/workflows/platform.yml', '.github/dependabot.yml']
+  push:
+    paths: ['platform/**', '.github/workflows/platform.yml', '.github/dependabot.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    defaults:
+      run:
+        working-directory: platform
+    env:
+      TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: platform/tools/go.mod
+          cache-dependency-path: platform/go.sum
+      - name: Build pinned quality tools
+        run: |
+          go -C tools build -o ../tools.local/golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+          go -C tools build -o ../tools.local/govulncheck golang.org/x/vuln/cmd/govulncheck
+      - name: Runtime vulnerability gate
+        run: tools.local/govulncheck ./cmd/... ./internal/...
+      - name: SQL generation drift
+        run: go -C tools/sqlc tool sqlc diff -f ../../sqlc.yaml
+      - name: SQL generator vulnerability gate
+        run: tools.local/govulncheck -C tools/sqlc github.com/sqlc-dev/sqlc/cmd/sqlc
+      - name: Golden and Nebius code quality gate
+        run: |
+          tools.local/golangci-lint config verify
+          tools.local/golangci-lint run ./cmd/... ./internal/... ./integration/...
+          tools.local/golangci-lint fmt --diff
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+      - name: JavaScript quality gate
+        run: |
+          npm ci
+          npm run quality
+          npm run test:fqa
+          python3 -m unittest discover -s scripts/fqa -p 'test_*.py'
+      - name: Format, vet and verify dependencies
+        run: |
+          test -z "$(gofmt -l cmd internal integration)"
+          go vet ./cmd/... ./internal/... ./integration/...
+          go mod verify
+          go -C tools mod verify
+          go -C tools/sqlc mod verify
+      - name: Unit and PostgreSQL integration tests
+        run: |
+          docker build --target test -t zns-platform-tests .
+          docker run --rm --network host -e TEST_DATABASE_URL -v "$PWD:/results" zns-platform-tests go test -race -count=1 -coverpkg=./internal/... -coverprofile=/results/coverage.out ./cmd/... ./internal/... ./integration/...
+      - name: Fuzz identity boundary
+        run: go test ./internal/identity -run '^$' -fuzz FuzzVerify -fuzztime 10s
+      - name: Build
+        run: go build ./cmd/...
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: platform/coverage.out
+  sandbox:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: platform/go.mod
+          cache-dependency-path: platform/go.sum
+      - run: docker compose -f compose.yaml -f compose.qa.yaml -f compose.av.yaml -f compose.av.qa.yaml up -d --build --wait
+      - name: Exercise running containers
+        run: SANDBOX_URL=http://127.0.0.1:8090 go test ./integration -run TestLiveSandbox -count=1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+      - name: Browser acceptance
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npm run test:browser
+          node tests/fqa.mjs
+          node tests/language-payments.mjs
+          node tests/profiles.mjs
+          node tests/media.mjs
+          node tests/av-player.mjs
+          node tests/av-worker.mjs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-browser
+          path: platform/test-results/
+      - if: always()
+        run: docker compose -f compose.yaml -f compose.qa.yaml -f compose.av.yaml -f compose.av.qa.yaml logs --no-color
+      - if: always()
+        run: docker compose -f compose.yaml -f compose.qa.yaml -f compose.av.yaml -f compose.av.qa.yaml down

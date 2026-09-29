@@ -1,0 +1,98 @@
+name: synthetic-qa-zns-sandbox
+x-app: &app
+  image: zns-sandbox:local
+  pull_policy: never
+  networks: [sandbox]
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+x-common: &common
+  ZNS_ENV: sandbox
+  SANDBOX_SIGNING_KEY: sandbox-only-do-not-use-in-production-123456789
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: sandbox-owner-only
+      POSTGRES_DB: zns
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sandbox/roles.sql:/docker-entrypoint-initdb.d/roles.sql:ro
+    networks: [sandbox, host]
+    ports: ['127.0.0.1:55432:5432']
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres -d zns']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  migrate:
+    <<: *app
+    command: migrate
+    restart: 'no'
+    environment:
+      <<: *common
+      DATABASE_URL: postgres://postgres:sandbox-owner-only@postgres/zns?sslmode=disable
+    depends_on:
+      postgres: { condition: service_healthy }
+  api:
+    <<: *app
+    build: .
+    command: api
+    environment:
+      <<: *common
+      DATABASE_URL: postgres://zns_api:sandbox-api-only@postgres/zns?sslmode=disable
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, zns, health]
+      interval: 2s
+      timeout: 4s
+      retries: 20
+  model:
+    <<: *app
+    command: model
+    environment:
+      ZNS_ENV: sandbox
+      MODEL_PROVIDER: scripted
+    healthcheck:
+      test: [CMD, zns, health]
+      interval: 2s
+      timeout: 4s
+      retries: 20
+  fake:
+    <<: *app
+    networks: [sandbox, host]
+    command: fake
+    ports: ['127.0.0.1:8090:8080']
+    environment:
+      <<: *common
+      DATABASE_URL: postgres://zns_bot:sandbox-bot-only@postgres/zns?sslmode=disable
+      TELEGRAM_TOKEN: sandbox
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, zns, health]
+      interval: 2s
+      timeout: 4s
+      retries: 20
+  bot:
+    <<: *app
+    command: bot
+    environment:
+      <<: *common
+      DATABASE_URL: postgres://zns_bot:sandbox-bot-only@postgres/zns?sslmode=disable
+      CORE_URL: http://api:8080
+      MODEL_URL: http://model:8080
+      TELEGRAM_BASE_URL: http://fake:8080
+      TELEGRAM_TOKEN: sandbox
+    depends_on:
+      api: { condition: service_healthy }
+      fake: { condition: service_healthy }
+      model: { condition: service_healthy }
+networks:
+  sandbox:
+    internal: true
+  host: {}
+volumes:
+  pgdata:

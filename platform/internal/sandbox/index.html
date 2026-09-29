@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="ru">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  /><title>ZNS · ручной стенд</title>
+  <style>
+    :root {
+      font: 16px/1.5 system-ui;
+      color: #202724;
+      background: #fafbf9;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+    }
+    header {
+      border-bottom: 1px solid #d4dad5;
+      padding: 22px 32px;
+    }
+    h1 {
+      font-size: 25px;
+      margin: 0;
+    }
+    header p {
+      margin: 5px 0;
+      color: #536057;
+    }
+    main {
+      max-width: 1200px;
+      margin: auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      padding: 28px;
+    }
+    h2 {
+      font-size: 19px;
+      margin-top: 0;
+    }
+    section {
+      min-width: 0;
+    }
+    select {
+      max-width: 100%;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+    }
+    select,
+    input,
+    button {
+      font: inherit;
+      padding: 9px;
+      border: 1px solid #b5bfb7;
+      border-radius: 4px;
+      background: white;
+      color: inherit;
+    }
+    button {
+      cursor: pointer;
+    }
+    button:hover {
+      background: #e6eee8;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: wait;
+    }
+    button:focus-visible,
+    select:focus-visible,
+    input:focus-visible {
+      outline: 3px solid #397759;
+      outline-offset: 2px;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .message {
+      border-left: 3px solid #3b7557;
+      padding: 18px;
+      background: white;
+      margin: 16px 0;
+    }
+    .uploaded-photo {
+      max-width: 100%;
+      max-height: 320px;
+      object-fit: contain;
+    }
+    .message p {
+      white-space: pre-wrap;
+      margin-top: 0;
+    }
+    .spoiler {
+      background: #d4dad5;
+    }
+    .custom-emoji img,
+    .custom-emoji video {
+      width: 2em;
+      height: 2em;
+      vertical-align: middle;
+    }
+    .buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    form {
+      display: flex;
+      gap: 8px;
+    }
+    input {
+      min-width: 0;
+      flex: 1;
+    }
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font:
+        13px/1.6 ui-monospace,
+        monospace;
+      background: #f0f3ef;
+      padding: 14px;
+      max-height: 640px;
+      overflow: auto;
+    }
+    small {
+      color: #58665e;
+    }
+    #status {
+      min-height: 26px;
+      color: #8a322a;
+    }
+    @media (max-width: 780px) {
+      main {
+        grid-template-columns: 1fr;
+        padding: 20px;
+      }
+      header {
+        padding: 20px;
+      }
+      form {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+  <style>
+    #contact-form,
+    #document-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      margin: 16px 0;
+    }
+    #contact-form input,
+    #contact-form select,
+    #document-form input,
+    #document-form select {
+      min-width: 0;
+      width: 100%;
+    }
+    #contact-form button,
+    #document-form button {
+      justify-self: start;
+    }
+  </style>
+  <style>
+    dialog {
+      width: min(950px, 96vw);
+      max-height: 96vh;
+      padding: 12px;
+      border: 1px solid #b5bfb7;
+    }
+    dialog::backdrop {
+      background: #0008;
+    }
+    #miniapp-frame {
+      display: block;
+      width: 100%;
+      height: 78vh;
+      border: 0;
+      margin-top: 10px;
+    }
+  </style>
+  <header>
+    <h1>ZNS · ручной тестовый стенд</h1>
+    <p>
+      Fake Telegram → Go-бот → Core API → PostgreSQL. Скриптовый агент, только
+      тестовые пользователи.
+    </p>
+  </header>
+  <main>
+    <section>
+      <h2>Диалог и кнопки</h2>
+      <label for="user">Пользователь</label>
+      <div class="controls">
+        <select id="user">
+          <option value="101">Алиса · может бронировать</option>
+          <option value="202">Борис · администратор платежей</option>
+          <option value="303">Гость · только просмотр</option>
+          <option value="-1009001">
+            Synthetic channel / Тестовый канал @sandbox_channel
+          </option>
+          <option value="-1009002">
+            Synthetic forum / Тестовый форум @sandbox_forum (101, 102)
+          </option></select
+        ><button id="start">/start</button><button id="orders">/orders</button>
+      </div>
+      <div id="messages"></div>
+      <label
+        >Telegram username (optional / необязательно)
+        <input
+          id="telegram-username"
+          type="text"
+          maxlength="64"
+          autocomplete="off"
+        />
+      </label>
+      <form id="chat">
+        <input
+          id="text"
+          aria-label="Сообщение"
+          placeholder="помоги закончить / выбери массаж"
+          maxlength="5000"
+          required
+        /><button>Отправить</button>
+      </form>
+      <form id="contact-form">
+        <label for="contact-mode"
+          >Contact or forward / Контакт или пересылка</label
+        >
+        <select id="contact-mode">
+          <option value="contact">Share contact / Поделиться контактом</option>
+          <option value="forward">Forward message / Переслать сообщение</option>
+          <option value="hidden">Hidden sender / Скрытый отправитель</option>
+        </select>
+        <label for="contact-user">Person / Пользователь</label>
+        <select id="contact-user">
+          <option value="101">Алиса / Alice</option>
+          <option value="202">Борис / Boris</option>
+          <option value="303">Гость / Visitor</option>
+        </select>
+        <input
+          id="contact-text"
+          aria-label="Message text / Текст сообщения"
+          maxlength="5000"
+        />
+        <button>Send / Отправить</button>
+      </form>
+      <form id="document-form">
+        <label for="document">Файл / File (до / up to 20 МиБ)</label>
+        <input id="document" type="file" required />
+        <label for="upload-kind">Отправить как / Send as</label>
+        <select id="upload-kind">
+          <option value="document">Документ / Document</option>
+          <option value="photo">Фото / Photo (PNG, JPEG)</option>
+          <option value="audio">Аудио / Audio</option>
+          <option value="voice">Голосовое / Voice</option>
+          <option value="video">Видео / Video</option>
+          <option value="video_note">Видеосообщение / Video note</option>
+          <option value="sticker">
+            Стикер / Sticker (WebP, TGS, WebM; 1 MiB)
+          </option>
+          <option value="custom_emoji">
+            Эмодзи / Custom emoji (WebP, TGS, WebM; 1 MiB)
+          </option>
+        </select>
+        <label for="duration"
+          >Заявленная длительность / Declared seconds (AV)</label
+        >
+        <input
+          id="duration"
+          type="number"
+          min="0"
+          max="86400"
+          step="1"
+          value="0"
+        />
+        <label for="caption">Подпись / Caption</label>
+        <input id="caption" type="text" maxlength="1024" />
+        <label for="emoji-marker"
+          >Маркер эмодзи / Emoji marker (repeat in caption; sticker caption must
+          be empty)</label
+        >
+        <input id="emoji-marker" type="text" value="🧩" maxlength="32" />
+        <button id="send-document">Отправить файл / Send file</button>
+      </form>
+      <p id="status" role="status"></p>
+      <small
+        >Попробуйте выбрать услугу кнопкой, попросить агента продолжить и
+        подтвердить. Исходная карточка обновится.</small
+      >
+      <h2 style="margin-top: 28px">Сбои Telegram</h2>
+      <div class="controls">
+        <button data-fault="edit_missing">Удалить при следующем edit</button
+        ><button data-fault="transient">Следующий запрос: 429</button>
+      </div>
+    </section>
+    <section>
+      <h2>История действий</h2>
+      <p>
+        <span id="edits">0</span> изменений сообщений. Выберите другого
+        пользователя, чтобы проверить изоляцию и последнее свободное место.
+      </p>
+      <pre id="history">Начните с /start.</pre>
+      <details>
+        <summary>Что доступно в стенде</summary>
+        <p>
+          Доступны бронирование и заказы услуг фестиваля: создание, изменение
+          кнопками или агентом, оплата наличными и проверка администратором.
+          Перенос Python-бота ещё продолжается. По умолчанию используется
+          скриптовая модель; OpenAI gpt-6-luna включается отдельной
+          конфигурацией. Состояние API, бота и fake Telegram сохраняется в
+          PostgreSQL.
+        </p>
+      </details>
+    </section>
+  </main>
+  <dialog id="miniapp-dialog" aria-label="Редактор заказа">
+    <button id="miniapp-close" type="button">Закрыть редактор</button>
+    <iframe id="miniapp-frame" title="Питание и услуги"></iframe>
+  </dialog>
+  <!-- Message text is rendered via textContent; no model output is inserted as HTML. -->
+  <script type="module" src="/app.js"></script>
+</html>

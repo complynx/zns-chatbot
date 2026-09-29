@@ -1,0 +1,48 @@
+# Local synthetic identity stand. Bootstrap credentials never belong in bot config.
+name: zns-identity
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: identity-sandbox-only
+      POSTGRES_DB: zitadel
+    volumes: [identity-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d zitadel"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    networks: [identity]
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:v4.16.3
+    command: [start-from-init, --masterkey, SandboxMasterKeyOnly32Characters, --tlsMode, disabled]
+    environment:
+      ZITADEL_EXTERNALDOMAIN: localhost
+      ZITADEL_EXTERNALPORT: 8113
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: identity-runtime-sandbox-only
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: identity-sandbox-only
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      ZITADEL_FIRSTINSTANCE_INSTANCENAME: ZNS Synthetic Identity
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: ZNS Sandbox
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Disposable test bootstrap
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2027-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /bootstrap/admin.pat
+    volumes: [./qa.local/identity:/bootstrap]
+    ports: [127.0.0.1:8113:8080]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [identity]
+networks:
+  identity: {}
+volumes:
+  identity-db:

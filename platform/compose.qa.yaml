@@ -1,0 +1,5 @@
+# Optional local API surface for independent black-box QA.
+services:
+  api:
+    networks: [sandbox, host]
+    ports: ['127.0.0.1:8091:8080']

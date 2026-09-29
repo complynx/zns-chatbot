@@ -1,0 +1,119 @@
+package bot
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
+)
+
+const scriptBroadcastReview = "broadcasts.review"
+const scriptBroadcastShow = "broadcasts.show"
+
+type broadcastReviewArguments struct {
+	ID     int64  `json:"id"`
+	Offset int64  `json:"offset,omitempty"`
+	Cursor string `json:"cursor,omitempty"`
+}
+
+// The receipt binds the selected campaign and native destination before display.
+// Interrupted transport remains uncertain; script recovery must not resend it.
+type broadcastReviewRequest struct {
+	Owner     string                   `json:"owner"`
+	Chat      int64                    `json:"chat"`
+	Arguments broadcastReviewArguments `json:"arguments"`
+}
+
+func (b *Bot) broadcastReviewEntries() []scriptToolEntry {
+	tools := []scriptclient.Tool{
+		{
+			Name:        scriptBroadcastReview,
+			Description: "Read your broadcast campaign status and complete recipient content/results without changing it. Each offset selects a page of up to 20 recipients, serialized into JSON chunks. Concatenate json until more=false and JSON.parse; then advance offset by page.items.length while page.more. Reuse id/offset with next_cursor for chunks. A stale read requires restarting that page. Delivery attempts are not proof of exactly-once delivery.",
+			InputSchema: json.RawMessage(
+				`{"type":"object","properties":{"id":{"type":"integer","minimum":1},"offset":{"type":"integer","minimum":0},"cursor":{"type":"string","maxLength":2048}},"required":["id"],"additionalProperties":false}`,
+			),
+		},
+		{
+			Name:        scriptBroadcastShow,
+			Description: "Show your campaign's existing native review and manual continuation buttons in the current chat. May resume unfinished content preparation through the existing renderer, but never enqueues or sends the campaign. Sending requires the user's separate manual Send confirmation. Interrupted display may have reached Telegram; inspect host outcomes before requesting another display.",
+			InputSchema: json.RawMessage(
+				`{"type":"object","properties":{"id":{"type":"integer","minimum":1},"offset":{"type":"integer","minimum":0}},"required":["id"],"additionalProperties":false}`,
+			),
+		},
+	}
+	entries := make([]scriptToolEntry, 0, len(tools))
+	for _, tool := range tools {
+		entries = append(entries, scriptToolEntry{
+			descriptor: tool, prepare: b.prepareBroadcastReview, execute: b.executeBroadcastReview,
+			resultLimit: maxScriptReadBytes,
+		})
+	}
+	return entries
+}
+
+func (b *Bot) prepareBroadcastReview(ctx context.Context, owner string, _ int64,
+	call scriptclient.ToolCall, _ agent.Input) (scriptToolRecord, error) {
+	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+	var args broadcastReviewArguments
+	if err := decodeBroadcastReview(call, &args); err != nil {
+		return record, err
+	}
+	if args.ID <= 0 || args.Offset < 0 || len(args.Cursor) > 2048 {
+		return record, errors.New("invalid broadcast review arguments")
+	}
+	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
+	if !ok || source.owner != owner {
+		return record, errors.New("broadcast source unavailable")
+	}
+	record.BroadcastReview = &broadcastReviewRequest{Owner: owner, Chat: source.in.chat, Arguments: args}
+	return record, nil
+}
+
+func decodeBroadcastReview(call scriptclient.ToolCall, args *broadcastReviewArguments) error {
+	if call.Name == scriptBroadcastShow {
+		var show struct {
+			ID     int64 `json:"id"`
+			Offset int64 `json:"offset,omitempty"`
+		}
+		err := decodeScriptArguments(call.Arguments, &show)
+		args.ID, args.Offset = show.ID, show.Offset
+		return err
+	}
+	return decodeScriptArguments(call.Arguments, args)
+}
+
+func (b *Bot) executeBroadcastReview(ctx context.Context, owner string, call scriptclient.ToolCall,
+	record scriptToolRecord, _ *agent.Input) (any, error) {
+	request := record.BroadcastReview
+	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
+	if request == nil || !ok || source.owner != owner || request.Owner != owner || request.Chat != source.in.chat {
+		return nil, errors.New("broadcast source unavailable")
+	}
+	args := request.Arguments
+	if call.Name == scriptBroadcastShow {
+		prefs, err := b.API.Preferences(ctx, owner)
+		if err != nil {
+			return nil, err
+		}
+		err = b.sendAdminMessagePage(ctx, source.in, args.ID, args.Offset, &orderMessages{language: prefs.Language})
+		return map[string]any{"id": args.ID, "displayed": err == nil, "manual_send_required": true}, err
+	}
+	cursor, err := core.DecodeReadCursor(
+		args.Cursor,
+		owner,
+		fmt.Sprintf("broadcasts.review:%d:%d", args.ID, args.Offset),
+	)
+	if err != nil {
+		return nil, scriptDomainAPIError(err)
+	}
+	page, err := b.loadAdminMessagePage(ctx, owner, args.ID, args.Offset)
+	if err != nil {
+		return nil, scriptDomainAPIError(err)
+	}
+	chunk, err := core.JSONReadChunk(page, cursor)
+	return chunk, scriptDomainAPIError(err)
+}

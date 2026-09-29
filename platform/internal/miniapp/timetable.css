@@ -1,0 +1,165 @@
+:root {
+  font: 16px/1.5 system-ui;
+  color: #202724;
+  background: #fafbf9;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+main {
+  max-width: 1400px;
+  margin: auto;
+  padding: 20px;
+}
+header,
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+header {
+  justify-content: space-between;
+}
+h1 {
+  font-size: 24px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mine {
+  flex-direction: row;
+  align-items: center;
+  min-height: 44px;
+}
+input,
+select,
+button {
+  font: inherit;
+  padding: 8px;
+  border: 1px solid #b5bfb7;
+  border-radius: 4px;
+  color: inherit;
+  background: white;
+}
+button,
+select {
+  min-height: 44px;
+}
+input[type='checkbox'] {
+  width: 24px;
+  height: 24px;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+@media (hover: hover) {
+  button:hover:not(:disabled) {
+    background: #e6eee8;
+  }
+}
+:focus-visible {
+  outline: 3px solid #397759;
+  outline-offset: 2px;
+}
+#status:empty {
+  display: none;
+}
+#timetable {
+  overflow: auto;
+  max-height: 72vh;
+  border: 1px solid #b5bfb7;
+  touch-action: auto;
+}
+#timetable:empty {
+  display: none;
+}
+.grid {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+}
+.column {
+  width: 220px;
+  flex: 1 0 220px;
+  border-right: 1px solid #d4dad5;
+}
+.column.axis {
+  width: 70px;
+  flex: 0 0 70px;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #fafbf9;
+}
+.provider {
+  position: sticky;
+  top: 0;
+  margin: 0;
+  background: #fafbf9;
+  padding: 8px;
+  font-size: 16px;
+  z-index: 2;
+  height: 56px;
+  overflow: auto;
+  border-bottom: 1px solid #b5bfb7;
+}
+.timeline {
+  position: relative;
+}
+.working {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #e6eee8;
+  border-top: 1px solid #b5bfb7;
+  border-bottom: 1px solid #b5bfb7;
+}
+.booking {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  border: 1px solid #397759;
+  border-radius: 3px;
+  background: #fff;
+  padding: 4px;
+  overflow: auto;
+  line-height: 1.25;
+  font-size: 14px;
+}
+.tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px solid #d4dad5;
+  font-size: 13px;
+  padding-left: 4px;
+}
+.now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 2px solid #9f402d;
+  pointer-events: none;
+}
+@media (max-width: 600px) {
+  main {
+    padding: 12px;
+  }
+  .column {
+    width: 190px;
+    flex-basis: 190px;
+  }
+  h1 {
+    font-size: 21px;
+  }
+}

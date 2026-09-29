@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Meals</title>
+    <link rel="stylesheet" href="{{.MiniAppPath}}editor.css" />
+    <link rel="stylesheet" href="{{.MiniAppPath}}legacyfood.css" />
+    <script type="module" src="{{.MiniAppPath}}legacyfood.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 data-text="title">Meals</h1>
+        <label
+          ><span data-text="language">Language</span
+          ><select id="language">
+            <option value="en">English</option>
+            <option value="ru">Русский</option>
+          </select></label
+        >
+      </header>
+      <div id="browser-auth"></div>
+      <p id="status" role="status" aria-live="polite"></p>
+      <p id="payment"></p>
+      <form id="menu" hidden>
+        <div id="days"></div>
+        <footer>
+          <output id="total"></output
+          ><button type="submit" data-text="save">Save</button
+          ><button id="reload" type="button" data-text="reload">Reload</button>
+        </footer>
+      </form>
+    </main>
+  </body>
+</html>

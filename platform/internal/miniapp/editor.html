@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Питание и услуги</title>
+    <link rel="stylesheet" href="{{.MiniAppPath}}editor.css" />
+    <script type="module" src="{{.MiniAppPath}}editor.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1 id="title">Питание и услуги</h1>
+        <label
+          >Language
+          <select id="language">
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+          </select></label
+        >
+      </header>
+      <p id="status" role="status"></p>
+      <form id="order-form">
+        <fieldset id="fields" disabled>
+          <legend id="customer-title">Для кого заказ</legend>
+          <div id="customer"></div>
+          <section id="extras"></section>
+          <section id="meals"></section>
+        </fieldset>
+        <section id="summary" aria-live="polite"></section>
+        <footer>
+          <button type="button" id="quote">Рассчитать</button
+          ><button id="save" type="submit" disabled>Сохранить</button
+          ><button type="button" id="reload">Загрузить актуальный заказ</button>
+        </footer>
+      </form>
+    </main>
+  </body>
+</html>

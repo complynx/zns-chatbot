@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "snapshot_id": "synthetic-example",
+  "bot_id": 999,
+  "captured_at": "2026-09-26T12:00:00Z",
+  "consistency": "stopped_writer",
+  "coverage": [
+    {
+      "domain": "users",
+      "name": "synthetic_users",
+      "status": "included",
+      "reason": ""
+    },
+    {
+      "domain": "events",
+      "name": "synthetic_events",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "passes",
+      "name": "synthetic_passes",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "orders",
+      "name": "synthetic_orders",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "order_capacity",
+      "name": "synthetic_order_capacity",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "massage",
+      "name": "synthetic_massage",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "messages",
+      "name": "synthetic_messages",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "files",
+      "name": "synthetic_files",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "bot_storage",
+      "name": "synthetic_bot_storage",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "knowledge",
+      "name": "synthetic_knowledge",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "schedule",
+      "name": "synthetic_schedule",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    },
+    {
+      "domain": "configuration",
+      "name": "synthetic_configuration",
+      "status": "absent",
+      "reason": "Synthetic example only; no production coverage claimed."
+    }
+  ],
+  "files": [
+    {
+      "path": "users.jsonl",
+      "source": "users",
+      "kind": "records",
+      "sha256": "895647126dc2484748b0bc32a9bbfdbc599f861f85f2f4af8a86dfeec2693a05",
+      "bytes": 102,
+      "records": 1
+    }
+  ],
+  "proofs": []
+}

@@ -1,0 +1,28 @@
+env: production
+parent_stdin: false
+synthetic_only: false
+server:
+  host: 0.0.0.0
+  port: 8080
+auth:
+  mode: zitadel
+  zitadel:
+    provisioning:
+      enabled: true
+telegram:
+  base_url: https://api.telegram.org
+model:
+  provider: openai
+media:
+  url: http://media-broker:8091
+sticker:
+  worker:
+    url: http://sticker-broker:8098
+script:
+  enabled: true
+  socket: /run/script-ipc/evaluate.sock
+shutdown:
+  drain: 10s
+  telemetry_flush: 5s
+log:
+  level: info

@@ -1,0 +1,56 @@
+name: synthetic-qa-zns-media
+services:
+  decoder:
+    build:
+      context: .
+      dockerfile: Dockerfile.media
+    image: zns-media-decoder:local
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 2
+    pids_limit: 256
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,uid=10002,gid=10002,mode=0700
+    volumes:
+      - decoder-ipc-bounded:/run/media-ipc
+    healthcheck:
+      test: [CMD, test, -S, /run/media-ipc/decoder.sock]
+      interval: 2s
+      timeout: 1s
+      retries: 15
+    restart: unless-stopped
+  broker:
+    build:
+      context: .
+      dockerfile: Dockerfile.media-broker
+    image: zns-media-broker:local
+    ports: ['127.0.0.1:8096:8091']
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 64
+    environment:
+      # Empty configuration fails closed at broker startup. The synthetic overlay overrides it.
+      MEDIA_WORKER_SECRET: ${MEDIA_WORKER_SECRET:-}
+      DATABASE_URL: ${MEDIA_DATABASE_URL:-}
+      ZNS_CREDITS__ENFORCE: ${ZNS_CREDITS__ENFORCE:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-gpt-transcribe}
+      OPENAI_TRANSCRIPTION_URL: ${OPENAI_TRANSCRIPTION_URL:-https://api.openai.com/v1/audio/transcriptions}
+    volumes:
+      - decoder-ipc-bounded:/run/media-ipc:ro
+    depends_on:
+      decoder: { condition: service_healthy }
+    restart: unless-stopped
+volumes:
+  decoder-ipc-bounded:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec

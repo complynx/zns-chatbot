@@ -1,0 +1,159 @@
+# Reviewable Linux deployment candidate. No image is built or published here.
+name: zns-go
+x-runtime: &runtime
+  image: ${ZNS_APP_IMAGE:?Set the reviewed app image with an immutable digest}
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  networks: [database]
+  pids_limit: 128
+  mem_limit: 1g
+  cpus: 2
+services:
+  postgres:
+    image: ${ZNS_POSTGRES_IMAGE:?Set the reviewed PostgreSQL 17 image with an immutable digest}
+    environment:
+      POSTGRES_DB: zns
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password, migrator_password, runtime_password, accounting_password]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d zns]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    stop_grace_period: 60s
+  migrate:
+    <<: *runtime
+    profiles: [maintenance]
+    command: migrate
+    env_file:
+      - path: ${ZNS_SECRET_DIR:?Set an absolute protected secret directory}/migrator.env
+        format: raw
+    environment:
+      ZNS_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: 'no'
+  app:
+    <<: *runtime
+    profiles: [runtime]
+    command: app
+    env_file:
+      - path: ${ZNS_SECRET_DIR:?}/app.env
+        format: raw
+    environment:
+      ZNS_CONFIG_FILE: /etc/zns/runtime.yaml
+    volumes:
+      - ./runtime.yaml:/etc/zns/runtime.yaml:ro
+      - script-ipc:/run/script-ipc:ro
+    group_add: ['10002']
+    networks: [database, helpers, egress]
+    ports: ['127.0.0.1:${ZNS_HTTP_PORT:-8180}:8080']
+    depends_on:
+      postgres: { condition: service_healthy }
+      evaluator: { condition: service_started }
+      media-broker: { condition: service_started }
+      sticker-broker: { condition: service_started }
+    healthcheck:
+      test: [CMD, zns, health]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    stop_grace_period: 30s
+    restart: unless-stopped
+  evaluator:
+    extends: { file: ../../compose.script.yaml, service: evaluator }
+    profiles: [runtime]
+    build: !reset null
+    image: ${ZNS_SCRIPT_IMAGE:?Set the reviewed Sobek evaluator image with an immutable digest}
+  media-decoder:
+    extends: { file: ../compose.media.yaml, service: decoder }
+    profiles: [runtime]
+    build: !reset null
+    image: ${ZNS_MEDIA_DECODER_IMAGE:?Set the reviewed media decoder image with an immutable digest}
+  media-broker:
+    extends: { file: ../compose.media.yaml, service: broker }
+    profiles: [runtime]
+    build: !reset null
+    image: ${ZNS_MEDIA_BROKER_IMAGE:?Set the reviewed media broker image with an immutable digest}
+    ports: !reset []
+    environment: !reset {}
+    env_file:
+      - path: ${ZNS_SECRET_DIR:?}/media.env
+        format: raw
+    depends_on: !override
+      media-decoder: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+    networks: [database, helpers, egress]
+  sticker-decoder:
+    profiles: [runtime]
+    image: ${ZNS_STICKER_DECODER_IMAGE:?Set the reviewed sticker decoder image with an immutable digest}
+    network_mode: none
+    environment:
+      STICKER_WORKER_MODE: decoder
+    volumes: ['sticker-ipc-bounded:/run/sticker-ipc']
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: ['/tmp:rw,nosuid,noexec,size=32m,uid=10002,gid=10002,mode=0700']
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 32
+    restart: unless-stopped
+  sticker-broker:
+    profiles: [runtime]
+    image: ${ZNS_STICKER_BROKER_IMAGE:?Set the reviewed sticker broker image with an immutable digest}
+    environment:
+      STICKER_WORKER_MODE: broker
+    env_file:
+      - path: ${ZNS_SECRET_DIR:?}/sticker.env
+        format: raw
+    depends_on:
+      sticker-decoder: { condition: service_started }
+    networks: [helpers]
+    volumes: ['sticker-ipc-bounded:/run/sticker-ipc:ro']
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 16
+    restart: unless-stopped
+networks:
+  database: { internal: true }
+  helpers: { internal: true }
+  egress: {}
+volumes:
+  pgdata: {}
+  script-ipc:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0770,nosuid,nodev,noexec
+  decoder-ipc-bounded:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec
+  sticker-ipc-bounded:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec
+secrets:
+  postgres_password:
+    file: ${ZNS_SECRET_DIR:?}/postgres.password
+  migrator_password:
+    file: ${ZNS_SECRET_DIR:?}/migrator.password
+  runtime_password:
+    file: ${ZNS_SECRET_DIR:?}/runtime.password
+  accounting_password:
+    file: ${ZNS_SECRET_DIR:?}/accounting.password

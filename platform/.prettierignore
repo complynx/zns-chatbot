@@ -1,0 +1,5 @@
+node_modules/
+test-results/
+*.local/
+package-lock.json
+internal/orders/menu_belarus.json

@@ -1,0 +1,19 @@
+# Explicit opt-in: sends sandbox conversation context to OpenAI and incurs API usage.
+# No other service receives this key or outbound network access.
+services:
+  model:
+    environment:
+      MODEL_PROVIDER: openai
+      ZNS_MODEL__REMOTE_SECRET: ${MODEL_REMOTE_SECRET:?Set MODEL_REMOTE_SECRET for the authenticated model channel}
+      ZNS_CREDITS__ENFORCE: ${ZNS_CREDITS__ENFORCE:-false}
+      DATABASE_URL: postgres://zns_meter:sandbox-meter-only@postgres/zns?sslmode=disable
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Set OPENAI_API_KEY to enable gpt-6-luna}
+    networks: [sandbox, model-egress]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+  bot:
+    environment:
+      ZNS_MODEL__REMOTE_SECRET: ${MODEL_REMOTE_SECRET:?Set MODEL_REMOTE_SECRET for the authenticated model channel}
+      ZNS_CREDITS__ENFORCE: ${ZNS_CREDITS__ENFORCE:-false}
+networks:
+  model-egress: {}
