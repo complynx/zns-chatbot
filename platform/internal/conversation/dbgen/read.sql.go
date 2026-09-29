@@ -39,6 +39,43 @@ func (q *Queries) HistoryGeneration(ctx context.Context, owner string) (int64, e
 	return generation, err
 }
 
+const historyReadWithinBudget = `-- name: HistoryReadWithinBudget :one
+SELECT (
+ COALESCE((SELECT sum(
+  CASE WHEN $1::boolean THEN 0 ELSE
+   octet_length(e.text)::bigint+octet_length(e.details::text)+octet_length(e.omission_reason) END
+  +CASE WHEN e.omitted THEN 0 ELSE COALESCE(octet_length(a.authorities::text),0) END)
+ FROM core.conversation_events e
+ LEFT JOIN core.conversation_read_authorities a ON a.event_id=e.id
+ WHERE e.owner=$2 AND e.id=ANY($3::bigint[])),0)
+ +CASE WHEN $4::boolean THEN
+  COALESCE((SELECT octet_length(text)::bigint+octet_length(read_authorities::text)
+   FROM core.conversation_summaries WHERE owner=$2),0)
+ ELSE 0 END
+) <= $5::bigint AS allowed
+`
+
+type HistoryReadWithinBudgetParams struct {
+	TextOnly       bool
+	Owner          string
+	EventIds       []int64
+	IncludeSummary bool
+	Budget         int64
+}
+
+func (q *Queries) HistoryReadWithinBudget(ctx context.Context, arg HistoryReadWithinBudgetParams) (bool, error) {
+	row := q.db.QueryRow(ctx, historyReadWithinBudget,
+		arg.TextOnly,
+		arg.Owner,
+		arg.EventIds,
+		arg.IncludeSummary,
+		arg.Budget,
+	)
+	var allowed bool
+	err := row.Scan(&allowed)
+	return allowed, err
+}
+
 const knownActor = `-- name: KnownActor :one
 SELECT EXISTS(SELECT 1 FROM core.users WHERE id = $1)
 `
@@ -92,6 +129,56 @@ func (q *Queries) ReadEvents(ctx context.Context, arg ReadEventsParams) ([]ReadE
 	items := []ReadEventsRow{}
 	for rows.Next() {
 		var i ReadEventsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Text,
+			&i.Details,
+			&i.Omitted,
+			&i.At,
+			&i.HasFullText,
+			&i.OmissionReason,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readSelectedEvents = `-- name: ReadSelectedEvents :many
+SELECT id, kind, text, details, omitted, created_at, EXISTS(SELECT 1 FROM core.conversation_message_bodies b WHERE b.event_id=conversation_events.id) AS has_full_text, omission_reason
+FROM core.conversation_events WHERE owner=$1 AND id=ANY($2::bigint[]) ORDER BY id
+`
+
+type ReadSelectedEventsParams struct {
+	Owner   string
+	Column2 []int64
+}
+
+type ReadSelectedEventsRow struct {
+	ID             int64
+	Kind           string
+	Text           string
+	Details        json.RawMessage
+	Omitted        bool
+	At             time.Time
+	HasFullText    bool
+	OmissionReason string
+}
+
+func (q *Queries) ReadSelectedEvents(ctx context.Context, arg ReadSelectedEventsParams) ([]ReadSelectedEventsRow, error) {
+	rows, err := q.db.Query(ctx, readSelectedEvents, arg.Owner, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReadSelectedEventsRow{}
+	for rows.Next() {
+		var i ReadSelectedEventsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Kind,

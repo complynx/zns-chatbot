@@ -25,7 +25,8 @@ type mediaProofResponseFailure struct {
 }
 
 func (transport *mediaProofResponseFailure) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.Method != http.MethodPost || request.URL.Path != "/v1/order-actions" ||
+	if request.Method != http.MethodPost ||
+		(request.URL.Path != "/v1/order-actions" && request.URL.Path != "/internal/derived/order-actions") ||
 		!transport.failed.CompareAndSwap(false, true) {
 		return http.DefaultTransport.RoundTrip(request)
 	}
@@ -98,6 +99,7 @@ func TestMediaTerminalRetryPreservesCompletedReceiptAfterExpiry(t *testing.T) {
 		path:   "/v1/order-events/" + order.EventID + "/orders/" + order.ID + "/payment-instructions",
 		status: http.StatusServiceUnavailable, response: `{"code":"temporarily_unavailable"}`,
 	}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.Error(t, f.b.Handle(t.Context(), photo))
 	require.NoError(t, f.b.RenderMedia(t.Context(), "alice", 101, "tg-media-100"))
 	transport := &mediaSavedDeliveryFailure{}
@@ -152,6 +154,7 @@ func TestMediaTerminalRetryReplaysCommittedCommandWithoutSource(t *testing.T) {
 	photo, original := intakePhoto(t, f)
 	f.model.plan = terminalReceiptPlan()
 	f.b.API.HTTP = &http.Client{Transport: &mediaProofResponseFailure{afterCommit: true}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.Error(t, f.b.Handle(t.Context(), photo), "lost response leaves the durable command for replay")
 	before, err := f.b.API.Order(t.Context(), "alice", order.EventID, order.ID)
 	require.NoError(t, err)
@@ -174,6 +177,7 @@ func TestMediaTerminalRetryChecksPersistedCommandVersion(t *testing.T) {
 	photo, _ := intakePhoto(t, f)
 	f.model.plan = terminalReceiptPlan()
 	f.b.API.HTTP = &http.Client{Transport: &mediaProofResponseFailure{}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.Error(t, f.b.Handle(t.Context(), photo))
 	edit := orderCommand("edit", order)
 	edit.Choice = orderChoice("shuttle")
@@ -212,6 +216,7 @@ func TestMediaDurableReceiptSurvivesExpiryAcrossEntryPoints(t *testing.T) {
 				operation = message(102, 101, "Use order "+order.ID)
 			}
 			f.b.API.HTTP = &http.Client{Transport: &mediaProofResponseFailure{afterCommit: true}}
+			f.b.Host.HTTP = f.b.API.HTTP
 			require.Error(t, f.b.Handle(t.Context(), operation))
 			before, err := f.b.API.Order(t.Context(), "alice", order.EventID, order.ID)
 			require.NoError(t, err)
@@ -295,6 +300,7 @@ func TestMediaCommittedReceiptRevocationReportsUnknownOutcome(t *testing.T) {
 	photo, original := intakePhoto(t, f)
 	f.model.plan = terminalReceiptPlan()
 	f.b.API.HTTP = &http.Client{Transport: &mediaProofResponseFailure{afterCommit: true}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.Error(t, f.b.Handle(t.Context(), photo))
 	before, err := f.b.API.Order(t.Context(), "alice", order.EventID, order.ID)
 	require.NoError(t, err)

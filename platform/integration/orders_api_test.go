@@ -10,14 +10,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
@@ -105,10 +105,10 @@ func TestOrdersHTTPContract(t *testing.T) {
 	db := database(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
 	server := httptest.NewServer(
-		api.Handler(runtimeapp.NewServices(db, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler)),
+		api.Handler(appservices.NewServices(db, appservices.Options{}), signer, slog.New(slog.DiscardHandler)),
 	)
 	t.Cleanup(server.Close)
-	client := bot.APIClient{Base: server.URL, Signer: signer, HTTP: server.Client()}
+	client := appclient.Client{Base: server.URL, SandboxToken: signer.Token, HTTP: server.Client()}
 	event, err := client.OrderEvent(t.Context(), "alice", "sandbox-festival")
 	require.NoError(t, err)
 	assert.Equal(t, orders.Money(6500), event.Extras["shuttle"].Price)
@@ -139,7 +139,7 @@ func TestOrdersHTTPRejectsMalformedAndUnauthenticatedRequests(t *testing.T) {
 	t.Parallel()
 	db := database(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
-	handler := api.Handler(runtimeapp.NewServices(db, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler))
+	handler := api.Handler(appservices.NewServices(db, appservices.Options{}), signer, slog.New(slog.DiscardHandler))
 	for _, body := range []string{
 		`null`, `{"days":null}`, `{"extras":null}`, `{"days":{"fri":null}}`,
 		`{"days":{"fri":{"mealtimes":null}}}`, `{"days":{"fri":{"mealtimes":{"dinner":null}}}}`,

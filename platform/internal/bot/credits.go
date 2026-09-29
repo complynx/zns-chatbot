@@ -8,11 +8,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+const creditsUsageCommand = "/usage"
 
 const creditOwnerWords = 2
 const creditPolicyWords = 3
@@ -34,7 +38,7 @@ func isCreditsUpdate(text string) bool {
 		return false
 	}
 	switch parts[0] {
-	case "/usage", "/credits_user", "/credits_policy", "/credits_default":
+	case creditsUsageCommand, "/credits_user", "/credits_policy", "/credits_default":
 		return true
 	default:
 		return false
@@ -57,17 +61,26 @@ func (b *Bot) handleCredits(ctx context.Context, in incoming, u telegram.Update)
 	if messages.err != nil {
 		return messages.err
 	}
-	if _, err = b.TG.Send(ctx, telegram.Send{ChatID: in.chat, Text: text}); err != nil {
+	ref := botdelivery.Reference{Family: botFamilyCredits}
+	result := botdelivery.StoredResult{Payload: telegram.Send{ChatID: in.chat, Text: text}}
+	if parts := strings.Fields(in.text); len(parts) > 0 && parts[0] != creditsUsageCommand {
+		ref.Object = "admin"
+	}
+	if text == messages.text(i18n.BillingDenied, nil) {
+		ref.Family = botFamilyStatic
+		result.Notice = i18n.BillingDenied
+	}
+	if err = b.queueBotResult(ctx, in.owner, in.chat, u.ID, botFamilyCredits, ref, result, 0); err != nil {
 		return err
 	}
-	return b.record(ctx, in.owner, u.ID, "credits", map[string]string{"text": text})
+	return b.record(ctx, in.owner, u.ID, botFamilyCredits, map[string]string{"text": text})
 }
 func (b *Bot) creditsCommand(ctx context.Context, in incoming, u telegram.Update, m *orderMessages) (string, error) {
 	parts := strings.Fields(in.text)
 	endpoint := "/v1/credits"
-	if parts[0] != "/usage" {
+	if parts[0] != creditsUsageCommand {
 		var permissions map[string]bool
-		if err := b.API.call(ctx, in.owner, http.MethodGet, endpoint+"/permissions", nil, &permissions); err != nil {
+		if err := b.API.Call(ctx, in.owner, http.MethodGet, endpoint+"/permissions", nil, &permissions); err != nil {
 			return "", err
 		}
 		if !permissions["admin"] {
@@ -82,7 +95,7 @@ func (b *Bot) creditsCommand(ctx context.Context, in incoming, u telegram.Update
 		endpoint += "/users/" + url.PathEscape(parts[1])
 	}
 	var report credits.UsageReport
-	if err := b.API.call(ctx, in.owner, http.MethodGet, endpoint+"/usage", nil, &report); err != nil {
+	if err := b.API.Call(ctx, in.owner, http.MethodGet, endpoint+creditsUsageCommand, nil, &report); err != nil {
 		return "", err
 	}
 	if parts[0] == "/credits_policy" {
@@ -94,7 +107,7 @@ func (b *Bot) creditsCommand(ctx context.Context, in incoming, u telegram.Update
 			return m.text(i18n.BillingPolicyHelp, nil), nil
 		}
 		var updated credits.Policy
-		if err := b.API.call(ctx, in.owner, http.MethodPost, endpoint+"/policy", change, &updated); err != nil {
+		if err := b.API.Call(ctx, in.owner, http.MethodPost, endpoint+"/policy", change, &updated); err != nil {
 			return "", err
 		}
 		return m.text(i18n.BillingSaved, nil), nil
@@ -141,7 +154,7 @@ func (b *Bot) creditDefaultCommand(
 ) (string, error) {
 	var policy credits.Policy
 	endpoint := "/v1/credits/default"
-	if err := b.API.call(ctx, in.owner, http.MethodGet, endpoint, nil, &policy); err != nil {
+	if err := b.API.Call(ctx, in.owner, http.MethodGet, endpoint, nil, &policy); err != nil {
 		return "", err
 	}
 	if len(parts) != creditOwnerWords {
@@ -151,7 +164,7 @@ func (b *Bot) creditDefaultCommand(
 	if !valid || change.Unlimited || change.MonthlyNanoUSD == nil {
 		return m.text(i18n.BillingPolicyHelp, nil), nil
 	}
-	if err := b.API.call(ctx, in.owner, http.MethodPost, endpoint, change, &policy); err != nil {
+	if err := b.API.Call(ctx, in.owner, http.MethodPost, endpoint, change, &policy); err != nil {
 		return "", err
 	}
 	return m.text(i18n.BillingSaved, nil), nil

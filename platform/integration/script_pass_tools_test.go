@@ -139,7 +139,9 @@ type passLostReply struct{ lost bool }
 
 func (transport *passLostReply) RoundTrip(request *http.Request) (*http.Response, error) {
 	response, err := http.DefaultTransport.RoundTrip(request)
-	if err == nil && request.URL.Path == "/v1/passes/batches" && !transport.lost {
+	if err == nil &&
+		(request.URL.Path == "/v1/passes/batches" || request.URL.Path == "/internal/derived/pass-batches") &&
+		!transport.lost {
 		transport.lost = true
 		_ = response.Body.Close()
 		return nil, errors.New("synthetic lost batch reply")
@@ -154,6 +156,7 @@ func TestScriptPassBatchLostReplyResumeAndRevoke(t *testing.T) {
 	require.NoError(t, err)
 	transport := &passLostReply{}
 	f.b.API.HTTP = &http.Client{Transport: transport}
+	f.b.Host.HTTP = f.b.API.HTTP
 	result := runPassVM(
 		t,
 		f,

@@ -13,14 +13,19 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/browserauth"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/mediaclient"
 	"github.com/complynx/zns-chatbot/platform/internal/miniapp"
 	"github.com/complynx/zns-chatbot/platform/internal/observability"
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 	"github.com/complynx/zns-chatbot/platform/internal/sandbox"
 	"github.com/complynx/zns-chatbot/platform/internal/store"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -65,26 +70,47 @@ func run() error {
 		return err
 	}
 	logger.InfoContext(ctx, "starting", "command", os.Args[1])
-	err = runCommand(ctx, logger, cfg, runtime)
-	return errors.Join(err, flushTelemetry(ctx, runtime, cfg.Shutdown.TelemetryFlush))
+	return runCommand(ctx, logger, cfg, runtime)
 }
 
-func runCommand(ctx context.Context, logger *slog.Logger, cfg config.Config, runtime *observability.Runtime) error {
+func runCommand(
+	ctx context.Context,
+	logger *slog.Logger,
+	cfg config.Config,
+	runtime *observability.Runtime,
+) (result error) {
 	if os.Args[1] == "model" {
 		return runModel(ctx, logger, cfg, runtime)
 	}
-	db, e := store.Open(ctx, cfg.Database.URL.Value(), runtime.PGXTracer())
+	var db *pgxpool.Pool
+	defer func() { result = errors.Join(result, closeRuntime(ctx, cfg, runtime, db)) }()
+	var e error
+	db, e = openRuntimeDatabase(ctx, cfg, runtime)
 	if e != nil {
 		return e
 	}
-	defer db.Close()
 	if e = runtime.RegisterPool(db); e != nil {
 		return e
 	}
+	work := func(owned context.Context) error {
+		return runDatabaseCommand(owned, logger, cfg, runtime, db)
+	}
+	if role, admitted := commandRole(os.Args[1]); admitted {
+		admission, configErr := admissionConfig(db)
+		if configErr != nil {
+			return configErr
+		}
+		return runtimeapp.Run(ctx, admission, role, work)
+	}
+	return work(ctx)
+}
+
+func runDatabaseCommand(ctx context.Context, logger *slog.Logger, cfg config.Config,
+	runtime *observability.Runtime, db *pgxpool.Pool) error {
 	signer := identity.Signer{Key: []byte(cfg.Auth.SigningKey.Value())}
 	switch os.Args[1] {
 	case "migrate":
-		if cfg.Env == "production" {
+		if cfg.Env == productionEnvironment {
 			return store.Migrate(ctx, db)
 		}
 		return runFixture(ctx, db, os.Args[1])
@@ -102,36 +128,41 @@ func runCommand(ctx context.Context, logger *slog.Logger, cfg config.Config, run
 		fake.MiniAppURL = cfg.Sandbox.MiniAppURL
 		return serve(ctx, telemetryHandler(runtime, fake.Handler()), logger, cfg)
 	case "bot":
+		deliverySettings, deliveryErr := cfg.DeliverySettings()
+		if deliveryErr != nil {
+			return deliveryErr
+		}
 		model, modelErr := botModel(cfg, runtime, credits.Service{DB: db, Enforce: cfg.Credits.Enforce})
 		if modelErr != nil {
 			return modelErr
 		}
+		tg, telegramErr := configuredTelegramClient(cfg, runtime, db, deliverySettings)
+		if telegramErr != nil {
+			return telegramErr
+		}
 		b := bot.Bot{OrderEventID: cfg.Orders.ActiveEvent,
+			Delivery:  deliverySettings,
 			Logger:    logger,
 			Observer:  runtime,
 			WebAppURL: cfg.Telegram.WebAppURL,
 			DB:        db,
-			API: bot.APIClient{
-				Base:   cfg.Core.URL,
-				Signer: signer,
-				HTTP:   telemetryClient(runtime, "api", apiClientTimeout),
+			API: appclient.Client{
+				Base: cfg.Core.URL,
+
+				HTTP: telemetryClient(runtime, "api", apiClientTimeout),
 			},
-			TG: telegram.Client{
-				Base:  cfg.Telegram.BaseURL,
-				Token: cfg.Telegram.Token.Value(),
-				HTTP:  telemetryClient(runtime, "api", telegramClientTimeout),
-			},
+			TG:                  tg,
 			Model:               model,
 			AssistantDailyLimit: cfg.Model.AssistantDailyLimit,
 			CreditsEnforce:      cfg.Credits.Enforce,
 			HistoryLimit:        cfg.History.Recent,
 		}
 		configureBotLineup(&b, cfg)
-		if e = configureBotAuth(ctx, &b, cfg, signer); e != nil {
-			return e
+		if err := configureBotAuth(ctx, &b, cfg, signer); err != nil {
+			return err
 		}
-		if e = configureTrustedOnboarding(&b, cfg); e != nil {
-			return e
+		if err := configureTrustedOnboarding(&b, cfg); err != nil {
+			return err
 		}
 		closeScripts, scriptErr := configureBotHelpers(&b, cfg, runtime)
 		if scriptErr != nil {
@@ -158,33 +189,33 @@ func runBot(
 	defer cancel()
 	finished := make(chan error, 1)
 	go func() { finished <- b.Run(ctx); cancel() }()
-	gateway := botGateway(b, cfg)
+	gateway := appGateway(b.API, b.Onboarding, b.BrowserAuth, b.TG.Token, cfg)
 	err := serve(ctx, telemetryHandler(runtime, gateway.Handler()), logger, cfg)
 	cancel()
 	return errors.Join(err, <-finished)
 }
 
-func botGateway(b *bot.Bot, cfg config.Config) miniapp.Gateway {
+func appGateway(client appclient.Client, onboarding func(context.Context, telegram.User) error,
+	browser *browserauth.Service, token string, cfg config.Config) miniapp.Gateway {
 	return miniapp.Gateway{
-		Onboarding:        b.Onboarding,
-		WebAppURL:         cfg.Telegram.WebAppURL,
-		BrowserAuth:       b.BrowserAuth,
-		API:               b.API,
-		Token:             b.TG.Token,
-		EventID:           cfg.Orders.ActiveEvent,
-		ResolveOrderEvent: b.OrderEventForOrder,
+		Onboarding: onboarding, WebAppURL: cfg.Telegram.WebAppURL, BrowserAuth: browser,
+		API: client, Token: token, EventID: cfg.Orders.ActiveEvent,
+		ResolveOrderEvent: func(ctx context.Context, owner, id string) (string, error) {
+			order, err := client.OrderByID(ctx, owner, id)
+			return order.EventID, err
+		},
 	}
 }
 
 func verifyBotIdentity(ctx context.Context, b *bot.Bot, cfg config.Config) error {
-	if cfg.Env != "production" {
+	if cfg.Env != productionEnvironment {
 		return nil
 	}
 	id, err := strconv.ParseInt(cfg.Auth.Zitadel.BotID, 10, 64)
 	if err != nil || id <= 0 {
 		return errors.New("invalid production Telegram bot identity")
 	}
-	return b.TG.VerifyBot(ctx, id)
+	return telegram.RetryControl(ctx, func(live context.Context) error { return b.TG.VerifyBot(live, id) })
 }
 
 func configureBotAV(b *bot.Bot, cfg config.Config, runtime *observability.Runtime) error {
@@ -242,7 +273,7 @@ func unobservedModel(cfg config.Config, runtime *observability.Runtime) (agent.M
 	switch cfg.Model.Provider {
 	case "scripted":
 		return agent.Scripted{}, nil
-	case "openai":
+	case openAIProvider:
 		return agent.OpenAI{
 			Key:  cfg.Model.OpenAIKey.Value(),
 			HTTP: telemetryClient(runtime, "api", openAIClientTimeout),
@@ -279,20 +310,27 @@ func unobservedModel(cfg config.Config, runtime *observability.Runtime) (agent.M
 	}
 }
 
-func runModel(ctx context.Context, logger *slog.Logger, cfg config.Config, runtime *observability.Runtime) error {
+func runModel(
+	ctx context.Context,
+	logger *slog.Logger,
+	cfg config.Config,
+	runtime *observability.Runtime,
+) (result error) {
+	var db *pgxpool.Pool
+	defer func() { result = errors.Join(result, closeRuntime(ctx, cfg, runtime, db)) }()
 	switch cfg.Model.Provider {
 	case "scripted":
 		return serve(ctx, telemetryHandler(runtime, (&agent.ScriptedServer{}).Handler()), logger, cfg)
-	case "openai":
+	case openAIProvider:
 		key := cfg.Model.OpenAIKey.Value()
 		if key == "" {
 			return fmt.Errorf("OPENAI_API_KEY required for gpt-6-luna")
 		}
-		db, err := store.Open(ctx, cfg.Database.URL.Value(), runtime.PGXTracer())
+		var err error
+		db, err = store.Open(ctx, cfg.Database.URL.Value(), runtime.PGXTracer())
 		if err != nil {
 			return err
 		}
-		defer db.Close()
 		model, err := botModel(cfg, runtime, credits.Service{DB: db, Enforce: cfg.Credits.Enforce})
 		if err != nil {
 			return err

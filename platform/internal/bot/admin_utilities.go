@@ -5,11 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 
 	"github.com/complynx/zns-chatbot/platform/internal/adminutilities"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -36,6 +37,7 @@ func isAdminUtilityUpdate(in incoming, u telegram.Update) bool {
 }
 
 func (b *Bot) handleAdminUtility(ctx context.Context, in incoming, u telegram.Update) error {
+	ctx = withAdminMessageSource(ctx, in, u)
 	prefs, err := b.API.Preferences(ctx, in.owner)
 	if err != nil {
 		return err
@@ -44,7 +46,7 @@ func (b *Bot) handleAdminUtility(ctx context.Context, in incoming, u telegram.Up
 	var authorized struct {
 		OK bool `json:"ok"`
 	}
-	err = b.API.call(ctx, in.owner, http.MethodGet, "/v1/admin-utilities/authorize", nil, &authorized)
+	err = b.API.Call(ctx, in.owner, http.MethodGet, "/v1/admin-utilities/authorize", nil, &authorized)
 	text := ""
 	if err == nil {
 		text, err = b.adminUtilityCommand(ctx, in, u, messages)
@@ -62,12 +64,26 @@ func (b *Bot) handleAdminUtility(ctx context.Context, in incoming, u telegram.Up
 	// Long diagnostic reports are split without truncating metadata or UTF-8.
 	const chunkSize = 2000 // A rune can occupy two Telegram UTF-16 units.
 	runes := []rune(text)
+	index := 0
+	family := "admin_utility"
+	if text == messages.text(i18n.AdminUtilityFailed, nil) {
+		family = botFamilyStatic
+	}
 	for len(runes) > 0 {
 		n := min(len(runes), chunkSize)
-		if _, err = b.TG.Send(ctx, telegram.Send{ChatID: in.chat, Text: string(runes[:n])}); err != nil {
+		if err = b.queueBotResult(
+			ctx,
+			in.owner,
+			in.chat,
+			u.ID,
+			"admin_utility:"+strconv.Itoa(index),
+			botdelivery.Reference{Family: family},
+			botdelivery.StoredResult{Payload: telegram.Send{ChatID: in.chat, Text: string(runes[:n])}}, 0,
+		); err != nil {
 			return err
 		}
 		runes = runes[n:]
+		index++
 	}
 	return nil
 }
@@ -81,7 +97,7 @@ func (b *Bot) adminUtilityCommand(
 	parts := strings.Fields(u.Message.Text)
 	if parts[0] == "/refresh_events" && len(parts) == 1 {
 		var result adminutilities.Events
-		err := b.API.call(ctx, in.owner, http.MethodPost, "/v1/admin-utilities/refresh", nil, &result)
+		err := b.API.Call(ctx, in.owner, http.MethodPost, "/v1/admin-utilities/refresh", nil, &result)
 		return m.text(
 			i18n.AdminUtilityRefresh,
 			map[string]string{"all": strings.Join(result.All, ", "), "active": strings.Join(result.Active, ", ")},
@@ -98,7 +114,7 @@ func (b *Bot) adminUtilityCommand(
 			return "", &core.ProblemError{Status: http.StatusBadRequest, Code: "invalid_user_id"}
 		}
 		var report adminutilities.Report
-		err = b.API.call(
+		err = b.API.Call(
 			ctx,
 			in.owner,
 			http.MethodGet,
@@ -121,19 +137,21 @@ func (b *Bot) adminUtilityCommand(
 }
 
 func (b *Bot) adminUtilityFile(ctx context.Context, chat int64, id string) error {
-	var file telegram.File
-	if err := b.TG.Call(ctx, "getFile", map[string]string{"file_id": id}, &file); err != nil {
-		return err
+	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
+	if !ok || source.in.chat != chat {
+		return botdelivery.ErrBinding
 	}
-	filename := id
-	if extension := path.Ext(file.Path); adminFileExtension.MatchString(extension) {
-		filename += extension
-	}
-	body, err := b.TG.Download(ctx, telegram.Document{FileID: id, Size: file.Size})
-	if err != nil {
-		return err
-	}
-	_, err = b.TG.SendDocument(ctx, chat, filename, body)
+	_, err := b.queueBotDocument(
+		ctx,
+		source.owner,
+		chat,
+		botdelivery.Reference{
+			Family:       botFamilyAdminFile,
+			Object:       id,
+			Update:       source.update.ID,
+			Continuation: botdelivery.Continuation{Kind: botDocumentKind},
+		},
+	)
 	return err
 }
 

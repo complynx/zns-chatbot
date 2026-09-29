@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -61,10 +62,14 @@ func TestScriptFoodObservedCatalogueCannotChangeBeforeSave(t *testing.T) {
 			t.Parallel()
 			f, _ := foodBotFixture(t)
 			// Change only when the already-bound command reaches the API transport.
-			f.b.API.HTTP = &http.Client{Transport: foodToolTransport{before: func(ctx context.Context) error {
-				_, err := f.db.Exec(ctx, change)
-				return err
-			}}}
+			var hits atomic.Int64
+			f.b.API.HTTP = &http.Client{
+				Transport: foodToolTransport{hits: &hits, before: func(ctx context.Context) error {
+					_, err := f.db.Exec(ctx, change)
+					return err
+				}},
+			}
+			f.b.Host.HTTP = f.b.API.HTTP
 			runScriptReads(
 				t,
 				f,
@@ -79,6 +84,7 @@ func TestScriptFoodObservedCatalogueCannotChangeBeforeSave(t *testing.T) {
 								Arguments: json.RawMessage(`{"name":"save_meals","meals":` + foodToolMeals + `}`),
 							},
 						)
+						require.Positive(t, hits.Load(), "catalogue interleaving must fire")
 						require.Error(t, err)
 						return json.RawMessage(`{"stale":true}`), nil
 					},

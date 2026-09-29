@@ -51,7 +51,7 @@ WHERE m.status<>'done' AND m.id>$1 ORDER BY m.id LIMIT $2`, after, pageSize)
 }
 
 func (b *Bot) reconcileMediaView(ctx context.Context, view mediaView) error {
-	ctx, authErr := b.API.notificationContext(ctx, view.Owner, view.Chat)
+	ctx, authErr := b.API.NotificationContext(ctx, view.Owner, view.Chat)
 	if authErr != nil {
 		return authErr
 	}
@@ -67,7 +67,7 @@ func (b *Bot) reconcileMediaView(ctx context.Context, view mediaView) error {
 		return resumeErr
 	}
 	var metadata media.Attachment
-	err = b.API.call(ctx, view.Owner, http.MethodGet, "/v1/media/"+url.PathEscape(item.AttachmentID), nil, &metadata)
+	err = b.API.Call(ctx, view.Owner, http.MethodGet, "/v1/media/"+url.PathEscape(item.AttachmentID), nil, &metadata)
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok &&
 		(problem.Status == http.StatusForbidden || problem.Status == http.StatusNotFound) {
 		return b.retireMediaView(ctx, view)

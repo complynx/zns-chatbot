@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
+	deliverypolicy "github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
@@ -36,6 +37,8 @@ func adminMessageRoutes(
 			return
 		}
 		switch r.PathValue("action") {
+		case "publication":
+			err = service.CheckPublication(r.Context(), requestOwner(r), id)
 		case "send":
 			err = service.Enqueue(r.Context(), requestOwner(r), id)
 		case "cancel":
@@ -56,12 +59,22 @@ func adminMessageRoutes(
 	})
 	delivery := http.NewServeMux()
 	adminBroadcastDeliveryRoutes(delivery, service, logger)
+	adminQueueRoutes(delivery, service, logger)
 	delivery.HandleFunc("POST /internal/admin-messages/claim", func(w http.ResponseWriter, r *http.Request) {
 		value, found, err := service.Claim(r.Context())
 		respond(logger, w, struct {
 			Delivery adminmessage.Delivery `json:"delivery"`
 			Found    bool                  `json:"found"`
 		}{value, found}, err)
+	})
+	delivery.HandleFunc("POST /internal/admin-messages/begin", func(w http.ResponseWriter, r *http.Request) {
+		var input deliverypolicy.Attempt
+		if Decode(w, r, &input) != nil {
+			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
+			return
+		}
+		result, err := service.BeginDelivery(r.Context(), input)
+		respond(logger, w, result, err)
 	})
 	delivery.HandleFunc("POST /internal/admin-messages/complete", func(w http.ResponseWriter, r *http.Request) {
 		var input adminmessage.Completion

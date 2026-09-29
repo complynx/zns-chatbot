@@ -210,7 +210,8 @@ func TestAVRefinementResultsPermitFinalAnswerAtZeroBudget(t *testing.T) {
 	var saved string
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), "SELECT plan::text FROM bot.replies WHERE update_id=100").Scan(&saved),
+		f.db.QueryRow(t.Context(), "SELECT payload::text FROM interaction.saved_turns WHERE owner='alice' AND update_id=100").
+			Scan(&saved),
 	)
 	assert.Contains(t, saved, "35 BYN")
 	handle(t, f.b, update)
@@ -496,7 +497,7 @@ func TestAVVoiceNavigationUsesNormalCards(t *testing.T) {
 			var planView string
 			require.NoError(
 				t,
-				f.db.QueryRow(t.Context(), "SELECT plan->'plan'->>'view' FROM bot.replies WHERE update_id=100").
+				f.db.QueryRow(t.Context(), "SELECT payload->'plan'->>'view' FROM interaction.saved_turns WHERE owner='alice' AND update_id=100").
 					Scan(&planView),
 			)
 			assert.Equal(t, view, planView)
@@ -607,7 +608,8 @@ func testAVReceiptSelection(t *testing.T, mode string) {
 	var planJSON string
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), "SELECT plan::text FROM bot.replies WHERE update_id=101").Scan(&planJSON),
+		f.db.QueryRow(t.Context(), "SELECT payload::text FROM interaction.saved_turns WHERE owner='alice' AND update_id=101").
+			Scan(&planJSON),
 	)
 	assert.NotContains(t, planJSON, worker.result.Transcript.Text)
 	calls := f.model.calls

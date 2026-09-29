@@ -8,30 +8,32 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+	"github.com/complynx/zns-chatbot/platform/internal/applicationauth"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/browserauth"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
+	"github.com/complynx/zns-chatbot/platform/internal/destination"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/observability"
-	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 	"github.com/complynx/zns-chatbot/platform/internal/webappurl"
 )
 
 // runApp hosts bot, authenticated API, model and Mini App in one process.
-// Local API calls keep the same authenticated HTTP boundary as remote callers.
+// Local order, registration, history and knowledge calls share the HTTP authorizer and services without a
+// loopback request. Other adapters retain their current transport boundaries.
 func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	logger *slog.Logger, cfg config.Config, runtime *observability.Runtime) error {
-	verify, _, _, err := runtimeAuth(db, cfg, signer)
+	verify, identityAdapter, identityLinks, err := runtimeAuth(db, cfg, signer)
 	if err != nil {
 		return err
 	}
-	legacyBotID, err := cfg.LegacyOrderBotID()
+	deliverySettings, err := cfg.DeliverySettings()
 	if err != nil {
 		return err
 	}
@@ -39,11 +41,7 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	if err != nil {
 		return err
 	}
-	listener, err := (&net.ListenConfig{}).Listen(
-		ctx,
-		"tcp",
-		net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port)),
-	)
+	listener, err := appListener(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -52,7 +50,25 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	if err != nil {
 		return err
 	}
-	b := &bot.Bot{OrderEventID: cfg.Orders.ActiveEvent,
+	tg, err := configuredTelegramClient(cfg, runtime, db, deliverySettings)
+	if err != nil {
+		return err
+	}
+	services := appservices.NewServices(db, appservices.Options{
+		RegistrationRetention: cfg.Registration.Retention,
+		NativeRegistrationAuthorizer: nativeRegistrationAuthorizer(
+			db, deliverySettings.BotID, verify, identityAdapter, identityLinks, signer,
+		),
+		LegacyOrderBotID:     deliverySettings.BotID,
+		InformalName:         broadcastOptions(model).InformalName,
+		Delivery:             deliverySettings,
+		AnnouncementBindings: &destination.Bindings{},
+		DestinationResolver:  tg,
+	})
+	authorizer := applicationauth.Authorizer{DB: db, Verify: applicationauth.VerifyOwner(verify)}
+	b := &bot.Bot{
+		Delivery:            deliverySettings,
+		OrderEventID:        cfg.Orders.ActiveEvent,
 		DB:                  db,
 		Logger:              logger,
 		Observer:            runtime,
@@ -61,21 +77,19 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 		CreditsEnforce:      cfg.Credits.Enforce,
 		HistoryLimit:        cfg.History.Recent,
 		WebAppURL:           cfg.Telegram.WebAppURL,
-		API: bot.APIClient{
-			Base:   base,
-			Signer: signer,
-			HTTP:   telemetryClient(runtime, "api", apiClientTimeout),
-		},
-		TG: telegram.Client{
-			Base:  cfg.Telegram.BaseURL,
-			Token: cfg.Telegram.Token.Value(),
-			HTTP:  telemetryClient(runtime, "api", telegramClientTimeout),
-		},
+		API: combinedClient(
+			base,
+			telemetryClient(runtime, "api", apiClientTimeout),
+			services,
+			authorizer,
+		),
+		TG: tg,
 	}
 	configureBotLineup(b, cfg)
 	if err = configureBotAuth(ctx, b, cfg, signer); err != nil {
 		return err
 	}
+	configureLocalHost(&b.Host, services, authorizer)
 	if err = configureTrustedOnboarding(b, cfg); err != nil {
 		return err
 	}
@@ -86,7 +100,7 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	defer closeScripts()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stopMaintenance, err := startProductMaintenance(ctx, db, logger, cfg, legacyBotID)
+	stopMaintenance, err := startProductMaintenance(ctx, db, logger, cfg, services)
 	if err != nil {
 		return err
 	}
@@ -97,10 +111,7 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	mux := appMux(b, cfg)
 	coreHandler, closeProvisioning, err := configureCoreProvisioning(ctx,
 		api.AuthenticatedHandler(
-			runtimeapp.NewServices(
-				db,
-				runtimeapp.Options{LegacyOrderBotID: legacyBotID, InformalName: broadcastOptions(model).InformalName},
-			),
+			services,
 			signer,
 			logger,
 			verify,
@@ -112,15 +123,45 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	}
 	defer closeProvisioning()
 	mux.Handle("/", coreHandler)
+	return runAppServers(ctx, cancel, b, func(live context.Context) error {
+		return serveListener(live, listener, telemetryHandler(runtime, publicHandler(mux, cfg)), logger, cfg)
+	})
+}
+
+// runAppServers joins the bot worker before caller-owned resources are closed.
+func runAppServers(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	b *bot.Bot,
+	serve func(context.Context) error,
+) error {
 	finished := make(chan error, 1)
 	go func() { finished <- b.Run(ctx); cancel() }()
-	err = serveListener(ctx, listener, telemetryHandler(runtime, publicHandler(mux, cfg)), logger, cfg)
+	err := serve(ctx)
 	cancel()
 	return errors.Join(err, <-finished)
 }
+func combinedClient(
+	base string, transport *http.Client, services appservices.Services, authorizer applicationauth.Authorizer,
+) appclient.Client {
+	return appclient.Client{
+		Base: base, HTTP: transport,
+		LocalHistory:   &appclient.LocalHistory{Service: services.Conversation, Authorizer: authorizer},
+		LocalKnowledge: &appclient.LocalKnowledge{Service: services.Knowledge, Authorizer: authorizer},
+		LocalOrders:    &appclient.LocalOrders{Service: services.Orders, Authorizer: authorizer},
+		LocalRegistration: &appclient.LocalRegistration{
+			Service: services.Registration, Profile: services.PassProfiles,
+			Files: services.Orders, Batches: services.DerivedMutations, Authorizer: authorizer,
+		},
+	}
+}
+
+func appListener(ctx context.Context, cfg config.Config) (net.Listener, error) {
+	return (&net.ListenConfig{}).Listen(ctx, "tcp", net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port)))
+}
 
 func appMux(b *bot.Bot, cfg config.Config) *http.ServeMux {
-	gateway := botGateway(b, cfg).Handler()
+	gateway := appGateway(b.API, b.Onboarding, b.BrowserAuth, b.TG.Token, cfg).Handler()
 	mux := http.NewServeMux()
 	if b.BrowserAuth != nil {
 		mux.Handle("/auth", b.BrowserAuth.LegacyHandler())
@@ -147,4 +188,11 @@ func localOrigin(address net.Addr) (string, error) {
 
 func publicHandler(mux *http.ServeMux, cfg config.Config) http.Handler {
 	return browserauth.GuardRouting(webappurl.SubtreeRedirects(cfg.Telegram.WebAppURL, mux))
+}
+
+func configureLocalHost(host *appclient.Host, services appservices.Services, authorizer applicationauth.Authorizer) {
+	host.LocalBotDelivery = &appclient.LocalBotDelivery{Service: services.BotDelivery, Authorizer: authorizer}
+	host.LocalHistory = &appclient.LocalHistory{Service: services.Conversation, Authorizer: authorizer}
+	host.LocalKnowledge = &appclient.LocalKnowledge{Service: services.Knowledge, Authorizer: authorizer}
+	host.LocalDerived = &appclient.LocalDerived{Service: services.DerivedMutations, Authorizer: authorizer}
 }

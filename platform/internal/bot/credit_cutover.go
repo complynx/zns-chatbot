@@ -38,7 +38,7 @@ func (b *Bot) bindBudget(ctx context.Context, owner string, update int64) (conte
 			return ctx, err
 		}
 		if epoch != nil && !existing {
-			mode = "credits"
+			mode = botFamilyCredits
 		}
 		_, err = tx.Exec(
 			ctx,

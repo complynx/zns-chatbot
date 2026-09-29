@@ -2,107 +2,287 @@ package adminmessage
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/complynx/zns-chatbot/platform/internal/adminmessage/dbgen"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
-// Claim is service-only. A lease lasts two minutes; workers must finish their send
-// before it expires. Attempt fences stale completions after a crash/reclaim.
+// Claim retains the legacy entry point while selecting only shared queue heads.
 func (s Service) Claim(ctx context.Context) (Delivery, bool, error) {
-	var result Delivery
+	if err := s.RecoverDeliveries(ctx); err != nil {
+		return Delivery{}, false, err
+	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return result, false, err
+		return Delivery{}, false, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	// Revocation/cancellation also retires crashed work once its lease expires.
-	_, err = tx.Exec(ctx, `UPDATE core.admin_message_deliveries d SET state='cancelled'
- FROM core.admin_messages m WHERE m.id=d.message_id
- AND (d.state='pending' OR (d.state='sending' AND d.available_at<=clock_timestamp()))
- AND (m.state='cancelled' OR NOT EXISTS(SELECT 1 FROM core.pass_booking_admins a WHERE a.owner=m.actor))`)
+	entries, err := delivery.Candidates(ctx, tx, s.Delivery.BotID, queueCandidateLimit)
+	_ = tx.Rollback(ctx)
 	if err != nil {
-		return result, false, err
+		return Delivery{}, false, err
 	}
-	rows, err := tx.Query(
-		ctx,
-		`SELECT d.id,d.message_id,d.destination,COALESCE(d.content,m.request->'content'),d.state,d.attempt
- FROM core.admin_message_deliveries d JOIN core.admin_messages m ON m.id=d.message_id
- JOIN core.pass_booking_admins a ON a.owner=m.actor
- WHERE m.state='queued' AND d.state IN ('pending','sending') AND d.available_at<=clock_timestamp()
- ORDER BY d.available_at,d.id LIMIT 1 FOR UPDATE OF d,m SKIP LOCKED FOR SHARE OF a`,
-	)
-	if err != nil {
-		return result, false, err
-	}
-	deliveries, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Delivery, error) {
-		var delivery Delivery
-		scanErr := row.Scan(
-			&delivery.ID,
-			&delivery.MessageID,
-			&delivery.Destination,
-			&delivery.Content,
-			&delivery.State,
-			&delivery.Attempt,
-		)
-		return delivery, scanErr
-	})
-	if err != nil {
-		return result, false, err
-	}
-	if len(deliveries) == 0 {
-		return result, false, tx.Commit(ctx)
-	}
-	result = deliveries[0]
-	result.Attempt++
-	result.State = "sending"
-	_, err = tx.Exec(ctx, `UPDATE core.admin_message_deliveries SET state='sending',attempt=$2,
- available_at=clock_timestamp()+interval '2 minutes' WHERE id=$1`, result.ID, result.Attempt)
-	if err != nil {
-		return result, false, err
-	}
-	return result, true, tx.Commit(ctx)
-}
-
-// Complete is service-only. Without an upstream cooldown, retries wait30seconds.
-// Telegram does not offer an idempotency key: a crash after send but before Complete
-// can duplicate delivery. Do not describe this contract as exactly-once.
-func (s Service) Complete(ctx context.Context, id, attempt, telegramMessageID int64, failure string, retry bool) error {
-	return s.CompleteDelivery(
-		ctx,
-		Completion{ID: id, Attempt: attempt, MessageID: telegramMessageID, Failure: failure, Retry: retry},
-	)
-}
-
-// CompleteDelivery persists the maximum of the minimum backoff and Telegram's
-// structured cooldown. Invalid durations fail closed before scheduling work.
-func (s Service) CompleteDelivery(ctx context.Context, result Completion) error {
-	id, attempt, telegramMessageID := result.ID, result.Attempt, result.MessageID
-	failure, retry := result.Failure, result.Retry
-	if result.RetryAfter < 0 || result.RetryAfter > MaxRetryAfterSeconds || (!retry && result.RetryAfter != 0) {
-		return invalid()
-	}
-	const minimumRetrySeconds int64 = 30
-	retrySeconds := max(minimumRetrySeconds, result.RetryAfter)
-	if id <= 0 || attempt <= 0 || len(failure) > maxFailureBytes || telegramMessageID < 0 ||
-		(telegramMessageID > 0 && (failure != "" || retry)) || (telegramMessageID == 0 && failure == "") {
-		return invalid()
-	}
-	state := "sent"
-	if failure != "" {
-		state = "failed"
-		if retry {
-			state = statePending
+	for _, entry := range entries {
+		if entry.Reference.Owner != delivery.Admin {
+			continue
+		}
+		id, parseErr := strconv.ParseInt(entry.Reference.Key, 10, 64)
+		if parseErr != nil {
+			return Delivery{}, false, parseErr
+		}
+		item, found, prepareErr := s.PrepareDelivery(ctx, id)
+		if prepareErr != nil || found {
+			return item, found, prepareErr
 		}
 	}
-	tag, err := s.DB.Exec(ctx, `UPDATE core.admin_message_deliveries SET state=$3,telegram_message_id=$4,
- failure=$5,available_at=clock_timestamp()+make_interval(secs => $6) WHERE id=$1 AND attempt=$2 AND state='sending'`,
-		id, attempt, state, telegramMessageID, failure, retrySeconds)
+	return Delivery{}, false, nil
+}
+func (s Service) prepareDelivery(ctx context.Context, candidate dbgen.NextAdminDeliveriesRow) (Delivery, bool, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return Delivery{}, false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err = guardMessage(ctx, tx, candidate.Actor, candidate.MessageID); err != nil {
+		if _, revoked := errors.AsType[*revokedSourceError](err); revoked {
+			return Delivery{}, false, tx.Commit(ctx)
+		}
+		return Delivery{}, false, err
+	}
+	q := dbgen.New(tx)
+	row, err := q.LockAdminDelivery(ctx, dbgen.LockAdminDeliveryParams{ID: candidate.ID, BotID: s.Delivery.BotID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Delivery{}, false, tx.Commit(ctx)
+	}
+	if err != nil {
+		return Delivery{}, false, err
+	}
+	item := Delivery{
+		ID:              row.ID,
+		MessageID:       row.MessageID,
+		Actor:           row.Actor,
+		ActorTelegramID: row.TelegramID,
+		State:           row.State,
+	}
+	if err = json.Unmarshal(row.Destination, &item.Destination); err != nil {
+		return Delivery{}, false, err
+	}
+	if err = json.Unmarshal(row.Content, &item.Content); err != nil {
+		return Delivery{}, false, err
+	}
+	entry, bindingErr := delivery.ReadReference(ctx, tx, s.Delivery.BotID, adminReference(item.ID))
+	if bindingErr != nil {
+		return Delivery{}, false, bindingErr
+	}
+	if entry.Destination.Thread != item.Destination.Thread {
+		return Delivery{}, false, delivery.ErrQueueBinding
+	}
+	item.Destination.Chat = entry.Destination.Chat
+	item.Attempt, err = q.PrepareAdminDelivery(ctx, item.ID)
+	if err != nil {
+		return Delivery{}, false, err
+	}
+	return item, true, tx.Commit(ctx)
+}
+
+// BeginDelivery is called after external identity authorization, without holding
+// its SQL locks. It rechecks source/rights and reserves pacing before dispatch.
+func (s Service) BeginDelivery(ctx context.Context, attempt delivery.Attempt) (delivery.Admission, error) {
+	if err := s.Delivery.Validate(); err != nil {
+		return delivery.Admission{}, err
+	}
+	if attempt.ID <= 0 || attempt.Generation <= 0 {
+		return delivery.Admission{}, invalid()
+	}
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return delivery.Admission{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := dbgen.New(tx)
+	owner, err := q.AdminAttemptOwner(
+		ctx,
+		dbgen.AdminAttemptOwnerParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
+	)
+	if err != nil {
+		return delivery.Admission{}, adminAttemptError(err)
+	}
+	if err = guardMessage(ctx, tx, owner.Actor, owner.ID); err != nil {
+		if _, revoked := errors.AsType[*revokedSourceError](err); revoked {
+			return delivery.Admission{Reason: sourceRevoked}, tx.Commit(ctx)
+		}
+		return delivery.Admission{}, err
+	}
+	if err = authorize(ctx, tx, owner.Actor); err != nil {
+		return delivery.Admission{}, err
+	}
+	row, err := q.LockAdminAttempt(
+		ctx,
+		dbgen.LockAdminAttemptParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
+	)
+	if err != nil {
+		return delivery.Admission{}, adminAttemptError(err)
+	}
+	if row.State != statePending || !row.LeaseLive {
+		return delivery.Admission{}, staleAdminAttempt()
+	}
+	gate, err := delivery.Begin(ctx, tx, s.Delivery, adminReference(attempt.ID))
+	if err != nil {
+		return gate, err
+	}
+	if !gate.Ready {
+		_, err = q.FinishAdminDelivery(
+			ctx,
+			dbgen.FinishAdminDeliveryParams{
+				ID:          attempt.ID,
+				BotID:       s.Delivery.BotID,
+				Attempt:     attempt.Generation,
+				State:       statePending,
+				Failure:     gate.Reason,
+				AvailableAt: pgtype.Timestamptz{Time: gate.NotBefore, Valid: true},
+			},
+		)
+	} else {
+		var count int64
+		count, err = q.BeginAdminSend(
+			ctx,
+			dbgen.BeginAdminSendParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
+		)
+		if err == nil && count != 1 {
+			err = staleAdminAttempt()
+		}
+	}
+	if err != nil {
+		return delivery.Admission{}, err
+	}
+	return gate, tx.Commit(ctx)
+}
+
+// Complete retains the existing explicit service completion entry point.
+func (s Service) Complete(ctx context.Context, id, attempt, messageID int64, failure string, retry bool) error {
+	outcome := delivery.Outcome{Kind: delivery.Succeeded, MessageID: messageID}
+	if failure != "" {
+		outcome = delivery.Outcome{Kind: delivery.Rejected, Reason: failure}
+	}
+	if retry {
+		outcome = delivery.Outcome{Kind: delivery.Deferred, Reason: failure, Missing: true}
+	}
+	return s.CompleteDelivery(ctx, Completion{ID: id, Attempt: attempt, Outcome: outcome})
+}
+
+// CompleteDelivery records an exact attempt. An uncertain send is never returned
+// to pending, even if authority was withdrawn while the wire call was active.
+func (s Service) CompleteDelivery(ctx context.Context, result Completion) error {
+	if result.ID <= 0 || result.Attempt <= 0 || !result.Outcome.Valid() {
+		return invalid()
+	}
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return problem(http.StatusConflict, "admin_message_stale_attempt")
+	defer func() { _ = tx.Rollback(ctx) }()
+	valid, err := s.completionSource(ctx, tx, result.ID, result.Attempt)
+	if err != nil {
+		return err
 	}
-	return nil
+	q := dbgen.New(tx)
+	row, err := q.LockAdminAttempt(
+		ctx,
+		dbgen.LockAdminAttemptParams{ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt},
+	)
+	if err != nil {
+		return adminAttemptError(err)
+	}
+	if row.State == statePending &&
+		(result.Outcome.Kind == delivery.Succeeded || result.Outcome.Kind == delivery.Uncertain) {
+		return staleAdminAttempt()
+	}
+	if !valid && result.Outcome.Kind == delivery.Rejected {
+		result.Outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}
+	}
+	outcome, deadline, err := delivery.Finish(ctx, tx, s.Delivery, adminReference(result.ID), result.Outcome)
+	if err != nil {
+		return err
+	}
+	if !valid && outcome.Kind != delivery.Succeeded && outcome.Kind != delivery.Uncertain {
+		outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}
+		if err = delivery.Project(
+			ctx,
+			tx,
+			s.Delivery.BotID,
+			adminReference(result.ID),
+			delivery.Cancelled,
+			deadline,
+		); err != nil {
+			return err
+		}
+	}
+	if err = s.finishDelivery(ctx, q, result.ID, result.Attempt, outcome, deadline); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (s Service) finishDelivery(
+	ctx context.Context,
+	q *dbgen.Queries,
+	id, attempt int64,
+	outcome delivery.Outcome,
+	deadline time.Time,
+) error {
+	var failures int64
+	if outcome.Kind == delivery.Rejected ||
+		(outcome.Kind == delivery.Deferred && outcome.Reason != "telegram_rate_limit") {
+		failures = 1
+	}
+	count, err := q.FinishAdminDelivery(
+		ctx,
+		dbgen.FinishAdminDeliveryParams{ID: id, BotID: s.Delivery.BotID, Attempt: attempt,
+			State: string(outcome.Kind), MessageID: outcome.MessageID, Failure: outcome.Reason,
+			AvailableAt: pgtype.Timestamptz{Time: deadline, Valid: true}, FailureIncrement: failures},
+	)
+	if err == nil && count != 1 {
+		return staleAdminAttempt()
+	}
+	return err
+}
+
+func (s Service) completionSource(ctx context.Context, tx pgx.Tx, id, attempt int64) (bool, error) {
+	owner, err := dbgen.New(tx).
+		AdminAttemptOwner(ctx, dbgen.AdminAttemptOwnerParams{ID: id, BotID: s.Delivery.BotID, Attempt: attempt})
+	if err != nil {
+		return false, adminAttemptError(err)
+	}
+	source, err := messageSource(ctx, tx, owner.Actor, owner.ID)
+	if err != nil {
+		return false, err
+	}
+	if err = source.prelock(ctx, tx, owner.Actor); err != nil {
+		return false, err
+	}
+	valid, err := source.validity(ctx, tx, owner.Actor)
+	if err != nil {
+		return false, err
+	}
+	if !valid {
+		if err = retireMessage(ctx, tx, owner.ID); err != nil {
+			return false, err
+		}
+	}
+	return valid, nil
+}
+
+func staleAdminAttempt() error { return problem(http.StatusConflict, "admin_message_stale_attempt") }
+func adminAttemptError(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return staleAdminAttempt()
+	}
+	return err
 }

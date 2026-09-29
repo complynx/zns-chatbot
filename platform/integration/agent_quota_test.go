@@ -31,7 +31,7 @@ func TestAssistantQuotaLocalesManualAndOwnerIsolation(t *testing.T) {
 			var reply string
 			require.NoError(
 				t,
-				f.db.QueryRow(t.Context(), `SELECT plan->'plan'->>'text' FROM bot.replies WHERE update_id=9101`).
+				f.db.QueryRow(t.Context(), `SELECT payload->'plan'->>'text' FROM interaction.saved_turns WHERE owner='alice' AND update_id=9101`).
 					Scan(&reply),
 			)
 			assert.Equal(t, text, reply)

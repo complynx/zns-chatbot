@@ -12,12 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/browserauth"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
@@ -38,7 +37,7 @@ func runtimeRoutingServer(t *testing.T, prefix string) string {
 	mux.Handle(
 		"/",
 		api.Handler(
-			runtimeapp.NewServices(nil, runtimeapp.Options{}),
+			appservices.NewServices(nil, appservices.Options{}),
 			identity.Signer{},
 			slog.New(slog.DiscardHandler),
 		),

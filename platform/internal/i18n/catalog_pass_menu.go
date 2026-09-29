@@ -11,6 +11,7 @@ const (
 	RegistrationEmpty                   ID = "passmenu.RegistrationEmpty"
 	RegistrationSaved                   ID = "passmenu.RegistrationSaved"
 	RegistrationStale                   ID = "passmenu.RegistrationStale"
+	RegistrationUnavailable             ID = "passmenu.RegistrationUnavailable"
 	RegistrationSolo                    ID = "passmenu.RegistrationSolo"
 	RegistrationInvite                  ID = "passmenu.RegistrationInvite"
 	RegistrationInviteHint              ID = "passmenu.RegistrationInviteHint"

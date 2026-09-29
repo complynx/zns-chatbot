@@ -3,7 +3,9 @@ package orders
 import (
 	"context"
 	"errors"
-	"net/http"
+
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,40 +38,23 @@ func (s Service) QueueDueReminders(ctx context.Context, after time.Duration) (in
 	if err != nil {
 		return 0, err
 	}
+	var pending []delivery.Registration
 	for _, order := range due {
-		if err = enqueueNotification(ctx, tx, order.Owner, "reminder", order, nil); err != nil {
+		if err = enqueueNotification(
+			ctx,
+			tx,
+			s.Delivery.BotID,
+			&pending,
+			order.Owner,
+			"reminder",
+			order,
+			nil,
+		); err != nil {
 			return 0, err
 		}
 	}
+	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
+		return 0, err
+	}
 	return len(due), tx.Commit(ctx)
-}
-
-// ClaimReminder preserves Python's one delivery attempt, including ambiguous failures.
-func (s Service) ClaimReminder(ctx context.Context, id int64) (bool, error) {
-	if id <= 0 {
-		return false, problem(http.StatusBadRequest, "invalid_delivery")
-	}
-	tx, err := s.DB.Begin(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }() // Cleanup after commit or a reported claim error.
-	var eligible bool
-	err = tx.QueryRow(ctx, `SELECT o.state IN ('unpaid','cash') AND (o.choice->>'total')::numeric>0
- FROM core.orders o JOIN core.order_notifications n ON n.order_id=o.id
- WHERE n.id=$1 AND n.payload->>'kind'='reminder' AND n.delivered_at IS NULL AND n.attempted_at IS NULL
- FOR UPDATE OF o`, id).Scan(&eligible)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	result, err := tx.Exec(ctx, `UPDATE core.order_notifications SET attempted_at=clock_timestamp(),
- delivered_at=CASE WHEN $2 THEN NULL ELSE clock_timestamp() END
- WHERE id=$1 AND attempted_at IS NULL AND delivered_at IS NULL`, id, eligible)
-	if err != nil {
-		return false, err
-	}
-	return eligible && result.RowsAffected() == 1, tx.Commit(ctx)
 }

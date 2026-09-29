@@ -20,7 +20,7 @@ func (b *Bot) reconcilePassMenus(ctx context.Context) error {
 		return err
 	}
 	for _, view := range views {
-		viewContext, authErr := b.API.notificationContext(ctx, view.Owner, view.Chat)
+		viewContext, authErr := b.API.NotificationContext(ctx, view.Owner, view.Chat)
 		if authErr != nil {
 			b.logger().WarnContext(ctx, "pass menu identity pending")
 			continue

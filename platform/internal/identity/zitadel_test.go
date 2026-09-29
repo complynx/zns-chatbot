@@ -149,5 +149,5 @@ func TestZitadelOAuthBasicEscapesCredentials(t *testing.T) {
 	client, err := identity.NewZitadel(config)
 	require.NoError(t, err)
 	_, err = client.Exchange(t.Context(), "mapped-user")
-	require.ErrorIs(t, err, identity.ErrZitadelIdentity)
+	require.ErrorIs(t, err, identity.ErrZitadelUnavailable)
 }

@@ -23,7 +23,7 @@ import (
 type modernRevokeTransport struct{ before func(context.Context) error }
 
 func (tr modernRevokeTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	if r.URL.Path == "/v1/order-actions" {
+	if r.URL.Path == "/v1/order-actions" || r.URL.Path == "/internal/derived/order-actions" {
 		if err := tr.before(r.Context()); err != nil {
 			return nil, err
 		}
@@ -62,6 +62,7 @@ func TestModernOrdersTransactionRechecksAdminAndBooking(t *testing.T) {
 				_, execErr := f.db.Exec(ctx, query)
 				return execErr
 			}}}
+			f.b.Host.HTTP = f.b.API.HTTP
 			result := runModernVM(t, f, 38401, identity.BobTelegramID, "Accept "+order.ID, fmt.Sprintf(`
 tools.orders.review.read({order_id:%q});let denied=false;try{tools.orders.review.decide({order_id:%q,name:"accept"});}catch(_){denied=true;}
 let help=false;try{tools.orders.review.decide.$help();help=true;}catch(_){} return {denied,help,listed:tools.$list().some(x=>x.name==="orders.review.decide")};`, order.ID, order.ID))
@@ -144,7 +145,7 @@ func TestModernOrdersExportUncertaintyAndRestart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, hex.EncodeToString(digest[:]), receipt.SHA256)
 	assert.Equal(t, len(body), receipt.Bytes)
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, TG: f.b.TG, Model: f.b.Model}
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: f.b.Model}
 	handle(t, f.b, message(38601, identity.BobTelegramID, "Export modern orders"))
 	assert.Equal(t, 1, transport.sent)
 }

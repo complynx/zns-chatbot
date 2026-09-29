@@ -9,13 +9,13 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/identityprovision"
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -61,20 +61,25 @@ func onboardingInboxFixture(t *testing.T, language string) (*fixture, *unavailab
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
 	server := httptest.NewServer(
 		api.WithTelegramProvisioning(
-			api.Handler(runtimeapp.NewServices(f.db, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler)),
+			api.Handler(appservices.NewServices(f.db, appservices.Options{}), signer, slog.New(slog.DiscardHandler)),
 			provider,
 			signer,
 			77,
 		),
 	)
 	t.Cleanup(server.Close)
-	f.b.API = bot.APIClient{
-		Base:     server.URL,
-		Signer:   signer,
-		Links:    links,
-		Exchange: provisioningExchange{links: links, signer: signer},
+	f.b.API = appclient.Client{
+		Base:         server.URL,
+		SandboxToken: signer.Token,
+		Links:        links,
+		Exchange:     provisioningExchange{links: links, signer: signer},
 	}
-	f.b.Onboarding = func(ctx context.Context, user telegram.User) error { return f.b.API.ProvisionTelegram(ctx, 77, user) }
+	f.b.Host = appclient.Host{
+		Base:      server.URL,
+		Signer:    signer,
+		UserToken: func(ctx context.Context, owner string) (string, error) { return f.b.API.UserToken(ctx, owner) },
+	}
+	f.b.Onboarding = func(ctx context.Context, user telegram.User) error { return f.b.Host.ProvisionTelegram(ctx, 77, user) }
 	denied, healthy := message(9200, 101, "/orders"), message(9201, 202, "/orders")
 	denied.Message.From.LanguageCode = language
 	if language == "callback" {

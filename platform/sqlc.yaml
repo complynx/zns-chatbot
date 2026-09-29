@@ -2,6 +2,16 @@ version: '2'
 sql:
   - engine: postgresql
     schema: internal/store/migrations
+    queries: internal/interaction/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/interaction/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+  - engine: postgresql
+    schema: internal/store/migrations
     queries: internal/conversation/queries
     gen:
       go:
@@ -21,3 +31,114 @@ sql:
               type: RawMessage
         rename:
           created_at: At
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/passbooking/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/passbooking/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/delivery/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/delivery/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/adminmessage/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/adminmessage/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/orders/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/orders/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/massage/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/massage/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/legacyfood/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/legacyfood/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/bot/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/bot/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+        overrides:
+          - db_type: timestamptz
+            go_type:
+              import: time
+              type: Time
+
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/registrationnative/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/registrationnative/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/registrationingress/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/registrationingress/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true
+
+  - engine: postgresql
+    schema: internal/store/migrations
+    queries: internal/botdelivery/queries
+    gen:
+      go:
+        package: dbgen
+        out: internal/botdelivery/dbgen
+        sql_package: pgx/v5
+        emit_empty_slices: true
+        omit_unused_structs: true

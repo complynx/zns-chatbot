@@ -125,20 +125,11 @@ func (c Config) validateValues() error {
 	if net.ParseIP(c.Server.Host) == nil && strings.ContainsAny(c.Server.Host, "/\\?#@[]: \t\r\n") {
 		return errors.New("configuration server.host must be a hostname, IP address or empty")
 	}
-	durations := map[string]time.Duration{
-		"server.read_header_timeout": c.Server.ReadHeaderTimeout,
-		"server.read_timeout":        c.Server.ReadTimeout,
-		"server.write_timeout":       c.Server.WriteTimeout,
-		"server.idle_timeout":        c.Server.IdleTimeout,
-		"server.health_timeout":      c.Server.HealthTimeout,
-		"shutdown.drain":             c.Shutdown.Drain,
-		"shutdown.telemetry_flush":   c.Shutdown.TelemetryFlush,
-		"orders.reminder_after":      c.Orders.ReminderAfter,
+	if c.Registration.Retention < time.Microsecond {
+		return errors.New("configuration registration.retention must be at least 1us")
 	}
-	for name, value := range durations {
-		if value <= 0 {
-			return fmt.Errorf("configuration %s must be positive", name)
-		}
+	if err := c.validateDurations(); err != nil {
+		return err
 	}
 	if c.Sticker.Cache.Capacity < 1 || c.Sticker.Cache.HalfLife < time.Second {
 		return errors.New("configuration sticker cache requires positive capacity and half_life of at least 1s")
@@ -257,5 +248,28 @@ func (c Config) validateOpenAIModel(command string) error {
 		return errors.New("configuration model.remote_secret is required for paid model mode")
 	}
 
+	return nil
+}
+
+func (c Config) validateDurations() error {
+	durations := map[string]time.Duration{
+		"registration.retention":     c.Registration.Retention,
+		"delivery.bot_interval":      c.Delivery.BotInterval,
+		"delivery.chat_interval":     c.Delivery.ChatInterval,
+		"delivery.cooldown_fallback": c.Delivery.CooldownFallback,
+		"server.read_header_timeout": c.Server.ReadHeaderTimeout,
+		"server.read_timeout":        c.Server.ReadTimeout,
+		"server.write_timeout":       c.Server.WriteTimeout,
+		"server.idle_timeout":        c.Server.IdleTimeout,
+		"server.health_timeout":      c.Server.HealthTimeout,
+		"shutdown.drain":             c.Shutdown.Drain,
+		"shutdown.telemetry_flush":   c.Shutdown.TelemetryFlush,
+		"orders.reminder_after":      c.Orders.ReminderAfter,
+	}
+	for name, value := range durations {
+		if value <= 0 {
+			return fmt.Errorf("configuration %s must be positive", name)
+		}
+	}
 	return nil
 }

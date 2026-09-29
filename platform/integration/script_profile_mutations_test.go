@@ -163,7 +163,9 @@ type profileInterleavingTransport struct {
 }
 
 func (transport *profileInterleavingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.Method == http.MethodPost && request.URL.Path == "/v1/me/pass-profile/actions" && !transport.done {
+	if request.Method == http.MethodPost &&
+		(request.URL.Path == "/v1/me/pass-profile/actions" || request.URL.Path == "/internal/derived/pass-profiles") &&
+		!transport.done {
 		transport.done = true
 		transport.before()
 	}
@@ -197,6 +199,7 @@ func TestScriptProfileStaleAndRevokedAtExecution(t *testing.T) {
 				require.NoError(t, err)
 			}}
 			f.b.API.HTTP = &http.Client{Transport: transport}
+			f.b.Host.HTTP = f.b.API.HTTP
 			f.b.Scripts = scopeVM{}
 			model := &knowledgeModel{plans: []agent.Plan{
 				{

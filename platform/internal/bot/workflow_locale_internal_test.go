@@ -3,10 +3,10 @@ package bot
 import (
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 func TestWorkflowLocalizedCard(t *testing.T) {
@@ -23,8 +23,8 @@ func TestWorkflowLocalizedCard(t *testing.T) {
 			payload, err := renderPayload(
 				test.language,
 				101,
-				core.Workflow{State: stateDraft, Version: 4, SlotID: "one"},
-				[]core.Slot{
+				workflow.Workflow{State: stateDraft, Version: 4, SlotID: "one"},
+				[]workflow.Slot{
 					{ID: "one", Title: "Custom service", Price: 30, Currency: "BYN", Remaining: 2},
 				},
 				notice,
@@ -47,7 +47,7 @@ func TestWorkflowLocalizedCard(t *testing.T) {
 func TestWorkflowNativeReplyRemainsUntranslated(t *testing.T) {
 	t.Parallel()
 	const reply = "**Ответ агента** stays exactly as written"
-	payload, err := renderPayload("en", 101, core.Workflow{State: stateBooked}, nil, reply, true)
+	payload, err := renderPayload("en", 101, workflow.Workflow{State: stateBooked}, nil, reply, true)
 	require.NoError(t, err)
 	assert.Contains(t, payload.Text, "*Ответ агента* stays exactly as written")
 	assert.Contains(t, payload.Text, "Status: Booked")

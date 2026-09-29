@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -14,7 +16,7 @@ import (
 
 func (b *Bot) loadAdminMessagePage(ctx context.Context, owner string, id, offset int64) (adminmessage.Page, error) {
 	var page adminmessage.Page
-	err := b.API.call(
+	err := b.API.Call(
 		ctx,
 		owner,
 		http.MethodPost,
@@ -26,46 +28,11 @@ func (b *Bot) loadAdminMessagePage(ctx context.Context, owner string, id, offset
 }
 
 func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset int64, messages *orderMessages) error {
-	page, err := b.loadAdminMessagePage(ctx, in.owner, id, offset)
-	if err == nil && page.State == broadcastPreparing {
-		var resumed adminmessage.Message
-		err = b.API.call(ctx, in.owner, http.MethodPost, fmt.Sprintf("/v1/admin-messages/%d/resume", id), nil, &resumed)
-		if err == nil {
-			page, err = b.loadAdminMessagePage(ctx, in.owner, id, offset)
-		}
-	}
+	page, err := b.readyAdminMessagePage(ctx, in.owner, id, offset)
 	if err != nil {
 		return err
 	}
-	var lines []string
-	var rows [][]telegram.Button
-	for i, item := range page.Items {
-		status := item.State
-		if status == "draft" || status == broadcastPreparing {
-			status = broadcastPending
-		}
-		lines = append(
-			lines,
-			messages.text(
-				i18n.AdminMessageResult,
-				map[string]string{
-					"destination": adminDestination(item.Destination),
-					"status":      messages.text(i18n.ID("admin_message.state."+status), nil),
-					"message":     strconv.FormatInt(item.TelegramMessageID, 10),
-					"detail":      item.Failure,
-				},
-			),
-		)
-		rows = append(
-			rows,
-			[]telegram.Button{
-				{
-					Text: adminDestination(item.Destination),
-					Data: fmt.Sprintf("adminmsg:inspect:%d:%d", id, offset+int64(i)),
-				},
-			},
-		)
-	}
+	lines, rows := adminMessagePageItems(page, id, offset, messages)
 	text := messages.text(
 		i18n.AdminBroadcastPage,
 		map[string]string{
@@ -110,20 +77,42 @@ func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset 
 		if messages.err != nil {
 			return messages.err
 		}
-		_, sendErr := b.TG.Send(ctx, telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: rows}})
+		if err = b.API.CheckAdminMessagePublication(ctx, in.owner, id); err != nil {
+			return err
+		}
+		sendErr := b.queueBotUpdateResult(
+			ctx,
+			in.chat,
+			fmt.Sprintf("admin_page:%d:%d", id, offset),
+			botdelivery.Reference{Family: botFamilyAdminPage, Version: id},
+			botdelivery.StoredResult{
+				Payload: telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: rows}},
+			},
+		)
 		return sendErr
 	}
 	if messages.err != nil {
 		return messages.err
 	}
-	if _, err = b.TG.Send(
+	if err = b.API.CheckAdminMessagePublication(ctx, in.owner, id); err != nil {
+		return err
+	}
+	if err = b.queueBotUpdateResult(
 		ctx,
-		telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: rows}},
+		in.chat,
+		fmt.Sprintf("admin_page:%d:%d", id, offset),
+		botdelivery.Reference{Family: botFamilyAdminPage, Version: id},
+		botdelivery.StoredResult{
+			Payload: telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: rows}},
+		},
 	); err != nil {
 		return err
 	}
 	if len(page.Items) > 0 {
 		text += "\n\n" + page.Items[0].Content.Text
+	}
+	if err = b.API.CheckAdminMessagePublication(ctx, in.owner, id); err != nil {
+		return err
 	}
 	return b.sendAdminMessageView(ctx, in.chat, text, id, messages)
 }
@@ -144,14 +133,7 @@ func (b *Bot) adminMessagePageCallback(ctx context.Context, in incoming, message
 	if parts[1] == broadcastPageAction {
 		return true, b.sendAdminMessagePage(ctx, in, id, offset, messages)
 	}
-	page, err := b.loadAdminMessagePage(ctx, in.owner, id, offset)
-	if err == nil && page.State == broadcastPreparing {
-		var resumed adminmessage.Message
-		err = b.API.call(ctx, in.owner, http.MethodPost, fmt.Sprintf("/v1/admin-messages/%d/resume", id), nil, &resumed)
-		if err == nil {
-			page, err = b.loadAdminMessagePage(ctx, in.owner, id, offset)
-		}
-	}
+	page, err := b.readyAdminMessagePage(ctx, in.owner, id, offset)
 	if err != nil {
 		return true, err
 	}
@@ -163,5 +145,65 @@ func (b *Bot) adminMessagePageCallback(ctx context.Context, in incoming, message
 	if item.Content.FromMessage != 0 {
 		text = fmt.Sprintf("%d/%d", item.Content.FromChat, item.Content.FromMessage)
 	}
+	if err = b.API.CheckAdminMessagePublication(ctx, in.owner, id); err != nil {
+		return true, err
+	}
 	return true, b.sendAdminMessageView(ctx, in.chat, adminDestination(item.Destination)+"\n"+text, id, messages)
+}
+
+func (b *Bot) readyAdminMessagePage(ctx context.Context, owner string, id, offset int64) (adminmessage.Page, error) {
+	page, err := b.loadAdminMessagePage(ctx, owner, id, offset)
+	if err != nil || page.State != broadcastPreparing {
+		return page, err
+	}
+	var resumed adminmessage.Message
+	if err = b.API.Call(
+		ctx,
+		owner,
+		http.MethodPost,
+		fmt.Sprintf("/v1/admin-messages/%d/resume", id),
+		nil,
+		&resumed,
+	); err != nil {
+		return page, err
+	}
+	return b.loadAdminMessagePage(ctx, owner, id, offset)
+}
+
+func adminMessagePageItems(
+	page adminmessage.Page,
+	id, offset int64,
+	messages *orderMessages,
+) ([]string, [][]telegram.Button) {
+	var lines []string
+	var rows [][]telegram.Button
+	for i, item := range page.Items {
+		status := item.State
+		if status == "draft" || status == broadcastPreparing {
+			status = broadcastPending
+		}
+		lines = append(
+			lines,
+			messages.text(
+				i18n.AdminMessageResult,
+				map[string]string{
+					"destination": adminDestination(item.Destination),
+					"status":      messages.text(i18n.ID("admin_message.state."+status), nil),
+					"message":     strconv.FormatInt(item.TelegramMessageID, 10),
+					"detail":      item.Failure,
+				},
+			),
+		)
+		rows = append(
+			rows,
+			[]telegram.Button{
+				{
+					Text: adminDestination(item.Destination),
+					Data: fmt.Sprintf("adminmsg:inspect:%d:%d", id, offset+int64(i)),
+				},
+			},
+		)
+	}
+
+	return lines, rows
 }

@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -77,7 +77,7 @@ func (p *inboxOAuth) serve(w http.ResponseWriter, r *http.Request) {
 func providerInboxFixture(t *testing.T, mode int32, language string) (*fixture, *inboxOAuth, *atomic.Int64) {
 	t.Helper()
 	f := setup(t)
-	service := core.Service{DB: f.db}
+	service := workflow.Service{DB: f.db}
 	selected := mustExec(t, service, "alice", action("select", "massage-1", 0, "provider-select", "manual"))
 	mustExec(t, service, "alice", action("confirm", "", selected.Version, "provider-confirm", "manual"))
 	provider := &inboxOAuth{}
@@ -102,14 +102,15 @@ func providerInboxFixture(t *testing.T, mode int32, language string) (*fixture, 
 	require.NoError(t, links.Bind(t.Context(), "bob", 202, "z-bob"))
 	server := httptest.NewServer(
 		api.AuthenticatedHandler(
-			runtimeapp.NewServices(service.DB, runtimeapp.Options{LegacyOrderBotID: service.LegacyOrderBotID}),
-			f.b.API.Signer,
+			appservices.NewServices(f.db, appservices.Options{}),
+			f.b.Host.Signer,
 			slog.New(slog.DiscardHandler),
 			api.ZitadelOwner(adapter, links),
 		),
 	)
 	t.Cleanup(server.Close)
 	f.b.API.Base, f.b.API.Links, f.b.API.Exchange = server.URL, links, adapter
+	f.b.Host.Base = f.b.API.Base
 	f.b.Logger = slog.New(slog.DiscardHandler)
 	f.b.Onboarding = func(context.Context, telegram.User) error {
 		t.Error("mapped provider rejection must not provision")
@@ -166,7 +167,7 @@ func TestInactiveProviderUserCompletesDeniedUpdateWithoutReplay(t *testing.T) {
 			require.Positive(t, cards, "healthy successor must receive its reply")
 			provider.mode.Store(0)
 			completeInbox(t, f, 9302)
-			current, err := (core.Service{DB: f.db}).Current(t.Context(), "alice")
+			current, err := (workflow.Service{DB: f.db}).Current(t.Context(), "alice")
 			require.NoError(t, err)
 			assert.EqualValues(t, 2, current.Version, "reactivation must not execute rejected callback")
 		})
@@ -187,7 +188,7 @@ func TestProviderInfrastructureFailureKeepsDurableUpdate(t *testing.T) {
 				require.Equal(t, 2, pending)
 				provider.mode.Store(0)
 				completeInbox(t, f, 9302)
-				current, err := (core.Service{DB: f.db}).Current(t.Context(), "alice")
+				current, err := (workflow.Service{DB: f.db}).Current(t.Context(), "alice")
 				require.NoError(t, err)
 				assert.EqualValues(
 					t,
@@ -207,7 +208,7 @@ func TestProviderUserDeactivatedAfterAdmissionIsTerminal(t *testing.T) {
 	require.Positive(t, acknowledgements.Load())
 	provider.mode.Store(0)
 	completeInbox(t, f, 9302)
-	current, err := (core.Service{DB: f.db}).Current(t.Context(), "alice")
+	current, err := (workflow.Service{DB: f.db}).Current(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, current.Version)
 }

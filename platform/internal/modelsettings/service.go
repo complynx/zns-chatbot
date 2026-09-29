@@ -28,9 +28,10 @@ type Change struct {
 	OperationKey string `json:"operation_key"`
 }
 type Grant struct {
-	Owner      string `json:"owner"`
-	Capability string `json:"capability"`
-	Enabled    bool   `json:"enabled"`
+	OperationKey string `json:"operation_key,omitempty"`
+	Owner        string `json:"owner"`
+	Capability   string `json:"capability"`
+	Enabled      bool   `json:"enabled"`
 }
 
 type querier interface {
@@ -64,41 +65,27 @@ func authorize(ctx context.Context, db querier, actor, capability string) error 
 	return nil
 }
 func (s Service) Grant(ctx context.Context, actor string, input Grant) error {
-	if input.Capability != Own && input.Capability != Others && input.Capability != Global {
-		return problem(http.StatusBadRequest, "invalid_capability")
+	if err := validGrant(input); err != nil {
+		return err
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(481048)`); err != nil {
-		return err
-	}
-	// An empty capability never matches a grant: only canonical superadmins qualify.
-	if err = authorize(ctx, tx, actor, ""); err != nil {
-		return err
-	}
-	if input.Enabled {
-		_, err = tx.Exec(
-			ctx,
-			`INSERT INTO core.model_setting_grants(owner,capability) VALUES($1,$2) ON CONFLICT DO NOTHING`,
-			input.Owner,
-			input.Capability,
-		)
-	} else {
-		_, err = tx.Exec(
-			ctx,
-			`DELETE FROM core.model_setting_grants WHERE owner=$1 AND capability=$2`,
-			input.Owner,
-			input.Capability,
-		)
-	}
+	prepared, err := s.PrepareGrantInTx(ctx, tx, actor, input)
 	if err != nil {
+		return err
+	}
+	if prepared.Replay() {
+		return nil
+	}
+	if err = prepared.Apply(ctx); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
+
 func effective(ctx context.Context, db querier, owner string) (Selection, error) {
 	var selection Selection
 
@@ -144,72 +131,26 @@ func (s Service) Read(ctx context.Context, actor, scope string) (State, error) {
 }
 
 func (s Service) Set(ctx context.Context, actor, scope string, input Change) (State, error) {
-	if !Valid(input.Selection) || input.Version < 0 || input.OperationKey == "" || len(input.OperationKey) > 128 {
-		return State{}, problem(http.StatusBadRequest, "invalid_model_settings")
+	if err := validChange(input); err != nil {
+		return State{}, err
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return State{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(481048)`); err != nil {
-		return State{}, err
-	}
-	if err = authorize(ctx, tx, actor, permission(actor, scope)); err != nil {
-		return State{}, err
-	}
-	if scope != GlobalScope {
-		var exists bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.users WHERE id=$1)`, scope).
-			Scan(&exists); err != nil {
-			return State{}, err
-		}
-		if !exists {
-			return State{}, problem(http.StatusNotFound, "user_not_found")
-		}
-	}
-	request, err := json.Marshal(struct {
-		Change
-
-		Scope string `json:"scope"`
-	}{input, scope})
+	prepared, err := s.PrepareSetInTx(ctx, tx, actor, scope, input)
 	if err != nil {
 		return State{}, err
 	}
-	previous, replayed, err := replay(ctx, tx, actor, input.OperationKey, request)
-	if err != nil || replayed {
-		return previous, err
+	if value, found := prepared.Replay(); found {
+		return value, nil
 	}
-	state, err := read(ctx, tx, actor, scope)
+	value, err := prepared.Apply(ctx)
 	if err != nil {
-		return State{}, err
+		return value, err
 	}
-	if state.Version != input.Version {
-		return State{}, problem(http.StatusConflict, "stale_model_settings")
-	}
-	if err = write(ctx, tx, actor, scope, input); err != nil {
-		return State{}, err
-	}
-	state, err = read(ctx, tx, actor, scope)
-	if err != nil {
-		return State{}, err
-	}
-	result, err := json.Marshal(state)
-	if err != nil {
-		return State{}, err
-	}
-	_, err = tx.Exec(
-		ctx,
-		`INSERT INTO core.model_setting_operations(actor,operation_key,request,result) VALUES($1,$2,$3,$4)`,
-		actor,
-		input.OperationKey,
-		request,
-		result,
-	)
-	if err != nil {
-		return State{}, err
-	}
-	return state, tx.Commit(ctx)
+	return value, tx.Commit(ctx)
 }
 
 // Permissions returns only the caller's capabilities for host-owned menus.

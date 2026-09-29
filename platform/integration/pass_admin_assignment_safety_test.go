@@ -250,7 +250,7 @@ func TestPassAdminAssignmentFreshClockAfterEventLock(t *testing.T) {
 	}()
 	require.Eventually(t, func() bool {
 		var waiting bool
-		queryErr := db.QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%FROM core.pass_events%FOR UPDATE%')`).
+		queryErr := db.QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%FROM core.pass_events%FOR NO KEY UPDATE%')`).
 			Scan(&waiting)
 		return queryErr == nil && waiting
 	}, time.Second, 10*time.Millisecond)

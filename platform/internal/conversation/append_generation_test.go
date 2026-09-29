@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,14 +26,14 @@ func TestHistoryAppendGenerationSharesDeletionLock(t *testing.T) {
 	// Deletion holds its first lock before incrementing generation. An append
 	// cannot accept the still-visible old generation while this lock is held.
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-	err := s.AppendAtGeneration(ctx, "alice", "held-append", "assistant", "old generation reply", 0)
+	err := s.AppendDerived(ctx, "alice", "held-append", "old generation reply", 0, []readsource.Authority{})
 	cancel()
 	close(barrier.release)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.NoError(t, <-done)
 	require.ErrorContains(
 		t,
-		s.AppendAtGeneration(t.Context(), "alice", "stale-append", "assistant", "old generation reply", 0),
+		s.AppendDerived(t.Context(), "alice", "stale-append", "old generation reply", 0, []readsource.Authority{}),
 		"history_stale",
 	)
 	var count int
@@ -42,7 +44,7 @@ func TestHistoryAppendGenerationSharesDeletionLock(t *testing.T) {
 	)
 	require.Zero(t, count)
 	body := strings.Repeat("fresh complete reply 🌍", 500)
-	require.NoError(t, s.AppendAtGeneration(t.Context(), "alice", "fresh-append", "assistant", body, 1))
+	require.NoError(t, s.AppendDerived(t.Context(), "alice", "fresh-append", body, 1, []readsource.Authority{}))
 	var saved string
 	require.NoError(
 		t,
@@ -50,6 +52,6 @@ func TestHistoryAppendGenerationSharesDeletionLock(t *testing.T) {
 			Scan(&saved),
 	)
 	require.Equal(t, body, saved)
-	require.NoError(t, s.Append(t.Context(), "alice", "manual-append", "manual", "button: menu"))
-	require.NoError(t, s.Append(t.Context(), "alice", "system-append", "system", "notification"))
+	require.NoError(t, s.AppendOriginal(t.Context(), "alice", "manual-append", "manual", "button: menu"))
+	require.NoError(t, s.AppendTrustedOutcome(t.Context(), "alice", "system-append", "notification"))
 }

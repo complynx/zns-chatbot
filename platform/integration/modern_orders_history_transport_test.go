@@ -39,6 +39,7 @@ func TestModernLargeHistoryTransportAndRuntime(t *testing.T) {
 	require.Greater(t, len(body), 1<<20)
 	transport := &historyAppendTransport{}
 	f.b.API.HTTP = &http.Client{Transport: transport, Timeout: 10 * time.Second}
+	f.b.Host.HTTP = f.b.API.HTTP
 	actual, err := f.b.API.OrderHistory(t.Context(), "alice", current.EventID)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, transport.requests.Load(), int64(50))

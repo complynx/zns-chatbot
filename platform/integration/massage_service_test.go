@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +33,11 @@ func massageFixture(t *testing.T) (*pgxpool.Pool, massage.Service, time.Time) {
 	_, err = db.Exec(t.Context(), `INSERT INTO core.massage_work(event_id,specialist,starts_at,ends_at)
 	VALUES('sandbox-festival','bob',$1,$2),('sandbox-festival','master',$1,$2)`, start, start.Add(4*time.Hour))
 	require.NoError(t, err)
-	return db, massage.Service{DB: db, Now: func() time.Time { return start.Add(-time.Hour) }}, start
+	return db, massage.Service{
+		DB:       db,
+		Delivery: syntheticDeliverySettings(),
+		Now:      func() time.Time { return start.Add(-time.Hour) },
+	}, start
 }
 
 func massageBook(key, specialist string, slot, length int) massage.Command {
@@ -211,8 +217,23 @@ func TestMassageLimitsInstantAndNotifications(t *testing.T) {
 	require.NoError(t, err)
 	for _, notice := range notices {
 		assert.NotEqual(t, "next", notice.Kind)
-		massageCode(t, service.AcknowledgeNotice(t.Context(), "visitor", notice.ID), http.StatusNotFound, "not_found")
-		require.NoError(t, service.AcknowledgeNotice(t.Context(), "master", notice.ID))
+	}
+	prepared, err := service.DeliveryNotices(t.Context(), "master")
+	require.NoError(t, err)
+	require.NotEmpty(t, prepared)
+	for _, value := range prepared {
+		completion := massage.NotificationCompletion{
+			ID:      value.Notice.ID,
+			Attempt: value.Notice.DeliveryAttempt,
+			Outcome: delivery.Outcome{Kind: delivery.Cancelled, Reason: "synthetic_domain_notice_consumed"},
+		}
+		massageCode(
+			t,
+			service.CompleteNotification(t.Context(), "visitor", completion),
+			http.StatusNotFound,
+			"not_found",
+		)
+		require.NoError(t, service.CompleteNotification(t.Context(), "master", completion))
 	}
 	restarted := massage.Service{DB: db}
 	restored, err := restarted.Bookings(t.Context(), "master", booking.Event, "night", "mine")

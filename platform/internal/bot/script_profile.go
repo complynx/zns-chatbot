@@ -4,35 +4,37 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
 const maxScriptProfileResult = 8 * 1024
 
-func (b *Bot) scriptProfileEntries() []scriptToolEntry {
+func (b *Bot) scriptProfileEntries() []agenthost.ScriptToolEntry {
 	empty := json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
-	return []scriptToolEntry{
+	return []agenthost.ScriptToolEntry{
 		{
-			descriptor: scriptclient.Tool{
+			Descriptor: scriptclient.Tool{
 				Name:        "preferences.get",
 				Description: "Read your current language preferences.",
 				InputSchema: empty,
 			},
-			prepare:     prepareScriptProfileRead,
-			execute:     b.executeScriptPreferencesRead,
-			resultLimit: maxOrdinaryScriptResult,
+			Prepare:     prepareScriptProfileRead,
+			Execute:     b.executeScriptPreferencesRead,
+			ResultLimit: maxOrdinaryScriptResult,
 		},
 		{
-			descriptor: scriptclient.Tool{
+			Descriptor: scriptclient.Tool{
 				Name:        "profile.get",
 				Description: "Read your own pass profile, including saved personal details. Return only details needed for the current request.",
 				InputSchema: empty,
 			},
-			prepare: prepareScriptProfileRead,
-			execute: b.executeScriptProfileRead,
+			Prepare: prepareScriptProfileRead,
+			Execute: b.executeScriptProfileRead,
 			// Two 300-character fields may each expand sixfold when JSON encoded.
-			resultLimit: maxScriptProfileResult,
+			ResultLimit: maxScriptProfileResult,
 		},
 	}
 }
@@ -43,8 +45,8 @@ func prepareScriptProfileRead(
 	_ int64,
 	call scriptclient.ToolCall,
 	_ agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	return record, decodeScriptArguments(call.Arguments, &struct{}{})
 }
 
@@ -52,7 +54,7 @@ func (b *Bot) executeScriptPreferencesRead(
 	ctx context.Context,
 	owner string,
 	_ scriptclient.ToolCall,
-	_ scriptToolRecord,
+	_ agenthost.ScriptToolRecord,
 	_ *agent.Input,
 ) (any, error) {
 	return b.API.Preferences(ctx, owner)
@@ -62,7 +64,7 @@ func (b *Bot) executeScriptProfileRead(
 	ctx context.Context,
 	owner string,
 	_ scriptclient.ToolCall,
-	_ scriptToolRecord,
+	_ agenthost.ScriptToolRecord,
 	input *agent.Input,
 ) (any, error) {
 	profile, err := b.API.PassProfile(ctx, owner)

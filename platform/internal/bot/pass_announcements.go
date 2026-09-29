@@ -2,38 +2,38 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"html"
-	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
 func (b *Bot) deliverRegistrationAnnouncement(ctx context.Context) error {
-	var claim struct {
-		Announcement passbooking.RegistrationAnnouncement `json:"announcement"`
-		Found        bool                                 `json:"found"`
-	}
-	err := b.API.requestToken(
-		ctx,
-		b.API.Signer.DeliveryToken(),
-		http.MethodPost,
-		"/internal/pass-announcements/claim",
-		nil,
-		&claim,
-	)
-	if err != nil || !claim.Found {
+	item, found, err := b.Host.ClaimRegistrationAnnouncement(ctx)
+	if err != nil || !found {
 		return err
 	}
-	item := claim.Announcement
+	return b.deliverPreparedRegistrationAnnouncement(ctx, item)
+}
+
+func (b *Bot) deliverPreparedRegistrationAnnouncement(
+	ctx context.Context,
+	item passbooking.RegistrationAnnouncement,
+) error {
 	text, err := registrationAnnouncementText(item)
 	if err != nil {
 		return err
+	}
+	gate, err := b.Host.BeginRegistrationAnnouncement(ctx, delivery.Attempt{ID: item.ID, Generation: item.Attempts})
+	if err != nil {
+		return err
+	}
+	if !gate.Ready {
+		return nil
 	}
 	var chat any = item.Channel
 	if numeric, parseErr := strconv.ParseInt(item.Channel, 10, 64); parseErr == nil {
@@ -48,25 +48,14 @@ func (b *Bot) deliverRegistrationAnnouncement(ctx context.Context) error {
 	sendErr := b.TG.Call(sendCtx, "sendMessage", payload, &message)
 	cancel()
 	completion := announcementCompletion(item.ID, message.ID, sendErr)
-	if completion.Failure != "" {
+	completion.Attempt = item.Attempts
+	if completion.Outcome.Reason != "" {
 		b.logger().
-			WarnContext(ctx, "registration announcement delivery", "announcement", item.ID, "failure", completion.Failure)
+			WarnContext(ctx, "registration announcement delivery", "announcement", item.ID, "failure", completion.Outcome.Reason)
 	}
-	body, err := json.Marshal(completion)
-	if err != nil {
-		return err
-	}
-	var result struct {
-		OK bool `json:"ok"`
-	}
-	return b.API.requestToken(
-		ctx,
-		b.API.Signer.DeliveryToken(),
-		http.MethodPost,
-		"/internal/pass-announcements/complete",
-		body,
-		&result,
-	)
+	completionCtx, finish := deliveryCompletionContext(ctx)
+	defer finish()
+	return b.Host.CompleteRegistrationAnnouncement(completionCtx, completion)
 }
 
 func registrationAnnouncementText(item passbooking.RegistrationAnnouncement) (string, error) {
@@ -92,19 +81,5 @@ func registrationAnnouncementText(item passbooking.RegistrationAnnouncement) (st
 }
 
 func announcementCompletion(id, messageID int64, err error) passbooking.AnnouncementCompletion {
-	result := passbooking.AnnouncementCompletion{ID: id, MessageID: messageID}
-	if err == nil && messageID > 0 {
-		return result
-	}
-	result.MessageID = 0
-	result.Failure = "telegram_outcome_unknown"
-	if apiErr, ok := errors.AsType[*telegram.APIError](err); ok {
-		result.Failure = telegramRejected
-		if apiErr.Code == http.StatusTooManyRequests && apiErr.Parameters.RetryAfter >= 0 &&
-			apiErr.Parameters.RetryAfter <= 3600 {
-			result.Failure = "telegram_rate_limit"
-			result.RetryAfter = apiErr.Parameters.RetryAfter
-		}
-	}
-	return result
+	return passbooking.AnnouncementCompletion{ID: id, Outcome: telegram.DeliveryOutcome(messageID, err)}
 }

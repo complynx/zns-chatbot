@@ -6,13 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 )
 
-func startFoodMaintenance(ctx context.Context, db *pgxpool.Pool, logger *slog.Logger, botID int64) (func(), error) {
-	service := legacyfood.Service{DB: db, BotID: botID}
+func startFoodMaintenance(ctx context.Context, service legacyfood.Service, logger *slog.Logger) (func(), error) {
 	if err := service.QueueReminders(ctx); err != nil {
 		return nil, err
 	}

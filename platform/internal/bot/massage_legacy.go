@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -21,29 +20,6 @@ const massageLegacySource = "source"
 const massageLegacyBack = "back"
 const massageLegacyExitAction = "exit"
 const massageLegacyInvalidCallback = "invalid_callback"
-
-func (c APIClient) LegacyMassageDraft(ctx context.Context, owner, event, id string) (massage.LegacyDraft, error) {
-	var result massage.LegacyDraft
-	err := c.call(
-		ctx,
-		owner,
-		http.MethodGet,
-		"/v1/massage/legacy-draft?"+url.Values{knowledgeEventQuery: {event}, "id": {id}}.Encode(),
-		nil,
-		&result,
-	)
-	return result, err
-}
-
-func (c APIClient) ExecuteLegacyMassage(
-	ctx context.Context,
-	owner string,
-	command massage.LegacyCommand,
-) (massage.LegacyDraft, error) {
-	var result massage.LegacyDraft
-	err := c.call(ctx, owner, http.MethodPost, "/v1/massage/legacy-draft", command, &result)
-	return result, err
-}
 
 func (b *Bot) applyLegacyMassageCallback(
 	ctx context.Context,

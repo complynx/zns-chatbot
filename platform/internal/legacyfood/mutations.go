@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/complynx/zns-chatbot/platform/internal/legacyfood/dbgen"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -179,20 +181,35 @@ func (op *operation) review(ctx context.Context, order *Order) error {
 }
 
 func (op *operation) notice(ctx context.Context, order *Order, owner, kind string, p Payment) error {
-	_, err := op.tx.Exec(
-		ctx,
-		`INSERT INTO core.food_notifications(event_id,owner,kind,subject,payload)
- VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-		order.EventID,
-		owner,
-		kind,
-		fmt.Sprintf(
+	payload, err := json.Marshal(map[string]any{"order_id": order.ID, "kind": p.Kind, "generation": p.Generation})
+	if err != nil {
+		return err
+	}
+	row, err := dbgen.New(op.tx).EnqueueNotification(ctx, dbgen.EnqueueNotificationParams{
+		EventID: order.EventID,
+		Owner:   owner,
+		Kind:    kind,
+		Subject: fmt.Sprintf(
 			"%s:%s:%d",
 			order.ID,
 			p.Kind,
 			p.Generation,
 		),
-		map[string]any{"order_id": order.ID, "kind": p.Kind, "generation": p.Generation},
+		Payload: payload,
+		BotID:   op.service.Delivery.BotID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return collectNotificationRegistration(
+		ctx,
+		op.tx,
+		op.service.Delivery.BotID,
+		row.ID,
+		row.DeliveryChat,
+		&op.notificationRegistrations,
 	)
-	return err
 }

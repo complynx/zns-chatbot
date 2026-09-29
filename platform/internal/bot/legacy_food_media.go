@@ -11,6 +11,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -22,7 +23,7 @@ func (b *Bot) foodMediaMarkup(
 	markup *telegram.Markup,
 	hint *agent.MediaHint,
 ) error {
-	view, err := b.API.foodView(ctx, owner, "", "", false)
+	view, err := b.API.FoodViewForReview(ctx, owner, "", "", false)
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return nil
 	}
@@ -99,13 +100,26 @@ func foodReceiptChoiceLabel(language string, label i18n.ID, kind string, prepare
 }
 
 func (b *Bot) chooseFoodReceipt(ctx context.Context, in incoming, choice foodButtonCommand) error {
-	return b.selectFoodReceipt(ctx, in, choice, originManual)
+	return b.selectFoodReceipt(ctx, in, choice, originManual, nil)
 }
 
-func (b *Bot) selectFoodReceipt(ctx context.Context, in incoming, choice foodButtonCommand, origin string) error {
+func (b *Bot) selectFoodReceipt(
+	ctx context.Context,
+	in incoming,
+	choice foodButtonCommand,
+	origin string,
+	source *readsource.Derivation,
+) error {
+	boundSource, sourceErr := mediaCommandSource(origin, source)
+	if sourceErr != nil {
+		return sourceErr
+	}
+	if source != nil {
+		source = &boundSource
+	}
 	var item mediaIntake
-	err := b.DB.QueryRow(ctx, `UPDATE bot.media_intake SET food_command=$3,last_action='select_food',last_origin=$4 WHERE owner=$1 AND id=$2 AND status='choose' AND expires_at>now() AND command IS NULL AND registration_command IS NULL AND food_command IS NULL RETURNING id,attachment_id,food_command`, in.owner, choice.MediaID, choice.Command, origin).
-		Scan(&item.ID, &item.AttachmentID, &item.FoodCommand)
+	err := b.DB.QueryRow(ctx, `UPDATE bot.media_intake SET food_command=$3,last_action='select_food',last_origin=$4,command_source=$5 WHERE owner=$1 AND id=$2 AND status='choose' AND expires_at>now() AND command IS NULL AND registration_command IS NULL AND food_command IS NULL RETURNING id,attachment_id,food_command,command_source,last_origin`, in.owner, choice.MediaID, choice.Command, origin, source).
+		Scan(&item.ID, &item.AttachmentID, &item.FoodCommand, &item.CommandSource, &item.CommandOrigin)
 	if errors.Is(err, pgx.ErrNoRows) {
 		var expired bool
 		item, expired, err = b.loadMediaUploadState(ctx, in.owner, choice.MediaID)
@@ -123,6 +137,9 @@ func (b *Bot) selectFoodReceipt(ctx context.Context, in incoming, choice foodBut
 }
 
 func (b *Bot) commitFoodReceipt(ctx context.Context, in incoming, item mediaIntake) error {
+	if _, err := mediaCommandSource(item.CommandOrigin, item.CommandSource); err != nil {
+		return b.mediaExecutionError(ctx, in, item, err)
+	}
 	command := *item.FoodCommand
 	if command.ProofID == "" {
 		proof, err := b.API.PromoteMedia(ctx, in.owner, item.AttachmentID)
@@ -141,7 +158,13 @@ func (b *Bot) commitFoodReceipt(ctx context.Context, in incoming, item mediaInta
 		}
 	}
 	item.FoodCommand = &command
-	order, err := b.API.ExecuteFood(ctx, in.owner, command)
+	var order legacyfood.Order
+	var err error
+	if item.CommandSource == nil {
+		order, err = b.API.ExecuteFood(ctx, in.owner, command)
+	} else {
+		order, err = b.Host.ExecuteDerivedFood(ctx, in.owner, command, *item.CommandSource)
+	}
 	if err != nil {
 		return b.mediaExecutionError(ctx, in, item, err)
 	}

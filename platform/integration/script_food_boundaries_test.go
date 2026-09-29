@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,12 +18,15 @@ import (
 type foodToolTransport struct {
 	before    func(context.Context) error
 	loseReply bool
+	hits      *atomic.Int64
 }
 
 func (transport foodToolTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.URL.Path != "/v1/food/commands" {
+	if request.Method != http.MethodPost ||
+		(request.URL.Path != "/v1/food/commands" && request.URL.Path != "/internal/derived/food-actions") {
 		return http.DefaultTransport.RoundTrip(request)
 	}
+	transport.hits.Add(1)
 	if transport.before != nil {
 		if err := transport.before(request.Context()); err != nil {
 			return nil, err
@@ -39,10 +43,12 @@ func (transport foodToolTransport) RoundTrip(request *http.Request) (*http.Respo
 func TestScriptFoodExecutionRechecksPermissionAfterBinding(t *testing.T) {
 	t.Parallel()
 	f, _ := foodBotFixture(t)
-	f.b.API.HTTP = &http.Client{Transport: foodToolTransport{before: func(ctx context.Context) error {
+	var hits atomic.Int64
+	f.b.API.HTTP = &http.Client{Transport: foodToolTransport{hits: &hits, before: func(ctx context.Context) error {
 		_, err := f.db.Exec(ctx, `UPDATE core.users SET can_book=false WHERE id='alice'`)
 		return err
 	}}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	runScriptReads(
 		t,
 		f,
@@ -56,6 +62,7 @@ func TestScriptFoodExecutionRechecksPermissionAfterBinding(t *testing.T) {
 						Arguments: json.RawMessage(`{"name":"toggle_activity","activity":"yoga"}`),
 					},
 				)
+				require.Positive(t, hits.Load(), "food mutation fault must fire")
 				require.Error(t, err)
 				return json.RawMessage(`{"denied":true}`), nil
 			},
@@ -72,7 +79,9 @@ func TestScriptFoodExecutionRechecksPermissionAfterBinding(t *testing.T) {
 func TestScriptFoodLostResponseRetainsOriginalCommand(t *testing.T) {
 	t.Parallel()
 	f, service := foodBotFixture(t)
-	f.b.API.HTTP = &http.Client{Transport: foodToolTransport{loseReply: true}}
+	var hits atomic.Int64
+	f.b.API.HTTP = &http.Client{Transport: foodToolTransport{hits: &hits, loseReply: true}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	runScriptReads(
 		t,
 		f,
@@ -86,6 +95,7 @@ func TestScriptFoodLostResponseRetainsOriginalCommand(t *testing.T) {
 						Arguments: json.RawMessage(`{"name":"toggle_activity","activity":"yoga"}`),
 					},
 				)
+				require.Positive(t, hits.Load(), "food mutation fault must fire")
 				require.Error(t, err)
 				return json.RawMessage(`{"uncertain":true}`), nil
 			},

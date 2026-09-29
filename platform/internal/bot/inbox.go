@@ -1,9 +1,11 @@
 package bot
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"math"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -19,12 +21,17 @@ func (b *Bot) saveBatch(ctx context.Context, offset int64, updates []telegram.Up
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	next := offset
+	updates = slices.Clone(updates)
+	slices.SortFunc(updates, func(a, b telegram.Update) int { return cmp.Compare(a.ID, b.ID) })
 	for _, update := range updates {
 		if update.ID < 0 || update.ID == math.MaxInt64 {
 			return offset, errors.New("invalid Telegram update ID")
 		}
 		if update.ID < offset {
 			continue
+		}
+		if err = b.saveRegistrationIngress(ctx, tx, update); err != nil {
+			return offset, err
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO bot.telegram_inbox(update_id,payload)
 VALUES($1,$2) ON CONFLICT DO NOTHING`, update.ID, update); err != nil {
@@ -54,7 +61,7 @@ func (b *Bot) drainInbox(ctx context.Context) error {
 			return err
 		}
 		if err = b.Handle(ctx, update); err != nil {
-			if !errors.Is(err, errHistoryPlanTerminal) {
+			if !errors.Is(err, errHistoryPlanTerminal) && !errors.Is(err, errPassPlanTerminal) {
 				return err
 			}
 			if ctx.Err() != nil {

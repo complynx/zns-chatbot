@@ -29,8 +29,10 @@ Merge the previous summary with the supplied new events; this is a real semantic
 Keep concise, at most 2048 UTF-8 bytes. Output only the required structured text field. Empty input is not a task.`
 
 type HistorySummaryInput struct {
-	Previous string               `json:"previous"`
-	Events   []conversation.Event `json:"events"`
+	// BeforeProvider validates the exact host snapshot before exposing its contents.
+	BeforeProvider func(context.Context) error `json:"-"`
+	Previous       string                      `json:"previous"`
+	Events         []conversation.Event        `json:"events"`
 }
 type HistorySummarizer interface {
 	SummarizeHistory(context.Context, HistorySummaryInput) (string, error)
@@ -48,10 +50,11 @@ func summarizeHistory(ctx context.Context, input HistorySummaryInput, call struc
 	raw, err := call(
 		ctx,
 		providerPrompt{
-			instructions: summaryInstructions,
-			schema:       summarySchema,
-			name:         "zns_history_summary",
-			input:        data,
+			instructions:   summaryInstructions,
+			schema:         summarySchema,
+			name:           "zns_history_summary",
+			input:          data,
+			beforeProvider: input.BeforeProvider,
 		},
 	)
 	if ctx.Err() != nil {
@@ -108,6 +111,9 @@ func (m Remote) SummarizeHistory(ctx context.Context, input HistorySummaryInput)
 	client := m.HTTP
 	if client == nil {
 		client = &http.Client{Timeout: summaryTimeout}
+	}
+	if err = checkProviderRequest(ctx, input.BeforeProvider); err != nil {
+		return "", err
 	}
 	response, err := remoteClient(client).Do(request)
 	if err != nil {

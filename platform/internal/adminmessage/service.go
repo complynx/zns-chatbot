@@ -37,6 +37,19 @@ func (s Service) Preview(ctx context.Context, actor, key string, request Request
 		return result, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = prelockMessageKey(ctx, tx, actor, key, originalSource()); err != nil {
+		return result, err
+	}
+	var oldID int64
+	lookupErr := tx.QueryRow(ctx, `SELECT id FROM core.admin_messages WHERE actor=$1 AND key=$2`, actor, key).
+		Scan(&oldID)
+	if lookupErr == nil {
+		if err = guardMessage(ctx, tx, actor, oldID); err != nil {
+			return Message{}, preserveSourceRefusal(ctx, tx, err)
+		}
+	} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
+		return result, lookupErr
+	}
 	if err = authorize(ctx, tx, actor); err != nil {
 		return result, err
 	}
@@ -77,6 +90,10 @@ func previewRequest(ctx context.Context, tx pgx.Tx, actor, key string, payload [
 
 // Enqueue requires the owning administrator's explicit action on a saved preview.
 func (s Service) Enqueue(ctx context.Context, actor string, id int64) error {
+	bindings, err := s.publicationBindings(ctx, actor, id)
+	if err != nil {
+		return err
+	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err
@@ -84,12 +101,12 @@ func (s Service) Enqueue(ctx context.Context, actor string, id int64) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 	message, err := owned(ctx, tx, actor, id)
 	if err != nil {
-		return err
+		return preserveSourceRefusal(ctx, tx, err)
 	}
 	if message.State == statePreparing {
 		return problem(http.StatusConflict, "admin_message_preparing")
 	}
-	if message.State == "cancelled" {
+	if message.State == stateCancelled {
 		return problem(http.StatusConflict, "admin_message_cancelled")
 	}
 	var failures bool
@@ -100,8 +117,7 @@ func (s Service) Enqueue(ctx context.Context, actor string, id int64) error {
 	if failures {
 		return problem(http.StatusConflict, "admin_message_render_failed")
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO core.admin_message_deliveries(message_id,destination,content)
- SELECT message_id,destination,content FROM core.admin_message_recipients WHERE message_id=$1 ON CONFLICT DO NOTHING`, id)
+	err = s.enqueueRegistered(ctx, tx, id, bindings)
 	if err != nil {
 		return err
 	}
@@ -113,6 +129,9 @@ func (s Service) Enqueue(ctx context.Context, actor string, id int64) error {
 }
 
 func owned(ctx context.Context, tx pgx.Tx, actor string, id int64) (Message, error) {
+	if err := guardMessage(ctx, tx, actor, id); err != nil {
+		return Message{}, err
+	}
 	var result Message
 	if err := authorize(ctx, tx, actor); err != nil {
 		return result, err
@@ -133,6 +152,10 @@ func (s Service) Cancel(ctx context.Context, actor string, id int64) error {
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = owned(ctx, tx, actor, id); err != nil {
+		return preserveSourceRefusal(ctx, tx, err)
+	}
+	items, err := lockAdminPublication(ctx, tx, id)
+	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(ctx, `UPDATE core.admin_messages SET state='cancelled' WHERE id=$1`, id)
@@ -141,6 +164,9 @@ func (s Service) Cancel(ctx context.Context, actor string, id int64) error {
 	}
 	_, err = tx.Exec(ctx, `UPDATE core.admin_message_deliveries SET state='cancelled'
  WHERE message_id=$1 AND state='pending'`, id)
+	if err == nil {
+		err = projectAdminCancellation(ctx, tx, items)
+	}
 	if err != nil {
 		return err
 	}
@@ -154,7 +180,7 @@ func (s Service) Results(ctx context.Context, actor string, id int64) ([]Deliver
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = owned(ctx, tx, actor, id); err != nil {
-		return nil, err
+		return nil, preserveSourceRefusal(ctx, tx, err)
 	}
 	rows, err := tx.Query(
 		ctx,

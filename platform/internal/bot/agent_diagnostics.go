@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/observability"
 )
 
@@ -42,22 +41,6 @@ func (b *Bot) startAgentDiagnostics(
 	}
 	return observability.StartAgentEvent(observability.WithAgentEvents(ctx, recorder),
 		observability.AgentEvent{Phase: "request", Operation: "telegram.update"})
-}
-
-func (b *Bot) diagnosticPlan(ctx context.Context, input agent.Input) (agent.Plan, error) {
-	ctx, span := observability.StartAgentEvent(
-		ctx,
-		observability.AgentEvent{Phase: diagnosticModelPhase, Operation: "model.loop"},
-	)
-	plan, err := b.Model.Plan(ctx, input)
-	if err == nil {
-		err = agent.Validate(plan)
-		if err != nil {
-			span.Outcome("invalid", "invalid_plan")
-		}
-	}
-	span.Finish(err)
-	return plan, err
 }
 
 func diagnosticPlanReplay(ctx context.Context) {

@@ -5,7 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/stretchr/testify/require"
+
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 )
 
 func TestDomainPageSnapshotAndByteBounds(t *testing.T) {
@@ -24,7 +28,7 @@ func TestDomainPageSnapshotAndByteBounds(t *testing.T) {
 	require.False(t, next.More)
 	items[0] = "changed"
 	_, err = scriptDomainItems(items, cursor, "")
-	require.ErrorIs(t, err, errScriptReadStale)
+	require.ErrorIs(t, err, appclient.ErrReadStale)
 }
 
 func TestDomainPageDiagnosticsMetadata(t *testing.T) {
@@ -43,7 +47,7 @@ func TestDomainPageDiagnosticsMetadata(t *testing.T) {
 		{"massage.slots", `invalid`, 0, false},
 		{"passes.get", `{"items":[]}`, 0, false},
 	} {
-		count, empty := scriptToolResultMetadata(scenario.name, json.RawMessage(scenario.body))
+		count, empty := agenthost.ScriptToolResultMetadata(scenario.name, json.RawMessage(scenario.body))
 		require.Equal(t, scenario.count, count)
 		require.Equal(t, scenario.empty, empty)
 	}

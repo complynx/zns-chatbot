@@ -7,11 +7,12 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptprotocol"
@@ -24,7 +25,8 @@ type scriptLostReplyTransport struct {
 }
 
 func (transport *scriptLostReplyTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.Method != http.MethodPost || request.URL.Path != "/v1/order-actions" || transport.lost {
+	if request.Method != http.MethodPost ||
+		(request.URL.Path != "/v1/order-actions" && request.URL.Path != "/internal/derived/order-actions") || transport.lost {
 		return http.DefaultTransport.RoundTrip(request)
 	}
 	transport.before()
@@ -66,7 +68,14 @@ func TestScriptToolsDurableEffectsAndReplay(t *testing.T) {
 	f.b.Scripts = hostScriptFunc(
 		func(ctx context.Context, tools []scriptclient.Tool, callback scriptclient.Callback) (json.RawMessage, error) {
 			executions++
-			require.Len(t, tools, 60)
+			require.Len(t, tools, 61)
+			names := make([]string, 0, len(tools))
+			for _, tool := range tools {
+				names = append(names, tool.Name)
+			}
+			require.Contains(t, names, "passes.event.read")
+			require.NotContains(t, names, "passes.payments.accept")
+			require.NotContains(t, names, "passes.admin.queue")
 			require.NoError(t, scriptprotocol.ValidateTools(tools))
 			list := scriptCall(ctx, t, callback, "$list", "{}")
 			var listed []scriptclient.Tool
@@ -233,6 +242,7 @@ func TestScriptToolsAdmissionPrecedesEffectAndLostReplyIsNotRepeated(t *testing.
 		assert.Equal(t, "tg-script-1854-0-0", key)
 	}}
 	f.b.API.HTTP = &http.Client{Transport: transport}
+	f.b.Host.HTTP = f.b.API.HTTP
 	executions := 0
 	f.b.Scripts = hostScriptFunc(
 		func(ctx context.Context, _ []scriptclient.Tool, callback scriptclient.Callback) (json.RawMessage, error) {
@@ -314,6 +324,7 @@ func TestScriptToolsAuthorizedReadRefreshesAfterLostWriteReply(t *testing.T) {
 			t.Parallel()
 			f := setup(t)
 			f.b.API.HTTP = &http.Client{Transport: &scriptLostReplyTransport{test: t, before: func() {}}}
+			f.b.Host.HTTP = f.b.API.HTTP
 			f.b.Scripts = hostScriptFunc(
 				func(ctx context.Context, _ []scriptclient.Tool, callback scriptclient.Callback) (json.RawMessage, error) {
 					_, err := callback(
@@ -359,7 +370,7 @@ func TestScriptToolsWorkflowReadRefreshesOrdinaryProposal(t *testing.T) {
 			_, err := f.b.API.Execute(
 				ctx,
 				"alice",
-				core.Action{
+				workflow.Action{
 					Name:    "select",
 					SlotID:  "massage-1",
 					Version: 0,

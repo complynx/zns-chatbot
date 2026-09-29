@@ -14,6 +14,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -93,12 +94,28 @@ func (b *Bot) executeProfileCommand(
 	id int64,
 	command passes.Command,
 ) (string, error) {
+	return b.executeProfileWithSource(ctx, in, id, command, nil)
+}
+
+func (b *Bot) executeProfileWithSource(ctx context.Context, in incoming, id int64,
+	command passes.Command, source *readsource.Derivation) (string, error) {
 	preference, err := b.API.Preferences(ctx, in.owner)
 	if err != nil {
 		return "", err
 	}
 	command.Key = "tg-profile-" + strconv.FormatInt(id, 10)
-	profile, executionErr := b.API.ExecutePassProfile(ctx, in.owner, command)
+	var profile passes.Profile
+	var executionErr error
+	if source == nil {
+		profile, executionErr = b.API.ExecutePassProfile(ctx, in.owner, command)
+	} else {
+		profile, executionErr = b.Host.ExecuteDerivedPassProfile(ctx, in.owner, command, *source)
+	}
+	return b.profileOutcome(ctx, in, id, command, profile, executionErr, preference.Language)
+}
+
+func (b *Bot) profileOutcome(ctx context.Context, in incoming, id int64, command passes.Command,
+	profile passes.Profile, executionErr error, language string) (string, error) {
 	metadata := struct {
 		Action  string `json:"action"`
 		Field   string `json:"field"`
@@ -130,10 +147,10 @@ func (b *Bot) executeProfileCommand(
 	case command.Name == mediaCancel:
 		noticeID = i18n.ProfileCancelled
 	}
-	if err = b.record(ctx, in.owner, id, "profile_action", metadata); err != nil {
+	if err := b.record(ctx, in.owner, id, "profile_action", metadata); err != nil {
 		return "", err
 	}
-	return i18n.Translate(preference.Language, noticeID, nil)
+	return i18n.Translate(language, noticeID, nil)
 }
 
 func profileErrorNotice(code string) i18n.ID {
@@ -172,7 +189,7 @@ func (b *Bot) RenderProfile(ctx context.Context, owner string, chat int64) error
 		return err
 	}
 	if err == nil {
-		visible, visibleErr := b.historyReplyVisible(ctx, owner, updateID)
+		visible, visibleErr := b.derivedReplyVisible(ctx, owner, updateID)
 		if visibleErr != nil {
 			return visibleErr
 		}

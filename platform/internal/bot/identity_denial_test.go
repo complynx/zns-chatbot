@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -32,12 +32,12 @@ func TestOnboardingClassifiesOnlyExactPermanentConflict(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(map[string]string{"code": test.code})
 			}))
 			t.Cleanup(server.Close)
-			err := (bot.APIClient{Base: server.URL}).ProvisionTelegram(t.Context(), 77, telegram.User{ID: 101})
+			err := (appclient.Host{Base: server.URL}).ProvisionTelegram(t.Context(), 77, telegram.User{ID: 101})
 			if test.denied {
-				require.ErrorIs(t, err, bot.ErrProvisioningDenied)
+				require.ErrorIs(t, err, appclient.ErrProvisioningDenied)
 			} else {
 				require.Error(t, err)
-				require.NotErrorIs(t, err, bot.ErrProvisioningDenied)
+				require.NotErrorIs(t, err, appclient.ErrProvisioningDenied)
 			}
 		})
 	}

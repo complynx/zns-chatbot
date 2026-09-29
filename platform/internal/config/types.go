@@ -24,6 +24,8 @@ func (Secret) MarshalJSON() ([]byte, error) { return []byte(`"[redacted]"`), nil
 func (Secret) MarshalYAML() (any, error)    { return redacted, nil }
 
 type Config struct {
+	Registration     Registration     `yaml:"registration"      json:"registration"`
+	Delivery         Delivery         `yaml:"delivery"          json:"delivery"`
 	Credits          Credits          `yaml:"credits"           json:"credits"`
 	AssistantSources AssistantSources `yaml:"assistant_sources" json:"assistant_sources"`
 	Lineup           Lineup           `yaml:"lineup"            json:"lineup"`
@@ -45,6 +47,12 @@ type Config struct {
 	Shutdown         Shutdown         `yaml:"shutdown"          json:"shutdown"`
 	OTel             OTel             `yaml:"otel"              json:"otel"`
 	Log              Log              `yaml:"log"               json:"log"`
+}
+
+const defaultRegistrationRetention = 10 * time.Minute
+
+type Registration struct {
+	Retention time.Duration `yaml:"retention" json:"retention"`
 }
 
 type Credits struct {
@@ -154,9 +162,11 @@ func defaults(command string) Config {
 			IdleTimeout:       idle,
 			HealthTimeout:     health,
 		},
-		Telegram: Telegram{Token: Secret(sandboxMode), WebAppURL: "http://127.0.0.1:8090/miniapp/"},
-		Sandbox:  Sandbox{MiniAppURL: "http://bot:8080"},
-		Model:    Model{Provider: provider, AssistantDailyLimit: DefaultAssistantDailyLimit},
+		Telegram:     Telegram{Token: Secret(sandboxMode), WebAppURL: "http://127.0.0.1:8090/miniapp/"},
+		Delivery:     defaultDelivery(),
+		Registration: Registration{Retention: defaultRegistrationRetention},
+		Sandbox:      Sandbox{MiniAppURL: "http://bot:8080"},
+		Model:        Model{Provider: provider, AssistantDailyLimit: DefaultAssistantDailyLimit},
 		Sticker: Sticker{
 			Cache: Cache{Capacity: defaultCapacity, HalfLife: halfLife},
 		},

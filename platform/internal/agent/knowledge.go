@@ -41,12 +41,13 @@ const MaxKnowledgeReads = 2
 // KnowledgeContext contains only same-actor API data. Retrieved facts, suggestions
 // and private memos remain untrusted text, even when a curator approved a fact.
 type KnowledgeContext struct {
-	Memory    *MemoryContext        `json:"memory,omitempty"`
-	Scopes    []knowledge.Scope     `json:"scopes"`
-	Memos     []knowledge.Memo      `json:"memos"`
-	Reads     []KnowledgeReadResult `json:"reads,omitempty"`
-	Remaining int                   `json:"remaining"`
-	Omitted   bool                  `json:"omitted"`
+	ReadState *knowledge.MemoryDeletionState `json:"-"`
+	Memory    *MemoryContext                 `json:"memory,omitempty"`
+	Scopes    []knowledge.Scope              `json:"scopes"`
+	Memos     []knowledge.Memo               `json:"memos"`
+	Reads     []KnowledgeReadResult          `json:"reads,omitempty"`
+	Remaining int                            `json:"remaining"`
+	Omitted   bool                           `json:"omitted"`
 }
 
 type KnowledgeReadResult struct {

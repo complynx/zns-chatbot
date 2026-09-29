@@ -2,6 +2,7 @@ package passbooking
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -113,23 +114,26 @@ func (s *snapshot) appendAdminTier(
 }
 
 func (s *snapshot) currentAdminTier() int {
-	stats := s.stats()
+	return currentAdminTier(s.event, s.stats(), s.now)
+}
+
+func currentAdminTier(e event, stats statistics, now time.Time) int {
 	usages := []passallocation.Usage{stats.total}
-	if s.event.rule == passallocation.Paired {
+	if e.rule == passallocation.Paired {
 		usages = []passallocation.Usage{stats.roles[passallocation.Leader], stats.roles[passallocation.Follower]}
 	}
 	current := 0
 	for _, usage := range usages {
 		index, ok := passallocation.PickTier(
-			s.event.tiers,
-			passallocation.TierRequest{Rule: s.event.rule, Usage: usage, Increment: 1, Now: s.now},
+			e.tiers,
+			passallocation.TierRequest{Rule: e.rule, Usage: usage, Increment: 1, Now: now},
 		)
 		if ok {
 			current = max(current, index+1)
 		}
 	}
 	if current == 0 {
-		return len(s.event.tiers)
+		return len(e.tiers)
 	}
 	return current
 }

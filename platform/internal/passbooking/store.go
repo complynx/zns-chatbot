@@ -15,8 +15,16 @@ const bookingColumns = `b.event_id,b.owner,u.telegram_id,b.version,b.state,b.rol
 b.invitation_target,b.payment_admin,b.created_at,b.assigned_at,b.price,b.tier_index,b.skip_balance,b.comment`
 
 func readEvent(ctx context.Context, tx pgx.Tx, id string) (event, error) {
+	return readEventLocked(ctx, tx, id, true)
+}
+
+func readEventLocked(ctx context.Context, tx pgx.Tx, id string, allocation bool) (event, error) {
 	e := event{id: id, admins: map[string]bool{}}
-	err := tx.QueryRow(ctx, `SELECT finishes_at,passport_required,assignment_rule,disable_concurrency_limit FROM core.pass_events WHERE id=$1 FOR UPDATE`, id).
+	query := `SELECT finishes_at,passport_required,assignment_rule,disable_concurrency_limit FROM core.pass_events WHERE id=$1`
+	if allocation {
+		query += ` FOR NO KEY UPDATE`
+	}
+	err := tx.QueryRow(ctx, query, id).
 		Scan(&e.finishes, &e.passport, &e.rule, &e.unlimited)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return e, conflict("pass_event_unknown")
@@ -82,6 +90,9 @@ func readBookings(ctx context.Context, tx pgx.Tx, eventID string) (map[string]*B
 }
 
 func persist(ctx context.Context, tx pgx.Tx, s *snapshot) error {
+	if err := s.persistAdmissions(ctx, tx); err != nil {
+		return err
+	}
 	for owner := range s.dirty {
 		b := s.bookings[owner]
 		_, err := tx.Exec(

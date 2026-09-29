@@ -22,7 +22,7 @@ func TestHistoryTerminalPlanDoesNotPoisonInboxAfterRestart(t *testing.T) {
 	f := setup(t)
 	archive := conversation.Service{DB: f.db}
 	const canary = "deleted history source canary"
-	require.NoError(t, archive.Append(t.Context(), "alice", "terminal-source", "user", canary))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "terminal-source", "user", canary))
 	var eventID int64
 	require.NoError(
 		t,
@@ -70,7 +70,7 @@ func TestHistoryTerminalPlanDoesNotPoisonInboxAfterRestart(t *testing.T) {
 	close(releaseFinal)
 	require.Eventually(t, func() bool {
 		var terminal bool
-		queryErr := f.db.QueryRow(t.Context(), `SELECT COALESCE((plan->>'history_redacted')::boolean,false) FROM bot.replies WHERE update_id=1`).
+		queryErr := f.db.QueryRow(t.Context(), `SELECT COALESCE((kind='terminal' AND state='privacy_terminal' AND reason='history_deleted'),false) FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
 			Scan(&terminal)
 		return queryErr == nil && terminal
 	}, 5*time.Second, 10*time.Millisecond)
@@ -107,8 +107,18 @@ func TestHistoryTerminalPlanDoesNotPoisonInboxAfterRestart(t *testing.T) {
 	)
 	assert.Equal(t, 1, effects)
 	var saved string
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT plan::text FROM bot.replies WHERE update_id=1`).Scan(&saved))
-	assert.Contains(t, saved, `"history_redacted": true`)
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT payload::text FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
+			Scan(&saved),
+	)
+	var terminal bool
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT kind='terminal' AND state='privacy_terminal' AND reason='history_deleted' FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
+			Scan(&terminal),
+	)
+	assert.True(t, terminal)
 	assert.NotContains(t, saved, canary)
 	var cursor int64
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT value FROM bot.cursors WHERE name='telegram'`).Scan(&cursor))
@@ -139,8 +149,8 @@ func TestHistorySummaryDeletionDoesNotPoisonFollowingUpdate(t *testing.T) {
 	f.b.HistoryLimit = 1
 	archive := conversation.Service{DB: f.db}
 	const canary = "stale summary source canary"
-	require.NoError(t, archive.Append(t.Context(), "alice", "summary-source", "user", canary))
-	require.NoError(t, archive.Append(t.Context(), "alice", "recent-source", "assistant", "recent safe event"))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "summary-source", "user", canary))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "recent-source", "assistant", "recent safe event"))
 	var eventID int64
 	require.NoError(
 		t,
@@ -182,7 +192,7 @@ func TestHistorySummaryDeletionDoesNotPoisonFollowingUpdate(t *testing.T) {
 	var terminal bool
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), `SELECT COALESCE((plan->>'history_redacted')::boolean,false) FROM bot.replies WHERE update_id=1`).
+		f.db.QueryRow(t.Context(), `SELECT COALESCE((kind='terminal' AND state='privacy_terminal' AND reason='history_deleted'),false) FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
 			Scan(&terminal),
 	)
 	assert.True(t, terminal)

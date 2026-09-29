@@ -31,9 +31,8 @@ func TestLineupReadRetrievesLateDJ(t *testing.T) {
 	}, &nextTurn))
 	assert.NotEmpty(t, nextTurn.LineupSource.Reads[2].Entries)
 	query := agent.LineupQuery{Scope: "full", DJ: "LateDJ"}
-	handled, err := b.performContextRead(t.Context(), "owner", 1, agent.Plan{LineupAction: &query}, &input)
+	err = b.performLineupRead(query, &input)
 	require.NoError(t, err)
-	assert.True(t, handled)
 	read := input.LineupSource.Reads[2]
 	require.Len(t, read.Entries, 1)
 	assert.Equal(t, "LateDJ", read.Entries[0].DJ)

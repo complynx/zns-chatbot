@@ -18,7 +18,7 @@ import (
 type qaInviteInterruption struct{ stopped bool }
 
 func (tr *qaInviteInterruption) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req.URL.Path == "/v1/passes/actions" && !tr.stopped {
+	if (req.URL.Path == "/v1/passes/actions" || req.URL.Path == "/internal/derived/pass-actions") && !tr.stopped {
 		tr.stopped = true
 		return nil, errors.New("QA interruption before dispatch")
 	}
@@ -33,6 +33,7 @@ func TestScriptPassQueueAuthorityResumeAfterRevocation(t *testing.T) {
 	)
 	require.NoError(t, err)
 	f.b.API.HTTP = &http.Client{Transport: &qaInviteInterruption{}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	r := runPassVM(
 		t,
 		f,
@@ -79,6 +80,7 @@ func TestScriptPassQueueAuthorityExecutionRevocation(t *testing.T) {
 		_, e := f.db.Exec(t.Context(), `DELETE FROM core.pass_booking_admins WHERE owner='bob'`)
 		require.NoError(t, e)
 	}}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	r := runPassVM(
 		t,
 		f,
@@ -103,6 +105,7 @@ func TestScriptPassOrdinaryInvitationIgnoresQueueGrant(t *testing.T) {
 				_, err := f.db.Exec(t.Context(), `DELETE FROM core.pass_booking_admins WHERE owner='bob'`)
 				require.NoError(t, err)
 			}}}
+			f.b.Host.HTTP = f.b.API.HTTP
 			code := `await tools.passes.registration.read({event:"dance"});return tools.passes.registration.invite({event:"dance",invite_telegram_id:101});`
 			f.b.Scripts = scopeVM{}
 			model := &knowledgeModel{

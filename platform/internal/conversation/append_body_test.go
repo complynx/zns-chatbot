@@ -20,7 +20,7 @@ func TestAppendFullHistoryIsAtomicPrivateAndReplaySafe(t *testing.T) {
 		`CREATE FUNCTION core.reject_history_body() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic body persistence failure'; END $$; CREATE TRIGGER reject_history_body BEFORE INSERT ON core.conversation_message_bodies FOR EACH ROW EXECUTE FUNCTION core.reject_history_body()`,
 	)
 	require.NoError(t, err)
-	require.Error(t, s.Append(t.Context(), "alice", "atomic-long", "user", original))
+	require.Error(t, s.AppendOriginal(t.Context(), "alice", "atomic-long", "user", original))
 	var count int
 	require.NoError(
 		t,
@@ -30,8 +30,8 @@ func TestAppendFullHistoryIsAtomicPrivateAndReplaySafe(t *testing.T) {
 	assert.Zero(t, count, "body failure must not commit a falsely complete excerpt")
 	_, err = s.DB.Exec(t.Context(), `DROP TRIGGER reject_history_body ON core.conversation_message_bodies`)
 	require.NoError(t, err)
-	require.NoError(t, s.Append(t.Context(), "alice", "atomic-long", "user", original))
-	require.NoError(t, s.Append(t.Context(), "alice", "atomic-long", "user", original+"CHANGED"))
+	require.NoError(t, s.AppendOriginal(t.Context(), "alice", "atomic-long", "user", original))
+	require.NoError(t, s.AppendOriginal(t.Context(), "alice", "atomic-long", "user", original+"CHANGED"))
 	var body, excerpt string
 	var id int64
 	var omitted bool
@@ -44,7 +44,10 @@ func TestAppendFullHistoryIsAtomicPrivateAndReplaySafe(t *testing.T) {
 	assert.True(t, utf8.ValidString(excerpt))
 	assert.LessOrEqual(t, len(excerpt), conversation.MaxTextBytes)
 	assert.Equal(t, original, body)
-	require.NoError(t, s.Append(t.Context(), "alice", "suffix-secret", "user", original+" password: synthetic-private"))
+	require.NoError(
+		t,
+		s.AppendOriginal(t.Context(), "alice", "suffix-secret", "user", original+" password: synthetic-private"),
+	)
 	require.NoError(
 		t,
 		s.DB.QueryRow(t.Context(), `SELECT e.omitted,e.text,(SELECT count(*) FROM core.conversation_message_bodies b WHERE b.event_id=e.id) FROM core.conversation_events e WHERE source_key='suffix-secret'`).
@@ -55,7 +58,7 @@ func TestAppendFullHistoryIsAtomicPrivateAndReplaySafe(t *testing.T) {
 	assert.Zero(t, count)
 	require.Error(
 		t,
-		s.Append(t.Context(), "alice", "over-limit", "user", strings.Repeat("x", conversation.MaxBodyBytes+1)),
+		s.AppendOriginal(t.Context(), "alice", "over-limit", "user", strings.Repeat("x", conversation.MaxBodyBytes+1)),
 	)
 	require.NoError(
 		t,

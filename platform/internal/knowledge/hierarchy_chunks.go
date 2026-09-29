@@ -21,6 +21,10 @@ func (s Service) ReadMemoryPage(ctx context.Context, actor, reference, cursor st
 	if err != nil {
 		return MemoryEntry{}, err
 	}
+	entry, err = s.authorizeMemoryEntry(ctx, actor, entry)
+	if err != nil {
+		return MemoryEntry{}, err
+	}
 	return memoryChunk(actor, reference, cursor, entry)
 }
 
@@ -82,6 +86,10 @@ func (s Service) ReadMemoryRevisionPage(ctx context.Context, actor, reference, c
 	if errors.Is(err, pgx.ErrNoRows) {
 		return MemoryEntry{}, missing()
 	}
+	if err != nil {
+		return MemoryEntry{}, err
+	}
+	entry, err = s.authorizeMemoryEntry(ctx, actor, entry)
 	if err != nil {
 		return MemoryEntry{}, err
 	}

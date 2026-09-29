@@ -8,12 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -23,7 +22,7 @@ func TestPassPaymentAPIFileIsolation(t *testing.T) {
 	t.Parallel()
 	db, service := bookingFixture(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("p", 32))}
-	handler := api.Handler(runtimeapp.NewServices(db, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler))
+	handler := api.Handler(appservices.NewServices(db, appservices.Options{}), signer, slog.New(slog.DiscardHandler))
 	request := func(actor, method, path, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		if actor != "" {

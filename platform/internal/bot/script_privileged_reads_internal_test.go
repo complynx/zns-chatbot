@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -25,10 +27,10 @@ func TestPrivilegedReadArgumentsAndProjection(t *testing.T) {
 			require.Error(t, err)
 		}
 		outcome := agent.ScriptToolResult{Name: name, Result: json.RawMessage(`{"private":"participant canary"}`)}
-		projected := scriptCallProjection(outcome)
+		projected := agenthost.ScriptCallProjection(outcome)
 		assert.NotContains(t, string(projected.Result), "participant canary")
 		assert.Contains(t, string(projected.Result), "payload_omitted")
-		count, empty := scriptToolResultMetadata(
+		count, empty := agenthost.ScriptToolResultMetadata(
 			name,
 			json.RawMessage(`{"items":[{"private":"participant canary"}],"more":true}`),
 		)

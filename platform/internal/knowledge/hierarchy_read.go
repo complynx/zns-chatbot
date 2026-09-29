@@ -47,6 +47,9 @@ func (s Service) MemorySummary(ctx context.Context, actor string, query MemoryQu
 		result.More = true
 		result.Topics = result.Topics[:MaxResults]
 	}
+	if err = s.authorizeMemoryTopics(ctx, actor, q, &result); err != nil {
+		return MemoryOverview{}, err
+	}
 	summaries, err := s.SearchMemory(ctx, actor, MemoryQuery{Namespace: q.Namespace, Event: q.Event, Topic: "summary"})
 	result.Summaries = summaries.Entries
 	result.More = result.More || summaries.More
@@ -213,7 +216,9 @@ func (s Service) MemoryHistory(ctx context.Context, actor, reference, cursor str
 			)
 		}
 	}
-	return page, nil
+	rows.Close()
+	page.Entries, err = s.authorizeMemoryEntries(ctx, actor, page.Entries)
+	return page, err
 }
 
 func memoryHistoryPosition(actor, reference, cursor string) (int64, error) {

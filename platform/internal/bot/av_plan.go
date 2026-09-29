@@ -17,24 +17,6 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/mediaproc"
 )
 
-// Telegram voice is a direct spoken request. Speech in uploaded recordings is
-// evidence for interpretation, not automatic authority to select an order.
-// This only supplies selection evidence; normal owner/version checks still apply.
-func currentRequestEvidence(input agent.Input) string {
-	if input.AV != nil && input.AV.Kind == string(mediaclient.Voice) && input.AV.Transcript.Status == "ok" {
-		return input.Text + "\n" + input.AV.Transcript.Text
-	}
-	return input.Text
-}
-
-func isNonAVMediaReply(in incoming, input agent.Input, plan agent.Plan) bool {
-	return in.mediaID != "" && input.AV == nil && plan.Action == nil && plan.OrderAction == nil &&
-		plan.ProfileAction == nil && plan.KnowledgeAction == nil && plan.RegistrationAction == nil &&
-		plan.View != agent.KnowledgeView && plan.View != agent.RegistrationView
-}
-
-// Load current AV speech before selecting order summaries. Other media keeps its
-// existing context order, including receipt history assembled from order history.
 func (b *Bot) addCurrentAV(ctx context.Context, in incoming, input *agent.Input) error {
 	if in.mediaID == "" {
 		return nil
@@ -69,7 +51,7 @@ func (b *Bot) avHint(ctx context.Context, owner string, hint *agent.MediaHint) e
 		return nil
 	}
 	var attachment media.Attachment
-	err = b.API.call(ctx, owner, http.MethodGet, "/v1/media/"+url.PathEscape(attachmentID), nil, &attachment)
+	err = b.API.Call(ctx, owner, http.MethodGet, "/v1/media/"+url.PathEscape(attachmentID), nil, &attachment)
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return b.clearAVResults(ctx, owner, []string{hint.ID})
 	}
@@ -77,60 +59,6 @@ func (b *Bot) avHint(ctx context.Context, owner string, hint *agent.MediaHint) e
 		hint.CanInspect = true
 	}
 	return err
-}
-
-func (b *Bot) planWithAV(
-	ctx context.Context,
-	in incoming,
-	input *agent.Input,
-	updateID int64,
-) (agent.Plan, []string, error) {
-	ctx, settingsErr := b.modelSettingsContext(ctx, in.owner)
-	if settingsErr != nil {
-		return agent.Plan{}, nil, settingsErr
-	}
-	inspection, inspectionErr := b.avInspectionContext(ctx, in.owner, updateID)
-	if inspectionErr != nil {
-		return agent.Plan{}, nil, inspectionErr
-	}
-	input.AVInspection = inspection
-	var ids []string
-	if input.AV != nil {
-		ids = append(ids, input.AV.ID)
-	}
-	for turn := 0; ; turn++ {
-		input.BeforeProvider = func(ctx context.Context, current *agent.Input) error {
-			return b.reauthorizeModelContext(ctx, in.owner, current)
-		}
-		if err := b.reauthorizeModelContext(ctx, in.owner, input); err != nil {
-			return agent.Plan{}, ids, err
-		}
-		modelContext := agent.WithRequestScope(ctx, agent.RequestScope{Owner: in.owner, UpdateID: updateID, Turn: turn})
-		plan, err := b.historyFencedPlan(modelContext, in.owner, *input)
-		if err != nil {
-			return plan, ids, err
-		}
-		handled, readErr := b.performContextRead(ctx, in.owner, updateID, plan, input)
-		if readErr != nil {
-			return agent.Plan{}, ids, readErr
-		}
-		if handled {
-			continue
-		}
-		if plan.MediaAction == nil || plan.MediaAction.Intent != "inspect_video" {
-			return plan, ids, nil
-		}
-		proposal := *plan.MediaAction
-		notice, err := b.refineAV(ctx, in.owner, updateID, proposal, input)
-		if err != nil {
-			return agent.Plan{}, ids, err
-		}
-		if notice != "" {
-			text, translateErr := i18n.Translate(input.Language, notice, nil)
-			return agent.Plan{View: agent.MediaView, Text: text}, ids, translateErr
-		}
-		ids = append(ids, proposal.MediaID)
-	}
 }
 
 func (b *Bot) avInspectionContext(

@@ -9,12 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/sandbox"
@@ -48,11 +47,12 @@ func enableRuntimeIdentity(t *testing.T, f *fixture) identity.Links {
 	require.NoError(t, links.Bind(t.Context(), "alice", 101, "z-alice"))
 	require.NoError(t, links.Bind(t.Context(), "bob", 202, "z-bob"))
 	server := httptest.NewServer(
-		api.AuthenticatedHandler(runtimeapp.NewServices(f.db, runtimeapp.Options{}), f.b.API.Signer,
+		api.AuthenticatedHandler(appservices.NewServices(f.db, appservices.Options{}), f.b.Host.Signer,
 			slog.New(slog.DiscardHandler), api.ZitadelOwner(runtimeProvider{}, links)),
 	)
 	t.Cleanup(server.Close)
 	f.b.API.Base, f.b.API.Links, f.b.API.Exchange = server.URL, links, runtimeProvider{}
+	f.b.Host.Base = f.b.API.Base
 	f.b.Logger = slog.New(slog.DiscardHandler)
 	return links
 }

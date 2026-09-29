@@ -27,7 +27,8 @@ func memorySplitRoleFixture(t *testing.T) *fixture {
 
 func restrictMemoryBotRole(t *testing.T, f *fixture) *fixture {
 	t.Helper()
-	_, err := f.db.Exec(t.Context(), `GRANT USAGE ON SCHEMA bot TO zns_bot;
+	_, err := f.db.Exec(t.Context(), `GRANT USAGE ON SCHEMA bot, interaction TO zns_bot;
+ GRANT SELECT,INSERT,UPDATE,DELETE ON interaction.saved_turns TO zns_bot;
  GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA bot TO zns_bot;
  GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA bot TO zns_bot`)
 	require.NoError(t, err)
@@ -92,7 +93,7 @@ func TestMemoryOrdinaryProvenanceWithSplitBotRole(t *testing.T) {
 				proposals, listErr := f.b.API.KnowledgeProposals(t.Context(), "alice", knowledge.ProposalQuery{})
 				require.NoError(t, listErr)
 				require.Len(t, proposals, 1)
-				require.Equal(t, "pending_review", proposals[0].State)
+				proposals[0] = submitKnowledgeCardForAlice(t, f, proposals[0], 17101)
 				_, err = f.b.API.ExecuteKnowledge(
 					t.Context(),
 					"bob",
@@ -199,6 +200,10 @@ func TestMemorySuggestionRetryAndManualApprovalKeepSource(t *testing.T) {
 			Scan(&retry),
 	)
 	handle(t, f.b, aliceCallback(17004, 1, retry))
+	proposals, err := f.b.API.KnowledgeProposals(t.Context(), "alice", knowledge.ProposalQuery{})
+	require.NoError(t, err)
+	require.Len(t, proposals, 1)
+	submitKnowledgeCardForAlice(t, f, proposals[0], 17104)
 	handle(t, f.b, message(17005, identity.BobTelegramID, "/knowledge"))
 	var navigation string
 	require.NoError(
@@ -229,7 +234,10 @@ func TestMemoryHistorySummaryWithSplitBotRole(t *testing.T) {
 	f.b.HistoryLimit = 2
 	archive := conversation.Service{DB: f.db}
 	for i := range 8 {
-		require.NoError(t, archive.Append(t.Context(), "alice", "old-"+strconv.Itoa(i), "user", "Previous preferences"))
+		require.NoError(
+			t,
+			archive.AppendOriginal(t.Context(), "alice", "old-"+strconv.Itoa(i), "user", "Previous preferences"),
+		)
 	}
 	model := &historyModel{plans: []agent.Plan{{View: "workflow", Text: "Earlier preferences summarized"}}}
 	f.b.Model = model

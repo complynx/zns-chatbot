@@ -58,6 +58,7 @@ func TestMediaUploadTransientRetry(t *testing.T) {
 			client := &http.Client{Transport: transport}
 			if test.core {
 				f.b.API.HTTP = client
+				f.b.Host.HTTP = f.b.API.HTTP
 			} else {
 				f.b.TG.HTTP = client
 			}
@@ -124,6 +125,7 @@ func TestMediaPriceSnapshotFailureCannotResolveAmbiguity(t *testing.T) {
 		path:   "/v1/order-events/" + first.EventID + "/orders/" + first.ID + "/payment-instructions",
 		status: http.StatusServiceUnavailable, response: `{"code":"temporarily_unavailable"}`,
 	}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.Error(t, f.b.Handle(t.Context(), photo), "incomplete price snapshots cannot establish a unique match")
 	assert.Zero(t, f.model.calls)
 	handle(t, f.b, photo)
@@ -146,6 +148,7 @@ func TestMediaExpiredIncompleteUploadTerminatesRetry(t *testing.T) {
 		path:   "/v1/order-events/" + order.EventID + "/orders/" + order.ID + "/payment-instructions",
 		status: http.StatusServiceUnavailable, response: `{"code":"temporarily_unavailable"}`,
 	}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.Error(t, f.b.Handle(t.Context(), photo))
 	_, err := f.db.Exec(
 		t.Context(),
@@ -181,6 +184,7 @@ func TestMediaMissingSourceTerminatesIncompleteRetry(t *testing.T) {
 				path:   "/v1/order-events/" + order.EventID + "/orders/" + order.ID + "/payment-instructions",
 				status: http.StatusServiceUnavailable, response: `{"code":"temporarily_unavailable"}`,
 			}}
+			f.b.Host.HTTP = f.b.API.HTTP
 			require.Error(t, f.b.Handle(t.Context(), photo))
 			_, err := f.db.Exec(
 				t.Context(),

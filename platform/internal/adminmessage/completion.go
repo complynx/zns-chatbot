@@ -1,15 +1,10 @@
 package adminmessage
 
-// MaxRetryAfterSeconds bounds an upstream cooldown to one day. A larger or
-// negative value must stop automatic retries instead of retrying prematurely.
-const MaxRetryAfterSeconds int64 = 24 * 60 * 60
+import "github.com/complynx/zns-chatbot/platform/internal/delivery"
 
-// Completion records the fenced attempt and its next permitted retry time.
+// Completion records one exact attempt; transport cooldown is not a failure budget.
 type Completion struct {
-	ID         int64  `json:"id"`
-	Attempt    int64  `json:"attempt"`
-	MessageID  int64  `json:"message_id"`
-	Failure    string `json:"failure"`
-	Retry      bool   `json:"retry"`
-	RetryAfter int64  `json:"retry_after,omitempty"`
+	ID      int64            `json:"id"`
+	Attempt int64            `json:"attempt"`
+	Outcome delivery.Outcome `json:"outcome"`
 }

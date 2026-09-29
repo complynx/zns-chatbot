@@ -2,11 +2,10 @@ package bot
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 
 	"github.com/jackc/pgx/v5"
 
@@ -15,38 +14,45 @@ import (
 )
 
 func (b *Bot) deliverOrderCard(ctx context.Context, owner, key string, payload telegram.Send) error {
-	encoded, err := json.Marshal(payload)
+	return b.deliverOrderCardChecked(ctx, owner, key, payload, nil)
+}
+
+func (b *Bot) deliverOrderCardChecked(
+	ctx context.Context, owner, key string, payload telegram.Send, check func() error,
+) error {
+	if check != nil {
+		if err := check(); err != nil {
+			return err
+		}
+	}
+	ref, err := b.orderCardReference(ctx, owner, key)
 	if err != nil {
 		return err
 	}
-	digest := sha256.Sum256(encoded)
-	hash := hex.EncodeToString(digest[:])
+	if retired, ok := ctx.Value(botRetiredCardKey{}).(bool); ok {
+		ref.Continuation.Retired = retired
+	}
+	hash, err := botCardHash(payload)
+	if err != nil {
+		return err
+	}
 	var previous string
-	err = b.DB.QueryRow(ctx, `SELECT message_id,view_hash FROM bot.order_cards WHERE owner=$1 AND card_key=$2`, owner, key).
+	err = b.DB.QueryRow(ctx, "SELECT message_id,view_hash FROM bot.order_cards WHERE owner=$1 AND card_key=$2", owner, key).
 		Scan(&payload.MessageID, &previous)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	if previous == hash {
+	if payload.MessageID > 0 && previous == hash {
 		return nil
 	}
-	id, err := b.editOrSend(ctx, payload)
-	if err != nil {
-		return err
-	}
-	_, err = b.DB.Exec(
+	return b.queueBotCard(
 		ctx,
-		`INSERT INTO bot.order_cards(owner,card_key,chat_id,message_id,view_hash) VALUES($1,$2,$3,$4,$5)
-		ON CONFLICT(owner,card_key) DO UPDATE SET chat_id=$3,message_id=$4,view_hash=$5,visible=true`,
 		owner,
-		key,
-		payload.ChatID,
-		id,
-		hash,
+		payload,
+		ref,
+		botdelivery.Continuation{Kind: "order_card", Key: key, ViewHash: hash, Retired: ref.Continuation.Retired},
 	)
-	return err
 }
-
 func (b *Bot) retireOrderCards(
 	ctx context.Context,
 	owner string,
@@ -73,14 +79,6 @@ func (b *Bot) retireOrderCards(
 		if err = b.retireOrderCard(ctx, owner, chat, key, available[key], language); err != nil {
 			return err
 		}
-		if _, err = b.DB.Exec(
-			ctx,
-			`UPDATE bot.order_cards SET visible=false WHERE owner=$1 AND card_key=$2`,
-			owner,
-			key,
-		); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -102,7 +100,7 @@ func (b *Bot) reconcileOrderViews(ctx context.Context) error {
 		return err
 	}
 	for _, view := range views {
-		viewContext, authErr := b.API.notificationContext(ctx, view.Owner, view.Chat)
+		viewContext, authErr := b.API.NotificationContext(ctx, view.Owner, view.Chat)
 		if authErr != nil {
 			b.logger().WarnContext(ctx, "order view identity pending")
 			continue
@@ -122,6 +120,7 @@ func (b *Bot) retireOrderCard(
 	available bool,
 	language string,
 ) error {
+	ctx = context.WithValue(ctx, botRetiredCardKey{}, true)
 	text, err := i18n.Translate(language, i18n.OrderRetired, nil)
 	if err != nil {
 		return err

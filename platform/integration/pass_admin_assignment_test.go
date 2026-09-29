@@ -207,7 +207,7 @@ func TestPassAdminAssignmentPreservesReceiptOrReplacesIt(t *testing.T) {
 	)
 	require.NoError(t, err)
 	_, err = service.Payment(t.Context(), "alice", "dance", "alice")
-	requireCode(t, err, "forbidden")
+	requireCode(t, err, "pass_payment_missing")
 	surviving, err := service.Payment(t.Context(), "bob", "dance", "bob")
 	require.NoError(t, err)
 	assert.Equal(t, old.Attempt, surviving.Attempt)

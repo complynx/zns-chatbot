@@ -7,13 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -50,8 +49,8 @@ func TestTelegramMetadataHostBoundary(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	handler := api.Handler(
-		runtimeapp.NewServices(f.db, runtimeapp.Options{}),
-		f.b.API.Signer,
+		appservices.NewServices(f.db, appservices.Options{}),
+		f.b.Host.Signer,
 		slog.New(slog.DiscardHandler),
 	)
 	body := `{"sender":{"id":101,"first_name":"Trusted"},"update_id":19210}`
@@ -63,17 +62,17 @@ func TestTelegramMetadataHostBoundary(t *testing.T) {
 		return response.Code
 	}
 	before := readTelegramMetadata(t, f)
-	assert.Equal(t, http.StatusUnauthorized, call(f.b.API.Signer.Token("alice"), body))
-	assert.Equal(t, http.StatusOK, call(f.b.API.Signer.MemoryProvenanceToken("bob"), body))
+	assert.Equal(t, http.StatusUnauthorized, call(f.b.Host.Signer.Token("alice"), body))
+	assert.Equal(t, http.StatusOK, call(f.b.Host.Signer.MemoryProvenanceToken("bob"), body))
 	assert.Equal(t, before, readTelegramMetadata(t, f), "signed Bob cannot rename Alice's Telegram binding")
 	assert.Equal(
 		t,
 		http.StatusBadRequest,
 		call(
-			f.b.API.Signer.MemoryProvenanceToken("alice"),
+			f.b.Host.Signer.MemoryProvenanceToken("alice"),
 			`{"sender":{"id":101,"first_name":"Injected"},"update_id":19210,"owner":"bob"}`,
 		),
 	)
-	assert.Equal(t, http.StatusOK, call(f.b.API.Signer.MemoryProvenanceToken("alice"), body))
+	assert.Equal(t, http.StatusOK, call(f.b.Host.Signer.MemoryProvenanceToken("alice"), body))
 	assert.Equal(t, "Trusted", readTelegramMetadata(t, f).FirstName)
 }

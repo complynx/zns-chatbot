@@ -94,7 +94,7 @@ func (s *snapshot) submitProof(ctx context.Context, tx pgx.Tx, b *Booking, c Com
 		participant.State = paid
 		s.touch(participant)
 	}
-	return notifyPaymentRequest(ctx, tx, b, id)
+	return notifyPaymentRequest(ctx, tx, s.deliveryBotID, &s.notificationRegistrations, b, id)
 }
 
 func (s *snapshot) reviewProof(ctx context.Context, tx pgx.Tx, actor string, c Command) error {
@@ -137,7 +137,7 @@ WHERE p.id=$1 AND p.event_id=$2 AND b.owner=$3`, c.PaymentAttempt, c.Event, c.Ta
 			b.State = assigned
 		}
 		s.touch(b)
-		if err = notifyPaymentDecision(ctx, tx, b, c); err != nil {
+		if err = notifyPaymentDecision(ctx, tx, s.deliveryBotID, &s.notificationRegistrations, b, c); err != nil {
 			return err
 		}
 	}
@@ -194,7 +194,10 @@ AND (b.owner=$3 OR EXISTS(SELECT 1 FROM core.pass_payment_admins a WHERE a.event
 		Scan(&payment.Kind, &payment.Attempt, &payment.Event, &payment.Submitter, &payment.ProofID, &payment.ReceivingAdmin,
 			&payment.ReceivedAt, &payment.Decision, &payment.ReviewedBy, &payment.ReviewedAt, &payment.Version, &payment.ProofUnavailable)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return s.legacyFreePayment(ctx, actor, eventID, owner)
+		payment, err = s.legacyFreePayment(ctx, actor, eventID, owner)
+		if err != nil && actor == owner {
+			return s.absentOwnerPayment(ctx, actor, eventID, payment, err)
+		}
 	}
 	return payment, err
 }

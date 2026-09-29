@@ -16,7 +16,7 @@ func (r *massageRenderer) readBookings(ctx context.Context) ([]massage.Reservati
 		return r.bot.API.MassageBookings(ctx, r.owner, r.state.Event, r.state.Party, massageClients)
 	}
 	var booking massage.Reservation
-	err := r.bot.API.call(
+	err := r.bot.API.Call(
 		ctx,
 		r.owner,
 		http.MethodGet,

@@ -8,6 +8,15 @@ import (
 )
 
 func orderAgentReadRoutes(mux *http.ServeMux, service orders.Service, logger *slog.Logger) {
+	mux.HandleFunc("GET /v1/order-events/{event}/choice-snapshot", func(w http.ResponseWriter, r *http.Request) {
+		value, err := service.ChoiceSnapshot(
+			r.Context(),
+			requestOwner(r),
+			r.PathValue("event"),
+			r.URL.Query().Get("order_id"),
+		)
+		respond(logger, w, value, err)
+	})
 	for _, route := range []string{"catalog-read", "catalog-transport"} {
 		mux.HandleFunc("GET /v1/order-events/{event}/"+route, func(w http.ResponseWriter, r *http.Request) {
 			value, err := service.CatalogRead(r.Context(), requestOwner(r), r.PathValue("event"),

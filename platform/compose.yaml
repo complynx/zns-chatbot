@@ -9,6 +9,7 @@ x-app: &app
   restart: unless-stopped
 x-common: &common
   ZNS_ENV: sandbox
+  ZNS_AUTH__ZITADEL__BOT_ID: "1"
   SANDBOX_SIGNING_KEY: sandbox-only-do-not-use-in-production-123456789
 services:
   postgres:

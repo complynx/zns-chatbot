@@ -66,10 +66,11 @@ func (s Service) ProcessDeadlines(ctx context.Context) (int64, error) {
 func (s Service) maintenanceEvents(ctx context.Context, after string) ([]string, error) {
 	rows, err := s.DB.Query(
 		ctx,
-		`SELECT DISTINCT e.id FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
+		`SELECT DISTINCT e.id FROM core.pass_events e LEFT JOIN core.pass_bookings b ON b.event_id=e.id
  LEFT JOIN core.pass_deadline_markers m ON m.event_id=b.event_id AND m.owner=b.owner AND m.assigned_at=b.assigned_at
  WHERE e.id>$2 AND e.finishes_at>clock_timestamp() AND (
- b.state='waitlist' OR
+ EXISTS(SELECT 1 FROM core.registration_intents i WHERE i.event_id=e.id AND i.state='captured') OR
+ EXISTS(SELECT 1 FROM core.registration_ingress g WHERE g.native_event=e.id AND g.native_payload IS NOT NULL AND g.native_outcome='') OR b.state='waitlist' OR
  (b.state='waiting-for-couple' AND b.created_at<clock_timestamp()-interval '58 hours') OR
  (b.state='assigned' AND ((m.first_at IS NULL AND b.assigned_at<clock_timestamp()-interval '6 days') OR
  m.first_at<clock_timestamp()-interval '2 days' OR (m.second_at IS NULL AND m.first_at<clock_timestamp()-interval '1 day'))))
@@ -84,6 +85,9 @@ func (s Service) maintenanceEvents(ctx context.Context, after string) ([]string,
 }
 
 func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, error) {
+	if err := s.ResolveRegistrationIntake(ctx, id); err != nil {
+		return 0, err
+	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return 0, err
@@ -109,7 +113,15 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 		return 0, tx.Commit(ctx)
 	}
 	before := copyBookings(bookings)
+	if err = refreshRegistrationTurns(ctx, tx, id, s.registrationRetention(), now); err != nil {
+		return 0, err
+	}
 	state := newSnapshot(e, bookings, now)
+	if err = state.loadRegistrationRanks(ctx, tx); err != nil {
+		return 0, err
+	}
+	state.deliveryBotID = s.Delivery.BotID
+	state.announcementBindings = s.AnnouncementBindings
 	ordered := make([]string, 0, len(bookings))
 	for owner := range bookings {
 		ordered = append(ordered, owner)
@@ -176,7 +188,13 @@ func (s *snapshot) processDeadline(ctx context.Context, tx pgx.Tx, b *Booking, m
 		if err != nil {
 			return false, err
 		}
-		return true, enqueuePassNotice(ctx, tx, b, b.Owner, "reminder_first", noticeTime(*b.AssignedAt), "")
+		return true, enqueuePassNotice(ctx, tx, s.deliveryBotID, &s.notificationRegistrations,
+			b,
+			b.Owner,
+			"reminder_first",
+			noticeTime(*b.AssignedAt),
+			"",
+		)
 	}
 	if marker.Second == nil && marker.First != nil && marker.First.Before(s.now.Add(-secondReminderAfter)) {
 		_, err := tx.Exec(
@@ -190,7 +208,13 @@ func (s *snapshot) processDeadline(ctx context.Context, tx pgx.Tx, b *Booking, m
 		if err != nil {
 			return false, err
 		}
-		return true, enqueuePassNotice(ctx, tx, b, b.Owner, "reminder_second", noticeTime(*b.AssignedAt), "")
+		return true, enqueuePassNotice(ctx, tx, s.deliveryBotID, &s.notificationRegistrations,
+			b,
+			b.Owner,
+			"reminder_second",
+			noticeTime(*b.AssignedAt),
+			"",
+		)
 	}
 	return false, nil
 }
@@ -202,8 +226,14 @@ func (s *snapshot) expireInvitation(ctx context.Context, tx pgx.Tx, b *Booking) 
 	b.InvitationTarget = 0
 	b.Partner = ""
 	s.touch(b)
-	if err := enqueuePassNotice(ctx, tx, b, b.Owner, "invitation_expired", noticeVersion(b), ""); err != nil {
+	if err := enqueuePassNotice(ctx, tx, s.deliveryBotID, &s.notificationRegistrations,
+		b,
+		b.Owner,
+		"invitation_expired",
+		noticeVersion(b),
+		"",
+	); err != nil {
 		return err
 	}
-	return notifyKnownInvitee(ctx, tx, b, invited, "invitation_expired")
+	return notifyKnownInvitee(ctx, tx, s.deliveryBotID, &s.notificationRegistrations, b, invited, "invitation_expired")
 }

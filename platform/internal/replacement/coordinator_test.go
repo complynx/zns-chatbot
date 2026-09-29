@@ -1,0 +1,218 @@
+package replacement_test
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/complynx/zns-chatbot/platform/internal/replacement"
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+)
+
+const installation = "abcdef012345"
+const oldLaunch = "111111111111111111111111"
+const newLaunch = "222222222222222222222222"
+
+type fixture struct {
+	ledger       replacement.Ledger
+	inventory    []replacement.Container
+	names        []string
+	events       []string
+	inventoryErr error
+	sessionErr   error
+	daemon       string
+	keepSession  bool
+	keepProcess  bool
+	createCalls  int
+	startCalls   int
+	onStart      func()
+	saveFailure  string
+}
+
+func (f *fixture) Identity(context.Context) (string, error) { return f.daemon, nil }
+func (f *fixture) Inventory(context.Context) ([]replacement.Container, error) {
+	return slices.Clone(f.inventory), f.inventoryErr
+}
+func (f *fixture) Names(context.Context) ([]string, error) {
+	return slices.Clone(f.names), f.sessionErr
+}
+func (f *fixture) Load() (replacement.Ledger, error) { return f.ledger, nil }
+func (f *fixture) Save(ledger replacement.Ledger) error {
+	f.events = append(f.events, "save:"+ledger.State)
+	if f.saveFailure == ledger.State {
+		return errors.New("durability failure")
+	}
+	ledger.Containers = slices.Clone(ledger.Containers)
+	f.ledger = ledger
+	return nil
+}
+func (f *fixture) Create(_ context.Context, instance runtimeapp.Instance) ([]replacement.Container, error) {
+	f.createCalls++
+	f.events = append(f.events, "create")
+	f.inventory = nil
+	for _, component := range replacement.Components() {
+		f.inventory = append(f.inventory, replacement.Container{
+			ID:        component + "-new",
+			Component: component,
+			Launch:    instance.Launch,
+			Image:     "digest",
+			Created:   "now",
+			Health:    "healthy",
+		})
+	}
+	return slices.Clone(f.inventory), nil
+}
+func (f *fixture) Start(context.Context, []replacement.Container) error {
+	f.startCalls++
+	f.events = append(f.events, "start")
+	for i := range f.inventory {
+		f.inventory[i].Running = true
+		f.inventory[i].PID = 1
+	}
+	if f.onStart != nil {
+		f.onStart()
+	}
+	return nil
+}
+func (f *fixture) Stop(context.Context, []replacement.Container) error {
+	f.events = append(f.events, "stop")
+	return nil
+}
+func (f *fixture) Kill(context.Context, []replacement.Container) error {
+	f.events = append(f.events, "kill")
+	if !f.keepProcess {
+		for i := range f.inventory {
+			f.inventory[i].Running = false
+			f.inventory[i].PID = 0
+		}
+	}
+	if !f.keepSession {
+		f.names = nil
+	}
+	return nil
+}
+func (f *fixture) Remove(context.Context, []replacement.Container) error {
+	f.events = append(f.events, "remove")
+	f.inventory = nil
+	return nil
+}
+
+func newFixture(t *testing.T) (*fixture, *replacement.Coordinator) {
+	t.Helper()
+	old := replacement.Container{
+		ID:        "old-app",
+		Component: "app",
+		Launch:    oldLaunch,
+		Image:     "digest",
+		Created:   "before",
+		Running:   true,
+		PID:       1,
+	}
+	name, err := (runtimeapp.Instance{Installation: installation, Launch: oldLaunch}).ApplicationName("app")
+	require.NoError(t, err)
+	f := &fixture{daemon: "daemon", inventory: []replacement.Container{old}, names: []string{name},
+		ledger: replacement.Ledger{
+			Version:      1,
+			Installation: installation,
+			Host:         "host",
+			Daemon:       "daemon",
+			Generation:   1,
+			Launch:       oldLaunch,
+			State:        replacement.StateRunning,
+			Containers:   []replacement.Container{old},
+		},
+	}
+	return f, &replacement.Coordinator{
+		Engine:        f,
+		Sessions:      f,
+		Journal:       f,
+		Installation:  installation,
+		Host:          "host",
+		StopTimeout:   time.Second,
+		VerifyTimeout: 10 * time.Millisecond,
+		PollInterval:  time.Millisecond,
+		ReadyTimeout:  time.Second,
+		NewLaunch:     func() (string, error) { return newLaunch, nil },
+	}
+}
+
+func TestReplacementWaitsForProcessesAndSessionsBeforeStarting(t *testing.T) {
+	t.Parallel()
+	f, c := newFixture(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	f.onStart = cancel
+	require.NoError(t, c.Run(ctx))
+	require.Equal(t, 1, f.startCalls)
+	require.Equal(t, replacement.StateStopped, f.ledger.State)
+	require.Less(t, slices.Index(f.events, "kill"), slices.Index(f.events, "create"))
+	require.Less(t, slices.Index(f.events, "save:stopped"), slices.Index(f.events, "create"))
+	require.Less(t, slices.Index(f.events, "save:starting"), slices.Index(f.events, "start"))
+	require.Empty(t, f.inventory)
+}
+
+func TestReplacementFailsClosedOnIncompleteBarrier(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"session", "process", "unknown-session", "unknown-container", "database", "docker", "host", "daemon", "durability", "collision"} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			f, c := newFixture(t)
+			switch reason {
+			case "session":
+				f.keepSession = true
+			case "process":
+				f.keepProcess = true
+			case "unknown-session":
+				f.keepSession = true
+				f.names = []string{"untagged"}
+			case "unknown-container":
+				f.inventory[0].ID = "unowned"
+			case "database":
+				f.sessionErr = errors.New("database unavailable")
+			case "docker":
+				f.inventoryErr = errors.New("Docker unavailable")
+			case "host":
+				c.Host = "different-host"
+			case "daemon":
+				f.daemon = "different-daemon"
+			case "durability":
+				f.saveFailure = replacement.StateStopping
+			case "collision":
+				c.NewLaunch = func() (string, error) { return oldLaunch, nil }
+			}
+			require.Error(t, c.Run(t.Context()))
+			require.Zero(t, f.startCalls)
+			require.Zero(t, f.createCalls)
+		})
+	}
+}
+
+func TestReplacementRetiresGroupOnHelperCrash(t *testing.T) {
+	t.Parallel()
+	f, c := newFixture(t)
+	f.onStart = func() { f.inventory[0].Running = false }
+	require.ErrorIs(t, c.Run(t.Context()), replacement.ErrStopped)
+	require.Equal(t, 1, f.startCalls)
+	require.Empty(t, f.inventory)
+	require.Equal(t, replacement.StateStopped, f.ledger.State)
+}
+
+func TestReplacementReconcilesInterruptedKnownGeneration(t *testing.T) {
+	t.Parallel()
+	for _, state := range []string{replacement.StateStarting, replacement.StateRunning, replacement.StateStopping, replacement.StateBlocked} {
+		t.Run(state, func(t *testing.T) {
+			t.Parallel()
+			f, c := newFixture(t)
+			f.ledger.State = state
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			f.onStart = cancel
+			require.NoError(t, c.Run(ctx))
+			require.Equal(t, uint64(2), f.ledger.Generation)
+		})
+	}
+}

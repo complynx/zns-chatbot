@@ -40,6 +40,9 @@ type Zitadel struct {
 
 var ErrZitadelIdentity = errors.New("invalid Zitadel identity")
 
+// ErrZitadelUnavailable means no authoritative identity decision was obtained.
+var ErrZitadelUnavailable = errors.New("Zitadel unavailable")
+
 // ErrZitadelUserInactive is an explicit rejection of the exchanged user, not an
 // actor credential, provider configuration or transport failure.
 var ErrZitadelUserInactive = errors.New("Zitadel user inactive")
@@ -225,22 +228,25 @@ func (z *Zitadel) post(ctx context.Context, path, clientID, secret string, form 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return errors.New("Zitadel unavailable")
+		return ErrZitadelUnavailable
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		if inactiveExchange(response, form) {
 			return ErrZitadelUserInactive
 		}
-		return ErrZitadelIdentity
+		return ErrZitadelUnavailable
 	}
 	const maxResponse = 64 << 10
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponse+1))
 	if err != nil || len(data) > maxResponse {
-		return ErrZitadelIdentity
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return ErrZitadelUnavailable
 	}
 	if json.Unmarshal(data, out) != nil {
-		return ErrZitadelIdentity
+		return ErrZitadelUnavailable
 	}
 	return nil
 }

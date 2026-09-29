@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -42,10 +43,13 @@ func TestTrustedPrincipalRequiredForEachRequest(t *testing.T) {
 		assert.NoError(t, err)
 	}))
 	t.Cleanup(server.Close)
-	client := APIClient{
+	client := appclient.Client{
 		Base:     server.URL,
 		Exchange: exchange,
-		Links:    authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}},
+		Links: authLinks{
+			user: identity.User{Owner: "alice", Subject: "z-alice"},
+		},
+		SandboxToken: (identity.Signer{}).Token,
 	}
 	ctx, owner, err := client.AuthenticateTelegram(t.Context(), 101)
 	require.NoError(t, err)
@@ -59,14 +63,14 @@ func TestTrustedPrincipalRequiredForEachRequest(t *testing.T) {
 	require.ErrorIs(t, err, identity.ErrZitadelIdentity)
 	_, err = client.Current(t.Context(), "alice")
 	require.ErrorIs(t, err, identity.ErrZitadelIdentity)
-	_, err = client.notificationContext(t.Context(), "bob", 101)
+	_, err = client.NotificationContext(t.Context(), "bob", 101)
 	require.ErrorIs(t, err, identity.ErrZitadelIdentity)
 	assert.Len(t, exchange.subjects, 2)
 }
 
 func TestIdentityFailureCannotFallBackToSandbox(t *testing.T) {
 	t.Parallel()
-	for _, client := range []APIClient{
+	for _, client := range []appclient.Client{
 		{Exchange: &authExchange{}},
 		{Links: authLinks{}},
 		{Exchange: &authExchange{}, Links: authLinks{err: identity.ErrZitadelIdentity}},
@@ -74,14 +78,20 @@ func TestIdentityFailureCannotFallBackToSandbox(t *testing.T) {
 	} {
 		_, _, err := client.AuthenticateTelegram(t.Context(), 101)
 		require.ErrorIs(t, err, identity.ErrZitadelIdentity)
-		_, err = client.userToken(t.Context(), "alice")
+		_, err = client.UserToken(t.Context(), "alice")
 		require.ErrorIs(t, err, identity.ErrZitadelIdentity)
 	}
 }
 
 func TestIdentityOutageRetriesUpdate(t *testing.T) {
 	t.Parallel()
-	b := Bot{API: APIClient{Exchange: &authExchange{}, Links: authLinks{err: errors.New("database outage")}}}
+	b := Bot{
+		API: appclient.Client{
+			Exchange:     &authExchange{},
+			Links:        authLinks{err: errors.New("database outage")},
+			SandboxToken: (identity.Signer{}).Token,
+		},
+	}
 	update := telegram.Update{
 		Message: &telegram.Message{From: telegram.User{ID: 101}, Chat: telegram.Chat{ID: 101, Type: "private"}},
 	}

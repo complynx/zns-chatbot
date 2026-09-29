@@ -3,8 +3,9 @@ package bot
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"slices"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
@@ -16,7 +17,6 @@ const registrationSchemaInteger = "integer"
 const registrationSchemaBoolean = "boolean"
 const registrationOperationID = "operation_id"
 const registrationAdminsView = "admins"
-const passBatchRecalculate = "recalculate"
 const scriptPassShow = "passes.registration.show"
 const scriptPassRead = "passes.registration.read"
 const scriptPassAdminRead = "passes.admin.queue"
@@ -31,42 +31,14 @@ const scriptPassBatchAssign = "passes.batch.assign"
 const scriptPassBatchCancel = "passes.batch.cancel"
 const scriptRegistrationBatchUncouple = "passes.batch.uncouple"
 const scriptPassResultLimit = 32 << 10
-const registrationCapabilitiesPath = "/v1/passes/tool-capabilities"
 
-func passToolActions() map[string]string {
-	return map[string]string{
-		"passes.registration.solo":          "solo",
-		"passes.registration.invite":        passInvite,
-		"passes.registration.accept":        passAccept,
-		"passes.registration.decline":       passDecline,
-		"passes.registration.cancel":        "cancel",
-		"passes.registration.payment_admin": "payment_admin",
-		"passes.admin.assign":               passBatchAssign,
-		"passes.admin.cancel":               passBatchCancel,
-		"passes.admin.uncouple":             passBatchUncouple,
-		"passes.admin.recalculate":          passBatchRecalculate,
-		"passes.payments.accept":            "proof_accept",
-		"passes.payments.reject":            "proof_reject",
-		"passes.takeover.apply":             "takeover",
-		"passes.takeover.received_only":     "received_only",
-		scriptPassAdminRead:                 passBatchAssign,
-		scriptPassAdminTarget:               passBatchAssign,
-		scriptPassReviewRead:                "proof_accept",
-		scriptPassTakeoverRead:              "takeover",
-		scriptPassTiers:                     passBatchCancel,
-		scriptPassBatchAssign:               passBatchAssign,
-		scriptPassBatchCancel:               passBatchCancel,
-		scriptRegistrationBatchUncouple:     passBatchUncouple,
-	}
-}
-
-func (b *Bot) scriptPassEntries(ctx context.Context, owner string) ([]scriptToolEntry, error) {
-	var capabilities passbooking.ToolCapabilities
-	if err := b.API.call(ctx, owner, http.MethodGet, registrationCapabilitiesPath, nil, &capabilities); err != nil {
+func (b *Bot) scriptPassEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
+	capabilities, err := b.API.PassToolCapabilities(ctx, owner)
+	if err != nil {
 		return nil, err
 	}
 	names := []string{scriptPassRead, scriptPassShow, scriptPassOperations, scriptPassResume}
-	for name, action := range passToolActions() {
+	for name, action := range agenthost.PassToolActions() {
 		if name == "passes.admin.cancel" {
 			action = passBatchAssign
 		}
@@ -78,15 +50,15 @@ func (b *Bot) scriptPassEntries(ctx context.Context, owner string) ([]scriptTool
 		names = append(names, scriptPassExport)
 	}
 	slices.Sort(names)
-	entries := make([]scriptToolEntry, 0, len(names))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(names))
 	for _, name := range names {
 		entries = append(
 			entries,
-			scriptToolEntry{
-				descriptor:  passToolDescriptor(name),
-				prepare:     b.preparePassTool,
-				execute:     b.executePassTool,
-				resultLimit: scriptPassResultLimit,
+			agenthost.ScriptToolEntry{
+				Descriptor:  passToolDescriptor(name),
+				Prepare:     b.preparePassTool,
+				Execute:     b.executePassTool,
+				ResultLimit: scriptPassResultLimit,
 			},
 		)
 	}
@@ -99,9 +71,11 @@ func passToolDescriptor(name string) scriptclient.Tool {
 	description := "Execute the named pass operation using completed registration reads. Host owns actor, versions and replay identity. Upload proof through Telegram; never supply proof IDs."
 	switch name {
 	case scriptPassRead, scriptPassShow:
-		properties["view"] = map[string]any{"enum": []string{"home", "invitations", registrationAdminsView, "payment"}}
+		properties["view"] = map[string]any{
+			"enum": []string{"home", "invitations", registrationAdminsView, registrationPayment},
+		}
 		properties["cursor"] = map[string]string{registrationSchemaType: registrationSchemaString}
-		description = "Read your pass booking and selected details. At most three registration reads per update; use returned next cursor only. These reads ground subsequent registration operations."
+		description = "Read your pass booking and selected details. Own historical bookings support home/payment views and are read-only. Discover event IDs with passes.events. At most three registration reads per update; use returned next cursor only. Current-event reads ground registration operations."
 	case scriptPassAdminRead, scriptPassReviewRead:
 		properties["cursor"] = map[string]string{registrationSchemaType: registrationSchemaString}
 		description = "Read one authorized queue page and ground observed target versions for subsequent actions. Use only returned next cursor."
@@ -117,9 +91,11 @@ func passToolDescriptor(name string) scriptclient.Tool {
 	case scriptPassExport, scriptPassOperations:
 		properties = map[string]any{}
 		required = []string{}
-		description = "List recent owner-private pass operation references for exact replay after interruption. No command authority is granted by a reference."
 		if name == scriptPassExport {
 			description = "Deliver passes.xlsx for all currently authorized active pass events to this Telegram chat. No spreadsheet bytes enter model results. Repeated delivery in the same update uses its receipt."
+		} else {
+			properties[registrationOperationID] = map[string]string{registrationSchemaType: registrationSchemaString}
+			description = "Read recent currently authorized pass operations, or one exact operation_id. Choose by admitted_at, tool, authorized context and canonical receipt status. Retired sources remove context and disable continuation; committed effects are not rolled back. References grant no authority. Transport delivery status is not a domain commit."
 		}
 	case scriptPassResume:
 		properties = map[string]any{
@@ -147,13 +123,13 @@ func passToolDescriptor(name string) scriptclient.Tool {
 		}
 		properties["invite_telegram_id"] = map[string]string{registrationSchemaType: registrationSchemaInteger}
 		properties["payment_admin"] = map[string]string{registrationSchemaType: registrationSchemaString}
-		if passToolActions()[name] == passBatchAssign {
+		if agenthost.PassToolActions()[name] == passBatchAssign {
 			properties["assignment"] = passAssignmentSchema()
 		}
 	}
 	if name == scriptPassShow {
 		delete(properties, "cursor")
-		description = "Show the native pass menu in this Telegram chat. Payment receipt upload remains host-owned and manual."
+		description = "Show the native pass menu in this Telegram chat. Own historical home/payment views are read-only. Discover event IDs with passes.events. Payment receipt upload for current events remains host-owned and manual."
 	}
 	schema, _ := json.Marshal(
 		map[string]any{

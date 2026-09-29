@@ -31,8 +31,8 @@ func TestPassBookingRechecksFinishAfterLock(t *testing.T) {
 			lock, err := db.Begin(t.Context())
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = lock.Rollback(context.WithoutCancel(t.Context())) })
-			query := `SELECT id FROM core.pass_events WHERE id='dance' FOR UPDATE`
-			waitingQuery := `%FROM core.pass_events%FOR UPDATE%`
+			query := `SELECT id FROM core.pass_events WHERE id='dance' FOR NO KEY UPDATE`
+			waitingQuery := `%FROM core.pass_events%FOR NO KEY UPDATE%`
 			if resource == "profile" {
 				query = `SELECT owner FROM core.pass_profiles WHERE owner='alice' FOR UPDATE`
 				waitingQuery = `%FROM core.pass_profiles%FOR SHARE%`
@@ -107,7 +107,7 @@ INSERT INTO core.pass_booking_admins(owner) VALUES('bob');
 INSERT INTO core.pass_profiles(owner,role) VALUES('alice','leader'),('bob','follower');`,
 	)
 	require.NoError(t, err)
-	return db, passbooking.Service{DB: db}
+	return db, passbooking.Service{DB: db, Delivery: syntheticDeliverySettings()}
 }
 
 func bookingCommand(name, key string, b passbooking.Booking) passbooking.Command {

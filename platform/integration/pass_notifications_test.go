@@ -3,6 +3,8 @@ package integration_test
 import (
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -21,7 +23,7 @@ func drainPassDomainNotices(t *testing.T, service passbooking.Service) []passboo
 		}
 		for _, notice := range notices {
 			result = append(result, notice)
-			require.NoError(t, service.CompleteNotification(t.Context(), notice.ID, ""))
+			require.NoError(t, cancelPassTestNotice(t, service, notice))
 		}
 	}
 	t.Fatal("pass notification drain exceeded bound")
@@ -133,7 +135,7 @@ func TestPassNotificationsDurableRetryAndCurrentData(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notices, 1, "oldest per recipient only")
 	first := notices[0]
-	require.NoError(t, service.CompleteNotification(t.Context(), first.ID, "telegram_retry"))
+	require.NoError(t, deferPassTestNotice(t.Context(), service, first))
 	notices, err = service.PendingNotifications(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, notices, "backoff on first notice also holds later recipient notices")
@@ -142,14 +144,19 @@ func TestPassNotificationsDurableRetryAndCurrentData(t *testing.T) {
 		`UPDATE core.pass_notifications SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.pass_events SET titles='{"en":"Renamed event","ru":"Новое событие"}'`,
 	)
 	require.NoError(t, err)
-	restarted := passbooking.Service{DB: db}
+	restarted := passbooking.Service{DB: db, Delivery: syntheticDeliverySettings()}
 	notices, err = restarted.PendingNotifications(t.Context())
 	require.NoError(t, err)
 	require.Len(t, notices, 1)
 	assert.Equal(t, first.ID, notices[0].ID)
 	assert.Equal(t, "Renamed event", notices[0].EventTitles["en"])
-	require.NoError(t, restarted.CompleteNotification(t.Context(), first.ID, "telegram_forbidden"))
-	require.NoError(t, restarted.CompleteNotification(t.Context(), first.ID, ""), "ack replay")
+	rejected := passbooking.NotificationCompletion{
+		ID:      notices[0].ID,
+		Attempt: notices[0].DeliveryAttempt,
+		Outcome: delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_recipient_rejected"},
+	}
+	require.NoError(t, restarted.CompleteNotification(t.Context(), rejected))
+	require.NoError(t, restarted.CompleteNotification(t.Context(), rejected), "ack replay")
 	notices, err = restarted.PendingNotifications(t.Context())
 	require.NoError(t, err)
 	require.Len(t, notices, 1)
@@ -160,9 +167,24 @@ func TestPassNotificationsDurableRetryAndCurrentData(t *testing.T) {
 		passbooking.AdminAssignment{Event: "dance", Key: "stale", Target: "alice", TargetVersion: 1},
 	)
 	require.NoError(t, err)
-	require.NoError(t, restarted.CompleteNotification(t.Context(), notices[0].ID, ""))
-	requireCode(t, restarted.CompleteNotification(t.Context(), -1, ""), "pass_booking_invalid")
-	requireCode(t, restarted.CompleteNotification(t.Context(), 99999, ""), "notification_not_found")
+	require.NoError(t, cancelPassTestNotice(t, restarted, notices[0]))
+	requireCode(
+		t,
+		restarted.CompleteNotification(t.Context(), passbooking.NotificationCompletion{ID: -1}),
+		"invalid_notification_delivery",
+	)
+	requireCode(
+		t,
+		restarted.CompleteNotification(
+			t.Context(),
+			passbooking.NotificationCompletion{
+				ID:      99999,
+				Attempt: 1,
+				Outcome: delivery.Outcome{Kind: delivery.Cancelled, Reason: "synthetic_domain_notice_consumed"},
+			},
+		),
+		"notification_stale_attempt",
+	)
 }
 
 func TestPassNotificationsDeclineAndWaitlistOnce(t *testing.T) {

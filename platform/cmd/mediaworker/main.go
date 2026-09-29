@@ -14,6 +14,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
 	"github.com/complynx/zns-chatbot/platform/internal/mediaproc"
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 	"github.com/complynx/zns-chatbot/platform/internal/store"
 )
 
@@ -45,7 +46,11 @@ func serve() error {
 		if os.Getenv("DATABASE_URL") == "" {
 			return errors.New("paid media broker requires accounting database")
 		}
-		db, err := store.Open(context.Background(), os.Getenv("DATABASE_URL"))
+		name, err := mediaApplicationName()
+		if err != nil {
+			return err
+		}
+		db, err := store.OpenNamed(context.Background(), os.Getenv("DATABASE_URL"), name)
 		if err != nil {
 			return err
 		}
@@ -156,3 +161,14 @@ const (
 	writeTimeout  = 160 * time.Second
 	maxHeaders    = 8192
 )
+
+func mediaApplicationName() (string, error) {
+	instance, err := runtimeapp.EnvironmentInstance(os.Getenv("ZNS_ENV") == "production")
+	if err != nil {
+		return "", err
+	}
+	if instance == (runtimeapp.Instance{}) {
+		return "", nil
+	}
+	return instance.ApplicationName("media")
+}

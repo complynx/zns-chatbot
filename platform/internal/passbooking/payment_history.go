@@ -3,7 +3,7 @@ package passbooking
 import (
 	"context"
 	"encoding/json"
-	"errors"
+
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -53,14 +53,12 @@ func (s Service) PaymentHistoryPage(
 		return core.ReadPage[PaymentHistoryEntry]{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	var owner string
-	err = tx.QueryRow(ctx, `SELECT owner FROM core.pass_payment_admins WHERE event_id=$1 AND owner=$2 FOR SHARE`, event, actor).
-		Scan(&owner)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return core.ReadPage[PaymentHistoryEntry]{}, forbidden()
-	}
+	permitted, err := lockPaymentReadRole(ctx, tx, actor, event)
 	if err != nil {
 		return core.ReadPage[PaymentHistoryEntry]{}, err
+	}
+	if !permitted {
+		return core.ReadPage[PaymentHistoryEntry]{}, forbidden()
 	}
 	rows, err := tx.Query(ctx, `SELECT p.id,p.event_id,p.kind,COALESCE(member.owner,''),member.assigned_at,p.submitter,
  COALESCE(legacy.receiving_admin,p.receiving_admin,''),p.received_at,p.decision,

@@ -3,6 +3,7 @@ package integration_test
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 
@@ -20,7 +21,10 @@ const choiceHistoryCanary = "iris_private_draft_context"
 func privateModernDraft(t *testing.T, f *fixture, update int64, orderID string) (string, int64) {
 	t.Helper()
 	archive := conversation.Service{DB: f.db}
-	require.NoError(t, archive.Append(t.Context(), "alice", "private-choice-source", "user", choiceHistoryCanary))
+	require.NoError(
+		t,
+		archive.AppendOriginal(t.Context(), "alice", "private-choice-source", "user", choiceHistoryCanary),
+	)
 	var eventID int64
 	require.NoError(
 		t,
@@ -165,7 +169,7 @@ func TestModernChoiceDeletionAtCommitBoundary(t *testing.T) {
 	ref, eventID := privateModernDraft(t, f, 92201, "")
 	called := false
 	f.b.API.HTTP = &http.Client{Transport: qaHistoryDeleteTransport{before: func(r *http.Request) error {
-		if r.URL.Path != "/v1/order-actions" {
+		if r.URL.Path != "/v1/order-actions" && r.URL.Path != "/internal/derived/order-actions" {
 			return nil
 		}
 		body, err := r.GetBody()
@@ -173,14 +177,23 @@ func TestModernChoiceDeletionAtCommitBoundary(t *testing.T) {
 			return err
 		}
 		defer body.Close()
+		payload, err := io.ReadAll(body)
+		if err != nil {
+			return err
+		}
+		commandJSON, err := restartOrderCommand(r.URL.Path, payload)
+		if err != nil {
+			return err
+		}
 		var command orders.Command
-		if err = json.NewDecoder(body).Decode(&command); err != nil {
+		if err = json.Unmarshal(commandJSON, &command); err != nil {
 			return err
 		}
 		assert.NotNil(t, command.HistoryGeneration, "expected generation is carried to Core")
 		called = true
 		return (conversation.Service{DB: f.db}).DeleteContent(r.Context(), "alice", eventID)
 	}}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	f.b.Scripts = scopeVM{}
 	f.b.Model = &knowledgeModel{plans: []agent.Plan{
 		{

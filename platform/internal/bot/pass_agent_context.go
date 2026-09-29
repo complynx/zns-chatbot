@@ -2,50 +2,34 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"strconv"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-const registrationReadsKind = "registration_reads"
-const registrationEventLimit = 20
-const registrationContextBytes = 20 * 1024
-
-func (b *Bot) addRegistrationContext(ctx context.Context, in incoming, id int64, input *agent.Input) error {
-	events, err := b.API.PassEvents(ctx, in.owner)
+func (b *Bot) addRegistrationContext(
+	ctx context.Context,
+	owner string,
+	id int64,
+	partners []int64,
+	input *agent.Input,
+) error {
+	reader := interaction.RegistrationReader{Domain: b.API, Store: b.readStore(),
+		Menu: func(ctx context.Context, owner string) (interaction.RegistrationMenu, error) {
+			state, _, err := b.passMenuState(ctx, owner)
+			return state, err
+		}}
+	value, err := reader.Context(ctx, owner, id, partners)
 	if err != nil {
 		return err
 	}
-	page, next, err := registrationEvents(events, "")
-	if err != nil {
-		return err
-	}
-	state, _, err := b.passMenuState(ctx, in.owner)
-	if err != nil {
-		return err
-	}
-	reads, err := b.authorizedRegistrationReads(ctx, in.owner, id)
-	if err != nil {
-		return err
-	}
-	input.Registration = &agent.RegistrationContext{
-		AdminTargetTelegramID: state.AdminTargetTelegramID,
-		Events:                page,
-		MoreEvents:            next != "",
-		EventCursor:           next,
-		CurrentEvent:          state.Event,
-		PendingPartner:        state.View == passInvite,
-		TrustedPartnerIDs:     registrationContacts(in.assetMessage),
-		Reads:                 reads,
-		Remaining:             agent.MaxRegistrationReads - len(reads),
-	}
-	return boundRegistrationContext(input.Registration)
+	input.Registration = value
+	return nil
 }
 
 // Recheck the current projection without restoring omitted payloads or read budget.
@@ -65,10 +49,18 @@ func (b *Bot) reauthorizeRegistrationContext(
 			return err
 		}
 	}
-	return boundRegistrationContext(value)
+	return interaction.BoundRegistrationContext(value)
 }
 
 func (b *Bot) reauthorizeRegistrationRead(ctx context.Context, owner string, read *agent.RegistrationReadResult) error {
+	if err := b.reauthorizePassTargetSnapshot(ctx, owner, read); err != nil || read.Error != "" {
+		return err
+	}
+	if read.Historical || read.Booking != nil && read.Booking.Version > 0 {
+		if err := b.reauthorizeOwnerPass(ctx, owner, read); err != nil || read.Error != "" {
+			return err
+		}
+	}
 	var err error
 	switch read.Request.View {
 	case agent.RegistrationTakeoverTarget:
@@ -87,6 +79,12 @@ func (b *Bot) reauthorizeRegistrationRead(ctx context.Context, owner string, rea
 		_, err = b.API.PassPaymentQueue(ctx, owner, read.Request.Event, "")
 	case passMenuQueue:
 		_, err = b.API.PassQueue(ctx, owner, read.Request.Event, "")
+	case passMenuInvitations:
+		var page passbooking.InvitationPage
+		page, err = b.API.PassInvitations(ctx, owner, read.Request.Event, read.Request.Cursor)
+		if err == nil && !passInvitationsPresent(read.Invitations, page.Invitations) {
+			*read = agent.RegistrationReadResult{Request: read.Request, Error: "invitation_changed"}
+		}
 	}
 	if err != nil && passMenuFailure(err) == nil {
 		*read = agent.RegistrationReadResult{Request: read.Request, Error: mediaForbidden}
@@ -111,76 +109,34 @@ func registrationContacts(message *telegram.Message) []int64 {
 	return ids
 }
 
-func registrationEvents(events []passbooking.Event, cursor string) ([]passbooking.Event, string, error) {
-	offset := 0
-	if cursor != "" {
-		value, err := strconv.Atoi(cursor)
-		if err != nil || value < 0 {
-			return nil, "", errors.New("invalid event cursor")
-		}
-		offset = min(value, len(events))
-	}
-	last := min(offset+registrationEventLimit, len(events))
-	page := append([]passbooking.Event{}, events[offset:last]...)
-	for index := range page {
-		titles := map[string]string{}
-		for _, language := range []string{"en", "ru"} {
-			titles[language] = passMenuLabel(page[index].Titles[language])
-		}
-		page[index].Titles = titles
-		short := map[string]string{}
-		for _, language := range []string{"en", "ru"} {
-			short[language] = passMenuLabel(page[index].Title(language, true))
-		}
-		page[index].ShortTitles = short
-		page[index].CountryEmoji = passMenuLabel(page[index].CountryEmoji)
-	}
-	next := ""
-	if last < len(events) {
-		next = strconv.Itoa(last)
-	}
-	return page, next, nil
-}
-
 // Every load used as model context must recheck current privileges. The stored
 // snapshot preserves the read budget; it never preserves permission to view it.
-func (b *Bot) authorizedRegistrationReads(
+
+func (b *Bot) reauthorizePassTargetSnapshot(
 	ctx context.Context,
 	owner string,
-	id int64,
-) ([]agent.RegistrationReadResult, error) {
-	reads := []agent.RegistrationReadResult{}
-	err := b.DB.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3`, owner, id, registrationReadsKind).
-		Scan(&reads)
-	if errors.Is(err, pgx.ErrNoRows) {
-		err = nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	for index := range reads {
-		if err = b.reauthorizeRegistrationRead(ctx, owner, &reads[index]); err != nil {
-			return nil, err
-		}
-	}
-	return reads, nil
-}
-
-func boundRegistrationContext(value *agent.RegistrationContext) error {
-	for index := range value.Reads {
-		data, err := json.Marshal(value)
-		if err == nil && len(data) <= registrationContextBytes {
+	read *agent.RegistrationReadResult,
+) error {
+	if read.AdminTarget != nil || read.TakeoverTarget != nil || agenthost.PassQueueView(read.Request.View) {
+		if !agenthost.PassQueueEvidenceComplete(*read) {
+			*read = agent.RegistrationReadResult{Request: read.Request, Error: mediaForbidden}
 			return nil
 		}
-		read := &value.Reads[index]
-		*read = agent.RegistrationReadResult{Request: read.Request, Error: "context_budget", Omitted: true}
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	if len(data) > registrationContextBytes {
-		return errors.New("registration context exceeds budget")
+		dependencies := agenthost.ScriptPassContext(
+			&agent.RegistrationContext{Reads: []agent.RegistrationReadResult{*read}},
+		)
+		authorities, err := agenthost.PassContextReadAuthorities(dependencies)
+		if err != nil {
+			return err
+		}
+		changed, err := b.readAuthoritiesChanged(ctx, owner, authorities)
+		if err != nil {
+			return err
+		}
+		if changed {
+			*read = agent.RegistrationReadResult{Request: read.Request, Error: mediaForbidden}
+			return nil
+		}
 	}
 	return nil
 }

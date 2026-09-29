@@ -101,51 +101,96 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Profile,
 		return Profile{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // Cleanup after commit or an operation error.
-	var allowed bool
-	err = tx.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1 FOR UPDATE`, actor).Scan(&allowed)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !allowed) {
-		return Profile{}, problem(http.StatusForbidden, "forbidden")
-	}
+	prepared, err := s.PrepareInTx(ctx, tx, actor, c)
 	if err != nil {
 		return Profile{}, err
+	}
+	result, err := prepared.Apply(ctx)
+	if err != nil {
+		return Profile{}, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+type PreparedCommand struct {
+	tx          pgx.Tx
+	actor       string
+	command     Command
+	profile     Profile
+	keyHash     string
+	requestHash string
+	found       bool
+}
+
+// PrepareInTx applies the current target policy before examining a receipt.
+func (s Service) PrepareInTx(ctx context.Context, tx pgx.Tx, actor string, c Command) (*PreparedCommand, error) {
+	if err := validate(c); err != nil {
+		return nil, err
+	}
+	var allowed bool
+	err := tx.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1 FOR UPDATE`, actor).Scan(&allowed)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !allowed) {
+		return nil, problem(http.StatusForbidden, "forbidden")
+	}
+	if err != nil {
+		return nil, err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO core.pass_profiles(owner) VALUES($1) ON CONFLICT DO NOTHING`, actor)
 	if err != nil {
-		return Profile{}, err
+		return nil, err
 	}
 	p, err := scan(tx.QueryRow(ctx, `SELECT `+columns+` FROM core.pass_profiles WHERE owner=$1 FOR UPDATE`, actor))
 	if err != nil {
-		return Profile{}, err
+		return nil, err
 	}
 	encoded, err := json.Marshal(c)
 	if err != nil {
-		return Profile{}, err
+		return nil, err
 	}
 	keyHash, requestHash := digest([]byte(c.Key)), digest(encoded)
+	prepared := &PreparedCommand{
+		tx:          tx,
+		actor:       actor,
+		command:     c,
+		profile:     p,
+		keyHash:     keyHash,
+		requestHash: requestHash,
+	}
 	var prior string
 	err = tx.QueryRow(ctx, `SELECT request_hash FROM core.pass_profile_operations WHERE owner=$1 AND key_hash=$2`, actor, keyHash).
 		Scan(&prior)
 	if err == nil {
 		if prior != requestHash {
-			return Profile{}, problem(http.StatusConflict, "idempotency_conflict")
+			return nil, problem(http.StatusConflict, "idempotency_conflict")
 		}
-		return p, tx.Commit(ctx)
+		prepared.found = true
+		return prepared, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return Profile{}, err
+		return nil, err
 	}
+	return prepared, nil
+}
+
+func (prepared *PreparedCommand) Replay() (Profile, bool) { return prepared.profile, prepared.found }
+
+func (prepared *PreparedCommand) Apply(ctx context.Context) (Profile, error) {
+	if prepared.found {
+		return prepared.profile, nil
+	}
+	tx, actor, c, p := prepared.tx, prepared.actor, prepared.command, prepared.profile
 	if c.Version != p.Version {
 		return Profile{}, problem(http.StatusConflict, "pass_profile_stale")
 	}
 	var now time.Time
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 		return Profile{}, err
 	}
-	if err = apply(&p, c, now); err != nil {
+	if err := apply(&p, c, now); err != nil {
 		return Profile{}, err
 	}
 	p.Version++
-	_, err = tx.Exec(
+	_, err := tx.Exec(
 		ctx,
 		`UPDATE core.pass_profiles SET version=$2,role=$3,legal_name=$4,passport=$5,pending=$6,expires_at=$7,passport_after=$8 WHERE owner=$1`,
 		actor,
@@ -164,8 +209,8 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Profile,
 		ctx,
 		`INSERT INTO core.pass_profile_operations(owner,key_hash,request_hash) VALUES($1,$2,$3)`,
 		actor,
-		keyHash,
-		requestHash,
+		prepared.keyHash,
+		prepared.requestHash,
 	)
 	if err != nil {
 		return Profile{}, err
@@ -173,7 +218,7 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Profile,
 	if err = recordProfileChanges(ctx, tx, actor, p.Version, c); err != nil {
 		return Profile{}, err
 	}
-	return p, tx.Commit(ctx)
+	return p, nil
 }
 
 func recordProfileChanges(ctx context.Context, tx pgx.Tx, actor string, version int64, c Command) error {

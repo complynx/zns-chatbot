@@ -8,11 +8,13 @@ import (
 )
 
 type statistics struct {
-	balance passallocation.Counts
-	waiting passallocation.Counts
-	unpaid  int
-	total   passallocation.Usage
-	roles   map[passallocation.Role]passallocation.Usage
+	balance          passallocation.Counts
+	waiting          passallocation.Counts
+	unpaid           int
+	assignedIncluded passallocation.Counts
+	waitingIncluded  passallocation.Counts
+	total            passallocation.Usage
+	roles            map[passallocation.Role]passallocation.Usage
 }
 
 func addRole(counts *passallocation.Counts, role passallocation.Role) {
@@ -23,39 +25,59 @@ func addRole(counts *passallocation.Counts, role passallocation.Role) {
 	}
 }
 
-func (s *snapshot) stats() statistics {
-	result := statistics{
+func newStatistics() statistics {
+	return statistics{
 		total: passallocation.Usage{Explicit: map[int]int{}},
 		roles: map[passallocation.Role]passallocation.Usage{
 			passallocation.Leader: {Explicit: map[int]int{}}, passallocation.Follower: {Explicit: map[int]int{}},
 		},
 	}
+}
+
+func (s *snapshot) stats() statistics {
+	result := newStatistics()
 	for _, b := range s.bookings {
-		if b.State == waitlist {
-			addRole(&result.waiting, b.Role)
-		}
-		if b.State != assigned && b.State != paid {
-			continue
-		}
-		if b.State == assigned {
-			result.unpaid++
-		}
-		if (b.SkipBalance != nil && !*b.SkipBalance) || (b.SkipBalance == nil && b.Price != nil && *b.Price != 0) {
-			addRole(&result.balance, b.Role)
-		}
-		result.total.Participants++
-		role := result.roles[b.Role]
-		role.Participants++
-		if b.TierIndex != nil {
-			result.total.Explicit[*b.TierIndex]++
-			role.Explicit[*b.TierIndex]++
-		}
-		result.roles[b.Role] = role
+		result.observe(b)
 	}
 	return result
 }
 
-func ordered(a, b *Booking) int {
+func (result *statistics) observe(b *Booking) {
+	included := (b.SkipBalance != nil && !*b.SkipBalance) ||
+		(b.SkipBalance == nil && (b.Price == nil || *b.Price != 0))
+	if included {
+		if b.State == assigned {
+			addRole(&result.assignedIncluded, b.Role)
+		}
+		if b.State == waitlist {
+			addRole(&result.waitingIncluded, b.Role)
+		}
+	}
+	if b.State == waitlist {
+		addRole(&result.waiting, b.Role)
+	}
+	if b.State != assigned && b.State != paid {
+		return
+	}
+	if b.State == assigned {
+		result.unpaid++
+	}
+	if (b.SkipBalance != nil && !*b.SkipBalance) || (b.SkipBalance == nil && b.Price != nil && *b.Price != 0) {
+		addRole(&result.balance, b.Role)
+	}
+	result.total.Participants++
+	role := result.roles[b.Role]
+	role.Participants++
+	if b.TierIndex != nil {
+		result.total.Explicit[*b.TierIndex]++
+		role.Explicit[*b.TierIndex]++
+	}
+	result.roles[b.Role] = role
+}
+func (s *snapshot) ordered(a, b *Booking) int {
+	if order := cmp.Compare(s.registrationPosition(a), s.registrationPosition(b)); order != 0 {
+		return order
+	}
 	if order := a.CreatedAt.Compare(b.CreatedAt); order != 0 {
 		return order
 	}
@@ -70,7 +92,7 @@ func (s *snapshot) waitlists() map[passallocation.Role][]*Booking {
 		}
 	}
 	for _, list := range lists {
-		slices.SortFunc(list, ordered)
+		slices.SortFunc(list, s.ordered)
 	}
 	return lists
 }
@@ -101,7 +123,7 @@ func (s *snapshot) assignNext() bool {
 			heads = append(heads, lists[role][0])
 		}
 	}
-	slices.SortFunc(heads, ordered)
+	slices.SortFunc(heads, s.ordered)
 	if len(leader) > 0 && len(follower) > 0 && len(heads) > 0 && s.tryCandidate(heads[0], true) {
 		return true
 	}
@@ -163,6 +185,9 @@ func (s *snapshot) tryCandidate(b *Booking, checkBalance bool) bool {
 	stats := s.stats()
 	var delta passallocation.Counts
 	for _, participant := range participants {
+		if s.blockedByRegistration(participant) {
+			return false
+		}
 		addRole(&delta, participant.Role)
 	}
 	if !passallocation.HasConcurrencyCapacity(stats.unpaid, len(participants), s.event.unlimited) ||

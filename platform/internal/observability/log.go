@@ -210,6 +210,9 @@ func normalizedKey(key string) string {
 
 func secretKey(key string) bool {
 	key = normalizedKey(key)
+	if key == "xznsderivation" {
+		return true
+	}
 	for _, part := range []string{"password", "secret", "token", "authorization", "cookie", "apikey", "credential", "privatekey", "signature", "dsn"} {
 		if strings.Contains(key, part) {
 			return true

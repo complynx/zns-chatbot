@@ -2,31 +2,38 @@ package massage
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/complynx/zns-chatbot/platform/internal/massage/dbgen"
 )
+
+const notificationBatchSize = 25
 
 type NoticeRecipient struct {
 	Owner      string `json:"owner"`
 	TelegramID int64  `json:"telegram_id"`
 }
-
 type DeliveryNotice struct {
+	Owner       string      `json:"owner"`
+	TelegramID  int64       `json:"telegram_id"`
 	Notice      Notice      `json:"notice"`
 	Reservation Reservation `json:"reservation"`
 	Client      string      `json:"client"`
 	Specialist  string      `json:"specialist"`
+	Current     bool        `json:"current"`
 }
 
-// NoticeRecipients queues due reminders and returns a bounded, fair recipient scan.
-// Attempts are recorded only when the adapter reaches that recipient.
+// NoticeRecipients keeps recipient rotation separate from transport admission.
+
 func (s Service) NoticeRecipients(ctx context.Context) ([]NoticeRecipient, error) {
-	rows, err := s.DB.Query(ctx, `SELECT DISTINCT event_id FROM core.massage_parties
- WHERE starts_at-interval '2 hours'<$1 AND ends_at+interval '2 hours'>$1`, s.now())
-	if err != nil {
+	if err := s.Delivery.Validate(); err != nil {
 		return nil, err
 	}
-	events, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	q := dbgen.New(s.DB)
+	events, err := q.NotificationReminderEvents(ctx, pgtype.Timestamptz{Time: s.now(), Valid: true})
 	if err != nil {
 		return nil, err
 	}
@@ -35,49 +42,109 @@ func (s Service) NoticeRecipients(ctx context.Context) ([]NoticeRecipient, error
 			return nil, err
 		}
 	}
-	rows, err = s.DB.Query(ctx, `SELECT n.owner,u.telegram_id FROM core.massage_notices n
- JOIN core.users u ON u.id=n.owner JOIN core.massage_bookings b ON b.id=n.booking_id
- JOIN core.massage_specialists sp ON sp.event_id=b.event_id AND sp.owner=b.specialist
- LEFT JOIN core.massage_notification_attempts a ON a.owner=n.owner
- WHERE n.sent_at IS NULL AND (b.cancelled_at IS NULL OR n.kind='cancelled')
- AND (n.kind NOT IN ('booked','cancelled') OR sp.notify_bookings)
- AND (n.kind<>'next' OR sp.notify_next)
- AND (n.kind<>'additional' OR b.starts_at>=$1)
- GROUP BY n.owner,u.telegram_id,a.attempted_at
- ORDER BY a.attempted_at NULLS FIRST,n.owner LIMIT 100`, s.now())
+	if err = s.recoverNotificationSends(ctx); err != nil {
+		return nil, err
+	}
+	rows, err := q.NotificationRecipients(ctx, s.Delivery.BotID)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[NoticeRecipient])
+	values := make([]NoticeRecipient, 0, len(rows))
+	for _, row := range rows {
+		values = append(values, NoticeRecipient{Owner: row.Owner, TelegramID: row.TelegramID})
+	}
+	return values, nil
 }
 
-// DeliveryNotices records rotation before any identity or Telegram work can fail.
-// Only the service-authenticated delivery adapter may request this projection.
+// DeliveryNotices prepares lane heads for an authenticated delivery adapter.
 func (s Service) DeliveryNotices(ctx context.Context, owner string) ([]DeliveryNotice, error) {
-	_, err := s.DB.Exec(ctx, `INSERT INTO core.massage_notification_attempts(owner,attempted_at)
- SELECT id,clock_timestamp() FROM core.users WHERE id=$1
- ON CONFLICT(owner) DO UPDATE SET attempted_at=EXCLUDED.attempted_at`, owner)
-	if err != nil {
+	if err := s.Delivery.Validate(); err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.Query(ctx, `SELECT n.id,n.booking_id,n.kind,
- b.id,b.starts_at,b.ends_at,b.length,b.price,b.cancelled_at,u.name,sp.name
- FROM core.massage_notices n JOIN core.massage_bookings b ON b.id=n.booking_id
- JOIN core.users u ON u.id=b.owner
- JOIN core.massage_specialists sp ON sp.event_id=b.event_id AND sp.owner=b.specialist
- WHERE n.owner=$1 AND n.sent_at IS NULL AND (b.cancelled_at IS NULL OR n.kind='cancelled')
- AND (n.kind NOT IN ('booked','cancelled') OR sp.notify_bookings)
- AND (n.kind<>'next' OR sp.notify_next)
- AND (n.kind<>'additional' OR b.starts_at>=$2)
- ORDER BY n.id LIMIT 100`, owner, s.now())
-	if err != nil {
+	q := dbgen.New(s.DB)
+	if err := q.RecordNotificationRotation(ctx, owner); err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (DeliveryNotice, error) {
-		var value DeliveryNotice
-		scanErr := row.Scan(&value.Notice.ID, &value.Notice.Booking, &value.Notice.Kind,
-			&value.Reservation.ID, &value.Reservation.Start, &value.Reservation.End, &value.Reservation.Length,
-			&value.Reservation.Price, &value.Reservation.CancelledAt, &value.Client, &value.Specialist)
-		return value, scanErr
-	})
+	if err := s.recoverNotificationSends(ctx); err != nil {
+		return nil, err
+	}
+	values := make([]DeliveryNotice, 0, notificationBatchSize)
+	for len(values) < notificationBatchSize {
+		row, err := q.PrepareNotification(ctx, dbgen.PrepareNotificationParams{BotID: s.Delivery.BotID, Owner: owner})
+		if errors.Is(err, pgx.ErrNoRows) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		value, err := s.notificationProjection(ctx, q, row)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+func (s Service) notificationProjection(
+	ctx context.Context,
+	q *dbgen.Queries,
+	row dbgen.CoreMassageNotice,
+) (DeliveryNotice, error) {
+	value := DeliveryNotice{
+		Owner:      row.Owner,
+		TelegramID: row.DeliveryChat,
+		Notice: Notice{ID: row.ID, Booking: row.BookingID, Kind: row.Kind, DeliveryAttempt: row.DeliveryAttempt,
+			MessageID: row.TelegramMessageID, DeliveryText: row.DeliveryText, FollowupPending: row.FollowupPending},
+	}
+	booking, err := q.NotificationBookingProjection(ctx, row.BookingID)
+	if err != nil {
+		return value, err
+	}
+	value.Reservation = Reservation{
+		ID:     booking.ID,
+		Start:  booking.StartsAt.Time,
+		End:    booking.EndsAt.Time,
+		Length: int(booking.Length),
+		Price:  int(booking.Price),
+	}
+	if booking.CancelledAt.Valid {
+		value.Reservation.CancelledAt = &booking.CancelledAt.Time
+	}
+	value.Client, value.Specialist = booking.Client, booking.Specialist
+	value.Current, err = q.NotificationCurrent(
+		ctx,
+		dbgen.NotificationCurrentParams{
+			ID:    row.ID,
+			BotID: s.Delivery.BotID,
+			Now:   pgtype.Timestamptz{Time: s.now(), Valid: true},
+		},
+	)
+	return value, err
+}
+
+func (s Service) lockNotificationEligibility(ctx context.Context, tx pgx.Tx, id int64) (bool, error) {
+	q := dbgen.New(tx)
+	row, err := q.ReadNotification(ctx, dbgen.ReadNotificationParams{ID: id, BotID: s.Delivery.BotID})
+	if err != nil {
+		return false, err
+	}
+	if _, err = q.LockNotificationBooking(ctx, row.BookingID); err != nil {
+		return false, err
+	}
+	recipient, err := q.LockNotificationRecipient(ctx, row.Owner)
+	if err != nil {
+		return false, err
+	}
+	if !recipient.CanBook || recipient.TelegramID <= 0 || recipient.TelegramID != row.DeliveryChat {
+		return false, nil
+	}
+	return q.NotificationCurrent(
+		ctx,
+		dbgen.NotificationCurrentParams{
+			ID:    id,
+			BotID: s.Delivery.BotID,
+			Now:   pgtype.Timestamptz{Time: s.now(), Valid: true},
+		},
+	)
 }

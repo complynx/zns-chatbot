@@ -28,7 +28,7 @@ func foodPendingDatabase(t *testing.T) *pgxpool.Pool {
 	admin, err := pgxpool.New(t.Context(), dsn)
 	require.NoError(t, err)
 	t.Cleanup(admin.Close)
-	name := "food_pending_" + strings.ToLower(rand.Text())
+	name := "synthetic_qa_zns_food_pending_" + strings.ToLower(rand.Text())
 	quoted := pgx.Identifier{name}.Sanitize()
 	_, err = admin.Exec(t.Context(), "CREATE DATABASE "+quoted)
 	require.NoError(t, err)

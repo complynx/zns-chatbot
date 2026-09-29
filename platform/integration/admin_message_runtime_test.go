@@ -17,6 +17,7 @@ func TestAdminMessageRuntimePreviewSendResults(t *testing.T) {
 		t.Run(locale, func(t *testing.T) {
 			t.Parallel()
 			f := passMenuFixture(t)
+			configureDeliveryFixture(t, f)
 			_, err := f.db.Exec(t.Context(), `UPDATE core.users SET language=$1 WHERE id='bob'`, locale)
 			require.NoError(t, err)
 			handle(t, f.b, message(900, 202, `/send_message_to 101 --msg "Synthetic runtime message"`))

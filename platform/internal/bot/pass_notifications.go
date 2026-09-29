@@ -2,78 +2,102 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
 	"strconv"
 
-	"github.com/jackc/pgx/v5"
-
+	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-func (c APIClient) PendingPassNotifications(ctx context.Context) ([]passbooking.Notification, error) {
-	var notices []passbooking.Notification
-	err := c.requestToken(ctx, c.Signer.DeliveryToken(), http.MethodGet, "/internal/pass-notifications", nil, &notices)
-	return notices, err
-}
-
-func (c APIClient) CompletePassNotification(ctx context.Context, id int64, failure string) error {
-	body, err := json.Marshal(map[string]string{"failure": failure})
-	if err != nil {
-		return err
-	}
-	var result struct {
-		OK bool `json:"ok"`
-	}
-	return c.requestToken(ctx, c.Signer.DeliveryToken(), http.MethodPost,
-		"/internal/pass-notifications/"+strconv.FormatInt(id, 10)+"/complete", body, &result)
-}
-
-// DeliverPassNotifications runs under the single poller's session lock.
-// Telegram cannot deduplicate a send whose response was lost before persistence.
+// DeliverPassNotifications preserves each canonical outcome before follow-up work.
 func (b *Bot) DeliverPassNotifications(ctx context.Context) error {
-	if err := b.deliverRegistrationAnnouncement(ctx); err != nil {
-		return err
-	}
-	notices, err := b.API.PendingPassNotifications(ctx)
+	failures := b.deliverRegistrationAnnouncement(ctx)
+	notices, err := b.Host.PendingPassNotifications(ctx)
 	if err != nil {
-		return err
+		return errors.Join(failures, err)
 	}
 	for _, notice := range notices {
-		if err = b.deliverPassNotification(ctx, notice); err == nil {
-			continue
-		}
-		failure := "telegram_retry"
-		if problem, ok := errors.AsType[*telegram.APIError](err); ok {
-			switch problem.Code {
-			case http.StatusForbidden:
-				failure = "telegram_forbidden"
-			case http.StatusBadRequest:
-				failure = telegramRejected
-			}
-		}
-		b.logger().WarnContext(ctx, "pass notification delivery pending", "notification", notice.ID, "error", err)
-		if completeErr := b.API.CompletePassNotification(ctx, notice.ID, failure); completeErr != nil {
-			return completeErr
+		failures = errors.Join(failures, b.deliverPassNotification(ctx, notice))
+		if ctx.Err() != nil {
+			return errors.Join(failures, ctx.Err())
 		}
 	}
-	return nil
+	return failures
+}
+
+func (b *Bot) deferPassNotification(ctx context.Context, n passbooking.Notification, err error) error {
+	if n.FollowupPending {
+		done, reason := notificationFollowupResult(err)
+		return b.Host.CompletePassNotificationFollowup(
+			ctx,
+			passbooking.NotificationFollowup{ID: n.ID, Attempt: n.DeliveryAttempt, Done: done, Failure: reason},
+		)
+	}
+	return b.Host.CompletePassNotification(
+		ctx,
+		passbooking.NotificationCompletion{
+			ID:      n.ID,
+			Attempt: n.DeliveryAttempt,
+			Outcome: notificationPreflightOutcome(err),
+		},
+	)
 }
 
 func (b *Bot) deliverPassNotification(ctx context.Context, notice passbooking.Notification) error {
 	if !notice.Current {
-		return b.API.CompletePassNotification(ctx, notice.ID, "")
+		if notice.FollowupPending {
+			return b.Host.CompletePassNotificationFollowup(
+				ctx,
+				passbooking.NotificationFollowup{
+					ID:      notice.ID,
+					Attempt: notice.DeliveryAttempt,
+					Done:    true,
+					Failure: notificationNoLongerCurrent,
+				},
+			)
+		}
+		return b.Host.CompletePassNotification(
+			ctx,
+			passbooking.NotificationCompletion{
+				ID:      notice.ID,
+				Attempt: notice.DeliveryAttempt,
+				Outcome: delivery.Outcome{Kind: delivery.Cancelled, Reason: notificationNoLongerCurrent},
+			},
+		)
 	}
-	ctx, authErr := b.API.notificationContext(ctx, notice.Recipient, notice.TelegramID)
-	if authErr != nil {
-		return authErr
+	authenticated, err := b.API.NotificationContext(ctx, notice.Recipient, notice.TelegramID)
+	if err != nil {
+		return b.deferPassNotification(ctx, notice, err)
 	}
+	ctx = authenticated
+	var known bool
+	notice, known, err = b.sendPreparedPassNotice(ctx, notice)
+	if err != nil || !known {
+		return err
+	}
+	ctx = withBotDeliveryOrigin(
+		ctx,
+		delivery.Reference{Owner: delivery.Passes, Key: strconv.FormatInt(notice.ID, 10), Effect: botRefreshEffect},
+	)
+	err = b.storePassNotificationDelivery(ctx, notice, notice.MessageID, notice.DeliveryText)
+	if err == nil {
+		err = b.refreshPassNotificationViews(ctx, notice)
+	}
+	done, reason := notificationFollowupResult(err)
+	completeErr := b.Host.CompletePassNotificationFollowup(
+		ctx,
+		passbooking.NotificationFollowup{ID: notice.ID, Attempt: notice.DeliveryAttempt, Done: done, Failure: reason},
+	)
+	return errors.Join(err, completeErr)
+}
+
+func (b *Bot) passNotificationText(ctx context.Context, notice passbooking.Notification) (string, error) {
 	prefs, err := b.API.Preferences(ctx, notice.Recipient)
 	if err != nil {
-		return err
+		return "", err
 	}
 	title := notice.Event
 	for _, locale := range i18n.FallbackLocales(prefs.Language) {
@@ -82,59 +106,90 @@ func (b *Bot) deliverPassNotification(ctx context.Context, notice passbooking.No
 			break
 		}
 	}
-	text, err := i18n.Translate(
+	return i18n.Translate(
 		prefs.Language,
 		i18n.ID("pass.notice."+notice.Kind),
 		map[string]string{knowledgeEventQuery: title},
 	)
-	if err != nil {
-		return err
-	}
-	var messageID int64
-	err = b.DB.QueryRow(ctx, `SELECT message_id FROM bot.pass_notification_deliveries WHERE notice_id=$1`, notice.ID).
-		Scan(&messageID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	if messageID == 0 {
-		message, sendErr := b.TG.Send(ctx, telegram.Send{ChatID: notice.TelegramID, Text: text})
-		if sendErr != nil {
-			return sendErr
-		}
-		if err = b.storePassNotificationDelivery(ctx, notice, message.ID, text); err != nil {
-			return err
-		}
-	}
-	if err = b.refreshPassNotificationViews(ctx, notice); err != nil {
-		return err
-	}
-	return b.API.CompletePassNotification(ctx, notice.ID, "")
 }
 
-// Archive before saving the bot receipt. A known delivery always has history;
-// a failure before receipt persistence retains the documented resend window.
+// The domain receipt already owns transport success; this follow-up never sends.
 func (b *Bot) storePassNotificationDelivery(
 	ctx context.Context,
 	notice passbooking.Notification,
 	messageID int64,
 	text string,
 ) error {
-	if err := b.API.ArchiveConversation(
+	if err := b.Host.ArchiveOutcome(
 		ctx,
 		notice.Recipient,
 		"pass-notification-"+strconv.FormatInt(notice.ID, 10),
-		"system",
 		text,
-		0,
-		false,
 	); err != nil {
 		return err
 	}
-	_, err := b.DB.Exec(
+	return dbgen.New(b.DB).
+		StorePassNotificationReceipt(ctx, dbgen.StorePassNotificationReceiptParams{ID: notice.ID, MessageID: messageID})
+}
+
+// A known canonical outcome permits follow-up; deferred or rejected work does not.
+func (b *Bot) sendPreparedPassNotice(
+	ctx context.Context,
+	notice passbooking.Notification,
+) (passbooking.Notification, bool, error) {
+	if notice.FollowupPending {
+		return notice, true, nil
+	}
+	text, err := b.passNotificationText(ctx, notice)
+	if err != nil {
+		return notice, false, b.deferPassNotification(ctx, notice, err)
+	}
+	gate, err := b.Host.BeginPassNotification(
 		ctx,
-		`INSERT INTO bot.pass_notification_deliveries(notice_id,message_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
-		notice.ID,
-		messageID,
+		delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
 	)
-	return err
+	if err != nil || !gate.Ready {
+		return notice, false, err
+	}
+	message, sendErr := b.TG.Send(ctx, telegram.Send{ChatID: notice.TelegramID, Text: text})
+	outcome := telegram.DeliveryOutcome(message.ID, sendErr)
+	result := passbooking.NotificationCompletion{ID: notice.ID, Attempt: notice.DeliveryAttempt, Outcome: outcome}
+	if outcome.Kind == delivery.Succeeded {
+		result.Text = text
+	}
+	completionCtx, cancelCompletion := deliveryCompletionContext(ctx)
+	defer cancelCompletion()
+	if err = b.Host.CompletePassNotification(completionCtx, result); err != nil {
+		return notice, false, err
+	}
+	if outcome.Kind != delivery.Succeeded {
+		return notice, false, nil
+	}
+	notice.MessageID, notice.DeliveryText = message.ID, text
+	return notice, true, nil
+}
+
+// DeliverPassNotification handles one advisory shared-queue candidate.
+func (b *Bot) DeliverPassNotification(ctx context.Context, id int64) error {
+	notice, found, err := b.Host.PreparePassNotification(ctx, id)
+	if err != nil || !found {
+		return err
+	}
+	return b.deliverPassNotification(ctx, notice)
+}
+
+// RecoverPassNotifications never starts a fresh primary send.
+func (b *Bot) RecoverPassNotifications(ctx context.Context) error {
+	notices, err := b.Host.RecoverPassNotifications(ctx)
+	if err != nil {
+		return err
+	}
+	var failures error
+	for _, notice := range notices {
+		failures = errors.Join(failures, b.deliverPassNotification(ctx, notice))
+		if ctx.Err() != nil {
+			return errors.Join(failures, ctx.Err())
+		}
+	}
+	return failures
 }

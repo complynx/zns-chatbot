@@ -11,12 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 )
@@ -157,7 +156,8 @@ func TestKnowledgeSuggestionFilterReviewRightsAndReplay(t *testing.T) {
 	requireCode(t, err, "knowledge_not_found")
 	filtered, err := s.Assess(t.Context(), "alice", assessment)
 	require.NoError(t, err)
-	assert.Equal(t, "pending_review", filtered.Proposal.State)
+	assert.Equal(t, knowledge.AwaitingSubmission, filtered.Proposal.State)
+	filtered = submitKnowledgeProposal(t, s, "alice", *filtered.Proposal)
 	queue, err := s.Proposals(t.Context(), "bob", knowledge.ProposalQuery{Event: "kb-current", ReviewQueue: true})
 	require.NoError(t, err)
 	require.Len(t, queue, 1)
@@ -229,12 +229,13 @@ func TestKnowledgeRejectAndConcurrentApproval(t *testing.T) {
 			assert.Equal(t, "filtered", filtered.Proposal.State)
 			continue
 		}
+		filtered = submitKnowledgeProposal(t, s, "alice", *filtered.Proposal)
 		command := knowledge.Command{
 			Name:       knowledge.Review,
 			Key:        "review",
 			Event:      "kb-current",
 			ProposalID: proposal.Proposal.ID,
-			Version:    2,
+			Version:    filtered.Proposal.Version,
 			Decision:   "approve",
 		}
 		var wg sync.WaitGroup
@@ -325,7 +326,7 @@ func TestKnowledgeAPIRejectsActorAndFilterInjection(t *testing.T) {
 	t.Parallel()
 	s := knowledgeFixture(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
-	handler := api.Handler(runtimeapp.NewServices(s.DB, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler))
+	handler := api.Handler(appservices.NewServices(s.DB, appservices.Options{}), signer, slog.New(slog.DiscardHandler))
 	for _, test := range []struct {
 		body, token string
 		status      int
@@ -346,9 +347,9 @@ func TestKnowledgeAPIRejectsActorAndFilterInjection(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 	assert.Equal(t, 200, recorder.Code)
-	var memos []knowledge.Memo
+	var memos knowledge.MemoPage
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &memos))
-	assert.Empty(t, memos)
+	assert.Empty(t, memos.Items)
 }
 
 func TestKnowledgeReviewCannotOverwriteNewerFact(t *testing.T) {
@@ -364,19 +365,20 @@ func TestKnowledgeReviewCannotOverwriteNewerFact(t *testing.T) {
 		Text:    "Suggested replacement",
 	})
 	require.NoError(t, err)
-	_, err = s.Assess(
+	assessed, err := s.Assess(
 		t.Context(),
 		"alice",
 		knowledge.Assessment{Key: "filter", ProposalID: proposal.Proposal.ID, Version: 1, Worthwhile: true},
 	)
 	require.NoError(t, err)
+	assessed = submitKnowledgeProposal(t, s, "alice", *assessed.Proposal)
 	knowledgeFact(t, s, "kb-current", "venue", "Curator correction", 1)
 	review := knowledge.Command{
 		Name:       knowledge.Review,
 		Key:        "approve",
 		Event:      "kb-current",
 		ProposalID: proposal.Proposal.ID,
-		Version:    2,
+		Version:    assessed.Proposal.Version,
 		Decision:   "approve",
 	}
 	_, err = s.Execute(t.Context(), "bob", review)

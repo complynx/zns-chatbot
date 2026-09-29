@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -143,13 +145,18 @@ func (r *passMenuRenderer) paymentQueue(ctx context.Context) error {
 }
 
 func (b *Bot) sendRegistrationProof(ctx context.Context, in incoming, ref registrationProofReference) error {
-	proof, err := b.API.DownloadPassProof(ctx, in.owner, ref.Event, ref.Owner)
-	if err != nil {
-		return err
-	}
-	if proof.Version != ref.Version || proof.Attempt != ref.Attempt {
-		return &core.ProblemError{Status: http.StatusConflict, Code: "pass_payment_stale"}
-	}
-	_, err = b.TG.SendDocument(ctx, in.chat, proof.Filename, proof.Body)
+	_, err := b.queueBotDocument(
+		ctx,
+		in.owner,
+		in.chat,
+		botdelivery.Reference{
+			Family:       botFamilyPassProof,
+			Event:        ref.Event,
+			Object:       ref.Owner,
+			Version:      ref.Version,
+			ProofAttempt: ref.Attempt,
+			Continuation: botdelivery.Continuation{Kind: botDocumentKind},
+		},
+	)
 	return err
 }

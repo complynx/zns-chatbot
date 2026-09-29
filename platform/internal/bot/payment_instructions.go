@@ -10,13 +10,36 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-const actionInstructions = "payment_instructions"
+const actionInstructions = orders.ActionPaymentInstructions
 const paymentCardPrefix = "payment:"
 
 func (b *Bot) showPaymentInstructions(ctx context.Context, in incoming, id string) (string, error) {
+	return b.showPaymentInstructionsWithSource(ctx, in, id, nil)
+}
+
+func (b *Bot) showPaymentInstructionsWithSource(
+	ctx context.Context,
+	in incoming,
+	id string,
+	source *readsource.Derivation,
+) (string, error) {
+	return b.paymentInstructionsWithSource(ctx, in, id, source, true)
+}
+
+func (b *Bot) paymentInstructionsWithSource(
+	ctx context.Context,
+	in incoming,
+	id string,
+	source *readsource.Derivation,
+	opening bool,
+) (string, error) {
+	if err := b.checkOrderDeliverySource(ctx, in.owner, source); err != nil {
+		return "", err
+	}
 	event, err := b.OrderEventForOrder(ctx, in.owner, id)
 	if err != nil {
 		return b.proofFailure(ctx, in.owner, err)
@@ -35,7 +58,13 @@ func (b *Bot) showPaymentInstructions(ctx context.Context, in incoming, id strin
 	if err != nil {
 		return "", err
 	}
-	if err = b.deliverOrderCard(ctx, in.owner, paymentCardPrefix+id, payload); err != nil {
+	if opening {
+		if err = b.bindPaymentSource(ctx, in.owner, id, source); err != nil {
+			return "", err
+		}
+	}
+	check := func() error { return b.checkPaymentDelivery(ctx, in.owner, event, info, source) }
+	if err = b.deliverOrderCardChecked(ctx, in.owner, paymentCardPrefix+id, payload, check); err != nil {
 		return "", err
 	}
 	return i18n.Translate(info.Language, i18n.PaymentShown, nil)
@@ -176,7 +205,15 @@ func (b *Bot) refreshPaymentInstructions(
 		return nil
 	}
 	active[key] = true
-	_, err := b.showPaymentInstructions(ctx, incoming{owner: owner, chat: chat}, order.ID)
+	if !opened {
+		_, err := b.showPaymentInstructions(ctx, incoming{owner: owner, chat: chat}, order.ID)
+		return err
+	}
+	source, err := b.paymentSource(ctx, owner, order.ID)
+	if err != nil {
+		return err
+	}
+	_, err = b.paymentInstructionsWithSource(ctx, incoming{owner: owner, chat: chat}, order.ID, source, false)
 	return err
 }
 

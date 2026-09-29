@@ -6,14 +6,18 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
-
-	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
+// Sender contains only fields written by an accepted account metadata refresh.
+type Sender struct {
+	ID                                       int64
+	Username, FirstName, LastName, PrintName string
+}
+
 // Telegram records the accepted, ordered Telegram sender refresh in its transaction.
-func Telegram(ctx context.Context, tx pgx.Tx, owner string, sender telegram.User, printName string) error {
+func Telegram(ctx context.Context, tx pgx.Tx, owner string, sender Sender) error {
 	fields := map[string]any{"user_id": sender.ID, "username": sender.Username,
-		"first_name": sender.FirstName, "last_name": sender.LastName, "print_name": printName}
+		"first_name": sender.FirstName, "last_name": sender.LastName, "print_name": sender.PrintName}
 	return write(ctx, tx, owner, fields)
 }
 

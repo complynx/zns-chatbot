@@ -8,10 +8,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/destination"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
 )
 
-type Service struct{ DB *pgxpool.Pool }
+type Service struct {
+	Intake                RegistrationIntakeResolver
+	RegistrationRetention time.Duration
+	AnnouncementBindings  *destination.Bindings
+	DB                    *pgxpool.Pool
+	Delivery              delivery.Settings
+}
 
 type Booking struct {
 	Event            string              `json:"event"`
@@ -79,10 +87,15 @@ type event struct {
 }
 
 type snapshot struct {
-	event    event
-	bookings map[string]*Booking
-	dirty    map[string]bool
-	now      time.Time
+	registrationRanks         map[string]int64
+	unfinishedRegistrations   map[string]bool
+	announcementBindings      *destination.Bindings
+	notificationRegistrations []delivery.Registration
+	deliveryBotID             int64
+	event                     event
+	bookings                  map[string]*Booking
+	dirty                     map[string]bool
+	now                       time.Time
 }
 
 func conflict(code string) error { return &core.ProblemError{Status: http.StatusConflict, Code: code} }

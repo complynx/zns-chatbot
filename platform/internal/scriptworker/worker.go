@@ -12,6 +12,8 @@ import (
 
 	"github.com/grafana/sobek"
 	"github.com/grafana/sobek/parser"
+
+	"github.com/complynx/zns-chatbot/platform/internal/scriptprotocol"
 )
 
 const (
@@ -20,8 +22,8 @@ const (
 	MaxOutputBytes   = 64 * 1024
 	MaxResponseBytes = MaxOutputBytes + 64
 	MaxRequestBytes  = 256 * 1024
-	Timeout          = 200 * time.Millisecond
-	ProcessTimeout   = 2 * time.Second
+	Timeout          = scriptprotocol.ActiveTime
+	ProcessTimeout   = scriptprotocol.EvaluateProcessTimeout
 )
 
 var (

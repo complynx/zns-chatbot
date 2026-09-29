@@ -16,7 +16,10 @@ func TestQAComposedHistoryDraftAfterDeletion(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	archive := conversation.Service{DB: f.db}
-	require.NoError(t, archive.Append(t.Context(), "alice", "qa-derived-choice", "user", "orchid_private_deleted"))
+	require.NoError(
+		t,
+		archive.AppendOriginal(t.Context(), "alice", "qa-derived-choice", "user", "orchid_private_deleted"),
+	)
 	var eventID int64
 	require.NoError(
 		t,

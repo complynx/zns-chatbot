@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
-	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/scriptprotocol"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptworker"
@@ -18,7 +17,7 @@ import (
 
 type Service struct {
 	executable string
-	busy       chan struct{}
+	sessions   lifecycle
 }
 
 func New(executable string) (*Service, error) {
@@ -28,7 +27,7 @@ func New(executable string) (*Service, error) {
 	if _, err := exec.LookPath(executable); err != nil {
 		return nil, errors.New("script executable unavailable")
 	}
-	return &Service{executable: executable, busy: make(chan struct{}, 1)}, nil
+	return &Service{executable: executable}, nil
 }
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -37,13 +36,13 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	select {
-	case s.busy <- struct{}{}:
-		defer func() { <-s.busy }()
-	default:
+	ctx, finish, admitted := s.sessions.begin(r.Context())
+	if !admitted {
 		http.Error(w, "busy", http.StatusServiceUnavailable)
 		return
 	}
+	defer finish()
+	r = r.WithContext(ctx)
 	if rpc {
 		s.execute(w, r)
 		return
@@ -55,7 +54,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// The parent deadline is independent of the child watchdog and kills/reaps
 	// even if the VM or child runtime stops responding.
-	ctx, cancel := context.WithTimeout(r.Context(), scriptworker.ProcessTimeout+time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), scriptprotocol.EvaluateHostTimeout)
 	defer cancel()
 	//nolint:gosec // Fixed operator-owned absolute helper; request supplies stdin only, never executable or arguments.
 	command := exec.CommandContext(ctx, s.executable)
@@ -64,7 +63,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	output := &limitedOutput{}
 	command.Stdout = output
 	command.Stderr = io.Discard
-	command.WaitDelay = time.Second
+	command.WaitDelay = scriptprotocol.ProcessWaitDelay
 	if err = command.Run(); err != nil || output.overflow {
 		http.Error(w, "script process failed", http.StatusBadGateway)
 		return
@@ -86,10 +85,18 @@ func (s *Service) execute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer connection.Close()
-	ctx, cancel := context.WithTimeout(r.Context(), scriptworker.ExecuteProcessTimeout+time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), scriptprotocol.ExecuteTransportTimeout)
 	defer cancel()
-	stop := context.AfterFunc(ctx, func() { _ = connection.Close() })
-	defer stop()
+	closed := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		defer close(closed)
+		_ = connection.Close()
+	})
+	defer func() {
+		if !stop() {
+			<-closed
+		}
+	}()
 	deadline, _ := ctx.Deadline()
 	if connection.SetDeadline(deadline) != nil {
 		return
@@ -99,7 +106,7 @@ func (s *Service) execute(w http.ResponseWriter, r *http.Request) {
 	command.Env = []string{}
 	command.Stdout = &scriptprotocol.Writer{Output: connection, Remaining: scriptprotocol.MaxTraffic}
 	command.Stderr = io.Discard
-	command.WaitDelay = time.Second
+	command.WaitDelay = scriptprotocol.ProcessWaitDelay
 	input, err := command.StdinPipe()
 	if err != nil {
 		return

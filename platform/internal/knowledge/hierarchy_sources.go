@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // ExecuteWithSources is host-only. Source keys come from archived host requests,
@@ -17,7 +18,7 @@ func (s Service) ExecuteWithSources(ctx context.Context, actor string, c Command
 	keys = slices.Clone(keys)
 	slices.Sort(keys)
 	keys = slices.Compact(keys)
-	return s.execute(ctx, actor, c, false, keys)
+	return s.execute(ctx, actor, c, false, keys, nil)
 }
 
 func memoryCommandBytes(c Command, keys []string) ([]byte, error) {
@@ -156,6 +157,15 @@ func bindMemorySources(ctx context.Context, tx pgx.Tx, actor string, result Resu
 // MemorySources returns only the reader's own archived source evidence. A
 // shared fact never makes its author's private conversation publicly readable.
 func (s Service) MemorySources(ctx context.Context, actor, reference string) (conversation.Page, error) {
+	if _, err := s.ReadMemoryRevisionPage(ctx, actor, reference, ""); err != nil {
+		if problem, ok := errors.AsType[*core.ProblemError](
+			err,
+		); ok && problem.Status == 404 &&
+			problem.Code == "knowledge_not_found" {
+			return (conversation.Service{DB: s.DB}).ReadSelected(ctx, actor, []int64{})
+		}
+		return conversation.Page{}, err
+	}
 	ref, err := decodeMemoryReference(reference)
 	if err != nil {
 		return conversation.Page{}, err
@@ -172,7 +182,7 @@ func (s Service) MemorySources(ctx context.Context, actor, reference string) (co
 	if ref.Namespace == MemoryPrivate {
 		owner = actor
 	}
-	rows, err := s.DB.Query(ctx, `SELECT e.id,e.kind,e.text,'{}'::jsonb,e.omitted,e.created_at
+	rows, err := s.DB.Query(ctx, `SELECT e.id
  FROM core.memory_sources s JOIN core.conversation_events e ON e.id=s.event_id AND e.owner=s.source_owner
  WHERE s.namespace=$1 AND s.owner=$2 AND s.scope=$3 AND s.topic=$4 AND s.item_key=$5 AND s.source_kind=$6 AND s.version=$7 AND s.source_owner=$8
  ORDER BY e.id LIMIT $9`, ref.Namespace, owner, ref.Event, ref.Topic, ref.Key, ref.SourceKind, ref.Version, actor, conversation.MaxPage)
@@ -180,18 +190,30 @@ func (s Service) MemorySources(ctx context.Context, actor, reference string) (co
 		return conversation.Page{}, err
 	}
 	defer rows.Close()
-	result := conversation.Page{Events: []conversation.Event{}}
+	ids := []int64{}
 	for rows.Next() {
-		var event conversation.Event
-		if err = rows.Scan(&event.ID, &event.Kind, &event.Text, &event.Details, &event.Omitted, &event.At); err != nil {
-			return result, err
+		var id int64
+		if err = rows.Scan(&id); err != nil {
+			return conversation.Page{}, err
 		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return conversation.Page{}, err
+	}
+	result, err := (conversation.Service{DB: s.DB}).ReadSelected(ctx, actor, ids)
+	if err != nil {
+		return result, err
+	}
+	for i := range result.Events {
+		event := &result.Events[i]
 		excerpt := memoryExcerpt(event.Text)
 		event.Omitted = event.Omitted || excerpt != event.Text
 		event.Text = excerpt
-		result.Events = append(result.Events, event)
 	}
-	return result, rows.Err()
+	return result, nil
 }
 
 // AttachMemorySources completes host provenance after privacy-aware archival.

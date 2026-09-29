@@ -49,33 +49,37 @@ const exportProjection = `SELECT jsonb_build_array(u.telegram_id::text,u.usernam
  ) rejected ON true
  WHERE b.state<>'cancelled'`
 
-// Export returns a consistent authorized snapshot of all current pass events.
-func (s Service) Export(ctx context.Context, actor string) ([]byte, error) {
+// ExportSnapshot returns a consistent file and the complete event authority set.
+func (s Service) ExportSnapshot(ctx context.Context, actor string) (ExportSnapshot, error) {
 	tx, err := s.DB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return nil, err
+		return ExportSnapshot{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var allowed bool
 	if err = tx.QueryRow(ctx, exportEvents+`SELECT EXISTS(SELECT 1 FROM allowed_events)`, actor).
 		Scan(&allowed); err != nil {
-		return nil, err
+		return ExportSnapshot{}, err
 	}
 	if !allowed {
-		return nil, forbidden()
+		return ExportSnapshot{}, forbidden()
+	}
+	events, err := exportSnapshotEvents(ctx, tx, actor)
+	if err != nil {
+		return ExportSnapshot{}, err
 	}
 	var count, size int64
 	err = tx.QueryRow(ctx, exportEvents+`, export_rows AS (`+exportProjection+`)
  SELECT count(*),COALESCE(sum(octet_length(cells::text)),0) FROM export_rows`, actor).Scan(&count, &size)
 	if err != nil {
-		return nil, err
+		return ExportSnapshot{}, err
 	}
 	if count > maxExportRows || size > maxExportInputBytes {
-		return nil, exportTooLarge()
+		return ExportSnapshot{}, exportTooLarge()
 	}
 	rows, err := tx.Query(ctx, exportEvents+exportProjection+` ORDER BY b.event_id,b.created_at,u.telegram_id`, actor)
 	if err != nil {
-		return nil, err
+		return ExportSnapshot{}, err
 	}
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) ([]any, error) {
 		var cells []any
@@ -83,12 +87,13 @@ func (s Service) Export(ctx context.Context, actor string) ([]byte, error) {
 		return cells, scanErr
 	})
 	if err != nil {
-		return nil, err
+		return ExportSnapshot{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return nil, err
+		return ExportSnapshot{}, err
 	}
-	return renderPassExport(ctx, list)
+	body, err := renderPassExport(ctx, list)
+	return ExportSnapshot{Body: body, Events: events}, err
 }
 
 func exportTooLarge() error {

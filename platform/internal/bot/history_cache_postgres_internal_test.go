@@ -2,23 +2,30 @@ package bot
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
 func TestHistoryCachePostgresDeletionAndCompletion(t *testing.T) {
 	t.Parallel()
 	db := foodPendingDatabase(t)
 	archive := conversation.Service{DB: db}
-	require.NoError(t, archive.Append(t.Context(), "alice", "cache-proof", "user", "private history canary"))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "cache-proof", "user", "private history canary"))
 	var eventID int64
 	require.NoError(
 		t,
@@ -29,6 +36,8 @@ func TestHistoryCachePostgresDeletionAndCompletion(t *testing.T) {
 	completionStarted := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/internal/history/authority":
+			historyAuthorityFixture(w, r, archive)
 		case "/v1/me/history/generation":
 			generation, err := archive.Generation(r.Context(), "alice")
 			if err != nil {
@@ -51,23 +60,36 @@ func TestHistoryCachePostgresDeletionAndCompletion(t *testing.T) {
 	t.Cleanup(server.Close)
 	b := Bot{
 		DB: db,
-		API: APIClient{
+		API: appclient.Client{
 			Base:     server.URL,
 			Exchange: &authExchange{},
-			Links:    authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}},
+			Links: authLinks{
+				user: identity.User{Owner: "alice", Subject: "z-alice"},
+			},
+			SandboxToken: (identity.Signer{}).Token,
 		},
 	}
+	b.Host = appclient.Host{Base: server.URL, UserToken: b.API.UserToken}
 	ctx, owner, err := b.API.AuthenticateTelegram(t.Context(), 101)
 	require.NoError(t, err)
-	index, err := b.reserveScript(ctx, owner, 701, agent.ScriptProposal{Code: "return 'private history canary';"}, 0)
+	index, err := b.scriptHost().Store.ReserveRun(
+		ctx,
+		owner,
+		701,
+		agent.ScriptProposal{Code: "return 'private history canary';"},
+		0,
+		nil,
+		[]readsource.Authority{},
+		false,
+	)
 	require.NoError(t, err)
-	call := scriptToolRecord{
+	call := agenthost.ScriptToolRecord{
 		Outcome: agent.ScriptToolResult{
 			Name:   scriptHistoryRead,
 			Result: json.RawMessage(`{"text":"private history canary"}`),
 		},
 	}
-	_, err = b.reserveScriptTool(ctx, owner, 701, index, &call)
+	_, err = b.scriptHost().Store.AdmitCall(ctx, owner, 701, index, &call)
 	require.NoError(t, err)
 	pages := []conversation.Page{
 		{Generation: 0, Events: []conversation.Event{{ID: eventID, Text: "private history canary"}}},
@@ -79,7 +101,9 @@ func TestHistoryCachePostgresDeletionAndCompletion(t *testing.T) {
 		pages,
 	)
 	require.NoError(t, err)
-	older := []scriptRecord{{Run: agent.ScriptRun{Result: json.RawMessage(`{"derived":"private history canary"}`)}}}
+	older := []agenthost.ScriptRecord{
+		{Run: agent.ScriptRun{Result: json.RawMessage(`{"derived":"private history canary"}`)}},
+	}
 	_, err = db.Exec(
 		ctx,
 		`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES($1,699,'script_runs',$2)`,
@@ -87,17 +111,25 @@ func TestHistoryCachePostgresDeletionAndCompletion(t *testing.T) {
 		older,
 	)
 	require.NoError(t, err)
-	plan := cachedPlan{Plan: agent.Plan{Text: "private history canary"}}
-	_, err = db.Exec(ctx, `INSERT INTO bot.replies(update_id,plan) VALUES(702,$1)`, plan)
+	plan := interaction.SavedPlan{FormatVersion: interaction.CurrentFormatVersion,
+		Kind:  interaction.DerivedPlan,
+		State: interaction.Ready,
+		Plan:  agent.Plan{Text: "private history canary"},
+		PassAuthority: &interaction.PlanAuthority{
+			Reads:           []interaction.PassContextDependency{},
+			ReadAuthorities: []readsource.Authority{},
+		},
+	}
+	_, err = (interaction.Store{DB: db}).SaveWinner(ctx, owner, 702, plan)
 	require.NoError(t, err)
 	barrier, err := db.Begin(ctx)
 	require.NoError(t, err)
 	defer func() { _ = barrier.Rollback(ctx) }()
-	require.NoError(t, scriptLock(ctx, barrier, owner, 701))
+	require.NoError(t, agenthost.LockScript(ctx, barrier, owner, 701))
 	finishing.Store(true)
 	completed := make(chan error, 1)
 	go func() {
-		_, finishErr := b.finishScript(
+		_, finishErr := b.scriptHost().Store.CompleteRun(
 			ctx,
 			owner,
 			701,
@@ -113,12 +145,12 @@ func TestHistoryCachePostgresDeletionAndCompletion(t *testing.T) {
 	}
 	require.NoError(t, archive.DeleteContent(ctx, owner, eventID))
 	require.NoError(t, barrier.Commit(ctx))
-	require.NoError(t, <-completed)
-	records, err := b.scriptRecords(ctx, owner, 701)
+	require.ErrorIs(t, <-completed, appclient.ErrReadStale)
+	records, err := b.scriptHost().Store.Records(ctx, owner, 701)
 	require.NoError(t, err)
 	require.True(t, records[0].HistoryRedacted)
 	// A late tool completion must not restore its raw payload after reconciliation.
-	require.NoError(t, b.finishScriptTool(ctx, owner, 701, index, 0, call))
+	require.ErrorIs(t, b.scriptHost().Store.CompleteCall(ctx, owner, 701, index, 0, call), appclient.ErrReadStale)
 	var count int
 	require.NoError(
 		t,
@@ -126,18 +158,39 @@ func TestHistoryCachePostgresDeletionAndCompletion(t *testing.T) {
 			Scan(&count),
 	)
 	require.Zero(t, count)
-	loaded, err := b.historyReads(ctx, owner, 700)
+	loaded, err := b.readStore().History(ctx, owner, 700)
 	require.NoError(t, err)
 	require.Equal(t, historyDeleted, loaded[0].Error)
 	require.Empty(t, loaded[0].Events)
 	_, err = b.planForUpdate(ctx, incoming{owner: owner}, 702)
-	require.ErrorIs(t, err, errScriptReadStale)
-	var stored cachedPlan
-	require.NoError(t, db.QueryRow(ctx, `SELECT plan FROM bot.replies WHERE update_id=702`).Scan(&stored))
-	require.True(t, stored.HistoryRedacted)
+	require.ErrorIs(t, err, appclient.ErrReadStale)
+	stored, err := (interaction.Store{DB: db}).Load(ctx, owner, 702)
+	require.NoError(t, err)
+	require.Equal(t, interaction.HistoryDeleted, stored.TerminalReason)
 	require.Empty(t, stored.Plan.Text)
 	_, err = b.planForUpdate(ctx, incoming{owner: owner}, 702)
-	require.ErrorIs(t, err, errScriptReadStale)
+	require.ErrorIs(t, err, appclient.ErrReadStale)
 	_, err = b.executePlan(ctx, incoming{owner: owner}, 702, plan)
-	require.ErrorIs(t, err, errScriptReadStale)
+	require.ErrorIs(t, err, appclient.ErrReadStale)
+}
+
+func historyAuthorityFixture(w http.ResponseWriter, r *http.Request, archive conversation.Service) {
+	var input struct {
+		ReadAuthorities []readsource.Authority `json:"read_authorities"`
+	}
+	if json.NewDecoder(r.Body).Decode(&input) != nil {
+		http.Error(w, "invalid authority", http.StatusBadRequest)
+		return
+	}
+	err := archive.CheckReadAuthorities(r.Context(), "alice", input.ReadAuthorities)
+	if err != nil {
+		if problem, ok := errors.AsType[*core.ProblemError](err); ok {
+			w.WriteHeader(problem.Status)
+			_ = json.NewEncoder(w).Encode(map[string]string{"code": problem.Code})
+			return
+		}
+		http.Error(w, "authority unavailable", http.StatusInternalServerError)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }

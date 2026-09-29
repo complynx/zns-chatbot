@@ -55,15 +55,22 @@ func TestScriptReadPagesContinueWithoutSkipping(t *testing.T) {
 	)
 	require.NoError(t, err)
 	service := conversation.Service{DB: f.db}
-	require.NoError(t, service.Append(t.Context(), "alice", "older", "user", strings.Repeat("<", 5000)))
-	require.NoError(t, service.Append(t.Context(), "alice", "newer", "user", strings.Repeat(">", 5000)))
-	require.NoError(t, service.Append(t.Context(), "bob", "private", "user", "foreign private marker"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "alice", "older", "user", strings.Repeat("<", 5000)))
+	require.NoError(t, service.AppendOriginal(t.Context(), "alice", "newer", "user", strings.Repeat(">", 5000)))
+	require.NoError(t, service.AppendOriginal(t.Context(), "bob", "private", "user", "foreign private marker"))
 	runScriptReads(
 		t,
 		f,
 		hostScriptFunc(
 			func(ctx context.Context, tools []scriptclient.Tool, callback scriptclient.Callback) (json.RawMessage, error) {
-				require.Len(t, tools, 60)
+				require.Len(t, tools, 61)
+				names := make([]string, 0, len(tools))
+				for _, tool := range tools {
+					names = append(names, tool.Name)
+				}
+				require.Contains(t, names, "passes.event.read")
+				require.NotContains(t, names, "passes.payments.accept")
+				require.NotContains(t, names, "passes.admin.queue")
 				for _, tool := range tools {
 					assert.Empty(t, tool.InputSchema)
 					assert.Empty(t, tool.Description)

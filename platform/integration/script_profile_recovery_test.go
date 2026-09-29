@@ -18,7 +18,8 @@ type profileLostReplyTransport struct{ lost bool }
 
 func (transport *profileLostReplyTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	response, err := http.DefaultTransport.RoundTrip(request)
-	if err == nil && request.Method == http.MethodPost && request.URL.Path == "/v1/me/pass-profile/actions" &&
+	if err == nil && request.Method == http.MethodPost &&
+		(request.URL.Path == "/v1/me/pass-profile/actions" || request.URL.Path == "/internal/derived/pass-profiles") &&
 		!transport.lost {
 		transport.lost = true
 		_ = response.Body.Close()
@@ -32,6 +33,7 @@ func TestScriptProfileLostWriteReadRecoveryAndTypedFollowup(t *testing.T) {
 	f := setup(t)
 	transport := &profileLostReplyTransport{}
 	f.b.API.HTTP = &http.Client{Transport: transport}
+	f.b.Host.HTTP = f.b.API.HTTP
 	f.b.Scripts = scopeVM{}
 	model := &knowledgeModel{plans: []agent.Plan{
 		{
@@ -51,6 +53,7 @@ func TestScriptProfileLostWriteReadRecoveryAndTypedFollowup(t *testing.T) {
 	update := message(9830, 101, "Save my legal name Private Recovery Name and dance role follower")
 	handle(t, f.b, update)
 	handle(t, f.b, update)
+	require.True(t, transport.lost, "lost-response fault must fire on the profile mutation")
 	require.Len(t, model.inputs, 2)
 	assert.EqualValues(t, 1, model.inputs[1].Profile.Version)
 	calls := model.inputs[1].Script.Runs[0].Calls

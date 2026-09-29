@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
@@ -26,23 +27,23 @@ func TestHistoryResponseLimitFallbackIsExact(t *testing.T) {
 		fail     bool
 	}{
 		{"ordinary", `[]`, http.StatusOK, false, false},
-		{"exact_limit", `[]` + strings.Repeat(" ", maxAPIBytes-2), http.StatusOK, false, false},
-		{"over_limit", `[]` + strings.Repeat(" ", maxAPIBytes-1), http.StatusOK, true, false},
-		{"oversized_truncated", `[` + strings.Repeat(" ", maxAPIBytes), http.StatusOK, true, false},
-		{"oversized_string_prefix", `[{"order_id":"` + strings.Repeat("x", maxAPIBytes), http.StatusOK, true, false},
-		{"oversized_malformed_prefix", `[{broken}]` + strings.Repeat(" ", maxAPIBytes), http.StatusOK, false, true},
-		{"oversized_invalid_escape", `["\q` + strings.Repeat(" ", maxAPIBytes), http.StatusOK, false, true},
-		{"oversized_trailing_malformed", `[]broken` + strings.Repeat(" ", maxAPIBytes), http.StatusOK, false, true},
-		{"oversized_extra_value", `[][]` + strings.Repeat(" ", maxAPIBytes), http.StatusOK, false, true},
-		{"oversized_extra_incomplete", `[][` + strings.Repeat(" ", maxAPIBytes), http.StatusOK, false, true},
-		{"oversized_wrong_type", `true` + strings.Repeat(" ", maxAPIBytes), http.StatusOK, false, true},
-		{"exact_limit_truncated", `[` + strings.Repeat(" ", maxAPIBytes-1), http.StatusOK, false, true},
+		{"exact_limit", `[]` + strings.Repeat(" ", appclient.MaxAPIBytes-2), http.StatusOK, false, false},
+		{"over_limit", `[]` + strings.Repeat(" ", appclient.MaxAPIBytes-1), http.StatusOK, true, false},
+		{"oversized_truncated", `[` + strings.Repeat(" ", appclient.MaxAPIBytes), http.StatusOK, true, false},
+		{"oversized_string_prefix", `[{"order_id":"` + strings.Repeat("x", appclient.MaxAPIBytes), http.StatusOK, true, false},
+		{"oversized_malformed_prefix", `[{broken}]` + strings.Repeat(" ", appclient.MaxAPIBytes), http.StatusOK, false, true},
+		{"oversized_invalid_escape", `["\q` + strings.Repeat(" ", appclient.MaxAPIBytes), http.StatusOK, false, true},
+		{"oversized_trailing_malformed", `[]broken` + strings.Repeat(" ", appclient.MaxAPIBytes), http.StatusOK, false, true},
+		{"oversized_extra_value", `[][]` + strings.Repeat(" ", appclient.MaxAPIBytes), http.StatusOK, false, true},
+		{"oversized_extra_incomplete", `[][` + strings.Repeat(" ", appclient.MaxAPIBytes), http.StatusOK, false, true},
+		{"oversized_wrong_type", `true` + strings.Repeat(" ", appclient.MaxAPIBytes), http.StatusOK, false, true},
+		{"exact_limit_truncated", `[` + strings.Repeat(" ", appclient.MaxAPIBytes-1), http.StatusOK, false, true},
 		{"truncated", `[`, http.StatusOK, false, true},
 		{"malformed", `[{broken}]`, http.StatusOK, false, true},
 		{"trailing_malformed", `[]broken`, http.StatusOK, false, true},
 		{"extra_value", `[][]`, http.StatusOK, false, true},
 		{"denied", `{"code":"access_denied"}`, http.StatusForbidden, false, true},
-		{"oversized_denied", strings.Repeat("x", maxAPIBytes+1), http.StatusUnauthorized, false, true},
+		{"oversized_denied", strings.Repeat("x", appclient.MaxAPIBytes+1), http.StatusUnauthorized, false, true},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			t.Parallel()
@@ -59,8 +60,14 @@ func TestHistoryResponseLimitFallbackIsExact(t *testing.T) {
 				assert.NoError(t, err)
 			}))
 			t.Cleanup(server.Close)
-			client := APIClient{Base: server.URL, Exchange: &authExchange{},
-				Links: authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}}}
+			client := appclient.Client{
+				Base:     server.URL,
+				Exchange: &authExchange{},
+				Links: authLinks{
+					user: identity.User{Owner: "alice", Subject: "z-alice"},
+				},
+				SandboxToken: (identity.Signer{}).Token,
+			}
 			ctx, owner, err := client.AuthenticateTelegram(t.Context(), 101)
 			require.NoError(t, err)
 			_, err = client.OrderHistory(ctx, owner, "event")
@@ -88,8 +95,13 @@ func (transport *historyUnavailableTransport) RoundTrip(*http.Request) (*http.Re
 func TestHistoryTransportDoesNotRetryUnavailableOrUntrustedIdentity(t *testing.T) {
 	t.Parallel()
 	transport := &historyUnavailableTransport{}
-	client := APIClient{Base: "https://synthetic.invalid", HTTP: &http.Client{Transport: transport},
-		Exchange: &authExchange{}, Links: authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}}}
+	client := appclient.Client{
+		Base:         "https://synthetic.invalid",
+		HTTP:         &http.Client{Transport: transport},
+		Exchange:     &authExchange{},
+		Links:        authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}},
+		SandboxToken: (identity.Signer{}).Token,
+	}
 	ctx, owner, err := client.AuthenticateTelegram(t.Context(), 101)
 	require.NoError(t, err)
 	_, err = client.OrderHistory(ctx, owner, "event")
@@ -106,7 +118,7 @@ type historyBoundProbeBody struct {
 }
 
 func (body *historyBoundProbeBody) Read(target []byte) (int, error) {
-	if body.read >= maxAPIBytes+1 {
+	if body.read >= appclient.MaxAPIBytes+1 {
 		return 0, errors.New("synthetic read exceeded bounded prefix")
 	}
 	for index := range target {
@@ -137,13 +149,17 @@ func (transport historyBoundProbeTransport) RoundTrip(request *http.Request) (*h
 func TestHistoryTransportBoundsTheObservedPrefix(t *testing.T) {
 	t.Parallel()
 	body := &historyBoundProbeBody{}
-	client := APIClient{Base: "https://synthetic.invalid",
-		HTTP:     &http.Client{Transport: historyBoundProbeTransport{body: body}},
-		Exchange: &authExchange{}, Links: authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}}}
+	client := appclient.Client{
+		Base:         "https://synthetic.invalid",
+		HTTP:         &http.Client{Transport: historyBoundProbeTransport{body: body}},
+		Exchange:     &authExchange{},
+		Links:        authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}},
+		SandboxToken: (identity.Signer{}).Token,
+	}
 	ctx, owner, err := client.AuthenticateTelegram(t.Context(), 101)
 	require.NoError(t, err)
 	_, err = client.OrderHistory(ctx, owner, "event")
 	require.NoError(t, err)
-	assert.Equal(t, maxAPIBytes+1, body.read)
+	assert.Equal(t, appclient.MaxAPIBytes+1, body.read)
 	assert.True(t, body.closed)
 }

@@ -23,7 +23,8 @@ func (s Service) RetrievePage(ctx context.Context, actor string, q Query) (FactP
 	if len(page.Facts) > 0 {
 		page.NextCursor = CursorAfter(page.Facts[len(page.Facts)-1])
 	}
-	return page, nil
+	page.Facts, err = s.authorizeFacts(ctx, actor, page.Facts)
+	return page, err
 }
 
 func CursorAfter(fact Fact) string {

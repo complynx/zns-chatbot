@@ -6,12 +6,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/media"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -22,13 +21,14 @@ func foodBotFixture(t *testing.T) (*fixture, legacyfood.Service) {
 	f := setup(t)
 	server := httptest.NewServer(
 		api.Handler(
-			runtimeapp.NewServices(f.db, runtimeapp.Options{LegacyOrderBotID: 77}),
-			f.b.API.Signer,
+			notificationFixtureServices(f.db, appservices.Options{LegacyOrderBotID: 77}),
+			f.b.Host.Signer,
 			slog.New(slog.DiscardHandler),
 		),
 	)
 	t.Cleanup(server.Close)
 	f.b.API.Base = server.URL
+	f.b.Host.Base = f.b.API.Base
 	_, err := f.db.Exec(t.Context(), `INSERT INTO core.pass_events(id,finishes_at) VALUES('food-bot','2035-01-01Z');
  INSERT INTO core.food_events(event_id,bot_id,menu,menu_sha256,meal_prices,activity_prices,deadline,cacao_capacity,first_before,last_before,notify_after)
  VALUES('food-bot',77,'{"friday":{"lunch":[{"title_ru":"Суп","title_en":"Soup","price":185}]}}',repeat('a',64),
@@ -36,7 +36,7 @@ func foodBotFixture(t *testing.T) (*fixture, legacyfood.Service) {
  '2035-01-01Z',38,'7 days','1 day','1 hour');
  INSERT INTO core.food_admins(event_id,owner,can_export,can_review,can_assign) VALUES('food-bot','bob',true,true,true)`)
 	require.NoError(t, err)
-	return f, legacyfood.Service{DB: f.db, BotID: 77}
+	return f, legacyfood.Service{DB: f.db, BotID: 77, Delivery: syntheticDeliverySettings()}
 }
 
 func TestFoodBotReceiptExplicitTargetReplayAndCurrentReviewer(t *testing.T) {
@@ -110,6 +110,12 @@ func TestFoodBotReceiptExplicitTargetReplayAndCurrentReviewer(t *testing.T) {
 	review.Callback.From.ID = 202
 	review.Callback.Message.Chat.ID = 202
 	handle(t, f.b, review)
+	handle(t, f.b, review)
+	var notices int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.delivery_intents i
+JOIN core.delivery_queue q ON q.bot_id=i.bot_id AND q.owner_kind='bot' AND q.owner_key=i.operation_key AND q.effect_key=i.effect_key
+WHERE i.owner='bob' AND i.reference->>'update'='8002' AND i.reference->>'kind'='result'`).Scan(&notices))
+	assert.Equal(t, 1, notices, "replayed denial must retain one queued result")
 	view, err = service.View(t.Context(), "alice", "food-bot", order.ID)
 	require.NoError(t, err)
 	assert.Equal(t, legacyfood.Submitted, view.Order.ActivityPayment.Status)

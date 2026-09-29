@@ -12,11 +12,16 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-func (b *Bot) executeMediaPlan(ctx context.Context, in incoming, cached cachedPlan) error {
+func (b *Bot) executeMediaPlan(ctx context.Context, in incoming, updateID int64, cached interaction.SavedPlan) error {
+	if err := b.planAuthorization().ValidatePlan(ctx, in.owner, updateID, cached); err != nil {
+		return err
+	}
 	id := cached.MediaID
 	proposal := cached.Plan.MediaAction
 	if proposal != nil {
@@ -63,17 +68,7 @@ func (b *Bot) executeMediaPlan(ctx context.Context, in incoming, cached cachedPl
 	if proposal != nil {
 		action = proposal.Intent
 	}
-	_, err = b.DB.Exec(
-		ctx,
-		`UPDATE bot.media_intake SET status=$3,notice=$4,model_text=$5,last_action=$6,last_origin='agent'
-WHERE owner=$1 AND id=$2 AND status<>'done' AND command IS NULL AND registration_command IS NULL AND food_command IS NULL`,
-		in.owner,
-		id,
-		status,
-		string(notice),
-		cached.Plan.Text,
-		action,
-	)
+	err = b.storeMediaModelReply(ctx, in.owner, id, status, string(notice), cached.Plan.Text, action, updateID)
 	if err != nil {
 		return err
 	}
@@ -147,9 +142,18 @@ func registrationNamed(candidate agent.MediaCandidate, text string) bool {
 	return false
 }
 
-func (b *Bot) selectMediaReceipt(ctx context.Context, in incoming, item mediaIntake, cached cachedPlan) (bool, error) {
+func (b *Bot) selectMediaReceipt(
+	ctx context.Context,
+	in incoming,
+	item mediaIntake,
+	cached interaction.SavedPlan,
+) (bool, error) {
+	source, err := savedPlanSource(cached)
+	if err != nil {
+		return true, err
+	}
 	if target := cached.MediaResolvedFood; target != nil {
-		return true, b.chooseAgentFoodReceipt(ctx, in, item.ID, *target)
+		return true, b.chooseAgentFoodReceipt(ctx, in, item.ID, *target, source)
 	}
 	if cached.Plan.MediaAction.FoodKind != "" {
 		return false, nil
@@ -167,9 +171,9 @@ func (b *Bot) selectMediaReceipt(ctx context.Context, in incoming, item mediaInt
 		return false, nil
 	}
 	if candidate.RegistrationEvent != "" {
-		return true, b.chooseRegistrationReceipt(ctx, in, item, *candidate, originAgent)
+		return true, b.chooseRegistrationReceiptWithSource(ctx, in, item, *candidate, originAgent, &source)
 	}
-	return true, b.chooseMediaReceipt(ctx, in, item, *candidate, originAgent)
+	return true, b.chooseMediaReceiptWithSource(ctx, in, item, *candidate, originAgent, &source)
 }
 
 func mediaCandidateByID(candidates []agent.MediaCandidate, id string) *agent.MediaCandidate {
@@ -204,6 +208,18 @@ func (b *Bot) chooseMediaReceipt(
 	candidate agent.MediaCandidate,
 	origin string,
 ) error {
+	return b.chooseMediaReceiptWithSource(ctx, in, item, candidate, origin, nil)
+}
+
+func (b *Bot) chooseMediaReceiptWithSource(ctx context.Context, in incoming, item mediaIntake,
+	candidate agent.MediaCandidate, origin string, source *readsource.Derivation) error {
+	boundSource, sourceErr := mediaCommandSource(origin, source)
+	if sourceErr != nil {
+		return sourceErr
+	}
+	if source != nil {
+		source = &boundSource
+	}
 	event, resolveErr := b.OrderEventForOrder(ctx, in.owner, candidate.OrderID)
 	if resolveErr != nil {
 		return b.mediaExecutionError(ctx, in, item, resolveErr)
@@ -211,9 +227,9 @@ func (b *Bot) chooseMediaReceipt(
 	command := orders.Command{Name: stateProof, EventID: event, OrderID: candidate.OrderID,
 		Version: candidate.Version, Origin: origin, Key: item.ID}
 	// First choice wins and is persisted before any external effect.
-	err := b.DB.QueryRow(ctx, `UPDATE bot.media_intake SET command=$3,last_action='select_order',last_origin=$4 WHERE owner=$1 AND id=$2
-AND command IS NULL AND registration_command IS NULL AND food_command IS NULL AND status<>'done' AND expires_at>now() RETURNING command`, in.owner, item.ID, command, origin).
-		Scan(&item.Command)
+	err := b.DB.QueryRow(ctx, `UPDATE bot.media_intake SET command=$3,last_action='select_order',last_origin=$4,command_source=$5 WHERE owner=$1 AND id=$2
+AND command IS NULL AND registration_command IS NULL AND food_command IS NULL AND status<>'done' AND expires_at>now() RETURNING command,command_source,last_origin`, in.owner, item.ID, command, origin, source).
+		Scan(&item.Command, &item.CommandSource, &item.CommandOrigin)
 	if errors.Is(err, pgx.ErrNoRows) {
 		item, err = b.loadMediaIntake(ctx, in.owner, item.ID)
 	}
@@ -227,6 +243,9 @@ AND command IS NULL AND registration_command IS NULL AND food_command IS NULL AN
 }
 
 func (b *Bot) commitMediaReceipt(ctx context.Context, in incoming, item mediaIntake) error {
+	if _, err := mediaCommandSource(item.CommandOrigin, item.CommandSource); err != nil {
+		return b.mediaExecutionError(ctx, in, item, err)
+	}
 	command := *item.Command
 	if command.ProofFile == "" {
 		proof, err := b.API.PromoteMedia(ctx, in.owner, item.AttachmentID)
@@ -246,7 +265,12 @@ func (b *Bot) commitMediaReceipt(ctx context.Context, in incoming, item mediaInt
 		}
 	}
 	item.Command = &command
-	_, err := b.API.ExecuteOrder(ctx, in.owner, command)
+	var err error
+	if item.CommandSource == nil {
+		_, err = b.API.ExecuteOrder(ctx, in.owner, command)
+	} else {
+		_, err = b.Host.ExecuteDerivedOrder(ctx, in.owner, command, *item.CommandSource)
+	}
 	if err != nil {
 		return b.mediaExecutionError(ctx, in, item, err)
 	}

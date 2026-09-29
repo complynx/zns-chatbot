@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
 const Meals = "meals"
@@ -18,8 +19,9 @@ const Paid = "paid"
 const Rejected = "rejected"
 
 type Service struct {
-	DB    *pgxpool.Pool
-	BotID int64
+	Delivery delivery.Settings
+	DB       *pgxpool.Pool
+	BotID    int64
 }
 
 type Event struct {

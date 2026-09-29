@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
 	"github.com/jackc/pgx/v5"
 
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 )
 
@@ -72,8 +73,8 @@ func (b *Bot) localizeWorkflowNotice(
 		return fallback, nil
 	}
 	var result struct {
-		Workflow *core.Workflow `json:"workflow"`
-		Error    string         `json:"error"`
+		Workflow *workflow.Workflow `json:"workflow"`
+		Error    string             `json:"error"`
 	}
 	if err = json.Unmarshal(raw, &result); err != nil {
 		return "", err

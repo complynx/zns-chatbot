@@ -10,12 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 )
@@ -48,7 +47,7 @@ func TestMassageAuthenticatedAPI(t *testing.T) {
 	db, _, _ := massageFixture(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("m", 32))}
 	server := httptest.NewServer(
-		api.Handler(runtimeapp.NewServices(db, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler)),
+		api.Handler(appservices.NewServices(db, appservices.Options{}), signer, slog.New(slog.DiscardHandler)),
 	)
 	defer server.Close()
 	const event = "?event=sandbox-festival"

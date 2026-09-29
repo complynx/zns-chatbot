@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"net/url"
+
 	"strconv"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
@@ -20,22 +23,16 @@ type scriptHistoryArguments struct {
 	Cursor  string `json:"cursor,omitempty"`
 }
 
-type scriptHistoryChunk struct {
-	conversation.TextChunk
-
-	NextCursor string `json:"next_cursor"`
-}
-
-func (b *Bot) historyReadEntry() scriptToolEntry {
-	return scriptToolEntry{
-		descriptor: scriptclient.Tool{
+func (b *Bot) historyReadEntry() agenthost.ScriptToolEntry {
+	return agenthost.ScriptToolEntry{
+		Descriptor: scriptclient.Tool{
 			Name:        scriptHistoryRead,
 			Description: "Read your archived event text in Unicode-safe chunks. Keep event_id unchanged and follow next_cursor while more is true. Concatenate text chunks. Omitted content cannot be recovered; stale means discard chunks and restart.",
 			InputSchema: json.RawMessage(
 				`{"type":"object","properties":{"event_id":{"type":"integer"},"cursor":{"type":"string"}},"required":["event_id"],"additionalProperties":false}`,
 			),
 		},
-		prepare: prepareScriptHistoryRead, execute: b.executeScriptHistoryRead, resultLimit: maxScriptReadBytes,
+		Prepare: prepareScriptHistoryRead, Execute: b.executeScriptHistoryRead, ResultLimit: maxScriptReadBytes,
 	}
 }
 
@@ -45,8 +42,8 @@ func prepareScriptHistoryRead(
 	_ int64,
 	call scriptclient.ToolCall,
 	_ agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	var args scriptHistoryArguments
 	if err := decodeScriptArguments(call.Arguments, &args); err != nil {
 		return record, err
@@ -61,7 +58,7 @@ func (b *Bot) executeScriptHistoryRead(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	_ scriptToolRecord,
+	_ agenthost.ScriptToolRecord,
 	_ *agent.Input,
 ) (any, error) {
 	var args scriptHistoryArguments
@@ -72,39 +69,32 @@ func (b *Bot) executeScriptHistoryRead(
 	if err != nil {
 		return nil, err
 	}
-	generation, err := b.API.historyGeneration(ctx, owner)
+	generation, err := b.API.HistoryGeneration(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
 	if args.Cursor != "" && cursor.Version != generation {
-		return nil, errScriptReadStale
+		return nil, appclient.ErrReadStale
 	}
-	query := url.Values{
-		"offset": {strconv.Itoa(cursor.Offset)},
-		"limit":  {strconv.Itoa(conversation.MaxChunkCharacters)},
-		"digest": {cursor.Digest},
-	}
-	var chunk conversation.TextChunk
-
-	err = b.API.call(
+	chunk, err := b.API.ConversationText(
 		ctx,
 		owner,
-		http.MethodGet,
-		"/v1/me/history/"+strconv.FormatInt(args.EventID, 10)+"/text?"+query.Encode(),
-		nil,
-		&chunk,
+		args.EventID,
+		cursor.Offset,
+		conversation.MaxChunkCharacters,
+		cursor.Digest,
 	)
 	if err != nil {
-		return nil, scriptDomainAPIError(err)
+		return nil, appclient.ReadError(err)
 	}
-	current, err := b.API.historyGeneration(ctx, owner)
+	current, err := b.API.HistoryGeneration(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
 	if current != generation || chunk.Generation != generation {
-		return nil, errScriptReadStale
+		return nil, appclient.ErrReadStale
 	}
-	result := scriptHistoryChunk{TextChunk: chunk}
+	result := agenthost.ScriptHistoryChunk{TextChunk: chunk}
 	if chunk.More {
 		cursor.Offset, cursor.Digest, cursor.Version = chunk.NextOffset, chunk.Digest, generation
 		result.NextCursor = encodeScriptCursor(cursor)

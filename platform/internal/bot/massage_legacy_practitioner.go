@@ -70,7 +70,7 @@ func (b *Bot) legacyPractitionerState(
 			return next, legacyInvalidCallback()
 		}
 		var booking massage.Reservation
-		err = b.API.call(
+		err = b.API.Call(
 			ctx,
 			owner,
 			http.MethodGet,
@@ -99,7 +99,7 @@ func (b *Bot) legacyNotificationCallback(ctx context.Context, owner, event, key,
 	}
 	var result massage.Preferences
 	command := massage.LegacyCommand{Event: event, Key: key, Choice: choice}
-	return b.API.call(ctx, owner, http.MethodPost, "/v1/massage/legacy-preferences", command, &result)
+	return b.API.Call(ctx, owner, http.MethodPost, "/v1/massage/legacy-preferences", command, &result)
 }
 
 func (b *Bot) legacyInstantCallback(ctx context.Context, owner, event, key, argument string) error {
@@ -112,7 +112,7 @@ func (b *Bot) legacyInstantCallback(ctx context.Context, owner, event, key, argu
 	}
 	var result massage.Reservation
 	command := massage.LegacyCommand{Event: event, Key: key, Length: length}
-	return b.API.call(ctx, owner, http.MethodPost, "/v1/massage/legacy-instant", command, &result)
+	return b.API.Call(ctx, owner, http.MethodPost, "/v1/massage/legacy-instant", command, &result)
 }
 
 func (b *Bot) legacyClientParty(ctx context.Context, owner, event, argument string) (string, error) {

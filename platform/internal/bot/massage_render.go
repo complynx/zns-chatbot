@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -104,6 +106,16 @@ func (b *Bot) RenderMassage(ctx context.Context, owner string, chat int64, notic
 	if err != nil {
 		return err
 	}
+	ctx = withBotCard(
+		ctx,
+		botdelivery.Reference{
+			Family:       botFamilyMassage,
+			CardKey:      botFamilyMassage,
+			Revision:     revision,
+			Notice:       notice,
+			Continuation: botdelivery.Continuation{Tokens: tokens},
+		},
+	)
 	if err = b.deliverMassageCard(
 		ctx,
 		owner,
@@ -111,39 +123,43 @@ func (b *Bot) RenderMassage(ctx context.Context, owner string, chat int64, notic
 	); err != nil {
 		return err
 	}
-	_, err = b.DB.Exec(ctx, `DELETE FROM bot.massage_buttons WHERE owner=$1 AND NOT(token=ANY($2))`, owner, tokens)
-	return err
+	return nil
 }
 
 func (b *Bot) deliverMassageCard(ctx context.Context, owner string, payload telegram.Send) error {
-	encoded, err := json.Marshal(payload)
+	hash, err := botCardHash(payload)
 	if err != nil {
 		return err
 	}
-	sum := sha256.Sum256(encoded)
-	hash := hex.EncodeToString(sum[:])
 	var previous string
-	if err = b.DB.QueryRow(ctx, `SELECT message_id,view_hash FROM bot.massage_views WHERE owner=$1`, owner).
+	if err = b.DB.QueryRow(ctx, "SELECT message_id,view_hash FROM bot.massage_views WHERE owner=$1", owner).
 		Scan(&payload.MessageID, &previous); err != nil {
 		return err
 	}
-	if previous == hash {
+	if payload.MessageID > 0 && previous == hash {
 		return nil
 	}
-	messageID, err := b.editOrSend(ctx, payload)
+	_, revision, err := b.massageState(ctx, owner)
 	if err != nil {
 		return err
 	}
-	_, err = b.DB.Exec(
+	ref := botdelivery.Reference{Family: botFamilyMassage, CardKey: botFamilyMassage, Revision: revision}
+	if selected, ok := ctx.Value(botCardContextKey{}).(botdelivery.Reference); ok {
+		ref = selected
+	}
+	return b.queueBotCard(
 		ctx,
-		`UPDATE bot.massage_views SET message_id=$2,view_hash=$3 WHERE owner=$1`,
 		owner,
-		messageID,
-		hash,
+		payload,
+		ref,
+		botdelivery.Continuation{
+			Kind:     "massage_card",
+			Revision: revision,
+			ViewHash: hash,
+			Tokens:   ref.Continuation.Tokens,
+		},
 	)
-	return err
 }
-
 func (b *Bot) massageButtons(
 	ctx context.Context,
 	owner string,

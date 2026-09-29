@@ -5,8 +5,13 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+
+	"github.com/complynx/zns-chatbot/platform/internal/massage/dbgen"
 )
 
 type Preferences struct {
@@ -29,7 +34,47 @@ func (s Service) SetPreferences(
 	actor, event string,
 	preferences Preferences,
 ) (Preferences, error) {
-	return setPreferences(ctx, s.DB, actor, event, preferences)
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return Preferences{}, err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	prepared, err := s.PreparePreferencesInTx(ctx, tx, actor, event, preferences)
+	if err != nil {
+		return Preferences{}, err
+	}
+	result, err := prepared.Apply(ctx)
+	if err != nil {
+		return Preferences{}, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+// PreparedPreferences holds the current practitioner row until the caller commits.
+type PreparedPreferences struct {
+	tx           pgx.Tx
+	actor, event string
+	value        Preferences
+}
+
+func (s Service) PreparePreferencesInTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor, event string,
+	value Preferences,
+) (PreparedPreferences, error) {
+	p := PreparedPreferences{tx: tx, actor: actor, event: event, value: value}
+	var owner string
+	err := tx.QueryRow(ctx, `SELECT owner FROM core.massage_specialists WHERE event_id=$1 AND owner=$2 FOR UPDATE`, event, actor).
+		Scan(&owner)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = problem(http.StatusForbidden, "forbidden")
+	}
+	return p, err
+}
+
+func (p PreparedPreferences) Apply(ctx context.Context) (Preferences, error) {
+	return setPreferences(ctx, p.tx, p.actor, p.event, p.value)
 }
 
 type preferenceWriter interface {
@@ -63,25 +108,41 @@ func setPreferences(
 // retries safe; notices are acknowledged only after the delivery adapter sends.
 // Source reminders include missed starts back to the first party's early window.
 func (s Service) QueueReminders(ctx context.Context, event string) (int64, error) {
-	result, err := s.DB.Exec(ctx, `INSERT INTO core.massage_notices(booking_id,owner,kind)
-	SELECT b.id,n.owner,n.kind FROM core.massage_bookings b
-	JOIN core.massage_events e ON e.id=b.event_id
-	JOIN core.massage_specialists sp ON sp.event_id=b.event_id AND sp.owner=b.specialist
-	CROSS JOIN LATERAL (VALUES
-	 (b.owner,'prior_long',e.prior_long,true),
-	 (b.owner,'prior_short',e.prior_short,true),
-	 (b.specialist,'next',interval '5 minutes',sp.notify_next)) n(owner,kind,prior,enabled)
-	WHERE b.event_id=$1 AND b.cancelled_at IS NULL AND n.enabled
-	AND b.starts_at >= (SELECT min(p.starts_at)-interval '2 hours' FROM core.massage_parties p WHERE p.event_id=b.event_id)
-	AND b.starts_at<$2::timestamptz+n.prior
-	ON CONFLICT DO NOTHING`, event, s.now())
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
-	return result.RowsAffected(), nil
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	rows, err := dbgen.New(tx).
+		QueueNotificationReminders(ctx, dbgen.QueueNotificationRemindersParams{BotID: s.Delivery.BotID, Event: event, Now: pgtype.Timestamptz{Time: s.now(), Valid: true}})
+	if err != nil {
+		return 0, err
+	}
+	var pending []delivery.Registration
+	for _, row := range rows {
+		if err = collectNotificationRegistration(
+			ctx,
+			tx,
+			s.Delivery.BotID,
+			row.ID,
+			row.DeliveryChat,
+			&pending,
+		); err != nil {
+			return 0, err
+		}
+	}
+	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
+		return 0, err
+	}
+	return int64(len(rows)), tx.Commit(ctx)
 }
 
 type Notice struct {
+	DeliveryAttempt int64  `json:"delivery_attempt"`
+	MessageID       int64  `json:"message_id,omitempty"`
+	DeliveryText    string `json:"delivery_text,omitempty"`
+	FollowupPending bool   `json:"followup_pending,omitempty"`
+
 	ID      int64  `json:"id"`
 	Booking string `json:"booking"`
 	Kind    string `json:"kind"`
@@ -92,7 +153,7 @@ func (s Service) PendingNotices(ctx context.Context, actor string) ([]Notice, er
 	rows, err := s.DB.Query(ctx, `SELECT n.id,n.booking_id,n.kind FROM core.massage_notices n
 	JOIN core.massage_bookings b ON b.id=n.booking_id
 	JOIN core.massage_specialists sp ON sp.event_id=b.event_id AND sp.owner=b.specialist
-	WHERE n.owner=$1 AND n.sent_at IS NULL AND (b.cancelled_at IS NULL OR n.kind='cancelled')
+	WHERE n.owner=$1 AND n.delivery_state='pending' AND (b.cancelled_at IS NULL OR n.kind='cancelled')
 	AND (n.kind NOT IN ('booked','cancelled') OR sp.notify_bookings)
 	AND (n.kind<>'next' OR sp.notify_next)
 	AND (n.kind<>'additional' OR b.starts_at>=$2)
@@ -100,21 +161,9 @@ func (s Service) PendingNotices(ctx context.Context, actor string) ([]Notice, er
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[Notice])
-}
-
-func (s Service) AcknowledgeNotice(ctx context.Context, actor string, id int64) error {
-	result, err := s.DB.Exec(
-		ctx,
-		`UPDATE core.massage_notices SET sent_at=COALESCE(sent_at,now()) WHERE owner=$1 AND id=$2`,
-		actor,
-		id,
-	)
-	if err != nil {
-		return err
-	}
-	if result.RowsAffected() != 1 {
-		return problem(http.StatusNotFound, "not_found")
-	}
-	return nil
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Notice, error) {
+		var n Notice
+		scanErr := row.Scan(&n.ID, &n.Booking, &n.Kind)
+		return n, scanErr
+	})
 }

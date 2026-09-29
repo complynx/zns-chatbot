@@ -6,6 +6,10 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
+	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
@@ -18,15 +22,15 @@ const scriptKnowledgeReviewQueue = "knowledge.review_queue"
 const scriptKnowledgeScopes = "knowledge.scopes"
 const scriptKnowledgeMemos = "knowledge.memos"
 
-func (b *Bot) scriptKnowledgeEntries(ctx context.Context, owner string) ([]scriptToolEntry, error) {
-	capabilities, err := b.API.knowledgeCapabilities(ctx, owner)
+func (b *Bot) scriptKnowledgeEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
+	capabilities, err := b.API.KnowledgeCapabilities(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
 	return b.knowledgeToolEntries(capabilities.CanCurate, capabilities.CanReview), nil
 }
 
-func (b *Bot) knowledgeToolEntries(curate, review bool) []scriptToolEntry {
+func (b *Bot) knowledgeToolEntries(curate, review bool) []agenthost.ScriptToolEntry {
 	specs := []struct {
 		name, description, properties string
 		allowed                       bool
@@ -62,7 +66,7 @@ func (b *Bot) knowledgeToolEntries(curate, review bool) []scriptToolEntry {
 			true,
 		},
 		{
-			"knowledge.memo_read",
+			scriptKnowledgePrefix + agent.KnowledgeMemoRead,
 			"Read your short private memo by fact_key, including its current active/version state.",
 			`"fact_key":{"type":"string"}`,
 			true,
@@ -81,7 +85,7 @@ func (b *Bot) knowledgeToolEntries(curate, review bool) []scriptToolEntry {
 		},
 		{
 			"knowledge.suggest",
-			"Suggest a shared fact for assessment and human moderation. This does not publish or approve it. Event is empty for general knowledge; topic and fact_key are required.",
+			"Prepare a self-contained private proposal for assessment. The author must manually submit its exact text and destination before reviewers can see it. This tool cannot submit, approve, or publish. Event is empty for general knowledge; topic and fact_key are required.",
 			`"event":{"type":"string"},"topic":{"type":"string"},"fact_key":{"type":"string"},"text":{"type":"string"}`,
 			true,
 		},
@@ -104,14 +108,14 @@ func (b *Bot) knowledgeToolEntries(curate, review bool) []scriptToolEntry {
 			review,
 		},
 	}
-	entries := make([]scriptToolEntry, 0, len(specs))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(specs))
 	for _, spec := range specs {
 		if !spec.allowed {
 			continue
 		}
 		entries = append(
 			entries,
-			scriptToolEntry{descriptor: scriptclient.Tool{
+			agenthost.ScriptToolEntry{Descriptor: scriptclient.Tool{
 				Name:        spec.name,
 				Description: spec.description,
 				InputSchema: json.RawMessage(
@@ -120,7 +124,7 @@ func (b *Bot) knowledgeToolEntries(curate, review bool) []scriptToolEntry {
 					) + `}`,
 				),
 			},
-				prepare: b.prepareKnowledgeTool, execute: b.executeKnowledgeTool, resultLimit: maxScriptReadBytes},
+				Prepare: b.prepareKnowledgeTool, Execute: b.executeKnowledgeTool, ResultLimit: maxScriptReadBytes},
 		)
 	}
 	return entries
@@ -180,13 +184,21 @@ func (b *Bot) prepareKnowledgeTool(
 	_ int64,
 	call scriptclient.ToolCall,
 	input agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	p, _, err := knowledgeToolProposal(call)
 	if err != nil {
 		return record, err
 	}
+	if p.ReviewQueue {
+		record.KnowledgeRead = &knowledgeauthority.ReadAuthority{Kind: knowledgeauthority.Review, Scope: p.Event}
+	}
 	if agent.IsKnowledgeRead(&p) || call.Name == scriptKnowledgeScopes || call.Name == scriptKnowledgeMemos {
+		state, stateErr := b.API.MemoryDeletions(ctx, owner)
+		if stateErr != nil {
+			return record, stateErr
+		}
+		record.MemoryReadState = &state
 		return record, nil
 	}
 	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
@@ -196,15 +208,15 @@ func (b *Bot) prepareKnowledgeTool(
 	if input.Knowledge == nil {
 		input.Knowledge = &agent.KnowledgeContext{}
 	}
-	scope, err := b.API.knowledgeScope(ctx, owner, p.Event)
+	scope, err := b.API.KnowledgeScope(ctx, owner, p.Event)
 	if err != nil {
 		return record, err
 	}
 	input.Knowledge.Scopes = []knowledge.Scope{scope}
-	if err = b.sanitizeKnowledgeReads(ctx, owner, input.Knowledge); err != nil {
+	if err = b.knowledgeReader().SanitizeKnowledgeReads(ctx, owner, input.Knowledge); err != nil {
 		return record, err
 	}
-	record.Memory, err = b.bindKnowledgeCommand(ctx, owner, &p, input.Knowledge)
+	record.Memory, err = b.knowledgeCoordinator().Bind(ctx, owner, &p, input.Knowledge)
 	return record, err
 }
 

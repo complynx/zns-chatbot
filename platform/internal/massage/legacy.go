@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -293,6 +295,7 @@ func (s Service) selectLegacySpecialist(
 	if selected, present := d.State.Selected[c.Specialist]; present && !selected {
 		return problem(http.StatusConflict, "specialist_unavailable")
 	}
+	var pending []delivery.Registration
 	result, err := s.book(
 		ctx,
 		tx,
@@ -305,8 +308,12 @@ func (s Service) selectLegacySpecialist(
 			Length:     d.State.Length,
 			Slot:       *c.Slot,
 		},
+		&pending,
 	)
 	if err != nil {
+		return err
+	}
+	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
 		return err
 	}
 	d.Booking = result.ID

@@ -2,49 +2,12 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-func scriptHasProfileWrite(record scriptRecord) bool {
-	if record.PrivateProfile {
-		return true
-	}
-	for _, call := range record.Calls {
-		if call.Profile != nil {
-			return true
-		}
-	}
-	return false
-}
-
 // Profile scripts return only host effect receipts to later planning. Arbitrary
 // worker output can echo private identity values, including through other reads.
-func redactProfileScript(record *scriptRecord) {
-	if !scriptHasProfileWrite(*record) {
-		return
-	}
-	record.Request.Code = ""
-	record.Request.InputJSON = ""
-	record.Run.Code = ""
-	record.Run.Result = json.RawMessage(
-		`{"private_profile_script":true,"evidence":"Inspect host call outcomes; read profile.get for current state."}`,
-	)
-	for i := range record.Calls {
-		call := &record.Calls[i]
-		if call.Profile != nil {
-			metadata := *call.Profile
-			metadata.Value = ""
-			call.Profile = &metadata
-		}
-		if call.Profile == nil && call.Language == nil && call.Outcome.Error == "" {
-			call.Outcome.Result = json.RawMessage(`{"completed":true,"private_payload_omitted":true}`)
-		}
-	}
-}
 
 func (b *Bot) scriptProfileEffects(ctx context.Context, owner string, id int64) (bool, bool, error) {
 	var profile, language bool
@@ -76,13 +39,3 @@ func (b *Bot) refreshScriptProfileEffects(ctx context.Context, in incoming, id i
 }
 
 // Even a rejected private-field proposal must not retain its source or echo.
-func (b *Bot) markPrivateProfileScript(ctx context.Context, owner string, id int64, index int) error {
-	return b.updateScriptTools(ctx, owner, id, index, func(_ pgx.Tx, records []scriptRecord) error {
-		record := &records[index]
-		record.PrivateProfile = true
-		record.Request.Code = ""
-		record.Request.InputJSON = ""
-		record.Run.Code = ""
-		return nil
-	})
-}

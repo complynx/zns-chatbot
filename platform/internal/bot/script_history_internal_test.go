@@ -9,10 +9,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
@@ -55,10 +58,13 @@ func TestHistoryReadSobekChunksAndPrivacy(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	b := Bot{
-		API: APIClient{
+		API: appclient.Client{
 			Base:     server.URL,
 			Exchange: &authExchange{},
-			Links:    authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}},
+			Links: authLinks{
+				user: identity.User{Owner: "alice", Subject: "z-alice"},
+			},
+			SandboxToken: (identity.Signer{}).Token,
 		},
 	}
 	ctx, owner, err := b.API.AuthenticateTelegram(t.Context(), 101)
@@ -66,18 +72,18 @@ func TestHistoryReadSobekChunksAndPrivacy(t *testing.T) {
 	entry := b.historyReadEntry()
 	request := scriptprotocol.ExecuteRequest{
 		Input: json.RawMessage(`{}`),
-		Tools: []scriptprotocol.Tool{entry.descriptor},
+		Tools: []scriptprotocol.Tool{entry.Descriptor},
 		Code:  `let cursor="",text="",count=0; do {const page=await tools.history.read({event_id:7,cursor}); text+=page.text; cursor=page.next_cursor;count++;}while(cursor);return {text,count};`,
 	}
 	result, err := scriptworker.Execute(
 		ctx,
 		request,
 		func(ctx context.Context, call scriptprotocol.ToolCall) (json.RawMessage, error) {
-			record, callbackErr := entry.prepare(ctx, owner, 1, call, agent.Input{})
+			record, callbackErr := entry.Prepare(ctx, owner, 1, call, agent.Input{})
 			if callbackErr != nil {
 				return nil, callbackErr
 			}
-			value, callbackErr := entry.execute(ctx, owner, call, record, &agent.Input{})
+			value, callbackErr := entry.Execute(ctx, owner, call, record, &agent.Input{})
 			if callbackErr != nil {
 				return nil, callbackErr
 			}
@@ -100,51 +106,51 @@ func TestHistoryReadSobekChunksAndPrivacy(t *testing.T) {
 	raw, err := json.Marshal(scriptHistoryArguments{EventID: 7, Cursor: cursor})
 	require.NoError(t, err)
 	generation = 1
-	_, err = entry.execute(
+	_, err = entry.Execute(
 		ctx,
 		owner,
 		scriptprotocol.ToolCall{Name: scriptHistoryRead, Arguments: raw},
-		scriptToolRecord{},
+		agenthost.ScriptToolRecord{},
 		&agent.Input{},
 	)
-	require.ErrorIs(t, err, errScriptReadStale)
+	require.ErrorIs(t, err, appclient.ErrReadStale)
 	require.Equal(t, 2, textReads)
-	_, err = entry.execute(
+	_, err = entry.Execute(
 		ctx,
 		"bob",
 		scriptprotocol.ToolCall{Name: scriptHistoryRead, Arguments: raw},
-		scriptToolRecord{},
+		agenthost.ScriptToolRecord{},
 		&agent.Input{},
 	)
 	require.Error(t, err)
 	require.Equal(t, 2, textReads)
 	deleteDuringRead = true
-	_, err = entry.execute(
+	_, err = entry.Execute(
 		ctx,
 		owner,
 		scriptprotocol.ToolCall{Name: scriptHistoryRead, Arguments: json.RawMessage(`{"event_id":7}`)},
-		scriptToolRecord{},
+		agenthost.ScriptToolRecord{},
 		&agent.Input{},
 	)
-	require.ErrorIs(t, err, errScriptReadStale)
+	require.ErrorIs(t, err, appclient.ErrReadStale)
 }
 
 func TestHistoryDeletionCannotResurrectCompletedOutput(t *testing.T) {
 	t.Parallel()
-	record := scriptRecord{
+	record := agenthost.ScriptRecord{
 		HistoryGeneration: 1,
 		Request:           agent.ScriptProposal{Code: "private"},
 		Run:               agent.ScriptRun{Result: json.RawMessage(`"private"`)},
 	}
-	require.True(t, redactHistoryScript(&record, 2))
+	require.True(t, agenthost.RedactHistoryScript(&record, 2))
 	record.Run = agent.ScriptRun{Result: json.RawMessage(`"late private result"`)}
-	require.True(t, redactHistoryScript(&record, 2))
+	require.True(t, agenthost.RedactHistoryScript(&record, 2))
 	encoded, err := json.Marshal(record)
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "private result")
 	require.Contains(t, string(encoded), historyDeleted)
 	pages := []conversation.Page{{Generation: 1, Events: []conversation.Event{{Text: "private"}}}}
-	redactHistoryPages(pages, 2)
+	agenthost.RedactHistoryPages(pages, 2)
 	require.Empty(t, pages[0].Events)
 	require.Equal(t, historyDeleted, pages[0].Error)
 }
@@ -153,13 +159,13 @@ func TestHistoryDeletionFencesConcurrentScriptCompletion(t *testing.T) {
 	t.Parallel()
 	readComplete := make(chan struct{})
 	allowCompletion := make(chan struct{})
-	finished := make(chan scriptRecord)
+	finished := make(chan agenthost.ScriptRecord)
 	go func() {
-		record := scriptRecord{HistoryGeneration: 1}
+		record := agenthost.ScriptRecord{HistoryGeneration: 1}
 		run := agent.ScriptRun{Result: json.RawMessage(`{"derived":"private canary transformed"}`)}
 		close(readComplete)
 		<-allowCompletion
-		completeScriptRecord(&record, run, knowledge.MemoryDeletionState{}, 2)
+		(&Bot{}).scriptHost().Store.CompleteRecord(&record, run, knowledge.MemoryDeletionState{}, 2)
 		finished <- record
 	}()
 	<-readComplete
@@ -196,10 +202,13 @@ func TestHistoryReadSobekContinuesAcrossRunBudget(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 	b := Bot{
-		API: APIClient{
+		API: appclient.Client{
 			Base:     server.URL,
 			Exchange: &authExchange{},
-			Links:    authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}},
+			Links: authLinks{
+				user: identity.User{Owner: "alice", Subject: "z-alice"},
+			},
+			SandboxToken: (identity.Signer{}).Token,
 		},
 	}
 	ctx, owner, err := b.API.AuthenticateTelegram(t.Context(), 101)
@@ -213,7 +222,7 @@ func TestHistoryReadSobekContinuesAcrossRunBudget(t *testing.T) {
 		require.NoError(t, marshalErr)
 		request := scriptprotocol.ExecuteRequest{
 			Input: input,
-			Tools: []scriptprotocol.Tool{entry.descriptor},
+			Tools: []scriptprotocol.Tool{entry.Descriptor},
 			Code:  `let cursor=input.cursor; for(let n=0;n<8;n++){const page=await tools.history.read({event_id:9,cursor});cursor=page.next_cursor;if(!page.more)return {cursor,more:false};}return {cursor,more:true};`,
 		}
 		calls := 0
@@ -223,15 +232,15 @@ func TestHistoryReadSobekContinuesAcrossRunBudget(t *testing.T) {
 			func(ctx context.Context, call scriptprotocol.ToolCall) (json.RawMessage, error) {
 				calls++
 				totalCalls++
-				record, prepareErr := entry.prepare(ctx, owner, 1, call, agent.Input{})
+				record, prepareErr := entry.Prepare(ctx, owner, 1, call, agent.Input{})
 				if prepareErr != nil {
 					return nil, prepareErr
 				}
-				value, readErr := entry.execute(ctx, owner, call, record, &agent.Input{})
+				value, readErr := entry.Execute(ctx, owner, call, record, &agent.Input{})
 				if readErr != nil {
 					return nil, readErr
 				}
-				chunk, ok := value.(scriptHistoryChunk)
+				chunk, ok := value.(agenthost.ScriptHistoryChunk)
 				require.True(t, ok)
 				reconstructed.WriteString(chunk.Text)
 				raw, encodeErr := json.Marshal(value)

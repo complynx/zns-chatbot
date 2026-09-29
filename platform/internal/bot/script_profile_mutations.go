@@ -7,6 +7,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/account"
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
@@ -19,19 +23,8 @@ const scriptLanguageSet = "preferences.setLanguage"
 
 // Script calls never resume interrupted mutations. Keep authority/effect metadata,
 // but never copy identity values into the durable script receipt.
-type scriptProfileMutation struct {
-	Field   string `json:"field"`
-	Version int64  `json:"version"`
-	Key     string `json:"key"`
-	Value   string `json:"-"`
-}
 
-type scriptLanguageMutation struct {
-	Language string                    `json:"language"`
-	Key      core.LanguageOperationKey `json:"key"`
-}
-
-func (b *Bot) scriptProfileMutationEntries(canBook bool) []scriptToolEntry {
+func (b *Bot) scriptProfileMutationEntries(canBook bool) []agenthost.ScriptToolEntry {
 	descriptors := []scriptclient.Tool{
 		{
 			Name:        scriptProfileHistory,
@@ -60,15 +53,15 @@ func (b *Bot) scriptProfileMutationEntries(canBook bool) []scriptToolEntry {
 			},
 		)
 	}
-	entries := make([]scriptToolEntry, 0, len(descriptors))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		entries = append(
 			entries,
-			scriptToolEntry{
-				descriptor:  descriptor,
-				prepare:     b.prepareScriptProfileMutation,
-				execute:     b.executeScriptProfileMutation,
-				resultLimit: maxScriptProfileResult,
+			agenthost.ScriptToolEntry{
+				Descriptor:  descriptor,
+				Prepare:     b.prepareScriptProfileMutation,
+				Execute:     b.executeScriptProfileMutation,
+				ResultLimit: maxScriptProfileResult,
 			},
 		)
 	}
@@ -81,8 +74,8 @@ func (b *Bot) prepareScriptProfileMutation(
 	_ int64,
 	call scriptclient.ToolCall,
 	input agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	switch call.Name {
 	case scriptProfileHistory:
 		var args struct {
@@ -102,7 +95,7 @@ func (b *Bot) prepareScriptProfileMutation(
 			strings.TrimSpace(input.Text) == "" {
 			return record, errors.New("invalid language request")
 		}
-		record.Language = &scriptLanguageMutation{Language: args.Language}
+		record.Language = &agenthost.ScriptLanguageMutation{Language: args.Language}
 	case scriptProfileSet:
 		var args struct {
 			Field string `json:"field"`
@@ -122,7 +115,11 @@ func (b *Bot) prepareScriptProfileMutation(
 		if err != nil {
 			return record, err
 		}
-		record.Profile = &scriptProfileMutation{Field: args.Field, Value: args.Value, Version: current.Version}
+		record.Profile = &agenthost.ScriptProfileMutation{
+			Field:   args.Field,
+			Value:   args.Value,
+			Version: current.Version,
+		}
 	default:
 		return record, errors.New("tool unavailable")
 	}
@@ -133,7 +130,7 @@ func (b *Bot) executeScriptProfileMutation(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	input *agent.Input,
 ) (any, error) {
 	switch call.Name {
@@ -149,12 +146,14 @@ func (b *Bot) executeScriptProfileMutation(
 		if record.Language == nil {
 			return nil, errors.New("language binding missing")
 		}
-		preference, err := b.API.SetLanguageWithOperation(
+		if record.Source == nil || !record.Source.Valid() {
+			return nil, errors.New("missing admitted source")
+		}
+		preference, err := b.Host.SetDerivedLanguage(
 			ctx,
 			owner,
-			record.Language.Language,
-			false,
-			record.Language.Key,
+			account.LanguageChange{Language: record.Language.Language, OperationKey: record.Language.Key},
+			*record.Source,
 		)
 		if err == nil {
 			input.Language = preference.Language
@@ -164,8 +163,11 @@ func (b *Bot) executeScriptProfileMutation(
 		if record.Profile == nil {
 			return nil, errors.New("profile binding missing")
 		}
+		if record.Source == nil || !record.Source.Valid() {
+			return nil, errors.New("missing admitted source")
+		}
 		change := record.Profile
-		profile, err := b.API.ExecutePassProfile(
+		profile, err := b.Host.ExecuteDerivedPassProfile(
 			ctx,
 			owner,
 			passes.Command{
@@ -176,12 +178,13 @@ func (b *Bot) executeScriptProfileMutation(
 				Key:     change.Key,
 				Origin:  originAgent,
 			},
+			*record.Source,
 		)
 		if problem, ok := errors.AsType[*core.ProblemError](
 			err,
 		); ok && problem.Status == http.StatusConflict &&
 			problem.Code == "pass_profile_stale" {
-			return nil, errScriptReadStale
+			return nil, appclient.ErrReadStale
 		}
 		if err != nil {
 			return nil, err

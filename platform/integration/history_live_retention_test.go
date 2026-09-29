@@ -117,7 +117,7 @@ func checkLiveHistoryRetention(t *testing.T, source string) {
 	_, err = archive.ReadText(t.Context(), "bob", id, 0, 503, "")
 	require.Error(t, err)
 	require.NoError(t, archive.DeleteContent(t.Context(), "alice", id))
-	require.NoError(t, archive.Append(t.Context(), "alice", "tg-user-1", "user", source))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "tg-user-1", "user", source))
 	chunk, err := archive.ReadText(t.Context(), "alice", id, 0, 503, "")
 	require.NoError(t, err)
 	assert.True(t, chunk.Omitted)

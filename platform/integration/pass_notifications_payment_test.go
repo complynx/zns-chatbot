@@ -69,6 +69,12 @@ func TestPassNotificationsPaymentRequestSurvivingParticipant(t *testing.T) {
 }
 
 func pendingPaymentRequest(t *testing.T, service passbooking.Service) passbooking.Notification {
+	// Reconstruct a later poll without sleeping; this helper only inspects current domain eligibility.
+	_, resetErr := service.DB.Exec(
+		t.Context(),
+		`UPDATE core.pass_notifications SET lease_until=NULL WHERE delivery_state='pending'`,
+	)
+	require.NoError(t, resetErr)
 	t.Helper()
 	for range 10 {
 		notices, err := service.PendingNotifications(t.Context())
@@ -77,7 +83,7 @@ func pendingPaymentRequest(t *testing.T, service passbooking.Service) passbookin
 			if notice.Kind == "payment_request" {
 				return notice
 			}
-			require.NoError(t, service.CompleteNotification(t.Context(), notice.ID, ""))
+			require.NoError(t, cancelPassTestNotice(t, service, notice))
 		}
 	}
 	t.Fatal("payment request not found")

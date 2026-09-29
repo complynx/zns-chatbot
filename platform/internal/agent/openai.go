@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
 	"github.com/complynx/zns-chatbot/platform/internal/modelsettings"
 )
@@ -99,6 +99,9 @@ func (m OpenAI) structured(ctx context.Context, prompt providerPrompt) (string, 
 	call, e := credits.Begin(ctx, m.Accounting, prompt.name, "openai", selection.Model, int64(tokens))
 	if e != nil {
 		return "", e
+	}
+	if e = checkProviderRequest(ctx, prompt.beforeProvider); e != nil {
+		return "", errors.Join(e, call.NotSent(ctx))
 	}
 	text, responseErr := readMeteredResponse(&singleSend, r, call)
 	return text, errors.Join(responseErr, call.Finish(ctx))
@@ -188,7 +191,7 @@ func (r responseEnvelope) text() (string, error) {
 	return text.String(), nil
 }
 
-func decodePlan(text string, catalog []core.Slot) (Plan, error) {
+func decodePlan(text string, catalog []workflow.Slot) (Plan, error) {
 	var plan Plan
 	if err := validatePlanFields([]byte(text), ""); err != nil {
 		return plan, err
@@ -224,25 +227,25 @@ func ModelHandler(model Model) http.Handler {
 	broadcastNameRoute(mux, model)
 	mux.HandleFunc(
 		"GET /healthz",
-		func(w http.ResponseWriter, _ *http.Request) { api.JSON(w, http.StatusOK, map[string]bool{"ok": true}) },
+		func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, map[string]bool{"ok": true}) },
 	)
 	mux.HandleFunc("POST /plan", func(w http.ResponseWriter, r *http.Request) {
 		var in Input
 		if decodeInput(w, r, &in) != nil {
-			api.JSON(w, http.StatusBadRequest, nil)
+			writeJSON(w, http.StatusBadRequest, nil)
 			return
 		}
 		ctx, err := modelRequestContext(r)
 		if err != nil {
-			api.JSON(w, http.StatusBadRequest, nil)
+			writeJSON(w, http.StatusBadRequest, nil)
 			return
 		}
 		p, e := model.Plan(ctx, in)
 		if e != nil {
-			api.JSON(w, http.StatusBadGateway, map[string]string{"error": "model unavailable"})
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "model unavailable"})
 			return
 		}
-		api.JSON(w, http.StatusOK, p)
+		writeJSON(w, http.StatusOK, p)
 	})
 	return mux
 }

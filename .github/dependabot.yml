@@ -2,23 +2,26 @@ version: 2
 updates:
   - package-ecosystem: gomod
     directory: /platform
-    schedule: {interval: weekly}
+    schedule: { interval: weekly }
     groups:
       compatible-go:
         update-types: [minor, patch]
     open-pull-requests-limit: 5
   - package-ecosystem: docker
     directory: /platform
-    schedule: {interval: weekly}
+    schedule: { interval: weekly }
   - package-ecosystem: gomod
     directory: /platform/tools
-    schedule: {interval: weekly}
+    schedule: { interval: weekly }
   - package-ecosystem: gomod
     directory: /platform/tools/sqlc
-    schedule: {interval: weekly}
+    schedule: { interval: weekly }
+  - package-ecosystem: gomod
+    directory: /tools/migrate
+    schedule: { interval: weekly }
   - package-ecosystem: npm
     directory: /platform
-    schedule: {interval: weekly}
+    schedule: { interval: weekly }
   - package-ecosystem: github-actions
     directory: /
-    schedule: {interval: weekly}
+    schedule: { interval: weekly }

@@ -3,6 +3,11 @@
 env: sandbox
 parent_stdin: false
 synthetic_only: false
+# App/API delivery also requires an explicit configured bot identity.
+delivery:
+  bot_interval: 50ms
+  chat_interval: 1s
+  cooldown_fallback: 30s
 server:
   host: 127.0.0.1
   port: 8080

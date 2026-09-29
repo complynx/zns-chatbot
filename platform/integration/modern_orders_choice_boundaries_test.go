@@ -43,7 +43,7 @@ func TestModernChoiceRevisionExpiryAndPatchLimits(t *testing.T) {
 	f := setup(t)
 	ref := newModernBoundaryDraft(t, f, 51000)
 	assertModernBoundaryDenied(t, f, 51001, identity.AliceTelegramID, fmt.Sprintf(
-		`tools.orders.choice({operation:"patch",choice_ref:%q,extras:Array.from({length:1025},()=>({ref:0,selected:true}))});`,
+		`tools.orders.choice({operation:"patch",choice_ref:%q,event:"sandbox-festival",customer:"rejected"});`,
 		ref,
 	))
 	// Failed validation must not consume the parent revision.
@@ -136,7 +136,7 @@ func TestModernChoiceConcurrentCreateClaimsOnce(t *testing.T) {
 				)}},
 				{View: agent.KnowledgeView, Text: "Checked"},
 			}}
-			current := &bot.Bot{DB: f.db, API: f.b.API, TG: f.b.TG, Model: model,
+			current := &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: model,
 				Scripts: scopeVM{before: func() {
 					ready <- struct{}{}
 					select {
@@ -175,6 +175,7 @@ func TestModernChoiceCatalogRaceAtAPITransaction(t *testing.T) {
  WHERE id='sandbox-festival'`)
 		return err
 	}}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	assertModernBoundaryDenied(t, f, 51301, identity.AliceTelegramID, fmt.Sprintf(
 		`tools.orders.update({name:"create",choice_ref:%q});`, ref))
 	assert.True(t, called, "catalog changes after host preparation, before the API transaction")

@@ -7,11 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/browserauth"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
@@ -29,7 +28,7 @@ func TestPublicSubtreeRedirects(t *testing.T) {
 			mux.Handle(
 				"/",
 				api.Handler(
-					runtimeapp.NewServices(nil, runtimeapp.Options{}),
+					appservices.NewServices(nil, appservices.Options{}),
 					identity.Signer{},
 					slog.New(slog.DiscardHandler),
 				),

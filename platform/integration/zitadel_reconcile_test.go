@@ -8,12 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
@@ -60,11 +59,12 @@ func TestZitadelBackgroundReconcilesSeparateRecipients(t *testing.T) {
 	require.NoError(t, links.Bind(ctx, "bob", 202, "z-bob"))
 	provider := &reconciliationProvider{subjects: map[string]int{}}
 	server := httptest.NewServer(
-		api.AuthenticatedHandler(runtimeapp.NewServices(f.db, runtimeapp.Options{}), f.b.API.Signer,
+		api.AuthenticatedHandler(appservices.NewServices(f.db, appservices.Options{}), f.b.Host.Signer,
 			slog.New(slog.DiscardHandler), api.ZitadelOwner(runtimeProvider{}, links)),
 	)
 	t.Cleanup(server.Close)
 	f.b.API.Base, f.b.API.Links, f.b.API.Exchange = server.URL, links, provider
+	f.b.Host.Base = f.b.API.Base
 	f.b.Logger = slog.New(slog.DiscardHandler)
 	_, err := f.db.Exec(
 		ctx,

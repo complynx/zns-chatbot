@@ -19,6 +19,9 @@ type PaymentContact struct {
 	TelegramID int64  `json:"telegram_id"`
 }
 
+// ActionPaymentInstructions identifies the owner-bound read in saved plans.
+const ActionPaymentInstructions = "payment_instructions"
+
 // PaymentInstructions is a read-only, owner-bound view of current payment options.
 type PaymentInstructions struct {
 	OrderID      string           `json:"order_id"`

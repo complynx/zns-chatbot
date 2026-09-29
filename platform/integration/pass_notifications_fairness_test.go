@@ -15,20 +15,21 @@ func TestPassNotificationsRetryDoesNotStarveOtherRecipients(t *testing.T) {
 	// Use a normal registration payload for the synthetic recipient batch.
 	_, err := service.Execute(t.Context(), "alice", bookingCommand("solo", "register", passbooking.Booking{}))
 	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `INSERT INTO core.users(id,telegram_id,name)
- SELECT 'notice-'||i,90000+i,'Recipient '||i FROM generate_series(1,26) i;
- INSERT INTO core.pass_notifications(event_id,owner,recipient,kind,generation,payload,available_at)
- SELECT n.event_id,n.owner,'notice-'||i,n.kind,n.generation,n.payload,clock_timestamp()-interval '1 day'
+	_, err = db.Exec(t.Context(), `INSERT INTO core.users(id,telegram_id,name,can_book)
+ SELECT 'notice-'||i,90000+i,'Recipient '||i,true FROM generate_series(1,26) i;
+ INSERT INTO core.pass_notifications(event_id,owner,recipient,kind,generation,payload,available_at,bot_id)
+ SELECT n.event_id,n.owner,'notice-'||i,n.kind,n.generation,n.payload,clock_timestamp()-interval '1 day',n.bot_id
  FROM core.pass_notifications n CROSS JOIN generate_series(1,26) i
  WHERE n.kind='registered' ORDER BY i;
  DELETE FROM core.pass_notifications WHERE recipient='alice'`)
 	require.NoError(t, err)
+	indexSyntheticNotificationRows(t, db, "registration")
 	first, err := service.PendingNotifications(t.Context())
 	require.NoError(t, err)
 	require.Len(t, first, 25)
 	for _, notice := range first {
 		assert.NotEqual(t, "notice-26", notice.Recipient)
-		require.NoError(t, service.CompleteNotification(t.Context(), notice.ID, "telegram_retry"))
+		require.NoError(t, deferPassTestNotice(t.Context(), service, notice))
 	}
 	// Emulate a slow poll: retries are eligible again, but untouched work is older.
 	_, err = db.Exec(t.Context(), `UPDATE core.pass_notifications SET available_at=clock_timestamp()-interval '1 minute'

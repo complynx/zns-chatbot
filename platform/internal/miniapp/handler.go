@@ -1,4 +1,4 @@
-// Package miniapp serves the Telegram meal editor through the bot's API identity.
+// Package miniapp serves the Telegram meal editor through the authenticated application client.
 package miniapp
 
 import (
@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/browserauth"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
@@ -27,10 +26,10 @@ const codeField = "code"
 
 type Gateway struct {
 	WebAppURL         string
-	Onboarding        bot.TelegramOnboarding
+	Onboarding        func(context.Context, telegram.User) error
 	BrowserAuth       *browserauth.Service
 	ResolveOrderEvent func(context.Context, string, string) (string, error)
-	API               bot.APIClient
+	API               Client
 	Token             string
 	EventID           string
 }

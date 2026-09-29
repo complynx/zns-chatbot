@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -71,8 +73,17 @@ func (b *Bot) handleLegacyOrder(ctx context.Context, in incoming, update telegra
 	if err = b.record(ctx, in.owner, update.ID, "legacy_order_reply", notice); err != nil {
 		return err
 	}
-	if _, err = b.editOrSend(ctx, telegram.Send{ChatID: in.chat, MessageID: update.Callback.Message.ID,
-		Text: notice, Markup: telegram.Markup{Rows: [][]telegram.Button{}}}); err != nil {
+	if err = b.queueBotResult(
+		ctx,
+		in.owner,
+		in.chat,
+		update.ID,
+		"legacy_order_reply",
+		botdelivery.Reference{Family: "legacy_order"},
+		botdelivery.StoredResult{Payload: telegram.Send{ChatID: in.chat,
+			Text: notice, Markup: telegram.Markup{Rows: [][]telegram.Button{}}}},
+		update.Callback.Message.ID,
+	); err != nil {
 		return err
 	}
 	if receipt.Code == "" && receipt.Binding.Action != "close" {

@@ -1,0 +1,61 @@
+# Use only with znsreplace and the reviewed deployment Compose file.
+x-instance: &instance
+  ZNS_INSTALLATION_ID: ${ZNS_INSTALLATION_ID:?Only znsreplace may create this group}
+  ZNS_LAUNCH_ID: ${ZNS_LAUNCH_ID:?Only znsreplace may create this group}
+  ZNS_ENV: production
+x-labels: &labels
+  net.complynx.zns.installation: ${ZNS_INSTALLATION_ID:?}
+  net.complynx.zns.launch: ${ZNS_LAUNCH_ID:?}
+services:
+  app:
+    restart: 'no'
+    depends_on: !reset {}
+    environment: *instance
+    labels:
+      <<: *labels
+      net.complynx.zns.component: app
+    volumes: !override
+      - ./runtime.yaml:/etc/zns/runtime.yaml:ro
+      - script-ipc:/run/script-ipc:ro
+  evaluator:
+    restart: 'no'
+    depends_on: !reset {}
+    environment: *instance
+    labels:
+      <<: *labels
+      net.complynx.zns.component: evaluator
+  media-decoder:
+    restart: 'no'
+    depends_on: !reset {}
+    environment: *instance
+    labels:
+      <<: *labels
+      net.complynx.zns.component: media-decoder
+  media-broker:
+    restart: 'no'
+    depends_on: !reset {}
+    environment: *instance
+    labels:
+      <<: *labels
+      net.complynx.zns.component: media-broker
+  sticker-decoder:
+    restart: 'no'
+    depends_on: !reset {}
+    environment: *instance
+    labels:
+      <<: *labels
+      net.complynx.zns.component: sticker-decoder
+  sticker-broker:
+    restart: 'no'
+    depends_on: !reset {}
+    environment: *instance
+    labels:
+      <<: *labels
+      net.complynx.zns.component: sticker-broker
+volumes:
+  script-ipc:
+    name: zns-${ZNS_INSTALLATION_ID:?}-${ZNS_LAUNCH_ID:?}-script
+  decoder-ipc-bounded:
+    name: zns-${ZNS_INSTALLATION_ID:?}-${ZNS_LAUNCH_ID:?}-media
+  sticker-ipc-bounded:
+    name: zns-${ZNS_INSTALLATION_ID:?}-${ZNS_LAUNCH_ID:?}-sticker

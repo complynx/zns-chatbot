@@ -16,10 +16,10 @@ func configureBrowserAuth(b *bot.Bot, cfg config.Config, localURL string) error 
 	}
 	service, err := browserauth.New(
 		b.DB,
-		b.API.Signer,
+		b.Host.Signer,
 		b.TG,
 		publicURL,
-		b.API.BrowserAuthRecipient,
+		b.Host.BrowserAuthRecipient,
 		b.API.AuthenticateTelegram,
 	)
 	if err != nil {

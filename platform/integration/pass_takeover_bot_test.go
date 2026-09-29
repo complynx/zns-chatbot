@@ -113,7 +113,15 @@ func TestPassTakeoverAgentBindsVersionAndRechecksRights(t *testing.T) {
 			if scenario == "guessed" {
 				text = "Make me the payment contact for someone"
 			}
-			handle(t, f.b, message(1110, 202, text))
+			update := message(1110, 202, text)
+			switch scenario {
+			case "revoked", "stale":
+				require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
+				require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
+				require.Equal(t, 2, calls)
+			default:
+				handle(t, f.b, update)
+			}
 			booking, err := f.b.API.PassBooking(t.Context(), "alice", "dance")
 			require.NoError(t, err)
 			if scenario == "allowed" {

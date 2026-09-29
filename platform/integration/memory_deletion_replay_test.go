@@ -150,6 +150,7 @@ func TestMemoryDeletionRedactsApprovedProposalCopies(t *testing.T) {
 	}
 	filtered, err := s.Assess(t.Context(), "alice", assessment)
 	require.NoError(t, err)
+	filtered = submitKnowledgeProposal(t, s, "alice", *filtered.Proposal)
 	review := knowledge.Command{
 		Name:       knowledge.Review,
 		Key:        "review",

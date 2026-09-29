@@ -10,15 +10,23 @@ if (!process.env.SANDBOX_URL)
   throw new Error('SANDBOX_URL is required for the full gate');
 
 const root = fileURLToPath(new URL('..', import.meta.url));
+const migrateRoot = path.resolve(root, '../tools/migrate');
 const isWindows = process.platform === 'win32';
-const packages = ['./cmd/...', './internal/...', './integration/...'];
+// Include every authored package root without scanning installed dependencies.
+const packages = [
+  './cmd/...',
+  './internal/...',
+  './integration/...',
+  './identityprovision/...',
+  './deploy/...',
+];
 // Each integration case migrates its own database. Bound parallel migrations
 // independently of host CPU count; concurrency tests still run their actors.
 const testArguments = ['-race', '-count=1', '-p', '2', '-parallel', '4'];
 
-function run(command, arguments_) {
+function run(command, arguments_, cwd = root) {
   const result = spawnSync(command, arguments_, {
-    cwd: root,
+    cwd,
     stdio: 'inherit',
     shell: false,
     env: process.env,
@@ -52,6 +60,17 @@ run('go', [
 ]);
 run(lintBinary, ['config', 'verify']);
 run(lintBinary, ['run', ...packages]);
+run(lintBinary, ['fmt', '--diff']);
+run(
+  lintBinary,
+  ['run', '--config', path.join(root, '.golangci.yml'), './...'],
+  migrateRoot,
+);
+run(
+  lintBinary,
+  ['fmt', '--diff', '--config', path.join(root, '.golangci.yml')],
+  migrateRoot,
+);
 const vulnerabilityBinary = path.join(
   root,
   'tools.local',
@@ -65,7 +84,8 @@ run('go', [
   vulnerabilityBinary,
   'golang.org/x/vuln/cmd/govulncheck',
 ]);
-run(vulnerabilityBinary, ['./cmd/...', './internal/...']);
+run(vulnerabilityBinary, packages);
+run(vulnerabilityBinary, ['./...'], migrateRoot);
 run(vulnerabilityBinary, [
   '-C',
   'tools/sqlc',
@@ -94,8 +114,12 @@ run(process.env.PYTHON || (isWindows ? 'python' : 'python3'), [
 ]);
 run('go', ['mod', 'verify']);
 run('go', ['-C', 'tools', 'mod', 'verify']);
+run('go', ['-C', 'tools/sqlc', 'mod', 'verify']);
+run('go', ['mod', 'verify'], migrateRoot);
 run('go', ['vet', ...packages]);
-run('go', ['build', './cmd/...']);
+run('go', ['vet', './...'], migrateRoot);
+run('go', ['build', ...packages]);
+run('go', ['build', './...'], migrateRoot);
 
 if (isWindows) {
   // Windows machines need no C compiler; race tests run in the Linux test image.
@@ -107,7 +131,7 @@ if (isWindows) {
     '--target',
     'test',
     '-t',
-    'zns-sandbox-tests:local',
+    'synthetic-qa-zns-tests:local',
     '.',
   ]);
   run('docker', [
@@ -116,17 +140,39 @@ if (isWindows) {
     'run',
     '--rm',
     '--network',
-    'zns-sandbox_sandbox',
+    'synthetic-qa-zns-sandbox_sandbox',
     '-e',
     'TEST_DATABASE_URL=postgres://postgres:sandbox-owner-only@postgres/zns?sslmode=disable',
-    'zns-sandbox-tests:local',
+    'synthetic-qa-zns-tests:local',
     'go',
     'test',
     ...testArguments,
     ...packages,
   ]);
+  run('docker', [
+    '--context',
+    'desktop-linux',
+    'run',
+    '--rm',
+    '--network',
+    'synthetic-qa-zns-sandbox_sandbox',
+    '--mount',
+    `type=bind,source=${root},target=/workspace/platform,readonly`,
+    '--mount',
+    `type=bind,source=${migrateRoot},target=/workspace/tools/migrate,readonly`,
+    '--workdir',
+    '/workspace/tools/migrate',
+    '-e',
+    'TEST_DATABASE_URL=postgres://postgres:sandbox-owner-only@postgres/zns?sslmode=disable',
+    'synthetic-qa-zns-tests:local',
+    'go',
+    'test',
+    ...testArguments,
+    './...',
+  ]);
 } else {
   run('go', ['test', ...testArguments, ...packages]);
+  run('go', ['test', ...testArguments, './...'], migrateRoot);
 }
 run('go', [
   'test',

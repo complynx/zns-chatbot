@@ -4,17 +4,20 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
-func preparePassBatch(call scriptclient.ToolCall, input agent.Input) (*scriptPassRequest, error) {
+func preparePassBatch(call scriptclient.ToolCall, input agent.Input) (*agenthost.ScriptPassRequest, error) {
 	var args struct {
 		Event      string                        `json:"event"`
 		Recipients []int64                       `json:"recipients"`
@@ -23,25 +26,25 @@ func preparePassBatch(call scriptclient.ToolCall, input agent.Input) (*scriptPas
 	if err := decodeScriptArguments(call.Arguments, &args); err != nil {
 		return nil, err
 	}
-	if input.Registration == nil || !registrationEventKnown(input.Registration, args.Event) || args.Event == "" ||
+	if input.Registration == nil || !interaction.RegistrationEventKnown(input.Registration, args.Event) ||
+		args.Event == "" ||
 		len(args.Recipients) == 0 ||
 		len(args.Recipients) > passbooking.MaxAdminBatchRecipients {
 		return nil, errors.New("pass batch lacks evidence")
 	}
 	for _, id := range args.Recipients {
-		if !registrationAdminTargetGrounded(
-			input,
+		if !interaction.RegistrationAdminTargetGrounded(agenthost.CurrentRequestEvidence(input), input,
 			agent.RegistrationProposal{Event: args.Event, Target: strconv.FormatInt(id, 10)},
 		) {
 			return nil, errors.New("pass recipient lacks evidence")
 		}
 	}
-	request := &scriptPassRequest{
+	request := &agenthost.ScriptPassRequest{
 		ID:   rand.Text(),
 		Name: call.Name,
 		Batch: &passbooking.RuntimeBatch{
 			Event:      args.Event,
-			Action:     passToolActions()[call.Name],
+			Action:     agenthost.PassToolActions()[call.Name],
 			Recipients: args.Recipients,
 		},
 	}
@@ -64,7 +67,7 @@ func preparePassBatch(call scriptclient.ToolCall, input agent.Input) (*scriptPas
 	if err := agent.Validate(agent.Plan{View: agent.RegistrationView, RegistrationAction: &proposal}); err != nil {
 		return nil, err
 	}
-	if options.LegalName != nil && !strings.Contains(currentRequestEvidence(input), *options.LegalName) {
+	if options.LegalName != nil && !strings.Contains(agenthost.CurrentRequestEvidence(input), *options.LegalName) {
 		return nil, errors.New("assignment name lacks current evidence")
 	}
 	request.Batch.Options = passbooking.AdminAssignment{
@@ -90,9 +93,13 @@ type scriptPassBatchItem struct {
 	Code       string                       `json:"code,omitempty"`
 }
 
-func (b *Bot) executePassBatch(ctx context.Context, owner string, request *scriptPassRequest) (any, error) {
-	var result []passbooking.RuntimeBatchItem
-	err := b.API.call(ctx, owner, http.MethodPost, "/v1/passes/batches", request.Batch, &result)
+func (b *Bot) executePassBatch(
+	ctx context.Context,
+	owner string,
+	request *agenthost.ScriptPassRequest,
+	source readsource.Derivation,
+) (any, error) {
+	result, err := (interaction.RegistrationExecutor{Derived: b.Host}).Batch(ctx, owner, *request.Batch, &source)
 	if err != nil {
 		return nil, err
 	}

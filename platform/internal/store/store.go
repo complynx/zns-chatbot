@@ -17,9 +17,17 @@ import (
 var migrations embed.FS
 
 func Open(ctx context.Context, url string, tracers ...pgx.QueryTracer) (*pgxpool.Pool, error) {
+	return OpenNamed(ctx, url, "", tracers...)
+}
+
+// OpenNamed sets connection identity before the pool opens its first connection.
+func OpenNamed(ctx context.Context, url, applicationName string, tracers ...pgx.QueryTracer) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, errors.New("invalid database configuration")
+	}
+	if applicationName != "" {
+		config.ConnConfig.RuntimeParams["application_name"] = applicationName
 	}
 	if len(tracers) > 1 {
 		return nil, errors.New("only one database tracer is supported")

@@ -73,9 +73,20 @@ func allowed(ctx context.Context, q queryer, actor string) error {
 }
 
 func adminAllowed(ctx context.Context, q queryer, actor, event, scope string) error {
+	return adminPermission(ctx, q, actor, event, scope, false)
+}
+
+func adminPermission(ctx context.Context, q queryer, actor, event, scope string, lock bool) error {
+	query := `SELECT CASE $3 WHEN 'export' THEN can_export WHEN 'review' THEN can_review ELSE false END
+ FROM core.food_admins WHERE event_id=$1 AND owner=$2`
+	if lock {
+		query += " FOR SHARE"
+	}
 	var permitted bool
-	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.food_admins WHERE event_id=$1 AND owner=$2
- AND CASE $3 WHEN 'export' THEN can_export WHEN 'review' THEN can_review ELSE false END)`, event, actor, scope).Scan(&permitted)
+	err := q.QueryRow(ctx, query, event, actor, scope).Scan(&permitted)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return forbidden()
+	}
 	if err != nil {
 		return err
 	}

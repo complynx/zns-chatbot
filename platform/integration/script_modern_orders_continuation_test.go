@@ -29,7 +29,7 @@ func TestModernOrdersCompleteCursorAcrossTurns(t *testing.T) {
 	t.Parallel()
 	f, _, order := modernLargeOrder(t, false)
 	cursor := startModernContinuation(t, f, identity.AliceTelegramID, order.ID, "orders.inspect")
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, TG: f.b.TG}
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG}
 	result := runModernContinuation(t, f, 42001, identity.AliceTelegramID, "Continue reading "+order.ID, fmt.Sprintf(`
 const p=tools.orders.inspect({order_id:%q,cursor:%q});return {offset:p.offset,more:p.more};`, order.ID, cursor))
 	assert.JSONEq(t, `{"offset":32000,"more":true}`, string(result))
@@ -50,7 +50,7 @@ let denied=false;try{tools.orders.inspect({event:"different-event",order_id:%q,c
 	changed.Choice = &orders.ChoiceInput{Customer: "Changed manually"}
 	_, err := s.Execute(t.Context(), "alice", changed)
 	require.NoError(t, err)
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, TG: f.b.TG}
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG}
 	result = runModernContinuation(t, f, 42103, identity.AliceTelegramID, "Continue and delete "+order.ID, fmt.Sprintf(`
 const stale=tools.orders.inspect({order_id:%q,resume:true});let edited=false;try{tools.orders.update({name:"delete",order_id:%q});edited=true;}catch(_){}
 return {stale,edited};`, order.ID, order.ID))

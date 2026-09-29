@@ -188,7 +188,7 @@ func TestFoodAgentExplicitDisplayedTarget(t *testing.T) {
 			var bound agent.FoodReceiptTarget
 			require.NoError(
 				t,
-				f.db.QueryRow(t.Context(), `SELECT plan->'media_resolved_food' FROM bot.replies WHERE update_id=8701`).
+				f.db.QueryRow(t.Context(), `SELECT payload->'media_resolved_food' FROM interaction.saved_turns WHERE owner='alice' AND update_id=8701`).
 					Scan(&bound),
 			)
 			assert.Equal(t, order.EventID, bound.EventID)

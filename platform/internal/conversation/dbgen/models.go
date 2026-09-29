@@ -3,3 +3,13 @@
 //   sqlc v1.31.1
 
 package dbgen
+
+import (
+	"encoding/json"
+)
+
+type CoreConversationReadAuthority struct {
+	EventID           int64
+	Authorities       json.RawMessage
+	HistoryGeneration int64
+}

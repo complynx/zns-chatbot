@@ -92,3 +92,17 @@ func (c *Call) Finish(ctx context.Context) error {
 	}
 	return nil
 }
+
+// NotSent releases an attempt only when the caller knows no provider send/start
+// occurred. A failed transport is uncertain and must use Finish instead.
+func (c *Call) NotSent(ctx context.Context) error {
+	if c == nil || c.recorder == nil {
+		return nil
+	}
+	settleCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), settleTimeout)
+	defer cancel()
+	if c.recorder.NotSent(settleCtx, c.id) != nil {
+		return ErrAccounting
+	}
+	return nil
+}

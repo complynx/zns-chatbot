@@ -2,7 +2,6 @@ package passbooking
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -109,46 +108,20 @@ func (s Service) prepareRuntimeBatch(ctx context.Context, actor string, c Runtim
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = readEvent(ctx, tx, c.Event); err != nil {
-		return err
-	}
-	if _, err = authorize(ctx, tx, actor, c.Action, c.Event); err != nil {
-		return err
-	}
-	raw, err := json.Marshal(c)
+	batch, found, err := s.PrepareRuntimeBatchInTx(ctx, tx, actor, c)
 	if err != nil {
 		return err
 	}
-	var previous string
-	err = tx.QueryRow(ctx, `SELECT request_hash FROM core.pass_admin_batches WHERE actor=$1 AND key_hash=$2`, actor, hash([]byte(c.Key))).
-		Scan(&previous)
-	if err == nil {
-		if previous != hash(raw) {
-			return conflict("idempotency_conflict")
+	if len(batch.Source) > 0 {
+		return conflict("derived_batch_requires_coordinator")
+	}
+	if !found {
+		if err = batch.Persist(ctx, tx, c, nil); err != nil {
+			return err
 		}
-		return tx.Commit(ctx)
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	plan, err := groundRuntimeBatch(ctx, tx, actor, c)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(
-		ctx,
-		`INSERT INTO core.pass_admin_batches(actor,key_hash,request_hash,plan) VALUES($1,$2,$3,$4)`,
-		actor,
-		hash([]byte(c.Key)),
-		hash(raw),
-		plan,
-	)
-	if err != nil {
-		return err
 	}
 	return tx.Commit(ctx)
 }
-
 func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeBatch) (runtimeBatchPlan, error) {
 	plan := runtimeBatchPlan{Action: c.Action, Event: c.Event, Items: make([]RuntimeBatchItem, len(c.Recipients))}
 	records, err := readBookings(ctx, tx, c.Event)
@@ -198,10 +171,17 @@ func (s Service) runRuntimeBatchItem(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var plan runtimeBatchPlan
-	err = tx.QueryRow(ctx, `SELECT plan FROM core.pass_admin_batches WHERE actor=$1 AND key_hash=$2 FOR UPDATE`, actor, hash([]byte(c.Key))).
-		Scan(&plan)
+	if _, err = readEvent(ctx, tx, c.Event); err != nil {
+		return nil, err
+	}
+	var source []byte
+	err = tx.QueryRow(ctx, `SELECT plan,source_derivation FROM core.pass_admin_batches WHERE actor=$1 AND key_hash=$2 FOR UPDATE`, actor, hash([]byte(c.Key))).
+		Scan(&plan, &source)
 	if err != nil {
 		return nil, err
+	}
+	if len(source) > 0 {
+		return nil, conflict("derived_batch_requires_coordinator")
 	}
 	item := &plan.Items[index]
 	// Mutations check authorization themselves. A terminal replay also checks it.

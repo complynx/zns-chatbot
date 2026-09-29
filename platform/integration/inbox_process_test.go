@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,12 +31,14 @@ func inboxChild(t *testing.T, connection string) {
 	db, err := pgxpool.New(t.Context(), connection)
 	require.NoError(t, err)
 	defer db.Close()
-	require.True(t, strings.HasPrefix(db.Config().ConnConfig.Database, "zns_test_"))
+	require.True(t, strings.HasPrefix(db.Config().ConnConfig.Database, "synthetic_qa_zns_"))
+	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
 	b := &bot.Bot{
 		DB: db,
-		API: bot.APIClient{Base: os.Getenv("ZNS_INBOX_PROCESS_TEST_API"),
-			Signer: identity.Signer{Key: []byte(strings.Repeat("k", 32))}},
-		TG: telegram.Client{Base: os.Getenv("ZNS_INBOX_PROCESS_TEST_TG"), Token: "sandbox"},
+		API: appclient.Client{Base: os.Getenv("ZNS_INBOX_PROCESS_TEST_API"),
+			SandboxToken: signer.Token},
+		Host: appclient.Host{Base: os.Getenv("ZNS_INBOX_PROCESS_TEST_API"), Signer: signer},
+		TG:   telegram.Client{Base: os.Getenv("ZNS_INBOX_PROCESS_TEST_TG"), Token: "sandbox"},
 		Model: avModel(func(ctx context.Context, _ agent.Input) (agent.Plan, error) {
 			_, printErr := fmt.Fprintln(os.Stdout, inboxDurableMarker)
 			if printErr != nil {
@@ -44,6 +48,7 @@ func inboxChild(t *testing.T, connection string) {
 			return agent.Plan{}, ctx.Err()
 		}),
 	}
+	b.Host.UserToken = b.API.UserToken
 	require.NoError(t, b.Run(t.Context()))
 }
 

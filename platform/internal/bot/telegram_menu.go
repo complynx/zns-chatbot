@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -13,7 +12,7 @@ import (
 // Registration is an idempotent replacement on every exclusive poller startup.
 // No legacy version marker can suppress a changed command catalog or bot token.
 func (b *Bot) registerTelegramMenu(ctx context.Context) error {
-	if err := b.TG.SetDefaultCommandsMenu(ctx); err != nil {
+	if err := telegram.RetryControl(ctx, b.TG.SetDefaultCommandsMenu); err != nil {
 		return err
 	}
 	for _, locale := range []i18n.Locale{i18n.English, i18n.Russian} {
@@ -25,7 +24,10 @@ func (b *Bot) registerTelegramMenu(ctx context.Context) error {
 		if locale == i18n.English {
 			language = ""
 		}
-		if err = b.TG.SetMyCommands(ctx, language, commands); err != nil {
+		if err = telegram.RetryControl(
+			ctx,
+			func(callCtx context.Context) error { return b.TG.SetMyCommands(callCtx, language, commands) },
+		); err != nil {
 			return err
 		}
 	}
@@ -38,10 +40,10 @@ func telegramCommands(locale i18n.Locale) ([]telegram.BotCommand, error) {
 		description i18n.ID
 	}{
 		{
-			"passes",
+			botFamilyPasses,
 			i18n.MenuRegistrationDescription,
 		},
-		{"massage", i18n.CommandMassage},
+		{botFamilyMassage, i18n.CommandMassage},
 		{agent.OrdersView, i18n.CommandOrders},
 	}
 	commands := make([]telegram.BotCommand, 0, len(specs))

@@ -7,6 +7,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -14,7 +16,15 @@ import (
 )
 
 func (b *Bot) renderFood(ctx context.Context, in incoming, event, id string, review bool) error {
-	view, err := b.API.foodView(ctx, in.owner, event, id, review)
+	family := "food"
+	if review {
+		family = botFamilyFoodReview
+	}
+	ctx = withBotCard(
+		ctx,
+		botdelivery.Reference{Kind: botdelivery.CardIntent, Family: family, Event: event, Object: id},
+	)
+	view, err := b.API.FoodViewForReview(ctx, in.owner, event, id, review)
 	if err != nil {
 		return b.foodFailure(ctx, in, err)
 	}

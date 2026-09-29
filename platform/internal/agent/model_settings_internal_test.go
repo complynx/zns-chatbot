@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/zns-chatbot/platform/internal/api"
 	"github.com/complynx/zns-chatbot/platform/internal/modelsettings"
 )
 
@@ -29,9 +28,8 @@ func TestModelSettingsProviderIsolation(t *testing.T) {
 				assert.NoError(t, json.NewDecoder(r.Body).Decode(&payload))
 				assert.Equal(t, selection.Model, payload.Model)
 				assert.Equal(t, selection.Effort, payload.Reasoning.Effort)
-				api.JSON(
-					w,
-					http.StatusOK,
+				w.Header().Set("Content-Type", "application/json")
+				assert.NoError(t, json.NewEncoder(w).Encode(
 					map[string]any{
 						"status": "completed",
 						"output": []any{
@@ -41,7 +39,7 @@ func TestModelSettingsProviderIsolation(t *testing.T) {
 							},
 						},
 					},
-				)
+				))
 			}))
 			defer server.Close()
 			ctx := modelsettings.WithSelection(t.Context(), selection)

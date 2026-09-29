@@ -4,52 +4,36 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/url"
 	"strings"
 
-	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
+const memorySummaryOperation = "summary"
+
 const maxMemoryToolBytes = 32 * 1024
 const memoryToolWrite = "memory.write"
+const memoryToolSources = "memory.sources"
 const memoryToolRead = "memory.read"
 
 // The script result carries the selected evidence. Do not re-inject every full
 // intermediate read into the next prompt; the durable host ledger retains it.
-func memoryCallProjection(outcome agent.ScriptToolResult) agent.ScriptToolResult {
-	if strings.HasPrefix(outcome.Name, "memory.") && outcome.Name != memoryToolWrite && outcome.Error == "" {
-		outcome.Result = json.RawMessage(
-			`{"read_completed":true,"payload_omitted":true,"evidence":"See script result; omission is not absence."}`,
-		)
-	}
-	return outcome
-}
-
 func (b *Bot) finalizeMemorySources(ctx context.Context, owner string, updateID int64) error {
-	records, err := b.scriptRecords(ctx, owner, updateID)
+	records, err := b.scriptHost().Store.Records(ctx, owner, updateID)
 	if err != nil {
 		return err
 	}
+	var keys []string
 	for _, record := range records {
 		for _, call := range record.Calls {
-			if call.Memory == nil {
-				continue
-			}
-			// Interrupted callbacks may have committed. The domain receipt resolves
-			// that uncertainty without repeating the mutation.
-			if err = b.API.AttachMemorySources(
-				ctx,
-				owner,
-				call.Memory.Key,
-				updateID,
-			); err != nil {
-				return err
+			if call.Memory != nil {
+				keys = append(keys, call.Memory.Key)
 			}
 		}
 	}
-	return nil
+	return b.knowledgeCoordinator().AttachOriginalSources(ctx, owner, updateID, keys)
 }
 
 func memoryTools() []scriptclient.Tool {
@@ -91,7 +75,7 @@ func memoryTools() []scriptclient.Tool {
 			InputSchema: ref,
 		},
 		{
-			Name:        "memory.sources",
+			Name:        memoryToolSources,
 			Description: "Read actual owner-authorized source messages for this exact revision. Missing sources are not evidence.",
 			InputSchema: ref,
 		},
@@ -115,12 +99,19 @@ func (b *Bot) prepareMemoryTool(
 	owner string,
 	updateID int64,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
-) (scriptToolRecord, error) {
+	record agenthost.ScriptToolRecord,
+) (agenthost.ScriptToolRecord, error) {
+	if call.Name != memoryToolWrite {
+		state, err := b.API.MemoryDeletions(ctx, owner)
+		if err != nil {
+			return record, err
+		}
+		record.MemoryReadState = &state
+	}
 	switch call.Name {
 	case "memory.summary", "memory.index", "memory.search":
 		return record, decodeScriptArguments(call.Arguments, new(knowledge.MemoryQuery))
-	case memoryToolRead, "memory.history", "memory.revision", "memory.sources":
+	case memoryToolRead, "memory.history", "memory.revision", memoryToolSources:
 		var args memoryRefArguments
 		if err := decodeScriptArguments(call.Arguments, &args); err != nil || args.Ref == "" {
 			return record, errors.New("invalid memory reference")
@@ -159,11 +150,12 @@ func (b *Bot) prepareMemoryWrite(
 		if err := b.observedMemoryReference(ctx, owner, updateID, args.Ref); err != nil {
 			return nil, err
 		}
-		var entry knowledge.MemoryEntry
-		if err := b.API.memoryRead(ctx, owner, "read", url.Values{"ref": {args.Ref}}, &entry); err != nil {
+		entry, err := b.API.MemoryEntry(ctx, owner, args.Ref, "")
+		if err != nil {
 			return nil, err
 		}
-		if entry.Namespace != knowledge.MemoryPrivate || entry.SourceKind != "document" || entry.Topic != args.Topic ||
+		if entry.Namespace != knowledge.MemoryPrivate || entry.SourceKind != botDocumentKind ||
+			entry.Topic != args.Topic ||
 			entry.Key != args.Key ||
 			entry.Historical {
 			return nil, errors.New("memory target requires a current private document")
@@ -171,14 +163,7 @@ func (b *Bot) prepareMemoryWrite(
 		command.Version = entry.Version
 		return command, nil
 	}
-	var document knowledge.Document
-	err := b.API.memoryRead(
-		ctx,
-		owner,
-		"document",
-		url.Values{"topic": {args.Topic}, knowledgeKeyQuery: {args.Key}},
-		&document,
-	)
+	document, err := b.API.MemoryDocument(ctx, owner, args.Topic, args.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -190,7 +175,7 @@ func (b *Bot) prepareMemoryWrite(
 }
 
 func (b *Bot) observedMemoryReference(ctx context.Context, owner string, updateID int64, reference string) error {
-	records, err := b.scriptRecords(ctx, owner, updateID)
+	records, err := b.scriptHost().Store.Records(ctx, owner, updateID)
 	if err != nil {
 		return err
 	}
@@ -212,10 +197,13 @@ func (b *Bot) executeMemoryTool(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 ) (any, error) {
 	if record.Memory != nil {
-		result, err := b.API.ExecuteKnowledge(ctx, owner, *record.Memory)
+		if record.Source == nil || !record.Source.Valid() {
+			return nil, errors.New("missing admitted source")
+		}
+		result, err := b.Host.ExecuteDerivedKnowledge(ctx, owner, *record.Memory, *record.Source)
 		if err != nil {
 			return nil, err
 		}
@@ -226,21 +214,30 @@ func (b *Bot) executeMemoryTool(
 		return result, nil
 	}
 	operation := strings.TrimPrefix(call.Name, "memory.")
-	var values url.Values
-	if operation == "summary" || operation == "index" || operation == "search" {
+	if operation == memorySummaryOperation || operation == "index" || operation == "search" {
 		var query knowledge.MemoryQuery
 		if err := decodeScriptArguments(call.Arguments, &query); err != nil {
 			return nil, err
 		}
-		values = memoryQueryValues(query)
-	} else {
-		var args memoryRefArguments
-		if err := decodeScriptArguments(call.Arguments, &args); err != nil {
-			return nil, err
+		if operation == memorySummaryOperation {
+			return b.API.MemorySummary(ctx, owner, query)
 		}
-		values = url.Values{"ref": {args.Ref}, memoryCursorQuery: {args.Cursor}}
+		return b.API.MemorySearch(ctx, owner, query)
 	}
-	var result json.RawMessage
-	err := b.API.memoryRead(ctx, owner, operation, values, &result)
-	return result, err
+	var args memoryRefArguments
+	if err := decodeScriptArguments(call.Arguments, &args); err != nil {
+		return nil, err
+	}
+	switch operation {
+	case "read":
+		return b.API.MemoryEntry(ctx, owner, args.Ref, args.Cursor)
+	case "revision":
+		return b.API.MemoryRevision(ctx, owner, args.Ref, args.Cursor)
+	case "history":
+		return b.API.MemoryHistory(ctx, owner, args.Ref, args.Cursor)
+	case "sources":
+		return b.API.MemorySources(ctx, owner, args.Ref)
+	default:
+		return nil, errors.New("invalid memory read")
+	}
 }

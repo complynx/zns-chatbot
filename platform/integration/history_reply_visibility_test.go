@@ -12,6 +12,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 )
 
 func TestHistoryReplyVisibilityAfterDeletionAndRestart(t *testing.T) {
@@ -22,7 +23,7 @@ func TestHistoryReplyVisibilityAfterDeletionAndRestart(t *testing.T) {
 			f := setup(t)
 			archive := conversation.Service{DB: f.db}
 			const canary = "orchid garden stale reply marker"
-			require.NoError(t, archive.Append(t.Context(), "alice", "visibility-source", "user", canary))
+			require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "visibility-source", "user", canary))
 			var eventID int64
 			require.NoError(
 				t,
@@ -50,7 +51,7 @@ func TestHistoryReplyVisibilityAfterDeletionAndRestart(t *testing.T) {
 			var terminal bool
 			require.NoError(
 				t,
-				f.db.QueryRow(t.Context(), `SELECT (plan->>'history_redacted')::boolean FROM bot.replies WHERE update_id=70001`).
+				f.db.QueryRow(t.Context(), `SELECT (kind='terminal' AND state='privacy_terminal' AND reason='history_deleted') FROM interaction.saved_turns WHERE owner='alice' AND update_id=70001`).
 					Scan(&terminal),
 			)
 			assert.True(t, terminal)
@@ -88,7 +89,7 @@ func TestHistoryReplyVisibilityPreservesManualAndSystemNotices(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	archive := conversation.Service{DB: f.db}
-	require.NoError(t, archive.Append(t.Context(), "alice", "manual-generation-source", "user", "old context"))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "manual-generation-source", "user", "old context"))
 	var eventID int64
 	require.NoError(
 		t,
@@ -98,14 +99,23 @@ func TestHistoryReplyVisibilityPreservesManualAndSystemNotices(t *testing.T) {
 	require.NoError(t, archive.DeleteContent(t.Context(), "alice", eventID))
 	_, err := f.db.Exec(
 		t.Context(),
-		`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',70002,'reply','"manual fixed notice"')`,
+		`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',70002,'reply','"manual fixed notice"'),('alice',70002,'reply_origin','"authoritative"')`,
 	)
 	require.NoError(t, err)
 	require.NoError(t, f.b.Render(t.Context(), "alice", 101))
 	assert.Contains(t, replyVisibilityState(t, f), "manual fixed notice")
+	_, err = (interaction.Store{DB: f.db}).SaveWinner(
+		t.Context(),
+		"alice",
+		70003,
+		interaction.SavedPlan{FormatVersion: interaction.CurrentFormatVersion,
+			Kind: interaction.NoticePlan, State: interaction.Ready, SystemNotice: i18n.AgentQuotaReached,
+		},
+	)
+	require.NoError(t, err)
 	_, err = f.db.Exec(
 		t.Context(),
-		`INSERT INTO bot.replies(update_id,plan) VALUES(70003,'{"history_generation":0,"system_notice":"agent.quota_reached"}'); INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',70003,'reply','"fixed host notice"')`,
+		`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',70003,'reply','"fixed host notice"'),('alice',70003,'reply_origin','"authoritative"')`,
 	)
 	require.NoError(t, err)
 	require.NoError(t, f.b.Render(t.Context(), "alice", 101))

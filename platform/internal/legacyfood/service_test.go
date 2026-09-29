@@ -9,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,7 +35,7 @@ func foodDatabase(t *testing.T) legacyfood.Service {
 	admin, err := pgxpool.New(t.Context(), dsn)
 	require.NoError(t, err)
 	t.Cleanup(admin.Close)
-	name := "food_test_" + strings.ToLower(rand.Text())
+	name := "synthetic_qa_zns_food_test_" + strings.ToLower(rand.Text())
 	quoted := pgx.Identifier{name}.Sanitize()
 	_, err = admin.Exec(t.Context(), "CREATE DATABASE "+quoted)
 	require.NoError(t, err)
@@ -55,7 +58,16 @@ func foodDatabase(t *testing.T) legacyfood.Service {
  '2035-01-01Z',1,'7 days','1 day','1 hour');
  INSERT INTO core.food_admins(event_id,owner,can_export,can_review,can_assign) VALUES('food-event','bob',true,true,true)`)
 	require.NoError(t, err)
-	return legacyfood.Service{DB: db, BotID: 77}
+	return legacyfood.Service{
+		DB:    db,
+		BotID: 77,
+		Delivery: delivery.Settings{
+			BotID:        909090,
+			BotInterval:  time.Millisecond,
+			ChatInterval: time.Millisecond,
+			Fallback:     30 * time.Second,
+		},
+	}
 }
 
 func command(order legacyfood.Order, name, kind string) legacyfood.Command {
@@ -180,7 +192,17 @@ func TestReminderMarkersAndNoOrderBranch(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notices, 2)
 	for _, notice := range notices {
-		require.NoError(t, s.MarkNotification(t.Context(), notice.ID))
+		require.NoError(
+			t,
+			s.CompleteNotification(
+				t.Context(),
+				legacyfood.NotificationCompletion{
+					ID:      notice.ID,
+					Attempt: notice.DeliveryAttempt,
+					Outcome: delivery.Outcome{Kind: delivery.Cancelled, Reason: "synthetic_domain_notice_consumed"},
+				},
+			),
+		)
 	}
 	_, err = s.DB.Exec(
 		t.Context(),

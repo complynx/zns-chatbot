@@ -42,7 +42,7 @@ func TestWorkflowUnavailableNoticeLocaleAndReplay(t *testing.T) {
 	assert.False(t, native, "catalog fallback is a system notice, not model prose")
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), `SELECT COALESCE(plan->>'system_notice','') FROM bot.replies WHERE update_id=9022`).
+		f.db.QueryRow(t.Context(), `SELECT COALESCE(payload->>'system_notice','') FROM interaction.saved_turns WHERE owner='alice' AND update_id=9022`).
 			Scan(&identity),
 	)
 	assert.Equal(t, string(i18n.AgentUnavailable), identity)

@@ -1,7 +1,10 @@
 package bot
 
 import (
+	"errors"
 	"testing"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 
 	"github.com/stretchr/testify/require"
 
@@ -15,16 +18,16 @@ func TestModernChoiceClaimFencesParentGeneration(t *testing.T) {
 			t.Parallel()
 			db := foodPendingDatabase(t)
 			generation := int64(0)
-			parent := scriptRecord{
+			parent := agenthost.ScriptRecord{
 				HistoryGeneration: 0,
-				Calls: []scriptToolRecord{
+				Calls: []agenthost.ScriptToolRecord{
 					{
-						ModernChoice: &modernChoiceRecord{Ref: "94001.0.0", HistoryGeneration: &generation},
+						ModernChoice: &agenthost.ModernChoiceRecord{Ref: "94001.0.0", HistoryGeneration: &generation},
 						Outcome:      agent.ScriptToolResult{Result: []byte(`{}`)},
 					},
 				},
 			}
-			records := []scriptRecord{parent}
+			records := []agenthost.ScriptRecord{parent}
 			_, err := db.Exec(
 				t.Context(),
 				`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',94001,'script_runs',$1)`,
@@ -38,7 +41,16 @@ func TestModernChoiceClaimFencesParentGeneration(t *testing.T) {
 			if sameUpdate {
 				update = 94001
 			}
-			err = claimModernChoice(t.Context(), tx, "alice", update, records, "94001.0.0", "94002.0.0", 1)
+			err = (agenthost.ScriptStore{StaleError: errors.New("stale read")}).ClaimModernChoice(
+				t.Context(),
+				tx,
+				"alice",
+				update,
+				records,
+				"94001.0.0",
+				"94002.0.0",
+				1,
+			)
 			require.Error(t, err, "current-generation admission cannot claim an older parent")
 			require.NoError(t, tx.Rollback(t.Context()))
 			var child string

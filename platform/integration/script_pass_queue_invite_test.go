@@ -91,6 +91,22 @@ func TestScriptPassQueueInvitationGrounding(t *testing.T) {
 			case "queue", "explicit", "trusted":
 				require.Empty(t, run.Error)
 				assert.EqualValues(t, 101, booking.InvitationTarget)
+			case "revoked":
+				var omitted struct {
+					Omitted bool   `json:"omitted"`
+					Reason  string `json:"reason"`
+				}
+				require.NoError(t, json.Unmarshal(run.Result, &omitted))
+				require.True(t, omitted.Omitted)
+				require.Equal(t, "pass_access_changed", omitted.Reason)
+				var redacted bool
+				require.NoError(
+					t,
+					f.db.QueryRow(t.Context(), `SELECT (content#>>'{0,pass_redacted}')::boolean FROM bot.interactions WHERE owner='bob' AND update_id=20150 AND kind='script_runs'`).
+						Scan(&redacted),
+				)
+				require.True(t, redacted)
+				assert.Zero(t, booking.InvitationTarget)
 			default:
 				assert.NotEmpty(t, run.Error)
 				assert.Zero(t, booking.InvitationTarget)

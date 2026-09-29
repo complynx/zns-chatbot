@@ -5,8 +5,8 @@ import (
 	"strconv"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -99,7 +99,7 @@ func (r *passMenuRenderer) queue(ctx context.Context) error {
 	first, last := r.page(len(page.Bookings), page.Next)
 	for _, booking := range page.Bookings[first:last] {
 		r.takeoverLink(booking.TelegramID, " · "+strconv.FormatInt(booking.TelegramID, 10))
-		state := passMenuState{
+		state := interaction.RegistrationMenu{
 			Event:                 r.state.Event,
 			View:                  agent.RegistrationAdminTarget,
 			AdminTargetTelegramID: booking.TelegramID,

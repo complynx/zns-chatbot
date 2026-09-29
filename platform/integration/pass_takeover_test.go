@@ -310,13 +310,13 @@ func TestPassTakeoverConcurrentReplayAndNoticeCurrentness(t *testing.T) {
 		require.NoError(t, failure)
 	}
 	// Recreate the service to prove the notice and replay survive a process restart.
-	s = passbooking.Service{DB: db}
+	s = passbooking.Service{DB: db, Delivery: syntheticDeliverySettings()}
 	notices, err := s.PendingNotifications(t.Context())
 	require.NoError(t, err)
 	require.Len(t, notices, 1)
 	assert.True(t, notices[0].Current)
 	assert.Equal(t, "payment_contact_changed", notices[0].Kind)
-	require.NoError(t, s.CompleteNotification(t.Context(), notices[0].ID, "telegram_retry"))
+	require.NoError(t, deferPassTestNotice(t.Context(), s, notices[0]))
 	target, err := s.TakeoverTarget(t.Context(), "bob", "dance", 101)
 	require.NoError(t, err)
 	_, err = s.Execute(
@@ -338,12 +338,12 @@ func TestPassTakeoverConcurrentReplayAndNoticeCurrentness(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notices, 1)
 	assert.False(t, notices[0].Current, "superseded contact notice is not delivered")
-	require.NoError(t, s.CompleteNotification(t.Context(), notices[0].ID, ""))
+	require.NoError(t, cancelPassTestNotice(t, s, notices[0]))
 	notices, err = s.PendingNotifications(t.Context())
 	require.NoError(t, err)
 	require.Len(t, notices, 1)
 	assert.True(t, notices[0].Current)
-	require.NoError(t, s.CompleteNotification(t.Context(), notices[0].ID, ""))
+	require.NoError(t, cancelPassTestNotice(t, s, notices[0]))
 	notices, err = s.PendingNotifications(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, notices)

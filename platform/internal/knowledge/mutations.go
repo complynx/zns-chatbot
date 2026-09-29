@@ -65,7 +65,7 @@ func suggest(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, e
 		return Result{}, invalid()
 	}
 	var count int
-	err := tx.QueryRow(ctx, `SELECT count(*) FROM core.knowledge_proposals WHERE owner=$1 AND state IN ('pending_filter','pending_review')`, actor).
+	err := tx.QueryRow(ctx, `SELECT count(*) FROM core.knowledge_proposals WHERE owner=$1 AND state IN ('pending_filter','awaiting_submission','pending_review')`, actor).
 		Scan(&count)
 	if err != nil {
 		return Result{}, err
@@ -88,7 +88,7 @@ func suggest(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, e
 	return Result{Proposal: &p}, err
 }
 
-const proposalColumns = `id,scope,owner,topic,fact_key,body,version,fact_version,state,reason,created_at`
+const proposalColumns = `id,scope,owner,topic,fact_key,body,version,fact_version,state,reason,created_at,` + proposalSubmittedSQL
 
 func readProposal(ctx context.Context, tx pgx.Tx, id int64, scope string) (Proposal, error) {
 	p, err := scanProposal(
@@ -119,6 +119,7 @@ func scanProposal(row pgx.Row) (Proposal, error) {
 		&p.State,
 		&p.Reason,
 		&p.CreatedAt,
+		&p.Submitted,
 	)
 	return p, err
 }
@@ -137,7 +138,7 @@ func decide(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, er
 	if c.Name == assess {
 		return assessProposal(ctx, tx, p, c)
 	}
-	if p.State != pendingReview {
+	if p.State != pendingReview || !p.Submitted {
 		return Result{}, conflict("knowledge_review_state")
 	}
 	p.State = "rejected"
@@ -171,7 +172,7 @@ func assessProposal(ctx context.Context, tx pgx.Tx, p Proposal, c Command) (Resu
 	}
 	p.State = "filtered"
 	if c.Decision == approve {
-		p.State = pendingReview
+		p.State = AwaitingSubmission
 	}
 	p, err := updateProposal(ctx, tx, p, c.Text)
 	return Result{Proposal: &p}, err

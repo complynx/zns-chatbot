@@ -20,7 +20,7 @@ func memoryProvenanceRoutes(
 	signer identity.Signer,
 	logger *slog.Logger,
 ) {
-	memoryArchiveRoutes(mux, service, history, signer, logger)
+	memoryArchiveRoutes(mux, history, signer, logger)
 	memoryAssessmentRoutes(mux, service, signer, logger)
 	memorySummaryRoutes(mux, history, signer, logger)
 	mux.HandleFunc("POST /internal/memory/sources", func(w http.ResponseWriter, r *http.Request) {

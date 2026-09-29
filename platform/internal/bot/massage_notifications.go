@@ -4,144 +4,172 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-// DeliverMassageNotifications runs under the poller's existing session lock.
-// A crash before storing Telegram's accepted message ID can duplicate a send.
-// Once stored, retry edits the known message before acknowledging.
+// DeliverMassageNotifications isolates recipient failures and retains wire uncertainty.
 func (b *Bot) DeliverMassageNotifications(ctx context.Context) error {
-	recipients, err := b.API.MassageNoticeRecipients(ctx)
+	recipients, err := b.Host.MassageNoticeRecipients(ctx)
 	if err != nil {
 		return err
 	}
+	var failures error
 	delivered := 0
 	for _, recipient := range recipients {
 		if delivered >= massageDeliveryBatch {
-			return nil
+			break
 		}
-		notices, noticeErr := b.API.MassageDeliveryNotices(ctx, recipient.Owner)
+		notices, noticeErr := b.Host.MassageDeliveryNotices(ctx, recipient.Owner)
 		if noticeErr != nil {
-			return noticeErr
+			failures = errors.Join(failures, noticeErr)
+			continue
 		}
 		for _, notice := range notices {
 			if delivered >= massageDeliveryBatch {
-				return nil
+				break
 			}
 			delivered++
-			if noticeErr = b.deliverMassageNotice(
-				ctx,
-				recipient.Owner,
-				recipient.TelegramID,
-				notice,
-			); noticeErr != nil {
-				b.logger().WarnContext(ctx, "massage notification pending", "error", noticeErr)
-				break
+			failures = errors.Join(failures, b.deliverMassageNotice(ctx, recipient.Owner, notice.TelegramID, notice))
+			if ctx.Err() != nil {
+				return errors.Join(failures, ctx.Err())
 			}
 		}
 	}
-	return nil
+	return failures
 }
 
 const massageDeliveryBatch = 10
 
-func (b *Bot) deliverMassageNotice(
+func (b *Bot) deferMassageNotification(ctx context.Context, owner string, n massage.Notice, err error) error {
+	if n.FollowupPending {
+		done, reason := notificationFollowupResult(err)
+		return b.Host.CompleteMassageNoticeFollowup(
+			ctx,
+			owner,
+			massage.NotificationFollowup{ID: n.ID, Attempt: n.DeliveryAttempt, Done: done, Failure: reason},
+		)
+	}
+	return b.Host.CompleteMassageNotice(
+		ctx,
+		owner,
+		massage.NotificationCompletion{
+			ID:      n.ID,
+			Attempt: n.DeliveryAttempt,
+			Outcome: notificationPreflightOutcome(err),
+		},
+	)
+}
+
+func (b *Bot) deliverMassageNotice(ctx context.Context, owner string, chat int64, value massage.DeliveryNotice) error {
+	notice := value.Notice
+	if !value.Current {
+		if notice.FollowupPending {
+			return b.Host.CompleteMassageNoticeFollowup(
+				ctx,
+				owner,
+				massage.NotificationFollowup{
+					ID:      notice.ID,
+					Attempt: notice.DeliveryAttempt,
+					Done:    true,
+					Failure: notificationNoLongerCurrent,
+				},
+			)
+		}
+		return b.Host.CompleteMassageNotice(
+			ctx,
+			owner,
+			massage.NotificationCompletion{
+				ID:      notice.ID,
+				Attempt: notice.DeliveryAttempt,
+				Outcome: delivery.Outcome{Kind: delivery.Cancelled, Reason: notificationNoLongerCurrent},
+			},
+		)
+	}
+	authenticated, err := b.API.NotificationContext(ctx, owner, chat)
+	if err != nil {
+		return b.deferMassageNotification(ctx, owner, notice, err)
+	}
+	ctx = authenticated
+	var known bool
+	notice, known, err = b.sendPreparedMassageNotice(ctx, owner, chat, value)
+	if err != nil || !known {
+		return err
+	}
+	ctx = withBotDeliveryOrigin(
+		ctx,
+		delivery.Reference{Owner: delivery.Massage, Key: strconv.FormatInt(notice.ID, 10), Effect: botRefreshEffect},
+	)
+	err = b.followupMassageNotification(ctx, owner, chat, notice)
+	done, reason := notificationFollowupResult(err)
+	completeErr := b.Host.CompleteMassageNoticeFollowup(
+		ctx,
+		owner,
+		massage.NotificationFollowup{ID: notice.ID, Attempt: notice.DeliveryAttempt, Done: done, Failure: reason},
+	)
+	return errors.Join(err, completeErr)
+}
+
+func (b *Bot) massageNotificationPayload(
 	ctx context.Context,
 	owner string,
 	chat int64,
-	delivery massage.DeliveryNotice,
-) error {
-	ctx, authErr := b.API.notificationContext(ctx, owner, chat)
-	if authErr != nil {
-		return authErr
-	}
-	notice, reservation := delivery.Notice, delivery.Reservation
-	client, specialist := delivery.Client, delivery.Specialist
-	if reservation.CancelledAt != nil && notice.Kind != massageNoticeCancelled {
-		return b.API.CompleteMassageNotice(ctx, owner, notice.ID)
-	}
-	if notice.Kind == "additional" && time.Now().After(reservation.Start) {
-		return b.API.CompleteMassageNotice(ctx, owner, notice.ID)
-	}
-	preference, err := b.API.Preferences(ctx, owner)
+	value massage.DeliveryNotice,
+) (telegram.Send, error) {
+	pref, err := b.API.Preferences(ctx, owner)
 	if err != nil {
-		return err
+		return telegram.Send{}, err
 	}
 	title := i18n.MassageReminder
-	switch notice.Kind {
+	switch value.Notice.Kind {
 	case "booked":
 		title = i18n.MassageNewBooking
 	case massageNoticeCancelled:
 		title = i18n.MassageCancelNotice
 	}
-	r := massageRenderer{language: preference.Language}
+	r := massageRenderer{language: pref.Language}
 	text := r.text(
 		title,
 	) + "\n" + massageWhen(
-		reservation.Start,
+		value.Reservation.Start,
 	) + " · " + r.reservationQuote(
-		reservation,
+		value.Reservation,
 	) + "\n" + massageName(
-		specialist,
+		value.Specialist,
 	) + " · " + massageName(
-		client,
+		value.Client,
 	)
-	payload := telegram.Send{
+	return telegram.Send{
 		ChatID: chat,
 		Text:   text,
 		Markup: telegram.Markup{
 			Rows: [][]telegram.Button{{{Text: r.text(i18n.MassageHome), Data: massagePrefix + "open"}}},
 		},
-	}
-	err = b.DB.QueryRow(ctx, `SELECT message_id FROM bot.massage_deliveries WHERE notice_id=$1`, notice.ID).
-		Scan(&payload.MessageID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	}, nil
+}
+
+func (b *Bot) followupMassageNotification(ctx context.Context, owner string, chat int64, notice massage.Notice) error {
+	q := dbgen.New(b.DB)
+	if err := q.StoreMassageNotificationReceipt(
+		ctx,
+		dbgen.StoreMassageNotificationReceiptParams{ID: notice.ID, MessageID: notice.MessageID},
+	); err != nil {
 		return err
 	}
-	messageID, err := b.editOrSend(ctx, payload)
+	opened, err := q.MassageNotificationViewOpened(ctx, owner)
 	if err != nil {
-		return err
-	}
-	_, err = b.DB.Exec(ctx, `INSERT INTO bot.massage_deliveries(notice_id,message_id) VALUES($1,$2)
-	ON CONFLICT(notice_id) DO UPDATE SET message_id=$2`, notice.ID, messageID)
-	if err != nil {
-		return err
-	}
-	var opened bool
-	if err = b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.massage_views WHERE owner=$1)`, owner).
-		Scan(&opened); err != nil {
 		return err
 	}
 	if opened {
-		if err = b.RenderMassage(ctx, owner, chat, ""); err != nil {
-			return err
-		}
+		return b.RenderMassage(ctx, owner, chat, "")
 	}
-	return b.API.CompleteMassageNotice(ctx, owner, notice.ID)
-}
-
-func (b *Bot) deliverQueuedNotifications(ctx context.Context) {
-	if err := b.DeliverFoodNotifications(ctx); err != nil {
-		b.logger().WarnContext(ctx, "food notification queue unavailable", "error", err)
-	}
-	if err := b.DeliverAdminMessages(ctx); err != nil {
-		b.logger().WarnContext(ctx, "administrator message queue unavailable")
-	}
-	if err := b.DeliverNotifications(ctx); err != nil {
-		b.logger().WarnContext(ctx, "notification queue unavailable", "error", err)
-	}
-	if err := b.DeliverMassageNotifications(ctx); err != nil {
-		b.logger().WarnContext(ctx, "massage notification queue unavailable", "error", err)
-	}
-	if err := b.DeliverPassNotifications(ctx); err != nil {
-		b.logger().WarnContext(ctx, "pass notification queue unavailable", "error", err)
-	}
+	return nil
 }
 
 func (r *massageRenderer) reservationQuote(reservation massage.Reservation) string {
@@ -172,7 +200,7 @@ func (b *Bot) reconcileMassageViews(ctx context.Context) error {
 		return err
 	}
 	for _, view := range views {
-		viewContext, authErr := b.API.notificationContext(ctx, view.owner, view.chat)
+		viewContext, authErr := b.API.NotificationContext(ctx, view.owner, view.chat)
 		if authErr != nil {
 			b.logger().WarnContext(ctx, "massage view identity pending")
 			continue
@@ -185,3 +213,69 @@ func (b *Bot) reconcileMassageViews(ctx context.Context) error {
 }
 
 const massageNoticeCancelled = "cancelled"
+
+// A known canonical outcome permits follow-up; deferred or rejected work does not.
+func (b *Bot) sendPreparedMassageNotice(
+	ctx context.Context,
+	owner string,
+	chat int64,
+	value massage.DeliveryNotice,
+) (massage.Notice, bool, error) {
+	notice := value.Notice
+	if notice.FollowupPending {
+		return notice, true, nil
+	}
+	payload, err := b.massageNotificationPayload(ctx, owner, chat, value)
+	if err != nil {
+		return notice, false, b.deferMassageNotification(ctx, owner, notice, err)
+	}
+	gate, err := b.Host.BeginMassageNotice(
+		ctx,
+		owner,
+		delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+	)
+	if err != nil || !gate.Ready {
+		return notice, false, err
+	}
+	message, sendErr := b.TG.Send(ctx, payload)
+	outcome := telegram.DeliveryOutcome(message.ID, sendErr)
+	result := massage.NotificationCompletion{ID: notice.ID, Attempt: notice.DeliveryAttempt, Outcome: outcome}
+	if outcome.Kind == delivery.Succeeded {
+		result.Text = payload.Text
+	}
+	completionCtx, cancelCompletion := deliveryCompletionContext(ctx)
+	defer cancelCompletion()
+	if err = b.Host.CompleteMassageNotice(completionCtx, owner, result); err != nil {
+		return notice, false, err
+	}
+	if outcome.Kind != delivery.Succeeded {
+		return notice, false, nil
+	}
+	notice.MessageID = message.ID
+	return notice, true, nil
+}
+
+// DeliverMassageNotification handles one advisory shared-queue candidate.
+func (b *Bot) DeliverMassageNotification(ctx context.Context, id int64) error {
+	notice, found, err := b.Host.PrepareMassageNotification(ctx, id)
+	if err != nil || !found {
+		return err
+	}
+	return b.deliverMassageNotice(ctx, notice.Owner, notice.TelegramID, notice)
+}
+
+// RecoverMassageNotifications never starts a fresh primary send.
+func (b *Bot) RecoverMassageNotifications(ctx context.Context) error {
+	notices, err := b.Host.RecoverMassageNotifications(ctx)
+	if err != nil {
+		return err
+	}
+	var failures error
+	for _, notice := range notices {
+		failures = errors.Join(failures, b.deliverMassageNotice(ctx, notice.Owner, notice.TelegramID, notice))
+		if ctx.Err() != nil {
+			return errors.Join(failures, ctx.Err())
+		}
+	}
+	return failures
+}

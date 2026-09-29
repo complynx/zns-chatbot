@@ -40,3 +40,5 @@ func TestOpenAICreditsFailurePreventsSend(t *testing.T) {
 	require.ErrorIs(t, err, credits.ErrAccounting)
 	require.Zero(t, calls)
 }
+
+func (rejectedAccounting) NotSent(context.Context, string) error { return credits.ErrAccounting }

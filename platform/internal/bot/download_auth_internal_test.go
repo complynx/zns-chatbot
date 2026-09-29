@@ -11,26 +11,27 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
-func downloadCalls() map[string]func(context.Context, APIClient, string) ([]byte, error) {
-	return map[string]func(context.Context, APIClient, string) ([]byte, error){
-		"pass proof": func(ctx context.Context, c APIClient, owner string) ([]byte, error) {
+func downloadCalls() map[string]func(context.Context, appclient.Client, string) ([]byte, error) {
+	return map[string]func(context.Context, appclient.Client, string) ([]byte, error){
+		"pass proof": func(ctx context.Context, c appclient.Client, owner string) ([]byte, error) {
 			proof, err := c.DownloadPassProof(ctx, owner, "event", "recipient")
 			return proof.Body, err
 		},
-		"order proof": func(ctx context.Context, c APIClient, owner string) ([]byte, error) {
+		"order proof": func(ctx context.Context, c appclient.Client, owner string) ([]byte, error) {
 			proof, err := c.DownloadOrderProof(ctx, owner, "event", "order")
 			return proof.Body, err
 		},
-		"pass export": func(ctx context.Context, c APIClient, owner string) ([]byte, error) {
+		"pass export": func(ctx context.Context, c appclient.Client, owner string) ([]byte, error) {
 			return c.ExportPasses(ctx, owner)
 		},
-		"order export": func(ctx context.Context, c APIClient, owner string) ([]byte, error) {
+		"order export": func(ctx context.Context, c appclient.Client, owner string) ([]byte, error) {
 			return c.ExportOrders(ctx, owner, "event")
 		},
-		"media": func(ctx context.Context, c APIClient, owner string) ([]byte, error) {
+		"media": func(ctx context.Context, c appclient.Client, owner string) ([]byte, error) {
 			attachment, err := c.Media(ctx, owner, "attachment")
 			return attachment.Body, err
 		},
@@ -52,14 +53,21 @@ func TestCoreAPIRejectsCredentialRedirects(t *testing.T) {
 				http.Redirect(w, r, "/redirect-target", status)
 			}))
 			t.Cleanup(server.Close)
-			client := APIClient{Base: server.URL, HTTP: server.Client(), Exchange: &authExchange{},
-				Links: authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}}}
+			client := appclient.Client{
+				Base:     server.URL,
+				HTTP:     server.Client(),
+				Exchange: &authExchange{},
+				Links: authLinks{
+					user: identity.User{Owner: "alice", Subject: "z-alice"},
+				},
+				SandboxToken: (identity.Signer{}).Token,
+			}
 			ctx, owner, err := client.AuthenticateTelegram(t.Context(), 101)
 			require.NoError(t, err)
 			_, err = client.Media(ctx, owner, "attachment")
 			require.Error(t, err)
-			var result any
-			err = client.requestToken(ctx, "service-token", http.MethodPost, "/service", []byte(`{}`), &result)
+
+			_, err = (appclient.Host{Base: client.Base, HTTP: client.HTTP}).PendingNotifications(ctx)
 			require.Error(t, err)
 			assert.Zero(t, redirected.Load(), "neither media metadata nor service requests may forward credentials")
 			assert.Nil(t, client.HTTP.CheckRedirect)
@@ -94,8 +102,14 @@ func TestDownloadsRequireDelegatedPrincipal(t *testing.T) {
 				assert.NoError(t, err)
 			}))
 			t.Cleanup(server.Close)
-			client := APIClient{Base: server.URL, Exchange: &authExchange{},
-				Links: authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}}}
+			client := appclient.Client{
+				Base:     server.URL,
+				Exchange: &authExchange{},
+				Links: authLinks{
+					user: identity.User{Owner: "alice", Subject: "z-alice"},
+				},
+				SandboxToken: (identity.Signer{}).Token,
+			}
 			ctx, owner, err := client.AuthenticateTelegram(t.Context(), 101)
 			require.NoError(t, err)
 			body, err := download(ctx, client, owner)
@@ -130,8 +144,15 @@ func TestDownloadsRejectRedirects(t *testing.T) {
 				}
 			}))
 			t.Cleanup(server.Close)
-			client := APIClient{Base: server.URL, HTTP: server.Client(), Exchange: &authExchange{},
-				Links: authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}}}
+			client := appclient.Client{
+				Base:     server.URL,
+				HTTP:     server.Client(),
+				Exchange: &authExchange{},
+				Links: authLinks{
+					user: identity.User{Owner: "alice", Subject: "z-alice"},
+				},
+				SandboxToken: (identity.Signer{}).Token,
+			}
 			ctx, owner, err := client.AuthenticateTelegram(t.Context(), 101)
 			require.NoError(t, err)
 			_, err = download(ctx, client, owner)
@@ -160,8 +181,14 @@ func TestDownloadsDoNotFallbackAfterExchangeFailure(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 			failure := errors.New("identity provider unavailable")
-			client := APIClient{Base: server.URL, Exchange: failedDownloadExchange{err: failure},
-				Links: authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}}}
+			client := appclient.Client{
+				Base:     server.URL,
+				Exchange: failedDownloadExchange{err: failure},
+				Links: authLinks{
+					user: identity.User{Owner: "alice", Subject: "z-alice"},
+				},
+				SandboxToken: (identity.Signer{}).Token,
+			}
 			ctx, owner, err := client.AuthenticateTelegram(t.Context(), 101)
 			require.NoError(t, err)
 			_, err = download(ctx, client, owner)

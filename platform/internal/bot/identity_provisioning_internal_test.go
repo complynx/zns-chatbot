@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -16,7 +17,13 @@ func TestOnboardingOnlyAcceptedInboundUpdates(t *testing.T) {
 	for _, kind := range []string{"message", "callback", "group", "mismatch", "bot", "zero", "lookupfailure", "recipient"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
-			b := Bot{API: APIClient{Links: authLinks{err: identity.ErrZitadelIdentity}, Exchange: &authExchange{}}}
+			b := Bot{
+				API: appclient.Client{
+					Links:        authLinks{err: identity.ErrZitadelIdentity},
+					Exchange:     &authExchange{},
+					SandboxToken: (identity.Signer{}).Token,
+				},
+			}
 			calls := 0
 			b.Onboarding = func(_ context.Context, u telegram.User) error {
 				calls++
@@ -43,7 +50,7 @@ func TestOnboardingOnlyAcceptedInboundUpdates(t *testing.T) {
 			case "lookupfailure":
 				b.API.Links = authLinks{err: errors.New("database failure")}
 			case "recipient":
-				_, err := b.API.notificationContext(t.Context(), "created", 101)
+				_, err := b.API.NotificationContext(t.Context(), "created", 101)
 				require.Error(t, err)
 				require.Zero(t, calls)
 				return

@@ -9,58 +9,94 @@ import (
 	"errors"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+
 	"github.com/jackc/pgx/v5"
 )
 
 type operation struct {
-	service Service
-	tx      pgx.Tx
-	actor   string
-	command Command
-	event   Event
-	now     time.Time
+	notificationRegistrations []delivery.Registration
+	service                   Service
+	tx                        pgx.Tx
+	actor                     string
+	command                   Command
+	event                     Event
+	now                       time.Time
 }
 
 func digest(raw []byte) string { sum := sha256.Sum256(raw); return hex.EncodeToString(sum[:]) }
 
+// PreparedCommand retains domain authorization and an exact receipt in the caller transaction.
+type PreparedCommand struct {
+	op        operation
+	key, hash string
+	result    Order
+	found     bool
+}
+
 func (s Service) Execute(ctx context.Context, actor string, command Command) (Order, error) {
-	if command.Key == "" || len(command.Key) > 200 || command.EventID == "" || command.Version < 0 {
-		return Order{}, problem("food_invalid_command")
-	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return Order{}, err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	op := operation{service: s, tx: tx, actor: actor, command: command}
-	if err = op.authorize(ctx); err != nil {
-		return Order{}, err
-	}
-	raw, err := json.Marshal(command)
+	prepared, err := s.PrepareInTx(ctx, tx, actor, command)
 	if err != nil {
 		return Order{}, err
 	}
-	hash, key := digest(raw), digest([]byte(command.Key))
+	result, err := prepared.Apply(ctx)
+	if err != nil {
+		return Order{}, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+// LockEvent establishes the same event-before-actor order for manual and derived commands.
+func (s Service) LockEvent(ctx context.Context, tx pgx.Tx, event string) error {
+	_, err := s.event(ctx, tx, event, true)
+	return err
+}
+
+func (s Service) PrepareInTx(ctx context.Context, tx pgx.Tx, actor string, command Command) (PreparedCommand, error) {
+	p := PreparedCommand{op: operation{service: s, tx: tx, actor: actor, command: command}}
+	if command.Key == "" || len(command.Key) > 200 || command.EventID == "" || command.Version < 0 {
+		return p, problem("food_invalid_command")
+	}
+	if err := p.op.authorize(ctx); err != nil {
+		return p, err
+	}
+	raw, err := json.Marshal(command)
+	if err != nil {
+		return p, err
+	}
+	p.hash, p.key = digest(raw), digest([]byte(command.Key))
 	var previous string
-	var result Order
-	err = tx.QueryRow(ctx, `SELECT request_hash,result FROM core.food_operations WHERE event_id=$1 AND actor=$2 AND key_hash=$3`,
-		command.EventID, actor, key).
-		Scan(&previous, &result)
+	err = tx.QueryRow(ctx, `SELECT request_hash,result FROM core.food_operations WHERE event_id=$1 AND actor=$2 AND key_hash=$3`, command.EventID, actor, p.key).
+		Scan(&previous, &p.result)
 	if err == nil {
-		if hash != previous {
-			return Order{}, problem("idempotency_conflict")
+		if p.hash != previous {
+			return p, problem("idempotency_conflict")
 		}
-		return result, nil
+		p.found = true
+		return p, nil
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return p, nil
+	}
+	return p, err
+}
+
+func (p PreparedCommand) Replay() (Order, bool) { return p.result, p.found }
+
+func (p PreparedCommand) Apply(ctx context.Context) (Order, error) {
+	if p.found {
+		return p.result, nil
+	}
+	op := p.op
+	if err := checkCatalogRevision(op.event, op.command.CatalogRevision); err != nil {
 		return Order{}, err
 	}
-	// authorize holds the event row lock until commit. A new command cannot
-	// reinterpret observed indices/prices; an exact completed replay stays exact.
-	if err = checkCatalogRevision(op.event, command.CatalogRevision); err != nil {
-		return Order{}, err
-	}
-	result, err = op.load(ctx)
+	result, err := op.load(ctx)
 	if err != nil {
 		return Order{}, err
 	}
@@ -71,27 +107,29 @@ func (s Service) Execute(ctx context.Context, actor string, command Command) (Or
 	if err = op.save(ctx, result); err != nil {
 		return Order{}, err
 	}
-	_, err = tx.Exec(
+	_, err = op.tx.Exec(
 		ctx,
 		`INSERT INTO core.food_operations(event_id,actor,key_hash,request_hash,result) VALUES($1,$2,$3,$4,$5)`,
-		command.EventID,
-		actor,
-		key,
-		hash,
+		op.command.EventID,
+		op.actor,
+		p.key,
+		p.hash,
 		result,
 	)
-	if err != nil {
-		return Order{}, err
+	if err == nil {
+		err = delivery.RegisterBatch(ctx, op.tx, op.service.Delivery.BotID, op.notificationRegistrations)
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return Order{}, err
-	}
-	return result, nil
+	return result, err
 }
 
 func (op *operation) authorize(ctx context.Context) error {
+	var err error
+	op.event, err = op.service.event(ctx, op.tx, op.command.EventID, true)
+	if err != nil {
+		return err
+	}
 	var permitted bool
-	err := op.tx.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1 FOR NO KEY UPDATE`, op.actor).
+	err = op.tx.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1 FOR NO KEY UPDATE`, op.actor).
 		Scan(&permitted)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !permitted) {
 		return forbidden()
@@ -99,12 +137,8 @@ func (op *operation) authorize(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	op.event, err = op.service.event(ctx, op.tx, op.command.EventID, true)
-	if err != nil {
-		return err
-	}
 	if op.command.Name == commandAccept || op.command.Name == commandReject {
-		if err = adminAllowed(ctx, op.tx, op.actor, op.event.ID, "review"); err != nil {
+		if err = adminPermission(ctx, op.tx, op.actor, op.event.ID, "review", true); err != nil {
 			return err
 		}
 	}

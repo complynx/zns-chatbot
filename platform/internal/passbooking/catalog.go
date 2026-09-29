@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 type Event struct {
@@ -25,30 +27,37 @@ type Contact struct {
 }
 
 type Invitation struct {
-	From    Contact `json:"from"`
-	Version int64   `json:"version"`
+	From      Contact   `json:"from"`
+	Version   int64     `json:"version"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func (s Service) Events(ctx context.Context, actor string) ([]Event, error) {
 	if err := s.requireActor(ctx, actor); err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.Query(ctx, `SELECT e.id,e.titles,e.finishes_at,e.passport_required,
- (SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id),e.short_titles,e.country_emoji,e.open_ended
+	rows, err := s.DB.Query(ctx, `WITH selected AS MATERIALIZED (
+ SELECT e.id,e.finishes_at,e.passport_required,e.open_ended,e.display_order,
+ (SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id) AS sales_start,
+ octet_length(e.id)::bigint+octet_length(e.titles::text)+octet_length(e.short_titles::text)
+ +octet_length(e.country_emoji) AS payload_bytes
  FROM core.pass_events e WHERE e.finishes_at>clock_timestamp()
- ORDER BY COALESCE((SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id),'9999-12-31 23:59:59.999999+00'::timestamptz),display_order,e.id LIMIT 101`)
+ ORDER BY COALESCE((SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id),
+ '9999-12-31 23:59:59.999999+00'::timestamptz),display_order,e.id LIMIT $1
+ ), bounded AS (
+ SELECT id,finishes_at,passport_required,open_ended,display_order,sales_start,
+ sum(payload_bytes) OVER () > $2 AS oversized FROM selected)
+ SELECT CASE WHEN b.oversized THEN '' ELSE b.id END,
+ CASE WHEN b.oversized THEN '{}'::jsonb ELSE e.titles END,b.finishes_at,b.passport_required,b.sales_start,
+ CASE WHEN b.oversized THEN '{}'::jsonb ELSE e.short_titles END,
+ CASE WHEN b.oversized THEN '' ELSE e.country_emoji END,b.open_ended,b.oversized
+ FROM bounded b JOIN core.pass_events e ON e.id=b.id
+ ORDER BY COALESCE(b.sales_start,'9999-12-31 23:59:59.999999+00'::timestamptz),b.display_order,b.id`,
+		maxCatalogEvents+1, core.ReadResourceBytes)
 	if err != nil {
 		return nil, err
 	}
-	events, err := pgx.CollectRows(rows, pgx.RowToStructByPos[Event])
-	if err != nil {
-		return nil, err
-	}
-	const maxEvents = 100
-	if len(events) > maxEvents {
-		return nil, conflict("pass_event_limit")
-	}
-	return events, nil
+	return collectCatalog(rows)
 }
 
 func (s Service) PaymentAdmins(ctx context.Context, actor, eventID string) ([]Contact, error) {
@@ -93,14 +102,13 @@ func (s Service) Invitations(ctx context.Context, actor, eventID, after string) 
 			break
 		}
 		var invite Invitation
-		var created time.Time
 		if err = rows.Scan(
-			&invite.From.Owner, &invite.From.Name, &invite.From.TelegramID, &invite.Version, &created,
+			&invite.From.Owner, &invite.From.Name, &invite.From.TelegramID, &invite.Version, &invite.CreatedAt,
 		); err != nil {
 			return InvitationPage{}, err
 		}
 		page.Invitations = append(page.Invitations, invite)
-		boundary = pageCursor(created, invite.From.TelegramID)
+		boundary = pageCursor(invite.CreatedAt, invite.From.TelegramID)
 	}
 	return page, rows.Err()
 }

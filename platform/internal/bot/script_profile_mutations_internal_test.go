@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
@@ -38,12 +40,17 @@ func TestProfileMutationRejectsAuthorityAndInvalidArguments(t *testing.T) {
 func TestPrivateProfileScriptRetainsOnlyEffectEvidence(t *testing.T) {
 	t.Parallel()
 	secret := "private-canary"
-	record := scriptRecord{
+	record := agenthost.ScriptRecord{
 		Request: agent.ScriptProposal{Code: secret, InputJSON: secret},
 		Run:     agent.ScriptRun{Code: secret, Result: json.RawMessage(`"private-canary"`)},
-		Calls: []scriptToolRecord{
+		Calls: []agenthost.ScriptToolRecord{
 			{
-				Profile: &scriptProfileMutation{Field: "passport", Value: secret, Version: 2, Key: "host-key"},
+				Profile: &agenthost.ScriptProfileMutation{
+					Field:   "passport",
+					Value:   secret,
+					Version: 2,
+					Key:     "host-key",
+				},
 				Outcome: agent.ScriptToolResult{
 					Name:   scriptProfileSet,
 					Result: json.RawMessage(`{"applied":true,"version":3}`),
@@ -56,7 +63,7 @@ func TestPrivateProfileScriptRetainsOnlyEffectEvidence(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(payload), secret)
 	liveCommand := record.Calls[0].Profile
-	redactProfileScript(&record)
+	agenthost.RedactProfileScript(&record)
 	require.Equal(t, secret, liveCommand.Value)
 	payload, err = json.Marshal(record)
 	require.NoError(t, err)

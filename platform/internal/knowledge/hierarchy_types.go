@@ -1,6 +1,10 @@
 package knowledge
 
-import "time"
+import (
+	"time"
+
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+)
 
 const (
 	MemoryFactKind     = "fact"
@@ -27,33 +31,35 @@ type MemoryQuery struct {
 }
 
 type MemoryEntry struct {
-	Source             *SourceProvenance `json:"source,omitempty"`
-	SourceKind         string            `json:"source_kind"`
-	More               bool              `json:"more"`
-	NextCursor         string            `json:"next_cursor"`
-	Offset             int               `json:"offset"`
-	TotalCharacters    int               `json:"total_characters"`
-	Ref                string            `json:"ref"`
-	Namespace          string            `json:"namespace"`
-	Event              string            `json:"event"`
-	Topic              string            `json:"topic"`
-	Key                string            `json:"key"`
-	Version            int64             `json:"version"`
-	Text               string            `json:"text"`
-	Phase              string            `json:"phase"`
-	HistoricalFallback bool              `json:"historical_fallback"`
-	Untrusted          bool              `json:"untrusted"`
-	Historical         bool              `json:"historical"`
-	CapturedAt         *time.Time        `json:"captured_at,omitempty"`
-	Active             bool              `json:"active"`
+	ReadAuthorities    []readsource.Authority `json:"read_authorities,omitempty"`
+	Source             *SourceProvenance      `json:"source,omitempty"`
+	SourceKind         string                 `json:"source_kind"`
+	More               bool                   `json:"more"`
+	NextCursor         string                 `json:"next_cursor"`
+	Offset             int                    `json:"offset"`
+	TotalCharacters    int                    `json:"total_characters"`
+	Ref                string                 `json:"ref"`
+	Namespace          string                 `json:"namespace"`
+	Event              string                 `json:"event"`
+	Topic              string                 `json:"topic"`
+	Key                string                 `json:"key"`
+	Version            int64                  `json:"version"`
+	Text               string                 `json:"text"`
+	Phase              string                 `json:"phase"`
+	HistoricalFallback bool                   `json:"historical_fallback"`
+	Untrusted          bool                   `json:"untrusted"`
+	Historical         bool                   `json:"historical"`
+	CapturedAt         *time.Time             `json:"captured_at,omitempty"`
+	Active             bool                   `json:"active"`
 }
 
 type MemoryPage struct {
-	Entries    []MemoryEntry `json:"entries"`
-	More       bool          `json:"more"`
-	Incomplete bool          `json:"incomplete"`
-	NextCursor string        `json:"next_cursor"`
-	Scanned    int           `json:"scanned"`
+	ReadAuthorities []readsource.Authority `json:"read_authorities,omitempty"`
+	Entries         []MemoryEntry          `json:"entries"`
+	More            bool                   `json:"more"`
+	Incomplete      bool                   `json:"incomplete"`
+	NextCursor      string                 `json:"next_cursor"`
+	Scanned         int                    `json:"scanned"`
 }
 
 type MemoryTopic struct {
@@ -64,8 +70,9 @@ type MemoryTopic struct {
 
 // MemoryOverview separates curated summary content from generated navigation.
 type MemoryOverview struct {
-	Summaries []MemoryEntry `json:"summaries"`
-	Topics    []MemoryTopic `json:"topics"`
-	More      bool          `json:"more"`
-	Untrusted bool          `json:"untrusted"`
+	ReadAuthorities []readsource.Authority `json:"read_authorities,omitempty"`
+	Summaries       []MemoryEntry          `json:"summaries"`
+	Topics          []MemoryTopic          `json:"topics"`
+	More            bool                   `json:"more"`
+	Untrusted       bool                   `json:"untrusted"`
 }

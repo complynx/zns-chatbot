@@ -19,8 +19,8 @@ func TestHistoryOwnerAPIAndCommittedAudit(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	service := conversation.Service{DB: f.db}
-	require.NoError(t, service.Append(t.Context(), "alice", "private", "user", "I prefer vegetarian meals"))
-	require.NoError(t, service.Append(t.Context(), "bob", "other", "user", "Bob private marker"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "alice", "private", "user", "I prefer vegetarian meals"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "bob", "other", "user", "Bob private marker"))
 	_, err := f.b.API.Execute(t.Context(), "alice", action("select", "massage-1", 0, "history-action", "manual"))
 	require.NoError(t, err)
 	page, err := f.b.API.ConversationHistory(t.Context(), "alice", conversation.Query{Limit: conversation.MaxPage})
@@ -32,7 +32,10 @@ func TestHistoryOwnerAPIAndCommittedAudit(t *testing.T) {
 	assert.NotContains(t, string(encoded), "Bob private marker")
 	_, err = service.Read(t.Context(), "unknown", conversation.Query{Limit: 1})
 	require.Error(t, err)
-	require.NoError(t, service.Append(t.Context(), "alice", "sensitive", "user", "My passport is SECRET-DOCUMENT"))
+	require.NoError(
+		t,
+		service.AppendOriginal(t.Context(), "alice", "sensitive", "user", "My passport is SECRET-DOCUMENT"),
+	)
 	page, err = service.Read(t.Context(), "alice", conversation.Query{Limit: 1})
 	require.NoError(t, err)
 	require.Len(t, page.Events, 1)
@@ -53,8 +56,8 @@ func TestHistorySummaryCoverageIncludesLateLowerID(t *testing.T) {
 		tx.QueryRow(t.Context(), `INSERT INTO core.conversation_events(owner,source_key,kind,text) VALUES('alice','late','user','Late committed event') RETURNING id`).
 			Scan(&late),
 	)
-	require.NoError(t, service.Append(t.Context(), "alice", "visible", "user", "Visible earlier decision"))
-	require.NoError(t, service.Append(t.Context(), "alice", "latest", "assistant", "Recent answer"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "alice", "visible", "user", "Visible earlier decision"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "alice", "latest", "assistant", "Recent answer"))
 	window, err := service.Window(t.Context(), "alice", 1)
 	require.NoError(t, err)
 	assert.True(t, window.Gap)
@@ -122,7 +125,7 @@ func TestHistoryBotRealSummaryAndBoundedReadReplay(t *testing.T) {
 	for index := range 8 {
 		require.NoError(
 			t,
-			service.Append(
+			service.AppendOriginal(
 				t.Context(),
 				"alice",
 				"seed-"+strconv.Itoa(index),
@@ -158,8 +161,8 @@ func TestHistorySummaryFailureLeavesGapAndDoesNotBlockAnswer(t *testing.T) {
 	f := setup(t)
 	f.b.HistoryLimit = 1
 	service := conversation.Service{DB: f.db}
-	require.NoError(t, service.Append(t.Context(), "alice", "older", "user", "An earlier request"))
-	require.NoError(t, service.Append(t.Context(), "alice", "newer", "assistant", "A later answer"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "alice", "older", "user", "An earlier request"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "alice", "newer", "assistant", "A later answer"))
 	model := &historyModel{plans: []agent.Plan{{View: "workflow", Text: "I can still answer."}}, fail: true}
 	f.b.Model = model
 	handle(t, f.b, message(910, identity.AliceTelegramID, "Hello"))

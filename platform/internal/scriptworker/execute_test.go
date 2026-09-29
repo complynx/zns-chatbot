@@ -228,3 +228,33 @@ func TestExecuteBoundedLargeNameOnlyCatalog(t *testing.T) {
 		string(result),
 	)
 }
+
+func TestExecuteSequentialCallbackWallBudget(t *testing.T) {
+	t.Parallel()
+	var count int
+	start := time.Now()
+	result, err := scriptworker.Execute(t.Context(), scriptprotocol.ExecuteRequest{
+		Code:  `const first=await tools.read({});const second=await tools.read({});return first+second;`,
+		Input: json.RawMessage(`null`), Tools: []scriptprotocol.Tool{{Name: "read"}},
+	}, func(ctx context.Context, _ scriptprotocol.ToolCall) (json.RawMessage, error) {
+		count++
+		timer := time.NewTimer(150 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+			return json.RawMessage(`1`), nil
+		}
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `2`, string(result))
+	require.Equal(t, 2, count)
+	t.Logf(
+		"synthetic callbacks=%d elapsed=%s active_limit=%s total_limit=%s",
+		count,
+		time.Since(start),
+		scriptprotocol.ActiveTime,
+		scriptprotocol.ExecuteTimeout,
+	)
+}

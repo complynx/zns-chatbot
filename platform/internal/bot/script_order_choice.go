@@ -3,9 +3,12 @@ package bot
 import (
 	"context"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
@@ -15,23 +18,12 @@ import (
 )
 
 const modernOrdersChoice = "orders.choice"
+const modernChoiceRead = "read"
 const maxChoiceRevisions = 128
 const modernChoiceLabelRunes = 80
 
 // Drafts are immutable successful script receipts. Child claims prevent a stale
 // branch or consumed create draft from authorizing another command.
-type modernChoiceRecord struct {
-	HistoryGeneration *int64        `json:"history_generation,omitempty"`
-	Ref               string        `json:"ref"`
-	Parent            string        `json:"parent,omitempty"`
-	Child             string        `json:"child,omitempty"`
-	Depth             int           `json:"depth"`
-	Event             string        `json:"event"`
-	Catalog           string        `json:"catalog"`
-	OrderID           string        `json:"order_id,omitempty"`
-	Snapshot          string        `json:"snapshot,omitempty"`
-	Choice            orders.Choice `json:"choice"`
-}
 
 type modernChoiceArguments struct {
 	Meals      []modernChoiceMeal         `json:"meals,omitempty"`
@@ -55,17 +47,17 @@ type modernChoiceExtra struct {
 	Selected bool `json:"selected"`
 }
 
-func (b *Bot) modernChoiceEntry() scriptToolEntry {
-	return scriptToolEntry{
-		descriptor: scriptclient.Tool{
+func (b *Bot) modernChoiceEntry() agenthost.ScriptToolEntry {
+	return agenthost.ScriptToolEntry{
+		Descriptor: scriptclient.Tool{
 			Name:        modernOrdersChoice,
-			Description: "Build a host-owned full order choice across bounded turns. begin: empty=true for create, or order_id after complete orders.inspect; empty=true with order_id replaces the whole choice. patch: exact choice_ref plus customer fields, complete days replacement, or up to 1024 {ref,selected} extra changes. read: part summary/choice/catalog; catalog gives stable extra indexes bound to this draft. Full choice/catalog reads use cursors. Every patch returns a new immutable choice_ref; old revisions cannot branch or commit. Use orders.quote/update with latest choice_ref. No mutation is authorized by an unrelated follow-up.",
+			Description: "Build a host-owned full order choice across bounded turns. begin: empty=true for create, or order_id after complete orders.inspect; empty=true with order_id replaces the whole choice. event, order_id and empty are begin-only; omit them for read/patch, whose event is bound by choice_ref. patch: exact choice_ref plus customer fields, complete days replacement, or up to 1024 {ref,selected} extra changes. read: part summary/choice/catalog; catalog gives stable extra indexes bound to this draft. Full choice/catalog reads use cursors. Every patch returns a new immutable choice_ref; old revisions cannot branch or commit. Use orders.quote/update with latest choice_ref. No mutation is authorized by an unrelated follow-up.",
 			InputSchema: modernOrderSchema(
 				`"operation":{"enum":["begin","patch","read"]},"choice_ref":{"type":"string"},"event":{"type":"string"},"order_id":{"type":"string"},"empty":{"type":"boolean"},"part":{"enum":["summary","choice","catalog"]},"cursor":{"type":"string"},"customer":{"type":"string"},"customer_first_name":{"type":"string"},"customer_last_name":{"type":"string"},"customer_patronymus":{"type":"string"},"days":{"type":"object"},"meals":{"type":"array","items":{"type":"object","properties":{"day_ref":{"type":"integer"},"meal_ref":{"type":"integer"},"append":{"type":"boolean"},"remove":{"type":"boolean"},"dishes":{"type":"array","items":{"type":"object","properties":{"ref":{"type":"integer"},"count":{"type":"integer"}},"required":["ref","count"],"additionalProperties":false}}},"required":["day_ref","meal_ref"],"additionalProperties":false}},"extras":{"type":"array","items":{"type":"object","properties":{"ref":{"type":"integer"},"selected":{"type":"boolean"}},"required":["ref","selected"],"additionalProperties":false}}`,
 				`"operation"`,
 			),
 		},
-		prepare: b.prepareModernChoice, execute: b.executeModernChoice, resultLimit: maxScriptReadBytes,
+		Prepare: b.prepareModernChoice, Execute: b.executeModernChoice, ResultLimit: maxScriptReadBytes,
 	}
 }
 
@@ -99,7 +91,7 @@ func validateModernChoiceOperation(args modernChoiceArguments) error {
 			!patch {
 			return errors.New("invalid choice patch")
 		}
-	case "read":
+	case modernChoiceRead:
 		if args.Ref == "" || args.Event != "" || args.OrderID != "" || args.Empty || patch {
 			return errors.New("invalid choice read")
 		}
@@ -118,13 +110,13 @@ func (b *Bot) prepareModernChoice(
 	_ int64,
 	call scriptclient.ToolCall,
 	input agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	args, err := decodeModernChoice(call)
 	if err != nil {
 		return record, err
 	}
-	var draft modernChoiceRecord
+	var draft agenthost.ModernChoiceRecord
 	var event orders.Event
 	if args.Operation == "begin" {
 		draft, event, err = b.beginModernChoice(ctx, owner, args, input)
@@ -134,7 +126,7 @@ func (b *Bot) prepareModernChoice(
 	if err != nil {
 		return record, err
 	}
-	if args.Operation == "read" {
+	if args.Operation == modernChoiceRead {
 		return record, nil
 	}
 	if args.Operation == "patch" {
@@ -158,8 +150,8 @@ func (b *Bot) beginModernChoice(
 	owner string,
 	args modernChoiceArguments,
 	input agent.Input,
-) (modernChoiceRecord, orders.Event, error) {
-	draft := modernChoiceRecord{Event: args.Event, HistoryGeneration: &input.HistoryGeneration}
+) (agenthost.ModernChoiceRecord, orders.Event, error) {
+	draft := agenthost.ModernChoiceRecord{Event: args.Event, HistoryGeneration: &input.HistoryGeneration}
 	if draft.Event == "" {
 		draft.Event = b.currentOrderEvent()
 	}
@@ -171,7 +163,7 @@ func (b *Bot) beginModernChoice(
 		}
 		draft.Event, draft.OrderID, draft.Snapshot = current.EventID, current.ID, snapshot
 		if !args.Empty {
-			choice = choiceInput(current.Choice)
+			choice = current.Choice.Input()
 		}
 	}
 	event, err := b.API.OrderEvent(ctx, owner, draft.Event)
@@ -186,7 +178,7 @@ func (b *Bot) beginModernChoice(
 func modernCatalogFingerprint(event orders.Event) string { return orders.CatalogSnapshot(event) }
 
 func patchModernChoice(before orders.Choice, event orders.Event, args modernChoiceArguments) (orders.Choice, error) {
-	choice := choiceInput(before)
+	choice := before.Input()
 	fields := []struct {
 		value  *string
 		target *string
@@ -234,7 +226,7 @@ func (b *Bot) executeModernChoice(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	_ *agent.Input,
 ) (any, error) {
 	args, err := decodeModernChoice(call)
@@ -268,7 +260,7 @@ func (b *Bot) executeModernChoice(
 	}
 }
 
-func modernChoiceSummary(draft modernChoiceRecord) any {
+func modernChoiceSummary(draft agenthost.ModernChoiceRecord) any {
 	encoded, _ := json.Marshal(draft.Choice)
 	return struct {
 		Ref      string       `json:"choice_ref"`
@@ -279,7 +271,11 @@ func modernChoiceSummary(draft modernChoiceRecord) any {
 	}{draft.Ref, draft.OrderID, draft.Choice.Total, len(encoded), false}
 }
 
-func modernChoiceCatalogPage(draft modernChoiceRecord, event orders.Event, cursor core.ReadCursor) (any, error) {
+func modernChoiceCatalogPage(
+	draft agenthost.ModernChoiceRecord,
+	event orders.Event,
+	cursor core.ReadCursor,
+) (any, error) {
 	type item struct {
 		Ref      int    `json:"ref"`
 		Label    string `json:"label"`
@@ -309,22 +305,6 @@ func modernChoiceCatalogPage(draft modernChoiceRecord, event orders.Event, curso
 	}{items, days}, cursor)
 }
 
-func parseModernChoiceRef(ref string) (int64, int, int, error) {
-	var update int64
-	var run, call int
-	if _, err := fmt.Sscanf(
-		ref,
-		"%d.%d.%d",
-		&update,
-		&run,
-		&call,
-	); err != nil || update <= 0 || run < 0 || run >= agent.MaxScriptRuns || call < 0 || call >= maxScriptCalls ||
-		ref != fmt.Sprintf("%d.%d.%d", update, run, call) {
-		return 0, 0, 0, errors.New("invalid choice reference")
-	}
-	return update, run, call, nil
-}
-
 func (b *Bot) observedModernChoice(
 	ctx context.Context,
 	owner string,
@@ -346,7 +326,7 @@ func (b *Bot) observedModernChoice(
 	}
 	observedHash, err := modernOrderFingerprint(*observed)
 	if err != nil || observedHash != snapshot {
-		return current, "", errScriptReadStale
+		return current, "", appclient.ErrReadStale
 	}
 	return current, snapshot, nil
 }

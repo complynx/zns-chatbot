@@ -7,9 +7,16 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
@@ -19,7 +26,7 @@ const scriptFoodReviewDecide = "food.review.decide"
 const scriptFoodReviewProof = "food.review.proof"
 const scriptFoodExport = "food.export"
 
-func (b *Bot) scriptFoodAdminEntries(capability legacyfood.OwnerCapabilities) []scriptToolEntry {
+func (b *Bot) scriptFoodAdminEntries(capability legacyfood.OwnerCapabilities) []agenthost.ScriptToolEntry {
 	descriptors := []scriptclient.Tool{}
 	if capability.CanReview {
 		descriptors = append(
@@ -66,15 +73,15 @@ func (b *Bot) scriptFoodAdminEntries(capability legacyfood.OwnerCapabilities) []
 			},
 		)
 	}
-	entries := make([]scriptToolEntry, 0, len(descriptors))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		entries = append(
 			entries,
-			scriptToolEntry{
-				descriptor:  descriptor,
-				prepare:     b.prepareFoodAdminTool,
-				execute:     b.executeFoodAdminTool,
-				resultLimit: maxScriptReadBytes,
+			agenthost.ScriptToolEntry{
+				Descriptor:  descriptor,
+				Prepare:     b.prepareFoodAdminTool,
+				Execute:     b.executeFoodAdminTool,
+				ResultLimit: maxScriptReadBytes,
 			},
 		)
 	}
@@ -114,8 +121,8 @@ func (b *Bot) prepareFoodAdminTool(
 	update int64,
 	call scriptclient.ToolCall,
 	input agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	if call.Name == scriptFoodExport {
 		return b.prepareFoodExport(ctx, owner, update, call, record)
 	}
@@ -126,7 +133,7 @@ func (b *Bot) prepareFoodAdminTool(
 	if !validFoodReviewArguments(call.Name, args) {
 		return record, errors.New("invalid food review arguments")
 	}
-	capability, err := b.API.foodCapabilities(ctx, owner)
+	capability, err := b.API.FoodCapabilities(ctx, owner)
 	if err != nil {
 		return record, err
 	}
@@ -160,7 +167,7 @@ func (b *Bot) executeFoodAdminTool(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	input *agent.Input,
 ) (any, error) {
 	if call.Name == scriptFoodExport {
@@ -177,7 +184,7 @@ func (b *Bot) executeFoodAdminTool(
 	switch call.Name {
 	case scriptFoodReviewQueue:
 		var result core.ReadPage[legacyfood.ReviewItem]
-		err := b.API.call(
+		err := b.API.Call(
 			ctx,
 			owner,
 			http.MethodGet,
@@ -189,9 +196,12 @@ func (b *Bot) executeFoodAdminTool(
 	case scriptFoodReviewRead:
 		return b.readFoodReview(ctx, owner, command, args.Cursor, input)
 	case scriptFoodReviewProof:
-		return b.deliverFoodReviewProof(ctx, owner, command)
+		return b.deliverFoodReviewProof(ctx, owner, command, record.Source)
 	case scriptFoodReviewDecide:
-		order, err := b.API.ExecuteFood(ctx, owner, command)
+		if record.Source == nil || !record.Source.Valid() {
+			return nil, errors.New("missing admitted source")
+		}
+		order, err := b.Host.ExecuteDerivedFood(ctx, owner, command, *record.Source)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +226,7 @@ func (b *Bot) readFoodReview(
 	if !valid {
 		return nil, errors.New("food review continuation unavailable; read again")
 	}
-	view, err := b.API.foodView(ctx, owner, command.EventID, command.OrderID, true)
+	view, err := b.API.FoodViewForReview(ctx, owner, command.EventID, command.OrderID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -229,29 +239,45 @@ func (b *Bot) readFoodReview(
 	safe.ActivityPayment.ProofID, safe.ActivityPayment.ProofSource, safe.ActivityPayment.LegacySourceKey = "", "", ""
 	result, err := core.JSONReadChunk(safe, cursor)
 	if err != nil {
-		return nil, scriptDomainAPIError(err)
+		return nil, appclient.ReadError(err)
 	}
 	input.FoodReview = &view
 	input.FoodReviewCursor = result.NextCursor
 	return result, nil
 }
 
-func (b *Bot) deliverFoodReviewProof(ctx context.Context, owner string, command legacyfood.Command) (any, error) {
+func (b *Bot) deliverFoodReviewProof(
+	ctx context.Context,
+	owner string,
+	command legacyfood.Command,
+	derivation *readsource.Derivation,
+) (any, error) {
+	if derivation == nil || !derivation.Valid() {
+		return nil, errors.New("missing admitted source")
+	}
 	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
 	if !ok || source.owner != owner {
-		return nil, errors.New("food delivery context missing")
+		return nil, botdelivery.ErrBinding
 	}
-	view, err := b.API.foodView(ctx, owner, command.EventID, command.OrderID, true)
-	if err != nil {
-		return nil, err
+	family := botFamilyFoodReviewMeals
+	if command.Kind == legacyfood.Activity {
+		family = botFamilyFoodReviewActivity
+	} else if command.Kind != legacyfood.Meals {
+		return nil, botdelivery.ErrBinding
 	}
-	if view.Order.Version != command.Version {
-		return nil, errors.New("food review changed; read again")
-	}
-	body, err := b.API.foodReviewProof(ctx, owner, command)
-	if err != nil {
-		return nil, err
-	}
-	_, err = b.TG.SendDocument(ctx, source.in.chat, "receipt", body)
-	return map[string]bool{"displayed": err == nil}, err
+	observed, err := b.queueBotDocument(
+		ctx,
+		owner,
+		source.in.chat,
+		botdelivery.Reference{
+			Family:       family,
+			Event:        command.EventID,
+			Object:       command.OrderID,
+			Version:      command.Version,
+			Attempt:      command.Generation,
+			Source:       derivation,
+			Continuation: botdelivery.Continuation{Kind: botDocumentKind},
+		},
+	)
+	return map[string]any{"displayed": documentDelivered(observed), "delivery_state": observed.State}, err
 }

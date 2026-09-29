@@ -57,7 +57,7 @@ func catalogReadResponse(t *testing.T, f *fixture, owner, event, route, cursor s
 		f.b.API.Base+"/v1/order-events/"+url.PathEscape(event)+"/"+route+"?cursor="+url.QueryEscape(cursor), nil)
 	require.NoError(t, err)
 	if owner != "" {
-		request.Header.Set("Authorization", "Bearer "+f.b.API.Signer.Token(owner))
+		request.Header.Set("Authorization", "Bearer "+f.b.Host.Signer.Token(owner))
 	}
 	response, err := http.DefaultClient.Do(request)
 	require.NoError(t, err)
@@ -139,6 +139,7 @@ func TestModernCatalogHostRejectsChangingSnapshot(t *testing.T) {
 		)
 		require.NoError(t, err)
 	}}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	_, err := f.b.API.OrderEvent(t.Context(), "alice", current.EventID)
 	var problem *core.ProblemError
 	require.ErrorAs(t, err, &problem)

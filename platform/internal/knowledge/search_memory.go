@@ -205,7 +205,12 @@ func (s Service) SearchMemory(ctx context.Context, actor string, query MemoryQue
 	if !page.More {
 		page.NextCursor = ""
 	}
-	return page, rows.Err()
+	if err = rows.Err(); err != nil {
+		return page, err
+	}
+	rows.Close()
+	page.Entries, err = s.authorizeMemoryEntries(ctx, actor, page.Entries)
+	return page, err
 }
 
 func memoryMatches(entry MemoryEntry, q MemoryQuery, pattern *regexp.Regexp, textMatch bool) bool {

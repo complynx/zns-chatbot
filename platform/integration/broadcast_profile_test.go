@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/account"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
-	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
 func TestBroadcastProfileExplicitWritesAndReplay(t *testing.T) {
@@ -18,7 +18,7 @@ func TestBroadcastProfileExplicitWritesAndReplay(t *testing.T) {
 	_, err := f.db.Exec(t.Context(), `INSERT INTO core.admin_broadcast_profiles(owner,source_key,source_hash,fields)
  VALUES('alice','source','hash','{"username":null,"inner_name_de":"Quelle","language_code":null}')`)
 	require.NoError(t, err)
-	s := core.Service{DB: f.db}
+	s := account.Service{DB: f.db}
 	_, err = s.SetLanguage(t.Context(), "alice", "en", true)
 	require.NoError(t, err)
 	var overrides string
@@ -39,7 +39,7 @@ func TestBroadcastProfileExplicitWritesAndReplay(t *testing.T) {
 		s.RefreshTelegramMetadata(
 			t.Context(),
 			"alice",
-			core.TelegramMetadataUpdate{UpdateID: 50, Sender: telegram.User{ID: 101, FirstName: "Current"}},
+			account.TelegramMetadataUpdate{UpdateID: 50, Sender: account.SenderMetadata{ID: 101, FirstName: "Current"}},
 		),
 	)
 	require.NoError(
@@ -47,7 +47,7 @@ func TestBroadcastProfileExplicitWritesAndReplay(t *testing.T) {
 		s.RefreshTelegramMetadata(
 			t.Context(),
 			"alice",
-			core.TelegramMetadataUpdate{UpdateID: 49, Sender: telegram.User{ID: 101, FirstName: "Stale"}},
+			account.TelegramMetadataUpdate{UpdateID: 49, Sender: account.SenderMetadata{ID: 101, FirstName: "Stale"}},
 		),
 	)
 	p := passes.Service{DB: f.db}
@@ -108,11 +108,11 @@ func TestBroadcastProfileMissingImportCannotBecomeNative(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.db.Exec(t.Context(), `DELETE FROM core.admin_broadcast_profiles WHERE owner='alice'`)
 	require.NoError(t, err)
-	s := core.Service{DB: f.db}
+	s := account.Service{DB: f.db}
 	err = s.RefreshTelegramMetadata(
 		t.Context(),
 		"alice",
-		core.TelegramMetadataUpdate{UpdateID: 80, Sender: telegram.User{ID: 101, FirstName: "Uncommitted"}},
+		account.TelegramMetadataUpdate{UpdateID: 80, Sender: account.SenderMetadata{ID: 101, FirstName: "Uncommitted"}},
 	)
 	require.EqualError(t, err, "broadcast_profile_missing")
 	var update int64
@@ -121,4 +121,17 @@ func TestBroadcastProfileMissingImportCannotBecomeNative(t *testing.T) {
 		f.db.QueryRow(t.Context(), `SELECT telegram_metadata_update FROM core.users WHERE id='alice'`).Scan(&update),
 	)
 	assert.Less(t, update, int64(80))
+	before, err := s.Preferences(t.Context(), "alice")
+	require.NoError(t, err)
+	_, err = s.SetLanguageWithOperation(t.Context(), "alice", "ru", false, "missing-profile")
+	require.EqualError(t, err, "broadcast_profile_missing")
+	after, err := s.Preferences(t.Context(), "alice")
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "projection failure must roll back the account write")
+	var receipts int
+	require.NoError(t, f.db.QueryRow(
+		t.Context(),
+		`SELECT count(*) FROM core.language_operations WHERE owner='alice' AND operation_key='missing-profile'`,
+	).Scan(&receipts))
+	assert.Zero(t, receipts, "projection failure must not retain the operation identity")
 }

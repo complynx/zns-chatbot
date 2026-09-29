@@ -4,7 +4,11 @@ import (
 	"context"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 )
 
 // ProcessPassportReminders preserves the Python startup-only, once-per-user
@@ -31,6 +35,7 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	var pending []delivery.Registration
 	count := 0
 	for _, booking := range bookings {
 		var passport string
@@ -50,16 +55,29 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if err = enqueuePassNotice(ctx, tx, &booking, booking.Owner, "passport_required", "once", ""); err != nil {
+		if err = enqueuePassNotice(ctx, tx, s.Delivery.BotID, &pending,
+			&booking,
+			booking.Owner,
+			"passport_required",
+			"once",
+			"",
+		); err != nil {
 			return 0, err
 		}
 		count++
 	}
+	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
+		return 0, err
+	}
 	return count, tx.Commit(ctx)
 }
 
-func (s Service) livePassportReminder(ctx context.Context, notice Notification) (Notification, error) {
-	err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.pass_profiles p JOIN core.pass_bookings b ON b.owner=p.owner
+func (s Service) livePassportReminder(
+	ctx context.Context,
+	reader dbgen.DBTX,
+	notice Notification,
+) (Notification, error) {
+	err := reader.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.pass_profiles p JOIN core.pass_bookings b ON b.owner=p.owner
  JOIN core.pass_events e ON e.id=b.event_id WHERE p.owner=$1 AND p.passport=''
  AND b.state IN ('assigned','paid') AND e.passport_required AND e.finishes_at>clock_timestamp())`, notice.Owner).
 		Scan(&notice.Current)

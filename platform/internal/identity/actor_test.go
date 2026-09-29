@@ -76,6 +76,6 @@ func TestZitadelActorRenewal(t *testing.T) {
 	fail.Store(true)
 	time.Sleep(time.Second)
 	token, err := client.Exchange(t.Context(), "mapped-user")
-	require.ErrorIs(t, err, identity.ErrZitadelIdentity)
+	require.ErrorIs(t, err, identity.ErrZitadelUnavailable)
 	assert.Empty(t, token)
 }

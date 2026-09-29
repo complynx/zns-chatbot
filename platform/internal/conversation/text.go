@@ -13,10 +13,16 @@ import (
 
 // Generation fences cached history and derived model outputs after deletion.
 func (s Service) Generation(ctx context.Context, actor string) (int64, error) {
-	if err := s.knownActor(ctx, actor); err != nil {
+	state, err := s.authoritySnapshot(ctx, actor, nil, authorityScope{})
+	if err != nil {
 		return 0, err
 	}
-	return dbgen.New(s.DB).HistoryGeneration(ctx, actor)
+	defer func() { _ = state.tx.Rollback(ctx) }()
+	generation, err := dbgen.New(state.tx).HistoryGeneration(ctx, actor)
+	if err != nil {
+		return 0, err
+	}
+	return generation, state.tx.Commit(ctx)
 }
 
 // ReadText uses character offsets and reads only a bounded slice in PostgreSQL.
@@ -31,10 +37,12 @@ func (s Service) ReadText(
 	if id <= 0 || offset < 0 || offset > MaxBodyBytes || limit < 1 || limit > MaxChunkCharacters {
 		return TextChunk{}, &core.ProblemError{Status: http.StatusBadRequest, Code: invalidHistory}
 	}
-	if err := s.knownActor(ctx, actor); err != nil {
+	state, err := s.authoritySnapshot(ctx, actor, nil, authorityScope{ids: []int64{id}, textOnly: true})
+	if err != nil {
 		return TextChunk{}, err
 	}
-	row, err := dbgen.New(s.DB).
+	defer func() { _ = state.tx.Rollback(ctx) }()
+	row, err := dbgen.New(state.tx).
 		ReadText(ctx, dbgen.ReadTextParams{Owner: actor, EventID: id, CharacterOffset: int32(offset), CharacterLimit: int32(limit)})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return TextChunk{}, &core.ProblemError{Status: http.StatusNotFound, Code: "history_missing"}
@@ -42,24 +50,28 @@ func (s Service) ReadText(
 	if err != nil {
 		return TextChunk{}, err
 	}
+	if err = state.tx.Commit(ctx); err != nil {
+		return TextChunk{}, err
+	}
 	if digest != "" && digest != row.Digest {
-		return TextChunk{}, &core.ProblemError{Status: http.StatusConflict, Code: "history_stale"}
+		return TextChunk{}, staleHistory()
 	}
 	if offset > int(row.Total) {
 		return TextChunk{}, &core.ProblemError{Status: http.StatusBadRequest, Code: invalidHistory}
 	}
 	next := min(offset+limit, int(row.Total))
-	return TextChunk{
-		EventID:    id,
-		Digest:     row.Digest,
-		Offset:     offset,
-		Total:      int(row.Total),
-		Text:       row.Text,
-		More:       next < int(row.Total),
-		NextOffset: next,
-		Generation: row.Generation,
-		Omitted:    row.Omitted,
-	}, nil
+	return boundedHistoryResult(TextChunk{
+		ReadAuthorities: state.byEvent[id],
+		EventID:         id,
+		Digest:          row.Digest,
+		Offset:          offset,
+		Total:           int(row.Total),
+		Text:            row.Text,
+		More:            next < int(row.Total),
+		NextOffset:      next,
+		Generation:      row.Generation,
+		Omitted:         row.Omitted,
+	}, nil)
 }
 
 // DeleteContent is a host-only tombstone operation. Counts, chronology and event
@@ -109,7 +121,10 @@ func (s Service) DeleteContent(ctx context.Context, actor string, id int64) erro
 	batch.Queue(`DELETE FROM core.conversation_message_bodies WHERE event_id=$1`, id)
 	batch.Queue(`UPDATE core.legacy_message_references SET tombstoned=true WHERE event_id=$1 AND owner=$2`, id, actor)
 	batch.Queue(`UPDATE core.conversation_events SET summarized_version=0 WHERE owner=$1`, actor)
-	batch.Queue(`UPDATE core.conversation_summaries SET version=version+1,through_id=0,text='' WHERE owner=$1`, actor)
+	batch.Queue(
+		`UPDATE core.conversation_summaries SET version=version+1,through_id=0,text='',read_authorities='[]' WHERE owner=$1`,
+		actor,
+	)
 	batch.Queue(
 		`INSERT INTO core.conversation_history_generations(owner,generation) VALUES($1,1) ON CONFLICT(owner) DO UPDATE SET generation=core.conversation_history_generations.generation+1`,
 		actor,

@@ -6,14 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"net/url"
-	"strconv"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-	"github.com/complynx/zns-chatbot/platform/internal/core"
-	"github.com/complynx/zns-chatbot/platform/internal/massage"
-	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
@@ -32,19 +29,12 @@ const (
 	scriptOrdersPageToolName  = "orders.page"
 )
 
-var errScriptReadLimit = errors.New("read result limit")
-
 type scriptDomainArguments struct {
 	Provider string `json:"provider"`
 	Event    string `json:"event"`
 	Party    string `json:"party"`
 	Length   int    `json:"length"`
 	Cursor   string `json:"cursor"`
-}
-
-type scriptDomainEventArguments struct {
-	Event  string `json:"event"`
-	Cursor string `json:"cursor,omitempty"`
 }
 
 type scriptDomainBookingArguments struct {
@@ -59,16 +49,14 @@ type scriptDomainSlotsArguments struct {
 	Length int `json:"length"`
 }
 
-type scriptDomainPage[T any] struct {
-	Items      []T    `json:"items"`
-	NextCursor string `json:"next_cursor"`
-	More       bool   `json:"more"`
-}
-
 // A changed source page invalidates an offset rather than silently skipping data.
 // RemoteNext is an existing Core keyset cursor, used only after this page ends.
-func scriptDomainItems[T any](items []T, cursor scriptReadCursor, remoteNext string) (scriptDomainPage[T], error) {
-	result := scriptDomainPage[T]{Items: []T{}}
+func scriptDomainItems[T any](
+	items []T,
+	cursor scriptReadCursor,
+	remoteNext string,
+) (agenthost.ScriptDomainPage[T], error) {
+	result := agenthost.ScriptDomainPage[T]{Items: []T{}}
 	raw, err := json.Marshal(items)
 	if err != nil {
 		return result, err
@@ -76,7 +64,7 @@ func scriptDomainItems[T any](items []T, cursor scriptReadCursor, remoteNext str
 	digest := sha256.Sum256(raw)
 	fingerprint := hex.EncodeToString(digest[:])
 	if cursor.Digest != "" && cursor.Digest != fingerprint {
-		return result, errScriptReadStale
+		return result, appclient.ErrReadStale
 	}
 	if cursor.Offset > len(items) {
 		return result, errors.New("invalid read cursor")
@@ -86,13 +74,13 @@ func scriptDomainItems[T any](items []T, cursor scriptReadCursor, remoteNext str
 		result.Items = append(result.Items, items[index])
 		result.More = index+1 < len(items) || remoteNext != ""
 		result.NextCursor = scriptDomainNextCursor(cursor, index+1, len(items), fingerprint, remoteNext)
-		encoded, encodeErr := json.Marshal(result)
+		encoded, encodeErr := json.Marshal(agenthost.ModelToolEvidence(result))
 		if encodeErr != nil {
 			return result, encodeErr
 		}
 		if len(encoded) > maxScriptReadBytes {
 			if len(previous.Items) == 0 {
-				return previous, errScriptReadLimit
+				return previous, appclient.ErrReadLimit
 			}
 			return previous, nil
 		}
@@ -119,8 +107,8 @@ func prepareScriptDomainRead(
 	_ int64,
 	call scriptclient.ToolCall,
 	_ agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	var target any
 	switch call.Name {
 	case scriptPassEvents:
@@ -130,7 +118,7 @@ func prepareScriptDomainRead(
 			Event string `json:"event"`
 		})
 	case scriptPassInvitations, scriptPassEventRead, scriptMassageParties:
-		target = new(scriptDomainEventArguments)
+		target = new(agenthost.ScriptDomainEventArguments)
 	case scriptMassageBookings:
 		target = new(scriptDomainBookingArguments)
 	case scriptMassageSlots:
@@ -165,6 +153,9 @@ func prepareScriptDomainRead(
 	if call.Name == scriptMassageProviderRead && args.Provider == "" {
 		return record, errors.New("provider is required")
 	}
+	if call.Name == scriptPassInvitations {
+		record.PassRead = &agenthost.ScriptDomainEventArguments{Event: args.Event, Cursor: args.Cursor}
+	}
 	return record, nil
 }
 
@@ -178,7 +169,7 @@ func (b *Bot) executeScriptDomainRead(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	_ scriptToolRecord,
+	_ agenthost.ScriptToolRecord,
 	_ *agent.Input,
 ) (any, error) {
 	var args scriptDomainArguments
@@ -193,13 +184,13 @@ func (b *Bot) executeScriptDomainRead(
 	}
 	switch call.Name {
 	case scriptPassEvents:
-		return b.API.passEventsPage(ctx, owner, args.Cursor)
+		return b.API.PassEventsPage(ctx, owner, args.Cursor)
 	case scriptPassEventRead:
-		return b.API.passEventDetail(ctx, owner, args.Event, args.Cursor)
+		return b.API.PassEventDetail(ctx, owner, args.Event, args.Cursor)
 	case scriptMassageSlots:
-		return b.API.massageSlotsPage(ctx, owner, args)
+		return b.API.MassageSlotsPage(ctx, owner, args.Event, args.Party, args.Cursor, args.Length)
 	case scriptMassageProviderRead:
-		return b.API.massageProviderDetail(ctx, owner, args)
+		return b.API.MassageProviderDetail(ctx, owner, args.Event, args.Provider, args.Cursor)
 	}
 	cursor, err := readScriptCursor(args.Cursor, owner, call.Name, scriptDomainScope(args))
 	if err != nil {
@@ -231,7 +222,7 @@ func (b *Bot) executeScriptDomainRead(
 	}
 }
 
-func (b *Bot) scriptDomainEntries() []scriptToolEntry {
+func (b *Bot) scriptDomainEntries() []agenthost.ScriptToolEntry {
 	cursor := json.RawMessage(
 		`{"type":"object","properties":{"cursor":{"type":"string"}},"additionalProperties":false}`,
 	)
@@ -250,7 +241,7 @@ func (b *Bot) scriptDomainEntries() []scriptToolEntry {
 	descriptors := []scriptclient.Tool{
 		{
 			Name:        scriptPassEvents,
-			Description: "Browse active pass events with explicitly excerpted en/ru titles and stable IDs. Follow next_cursor; passes.event.read returns complete localized titles.",
+			Description: "Browse active pass events and your own historical registrations with excerpted en/ru titles and stable IDs. Historical events are read-only; use passes.registration.read/show with home/payment views. Follow next_cursor; passes.event.read returns complete localized titles.",
 			InputSchema: cursor,
 		},
 		{
@@ -296,127 +287,17 @@ func (b *Bot) scriptDomainEntries() []scriptToolEntry {
 			),
 		},
 	)
-	entries := make([]scriptToolEntry, 0, len(descriptors))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		entries = append(
 			entries,
-			scriptToolEntry{
-				descriptor:  descriptor,
-				prepare:     prepareScriptDomainRead,
-				execute:     b.executeScriptDomainRead,
-				resultLimit: maxScriptReadBytes,
+			agenthost.ScriptToolEntry{
+				Descriptor:  descriptor,
+				Prepare:     prepareScriptDomainRead,
+				Execute:     b.executeScriptDomainRead,
+				ResultLimit: maxScriptReadBytes,
 			},
 		)
 	}
 	return entries
-}
-
-func scriptDomainAPIError(err error) error {
-	if problem, ok := errors.AsType[*core.ProblemError](err); ok {
-		switch problem.Code {
-		case "read_stale", "history_stale":
-			return errScriptReadStale
-		case "read_result_limit":
-			return errScriptReadLimit
-		}
-	}
-	return err
-}
-
-func (c APIClient) passEventsPage(
-	ctx context.Context,
-	owner, cursor string,
-) (core.ReadPage[passbooking.NavigationEvent], error) {
-	var result core.ReadPage[passbooking.NavigationEvent]
-	err := c.call(ctx, owner, http.MethodGet, "/v1/passes/events/page?cursor="+url.QueryEscape(cursor), nil, &result)
-	return result, scriptDomainAPIError(err)
-}
-
-func (c APIClient) passEventDetail(ctx context.Context, owner, event, cursor string) (core.ReadChunk, error) {
-	var result core.ReadChunk
-	err := c.call(
-		ctx,
-		owner,
-		http.MethodGet,
-		"/v1/passes/events/"+url.PathEscape(event)+"/detail?cursor="+url.QueryEscape(cursor),
-		nil,
-		&result,
-	)
-	return result, scriptDomainAPIError(err)
-}
-
-func (c APIClient) massageSlotsPage(
-	ctx context.Context,
-	owner string,
-	args scriptDomainArguments,
-) (core.ReadPage[massage.NavigationSlot], error) {
-	var result core.ReadPage[massage.NavigationSlot]
-	query := url.Values{
-		knowledgeEventQuery: {args.Event},
-		massagePartyQuery:   {args.Party},
-		"length":            {strconv.Itoa(args.Length)},
-		memoryCursorQuery:   {args.Cursor},
-	}
-	err := c.call(ctx, owner, http.MethodGet, "/v1/massage/slots/page?"+query.Encode(), nil, &result)
-	return result, scriptDomainAPIError(err)
-}
-
-func (c APIClient) massageProviderDetail(
-	ctx context.Context,
-	owner string,
-	args scriptDomainArguments,
-) (core.ReadChunk, error) {
-	var result core.ReadChunk
-	query := url.Values{knowledgeEventQuery: {args.Event}, memoryCursorQuery: {args.Cursor}}
-	err := c.call(
-		ctx,
-		owner,
-		http.MethodGet,
-		"/v1/massage/providers/"+url.PathEscape(args.Provider)+"/detail?"+query.Encode(),
-		nil,
-		&result,
-	)
-	return result, scriptDomainAPIError(err)
-}
-
-// Count only known page fields; metadata never includes response content.
-func scriptToolResultMetadata(name string, data json.RawMessage) (int, bool) {
-	if string(data) == "[]" {
-		return 0, true
-	}
-	var field string
-	switch name {
-	case scriptPassEvents, scriptPassInvitations, scriptMassageParties, scriptMassageSlots, scriptMassageBookings,
-		scriptPrivilegeEvents, scriptPaymentQueue, scriptPaymentHistory, scriptPractitionerSchedule, scriptPractitionerBookings:
-		field = "items"
-	case scriptHistoryPageToolName:
-		field = "events"
-	case scriptOrdersPageToolName:
-		field = "orders"
-	default:
-		return 0, false
-	}
-	var page struct {
-		Items  []json.RawMessage `json:"items"`
-		Events []json.RawMessage `json:"events"`
-		Orders []json.RawMessage `json:"orders"`
-		More   bool              `json:"more"`
-		Error  string            `json:"error"`
-	}
-	if json.Unmarshal(data, &page) != nil || page.Error != "" {
-		return 0, false
-	}
-	var items []json.RawMessage
-	switch field {
-	case "items":
-		items = page.Items
-	case "events":
-		items = page.Events
-	case "orders":
-		items = page.Orders
-	}
-	if items == nil {
-		return 0, false
-	}
-	return len(items), len(items) == 0 && !page.More
 }

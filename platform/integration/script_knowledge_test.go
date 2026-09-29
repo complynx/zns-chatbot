@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
@@ -61,6 +63,7 @@ return {before:before.version,version:saved.memo.version,text:memos[0].text,forg
 			other, err := f.b.API.Memos(t.Context(), "bob")
 			require.NoError(t, err)
 			assert.Empty(t, other)
+			deliverNotificationBotCards(t, f)
 			var visible int
 			require.NoError(
 				t,
@@ -68,14 +71,7 @@ return {before:before.version,version:saved.memo.version,text:memos[0].text,forg
 					Scan(&visible),
 			)
 			assert.Positive(t, visible)
-			result = runKnowledgeScript(
-				t,
-				f,
-				identity.AliceTelegramID,
-				15002,
-				`tools.knowledge.memo_read({fact_key:"diet"});tools.knowledge.memo_delete({fact_key:"diet"});return {remaining:tools.knowledge.memos().length};`,
-			)
-			assert.JSONEq(t, `{"omitted":true,"reason":"memory_deleted"}`, string(result))
+			assertKnowledgeDeleteScriptCascade(t, f)
 			memos, err = f.b.API.Memos(t.Context(), "alice")
 			require.NoError(t, err)
 			assert.Empty(t, memos)
@@ -115,6 +111,13 @@ func TestScriptKnowledgeSuggestionManualReview(t *testing.T) {
 			facts, err := f.b.API.Knowledge(t.Context(), "alice", knowledge.Query{})
 			require.NoError(t, err)
 			assert.Empty(t, facts)
+			proposals, err := f.b.API.KnowledgeProposals(t.Context(), "alice", knowledge.ProposalQuery{})
+			require.NoError(t, err)
+			require.Len(t, proposals, 2)
+			for _, proposal := range proposals {
+				require.Equal(t, knowledge.AwaitingSubmission, proposal.State)
+			}
+			submitKnowledgeCardForAlice(t, f, proposals[0], 15021)
 			result := runKnowledgeScript(
 				t,
 				f,
@@ -316,4 +319,62 @@ return {count,found,version:fact.fact.version,proposals:p.items.length+p2.items.
 	assert.Equal(t, 1, parsed.Version)
 	assert.Equal(t, 23, parsed.Proposals)
 	assert.False(t, parsed.More)
+}
+
+// Deleting memory now also revokes the prior derived archive and its inherited
+// script generation. The ordinary script helper still requires no error.
+func assertKnowledgeDeleteScriptCascade(t *testing.T, f *fixture) {
+	t.Helper()
+	history := conversation.Service{DB: f.db}
+	before, err := history.Window(t.Context(), "alice", 1)
+	require.NoError(t, err)
+	code := `tools.knowledge.memo_read({fact_key:"diet"});tools.knowledge.memo_delete({fact_key:"diet"});return {remaining:tools.knowledge.memos().length};`
+	model := &knowledgeModel{plans: []agent.Plan{
+		{View: agent.KnowledgeView, ScriptAction: &agent.ScriptProposal{Code: code, InputJSON: "null"}},
+		{View: agent.KnowledgeView, Text: "Done"},
+	}}
+	f.b.Model = model
+	update := message(15002, identity.AliceTelegramID, "Use the explicitly requested knowledge operation")
+	handle(t, f.b, update)
+	require.Len(t, model.inputs, 2)
+	require.Len(t, model.inputs[1].Script.Runs, 1)
+	run := model.inputs[1].Script.Runs[0]
+	require.True(t, run.PassRedacted)
+	require.Equal(t, "history_deleted", run.Error)
+	require.Empty(t, run.Calls)
+	require.Empty(t, run.Code)
+	require.Empty(t, run.Result)
+	after, err := history.Window(t.Context(), "alice", 10)
+	require.NoError(t, err)
+	require.Greater(t, after.Generation, before.Generation)
+	encoded, err := json.Marshal(model.inputs[1])
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "vegetarian")
+	require.NotContains(t, string(encoded), "вегетарианское")
+	// Replay after a fresh bot instance cannot re-run the committed deletion.
+	f.b = &bot.Bot{
+		DB:      f.db,
+		API:     f.b.API,
+		Host:    f.b.Host,
+		TG:      f.b.TG,
+		Scripts: scopeVM{},
+		Model: avModel(func(context.Context, agent.Input) (agent.Plan, error) {
+			t.Error("replay invoked model")
+			return agent.Plan{}, context.Canceled
+		}),
+	}
+	require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal history plan")
+	var deletes int
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.knowledge_operations WHERE actor='alice' AND result->'memo'->>'key'='diet' AND result->'memo'->>'version'='2' AND result->'memo'->>'active'='false'`).
+			Scan(&deletes),
+	)
+	require.Equal(t, 1, deletes)
+	page, err := history.Read(t.Context(), "alice", conversation.Query{Limit: 20})
+	require.NoError(t, err)
+	encoded, err = json.Marshal(page)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "vegetarian")
+	require.NotContains(t, string(encoded), "вегетарианское")
 }

@@ -101,7 +101,7 @@ func (s Service) Proposals(ctx context.Context, actor string, q ProposalQuery) (
 		}
 	}
 	rows, err := tx.Query(ctx, `SELECT `+proposalColumns+` FROM core.knowledge_proposals WHERE scope=$1
- AND (($2 AND state='pending_review' AND owner<>$3) OR (NOT $2 AND owner=$3))
+ AND (($2 AND state='pending_review' AND owner<>$3 AND `+proposalSubmittedSQL+`) OR (NOT $2 AND owner=$3))
  AND ($4::bigint=0 OR id<$4) ORDER BY id DESC LIMIT $5`, q.Event, q.ReviewQueue, actor, q.After, MaxResults)
 	if err != nil {
 		return nil, err
@@ -120,7 +120,10 @@ func (s Service) Proposals(ctx context.Context, actor string, q ProposalQuery) (
 	if err != nil {
 		return nil, err
 	}
-	return result, tx.Commit(ctx)
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return s.authorizeProposals(ctx, actor, result)
 }
 
 func (s Service) Memos(ctx context.Context, actor string) ([]Memo, error) {
@@ -145,7 +148,11 @@ func (s Service) Memos(ctx context.Context, actor string) ([]Memo, error) {
 		}
 		result = append(result, memo)
 	}
-	return result, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	return s.authorizeMemos(ctx, actor, result)
 }
 
 func (s Service) Memo(ctx context.Context, actor, key string) (Memo, error) {
@@ -161,5 +168,10 @@ func (s Service) Memo(ctx context.Context, actor, key string) (Memo, error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return memo, nil
 	}
+	if err != nil {
+		return memo, err
+	}
+	entry, err := s.authorizeMemoryEntry(ctx, actor, memoMemoryEntry(memo))
+	memo.ReadAuthorities = entry.ReadAuthorities
 	return memo, err
 }

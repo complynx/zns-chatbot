@@ -91,7 +91,9 @@ type Send struct {
 
 // ResponseParameters contains structured Telegram recovery information.
 type ResponseParameters struct {
-	RetryAfter int64 `json:"retry_after,omitempty"`
+	RetryAfter        int64 `json:"retry_after,omitempty"`
+	RetryAfterPresent bool  `json:"-"`
+	RetryAfterInvalid bool  `json:"-"`
 }
 
 type APIError struct {
@@ -105,9 +107,10 @@ func (e *APIError) Error() string {
 }
 
 type Client struct {
-	Base  string
-	Token string
-	HTTP  *http.Client
+	Control ControlPolicy
+	Base    string
+	Token   string
+	HTTP    *http.Client
 }
 
 const (
@@ -120,7 +123,11 @@ func (c Client) Call(ctx context.Context, method string, in, out any) error {
 	if e != nil {
 		return e
 	}
-	return c.request(ctx, method, bytes.NewReader(b), "application/json", out)
+	if err := c.admitControl(ctx, method); err != nil {
+		return err
+	}
+	err := c.request(ctx, method, bytes.NewReader(b), "application/json", out)
+	return c.observeControl(ctx, method, err)
 }
 
 func (c Client) request(ctx context.Context, method string, body io.Reader, contentType string, out any) error {
@@ -146,7 +153,13 @@ func (c Client) request(ctx context.Context, method string, body io.Reader, cont
 		Parameters  ResponseParameters `json:"parameters"`
 	}
 	if e = json.NewDecoder(io.LimitReader(resp.Body, maxResponseBytes)).Decode(&envelope); e != nil {
+		if resp.StatusCode == http.StatusTooManyRequests {
+			return invalidRateLimitResponse()
+		}
 		return e
+	}
+	if resp.StatusCode == http.StatusTooManyRequests && (envelope.OK || envelope.Code != http.StatusTooManyRequests) {
+		return invalidRateLimitResponse()
 	}
 	if !envelope.OK {
 		return &APIError{Code: envelope.Code, Description: envelope.Description, Parameters: envelope.Parameters}
@@ -183,4 +196,12 @@ func (c Client) Edit(ctx context.Context, p Send) error {
 		return err
 	}
 	return c.Call(ctx, "editMessageText", p, nil)
+}
+
+func invalidRateLimitResponse() error {
+	return &APIError{
+		Code:        http.StatusTooManyRequests,
+		Description: "invalid rate-limit response",
+		Parameters:  ResponseParameters{RetryAfterInvalid: true},
+	}
 }

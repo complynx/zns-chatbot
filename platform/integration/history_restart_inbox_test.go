@@ -18,7 +18,7 @@ import (
 // Stop the host before it can persist a final plan or terminal marker.
 func TestHistoryInterruptedFinalPlanDoesNotRegenerateAfterDeletion(t *testing.T) {
 	t.Parallel()
-	for _, mode := range []string{"original", "legacy", "redacted"} {
+	for _, mode := range []string{"original", "missing_generation", "redacted"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			historyInterruptedFinalPlan(t, mode)
@@ -31,7 +31,7 @@ func historyInterruptedFinalPlan(t *testing.T, mode string) {
 	f := setup(t)
 	archive := conversation.Service{DB: f.db}
 	const canary = "deleted history source canary"
-	require.NoError(t, archive.Append(t.Context(), "alice", "terminal-source", "user", canary))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "terminal-source", "user", canary))
 	var eventID int64
 	require.NoError(
 		t,
@@ -105,8 +105,18 @@ func historyInterruptedFinalPlan(t *testing.T, mode string) {
 	)
 	assert.Equal(t, 1, effects)
 	var saved string
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT plan::text FROM bot.replies WHERE update_id=1`).Scan(&saved))
-	assert.Contains(t, saved, `"history_redacted": true`)
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT payload::text FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
+			Scan(&saved),
+	)
+	var terminal bool
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT kind='terminal' AND state='privacy_terminal' AND reason='history_deleted' FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
+			Scan(&terminal),
+	)
+	assert.True(t, terminal)
 	assert.NotContains(t, saved, canary)
 	var cursor int64
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT value FROM bot.cursors WHERE name='telegram'`).Scan(&cursor))
@@ -121,11 +131,15 @@ func historyInterruptedFinalPlan(t *testing.T, mode string) {
 func prepareInterruptedHistoryLedger(t *testing.T, f *fixture, mode string) {
 	t.Helper()
 	var plans int
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.replies WHERE update_id=1`).Scan(&plans))
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT count(*) FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
+			Scan(&plans),
+	)
 	require.Zero(t, plans, "crash happened before either final plan or terminal marker")
 	var query string
 	switch mode {
-	case "legacy":
+	case "missing_generation":
 		query = `UPDATE bot.interactions SET content=(SELECT jsonb_agg(r-'history_generation') FROM jsonb_array_elements(content) r)
  WHERE update_id=1 AND kind='script_runs'`
 	case "redacted":
@@ -143,7 +157,7 @@ func assertInterruptedMarkerRetry(t *testing.T, f *fixture, calls *atomic.Int64)
 	_, err := f.db.Exec(t.Context(), `CREATE SEQUENCE bot.marker_attempts;
  CREATE FUNCTION bot.reject_terminal_marker() RETURNS trigger LANGUAGE plpgsql AS $$
  BEGIN PERFORM nextval('bot.marker_attempts'); RAISE EXCEPTION 'synthetic marker persistence failure'; END $$;
- CREATE TRIGGER reject_terminal_marker BEFORE INSERT ON bot.replies FOR EACH ROW EXECUTE FUNCTION bot.reject_terminal_marker()`)
+ CREATE TRIGGER reject_terminal_marker BEFORE INSERT ON interaction.saved_turns FOR EACH ROW EXECUTE FUNCTION bot.reject_terminal_marker()`)
 	require.NoError(t, err)
 	runInboxUntil(t, f, func() bool {
 		var attempts int
@@ -154,6 +168,6 @@ func assertInterruptedMarkerRetry(t *testing.T, f *fixture, calls *atomic.Int64)
 	var pending int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&pending))
 	assert.Equal(t, 2, pending, "no acknowledgement before a durable terminal marker")
-	_, err = f.db.Exec(t.Context(), `DROP TRIGGER reject_terminal_marker ON bot.replies`)
+	_, err = f.db.Exec(t.Context(), `DROP TRIGGER reject_terminal_marker ON interaction.saved_turns`)
 	require.NoError(t, err)
 }

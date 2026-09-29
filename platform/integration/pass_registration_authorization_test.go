@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 )
 
 func TestRegistrationRevokedReadsStayHiddenAfterAllowedRead(t *testing.T) {
@@ -106,11 +105,33 @@ func TestRegistrationAuthorizationBeforeModelAfterHistoryRead(t *testing.T) {
 					return agent.Plan{View: "workflow", Text: "The history read completed."}, nil
 				}
 			})
-			handle(t, f.b, message(990, 202, "Inspect registration for 101 and recent history"))
+			update := message(990, 202, "Inspect registration for 101 and recent history")
+			err := f.b.Handle(t.Context(), update)
 			if scenario == "database_failure" {
 				assert.Equal(t, 2, calls)
-				assertUnavailableWithoutSettings(t, f)
+				require.ErrorContains(t, err, "registration authority unavailable")
+				var plans int
+				require.NoError(
+					t,
+					f.db.QueryRow(t.Context(), `SELECT count(*) FROM interaction.saved_turns WHERE owner='alice' AND update_id=990`).
+						Scan(&plans),
+				)
+				assert.Zero(t, plans)
+				_, restoreErr := f.db.Exec(
+					t.Context(),
+					`ALTER TABLE core.unavailable_registration_admins RENAME TO pass_booking_admins`,
+				)
+				require.NoError(t, restoreErr)
+				f.b.Model = avModel(func(_ context.Context, input agent.Input) (agent.Plan, error) {
+					require.Len(t, input.Registration.Reads, 1)
+					assert.Empty(t, input.Registration.Reads[0].Error)
+					assert.Equal(t, 2, input.Registration.Remaining)
+					require.Len(t, input.Conversation.Reads, 1)
+					return agent.Plan{View: "workflow", Text: "The recovered history read completed."}, nil
+				})
+				handle(t, f.b, update)
 			} else {
+				require.NoError(t, err)
 				assert.Equal(t, 3, calls)
 			}
 			var completed int
@@ -118,22 +139,5 @@ func TestRegistrationAuthorizationBeforeModelAfterHistoryRead(t *testing.T) {
 WHERE owner='bob' AND update_id=990 AND kind='history_reads'`).Scan(&completed))
 			assert.Equal(t, 1, completed, "the non-registration read must complete before the boundary check")
 		})
-	}
-}
-
-func assertUnavailableWithoutSettings(t *testing.T, f *fixture) {
-	t.Helper()
-	messages := chatMessages(t, f, 202)
-	require.NotEmpty(t, messages)
-	card := messages[len(messages)-1]
-	preferences, err := f.b.API.Preferences(t.Context(), "bob")
-	require.NoError(t, err)
-	notice, err := i18n.Translate(preferences.Language, i18n.AgentUnavailable, nil)
-	require.NoError(t, err)
-	assert.Contains(t, card.Text, notice)
-	for _, row := range card.Markup.Rows {
-		for _, button := range row {
-			assert.NotEqual(t, "/model", button.Data)
-		}
 	}
 }

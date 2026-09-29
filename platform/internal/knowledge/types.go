@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -56,7 +58,7 @@ type Command struct {
 }
 
 // Assessment is used only by the trusted host classification workflow, never a
-// public API or an agent tool. A positive verdict only queues a human review.
+// public API or an agent tool. A positive verdict leaves the proposal private until the author submits it.
 type Assessment struct {
 	Key        string
 	ProposalID int64
@@ -66,59 +68,67 @@ type Assessment struct {
 }
 
 type Fact struct {
-	Event              string `json:"event"`
-	Topic              string `json:"topic"`
-	Key                string `json:"key"`
-	Text               string `json:"text"`
-	Version            int64  `json:"version"`
-	Phase              string `json:"phase"`
-	HistoricalFallback bool   `json:"historical_fallback"`
-	Untrusted          bool   `json:"untrusted"`
-	Active             bool   `json:"active"`
+	ReadAuthorities    []readsource.Authority `json:"read_authorities,omitempty"`
+	Event              string                 `json:"event"`
+	Topic              string                 `json:"topic"`
+	Key                string                 `json:"key"`
+	Text               string                 `json:"text"`
+	Version            int64                  `json:"version"`
+	Phase              string                 `json:"phase"`
+	HistoricalFallback bool                   `json:"historical_fallback"`
+	Untrusted          bool                   `json:"untrusted"`
+	Active             bool                   `json:"active"`
 }
 
 type Proposal struct {
-	ID          int64     `json:"id"`
-	Event       string    `json:"event"`
-	Owner       string    `json:"owner"`
-	Topic       string    `json:"topic"`
-	FactKey     string    `json:"fact_key"`
-	Text        string    `json:"text"`
-	Version     int64     `json:"version"`
-	FactVersion int64     `json:"fact_version"`
-	State       string    `json:"state"`
-	Reason      string    `json:"reason"`
-	CreatedAt   time.Time `json:"created_at"`
+	Submitted       bool                   `json:"submitted"`
+	ReadAuthorities []readsource.Authority `json:"read_authorities,omitempty"`
+	ID              int64                  `json:"id"`
+	Event           string                 `json:"event"`
+	Owner           string                 `json:"owner"`
+	Topic           string                 `json:"topic"`
+	FactKey         string                 `json:"fact_key"`
+	Text            string                 `json:"text"`
+	Version         int64                  `json:"version"`
+	FactVersion     int64                  `json:"fact_version"`
+	State           string                 `json:"state"`
+	Reason          string                 `json:"reason"`
+	CreatedAt       time.Time              `json:"created_at"`
 }
 
 type Memo struct {
-	Key     string `json:"key"`
-	Text    string `json:"text"`
-	Version int64  `json:"version"`
-	Active  bool   `json:"active"`
+	ReadAuthorities []readsource.Authority `json:"read_authorities,omitempty"`
+	Key             string                 `json:"key"`
+	Text            string                 `json:"text"`
+	Version         int64                  `json:"version"`
+	Active          bool                   `json:"active"`
 }
 
 type Document struct {
-	Topic   string `json:"topic"`
-	Key     string `json:"key"`
-	Text    string `json:"text"`
-	Version int64  `json:"version"`
-	Active  bool   `json:"active"`
+	ReadAuthorities []readsource.Authority `json:"read_authorities,omitempty"`
+	Topic           string                 `json:"topic"`
+	Key             string                 `json:"key"`
+	Text            string                 `json:"text"`
+	Version         int64                  `json:"version"`
+	Active          bool                   `json:"active"`
 }
 
 type Result struct {
-	Redacted bool      `json:"redacted,omitempty"`
-	Document *Document `json:"document,omitempty"`
-	Fact     *Fact     `json:"fact,omitempty"`
-	Proposal *Proposal `json:"proposal,omitempty"`
-	Memo     *Memo     `json:"memo,omitempty"`
+	PrivateDeletion *PrivateDeletionWitness `json:"private_deletion,omitempty"`
+	ReadAuthorities []readsource.Authority  `json:"read_authorities,omitempty"`
+	Redacted        bool                    `json:"redacted,omitempty"`
+	Document        *Document               `json:"document,omitempty"`
+	Fact            *Fact                   `json:"fact,omitempty"`
+	Proposal        *Proposal               `json:"proposal,omitempty"`
+	Memo            *Memo                   `json:"memo,omitempty"`
 }
 
 type Query struct{ Event, Topic, Text, Cursor string }
 type FactPage struct {
-	Facts      []Fact `json:"facts"`
-	More       bool   `json:"more"`
-	NextCursor string `json:"next_cursor"`
+	ReadAuthorities []readsource.Authority `json:"read_authorities,omitempty"`
+	Facts           []Fact                 `json:"facts"`
+	More            bool                   `json:"more"`
+	NextCursor      string                 `json:"next_cursor"`
 }
 type ProposalQuery struct {
 	Event       string
@@ -134,3 +144,30 @@ func missing() error {
 	return &core.ProblemError{Status: http.StatusNotFound, Code: "knowledge_not_found"}
 }
 func conflict(code string) error { return &core.ProblemError{Status: http.StatusConflict, Code: code} }
+
+// MemoPage serializes collection evidence once, outside the original content budget.
+type MemoPage struct {
+	Items           []Memo                 `json:"items"`
+	ReadAuthorities []readsource.Authority `json:"read_authorities"`
+}
+type ProposalPage struct {
+	Items           []Proposal             `json:"items"`
+	ReadAuthorities []readsource.Authority `json:"read_authorities"`
+}
+
+// RestoreReadAuthorities projects one wire envelope back onto its typed bodies
+// for host callers that consume an individual result field.
+func (r *Result) RestoreReadAuthorities() {
+	if r.Fact != nil {
+		r.Fact.ReadAuthorities = readsource.CloneAuthorities(r.ReadAuthorities)
+	}
+	if r.Memo != nil {
+		r.Memo.ReadAuthorities = readsource.CloneAuthorities(r.ReadAuthorities)
+	}
+	if r.Document != nil {
+		r.Document.ReadAuthorities = readsource.CloneAuthorities(r.ReadAuthorities)
+	}
+	if r.Proposal != nil {
+		r.Proposal.ReadAuthorities = readsource.CloneAuthorities(r.ReadAuthorities)
+	}
+}

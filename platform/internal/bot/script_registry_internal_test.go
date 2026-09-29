@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
@@ -18,7 +20,7 @@ func TestScriptCatalogSize(t *testing.T) {
 	entries := append(b.scriptProfileEntries(), b.scriptReadEntries()...)
 	entries = append(entries, b.scriptDomainEntries()...)
 	for _, entry := range entries {
-		tools = append(tools, entry.descriptor)
+		tools = append(tools, entry.Descriptor)
 	}
 	encoded, err := json.Marshal(tools)
 	require.NoError(t, err)
@@ -72,10 +74,10 @@ func TestScriptReadProjectionPreservesFailureEvidence(t *testing.T) {
 			Name:   name,
 			Result: json.RawMessage(`{"private":"large intermediate read"}`),
 		}
-		projected := scriptCallProjection(successful)
+		projected := agenthost.ScriptCallProjection(successful)
 		require.Contains(t, string(projected.Result), "payload_omitted")
 		require.NotContains(t, string(projected.Result), "large intermediate read")
 		successful.Error = "interrupted"
-		require.Equal(t, successful, scriptCallProjection(successful))
+		require.Equal(t, successful, agenthost.ScriptCallProjection(successful))
 	}
 }

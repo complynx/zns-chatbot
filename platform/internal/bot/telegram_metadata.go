@@ -4,7 +4,7 @@ import (
 	"context"
 	"math"
 
-	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/account"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -27,12 +27,15 @@ func (b *Bot) refreshTelegramMetadata(ctx context.Context, in incoming, update t
 	} else if update.Message != nil {
 		sender = update.Message.From
 	}
-	if !core.ValidTelegramMetadata(sender) {
+	metadata := account.SenderMetadata{ID: sender.ID, IsBot: sender.IsBot,
+		FirstName: sender.FirstName, LastName: sender.LastName,
+		Username: sender.Username, LanguageCode: sender.LanguageCode}
+	if !account.ValidTelegramMetadata(metadata) {
 		return nil
 	}
-	return b.API.RefreshTelegramMetadata(
+	return b.Host.RefreshTelegramMetadata(
 		ctx,
 		in.owner,
-		core.TelegramMetadataUpdate{Sender: sender, UpdateID: update.ID},
+		account.TelegramMetadataUpdate{Sender: metadata, UpdateID: update.ID},
 	)
 }

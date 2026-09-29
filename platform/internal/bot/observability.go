@@ -12,6 +12,11 @@ type Observer interface {
 }
 
 func (b *Bot) Handle(ctx context.Context, update telegram.Update) error {
+	var ingressErr error
+	ctx, ingressErr = b.registrationIngressContext(ctx, update)
+	if ingressErr != nil {
+		return ingressErr
+	}
 	if b.Observer == nil {
 		return b.handle(ctx, update)
 	}

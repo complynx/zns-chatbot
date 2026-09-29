@@ -1,4 +1,4 @@
-name: synthetic-qa-zns-media
+name: zns-media-isolated
 services:
   decoder:
     build:

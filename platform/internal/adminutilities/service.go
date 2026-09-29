@@ -15,7 +15,10 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
-type Service struct{ DB *pgxpool.Pool }
+type Service struct {
+	DB           *pgxpool.Pool
+	Registration passbooking.Service
+}
 
 // Authorize uses the same global administrator mapping as administrative sends.
 // Payment administrators and user-supplied text never confer these rights.
@@ -113,7 +116,7 @@ func (s Service) Refresh(ctx context.Context, actor string) (Events, error) {
 	if err := s.Authorize(ctx, actor); err != nil {
 		return result, err
 	}
-	changed, err := (passbooking.Service{DB: s.DB}).ProcessDeadlines(ctx)
+	changed, err := s.Registration.ProcessDeadlines(ctx)
 	if err != nil {
 		return result, err
 	}

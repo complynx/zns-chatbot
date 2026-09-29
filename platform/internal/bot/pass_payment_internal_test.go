@@ -3,6 +3,9 @@ package bot
 import (
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -46,12 +49,20 @@ func TestRegistrationReviewBindsAuthorizedAttempt(t *testing.T) {
 			},
 		},
 	}}
-	command, _, err := bindRegistrationPlan(agent.Plan{View: agent.RegistrationView, RegistrationAction: &p}, input)
+	command, _, err := interaction.BindRegistrationPlan(
+		agenthost.CurrentRequestEvidence(input),
+		agent.Plan{View: agent.RegistrationView, RegistrationAction: &p},
+		input,
+	)
 	require.NoError(t, err)
 	assert.EqualValues(t, 3, command.Version)
 	assert.EqualValues(t, 8, command.TargetVersion)
 	assert.Equal(t, "immutable-attempt", command.PaymentAttempt)
 	input.Registration.Reads[0].Error = mediaForbidden
-	_, _, err = bindRegistrationPlan(agent.Plan{View: agent.RegistrationView, RegistrationAction: &p}, input)
+	_, _, err = interaction.BindRegistrationPlan(
+		agenthost.CurrentRequestEvidence(input),
+		agent.Plan{View: agent.RegistrationView, RegistrationAction: &p},
+		input,
+	)
 	require.Error(t, err)
 }

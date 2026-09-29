@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/account"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,7 +41,7 @@ func TestLanguageOperationReplayPreservesNewerChoice(t *testing.T) {
 		"alice",
 		"en",
 		false,
-		core.LanguageOperationKey(strings.Repeat("k", 129)),
+		account.LanguageOperationKey(strings.Repeat("k", 129)),
 	)
 	require.ErrorAs(t, err, &problem)
 	assert.Equal(t, http.StatusBadRequest, problem.Status)

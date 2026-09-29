@@ -13,6 +13,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/mediaclient"
 	"github.com/complynx/zns-chatbot/platform/internal/mediaproc"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -40,7 +41,7 @@ func (b *Bot) clearAVResults(ctx context.Context, owner string, ids []string) er
 
 // Retire a direct spoken command after its durable reply, without touching other
 // pending attachments. Its cached plan remains available for delivery retries.
-func (b *Bot) finishConsumedVoice(ctx context.Context, owner string, cached cachedPlan) error {
+func (b *Bot) finishConsumedVoice(ctx context.Context, owner string, cached interaction.SavedPlan) error {
 	_, err := b.DB.Exec(ctx, `UPDATE bot.media_intake SET status='done',last_action='answer',last_origin='agent'
 	WHERE owner=$1 AND id=$2 AND id=ANY($3) AND av_kind='voice' AND status='new'`, owner, cached.MediaID, cached.AVIDs)
 	return err
@@ -50,16 +51,8 @@ func (b *Bot) resumeConsumedVoice(ctx context.Context, in incoming, updateID int
 	if status != "new" && status != mediaDone {
 		return false, nil
 	}
-	var consumed bool
-	// A saved, validated spoken intent no longer needs its source audio. Replay
-	// still uses the normal executor's current authorization and idempotency checks;
-	// a different media target retains its own availability/selection checks.
-	err := b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.media_intake m JOIN bot.replies r ON r.update_id=m.update_id
-	WHERE m.owner=$1 AND m.id=$2 AND m.update_id=$3 AND m.av_kind='voice'
-	AND r.plan->>'media_id'=m.id AND r.plan->'av_ids' ? m.id
-	AND (m.status='new' OR (m.status='done' AND m.last_action='answer'))
-	AND (r.plan->'plan'->>'view'<>'media' OR r.plan->'plan'->'media_action'->>'media_id'<>m.id))`, in.owner, in.mediaID, updateID).
-		Scan(&consumed)
+	// Replaying a saved spoken intent still checks current authority and receipts.
+	consumed, err := (interaction.Store{DB: b.DB}).ConsumedVoice(ctx, in.owner, in.mediaID, updateID)
 	if err != nil || !consumed {
 		return false, err
 	}

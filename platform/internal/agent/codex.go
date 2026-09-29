@@ -83,6 +83,9 @@ func (m Codex) structured(ctx context.Context, prompt providerPrompt) (string, e
 	if err != nil {
 		return "", err
 	}
+	if err = checkProviderRequest(ctx, prompt.beforeProvider); err != nil {
+		return "", errors.Join(err, call.NotSent(parent))
+	}
 	text, resultErr := runCodexResult(ctx, parent, cmd, output, prompt.name)
 	return text, errors.Join(resultErr, call.Finish(parent))
 }

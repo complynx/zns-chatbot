@@ -2,19 +2,10 @@ package bot
 
 import (
 	"context"
-	"net/http"
-	"net/url"
 	"slices"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
-
-func (c APIClient) PassCapabilities(ctx context.Context, actor, event string) (passbooking.Capabilities, error) {
-	var value passbooking.Capabilities
-	err := c.call(ctx, actor, http.MethodGet, "/v1/passes/events/"+url.PathEscape(event)+"/capabilities", nil, &value)
-	return value, err
-}
 
 func (b *Bot) refreshPassCapabilities(ctx context.Context, owner string, value *agent.RegistrationContext) error {
 	events := []string{}

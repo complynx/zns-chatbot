@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -14,10 +14,12 @@ import (
 
 const historySystemKind = "system"
 
+const historyReply = "reply"
+
 const historyOrdersReply = "orders_reply"
 const historyProfileReply = "profile_reply"
 
-func (b *Bot) archiveUserRequest(ctx context.Context, in incoming, id int64, cached cachedPlan) error {
+func (b *Bot) archiveUserRequest(ctx context.Context, in incoming, id int64, cached interaction.SavedPlan) error {
 	text := in.text
 	if in.assetMessage != nil && in.assetMessage.Text != "" {
 		text = in.assetMessage.Text
@@ -35,7 +37,7 @@ func (b *Bot) archiveUserRequest(ctx context.Context, in incoming, id int64, cac
 	if in.mediaID != "" || len(cached.AVIDs) > 0 {
 		text = "[media request; expiring content omitted]"
 	}
-	return b.API.ArchiveConversation(ctx, in.owner, "tg-user-"+strconv.FormatInt(id, 10), "user", text, 0, false)
+	return b.Host.ArchiveOriginal(ctx, in.owner, "tg-user-"+strconv.FormatInt(id, 10), "user", text)
 }
 
 func (b *Bot) archiveControl(ctx context.Context, in incoming, u telegram.Update) error {
@@ -57,27 +59,32 @@ func (b *Bot) archiveControl(ctx context.Context, in incoming, u telegram.Update
 	default:
 		return nil
 	}
-	return b.API.ArchiveConversation(ctx, in.owner, "tg-user-"+strconv.FormatInt(u.ID, 10), kind, text, 0, false)
+	return b.Host.ArchiveOriginal(ctx, in.owner, "tg-user-"+strconv.FormatInt(u.ID, 10), kind, text)
 }
 
-func (b *Bot) archiveReply(ctx context.Context, owner string, id int64, kind string, content any) error {
+func (b *Bot) archiveReply(
+	ctx context.Context,
+	owner string,
+	id int64,
+	kind string,
+	content any,
+	origin interaction.ReplyOrigin,
+) error {
 	if kind == "order_notification" {
 		notice, ok := content.(map[string]string)
 		if !ok || notice[originField] != historySystemKind {
 			return nil
 		}
-		return b.API.ArchiveConversation(
-			ctx,
-			owner,
-			"notification-"+strconv.FormatInt(id, 10),
-			"system",
-			notice[textField],
-			0, false,
-		)
+		return b.Host.ArchiveOutcome(ctx, owner, "notification-"+strconv.FormatInt(id, 10), notice[textField])
+	}
+	if origin == interaction.DerivedReply {
+		if err := b.planAuthorization().ValidateReply(ctx, owner, id); err != nil {
+			return err
+		}
 	}
 	var text string
 	switch kind {
-	case "reply", historyOrdersReply, knowledgeReply, registrationReply:
+	case historyReply, historyOrdersReply, knowledgeReply, registrationReply:
 		text, _ = content.(string)
 	case historyProfileReply, profileAnswer:
 		text = "[private profile response omitted]"
@@ -94,37 +101,47 @@ func (b *Bot) archiveReply(ctx context.Context, owner string, id int64, kind str
 	if text == "" {
 		return nil
 	}
+	if origin == interaction.TrustedReply {
+		return b.Host.ArchiveOutcome(ctx, owner, "tg-assistant-"+strconv.FormatInt(id, 10), text)
+	}
+	if origin != interaction.DerivedReply {
+		return errors.New("invalid reply origin")
+	}
 	return b.archiveAssistantReply(ctx, owner, id, text)
 }
 
 func (b *Bot) archiveAssistantReply(ctx context.Context, owner string, id int64, text string) error {
-	var plan cachedPlan
-	var generation *int64
-	err := b.DB.QueryRow(ctx, `SELECT plan FROM bot.replies WHERE update_id=$1`, id).Scan(&plan)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	plan, err := (interaction.Store{DB: b.DB}).Load(ctx, owner, id)
+	if err != nil {
 		return err
 	}
-	if err == nil {
-		if plan.HistoryRedacted {
-			return b.validateHistoryPlan(ctx, owner, id, plan)
-		}
-		generation = &plan.HistoryGeneration
+	if err = b.planAuthorization().ValidateDerivedReply(ctx, owner, id, plan); err != nil {
+		return err
+	}
+	if plan.PassAuthority == nil {
+		return errors.New("missing derived reply authority")
 	}
 	media := plan.MediaID != "" || len(plan.AVIDs) > 0
-	err = b.API.archiveConversation(
+	err = b.Host.ArchiveDerived(
 		ctx,
 		owner,
 		"tg-assistant-"+strconv.FormatInt(id, 10),
-		"assistant",
 		text,
-		id, media, generation,
+		id,
+		media,
+		plan.HistoryGeneration,
+		plan.PassAuthority.ReadAuthorities,
 	)
 	var problem *core.ProblemError
-	if errors.As(err, &problem) && problem.Code == "history_stale" {
-		return b.validateHistoryPlan(ctx, owner, id, cachedPlan{HistoryRedacted: true})
+	if errors.As(err, &problem) && problem.Code == historyStale {
+		if passErr := b.planAuthorization().ValidateAuthority(ctx, owner, id, plan); passErr != nil {
+			return passErr
+		}
+		return b.planAuthorization().
+			ValidateHistoryPlan(ctx, owner, id, interaction.SavedPlan{TerminalReason: interaction.HistoryDeleted})
 	}
-	if err == nil && generation != nil {
-		return b.validateHistoryPlan(ctx, owner, id, plan)
+	if err == nil {
+		return b.planAuthorization().ValidateDerivedReply(ctx, owner, id, plan)
 	}
 	return err
 }

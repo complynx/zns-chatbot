@@ -5,7 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"testing"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/identity"
+	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,11 +71,14 @@ func TestPrivilegedScriptLiveReadsAndScopeRevocation(t *testing.T) {
 			seedPrivilegedReads(t, f)
 			_, err := f.db.Exec(t.Context(), `UPDATE core.users SET language=$1 WHERE id='alice'`, language)
 			require.NoError(t, err)
+			beforeEffects := privilegedEffectDigest(t, f)
+			workerRuns := 0
 			model := runScriptReads(
 				t,
 				f,
 				hostScriptFunc(
 					func(ctx context.Context, tools []scriptclient.Tool, callback scriptclient.Callback) (json.RawMessage, error) {
+						workerRuns++
 						bindings, encodeErr := json.Marshal(tools)
 						require.NoError(t, encodeErr)
 						for _, name := range privilegedToolNames() {
@@ -152,12 +161,19 @@ func TestPrivilegedScriptLiveReadsAndScopeRevocation(t *testing.T) {
 					},
 				),
 			)
-			require.Len(t, model.inputs, 2)
-			encoded, err := json.Marshal(model.inputs[1].Script)
-			require.NoError(t, err)
-			assert.NotContains(t, string(encoded), "privileged-1")
-			assert.NotContains(t, string(encoded), "visitor")
-			assert.Contains(t, string(encoded), "payload_omitted")
+			require.Len(t, model.inputs, 1, "revoked evidence must not reach another model request")
+			require.Equal(t, 1, workerRuns)
+			assertPrivilegedRetirement(t, f, language)
+			_, restoreErr := f.db.Exec(
+				t.Context(),
+				`INSERT INTO core.pass_payment_admins(event_id,owner,hidden) VALUES('script-dance','alice',true)`,
+			)
+			require.NoError(t, restoreErr)
+			handle(t, f.b, message(1989, identity.AliceTelegramID, "Read my saved history and orders"))
+			require.Len(t, model.inputs, 1, "the saved notice must prevent replanning after rights restoration")
+			require.Equal(t, 1, workerRuns, "same-update replay must not rerun the worker")
+			require.Equal(t, beforeEffects, privilegedEffectDigest(t, f))
+			assertPrivilegedRetirement(t, f, language)
 		})
 	}
 }
@@ -254,4 +270,59 @@ func TestPrivilegedScriptPaymentQueueContinuesAcrossCorePages(t *testing.T) {
 			},
 		),
 	)
+}
+
+func privilegedEffectDigest(t *testing.T, f *fixture) string {
+	t.Helper()
+	var digest string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT md5(concat(
+ (SELECT COALESCE(string_agg(row_to_json(r)::text,E'\n' ORDER BY row_to_json(r)::text),'') FROM core.pass_bookings r),
+ (SELECT COALESCE(string_agg(row_to_json(r)::text,E'\n' ORDER BY row_to_json(r)::text),'') FROM core.pass_payment_attempts r),
+ (SELECT COALESCE(string_agg(row_to_json(r)::text,E'\n' ORDER BY row_to_json(r)::text),'') FROM core.massage_bookings r)))`).Scan(&digest))
+	return digest
+}
+
+func assertPrivilegedRetirement(t *testing.T, f *fixture, language string) {
+	t.Helper()
+	var records []agenthost.ScriptRecord
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions WHERE owner='alice' AND update_id=1989 AND kind='script_runs'`).
+			Scan(&records),
+	)
+	require.Len(t, records, 1)
+	require.True(t, records[0].PassRedacted)
+	require.Empty(t, records[0].Request.Code)
+	require.Empty(t, records[0].Request.InputJSON)
+	var result struct {
+		Omitted bool   `json:"omitted"`
+		Reason  string `json:"reason"`
+	}
+	require.NoError(t, json.Unmarshal(records[0].Run.Result, &result))
+	require.True(t, result.Omitted)
+	require.Equal(t, "pass_access_changed", result.Reason)
+	require.NotEmpty(t, records[0].Calls)
+	for _, call := range records[0].Calls {
+		require.Empty(t, call.Outcome.Result)
+	}
+	var kind, state string
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT kind,state FROM interaction.saved_turns WHERE owner='alice' AND update_id=1989`).
+			Scan(&kind, &state),
+	)
+	require.Equal(t, "notice", kind)
+	require.Equal(t, "ready", state)
+	var wire struct {
+		Messages []telegram.Message `json:"Messages"`
+	}
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT data FROM bot.fake_state WHERE id=true`).Scan(&wire))
+	require.NotEmpty(t, wire.Messages)
+	notice, err := i18n.Translate(language, i18n.AgentUnavailable, nil)
+	require.NoError(t, err)
+	require.Contains(t, strings.ReplaceAll(wire.Messages[len(wire.Messages)-1].Text, `\`, ""), notice)
+	for _, message := range wire.Messages {
+		require.NotContains(t, message.Text, "privileged-1")
+		require.NotContains(t, message.Text, "visitor")
+	}
 }

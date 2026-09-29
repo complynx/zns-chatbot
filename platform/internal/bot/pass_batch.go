@@ -4,15 +4,17 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -33,6 +35,7 @@ func isPassBatchUpdate(in incoming, update telegram.Update) bool {
 }
 
 func (b *Bot) handlePassBatch(ctx context.Context, in incoming, update telegram.Update) error {
+	ctx = withAdminMessageSource(ctx, in, update)
 	preferences, err := b.API.Preferences(ctx, in.owner)
 	if err != nil {
 		return err
@@ -47,8 +50,7 @@ func (b *Bot) handlePassBatch(ctx context.Context, in incoming, update telegram.
 	if command.Action == passBatchTier {
 		return b.sendPassTier(ctx, in, preferences.Language, command.Event)
 	}
-	var result []passbooking.RuntimeBatchItem
-	err = b.API.call(ctx, in.owner, http.MethodPost, "/v1/passes/batches", command, &result)
+	result, err := (interaction.RegistrationExecutor{Manual: b.API}).Batch(ctx, in.owner, command, nil)
 	if err != nil {
 		return b.passBatchError(ctx, in, preferences.Language, err)
 	}
@@ -124,13 +126,18 @@ func (b *Bot) sendPassBatchText(
 	if err != nil {
 		return err
 	}
-	_, err = b.TG.Send(ctx, telegram.Send{ChatID: in.chat, Text: text})
+	err = b.queueBotUpdateResult(
+		ctx,
+		in.chat,
+		"pass_batch:"+string(id)+":"+values["id"],
+		botdelivery.Reference{Family: botFamilyStatic},
+		botdelivery.StoredResult{Notice: id, Values: values, Payload: telegram.Send{ChatID: in.chat, Text: text}},
+	)
 	return err
 }
 
 func (b *Bot) sendPassTier(ctx context.Context, in incoming, language, event string) error {
-	var result passbooking.TierStatus
-	err := b.API.call(ctx, in.owner, http.MethodGet, "/v1/passes/events/"+url.PathEscape(event)+"/tiers", nil, &result)
+	result, err := b.API.PassTierStatus(ctx, in.owner, event)
 	if err != nil {
 		return b.passBatchError(ctx, in, language, err)
 	}
@@ -138,8 +145,14 @@ func (b *Bot) sendPassTier(ctx context.Context, in incoming, language, event str
 	if err != nil {
 		return err
 	}
-	for _, text := range messages {
-		if _, err = b.TG.Send(ctx, telegram.Send{ChatID: in.chat, Text: text}); err != nil {
+	for index, text := range messages {
+		if err = b.queueBotUpdateResult(
+			ctx,
+			in.chat,
+			"pass_tier:"+event+":"+strconv.Itoa(index),
+			botdelivery.Reference{Family: "pass_tier", Event: event},
+			botdelivery.StoredResult{Payload: telegram.Send{ChatID: in.chat, Text: text}},
+		); err != nil {
 			return err
 		}
 	}

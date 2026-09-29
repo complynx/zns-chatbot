@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/creachadair/jrpc2"
 	"github.com/creachadair/jrpc2/channel"
@@ -15,9 +16,13 @@ import (
 // ServeRPC handles one execution and its host callbacks over bounded stdio.
 // A supervising process must kill and reap it on deadline or disconnection.
 func ServeRPC(ctx context.Context, input io.ReadCloser, output io.WriteCloser) error {
+	return serveRPCBounded(ctx, input, output, ExecuteTimeout)
+}
+
+func serveRPCBounded(ctx context.Context, input io.ReadCloser, output io.WriteCloser, timeout time.Duration) error {
 	// Keep the transport alive long enough to deliver Execute's timeout response.
 	// The process watchdog still bounds a stalled reader or writer.
-	ctx, cancel := context.WithTimeout(ctx, ExecuteProcessTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout+scriptprotocol.ProcessWaitDelay)
 	defer cancel()
 	stop := context.AfterFunc(ctx, func() { _ = input.Close(); _ = output.Close() })
 	defer stop()
@@ -31,7 +36,7 @@ func ServeRPC(ctx context.Context, input io.ReadCloser, output io.WriteCloser) e
 		if len(r.ParamString()) > MaxRequestBytes || scriptprotocol.Decode([]byte(r.ParamString()), &request) != nil {
 			return invalidRPCRequest()
 		}
-		result, err := Execute(
+		result, err := executeBounded(
 			ctx,
 			request,
 			func(ctx context.Context, call scriptprotocol.ToolCall) (json.RawMessage, error) {
@@ -45,6 +50,7 @@ func ServeRPC(ctx context.Context, input io.ReadCloser, output io.WriteCloser) e
 				}
 				return value, nil
 			},
+			timeout,
 		)
 		if err != nil {
 			return Response{Error: errorCode(err)}, nil

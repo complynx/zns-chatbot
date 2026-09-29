@@ -91,7 +91,8 @@ type passActionTransport struct {
 }
 
 func (transport *passActionTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.URL.Path == "/v1/passes/actions" && !transport.done {
+	if (request.URL.Path == "/v1/passes/actions" || request.URL.Path == "/internal/derived/pass-actions") &&
+		!transport.done {
 		transport.done = true
 		transport.before()
 	}
@@ -154,6 +155,7 @@ func TestScriptPassPaymentGenerationAndExecutionACL(t *testing.T) {
 					_, err = service.Execute(t.Context(), "alice", submit)
 					require.NoError(t, err)
 				}}}
+				f.b.Host.HTTP = f.b.API.HTTP
 			}
 			action := "accept"
 			if scenario == "reject" {

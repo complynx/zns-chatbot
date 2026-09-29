@@ -2,14 +2,19 @@ package bot
 
 import (
 	"context"
+
 	"errors"
 	"net/http"
-	"net/url"
+
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/derivedmutation"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
-	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
@@ -17,12 +22,16 @@ func (b *Bot) executePassTool(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	input *agent.Input,
 ) (any, error) {
 	if record.Pass == nil {
 		if call.Name == scriptPassOperations {
-			return b.passOperations(ctx, owner)
+			var query derivedmutation.PassOperationQuery
+			if err := decodeScriptArguments(call.Arguments, &query); err != nil {
+				return nil, err
+			}
+			return b.passOperations(ctx, owner, query)
 		}
 		if call.Name == scriptPassTiers {
 			return b.readPassTiers(ctx, owner, call)
@@ -33,7 +42,10 @@ func (b *Bot) executePassTool(
 	if err := b.authorizePassRequest(ctx, owner, request); err != nil {
 		return nil, err
 	}
-	result, err := b.executePassRequest(ctx, owner, request)
+	if record.Source == nil || !record.Source.Valid() {
+		return nil, errors.New("missing admitted source")
+	}
+	result, err := b.executePassRequest(ctx, owner, request, *record.Source)
 	if err != nil {
 		var problem *core.ProblemError
 		if errors.As(err, &problem) && problem.Status < http.StatusInternalServerError {
@@ -46,26 +58,43 @@ func (b *Bot) executePassTool(
 	return map[string]any{registrationOperationID: request.ID, "complete": true, "result": result}, nil
 }
 
-func (b *Bot) executePassRequest(ctx context.Context, owner string, request *scriptPassRequest) (any, error) {
+func (b *Bot) executePassRequest(
+	ctx context.Context,
+	owner string,
+	request *agenthost.ScriptPassRequest,
+	source readsource.Derivation,
+) (any, error) {
 	switch {
 	case request.Menu != nil:
-		if err := b.storePassMenu(ctx, owner, request.Chat, request.ExportUpdate, *request.Menu); err != nil {
+		if err := b.storePassMenuWithSource(
+			ctx,
+			owner,
+			request.Chat,
+			request.ExportUpdate,
+			*request.Menu,
+			&source,
+		); err != nil {
 			return nil, err
 		}
 		err := b.RenderPassMenu(ctx, owner, request.Chat, "")
 		return map[string]bool{"shown": err == nil}, err
 	case request.Command != nil:
-		return b.API.ExecutePassBooking(ctx, owner, *request.Command)
+		return (interaction.RegistrationExecutor{Derived: b.Host}).Command(ctx, owner, *request.Command, &source)
 	case request.Assignment != nil:
-		return b.API.AssignPass(ctx, owner, *request.Assignment)
+		return (interaction.RegistrationExecutor{Derived: b.Host}).Assignment(ctx, owner, *request.Assignment, &source)
 	case request.Batch != nil:
-		return b.executePassBatch(ctx, owner, request)
+		return b.executePassBatch(ctx, owner, request, source)
 	case request.Name == scriptPassExport:
-		notice, err := b.exportPasses(ctx, incoming{owner: owner, chat: request.Chat}, request.ExportUpdate)
+		notice, err := b.exportPassesWithSource(
+			ctx,
+			incoming{owner: owner, chat: request.Chat},
+			request.ExportUpdate,
+			&source,
+		)
 		if err == nil && notice != i18n.RegistrationExported {
 			return nil, errors.New("pass export unavailable")
 		}
-		return map[string]bool{"delivered": err == nil}, err
+		return map[string]bool{botReceiptDelivered: err == nil}, err
 	default:
 		return nil, errors.New("pass operation unavailable")
 	}
@@ -106,16 +135,12 @@ func (b *Bot) readPassTool(
 		default:
 			return nil, errors.New("invalid read view")
 		}
-	case scriptPassAdminRead:
-		p.View = passMenuQueue
-	case scriptPassAdminTarget:
-		p.View = agent.RegistrationAdminTarget
-	case scriptPassReviewRead:
-		p.View = registrationPaymentQueue
-	case scriptPassTakeoverRead:
-		p.View = agent.RegistrationTakeoverTarget
 	default:
-		return nil, errors.New("pass read unavailable")
+		view, known := agenthost.PassPrivilegedReadView(call.Name)
+		if !known {
+			return nil, errors.New("pass read unavailable")
+		}
+		p.View = view
 	}
 	if err := agent.Validate(agent.Plan{View: agent.RegistrationView, RegistrationAction: &p}); err != nil {
 		return nil, err
@@ -150,15 +175,8 @@ func (b *Bot) readPassTiers(ctx context.Context, owner string, call scriptclient
 	if err != nil {
 		return nil, err
 	}
-	var result passbooking.TierStatus
-	if err = b.API.call(
-		ctx,
-		owner,
-		http.MethodGet,
-		"/v1/passes/events/"+url.PathEscape(args.Event)+"/tiers",
-		nil,
-		&result,
-	); err != nil {
+	result, err := b.API.PassTierStatus(ctx, owner, args.Event)
+	if err != nil {
 		return nil, err
 	}
 	return core.JSONReadChunk(result, cursor)

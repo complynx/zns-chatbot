@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -31,8 +32,9 @@ type knowledgeView struct {
 	After  int64  `json:"after"`
 }
 type knowledgeButton struct {
-	View    knowledgeView      `json:"view"`
-	Command *knowledge.Command `json:"command,omitempty"`
+	View       knowledgeView         `json:"view"`
+	Command    *knowledge.Command    `json:"command,omitempty"`
+	Submission *knowledge.Submission `json:"submission,omitempty"`
 }
 
 // A callback is an opaque reference to a command the host showed this owner.
@@ -114,13 +116,43 @@ func (b *Bot) executeKnowledgeButton(ctx context.Context, in incoming, id int64)
 	if err != nil {
 		return "", err
 	}
+	if value.Submission != nil {
+		return b.submitKnowledgeProposal(ctx, in, *value.Submission)
+	}
 	if value.Command != nil {
 		command := *value.Command
 		if command.Name == knowledgeRetryAssessment {
-			return "", b.retryKnowledgeAssessment(ctx, in.owner, id, command)
+			return b.retryKnowledgeAssessmentNotice(ctx, in, id, command)
 		}
 		command.Key = "tg-knowledge-button-" + strings.TrimPrefix(in.text, knowledgePrefix)
 		return b.executeKnowledgeCommand(ctx, in, id, command)
 	}
 	return "", b.saveKnowledgeView(ctx, in.owner, value.View)
+}
+
+func (b *Bot) retryKnowledgeAssessmentNotice(
+	ctx context.Context,
+	in incoming,
+	id int64,
+	command knowledge.Command,
+) (string, error) {
+	assessment, assessmentErr := b.knowledgeCoordinator().RetryAssessment(ctx, in.owner, id, command)
+	if assessmentErr != nil {
+		return "", assessmentErr
+	}
+	if assessment.Status == interaction.KnowledgeAssessmentDeferred {
+		preference, preferenceErr := b.API.Preferences(ctx, in.owner)
+		if preferenceErr != nil {
+			return "", preferenceErr
+		}
+		if saveErr := b.saveKnowledgeView(
+			ctx,
+			in.owner,
+			knowledgeView{Event: command.Event, Mode: knowledgeOwnMode},
+		); saveErr != nil {
+			return "", saveErr
+		}
+		return i18n.Translate(preference.Language, i18n.KnowledgePendingFilter, nil)
+	}
+	return "", b.saveKnowledgeView(ctx, in.owner, knowledgeView{Event: command.Event, Mode: knowledgeOwnMode})
 }

@@ -56,12 +56,25 @@ func (s Service) UploadProof(ctx context.Context, owner, filename string, body [
 // OrderProof authorizes against the current order, never a client-supplied file ID.
 func (s Service) OrderProof(ctx context.Context, actor, event, id string) (Proof, error) {
 	var proof Proof
-	err := s.DB.QueryRow(ctx, `SELECT p.id,p.filename,p.body,o.version,o.attempt FROM core.orders o
+	err := s.DB.QueryRow(ctx, `SELECT p.id,p.filename,p.body,o.version,o.attempt `+orderProofScope, actor, event, id).
+		Scan(&proof.ID, &proof.Filename, &proof.Body, &proof.Version, &proof.Attempt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Proof{}, problem(http.StatusNotFound, "proof_not_found")
+	}
+	return proof, err
+}
+
+const orderProofScope = `FROM core.orders o
  JOIN core.order_proofs p ON p.id=o.proof_file AND p.owner=o.owner
  JOIN core.users u ON u.id=$1
  WHERE o.id=$3 AND o.event_id=$2 AND o.state IN ('proof','paid')
- AND (o.owner=$1 OR (u.can_book AND EXISTS(SELECT 1 FROM core.order_admins a WHERE a.event_id=o.event_id AND a.owner=$1)))`, actor, event, id).
-		Scan(&proof.ID, &proof.Filename, &proof.Body, &proof.Version, &proof.Attempt)
+ AND (o.owner=$1 OR (u.can_book AND EXISTS(SELECT 1 FROM core.order_admins a WHERE a.event_id=o.event_id AND a.owner=$1)))`
+
+// OrderProofMetadata checks current access and the immutable file binding without reading its bytes.
+func (s Service) OrderProofMetadata(ctx context.Context, actor, event, id string) (Proof, error) {
+	var proof Proof
+	err := s.DB.QueryRow(ctx, `SELECT p.id,p.filename,o.version,o.attempt `+orderProofScope, actor, event, id).
+		Scan(&proof.ID, &proof.Filename, &proof.Version, &proof.Attempt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Proof{}, problem(http.StatusNotFound, "proof_not_found")
 	}

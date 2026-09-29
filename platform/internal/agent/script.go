@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
 const MaxScriptRuns = 2
@@ -23,18 +25,20 @@ type ScriptProposal struct {
 }
 
 type ScriptContext struct {
-	UpdateID  int64       `json:"-"`
-	Available bool        `json:"available"`
-	Remaining int         `json:"remaining"`
-	Runs      []ScriptRun `json:"runs"`
+	ReadAuthorities []readsource.Authority `json:"-"`
+	UpdateID        int64                  `json:"-"`
+	Available       bool                   `json:"available"`
+	Remaining       int                    `json:"remaining"`
+	Runs            []ScriptRun            `json:"runs"`
 }
 
 // ScriptRun carries bounded outcomes; terminal source/input copies are discarded.
 type ScriptRun struct {
-	Calls  []ScriptToolResult `json:"calls,omitempty"`
-	Code   string             `json:"code"`
-	Result json.RawMessage    `json:"result,omitempty"`
-	Error  string             `json:"error,omitempty"`
+	PassRedacted bool               `json:"-"`
+	Calls        []ScriptToolResult `json:"calls,omitempty"`
+	Code         string             `json:"code"`
+	Result       json.RawMessage    `json:"result,omitempty"`
+	Error        string             `json:"error,omitempty"`
 }
 
 // ScriptToolResult is host evidence, separate from untrusted JavaScript output.

@@ -107,7 +107,7 @@ func TestOrderPagingNavigationRetiresOldCardsAndSurvivesRestart(t *testing.T) {
 	assert.Contains(t, retired.Text, "вне текущей страницы")
 	assert.NotContains(t, retired.Text, "удалён")
 	// New Bot instance uses the persisted view rather than an in-memory page counter.
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, TG: f.b.TG, Model: f.model}
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: f.model}
 	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
 	assert.Contains(t, pagingCard(t, f, 101, "paging:orders").Text, "2/3")
 	handle(t, f.b, pageClick(t, f, 101, 102, "orders", true))

@@ -13,7 +13,7 @@ import (
 func TestAdminUtilitiesRightsAndMetadata(t *testing.T) {
 	t.Parallel()
 	db, bookings := bookingFixture(t)
-	service := adminutilities.Service{DB: db}
+	service := adminutilities.Service{DB: db, Registration: bookings}
 	_, err := service.User(t.Context(), "alice", 101)
 	requireCode(t, err, "forbidden")
 	_, err = service.Refresh(t.Context(), "alice")
@@ -48,13 +48,13 @@ func TestAdminUtilitiesRightsAndMetadata(t *testing.T) {
 
 func TestAdminUtilitiesRefreshCurrentSQL(t *testing.T) {
 	t.Parallel()
-	db, _ := bookingFixture(t)
+	db, bookings := bookingFixture(t)
 	_, err := db.Exec(
 		t.Context(),
 		`INSERT INTO core.pass_events(id,finishes_at) VALUES('finished',now()-interval '1 day')`,
 	)
 	require.NoError(t, err)
-	result, err := (adminutilities.Service{DB: db}).Refresh(t.Context(), "bob")
+	result, err := (adminutilities.Service{DB: db, Registration: bookings}).Refresh(t.Context(), "bob")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"dance", "finished"}, result.All)
 	assert.Equal(t, []string{"dance"}, result.Active)

@@ -9,7 +9,9 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
 const registrationMediaChoice = "registration"
@@ -70,12 +72,24 @@ func (b *Bot) chooseRegistrationReceipt(
 	candidate agent.MediaCandidate,
 	origin string,
 ) error {
+	return b.chooseRegistrationReceiptWithSource(ctx, in, item, candidate, origin, nil)
+}
+
+func (b *Bot) chooseRegistrationReceiptWithSource(ctx context.Context, in incoming, item mediaIntake,
+	candidate agent.MediaCandidate, origin string, source *readsource.Derivation) error {
+	boundSource, sourceErr := mediaCommandSource(origin, source)
+	if sourceErr != nil {
+		return sourceErr
+	}
+	if source != nil {
+		source = &boundSource
+	}
 	command := passbooking.Command{Name: stateProof, Event: candidate.RegistrationEvent, Version: candidate.Version,
 		Key: "media-" + item.ID}
-	err := b.DB.QueryRow(ctx, `UPDATE bot.media_intake SET registration_command=$3,last_action='select_registration',last_origin=$4
+	err := b.DB.QueryRow(ctx, `UPDATE bot.media_intake SET registration_command=$3,last_action='select_registration',last_origin=$4,command_source=$5
 WHERE owner=$1 AND id=$2 AND command IS NULL AND registration_command IS NULL AND food_command IS NULL AND status<>'done' AND expires_at>now()
-RETURNING registration_command`, in.owner, item.ID, command, origin).
-		Scan(&item.RegistrationCommand)
+RETURNING registration_command,command_source,last_origin`, in.owner, item.ID, command, origin, source).
+		Scan(&item.RegistrationCommand, &item.CommandSource, &item.CommandOrigin)
 	if errors.Is(err, pgx.ErrNoRows) {
 		item, err = b.loadMediaIntake(ctx, in.owner, item.ID)
 	}
@@ -89,6 +103,9 @@ RETURNING registration_command`, in.owner, item.ID, command, origin).
 }
 
 func (b *Bot) commitRegistrationReceipt(ctx context.Context, in incoming, item mediaIntake) error {
+	if _, err := mediaCommandSource(item.CommandOrigin, item.CommandSource); err != nil {
+		return b.mediaExecutionError(ctx, in, item, err)
+	}
 	command := *item.RegistrationCommand
 	if command.ProofID == "" {
 		// Promotion uses the shared immutable owner-bound proof store; no file is
@@ -109,7 +126,9 @@ func (b *Bot) commitRegistrationReceipt(ctx context.Context, in incoming, item m
 		}
 	}
 	item.RegistrationCommand = &command
-	if _, err := b.API.ExecutePassBooking(ctx, in.owner, command); err != nil {
+	_, executionErr := (interaction.RegistrationExecutor{Manual: b.API, Derived: b.Host}).
+		Command(ctx, in.owner, command, item.CommandSource)
+	if err := executionErr; err != nil {
 		return b.mediaExecutionError(ctx, in, item, err)
 	}
 	if _, err := b.DB.Exec(
@@ -121,7 +140,7 @@ func (b *Bot) commitRegistrationReceipt(ctx context.Context, in incoming, item m
 	); err != nil {
 		return err
 	}
-	state := passMenuState{Event: command.Event, View: registrationPayment}
+	state := interaction.RegistrationMenu{Event: command.Event, View: registrationPayment}
 	_, revision, err := b.passMenuState(ctx, in.owner)
 	if err != nil {
 		return err

@@ -9,12 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -24,13 +23,14 @@ func legacyBotFixture(t *testing.T) (*fixture, orders.Service, orders.Order) {
 	f := setup(t)
 	server := httptest.NewServer(
 		api.Handler(
-			runtimeapp.NewServices(f.db, runtimeapp.Options{LegacyOrderBotID: 77}),
-			f.b.API.Signer,
+			appservices.NewServices(f.db, appservices.Options{LegacyOrderBotID: 77}),
+			f.b.Host.Signer,
 			slog.New(slog.DiscardHandler),
 		),
 	)
 	t.Cleanup(server.Close)
 	f.b.API.Base = server.URL
+	f.b.Host.Base = f.b.API.Base
 	service := orders.Service{DB: f.db, LegacyBotID: 77}
 	order, err := service.Execute(t.Context(), "alice", orders.Command{
 		EventID: "sandbox-festival",

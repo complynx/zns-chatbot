@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 )
 
@@ -16,9 +17,9 @@ func startProductMaintenance(
 	db *pgxpool.Pool,
 	logger *slog.Logger,
 	cfg config.Config,
-	botID int64,
+	services appservices.Services,
 ) (func(), error) {
-	stopMaintenance, err := startMaintenance(ctx, db, logger, cfg.Orders.ReminderAfter)
+	stopMaintenance, err := startMaintenance(ctx, services, logger, cfg.Orders.ReminderAfter)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +28,7 @@ func startProductMaintenance(
 		stopMaintenance()
 		return nil, err
 	}
-	stopFood, err := startFoodMaintenance(ctx, db, logger, botID)
+	stopFood, err := startFoodMaintenance(ctx, services.LegacyFood, logger)
 	if err != nil {
 		stopSources()
 		stopMaintenance()

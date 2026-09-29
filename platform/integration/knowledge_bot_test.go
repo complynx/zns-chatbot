@@ -130,7 +130,8 @@ func TestKnowledgeBotSuggestionCannotPublishAndReviewButtonsAreOwnerBound(t *tes
 	proposals, err := f.b.API.KnowledgeProposals(t.Context(), "alice", knowledge.ProposalQuery{})
 	require.NoError(t, err)
 	require.Len(t, proposals, 1)
-	assert.Equal(t, "pending_review", proposals[0].State)
+	assert.Equal(t, knowledge.AwaitingSubmission, proposals[0].State)
+	submitKnowledgeCardForAlice(t, f, proposals[0], 81001)
 	facts, err := f.b.API.Knowledge(t.Context(), "alice", knowledge.Query{})
 	require.NoError(t, err)
 	assert.Empty(t, facts)
@@ -179,4 +180,57 @@ func TestKnowledgeBotSuggestionCannotPublishAndReviewButtonsAreOwnerBound(t *tes
 			Scan(&notice),
 	)
 	assert.Contains(t, notice, "недоступно")
+}
+
+// Exercise the author button through the bot transport, including foreign and replayed callbacks.
+func submitKnowledgeCardForAlice(
+	t *testing.T,
+	f *fixture,
+	proposal knowledge.Proposal,
+	updateID int64,
+) knowledge.Proposal {
+	t.Helper()
+	require.Equal(t, knowledge.AwaitingSubmission, proposal.State)
+	queue, err := f.b.API.KnowledgeProposals(
+		t.Context(),
+		"bob",
+		knowledge.ProposalQuery{Event: proposal.Event, ReviewQueue: true},
+	)
+	require.NoError(t, err)
+	require.Empty(t, queue, "review grant alone cannot expose the private draft")
+	var token string
+	var submission knowledge.Submission
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT kind,content->'submission' FROM bot.interactions
+ WHERE owner='alice' AND kind LIKE 'knowledge:%' AND (content->'submission'->>'proposal_id')::bigint=$1`, proposal.ID).Scan(&token, &submission))
+	require.Equal(t, knowledge.Submission{ProposalID: proposal.ID, Version: proposal.Version, Event: proposal.Event,
+		Topic: proposal.Topic, FactKey: proposal.FactKey, Text: proposal.Text}, submission)
+	foreign := aliceCallback(updateID, 1, token)
+	foreign.Callback.From.ID = identity.BobTelegramID
+	foreign.Callback.Message.Chat.ID = identity.BobTelegramID
+	handle(t, f.b, foreign)
+	queue, err = f.b.API.KnowledgeProposals(
+		t.Context(),
+		"bob",
+		knowledge.ProposalQuery{Event: proposal.Event, ReviewQueue: true},
+	)
+	require.NoError(t, err)
+	require.Empty(t, queue, "another actor cannot use the author's consent button")
+	callback := aliceCallback(updateID+1, 1, token)
+	handle(t, f.b, callback)
+	handle(t, f.b, callback)
+	callback.ID = updateID + 2
+	handle(t, f.b, callback)
+	queue, err = f.b.API.KnowledgeProposals(
+		t.Context(),
+		"bob",
+		knowledge.ProposalQuery{Event: proposal.Event, ReviewQueue: true},
+	)
+	require.NoError(t, err)
+	require.Len(t, queue, 1)
+	require.Equal(t, proposal.ID, queue[0].ID)
+	require.Equal(t, proposal.Text, queue[0].Text)
+	require.Equal(t, "pending_review", queue[0].State)
+	require.True(t, queue[0].Submitted)
+	require.Empty(t, queue[0].Reason, "classifier explanation is outside the consented body")
+	return queue[0]
 }

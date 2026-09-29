@@ -12,14 +12,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/destination"
 )
 
 type InformalName func(context.Context, map[string]any) (string, error)
 
 type Service struct {
-	DB           *pgxpool.Pool
-	BotID        int64
-	InformalName InformalName
+	DestinationResolver destination.Resolver
+	Delivery            delivery.Settings
+	DB                  *pgxpool.Pool
+	BotID               int64
+	InformalName        InformalName
 }
 
 // Destination accepts a numeric private/group ID or a public Telegram chat username.
@@ -47,6 +51,8 @@ type Message struct {
 }
 
 type Delivery struct {
+	Actor             string      `json:"actor,omitempty"`
+	ActorTelegramID   int64       `json:"actor_telegram_id,omitempty"`
 	ID                int64       `json:"id"`
 	MessageID         int64       `json:"message_id"`
 	Destination       Destination `json:"destination"`

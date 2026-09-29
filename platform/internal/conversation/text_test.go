@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -78,6 +79,13 @@ func barrierService(t *testing.T, s conversation.Service, query string) (convers
 	db, err := pgxpool.NewWithConfig(t.Context(), cfg)
 	require.NoError(t, err)
 	t.Cleanup(db.Close)
+	t.Cleanup(func() {
+		select {
+		case <-barrier.release:
+		default:
+			close(barrier.release)
+		}
+	})
 	return conversation.Service{DB: db}, barrier
 }
 
@@ -95,10 +103,31 @@ func TestHistoryDeletionConcurrentBarriers(t *testing.T) {
 		chunk, err := reader.ReadText(t.Context(), "alice", id, 0, 4000, "")
 		result <- readResult{chunk: chunk, err: err}
 	}()
-	<-readBarrier.entered
-	require.NoError(t, s.DeleteContent(t.Context(), "alice", id))
+	select {
+	case <-readBarrier.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("read did not reach snapshot barrier")
+	}
+	// The coherent read now retains its owner lock until its transaction commits.
+	// Deletion must wait for that snapshot; waiting synchronously would deadlock
+	// this artificial barrier rather than test a concurrent product operation.
+	deleteCtx, cancelDelete := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelDelete()
+	deleted := make(chan error, 1)
+	go func() { deleted <- s.DeleteContent(deleteCtx, "alice", id) }()
+	select {
+	case deleteErr := <-deleted:
+		t.Fatalf("deletion escaped the read snapshot: %v", deleteErr)
+	case <-time.After(100 * time.Millisecond):
+	}
 	close(readBarrier.release)
-	read := <-result
+	var read readResult
+	select {
+	case read = <-result:
+	case <-deleteCtx.Done():
+		t.Fatal(deleteCtx.Err())
+	}
+	require.NoError(t, <-deleted)
 	require.NoError(t, read.err)
 	generation, err := s.Generation(t.Context(), "alice")
 	require.NoError(t, err)
@@ -106,7 +135,7 @@ func TestHistoryDeletionConcurrentBarriers(t *testing.T) {
 	// must discard it even when the completion arrives after deletion commits.
 	assert.Less(t, read.chunk.Generation, generation)
 	assert.Contains(t, read.chunk.Text, "private canary")
-	require.NoError(t, s.Append(t.Context(), "alice", "short-after-delete", "assistant", "short body"))
+	require.NoError(t, s.AppendOriginal(t.Context(), "alice", "short-after-delete", "assistant", "short body"))
 	page, err := s.Read(t.Context(), "alice", conversation.Query{Limit: 1})
 	require.NoError(t, err)
 	id = page.Events[0].ID
@@ -183,7 +212,7 @@ func TestHistoryFullTextPrivacyAndSummary(t *testing.T) {
 	)
 	body := strings.Repeat("Юникод🌍"+controls+"<&>\"\\", 5000) + "LAST-CHARACTER-Я"
 	id := longEvent(t, s, body)
-	require.NoError(t, s.Append(t.Context(), "alice", "short", "assistant", "ordinary answer"))
+	require.NoError(t, s.AppendOriginal(t.Context(), "alice", "short", "assistant", "ordinary answer"))
 	page, err := s.Read(t.Context(), "alice", conversation.Query{Limit: 20})
 	require.NoError(t, err)
 	require.Len(t, page.Events, 2)

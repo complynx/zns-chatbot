@@ -44,3 +44,22 @@ FROM core.conversation_events e LEFT JOIN core.conversation_message_bodies b ON 
 WHERE e.owner=sqlc.arg(owner) AND e.id=sqlc.arg(event_id);
 
 
+
+-- name: ReadSelectedEvents :many
+SELECT id, kind, text, details, omitted, created_at, EXISTS(SELECT 1 FROM core.conversation_message_bodies b WHERE b.event_id=conversation_events.id) AS has_full_text, omission_reason
+FROM core.conversation_events WHERE owner=$1 AND id=ANY($2::bigint[]) ORDER BY id;
+
+-- name: HistoryReadWithinBudget :one
+SELECT (
+ COALESCE((SELECT sum(
+  CASE WHEN sqlc.arg(text_only)::boolean THEN 0 ELSE
+   octet_length(e.text)::bigint+octet_length(e.details::text)+octet_length(e.omission_reason) END
+  +CASE WHEN e.omitted THEN 0 ELSE COALESCE(octet_length(a.authorities::text),0) END)
+ FROM core.conversation_events e
+ LEFT JOIN core.conversation_read_authorities a ON a.event_id=e.id
+ WHERE e.owner=sqlc.arg(owner) AND e.id=ANY(sqlc.arg(event_ids)::bigint[])),0)
+ +CASE WHEN sqlc.arg(include_summary)::boolean THEN
+  COALESCE((SELECT octet_length(text)::bigint+octet_length(read_authorities::text)
+   FROM core.conversation_summaries WHERE owner=sqlc.arg(owner)),0)
+ ELSE 0 END
+) <= sqlc.arg(budget)::bigint AS allowed;

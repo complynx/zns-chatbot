@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
 )
@@ -24,10 +24,10 @@ func TestPassProfileHTTPContract(t *testing.T) {
 	db := database(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
 	server := httptest.NewServer(
-		api.Handler(runtimeapp.NewServices(db, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler)),
+		api.Handler(appservices.NewServices(db, appservices.Options{}), signer, slog.New(slog.DiscardHandler)),
 	)
 	t.Cleanup(server.Close)
-	client := bot.APIClient{Base: server.URL, Signer: signer, HTTP: server.Client()}
+	client := appclient.Client{Base: server.URL, SandboxToken: signer.Token, HTTP: server.Client()}
 	alice, err := client.PassProfile(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "alice", alice.Owner)
@@ -85,7 +85,7 @@ func TestPassProfileHTTPStrictAuthenticationAndPrivacy(t *testing.T) {
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
 	var logs bytes.Buffer
 	handler := api.Handler(
-		runtimeapp.NewServices(db, runtimeapp.Options{}),
+		appservices.NewServices(db, appservices.Options{}),
 		signer,
 		slog.New(slog.NewTextHandler(&logs, nil)),
 	)

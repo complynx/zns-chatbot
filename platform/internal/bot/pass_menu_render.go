@@ -5,15 +5,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -24,7 +29,7 @@ type passMenuChoice struct {
 type passMenuRenderer struct {
 	bot             *Bot
 	owner, language string
-	state           passMenuState
+	state           interaction.RegistrationMenu
 	lines           []string
 	choices         []passMenuChoice
 }
@@ -34,21 +39,37 @@ func (r *passMenuRenderer) text(id i18n.ID) string {
 	return value
 }
 func (r *passMenuRenderer) navigate(id i18n.ID, view string) {
-	state := passMenuState{Event: r.state.Event, View: view, PaymentAdmin: r.state.PaymentAdmin}
+	state := interaction.RegistrationMenu{Event: r.state.Event, View: view, PaymentAdmin: r.state.PaymentAdmin}
+	state.Historical = r.state.Historical && historicalPassView(view)
 	r.choices = append(r.choices, passMenuChoice{label: r.text(id), action: passMenuAction{View: &state}})
 }
-func passMenuLabel(value string) string {
-	const maximum = 60
-	runes := []rune(value)
-	if len(runes) > maximum {
-		return string(runes[:maximum]) + "…"
-	}
-	return value
-}
+func passMenuLabel(value string) string { return interaction.RegistrationLabel(value) }
 
 func (b *Bot) RenderPassMenu(ctx context.Context, owner string, chat int64, notice i18n.ID) error {
-	state, revision, err := b.passMenuState(ctx, owner)
+	saved, revision, err := b.passMenuRecord(ctx, owner)
 	if err != nil {
+		return err
+	}
+	if saved.Redacted {
+		return b.renderRedactedPassMenu(ctx, owner, chat, revision, saved)
+	}
+	err = b.renderCurrentPassMenu(ctx, owner, chat, revision, saved, notice)
+	if saved.Source != nil && stalePassMenuSource(err) {
+		return b.redactPassMenu(ctx, owner, chat, revision, saved)
+	}
+	return err
+}
+
+func (b *Bot) renderCurrentPassMenu(
+	ctx context.Context,
+	owner string,
+	chat, revision int64,
+	saved botdelivery.PassMenu,
+	notice i18n.ID,
+) error {
+	var err error
+	state, source := saved.RegistrationMenu, saved.Source
+	if err = b.checkPassDeliverySource(ctx, owner, source); err != nil {
 		return err
 	}
 	if notice != "" {
@@ -64,7 +85,7 @@ func (b *Bot) RenderPassMenu(ctx context.Context, owner string, chat int64, noti
 			return failure
 		}
 		r.lines, r.choices = nil, nil
-		r.state = passMenuState{View: passMenuEvents}
+		r.state = interaction.RegistrationMenu{View: passMenuEvents}
 		if err = r.events(ctx); err != nil {
 			return err
 		}
@@ -95,7 +116,7 @@ func (b *Bot) RenderPassMenu(ctx context.Context, owner string, chat int64, noti
 	if err != nil {
 		return err
 	}
-	return b.deliverPassMenu(ctx, owner, revision, telegram.FormatSend(payload), r.choices)
+	return b.deliverPassMenu(ctx, owner, revision, telegram.FormatSend(payload), r.choices, r.state, source)
 }
 
 func (b *Bot) deliverPassMenu(
@@ -104,6 +125,8 @@ func (b *Bot) deliverPassMenu(
 	revision int64,
 	payload telegram.Send,
 	choices []passMenuChoice,
+	state interaction.RegistrationMenu,
+	source *readsource.Derivation,
 ) error {
 	tokens := []string{}
 	for _, choice := range choices {
@@ -124,37 +147,52 @@ func (b *Bot) deliverPassMenu(
 		}
 		payload.Markup.Rows = append(payload.Markup.Rows, []telegram.Button{button})
 	}
-	data, err := json.Marshal(payload)
+	hash, err := botCardHash(payload)
 	if err != nil {
 		return err
 	}
-	digest := sha256.Sum256(data)
-	hash := hex.EncodeToString(digest[:])
 	var previous string
-	if err = b.DB.QueryRow(ctx, `SELECT message_id,view_hash FROM bot.pass_views WHERE owner=$1`, owner).
+	if err = b.DB.QueryRow(ctx, "SELECT message_id,view_hash FROM bot.pass_views WHERE owner=$1", owner).
 		Scan(&payload.MessageID, &previous); err != nil {
 		return err
 	}
-	if hash != previous {
-		id, sendErr := b.editOrSend(ctx, payload)
-		if sendErr != nil {
-			return sendErr
-		}
-		if _, err = b.DB.Exec(
-			ctx,
-			`UPDATE bot.pass_views SET message_id=$2,view_hash=$3 WHERE owner=$1`,
-			owner,
-			id,
-			hash,
-		); err != nil {
-			return err
-		}
+	if payload.MessageID > 0 && previous == hash {
+		return nil
 	}
-	_, err = b.DB.Exec(ctx, `DELETE FROM bot.pass_buttons WHERE owner=$1 AND NOT(token=ANY($2))`, owner, tokens)
-	return err
+	ref := botdelivery.Reference{
+		Family:   botFamilyPasses,
+		CardKey:  botFamilyPasses,
+		Revision: revision,
+		Source:   source,
+		Notice:   state.Notice,
+	}
+	return b.queueBotCard(
+		ctx,
+		owner,
+		payload,
+		ref,
+		botdelivery.Continuation{Kind: botPassCardReceipt, Revision: revision, ViewHash: hash, Tokens: tokens},
+	)
+}
+func passMenuEditFallback(err error) (bool, error) {
+	var apiError *telegram.APIError
+	if !errors.As(err, &apiError) || apiError.Code != http.StatusBadRequest {
+		return false, err
+	}
+	if strings.Contains(apiError.Description, "message is not modified") {
+		return false, nil
+	}
+	if strings.Contains(apiError.Description, "message to edit not found") ||
+		strings.Contains(apiError.Description, "message can't be edited") {
+		return true, nil
+	}
+	return false, err
 }
 
 func (r *passMenuRenderer) build(ctx context.Context) error {
+	if r.state.Historical {
+		return r.historicalPass(ctx)
+	}
 	switch r.state.View {
 	case agent.RegistrationTakeoverTarget:
 		return r.takeoverTarget(ctx)
@@ -172,7 +210,7 @@ func (r *passMenuRenderer) build(ctx context.Context) error {
 		return r.payment(ctx)
 	case "admins":
 		return r.admins(ctx)
-	case "profile":
+	case profileCardKey:
 		return r.profile(ctx)
 	case passInvite:
 		r.lines = append(r.lines, r.text(i18n.RegistrationInviteHint))
@@ -190,7 +228,7 @@ func (r *passMenuRenderer) events(ctx context.Context) error {
 	first, last := r.page(len(events), "")
 	for _, event := range events[first:last] {
 		label := strings.TrimSpace(event.CountryEmoji + " " + event.Title(r.language, true))
-		state := passMenuState{Event: event.ID, View: passMenuHome}
+		state := interaction.RegistrationMenu{Event: event.ID, View: passMenuHome}
 		r.choices = append(r.choices, passMenuChoice{label: passMenuLabel(label), action: passMenuAction{View: &state}})
 	}
 	r.lines = append(r.lines, r.text(i18n.RegistrationEvents))
@@ -210,7 +248,7 @@ func (r *passMenuRenderer) home(ctx context.Context) error {
 	if err = r.paymentContact(ctx, booking); err != nil {
 		return err
 	}
-	r.navigate(i18n.RegistrationProfile, "profile")
+	r.navigate(i18n.RegistrationProfile, profileCardKey)
 	r.navigate(i18n.RegistrationAdmin, "admins")
 	if booking.Version == 0 || booking.State == passStateCancelled || booking.State == "waiting-for-couple" ||
 		(booking.State == "waitlist" && booking.Partner == "") {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
@@ -32,7 +33,7 @@ func TestAuthenticationFailsBeforeDatabase(t *testing.T) {
 	_, err := verify(t.Context(), "invalid")
 	require.ErrorIs(t, err, identity.ErrZitadelIdentity)
 	handler := AuthenticatedHandler(
-		Dependencies{},
+		appservices.Services{},
 		identity.Signer{},
 		slog.New(slog.DiscardHandler),
 		verify,

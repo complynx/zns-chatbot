@@ -3,8 +3,6 @@ package orders
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"maps"
@@ -15,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
 const actionDeleteOrder = "delete"
@@ -28,6 +26,7 @@ const originAgent = "agent"
 const actionEdit = "edit"
 
 type Service struct {
+	Delivery    delivery.Settings
 	DB          *pgxpool.Pool
 	LegacyBotID int64
 }
@@ -212,13 +211,15 @@ const actionReject = "reject"
 const actionCountry = "country"
 
 type operation struct {
-	tx       pgx.Tx
-	event    Event
-	actor    string
-	command  Command
-	now      time.Time
-	before   Choice
-	previous Order
+	notificationRegistrations []delivery.Registration
+	deliveryBotID             int64
+	tx                        pgx.Tx
+	event                     Event
+	actor                     string
+	command                   Command
+	now                       time.Time
+	before                    Choice
+	previous                  Order
 }
 
 // Execute serializes event writes. State, capacity notices and the retry receipt
@@ -232,48 +233,14 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Order, e
 		return Order{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // Cleanup after commit or a reported operation error.
-	op := operation{tx: tx, actor: actor, command: c}
-	if err = op.authorize(ctx); err != nil {
-		return Order{}, err
-	}
-	body, err := json.Marshal(c)
+	prepared, err := s.PrepareInTx(ctx, tx, actor, c)
 	if err != nil {
 		return Order{}, err
 	}
-	digest := sha256.Sum256(body)
-	hash := hex.EncodeToString(digest[:])
-	replay, found, err := op.replay(ctx, hash)
-	if err != nil || found {
-		return replay, err
+	if result, found := prepared.Replay(); found {
+		return result, nil
 	}
-	// A committed receipt survives deletion; only a new derived mutation needs
-	// the history fence, held through state and receipt commit.
-	if err = conversation.LockGeneration(ctx, tx, actor, c.HistoryGeneration); err != nil {
-		return Order{}, err
-	}
-	if c.CatalogSnapshot != "" && c.CatalogSnapshot != CatalogSnapshot(op.event) {
-		return Order{}, problem(http.StatusConflict, "catalog_changed")
-	}
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&op.now); err != nil {
-		return Order{}, err
-	}
-	if !c.isAdmin() && c.Name != actionCountry && !op.now.Before(op.event.Deadline) {
-		return Order{}, problem(http.StatusConflict, "deadline")
-	}
-	order, err := op.loadOrder(ctx)
-	if err != nil {
-		return Order{}, err
-	}
-	op.before = order.Choice
-	op.before.Extras = maps.Clone(order.Choice.Extras)
-	op.previous = order
-	if err = ensureCapacitySlots(ctx, tx, op.event); err != nil {
-		return Order{}, err
-	}
-	if err = op.apply(ctx, &order); err != nil {
-		return Order{}, err
-	}
-	result, err := op.persist(ctx, order, hash)
+	result, err := prepared.Apply(ctx)
 	if err != nil {
 		return Order{}, err
 	}
@@ -301,6 +268,10 @@ func (c Command) validate() error {
 }
 
 func (op *operation) authorize(ctx context.Context) error {
+	// Event precedes actor, matching derived-source transaction preparation.
+	if err := LockEvent(ctx, op.tx, op.command.EventID); err != nil {
+		return err
+	}
 	// Foreign-key checks for another user's capacity notice must remain compatible.
 	var allowed bool
 	err := op.tx.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1 FOR NO KEY UPDATE`, op.actor).Scan(&allowed)
@@ -311,7 +282,7 @@ func (op *operation) authorize(ctx context.Context) error {
 		return err
 	}
 	e := &op.event
-	err = op.tx.QueryRow(ctx, `SELECT id,deadline,menu,extras FROM core.order_events WHERE id=$1 FOR UPDATE`, op.command.EventID).
+	err = op.tx.QueryRow(ctx, `SELECT id,deadline,menu,extras FROM core.order_events WHERE id=$1`, op.command.EventID).
 		Scan(&e.ID, &e.Deadline, &e.Menu, &e.Extras)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return problem(http.StatusNotFound, "event_not_found")
@@ -528,7 +499,7 @@ func (op *operation) persist(ctx context.Context, o Order, hash string) (Order, 
 	if err := releaseCapacity(ctx, op.tx, op.previous, o); err != nil {
 		return Order{}, err
 	}
-	if err := reconcile(ctx, op.tx, op.event); err != nil {
+	if err := reconcile(ctx, op.tx, op.event, op.deliveryBotID, &op.notificationRegistrations); err != nil {
 		return Order{}, err
 	}
 	result, err := scan(op.tx.QueryRow(ctx, `SELECT `+columns+` FROM core.orders WHERE id=$1`, o.ID))
@@ -551,12 +522,15 @@ func (op *operation) persist(ctx context.Context, o Order, hash string) (Order, 
 		hash,
 		result,
 	)
+	if err == nil {
+		err = delivery.RegisterBatch(ctx, op.tx, op.deliveryBotID, op.notificationRegistrations)
+	}
 	return result, err
 }
 
 // Historical dishes remain untouched during capacity reconciliation. The saved
 // choice is authoritative; removing an extra must not reprice an old meal.
-func reconcile(ctx context.Context, tx pgx.Tx, e Event) error {
+func reconcile(ctx context.Context, tx pgx.Tx, e Event, deliveryBotID int64, pending *[]delivery.Registration) error {
 	rows, err := tx.Query(ctx, `SELECT `+columns+` FROM core.orders WHERE event_id=$1 AND state<>'deleted'
 	ORDER BY CASE WHEN state IN ('proof','paid') THEN 0 ELSE 1 END,COALESCE(attempt_at,created_at),id`, e.ID)
 	if err != nil {
@@ -595,7 +569,7 @@ func reconcile(ctx context.Context, tx pgx.Tx, e Event) error {
 		if err = recordChange(ctx, tx, o.Owner, "system", "capacity", before, o); err != nil {
 			return err
 		}
-		if err = enqueueNotification(ctx, tx, o.Owner, "capacity", o, removed); err != nil {
+		if err = enqueueNotification(ctx, tx, deliveryBotID, pending, o.Owner, "capacity", o, removed); err != nil {
 			return err
 		}
 		_, err = tx.Exec(

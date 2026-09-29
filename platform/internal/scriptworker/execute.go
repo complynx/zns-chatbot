@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	ExecuteTimeout        = 5 * time.Second
-	ExecuteProcessTimeout = ExecuteTimeout + time.Second
+	ExecuteTimeout        = scriptprotocol.ExecuteTimeout
+	ExecuteProcessTimeout = scriptprotocol.ExecuteProcessTimeout
 )
 
 type execution struct {
@@ -41,10 +41,16 @@ func Execute(
 	request scriptprotocol.ExecuteRequest,
 	callback scriptprotocol.Callback,
 ) (json.RawMessage, error) {
+	return executeBounded(ctx, request, callback, ExecuteTimeout)
+}
+
+func executeBounded(ctx context.Context, request scriptprotocol.ExecuteRequest,
+	callback scriptprotocol.Callback, timeout time.Duration,
+) (json.RawMessage, error) {
 	if !validExecuteRequest(request, callback) {
 		return nil, ErrRequest
 	}
-	ctx, cancel := context.WithTimeout(ctx, ExecuteTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if err := ctx.Err(); err != nil {
 		return nil, err

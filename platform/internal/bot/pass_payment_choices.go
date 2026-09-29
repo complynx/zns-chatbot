@@ -1,6 +1,8 @@
 package bot
 
-import "github.com/complynx/zns-chatbot/platform/internal/agent"
+import (
+	"github.com/complynx/zns-chatbot/platform/internal/agent"
+)
 
 // Keep both domains discoverable when an owner has many unpaid orders. Matching
 // still uses every authorized quote, not this bounded button projection.

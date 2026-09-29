@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
@@ -17,15 +18,8 @@ const (
 	scriptMassageConfigure = "massage.practitioner.configure"
 )
 
-type scriptMassageRequest struct {
-	Command     *massage.Command     `json:"command,omitempty"`
-	Preferences *massage.Preferences `json:"preferences,omitempty"`
-	Event       string               `json:"event"`
-	Update      int64                `json:"update"`
-}
-
-func (b *Bot) scriptMassageEntries(ctx context.Context, owner string) ([]scriptToolEntry, error) {
-	capabilities, err := b.API.privilegedReadCapabilities(ctx, owner)
+func (b *Bot) scriptMassageEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
+	capabilities, err := b.API.PrivilegedReadCapabilities(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -64,17 +58,17 @@ func (b *Bot) scriptMassageEntries(ctx context.Context, owner string) ([]scriptT
 			},
 		)
 	}
-	entries := make([]scriptToolEntry, 0, len(descriptors))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
 	for _, descriptor := range descriptors {
-		entries = append(entries, scriptToolEntry{descriptor: descriptor, prepare: b.prepareMassageTool,
-			execute: b.executeMassageTool, resultLimit: maxScriptReadBytes})
+		entries = append(entries, agenthost.ScriptToolEntry{Descriptor: descriptor, Prepare: b.prepareMassageTool,
+			Execute: b.executeMassageTool, ResultLimit: maxScriptReadBytes})
 	}
 	return entries, nil
 }
 
 func (b *Bot) prepareMassageTool(ctx context.Context, owner string, update int64,
-	call scriptclient.ToolCall, _ agent.Input) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+	call scriptclient.ToolCall, _ agent.Input) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
 	if !ok || source.owner != owner {
 		return record, errors.New("tool unavailable")
@@ -89,19 +83,28 @@ func (b *Bot) prepareMassageTool(ctx context.Context, owner string, update int64
 }
 
 func (b *Bot) executeMassageTool(ctx context.Context, owner string, _ scriptclient.ToolCall,
-	record scriptToolRecord, _ *agent.Input) (any, error) {
+	record agenthost.ScriptToolRecord, _ *agent.Input) (any, error) {
 	request := record.Massage
 	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
 	if request == nil || !ok || source.owner != owner {
 		return nil, errors.New("tool unavailable")
 	}
+	if record.Source == nil || !record.Source.Valid() {
+		return nil, errors.New("missing admitted source")
+	}
 	var result any
 	var err error
 	switch {
 	case request.Command != nil:
-		result, err = b.API.ExecuteMassage(ctx, owner, *request.Command)
+		result, err = b.Host.ExecuteDerivedMassage(ctx, owner, *request.Command, *record.Source)
 	case request.Preferences != nil:
-		result, err = b.API.SetMassagePreferences(ctx, owner, request.Event, *request.Preferences)
+		result, err = b.Host.SetDerivedMassagePreferences(
+			ctx,
+			owner,
+			request.Event,
+			*request.Preferences,
+			*record.Source,
+		)
 	default:
 		return nil, errors.New("tool unavailable")
 	}

@@ -15,7 +15,13 @@ services:
     environment:
       POSTGRES_DB: zns
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-    secrets: [postgres_password, migrator_password, runtime_password, accounting_password]
+    secrets:
+      [
+        postgres_password,
+        migrator_password,
+        runtime_password,
+        accounting_password,
+      ]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init-roles.sh:/docker-entrypoint-initdb.d/10-roles.sh:ro
@@ -87,8 +93,8 @@ services:
       - path: ${ZNS_SECRET_DIR:?}/media.env
         format: raw
     depends_on: !override
-      media-decoder: {condition: service_healthy}
-      postgres: {condition: service_healthy}
+      media-decoder: { condition: service_healthy }
+      postgres: { condition: service_healthy }
     networks: [database, helpers, egress]
   sticker-decoder:
     profiles: [runtime]

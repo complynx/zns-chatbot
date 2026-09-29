@@ -74,13 +74,14 @@ Skill catalog:
 const selectionSchema = `{"type":"object","properties":{"skills":{"type":"array","items":{"type":"string","enum":["booking","orders","profile","receipts","av","stickers","knowledge","scripting","history","registration","lineup_current","lineup_day","lineup_full"]},"maxItems":10},"reply_language":{"type":"string"}},"required":["skills","reply_language"],"additionalProperties":false}`
 
 type providerPrompt struct {
-	skills        []skillID
-	replyLanguage string
-	instructions  string
-	schema        string
-	name          string
-	input         []byte
-	source        Input
+	beforeProvider func(context.Context) error
+	skills         []skillID
+	replyLanguage  string
+	instructions   string
+	schema         string
+	name           string
+	input          []byte
+	source         Input
 }
 
 type structuredCall func(context.Context, providerPrompt) (string, error)

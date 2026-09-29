@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
@@ -24,8 +26,11 @@ type scriptPrivilegedArguments struct {
 	Cursor string `json:"cursor,omitempty"`
 }
 
-func (b *Bot) scriptPrivilegedReadEntries(ctx context.Context, owner string) ([]scriptToolEntry, error) {
-	capabilities, err := b.API.privilegedReadCapabilities(ctx, owner)
+// Scope is bound before admission; it cannot be reconstructed from transformed
+// script output. Admission retains an exact role for empty event-list pages.
+
+func (b *Bot) scriptPrivilegedReadEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
+	capabilities, err := b.API.PrivilegedReadCapabilities(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -83,15 +88,15 @@ func (b *Bot) scriptPrivilegedReadEntries(ctx context.Context, owner string) ([]
 			},
 		)
 	}
-	entries := make([]scriptToolEntry, 0, len(descriptors))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		entries = append(
 			entries,
-			scriptToolEntry{
-				descriptor:  descriptor,
-				prepare:     prepareScriptPrivilegedRead,
-				execute:     b.executeScriptPrivilegedRead,
-				resultLimit: maxScriptReadBytes,
+			agenthost.ScriptToolEntry{
+				Descriptor:  descriptor,
+				Prepare:     b.prepareScriptPrivilegedRead,
+				Execute:     b.executeScriptPrivilegedRead,
+				ResultLimit: maxScriptReadBytes,
 			},
 		)
 	}
@@ -100,12 +105,12 @@ func (b *Bot) scriptPrivilegedReadEntries(ctx context.Context, owner string) ([]
 
 func prepareScriptPrivilegedRead(
 	_ context.Context,
-	_ string,
+	owner string,
 	_ int64,
 	call scriptclient.ToolCall,
 	_ agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	var target any
 	switch call.Name {
 	case scriptPrivilegeEvents:
@@ -117,7 +122,7 @@ func prepareScriptPrivilegedRead(
 	case scriptPractitionerBookings:
 		target = new(scriptPrivilegedArguments)
 	case scriptPaymentQueue, scriptPaymentHistory, scriptPractitionerSchedule:
-		target = new(scriptDomainEventArguments)
+		target = new(agenthost.ScriptDomainEventArguments)
 	default:
 		return record, errors.New("tool unavailable")
 	}
@@ -135,6 +140,32 @@ func prepareScriptPrivilegedRead(
 		(call.Name != scriptPrivilegeEvents && args.Event == "") {
 		return record, errors.New("invalid privileged read arguments")
 	}
+	record.PrivilegedRead = &agenthost.ScriptPrivilegedRead{Event: args.Event, Owner: owner}
+	return record, nil
+}
+
+func (b *Bot) prepareScriptPrivilegedRead(
+	ctx context.Context,
+	owner string,
+	update int64,
+	call scriptclient.ToolCall,
+	input agent.Input,
+) (agenthost.ScriptToolRecord, error) {
+	record, err := prepareScriptPrivilegedRead(ctx, owner, update, call, input)
+	if err != nil || call.Name != scriptPrivilegeEvents {
+		return record, err
+	}
+	page, err := b.API.PrivilegedReadEvents(ctx, owner, "")
+	if err != nil {
+		return record, err
+	}
+	if len(page.Items) == 0 {
+		return record, errors.New("privileged read admission missing")
+	}
+	record.PrivilegedRead.Admission = agenthost.PrivilegedEventAuthorities(owner, page.Items[:1])
+	if len(record.PrivilegedRead.Admission) == 0 {
+		return record, errors.New("privileged read admission missing")
+	}
 	return record, nil
 }
 
@@ -142,24 +173,28 @@ func (b *Bot) executeScriptPrivilegedRead(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	_ scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	_ *agent.Input,
 ) (any, error) {
 	var args scriptPrivilegedArguments
 	if err := decodeScriptArguments(call.Arguments, &args); err != nil {
 		return nil, err
 	}
+	if record.PrivilegedRead == nil || record.PrivilegedRead.Owner != owner ||
+		record.PrivilegedRead.Event != args.Event {
+		return nil, errors.New("privileged read binding missing")
+	}
 	switch call.Name {
 	case scriptPrivilegeEvents:
-		return b.API.privilegedReadEvents(ctx, owner, args.Cursor)
+		return b.API.PrivilegedReadEvents(ctx, owner, args.Cursor)
 	case scriptPaymentHistory:
-		return b.API.passPaymentHistory(ctx, owner, args.Event, args.Cursor)
+		return b.API.PassPaymentHistory(ctx, owner, args.Event, args.Cursor)
 	case scriptPractitionerPreferences:
 		return b.API.MassagePreferences(ctx, owner, args.Event)
 	case scriptPractitionerSchedule:
-		return b.API.practitionerSchedule(ctx, owner, args.Event, args.Cursor)
+		return b.API.PractitionerSchedule(ctx, owner, args.Event, args.Cursor)
 	case scriptPractitionerBookings:
-		return b.API.practitionerBookings(ctx, owner, args)
+		return b.API.PractitionerBookings(ctx, owner, args.Event, args.Party, args.Cursor)
 	case scriptPaymentQueue:
 		cursor, err := readScriptCursor(args.Cursor, owner, call.Name, args.Event)
 		if err != nil {

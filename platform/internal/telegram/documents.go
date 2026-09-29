@@ -64,6 +64,12 @@ func (c Client) Download(ctx context.Context, document Document) ([]byte, error)
 	if err := c.Call(ctx, "getFile", map[string]string{"file_id": document.FileID}, &file); err != nil {
 		return nil, err
 	}
+	return c.DownloadResolved(ctx, file)
+}
+
+// DownloadResolved reuses trusted getFile metadata without another control call.
+// Path, declared size, redirects and actual body size remain bounded here.
+func (c Client) DownloadResolved(ctx context.Context, file File) ([]byte, error) {
 	if file.Path == "" || file.Size > MaxDocumentBytes {
 		return nil, ErrInvalidDocument
 	}
@@ -98,7 +104,11 @@ func (c Client) Download(ctx context.Context, document Document) ([]byte, error)
 	if response.StatusCode >= http.StatusInternalServerError ||
 		response.StatusCode == http.StatusTooManyRequests || response.StatusCode == http.StatusRequestTimeout ||
 		response.StatusCode == http.StatusUnauthorized {
-		return nil, &APIError{Code: response.StatusCode, Description: "file download temporarily unavailable"}
+		wireErr := error(&APIError{Code: response.StatusCode, Description: "file download temporarily unavailable"})
+		if response.StatusCode == http.StatusTooManyRequests {
+			wireErr = decodeControlRateLimit(response.Body)
+		}
+		return nil, c.observeControl(ctx, "getFile", wireErr)
 	}
 	if response.StatusCode != http.StatusOK {
 		return nil, ErrInvalidDocument

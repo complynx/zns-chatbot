@@ -2,36 +2,38 @@ package bot
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/browserauth"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
-	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
-	"github.com/complynx/zns-chatbot/platform/internal/orders"
-	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
-	"github.com/complynx/zns-chatbot/platform/internal/passes"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
 )
 
 type Bot struct {
+	Delivery            delivery.Settings
 	Onboarding          TelegramOnboarding
 	BrowserAuth         *browserauth.Service
 	OrderEventID        string
@@ -39,12 +41,13 @@ type Bot struct {
 	WebAppURL           string
 	Logger              *slog.Logger
 	DB                  *pgxpool.Pool
-	API                 APIClient
+	API                 appclient.Client
+	Host                appclient.Host
 	TG                  telegram.Client
 	Model               agent.Model
 	AV                  AVProcessor
 	Stickers            AssetDescriber
-	Scripts             ScriptEvaluator
+	Scripts             agenthost.ScriptEvaluator
 	HistoryLimit        int
 	AssistantDailyLimit int
 	CreditsEnforce      bool
@@ -59,12 +62,16 @@ func (b *Bot) logger() *slog.Logger {
 }
 
 func (b *Bot) record(ctx context.Context, owner string, id int64, kind string, content any) error {
+	switch kind {
+	case historyReply, historyOrdersReply, knowledgeReply, registrationReply, historyProfileReply:
+		return b.recordReply(ctx, owner, id, kind, content, false, interaction.TrustedReply)
+	}
 	raw, e := json.Marshal(content)
 	if e != nil {
 		return e
 	}
 	// Reject stale archives before a reply can be selected for rendering.
-	if e = b.archiveReply(ctx, owner, id, kind, content); e != nil {
+	if e = b.archiveReply(ctx, owner, id, kind, content, interaction.TrustedReply); e != nil {
 		return e
 	}
 	_, e = b.DB.Exec(
@@ -94,28 +101,6 @@ type incoming struct {
 	mediaID             string
 	language            string
 	chat                int64
-}
-type cachedPlan struct {
-	HistoryGeneration         int64                        `json:"history_generation"`
-	HistoryRedacted           bool                         `json:"history_redacted,omitempty"`
-	MediaResolvedFood         *agent.FoodReceiptTarget     `json:"media_resolved_food,omitempty"`
-	SystemNotice              i18n.ID                      `json:"system_notice,omitempty"`
-	RegistrationAssignment    *passbooking.AdminAssignment `json:"registration_assignment,omitempty"`
-	RegistrationCommand       *passbooking.Command         `json:"registration_command,omitempty"`
-	RegistrationMenu          *passMenuState               `json:"registration_menu,omitempty"`
-	AVIDs                     []string                     `json:"av_ids,omitempty"`
-	MediaID                   string                       `json:"media_id,omitempty"`
-	MediaCandidates           []agent.MediaCandidate       `json:"media_candidates,omitempty"`
-	MediaSelected             string                       `json:"media_selected,omitempty"`
-	MediaResolvedOrder        string                       `json:"media_resolved_order,omitempty"`
-	MediaResolvedRegistration string                       `json:"media_resolved_registration,omitempty"`
-	MediaResolvedVersion      int64                        `json:"media_resolved_version,omitempty"`
-	ProfileVersion            int64                        `json:"profile_version"`
-	Plan                      agent.Plan                   `json:"plan"`
-	Version                   int64                        `json:"version"`
-	OrderCommand              *orders.Command              `json:"order_command,omitempty"`
-	ProfileCommand            *passes.Command              `json:"profile_command,omitempty"`
-	KnowledgeCommand          *knowledge.Command           `json:"knowledge_command,omitempty"`
 }
 
 func parseUpdate(u telegram.Update) (incoming, bool) {
@@ -159,9 +144,13 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) (resultErr error) {
 	// A user can become inactive after admission. Never replay that user's
 	// rejected action after reactivation; unrelated durable updates can proceed.
 	defer func() {
+		if errors.Is(resultErr, errPassPlanTerminal) {
+			if deliveryErr := b.deliverPassTerminalNotice(ctx, in); deliveryErr != nil {
+				resultErr = deliveryErr
+			}
+		}
 		if errors.Is(resultErr, identity.ErrZitadelUserInactive) {
-			b.denyOnboarding(ctx, in, u)
-			resultErr = nil
+			resultErr = b.denyOnboarding(ctx, in, u)
 		}
 	}()
 	ctx = credits.WithScope(
@@ -307,7 +296,7 @@ func (b *Bot) handleCallback(ctx context.Context, in incoming, id int64) (string
 		ctx,
 		in.owner,
 		id,
-		core.Action{
+		workflow.Action{
 			Name:    parts[0],
 			SlotID:  parts[1],
 			Version: version,
@@ -317,163 +306,51 @@ func (b *Bot) handleCallback(ctx context.Context, in incoming, id int64) (string
 	)
 }
 
-func (b *Bot) executePlan(ctx context.Context, in incoming, id int64, cached cachedPlan) (string, error) {
-	if err := b.validateHistoryPlan(ctx, in.owner, id, cached); err != nil {
-		return "", err
+func (b *Bot) executePlan(
+	ctx context.Context,
+	in incoming,
+	id int64,
+	cached interaction.SavedPlan,
+) (interaction.Reply, error) {
+	if err := b.planAuthorization().ValidateAgentPlan(ctx, in.owner, id, cached); err != nil {
+		return interaction.Reply{}, err
 	}
 	if cached.RegistrationCommand != nil {
-		return b.executeRegistrationCommand(ctx, in, id, *cached.RegistrationCommand)
+		return interaction.TrustedResult(b.executePlannedRegistration(ctx, in, id, cached))
 	}
 	if cached.RegistrationAssignment != nil {
-		return b.executeAdminAssignment(ctx, in, id, *cached.RegistrationAssignment)
+		return interaction.TrustedResult(b.executePlannedAssignment(ctx, in, id, cached))
 	}
 	if cached.KnowledgeCommand != nil {
-		return b.executeKnowledgeCommand(ctx, in, id, *cached.KnowledgeCommand)
+		return interaction.TrustedResult(b.executePlannedKnowledge(ctx, in, id, cached))
 	}
 	if cached.ProfileCommand != nil {
-		return b.executeProfileCommand(ctx, in, id, *cached.ProfileCommand)
+		return interaction.TrustedResult(b.executePlannedProfile(ctx, in, id, cached))
 	}
 	if cached.OrderCommand != nil {
-		if cached.OrderCommand.Name == actionExport {
-			scoped := *b
-			scoped.OrderEventID = cached.OrderCommand.EventID
-			return scoped.exportOrders(ctx, in, id)
+		if cached.OrderCommand.Name == actionExport || cached.OrderCommand.Name == actionInstructions {
+			return interaction.TrustedResult(b.executePlannedOrderRead(ctx, in, id, cached))
 		}
-		if cached.OrderCommand.Name == actionInstructions {
-			return b.showPaymentInstructions(ctx, in, cached.OrderCommand.OrderID)
-		}
-		command := *cached.OrderCommand
-		command.Key = fmt.Sprintf("tg-order-%d", id)
-		return b.executeOrder(ctx, in.owner, id, command)
+		return interaction.TrustedResult(b.executePlannedOrder(ctx, in, id, cached))
 	}
 	if cached.Plan.Action == nil {
-		return cached.Plan.Text, nil
+		if cached.Kind == interaction.NoticePlan {
+			return interaction.TrustedResult(cached.Plan.Text, nil)
+		}
+		return interaction.Reply{Text: cached.Plan.Text, Origin: interaction.DerivedReply}, nil
 	}
-	// A proposal is not a completed action; the executor supplies the outcome.
-	action := cached.Plan.Action
-	return b.execute(
-		ctx,
-		in.owner,
-		id,
-		core.Action{
-			Name:    action.Name,
-			SlotID:  action.SlotID,
-			Version: cached.Version,
-			Key:     fmt.Sprintf("tg-%d", id),
-			Origin:  originAgent,
-		},
+	return interaction.TrustedResult(b.executePlannedWorkflow(ctx, in, id, cached))
+}
+
+func (b *Bot) planForUpdate(ctx context.Context, in incoming, id int64) (interaction.SavedPlan, error) {
+	plan, replay, err := (interaction.TurnCoordinator{Store: interaction.Store{DB: b.DB}}).ResumeOrPlan(
+		ctx, in.owner, id, b.turnHost(in, id),
 	)
-}
-
-func (b *Bot) planForUpdate(ctx context.Context, in incoming, id int64) (cachedPlan, error) {
-	var cached cachedPlan
-	err := b.DB.QueryRow(ctx, `SELECT plan FROM bot.replies WHERE update_id=$1`, id).Scan(&cached)
-	if err == nil {
-		if err = b.validateHistoryPlan(ctx, in.owner, id, cached); err != nil {
-			return cachedPlan{}, err
-		}
+	if replay {
 		diagnosticPlanReplay(ctx)
-		return cached, b.clearAVResults(ctx, in.owner, cached.AVIDs)
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return cached, err
-	}
-	generation, err := b.API.historyGeneration(ctx, in.owner)
-	if err != nil {
-		return cachedPlan{}, err
-	}
-	if err = b.validateHistoryInteractions(ctx, in.owner, id, generation); err != nil {
-		return cachedPlan{}, err
-	}
-	cached, err = b.createPlan(ctx, in, id)
-	if err != nil {
-		return cached, err
-	}
-	cached.HistoryGeneration = generation
-	if err = b.validateHistoryPlan(ctx, in.owner, id, cached); err != nil {
-		return cachedPlan{}, err
-	}
-	// A conflicting writer must use the already saved proposal and its version.
-	err = b.DB.QueryRow(ctx, `INSERT INTO bot.replies(update_id,plan) VALUES($1,$2) ON CONFLICT(update_id) DO UPDATE SET plan=bot.replies.plan RETURNING plan`, id, cached).
-		Scan(&cached)
-	if err == nil {
-		err = b.validateHistoryPlan(ctx, in.owner, id, cached)
-	}
-	if err == nil {
-		err = b.clearAVResults(ctx, in.owner, cached.AVIDs)
-	}
-	return cached, err
+	return plan, err
 }
-
-func (b *Bot) createAllowedPlan(ctx context.Context, in incoming, updateID int64, remaining int) (cachedPlan, error) {
-	workflow, err := b.API.Current(ctx, in.owner)
-	if err != nil {
-		return cachedPlan{}, err
-	}
-	catalog, err := b.API.Catalog(ctx, in.owner)
-	if err != nil {
-		return cachedPlan{}, err
-	}
-	input := agent.Input{Text: in.text, Workflow: workflow, Catalog: catalog, AssistantQuestionsRemaining: &remaining}
-	if remaining < 0 {
-		input.AssistantQuestionsRemaining = nil
-	}
-	if err = b.addCurrentAV(ctx, in, &input); err != nil {
-		return cachedPlan{}, err
-	}
-	if err = b.addOrderContext(ctx, in.owner, &input); err != nil {
-		return cachedPlan{}, err
-	}
-	if err = b.addProfileContext(ctx, in.owner, &input); err != nil {
-		return cachedPlan{}, err
-	}
-	if err = b.addMediaContext(ctx, in, &input); err != nil {
-		return cachedPlan{}, err
-	}
-	if err = b.addSupportingContext(ctx, in, updateID, &input); err != nil {
-		return cachedPlan{}, err
-	}
-	// Refinement adds visual evidence; current spoken selection stays tied to
-	// the original user input, not to speech inside an inspected recording.
-	requestInput := input
-	plan, avIDs, err := b.planWithAV(ctx, in, &input, updateID)
-	cached := cachedPlan{}
-	if err == nil {
-		err = b.bindPlanCommands(ctx, in.owner, plan, input, requestInput, &cached)
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return cachedPlan{}, err
-	}
-	if err != nil {
-		notice := paidFailureNotice(err)
-		text, translateErr := i18n.Translate(input.Language, notice, nil)
-		if translateErr != nil {
-			return cachedPlan{}, translateErr
-		}
-		plan = agent.Plan{
-			View: input.View,
-			Text: text,
-		}
-		cached = cachedPlan{SystemNotice: notice}
-	}
-	if isNonAVMediaReply(in, input, plan) {
-		plan.View = agent.MediaView
-	}
-	cached.Plan = plan
-	cached.Version = input.Workflow.Version
-	cached.ProfileVersion = requestInput.Profile.Version
-	if input.Profile != nil {
-		cached.ProfileVersion = input.Profile.Version
-	}
-	cached.AVIDs = avIDs
-	cached.MediaID = in.mediaID
-	cached.Plan.KnowledgeAction = nil
-	cached.Plan.RegistrationAction = nil
-	cacheMediaSelection(&cached, in, input, requestInput)
-	cacheProfileCommand(&cached, plan, cached.ProfileVersion)
-	return cached, nil
-}
-
 func (b *Bot) addProfileContext(ctx context.Context, owner string, input *agent.Input) error {
 	profile, err := b.API.PassProfile(ctx, owner)
 	if err != nil {
@@ -494,23 +371,18 @@ func (b *Bot) addProfileContext(ctx context.Context, owner string, input *agent.
 	return nil
 }
 
-func cacheProfileCommand(cached *cachedPlan, plan agent.Plan, version int64) {
-	if plan.ProfileAction != nil {
-		proposal := plan.ProfileAction
-		cached.ProfileCommand = &passes.Command{Name: proposal.Name, Field: proposal.Field, Value: proposal.Value,
-			Version: version, Origin: originAgent}
-		// The private execution cache owns this value; it is never interaction history.
-		cached.Plan.ProfileAction = nil
-	}
-}
-
 func (b *Bot) acknowledge(ctx context.Context, id string) {
 	if err := b.TG.Call(ctx, "answerCallbackQuery", map[string]string{"callback_query_id": id}, nil); err != nil {
 		b.logger().WarnContext(ctx, "callback acknowledgement failed")
 	}
 }
-func (b *Bot) execute(ctx context.Context, owner string, id int64, a core.Action) (string, error) {
+func (b *Bot) execute(ctx context.Context, owner string, id int64, a workflow.Action) (string, error) {
 	w, e := b.API.Execute(ctx, owner, a)
+	return b.workflowOutcome(ctx, owner, id, a, w, e)
+}
+
+func (b *Bot) workflowOutcome(ctx context.Context, owner string, id int64,
+	a workflow.Action, w workflow.Workflow, e error) (string, error) {
 	if e != nil {
 		var p *core.ProblemError
 		if errors.As(e, &p) && p.Status < 500 {
@@ -532,7 +404,7 @@ func (b *Bot) execute(ctx context.Context, owner string, id int64, a core.Action
 		owner,
 		id,
 		"result",
-		map[string]any{originField: a.Origin, actionField: a.Name, "workflow": w},
+		map[string]any{originField: a.Origin, actionField: a.Name, scriptWorkflowView: w},
 	); e != nil {
 		return "", e
 	}
@@ -579,21 +451,20 @@ func (b *Bot) Render(ctx context.Context, owner string, chat int64) error {
 }
 
 func (b *Bot) latestNotice(ctx context.Context, owner, language string) (string, bool, error) {
-	var raw []byte
-	var native bool
-	var update int64
-	var systemNotice i18n.ID
-	err := b.DB.QueryRow(ctx, `SELECT content,native_markdown,update_id,
- COALESCE((SELECT plan->>'system_notice' FROM bot.replies WHERE update_id=i.update_id),'')
- FROM bot.interactions i WHERE owner=$1 AND kind='reply' ORDER BY id DESC LIMIT 1`, owner).
-		Scan(&raw, &native, &update, &systemNotice)
+	notice, err := (interaction.Store{DB: b.DB}).LatestNotice(ctx, owner)
+	raw, native, update := notice.Content, notice.Native, notice.UpdateID
+	systemNotice, passRedacted := notice.System, notice.SourceRevoked
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
-	visible, err := b.historyReplyVisible(ctx, owner, update)
+	if passRedacted {
+		text, translateErr := i18n.Translate(language, i18n.AgentSourceUnavailable, nil)
+		return text, false, translateErr
+	}
+	visible, err := b.derivedReplyVisible(ctx, owner, update)
 	if err != nil || !visible {
 		return "", false, err
 	}
@@ -601,12 +472,12 @@ func (b *Bot) latestNotice(ctx context.Context, owner, language string) (string,
 		text, translateErr := i18n.Translate(language, systemNotice, nil)
 		return text, false, translateErr
 	}
-	var notice string
-	err = json.Unmarshal(raw, &notice)
+	var text string
+	err = json.Unmarshal(raw, &text)
 	if err == nil && !native {
-		notice, err = b.localizeWorkflowNotice(ctx, owner, update, language, notice)
+		text, err = b.localizeWorkflowNotice(ctx, owner, update, language, text)
 	}
-	return notice, native, err
+	return text, native, err
 }
 
 func defaultNotice(language, state string) (string, error) {
@@ -623,14 +494,14 @@ func defaultNotice(language, state string) (string, error) {
 func renderPayload(
 	language string,
 	chat int64,
-	wf core.Workflow,
-	slots []core.Slot,
+	wf workflow.Workflow,
+	slots []workflow.Slot,
 	notice string,
 	native bool,
 ) (telegram.Send, error) {
 	m := &orderMessages{language: language}
 	text := notice + "\n\n" + m.text(i18n.WorkflowStatus, map[string]string{
-		workflowStateParameter: workflowState(m, wf.State), "revision": strconv.FormatInt(wf.Version, 10),
+		workflowStateParameter: workflowState(m, wf.State), revisionParameter: strconv.FormatInt(wf.Version, 10),
 	}) + "\n"
 	rows := [][]telegram.Button{}
 	var selectedDescription strings.Builder
@@ -677,62 +548,26 @@ func renderPayload(
 }
 
 func (b *Bot) deliverCard(ctx context.Context, owner string, payload telegram.Send) error {
-	encoded, _ := json.Marshal(payload)
-	digest := sha256.Sum256(encoded)
-	hash := hex.EncodeToString(digest[:])
-	var id int64
-	var previous string
-	err := b.DB.QueryRow(ctx, `SELECT message_id,view_hash FROM bot.messages WHERE owner=$1`, owner).
-		Scan(&id, &previous)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
-	}
-	if id > 0 && previous == hash {
-		return nil
-	}
-	payload.MessageID = id
-	id, err = b.editOrSend(ctx, payload)
+	hash, err := botCardHash(payload)
 	if err != nil {
 		return err
 	}
-	_, err = b.DB.Exec(
+	var previous string
+	err = b.DB.QueryRow(ctx, "SELECT message_id,view_hash FROM bot.messages WHERE owner=$1", owner).
+		Scan(&payload.MessageID, &previous)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if payload.MessageID > 0 && previous == hash {
+		return nil
+	}
+	return b.queueBotCard(
 		ctx,
-		`INSERT INTO bot.messages(owner,chat_id,message_id,view_hash) VALUES($1,$2,$3,$4) ON CONFLICT(owner) DO UPDATE SET message_id=$3,chat_id=$2,view_hash=$4`,
 		owner,
-		payload.ChatID,
-		id,
-		hash,
+		payload,
+		botdelivery.Reference{Family: scriptWorkflowView, CardKey: scriptWorkflowView},
+		botdelivery.Continuation{Kind: "workflow_card", ViewHash: hash},
 	)
-	return err
-}
-
-func (b *Bot) editOrSend(ctx context.Context, payload telegram.Send) (int64, error) {
-	prepared, prepareErr := telegram.PrepareSend(payload)
-	if prepareErr != nil {
-		return 0, prepareErr
-	}
-	payload = prepared
-	if payload.MessageID > 0 {
-		err := b.TG.Edit(ctx, payload)
-		if err == nil {
-			return payload.MessageID, nil
-		}
-		var apiError *telegram.APIError
-		if !errors.As(err, &apiError) || apiError.Code != http.StatusBadRequest {
-			return 0, err
-		}
-		switch {
-		case strings.Contains(apiError.Description, "message is not modified"):
-			return payload.MessageID, nil
-		case strings.Contains(apiError.Description, "message to edit not found"),
-			strings.Contains(apiError.Description, "message can't be edited"):
-			payload.MessageID = 0
-		default:
-			return 0, err
-		}
-	}
-	message, err := b.TG.Send(ctx, payload)
-	return message.ID, err
 }
 
 const (
@@ -765,6 +600,8 @@ func (b *Bot) Run(ctx context.Context) (runErr error) {
 	if err != nil {
 		return err
 	}
+	stopDelivery := startBotDelivery(ctx, b.dispatchQueuedDeliveries)
+	defer stopDelivery()
 	for ctx.Err() == nil {
 		if err = conn.Ping(ctx); err != nil {
 			return err
@@ -779,7 +616,6 @@ func (b *Bot) Run(ctx context.Context) (runErr error) {
 		if err = b.reconcileAllViews(ctx); err != nil {
 			return err
 		}
-		b.deliverQueuedNotifications(ctx)
 		if err = b.reconcileMassageViews(ctx); err != nil {
 			return err
 		}
@@ -844,7 +680,7 @@ func (b *Bot) reconcileViews(ctx context.Context) error {
 		return err
 	}
 	for _, v := range views {
-		viewContext, authErr := b.API.notificationContext(ctx, v.owner, v.chat)
+		viewContext, authErr := b.API.NotificationContext(ctx, v.owner, v.chat)
 		if authErr != nil {
 			b.logger().WarnContext(ctx, "view identity pending")
 			continue
@@ -858,3 +694,4 @@ func (b *Bot) reconcileViews(ctx context.Context) error {
 
 const originField = "origin"
 const textField = "text"
+const revisionParameter = "revision"

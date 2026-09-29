@@ -6,7 +6,10 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
@@ -15,20 +18,14 @@ import (
 const scriptFoodView = "food.view"
 const scriptFoodQuote = "food.quote"
 const scriptFoodChange = "food.change"
-const scriptFoodPrepare = "food.payment.prepare"
+const scriptFoodPrepare = "food.payment.Prepare"
 const scriptFoodSaveMeals = "save_meals"
 const scriptFoodDeleteMeals = "delete_meals"
 const scriptFoodToggle = "toggle_activity"
 const maxFoodActivityBytes = 64
 
-func (c APIClient) foodCapabilities(ctx context.Context, owner string) (legacyfood.OwnerCapabilities, error) {
-	var result legacyfood.OwnerCapabilities
-	err := c.call(ctx, owner, http.MethodGet, "/v1/food/capabilities", nil, &result)
-	return result, err
-}
-
-func (b *Bot) scriptFoodEntries(ctx context.Context, owner string) ([]scriptToolEntry, error) {
-	capability, err := b.API.foodCapabilities(ctx, owner)
+func (b *Bot) scriptFoodEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
+	capability, err := b.API.FoodCapabilities(ctx, owner)
 	if err != nil || capability.EventID == "" {
 		return nil, err
 	}
@@ -62,10 +59,10 @@ func (b *Bot) scriptFoodEntries(ctx context.Context, owner string) ([]scriptTool
 			),
 		},
 	}
-	entries := make([]scriptToolEntry, 0, len(descriptors))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
 	for _, descriptor := range descriptors {
-		entries = append(entries, scriptToolEntry{descriptor: descriptor, prepare: b.prepareFoodTool,
-			execute: b.executeFoodTool, resultLimit: maxScriptReadBytes})
+		entries = append(entries, agenthost.ScriptToolEntry{Descriptor: descriptor, Prepare: b.prepareFoodTool,
+			Execute: b.executeFoodTool, ResultLimit: maxScriptReadBytes})
 	}
 	return append(entries, b.scriptFoodAdminEntries(capability)...), nil
 }
@@ -83,8 +80,8 @@ func (b *Bot) prepareFoodTool(
 	_ int64,
 	call scriptclient.ToolCall,
 	input agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	if call.Name == scriptFoodView {
 		return record, decodeScriptArguments(call.Arguments, new(scriptReadArguments))
 	}
@@ -155,7 +152,7 @@ func validateFoodToolArguments(name string, args scriptFoodArguments) error {
 }
 
 func (b *Bot) currentFoodToolEvent(ctx context.Context, owner, event string) error {
-	capability, err := b.API.foodCapabilities(ctx, owner)
+	capability, err := b.API.FoodCapabilities(ctx, owner)
 	if err != nil {
 		return err
 	}
@@ -169,7 +166,7 @@ func (b *Bot) executeFoodTool(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	input *agent.Input,
 ) (any, error) {
 	if call.Name == scriptFoodView {
@@ -181,14 +178,17 @@ func (b *Bot) executeFoodTool(
 	command := *record.Food
 	if call.Name == scriptFoodQuote {
 		var quote legacyfood.MealQuote
-		err := b.API.call(ctx, owner, http.MethodPost, "/v1/food/quote", map[string]any{
+		err := b.API.Call(ctx, owner, http.MethodPost, "/v1/food/quote", map[string]any{
 			foodEventIDField:   command.EventID,
 			legacyfood.Meals:   command.Meals,
 			"catalog_revision": command.CatalogRevision,
 		}, &quote)
 		return quote, err
 	}
-	order, err := b.API.ExecuteFood(ctx, owner, command)
+	if record.Source == nil || !record.Source.Valid() {
+		return nil, errors.New("missing admitted source")
+	}
+	order, err := b.Host.ExecuteDerivedFood(ctx, owner, command, *record.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +263,7 @@ func (b *Bot) readFoodTool(
 	}
 	result, err := core.JSONReadChunk(view, cursor)
 	if err != nil {
-		return nil, scriptDomainAPIError(err)
+		return nil, appclient.ReadError(err)
 	}
 	input.FoodView = &view
 	return result, nil

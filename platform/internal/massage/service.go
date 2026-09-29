@@ -9,11 +9,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
 type Service struct {
-	DB  *pgxpool.Pool
-	Now func() time.Time
+	Delivery delivery.Settings
+	DB       *pgxpool.Pool
+	Now      func() time.Time
 }
 
 func (s Service) now() time.Time {

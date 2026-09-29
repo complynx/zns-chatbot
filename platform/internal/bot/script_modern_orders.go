@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"net/http"
-	"net/url"
 	"strings"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -50,15 +52,6 @@ type modernOrderArguments struct {
 	Choice    *orders.ChoiceInput `json:"choice,omitempty"`
 }
 
-type modernOrderRequest struct {
-	ReadOrderID  string `json:"read_order_id,omitempty"`
-	ReadCursor   string `json:"read_cursor,omitempty"`
-	ReadSnapshot string `json:"read_snapshot,omitempty"`
-	Event        string `json:"event"`
-	Update       int64  `json:"update"`
-	Chat         int64  `json:"chat,omitempty"`
-}
-
 type modernOrderSummary struct {
 	ID      string       `json:"id"`
 	EventID string       `json:"event_id"`
@@ -85,7 +78,7 @@ func modernOrderSchema(properties, required string) json.RawMessage {
 	)
 }
 
-func (b *Bot) scriptModernOrderEntries(capability core.BusinessCapabilities) []scriptToolEntry {
+func (b *Bot) scriptModernOrderEntries(capability core.BusinessCapabilities) []agenthost.ScriptToolEntry {
 	const event = `"event":{"type":"string"}`
 	const cursor = `"cursor":{"type":"string"}`
 	const resume = `"resume":{"type":"boolean","description":"Replay the last successful page after a new turn or restart; do not combine with cursor."}`
@@ -116,7 +109,7 @@ func (b *Bot) scriptModernOrderEntries(capability core.BusinessCapabilities) []s
 		},
 		{
 			Name:        modernOrdersHistory,
-			Description: "Page all retained owner order history, including deleted orders. Follow next_cursor; history.read returns complete entry details.",
+			Description: "Page all retained owner order history, including deleted orders. Follow next_cursor; orders.history.read returns complete entry details.",
 			InputSchema: page,
 		},
 		{
@@ -161,15 +154,15 @@ func (b *Bot) scriptModernOrderEntries(capability core.BusinessCapabilities) []s
 	if capability.CanExportOrders {
 		descriptors = append(descriptors, modernOrderAdminDescriptors(cursor, order, resume)...)
 	}
-	entries := make([]scriptToolEntry, 0, len(descriptors))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		entries = append(
 			entries,
-			scriptToolEntry{
-				descriptor:  descriptor,
-				prepare:     b.prepareModernOrderTool,
-				execute:     b.executeModernOrderTool,
-				resultLimit: maxScriptReadBytes,
+			agenthost.ScriptToolEntry{
+				Descriptor:  descriptor,
+				Prepare:     b.prepareModernOrderTool,
+				Execute:     b.executeModernOrderTool,
+				ResultLimit: maxScriptReadBytes,
 			},
 		)
 	}
@@ -185,8 +178,8 @@ func (b *Bot) prepareModernOrderTool(
 	update int64,
 	call scriptclient.ToolCall,
 	input agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	var args modernOrderArguments
 	if err := decodeScriptArguments(call.Arguments, &args); err != nil {
 		return record, err
@@ -198,16 +191,18 @@ func (b *Bot) prepareModernOrderTool(
 	if event == "" {
 		event = b.currentOrderEvent()
 	}
-	if err := b.resolveModernChoice(ctx, owner, call.Name, &args, &record); err != nil {
+	if err := b.prepareModernOrderChoice(ctx, owner, call.Name, &args, &record); err != nil {
 		return record, err
 	}
 	if args.Event != "" {
 		event = args.Event
 	}
-	record.ModernOrder = &modernOrderRequest{Event: event, Update: update}
+	record.ModernOrder = &agenthost.ModernOrderRequest{Event: event, Update: update}
 	if call.Name == modernOrdersInspect || call.Name == modernOrdersReviewRead {
 		record.ModernOrder.ReadOrderID = args.OrderID
-		record.ModernOrder.ReadCursor = args.Cursor
+		if err := b.prepareModernOrderRead(ctx, owner, call.Name, args, record.ModernOrder); err != nil {
+			return record, err
+		}
 	}
 	if call.Name == modernOrdersUpdate && args.Name == actionCreateOrder {
 		record.Order = &orders.Command{
@@ -260,7 +255,7 @@ func (b *Bot) bindModernOrder(
 		if err != nil {
 			return nil, err
 		}
-		if len(list) > 1 && !strings.Contains(currentRequestEvidence(input), args.OrderID) {
+		if len(list) > 1 && !strings.Contains(agenthost.CurrentRequestEvidence(input), args.OrderID) {
 			return nil, errors.New("explicit order selection required")
 		}
 	}
@@ -357,7 +352,7 @@ func (b *Bot) executeModernOrderTool(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	input *agent.Input,
 ) (any, error) {
 	if record.ModernOrder == nil {
@@ -368,7 +363,6 @@ func (b *Bot) executeModernOrderTool(
 		return nil, err
 	}
 	event := record.ModernOrder.Event
-	path := "/v1/order-events/" + url.PathEscape(event)
 	switch call.Name {
 	case modernOrdersExport, modernOrdersProof, modernOrdersReviewProof:
 		return b.deliverModernOrder(ctx, owner, call.Name, record)
@@ -377,9 +371,12 @@ func (b *Bot) executeModernOrderTool(
 			return nil, errors.New("order command missing")
 		}
 		if record.ChoiceUse != "" && record.Order.HistoryGeneration == nil {
-			return nil, errScriptReadStale
+			return nil, appclient.ErrReadStale
 		}
-		order, err := b.API.ExecuteOrder(ctx, owner, *record.Order)
+		if record.Source == nil || !record.Source.Valid() {
+			return nil, errors.New("missing admitted source")
+		}
+		order, err := b.Host.ExecuteDerivedOrder(ctx, owner, *record.Order, *record.Source)
 		if err != nil {
 			return nil, err
 		}
@@ -388,38 +385,14 @@ func (b *Bot) executeModernOrderTool(
 	case modernOrdersInspect, modernOrdersReviewRead:
 		return b.readModernOrder(ctx, owner, call.Name, event, args, record.ModernOrder, input)
 	case modernOrdersEvents:
-		var result core.ReadPage[string]
-		err := b.API.call(
-			ctx,
-			owner,
-			http.MethodGet,
-			"/v1/order-events?cursor="+url.QueryEscape(args.Cursor),
-			nil,
-			&result,
-		)
-		return result, scriptDomainAPIError(err)
+		result, err := b.API.OrderEventsPage(ctx, owner, args.Cursor)
+		return result, appclient.ReadError(err)
 	case modernOrdersHistory:
-		var result core.ReadPage[orders.HistoryItem]
-		err := b.API.call(
-			ctx,
-			owner,
-			http.MethodGet,
-			path+"/history-page?cursor="+url.QueryEscape(args.Cursor),
-			nil,
-			&result,
-		)
-		return result, scriptDomainAPIError(err)
+		result, err := b.API.OrderHistoryPage(ctx, owner, event, args.Cursor)
+		return result, appclient.ReadError(err)
 	case modernOrdersHistoryRead:
-		var result core.ReadChunk
-		err := b.API.call(
-			ctx,
-			owner,
-			http.MethodGet,
-			path+"/history/"+url.PathEscape(args.Entry)+"?cursor="+url.QueryEscape(args.Cursor),
-			nil,
-			&result,
-		)
-		return result, scriptDomainAPIError(err)
+		result, err := b.API.OrderHistoryDetail(ctx, owner, event, args.Entry, args.Cursor)
+		return result, appclient.ReadError(err)
 	case modernOrdersInbox, modernOrdersBrowse:
 		return b.modernOrderPage(ctx, owner, event, args.Cursor, call.Name)
 	default:
@@ -431,11 +404,11 @@ func (b *Bot) modernOrderChunk(
 	ctx context.Context,
 	owner, name, event string,
 	args modernOrderArguments,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 ) (any, error) {
 	if name == modernOrdersEvent {
-		value, err := b.API.orderEventChunk(ctx, owner, event, args.Cursor, false)
-		return value, scriptDomainAPIError(err)
+		value, err := b.API.OrderEventChunk(ctx, owner, event, args.Cursor, false)
+		return value, appclient.ReadError(err)
 	}
 	scopeArgs := args
 	scopeArgs.Cursor = ""
@@ -443,13 +416,19 @@ func (b *Bot) modernOrderChunk(
 	digest := sha256.Sum256(scope)
 	cursor, err := core.DecodeReadCursor(args.Cursor, owner, name+":"+event+":"+hex.EncodeToString(digest[:]))
 	if err != nil {
-		return nil, scriptDomainAPIError(err)
+		return nil, appclient.ReadError(err)
 	}
 	var value any
 	switch name {
 	case modernOrdersContacts:
 		value, err = b.API.PaymentAdmins(ctx, owner, event)
 	case modernOrdersQuote:
+		if args.ChoiceRef != "" {
+			if args.Event != "" && args.Event != event {
+				return nil, errors.New("choice event mismatch")
+			}
+			args.Event = event
+		}
 		if err = b.resolveModernChoice(ctx, owner, name, &args, nil); err != nil {
 			return nil, err
 		}
@@ -460,9 +439,13 @@ func (b *Bot) modernOrderChunk(
 			return nil, readErr
 		}
 		if record.Order == nil || current.Version != record.Order.Version || current.Attempt != record.Order.Attempt {
-			return nil, errScriptReadStale
+			return nil, appclient.ErrReadStale
 		}
-		value, err = b.API.PaymentInstructions(ctx, owner, event, args.OrderID)
+		info, instructionErr := b.API.PaymentInstructions(ctx, owner, event, args.OrderID)
+		if instructionErr == nil && info.Version != record.Order.Version {
+			return nil, appclient.ErrReadStale
+		}
+		value, err = info, instructionErr
 	default:
 		return nil, errors.New("unknown modern order tool")
 	}
@@ -470,39 +453,23 @@ func (b *Bot) modernOrderChunk(
 		return nil, err
 	}
 	result, err := core.JSONReadChunk(value, cursor)
-	return result, scriptDomainAPIError(err)
+	return result, appclient.ReadError(err)
 }
 
 func (b *Bot) readModernOrder(
 	ctx context.Context,
 	owner, name, event string,
 	args modernOrderArguments,
-	request *modernOrderRequest,
+	request *agenthost.ModernOrderRequest,
 	input *agent.Input,
 ) (any, error) {
 	review := name == modernOrdersReviewRead
 	input.ModernOrder = nil
 	input.ModernOrderCursor = ""
-	previous, err := b.modernOrderReadCheckpoint(ctx, owner, name, event, args)
-	if err != nil {
-		return nil, err
+	if args.OrderID != request.ReadOrderID || (!args.Resume && args.Cursor != request.ReadCursor) {
+		return nil, appclient.ErrReadStale
 	}
-	if args.Resume {
-		args.Cursor = previous.ReadCursor
-	}
-	var order orders.Order
-	if review {
-		err = b.API.call(
-			ctx,
-			owner,
-			http.MethodGet,
-			"/v1/order-events/"+url.PathEscape(event)+"/review/"+url.PathEscape(args.OrderID),
-			nil,
-			&order,
-		)
-	} else {
-		order, err = b.API.Order(ctx, owner, event, args.OrderID)
-	}
+	order, err := b.modernOrderReadSource(ctx, owner, name, event, request.ReadOrderID)
 	if err != nil {
 		return nil, err
 	}
@@ -510,26 +477,64 @@ func (b *Bot) readModernOrder(
 	if err != nil {
 		return nil, err
 	}
-	if previous.ReadSnapshot != "" && previous.ReadSnapshot != fingerprint {
-		return nil, errScriptReadStale
+	if request.ReadSnapshot == "" || request.ReadSnapshot != fingerprint {
+		return nil, appclient.ErrReadStale
 	}
-	cursor, err := core.DecodeReadCursor(args.Cursor, owner, name+":"+event+":"+args.OrderID)
+	cursor, err := core.DecodeReadCursor(request.ReadCursor, owner, name+":"+event+":"+request.ReadOrderID)
 	if err != nil {
-		return nil, scriptDomainAPIError(err)
+		return nil, appclient.ReadError(err)
 	}
 	safe := order
 	safe.ProofFile = ""
 	safe.Attempt = ""
 	result, err := core.JSONReadChunk(safe, cursor)
 	if err != nil {
-		return nil, scriptDomainAPIError(err)
+		return nil, appclient.ReadError(err)
 	}
-	request.ReadCursor = args.Cursor
-	request.ReadSnapshot = fingerprint
 	input.ModernOrder = &order
 	input.ModernOrderReview = review
 	input.ModernOrderCursor = result.NextCursor
 	return modernOrderReadChunk{ReadChunk: result, Offset: cursor.Offset}, nil
+}
+
+// Bind the read checkpoint before admission. Execution rechecks the source and
+// leaves these request fields unchanged for the ledger's completion comparison.
+func (b *Bot) prepareModernOrderRead(
+	ctx context.Context, owner, name string, args modernOrderArguments, request *agenthost.ModernOrderRequest,
+) error {
+	event := request.Event
+	previous, err := b.modernOrderReadCheckpoint(ctx, owner, name, event, args)
+	if err != nil {
+		return err
+	}
+	if args.Resume {
+		args.Cursor = previous.ReadCursor
+	}
+	order, err := b.modernOrderReadSource(ctx, owner, name, event, args.OrderID)
+	if err != nil {
+		return err
+	}
+	fingerprint, err := modernOrderFingerprint(order)
+	if err != nil {
+		return err
+	}
+	if previous.ReadSnapshot != "" && previous.ReadSnapshot != fingerprint {
+		return appclient.ErrReadStale
+	}
+	_, err = core.DecodeReadCursor(args.Cursor, owner, name+":"+event+":"+args.OrderID)
+	if err != nil {
+		return appclient.ReadError(err)
+	}
+	request.ReadCursor = args.Cursor
+	request.ReadSnapshot = fingerprint
+	return nil
+}
+
+func (b *Bot) modernOrderReadSource(ctx context.Context, owner, name, event, id string) (orders.Order, error) {
+	if name == modernOrdersReviewRead {
+		return b.API.ReviewOrder(ctx, owner, event, id)
+	}
+	return b.API.Order(ctx, owner, event, id)
 }
 
 func (b *Bot) modernOrderPage(ctx context.Context, owner, event, raw, name string) (any, error) {
@@ -537,19 +542,7 @@ func (b *Bot) modernOrderPage(ctx context.Context, owner, event, raw, name strin
 	if err != nil {
 		return nil, err
 	}
-	var page orders.Page
-	resource := "/orders"
-	if name == modernOrdersInbox {
-		resource = "/payment-inbox"
-	}
-	err = b.API.call(
-		ctx,
-		owner,
-		http.MethodGet,
-		"/v1/order-events/"+url.PathEscape(event)+resource+"?cursor="+url.QueryEscape(cursor.Position),
-		nil,
-		&page,
-	)
+	page, err := b.API.OrdersPage(ctx, owner, event, cursor.Position, name == modernOrdersInbox)
 	if err != nil {
 		return nil, err
 	}

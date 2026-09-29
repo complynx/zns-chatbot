@@ -48,9 +48,9 @@ func (b *Bot) renderMediaHint(ctx context.Context, owner string, chat int64, id 
 	if err != nil {
 		return hint, err
 	}
-	hint.Question = message
-	if item.Text != "" && item.Status != mediaDone {
-		hint.Question += "\n" + item.Text
+	hint.Question, err = b.mediaModelQuestion(ctx, owner, id, message, item)
+	if err != nil {
+		return hint, err
 	}
 	text += "\n" + hint.Question
 	hint.Choices, err = b.mediaChoices(ctx, owner, pref.Language, item.Status)

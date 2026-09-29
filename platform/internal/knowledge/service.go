@@ -6,15 +6,21 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strconv"
 
+	"github.com/complynx/zns-chatbot/platform/internal/conversation/fence"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+
 	"github.com/jackc/pgx/v5"
+
+	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
 )
 
 func digest(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
 
 func (s Service) Execute(ctx context.Context, actor string, command Command) (Result, error) {
-	return s.execute(ctx, actor, command, false, nil)
+	return s.execute(ctx, actor, command, false, nil, nil)
 }
 
 // Assess can only classify this actor's pending proposal. No public route or
@@ -34,7 +40,7 @@ func (s Service) Assess(ctx context.Context, actor string, input Assessment) (Re
 		decision = approve
 	}
 	return s.execute(ctx, actor, Command{Name: assess, Key: input.Key, Event: scope, ProposalID: input.ProposalID,
-		Version: input.Version, Text: input.Reason, Decision: decision}, true, nil)
+		Version: input.Version, Text: input.Reason, Decision: decision}, true, nil, nil)
 }
 
 func (s Service) execute(
@@ -43,6 +49,7 @@ func (s Service) execute(
 	c Command,
 	internal bool,
 	sourceKeys []string,
+	source *readsource.Derivation,
 ) (Result, error) {
 	if err := validate(c, internal); err != nil {
 		return Result{}, err
@@ -52,22 +59,18 @@ func (s Service) execute(
 		return Result{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = lockActor(ctx, tx, actor); err != nil {
+	proposalSource, refs, err := knowledgeCommandSources(ctx, tx, c, source)
+	if err != nil {
 		return Result{}, err
 	}
-	if c.Name != MemoSet && c.Name != MemoDelete && c.Name != DocumentSet && c.Name != DocumentDelete {
-		if err = lockScope(ctx, tx, c.Event); err != nil {
-			return Result{}, err
-		}
-	}
-	if err = authorize(ctx, tx, actor, c); err != nil {
+	if err = lockKnowledgeCommand(ctx, tx, actor, c, refs, source != nil || proposalSource.derived); err != nil {
 		return Result{}, err
 	}
 	sources, err := resolveMemorySources(ctx, tx, actor, sourceKeys)
 	if err != nil {
 		return Result{}, err
 	}
-	encoded, err := memoryCommandBytes(c, sourceKeys)
+	encoded, err := knowledgeOperationBytes(c, sourceKeys, source)
 	if err != nil {
 		return Result{}, err
 	}
@@ -77,7 +80,27 @@ func (s Service) execute(
 		return Result{}, err
 	}
 	if found {
+		if err = retainKnowledgeReplay(
+			ctx,
+			tx,
+			actor,
+			keyHash,
+			&previous,
+			refs,
+			source,
+			proposalSource.revoked,
+		); err != nil {
+			return Result{}, err
+		}
 		return previous, tx.Commit(ctx)
+	}
+
+	if err = lockKnowledgeEffect(ctx, tx, actor, source, proposalSource); err != nil {
+		return Result{}, err
+	}
+	deletion, err := beginPrivateDeletion(ctx, tx, actor, c, source)
+	if err != nil {
+		return Result{}, err
 	}
 	result, err := mutate(ctx, tx, actor, c)
 	if err != nil {
@@ -86,9 +109,29 @@ func (s Service) execute(
 	if err = bindMemorySources(ctx, tx, actor, result, sources); err != nil {
 		return Result{}, err
 	}
+	if err = bindKnowledgeResult(ctx, tx, actor, c, &result, source, refs, proposalSource); err != nil {
+		return Result{}, err
+	}
+	if err = finishPrivateDeletion(ctx, tx, actor, deletion, &result); err != nil {
+		return Result{}, err
+	}
+	if err = saveKnowledgeOperation(ctx, tx, actor, c, result, keyHash, requestHash); err != nil {
+		return Result{}, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+func saveKnowledgeOperation(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor string,
+	c Command,
+	result Result,
+	keyHash, requestHash string,
+) error {
 	data, err := json.Marshal(result)
 	if err != nil {
-		return Result{}, err
+		return err
 	}
 	_, err = tx.Exec(
 		ctx,
@@ -99,7 +142,7 @@ func (s Service) execute(
 		data,
 	)
 	if err != nil {
-		return Result{}, err
+		return err
 	}
 	subject, version := resultSubject(result)
 	_, err = tx.Exec(
@@ -112,14 +155,14 @@ func (s Service) execute(
 		version,
 	)
 	if err != nil {
-		return Result{}, err
+		return err
 	}
-	return result, tx.Commit(ctx)
+	return err
 }
 
 func lockActor(ctx context.Context, tx pgx.Tx, actor string) error {
 	var id string
-	err := tx.QueryRow(ctx, `SELECT id FROM core.users WHERE id=$1 FOR UPDATE`, actor).Scan(&id)
+	err := tx.QueryRow(ctx, `SELECT id FROM core.users WHERE id=$1 FOR NO KEY UPDATE`, actor).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return forbidden()
 	}
@@ -158,13 +201,7 @@ func authorize(ctx context.Context, tx pgx.Tx, actor string, c Command) error {
 	default:
 		return nil
 	}
-	var found string
-	err := tx.QueryRow(ctx, `SELECT permission FROM core.knowledge_permissions WHERE scope=$1 AND actor=$2 AND permission=$3 FOR SHARE`, c.Event, actor, permission).
-		Scan(&found)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return forbidden()
-	}
-	return err
+	return knowledgeauthority.LockPermission(ctx, tx, actor, c.Event, permission)
 }
 
 func replay(ctx context.Context, tx pgx.Tx, actor, key, hash string) (Result, bool, error) {
@@ -214,4 +251,173 @@ func mutate(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, er
 	default:
 		return Result{}, invalid()
 	}
+}
+
+// ExecuteDerived accepts source evidence only from the authenticated host path.
+func (s Service) ExecuteDerived(
+	ctx context.Context,
+	actor string,
+	c Command,
+	source readsource.Derivation,
+) (Result, error) {
+	if !source.Valid() {
+		return Result{}, invalid()
+	}
+	if _, err := readsource.Capture(actor, source); err != nil {
+		return Result{}, err
+	}
+	source = source.Clone()
+	return s.execute(ctx, actor, c, false, nil, &source)
+}
+
+func derivedSharedMemory(source readsource.Derivation) bool {
+	for _, a := range source.Authorities {
+		if a.Knowledge.Kind == knowledgeauthority.SharedMemory {
+			return true
+		}
+		if a.Causal != nil {
+			for _, leaf := range a.Causal.Authorities {
+				if leaf.Knowledge.Kind == knowledgeauthority.SharedMemory {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func scrubMemoryResult(result *Result) {
+	result.Redacted = true
+	if result.Document != nil {
+		result.Document.Text = ""
+	}
+	if result.Memo != nil {
+		result.Memo.Text = ""
+	}
+	if result.Fact != nil {
+		result.Fact.Text = ""
+	}
+	if result.Proposal != nil {
+		result.Proposal.Text = ""
+		result.Proposal.Reason = ""
+	}
+}
+
+func bindKnowledgeResult(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor string,
+	c Command,
+	result *Result,
+	source *readsource.Derivation,
+	refs []readsource.Authority,
+	proposalSource proposalCausalRecord,
+) error {
+	var err error
+	if source != nil {
+		combined := source.Clone()
+		combined.Authorities = refs
+		if err = bindDerivedKnowledgeResult(ctx, tx, actor, c.Name, *result, combined); err != nil {
+			return err
+		}
+	} else if c.Name == Review && c.Decision == approve {
+		if err = publishProposalCausal(ctx, tx, actor, *result, proposalSource); err != nil {
+			return err
+		}
+	}
+	if proposalSource.derived && result.Proposal != nil {
+		result.Proposal.ReadAuthorities, err = proposalReadAuthorities(*result.Proposal)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func lockKnowledgeEffect(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor string,
+	source *readsource.Derivation,
+	proposal proposalCausalRecord,
+) error {
+	if source != nil {
+		allowed, err := readsource.Lock(ctx, tx, actor, source.Authorities)
+		if err != nil {
+			return err
+		}
+		if slices.Contains(allowed, false) {
+			return conflict("history_stale")
+		}
+		if err = fence.LockGeneration(ctx, tx, actor, source.Generation); err != nil {
+			return err
+		}
+	}
+	return lockProposalCausal(ctx, tx, actor, proposal)
+}
+
+func knowledgeCommandSources(
+	ctx context.Context,
+	tx pgx.Tx,
+	c Command,
+	source *readsource.Derivation,
+) (proposalCausalRecord, []readsource.Authority, error) {
+	var err error
+	proposalSource := proposalCausalRecord{}
+	refs := []readsource.Authority{}
+	if source != nil {
+		refs = source.Authorities
+	}
+	if c.Name == Review || c.Name == assess {
+		proposalSource, err = loadProposalCausal(ctx, tx, c.ProposalID)
+		if err != nil {
+			return proposalSource, nil, err
+		}
+		refs, err = readsource.Merge(refs, proposalSource.refs)
+		if err != nil {
+			return proposalSource, nil, err
+		}
+	}
+	refs, err = readsource.ExpandProposalSources(ctx, tx, refs)
+	return proposalSource, refs, err
+}
+
+func retainKnowledgeReplay(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor, keyHash string,
+	previous *Result,
+	refs []readsource.Authority,
+	source *readsource.Derivation,
+	revoked bool,
+) error {
+	terminal, replayErr := authorizeMemoryReplay(ctx, tx, actor, previous, refs, source, revoked)
+	if replayErr != nil {
+		return replayErr
+	}
+	if terminal {
+		if _, err := tx.Exec(
+			ctx,
+			`UPDATE core.knowledge_operations SET result=$3 WHERE actor=$1 AND key_hash=$2`,
+			actor,
+			keyHash,
+			previous,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func bindDerivedKnowledgeResult(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor, name string,
+	result Result,
+	source readsource.Derivation,
+) error {
+	if name == Review {
+		return bindMemoryCausalRefsFromDerivation(ctx, tx, actor, result, source)
+	}
+	return bindMemoryCausal(ctx, tx, actor, result, source)
 }

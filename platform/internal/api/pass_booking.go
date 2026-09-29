@@ -4,13 +4,20 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/derivedmutation"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
-func passBookingRoutes(mux *http.ServeMux, service passbooking.Service, files orders.Service, logger *slog.Logger) {
+func passBookingRoutes(
+	mux *http.ServeMux,
+	service passbooking.Service,
+	files orders.Service,
+	derived derivedmutation.Service,
+	logger *slog.Logger,
+) {
 	passCapabilitiesRoute(mux, service, logger)
-	passBatchRoutes(mux, service, logger)
+	passBatchRoutes(mux, service, derived, logger)
 	passExportRoute(mux, service, logger)
 	passTakeoverRoutes(mux, service, logger)
 	passAdminRoutes(mux, service, logger)

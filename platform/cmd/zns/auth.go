@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
@@ -46,5 +47,9 @@ func configureBotAuth(ctx context.Context, b *bot.Bot, cfg config.Config, signer
 		b.API.Exchange = adapter
 		b.API.Links = links
 	}
+	if cfg.Env == sandboxMode {
+		b.API.SandboxToken = signer.Token
+	}
+	b.Host = appclient.Host{Base: b.API.Base, HTTP: b.API.HTTP, Signer: signer, UserToken: b.API.UserToken}
 	return verifyBotIdentity(ctx, b, cfg)
 }

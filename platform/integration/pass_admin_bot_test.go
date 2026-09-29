@@ -104,7 +104,14 @@ func TestPassAdminAgentRejectsChangedEvidenceAndGuessedIdentity(t *testing.T) {
 			if scenario == "guessed" {
 				text = "Create a pass for some Alice"
 			}
-			handle(t, f.b, message(800, 202, text))
+			update := message(800, 202, text)
+			if scenario == "rights_revoked" {
+				require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
+				require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
+				require.Equal(t, 2, calls)
+			} else {
+				handle(t, f.b, update)
+			}
 			var count int
 			require.NoError(
 				t,

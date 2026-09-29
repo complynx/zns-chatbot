@@ -42,7 +42,7 @@ func domainHTTP(t *testing.T, f *fixture, actor, path string) (int, []byte) {
 	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.b.API.Base+path, nil)
 	require.NoError(t, err)
 	if actor != "" {
-		request.Header.Set("Authorization", "Bearer "+f.b.API.Signer.Token(actor))
+		request.Header.Set("Authorization", "Bearer "+f.b.Host.Signer.Token(actor))
 	}
 	response, err := http.DefaultClient.Do(request)
 	require.NoError(t, err)

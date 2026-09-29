@@ -13,7 +13,7 @@ import (
 func drainPassNotices(t *testing.T, f *fixture) {
 	t.Helper()
 	for range 10 {
-		notices, err := f.b.API.PendingPassNotifications(t.Context())
+		notices, err := f.b.Host.PendingPassNotifications(t.Context())
 		require.NoError(t, err)
 		if len(notices) == 0 {
 			return
@@ -29,6 +29,7 @@ func TestPassNoticeDeliveryLocaleHistoryAndRetry(t *testing.T) {
 	_, err := f.db.Exec(t.Context(), `UPDATE core.users SET language='ru' WHERE id='alice'`)
 	require.NoError(t, err)
 	f.b.API.HTTP = &http.Client{Transport: &failAcknowledgment{}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.NoError(t, f.b.DeliverPassNotifications(t.Context()))
 	before := chatMessages(t, f, 101)
 	require.NotEmpty(t, before)
@@ -57,8 +58,8 @@ func TestPassNoticeServiceIdentityAndBlockedRecipient(t *testing.T) {
 		token  string
 		status int
 	}{
-		{f.b.API.Signer.Token("bob"), http.StatusUnauthorized},
-		{f.b.API.Signer.DeliveryToken(), http.StatusOK},
+		{f.b.Host.Signer.Token("bob"), http.StatusUnauthorized},
+		{f.b.Host.Signer.DeliveryToken(), http.StatusOK},
 	} {
 		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
 			f.b.API.Base+"/internal/pass-notifications", http.NoBody)
@@ -137,6 +138,7 @@ func TestPassNoticeStaleRetryKeepsOriginalHistory(t *testing.T) {
 	t.Parallel()
 	f := registrationPaymentFixture(t)
 	f.b.API.HTTP = &http.Client{Transport: &failAcknowledgment{}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.NoError(t, f.b.DeliverPassNotifications(t.Context()))
 	before := chatMessages(t, f, 101)
 	require.Len(t, before, 1)

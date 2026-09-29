@@ -33,14 +33,11 @@ func (s Service) TierStatus(ctx context.Context, actor, eventID string) (TierSta
 		return result, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	e, err := readEvent(ctx, tx, eventID)
+	e, err := readTierEvent(ctx, tx, actor, eventID)
 	if err != nil {
 		return result, err
 	}
-	if _, err = authorize(ctx, tx, actor, commandAdminCancel, eventID); err != nil {
-		return result, err
-	}
-	records, err := readBookings(ctx, tx, eventID)
+	stats, err := readTierStatistics(ctx, tx, eventID)
 	if err != nil {
 		return result, err
 	}
@@ -48,7 +45,12 @@ func (s Service) TierStatus(ctx context.Context, actor, eventID string) (TierSta
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 		return result, err
 	}
-	state := newSnapshot(e, records, now)
-	result = state.tierStatus()
-	return result, tx.Commit(ctx)
+	result = tierStatus(e, stats, now)
+	if err = checkTierResult(result); err != nil {
+		return TierStatus{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return TierStatus{}, err
+	}
+	return result, nil
 }

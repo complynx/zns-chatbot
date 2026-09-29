@@ -7,13 +7,19 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // PreviewCommand serializes the request key before resolving the audience, so
 // retries return the original reviewed snapshot even after membership changes.
-func (s Service) previewCommandAttempt(ctx context.Context, actor, key, raw string) (Message, error) {
+func (s Service) previewCommandAttempt(
+	ctx context.Context,
+	actor, key, raw string,
+	source sourceBinding,
+) (Message, error) {
 	command, err := ParseCommand(raw)
 	if err != nil {
 		return Message{}, err
@@ -26,9 +32,12 @@ func (s Service) previewCommandAttempt(ctx context.Context, actor, key, raw stri
 		return Message{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	result, err := s.previewCommand(ctx, tx, actor, key, raw, command)
+	if err = prelockMessageKey(ctx, tx, actor, key, source); err != nil {
+		return Message{}, err
+	}
+	result, err := s.previewCommand(ctx, tx, actor, key, raw, command, source)
 	if err != nil {
-		return result, err
+		return result, preserveSourceRefusal(ctx, tx, err)
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return result, err
@@ -41,6 +50,7 @@ func (s Service) previewCommand(
 	tx pgx.Tx,
 	actor, key, raw string,
 	command Command,
+	source sourceBinding,
 ) (Message, error) {
 	var result Message
 	if key == "" || len(key) > maxKeyBytes {
@@ -52,19 +62,14 @@ func (s Service) previewCommand(
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, actor+":"+key); err != nil {
 		return result, err
 	}
-	var oldCommand *string
-	err := tx.QueryRow(ctx, `SELECT id,state,request,command FROM core.admin_messages WHERE actor=$1 AND key=$2`, actor, key).
-		Scan(&result.ID, &result.State, &result.Request, &oldCommand)
-	if err == nil {
-		if oldCommand == nil || *oldCommand != raw {
-			return Message{}, problem(http.StatusConflict, "idempotency_conflict")
-		}
-		return result, nil
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
+	result, found, err := replayPreviewCommand(ctx, tx, actor, key, raw)
+	if err != nil || found {
 		return result, err
 	}
 
+	if err = fenceNewSource(ctx, tx, actor, source); err != nil {
+		return Message{}, err
+	}
 	request := Request{Content: command.Content}
 	for _, expression := range command.Recipients {
 		destinations, resolveErr := s.resolveCommandRecipients(ctx, tx, actor, expression)
@@ -85,6 +90,9 @@ func (s Service) previewCommand(
 	if err != nil {
 		return result, err
 	}
+	if err = saveMessageSource(ctx, tx, result.ID, source); err != nil {
+		return Message{}, err
+	}
 	if command.Template {
 		if err = s.snapshotRecipientProfiles(ctx, tx, result); err != nil {
 			return result, err
@@ -95,6 +103,26 @@ func (s Service) previewCommand(
 	}
 	_, err = tx.Exec(ctx, `UPDATE core.admin_messages SET command=$2 WHERE id=$1`, result.ID, raw)
 	return result, err
+}
+
+func replayPreviewCommand(ctx context.Context, tx pgx.Tx, actor, key, raw string) (Message, bool, error) {
+	var result Message
+	var oldCommand *string
+	err := tx.QueryRow(ctx, `SELECT id,state,request,command FROM core.admin_messages WHERE actor=$1 AND key=$2`, actor, key).
+		Scan(&result.ID, &result.State, &result.Request, &oldCommand)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return result, false, nil
+	}
+	if err != nil {
+		return Message{}, false, err
+	}
+	if err = guardMessage(ctx, tx, actor, result.ID); err != nil {
+		return Message{}, true, err
+	}
+	if oldCommand == nil || *oldCommand != raw {
+		return Message{}, true, problem(http.StatusConflict, "idempotency_conflict")
+	}
+	return result, true, nil
 }
 
 func (s Service) resolveCommandRecipients(ctx context.Context, tx pgx.Tx, actor, raw string) ([]Destination, error) {
@@ -120,10 +148,10 @@ func (s Service) resolveCommandRecipients(ctx context.Context, tx pgx.Tx, actor,
 	return resolveShortcut(ctx, tx, event, category)
 }
 
-func (s Service) PreviewCommand(ctx context.Context, actor, key, raw string) (Message, error) {
+func (s Service) previewWithSource(ctx context.Context, actor, key, raw string, source sourceBinding) (Message, error) {
 	const attempts = 3
 	for range attempts {
-		result, err := s.previewCommandAttempt(ctx, actor, key, raw)
+		result, err := s.previewCommandAttempt(ctx, actor, key, raw, source)
 		if !serializationConflict(err) {
 			return result, err
 		}
@@ -134,4 +162,20 @@ func (s Service) PreviewCommand(ctx context.Context, actor, key, raw string) (Me
 func serializationConflict(err error) bool {
 	databaseError, ok := errors.AsType[*pgconn.PgError](err)
 	return ok && databaseError.Code == "40001"
+}
+
+func (s Service) PreviewCommand(ctx context.Context, actor, key, raw string) (Message, error) {
+	return s.previewWithSource(ctx, actor, key, raw, originalSource())
+}
+
+func (s Service) PreviewDerivedCommand(
+	ctx context.Context,
+	actor, key, raw string,
+	source readsource.Derivation,
+) (Message, error) {
+	binding, err := captureSource(actor, source)
+	if err != nil {
+		return Message{}, err
+	}
+	return s.previewWithSource(ctx, actor, key, raw, binding)
 }

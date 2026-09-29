@@ -58,24 +58,25 @@ func run() error {
 		ReadTimeout: timeout, WriteTimeout: timeout, IdleTimeout: timeout,
 		BaseContext: func(net.Listener) context.Context { return ctx }}
 	done := make(chan struct{})
-	stopped := make(chan struct{})
+	stopped := make(chan error, 1)
 	go func() {
-		defer close(stopped)
 		select {
 		case <-ctx.Done():
-			shutdown, stop := context.WithTimeout(context.Background(), timeout)
-			defer stop()
-			if server.Shutdown(shutdown) != nil {
-				_ = server.Close()
-			}
 		case <-done:
 		}
+		service.Stop()
+		// Close ordinary HTTP connections, including incomplete request bodies.
+		// Hijacked sessions and their children are joined by the service below.
+		closeErr := server.Close()
+		shutdown, stop := context.WithTimeout(context.Background(), timeout)
+		defer stop()
+		stopped <- errors.Join(closeErr, service.Shutdown(shutdown))
 	}()
 	err = server.Serve(listener)
 	close(done)
-	<-stopped
+	shutdownErr := <-stopped
 	if errors.Is(err, http.ErrServerClosed) {
-		return nil
+		err = nil
 	}
-	return err
+	return errors.Join(err, shutdownErr)
 }

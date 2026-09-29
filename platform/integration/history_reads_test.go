@@ -30,9 +30,9 @@ func TestHistoryReadEmptyAndPaginationContracts(t *testing.T) {
 	assert.NotNil(t, batch)
 	assert.Empty(t, batch)
 
-	require.NoError(t, service.Append(t.Context(), "alice", "first", "user", "First message"))
-	require.NoError(t, service.Append(t.Context(), "bob", "other", "user", "Other owner"))
-	require.NoError(t, service.Append(t.Context(), "alice", "second", "assistant", "Second message"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "alice", "first", "user", "First message"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "bob", "other", "user", "Other owner"))
+	require.NoError(t, service.AppendOriginal(t.Context(), "alice", "second", "assistant", "Second message"))
 	page, err = service.Read(t.Context(), "alice", conversation.Query{Limit: 1})
 	require.NoError(t, err)
 	require.Len(t, page.Events, 1)

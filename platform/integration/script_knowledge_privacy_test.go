@@ -50,7 +50,10 @@ func TestCodeQADeletedMemoNotRetainedInModelInput(t *testing.T) {
 	)
 }
 
-type memoChangeVM struct{ afterRead func() }
+type memoChangeVM struct {
+	afterRead  func()
+	executions *int
+}
 
 func (memoChangeVM) Evaluate(context.Context, scriptclient.Request) (json.RawMessage, error) {
 	return nil, errors.New("unexpected evaluation")
@@ -62,6 +65,9 @@ func (vm memoChangeVM) Execute(
 	tools []scriptclient.Tool,
 	callback scriptclient.Callback,
 ) (json.RawMessage, error) {
+	if vm.executions != nil {
+		*vm.executions++
+	}
 	return scriptworker.Execute(
 		ctx,
 		scriptprotocol.ExecuteRequest{Code: request.Code, Input: request.Input, Tools: tools},
@@ -145,7 +151,8 @@ func TestScriptKnowledgeExternalMemoDeletionClearsNextPlan(t *testing.T) {
 		knowledge.Command{Name: knowledge.MemoSet, Key: "seed", FactKey: "diet", Text: "EXTERNAL-DELETION-CANARY"},
 	)
 	require.NoError(t, err)
-	f.b.Scripts = memoChangeVM{afterRead: func() {
+	executions := 0
+	f.b.Scripts = memoChangeVM{executions: &executions, afterRead: func() {
 		_, changeErr := f.b.API.ExecuteKnowledge(
 			t.Context(),
 			"alice",
@@ -153,13 +160,35 @@ func TestScriptKnowledgeExternalMemoDeletionClearsNextPlan(t *testing.T) {
 		)
 		require.NoError(t, changeErr)
 	}}
-	result := runKnowledgeScript(t, f, identity.AliceTelegramID, 15994, `
+	code := `
  const old=tools.knowledge.memos();let staleBlocked=false;
  try{tools.knowledge.memo_delete({fact_key:"diet"});}catch(_){staleBlocked=true;}
  const fresh=tools.knowledge.memo_read({fact_key:"diet"});
- return {old,staleBlocked,active:fresh.active};`)
-	assert.JSONEq(t, `{"omitted":true,"reason":"memory_deleted"}`, string(result))
-	encoded, err := json.Marshal(f.b.Model.(*knowledgeModel).inputs[1])
+ return {old,staleBlocked,active:fresh.active};`
+	model := &knowledgeModel{plans: []agent.Plan{
+		{View: agent.KnowledgeView, ScriptAction: &agent.ScriptProposal{Code: code, InputJSON: "null"}},
+		{View: agent.KnowledgeView, Text: "Done"},
+	}}
+	f.b.Model = model
+	handle(t, f.b, message(15994, identity.AliceTelegramID, "Use the explicitly requested knowledge operation"))
+	require.Len(t, model.inputs, 2)
+	require.Len(t, model.inputs[1].Script.Runs, 1)
+	run := model.inputs[1].Script.Runs[0]
+	assert.Equal(t, "interrupted", run.Error)
+	assert.JSONEq(t, `{"omitted":true,"reason":"memory_deleted"}`, string(run.Result))
+	assert.Equal(t, 1, executions)
+	var records []struct {
+		MemoryRedacted bool              `json:"memory_redacted"`
+		Calls          []json.RawMessage `json:"calls"`
+		Run            agent.ScriptRun   `json:"run"`
+	}
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='alice' AND update_id=15994 AND kind='script_runs'`).Scan(&records))
+	require.Len(t, records, 1)
+	assert.True(t, records[0].MemoryRedacted)
+	assert.Equal(t, "interrupted", records[0].Run.Error)
+	assert.Len(t, records[0].Calls, 1, "stale mutation must not be admitted")
+	encoded, err := json.Marshal(model.inputs[1])
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "EXTERNAL-DELETION-CANARY")
 	memo, err := f.b.API.Memo(t.Context(), "alice", "diet")
@@ -180,14 +209,25 @@ func TestScriptKnowledgeMemoDeleteThenListPreservesRemainingMemo(t *testing.T) {
 		)
 		require.NoError(t, err)
 	}
-	runKnowledgeScript(
-		t,
-		f,
-		identity.AliceTelegramID,
-		15995,
-		`tools.knowledge.memos();tools.knowledge.memo_delete({fact_key:"diet"});return tools.knowledge.memos();`,
-	)
-	encoded, err := json.Marshal(f.b.Model.(*knowledgeModel).inputs[1])
+	model := &knowledgeModel{plans: []agent.Plan{
+		{View: agent.KnowledgeView, ScriptAction: &agent.ScriptProposal{
+			Code:      `tools.knowledge.memos();tools.knowledge.memo_delete({fact_key:"diet"});return tools.knowledge.memos();`,
+			InputJSON: "null",
+		}},
+		{View: agent.KnowledgeView, Text: "The deletion committed; the script was interrupted."},
+	}}
+	f.b.Model = model
+	update := message(15995, identity.AliceTelegramID, "Delete my diet memo and list remaining memos")
+	handle(t, f.b, update)
+	require.Len(t, model.inputs, 2)
+	require.Len(t, model.inputs[1].Script.Runs, 1)
+	assert.Equal(t, "interrupted", model.inputs[1].Script.Runs[0].Error)
+	assert.JSONEq(t, `{"omitted":true,"reason":"memory_deleted"}`, string(model.inputs[1].Script.Runs[0].Result))
+	records := scriptMemoRecords(t, f, update.ID)
+	require.Len(t, records, 1)
+	assert.True(t, records[0].MemoryRedacted)
+	assert.Equal(t, "interrupted", records[0].Run.Error)
+	encoded, err := json.Marshal(model.inputs[1])
 	require.NoError(t, err)
 	assert.NotContains(t, string(encoded), "REMOVED-PRIVATE-CANARY")
 	assert.Contains(t, string(encoded), "RETAINED-PRIVATE-MEMO")
@@ -196,4 +236,18 @@ func TestScriptKnowledgeMemoDeleteThenListPreservesRemainingMemo(t *testing.T) {
 	require.Len(t, memos, 1)
 	assert.Equal(t, "drink", memos[0].Key)
 	assert.EqualValues(t, 1, memos[0].Version)
+	handle(t, f.b, update)
+	assert.Len(t, model.inputs, 2, "replay must not reopen the retired script")
+	deleted, err := f.b.API.Memo(t.Context(), "alice", "diet")
+	require.NoError(t, err)
+	assert.False(t, deleted.Active)
+	assert.EqualValues(t, 2, deleted.Version)
+	var effects, receipts int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.knowledge_audit
+ WHERE actor='alice' AND action='memo_delete' AND subject='diet'`).Scan(&effects))
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.knowledge_operations
+ WHERE actor='alice' AND result->'memo'->>'key'='diet'
+ AND result->'memo'->>'version'='2' AND result->'memo'->>'active'='false'`).Scan(&receipts))
+	assert.Equal(t, 1, effects)
+	assert.Equal(t, 1, receipts, "one canonical deletion receipt survives script retirement")
 }

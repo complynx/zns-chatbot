@@ -7,6 +7,11 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
@@ -72,7 +77,7 @@ func (b *Bot) RenderKnowledge(ctx context.Context, owner string, chat int64) err
 	case knowledgeOwnMode:
 		err = r.proposals(ctx, false)
 	case knowledgeReviewMode:
-		if knowledgeCapability(scopes, view.Event, false) {
+		if interaction.KnowledgeCapability(scopes, view.Event, false) {
 			err = r.proposals(ctx, true)
 		}
 	default:
@@ -108,7 +113,7 @@ func (r *knowledgeRenderer) navigation(ctx context.Context, scopes []knowledge.S
 		id   i18n.ID
 		mode string
 	}{{i18n.KnowledgeMemos, knowledgeMemoMode}, {i18n.KnowledgeOwn, knowledgeOwnMode}}
-	if knowledgeCapability(scopes, r.view.Event, false) {
+	if interaction.KnowledgeCapability(scopes, r.view.Event, false) {
 		modes = append(modes, struct {
 			id   i18n.ID
 			mode string
@@ -134,7 +139,7 @@ func (r *knowledgeRenderer) navigation(ctx context.Context, scopes []knowledge.S
 		return err
 	}
 	if err == nil {
-		visible, visibleErr := r.bot.historyReplyVisible(ctx, r.owner, updateID)
+		visible, visibleErr := r.bot.derivedReplyVisible(ctx, r.owner, updateID)
 		if visibleErr != nil {
 			return visibleErr
 		}
@@ -164,7 +169,15 @@ func (r *knowledgeRenderer) facts(ctx context.Context) error {
 			}
 		}
 		key := "fact:" + fact.Event + ":" + fact.Topic + ":" + fact.Key
-		if err = r.card(ctx, key, source+"\n"+fact.Text, nil); err != nil {
+		if err = r.sourceCard(
+			ctx,
+			key,
+			fact.Key,
+			fact.Version,
+			fact.ReadAuthorities,
+			source+"\n"+fact.Text,
+			nil,
+		); err != nil {
 			return err
 		}
 	}
@@ -199,7 +212,15 @@ func (r *knowledgeRenderer) memos(ctx context.Context) error {
 		if buttonErr != nil {
 			return buttonErr
 		}
-		if err = r.card(ctx, "memo:"+memo.Key, memo.Text, [][]telegram.Button{{button}}); err != nil {
+		if err = r.sourceCard(
+			ctx,
+			"memo:"+memo.Key,
+			memo.Key,
+			memo.Version,
+			memo.ReadAuthorities,
+			memo.Text,
+			[][]telegram.Button{{button}},
+		); err != nil {
 			return err
 		}
 	}
@@ -234,6 +255,13 @@ func (r *knowledgeRenderer) proposals(ctx context.Context, review bool) error {
 
 func (r *knowledgeRenderer) proposalCard(ctx context.Context, p knowledge.Proposal, review bool) error {
 	rows := [][]telegram.Button{}
+	if submission := knowledgeProposalSubmission(r.owner, p, review); submission != nil {
+		button, err := r.button(ctx, i18n.KnowledgeSubmit, knowledgeButton{Submission: submission})
+		if err != nil {
+			return err
+		}
+		rows = append(rows, []telegram.Button{button})
+	}
 	if !review && p.State == knowledgePendingFilter {
 		button, err := r.button(
 			ctx,
@@ -276,16 +304,28 @@ func (r *knowledgeRenderer) proposalCard(ctx context.Context, p knowledge.Propos
 			rows = append(rows, []telegram.Button{button})
 		}
 	}
-	status := map[string]i18n.ID{knowledgePendingFilter: i18n.KnowledgePendingFilter, "pending_review": i18n.KnowledgePendingReview, "filtered": i18n.KnowledgeFiltered, "approved": i18n.KnowledgeApproved, "rejected": i18n.KnowledgeRejected}[p.State]
+	return r.sourceCard(
+		ctx,
+		"proposal:"+strconv.FormatInt(p.ID, 10),
+		strconv.FormatInt(p.ID, 10),
+		p.Version,
+		p.ReadAuthorities,
+		r.proposalText(p, review),
+		rows,
+	)
+}
+
+func (r *knowledgeRenderer) proposalText(p knowledge.Proposal, review bool) string {
+	status := map[string]i18n.ID{knowledgePendingFilter: i18n.KnowledgePendingFilter, knowledge.AwaitingSubmission: i18n.KnowledgeAwaitingSubmission, "pending_review": i18n.KnowledgePendingReview, "filtered": i18n.KnowledgeFiltered, "approved": i18n.KnowledgeApproved, "rejected": i18n.KnowledgeRejected}[p.State]
 	scope := p.Event
 	if scope == "" {
 		scope = r.text(i18n.KnowledgeGeneral)
 	}
-	text := fmt.Sprintf("%s\n%s\n\n%s", scope, p.Text, r.text(status))
-	if p.Reason != "" {
+	text := fmt.Sprintf("%s · %s / %s\n\n%s\n\n%s", scope, p.Topic, p.FactKey, p.Text, r.text(status))
+	if !review && p.Reason != "" {
 		text += "\n" + p.Reason
 	}
-	return r.card(ctx, "proposal:"+strconv.FormatInt(p.ID, 10), text, rows)
+	return text
 }
 
 func (r *knowledgeRenderer) retire(ctx context.Context) error {
@@ -304,7 +344,7 @@ func (r *knowledgeRenderer) retire(ctx context.Context) error {
 	for _, key := range keys {
 		if !r.keys[key] {
 			if err = r.bot.deliverOrderCard(
-				ctx,
+				context.WithValue(ctx, botRetiredCardKey{}, true),
 				r.owner,
 				key,
 				telegram.Send{ChatID: r.chat, Text: r.text(i18n.KnowledgeClosed)},
@@ -330,7 +370,7 @@ func (b *Bot) reconcileKnowledgeViews(ctx context.Context) error {
 		return err
 	}
 	for _, item := range views {
-		viewContext, authErr := b.API.notificationContext(ctx, item.Owner, item.Chat)
+		viewContext, authErr := b.API.NotificationContext(ctx, item.Owner, item.Chat)
 		if authErr != nil {
 			b.logger().WarnContext(ctx, "knowledge view identity pending")
 			continue
@@ -340,4 +380,23 @@ func (b *Bot) reconcileKnowledgeViews(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (r *knowledgeRenderer) sourceCard(
+	ctx context.Context,
+	key, object string,
+	version int64,
+	authorities []readsource.Authority,
+	text string,
+	rows [][]telegram.Button,
+) error {
+	ref := botdelivery.Reference{
+		Family:      botFamilyKnowledge,
+		CardKey:     knowledgePrefix + key,
+		Event:       r.view.Event,
+		Object:      object,
+		Version:     version,
+		Authorities: readsource.CloneAuthorities(authorities),
+	}
+	return r.card(withBotCard(ctx, ref), key, text, rows)
 }

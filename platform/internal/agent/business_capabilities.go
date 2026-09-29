@@ -1,6 +1,9 @@
 package agent
 
-import "github.com/complynx/zns-chatbot/platform/internal/core"
+import (
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/orders"
+)
 
 // BusinessCapabilities is current host evidence for the active order event.
 // Missing evidence exposes only ordinary reads, never mutation or export tools.
@@ -14,7 +17,7 @@ func canExportOrders(input Input) bool {
 	return canBook(input) && input.Business.CanExportOrders
 }
 
-const orderPaymentInstructions = "payment_instructions"
+const orderPaymentInstructions = orders.ActionPaymentInstructions
 const orderAddExtra = "add_extra"
 const orderRemoveExtra = "remove_extra"
 

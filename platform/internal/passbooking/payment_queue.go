@@ -4,14 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
 
 type PaymentReview struct {
-	Owner      string  `json:"owner"`
-	TelegramID int64   `json:"telegram_id"`
-	Payment    Payment `json:"payment"`
+	BookingCreatedAt time.Time `json:"booking_created_at,omitzero"`
+	Owner            string    `json:"owner"`
+	TelegramID       int64     `json:"telegram_id"`
+	Payment          Payment   `json:"payment"`
 }
 
 type PaymentPage struct {
@@ -40,7 +42,7 @@ func (s Service) PaymentQueue(ctx context.Context, actor, eventID, after string)
 	if !allowed {
 		return PaymentPage{}, forbidden()
 	}
-	rows, err := s.DB.Query(ctx, `SELECT DISTINCT ON (p.id) b.owner,u.telegram_id,
+	rows, err := s.DB.Query(ctx, `SELECT DISTINCT ON (p.id) b.owner,u.telegram_id,b.created_at,
 p.kind,p.id,p.event_id,p.submitter,COALESCE(p.proof_id,''),COALESCE(legacy.receiving_admin,p.receiving_admin,''),p.received_at,p.decision,COALESCE(p.reviewed_by,legacy.reviewed_by),p.reviewed_at,b.version,p.proof_unavailable
 FROM core.pass_payment_attempts p JOIN core.pass_bookings b ON b.payment_attempt=p.id AND b.event_id=p.event_id
 JOIN core.users u ON u.id=b.owner
@@ -59,6 +61,7 @@ ORDER BY p.id,u.telegram_id LIMIT $4`, eventID, actor, after, pageSize+1)
 		scanErr := row.Scan(
 			&item.Owner,
 			&item.TelegramID,
+			&item.BookingCreatedAt,
 			&p.Kind,
 			&p.Attempt,
 			&p.Event,

@@ -19,8 +19,11 @@ func (r *passMenuRenderer) eventHeading(ctx context.Context) error {
 		if event.ID == r.state.Event {
 			label := event.Title(r.language, false)
 			r.lines = append([]string{passMenuLabel(label)}, r.lines...)
-			break
+			return nil
 		}
+	}
+	if r.state.Historical {
+		r.lines = append([]string{passMenuLabel(r.state.Event)}, r.lines...)
 	}
 	return nil
 }

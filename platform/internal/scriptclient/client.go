@@ -11,8 +11,9 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
-	"time"
 	"unicode/utf8"
+
+	"github.com/complynx/zns-chatbot/platform/internal/scriptprotocol"
 )
 
 const (
@@ -39,7 +40,7 @@ func New(socket string) (*Client, error) {
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 	}}
-	const timeout = 5 * time.Second
+	const timeout = scriptprotocol.EvaluateClientTimeout
 	return &Client{socket: socket, http: &http.Client{Transport: transport, Timeout: timeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }

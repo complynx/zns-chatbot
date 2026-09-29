@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
@@ -32,7 +33,7 @@ func TestOrderExportUsesCurrentPrincipal(t *testing.T) {
 				assert.NoError(t, err)
 			}))
 			t.Cleanup(server.Close)
-			client := APIClient{Base: server.URL, Signer: signer}
+			client := appclient.Client{Base: server.URL, SandboxToken: signer.Token}
 			if delegated {
 				client.Exchange = &authExchange{}
 				client.Links = authLinks{user: identity.User{Owner: "alice", Subject: "z-alice"}}

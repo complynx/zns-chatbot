@@ -89,8 +89,8 @@ func TestMemoryDocumentsTrustedSourcesAndDeletion(t *testing.T) {
 	t.Parallel()
 	s := knowledgeFixture(t)
 	history := conversation.Service{DB: s.DB}
-	require.NoError(t, history.Append(t.Context(), "alice", "tg-user-5", "user", "Remember the blue train"))
-	require.NoError(t, history.Append(t.Context(), "bob", "tg-user-6", "user", "Bob private history"))
+	require.NoError(t, history.AppendOriginal(t.Context(), "alice", "tg-user-5", "user", "Remember the blue train"))
+	require.NoError(t, history.AppendOriginal(t.Context(), "bob", "tg-user-6", "user", "Bob private history"))
 	command := knowledge.Command{
 		Name:    knowledge.DocumentSet,
 		Key:     "source-doc",
@@ -141,7 +141,7 @@ func TestMemorySharedSourceTransferPreservesConversationPrivacy(t *testing.T) {
 	history := conversation.Service{DB: s.DB}
 	require.NoError(
 		t,
-		history.Append(t.Context(), "alice", "tg-user-7", "user", "Public suggestion from my private chat"),
+		history.AppendOriginal(t.Context(), "alice", "tg-user-7", "user", "Public suggestion from my private chat"),
 	)
 	result, err := s.Execute(
 		t.Context(),
@@ -162,6 +162,7 @@ func TestMemorySharedSourceTransferPreservesConversationPrivacy(t *testing.T) {
 		knowledge.Assessment{Key: "filter-source", ProposalID: result.Proposal.ID, Version: 1, Worthwhile: true},
 	)
 	require.NoError(t, err)
+	assessed = submitKnowledgeProposal(t, s, "alice", *assessed.Proposal)
 	_, err = s.Execute(
 		t.Context(),
 		"kbadmin",

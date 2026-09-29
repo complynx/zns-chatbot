@@ -50,7 +50,7 @@ func TestOnlyExplicitUserExchangeInactivityIsTerminal(t *testing.T) {
 			if test.denied {
 				require.ErrorIs(t, err, identity.ErrZitadelUserInactive)
 			} else {
-				require.ErrorIs(t, err, identity.ErrZitadelIdentity)
+				require.ErrorIs(t, err, identity.ErrZitadelUnavailable)
 				require.NotErrorIs(t, err, identity.ErrZitadelUserInactive)
 			}
 		})

@@ -17,6 +17,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
 // Faults stop the caller at external boundaries without modifying product code.
@@ -27,7 +28,8 @@ type orderRestartTransport struct {
 }
 
 func (f *orderRestartTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	if r.Method != http.MethodPost || r.URL.Path != "/v1/order-actions" {
+	if r.Method != http.MethodPost ||
+		(r.URL.Path != "/v1/order-actions" && r.URL.Path != "/internal/derived/order-actions" && r.URL.Path != "/internal/derived/order-actions/receipt") {
 		if f.armed && f.window == "delivery" {
 			return nil, errors.New("order test delivery interrupted")
 		}
@@ -41,7 +43,14 @@ func (f *orderRestartTransport) RoundTrip(r *http.Request) (*http.Response, erro
 		return nil, err
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body))
-	f.commands = append(f.commands, body)
+	command, err := restartOrderCommand(r.URL.Path, body)
+	if err != nil {
+		return nil, err
+	}
+	if r.URL.Path == "/internal/derived/order-actions/receipt" {
+		return f.receipt(r, command)
+	}
+	f.commands = append(f.commands, command)
 	if f.armed && f.window == "saved" {
 		return nil, errors.New("order test stopped after plan save")
 	}
@@ -80,7 +89,8 @@ func savedOrderPlan(t *testing.T, f *fixture) string {
 	var plan string
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), `SELECT plan::text FROM bot.replies WHERE update_id=88001`).Scan(&plan),
+		f.db.QueryRow(t.Context(), `SELECT payload::text FROM interaction.saved_turns WHERE owner='alice' AND update_id=88001`).
+			Scan(&plan),
 	)
 	return plan
 }
@@ -91,7 +101,7 @@ func restartOrderBot(f *fixture) *recordingModel {
 	model := &recordingModel{
 		plan: agent.Plan{View: agent.OrdersView, OrderAction: &agent.OrderProposal{Name: "create"}},
 	}
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, TG: f.b.TG, Model: model}
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: model}
 	return model
 }
 
@@ -114,6 +124,7 @@ func TestOrderInteractionRestartsAtDurableBoundaries(t *testing.T) {
 			f, original := boundOrderFixture(t)
 			wire := &orderRestartTransport{window: window, armed: window != "delivery"}
 			f.b.API.HTTP = &http.Client{Transport: wire}
+			f.b.Host.HTTP = f.b.API.HTTP
 			delivery := &orderRestartTransport{window: "delivery", armed: window == "delivery"}
 			f.b.TG.HTTP = &http.Client{Transport: delivery}
 			update := message(88001, 101, "add preparty to order "+original.ID)
@@ -180,6 +191,7 @@ func TestOrderSavedPlanRechecksResumeFences(t *testing.T) {
 			f, original := boundOrderFixture(t)
 			wire := &orderRestartTransport{window: "saved", armed: true}
 			f.b.API.HTTP = &http.Client{Transport: wire}
+			f.b.Host.HTTP = f.b.API.HTTP
 			update := message(88001, 101, "add preparty to order "+original.ID)
 			require.Error(t, f.b.Handle(t.Context(), update))
 			before := savedOrderPlan(t, f)
@@ -220,7 +232,7 @@ func TestOrderSavedPlanRechecksResumeFences(t *testing.T) {
 				var terminal bool
 				require.NoError(
 					t,
-					f.db.QueryRow(t.Context(), `SELECT (plan->>'history_redacted')::boolean FROM bot.replies WHERE update_id=88001`).
+					f.db.QueryRow(t.Context(), `SELECT (kind='terminal' AND state='privacy_terminal' AND reason='history_deleted') FROM interaction.saved_turns WHERE owner='alice' AND update_id=88001`).
 						Scan(&terminal),
 				)
 				assert.True(t, terminal)
@@ -256,4 +268,58 @@ func TestOrderSavedPlanRechecksResumeFences(t *testing.T) {
 			assert.False(t, hasExtra)
 		})
 	}
+}
+
+func restartOrderCommand(path string, body []byte) ([]byte, error) {
+	command := body
+	if path == "/internal/derived/order-actions" || path == "/internal/derived/order-actions/receipt" {
+		var envelope struct {
+			Command json.RawMessage       `json:"command"`
+			Source  readsource.Derivation `json:"source"`
+		}
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&envelope); err != nil {
+			return nil, err
+		}
+		if !envelope.Source.Valid() || len(envelope.Command) == 0 || bytes.Equal(envelope.Command, []byte("null")) {
+			return nil, errors.New("invalid derived order test envelope")
+		}
+		var extra any
+		if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+			return nil, errors.New("trailing derived order test envelope")
+		}
+		command = envelope.Command
+	}
+	return command, nil
+}
+
+// Absent probes do not attempt a mutation. A found receipt or current denial is
+// the authoritative retry outcome and must carry the exact original command.
+func (f *orderRestartTransport) receipt(r *http.Request, command []byte) (*http.Response, error) {
+	response, err := http.DefaultTransport.RoundTrip(r)
+	if err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		_ = response.Body.Close()
+		return nil, err
+	}
+	if err = response.Body.Close(); err != nil {
+		return nil, err
+	}
+	response.Body = io.NopCloser(bytes.NewReader(body))
+	var result struct {
+		Found bool `json:"found"`
+	}
+	if response.StatusCode == http.StatusOK {
+		if err = json.Unmarshal(body, &result); err != nil {
+			return nil, err
+		}
+	}
+	if result.Found || response.StatusCode == http.StatusForbidden {
+		f.commands = append(f.commands, command)
+	}
+	return response, nil
 }

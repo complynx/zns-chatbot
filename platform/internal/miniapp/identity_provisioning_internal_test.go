@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/sandbox"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -31,12 +31,19 @@ func TestMiniAppOnboardsOnlyVerifiedTelegramInput(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			calls := 0
-			g := Gateway{Token: "synthetic-bot", API: bot.APIClient{Links: unknownLinks{}, Exchange: unusedExchange{}},
+			g := Gateway{
+				Token: "synthetic-bot",
+				API: appclient.Client{
+					Links:        unknownLinks{},
+					Exchange:     unusedExchange{},
+					SandboxToken: (identity.Signer{}).Token,
+				},
 				Onboarding: func(_ context.Context, u telegram.User) error {
 					calls++
 					require.Equal(t, int64(95100), u.ID)
 					return nil
-				}}
+				},
+			}
 			u := telegram.User{ID: 95100, FirstName: "Synthetic"}
 			if kind == "bot" {
 				u.IsBot = true

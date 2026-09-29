@@ -8,6 +8,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
 // Only the last displayed owner-bound choices supply command coordinates.
@@ -69,9 +70,10 @@ func (b *Bot) chooseAgentFoodReceipt(
 	in incoming,
 	id string,
 	target agent.FoodReceiptTarget,
+	source readsource.Derivation,
 ) error {
 	return b.selectFoodReceipt(ctx, in, foodButtonCommand{MediaID: id, Command: legacyfood.Command{
 		EventID: target.EventID, OrderID: target.OrderID, Version: target.Version,
 		Kind: target.Kind, Generation: target.Generation, Name: foodSubmitProof, Key: id,
-	}}, originAgent)
+	}}, originAgent, &source)
 }

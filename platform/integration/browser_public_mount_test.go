@@ -24,8 +24,8 @@ func TestBrowserPublicMountConsent(t *testing.T) {
 			server := httptest.NewUnstartedServer(nil)
 			origin := "http://" + server.Listener.Addr().String()
 			publicURL := origin + prefix + "/miniapp/"
-			service, err := browserauth.New(f.db, f.b.API.Signer, f.b.TG, publicURL,
-				f.b.API.BrowserAuthRecipient, f.b.API.AuthenticateTelegram)
+			service, err := browserauth.New(f.db, f.b.Host.Signer, f.b.TG, publicURL,
+				f.b.Host.BrowserAuthRecipient, f.b.API.AuthenticateTelegram)
 			require.NoError(t, err)
 			f.b.BrowserAuth = service
 			server.Config.Handler = http.StripPrefix(prefix, (miniapp.Gateway{

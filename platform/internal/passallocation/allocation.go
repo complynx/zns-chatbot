@@ -23,7 +23,10 @@ const concurrentLimit = 10
 const rolesPerPair = 2
 
 // Counts contains assigned plus paid participants included in balance calculations.
-type Counts struct{ Leader, Follower int }
+type Counts struct {
+	Leader   int `json:"Leader"`
+	Follower int `json:"Follower"`
+}
 
 func (c Counts) Balanced() bool {
 	total := c.Leader + c.Follower
@@ -69,11 +72,11 @@ func HasConcurrencyCapacity(assigned, increment int, disabled bool) bool {
 }
 
 type Tier struct {
-	Amount        int
-	Price         int
-	Start         time.Time
-	Promo         bool
-	BlockedByDate bool
+	Amount        int       `json:"Amount"`
+	Price         int       `json:"Price"`
+	Start         time.Time `json:"Start"`
+	Promo         bool      `json:"Promo"`
+	BlockedByDate bool      `json:"BlockedByDate"`
 }
 
 // Usage includes all assigned/paid participants, including those without tier markers.

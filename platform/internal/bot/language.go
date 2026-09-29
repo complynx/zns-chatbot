@@ -5,7 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
+	"github.com/complynx/zns-chatbot/platform/internal/account"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -35,7 +37,7 @@ func (b *Bot) handleLanguage(ctx context.Context, in incoming, update telegram.U
 				in.owner,
 				selected,
 				false,
-				core.LanguageOperationKey("tg-language-"+strconv.FormatInt(update.ID, 10)),
+				account.LanguageOperationKey("tg-language-"+strconv.FormatInt(update.ID, 10)),
 			)
 			if err != nil {
 				return err
@@ -68,6 +70,7 @@ func (b *Bot) handleLanguage(ctx context.Context, in incoming, update telegram.U
 			[]telegram.Button{{Text: string(locale), Data: languageCallbackPrefix + string(locale)}},
 		)
 	}
+	ctx = withBotCard(ctx, botdelivery.Reference{Family: languageKey, CardKey: languageKey, Notice: noticeID})
 	if err = b.deliverOrderCard(ctx, in.owner, languageKey, payload); err != nil {
 		return err
 	}

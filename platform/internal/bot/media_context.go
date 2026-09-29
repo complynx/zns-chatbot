@@ -4,13 +4,16 @@ import (
 	"context"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 )
 
-func cacheMediaSelection(cached *cachedPlan, in incoming, input, requestInput agent.Input) {
+func cacheMediaSelection(cached *interaction.SavedPlan, in incoming, input, requestInput agent.Input) {
 	if input.MediaContext == nil {
 		return
 	}
@@ -70,7 +73,7 @@ func receiptFollowupEvidence(in incoming, input agent.Input, target string) (str
 		input.AV.Transcript.Status != "ok" || strings.TrimSpace(input.AV.Transcript.Text) == "" {
 		return "", false
 	}
-	return currentRequestEvidence(input), true
+	return agenthost.CurrentRequestEvidence(input), true
 }
 
 // Interpret replies against the last delivered card, never a freshly reordered list.

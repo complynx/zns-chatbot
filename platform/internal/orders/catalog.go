@@ -13,6 +13,8 @@ import (
 // Money is stored as integer cents but encoded as decimal currency for the web UI.
 type Money int64
 
+const extraTotalKey = "total"
+
 const maxDishCount = 10000
 const maxServiceCount = 1000000
 const centsPerUnit = 100
@@ -182,7 +184,7 @@ func Canonicalize(in ChoiceInput, c Catalog, extras map[string]Extra) (Choice, e
 	if err != nil {
 		return Choice{}, err
 	}
-	out.Total += out.Extras["total"]
+	out.Total += out.Extras[extraTotalKey]
 	if out.Total > maxMoney {
 		return Choice{}, fmt.Errorf("total too large")
 	}
@@ -306,9 +308,9 @@ func pricedLine(name string, count int64, price Money) (Line, error) {
 }
 
 func canonicalExtras(in map[string]json.RawMessage, definitions map[string]Extra) (map[string]Money, error) {
-	out := map[string]Money{"total": 0}
+	out := map[string]Money{extraTotalKey: 0}
 	for key := range in {
-		if key == "total" {
+		if key == extraTotalKey {
 			continue
 		}
 		extra, exists := definitions[key]
@@ -316,8 +318,8 @@ func canonicalExtras(in map[string]json.RawMessage, definitions map[string]Extra
 			return nil, fmt.Errorf("invalid extra %s", key)
 		}
 		out[key] = extra.Price
-		out["total"] += extra.Price
-		if out["total"] > maxMoney {
+		out[extraTotalKey] += extra.Price
+		if out[extraTotalKey] > maxMoney {
 			return nil, fmt.Errorf("total too large")
 		}
 	}

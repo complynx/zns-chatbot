@@ -12,8 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/modelsettings"
@@ -34,10 +36,11 @@ const (
 )
 
 type Input struct {
-	HistoryGeneration int64         `json:"-"`
-	ModernOrder       *orders.Order `json:"-"`
-	ModernOrderCursor string        `json:"-"`
-	ModernOrderReview bool          `json:"-"`
+	ReadAuthorities   []readsource.Authority `json:"-"`
+	HistoryGeneration int64                  `json:"-"`
+	ModernOrder       *orders.Order          `json:"-"`
+	ModernOrderCursor string                 `json:"-"`
+	ModernOrderReview bool                   `json:"-"`
 	// FoodView is current host-read evidence for script commands, never provider input.
 	FoodReviewCursor string                `json:"-"`
 	FoodReview       *legacyfood.View      `json:"-"`
@@ -67,8 +70,8 @@ type Input struct {
 	OrderCount         int                                 `json:"order_count"`
 	EditableOrderCount int                                 `json:"editable_order_count"`
 	OrderHistory       []orders.Change                     `json:"order_history,omitempty"`
-	Workflow           core.Workflow                       `json:"workflow"`
-	Catalog            []core.Slot                         `json:"catalog"`
+	Workflow           workflow.Workflow                   `json:"workflow"`
+	Catalog            []workflow.Slot                     `json:"catalog"`
 	History            []Event                             `json:"history"`
 	View               string                              `json:"view,omitempty"`
 	Orders             []OrderSummary                      `json:"orders,omitempty"`
@@ -289,46 +292,44 @@ func (s *ScriptedServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(
 		"GET /healthz",
-		func(w http.ResponseWriter, _ *http.Request) { api.JSON(w, http.StatusOK, map[string]bool{"ok": true}) },
+		func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, map[string]bool{"ok": true}) },
 	)
 	mux.HandleFunc("POST /mode", func(w http.ResponseWriter, r *http.Request) {
-		var b struct {
-			Mode string `json:"mode"`
-		}
-		if api.Decode(w, r, &b) != nil {
-			api.JSON(w, http.StatusBadRequest, nil)
+		mode, err := decodeScriptedMode(w, r)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, nil)
 			return
 		}
-		if b.Mode != "normal" && b.Mode != "fail" && b.Mode != "forbidden" {
-			api.JSON(w, http.StatusBadRequest, nil)
+		if mode != "normal" && mode != "fail" && mode != "forbidden" {
+			writeJSON(w, http.StatusBadRequest, nil)
 			return
 		}
 		s.mu.Lock()
-		s.mode = b.Mode
+		s.mode = mode
 		s.mu.Unlock()
-		api.JSON(w, http.StatusOK, b)
+		writeJSON(w, http.StatusOK, map[string]string{"mode": mode})
 	})
 	mux.HandleFunc("POST /plan", func(w http.ResponseWriter, r *http.Request) {
 		var in Input
 		if decodeInput(w, r, &in) != nil {
-			api.JSON(w, http.StatusBadRequest, nil)
+			writeJSON(w, http.StatusBadRequest, nil)
 			return
 		}
 		s.mu.Lock()
 		mode := s.mode
 		s.mu.Unlock()
 		if mode == "fail" {
-			api.JSON(w, http.StatusServiceUnavailable, nil)
+			writeJSON(w, http.StatusServiceUnavailable, nil)
 			return
 		}
 		p := Plan{View: workflowView}
 		if mode == "forbidden" {
 			p.Action = &Proposal{Name: "confirm"}
-			api.JSON(w, http.StatusOK, p)
+			writeJSON(w, http.StatusOK, p)
 			return
 		}
 		p = scriptedPlan(in)
-		api.JSON(w, http.StatusOK, p)
+		writeJSON(w, http.StatusOK, p)
 	})
 	return mux
 }

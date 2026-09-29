@@ -97,3 +97,5 @@ func TestASRRequestHeaderSurvivesInvalidResponse(t *testing.T) {
 		})
 	}
 }
+
+func (*asrAccounting) NotSent(context.Context, string) error { return nil }

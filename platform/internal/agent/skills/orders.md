@@ -49,6 +49,7 @@ in a later turn, replay the completed final page so this request has a fresh
 completed observation. An unrelated message is not permission to finish a mutation.
 
 <!-- capability:book -->
+
 Large choices stay in the host. Use orders.choice begin with an order_id after a
 complete orders.inspect to copy its full choice; patch only the requested fields.
 For create use begin with empty=true. For an explicit full replacement, use both
@@ -86,6 +87,7 @@ orders.proof displays its receipt in this chat. Delivery status uncertain means
 the file might have been sent: do not automatically send it again.
 
 <!-- capability:order_export -->
+
 Current administrators can discover orders.inbox and orders.review.read.
 The same bounded continuation and resume rules apply to orders.review.read.
 Complete the selected review read before orders.review.proof or an explicit

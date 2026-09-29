@@ -10,11 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/browserauth"
 	"github.com/complynx/zns-chatbot/platform/internal/miniapp"
 )
@@ -43,10 +42,10 @@ func TestBrowserAuthUIStand(t *testing.T) {
 	publicURL := "http://" + server.Listener.Addr().String() + prefix + "/miniapp/"
 	service, err := browserauth.New(
 		f.db,
-		f.b.API.Signer,
+		f.b.Host.Signer,
 		f.b.TG,
 		publicURL,
-		f.b.API.BrowserAuthRecipient,
+		f.b.Host.BrowserAuthRecipient,
 		f.b.API.AuthenticateTelegram,
 	)
 	require.NoError(t, err)
@@ -77,10 +76,11 @@ func TestBrowserAuthUIStand(t *testing.T) {
 
 func seedBrowserFood(t *testing.T, f *fixture) {
 	t.Helper()
-	server := httptest.NewServer(api.Handler(runtimeapp.NewServices(f.db, runtimeapp.Options{LegacyOrderBotID: 77}),
-		f.b.API.Signer, slog.New(slog.DiscardHandler)))
+	server := httptest.NewServer(api.Handler(appservices.NewServices(f.db, appservices.Options{LegacyOrderBotID: 77}),
+		f.b.Host.Signer, slog.New(slog.DiscardHandler)))
 	t.Cleanup(server.Close)
 	f.b.API.Base = server.URL
+	f.b.Host.Base = f.b.API.Base
 	_, err := f.db.Exec(t.Context(), `INSERT INTO core.pass_events(id,finishes_at) VALUES('food-browser','2035-01-01Z');
  INSERT INTO core.food_events(event_id,bot_id,menu,menu_sha256,meal_prices,activity_prices,deadline,cacao_capacity,first_before,last_before,notify_after)
  VALUES('food-browser',77,'{"friday":{"dinner":[{"title_ru":"Рыба","title_en":"Fish","price":185,"photo":"fish"}]}}',repeat('a',64),

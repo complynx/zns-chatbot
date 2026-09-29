@@ -56,6 +56,7 @@ type Recorder interface {
 	RequestTier() string
 	Reserve(context.Context, Attempt) error
 	Dispatch(context.Context, string) error
+	NotSent(context.Context, string) error
 	Settle(context.Context, string, Settlement) error
 }
 

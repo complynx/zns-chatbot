@@ -17,7 +17,7 @@ func TestKnowledgeClassifierIsStrictAndToolless(t *testing.T) {
 		KnowledgeAssessmentInput{Text: "Venue opens at noon", Topic: "travel", FactKey: "time"},
 		func(_ context.Context, p providerPrompt) (string, error) {
 			assert.Equal(t, knowledgeAssessmentName, p.name)
-			assert.Contains(t, p.instructions, "ONLY queues human review")
+			assert.Contains(t, p.instructions, "ONLY prepares a private draft for the author to submit manually")
 			assert.NotContains(t, p.schema, "knowledge_action")
 			return `{"worthwhile":true,"reason":"Concrete event information"}`, nil
 		},

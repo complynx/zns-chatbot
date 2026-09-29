@@ -8,11 +8,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
 	"github.com/stretchr/testify/assert"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 func TestOpenAIResponsesContract(t *testing.T) {
@@ -132,8 +133,8 @@ func TestOpenAIResponsesContract(t *testing.T) {
 				agent.Input{
 					Business: &agent.BusinessCapabilities{CanBook: true},
 					Text:     "finish",
-					Workflow: core.Workflow{State: "draft"},
-					Catalog:  []core.Slot{{ID: "massage-1"}},
+					Workflow: workflow.Workflow{State: "draft"},
+					Catalog:  []workflow.Slot{{ID: "massage-1"}},
 					History:  []agent.Event{{Kind: "input", Content: json.RawMessage(`"manual selection"`)}},
 				},
 			)

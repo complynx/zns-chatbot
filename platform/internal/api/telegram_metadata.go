@@ -4,17 +4,17 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/account"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
-func telegramMetadataRoutes(mux *http.ServeMux, service core.Service, signer identity.Signer, logger *slog.Logger) {
+func telegramMetadataRoutes(mux *http.ServeMux, service account.Service, signer identity.Signer, logger *slog.Logger) {
 	mux.HandleFunc("POST /internal/telegram/metadata", func(w http.ResponseWriter, r *http.Request) {
 		actor, ok := memoryHostActor(w, r, signer)
 		if !ok {
 			return
 		}
-		var input core.TelegramMetadataUpdate
+		var input account.TelegramMetadataUpdate
 		if Decode(w, r, &input) != nil {
 			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
 			return

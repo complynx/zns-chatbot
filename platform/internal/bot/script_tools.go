@@ -5,23 +5,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"slices"
-	"time"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-	"github.com/complynx/zns-chatbot/platform/internal/core"
-	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
-	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
-	"github.com/complynx/zns-chatbot/platform/internal/observability"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
-const maxScriptCalls = 8
-const scriptDiscoveryList = "$list"
-const scriptToolsTimeout = 7 * time.Second
 const scriptInterrupted = "interrupted"
 const scriptWorkflowView = "workflow"
 const scriptWorkflowGet = "workflow.get"
@@ -30,31 +26,6 @@ const scriptOrdersList = "orders.list"
 const scriptOrdersGet = "orders.get"
 const scriptWorkflowSelect = "workflow.select"
 const scriptOrdersChange = "orders.change"
-
-// Commands are bound by the host before admission, never reconstructed from a
-// worker result. An interrupted admission is evidence of an uncertain outcome.
-type scriptToolRecord struct {
-	ChoiceGeneration *int64                  `json:"choice_generation,omitempty"`
-	ChoiceCatalog    string                  `json:"choice_catalog,omitempty"`
-	ModernChoice     *modernChoiceRecord     `json:"modern_choice,omitempty"`
-	ChoiceUse        string                  `json:"choice_use,omitempty"`
-	ModernOrder      *modernOrderRequest     `json:"modern_order,omitempty"`
-	CreditPolicy     *creditToolCommand      `json:"credit_policy,omitempty"`
-	Pass             *scriptPassRequest      `json:"pass,omitempty"`
-	BroadcastReview  *broadcastReviewRequest `json:"broadcast_review,omitempty"`
-	FoodExport       *foodExportRequest      `json:"food_export,omitempty"`
-	FoodSequence     int                     `json:"food_sequence,omitempty"`
-	Food             *legacyfood.Command     `json:"food,omitempty"`
-	Model            *scriptModelRequest     `json:"model,omitempty"`
-	Massage          *scriptMassageRequest   `json:"massage,omitempty"`
-	Broadcast        *broadcastToolRequest   `json:"broadcast,omitempty"`
-	Memory           *knowledge.Command      `json:"memory,omitempty"`
-	Order            *orders.Command         `json:"order,omitempty"`
-	Action           *core.Action            `json:"action,omitempty"`
-	Outcome          agent.ScriptToolResult  `json:"outcome"`
-	Profile          *scriptProfileMutation  `json:"profile,omitempty"`
-	Language         *scriptLanguageMutation `json:"language,omitempty"`
-}
 
 func scriptTools(canBook bool) []scriptclient.Tool {
 	empty := json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
@@ -96,50 +67,6 @@ func scriptTools(canBook bool) []scriptclient.Tool {
 	return tools
 }
 
-func (b *Bot) evaluateScriptTools(
-	ctx context.Context,
-	owner string,
-	updateID int64,
-	index int,
-	p agent.ScriptProposal,
-	input *agent.Input,
-) (agent.ScriptRun, error) {
-	executor, ok := b.Scripts.(scriptExecutor)
-	if !ok {
-		return b.evaluateScript(ctx, p)
-	}
-	run := agent.ScriptRun{Code: p.Code}
-	// Authenticate before exposing even the ordinary-user tool catalog.
-	tools, err := b.availableScriptTools(ctx, owner)
-	if err != nil {
-		return run, err
-	}
-	callCtx, cancel := context.WithTimeout(ctx, scriptToolsTimeout)
-	defer cancel()
-	scope := scriptRunScope(tools)
-	result, err := executor.Execute(
-		callCtx,
-		scriptclient.Request{Code: p.Code, Input: json.RawMessage(p.InputJSON)},
-		scriptBindings(tools),
-		func(ctx context.Context, call scriptclient.ToolCall) (json.RawMessage, error) {
-			ctx = context.WithValue(ctx, scriptRunScopeKey{}, scope)
-			return b.callScriptTool(ctx, owner, updateID, index, call, input)
-		},
-	)
-	if ctx.Err() != nil {
-		return run, ctx.Err()
-	}
-	if err != nil || callCtx.Err() != nil {
-		run.Error = scriptFailure(callCtx, err)
-		return run, nil
-	}
-	if run.Error = scriptResultError(result); run.Error != "" {
-		return run, nil
-	}
-	run.Result = result
-	return run, nil
-}
-
 func decodeScriptArguments(raw json.RawMessage, target any) error {
 	if len(raw) == 0 || len(raw) > agent.MaxScriptInputBytes || raw[0] != '{' {
 		return errors.New("invalid tool arguments")
@@ -161,8 +88,8 @@ func (b *Bot) prepareWorkflowOrderTool(
 	_ int64,
 	call scriptclient.ToolCall,
 	input agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	switch call.Name {
 	case scriptWorkflowGet, scriptWorkflowCatalog, scriptOrdersList:
 		return record, decodeScriptArguments(call.Arguments, &struct{}{})
@@ -189,10 +116,10 @@ func (b *Bot) prepareWorkflowOrderTool(
 		if err := agent.Validate(plan); err != nil {
 			return record, err
 		}
-		if !slices.ContainsFunc(input.Catalog, func(slot core.Slot) bool { return slot.ID == args.SlotID }) {
+		if !slices.ContainsFunc(input.Catalog, func(slot workflow.Slot) bool { return slot.ID == args.SlotID }) {
 			return record, errors.New("unknown resource")
 		}
-		record.Action = &core.Action{
+		record.Action = &workflow.Action{
 			Name:    "select",
 			SlotID:  args.SlotID,
 			Version: input.Workflow.Version,
@@ -210,7 +137,13 @@ func (b *Bot) prepareWorkflowOrderTool(
 		if err := agent.Validate(agent.Plan{View: agent.OrdersView, OrderAction: &proposal}); err != nil {
 			return record, err
 		}
-		command, err := b.proposedOrderCommand(ctx, owner, &proposal, input)
+		command, err := (interaction.OrderCoordinator{Client: b.API, EventID: b.currentOrderEvent()}).Bind(
+			ctx,
+			owner,
+			&proposal,
+			input,
+			agenthost.CurrentRequestEvidence(input),
+		)
 		record.Order = command
 		return record, err
 	default:
@@ -218,167 +151,25 @@ func (b *Bot) prepareWorkflowOrderTool(
 	}
 }
 
-func (b *Bot) callScriptTool(
-	ctx context.Context,
-	owner string,
-	updateID int64,
-	index int,
-	call scriptclient.ToolCall,
-	input *agent.Input,
-) (json.RawMessage, error) {
-	if call.Name == scriptProfileSet {
-		if err := b.markPrivateProfileScript(ctx, owner, updateID, index); err != nil {
-			return nil, err
-		}
-	}
-	operation := call.Name
-	if call.Name == scriptDiscoveryList || call.Name == "$help" {
-		operation = "discovery"
-	}
-	ctx, diagnostic := observability.StartAgentEvent(ctx,
-		observability.AgentEvent{Phase: "tool", Operation: operation, InputBytes: len(call.Arguments)})
-	output, err := b.callScriptToolObserved(ctx, owner, updateID, index, call, input, diagnostic)
-	clearUncommittedModernOrderRead(input, call.Name, err == nil)
-	count, empty := scriptToolResultMetadata(call.Name, output)
-	diagnostic.Result(len(output), count, empty && err == nil)
-	diagnostic.Finish(err)
-	return output, err
-}
-
-func (b *Bot) callScriptToolObserved(ctx context.Context, owner string, updateID int64, index int,
-	call scriptclient.ToolCall, input *agent.Input, diagnostic *observability.AgentSpan) (json.RawMessage, error) {
-	if call.Name == scriptDiscoveryList || call.Name == "$help" {
-		return b.discoverScriptTools(ctx, owner, call)
-	}
-
-	entries, err := b.authorizedScriptRegistry(ctx, owner)
-	if err != nil {
-		return nil, errors.New("tool unavailable")
-	}
-	position := slices.IndexFunc(
-		entries,
-		func(entry scriptToolEntry) bool { return entry.descriptor.Name == call.Name },
-	)
-	if position < 0 {
-		diagnostic.Outcome("denied", "unavailable")
-		return nil, errors.New("tool unavailable")
-	}
-	entry := entries[position]
-	record, err := entry.prepare(ctx, owner, updateID, call, *input)
-	if err != nil {
-		// Preparation also reads fresh domain state; an error is not proof of bad model input.
-		diagnostic.Outcome("error", "unavailable")
-		return nil, errors.New("tool unavailable or invalid arguments")
-	}
-	sequence, err := b.reserveScriptTool(ctx, owner, updateID, index, &record)
-	if err != nil {
-		return nil, err
-	}
-	result, err := entry.execute(ctx, owner, call, record, input)
-	outcomeError := ""
-	if errors.Is(err, errScriptReadStale) {
-		result = json.RawMessage(`{"error":"stale","restart":true}`)
-		err = nil
-		outcomeError = "stale"
-		diagnostic.Outcome("error", "conflict")
-	}
-	if errors.Is(err, errScriptReadLimit) {
-		result = json.RawMessage(`{"error":"result_limit"}`)
-		err = nil
-		outcomeError = "result_limit"
-		diagnostic.Outcome("limited", "result_limit")
-	}
-	if err != nil {
-		var problem *core.ProblemError
-		if errors.As(err, &problem) && problem.Status < 500 {
-			diagnostic.Outcome("denied", "unavailable")
-			record.Outcome.Error = "denied"
-			if saveErr := b.finishScriptTool(ctx, owner, updateID, index, sequence, record); saveErr != nil {
-				return nil, saveErr
-			}
-		}
-		return nil, errors.New("tool execution failed; inspect host call outcomes")
-	}
-	body, err := json.Marshal(result)
-	limit := entry.resultLimit
-	if err != nil || len(body) > limit {
-		diagnostic.Outcome("limited", "result_limit")
-		return nil, errors.New("tool result exceeds limit; inspect current state")
-	}
-	record.Outcome.Result = body
-	record.Outcome.Error = outcomeError
-	if err = b.finishScriptTool(ctx, owner, updateID, index, sequence, record); err != nil {
-		return nil, err
-	}
-	return body, nil
-}
-
-func (b *Bot) discoverScriptTools(
-	ctx context.Context,
-	owner string,
-	call scriptclient.ToolCall,
-) (json.RawMessage, error) {
-	tools, err := b.availableScriptTools(ctx, owner)
-	if err != nil {
-		return nil, errors.New("tool unavailable")
-	}
-	if call.Name == scriptDiscoveryList {
-		if err = decodeScriptArguments(call.Arguments, &struct{}{}); err != nil {
-			return nil, err
-		}
-		type summary struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-		}
-		list := make([]summary, 0)
-		for _, tool := range tools {
-			list = append(list, summary{Name: tool.Name, Description: tool.Description})
-		}
-		return json.Marshal(list)
-	}
-	var args struct {
-		Name string `json:"name"`
-	}
-	if err = decodeScriptArguments(call.Arguments, &args); err != nil {
-		return nil, err
-	}
-	for _, tool := range tools {
-		if tool.Name == args.Name {
-			return json.Marshal(tool)
-		}
-	}
-	return nil, errors.New("tool unavailable")
-}
-
 func (b *Bot) executeWorkflowOrderTool(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	input *agent.Input,
 ) (any, error) {
 	if record.Action != nil {
-		result, err := b.API.Execute(ctx, owner, *record.Action)
+		if record.Source == nil || !record.Source.Valid() {
+			return nil, errors.New("missing admitted source")
+		}
+		result, err := b.Host.ExecuteDerivedWorkflow(ctx, owner, *record.Action, *record.Source)
 		if err == nil {
 			input.Workflow = result
 		}
 		return result, err
 	}
 	if record.Order != nil {
-		result, err := b.API.ExecuteOrder(ctx, owner, *record.Order)
-		if err != nil {
-			return nil, err
-		}
-		summary := scriptOrderSummary(result)
-		position := slices.IndexFunc(input.Orders, func(item agent.OrderSummary) bool { return item.ID == result.ID })
-		if position >= 0 {
-			input.Orders[position] = summary
-		} else {
-			input.Orders = append(input.Orders, summary)
-			input.OrderCount++
-			input.EditableOrderCount++
-		}
-		return summary, nil
+		return b.executeScriptOrder(ctx, owner, record, input)
 	}
 	switch call.Name {
 	case scriptWorkflowGet:
@@ -427,7 +218,11 @@ func (b *Bot) readScriptOrders(ctx context.Context, owner, selected string, inpu
 		}
 		result = append(result, scriptOrderSummary(order))
 	}
-	input.Orders = orderSummaries(list, currentRequestEvidence(*input)+" "+selected, input.EditableOrderCount)
+	input.Orders = interaction.OrderSummaries(
+		list,
+		agenthost.CurrentRequestEvidence(*input)+" "+selected,
+		input.EditableOrderCount,
+	)
 	if selected != "" {
 		for _, summary := range result {
 			if summary.ID == selected {
@@ -447,6 +242,29 @@ func scriptOrderSummary(order orders.Order) agent.OrderSummary {
 	}
 }
 
-func scriptToolKey(updateID int64, index, sequence int) string {
-	return fmt.Sprintf("tg-script-%d-%d-%d", updateID, index, sequence)
+// Definitive stale admission is a tool outcome, not a worker outage. The run
+// remains redacted and the next model input is rebuilt from current sources.
+func (b *Bot) executeScriptOrder(
+	ctx context.Context,
+	owner string,
+	record agenthost.ScriptToolRecord,
+	input *agent.Input,
+) (any, error) {
+	if record.Source == nil || !record.Source.Valid() {
+		return nil, errors.New("missing admitted source")
+	}
+	result, err := b.Host.ExecuteDerivedOrder(ctx, owner, *record.Order, *record.Source)
+	if err != nil {
+		return nil, err
+	}
+	summary := scriptOrderSummary(result)
+	position := slices.IndexFunc(input.Orders, func(item agent.OrderSummary) bool { return item.ID == result.ID })
+	if position >= 0 {
+		input.Orders[position] = summary
+	} else {
+		input.Orders = append(input.Orders, summary)
+		input.OrderCount++
+		input.EditableOrderCount++
+	}
+	return summary, nil
 }

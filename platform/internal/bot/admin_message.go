@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
@@ -22,6 +24,7 @@ func isAdminMessageUpdate(in incoming, u telegram.Update) bool {
 }
 
 func (b *Bot) handleAdminMessage(ctx context.Context, in incoming, u telegram.Update) error {
+	ctx = withAdminMessageSource(ctx, in, u)
 	prefs, err := b.API.Preferences(ctx, in.owner)
 	if err != nil {
 		return err
@@ -39,12 +42,17 @@ func (b *Bot) handleAdminMessage(ctx context.Context, in incoming, u telegram.Up
 		}
 	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < 500 {
-		return b.sendAdminMessageView(
+		return b.queueBotResult(
 			ctx,
+			in.owner,
 			in.chat,
-			messages.text(i18n.AdminMessageFailed, map[string]string{orderCodeParameter: problem.Code}),
-			0,
-			messages,
+			u.ID,
+			"admin_failure",
+			botdelivery.Reference{Family: botFamilyStatic},
+			botdelivery.StoredResult{
+				Notice: i18n.AdminMessageFailed,
+				Values: map[string]string{orderCodeParameter: problem.Code},
+			}, 0,
 		)
 	}
 	return err
@@ -54,11 +62,11 @@ func (b *Bot) authorizeAdminMessage(ctx context.Context, owner string) error {
 	var access struct {
 		Allowed bool `json:"allowed"`
 	}
-	if err := b.API.call(ctx, owner, http.MethodPost, "/v1/admin-messages/capabilities", nil, &access); err != nil {
+	if err := b.API.Call(ctx, owner, http.MethodPost, "/v1/admin-messages/capabilities", nil, &access); err != nil {
 		return err
 	}
 	if !access.Allowed {
-		return &core.ProblemError{Status: http.StatusForbidden, Code: "forbidden"}
+		return &core.ProblemError{Status: http.StatusForbidden, Code: mediaForbidden}
 	}
 	return nil
 }
@@ -84,7 +92,7 @@ func (b *Bot) handleAdminMessageCommand(
 		return b.beginAdminMessageInput(ctx, in, raw, fmt.Sprintf("tg-admin-%d", u.ID), messages)
 	}
 	var preview adminmessage.Message
-	err = b.API.call(
+	err = b.API.Call(
 		ctx,
 		in.owner,
 		http.MethodPost,
@@ -137,11 +145,11 @@ func (b *Bot) adminMessageCallback(ctx context.Context, in incoming, messages *o
 	}
 	path := "/v1/admin-messages/" + parts[2] + "/" + parts[1]
 	switch parts[1] {
-	case "send", mediaCancel:
+	case botPhaseSend, mediaCancel:
 		var result struct {
 			OK bool `json:"ok"`
 		}
-		err = b.API.call(ctx, in.owner, http.MethodPost, path, nil, &result)
+		err = b.API.Call(ctx, in.owner, http.MethodPost, path, nil, &result)
 		notice := i18n.AdminMessageQueued
 		if parts[1] == mediaCancel {
 			notice = i18n.AdminMessageCancelled
@@ -151,7 +159,7 @@ func (b *Bot) adminMessageCallback(ctx context.Context, in incoming, messages *o
 		var result struct {
 			OK bool `json:"ok"`
 		}
-		err = b.API.call(
+		err = b.API.Call(
 			ctx,
 			in.owner,
 			http.MethodPost,
@@ -176,18 +184,31 @@ func (b *Bot) sendAdminMessageView(
 ) error {
 	const chunkRunes = 1800
 	runes := []rune(text)
+	index := 0
+	ref := botdelivery.Reference{Family: botFamilyAdminView}
+	if id > 0 {
+		ref.Family = botFamilyAdminPage
+		ref.Version = id
+	}
 	for len(runes) > chunkRunes {
-		if _, err := b.TG.Send(ctx, telegram.Send{ChatID: chat, Text: string(runes[:chunkRunes])}); err != nil {
+		if err := b.queueBotUpdateResult(
+			ctx,
+			chat,
+			fmt.Sprintf("admin_view:%d:%d", id, index),
+			ref,
+			botdelivery.StoredResult{Payload: telegram.Send{ChatID: chat, Text: string(runes[:chunkRunes])}},
+		); err != nil {
 			return err
 		}
 		runes = runes[chunkRunes:]
+		index++
 	}
 	payload := telegram.Send{ChatID: chat, Text: string(runes)}
 	if id > 0 {
 		for _, action := range []struct {
 			name  string
 			label i18n.ID
-		}{{"send", i18n.AdminMessageSend}, {"results", i18n.AdminMessageResults}, {mediaCancel, i18n.AdminMessageCancel}} {
+		}{{botPhaseSend, i18n.AdminMessageSend}, {"results", i18n.AdminMessageResults}, {mediaCancel, i18n.AdminMessageCancel}} {
 			payload.Markup.Rows = append(
 				payload.Markup.Rows,
 				[]telegram.Button{
@@ -202,6 +223,11 @@ func (b *Bot) sendAdminMessageView(
 	if messages.err != nil {
 		return messages.err
 	}
-	_, err := b.TG.Send(ctx, payload)
-	return err
+	return b.queueBotUpdateResult(
+		ctx,
+		chat,
+		fmt.Sprintf("admin_view:%d:%d", id, index),
+		ref,
+		botdelivery.StoredResult{Payload: payload},
+	)
 }

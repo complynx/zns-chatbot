@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
@@ -28,14 +30,10 @@ type creditToolArguments struct {
 	Amount  string `json:"amount,omitempty"`
 	Version int64  `json:"version,omitempty"`
 }
-type creditToolCommand struct {
-	Payer  string               `json:"payer"`
-	Change credits.PolicyChange `json:"change"`
-}
 
-func (b *Bot) scriptCreditEntries(ctx context.Context, owner string) ([]scriptToolEntry, error) {
+func (b *Bot) scriptCreditEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
 	var permissions map[string]bool
-	if err := b.API.call(ctx, owner, http.MethodGet, "/v1/credits/permissions", nil, &permissions); err != nil {
+	if err := b.API.Call(ctx, owner, http.MethodGet, "/v1/credits/permissions", nil, &permissions); err != nil {
 		return nil, err
 	}
 	empty := json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
@@ -85,15 +83,15 @@ func (b *Bot) scriptCreditEntries(ctx context.Context, owner string) ([]scriptTo
 			},
 		)
 	}
-	entries := make([]scriptToolEntry, 0, len(descriptors))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
 	for _, descriptor := range descriptors {
 		entries = append(
 			entries,
-			scriptToolEntry{
-				descriptor:  descriptor,
-				prepare:     prepareCreditTool,
-				execute:     b.executeCreditTool,
-				resultLimit: maxScriptReadBytes,
+			agenthost.ScriptToolEntry{
+				Descriptor:  descriptor,
+				Prepare:     prepareCreditTool,
+				Execute:     b.executeCreditTool,
+				ResultLimit: maxScriptReadBytes,
 			},
 		)
 	}
@@ -106,8 +104,8 @@ func prepareCreditTool(
 	updateID int64,
 	call scriptclient.ToolCall,
 	_ agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	var args creditToolArguments
 	if err := decodeScriptArguments(call.Arguments, &args); err != nil {
 		return record, err
@@ -122,7 +120,7 @@ func prepareCreditTool(
 		}
 		digest := sha256.Sum256(call.Arguments)
 		change.OperationKey = fmt.Sprintf("script-credit-%d-%x", updateID, digest[:16])
-		record.CreditPolicy = &creditToolCommand{Payer: args.Payer, Change: change}
+		record.CreditPolicy = &agenthost.CreditToolCommand{Payer: args.Payer, Change: change}
 	}
 	return record, nil
 }
@@ -131,7 +129,7 @@ func (b *Bot) executeCreditTool(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	_ *agent.Input,
 ) (any, error) {
 	var args creditToolArguments
@@ -144,7 +142,7 @@ func (b *Bot) executeCreditTool(
 		return b.executeCreditPolicy(ctx, owner, record)
 	case scriptCreditDefault:
 		var policy credits.Policy
-		err := b.API.call(ctx, owner, http.MethodGet, endpoint+"/default", nil, &policy)
+		err := b.API.Call(ctx, owner, http.MethodGet, endpoint+"/default", nil, &policy)
 		return creditToolPolicy(policy), err
 	case scriptCreditAdminUsage, scriptCreditAdminHistory:
 		if args.Payer == "" {
@@ -154,7 +152,7 @@ func (b *Bot) executeCreditTool(
 	}
 	if call.Name == scriptCreditHistory || call.Name == scriptCreditAdminHistory {
 		var page core.ReadPage[credits.AttemptReport]
-		err := b.API.call(
+		err := b.API.Call(
 			ctx,
 			owner,
 			http.MethodGet,
@@ -165,20 +163,18 @@ func (b *Bot) executeCreditTool(
 		return creditToolHistory(page), err
 	}
 	var report credits.UsageReport
-	err := b.API.call(ctx, owner, http.MethodGet, endpoint+"/usage", nil, &report)
+	err := b.API.Call(ctx, owner, http.MethodGet, endpoint+"/usage", nil, &report)
 	return creditToolUsage(report), err
 }
 
-func (b *Bot) executeCreditPolicy(ctx context.Context, owner string, record scriptToolRecord) (any, error) {
+func (b *Bot) executeCreditPolicy(ctx context.Context, owner string, record agenthost.ScriptToolRecord) (any, error) {
 	if record.CreditPolicy == nil {
 		return nil, errors.New("credit policy unavailable")
 	}
-	command := record.CreditPolicy
-	endpoint := "/v1/credits/users/" + url.PathEscape(command.Payer) + "/policy"
-	if command.Payer == "*" {
-		endpoint = "/v1/credits/default"
+	if record.Source == nil || !record.Source.Valid() {
+		return nil, errors.New("missing admitted source")
 	}
-	var policy credits.Policy
-	err := b.API.call(ctx, owner, http.MethodPost, endpoint, command.Change, &policy)
+	command := record.CreditPolicy
+	policy, err := b.Host.SetDerivedCreditPolicy(ctx, owner, command.Payer, command.Change, *record.Source)
 	return creditToolPolicy(policy), err
 }

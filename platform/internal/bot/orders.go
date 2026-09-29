@@ -18,7 +18,9 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -86,28 +88,48 @@ func (b *Bot) handleOrderCallback(ctx context.Context, in incoming, update int64
 }
 
 func (b *Bot) executeOrder(ctx context.Context, owner string, update int64, command orders.Command) (string, error) {
+	return b.executeOrderWithSource(ctx, owner, update, command, nil)
+}
+
+func (b *Bot) executeOrderWithSource(ctx context.Context, owner string, update int64,
+	command orders.Command, source *readsource.Derivation) (string, error) {
 	if err := b.rememberOrderLocale(ctx, owner, update); err != nil {
 		return "", err
 	}
-	updated, err := b.API.ExecuteOrder(ctx, owner, command)
+	coordinator := interaction.OrderCoordinator{
+		Client:  b.API,
+		Host:    b.Host,
+		Store:   interaction.Store{DB: b.DB},
+		EventID: b.currentOrderEvent(),
+	}
+	var outcome interaction.OrderOutcome
+	var err error
+	if source == nil {
+		outcome, err = coordinator.Execute(ctx, owner, update, command)
+	} else {
+		outcome, err = coordinator.ExecuteDerived(ctx, owner, update, command, *source)
+	}
 	if err != nil {
-		if problem, ok := errors.AsType[*core.ProblemError](
-			err,
-		); ok &&
-			problem.Status < http.StatusInternalServerError {
-			if recordErr := b.record(ctx, owner, update, "order_error", problem); recordErr != nil {
-				return "", recordErr
-			}
-			return b.orderMessage(ctx, owner, i18n.OrderRejected, map[string]string{orderCodeParameter: problem.Code})
-		}
 		return "", err
 	}
-	if err = b.focusOrderPage(ctx, owner, updated, update); err != nil {
+	return b.orderOutcome(ctx, owner, update, outcome)
+}
+
+func (b *Bot) orderOutcome(ctx context.Context, owner string, update int64,
+	outcome interaction.OrderOutcome) (string, error) {
+	if outcome.Refusal != nil {
+		return b.orderMessage(
+			ctx,
+			owner,
+			i18n.OrderRejected,
+			map[string]string{orderCodeParameter: outcome.Refusal.Code},
+		)
+	}
+	if err := b.focusOrderPage(ctx, owner, outcome.Order, update); err != nil {
 		return "", err
 	}
 	return b.orderMessage(ctx, owner, i18n.OrderUpdated, nil)
 }
-
 func (b *Bot) orderButton(ctx context.Context, owner, label string, command orders.Command) (telegram.Button, error) {
 	if command.EventID == "" {
 		command.EventID = b.currentOrderEvent()
@@ -150,7 +172,7 @@ func (b *Bot) RenderOrders(ctx context.Context, owner string, chat int64) error 
 	if err = b.renderOrderMenu(ctx, owner, chat, canExport, preference.Language); err != nil {
 		return err
 	}
-	active := map[string]bool{"menu": true, languageKey: true, "profile": true}
+	active := map[string]bool{"menu": true, languageKey: true, profileCardKey: true}
 	available := map[string]bool{}
 	list, err = b.pagedOrders(ctx, owner, chat, ownOrdersScope, preference.Language, list, active, available)
 	if err != nil {
@@ -186,7 +208,7 @@ func (b *Bot) renderOrderMenu(ctx context.Context, owner string, chat int64, can
 		return err
 	}
 	if err == nil {
-		visible, visibleErr := b.historyReplyVisible(ctx, owner, updateID)
+		visible, visibleErr := b.derivedReplyVisible(ctx, owner, updateID)
 		if visibleErr != nil {
 			return visibleErr
 		}
@@ -483,8 +505,8 @@ func orderActions(
 	keys, _ := orderExtraControlKeys(order.Choice, event)
 	for _, key := range keys {
 		command := base
-		command.Name = "edit"
-		choice := choiceInput(order.Choice)
+		command.Name = modernOrderEdit
+		choice := order.Choice.Input()
 		label := messages.text(i18n.OrderAddExtra, map[string]string{orderExtraParameter: messages.extra(key)})
 		if _, selected := choice.Extras[key]; selected {
 			delete(choice.Extras, key)
@@ -538,32 +560,4 @@ func orderProofActions(
 		return result
 	}
 	return append(result, orderAction{messages.text(i18n.OrderCancelProof, nil), base})
-}
-
-func choiceInput(choice orders.Choice) orders.ChoiceInput {
-	in := orders.ChoiceInput{
-		Customer:   choice.Customer,
-		FirstName:  choice.FirstName,
-		LastName:   choice.LastName,
-		Patronymic: choice.Patronymic,
-		Days:       map[string]orders.DayInput{},
-		Extras:     map[string]json.RawMessage{},
-	}
-	for key := range choice.Extras {
-		if key != orderTotalKey {
-			in.Extras[key] = json.RawMessage(`0`)
-		}
-	}
-	for dayKey, day := range choice.Days {
-		input := orders.DayInput{Mealtimes: map[string]orders.MealInput{}}
-		for mealKey, meal := range day.Mealtimes {
-			items := []orders.Item{}
-			for _, item := range meal.Dishes {
-				items = append(items, orders.Item{Name: item.Name, Count: item.Count})
-			}
-			input.Mealtimes[mealKey] = orders.MealInput{Dishes: items}
-		}
-		in.Days[dayKey] = input
-	}
-	return in
 }

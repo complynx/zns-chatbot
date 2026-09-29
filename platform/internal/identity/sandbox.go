@@ -45,6 +45,9 @@ func (s Signer) tokenUntil(subject, audience string, expires time.Time) string {
 	m.Write([]byte(body))
 	return body + "." + base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
+
+var ErrSandboxIdentity = errors.New("invalid sandbox identity")
+
 func (s Signer) Verify(token string) (string, error) {
 	return s.verify(token, "zns-core")
 }
@@ -61,7 +64,7 @@ func (s Signer) VerifyDelivery(token string) error {
 }
 
 func (s Signer) verify(token, audience string) (string, error) {
-	bad := errors.New("invalid sandbox identity")
+	bad := ErrSandboxIdentity
 	if len(s.Key) < MinKeyBytes {
 		return "", bad
 	}

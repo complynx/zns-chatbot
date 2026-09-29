@@ -26,10 +26,10 @@ func browserFixture(t *testing.T) (*fixture, *browserauth.Service) {
 	require.NoError(t, err)
 	s, err := browserauth.New(
 		f.db,
-		f.b.API.Signer,
+		f.b.Host.Signer,
 		f.b.TG,
 		browserOrigin,
-		f.b.API.BrowserAuthRecipient,
+		f.b.Host.BrowserAuthRecipient,
 		f.b.API.AuthenticateTelegram,
 	)
 	require.NoError(t, err)
@@ -104,10 +104,10 @@ func TestBrowserConsentBindingRestartAndRevocation(t *testing.T) {
 	authCallback(t, f, second, "approve", 10002)
 	restarted, err := browserauth.New(
 		f.db,
-		f.b.API.Signer,
+		f.b.Host.Signer,
 		f.b.TG,
 		browserOrigin,
-		f.b.API.BrowserAuthRecipient,
+		f.b.Host.BrowserAuthRecipient,
 		f.b.API.AuthenticateTelegram,
 	)
 	require.NoError(t, err)
@@ -137,10 +137,10 @@ func TestBrowserConsentBindingRestartAndRevocation(t *testing.T) {
 	f.b.API.Links, f.b.API.Exchange = links, runtimeProvider{}
 	linked, err := browserauth.New(
 		f.db,
-		f.b.API.Signer,
+		f.b.Host.Signer,
 		f.b.TG,
 		browserOrigin,
-		f.b.API.BrowserAuthRecipient,
+		f.b.Host.BrowserAuthRecipient,
 		f.b.API.AuthenticateTelegram,
 	)
 	require.NoError(t, err)

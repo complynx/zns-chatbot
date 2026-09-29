@@ -3,50 +3,37 @@ package bot
 import (
 	"context"
 	"errors"
-	"strconv"
+
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
-	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
 const registrationReply = "registration_reply"
 
-func (b *Bot) executeRegistrationCommand(
-	ctx context.Context,
-	in incoming,
-	id int64,
-	command passbooking.Command,
-) (string, error) {
-	command.Key = "tg-registration-" + strconv.FormatInt(id, 10)
-	_, executionErr := b.API.ExecutePassBooking(ctx, in.owner, command)
-	return b.registrationExecutionNotice(ctx, in, id, command.Name, command.Event, executionErr)
+func (b *Bot) registrationExecutionWriter(id int64) interaction.RegistrationExecutionWriter {
+	return func(ctx context.Context, owner string, record interaction.RegistrationExecutionRecord) error {
+		return b.record(ctx, owner, id, "registration_action", record)
+	}
 }
 
 func (b *Bot) registrationExecutionNotice(
 	ctx context.Context,
 	in incoming,
-	id int64,
-	name, event string,
 	executionErr error,
 ) (string, error) {
-	if executionErr != nil && passMenuFailure(executionErr) != nil {
+	if errors.Is(executionErr, interaction.ErrRegistrationExecutionRecord) ||
+		(executionErr != nil && passMenuFailure(executionErr) != nil) {
 		return "", executionErr
 	}
 	notice := i18n.RegistrationSaved
 	if executionErr != nil {
 		notice = i18n.RegistrationStale
-	}
-	if err := b.record(
-		ctx,
-		in.owner,
-		id,
-		"registration_action",
-		map[string]string{actionField: name, knowledgeEventQuery: event},
-	); err != nil {
-		return "", err
 	}
 	prefs, err := b.API.Preferences(ctx, in.owner)
 	if err != nil {
@@ -61,18 +48,14 @@ func (b *Bot) finishRegistrationReply(
 	ctx context.Context,
 	in incoming,
 	id int64,
-	cached cachedPlan,
-	notice string,
+	cached interaction.SavedPlan,
+	notice interaction.Reply,
 ) error {
-	state := cached.RegistrationMenu
-	if state == nil {
-		current, _, err := b.passMenuState(ctx, in.owner)
-		if err != nil {
-			return err
-		}
-		state = &current
+	menu, menuErr := b.registrationReplyMenu(ctx, in.owner, id, cached, notice)
+	if menuErr != nil {
+		return menuErr
 	}
-	if err := b.storePassMenu(ctx, in.owner, in.chat, id, *state); err != nil {
+	if err := b.storePassMenuWithSource(ctx, in.owner, in.chat, id, menu.RegistrationMenu, menu.Source); err != nil {
 		return err
 	}
 	if err := b.recordReply(
@@ -80,8 +63,9 @@ func (b *Bot) finishRegistrationReply(
 		in.owner,
 		id,
 		registrationReply,
-		notice,
-		cached.RegistrationCommand == nil && cached.RegistrationAssignment == nil,
+		notice.Text,
+		notice.Origin == interaction.DerivedReply,
+		notice.Origin,
 	); err != nil {
 		return err
 	}
@@ -89,6 +73,61 @@ func (b *Bot) finishRegistrationReply(
 		return err
 	}
 	return b.RenderPassMenu(ctx, in.owner, in.chat, "")
+}
+
+func (b *Bot) registrationReplyMenu(
+	ctx context.Context, owner string, id int64, cached interaction.SavedPlan, notice interaction.Reply,
+) (botdelivery.PassMenu, error) {
+	committedMenu, committed, err := b.committedRegistrationMenu(ctx, owner, id, cached, notice)
+	if err != nil {
+		return botdelivery.PassMenu{}, err
+	}
+	if committed {
+		var menu botdelivery.PassMenu
+		menu.RegistrationMenu = committedMenu
+		return menu, nil
+	}
+	var menu botdelivery.PassMenu
+	if cached.RegistrationMenu != nil {
+		menu.RegistrationMenu = *cached.RegistrationMenu
+	} else {
+		menu, _, err = b.passMenuRecord(ctx, owner)
+		if err != nil {
+			return botdelivery.PassMenu{}, err
+		}
+	}
+	if notice.Origin == interaction.DerivedReply || cached.RegistrationMenu != nil {
+		source, sourceErr := registrationMenuSource(owner, cached, menu.Source)
+		if sourceErr != nil {
+			return botdelivery.PassMenu{}, sourceErr
+		}
+		menu.Source = &source
+	}
+	return menu, nil
+}
+
+func registrationMenuSource(
+	owner string,
+	cached interaction.SavedPlan,
+	copied *readsource.Derivation,
+) (readsource.Derivation, error) {
+	value, err := savedPlanSource(cached)
+	if err != nil {
+		return value, err
+	}
+	if copied == nil {
+		return value, nil
+	}
+	original, err := readsource.Capture(owner, *copied)
+	if err != nil {
+		return value, err
+	}
+	value.Authorities, err = readsource.Merge(value.Authorities, original)
+	if err != nil {
+		return value, err
+	}
+	value.PrivateHistory = value.PrivateHistory || copied.PrivateHistory
+	return value, nil
 }
 
 func (b *Bot) registrationReplyPayload(
@@ -107,7 +146,7 @@ func (b *Bot) registrationReplyPayload(
 	if err != nil {
 		return payload, err
 	}
-	visible, err := b.historyReplyVisible(ctx, owner, revision)
+	visible, err := b.derivedReplyVisible(ctx, owner, revision)
 	if err != nil || !visible {
 		return payload, err
 	}

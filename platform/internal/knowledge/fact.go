@@ -24,5 +24,10 @@ func (s Service) Fact(ctx context.Context, actor, event, topic, key string) (Fac
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, nil
 	}
+	if err != nil {
+		return result, err
+	}
+	entry, err := s.authorizeMemoryEntry(ctx, actor, factMemoryEntry(result))
+	result.ReadAuthorities = entry.ReadAuthorities
 	return result, err
 }

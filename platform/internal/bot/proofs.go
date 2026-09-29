@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
@@ -52,16 +54,25 @@ func (b *Bot) proofFailure(ctx context.Context, owner string, err error) (string
 }
 
 func (b *Bot) showOrderProof(ctx context.Context, in incoming, command orders.Command) (string, error) {
-	proof, err := b.API.DownloadOrderProof(ctx, in.owner, command.EventID, command.OrderID)
+	observed, err := b.queueBotDocument(
+		ctx,
+		in.owner,
+		in.chat,
+		botdelivery.Reference{
+			Family:       botFamilyOrderProof,
+			Event:        command.EventID,
+			Object:       command.OrderID,
+			Version:      command.Version,
+			ProofAttempt: command.Attempt,
+			Notice:       i18n.OrderProofShown,
+			Continuation: botdelivery.Continuation{Kind: botDocumentKind},
+		},
+	)
 	if err != nil {
 		return b.proofFailure(ctx, in.owner, err)
 	}
-	if proof.Version != command.Version || proof.Attempt != command.Attempt {
-		return b.orderMessage(ctx, in.owner, i18n.OrderProofStale, nil)
+	if documentDelivered(observed) {
+		return b.orderMessage(ctx, in.owner, i18n.OrderProofShown, nil)
 	}
-	_, err = b.TG.SendDocument(ctx, in.chat, proof.Filename, proof.Body)
-	if err != nil {
-		return b.proofFailure(ctx, in.owner, err)
-	}
-	return b.orderMessage(ctx, in.owner, i18n.OrderProofShown, nil)
+	return "", nil
 }

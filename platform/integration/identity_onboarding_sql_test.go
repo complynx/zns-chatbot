@@ -30,7 +30,7 @@ func TestOnboardingSQLFailureKeepsInboxAndRetriesReservedIdentity(t *testing.T) 
 	require.NoError(t, err)
 	var failureStatus atomic.Int64
 	f.b.Onboarding = func(ctx context.Context, user telegram.User) error {
-		requestErr := f.b.API.ProvisionTelegram(ctx, 77, user)
+		requestErr := f.b.Host.ProvisionTelegram(ctx, 77, user)
 		if problem, ok := errors.AsType[*core.ProblemError](requestErr); ok {
 			failureStatus.Store(int64(problem.Status))
 		}

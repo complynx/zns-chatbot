@@ -25,7 +25,7 @@ func TestAVModelDeadlinePreservesEvidenceForRetry(t *testing.T) {
 	require.NoError(t, f.db.QueryRow(t.Context(),
 		`SELECT private_result IS NOT NULL FROM bot.av_results WHERE intake_id='tg-media-100'`).Scan(&retained))
 	require.NoError(t, f.db.QueryRow(t.Context(),
-		`SELECT EXISTS(SELECT 1 FROM bot.replies WHERE update_id=100)`).Scan(&replied))
+		`SELECT EXISTS(SELECT 1 FROM interaction.saved_turns WHERE owner='alice' AND update_id=100)`).Scan(&replied))
 	assert.True(t, retained)
 	assert.False(t, replied)
 	f.b.Model = avModel(func(_ context.Context, input agent.Input) (agent.Plan, error) {

@@ -13,6 +13,9 @@ func (c Client) VerifyBot(ctx context.Context, expectedID int64) error {
 	}
 	var user User
 	if err := c.Call(ctx, "getMe", struct{}{}, &user); err != nil {
+		if deferred, ok := errors.AsType[*ControlError](err); ok {
+			return deferred
+		}
 		return errors.New("telegram bot identity unavailable")
 	}
 	if !user.IsBot || user.ID != expectedID {

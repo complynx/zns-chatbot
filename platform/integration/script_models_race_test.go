@@ -17,7 +17,9 @@ type modelInterleavingTransport struct {
 }
 
 func (transport *modelInterleavingTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.Method == http.MethodPost && request.URL.Path == "/v1/model-settings" && !transport.done {
+	if request.Method == http.MethodPost &&
+		(request.URL.Path == "/v1/model-settings" || request.URL.Path == "/internal/derived/model-settings/alice") &&
+		!transport.done {
 		transport.done = true
 		transport.before()
 	}
@@ -60,6 +62,7 @@ func TestScriptModelPostBindingAuthorityAndVersion(t *testing.T) {
 				require.NoError(t, err)
 			}}
 			f.b.API.HTTP = &http.Client{Transport: transport}
+			f.b.Host.HTTP = f.b.API.HTTP
 			f.b.Scripts = scopeVM{}
 			model := &knowledgeModel{plans: []agent.Plan{
 				{View: "workflow", ScriptAction: &agent.ScriptProposal{

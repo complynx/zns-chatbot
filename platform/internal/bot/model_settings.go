@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/modelsettings"
@@ -16,6 +18,9 @@ import (
 )
 
 const (
+	modelUserCommand         = "/model_user"
+	modelDefaultCommand      = "/model_default"
+	modelAccessCommand       = "/model_access"
 	modelSettingsCommandName = "/model"
 	modelTargetArguments     = 2
 	modelCallbackArguments   = 4
@@ -28,7 +33,7 @@ func isModelSettingsUpdate(in incoming, _ telegram.Update) bool {
 		return false
 	}
 	switch p[0] {
-	case modelSettingsCommandName, "/model_user", "/model_default", "/model_access":
+	case modelSettingsCommandName, modelUserCommand, modelDefaultCommand, modelAccessCommand:
 		return true
 	}
 	return strings.HasPrefix(in.text, "model:")
@@ -54,13 +59,35 @@ func (b *Bot) handleModelSettings(ctx context.Context, in incoming, u telegram.U
 	if m.err != nil {
 		return m.err
 	}
-	if _, err = b.TG.Send(ctx, payload); err != nil {
+	capability := modelsettings.Own
+	parts := strings.Fields(in.text)
+	if len(parts) > 0 {
+		switch parts[0] {
+		case modelUserCommand:
+			capability = modelsettings.Others
+		case modelDefaultCommand:
+			capability = modelsettings.Global
+		case modelAccessCommand:
+			capability = modelsettings.GrantPermission
+		}
+	}
+	ref := botdelivery.Reference{Family: botFamilyModelSettings, Object: capability}
+	result := botdelivery.StoredResult{Payload: payload}
+	if payload.Text == m.text(i18n.ModelSettingsDenied, nil) || payload.Text == m.text(i18n.ModelSettingsFailed, nil) {
+		ref.Family = botFamilyStatic
+		if payload.Text == m.text(i18n.ModelSettingsDenied, nil) {
+			result.Notice = i18n.ModelSettingsDenied
+		} else {
+			result.Notice = i18n.ModelSettingsFailed
+		}
+	}
+	if err = b.queueBotResult(ctx, in.owner, in.chat, u.ID, botFamilyModelSettings, ref, result, 0); err != nil {
 		return err
 	}
 	if u.Callback != nil {
 		b.acknowledge(ctx, u.Callback.ID)
 	}
-	return b.record(ctx, in.owner, u.ID, "model_settings", map[string]string{"text": payload.Text})
+	return b.record(ctx, in.owner, u.ID, botFamilyModelSettings, map[string]string{"text": payload.Text})
 }
 
 func (b *Bot) modelSettingsCommand(
@@ -71,7 +98,7 @@ func (b *Bot) modelSettingsCommand(
 ) (telegram.Send, error) {
 	out := telegram.Send{ChatID: in.chat}
 	var permissions map[string]bool
-	if err := b.API.call(
+	if err := b.API.Call(
 		ctx,
 		in.owner,
 		http.MethodGet,
@@ -84,14 +111,14 @@ func (b *Bot) modelSettingsCommand(
 	p := strings.Fields(in.text)
 	capability := modelsettings.Own
 	endpoint := "/v1/model-settings"
-	if p[0] == "/model_access" {
+	if p[0] == modelAccessCommand {
 		return b.modelSettingsGrant(ctx, in, p, m, permissions)
 	}
-	if p[0] == "/model_default" {
+	if p[0] == modelDefaultCommand {
 		capability = modelsettings.Global
 		endpoint += "/default"
 	}
-	if p[0] == "/model_user" {
+	if p[0] == modelUserCommand {
 		capability = modelsettings.Others
 		if len(p) < modelTargetArguments {
 			if !permissions[capability] {
@@ -110,7 +137,7 @@ func (b *Bot) modelSettingsCommand(
 		return out, modelSettingsForbidden()
 	}
 	var state modelsettings.State
-	if err := b.API.call(ctx, in.owner, http.MethodGet, endpoint, nil, &state); err != nil {
+	if err := b.API.Call(ctx, in.owner, http.MethodGet, endpoint, nil, &state); err != nil {
 		return out, err
 	}
 	if err := b.applyModelSettings(ctx, in, u, endpoint, p, &state); err != nil {
@@ -119,9 +146,9 @@ func (b *Bot) modelSettingsCommand(
 	out.Text = m.text(
 		i18n.ModelSettingsTitle,
 		map[string]string{
-			"model":    state.Effective.Model,
-			"effort":   state.Effective.Effort,
-			"revision": strconv.FormatInt(state.Version, 10),
+			"model":           state.Effective.Model,
+			"effort":          state.Effective.Effort,
+			revisionParameter: strconv.FormatInt(state.Version, 10),
 		},
 	)
 	if capability == modelsettings.Own {
@@ -150,7 +177,7 @@ func (b *Bot) modelSettingsCommand(
 	return out, nil
 }
 func modelSettingsForbidden() error {
-	return &core.ProblemError{Status: http.StatusForbidden, Code: "forbidden"}
+	return &core.ProblemError{Status: http.StatusForbidden, Code: mediaForbidden}
 }
 func modelSettingsInvalid() error {
 	return &core.ProblemError{Status: http.StatusBadRequest, Code: "invalid_model_settings"}
@@ -186,7 +213,7 @@ func (b *Bot) modelSettingsGrant(
 		return out, nil
 	}
 	var result map[string]bool
-	err := b.API.call(
+	err := b.API.Call(
 		ctx,
 		in.owner,
 		http.MethodPost,
@@ -217,7 +244,7 @@ func (b *Bot) applyModelSettings(
 	if err != nil {
 		return err
 	}
-	return b.API.call(ctx, in.owner, http.MethodPost, endpoint, change, state)
+	return b.API.Call(ctx, in.owner, http.MethodPost, endpoint, change, state)
 }
 func parseModelSettingsChange(parts []string, callback bool, version, id int64) (modelsettings.Change, error) {
 	change := modelsettings.Change{Version: version, OperationKey: "tg-model-" + strconv.FormatInt(id, 10)}
@@ -248,7 +275,7 @@ func parseModelSettingsChange(parts []string, callback bool, version, id int64) 
 
 func (b *Bot) addModelSettingsMenu(ctx context.Context, owner, language string, payload *telegram.Send) error {
 	var permissions map[string]bool
-	if err := b.API.call(ctx, owner, http.MethodGet, "/v1/model-settings/permissions", nil, &permissions); err != nil {
+	if err := b.API.Call(ctx, owner, http.MethodGet, "/v1/model-settings/permissions", nil, &permissions); err != nil {
 		// An optional menu must not prevent a safe reply during an ACL outage.
 		// Show no settings controls unless the permission check succeeds.
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

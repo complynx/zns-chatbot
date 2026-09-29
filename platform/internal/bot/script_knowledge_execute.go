@@ -6,6 +6,10 @@ import (
 	"errors"
 	"strconv"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
@@ -15,11 +19,11 @@ func (b *Bot) executeKnowledgeTool(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	record scriptToolRecord,
+	record agenthost.ScriptToolRecord,
 	input *agent.Input,
 ) (any, error) {
 	if record.Memory != nil {
-		return b.executeKnowledgeToolCommand(ctx, owner, *record.Memory)
+		return b.executeKnowledgeToolCommand(ctx, owner, *record.Memory, record.Source)
 	}
 	p, rawCursor, err := knowledgeToolProposal(call)
 	if err != nil {
@@ -32,14 +36,14 @@ func (b *Bot) executeKnowledgeTool(
 	case scriptKnowledgeScopes:
 		return b.readKnowledgeToolScopes(ctx, owner, rawCursor)
 	case scriptKnowledgeMemos:
-		return b.readKnowledgeToolMemos(ctx, owner, input.Knowledge)
+		return b.knowledgeReader().Memos(ctx, owner, input.Knowledge)
 	}
 	scope, _ := json.Marshal(p)
 	cursor, err := readScriptCursor(rawCursor, owner, call.Name, string(scope))
 	if err != nil {
 		return nil, err
 	}
-	state, err := b.API.memoryDeletions(ctx, owner)
+	state, err := b.API.MemoryDeletions(ctx, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +126,12 @@ func (b *Bot) readKnowledgeToolProposals(
 	return page, page.Items, err
 }
 
-func (b *Bot) executeKnowledgeToolCommand(ctx context.Context, owner string, command knowledge.Command) (any, error) {
+func (b *Bot) executeKnowledgeToolCommand(
+	ctx context.Context,
+	owner string,
+	command knowledge.Command,
+	derivation *readsource.Derivation,
+) (any, error) {
 	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
 	if !ok || source.owner != owner {
 		return nil, errors.New("tool unavailable")
@@ -130,32 +139,27 @@ func (b *Bot) executeKnowledgeToolCommand(ctx context.Context, owner string, com
 	if command.Name == knowledgeReviewCard {
 		return b.showKnowledgeToolReview(ctx, owner, command, source.in.chat)
 	}
-	result, err := b.API.ExecuteKnowledge(ctx, owner, command)
+	outcome, err := b.knowledgeCoordinator().ExecuteScript(ctx, owner, source.update.ID, command, derivation)
 	if err != nil {
 		return nil, err
 	}
-	if result.Proposal != nil && command.Name == knowledge.Suggest {
-		if err = b.assessKnowledgeProposalReceipt(
-			ctx,
-			owner,
-			source.update.ID,
-			*result.Proposal,
-			"knowledge_assessment:"+strconv.FormatInt(result.Proposal.ID, 10),
-		); err != nil {
+	if outcome.Refusal != nil {
+		return nil, outcome.Refusal
+	}
+	if command.Name != knowledge.MemoSet && command.Name != knowledge.MemoDelete {
+		if err = b.refreshScriptKnowledge(ctx, owner, command); err != nil {
 			return nil, err
 		}
 	}
-	if err = b.saveKnowledgeView(
-		ctx,
-		owner,
-		knowledgeView{Event: command.Event, Mode: knowledgeCommandMode(command.Name)},
-	); err != nil {
-		return nil, err
+	return knowledgeScriptResult(outcome), nil
+}
+
+// knowledgeScriptResult retains host evidence until the script encoder captures it.
+func knowledgeScriptResult(outcome interaction.KnowledgeOutcome) any {
+	if outcome.Assessment.Status == interaction.KnowledgeAssessmentDeferred {
+		return agenthost.ScriptKnowledgeAssessmentResult{Result: outcome.Result, Assessment: outcome.Assessment}
 	}
-	if err = b.RenderKnowledge(ctx, owner, source.in.chat); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return outcome.Result
 }
 
 func (b *Bot) showKnowledgeToolReview(
@@ -164,26 +168,14 @@ func (b *Bot) showKnowledgeToolReview(
 	command knowledge.Command,
 	chat int64,
 ) (any, error) {
-	// The fresh authorized queue read checks event rights even after preparation.
-	queue, err := b.API.KnowledgeProposals(
-		ctx,
-		owner,
-		knowledge.ProposalQuery{Event: command.Event, ReviewQueue: true, After: command.ProposalID + 1},
-	)
+	target, err := b.knowledgeCoordinator().ReviewTarget(ctx, owner, command)
 	if err != nil {
 		return nil, err
-	}
-	found := false
-	for _, proposal := range queue {
-		found = found || proposal.ID == command.ProposalID
-	}
-	if !found {
-		return nil, errors.New("proposal changed; refresh review queue")
 	}
 	if err = b.saveKnowledgeView(
 		ctx,
 		owner,
-		knowledgeView{Event: command.Event, Mode: knowledgeReviewMode, After: command.ProposalID + 1},
+		knowledgeView{Event: command.Event, Mode: knowledgeReviewMode, After: target.ProposalID + 1},
 	); err != nil {
 		return nil, err
 	}
@@ -198,35 +190,9 @@ func (b *Bot) readKnowledgeToolScopes(ctx context.Context, owner, rawCursor stri
 	if err != nil {
 		return nil, err
 	}
-	remote, err := b.API.knowledgeScopePage(ctx, owner, cursor.Position)
+	remote, err := b.API.KnowledgeScopePage(ctx, owner, cursor.Position)
 	if err != nil {
 		return nil, err
 	}
 	return scriptDomainItems(remote.Items, cursor, remote.NextCursor)
-}
-
-// List reads carry the same deletion generation as exact memo reads. Keeping a
-// second unversioned copy in KnowledgeContext.Memos would bypass sanitization.
-func (b *Bot) readKnowledgeToolMemos(
-	ctx context.Context,
-	owner string,
-	input *agent.KnowledgeContext,
-) ([]knowledge.Memo, error) {
-	state, err := b.API.memoryDeletions(ctx, owner)
-	if err != nil {
-		return nil, err
-	}
-	memos, err := b.API.Memos(ctx, owner)
-	if err != nil {
-		return nil, err
-	}
-	reads := make([]agent.KnowledgeReadResult, 0, len(memos))
-	for index := range memos {
-		reads = append(reads, agent.KnowledgeReadResult{
-			Request:     agent.KnowledgeProposal{Name: agent.KnowledgeMemoRead, FactKey: memos[index].Key},
-			MemoryState: state, Memo: &memos[index],
-		})
-	}
-	input.Reads = append(reads, input.Reads...)
-	return memos, nil
 }

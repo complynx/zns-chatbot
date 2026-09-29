@@ -18,7 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -27,6 +29,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
@@ -54,7 +57,7 @@ func database(t *testing.T) *pgxpool.Pool {
 		require.NoError(t, e)
 	}
 
-	name := "zns_test_" + hex.EncodeToString(suffix)
+	name := "synthetic_qa_zns_" + hex.EncodeToString(suffix)
 	quoted := pgx.Identifier{name}.Sanitize()
 	{
 		_, e = admin.Exec(t.Context(), "CREATE DATABASE "+quoted)
@@ -86,8 +89,8 @@ func database(t *testing.T) *pgxpool.Pool {
 
 	return p
 }
-func action(name, slot string, version int64, key, origin string) core.Action {
-	return core.Action{Name: name, SlotID: slot, Version: version, Key: key, Origin: origin}
+func action(name, slot string, version int64, key, origin string) workflow.Action {
+	return workflow.Action{Name: name, SlotID: slot, Version: version, Key: key, Origin: origin}
 }
 func requireCode(t *testing.T, e error, code string) {
 	t.Helper()
@@ -96,7 +99,7 @@ func requireCode(t *testing.T, e error, code string) {
 		t.Fatalf("want %s; got %v", code, e)
 	}
 }
-func mustExec(t *testing.T, s core.Service, owner string, a core.Action) core.Workflow {
+func mustExec(t *testing.T, s workflow.Service, owner string, a workflow.Action) workflow.Workflow {
 	t.Helper()
 	w, e := s.Execute(t.Context(), owner, a)
 	require.NoError(t, e)
@@ -107,7 +110,7 @@ func mustExec(t *testing.T, s core.Service, owner string, a core.Action) core.Wo
 func TestCoreCapacityReplayAndRelease(t *testing.T) {
 	t.Parallel()
 	p := database(t)
-	s := core.Service{DB: p}
+	s := workflow.Service{DB: p}
 	for _, owner := range []string{"alice", "bob"} {
 		mustExec(t, s, owner, action("select", "massage-1", 0, "select", "manual"))
 	}
@@ -170,7 +173,7 @@ func TestCoreCapacityReplayAndRelease(t *testing.T) {
 func TestPolicyExpiryAndRevocation(t *testing.T) {
 	t.Parallel()
 	p := database(t)
-	s := core.Service{DB: p}
+	s := workflow.Service{DB: p}
 	for _, origin := range []string{"manual", "agent"} {
 		_, e := s.Execute(t.Context(), "visitor", action("select", "massage-1", 0, origin, origin))
 		requireCode(t, e, "forbidden")
@@ -205,7 +208,7 @@ func TestAPITrustBoundary(t *testing.T) {
 	p := database(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
 	server := httptest.NewServer(
-		api.Handler(runtimeapp.NewServices(p, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler)),
+		api.Handler(notificationFixtureServices(p, appservices.Options{}), signer, slog.New(slog.DiscardHandler)),
 	)
 	defer server.Close()
 	for _, tc := range []struct {
@@ -222,7 +225,7 @@ func TestAPITrustBoundary(t *testing.T) {
 			t.Fatalf("want %d got %d", tc.status, resp.StatusCode)
 		}
 	}
-	c := bot.APIClient{Base: server.URL, Signer: signer}
+	c := appclient.Client{Base: server.URL, SandboxToken: signer.Token}
 	{
 		_, e := c.Execute(t.Context(), "alice", action("select", "massage-1", 0, "x", "manual"))
 		require.NoError(t, e)
@@ -257,7 +260,7 @@ func setup(t *testing.T) *fixture {
 	p := database(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
 	as := httptest.NewServer(
-		api.Handler(runtimeapp.NewServices(p, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler)),
+		api.Handler(notificationFixtureServices(p, appservices.Options{}), signer, slog.New(slog.DiscardHandler)),
 	)
 	t.Cleanup(as.Close)
 	f, e := sandbox.New(t.Context(), p, "sandbox")
@@ -266,17 +269,26 @@ func setup(t *testing.T) *fixture {
 	ts := httptest.NewServer(f.Handler())
 	t.Cleanup(ts.Close)
 	m := &recordingModel{plan: agent.Plan{Text: "Вижу выбор; подтвердите кнопкой.", View: "workflow"}}
-	return &fixture{
+	result := &fixture{
 		p,
 		&bot.Bot{
-			DB:    p,
-			API:   bot.APIClient{Base: as.URL, Signer: signer},
-			TG:    telegram.Client{Base: ts.URL, Token: "sandbox"},
-			Model: m,
+			Delivery: syntheticDeliverySettings(),
+			DB:       p,
+			API:      appclient.Client{Base: as.URL, SandboxToken: signer.Token},
+			TG:       telegram.Client{Base: ts.URL, Token: "sandbox"},
+			Model:    m,
 		},
 		ts,
 		m,
 	}
+	result.b.Host = appclient.Host{
+		Base:   as.URL,
+		Signer: signer,
+		UserToken: func(ctx context.Context, owner string) (string, error) {
+			return result.b.API.UserToken(ctx, owner)
+		},
+	}
+	return result
 }
 func message(id, user int64, text string) telegram.Update {
 	return telegram.Update{

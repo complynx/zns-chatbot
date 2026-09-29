@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/miniapp"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
@@ -43,10 +43,10 @@ func TestZitadelRuntimeUsesLinkedOwnerAndExistingACL(t *testing.T) {
 	require.NoError(t, links.Bind(t.Context(), "alice", 101, "z-alice"))
 	require.NoError(t, links.Bind(t.Context(), "bob", 202, "z-bob"))
 	signer := identity.Signer{Key: []byte(strings.Repeat("s", identity.MinKeyBytes))}
-	server := httptest.NewServer(api.AuthenticatedHandler(runtimeapp.NewServices(db, runtimeapp.Options{}), signer,
+	server := httptest.NewServer(api.AuthenticatedHandler(appservices.NewServices(db, appservices.Options{}), signer,
 		slog.New(slog.DiscardHandler), api.ZitadelOwner(runtimeProvider{}, links)))
 	t.Cleanup(server.Close)
-	client := bot.APIClient{Base: server.URL, Signer: signer, Exchange: runtimeProvider{}, Links: links}
+	client := appclient.Client{Base: server.URL, SandboxToken: signer.Token, Exchange: runtimeProvider{}, Links: links}
 	ctx, owner, err := client.AuthenticateTelegram(t.Context(), 101)
 	require.NoError(t, err)
 	created, err := client.ExecuteOrder(ctx, owner, orders.Command{
@@ -68,9 +68,9 @@ func TestZitadelRuntimeUsesLinkedOwnerAndExistingACL(t *testing.T) {
 	assert.Equal(t, http.StatusOK, webRequest(t, gateway, http.MethodGet, path, 101, nil).Code)
 	assert.Equal(t, http.StatusNotFound, webRequest(t, gateway, http.MethodGet, path, 202, nil).Code)
 	assert.Equal(t, http.StatusForbidden, webRequest(t, gateway, http.MethodGet, path, 303, nil).Code)
-	_, err = (bot.APIClient{Base: server.URL, Signer: signer}).Current(t.Context(), "alice")
+	_, err = (appclient.Client{Base: server.URL, SandboxToken: signer.Token}).Current(t.Context(), "alice")
 	require.Error(t, err, "Zitadel API must reject synthetic bearer")
-	_, err = client.PendingNotifications(t.Context())
+	_, err = (appclient.Host{Base: server.URL, Signer: signer}).PendingNotifications(t.Context())
 	require.NoError(t, err, "service notification auth remains independent")
 	_, err = db.Exec(t.Context(), `UPDATE core.zitadel_identities SET active=false WHERE owner='alice'`)
 	require.NoError(t, err)

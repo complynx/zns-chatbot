@@ -107,6 +107,7 @@ func adminBroadcastRoutes(mux *http.ServeMux, service adminmessage.Service, logg
 }
 
 func adminBroadcastDeliveryRoutes(mux *http.ServeMux, service adminmessage.Service, logger *slog.Logger) {
+	adminInputExpiryCurrentRoute(mux, service, logger)
 	mux.HandleFunc("POST /internal/admin-messages/source", func(w http.ResponseWriter, r *http.Request) {
 		var source adminmessage.Source
 		if Decode(w, r, &source) != nil {

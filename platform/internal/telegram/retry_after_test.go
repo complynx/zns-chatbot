@@ -40,7 +40,8 @@ func TestStructuredRetryAfter(t *testing.T) {
 			require.Error(t, err)
 			var apiErr *telegram.APIError
 			if scenario.malformed {
-				assert.NotErrorAs(t, err, &apiErr)
+				require.ErrorAs(t, err, &apiErr)
+				assert.True(t, apiErr.Parameters.RetryAfterInvalid)
 				return
 			}
 			require.ErrorAs(t, err, &apiErr)

@@ -9,13 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -60,7 +59,7 @@ func TestLegacyFreePaymentOptionalMetadataAndHTTPAuthorization(t *testing.T) {
 			db, service := legacyFreeFixture(t, test.received, test.accepted)
 			signer := identity.Signer{Key: []byte(strings.Repeat("p", 32))}
 			handler := api.Handler(
-				runtimeapp.NewServices(db, runtimeapp.Options{}),
+				appservices.NewServices(db, appservices.Options{}),
 				signer,
 				slog.New(slog.DiscardHandler),
 			)

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 )
@@ -104,27 +106,71 @@ func legacyFoodRoutes(
 }
 
 func foodDeliveryRoutes(mux *http.ServeMux, service legacyfood.Service, signer identity.Signer, logger *slog.Logger) {
-	delivery := http.NewServeMux()
-	delivery.HandleFunc("GET /internal/food/notifications", func(w http.ResponseWriter, r *http.Request) {
+	queue := http.NewServeMux()
+	queue.HandleFunc("POST /internal/food/notifications/prepare", func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			ID int64 `json:"id"`
+		}
+		if Decode(w, r, &input) != nil || input.ID <= 0 {
+			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
+			return
+		}
+		notice, found, err := service.PrepareNotification(r.Context(), input.ID)
+		respond(logger, w, struct {
+			Notice legacyfood.Notification `json:"notice"`
+			Found  bool                    `json:"found"`
+		}{notice, found}, err)
+	})
+	queue.HandleFunc("POST /internal/food/notifications/recover", func(w http.ResponseWriter, r *http.Request) {
+		notices, err := service.RecoveryNotifications(r.Context())
+		respond(logger, w, notices, err)
+	})
+	queue.HandleFunc("GET /internal/food/notifications", func(w http.ResponseWriter, r *http.Request) {
 		notices, err := service.PendingNotifications(r.Context())
 		respond(logger, w, notices, err)
 	})
-	delivery.HandleFunc(
-		"POST /internal/food/notifications/{id}/complete",
-		func(w http.ResponseWriter, r *http.Request) {
-			id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
-			if err == nil {
-				err = service.MarkNotification(r.Context(), id)
-			}
-			respond(logger, w, map[string]bool{"ok": err == nil}, err)
-		},
-	)
+	queue.HandleFunc("GET /internal/food/notifications/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil || id <= 0 {
+			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
+			return
+		}
+		value, err := service.NotificationStatus(r.Context(), id)
+		respond(logger, w, value, err)
+	})
+	queue.HandleFunc("POST /internal/food/notifications/begin", func(w http.ResponseWriter, r *http.Request) {
+		var input delivery.Attempt
+		if Decode(w, r, &input) != nil {
+			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
+			return
+		}
+		value, err := service.BeginNotification(r.Context(), input)
+		respond(logger, w, value, err)
+	})
+	queue.HandleFunc("POST /internal/food/notifications/complete", func(w http.ResponseWriter, r *http.Request) {
+		var input legacyfood.NotificationCompletion
+		if Decode(w, r, &input) != nil {
+			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
+			return
+		}
+		err := service.CompleteNotification(r.Context(), input)
+		respond(logger, w, map[string]bool{"ok": err == nil}, err)
+	})
+	queue.HandleFunc("POST /internal/food/notifications/followup", func(w http.ResponseWriter, r *http.Request) {
+		var input legacyfood.NotificationFollowup
+		if Decode(w, r, &input) != nil {
+			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
+			return
+		}
+		err := service.CompleteNotificationFollowup(r.Context(), input)
+		respond(logger, w, map[string]bool{"ok": err == nil}, err)
+	})
 	mux.Handle("/internal/food/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if !ok || signer.VerifyDelivery(token) != nil {
 			JSON(w, http.StatusUnauthorized, map[string]string{codeField: unauthorized})
 			return
 		}
-		delivery.ServeHTTP(w, r)
+		queue.ServeHTTP(w, r)
 	}))
 }

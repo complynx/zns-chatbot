@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +20,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/identityprovision"
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -389,7 +389,7 @@ func TestIdentityProvisioningFirstMessageContinues(t *testing.T) {
 	links := identity.Links{DB: f.db, Issuer: service.Issuer, BotID: service.BotID}
 	server := httptest.NewServer(api.WithTelegramProvisioning(
 		api.Handler(
-			runtimeapp.NewServices(f.db, runtimeapp.Options{}),
+			appservices.NewServices(f.db, appservices.Options{}),
 			signer,
 			slog.New(slog.DiscardHandler),
 		),
@@ -398,16 +398,21 @@ func TestIdentityProvisioningFirstMessageContinues(t *testing.T) {
 		service.BotID,
 	))
 	t.Cleanup(server.Close)
-	f.b.API = bot.APIClient{
-		Base:     server.URL,
-		Signer:   signer,
-		Links:    links,
-		Exchange: provisioningExchange{links: links, signer: signer},
+	f.b.API = appclient.Client{
+		Base:         server.URL,
+		SandboxToken: signer.Token,
+		Links:        links,
+		Exchange:     provisioningExchange{links: links, signer: signer},
+	}
+	f.b.Host = appclient.Host{
+		Base:      server.URL,
+		Signer:    signer,
+		UserToken: func(ctx context.Context, owner string) (string, error) { return f.b.API.UserToken(ctx, owner) },
 	}
 	onboardingCalls := 0
 	f.b.Onboarding = func(ctx context.Context, user telegram.User) error {
 		onboardingCalls++
-		return f.b.API.ProvisionTelegram(ctx, service.BotID, user)
+		return f.b.Host.ProvisionTelegram(ctx, service.BotID, user)
 	}
 	update := message(9100, 95107, "/orders")
 	update.Message.From.FirstName = "Synthetic"

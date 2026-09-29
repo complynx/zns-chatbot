@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 )
@@ -93,7 +95,14 @@ func knowledgeRoutes(mux *http.ServeMux, service knowledge.Service, logger *slog
 
 func respondKnowledge(logger *slog.Logger, w http.ResponseWriter, value any, err error) {
 	if err == nil {
+		value, err = knowledge.EvidenceEnvelope(value)
+	}
+	if err == nil {
 		JSON(w, http.StatusOK, value)
+		return
+	}
+	if errors.Is(err, readsource.ErrLimit) {
+		JSON(w, http.StatusUnprocessableEntity, map[string]string{codeField: "source_authority_limit"})
 		return
 	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok {

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
@@ -16,7 +18,7 @@ func (b *Bot) bindMassageTool(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-) (scriptMassageRequest, error) {
+) (agenthost.ScriptMassageRequest, error) {
 	switch call.Name {
 	case scriptMassageBook:
 		return b.bindMassageBooking(ctx, owner, call)
@@ -29,15 +31,15 @@ func (b *Bot) bindMassageTool(
 			Length int    `json:"length"`
 		}
 		if err := decodeScriptArguments(call.Arguments, &args); err != nil {
-			return scriptMassageRequest{}, err
+			return agenthost.ScriptMassageRequest{}, err
 		}
 		if !massageIdentifier(args.Event) || !massageIdentifier(args.Party) || args.Length < 1 || args.Length > 6 {
-			return scriptMassageRequest{}, errors.New("invalid tool arguments")
+			return agenthost.ScriptMassageRequest{}, errors.New("invalid tool arguments")
 		}
 		if _, err := b.API.MassagePreferences(ctx, owner, args.Event); err != nil {
-			return scriptMassageRequest{}, err
+			return agenthost.ScriptMassageRequest{}, err
 		}
-		return scriptMassageRequest{
+		return agenthost.ScriptMassageRequest{
 			Event:   args.Event,
 			Command: &massage.Command{Action: "instant", Event: args.Event, Party: args.Party, Length: args.Length},
 		}, nil
@@ -48,20 +50,20 @@ func (b *Bot) bindMassageTool(
 			Next     *bool  `json:"next"`
 		}
 		if err := decodeScriptArguments(call.Arguments, &args); err != nil {
-			return scriptMassageRequest{}, err
+			return agenthost.ScriptMassageRequest{}, err
 		}
 		if !massageIdentifier(args.Event) || args.Bookings == nil || args.Next == nil {
-			return scriptMassageRequest{}, errors.New("invalid tool arguments")
+			return agenthost.ScriptMassageRequest{}, errors.New("invalid tool arguments")
 		}
 		if _, err := b.API.MassagePreferences(ctx, owner, args.Event); err != nil {
-			return scriptMassageRequest{}, err
+			return agenthost.ScriptMassageRequest{}, err
 		}
-		return scriptMassageRequest{
+		return agenthost.ScriptMassageRequest{
 			Event:       args.Event,
 			Preferences: &massage.Preferences{Bookings: *args.Bookings, Next: *args.Next},
 		}, nil
 	default:
-		return scriptMassageRequest{}, errors.New("tool unavailable")
+		return agenthost.ScriptMassageRequest{}, errors.New("tool unavailable")
 	}
 }
 
@@ -69,7 +71,7 @@ func (b *Bot) bindMassageBooking(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-) (scriptMassageRequest, error) {
+) (agenthost.ScriptMassageRequest, error) {
 	var args struct {
 		Event      string    `json:"event"`
 		Party      string    `json:"party"`
@@ -78,19 +80,19 @@ func (b *Bot) bindMassageBooking(
 		Length     int       `json:"length"`
 	}
 	if err := decodeScriptArguments(call.Arguments, &args); err != nil {
-		return scriptMassageRequest{}, err
+		return agenthost.ScriptMassageRequest{}, err
 	}
 	if !massageIdentifier(args.Event) || !massageIdentifier(args.Party) || !massageIdentifier(args.Specialist) ||
 		args.Start.IsZero() {
-		return scriptMassageRequest{}, errors.New("invalid tool arguments")
+		return agenthost.ScriptMassageRequest{}, errors.New("invalid tool arguments")
 	}
 	available, err := b.API.MassageSlots(ctx, owner, args.Event, args.Party, args.Length)
 	if err != nil {
-		return scriptMassageRequest{}, err
+		return agenthost.ScriptMassageRequest{}, err
 	}
 	for _, slot := range available.Slots {
 		if slot.Specialist == args.Specialist && slot.Start.Equal(args.Start) {
-			return scriptMassageRequest{Event: args.Event, Command: &massage.Command{
+			return agenthost.ScriptMassageRequest{Event: args.Event, Command: &massage.Command{
 				Action:        "book",
 				Event:         args.Event,
 				Party:         args.Party,
@@ -101,36 +103,36 @@ func (b *Bot) bindMassageBooking(
 			}}, nil
 		}
 	}
-	return scriptMassageRequest{}, errors.New("unknown resource")
+	return agenthost.ScriptMassageRequest{}, errors.New("unknown resource")
 }
 
 func (b *Bot) bindMassageCancellation(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-) (scriptMassageRequest, error) {
+) (agenthost.ScriptMassageRequest, error) {
 	var args struct {
 		Event   string `json:"event"`
 		Booking string `json:"booking"`
 	}
 	if err := decodeScriptArguments(call.Arguments, &args); err != nil {
-		return scriptMassageRequest{}, err
+		return agenthost.ScriptMassageRequest{}, err
 	}
 	if !massageIdentifier(args.Event) || !massageIdentifier(args.Booking) {
-		return scriptMassageRequest{}, errors.New("invalid tool arguments")
+		return agenthost.ScriptMassageRequest{}, errors.New("invalid tool arguments")
 	}
 	bookings, err := b.API.MassageBookings(ctx, owner, args.Event, "", "mine")
 	if err != nil {
-		return scriptMassageRequest{}, err
+		return agenthost.ScriptMassageRequest{}, err
 	}
 	for _, booking := range bookings {
 		if booking.ID == args.Booking && booking.Owner == owner {
-			return scriptMassageRequest{
+			return agenthost.ScriptMassageRequest{
 				Event: args.Event,
 				Command: &massage.Command{Action: "cancel", Event: args.Event,
 					Booking: booking.ID, Version: booking.Version},
 			}, nil
 		}
 	}
-	return scriptMassageRequest{}, errors.New("unknown resource")
+	return agenthost.ScriptMassageRequest{}, errors.New("unknown resource")
 }

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -32,19 +34,19 @@ func runLineupScript(t *testing.T, b *Bot, input *agent.Input, code string) (jso
 	t.Helper()
 	entry := b.scriptLineupEntry()
 	return scriptworker.Execute(t.Context(), scriptprotocol.ExecuteRequest{
-		Code: code, Input: json.RawMessage(`{}`), Tools: []scriptprotocol.Tool{entry.descriptor},
+		Code: code, Input: json.RawMessage(`{}`), Tools: []scriptprotocol.Tool{entry.Descriptor},
 	}, func(ctx context.Context, call scriptprotocol.ToolCall) (json.RawMessage, error) {
 		if call.Name == "$help" {
-			return json.Marshal(entry.descriptor)
+			return json.Marshal(entry.Descriptor)
 		}
 		if call.Name == "$list" {
-			return json.Marshal([]scriptprotocol.Tool{entry.descriptor})
+			return json.Marshal([]scriptprotocol.Tool{entry.Descriptor})
 		}
-		record, err := entry.prepare(ctx, "owner", 1, call, *input)
+		record, err := entry.Prepare(ctx, "owner", 1, call, *input)
 		if err != nil {
 			return nil, err
 		}
-		result, err := entry.execute(ctx, "owner", call, record, input)
+		result, err := entry.Execute(ctx, "owner", call, record, input)
 		if err != nil {
 			return nil, err
 		}
@@ -147,10 +149,10 @@ func TestScriptLineupValidationAndDiscovery(t *testing.T) {
 	assert.Contains(t, string(result), `"name":"lineup.query"`)
 	for _, raw := range []string{`{"scope":"other"}`, `{"scope":"full","date":"2026-02-30"}`, `{"scope":"full","path":"/tmp/private"}`, `{"scope":"full","now":"2026-01-01"}`} {
 		_, err = b.scriptLineupEntry().
-			prepare(t.Context(), "owner", 1, scriptclient.ToolCall{Name: scriptLineupQuery, Arguments: json.RawMessage(raw)}, input)
+			Prepare(t.Context(), "owner", 1, scriptclient.ToolCall{Name: scriptLineupQuery, Arguments: json.RawMessage(raw)}, input)
 		require.Error(t, err)
 	}
-	projection := scriptCallProjection(
+	projection := agenthost.ScriptCallProjection(
 		agent.ScriptToolResult{Name: scriptLineupQuery, Result: json.RawMessage(`{"entries":["private prompt data"]}`)},
 	)
 	assert.Contains(t, string(projection.Result), `"payload_omitted":true`)

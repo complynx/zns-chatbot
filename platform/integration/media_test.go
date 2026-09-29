@@ -148,7 +148,7 @@ func mediaRequest(t *testing.T, f *fixture, owner, method, path string, body []b
 	t.Helper()
 	request, err := http.NewRequestWithContext(t.Context(), method, f.b.API.Base+path, bytes.NewReader(body))
 	require.NoError(t, err)
-	request.Header.Set("Authorization", "Bearer "+f.b.API.Signer.Token(owner))
+	request.Header.Set("Authorization", "Bearer "+f.b.Host.Signer.Token(owner))
 	response, err := http.DefaultClient.Do(request)
 	require.NoError(t, err)
 	return response

@@ -21,7 +21,7 @@ func TestHistoryArchiveRejectionSurvivesInboxRestart(t *testing.T) {
 	f := setup(t)
 	archive := conversation.Service{DB: f.db}
 	const canary = "deleted archive-boundary lighthouse canary"
-	require.NoError(t, archive.Append(t.Context(), "alice", "archive-race-source", "user", canary))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "archive-race-source", "user", canary))
 	var id int64
 	require.NoError(
 		t,
@@ -40,7 +40,7 @@ func TestHistoryArchiveRejectionSurvivesInboxRestart(t *testing.T) {
 	})
 	var deleted atomic.Bool
 	f.b.API.HTTP = &http.Client{Transport: qaHistoryDeleteTransport{before: func(r *http.Request) error {
-		if r.URL.Path != "/internal/history/archive" {
+		if r.URL.Path != "/internal/history/archive/derived" {
 			return nil
 		}
 		body, err := r.GetBody()
@@ -55,12 +55,13 @@ func TestHistoryArchiveRejectionSurvivesInboxRestart(t *testing.T) {
 		if err = json.NewDecoder(body).Decode(&payload); err != nil {
 			return err
 		}
-		if payload.Kind == "assistant" && deleted.CompareAndSwap(false, true) {
+		if deleted.CompareAndSwap(false, true) {
 			assert.NotNil(t, payload.ExpectedGeneration)
 			return archive.DeleteContent(r.Context(), "alice", id)
 		}
 		return nil
 	}}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	post(t, f.fake.URL+"/lab/input", map[string]any{"user": 101, "text": "recall the old detail"})
 	post(t, f.fake.URL+"/lab/input", map[string]any{"user": 101, "text": "following request"})
 	_, err := f.db.Exec(t.Context(), `CREATE FUNCTION bot.hold_archive_ack() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -69,7 +70,7 @@ func TestHistoryArchiveRejectionSurvivesInboxRestart(t *testing.T) {
 	require.NoError(t, err)
 	runInboxUntil(t, f, func() bool {
 		var terminal bool
-		queryErr := f.db.QueryRow(t.Context(), `SELECT COALESCE((plan->>'history_redacted')::boolean,false) FROM bot.replies WHERE update_id=1`).
+		queryErr := f.db.QueryRow(t.Context(), `SELECT COALESCE((kind='terminal' AND state='privacy_terminal' AND reason='history_deleted'),false) FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
 			Scan(&terminal)
 		return queryErr == nil && terminal
 	})

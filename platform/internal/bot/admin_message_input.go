@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
@@ -21,7 +23,7 @@ func (b *Bot) beginAdminMessageInput(
 	messages *orderMessages,
 ) error {
 	var input adminmessage.Input
-	err := b.API.call(ctx, in.owner, http.MethodPost, "/v1/admin-messages/input/start", struct {
+	err := b.API.Call(ctx, in.owner, http.MethodPost, "/v1/admin-messages/input/start", struct {
 		Key     string `json:"key"`
 		Command string `json:"command"`
 		ChatID  int64  `json:"chat_id"`
@@ -29,6 +31,15 @@ func (b *Bot) beginAdminMessageInput(
 	if err != nil {
 		return err
 	}
+	return b.sendAdminInputPrompt(ctx, in, input, messages)
+}
+
+func (b *Bot) sendAdminInputPrompt(
+	ctx context.Context,
+	in incoming,
+	input adminmessage.Input,
+	messages *orderMessages,
+) error {
 	if input.PromptID != 0 || input.State != broadcastPending {
 		return nil
 	}
@@ -36,34 +47,37 @@ func (b *Bot) beginAdminMessageInput(
 	if input.Forward {
 		label = i18n.AdminBroadcastForward
 	}
-	prompt, err := b.TG.Send(
-		ctx,
-		telegram.Send{
-			ChatID: in.chat,
-			Text:   messages.text(label, nil),
-			Markup: telegram.Markup{
-				Rows: [][]telegram.Button{
+	ref := botdelivery.Reference{
+		Family:       botFamilyAdminPrompt,
+		Version:      input.ID,
+		Continuation: botdelivery.Continuation{Kind: botFamilyAdminPrompt, ID: input.ID},
+	}
+	payload := telegram.Send{
+		ChatID: in.chat,
+		Text:   messages.text(label, nil),
+		Markup: telegram.Markup{
+			Rows: [][]telegram.Button{
+				{
 					{
-						{
-							Text: messages.text(i18n.AdminMessageCancel, nil),
-							Data: fmt.Sprintf("adminmsg:inputcancel:%d", input.ID),
-						},
+						Text: messages.text(i18n.AdminMessageCancel, nil),
+						Data: fmt.Sprintf("adminmsg:inputcancel:%d", input.ID),
 					},
 				},
 			},
 		},
+	}
+	if messages.err != nil {
+		return messages.err
+	}
+	return b.queueBotResult(
+		ctx,
+		in.owner,
+		in.chat,
+		0,
+		"admin_prompt:"+strconv.FormatInt(input.ID, 10),
+		ref,
+		botdelivery.StoredResult{Notice: label, Payload: payload}, 0,
 	)
-	if err != nil {
-		return err
-	}
-	var result struct {
-		OK bool `json:"ok"`
-	}
-	return b.API.call(ctx, in.owner, http.MethodPost, "/v1/admin-messages/input/prompt", struct {
-		ID       int64 `json:"id"`
-		ChatID   int64 `json:"chat_id"`
-		PromptID int64 `json:"prompt_id"`
-	}{input.ID, in.chat, prompt.ID}, &result)
 }
 
 // Only an explicit reply to our authoritative prompt or the legacy cancel marker
@@ -77,7 +91,7 @@ func (b *Bot) handleAdminMessageInput(ctx context.Context, in incoming, u telegr
 		return false, nil
 	}
 	var pending []adminmessage.Input
-	err := b.API.call(
+	err := b.API.Call(
 		ctx,
 		in.owner,
 		http.MethodPost,
@@ -110,7 +124,7 @@ func (b *Bot) handleAdminMessageInput(ctx context.Context, in incoming, u telegr
 		var result struct {
 			OK bool `json:"ok"`
 		}
-		err = b.API.call(
+		err = b.API.Call(
 			ctx,
 			in.owner,
 			http.MethodPost,
@@ -134,7 +148,7 @@ func (b *Bot) handleAdminMessageInput(ctx context.Context, in incoming, u telegr
 		return true, err
 	}
 	var preview adminmessage.Message
-	err = b.API.call(
+	err = b.API.Call(
 		ctx,
 		in.owner,
 		http.MethodPost,

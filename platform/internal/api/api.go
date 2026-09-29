@@ -9,6 +9,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
+	"github.com/complynx/zns-chatbot/platform/internal/applicationauth"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
@@ -19,8 +23,8 @@ const maxRequestBytes = 65536
 const unauthorized = "unauthorized"
 
 func requestOwner(r *http.Request) string {
-	owner, _ := r.Context().Value(ownerKey{}).(string)
-	return owner
+	principal, _ := r.Context().Value(ownerKey{}).(applicationauth.Principal)
+	return principal.Owner()
 }
 
 func JSON(w http.ResponseWriter, status int, v any) {
@@ -42,7 +46,7 @@ func Decode(w http.ResponseWriter, r *http.Request, v any) error {
 	}
 	return nil
 }
-func Handler(deps Dependencies, signer identity.Signer, logger *slog.Logger) http.Handler {
+func Handler(deps appservices.Services, signer identity.Signer, logger *slog.Logger) http.Handler {
 	return AuthenticatedHandler(deps, signer, logger, func(_ context.Context, token string) (string, error) {
 		return signer.Verify(token)
 	})
@@ -50,7 +54,7 @@ func Handler(deps Dependencies, signer identity.Signer, logger *slog.Logger) htt
 
 // AuthenticatedHandler retains separate service authentication for notifications.
 func AuthenticatedHandler(
-	deps Dependencies,
+	deps appservices.Services,
 	signer identity.Signer,
 	logger *slog.Logger,
 	verify VerifyOwner,
@@ -75,13 +79,13 @@ func AuthenticatedHandler(
 	knowledgeRoutes(business, deps.Knowledge, logger)
 	memoryRoutes(business, deps.Knowledge, logger)
 	memoryProvenanceRoutes(mux, deps.Knowledge, deps.Conversation, signer, logger)
-	telegramMetadataRoutes(mux, s, signer, logger)
+	telegramMetadataRoutes(mux, deps.Account, signer, logger)
 	browserAuthRoutes(mux, s, signer, logger)
 	massageRoutes(business, deps.Massage, logger)
 	massageNavigationRoutes(business, deps.Massage, logger)
-	preferenceRoutes(business, s, logger)
+	preferenceRoutes(business, deps.Account, logger)
 	passProfileRoutes(business, deps.PassProfiles, logger)
-	passBookingRoutes(business, deps.Registration, deps.Orders, logger)
+	passBookingRoutes(business, deps.Registration, deps.Orders, deps.DerivedMutations, logger)
 	passNavigationRoutes(business, deps.Registration, logger)
 	notificationRoutes(mux, deps.Orders, deps.Massage, deps.Registration, signer, logger)
 	orderRoutes(business, deps.Orders, logger)
@@ -93,45 +97,61 @@ func AuthenticatedHandler(
 	})
 	business.HandleFunc(
 		"GET /v1/catalog",
-		func(w http.ResponseWriter, r *http.Request) { v, e := s.Catalog(r.Context()); respond(logger, w, v, e) },
+		func(w http.ResponseWriter, r *http.Request) {
+			v, e := deps.Workflow.Catalog(r.Context())
+			respond(logger, w, v, e)
+		},
 	)
 	business.HandleFunc("GET /v1/workflow", func(w http.ResponseWriter, r *http.Request) {
-		v, e := s.Current(r.Context(), requestOwner(r))
+		v, e := deps.Workflow.Current(r.Context(), requestOwner(r))
 		respond(logger, w, v, e)
 	})
 	business.HandleFunc("POST /v1/actions", func(w http.ResponseWriter, r *http.Request) {
-		var a core.Action
+		var a workflow.Action
 		if Decode(w, r, &a) != nil {
 			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
 			return
 		}
-		v, e := s.Execute(r.Context(), requestOwner(r), a)
+		v, e := deps.Workflow.Execute(r.Context(), requestOwner(r), a)
 		respond(logger, w, v, e)
 	})
-	mux.Handle("/v1/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	authorizer := applicationauth.Authorizer{DB: s.DB, Verify: applicationauth.VerifyOwner(verify)}
+	botDeliveryRoutes(mux, deps.BotDelivery, authorizer, signer, logger)
+	derivedMutationRoutes(mux, deps.DerivedMutations, authorizer, signer, logger)
+	derivedReceiptRoutes(mux, deps.DerivedMutations, deps.Knowledge, authorizer, signer, logger)
+	derivedSettingsRoutes(mux, deps.DerivedMutations, authorizer, signer, logger)
+	derivedBusinessRoutes(mux, deps.DerivedMutations, authorizer, signer, logger)
+	derivedRegistrationRoutes(mux, deps.DerivedMutations, authorizer, signer, logger)
+	derivedKnowledgeRoutes(mux, deps.Knowledge, authorizer, signer, logger)
+	knowledgeSubmissionRoutes(mux, deps.Knowledge, authorizer, signer, logger)
+	derivedBroadcastRoutes(mux, deps.AdminMessages, authorizer, signer, logger)
+	passExportAuthorityRoutes(mux, deps.Registration, authorizer, signer, logger)
+	mux.Handle("/v1/", authenticated(authorizer, business, logger))
+	return mux
+}
+
+func authenticated(authorizer applicationauth.Authorizer, business http.Handler, logger *slog.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, bearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !bearer || token == "" || verify == nil {
+		if !bearer {
 			JSON(w, http.StatusUnauthorized, map[string]string{codeField: unauthorized})
 			return
 		}
-		owner, e := verify(r.Context(), token)
-		if e != nil || owner == "" {
+		principal, e := authorizer.Authorize(r.Context(), token)
+		if errors.Is(e, applicationauth.ErrUnauthorized) {
 			JSON(w, http.StatusUnauthorized, map[string]string{codeField: unauthorized})
 			return
 		}
-		var exists bool
-		e = s.DB.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM core.users WHERE id=$1)`, owner).Scan(&exists)
+		if errors.Is(e, applicationauth.ErrForbidden) {
+			JSON(w, http.StatusForbidden, map[string]string{codeField: "forbidden"})
+			return
+		}
 		if e != nil {
 			respond(logger, w, nil, e)
 			return
 		}
-		if !exists {
-			JSON(w, http.StatusForbidden, map[string]string{codeField: "forbidden"})
-			return
-		}
-		business.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ownerKey{}, owner)))
-	}))
-	return mux
+		business.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ownerKey{}, principal)))
+	})
 }
 func respond(logger *slog.Logger, w http.ResponseWriter, v any, e error) {
 	if e == nil {

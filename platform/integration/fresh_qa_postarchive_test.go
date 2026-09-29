@@ -33,7 +33,7 @@ func TestFreshQADeletionAfterArchiveBeforeRendering(t *testing.T) {
 	f := setup(t)
 	archive := conversation.Service{DB: f.db}
 	const canary = "violet garden postarchive deletion canary"
-	require.NoError(t, archive.Append(t.Context(), "alice", "fresh-source", "user", canary))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "fresh-source", "user", canary))
 	var source int64
 	require.NoError(
 		t,
@@ -49,7 +49,7 @@ func TestFreshQADeletionAfterArchiveBeforeRendering(t *testing.T) {
 	deleted := false
 	f.b.API.HTTP = &http.Client{
 		Transport: freshAfterTransport{after: func(r *http.Request, response *http.Response) error {
-			if r.URL.Path != "/internal/history/archive" || response.StatusCode != http.StatusOK {
+			if r.URL.Path != "/internal/history/archive/derived" || response.StatusCode != http.StatusOK {
 				return nil
 			}
 			body, err := r.GetBody()
@@ -63,13 +63,14 @@ func TestFreshQADeletionAfterArchiveBeforeRendering(t *testing.T) {
 			if err = json.NewDecoder(body).Decode(&p); err != nil {
 				return err
 			}
-			if p.Kind == "assistant" && !deleted {
+			if !deleted {
 				deleted = true
 				return archive.DeleteContent(r.Context(), "alice", source)
 			}
 			return nil
 		}},
 	}
+	f.b.Host.HTTP = f.b.API.HTTP
 	err := f.b.Handle(t.Context(), message(99101, 101, "recall the detail"))
 	t.Logf("Handle error=%v deletion=%v", err, deleted)
 	require.True(t, deleted)

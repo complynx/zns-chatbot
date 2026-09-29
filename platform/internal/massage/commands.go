@@ -10,67 +10,132 @@ import (
 	"strings"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+
+	"github.com/complynx/zns-chatbot/platform/internal/massage/dbgen"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
+// PreparedCommand keeps authorization and receipt lookup in the mutation transaction.
+type PreparedCommand struct {
+	service     Service
+	tx          pgx.Tx
+	actor       string
+	command     Command
+	fingerprint string
+	result      Reservation
+	found       bool
+}
+
 func (s Service) Execute(ctx context.Context, actor string, command Command) (Reservation, error) {
-	if len(command.Key) < 1 || len(command.Key) > 128 || strings.TrimSpace(command.Event) == "" {
-		return Reservation{}, problem(http.StatusBadRequest, "invalid_command")
-	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return Reservation{}, err
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if err = authenticated(ctx, tx, actor); err != nil {
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	p, err := s.PrepareInTx(ctx, tx, actor, command)
+	if err != nil {
 		return Reservation{}, err
 	}
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('massage:'||$1,0))`, actor); err != nil {
+	result, err := p.Apply(ctx)
+	if err != nil {
 		return Reservation{}, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+func (s Service) PrepareInTx(ctx context.Context, tx pgx.Tx, actor string, command Command) (PreparedCommand, error) {
+	p := PreparedCommand{service: s, tx: tx, actor: actor, command: command}
+	if len(command.Key) < 1 || len(command.Key) > 128 || strings.TrimSpace(command.Event) == "" {
+		return p, problem(http.StatusBadRequest, "invalid_command")
+	}
+	if err := authenticated(ctx, tx, actor); err != nil {
+		return p, err
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('massage:'||$1,0))`, actor); err != nil {
+		return p, err
+	}
+	if err := authorizeCommand(ctx, tx, actor, command); err != nil {
+		return p, err
 	}
 	raw, err := json.Marshal(command)
 	if err != nil {
-		return Reservation{}, err
+		return p, err
 	}
 	hash := sha256.Sum256(raw)
-	fingerprint := hex.EncodeToString(hash[:])
+	p.fingerprint = hex.EncodeToString(hash[:])
 	var previous string
-	var result Reservation
 	err = tx.QueryRow(ctx, `SELECT request_hash,result FROM core.massage_operations WHERE actor=$1 AND key=$2`, actor, command.Key).
-		Scan(&previous, &result)
+		Scan(&previous, &p.result)
 	if err == nil {
-		if previous != fingerprint {
-			return result, problem(http.StatusConflict, "idempotency_conflict")
+		if previous != p.fingerprint {
+			return p, problem(http.StatusConflict, "idempotency_conflict")
 		}
-		return result, tx.Commit(ctx)
+		p.found = true
+		return p, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return result, err
+		return p, err
 	}
 	switch command.Action {
-	case "book", actionInstant:
-		result, err = s.book(ctx, tx, actor, command)
-	case "cancel":
-		result, err = s.cancel(ctx, tx, actor, command)
+	case legacyBook, actionInstant, legacyCancel:
+		return p, nil
 	default:
-		return result, problem(http.StatusBadRequest, "invalid_action")
+		return p, problem(http.StatusBadRequest, "invalid_action")
+	}
+}
+
+// authorizeCommand checks current target ownership even for completed receipts.
+func authorizeCommand(ctx context.Context, tx pgx.Tx, actor string, command Command) error {
+	switch command.Action {
+	case actionInstant:
+		var owner string
+		err := tx.QueryRow(ctx, `SELECT owner FROM core.massage_specialists WHERE event_id=$1 AND owner=$2 FOR SHARE`, command.Event, actor).
+			Scan(&owner)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return problem(http.StatusForbidden, "forbidden")
+		}
+		return err
+	case "cancel":
+		_, err := ownedCancellation(ctx, tx, actor, command)
+		return err
+	default:
+		return nil
+	}
+}
+
+func (p PreparedCommand) Replay() (Reservation, bool) { return p.result, p.found }
+
+func (p PreparedCommand) Apply(ctx context.Context) (Reservation, error) {
+	if p.found {
+		return p.result, nil
+	}
+	var result Reservation
+	var pending []delivery.Registration
+	var err error
+	switch p.command.Action {
+	case legacyBook, actionInstant:
+		result, err = p.service.book(ctx, p.tx, p.actor, p.command, &pending)
+	case "cancel":
+		result, err = p.service.cancel(ctx, p.tx, p.actor, p.command, &pending)
 	}
 	if err != nil {
 		return result, err
 	}
-	_, err = tx.Exec(
+	_, err = p.tx.Exec(
 		ctx,
 		`INSERT INTO core.massage_operations(actor,key,request_hash,result) VALUES($1,$2,$3,$4)`,
-		actor,
-		command.Key,
-		fingerprint,
+		p.actor,
+		p.command.Key,
+		p.fingerprint,
 		result,
 	)
-	if err != nil {
-		return result, err
+	if err == nil {
+		err = delivery.RegisterBatch(ctx, p.tx, p.service.Delivery.BotID, pending)
 	}
-	return result, tx.Commit(ctx)
+	return result, err
 }
 
 func availability(
@@ -111,7 +176,13 @@ func availability(
 	return slots, own, isStaff, err
 }
 
-func (s Service) book(ctx context.Context, tx pgx.Tx, actor string, command Command) (Reservation, error) {
+func (s Service) book(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor string,
+	command Command,
+	pending *[]delivery.Registration,
+) (Reservation, error) {
 	party, err := loadParty(ctx, tx, command.Event, command.Party, true)
 	if err != nil {
 		return Reservation{}, err
@@ -200,13 +271,13 @@ func (s Service) book(ctx context.Context, tx pgx.Tx, actor string, command Comm
 		return result, err
 	}
 	if selected.NotifyBookings && !result.Instant {
-		err = queueNotice(ctx, tx, result.ID, selected.Owner, "booked")
+		err = queueNotice(ctx, tx, s.Delivery.BotID, pending, result.ID, selected.Owner, "booked")
 	}
 	return result, err
 }
 
 func prepareBooking(command Command, party EventParty, staff []Provider, actor string, now time.Time) (Command, error) {
-	if command.Action == "book" {
+	if command.Action == legacyBook {
 		if !regularLength(command.Length) || party.Open {
 			return command, problem(http.StatusBadRequest, "invalid_length_or_party")
 		}
@@ -229,7 +300,7 @@ func prepareBooking(command Command, party EventParty, staff []Provider, actor s
 	return command, problem(http.StatusForbidden, "forbidden")
 }
 
-func (s Service) cancel(ctx context.Context, tx pgx.Tx, actor string, command Command) (Reservation, error) {
+func ownedCancellation(ctx context.Context, tx pgx.Tx, actor string, command Command) (Reservation, error) {
 	var partyID string
 	err := tx.QueryRow(ctx, `SELECT party_id FROM core.massage_bookings WHERE id=$1 AND event_id=$2 AND owner=$3`, command.Booking, command.Event, actor).
 		Scan(&partyID)
@@ -251,6 +322,23 @@ func (s Service) cancel(ctx context.Context, tx pgx.Tx, actor string, command Co
 		return Reservation{}, err
 	}
 	result, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByPos[Reservation])
+	if err != nil {
+		return result, err
+	}
+	if result.Owner != actor || result.Event != command.Event {
+		return Reservation{}, problem(http.StatusNotFound, "not_found")
+	}
+	return result, nil
+}
+
+func (s Service) cancel(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor string,
+	command Command,
+	pending *[]delivery.Registration,
+) (Reservation, error) {
+	result, err := ownedCancellation(ctx, tx, actor, command)
 	if err != nil {
 		return result, err
 	}
@@ -280,20 +368,27 @@ func (s Service) cancel(ctx context.Context, tx pgx.Tx, actor string, command Co
 		return result, err
 	}
 	if notify {
-		err = queueNotice(ctx, tx, result.ID, result.Specialist, "cancelled")
+		err = queueNotice(ctx, tx, s.Delivery.BotID, pending, result.ID, result.Specialist, "cancelled")
 	}
 	return result, err
 }
 
-func queueNotice(ctx context.Context, tx pgx.Tx, booking, owner, kind string) error {
-	_, err := tx.Exec(
-		ctx,
-		`INSERT INTO core.massage_notices(booking_id,owner,kind) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
-		booking,
-		owner,
-		kind,
-	)
-	return err
+func queueNotice(
+	ctx context.Context,
+	tx pgx.Tx,
+	botID int64,
+	pending *[]delivery.Registration,
+	booking, owner, kind string,
+) error {
+	row, err := dbgen.New(tx).EnqueueNotification(ctx, dbgen.EnqueueNotificationParams{
+		BookingID: booking, Owner: owner, Kind: kind, BotID: botID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return collectNotificationRegistration(ctx, tx, botID, row.ID, row.DeliveryChat, pending)
 }
 
 const actionInstant = "instant"

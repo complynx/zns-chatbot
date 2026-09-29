@@ -181,7 +181,7 @@ func TestAdminBroadcastUserCannotForgeSource(t *testing.T) {
 			strings.NewReader(test.body),
 		)
 		require.NoError(t, err)
-		request.Header.Set("Authorization", "Bearer "+f.b.API.Signer.Token("bob"))
+		request.Header.Set("Authorization", "Bearer "+f.b.Host.Signer.Token("bob"))
 		response, err := http.DefaultClient.Do(request)
 		require.NoError(t, err)
 		require.NoError(t, response.Body.Close())

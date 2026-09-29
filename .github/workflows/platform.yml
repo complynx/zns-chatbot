@@ -1,9 +1,21 @@
 name: Go platform
 on:
   pull_request:
-    paths: ['platform/**', '.github/workflows/platform.yml', '.github/dependabot.yml']
+    paths:
+      [
+        "platform/**",
+        "tools/migrate/**",
+        ".github/workflows/platform.yml",
+        ".github/dependabot.yml",
+      ]
   push:
-    paths: ['platform/**', '.github/workflows/platform.yml', '.github/dependabot.yml']
+    paths:
+      [
+        "platform/**",
+        "tools/migrate/**",
+        ".github/workflows/platform.yml",
+        ".github/dependabot.yml",
+      ]
 permissions:
   contents: read
 jobs:
@@ -15,7 +27,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: test
-        ports: ['5432:5432']
+        ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres -d test"
           --health-interval 2s --health-timeout 3s --health-retries 30
@@ -29,13 +41,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: platform/tools/go.mod
-          cache-dependency-path: platform/go.sum
+          cache-dependency-path: |
+            platform/go.sum
+            platform/tools/go.sum
+            platform/tools/sqlc/go.sum
+            tools/migrate/go.sum
       - name: Build pinned quality tools
         run: |
           go -C tools build -o ../tools.local/golangci-lint github.com/golangci/golangci-lint/v2/cmd/golangci-lint
           go -C tools build -o ../tools.local/govulncheck golang.org/x/vuln/cmd/govulncheck
       - name: Runtime vulnerability gate
-        run: tools.local/govulncheck ./cmd/... ./internal/...
+        run: |
+          tools.local/govulncheck ./cmd/... ./internal/... ./integration/... ./identityprovision/... ./deploy/...
+          tools.local/govulncheck -C ../tools/migrate ./...
       - name: SQL generation drift
         run: go -C tools/sqlc tool sqlc diff -f ../../sqlc.yaml
       - name: SQL generator vulnerability gate
@@ -43,11 +61,14 @@ jobs:
       - name: Golden and Nebius code quality gate
         run: |
           tools.local/golangci-lint config verify
-          tools.local/golangci-lint run ./cmd/... ./internal/... ./integration/...
+          tools.local/golangci-lint run ./cmd/... ./internal/... ./integration/... ./identityprovision/... ./deploy/...
           tools.local/golangci-lint fmt --diff
+          cd ../tools/migrate
+          ../../platform/tools.local/golangci-lint run --config ../../platform/.golangci.yml ./...
+          ../../platform/tools.local/golangci-lint fmt --diff --config ../../platform/.golangci.yml
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: platform/package-lock.json
       - name: JavaScript quality gate
@@ -58,23 +79,30 @@ jobs:
           python3 -m unittest discover -s scripts/fqa -p 'test_*.py'
       - name: Format, vet and verify dependencies
         run: |
-          test -z "$(gofmt -l cmd internal integration)"
-          go vet ./cmd/... ./internal/... ./integration/...
+          test -z "$(gofmt -l cmd internal integration identityprovision deploy ../tools/migrate)"
+          go vet ./cmd/... ./internal/... ./integration/... ./identityprovision/... ./deploy/...
+          go -C ../tools/migrate vet ./...
           go mod verify
           go -C tools mod verify
           go -C tools/sqlc mod verify
+          go -C ../tools/migrate mod verify
       - name: Unit and PostgreSQL integration tests
         run: |
-          docker build --target test -t zns-platform-tests .
-          docker run --rm --network host -e TEST_DATABASE_URL -v "$PWD:/results" zns-platform-tests go test -race -count=1 -coverpkg=./internal/... -coverprofile=/results/coverage.out ./cmd/... ./internal/... ./integration/...
+          docker build --target test -t synthetic-qa-zns-tests .
+          docker run --rm --network host -e TEST_DATABASE_URL -v "$PWD:/results" synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverpkg=./cmd/...,./internal/...,./identityprovision/... -coverprofile=/results/coverage.out ./cmd/... ./internal/... ./integration/... ./identityprovision/... ./deploy/...
+          docker run --rm --network host -e TEST_DATABASE_URL -v "$PWD:/workspace/platform:ro" -v "$PWD/../tools/migrate:/workspace/tools/migrate:ro" -v "$PWD:/results" -w /workspace/tools/migrate synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverprofile=/results/migrate-coverage.out ./...
       - name: Fuzz identity boundary
         run: go test ./internal/identity -run '^$' -fuzz FuzzVerify -fuzztime 10s
       - name: Build
-        run: go build ./cmd/...
+        run: |
+          go build ./cmd/... ./internal/... ./integration/... ./identityprovision/... ./deploy/...
+          go -C ../tools/migrate build ./...
       - uses: actions/upload-artifact@v4
         with:
           name: go-coverage
-          path: platform/coverage.out
+          path: |
+            platform/coverage.out
+            platform/migrate-coverage.out
   sandbox:
     runs-on: ubuntu-latest
     defaults:
@@ -91,7 +119,7 @@ jobs:
         run: SANDBOX_URL=http://127.0.0.1:8090 go test ./integration -run TestLiveSandbox -count=1
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
           cache-dependency-path: platform/package-lock.json
       - name: Browser acceptance

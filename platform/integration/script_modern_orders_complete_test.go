@@ -132,7 +132,7 @@ func TestModernOrdersCompleteUpperBoundAcrossRestart(t *testing.T) {
 			for more && turns < 20 {
 				resume := turns > 0
 				update := int64(41000 + turns)
-				f.b = &bot.Bot{DB: f.db, API: f.b.API, TG: f.b.TG}
+				f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG}
 				result := runModernContinuation(
 					t,
 					f,
@@ -158,7 +158,7 @@ return {more:page.more};`, order.ID, resume, order.ID),
 			var observed orders.Order
 			require.NoError(t, json.Unmarshal([]byte(string(assembled)), &observed))
 			assert.Equal(t, order.Choice, observed.Choice)
-			f.b = &bot.Bot{DB: f.db, API: f.b.API, TG: f.b.TG}
+			f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG}
 			result := runModernContinuation(
 				t,
 				f,

@@ -28,10 +28,10 @@ func TestRegistrationAnnouncementSourceText(t *testing.T) {
 func TestRegistrationAnnouncementUncertainSendIsNotRetried(t *testing.T) {
 	t.Parallel()
 	result := announcementCompletion(1, 0, errors.New("connection lost"))
-	assert.Equal(t, "telegram_outcome_unknown", result.Failure)
+	assert.Equal(t, "telegram_outcome_unknown", result.Outcome.Reason)
 	result = announcementCompletion(1, 0, &telegram.APIError{Code: http.StatusForbidden})
-	assert.Equal(t, "telegram_rejected", result.Failure)
+	assert.Equal(t, "telegram_recipient_rejected", result.Outcome.Reason)
 	result = announcementCompletion(1, 44, nil)
-	assert.Empty(t, result.Failure)
-	assert.EqualValues(t, 44, result.MessageID)
+	assert.Empty(t, result.Outcome.Reason)
+	assert.EqualValues(t, 44, result.Outcome.MessageID)
 }

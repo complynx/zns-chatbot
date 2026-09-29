@@ -22,6 +22,7 @@ func TestFixtureASROnlyRecognizesKnownPCM(t *testing.T) {
 	}{
 		{"orders-en", "Please show my orders."},
 		{"receipt-second-en", "This receipt is for the second order."},
+		{"receipt-second-ru", "Этот чек относится ко второму заказу."},
 		{"profile-en", "My full legal name is Taylor Synthetic Example."},
 		{"help-ru", "Какие услуги я могу забронировать?"},
 	} {

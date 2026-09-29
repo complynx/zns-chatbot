@@ -69,6 +69,7 @@ type RegistrationReadResult struct {
 	Next           string                      `json:"next,omitempty"`
 	Error          string                      `json:"error,omitempty"`
 	Omitted        bool                        `json:"omitted"`
+	Historical     bool                        `json:"historical,omitempty"`
 }
 
 func validateRegistrationProposal(p RegistrationProposal) error {

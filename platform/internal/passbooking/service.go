@@ -10,19 +10,19 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/destination"
 )
 
 func hash(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
 
 func validate(c Command) error {
-	const maxKey = 200
 	if c.QueueInvitation && c.Name != commandInvite {
 		return invalid()
 	}
-	if c.Event == "" || len(c.Event) > maxKey || c.Key == "" || len(c.Key) > maxKey || c.Version < 0 ||
+	if c.Event == "" || c.Key == "" || !boundedCommandStrings(c) || c.Version < 0 ||
 		c.TargetVersion < 0 ||
-		c.InviteTelegramID < 0 ||
-		strings.ContainsRune(c.Key, 0) {
+		c.InviteTelegramID < 0 {
 		return invalid()
 	}
 	switch c.Name {
@@ -49,6 +49,12 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Booking,
 	if err := validate(c); err != nil {
 		return Booking{}, err
 	}
+	if _, err := s.CaptureAdmission(ctx, actor, AdmissionRequest{Command: c}); err != nil {
+		return Booking{}, err
+	}
+	if err := s.ResolveRegistrationIntake(ctx, c.Event); err != nil {
+		return Booking{}, err
+	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return Booking{}, err
@@ -63,24 +69,63 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Booking,
 
 // executeInTx retains the shared command semantics for durable transactional adapters.
 func (s Service) executeInTx(ctx context.Context, tx pgx.Tx, actor string, c Command) (Booking, error) {
-	e, err := readEvent(ctx, tx, c.Event)
+	prepared, err := s.PrepareInTx(ctx, tx, actor, c)
 	if err != nil {
 		return Booking{}, err
 	}
+	return prepared.Apply(ctx)
+}
+
+// PreparedCommand retains target authorization and exact replay identity in a
+// caller-owned transaction. New derived effects can be fenced before Apply.
+type PreparedCommand struct {
+	nativeReceivedAt      *time.Time
+	registrationRetention time.Duration
+	announcementBindings  *destination.Bindings
+	deliveryBotID         int64
+	tx                    pgx.Tx
+	actor                 string
+	command               Command
+	event                 event
+	records               map[string]*Booking
+	current               *Booking
+	keyHash               string
+	requestHash           string
+	found                 bool
+}
+
+func (s Service) PrepareInTx(ctx context.Context, tx pgx.Tx, actor string, c Command) (*PreparedCommand, error) {
+	if err := validate(c); err != nil {
+		return nil, err
+	}
+	e, err := readEvent(ctx, tx, c.Event)
+	if err != nil {
+		return nil, err
+	}
+	return s.prepareCommand(ctx, tx, actor, c, e)
+}
+
+func (s Service) prepareCommand(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor string,
+	c Command,
+	e event,
+) (*PreparedCommand, error) {
 	telegramID, err := authorize(ctx, tx, actor, c.Name, c.Event)
 	if err != nil {
-		return Booking{}, err
+		return nil, err
 	}
 	if c.QueueInvitation {
 		// Queue reads require the booking-admin grant. Reuse its exact predicate
 		// and hold the grant's share lock through replay checking and effects.
 		if _, err = authorize(ctx, tx, actor, commandAdminAssign, c.Event); err != nil {
-			return Booking{}, err
+			return nil, err
 		}
 	}
 	records, err := readBookings(ctx, tx, c.Event)
 	if err != nil {
-		return Booking{}, err
+		return nil, err
 	}
 	current := records[actor]
 	if current == nil {
@@ -88,51 +133,89 @@ func (s Service) executeInTx(ctx context.Context, tx pgx.Tx, actor string, c Com
 	}
 	encoded, err := json.Marshal(c)
 	if err != nil {
-		return Booking{}, err
+		return nil, err
 	}
 	keyHash, requestHash := hash([]byte(c.Key)), hash(encoded)
+	p := &PreparedCommand{
+		registrationRetention: s.registrationRetention(),
+		deliveryBotID:         s.Delivery.BotID,
+		announcementBindings:  s.AnnouncementBindings,
+		tx:                    tx,
+		actor:                 actor,
+		command:               c,
+		event:                 e,
+		records:               records,
+		current:               current,
+		keyHash:               keyHash,
+		requestHash:           requestHash,
+	}
 	var previous string
 	err = tx.QueryRow(ctx, `SELECT request_hash FROM core.pass_booking_operations WHERE event_id=$1 AND actor=$2 AND key_hash=$3`, c.Event, actor, keyHash).
 		Scan(&previous)
 	if err == nil {
 		if previous != requestHash {
-			return Booking{}, conflict("idempotency_conflict")
+			return nil, conflict("idempotency_conflict")
 		}
-		return *current, nil
+		p.found = true
+		return p, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return Booking{}, err
+		return nil, err
 	}
+	return p, nil
+}
+
+func (p *PreparedCommand) Replay() (Booking, bool) { return *p.current, p.found }
+
+func (p *PreparedCommand) Apply(ctx context.Context) (Booking, error) {
+	if p.found {
+		return *p.current, nil
+	}
+	tx, actor, c, e, records, current := p.tx, p.actor, p.command, p.event, p.records, p.current
 	if current.Version != c.Version {
 		return Booking{}, conflict("pass_booking_stale")
 	}
-	if err = lockRegistrationProfile(ctx, tx, actor, c.Name, e.passport); err != nil {
+	if err := p.checkAdmission(ctx); err != nil {
+		return Booking{}, err
+	}
+	if cancelled, err := p.cancelUnfinishedAdmission(ctx); cancelled || err != nil {
+		return *current, err
+	}
+	if err := lockRegistrationProfile(ctx, tx, actor, c.Name, e.passport); err != nil {
 		return Booking{}, err
 	}
 	var now time.Time
 	// Transaction start can precede a long lock wait. All decisions use the clock
 	// after event, permission and required profile locks have been acquired.
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return Booking{}, err
+	}
+	if err := refreshRegistrationTurns(ctx, tx, c.Event, p.registrationRetention, now); err != nil {
 		return Booking{}, err
 	}
 	state := newSnapshot(e, records, now)
+	if err := state.loadRegistrationRanks(ctx, tx); err != nil {
+		return Booking{}, err
+	}
+	state.deliveryBotID = p.deliveryBotID
+	state.announcementBindings = p.announcementBindings
 	before := copyBookings(records)
-	if err = state.mutate(ctx, tx, current, c); err != nil {
+	if err := state.mutate(ctx, tx, current, c); err != nil {
 		return Booking{}, err
 	}
 	if now.Before(e.finishes) && c.Name != CommandTakeover && c.Name != CommandReceivedOnly {
 		state.allocate()
 	}
-	if err = state.persistNotified(ctx, tx, before, c.Name); err != nil {
+	if err := state.persistNotified(ctx, tx, before, c.Name); err != nil {
 		return Booking{}, err
 	}
-	_, err = tx.Exec(
+	_, err := tx.Exec(
 		ctx,
 		`INSERT INTO core.pass_booking_operations(event_id,actor,key_hash,request_hash) VALUES($1,$2,$3,$4)`,
 		c.Event,
 		actor,
-		keyHash,
-		requestHash,
+		p.keyHash,
+		p.requestHash,
 	)
 	if err != nil {
 		return Booking{}, err

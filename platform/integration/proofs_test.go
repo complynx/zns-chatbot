@@ -70,7 +70,7 @@ func TestProofFilesAreOwnerBoundAndPrivate(t *testing.T) {
 		nil,
 	)
 	require.NoError(t, err)
-	request.Header.Set("Authorization", "Bearer "+f.b.API.Signer.Token("bob"))
+	request.Header.Set("Authorization", "Bearer "+f.b.Host.Signer.Token("bob"))
 	response, err := http.DefaultClient.Do(request)
 	require.NoError(t, err)
 	defer response.Body.Close()

@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/complynx/zns-chatbot/platform/internal/config"
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 )
 
 func serve(ctx context.Context, handler http.Handler, logger *slog.Logger, cfg config.Config) error {
@@ -29,6 +30,8 @@ func serveListener(ctx context.Context, listener net.Listener, handler http.Hand
 	logger *slog.Logger, cfg config.Config) error {
 	requests, cancelRequests := context.WithCancel(context.WithoutCancel(ctx))
 	defer cancelRequests()
+	stopLossWatcher := cancelRequestsOnLoss(ctx, cancelRequests)
+	defer stopLossWatcher()
 	active := &activeRequests{next: handler}
 	server := &http.Server{
 		Handler: active, ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
@@ -92,4 +95,21 @@ func (a *activeRequests) stop() {
 	a.mu.Lock()
 	a.stopped = true
 	a.mu.Unlock()
+}
+
+// Keep watching through a normal drain: admission can be lost after SIGTERM.
+func cancelRequestsOnLoss(ctx context.Context, cancel context.CancelFunc) func() {
+	if runtimeapp.Lost(ctx) == nil {
+		return func() {}
+	}
+	stop, joined := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(joined)
+		select {
+		case <-runtimeapp.Lost(ctx):
+			cancel()
+		case <-stop:
+		}
+	}()
+	return func() { close(stop); <-joined }
 }

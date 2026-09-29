@@ -2,14 +2,12 @@ package bot
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
+
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 )
@@ -20,21 +18,8 @@ type modernOrderReadChunk struct {
 	Offset int `json:"offset"`
 }
 
-// A page must have a durable successful receipt before it can authorize a mutation.
-func clearUncommittedModernOrderRead(input *agent.Input, name string, committed bool) {
-	if !committed && (name == modernOrdersInspect || name == modernOrdersReviewRead) {
-		input.ModernOrder = nil
-		input.ModernOrderCursor = ""
-	}
-}
-
 func modernOrderFingerprint(order orders.Order) (string, error) {
-	data, err := json.Marshal(order)
-	if err != nil {
-		return "", err
-	}
-	digest := sha256.Sum256(data)
-	return hex.EncodeToString(digest[:]), nil
+	return orders.OrderSnapshot(order)
 }
 
 // Successful script-call receipts form the durable page chain. Pending calls,
@@ -45,8 +30,8 @@ func (b *Bot) modernOrderReadCheckpoint(
 	ctx context.Context,
 	owner, name, event string,
 	args modernOrderArguments,
-) (modernOrderRequest, error) {
-	var checkpoint modernOrderRequest
+) (agenthost.ModernOrderRequest, error) {
+	var checkpoint agenthost.ModernOrderRequest
 	if args.Cursor == "" && !args.Resume {
 		return checkpoint, nil
 	}

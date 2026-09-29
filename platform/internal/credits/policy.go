@@ -2,7 +2,6 @@ package credits
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"math/big"
 	"net/http"
@@ -161,82 +160,24 @@ func (s Service) Usage(ctx context.Context, actor, payer string) (UsageReport, e
 // SetPolicy fences a new write by version. A matching business-operation replay
 // may carry a refreshed version after a lost reply; it returns the saved result.
 func (s Service) SetPolicy(ctx context.Context, actor, payer string, input PolicyChange) (Policy, error) {
-	if payer == "" || len(payer) > 256 || input.Version < 1 || input.OperationKey == "" ||
-		len(input.OperationKey) > 128 ||
-		(input.MonthlyNanoUSD != nil && *input.MonthlyNanoUSD < 0) {
-		return Policy{}, ErrInvalid
+	if err := validPolicyChange(payer, input); err != nil {
+		return Policy{}, err
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return Policy{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = requireAdmin(ctx, tx, actor); err != nil {
-		return Policy{}, err
-	}
-	if _, err = tx.Exec(
-		ctx,
-		`SELECT pg_advisory_xact_lock(hashtextextended($1,64001))`,
-		actor+":"+input.OperationKey,
-	); err != nil {
-		return Policy{}, err
-	}
-	if payer == "*" {
-		return setDefaultPolicy(ctx, tx, actor, input)
-	}
-	if _, err = lockPolicy(ctx, tx, payer); err != nil {
-		return Policy{}, err
-	}
-	request, _ := json.Marshal(struct {
-		Payer  string       `json:"payer"`
-		Change PolicyChange `json:"change"`
-	}{payer, input})
-	var same bool
-	var result []byte
-	err = tx.QueryRow(ctx, `SELECT (request #- '{change,version}')=($3::jsonb #- '{change,version}'),result FROM credits.policy_changes WHERE actor=$1 AND operation_key=$2`, actor, input.OperationKey, request).
-		Scan(&same, &result)
-	if err == nil {
-		if !same {
-			return Policy{}, ErrConflict
-		}
-		var policy Policy
-		if json.Unmarshal(result, &policy) != nil {
-			return Policy{}, ErrInvalid
-		}
-		return policy, tx.Commit(ctx)
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return Policy{}, err
-	}
-	tag, err := tx.Exec(
-		ctx,
-		`UPDATE credits.accounts SET monthly_nano_usd=$2,unlimited=$3,version=version+1 WHERE payer=$1 AND version=$4`,
-		payer,
-		input.MonthlyNanoUSD,
-		input.Unlimited,
-		input.Version,
-	)
+	prepared, err := s.PreparePolicyInTx(ctx, tx, actor, payer, input)
 	if err != nil {
 		return Policy{}, err
 	}
-	if tag.RowsAffected() != 1 {
-		return Policy{}, ErrConflict
+	if value, found := prepared.Replay(); found {
+		return value, nil
 	}
-	policy, err := lockPolicy(ctx, tx, payer)
+	value, err := prepared.Apply(ctx)
 	if err != nil {
-		return Policy{}, err
+		return value, err
 	}
-	result, _ = json.Marshal(policy)
-	_, err = tx.Exec(
-		ctx,
-		`INSERT INTO credits.policy_changes(actor,operation_key,request,result) VALUES($1,$2,$3,$4)`,
-		actor,
-		input.OperationKey,
-		request,
-		result,
-	)
-	if err != nil {
-		return Policy{}, err
-	}
-	return policy, tx.Commit(ctx)
+	return value, tx.Commit(ctx)
 }

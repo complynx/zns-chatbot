@@ -9,12 +9,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 )
 
@@ -36,7 +37,11 @@ func TestContextBudgetIncludesJSONEscaping(t *testing.T) {
 		api.JSON(w, http.StatusOK, agent.Plan{Text: "continue", View: "workflow"})
 	}))
 	defer server.Close()
-	in := agent.Input{Text: "finish", Workflow: core.Workflow{State: "draft", Version: 7}, Catalog: []core.Slot{}}
+	in := agent.Input{
+		Text:     "finish",
+		Workflow: workflow.Workflow{State: "draft", Version: 7},
+		Catalog:  []workflow.Slot{},
+	}
 	for range 30 {
 		raw, _ := json.Marshal(strings.Repeat("<\"\n", 1600))
 		in.History = append(in.History, agent.Event{Kind: "input", Content: raw})
@@ -64,7 +69,7 @@ func TestScriptedModelAndHostileModes(t *testing.T) {
 	defer s.Close()
 	m := agent.Remote{URL: s.URL}
 	for _, state := range []string{"empty", "draft", "booked"} {
-		p, e := m.Plan(context.Background(), agent.Input{Workflow: core.Workflow{State: state}})
+		p, e := m.Plan(context.Background(), agent.Input{Workflow: workflow.Workflow{State: state}})
 		if e != nil || p.Text == "" || p.Action != nil {
 			t.Fatalf("%v %v", p, e)
 		}
@@ -74,7 +79,7 @@ func TestScriptedModelAndHostileModes(t *testing.T) {
 		agent.Input{
 			Business: &agent.BusinessCapabilities{CanBook: true},
 			Text:     "выбери массаж",
-			Catalog:  []core.Slot{{ID: "massage-1"}},
+			Catalog:  []workflow.Slot{{ID: "massage-1"}},
 		},
 	)
 	if e != nil || p.Action == nil || p.Action.Name != "select" {
@@ -163,7 +168,7 @@ func TestCancellationRequestOffersActualButtonWithoutClaimingWrite(t *testing.T)
 	defer s.Close()
 	p, e := (agent.Remote{URL: s.URL}).Plan(
 		context.Background(),
-		agent.Input{Text: "отмени бронирование", Workflow: core.Workflow{State: "booked"}},
+		agent.Input{Text: "отмени бронирование", Workflow: workflow.Workflow{State: "booked"}},
 	)
 	if e != nil || p.Action != nil || !strings.Contains(p.Text, "Отменить заявку") ||
 		!strings.Contains(p.Text, "Пока она не отменена") {
@@ -179,8 +184,8 @@ func TestDraftWithoutCapacityGetsUsefulGuidance(t *testing.T) {
 		context.Background(),
 		agent.Input{
 			Text:     "помоги закончить",
-			Workflow: core.Workflow{State: "draft", SlotID: "massage-1"},
-			Catalog:  []core.Slot{{ID: "massage-1", Remaining: 0}},
+			Workflow: workflow.Workflow{State: "draft", SlotID: "massage-1"},
+			Catalog:  []workflow.Slot{{ID: "massage-1", Remaining: 0}},
 		},
 	)
 	if e != nil || p.Action != nil || !strings.Contains(p.Text, "нет свободных мест") {

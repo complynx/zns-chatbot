@@ -49,7 +49,8 @@ func safeAgentOperation(operation string) string {
 		"knowledge.memos", "knowledge.memo_read", "knowledge.memo_set", "knowledge.memo_delete",
 		"knowledge.suggest", "knowledge.curate", "knowledge.remove_fact", "knowledge.review_card",
 		"memo.read", "history.read", "model.loop",
-		"model.cache", "model.remote", "model.validation":
+		"model.cache", "model.remote", "model.validation",
+		"script.registry.resolve", "script.registry.list", "script.callback", "script.knowledge.refresh", "script.source.admit", "script.call.prepare", "script.call.admit", "script.call.execute", "script.call.complete":
 		return operation
 	default:
 		return diagnosticUnknown

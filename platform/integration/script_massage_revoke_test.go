@@ -17,7 +17,7 @@ type massageWriteBarrier struct {
 }
 
 func (barrier *massageWriteBarrier) RoundTrip(request *http.Request) (*http.Response, error) {
-	if request.Method == http.MethodPut && request.URL.Path == "/v1/massage/preferences" {
+	if request.Method == http.MethodPost && request.URL.Path == "/internal/derived/massage-preferences" {
 		barrier.once.Do(barrier.before)
 	}
 	return http.DefaultTransport.RoundTrip(request)
@@ -36,6 +36,7 @@ INSERT INTO core.massage_specialists(event_id,owner,name) VALUES('role-only','al
 		)
 		require.NoError(t, deleteErr)
 	}}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	result := runMassageScript(t, f, identity.AliceTelegramID, 9954, `
 const cached=tools.massage.practitioner.configure;
 let denied=false; try {cached({event:"role-only",bookings:false,next:false});} catch (_) {denied=true;}

@@ -1,0 +1,382 @@
+package replacement
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"os/exec"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+)
+
+const commandTimeout = 10 * time.Second
+const commandOutputLimit = 2 << 20
+
+// Command runs Docker directly without shell interpretation.
+type Command interface {
+	Run(context.Context, []string, []string) ([]byte, error)
+}
+
+// DockerCommand bounds execution and output; errors never expose command output or secrets.
+type DockerCommand struct{}
+
+// Run executes only the installed Docker CLI.
+func (DockerCommand) Run(ctx context.Context, args, environment []string) ([]byte, error) {
+	command := exec.CommandContext(ctx, "docker", args...)
+	command.Env = append(os.Environ(), environment...)
+	var output boundedOutput
+	command.Stdout = &output
+	if err := command.Run(); err != nil {
+		return nil, errors.New("Docker operation failed")
+	}
+	return output.Bytes(), nil
+}
+
+type boundedOutput struct{ bytes.Buffer }
+
+// Write fails before retaining unbounded Docker output.
+func (b *boundedOutput) Write(data []byte) (int, error) {
+	if b.Len()+len(data) > commandOutputLimit {
+		return 0, ErrUnknown
+	}
+	return b.Buffer.Write(data)
+}
+
+// Docker is the sole-launcher adapter for a fixed reviewed Compose topology.
+type Docker struct {
+	Command      Command
+	Installation string
+	Project      string
+	Files        []string
+	ManagedRoles []string
+	Database     string
+	DatabaseHost string
+}
+
+func (d Docker) call(ctx context.Context, args, environment []string) ([]byte, error) {
+	limited, cancel := context.WithTimeout(ctx, commandTimeout)
+	defer cancel()
+	return d.Command.Run(limited, args, environment)
+}
+
+// Identity binds the ledger to the Docker daemon.
+func (d Docker) Identity(ctx context.Context) (string, error) {
+	data, err := d.call(ctx, []string{"info", "--format", "{{.ID}}"}, nil)
+	return strings.TrimSpace(string(data)), err
+}
+
+// Inventory includes stopped and restarting instances of the installation.
+func (d Docker) Inventory(ctx context.Context) ([]Container, error) {
+	data, err := d.call(
+		ctx,
+		[]string{"ps", "-a", "-q", "--no-trunc", "--filter", "label=" + LabelInstallation + "=" + d.Installation},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	ids := strings.Fields(string(data))
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	args := append([]string{"inspect", "--type", "container"}, ids...)
+	data, err = d.call(ctx, args, nil)
+	if err != nil {
+		return nil, err
+	}
+	return d.decodeInventory(data)
+}
+
+type dockerContainer struct {
+	ID      string `json:"Id"`
+	Image   string `json:"Image"`
+	Created string `json:"Created"`
+	State   struct {
+		Running    bool `json:"Running"`
+		Restarting bool `json:"Restarting"`
+		Paused     bool `json:"Paused"`
+		PID        int  `json:"Pid"`
+		Health     *struct {
+			Status string `json:"Status"`
+		} `json:"Health"`
+	} `json:"State"`
+	Config struct {
+		Labels map[string]string `json:"Labels"`
+		Image  string            `json:"Image"`
+		Env    []string          `json:"Env"`
+		Cmd    []string          `json:"Cmd"`
+	} `json:"Config"`
+	HostConfig struct {
+		Privileged    bool   `json:"Privileged"`
+		PidMode       string `json:"PidMode"`
+		RestartPolicy struct {
+			Name string `json:"Name"`
+		} `json:"RestartPolicy"`
+	} `json:"HostConfig"`
+	Mounts []struct {
+		Source      string `json:"Source"`
+		Destination string `json:"Destination"`
+	} `json:"Mounts"`
+}
+
+func (d Docker) decodeInventory(data []byte) ([]Container, error) {
+	var raw []dockerContainer
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, ErrUnknown
+	}
+	result := make([]Container, 0, len(raw))
+	for _, item := range raw {
+		if err := d.validateContainer(item); err != nil {
+			return nil, err
+		}
+		health := ""
+		if item.State.Health != nil {
+			health = item.State.Health.Status
+		}
+		result = append(result, Container{ID: item.ID, Component: item.Config.Labels[LabelComponent],
+			Launch: item.Config.Labels[LabelLaunch], Image: item.Image, Created: item.Created,
+			Running: item.State.Running, Restarting: item.State.Restarting, Paused: item.State.Paused,
+			PID: item.State.PID, Health: health})
+	}
+	return result, nil
+}
+
+func (d Docker) validateContainer(item dockerContainer) error {
+	labels := item.Config.Labels
+	instance := runtimeapp.Instance{Installation: labels[LabelInstallation], Launch: labels[LabelLaunch]}
+	if instance.Validate() != nil || instance.Installation != d.Installation ||
+		!slices.Contains(
+			Components(),
+			labels[LabelComponent],
+		) || item.ID == "" || item.Image == "" || item.Created == "" {
+		return ErrUnknown
+	}
+	if item.HostConfig.Privileged || item.HostConfig.PidMode != "" ||
+		item.HostConfig.RestartPolicy.Name != "no" || !strings.Contains(item.Config.Image, "@sha256:") {
+		return ErrUnknown
+	}
+	for _, mount := range item.Mounts {
+		if strings.Contains(mount.Source, "docker.sock") || strings.Contains(mount.Destination, "docker.sock") {
+			return ErrUnknown
+		}
+	}
+	required := []string{
+		runtimeapp.InstallationEnv + "=" + instance.Installation,
+		runtimeapp.LaunchEnv + "=" + instance.Launch,
+	}
+	for _, entry := range required {
+		if !slices.Contains(item.Config.Env, entry) {
+			return ErrUnknown
+		}
+	}
+	if labels[LabelComponent] == componentApp && !slices.Equal(item.Config.Cmd, []string{componentApp}) {
+		return ErrUnknown
+	}
+	return d.validateDatabase(item)
+}
+
+func (d Docker) composeArgs() []string {
+	args := []string{"compose", "--project-name", d.Project}
+	for _, file := range d.Files {
+		args = append(args, "--file", file)
+	}
+	return append(args, "--profile", "runtime")
+}
+
+// Create prepares, validates and returns exact identities without starting any process.
+func (d Docker) Create(ctx context.Context, instance runtimeapp.Instance) ([]Container, error) {
+	if instance.Installation != d.Installation || instance.Validate() != nil {
+		return nil, ErrConfiguration
+	}
+	environment := []string{
+		runtimeapp.InstallationEnv + "=" + instance.Installation,
+		runtimeapp.LaunchEnv + "=" + instance.Launch,
+	}
+	if err := d.validateComposition(ctx, environment); err != nil {
+		return nil, err
+	}
+	args := append(d.composeArgs(), "create", "--no-build", "--pull", "never")
+	args = append(args, Components()...)
+	if _, err := d.call(ctx, args, environment); err != nil {
+		return nil, err
+	}
+	inventory, err := d.Inventory(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(inventory) != len(Components()) {
+		return nil, ErrUnknown
+	}
+	ordered := make([]Container, 0, len(inventory))
+	for _, component := range Components() {
+		matches := 0
+		for _, item := range inventory {
+			if item.Component == component && item.Launch == instance.Launch && !item.Running && item.PID == 0 {
+				ordered = append(ordered, item)
+				matches++
+			}
+		}
+		if matches != 1 {
+			return nil, ErrUnknown
+		}
+	}
+	return ordered, nil
+}
+
+// Start starts only the exact prepared IDs, helpers before app.
+func (d Docker) Start(ctx context.Context, containers []Container) error {
+	for _, item := range containers {
+		if _, err := d.call(ctx, []string{"start", item.ID}, nil); err != nil {
+			return err
+		}
+		if err := d.waitHealthy(ctx, item.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Stop requests a bounded graceful stop for the entire group.
+func (d Docker) Stop(ctx context.Context, containers []Container) error {
+	if len(containers) == 0 {
+		return nil
+	}
+	args := []string{"stop", "--time", "25"}
+	for _, item := range containers {
+		args = append(args, item.ID)
+	}
+	_, err := d.Command.Run(ctx, args, nil)
+	return err
+}
+
+// Kill targets only still-running known containers after the stop budget.
+func (d Docker) Kill(ctx context.Context, containers []Container) error {
+	current, err := d.Inventory(ctx)
+	if err != nil {
+		return err
+	}
+	args := []string{"kill"}
+	for _, item := range current {
+		if !slices.ContainsFunc(containers, func(known Container) bool { return item.ID == known.ID }) {
+			return ErrUnknown
+		}
+		if item.Running || item.Restarting || item.Paused || item.PID != 0 {
+			args = append(args, item.ID)
+		}
+	}
+	if len(args) == 1 {
+		return nil
+	}
+	_, err = d.call(ctx, args, nil)
+	return err
+}
+
+// Remove removes only verified stopped containers, without force or shared volumes.
+func (d Docker) Remove(ctx context.Context, containers []Container) error {
+	if len(containers) == 0 {
+		return nil
+	}
+	args := []string{"rm"}
+	for _, item := range containers {
+		args = append(args, item.ID)
+	}
+	_, err := d.call(ctx, args, nil)
+	return err
+}
+
+func (d Docker) validateDatabase(item dockerContainer) error {
+	component := item.Config.Labels[LabelComponent]
+	if component != componentApp && component != "media-broker" {
+		return nil
+	}
+	key := "DATABASE_URL"
+	if component == componentApp {
+		key = "ZNS_DATABASE__URL"
+	}
+	value := ""
+	matches := 0
+	for _, entry := range item.Config.Env {
+		if suffix, found := strings.CutPrefix(entry, key+"="); found {
+			value = suffix
+			matches++
+		}
+	}
+	if matches != 1 || (!strings.HasPrefix(value, "postgres://") && !strings.HasPrefix(value, "postgresql://")) {
+		return ErrUnknown
+	}
+	config, err := pgx.ParseConfig(value)
+	if err != nil || config.Database != d.Database || config.Host != d.DatabaseHost ||
+		!slices.Contains(d.ManagedRoles, config.User) {
+		return ErrUnknown
+	}
+	return nil
+}
+
+type composeService struct {
+	DependsOn   map[string]json.RawMessage `json:"depends_on"`
+	Links       []string                   `json:"links"`
+	VolumesFrom []string                   `json:"volumes_from"`
+	NetworkMode string                     `json:"network_mode"`
+	PID         string                     `json:"pid"`
+	IPC         string                     `json:"ipc"`
+}
+
+// validateComposition checks the actual resolved model before create can affect dependencies.
+func (d Docker) validateComposition(ctx context.Context, environment []string) error {
+	data, err := d.call(ctx, append(d.composeArgs(), "config", "--format", "json"), environment)
+	if err != nil {
+		return err
+	}
+	var project struct {
+		Services map[string]composeService `json:"services"`
+	}
+	if err = json.Unmarshal(data, &project); err != nil {
+		return ErrUnknown
+	}
+	for _, component := range Components() {
+		service, found := project.Services[component]
+		if !found || len(service.DependsOn) != 0 || len(service.Links) != 0 || len(service.VolumesFrom) != 0 {
+			return ErrUnknown
+		}
+		for _, namespace := range []string{service.NetworkMode, service.PID, service.IPC} {
+			if strings.HasPrefix(namespace, "service:") {
+				return ErrUnknown
+			}
+		}
+	}
+	return nil
+}
+
+func (d Docker) waitHealthy(ctx context.Context, id string) error {
+	for {
+		inventory, err := d.Inventory(ctx)
+		if err != nil {
+			return err
+		}
+		index := slices.IndexFunc(inventory, func(item Container) bool { return item.ID == id })
+		if index < 0 || !inventory[index].Running {
+			return ErrStopped
+		}
+		switch inventory[index].Health {
+		case "", "healthy":
+			return nil
+		case "starting":
+		default:
+			return ErrStopped
+		}
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}

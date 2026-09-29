@@ -2,13 +2,15 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+	deliverypolicy "github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -18,22 +20,24 @@ func (b *Bot) DeliverAdminMessages(ctx context.Context) error {
 	if err := b.deliverAdminInputExpiry(ctx); err != nil {
 		return err
 	}
-	var claim struct {
-		Delivery adminmessage.Delivery `json:"delivery"`
-		Found    bool                  `json:"found"`
-	}
-	err := b.API.requestToken(
-		ctx,
-		b.API.Signer.DeliveryToken(),
-		http.MethodPost,
-		"/internal/admin-messages/claim",
-		nil,
-		&claim,
-	)
-	if err != nil || !claim.Found {
+	delivery, found, err := b.Host.ClaimAdminMessage(ctx)
+	if err != nil || !found {
 		return err
 	}
-	delivery := claim.Delivery
+	return b.deliverPreparedAdminMessage(ctx, delivery)
+}
+
+func (b *Bot) deliverPreparedAdminMessage(ctx context.Context, delivery adminmessage.Delivery) error {
+	if authErr := b.authorizeAdminDelivery(ctx, delivery); authErr != nil {
+		return b.finishAdminAuthorizationFailure(ctx, delivery, authErr)
+	}
+	gate, err := b.Host.BeginAdminMessage(ctx, deliverypolicy.Attempt{ID: delivery.ID, Generation: delivery.Attempt})
+	if err != nil {
+		return err
+	}
+	if !gate.Ready {
+		return nil
+	}
 	var chat any = delivery.Destination.Chat
 	if numeric, parseErr := strconv.ParseInt(delivery.Destination.Chat, 10, 64); parseErr == nil {
 		chat = numeric
@@ -57,52 +61,63 @@ func (b *Bot) DeliverAdminMessages(ctx context.Context) error {
 	var result telegram.Message
 	sendErr := b.TG.Call(sendCtx, method, payload, &result)
 	cancel()
-	body, err := json.Marshal(adminMessageCompletion(delivery, result.ID, sendErr))
+	completionCtx, finish := deliveryCompletionContext(ctx)
+	defer finish()
+	return b.completeAdminDelivery(completionCtx, adminMessageCompletion(delivery, result.ID, sendErr))
+}
+
+func (b *Bot) completeAdminDelivery(ctx context.Context, result adminmessage.Completion) error {
+	return b.Host.CompleteAdminMessage(ctx, result)
+}
+
+func (b *Bot) authorizeAdminDelivery(ctx context.Context, delivery adminmessage.Delivery) error {
+	if delivery.Actor == "" || delivery.ActorTelegramID == 0 {
+		return identity.ErrZitadelIdentity
+	}
+	actorCtx, err := b.API.NotificationContext(ctx, delivery.Actor, delivery.ActorTelegramID)
 	if err != nil {
 		return err
 	}
-	var completed struct {
-		OK bool `json:"ok"`
-	}
-	return b.API.requestToken(
-		ctx,
-		b.API.Signer.DeliveryToken(),
-		http.MethodPost,
-		"/internal/admin-messages/complete",
-		body,
-		&completed,
-	)
+	return b.API.CheckAdminMessagePublication(actorCtx, delivery.Actor, delivery.MessageID)
 }
 
-const (
-	adminSendTimeout  = 20 * time.Second
-	adminSendAttempts = 3
-)
+func (b *Bot) finishAdminAuthorizationFailure(
+	ctx context.Context,
+	delivery adminmessage.Delivery,
+	authErr error,
+) error {
+	denied := errors.Is(authErr, identity.ErrZitadelIdentity) || errors.Is(authErr, identity.ErrZitadelUserInactive)
+	if problem, ok := errors.AsType[*core.ProblemError](authErr); ok {
+		denied = denied || problem.Status == http.StatusUnauthorized || problem.Status == http.StatusForbidden
+		denied = denied || problem.Code == "source_revoked"
+	}
+	completion := adminmessage.Completion{
+		ID:      delivery.ID,
+		Attempt: delivery.Attempt,
+		Outcome: deliverypolicy.Outcome{
+			Kind:    deliverypolicy.Deferred,
+			Reason:  "admin_identity_unavailable",
+			Missing: true,
+		},
+	}
+	if denied {
+		completion.Outcome = deliverypolicy.Outcome{Kind: deliverypolicy.Cancelled, Reason: "admin_identity_denied"}
+	}
+	if err := b.completeAdminDelivery(ctx, completion); err != nil {
+		return err
+	}
+	if denied {
+		return nil
+	}
+	return authErr
+}
 
-func adminMessageCompletion(delivery adminmessage.Delivery, messageID int64, sendErr error) adminmessage.Completion {
-	result := adminmessage.Completion{ID: delivery.ID, Attempt: delivery.Attempt, MessageID: messageID}
-	if sendErr == nil && messageID > 0 {
-		return result
+const adminSendTimeout = 20 * time.Second
+
+func adminMessageCompletion(item adminmessage.Delivery, messageID int64, sendErr error) adminmessage.Completion {
+	return adminmessage.Completion{
+		ID:      item.ID,
+		Attempt: item.Attempt,
+		Outcome: telegram.DeliveryOutcome(messageID, sendErr),
 	}
-	result.MessageID = 0
-	result.Failure = "telegram_outcome_unknown"
-	apiErr, ok := errors.AsType[*telegram.APIError](sendErr)
-	if !ok {
-		return result
-	}
-	result.Failure = "admin_telegram_rejected"
-	if apiErr.Code != http.StatusTooManyRequests {
-		return result
-	}
-	result.Failure = "telegram_rate_limit"
-	delay := apiErr.Parameters.RetryAfter
-	if delay < 0 || delay > adminmessage.MaxRetryAfterSeconds {
-		result.Failure = "telegram_invalid_cooldown"
-		return result
-	}
-	result.Retry = delivery.Attempt < adminSendAttempts
-	if result.Retry {
-		result.RetryAfter = delay
-	}
-	return result
 }

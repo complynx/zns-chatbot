@@ -10,12 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 )
@@ -167,7 +166,7 @@ func TestMemoryHierarchyAPIAuthenticationAndReferences(t *testing.T) {
 	)
 	require.NoError(t, err)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
-	handler := api.Handler(runtimeapp.NewServices(s.DB, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler))
+	handler := api.Handler(appservices.NewServices(s.DB, appservices.Options{}), signer, slog.New(slog.DiscardHandler))
 	request := func(actor, path string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		if actor != "" {

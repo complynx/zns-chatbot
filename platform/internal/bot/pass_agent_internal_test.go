@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -33,7 +36,11 @@ func TestRegistrationContactsAndGrounding(t *testing.T) {
 				Text:         tc.text,
 				Registration: &agent.RegistrationContext{TrustedPartnerIDs: registrationContacts(&tc.message)},
 			}
-			assert.Equal(t, tc.allowed, groundedRegistrationContact(input, 202))
+			assert.Equal(
+				t,
+				tc.allowed,
+				interaction.GroundedRegistrationContact(agenthost.CurrentRequestEvidence(input), input, 202),
+			)
 		})
 	}
 }
@@ -42,14 +49,14 @@ func TestRegistrationContextBudgetCannotLeakOversizedResults(t *testing.T) {
 	t.Parallel()
 	value := &agent.RegistrationContext{
 		Reads: []agent.RegistrationReadResult{
-			{Events: []passbooking.Event{{ID: strings.Repeat("x", registrationContextBytes)}}},
+			{Events: []passbooking.Event{{ID: strings.Repeat("x", interaction.RegistrationContextBytes)}}},
 		},
 	}
-	require.NoError(t, boundRegistrationContext(value))
+	require.NoError(t, interaction.BoundRegistrationContext(value))
 	assert.True(t, value.Reads[0].Omitted)
 	assert.Empty(t, value.Reads[0].Events)
-	value.Events = []passbooking.Event{{ID: strings.Repeat("x", registrationContextBytes)}}
-	require.Error(t, boundRegistrationContext(value))
+	value.Events = []passbooking.Event{{ID: strings.Repeat("x", interaction.RegistrationContextBytes)}}
+	require.Error(t, interaction.BoundRegistrationContext(value))
 }
 
 func TestRegistrationBindingRequiresExactAuthorizedEvidence(t *testing.T) {
@@ -68,13 +75,13 @@ func TestRegistrationBindingRequiresExactAuthorizedEvidence(t *testing.T) {
 		View:               agent.RegistrationView,
 		RegistrationAction: &agent.RegistrationProposal{Name: passInvite, Event: "dance", InviteTelegramID: 202},
 	}
-	command, _, err := bindRegistrationPlan(plan, input)
+	command, _, err := interaction.BindRegistrationPlan(agenthost.CurrentRequestEvidence(input), plan, input)
 	require.NoError(t, err)
 	assert.EqualValues(t, 7, command.Version)
 	plan.RegistrationAction.Name = "admin_cancel"
 	plan.RegistrationAction.InviteTelegramID = 0
 	plan.RegistrationAction.Target = "bob"
-	_, _, err = bindRegistrationPlan(plan, input)
+	_, _, err = interaction.BindRegistrationPlan(agenthost.CurrentRequestEvidence(input), plan, input)
 	require.Error(t, err)
 	context.Reads = append(
 		context.Reads,
@@ -83,10 +90,10 @@ func TestRegistrationBindingRequiresExactAuthorizedEvidence(t *testing.T) {
 			Queue:   []passbooking.Booking{{Owner: "bob", Version: 9}},
 		},
 	)
-	command, _, err = bindRegistrationPlan(plan, input)
+	command, _, err = interaction.BindRegistrationPlan(agenthost.CurrentRequestEvidence(input), plan, input)
 	require.NoError(t, err)
 	assert.EqualValues(t, 9, command.TargetVersion)
 	context.Reads[1].Error = mediaForbidden
-	_, _, err = bindRegistrationPlan(plan, input)
+	_, _, err = interaction.BindRegistrationPlan(agenthost.CurrentRequestEvidence(input), plan, input)
 	require.Error(t, err)
 }

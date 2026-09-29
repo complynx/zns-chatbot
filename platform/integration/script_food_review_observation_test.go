@@ -127,12 +127,23 @@ func TestFoodReviewProofChecksVersionAtByteRead(t *testing.T) {
 				_, err = f.db.Exec(t.Context(), `UPDATE core.food_orders SET version=version+1 WHERE id=$1`, order.ID)
 				require.NoError(t, err)
 			}}}
+			f.b.Host.HTTP = f.b.API.HTTP
 			code := fmt.Sprintf(
 				`tools.food.review.read({order_id:%q});let displayed=false;try{displayed=tools.food.review.proof({kind:"meals"}).displayed;}catch(_){}return {displayed};`,
 				order.ID,
 			)
 			result := runFoodAdminVM(t, f, 29202, identity.BobTelegramID, code)
-			assert.JSONEq(t, `{"displayed":false}`, string(result))
+			if mode == "revoked" {
+				assert.JSONEq(t, `{"omitted":true,"reason":"pass_access_changed"}`, string(result))
+				var redacted bool
+				require.NoError(t, f.db.QueryRow(
+					t.Context(),
+					`SELECT COALESCE((content->0->>'pass_redacted')::boolean,false) FROM bot.interactions WHERE owner='bob' AND update_id=29202 AND kind='script_runs'`,
+				).Scan(&redacted))
+				assert.True(t, redacted, "source revocation must remain terminal in the saved script")
+			} else {
+				assert.JSONEq(t, `{"displayed":false}`, string(result))
+			}
 			for _, message := range chatMessages(t, f, 202) {
 				assert.Nil(t, message.Document)
 			}

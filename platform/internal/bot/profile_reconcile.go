@@ -51,7 +51,7 @@ func (b *Bot) reconcileProfileViews(ctx context.Context) error {
 		return err
 	}
 	for _, item := range views {
-		viewContext, authErr := b.API.notificationContext(ctx, item.Owner, item.Chat)
+		viewContext, authErr := b.API.NotificationContext(ctx, item.Owner, item.Chat)
 		if authErr != nil {
 			b.logger().WarnContext(ctx, "profile view identity pending")
 			continue

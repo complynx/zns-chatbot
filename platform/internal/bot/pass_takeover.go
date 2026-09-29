@@ -2,19 +2,19 @@ package bot
 
 import (
 	"context"
-	"errors"
-	"slices"
-	"strconv"
-	"strings"
-	"unicode"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
 func (r *passMenuRenderer) takeoverLink(id int64, label string) {
-	state := passMenuState{Event: r.state.Event, View: agent.RegistrationTakeoverTarget, AdminTargetTelegramID: id}
+	state := interaction.RegistrationMenu{
+		Event:                 r.state.Event,
+		View:                  agent.RegistrationTakeoverTarget,
+		AdminTargetTelegramID: id,
+	}
 	for _, choice := range r.choices {
 		if view := choice.action.View; view != nil && view.View == state.View && view.AdminTargetTelegramID == id {
 			return
@@ -88,77 +88,10 @@ func (r *passMenuRenderer) takeoverHint(ctx context.Context) error {
 	return nil
 }
 
-func isTakeoverProposal(p agent.RegistrationProposal) bool {
-	return p.Name == passbooking.CommandTakeover || p.Name == passbooking.CommandReceivedOnly ||
-		(p.Name == agent.RegistrationShow && p.View == agent.RegistrationTakeoverTarget)
-}
-
-func takeoverEvidence(value *agent.RegistrationContext, event, owner string) *passbooking.TakeoverTarget {
-	for _, read := range slices.Backward(value.Reads) {
-		if read.Error == "" && read.Request.Event == event && read.TakeoverTarget != nil &&
-			read.TakeoverTarget.Booking.Owner == owner {
-			return read.TakeoverTarget
-		}
-	}
-	return nil
-}
-
-func bindTakeover(
-	p agent.RegistrationProposal,
-	value *agent.RegistrationContext,
-) (*passbooking.Command, *passMenuState, error) {
-	target := takeoverEvidence(value, p.Event, p.Target)
-	if target == nil {
-		return nil, nil, errors.New("takeover target lacks evidence")
-	}
-	state := &passMenuState{
-		Event:                 p.Event,
-		View:                  agent.RegistrationTakeoverTarget,
-		AdminTargetTelegramID: target.Booking.TelegramID,
-	}
-	if p.Name == agent.RegistrationShow {
-		return nil, state, nil
-	}
-	command := &passbooking.Command{
-		Name:          p.Name,
-		Event:         p.Event,
-		Version:       target.ActorVersion,
-		Target:        p.Target,
-		TargetVersion: target.Booking.Version,
-	}
-	return command, state, nil
-}
-
-func (b *Bot) fetchTakeoverTarget(
-	ctx context.Context,
-	owner string,
-	p agent.RegistrationProposal,
-	result agent.RegistrationReadResult,
-) (agent.RegistrationReadResult, error) {
-	id, err := strconv.ParseInt(p.Target, 10, 64)
-	if err != nil {
-		return result, err
-	}
-	target, err := b.API.PassTakeoverTarget(ctx, owner, p.Event, id)
-	target.Name = passMenuLabel(target.Name)
-	result.TakeoverTarget = &target
-	return result, err
-}
-
 func (r *passMenuRenderer) takeoverContact(contact *passbooking.Contact) string {
 	if contact == nil {
 		return r.text(i18n.RegistrationReceiverMissing)
 	}
 	r.contact(*contact)
 	return passMenuLabel(contact.Name)
-}
-
-func takeoverEventGrounded(input agent.Input, event string) bool {
-	if registrationEventKnown(input.Registration, event) || input.Registration.CurrentEvent == event {
-		return true
-	}
-	tokens := strings.FieldsFunc(currentRequestEvidence(input), func(r rune) bool {
-		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_'
-	})
-	return event != "" && slices.Contains(tokens, event)
 }

@@ -28,7 +28,7 @@ func (s Service) Review(ctx context.Context, actor string, id, offset int64) (Pa
 	defer func() { _ = tx.Rollback(ctx) }()
 	message, err := owned(ctx, tx, actor, id)
 	if err != nil {
-		return result, err
+		return result, preserveSourceRefusal(ctx, tx, err)
 	}
 	result.State = message.State
 	result.Total = int64(len(message.Request.Destinations))

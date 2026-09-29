@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -26,10 +26,10 @@ func TestPassBookingAPICatalogInvitationAndActor(t *testing.T) {
 	require.NoError(t, err)
 	signer := identity.Signer{Key: []byte(strings.Repeat("p", 32))}
 	server := httptest.NewServer(
-		api.Handler(runtimeapp.NewServices(db, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler)),
+		api.Handler(appservices.NewServices(db, appservices.Options{}), signer, slog.New(slog.DiscardHandler)),
 	)
 	defer server.Close()
-	client := bot.APIClient{Base: server.URL, Signer: signer, HTTP: server.Client()}
+	client := appclient.Client{Base: server.URL, SandboxToken: signer.Token, HTTP: server.Client()}
 	events, err := client.PassEvents(t.Context(), "alice")
 	require.NoError(t, err)
 	require.Len(t, events, 1)

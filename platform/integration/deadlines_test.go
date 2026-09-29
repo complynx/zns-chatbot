@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/workflow"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 func TestConfirmationRechecksTimeAfterSlotLock(t *testing.T) {
@@ -20,7 +20,7 @@ func TestConfirmationRechecksTimeAfterSlotLock(t *testing.T) {
 		t.Run(code, func(t *testing.T) {
 			t.Parallel()
 			db := database(t)
-			s := core.Service{DB: db}
+			s := workflow.Service{DB: db}
 			mustExec(t, s, "alice", action("select", "massage-1", 0, "select", "manual"))
 			var deadline time.Time
 			query := `UPDATE core.workflows SET expires_at=clock_timestamp()+interval '2 seconds' WHERE owner='alice' RETURNING expires_at`

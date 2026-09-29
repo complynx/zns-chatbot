@@ -10,11 +10,14 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -23,8 +26,6 @@ const legacyFoodPrefix = "food|"
 const foodShowProof = "food_show_proof"
 const foodBeginPayment = "begin_payment"
 const foodSubmitProof = "submit_proof"
-const foodExportFilenameField = "filename"
-const foodExportMessageIDField = "message_id"
 
 type foodButtonCommand struct {
 	Command legacyfood.Command `json:"command"`
@@ -129,14 +130,18 @@ func (b *Bot) closeFood(ctx context.Context, in incoming, update telegram.Update
 	if err != nil {
 		return err
 	}
-	_, err = b.editOrSend(
+	err = b.queueBotResult(
 		ctx,
-		telegram.Send{
-			ChatID:    in.chat,
-			MessageID: update.Callback.Message.ID,
-			Text:      text,
-			Markup:    telegram.Markup{Rows: [][]telegram.Button{}},
+		in.owner,
+		in.chat,
+		update.ID,
+		botFamilyFoodClosed,
+		botdelivery.Reference{Family: botFamilyFoodClosed, Event: event},
+		botdelivery.StoredResult{
+			Notice:  i18n.FoodClosed,
+			Payload: telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: [][]telegram.Button{}}},
 		},
+		update.Callback.Message.ID,
 	)
 	return err
 }
@@ -208,67 +213,70 @@ func (b *Bot) foodFailure(ctx context.Context, in incoming, err error) error {
 }
 
 func (b *Bot) foodNotice(ctx context.Context, in incoming, id i18n.ID) error {
-	text, err := b.orderMessage(ctx, in.owner, id, nil)
-	if err != nil {
-		return err
-	}
-	return b.deliverOrderCard(ctx, in.owner, "food:notice", telegram.Send{ChatID: in.chat, Text: text})
+	return b.queueBotUpdateResult(
+		ctx,
+		in.chat,
+		"food_notice:"+string(id),
+		botdelivery.Reference{Family: botFamilyStatic},
+		botdelivery.StoredResult{Notice: id},
+	)
 }
 
 func (b *Bot) exportFood(ctx context.Context, in incoming, update int64) error {
-	view, err := b.API.foodView(ctx, in.owner, "", "", false)
+	view, err := b.API.FoodViewForReview(ctx, in.owner, "", "", false)
 	if err != nil {
 		return b.foodFailure(ctx, in, err)
 	}
-	if err = b.exportFoodEvent(ctx, in, update, view.Event.ID); err != nil {
+	if err = b.exportFoodEvent(ctx, in, update, view.Event.ID, nil); err != nil {
 		return b.foodFailure(ctx, in, err)
-	}
-	return b.foodNotice(ctx, in, i18n.FoodExported)
-}
-
-func (b *Bot) exportFoodEvent(ctx context.Context, in incoming, update int64, event string) error {
-	exported, err := b.API.ExportFood(ctx, in.owner, event)
-	if err != nil {
-		return err
-	}
-	for _, file := range []struct {
-		name, receipt string
-		body          []byte
-	}{
-		{"food_orders_" + event + ".csv", "food_orders_export", exported.Orders},
-		{"meal_summary_" + event + ".csv", "food_summary_export", exported.Summary},
-	} {
-		if err = b.deliverFoodExport(ctx, in, update, event, file.receipt, file.name, file.body); err != nil {
-			return err
-		}
 	}
 	return nil
 }
 
-// A durable receipt skips completed files. Telegram and this write are not atomic;
-// a lost response or crash after sending can still leave an unknown delivery.
-func (b *Bot) deliverFoodExport(
+func (b *Bot) exportFoodEvent(
 	ctx context.Context,
 	in incoming,
 	update int64,
-	event, receipt, filename string,
-	body []byte,
+	event string,
+	current *readsource.Derivation,
 ) error {
-	var sent bool
-	err := b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3)`,
-		in.owner, update, receipt).
-		Scan(&sent)
-	if err != nil || sent {
+	persisted, derived, err := b.foodExportSource(ctx, in.owner, update)
+	if err != nil {
 		return err
+	}
+	if derived {
+		if err = b.checkFoodDeliverySource(ctx, in.owner, persisted); err != nil {
+			return err
+		}
+		if current == nil {
+			current = persisted
+		}
+	}
+	if current != nil {
+		if err = b.checkFoodDeliverySource(ctx, in.owner, current); err != nil {
+			return err
+		}
 	}
 	if err = b.foodExportAllowed(ctx, in.owner, event); err != nil {
 		return err
 	}
-	message, err := b.TG.SendDocument(ctx, in.chat, filename, body)
-	if err != nil {
-		return err
+	for _, family := range []string{botFamilyFoodOrdersExport, botFamilyFoodSummaryExport} {
+		_, err = b.queueBotDocument(
+			ctx,
+			in.owner,
+			in.chat,
+			botdelivery.Reference{
+				Family:       family,
+				Event:        event,
+				Update:       update,
+				Source:       current,
+				Notice:       i18n.FoodExported,
+				Continuation: botdelivery.Continuation{Kind: botDocumentKind, Key: family},
+			},
+		)
+		if err != nil {
+			return err
+		}
 	}
-	return b.record(ctx, in.owner, update, receipt, map[string]any{
-		originField: in.origin, foodExportFilenameField: filename, foodExportMessageIDField: message.ID,
-	})
+	return nil
 }

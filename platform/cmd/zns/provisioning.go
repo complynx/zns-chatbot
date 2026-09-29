@@ -87,6 +87,6 @@ func configureTrustedOnboarding(b *bot.Bot, cfg config.Config) error {
 	if cfg.Auth.Mode != "zitadel" || err != nil || botID <= 0 || botID >= 1<<52 {
 		return errors.New("invalid provisioning bot identity")
 	}
-	b.Onboarding = func(ctx context.Context, user telegram.User) error { return b.API.ProvisionTelegram(ctx, botID, user) }
+	b.Onboarding = func(ctx context.Context, user telegram.User) error { return b.Host.ProvisionTelegram(ctx, botID, user) }
 	return nil
 }

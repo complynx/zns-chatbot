@@ -9,12 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
@@ -147,7 +146,13 @@ func TestMemoryEscapedHistorySummaryAndSourceBounds(t *testing.T) {
 		source := fmt.Sprint("source-", i)
 		require.NoError(
 			t,
-			archive.Append(t.Context(), "alice", source, "user", strings.Repeat("\u0001", conversation.MaxTextBytes)),
+			archive.AppendOriginal(
+				t.Context(),
+				"alice",
+				source,
+				"user",
+				strings.Repeat("\u0001", conversation.MaxTextBytes),
+			),
 		)
 		keys = append(keys, source)
 	}
@@ -164,7 +169,7 @@ func TestMemoryMaximumEscapedDocumentCrossesPublicAPI(t *testing.T) {
 	t.Parallel()
 	s := knowledgeFixture(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
-	handler := api.Handler(runtimeapp.NewServices(s.DB, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler))
+	handler := api.Handler(appservices.NewServices(s.DB, appservices.Options{}), signer, slog.New(slog.DiscardHandler))
 	command := knowledge.Command{
 		Name:    knowledge.DocumentSet,
 		Key:     "escaped-max",

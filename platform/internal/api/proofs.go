@@ -22,7 +22,12 @@ func proofRoutes(mux *http.ServeMux, service orders.Service, logger *slog.Logger
 		respond(logger, w, proof, err)
 	})
 	mux.HandleFunc("GET /v1/order-events/{event}/orders/{order}/proof", func(w http.ResponseWriter, r *http.Request) {
-		proof, err := service.OrderProof(r.Context(), requestOwner(r), r.PathValue("event"), r.PathValue("order"))
+		proof, err := service.OrderProofMetadata(
+			r.Context(),
+			requestOwner(r),
+			r.PathValue("event"),
+			r.PathValue("order"),
+		)
 		respond(logger, w, proof, err)
 	})
 	mux.HandleFunc(

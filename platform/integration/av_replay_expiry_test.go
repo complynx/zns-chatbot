@@ -39,6 +39,7 @@ func TestAVVoiceDurableCommandReplayAfterSourceExpiry(t *testing.T) {
 				OrderAction: &agent.OrderProposal{Name: "add_extra", OrderID: order.ID, Extra: "shuttle"},
 			}
 			f.b.API.HTTP = &http.Client{Transport: &mediaProofResponseFailure{afterCommit: mode == "committed"}}
+			f.b.Host.HTTP = f.b.API.HTTP
 			voice := avUpload(t, f, "voice")
 			require.Error(t, f.b.Handle(t.Context(), voice))
 			var status string
@@ -114,6 +115,7 @@ func TestAVVoiceReceiptReplayAfterSourceExpiry(t *testing.T) {
 	t.Parallel()
 	f, voice, order, photoBytes, worker := receiptVoiceReplayFixture(t)
 	f.b.API.HTTP = &http.Client{Transport: &mediaProofResponseFailure{afterCommit: true}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.Error(t, f.b.Handle(t.Context(), voice))
 	current, err := f.b.API.Order(t.Context(), "alice", order.EventID, order.ID)
 	require.NoError(t, err)
@@ -160,6 +162,7 @@ func TestAVVoiceReplayDoesNotPromoteExpiredTarget(t *testing.T) {
 		response: `{"code":"temporarily_unavailable"}`,
 	}
 	f.b.API.HTTP = &http.Client{Transport: transport}
+	f.b.Host.HTTP = f.b.API.HTTP
 	require.Error(t, f.b.Handle(t.Context(), voice))
 	expireAVReplaySource(t, f, "tg-media-100")
 	expireAVReplaySource(t, f, "tg-media-101")
@@ -192,12 +195,13 @@ func TestAVVoiceReplayRequiresSourceBinding(t *testing.T) {
 				OrderAction: &agent.OrderProposal{Name: "add_extra", OrderID: order.ID, Extra: "shuttle"},
 			}
 			f.b.API.HTTP = &http.Client{Transport: &mediaProofResponseFailure{}}
+			f.b.Host.HTTP = f.b.API.HTTP
 			voice := avUpload(t, f, "voice")
 			require.Error(t, f.b.Handle(t.Context(), voice))
-			query := `UPDATE bot.replies SET plan=jsonb_set(plan,'{media_id}','"other"') WHERE update_id=100`
+			query := `UPDATE interaction.saved_turns SET payload=jsonb_set(payload,'{media_id}','"other"') WHERE owner='alice' AND update_id=100`
 			switch mode {
 			case "av_ids":
-				query = `UPDATE bot.replies SET plan=jsonb_set(plan,'{av_ids}','["other"]') WHERE update_id=100`
+				query = `UPDATE interaction.saved_turns SET payload=jsonb_set(payload,'{av_ids}','["other"]') WHERE owner='alice' AND update_id=100`
 			case "update_id":
 				query = `UPDATE bot.media_intake SET update_id=999 WHERE id='tg-media-100'`
 			case "owner":

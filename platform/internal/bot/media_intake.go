@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
@@ -16,6 +18,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -29,6 +32,8 @@ const mediaOrderChoice = "order"
 const mediaForbidden = "forbidden"
 
 type mediaIntake struct {
+	CommandSource       *readsource.Derivation
+	CommandOrigin       string
 	ID                  string
 	AttachmentID        string
 	Status              string
@@ -41,18 +46,18 @@ type mediaIntake struct {
 
 func (b *Bot) loadMediaIntake(ctx context.Context, owner, id string) (mediaIntake, error) {
 	var item mediaIntake
-	err := b.DB.QueryRow(ctx, `SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command FROM bot.media_intake
+	err := b.DB.QueryRow(ctx, `SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,command_source,last_origin FROM bot.media_intake
 WHERE owner=$1 AND id=$2 AND expires_at>now()`, owner, id).
-		Scan(&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text, &item.Command, &item.RegistrationCommand, &item.FoodCommand)
+		Scan(&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text, &item.Command, &item.RegistrationCommand, &item.FoodCommand, &item.CommandSource, &item.CommandOrigin)
 	return item, err
 }
 
 // Completed notices outlive neutral attachment storage; this never loads an actionable intake.
 func (b *Bot) loadMediaOutcome(ctx context.Context, owner, id string) (mediaIntake, error) {
 	var item mediaIntake
-	err := b.DB.QueryRow(ctx, `SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command FROM bot.media_intake
+	err := b.DB.QueryRow(ctx, `SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,command_source,last_origin FROM bot.media_intake
 WHERE owner=$1 AND id=$2 AND status='done'`, owner, id).
-		Scan(&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text, &item.Command, &item.RegistrationCommand, &item.FoodCommand)
+		Scan(&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text, &item.Command, &item.RegistrationCommand, &item.FoodCommand, &item.CommandSource, &item.CommandOrigin)
 	return item, err
 }
 
@@ -60,9 +65,9 @@ WHERE owner=$1 AND id=$2 AND status='done'`, owner, id).
 func (b *Bot) loadMediaUploadState(ctx context.Context, owner, id string) (mediaIntake, bool, error) {
 	var item mediaIntake
 	var expired bool
-	err := b.DB.QueryRow(ctx, `SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,expires_at<=now()
+	err := b.DB.QueryRow(ctx, `SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,command_source,last_origin,expires_at<=now()
 FROM bot.media_intake WHERE owner=$1 AND id=$2`, owner, id).
-		Scan(&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text, &item.Command, &item.RegistrationCommand, &item.FoodCommand, &expired)
+		Scan(&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text, &item.Command, &item.RegistrationCommand, &item.FoodCommand, &item.CommandSource, &item.CommandOrigin, &expired)
 	return item, expired, err
 }
 
@@ -185,7 +190,7 @@ func (b *Bot) addMediaContext(ctx context.Context, in incoming, input *agent.Inp
 	rows, err := b.DB.Query(ctx, `SELECT id,status FROM bot.media_intake WHERE owner=$1
 AND status<>'done' AND expires_at>now()
 ORDER BY (id=$2) DESC,(strpos($3,id)>0) DESC,(status='choose') DESC,update_id DESC LIMIT 10`,
-		in.owner, in.mediaID, currentRequestEvidence(*input))
+		in.owner, in.mediaID, agenthost.CurrentRequestEvidence(*input))
 	if err != nil {
 		return err
 	}

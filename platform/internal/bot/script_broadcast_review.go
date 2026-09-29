@@ -6,6 +6,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
@@ -14,21 +18,10 @@ import (
 const scriptBroadcastReview = "broadcasts.review"
 const scriptBroadcastShow = "broadcasts.show"
 
-type broadcastReviewArguments struct {
-	ID     int64  `json:"id"`
-	Offset int64  `json:"offset,omitempty"`
-	Cursor string `json:"cursor,omitempty"`
-}
-
 // The receipt binds the selected campaign and native destination before display.
 // Interrupted transport remains uncertain; script recovery must not resend it.
-type broadcastReviewRequest struct {
-	Owner     string                   `json:"owner"`
-	Chat      int64                    `json:"chat"`
-	Arguments broadcastReviewArguments `json:"arguments"`
-}
 
-func (b *Bot) broadcastReviewEntries() []scriptToolEntry {
+func (b *Bot) broadcastReviewEntries() []agenthost.ScriptToolEntry {
 	tools := []scriptclient.Tool{
 		{
 			Name:        scriptBroadcastReview,
@@ -45,20 +38,20 @@ func (b *Bot) broadcastReviewEntries() []scriptToolEntry {
 			),
 		},
 	}
-	entries := make([]scriptToolEntry, 0, len(tools))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(tools))
 	for _, tool := range tools {
-		entries = append(entries, scriptToolEntry{
-			descriptor: tool, prepare: b.prepareBroadcastReview, execute: b.executeBroadcastReview,
-			resultLimit: maxScriptReadBytes,
+		entries = append(entries, agenthost.ScriptToolEntry{
+			Descriptor: tool, Prepare: b.prepareBroadcastReview, Execute: b.executeBroadcastReview,
+			ResultLimit: maxScriptReadBytes,
 		})
 	}
 	return entries
 }
 
 func (b *Bot) prepareBroadcastReview(ctx context.Context, owner string, _ int64,
-	call scriptclient.ToolCall, _ agent.Input) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
-	var args broadcastReviewArguments
+	call scriptclient.ToolCall, _ agent.Input) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+	var args agenthost.BroadcastReviewArguments
 	if err := decodeBroadcastReview(call, &args); err != nil {
 		return record, err
 	}
@@ -69,11 +62,11 @@ func (b *Bot) prepareBroadcastReview(ctx context.Context, owner string, _ int64,
 	if !ok || source.owner != owner {
 		return record, errors.New("broadcast source unavailable")
 	}
-	record.BroadcastReview = &broadcastReviewRequest{Owner: owner, Chat: source.in.chat, Arguments: args}
+	record.BroadcastReview = &agenthost.BroadcastReviewRequest{Owner: owner, Chat: source.in.chat, Arguments: args}
 	return record, nil
 }
 
-func decodeBroadcastReview(call scriptclient.ToolCall, args *broadcastReviewArguments) error {
+func decodeBroadcastReview(call scriptclient.ToolCall, args *agenthost.BroadcastReviewArguments) error {
 	if call.Name == scriptBroadcastShow {
 		var show struct {
 			ID     int64 `json:"id"`
@@ -87,7 +80,7 @@ func decodeBroadcastReview(call scriptclient.ToolCall, args *broadcastReviewArgu
 }
 
 func (b *Bot) executeBroadcastReview(ctx context.Context, owner string, call scriptclient.ToolCall,
-	record scriptToolRecord, _ *agent.Input) (any, error) {
+	record agenthost.ScriptToolRecord, _ *agent.Input) (any, error) {
 	request := record.BroadcastReview
 	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
 	if request == nil || !ok || source.owner != owner || request.Owner != owner || request.Chat != source.in.chat {
@@ -108,12 +101,12 @@ func (b *Bot) executeBroadcastReview(ctx context.Context, owner string, call scr
 		fmt.Sprintf("broadcasts.review:%d:%d", args.ID, args.Offset),
 	)
 	if err != nil {
-		return nil, scriptDomainAPIError(err)
+		return nil, appclient.ReadError(err)
 	}
 	page, err := b.loadAdminMessagePage(ctx, owner, args.ID, args.Offset)
 	if err != nil {
-		return nil, scriptDomainAPIError(err)
+		return nil, appclient.ReadError(err)
 	}
 	chunk, err := core.JSONReadChunk(page, cursor)
-	return chunk, scriptDomainAPIError(err)
+	return chunk, appclient.ReadError(err)
 }

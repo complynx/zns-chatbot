@@ -7,12 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
@@ -22,7 +21,7 @@ func TestMemoryServiceAudienceActorAndSourceBinding(t *testing.T) {
 	t.Parallel()
 	s := knowledgeFixture(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
-	handler := api.Handler(runtimeapp.NewServices(s.DB, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler))
+	handler := api.Handler(appservices.NewServices(s.DB, appservices.Options{}), signer, slog.New(slog.DiscardHandler))
 	_, err := s.Execute(
 		t.Context(),
 		"alice",
@@ -30,7 +29,7 @@ func TestMemoryServiceAudienceActorAndSourceBinding(t *testing.T) {
 	)
 	require.NoError(t, err)
 	archive := conversation.Service{DB: s.DB}
-	require.NoError(t, archive.Append(t.Context(), "alice", "tg-user-55", "user", "Alice source"))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "tg-user-55", "user", "Alice source"))
 	call := func(token, body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPost, "/internal/memory/sources", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer "+token)
@@ -83,7 +82,7 @@ func TestMemoryHostArchivePreservesSensitiveAndMediaSuppression(t *testing.T) {
 	t.Parallel()
 	s := knowledgeFixture(t)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
-	handler := api.Handler(runtimeapp.NewServices(s.DB, runtimeapp.Options{}), signer, slog.New(slog.DiscardHandler))
+	handler := api.Handler(appservices.NewServices(s.DB, appservices.Options{}), signer, slog.New(slog.DiscardHandler))
 	call := func(token, path, body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer "+token)
@@ -91,7 +90,7 @@ func TestMemoryHostArchivePreservesSensitiveAndMediaSuppression(t *testing.T) {
 		handler.ServeHTTP(recorder, request)
 		return recorder
 	}
-	const path = "/internal/history/archive"
+	const path = "/internal/history/archive/original"
 	const user = `{"source_key":"tg-user-56","kind":"user","text":"password: hidden-value"}`
 	assert.Equal(t, http.StatusUnauthorized, call(signer.Token("alice"), path, user).Code)
 	assert.Equal(t, http.StatusUnauthorized, call(signer.Token("alice"), "/internal/memory/assess", `{}`).Code)
@@ -99,14 +98,14 @@ func TestMemoryHostArchivePreservesSensitiveAndMediaSuppression(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	response = call(
 		signer.MemoryProvenanceToken("alice"),
-		path,
-		`{"source_key":"tg-assistant-56","kind":"assistant","text":"The original secret response","reply_to_update_id":56}`,
+		"/internal/history/archive/derived",
+		`{"source_key":"tg-assistant-56","text":"The original secret response","reply_to_update_id":56,"expected_generation":0,"read_authorities":[]}`,
 	)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	response = call(
 		signer.MemoryProvenanceToken("alice"),
-		path,
-		`{"source_key":"tg-assistant-57","kind":"assistant","text":"The raw media response","reply_to_update_id":57,"media":true}`,
+		"/internal/history/archive/derived",
+		`{"source_key":"tg-assistant-57","text":"The raw media response","reply_to_update_id":57,"media":true,"expected_generation":0,"read_authorities":[]}`,
 	)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	archive := conversation.Service{DB: s.DB}

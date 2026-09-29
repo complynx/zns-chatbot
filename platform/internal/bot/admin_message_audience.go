@@ -6,8 +6,11 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
@@ -20,7 +23,7 @@ type broadcastReadArguments struct {
 	Cursor string `json:"cursor,omitempty"`
 }
 
-func (b *Bot) broadcastReadEntries() []scriptToolEntry {
+func (b *Bot) broadcastReadEntries() []agenthost.ScriptToolEntry {
 	tools := []scriptclient.Tool{
 		{
 			Name:        scriptBroadcastAudience,
@@ -37,15 +40,15 @@ func (b *Bot) broadcastReadEntries() []scriptToolEntry {
 			),
 		},
 	}
-	entries := make([]scriptToolEntry, 0, len(tools))
+	entries := make([]agenthost.ScriptToolEntry, 0, len(tools))
 	for _, tool := range tools {
 		entries = append(
 			entries,
-			scriptToolEntry{
-				descriptor:  tool,
-				prepare:     prepareBroadcastRead,
-				execute:     b.executeBroadcastRead,
-				resultLimit: maxScriptReadBytes,
+			agenthost.ScriptToolEntry{
+				Descriptor:  tool,
+				Prepare:     prepareBroadcastRead,
+				Execute:     b.executeBroadcastRead,
+				ResultLimit: maxScriptReadBytes,
 			},
 		)
 	}
@@ -58,8 +61,8 @@ func prepareBroadcastRead(
 	_ int64,
 	call scriptclient.ToolCall,
 	_ agent.Input,
-) (scriptToolRecord, error) {
-	record := scriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
+) (agenthost.ScriptToolRecord, error) {
+	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}
 	var arguments broadcastReadArguments
 	if err := decodeScriptArguments(call.Arguments, &arguments); err != nil {
 		return record, err
@@ -80,7 +83,7 @@ func (b *Bot) executeBroadcastRead(
 	ctx context.Context,
 	owner string,
 	call scriptclient.ToolCall,
-	_ scriptToolRecord,
+	_ agenthost.ScriptToolRecord,
 	_ *agent.Input,
 ) (any, error) {
 	var arguments broadcastReadArguments
@@ -89,10 +92,10 @@ func (b *Bot) executeBroadcastRead(
 	}
 	if call.Name == scriptBroadcastAudience {
 		var result core.ReadPage[adminmessage.AudienceUser]
-		err := b.API.call(ctx, owner, http.MethodPost, "/v1/admin-messages/audience", arguments, &result)
-		return result, scriptDomainAPIError(err)
+		err := b.API.Call(ctx, owner, http.MethodPost, "/v1/admin-messages/audience", arguments, &result)
+		return result, appclient.ReadError(err)
 	}
 	var result core.ReadChunk
-	err := b.API.call(ctx, owner, http.MethodPost, "/v1/admin-messages/profile", arguments, &result)
-	return result, scriptDomainAPIError(err)
+	err := b.API.Call(ctx, owner, http.MethodPost, "/v1/admin-messages/profile", arguments, &result)
+	return result, appclient.ReadError(err)
 }

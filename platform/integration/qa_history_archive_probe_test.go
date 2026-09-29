@@ -26,7 +26,7 @@ func TestQAHistoryDeletionDuringReplyArchive(t *testing.T) {
 	f := setup(t)
 	archive := conversation.Service{DB: f.db}
 	const canary = "ordinary violet lighthouse historical detail"
-	require.NoError(t, archive.Append(t.Context(), "alice", "qa-history-source", "user", canary))
+	require.NoError(t, archive.AppendOriginal(t.Context(), "alice", "qa-history-source", "user", canary))
 	var id int64
 	require.NoError(
 		t,
@@ -41,7 +41,7 @@ func TestQAHistoryDeletionDuringReplyArchive(t *testing.T) {
 	})
 	deleted := false
 	f.b.API.HTTP = &http.Client{Transport: qaHistoryDeleteTransport{before: func(r *http.Request) error {
-		if r.URL.Path != "/internal/history/archive" {
+		if r.URL.Path != "/internal/history/archive/derived" {
 			return nil
 		}
 		copyBody, err := r.GetBody()
@@ -55,12 +55,13 @@ func TestQAHistoryDeletionDuringReplyArchive(t *testing.T) {
 		if err = json.NewDecoder(copyBody).Decode(&payload); err != nil {
 			return err
 		}
-		if payload.Kind == "assistant" && !deleted {
+		if !deleted {
 			deleted = true
 			return archive.DeleteContent(r.Context(), "alice", id)
 		}
 		return nil
 	}}}
+	f.b.Host.HTTP = f.b.API.HTTP
 	err := f.b.Handle(t.Context(), message(9801, 101, "recall the previous detail"))
 	t.Logf("Handle error=%v deletion_triggered=%v", err, deleted)
 	require.True(t, deleted)

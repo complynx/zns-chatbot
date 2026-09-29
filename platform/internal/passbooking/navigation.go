@@ -16,10 +16,17 @@ import (
 type NavigationEvent struct {
 	Event
 
-	TitlesExcerpt   bool `json:"titles_excerpt"`
-	DetailAvailable bool `json:"detail_available"`
-	Position        int  `json:"-"`
+	TitlesExcerpt   bool   `json:"titles_excerpt"`
+	DetailAvailable bool   `json:"detail_available"`
+	Position        int    `json:"-"`
+	Access          string `json:"access"`
 }
+
+// NavigationPublic marks entries discoverable independently of a booking.
+const NavigationPublic = "public"
+
+// NavigationOwned marks entries whose discovery reveals an owned registration.
+const NavigationOwned = "owner"
 
 type eventBoundary struct {
 	Version    int       `json:"version"`
@@ -48,8 +55,9 @@ func (s Service) EventsPage(ctx context.Context, actor, raw string) (core.ReadPa
 	rows, err := s.DB.Query(
 		ctx,
 		`SELECT e.id,jsonb_build_object('en',left(COALESCE(e.titles->>'en',''),$5),'ru',left(COALESCE(e.titles->>'ru',''),$5)),e.finishes_at,e.passport_required,
- (SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id),e.display_order,jsonb_build_object('en',left(COALESCE(e.short_titles->>'en',''),$5),'ru',left(COALESCE(e.short_titles->>'ru',''),$5)),left(e.country_emoji,$5),e.open_ended
- FROM core.pass_events e WHERE e.finishes_at>clock_timestamp() AND ($1='' OR (COALESCE((SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id),'9999-12-31 23:59:59.999999+00'::timestamptz),e.display_order,e.id)>($3,$2,$4))
+ (SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id),e.display_order,jsonb_build_object('en',left(COALESCE(e.short_titles->>'en',''),$5),'ru',left(COALESCE(e.short_titles->>'ru',''),$5)),left(e.country_emoji,$5),e.open_ended,
+ CASE WHEN e.finishes_at>statement_timestamp() THEN 'public' ELSE 'owner' END
+ FROM core.pass_events e WHERE (e.finishes_at>statement_timestamp() OR EXISTS(SELECT 1 FROM core.pass_bookings b WHERE b.event_id=e.id AND b.owner=$7)) AND ($1='' OR (COALESCE((SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id),'9999-12-31 23:59:59.999999+00'::timestamptz),e.display_order,e.id)>($3,$2,$4))
  ORDER BY COALESCE((SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id),'9999-12-31 23:59:59.999999+00'::timestamptz),e.display_order,e.id LIMIT $6`,
 		cursor.Position,
 		boundary.Position,
@@ -57,6 +65,7 @@ func (s Service) EventsPage(ctx context.Context, actor, raw string) (core.ReadPa
 		boundary.ID,
 		core.ReadExcerptRunes,
 		core.ReadPageItems+1,
+		actor,
 	)
 	if err != nil {
 		return core.ReadPage[NavigationEvent]{}, err
@@ -71,6 +80,7 @@ func (s Service) EventsPage(ctx context.Context, actor, raw string) (core.ReadPa
 			&item.SalesStart,
 			&item.Position,
 			&item.ShortTitles, &item.CountryEmoji, &item.OpenEnded,
+			&item.Access,
 		)
 		return item, scanErr
 	})
