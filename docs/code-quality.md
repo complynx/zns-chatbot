@@ -1,6 +1,13 @@
 # Code quality gates
 
 Every stage needs two independent reviews: Code QA and functional Senior QA.
+Count fresh Code QA requests from the 2026-09-29 resumption, starting at 1.
+Route requests 3, 6, 9, and so on through `claude-opus-5-5` when the SSH Claude
+tunnel and model are available. Record the request number, scope, route and any
+availability limit in the developer tracking record before dispatch; add the
+result afterward. Do not send that record, audit findings or fix hints to the
+reviewer. This routing rule does not replace either independent gate or relax
+freshness, read-only scope, required checks or acceptance conditions.
 The review procedure is in [the migration plan](go-migration.md).
 Implementation agents may be reused across related development tasks so they keep
 project context. Acceptance reviewers must be independent of implementation and
@@ -30,7 +37,7 @@ do not publish credentials in Git, shared reports or messages. This permission
 does not authorize production changes or unrelated account access.
 
 Record questions requiring Daniel's decision or participation in the dedicated
-section of `PROGRESS.md`. Name the decision, alternatives and consequences,
+section of `PROGRESS.html`. Name the decision, alternatives and consequences,
 dependent work, and checks that can proceed independently. Defer only the
 dependent work until the answer arrives. Do not treat unanswered questions as
 approval, and do not stop unrelated development or synthetic tests.

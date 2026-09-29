@@ -58,7 +58,7 @@ Small scoped reviews do not require a team.
 
 The [concrete Stage C plan](architecture-stage-c-plan.md) inventories enabled
 consumers, C1–C5 ownership, transaction boundaries and required proof. It is
-preparation against candidate6, not implementation or acceptance of Stage C.
+originally prepared against candidate6. Stage C implementation is now active in the Git composition; full Stage C acceptance remains open.
 
 After combined Stage B is accepted with any explicit architectural deferrals recorded, extend its authenticated application and
 final saved-state boundary rather than introducing another store or principal:
@@ -82,7 +82,7 @@ work starts after these seams are separated. Concrete caller/type and file-owner
 map: `qa.local/architecture-stage-c-preflight/REPORT.md`. Its prerelease client/JSON
 compatibility recommendations are superseded by the unreleased-Go premise and
 `qa.local/architecture-breaking-plan/REPORT.md`. These are planning evidence;
-Stage C implementation and acceptance have not started.
+Stage C implementation is in progress in the Git composition; full acceptance remains open. Historical preflight records above are planning evidence only.
 
 ## Stage D implementation checkpoints
 

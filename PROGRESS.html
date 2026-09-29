@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Прогресс Go-платформы</title>
+</head>
+<body>
+<main>
+<h1>Прогресс Go-платформы</h1>
+<p>Обновлено: <time datetime="2026-09-29">29 сентября 2026</time>. Цель — полный перенос Python → Go/PostgreSQL и выпуск в production. Linux/Docker, CPU-only. <strong>Реализовано ≠ проверено ≠ принято.</strong> Git — источник правды; новых source snapshots не создаём.</p>
+<p><strong>Оценки: production NO-GO.</strong> Codex: функциональная реализация 85–95%, архитектурная 75–85%, остаток 25–45 инженерных дней по 8 часов. Opus: общий охват 70–85%, остаток 43–89 дней, наиболее вероятно 55–70. Оценки используют разные знаменатели; их не усредняем. Это объём работы, не календарный срок. <a href="docs/readiness-estimate.md">Сравнение, основания и неопределённость</a>.</p>
+<section aria-labelledby="done">
+<h2 id="done">Готово</h2>
+<ul>
+<li><strong>Историческая архитектурная приёмка:</strong> A и B1 приняты в своём scope. B–E целиком ещё не приняты; прежние PASS не переносятся автоматически на общий состав.</li>
+<li><strong>Доменные возможности:</strong> заказы, память/знания, история, профили/пассы, массаж, food, рассылки, browser authentication, модельные настройки и источники проходили профильные gates/QA в исторических составах. <a href="docs/handover-status-2026-09-29.md">Границы</a>, <a href="PROGRESS_HISTORY.md">история</a>.</li>
+<li><strong>Сохранение Go-кода:</strong> C7/D + intake и именованные дельты объединены в <code>platform/</code>, composed commit <code>b99c4822ba9110dde5009e0aac738797cbb5ae66</code>. Исходники отслеживаются Git; AUD-01 по сохранению выполнен. <a href="docs/go-source-provenance.md">Provenance и assets</a>.</li>
+<li><strong>CI и quality coverage:</strong> охват authored roots и tools/migrate внесён; syntax/ESLint/Prettier и <a href="docs/qa/code-qa-2026-09-29-01.md">Code QA №1</a> прошли. QA №1 — static only, без runtime acceptance.</li>
+<li><strong>Developer gates:</strong> compile платформы и импортера, pinned formatter и пять focused PG-сценариев прошли; это не полный gate и не Functional QA.</li>
+<li><strong>Отдельный importer:</strong> standalone PG-прогон прошёл за 49.845s, go vet — exit 0. Итоговая миграционная приёмка всего runtime отдельно.</li>
+<li><strong>Окружение:</strong> synthetic PostgreSQL healthy на локальном <code>55432</code>; прежние стенды удалены, продуктовый Telegram-like FQA стенд ещё нужен.</li>
+</ul>
+</section>
+<section aria-labelledby="current">
+<h2 id="current">Сейчас</h2>
+<ul>
+<li><strong>Исправить общий baseline:</strong> native/PG — 104 failed test events и 26 skips при 2237 pass events; lint — 47 issues; SQLC diff — FAIL. <a href="docs/qa/composition-baseline-2026-09-29.md">Отчёт и ограничения</a>. Skips не считаются PASS; эти числа относятся к исходному baseline. Новый lint сократился до 16 issues без suppressions; исправления продолжаются.</li>
+<li><strong>Delivery:</strong> authenticated application getter и restricted-role regression получили PG PASS: 8 новых + 5 существующих тестов; общая приёмка ещё открыта. Завершить constants/helpers и свежую проверку <a href="docs/qa/code-qa-2026-09-29-02.md">P1 Code QA №2</a>, не расширяя права Bot.</li>
+<li><strong>Профиль и регистрация:</strong> пять focused-сценариев прошли, но Code QA №4 выявил P1: порядок блокировок у унаследованного opaque registration event. Исправление и реальная регрессия в работе.</li>
+<li><strong>Fixtures и SQLC:</strong> SQLC прошёл; identity delivery receipt context и оставшиеся async/broadcast gaps исправляются. В food доказана мутация admitted request; исправление ожидает PG-проверки. Исходный baseline FAIL сохраняется. Не ослаблять проверки ради зелёного результата.</li>
+<li><strong>Memory retirement и modern reads:</strong> по <a href="docs/qa/code-qa-2026-09-29-03.md">находкам Opus №3</a> focused retirement GREEN получен, но ближайший legacy privacy EN/RU сценарий падает; исправления продолжаются, приёмка не подтверждена. D-001 и C7 INCOMPLETE открыты.</li>
+<li><strong>Повторная приёмка:</strong> после исправлений — затронутые gates и свежие независимые Code/Functional QA. План Functional QA подготовлен по исходным требованиям; стенд и выполнение впереди.</li>
+<li><strong>Аудит:</strong> сверять находки с единым составом. AUD-10, остановка inbox одним сбойным обновлением, — следующий продуктовый приоритет после стабилизации композиции. <a href="docs/audit-followup.md">Задачи и решения</a>.</li>
+</ul>
+<p>Code QA №4 — FAIL, один P1 registration lock order; исправление в работе. Свежий №5 проверяет memory retirement: шесть файлов заморожены на время review. Следующий №6 — через <code>claude-opus-5-5</code>. <a href="docs/audit-followup.md#qa-routing">Счётчик и отчёты</a>. Оценка готовности Opus не входит в счётчик Code QA. Reviewer получает нейтральные требования без прежних находок и fix hints.</p>
+</section>
+<section aria-labelledby="remaining">
+<h2 id="remaining">Что ещё предстоит</h2>
+<ul>
+<li><strong>Закончить C–E:</strong> host-policy/coordinators, lifecycle/delivery/FIFO, runtime без импортера, остаточные условия B и D-001–D-007; оба QA и свежий архитектурный аудит на финализации D.</li>
+<li><strong>Функции и полный паритет:</strong> закрыть <a href="docs/parity-current.md">инвентаризацию</a>, manual → agent → manual, права, retries/restart, persistence, EN/RU и mouse/touch.</li>
+<li><strong>Финальный импорт и identity:</strong> полный повтор на итоговой схеме, reconciliation всех доменов, сохранность данных и удаление импортера.</li>
+<li><strong>Системная приёмка:</strong> Telegram-like UI, ограниченные DB-роли, failures/concurrency, актуальность карточек; затем разрешённые реальные модель/ASR и тестовый Telegram.</li>
+<li><strong>Выпуск:</strong> production configuration, observability, CPU/resource limits, runbook, backup/rollback и rehearsed cutover. Push, публикация и production deployment — только с финальным разрешением.</li>
+<li><strong>Переносимые доказательства:</strong> AUD-63; локальные qa.local деревья не публикуются целиком. После первого выпуска — отдельный UX-аудит, не условие первого релиза.</li>
+
+</ul>
+</section>
+<section aria-labelledby="questions">
+<h2 id="questions">Вопросы для решения</h2>
+<p>Решения ниже пока не согласованы. Отсутствие ответа не означает одобрение. Ожидает только зависимый этап; независимая работа продолжается. Инженерные проверки и выбор реализации ведёт агент, отдельное разрешение на них не требуется.</p>
+<ol>
+<li><strong>AUD-16 — оплаченная допуслуга при вытеснении.</strong> Какой результат нужен пользователю: сохранять оплаченную допуслугу либо снимать её с явной фиксацией обязательства возврата? Существующее поведение снимает её без такой записи; окончательный вариант зависит от подтверждения текущего сценария.</li>
+<li><strong>AUD-24 — срок приглашения после очереди.</strong> От какой даты считать срок: первоначальной регистрации или фактического приглашения? Сейчас долго ожидавший пользователь может получить уже истёкшее приглашение.</li>
+<li><strong>AUD-23 — временный сбой БД.</strong> При подтверждённом transient failure допустим перезапуск всего приложения, включая Mini App/API, или нужен режим восстановления без остановки остальных компонентов? Сначала агент проверяет фактическое поведение и последствия; retry-механизм выбирается в реализации.</li>
+<li><strong>AUD-56 — роль Zitadel.</strong> Сохраняем обязательную доступность Zitadel для runtime или нужна возможность продолжать доверенные внутренние операции во время его сбоя? Границы прав сохраняются в обоих случаях; точный безопасный вариант требует инженерной проверки.</li>
+<li><strong>AUD-67 — отдельные Python-изменения.</strong> Нужны ли ещё для текущего Python production ветки <code>fix/massage-byn-prices</code> и <code>feature/orders-extras-deadline</code>, или сохраняем их без отдельного выпуска? Изменения не удаляются и не публикуются без решения.</li>
+</ol>
+<p><a href="docs/audit-followup.md#product-decisions">Контекст и зависимости решений</a>. Новые вопросы, требующие выбора Даниила, добавляются сюда; дефекты и обычные инженерные решения остаются в рабочих задачах.</p>
+</section>
+</main>
+</body>
+</html>

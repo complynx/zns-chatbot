@@ -1,0 +1,530 @@
+{
+  "sourceCommit": "b99c4822ba9110dde5009e0aac738797cbb5ae66",
+  "passEvents": 2237,
+  "failedTestEvents": 104,
+  "skippedTestEvents": 26,
+  "failedTests": [
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptProfileLostWriteReadRecoveryAndTypedFollowup"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestIdentityProvisioningFirstMessageContinues"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestProviderUserDeactivatedAfterAdmissionIsTerminal"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestOnboardingSQLFailureKeepsInboxAndRetriesReservedIdentity"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestTransientOnboardingFailureRemainsRetryable"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestHistoryReplyVisibilityPreservesManualAndSystemNotices"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestFoodDerivedExportChecksSourceBetweenFiles"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestFoodDerivedProofChecksSourceAfterDownload"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestExportDoesNotMixEventsAndRetriesTelegramFailure"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestFoodDerivedExportContinuationRetainsSource"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestTelegramAndAgentExportShareRightsAndReceipt"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestDerivedRegistrationOrdersSourceAndTargetEventUnion"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestDerivedBroadcastClaimedRetryCannotResurrectRevokedSource"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestDerivedBroadcastManualPublicationBindsFrozenContent"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestCapacityFixturePreservesReservationsAndEnablesDisplacement"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestOrderVerifierOutageRetriesSavedCommand"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminUtilitiesRefreshBindsUnnotifiedRegistration"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminUtilityFilePreservesDocument"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminMessageDurableDelivery"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminMessageCancellationAndRevocation"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminMessageRuntimeHonorsLongCooldown"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptPassTierAndExportReceipt"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminBroadcastTemplateSnapshotAndNameCache"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminBroadcastLargeAudiencePagedSnapshot"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminBroadcastInputOwnershipExpiryReplay"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminBroadcastManualHelpRequiresCurrentRole"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAdminBroadcastNameSnapshotConcurrentOverride"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestActiveEventOpaqueReceiptChoiceKeepsOriginalOrder"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestActiveEventCallbacksReplayAndNewRequests"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptPassOwnerReadsMutationExactResume"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptPassQueueAuthorityExecutionRevocation"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptPassDiscoveryLaterPageLateRevocation"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptPassAssignmentAndManualCard"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptPassArchivedOwnerReadAndShow"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptPassCurrentAssignedPaymentUpload"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptPassArchivedAssignedWithoutPayment"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestModernOrdersSobekProofCountryCancellation"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestModernOrdersCompleteSinglePageResumeCannotAdoptChangedSnapshot"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestModernOrdersCompleteReviewCurrentRightsAndAttempt"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestModernOrdersCompleteContinuationScopesAndStale"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestModernOrdersCompleteCursorAcrossTurns"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestModernOrdersExportUncertaintyAndRestart"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptFoodExportContinuationReplayAndRevoke"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptFoodExportRechecksBeforeSecondFile"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptFoodPreparationAcrossCurrentEventSwitch"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestScriptFoodActivityPreparationAndMealDelete"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestBroadcastReviewSobekPaginationAndManualControls"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRuntimeAuthorityTerminalInboxNotice"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRegistrationRetentionNativeImmutableAndMetadataRole"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRegistrationAdmissionManualMissingProfileAndReplay"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestCodeQARevokedReplyDoesNotReturnThroughHistory"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestTelegramProofSelectionSubmissionReviewAndRetry"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestProfileAnswerDoesNotSurviveNewerManualState"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestProfileQuestionAnswerAndStaleManualButton"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestProfileQuestionDoesNotConsumePendingName"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestLanguageSwitchRefreshesPaymentCardAndRevocationRemovesInstructions"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestTelegramLanguageInitializesOnceAndDoesNotOpenOrders"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestLanguageInterruptedDeliveryReplayRefreshesCurrentCards"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestDeniedProposalDoesNotClaimSuccessAndStartReflectsState"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestTelegramFailureAndPersistence"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAgentProposalRetryAndHostileModel"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestManualAgentContinuationAndStaleButtons"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestDeletedPaymentCardKeepsSelectedLanguage"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassTakeoverConcurrentReplayAndNoticeCurrentness"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassTakeoverDelayedContactCycleDeliversLatestNotice"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassPlanMissingSavedSystemNotice"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassPlanArchiveBoundary"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassPlanCommittedStatusRetry"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassPlanPostModelOutageRecovery"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRegistrationReceiptAmbiguousDestinationAndStaleChoice"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRegistrationReceiptRussianSemanticChoiceAndAgentReview"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRegistrationReceiptAgentAmountAndManualReview"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassNoticeStaleRetryKeepsOriginalHistory"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassNoticeDeliveryHistoryIsAtomic"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassNoticeServiceIdentityAndBlockedRecipient"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassNoticeRefreshesExistingCard"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassNoticeDeliveryLocaleHistoryAndRetry"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassMenuRussianInvitationAndAdminQueue"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassMenuQueueTraversesAPIPagesAndClampsAfterChanges"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassMenuSoloForeignStaleCancelPersistence"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassMenuProfileControlsBindOwnerAndVersion"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassMaintenanceOpensDatedTierWithoutUserAction"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassExportTelegramDeliveryAndReplay"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRegistrationAgentPendingPartnerDoesNotCaptureUnrelatedText"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRegistrationAgentTrustedContactReadMutationReplay"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassAdminAgentCreatesExplicitIdentityAndBindsVersions"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPassAdminManualFreeAssignmentOwnerAndReplay"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestMediaUnknownPurposePreservesManualContinuation"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestOrderReconciliationPreservesHistoricalPrices"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestOrdersLocaleRefreshAndRecipientNotifications"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestLegacyOrderBotExportRequiresCurrentAdmin"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestLegacyOrderBotSavedVersionCannotFollowLaterCash"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestLegacyOrderBotDeleteBindsBeforeEffectsAndReplays"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAgentReceivesRemovedManualOrderChoices"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestAgentContinuesManualOrderAndBindsVersionAcrossRetries"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestTelegramOrderButtonsAreOwnerScoped"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestTelegramOrderCashLifecycleAndStaleCards"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestModernExportRetriesAuthorityOutageBeforeTransport"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestLargeOrderListsDoNotBlockOtherTelegramUsers"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestPaymentInboxPagingIsIndependentAndRevocationAware"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestOrderPagingRejectsForgedAndForeignCallbacks"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestOrderPagingAgentFocusesExplicitOffPageOrder"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestOrderPagingNavigationRetiresOldCardsAndSurvivesRestart"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestOrderFixturesEnableDeadlineAndRURouting"
+    }
+  ],
+  "skippedTests": [
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/agent",
+      "test": "TestLiveKnowledgeScopedFacts"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/agent",
+      "test": "TestLiveKnowledgeMemo"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/agent",
+      "test": "TestLiveQuestionLanguage"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/identity",
+      "test": "TestZitadelLocalAdapter"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestCommonOriginPreservesDelayedAudio"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestFrameMetadataBudgetStopsProducer"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestDurationVersionsAndEarlyRejection"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestRotatedAndOffsetVideo"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestMP3EncoderDelayBoundaries"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestBrokerRejectsMalformedDecoderAndCancels"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestBrokerUnixDecoderAndFakeASR"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestVideoStoryboard"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestWorkerRealFFmpeg"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/mediaproc",
+      "test": "TestDecoderDoesNotInheritSecretsOrProxies"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/replacement",
+      "test": "TestOwnerLockExcludesSecondLauncherAndRecoversAfterClose"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/scriptclient",
+      "test": "TestRealUnixWorker"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/scriptservice",
+      "test": "TestShutdownJoinsHijackedChild"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/scriptservice",
+      "test": "TestShutdownJoinsEvaluationChild"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/stickermedia",
+      "test": "TestWebMAlpha"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/stickermedia",
+      "test": "TestWebMLongFinalFrame"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/internal/stickermedia",
+      "test": "TestNativeAssets"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestLiveSandbox"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/identityprovision",
+      "test": "TestSDKLocalZitadelProvisioning"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestBrowserAuthUIStand"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRuntimeReplacementPhysicalBarrier"
+    },
+    {
+      "package": "github.com/complynx/zns-chatbot/platform/integration",
+      "test": "TestRegistrationContactBrowser"
+    }
+  ]
+}
