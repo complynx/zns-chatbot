@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through226, next227. All authorship/routes Codex under override;
+Fresh requests through227, next228. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -19,9 +19,10 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 | 221 | Knowledge error handling rev2 | Changes required; rev3 external |
 | 222 | Model usage diagnostics | Changes required; rev2 external |
 | 223 | Registration host catalog | Static PASS; unapplied |
-| 224 | Host/cache quality correction | Static PASS; integration gates pending |
+| 224 | Host/cache quality correction | Static PASS; exact d9d00ca9 merged75a65e21, integrated49PASS/lint0issues |
 | 225 | Menu retirement rev7 | FAIL; two authority defects and one SQL cancellation defect; branch correction assigned |
 | 226 | Knowledge SQL/cancellation rev3 | P2 finding; mixed ConnectError causes; transferred to another developer |
+| 227 | Complete registration/massage/food host catalogs | Exact Git e71c535 parent75a65e21; fresh review running |
 
 Daniel authorized Git consolidation and developer worktrees. Root creates a
 checkpoint of applied state and serializes integration merges. C developer owns
