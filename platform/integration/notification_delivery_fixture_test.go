@@ -16,25 +16,13 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
-// Production composition is a separate owner; this fixture binds synthetic identity before service copies.
+// Reuse product composition with synthetic identity and delivery bound before service copies.
 func notificationFixtureServices(db *pgxpool.Pool, options appservices.Options) appservices.Services {
 	if options.NativeRegistrationAuthorizer == nil {
 		options.NativeRegistrationAuthorizer = fixtureNativeRegistrationAuthorizer(db)
 	}
-	s := appservices.NewServices(db, options)
-	settings := syntheticDeliverySettings()
-	s.BotDelivery.Delivery = settings
-	s.AdminMessages.Delivery = settings
-	s.Orders.Delivery = settings
-	s.LegacyOrders.Delivery = settings
-	s.Registration.Delivery = settings
-	s.Massage.Delivery = settings
-	s.LegacyFood.Delivery = settings
-	s.DerivedMutations.Orders = s.Orders
-	s.DerivedMutations.Registration = s.Registration
-	s.DerivedMutations.Massage = s.Massage
-	s.DerivedMutations.Food = s.LegacyFood
-	return s
+	options.Delivery = syntheticDeliverySettings()
+	return appservices.NewServices(db, options)
 }
 
 // Domain-only notice tests cancel prepared work after inspecting it; no synthetic send receipt is invented.
