@@ -24,7 +24,7 @@ func TestRegistrationFixtureRealStateAndRevocation(t *testing.T) {
 	t.Parallel()
 	db := registrationFixtureDatabase(t)
 	ctx := t.Context()
-	_, err := db.Exec(ctx, `DROP SCHEMA IF EXISTS core,bot,interaction CASCADE;
+	_, err := db.Exec(ctx, `DROP SCHEMA IF EXISTS core,bot,interaction,credits CASCADE;
  DROP TABLE IF EXISTS public.zns_schema_migrations,public.zns_sandbox_fixtures`)
 	require.NoError(t, err)
 	require.NoError(t, store.Migrate(ctx, db))
