@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through225, next226. All authorship/routes Codex under override;
+Fresh requests through226, next227. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -20,12 +20,23 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 | 222 | Model usage diagnostics | Changes required; rev2 external |
 | 223 | Registration host catalog | Static PASS; unapplied |
 | 224 | Host/cache quality correction | Static PASS; integration gates pending |
-| 225 | Menu retirement rev7 | Fresh independent review running |
+| 225 | Menu retirement rev7 | FAIL; two authority defects and one SQL cancellation defect; branch correction assigned |
+| 226 | Knowledge SQL/cancellation rev3 | P2 finding; mixed ConnectError causes; transferred to another developer |
 
 Daniel authorized Git consolidation and developer worktrees. Root creates a
 checkpoint of applied state and serializes integration merges. C developer owns
 food host catalog; D developer prepares actual agent-flow stand capabilities.
 Existing frozen candidates stay immutable during migration to task branches.
+Checkpoint ce994271 is on feature/go-platform-sandbox. Active branches:
+codex/c-host-catalogs (C developer), codex/d-agent-stand (D developer),
+codex/menu-authority (batch_fixture_fix), codex/host-cache-quality (menu_retirement_fix).
+Each has a separate worktree and explicit local gate responsibility. Root serializes
+merges; no push. Preserved caches are excluded from Git, not deleted.
+Dedicated kanban_manager now owns KANBAN.html and optional docs/kanban-process.md;
+root commits the finished board. Menu branch owns isolated synthetic PostgreSQL
+database zns_menu_authority_qa, not the shared zns database or container lifecycle.
+Knowledge error correction transferred to provider_compatibility_developer on
+codex/knowledge-error-precedence at ce994271 after repeated failed static reviews.
 No extra slots required at this point. Same-reviewer applied-source addenda do not
 increment the fresh request counter.
 
