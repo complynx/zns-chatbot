@@ -3,10 +3,13 @@ package sandbox
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,9 +30,12 @@ var page []byte
 //go:embed app.js
 var appScript []byte
 
+const editMessageTextMethod = "editMessageText"
+
 const errorField = "error"
 
 type Fake struct {
+	delay         *editDelay
 	menu          telegramMenuState
 	menuFailure   *menuFault
 	modelFixtures modelFixtures
@@ -61,11 +67,11 @@ func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
 	f := &Fake{DB: db, Token: token}
 	var raw []byte
 	if db == nil {
-		return f, nil
+		return f, f.enableEditDelay(ctx)
 	}
 	e := db.QueryRow(ctx, `SELECT data FROM bot.fake_state WHERE id=true`).Scan(&raw)
 	if errors.Is(e, pgx.ErrNoRows) {
-		return f, nil
+		return f, f.enableEditDelay(ctx)
 	}
 	if e != nil {
 		return nil, e
@@ -81,7 +87,7 @@ func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
 	f.blocked = s.Blocked
 	f.stickers = s.Stickers
 	f.menu = s.Menu
-	return f, nil
+	return f, f.enableEditDelay(ctx)
 }
 
 // Save before acknowledging a mutation, so fake Telegram survives container restarts.
@@ -139,6 +145,9 @@ func (f *Fake) Handler() http.Handler {
 	f.documentRoutes(mux)
 	f.stickerRoutes(mux)
 	f.modelFixtureRoutes(mux)
+	if f.delay != nil {
+		return f.delay.dataHandler(mux)
+	}
 	return mux
 }
 func labRequest(w http.ResponseWriter, r *http.Request) bool {
@@ -173,7 +182,7 @@ func (f *Fake) telegram(w http.ResponseWriter, r *http.Request) {
 		tgOK(w, true)
 	case "getMe":
 		tgOK(w, telegram.User{ID: fakeBotID, IsBot: true, FirstName: "Sandbox"})
-	case "sendMessage", "editMessageText":
+	case "sendMessage", editMessageTextMethod:
 		f.writeMessage(w, r, method)
 	case "getFile":
 		f.getFile(w, r)
@@ -235,6 +244,10 @@ func (f *Fake) getUpdates(w http.ResponseWriter, r *http.Request) {
 
 func (f *Fake) writeMessage(w http.ResponseWriter, r *http.Request, method string) {
 	var wire deliveryRequest
+	digest := sha256.New()
+	if f.delay != nil {
+		r.Body = &delayBody{Reader: io.TeeReader(r.Body, digest), Closer: r.Body}
+	}
 	if api.Decode(w, r, &wire) != nil {
 		tgError(w, http.StatusBadRequest, "invalid payload")
 		return
@@ -250,7 +263,35 @@ func (f *Fake) writeMessage(w http.ResponseWriter, r *http.Request, method strin
 		return
 	}
 	p.Text = text
-	f.mu.Lock()
+	in := admittedDelivery{wire: wire, send: p, chat: chat, entities: entities}
+	if f.delay != nil && method == editMessageTextMethod {
+		held, selectErr := f.delay.selectEdit(wire, hex.EncodeToString(digest.Sum(nil)))
+		if selectErr != nil {
+			tgError(w, http.StatusServiceUnavailable, "synthetic evidence unavailable")
+			return
+		}
+		if held {
+			f.delay.apply(w, r, in, method, f.writeAdmittedMessage)
+			return
+		}
+	}
+	f.writeAdmittedMessage(w, r, in, method)
+}
+
+type admittedDelivery struct {
+	wire     deliveryRequest
+	send     telegram.Send
+	chat     telegram.Chat
+	entities []telegram.MessageEntity
+}
+
+// Carry the ordinary nonmutating admission through the optional hold unchanged.
+func (f *Fake) writeAdmittedMessage(w http.ResponseWriter, r *http.Request, in admittedDelivery, method string) {
+	p, chat, entities := in.send, in.chat, in.entities
+	if err := f.delayMutationLock(r.Context()); err != nil {
+		tgError(w, http.StatusServiceUnavailable, "synthetic apply unavailable")
+		return
+	}
 	defer f.mu.Unlock()
 	if f.blocked[p.ChatID] {
 		tgError(w, http.StatusForbidden, "bot was blocked by the user")
@@ -261,7 +302,7 @@ func (f *Fake) writeMessage(w http.ResponseWriter, r *http.Request, method strin
 		tgError(w, http.StatusTooManyRequests, "Too Many Requests")
 		return
 	}
-	if method == "editMessageText" {
+	if method == editMessageTextMethod {
 		f.editMessage(w, r, p, entities)
 		return
 	}
@@ -269,7 +310,7 @@ func (f *Fake) writeMessage(w http.ResponseWriter, r *http.Request, method strin
 	m := telegram.Message{
 		ID:       f.next,
 		Chat:     chat,
-		ThreadID: wire.ThreadID,
+		ThreadID: in.wire.ThreadID,
 		From:     telegram.User{ID: fakeBotID, IsBot: true},
 		Text:     p.Text,
 		Entities: entities,

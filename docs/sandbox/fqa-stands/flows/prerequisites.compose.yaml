@@ -1,0 +1,88 @@
+name: synthetic-qa-zns-fqa-flows-prerequisites
+x-tool: &tool
+  image: ${ZNS_APP_IMAGE:?Supply the reviewed local application digest}
+  pull_policy: never
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  networks: [sandbox]
+  volumes: ["config:/etc/zns:ro"]
+x-environment: &environment
+  ZNS_CONFIG_FILE: /etc/zns/runtime.yaml
+  ZNS_DATABASE__URL: postgres://postgres:fqa-flows-synthetic-owner-only@postgres/synthetic_qa_zns_fqa_flows?sslmode=disable
+  ZNS_AUTH__SIGNING_KEY: fqa-flows-synthetic-app-only-not-for-production-123456789
+  TELEGRAM_TOKEN: 999:sandbox
+  OPENAI_API_KEY: synthetic-fixture-only
+services:
+  postgres:
+    image: ${ZNS_POSTGRES_IMAGE:?Pinned locally available PostgreSQL17 digest required}
+    pull_policy: never
+    environment:
+      POSTGRES_PASSWORD: fqa-flows-synthetic-owner-only
+      POSTGRES_DB: synthetic_qa_zns_fqa_flows
+    ports: ["127.0.0.1:58401:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./product-roles.sql:/docker-entrypoint-initdb.d/10-product-roles.sql:ro
+      - ./inventory-role.sql:/docker-entrypoint-initdb.d/20-inventory-role.sql:ro
+    networks: [sandbox]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d synthetic_qa_zns_fqa_flows"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  migrate:
+    <<: *tool
+    command: migrate
+    environment: *environment
+    depends_on:
+      postgres: {condition: service_healthy}
+  fixtures:
+    <<: *tool
+    command: product-fixture
+    environment: *environment
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  fake:
+    <<: *tool
+    image: ${ZNS_FAKE_IMAGE:?Reviewed current-module plus R104 Go overlay fake digest required}
+    command: fake
+    restart: 'no'
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 1
+    environment:
+      <<: *environment
+      ZNS_CONFIG_FILE: /etc/zns/fake.runtime.yaml
+      R104_CONTROL_KEY: ${R104_CONTROL_KEY:?Separate synthetic control secret at least24bytes}
+      R104_JOURNAL: /evidence/${R104_CASE:?Fresh immutable provider case name}.jsonl
+    volumes:
+      - config:/etc/zns:ro
+      - type: bind
+        source: ${R104_EVIDENCE_DIR:?Absolute new private provider evidence directory}
+        target: /evidence
+        bind: {create_host_path: false}
+    ports: ["127.0.0.1:58403:8080", "127.0.0.1:58404:8090"]
+    networks:
+      sandbox: {}
+      front: {gw_priority: 1}
+    depends_on:
+      fixtures: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, zns, health]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+networks:
+  sandbox:
+    name: synthetic-qa-zns-fqa-flows
+    internal: true
+  front:
+    external: true
+    name: synthetic-qa-zns-fqa-flows-front
+volumes:
+  pgdata:
+    name: synthetic-qa-zns-fqa-flows-pgdata
+  config:
+    external: true
+    name: synthetic-qa-zns-fqa-flows-config

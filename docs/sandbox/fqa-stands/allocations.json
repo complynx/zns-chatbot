@@ -1,0 +1,47 @@
+[
+  {
+    "stand": "flows",
+    "namespace": "synthetic-qa-zns-fqa-flows",
+    "database": "synthetic_qa_zns_fqa_flows",
+    "installation": "010400000201",
+    "ports": {
+      "postgres": 58401,
+      "app": 58402,
+      "telegram_ui": 58403,
+      "provider_control": 58404
+    },
+    "status": "preparation_not_frozen",
+    "writer": "stand_engineer",
+    "owner": "fqa_lead"
+  },
+  {
+    "stand": "recovery",
+    "namespace": "synthetic-qa-zns-fqa-recovery",
+    "database": "synthetic_qa_zns_fqa_recovery",
+    "installation": "010400000202",
+    "ports": {
+      "postgres": 58411,
+      "app": 58412,
+      "telegram_ui": 58413,
+      "provider_control": 58414
+    },
+    "status": "preparation_not_frozen",
+    "writer": "stand_engineer",
+    "owner": "fqa_lead"
+  },
+  {
+    "stand": "import",
+    "namespace": "synthetic-qa-zns-fqa-import",
+    "database": "synthetic_qa_zns_fqa_import",
+    "installation": "010400000203",
+    "ports": {
+      "postgres": 58421,
+      "app": 58422,
+      "telegram_ui": 58423,
+      "provider_control": 58424
+    },
+    "status": "preparation_not_frozen",
+    "writer": "stand_engineer",
+    "owner": "fqa_lead"
+  }
+]
