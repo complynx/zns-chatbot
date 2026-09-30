@@ -88,7 +88,7 @@ func readPassMenuFamily(ctx context.Context, tx pgx.Tx, i Intent) (PassMenu, err
 			// Missing projection cannot skip immutable receipt/source authority.
 			return menu, ErrStale
 		}
-		return menu, core.DatabaseOperationError(err)
+		return menu, core.DatabaseOperationContextError(ctx, err)
 	}
 	// Incompatible stored state keeps its decode provenance.
 	if err := json.Unmarshal(state, &menu); err != nil {

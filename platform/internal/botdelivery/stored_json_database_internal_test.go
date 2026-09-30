@@ -132,13 +132,8 @@ func TestStoredJSONSyntheticSQLAndDecodeProvenance(t *testing.T) {
 		_, readErr := readPassMenuFamily(t.Context(), tx, passes)
 		lockErr := lockViewBinding(t.Context(), tx, passes, familyRead{})
 		storeErr := storeBotResult(t.Context(), tx, result, stored)
-		for _, err := range []error{readErr, lockErr, storeErr} {
-			if errors.Is(failure, io.EOF) {
-				require.Equal(t, core.ErrDatabase, err)
-			} else {
-				require.ErrorIs(t, err, failure)
-				require.False(t, core.IsDatabaseFailure(err))
-			}
+		for index, err := range []error{readErr, lockErr, storeErr} {
+			assertStoredJSONFailure(t, index == 0, failure, err)
 		}
 	}
 	// A successful SQL row is decoded only after the scan into raw bytes.
@@ -157,4 +152,23 @@ func TestStoredJSONSyntheticSQLAndDecodeProvenance(t *testing.T) {
 		require.ErrorAs(t, err, &syntax)
 		require.False(t, core.IsDatabaseFailure(err))
 	}
+}
+
+func assertStoredJSONFailure(t *testing.T, menu bool, failure, actual error) {
+	t.Helper()
+	expected := failure
+	if errors.Is(failure, io.EOF) {
+		expected = core.ErrDatabase
+	}
+	if menu && errors.Is(failure, pgx.ErrNoRows) {
+		expected = ErrStale
+	}
+	if menu && errors.Is(failure, context.Canceled) {
+		expected = core.ErrDatabase
+	}
+	require.ErrorIs(t, actual, expected)
+	if errors.Is(failure, io.EOF) {
+		require.Equal(t, core.ErrDatabase, actual)
+	}
+	require.Equal(t, errors.Is(expected, core.ErrDatabase), core.IsDatabaseFailure(actual))
 }

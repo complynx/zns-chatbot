@@ -30,10 +30,13 @@ func (tx receiptSQLFailure) QueryRow(context.Context, string, ...any) pgx.Row {
 func TestReceiptProjectionDatabaseFailureAndBinding(t *testing.T) {
 	t.Parallel()
 	s := Service{}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
 	for _, kind := range []string{"workflow_card", "order_card", "pass_card", "massage_card", familyPassRedaction} {
 		i := Intent{State: delivery.Succeeded, MessageID: 1, Receipt: Continuation{Kind: kind}}
 		require.ErrorIs(t, s.projectReceipt(t.Context(), receiptSQLFailure{err: io.EOF}, i), core.ErrDatabase)
-		require.ErrorIs(t, s.projectReceipt(t.Context(), receiptSQLFailure{err: context.Canceled}, i), context.Canceled)
+		require.ErrorIs(t, s.projectReceipt(t.Context(), receiptSQLFailure{err: context.Canceled}, i), core.ErrDatabase)
+		require.ErrorIs(t, s.projectReceipt(ctx, receiptSQLFailure{err: context.Canceled}, i), context.Canceled)
 	}
 	require.ErrorIs(t, s.projectReceipt(t.Context(), receiptSQLFailure{err: io.EOF}, Intent{}), ErrBinding)
 }
