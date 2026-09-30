@@ -241,8 +241,8 @@ func (f *Fake) getUpdates(w http.ResponseWriter, r *http.Request) {
 		case <-time.After(emptyPollDelay):
 		}
 	}
-	tgOK(w, batch)
 	f.observeDeliveredCallbacks(batch)
+	tgOK(w, batch)
 }
 
 func (f *Fake) writeMessage(w http.ResponseWriter, r *http.Request, method string) {

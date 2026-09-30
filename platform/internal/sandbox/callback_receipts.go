@@ -70,7 +70,7 @@ func callbackUserIndex(user int64) (int, bool) {
 	}
 }
 
-// Bind only callbacks in the actual successful getUpdates response batch.
+// Bind the successful getUpdates batch before its bytes can reach the caller.
 func (f *Fake) observeDeliveredCallbacks(batch []telegram.Update) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -107,10 +107,9 @@ func (f *Fake) answerCallbackQuery(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		CallbackID string `json:"callback_query_id"`
 	}
-	decoder := json.NewDecoder(io.LimitReader(r.Body, callbackObservationBodyLimit+1))
-	decodeErr := decoder.Decode(&request)
-	var trailing any
-	valid := decodeErr == nil && decoder.Decode(&trailing) == io.EOF &&
+	body, readErr := io.ReadAll(io.LimitReader(r.Body, callbackObservationBodyLimit+1))
+	valid := readErr == nil && len(body) <= callbackObservationBodyLimit &&
+		json.Unmarshal(body, &request) == nil &&
 		len(request.CallbackID) > 0 && len(request.CallbackID) <= callbackIdentifierLimit
 	tgOK(w, true)
 	if valid {

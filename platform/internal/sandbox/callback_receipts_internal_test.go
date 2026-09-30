@@ -42,7 +42,7 @@ func callbackRead(t *testing.T, fake *Fake, user int64, actor string) []callback
 	return state.Receipts
 }
 
-func deliveredCallback(t *testing.T, fake *Fake, user int64) telegram.Callback {
+func queuedCallback(t *testing.T, fake *Fake, user int64) telegram.Callback {
 	t.Helper()
 	sent := callbackRequest(
 		fake,
@@ -67,9 +67,56 @@ func deliveredCallback(t *testing.T, fake *Fake, user int64) telegram.Callback {
 	var update telegram.Update
 	require.NoError(t, json.Unmarshal(input.Body.Bytes(), &update))
 	require.NotNil(t, update.Callback)
+	return *update.Callback
+}
+
+func deliveredCallback(t *testing.T, fake *Fake, user int64) telegram.Callback {
+	t.Helper()
+	callback := queuedCallback(t, fake, user)
 	delivered := callbackRequest(fake, http.MethodPost, "/botTOKEN/getUpdates", `{}`, nil)
 	require.Equal(t, http.StatusOK, delivered.Code)
-	return *update.Callback
+	return callback
+}
+
+type earlyCallbackWriter struct {
+	*httptest.ResponseRecorder
+
+	duringWrite func()
+	once        sync.Once
+}
+
+func (w *earlyCallbackWriter) Write(body []byte) (int, error) {
+	n, err := w.ResponseRecorder.Write(body)
+	w.once.Do(w.duringWrite)
+	return n, err
+}
+
+func TestCallbackReceiptsAnswerBeforeGetUpdatesWriteReturns(t *testing.T) {
+	t.Parallel()
+	fake := &Fake{Token: "TOKEN"}
+	callback := queuedCallback(t, fake, 101)
+	var answered *httptest.ResponseRecorder
+	writer := &earlyCallbackWriter{ResponseRecorder: httptest.NewRecorder()}
+	writer.duringWrite = func() {
+		// A separate handler can answer as soon as batch bytes are published,
+		// while the getUpdates response Write is still running.
+		responses := make(chan *httptest.ResponseRecorder, 1)
+		go func() {
+			responses <- callbackRequest(fake, http.MethodPost, "/botTOKEN/answerCallbackQuery",
+				fmt.Sprintf(`{"callback_query_id":%q}`, callback.ID), nil)
+		}()
+		answered = <-responses
+	}
+	fake.Handler().
+		ServeHTTP(writer, httptest.NewRequest(http.MethodPost, "/botTOKEN/getUpdates", strings.NewReader(`{}`)))
+	require.Equal(t, http.StatusOK, writer.Code)
+	require.Contains(t, writer.Body.String(), callback.ID)
+	require.NotNil(t, answered)
+	require.Equal(t, http.StatusOK, answered.Code)
+	require.JSONEq(t, `{"ok":true,"result":true}`, answered.Body.String())
+	receipts := callbackRead(t, fake, 101, "alice")
+	require.Len(t, receipts, 1)
+	require.Equal(t, callback.ID, receipts[0].CallbackID)
 }
 
 func TestCallbackReceiptsObserveActualEndpointAndOrigin(t *testing.T) {
@@ -134,6 +181,21 @@ func TestCallbackReceiptsScopeAndInvalidCalls(t *testing.T) {
 		require.JSONEq(t, `{"ok":true,"result":true}`, response.Body.String())
 	}
 	require.Empty(t, callbackRead(t, fake, 101, "alice"))
+	validBody := fmt.Sprintf(`{"callback_query_id":%q}`, callback.ID)
+	for _, suffix := range []string{"", "!"} {
+		oversized := validBody + strings.Repeat(" ", callbackObservationBodyLimit+1) + suffix
+		response := callbackRequest(fake, http.MethodPost, "/botTOKEN/answerCallbackQuery", oversized, nil)
+		require.Equal(t, http.StatusOK, response.Code)
+		require.JSONEq(t, `{"ok":true,"result":true}`, response.Body.String())
+		require.Empty(t, callbackRead(t, fake, 101, "alice"))
+	}
+	boundedBody := validBody + strings.Repeat(" ", callbackObservationBodyLimit-len(validBody))
+	oversizedBoundary := callbackRequest(fake, http.MethodPost, "/botTOKEN/answerCallbackQuery", boundedBody+" ", nil)
+	require.Equal(t, http.StatusOK, oversizedBoundary.Code)
+	require.Empty(t, callbackRead(t, fake, 101, "alice"))
+	boundary := callbackRequest(fake, http.MethodPost, "/botTOKEN/answerCallbackQuery", boundedBody, nil)
+	require.Equal(t, http.StatusOK, boundary.Code)
+	require.Len(t, callbackRead(t, fake, 101, "alice"), 1)
 	for _, test := range []struct {
 		query, actor string
 		status       int

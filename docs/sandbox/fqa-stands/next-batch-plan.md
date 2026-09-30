@@ -146,6 +146,10 @@ actual callback emitted in a successful getUpdates batch and the actual
 answerCallbackQuery body after bot-token routing. Query user and additional body
 fields cannot choose a receipt's origin. Unknown or unmatched callback IDs do not
 produce matched evidence. Original answerCallbackQuery response behavior stays.
+Origin bindings are installed before getUpdates response bytes are published,
+so a concurrent immediate answer can be correlated. Observation accepts only a
+complete valid JSON body of at most4096 bytes; oversized or malformed bodies
+keep the existing Bot API response but do not create matched evidence.
 
 Readback includes scope=current_provider_process_response_generated, user_id,
 total_observed, truncated and receipts containing sequence, callback_query_id,
@@ -154,3 +158,23 @@ bindings and64 receipts per each of three known synthetic users are retained;
 truncation is explicit and output excludes callback data/text/provider tokens.
 The observation proves provider response generation, not browser/application
 receipt or actual Telegram server guarantees. A new fake process starts empty.
+
+## Two possible preparation batches
+
+ACK-only: build one fake image from the reviewed ACK commit. Reuse ce427 app,
+six managed runtime roles and coordinator artifacts only with explicit mixed-source
+provenance and acceptance limited to callback response observation. Preserve the
+released stands; a clone needs separate provider state, PG/config volumes,
+installation, role labels, network and lead-assigned loopback ports. A new managed
+app must poll only its own fake. An existing-stand reuse window instead needs lead
+allocation and an evidence-preserving snapshot before any write. Neither path is
+authorized by this plan. Public setup needs real UI callback cards and the chosen
+user locale; it does not require unrelated collector functionality.
+
+Combined ACK/C/menu: export the exact final reviewed Git epoch and inventory raw
+migration bytes without normalization. Compile current app/fake and separately
+bind the reviewed E CLI/schema; reuse helper images only after proving their
+compiled inputs, actual binary bytes and image bindings match the required epoch.
+Review the genuine C setup manifest before seeding. Record actual image refs,
+schema, installation/roles, reachable endpoints and starting state, then let the
+lead verify and freeze the scope for fresh independent Functional QA.
