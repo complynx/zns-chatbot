@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -25,46 +24,14 @@ const scriptFoodToggle = "toggle_activity"
 const maxFoodActivityBytes = 64
 
 func (b *Bot) scriptFoodEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
-	capability, err := b.API.FoodCapabilities(ctx, owner)
-	if err != nil || capability.EventID == "" {
-		return nil, err
-	}
-	descriptors := []scriptclient.Tool{
-		{
-			Name:        scriptFoodView,
-			Description: "Read your current food event, complete menu, own order and payment instructions as JSON chunks. Follow next_cursor and concatenate json. A fresh read is required before food changes. Event, owner and versions are host-bound.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"cursor":{"type":"string","maxLength":2048}},"additionalProperties":false}`,
-			),
+	return (agenthost.FoodScriptCatalog{Client: b.API,
+		OwnerBinding: agenthost.ScriptToolEntry{
+			Prepare: b.prepareFoodTool, Execute: b.executeFoodTool, ResultLimit: maxScriptReadBytes,
 		},
-		{
-			Name:        scriptFoodQuote,
-			Description: "Quote meals after food.view; changes nothing. RUB total and completeness are authoritative. Meals use menu day keys: {friday:{lunch:{type:'individual-items',items:[0]},dinner:[0]}}. Lunch types: no-lunch; individual-items with index array; combo-with-soup or combo-no-soup with items {soup_index,main_index,side_index,salad_index} (omit soup_index for no-soup). Indices are zero-based. Never invent menu items.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"meals":{"type":"object"}},"required":["meals"],"additionalProperties":false}`,
-			),
+		AdminBinding: agenthost.ScriptToolEntry{
+			Prepare: b.prepareFoodAdminTool, Execute: b.executeFoodAdminTool, ResultLimit: maxScriptReadBytes,
 		},
-		{
-			Name:        scriptFoodChange,
-			Description: "Change your food order only as requested: save_meals replaces the meal selection, delete_meals clears meals, toggle_activity toggles one activity. Requires food.view in this turn; host binds event/order/version/replay. Meals and activities have independent payment locks. Never submits a receipt or reviews payment.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"name":{"enum":["save_meals","delete_meals","toggle_activity"]},"meals":{"type":"object"},"activity":{"type":"string"}},"required":["name"],"additionalProperties":false}`,
-			),
-		},
-		{
-			Name:        scriptFoodPrepare,
-			Description: "Prepare payment for your explicitly requested meals or activities after food.view. Displays the current food card and receipt prompt. Does not upload, select or submit any proof; an unrelated next message remains unrelated.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"kind":{"enum":["meals","activities"]}},"required":["kind"],"additionalProperties":false}`,
-			),
-		},
-	}
-	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		entries = append(entries, agenthost.ScriptToolEntry{Descriptor: descriptor, Prepare: b.prepareFoodTool,
-			Execute: b.executeFoodTool, ResultLimit: maxScriptReadBytes})
-	}
-	return append(entries, b.scriptFoodAdminEntries(capability)...), nil
+	}).Entries(ctx, owner)
 }
 
 type scriptFoodArguments struct {

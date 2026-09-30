@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
@@ -19,53 +18,10 @@ const (
 )
 
 func (b *Bot) scriptMassageEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
-	capabilities, err := b.API.PrivilegedReadCapabilities(ctx, owner)
-	if err != nil {
-		return nil, err
-	}
-	descriptors := []scriptclient.Tool{
-		{
-			Name:        scriptMassageBook,
-			Description: "Book your explicitly requested massage. Use party/provider IDs and absolute start from massage.slots; length uses the same units as slots. Host resolves the slot, rechecks availability and owns identity/replay. Displays refreshed booking controls.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"event":{"type":"string","maxLength":200},"party":{"type":"string","maxLength":200},"specialist":{"type":"string","maxLength":200},"start":{"type":"string","format":"date-time"},"length":{"enum":[1,2,3,5]}},"required":["event","party","specialist","start","length"],"additionalProperties":false}`,
-			),
-		},
-		{
-			Name:        scriptMassageCancel,
-			Description: "Cancel your explicitly selected booking from massage.bookings. Host reads its current version and verifies ownership; cannot cancel another person's appointment. Displays refreshed booking controls.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"event":{"type":"string","maxLength":200},"booking":{"type":"string","maxLength":200}},"required":["event","booking"],"additionalProperties":false}`,
-			),
-		},
-	}
-	if capabilities.PractitionerReads {
-		descriptors = append(
-			descriptors,
-			scriptclient.Tool{
-				Name:        scriptMassageInstant,
-				Description: "Reserve your own current practitioner time. Event and current party must be explicit; host chooses the current slot and your identity. Only a current practitioner of that event may use this. Length is one to six massage units.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"event":{"type":"string","maxLength":200},"party":{"type":"string","maxLength":200},"length":{"type":"integer","minimum":1,"maximum":6}},"required":["event","party","length"],"additionalProperties":false}`,
-				),
-			},
-			scriptclient.Tool{
-				Name:        scriptMassageConfigure,
-				Description: "Set both of your practitioner notification preferences as explicitly requested for an event. bookings controls new/cancelled booking notices; next controls next-client notices. Current membership is required, other practitioners are inaccessible.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"event":{"type":"string","maxLength":200},"bookings":{"type":"boolean"},"next":{"type":"boolean"}},"required":["event","bookings","next"],"additionalProperties":false}`,
-				),
-			},
-		)
-	}
-	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		entries = append(entries, agenthost.ScriptToolEntry{Descriptor: descriptor, Prepare: b.prepareMassageTool,
-			Execute: b.executeMassageTool, ResultLimit: maxScriptReadBytes})
-	}
-	return entries, nil
+	return (agenthost.MassageScriptCatalog{Client: b.API, Binding: agenthost.ScriptToolEntry{
+		Prepare: b.prepareMassageTool, Execute: b.executeMassageTool, ResultLimit: maxScriptReadBytes,
+	}}).Entries(ctx, owner)
 }
-
 func (b *Bot) prepareMassageTool(ctx context.Context, owner string, update int64,
 	call scriptclient.ToolCall, _ agent.Input) (agenthost.ScriptToolRecord, error) {
 	record := agenthost.ScriptToolRecord{Outcome: agent.ScriptToolResult{Name: call.Name, Error: scriptInterrupted}}

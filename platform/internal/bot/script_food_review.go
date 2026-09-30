@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -25,68 +24,6 @@ const scriptFoodReviewRead = "food.review.read"
 const scriptFoodReviewDecide = "food.review.decide"
 const scriptFoodReviewProof = "food.review.proof"
 const scriptFoodExport = "food.export"
-
-func (b *Bot) scriptFoodAdminEntries(capability legacyfood.OwnerCapabilities) []agenthost.ScriptToolEntry {
-	descriptors := []scriptclient.Tool{}
-	if capability.CanReview {
-		descriptors = append(
-			descriptors,
-			scriptclient.Tool{
-				Name:        scriptFoodReviewQueue,
-				Description: "List orders with a submitted food payment in the current event. Bounded pages; follow next_cursor. Read an order before reviewing it.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"cursor":{"type":"string"}},"additionalProperties":false}`,
-				),
-			},
-			scriptclient.Tool{
-				Name:        scriptFoodReviewRead,
-				Description: "Read a food order in your current authorized review event as JSON chunks. Follow next_cursor. Binds the observed order/version and separate meal/activity generations for explicit review. Proof references remain host-owned.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"order_id":{"type":"string"},"cursor":{"type":"string"}},"required":["order_id"],"additionalProperties":false}`,
-				),
-			},
-			scriptclient.Tool{
-				Name:        scriptFoodReviewDecide,
-				Description: "Accept or reject the explicitly requested meals or activities payment after food.review.read. Host binds observed order/version/generation; current rights and submitted status are rechecked. Never infer acceptance merely from a receipt upload.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"kind":{"enum":["meals","activities"]},"decision":{"enum":["accept","reject"]}},"required":["kind","decision"],"additionalProperties":false}`,
-				),
-			},
-			scriptclient.Tool{
-				Name:        scriptFoodReviewProof,
-				Description: "Display the observed meals or activities proof in this Telegram chat after food.review.read. Returns delivery status only, never file bytes or a downloadable URL.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"kind":{"enum":["meals","activities"]}},"required":["kind"],"additionalProperties":false}`,
-				),
-			},
-		)
-	}
-	if capability.CanExport {
-		descriptors = append(
-			descriptors,
-			scriptclient.Tool{
-				Name:        scriptFoodExport,
-				Description: "Deliver the current food event's two CSV files to this Telegram chat. No CSV contents are returned. Save continuation and pass it to resume incomplete delivery; completed files are not resent. Only one export is started per Telegram update. Current export rights are checked before each unsent file.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"continuation":{"type":"string"}},"additionalProperties":false}`,
-				),
-			},
-		)
-	}
-	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		entries = append(
-			entries,
-			agenthost.ScriptToolEntry{
-				Descriptor:  descriptor,
-				Prepare:     b.prepareFoodAdminTool,
-				Execute:     b.executeFoodAdminTool,
-				ResultLimit: maxScriptReadBytes,
-			},
-		)
-	}
-	return entries
-}
 
 type foodReviewArguments struct {
 	OrderID  string `json:"order_id,omitempty"`
