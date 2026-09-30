@@ -13,4 +13,7 @@ const (
 	AdminMessageResult    ID = "admin_message.result"
 	AdminMessageEmpty     ID = "admin_message.empty"
 	AdminMessagePlain     ID = "admin_message.plain"
+	AdminMessageUnknown   ID = "admin_message.state.unknown"
+	AdminMessageParked    ID = "admin_message.state.parked"
+	AdminMessagePaused    ID = "admin_message.state.paused"
 )

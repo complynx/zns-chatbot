@@ -81,16 +81,7 @@ func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset 
 		if err = b.API.CheckAdminMessagePublication(ctx, in.owner, id); err != nil {
 			return err
 		}
-		sendErr := b.queueBotUpdateResult(
-			ctx,
-			in.chat,
-			fmt.Sprintf("admin_page:%d:%d", id, offset),
-			botdelivery.Reference{Family: botFamilyAdminPage, Version: id},
-			botdelivery.StoredResult{
-				Payload: telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: rows}},
-			},
-		)
-		return sendErr
+		return b.queueAdminMessagePage(ctx, in.chat, id, offset, text, rows)
 	}
 	if messages.err != nil {
 		return messages.err
@@ -98,15 +89,7 @@ func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset 
 	if err = b.API.CheckAdminMessagePublication(ctx, in.owner, id); err != nil {
 		return err
 	}
-	if err = b.queueBotUpdateResult(
-		ctx,
-		in.chat,
-		fmt.Sprintf("admin_page:%d:%d", id, offset),
-		botdelivery.Reference{Family: botFamilyAdminPage, Version: id},
-		botdelivery.StoredResult{
-			Payload: telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: rows}},
-		},
-	); err != nil {
+	if err = b.queueAdminMessagePage(ctx, in.chat, id, offset, text, rows); err != nil {
 		return err
 	}
 	if len(page.Items) > 0 {
@@ -116,6 +99,27 @@ func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset 
 		return err
 	}
 	return b.sendAdminMessageView(ctx, in.chat, text, id, messages)
+}
+
+// Split before outbound validation. Navigation remains on the final page chunk.
+func (b *Bot) queueAdminMessagePage(
+	ctx context.Context, chat, id, offset int64, text string, rows [][]telegram.Button,
+) error {
+	const chunkRunes = 1800
+	runes := []rune(text)
+	effect := fmt.Sprintf("admin_page:%d:%d", id, offset)
+	ref := botdelivery.Reference{Family: botFamilyAdminPage, Version: id}
+	for index := 0; len(runes) > chunkRunes; index++ {
+		if err := b.queueBotUpdateResult(ctx, chat, fmt.Sprintf("%s:chunk:%d", effect, index), ref,
+			botdelivery.StoredResult{Payload: telegram.Send{ChatID: chat, Text: string(runes[:chunkRunes])}},
+		); err != nil {
+			return err
+		}
+		runes = runes[chunkRunes:]
+	}
+	return b.queueBotUpdateResult(ctx, chat, effect, ref, botdelivery.StoredResult{
+		Payload: telegram.Send{ChatID: chat, Text: string(runes), Markup: telegram.Markup{Rows: rows}},
+	})
 }
 
 func adminMessageProgressText(progress adminmessage.JobProgress, messages *orderMessages) string {

@@ -134,6 +134,9 @@ func englishCatalog() translations {
 			ID("admin_message.state.sent"):      "sent",
 			ID("admin_message.state.failed"):    "failed",
 			ID("admin_message.state.cancelled"): "cancelled",
+			AdminMessageUnknown:                 "outcome unknown",
+			AdminMessageParked:                  "parked",
+			AdminMessagePaused:                  "paused",
 
 			AdminMessagePreview:                     "Draft #{id}. Recipients: {recipients}. Format: {format}. Review all content before sending.\n\n{text}",
 			AdminMessageSend:                        "Send reviewed draft",

@@ -136,6 +136,9 @@ func russianCatalog() translations {
 			ID("admin_message.state.sent"):      "отправлено",
 			ID("admin_message.state.failed"):    "ошибка",
 			ID("admin_message.state.cancelled"): "отменено",
+			AdminMessageUnknown:                 "результат неизвестен",
+			AdminMessageParked:                  "припарковано",
+			AdminMessagePaused:                  "приостановлено",
 
 			AdminMessagePreview:                     "Черновик №{id}. Получатели: {recipients}. Формат: {format}. Проверьте весь текст перед отправкой.\n\n{text}",
 			AdminMessageSend:                        "Отправить проверенный черновик",
