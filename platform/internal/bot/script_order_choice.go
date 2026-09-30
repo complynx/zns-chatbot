@@ -47,20 +47,6 @@ type modernChoiceExtra struct {
 	Selected bool `json:"selected"`
 }
 
-func (b *Bot) modernChoiceEntry() agenthost.ScriptToolEntry {
-	return agenthost.ScriptToolEntry{
-		Descriptor: scriptclient.Tool{
-			Name:        modernOrdersChoice,
-			Description: "Build a host-owned full order choice across bounded turns. begin: empty=true for create, or order_id after complete orders.inspect; empty=true with order_id replaces the whole choice. event, order_id and empty are begin-only; omit them for read/patch, whose event is bound by choice_ref. patch: exact choice_ref plus customer fields, complete days replacement, or up to 1024 {ref,selected} extra changes. read: part summary/choice/catalog; catalog gives stable extra indexes bound to this draft. Full choice/catalog reads use cursors. Every patch returns a new immutable choice_ref; old revisions cannot branch or commit. Use orders.quote/update with latest choice_ref. No mutation is authorized by an unrelated follow-up.",
-			InputSchema: modernOrderSchema(
-				`"operation":{"enum":["begin","patch","read"]},"choice_ref":{"type":"string"},"event":{"type":"string"},"order_id":{"type":"string"},"empty":{"type":"boolean"},"part":{"enum":["summary","choice","catalog"]},"cursor":{"type":"string"},"customer":{"type":"string"},"customer_first_name":{"type":"string"},"customer_last_name":{"type":"string"},"customer_patronymus":{"type":"string"},"days":{"type":"object"},"meals":{"type":"array","items":{"type":"object","properties":{"day_ref":{"type":"integer"},"meal_ref":{"type":"integer"},"append":{"type":"boolean"},"remove":{"type":"boolean"},"dishes":{"type":"array","items":{"type":"object","properties":{"ref":{"type":"integer"},"count":{"type":"integer"}},"required":["ref","count"],"additionalProperties":false}}},"required":["day_ref","meal_ref"],"additionalProperties":false}},"extras":{"type":"array","items":{"type":"object","properties":{"ref":{"type":"integer"},"selected":{"type":"boolean"}},"required":["ref","selected"],"additionalProperties":false}}`,
-				`"operation"`,
-			),
-		},
-		Prepare: b.prepareModernChoice, Execute: b.executeModernChoice, ResultLimit: maxScriptReadBytes,
-	}
-}
-
 func decodeModernChoice(call scriptclient.ToolCall) (modernChoiceArguments, error) {
 	var args modernChoiceArguments
 	if err := decodeScriptArguments(call.Arguments, &args); err != nil {
