@@ -63,6 +63,23 @@ mode `before_apply` or `after_apply_loss`. The case is one-shot. Observe a held
 request before release. New case/provider restart requires an exclusive lead
 window. Control acknowledgement is not business success.
 
+Exact delay arm JSON: `{chat_id:101,message_id:<positive integer>,
+text_sha256:'<64 lowercase hex>',mode:'before_apply'}` or `after_apply_loss`.
+IDs are JSON integers, not strings; no extra fields or trailing JSON.
+Arm success is HTTP200 `{state:'armed'}`. Eligible GET held states are
+`held_before_apply` and `applied_response_held`.
+Release accepts no body (recommended) or empty `{}` and returns HTTP200
+`{state:'released_unresolved'}`; this is not completion. Observe journal and UI.
+Terminal states: `completed`, `response_lost`, `unresolved_response`,
+`expired_unresolved`, `invalidated`.
+GET returns `{state,events:null|[...]}`. Events have `sequence,time_ns,kind`
+and optional `request_sha256,response_sha256,chat_id,message_id,status,known_success`.
+Errors: 403 key, 413 oversized body, 400 invalid arm, 409 wrong state,
+503 invalid/evidence failure. One eligible request can be released once.
+
+Public callback acknowledgement readback is unavailable. Card edits, state cursor
+or callback admission do not prove Telegram's callback answer; keep it unverified.
+
 Reviewer is the sole scenario writer on their own stand. No reseed, rebuild,
 config/image replacement or restart during frozen manual QA. Request missing
 capabilities, release the affected stand, and wait for a new handoff before

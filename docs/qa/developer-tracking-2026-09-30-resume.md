@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through235, next236. All authorship/routes Codex under override;
+Fresh requests through237, next238. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -31,6 +31,8 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 | 233 | Durable model usage and runtime binding | Static PASS c56c9e4f; merged e72338e1; developer native PG/local gates passed, root integrated135PASS/7SKIP/0FAIL without PG endpoint; Functional/D/E open |
 | 234 | Complete menu authority and context-aware SQL successor | Codex author, Codex override;1770e5f4 review requires SQL-provenance correction; transferred menu_sql_developer,21paths preserved |
 | 235 | Complete models/credits/broadcast host policy | Codex author, Codex override; PASS90d84e14; merged81a9cf73; actual2KiB/32KiB live limits preserved, wholeC/Functional open |
+| 236 | Shared synthetic runtime composition | Codex author, Codex override; PASS382b778b on00ad10e3; mergedf2bcbc5c; developer regression/PG65PASS/lint0; fullE remains pending |
+| 237 | Host registration context revalidation and redaction | Codex author, Codex override; independent nine-file review4f071bb1 on00ad10e3 running; developer983PASS/84PGSKIP/lint0; fullC remains pending |
 
 Current coordination (1 October): two real flows/recovery stands run sealed
 ce427ca5 images. Lead verified manual callbacks/edits/uploads; deterministic agent

@@ -98,6 +98,17 @@ includes optional fixture capability setup with explicit chosen-locale matching
 and automatic enqueue. Reviewers establish the actual outcome independently;
 engineer recipe clarification involved no post-freeze runtime/data writes.
 
+## Batch closed and resources released — 2026-10-01
+
+Both independent reports are complete. A released flows with no active browser
+or process. B released recovery after its one exact before-apply hold/release
+completed; no held request remains. Lead preserves both actual ce427 image/config
+and evidence state. Combined acceptance/backlog:
+`docs/qa/fqa-lead-2026-10-01-combined.md`. No whole original row or C/D/E stage
+is accepted; independent bounded checks are recorded separately from blocked
+requirements. Engineer now has bounded next planning ownership, with root gate
+and next epoch confirmation required before code/image/stand handoff.
+
 ## Allocation and ownership
 
 | Stand | Ports: PostgreSQL / app / Telegram fixture / controls | Execution owner | Scope |
