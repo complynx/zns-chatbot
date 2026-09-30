@@ -10,6 +10,8 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
+const identityCacheObservationTimeout = 2 * time.Second
+
 type IdentityCacheRole string
 
 const (
@@ -62,7 +64,7 @@ func (c *identityCacheCollector) Describe(out chan<- *prometheus.Desc) {
 }
 
 func (c *identityCacheCollector) Collect(out chan<- prometheus.Metric) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), identityCacheObservationTimeout)
 	defer cancel()
 	item, err := c.read(ctx)
 	if err != nil || !validIdentityCacheObservation(item) {

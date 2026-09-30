@@ -13,7 +13,6 @@ import (
 
 const scriptKnowledgePrefix = "knowledge."
 const scriptKnowledgeRead = "knowledge.read"
-const scriptKnowledgeProposals = "knowledge.proposals"
 const scriptKnowledgeReviewQueue = "knowledge.review_queue"
 const scriptKnowledgeScopes = "knowledge.scopes"
 const scriptKnowledgeMemos = "knowledge.memos"

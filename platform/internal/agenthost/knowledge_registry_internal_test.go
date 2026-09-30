@@ -29,6 +29,7 @@ func (c *knowledgeCatalogCapabilities) KnowledgeCapabilities(
 
 type liveKnowledgeCatalog struct {
 	liveScriptCatalog
+
 	knowledge KnowledgeScriptCatalog
 }
 

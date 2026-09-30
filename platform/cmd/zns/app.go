@@ -29,14 +29,9 @@ import (
 // loopback request. Other adapters retain their current transport boundaries.
 func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	logger *slog.Logger, cfg config.Config, runtime *observability.Runtime) (runErr error) {
-	verify, identityAdapter, identityLinks, err := runtimeAuth(db, cfg, signer)
+	verify, identityAdapter, identityLinks, err := observedRuntimeAuth(db, cfg, signer, runtime)
 	if err != nil {
 		return err
-	}
-	if identityAdapter != nil && runtime != nil {
-		if err = runtime.RegisterIdentityCaches(observability.IdentityCacheAPI, identityAdapter); err != nil {
-			return err
-		}
 	}
 	deliverySettings, err := cfg.DeliverySettings()
 	if err != nil {

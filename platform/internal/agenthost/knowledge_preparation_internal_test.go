@@ -16,6 +16,7 @@ import (
 type knowledgePreparationFixture struct {
 	KnowledgeDomain
 	interaction.KnowledgeClient
+
 	scope                         knowledge.Scope
 	state                         knowledge.MemoryDeletionState
 	scopeErr, stateErr, reviewErr error
@@ -106,9 +107,10 @@ func TestKnowledgePreparationCurrentRightsAndObservedVersions(t *testing.T) {
 			if test.deleted {
 				fixture.state.PrivateGeneration = 7
 			}
-			if test.failureAt == "scope" {
+			switch test.failureAt {
+			case "scope":
 				fixture.scopeErr = test.failure
-			} else if test.failureAt == "state" {
+			case "state":
 				fixture.stateErr = test.failure
 			}
 			input := agent.Input{Knowledge: &agent.KnowledgeContext{
