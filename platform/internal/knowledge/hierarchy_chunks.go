@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const memoryReadCharacters = 2000
@@ -87,7 +89,7 @@ func (s Service) ReadMemoryRevisionPage(ctx context.Context, actor, reference, c
 		return MemoryEntry{}, missing()
 	}
 	if err != nil {
-		return MemoryEntry{}, err
+		return MemoryEntry{}, core.DatabaseOperationError(err)
 	}
 	entry, err = s.authorizeMemoryEntry(ctx, actor, entry)
 	if err != nil {

@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 var (
@@ -82,7 +84,7 @@ func (s Service) prepare(ctx context.Context, input Telegram, bind bool) (Bindin
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Binding{}, err
+		return Binding{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var binding Binding
@@ -93,7 +95,7 @@ func (s Service) prepare(ctx context.Context, input Telegram, bind bool) (Bindin
 		s.Issuer, s.BotID, input.ID).Scan(&binding.Owner, &request.Subject, &request.Organization, &request.Operation,
 		&request.FirstName, &request.LastName, &request.Language, &request.Email, &ready)
 	if err != nil {
-		return Binding{}, err
+		return Binding{}, core.DatabaseOperationError(err)
 	}
 	if request.Organization != s.Organization {
 		return Binding{}, ErrConflict
@@ -108,7 +110,7 @@ func (s Service) prepare(ctx context.Context, input Telegram, bind bool) (Bindin
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return Binding{}, err
+		return Binding{}, core.DatabaseOperationError(err)
 	}
 	return binding, nil
 }
@@ -167,14 +169,14 @@ func (s Service) existing(ctx context.Context, telegramID int64) (Binding, bool,
 		return Binding{}, false, nil
 	}
 	if err != nil {
-		return Binding{}, false, err
+		return Binding{}, false, core.DatabaseOperationError(err)
 	}
 	var mapped bool
 	err = s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.telegram_identities WHERE bot_id=$1 AND telegram_id=$2 AND owner=$3)`,
 		s.BotID, telegramID, result.Owner).
 		Scan(&mapped)
 	if err != nil {
-		return Binding{}, false, err
+		return Binding{}, false, core.DatabaseOperationError(err)
 	}
 	if !mapped || !active || issuer != s.Issuer {
 		return Binding{}, true, ErrConflict
@@ -184,7 +186,7 @@ func (s Service) existing(ctx context.Context, telegramID int64) (Binding, bool,
  WHERE issuer=$1 AND bot_id=$2 AND telegram_id=$3 AND (owner<>$4 OR subject<>$5 OR organization<>$6))`,
 		s.Issuer, s.BotID, telegramID, result.Owner, result.Subject, s.Organization).Scan(&mismatch)
 	if err != nil {
-		return Binding{}, true, err
+		return Binding{}, true, core.DatabaseOperationError(err)
 	}
 	if mismatch {
 		return Binding{}, true, ErrConflict
@@ -223,5 +225,5 @@ func (s Service) reserve(ctx context.Context, input Telegram) error {
 		input.Language,
 		email,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }

@@ -5,11 +5,13 @@ import (
 	"errors"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -59,7 +61,7 @@ func (b *Bot) DeliverBotIntent(ctx context.Context, ref delivery.Reference) erro
 	outcome, fallback := b.sendBotIntent(live, attempt, rendered)
 	// A known provider response must be persisted even when shutdown cancelled
 	// the caller while the response was being read.
-	cleanup, cancel := deliveryCompletionContext(ctx)
+	cleanup, cancel := deliveryCompletionContext(live)
 	defer cancel()
 	if err = b.finishBotIntent(cleanup, attempt, outcome, rendered.Receipt, fallback); err != nil {
 		return err
@@ -104,6 +106,9 @@ func (b *Bot) sendBotIntent(ctx context.Context, i botdelivery.Intent, r botRend
 }
 
 func (b *Bot) botPreparationFailure(ctx context.Context, i botdelivery.Intent, cause error) error {
+	if core.IsDatabaseFailure(cause) {
+		return core.ErrDatabase
+	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -114,6 +119,9 @@ func (b *Bot) botPreparationFailure(ctx context.Context, i botdelivery.Intent, c
 		errors.Is(cause, identity.ErrZitadelIdentity) ||
 		errors.Is(cause, errHistoryPlanTerminal) ||
 		errors.Is(cause, errPassPlanTerminal) ||
+		// A corrupted current-format plan is permanent; unsupported formats and
+		// database or decode failures remain retryable and visible.
+		errors.Is(cause, interaction.ErrInvalidSavedTurn) ||
 		orderDeliveryDenied(cause)
 	if err := b.postponeBotIntent(ctx, i, terminal); err != nil {
 		return err
@@ -130,7 +138,7 @@ func (b *Bot) ContinueBotIntentReceipts(ctx context.Context) error {
 	rows, err := b.DB.Query(ctx, `SELECT operation_key,effect_key FROM bot.delivery_intents
  WHERE bot_id=$1 AND state='sent' AND NOT continuation_done AND not_before<=clock_timestamp() ORDER BY not_before,created_at,operation_key,effect_key LIMIT 32`, b.Delivery.BotID)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	type key struct{ operation, effect string }
 	var keys []key
@@ -138,13 +146,13 @@ func (b *Bot) ContinueBotIntentReceipts(ctx context.Context) error {
 		var k key
 		if err = rows.Scan(&k.operation, &k.effect); err != nil {
 			rows.Close()
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		keys = append(keys, k)
 	}
 	rows.Close()
 	if err = rows.Err(); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	var failures []error
 	for _, k := range keys {
@@ -156,15 +164,60 @@ func (b *Bot) ContinueBotIntentReceipts(ctx context.Context) error {
 			false,
 		)
 		if readErr != nil {
+			if core.IsDatabaseFailure(readErr) {
+				return errors.Join(append(failures, core.ErrDatabase)...)
+			}
 			failures = append(failures, readErr)
 			continue
 		}
 		if err = b.continueBotIntent(ctx, i); err != nil {
+			if core.IsDatabaseFailure(err) {
+				return errors.Join(append(failures, core.ErrDatabase)...)
+			}
 			failures = append(failures, err)
 		}
 	}
 	return errors.Join(failures...)
 }
 func (b *Bot) continueBotIntent(ctx context.Context, observed botdelivery.Intent) error {
+	if err := b.Delivery.Validate(); err != nil {
+		return err
+	}
+	err := b.applyBotIntentReceipt(ctx, observed)
+	if err == nil {
+		return nil
+	}
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
+	// Shutdown or a caller deadline is not an unavailable boundary: the next
+	// runtime continues the receipt without a postponement or extra SQL.
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	// Retain the sent receipt for recovery, but let older ready receipts advance
+	// before retrying an unavailable identity or application boundary.
+	cleanup, cancel := deliveryCompletionContext(ctx)
+	defer cancel()
+	_, retryErr := b.DB.Exec(cleanup, `UPDATE bot.delivery_intents
+ SET not_before=GREATEST(not_before,clock_timestamp()+$6::bigint*interval '1 microsecond')
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3 AND state='sent'
+ AND NOT continuation_done AND attempt=$4 AND message_id=$5`,
+		observed.BotID, observed.Operation, observed.Effect, observed.Attempt,
+		observed.MessageID, b.Delivery.Fallback.Microseconds())
+	return errors.Join(err, core.DatabaseOperationError(retryErr))
+}
+
+func (b *Bot) applyBotIntentReceipt(ctx context.Context, observed botdelivery.Intent) error {
+	if observed.Reference.Kind != botdelivery.IdentityIntent {
+		live, err := b.API.NotificationContext(ctx, observed.Owner, observed.Chat)
+		if err != nil {
+			return err
+		}
+		ctx = live
+	}
 	return b.Host.ApplyBotDeliveryReceipt(ctx, botdelivery.ReceiptRequest{Observed: observed})
 }

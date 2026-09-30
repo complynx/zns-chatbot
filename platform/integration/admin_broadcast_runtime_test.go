@@ -25,7 +25,7 @@ func TestAdminBroadcastManualInputDoesNotTrap(t *testing.T) {
 			f := passMenuFixture(t)
 			_, err := f.db.Exec(t.Context(), `UPDATE core.users SET language=$1 WHERE id='bob'`, language)
 			require.NoError(t, err)
-			handle(t, f.b, message(7100, 202, "/send_message_to 101"))
+			handleVisible(t, f.b, message(7100, 202, "/send_message_to 101"))
 			var inputID, prompt int64
 			require.NoError(
 				t,
@@ -33,13 +33,23 @@ func TestAdminBroadcastManualInputDoesNotTrap(t *testing.T) {
 					Scan(&inputID, &prompt),
 			)
 			require.Positive(t, prompt)
+			promptCard := adminRuntimeControl(t, f, fmt.Sprintf("adminmsg:inputcancel:%d", inputID))
+			require.Equal(t, prompt, promptCard.ID)
+			require.Empty(t, chatMessages(t, f, 101))
 			before := f.model.calls
-			handle(t, f.b, message(7101, 202, "What is two plus two?"))
+			handleVisible(t, f.b, message(7101, 202, "What is two plus two?"))
 			assert.Greater(t, f.model.calls, before)
+			var retainedPrompt, retainedDraft int64
+			require.NoError(t, f.db.QueryRow(t.Context(),
+				"SELECT prompt_id,COALESCE(message_id,0) FROM core.admin_message_inputs WHERE id=$1",
+				inputID).Scan(&retainedPrompt, &retainedDraft))
+			require.Equal(t, prompt, retainedPrompt)
+			require.Zero(t, retainedDraft, "unrelated text must not become a draft")
+			require.Empty(t, chatMessages(t, f, 101))
 			update := message(7102, 202, "Hello <Alice>")
-			update.Message.ReplyToMessage = &telegram.Message{ID: prompt, Chat: telegram.Chat{ID: 202}}
+			update.Message.ReplyToMessage = &promptCard
 			update.Message.Entities = []telegram.MessageEntity{{Type: "bold", Offset: 0, Length: 5}}
-			handle(t, f.b, update)
+			handleVisible(t, f.b, update)
 			var draftID int64
 			require.NoError(
 				t,
@@ -195,18 +205,18 @@ func TestAdminBroadcastUserCannotForgeSource(t *testing.T) {
 func TestAdminBroadcastManualHelpRequiresCurrentRole(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
-	handle(t, f.b, message(7400, 101, "/send_message_to"))
+	handleVisible(t, f.b, message(7400, 101, "/send_message_to"))
 	cards := chatMessages(t, f, 101)
 	require.NotEmpty(t, cards)
 	assert.NotContains(t, cards[len(cards)-1].Text, "--template")
 	_, err := f.db.Exec(t.Context(), `INSERT INTO core.pass_booking_admins(owner) VALUES('alice')`)
 	require.NoError(t, err)
-	handle(t, f.b, message(7401, 101, "/send_message_to"))
+	handleVisible(t, f.b, message(7401, 101, "/send_message_to"))
 	cards = chatMessages(t, f, 101)
 	assert.Contains(t, cards[len(cards)-1].Text, "--template")
 	_, err = f.db.Exec(t.Context(), `DELETE FROM core.pass_booking_admins WHERE owner='alice'`)
 	require.NoError(t, err)
-	handle(t, f.b, message(7402, 101, "/send_message_to"))
+	handleVisible(t, f.b, message(7402, 101, "/send_message_to"))
 	cards = chatMessages(t, f, 101)
 	assert.NotContains(t, cards[len(cards)-1].Text, "--template")
 }

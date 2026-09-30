@@ -2,8 +2,10 @@ package bot
 
 import (
 	"context"
+	"errors"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
@@ -47,7 +49,13 @@ func (b *Bot) exportPassesWithSource(
 func (b *Bot) handlePassExport(ctx context.Context, in incoming, update telegram.Update) error {
 	notice, err := b.exportPasses(ctx, in, update.ID)
 	if err != nil {
-		return err
+		if core.IsDatabaseFailure(err) {
+			return core.ErrDatabase
+		}
+		if problem, ok := errors.AsType[*core.ProblemError](err); !ok || problem.Code != "forbidden" {
+			return err
+		}
+		notice = i18n.RegistrationStale
 	}
 	state, _, err := b.passMenuState(ctx, in.owner)
 	if err != nil {

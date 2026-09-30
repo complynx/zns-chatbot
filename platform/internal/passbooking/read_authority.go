@@ -23,7 +23,7 @@ func LockReadAuthorities(ctx context.Context, tx pgx.Tx, actor string, authoriti
 	queries := dbgen.New(tx)
 	telegramID, err := queries.LockReadActor(ctx, actor)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationContextError(ctx, err)
 	}
 	valid := make([]bool, len(authorities))
 	for i, a := range authorities {
@@ -50,7 +50,8 @@ func LockReadAuthorityEvents(ctx context.Context, tx pgx.Tx, authorities []ReadA
 	}
 	slices.Sort(events)
 	events = slices.Compact(events)
-	return dbgen.New(tx).LockReadEvents(ctx, events)
+	locked, err := dbgen.New(tx).LockReadEvents(ctx, events)
+	return locked, core.DatabaseOperationContextError(ctx, err)
 }
 
 func lockReadAuthority(ctx context.Context, tx pgx.Tx, actor string, telegramID int64, a ReadAuthority) (bool, error) {
@@ -83,7 +84,7 @@ func lockReadAuthority(ctx context.Context, tx pgx.Tx, actor string, telegramID 
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	if a.Kind == ReadOwnedEvent {
 		return true, nil
@@ -109,7 +110,7 @@ func lockReadPaymentQueue(ctx context.Context, tx pgx.Tx, a ReadAuthority, b dbg
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	return eligible, nil
 }
@@ -132,7 +133,7 @@ func lockReadTarget(ctx context.Context, tx pgx.Tx, a ReadAuthority) (bool, erro
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationContextError(ctx, err)
 	}
 	if a.Owner != "" && a.Owner != target.ID {
 		return false, nil
@@ -144,5 +145,5 @@ func lockReadTarget(ctx context.Context, tx pgx.Tx, a ReadAuthority) (bool, erro
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
-	return err == nil, err
+	return err == nil, core.DatabaseOperationContextError(ctx, err)
 }

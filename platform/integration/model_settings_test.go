@@ -89,8 +89,9 @@ func TestModelSettingsTelegramLocalesAndStaleButtons(t *testing.T) {
 			ctx := t.Context()
 			_, err := f.db.Exec(ctx, `UPDATE core.users SET language=$1 WHERE id='bob'`, language)
 			require.NoError(t, err)
-			handle(t, f.b, message(800, 202, "/model"))
+			handleVisible(t, f.b, message(800, 202, "/model"))
 			messages := chatMessages(t, f, 202)
+			require.NotEmpty(t, messages)
 			card := messages[len(messages)-1]
 			assert.Contains(t, card.Text, "gpt-6-luna")
 			var data string
@@ -106,21 +107,22 @@ func TestModelSettingsTelegramLocalesAndStaleButtons(t *testing.T) {
 				ID:       801,
 				Callback: &telegram.Callback{ID: "801", From: telegram.User{ID: 202}, Message: card, Data: data},
 			}
-			handle(t, f.b, selected)
+			handleVisible(t, f.b, selected)
 			service := modelsettings.Service{DB: f.db}
 			effective, err := service.Effective(ctx, "bob")
 			require.NoError(t, err)
 			assert.Equal(t, "gpt-6-sol", effective.Model)
 			selected.ID = 802
 			selected.Callback.ID = "802"
-			handle(t, f.b, selected)
+			handleVisible(t, f.b, selected)
 			state, err := service.Read(ctx, "bob", "bob")
 			require.NoError(t, err)
 			assert.EqualValues(t, 1, state.Version)
-			handle(t, f.b, message(803, 101, "/model"))
+			handleVisible(t, f.b, message(803, 101, "/model"))
 			messages = chatMessages(t, f, 101)
+			require.NotEmpty(t, messages)
 			assert.Empty(t, messages[len(messages)-1].Markup.Rows)
-			handle(t, f.b, message(804, 202, "/model reset"))
+			handleVisible(t, f.b, message(804, 202, "/model reset"))
 			effective, err = service.Effective(ctx, "bob")
 			require.NoError(t, err)
 			assert.Equal(t, modelsettings.DefaultModel, effective.Model)

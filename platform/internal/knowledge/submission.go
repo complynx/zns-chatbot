@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const AwaitingSubmission = "awaiting_submission"
@@ -35,7 +37,7 @@ func (s Service) SubmitProposal(ctx context.Context, actor string, input Submiss
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Result{}, err
+		return Result{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	record, err := loadProposalCausal(ctx, tx, input.ProposalID)
@@ -75,7 +77,7 @@ func (s Service) SubmitProposal(ctx context.Context, actor string, input Submiss
 			return Result{}, err
 		}
 	}
-	return Result{Proposal: &p}, tx.Commit(ctx)
+	return Result{Proposal: &p}, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func recordProposalConsent(ctx context.Context, tx pgx.Tx, p Proposal, input Submission) (Proposal, error) {
@@ -89,7 +91,7 @@ func recordProposalConsent(ctx context.Context, tx pgx.Tx, p Proposal, input Sub
 		return p, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return Proposal{}, err
+		return Proposal{}, core.DatabaseOperationError(err)
 	}
 	if p.Version != input.Version || p.State != AwaitingSubmission {
 		return Proposal{}, conflict("knowledge_submission_state")
@@ -107,7 +109,7 @@ func recordProposalConsent(ctx context.Context, tx pgx.Tx, p Proposal, input Sub
 		digest([]byte(p.Text)),
 	)
 	if err != nil {
-		return Proposal{}, err
+		return Proposal{}, core.DatabaseOperationError(err)
 	}
 	p.State = pendingReview
 	p, err = updateProposal(ctx, tx, p, p.Reason)

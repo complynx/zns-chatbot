@@ -136,14 +136,21 @@ func TestModernChoiceConcurrentCreateClaimsOnce(t *testing.T) {
 				)}},
 				{View: agent.KnowledgeView, Text: "Checked"},
 			}}
-			current := &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: model,
+			current := &bot.Bot{
+				DB:       f.db,
+				API:      f.b.API,
+				Host:     f.b.Host,
+				TG:       f.b.TG,
+				Delivery: f.b.Delivery,
+				Model:    model,
 				Scripts: scopeVM{before: func() {
 					ready <- struct{}{}
 					select {
 					case <-start:
 					case <-ctx.Done():
 					}
-				}}}
+				}},
+			}
 			results <- current.Handle(ctx, message(51201+int64(index), identity.AliceTelegramID, "Create draft order"))
 		})
 	}

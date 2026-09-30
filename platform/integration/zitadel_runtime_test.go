@@ -43,7 +43,9 @@ func TestZitadelRuntimeUsesLinkedOwnerAndExistingACL(t *testing.T) {
 	require.NoError(t, links.Bind(t.Context(), "alice", 101, "z-alice"))
 	require.NoError(t, links.Bind(t.Context(), "bob", 202, "z-bob"))
 	signer := identity.Signer{Key: []byte(strings.Repeat("s", identity.MinKeyBytes))}
-	server := httptest.NewServer(api.AuthenticatedHandler(appservices.NewServices(db, appservices.Options{}), signer,
+	server := httptest.NewServer(api.AuthenticatedHandler(appservices.NewServices(db, appservices.Options{
+		Delivery: syntheticDeliverySettings(),
+	}), signer,
 		slog.New(slog.DiscardHandler), api.ZitadelOwner(runtimeProvider{}, links)))
 	t.Cleanup(server.Close)
 	client := appclient.Client{Base: server.URL, SandboxToken: signer.Token, Exchange: runtimeProvider{}, Links: links}

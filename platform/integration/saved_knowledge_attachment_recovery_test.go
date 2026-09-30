@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
+	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
@@ -83,6 +83,8 @@ func testSavedKnowledgeAttachment(t *testing.T, name, scenario string) {
 	require.EqualValues(t, 1, transport.attachments.Load())
 	assertSavedKnowledgeLinks(t, f, 0)
 	assertSavedKnowledgeReady(t, f, updateID)
+	quotaBeforeRecovery := knowledgeQuotaReservations(t, f)
+	require.Empty(t, quotaBeforeRecovery, "a fixture-provided saved winner does not reserve model quota")
 	var deletedOriginal int64
 	if scenario == "history_deleted" {
 		require.NoError(
@@ -104,10 +106,17 @@ func testSavedKnowledgeAttachment(t *testing.T, name, scenario string) {
 		require.NoError(t, err)
 	}
 	model := &knowledgeModel{}
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: model}
+	restarted := *f.b
+	restarted.Model = model
+	f.b = &restarted
 	switch {
 	case scenario == "source_revoked" || scenario == "history_deleted":
 		require.NoError(t, f.b.Handle(ctx, update))
+		pumpBotDeliveries(t, f.b)
+		for _, visible := range chatMessages(t, f, identity.BobTelegramID) {
+			require.NotContains(t, visible.Text, update.Message.Text)
+			require.NotContains(t, visible.Text, command.Text)
+		}
 		require.EqualValues(t, 1, transport.attachments.Load(), "retired receipt must not attach sources")
 		assertSavedKnowledgeLinks(t, f, 0)
 		if deletedOriginal != 0 {
@@ -117,17 +126,22 @@ func testSavedKnowledgeAttachment(t *testing.T, name, scenario string) {
 			require.Empty(t, originalText, "receipt recovery cannot restore a deleted original request")
 		}
 	case scenario == "permission_revoked" && name == knowledge.Curate:
-		require.Error(t, f.b.Handle(ctx, update), "current mutation permission is checked before finalization")
+		requireCode(t, f.b.Handle(ctx, update), "forbidden")
 		require.EqualValues(t, 1, transport.attachments.Load())
 		assertSavedKnowledgeLinks(t, f, 0)
 		assertSavedKnowledgeReady(t, f, updateID)
 	default:
 		require.EqualError(t, f.b.Handle(ctx, update), "core API unavailable")
 		require.EqualValues(t, 2, transport.attachments.Load())
+		require.Equal(t, quotaBeforeRecovery, knowledgeQuotaReservations(t, f), "interrupted recovery preserves quota")
 		assertSavedKnowledgeReady(t, f, updateID)
 		assertSavedKnowledgeLinks(t, f, 0)
 		require.NoError(t, f.b.Handle(ctx, update))
+		require.EqualValues(t, 3, transport.attachments.Load(), "third attempt completes the original attachment")
 		assertSavedKnowledgeLinks(t, f, 1)
+		pumpBotDeliveries(t, f.b)
+		assertSavedKnowledgeDelivered(t, f, updateID)
+		require.Equal(t, quotaBeforeRecovery, knowledgeQuotaReservations(t, f), "completed recovery preserves quota")
 		var sourceOwner, text string
 		require.NoError(t, f.db.QueryRow(ctx,
 			`SELECT s.source_owner, COALESCE(b.body,e.text) FROM core.memory_sources s
@@ -136,9 +150,16 @@ func testSavedKnowledgeAttachment(t *testing.T, name, scenario string) {
  WHERE s.item_key='recovery'`).Scan(&sourceOwner, &text))
 		require.Equal(t, "bob", sourceOwner)
 		require.Equal(t, update.Message.Text, text)
+		visibleBeforeReplay := chatMessages(t, f, identity.BobTelegramID)
 		require.NoError(t, f.b.Handle(ctx, update))
+		require.EqualValues(t, 3, transport.attachments.Load(), "completed receipt replay does not reattach sources")
 		assertSavedKnowledgeLinks(t, f, 1)
+		pumpBotDeliveries(t, f.b)
+		require.Equal(t, visibleBeforeReplay, chatMessages(t, f, identity.BobTelegramID),
+			"completed attachment replay leaves visible messages unchanged")
+		assertSavedKnowledgeDelivered(t, f, updateID)
 	}
+	require.Equal(t, quotaBeforeRecovery, knowledgeQuotaReservations(t, f), "receipt replay or refusal preserves quota")
 	require.EqualValues(t, 1, transport.effects.Load(), "recovery does not execute the domain command")
 	require.Empty(t, model.inputs, "recovery does not replan")
 	require.Zero(t, model.assessments, "recovery does not assess")
@@ -148,6 +169,33 @@ func testSavedKnowledgeAttachment(t *testing.T, name, scenario string) {
 		f.db.QueryRow(ctx, "SELECT count(*) FROM core.knowledge_operations WHERE actor='bob'").Scan(&operations),
 	)
 	require.Equal(t, 1, operations)
+}
+func assertSavedKnowledgeDelivered(t *testing.T, f *fixture, updateID int64) {
+	t.Helper()
+	preferences, err := f.b.API.Preferences(t.Context(), "bob")
+	require.NoError(t, err)
+	notice, err := i18n.Translate(preferences.Language, i18n.KnowledgeSaved, nil)
+	require.NoError(t, err)
+	var replies int
+	var saved string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*),COALESCE(max(content #>> '{}'),'')
+ FROM bot.interactions WHERE owner='bob' AND update_id=$1 AND kind='knowledge_reply'`, updateID).Scan(&replies, &saved))
+	require.Equal(t, 1, replies, "completed attachment records one durable reply")
+	require.Equal(t, notice, saved)
+	var messageID int64
+	require.NoError(t, f.db.QueryRow(t.Context(),
+		"SELECT message_id FROM bot.order_cards WHERE owner='bob' AND card_key='knowledge:main' AND visible").
+		Scan(&messageID))
+	visible := false
+	for _, message := range chatMessages(t, f, identity.BobTelegramID) {
+		if message.ID == messageID {
+			require.Contains(t, message.Text, notice)
+			require.NotContains(t, message.Text, "Synthetic recovered knowledge")
+			require.NotContains(t, message.Text, "Remember this original request")
+			visible = true
+		}
+	}
+	require.True(t, visible, "completed knowledge receipt must deliver its saved feedback")
 }
 func assertSavedKnowledgeLinks(t *testing.T, f *fixture, want int) {
 	t.Helper()

@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 func noOrder(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
@@ -16,7 +18,7 @@ func (s Service) resolveSourceOrder(ctx context.Context, actor, objectID string)
 	rows, err := s.DB.Query(ctx, `SELECT event_id,target_id FROM core.legacy_food_import_references
  WHERE bot_id=$1 AND source_kind='food' AND lower(source_record->'_id'->>'$oid')=$2 LIMIT 2`, s.BotID, objectID)
 	if err != nil {
-		return Order{}, err
+		return Order{}, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	type reference struct{ Event, ID string }
@@ -26,7 +28,7 @@ func (s Service) resolveSourceOrder(ctx context.Context, actor, objectID string)
 		return ref, scanErr
 	})
 	if err != nil {
-		return Order{}, err
+		return Order{}, core.DatabaseOperationError(err)
 	}
 	if len(refs) != 1 {
 		return Order{}, problem("food_order_not_found")

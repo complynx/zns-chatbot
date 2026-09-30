@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
@@ -343,24 +342,24 @@ func recoverKnowledgeOutage(t *testing.T, f *fixture, update telegram.Update, ta
 	_, err := f.db.Exec(t.Context(), `ALTER TABLE core.`+table+` RENAME TO knowledge_permissions`)
 	require.NoError(t, err)
 	calls := 0
-	f.b = &bot.Bot{
-		DB:  f.db,
-		API: f.b.API, Host: f.b.Host,
-		TG: f.b.TG,
-		Model: avModel(func(_ context.Context, input agent.Input) (agent.Plan, error) {
-			calls++
-			require.NotEmpty(t, input.Knowledge.Reads)
-			require.NotEmpty(
-				t,
-				input.Knowledge.Reads[0].Proposals,
-				"restored authority preserves authorized private context",
-			)
-			return agent.Plan{View: "workflow", Text: "Recovered authorized answer"}, nil
-		}),
-	}
-	handle(t, f.b, update)
+	restarted := *f.b
+	restarted.Model = avModel(func(_ context.Context, input agent.Input) (agent.Plan, error) {
+		calls++
+		require.NotEmpty(t, input.Knowledge.Reads)
+		require.NotEmpty(
+			t,
+			input.Knowledge.Reads[0].Proposals,
+			"restored authority preserves authorized private context",
+		)
+		return agent.Plan{View: "workflow", Text: "Recovered authorized answer"}, nil
+	})
+	f.b = &restarted
+	handlePassVisible(t, f, update)
 	require.Equal(t, 1, calls)
-	handle(t, f.b, update)
+	visibleBeforeReplay := chatMessages(t, f, identity.BobTelegramID)
+	handlePassVisible(t, f, update)
+	require.Equal(t, visibleBeforeReplay, chatMessages(t, f, identity.BobTelegramID),
+		"completed outage recovery replay leaves visible messages unchanged")
 	require.Equal(t, 1, calls, "saved winner retry never repeats model work")
 	require.Equal(t, keys, knowledgeQuotaReservations(t, f))
 	plan, err := (interaction.Store{DB: f.db}).Load(t.Context(), "bob", update.ID)
@@ -390,24 +389,22 @@ func assertProviderRevocation(t *testing.T, f *fixture, update telegram.Update, 
 	)
 	require.NoError(t, err)
 	calls := 0
-	f.b = &bot.Bot{
-		DB:  f.db,
-		API: f.b.API, Host: f.b.Host,
-		TG: f.b.TG,
-		Model: avModel(func(_ context.Context, _ agent.Input) (agent.Plan, error) {
-			calls++
-			return agent.Plan{View: "workflow", Text: "Fresh authorized request"}, nil
-		}),
-	}
+	restarted := *f.b
+	restarted.Model = avModel(func(_ context.Context, _ agent.Input) (agent.Plan, error) {
+		calls++
+		return agent.Plan{View: "workflow", Text: "Fresh authorized request"}, nil
+	})
+	f.b = &restarted
 	for range 2 {
 		require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
 	}
 	require.Zero(t, calls, "restored grants cannot revive the old turn")
 	require.NoError(t, f.b.Render(t.Context(), "bob", identity.BobTelegramID))
+	drainPassNotices(t, f)
 	assertKnowledgeAnswerAbsent(t, f, update.ID)
 	require.Equal(t, keys, knowledgeQuotaReservations(t, f))
 	fresh := message(1997, identity.BobTelegramID, "Make a fresh authorized request")
-	handle(t, f.b, fresh)
+	handlePassVisible(t, f, fresh)
 	require.Equal(t, 1, calls)
 	require.Len(t, knowledgeQuotaReservations(t, f), 2)
 	cards, err := json.Marshal(chatMessages(t, f, identity.BobTelegramID))

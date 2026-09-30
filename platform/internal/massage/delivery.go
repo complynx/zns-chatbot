@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/massage/dbgen"
 )
 
@@ -35,7 +36,7 @@ func (s Service) NoticeRecipients(ctx context.Context) ([]NoticeRecipient, error
 	q := dbgen.New(s.DB)
 	events, err := q.NotificationReminderEvents(ctx, pgtype.Timestamptz{Time: s.now(), Valid: true})
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	for _, event := range events {
 		if _, err = s.QueueReminders(ctx, event); err != nil {
@@ -47,7 +48,7 @@ func (s Service) NoticeRecipients(ctx context.Context) ([]NoticeRecipient, error
 	}
 	rows, err := q.NotificationRecipients(ctx, s.Delivery.BotID)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	values := make([]NoticeRecipient, 0, len(rows))
 	for _, row := range rows {
@@ -63,7 +64,7 @@ func (s Service) DeliveryNotices(ctx context.Context, owner string) ([]DeliveryN
 	}
 	q := dbgen.New(s.DB)
 	if err := q.RecordNotificationRotation(ctx, owner); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if err := s.recoverNotificationSends(ctx); err != nil {
 		return nil, err
@@ -75,7 +76,7 @@ func (s Service) DeliveryNotices(ctx context.Context, owner string) ([]DeliveryN
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		value, err := s.notificationProjection(ctx, q, row)
 		if err != nil {
@@ -99,7 +100,7 @@ func (s Service) notificationProjection(
 	}
 	booking, err := q.NotificationBookingProjection(ctx, row.BookingID)
 	if err != nil {
-		return value, err
+		return value, core.DatabaseOperationError(err)
 	}
 	value.Reservation = Reservation{
 		ID:     booking.ID,
@@ -120,26 +121,26 @@ func (s Service) notificationProjection(
 			Now:   pgtype.Timestamptz{Time: s.now(), Valid: true},
 		},
 	)
-	return value, err
+	return value, core.DatabaseOperationError(err)
 }
 
 func (s Service) lockNotificationEligibility(ctx context.Context, tx pgx.Tx, id int64) (bool, error) {
 	q := dbgen.New(tx)
 	row, err := q.ReadNotification(ctx, dbgen.ReadNotificationParams{ID: id, BotID: s.Delivery.BotID})
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	if _, err = q.LockNotificationBooking(ctx, row.BookingID); err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	recipient, err := q.LockNotificationRecipient(ctx, row.Owner)
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	if !recipient.CanBook || recipient.TelegramID <= 0 || recipient.TelegramID != row.DeliveryChat {
 		return false, nil
 	}
-	return q.NotificationCurrent(
+	current, err := q.NotificationCurrent(
 		ctx,
 		dbgen.NotificationCurrentParams{
 			ID:    id,
@@ -147,4 +148,5 @@ func (s Service) lockNotificationEligibility(ctx context.Context, tx pgx.Tx, id 
 			Now:   pgtype.Timestamptz{Time: s.now(), Valid: true},
 		},
 	)
+	return current, core.DatabaseOperationError(err)
 }

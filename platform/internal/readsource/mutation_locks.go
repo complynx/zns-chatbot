@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -75,14 +76,14 @@ func lockActors(ctx context.Context, tx pgx.Tx, actors []string, authorities []A
 	}
 	rows, err := tx.Query(ctx, query, actors, targets)
 	if err != nil {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
-			return err
+			return core.DatabaseOperationContextError(ctx, err)
 		}
 	}
-	return rows.Err()
+	return core.DatabaseOperationContextError(ctx, rows.Err())
 }

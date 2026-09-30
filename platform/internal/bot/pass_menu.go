@@ -65,16 +65,14 @@ func (b *Bot) handlePassMenu(ctx context.Context, in incoming, update telegram.U
 		if err = b.RenderPassMenu(ctx, in.owner, in.chat, ""); err != nil {
 			return err
 		}
-		b.acknowledge(ctx, update.Callback.ID)
-		return nil
+		return b.acknowledge(ctx, update.Callback.ID)
 	}
 	state, notice, err := b.passMenuUpdate(ctx, in, update, saved, revision)
 	if update.Callback != nil && stalePassMenuSource(err) && saved.Source != nil {
 		if err = b.redactPassMenu(ctx, in.owner, in.chat, revision, saved); err != nil {
 			return err
 		}
-		b.acknowledge(ctx, update.Callback.ID)
-		return nil
+		return b.acknowledge(ctx, update.Callback.ID)
 	}
 	if err != nil {
 		return err
@@ -87,7 +85,7 @@ func (b *Bot) handlePassMenu(ctx context.Context, in incoming, update telegram.U
 		return err
 	}
 	if update.Callback != nil {
-		b.acknowledge(ctx, update.Callback.ID)
+		return b.acknowledge(ctx, update.Callback.ID)
 	}
 	return nil
 }
@@ -201,6 +199,10 @@ func (b *Bot) storeCommittedPassMenu(
 }
 
 func passMenuFailure(err error) error {
+	// Positive SQL provenance must not become a stale-button notice.
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return nil
 	}

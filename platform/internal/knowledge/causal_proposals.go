@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
@@ -30,7 +31,7 @@ func loadProposalCausal(ctx context.Context, tx pgx.Tx, id int64) (proposalCausa
 		return result, nil
 	}
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	if origin == "original" && raw == nil {
 		return result, nil
@@ -78,7 +79,7 @@ func bindProposalCausal(ctx context.Context, tx pgx.Tx, p *Proposal, refs []read
 		}
 	}
 	if _, err := tx.Exec(ctx, `UPDATE core.knowledge_proposals SET origin='derived' WHERE id=$1`, p.ID); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if _, err := tx.Exec(
 		ctx,
@@ -86,7 +87,7 @@ func bindProposalCausal(ctx context.Context, tx pgx.Tx, p *Proposal, refs []read
 		p.ID,
 		refs,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	var err error
 	p.ReadAuthorities, err = proposalReadAuthorities(*p)
@@ -111,7 +112,7 @@ func proposalReadAuthorities(p Proposal) ([]readsource.Authority, error) {
 func (s Service) authorizeProposals(ctx context.Context, actor string, proposals []Proposal) ([]Proposal, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	records := make([]proposalCausalRecord, len(proposals))
@@ -148,7 +149,7 @@ func (s Service) authorizeProposals(ctx context.Context, actor string, proposals
 		}
 		result = append(result, p)
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func lockProposalCausal(ctx context.Context, tx pgx.Tx, actor string, record proposalCausalRecord) error {
@@ -162,7 +163,7 @@ func lockProposalCausal(ctx context.Context, tx pgx.Tx, actor string, record pro
 	var revoked bool
 	if err = tx.QueryRow(ctx, `SELECT revoked FROM core.knowledge_proposal_authorities WHERE proposal_id=$1 FOR SHARE`, record.id).
 		Scan(&revoked); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if revoked || slices.Contains(allowed, false) {
 		return conflict("knowledge_stale")
@@ -221,7 +222,7 @@ func authorizeProposalRecord(
 	var revoked bool
 	if err := tx.QueryRow(ctx, `SELECT revoked FROM core.knowledge_proposal_authorities WHERE proposal_id=$1 FOR UPDATE`, id).
 		Scan(&revoked); err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	origin, reader := memoryCausalValidity(record.refs, refs, validity)
 	if !origin {
@@ -230,7 +231,7 @@ func authorizeProposalRecord(
 			`UPDATE core.knowledge_proposal_authorities SET revoked=true WHERE proposal_id=$1`,
 			id,
 		); err != nil {
-			return false, err
+			return false, core.DatabaseOperationError(err)
 		}
 	}
 	if revoked || !origin || !reader {

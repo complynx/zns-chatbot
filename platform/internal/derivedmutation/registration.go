@@ -5,26 +5,24 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
 // lockRegistrationPrelude orders the union at UPDATE strength, including source
-// events that differ from the target, before any actor or source grant lock.
+// events hidden by opaque memory/proposal provenance, before actor or grant locks.
 func lockRegistrationPrelude(
 	ctx context.Context,
 	tx pgx.Tx,
 	actor, target, event string,
 	source readsource.Derivation,
 ) error {
-	if err := readsource.LockRegistrationMutationEvents(ctx, tx, source.Authorities, []string{event}); err != nil {
-		return err
-	}
 	actors := []string{actor}
 	if target != "" {
 		actors = append(actors, target)
 	}
-	return readsource.LockActors(ctx, tx, actors, source.Authorities)
+	return readsource.LockRegistrationMutationPrelude(ctx, tx, source.Authorities, []string{event}, actors)
 }
 
 func (s Service) ExecutePassBooking(
@@ -50,7 +48,7 @@ func (s Service) ExecutePassBooking(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return passbooking.Booking{}, err
+		return passbooking.Booking{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = lockRegistrationPrelude(ctx, tx, actor, command.Target, command.Event, source); err != nil {
@@ -78,7 +76,7 @@ func (s Service) AssignPass(
 	source = source.Clone()
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return passbooking.AdminAssignmentResult{}, err
+		return passbooking.AdminAssignmentResult{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = lockRegistrationPrelude(ctx, tx, actor, command.Target, command.Event, source); err != nil {

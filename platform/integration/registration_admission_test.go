@@ -15,17 +15,16 @@ import (
 func TestRegistrationAdmissionManualMissingProfileAndReplay(t *testing.T) {
 	t.Parallel()
 	f := passMenuFixture(t)
-	f.b.Delivery.BotID = 99078
 	ctx := t.Context()
-	handleNotificationUpdate(t, f, message(78001, 101, "/passes"))
-	handleNotificationUpdate(t, f, passMenuClick(t, f, 101, 78002, "Dance"))
+	handlePassVisible(t, f, message(78001, 101, "/passes"))
+	handlePassVisible(t, f, passMenuClick(t, f, 101, 78002, "Dance"))
 	var count int
 	require.NoError(t, f.db.QueryRow(ctx, "SELECT count(*) FROM core.registration_intents").Scan(&count))
 	require.Zero(t, count, "navigation must not acquire event priority")
 	click := passMenuClick(t, f, 101, 78003, "Register solo")
 	_, err := f.db.Exec(ctx, "DELETE FROM core.pass_profiles WHERE owner='alice'")
 	require.NoError(t, err)
-	handleNotificationUpdate(t, f, click)
+	handlePassVisible(t, f, click)
 	var intent, position int64
 	require.NoError(
 		t,
@@ -50,9 +49,9 @@ func TestRegistrationAdmissionManualMissingProfileAndReplay(t *testing.T) {
 	f.b = &restarted
 	_, err = f.db.Exec(ctx, "INSERT INTO core.pass_profiles(owner,role) VALUES('alice','leader')")
 	require.NoError(t, err)
-	handleNotificationUpdate(t, f, message(78004, 101, "/passes"))
-	handleNotificationUpdate(t, f, passMenuClick(t, f, 101, 78005, "Dance"))
-	handleNotificationUpdate(t, f, passMenuClick(t, f, 101, 78006, "Register solo"))
+	handlePassVisible(t, f, message(78004, 101, "/passes"))
+	handlePassVisible(t, f, passMenuClick(t, f, 101, 78005, "Dance"))
+	handlePassVisible(t, f, passMenuClick(t, f, 101, 78006, "Register solo"))
 	var after, afterPosition int64
 	require.NoError(
 		t,

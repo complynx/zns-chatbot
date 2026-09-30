@@ -4,5 +4,6 @@ coverage*
 *.exe
 node_modules
 .cache
+.go-cache
 test-results
 build.local.log

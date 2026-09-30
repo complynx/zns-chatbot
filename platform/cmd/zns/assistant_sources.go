@@ -16,10 +16,11 @@ func startAssistantSources(
 	db *pgxpool.Pool,
 	logger *slog.Logger,
 	cfg config.Config,
+	onFatal func(error),
 ) (func(), error) {
 	runner, err := assistantsource.New(cfg.AssistantSources, knowledge.Service{DB: db}, logger)
 	if err != nil {
 		return nil, err
 	}
-	return runner.Start(ctx)
+	return runner.Start(ctx, onFatal)
 }

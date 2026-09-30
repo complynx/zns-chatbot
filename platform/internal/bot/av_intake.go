@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -36,7 +37,7 @@ func hasAV(message telegram.Message) bool {
 func (b *Bot) clearAVResults(ctx context.Context, owner string, ids []string) error {
 	_, err := b.DB.Exec(ctx, `UPDATE bot.av_results a SET private_result=NULL FROM bot.media_intake m
 	WHERE a.intake_id=m.id AND m.owner=$1 AND a.intake_id=ANY($2)`, owner, ids)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 // Retire a direct spoken command after its durable reply, without touching other
@@ -44,7 +45,7 @@ func (b *Bot) clearAVResults(ctx context.Context, owner string, ids []string) er
 func (b *Bot) finishConsumedVoice(ctx context.Context, owner string, cached interaction.SavedPlan) error {
 	_, err := b.DB.Exec(ctx, `UPDATE bot.media_intake SET status='done',last_action='answer',last_origin='agent'
 	WHERE owner=$1 AND id=$2 AND id=ANY($3) AND av_kind='voice' AND status='new'`, owner, cached.MediaID, cached.AVIDs)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func (b *Bot) resumeConsumedVoice(ctx context.Context, in incoming, updateID int64, status string) (bool, error) {
@@ -62,7 +63,7 @@ func (b *Bot) resumeConsumedVoice(ctx context.Context, in incoming, updateID int
 func (b *Bot) purgeExpiredAV(ctx context.Context) error {
 	_, err := b.DB.Exec(ctx, `UPDATE bot.av_results a SET private_result=NULL FROM bot.media_intake m
 	WHERE a.intake_id=m.id AND a.private_result IS NOT NULL AND (m.expires_at<=now() OR m.status='done')`)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func releaseAV(conn *pgxpool.Conn, owner string) {
@@ -82,10 +83,13 @@ func (b *Bot) prepareAV(ctx context.Context, in incoming) (bool, error) {
 	err := b.DB.QueryRow(ctx, `SELECT av_kind FROM bot.media_intake WHERE owner=$1 AND id=$2`, in.owner, in.mediaID).
 		Scan(&kind)
 	if err != nil || kind == "" {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	result, err := b.initialAV(ctx, in, kind)
 	if err != nil {
+		if core.IsDatabaseFailure(err) {
+			return false, err
+		}
 		problem, denied := errors.AsType[*core.ProblemError](err)
 		if errors.Is(err, pgx.ErrNoRows) || (denied && problem.Status < 500) {
 			if clearErr := b.clearAVResults(ctx, in.owner, []string{in.mediaID}); clearErr != nil {
@@ -113,7 +117,7 @@ func (b *Bot) prepareAV(ctx context.Context, in incoming) (bool, error) {
 		string(notice),
 	)
 	if err != nil {
-		return true, err
+		return true, core.DatabaseOperationError(err)
 	}
 	if err = b.clearAVResults(ctx, in.owner, []string{in.mediaID}); err != nil {
 		return true, err
@@ -124,35 +128,39 @@ func (b *Bot) prepareAV(ctx context.Context, in incoming) (bool, error) {
 func (b *Bot) initialAV(ctx context.Context, in incoming, kind mediaclient.Kind) (mediaproc.Result, error) {
 	conn, err := b.DB.Acquire(ctx)
 	if err != nil {
-		return mediaproc.Result{}, err
+		return mediaproc.Result{}, core.DatabaseOperationError(err)
 	}
 	if _, err = conn.Exec(ctx, `SELECT pg_advisory_lock(193827,hashtext($1))`, in.owner); err != nil {
 		releaseAV(conn, in.owner)
-		return mediaproc.Result{}, err
+		return mediaproc.Result{}, core.DatabaseOperationError(err)
 	}
 	defer releaseAV(conn, in.owner)
 	var attachmentID string
 	err = conn.QueryRow(ctx, `SELECT attachment_id FROM bot.media_intake WHERE owner=$1 AND id=$2 AND status<>'done' AND expires_at>now()`, in.owner, in.mediaID).
 		Scan(&attachmentID)
 	if err != nil {
-		return mediaproc.Result{}, err
+		return mediaproc.Result{}, core.DatabaseOperationError(err)
 	}
 	attachment, err := b.API.Media(ctx, in.owner, attachmentID)
 	if err != nil {
 		return mediaproc.Result{}, err
 	}
-	var saved *mediaproc.Result
 	var status string
+	var raw []byte
 	err = conn.QueryRow(ctx, `SELECT status,private_result FROM bot.av_results WHERE intake_id=$1`, in.mediaID).
-		Scan(&status, &saved)
+		Scan(&status, &raw)
 	if err == nil {
-		if saved != nil {
-			return *saved, nil
+		saved, found, decodeErr := decodeAVResult(raw)
+		if decodeErr != nil {
+			return mediaproc.Result{}, decodeErr
+		}
+		if found {
+			return saved, nil
 		}
 		return mediaproc.Result{Status: status}, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return mediaproc.Result{}, err
+		return mediaproc.Result{}, core.DatabaseOperationError(err)
 	}
 	result := mediaproc.Result{
 		Status:   "failed",
@@ -187,10 +195,29 @@ func (b *Bot) initialAV(ctx context.Context, in incoming, kind mediaclient.Kind)
 		result,
 		in.owner,
 	)
-	if err == nil && command.RowsAffected() == 0 {
-		err = pgx.ErrNoRows
+	if err != nil {
+		return result, core.DatabaseOperationError(err)
 	}
-	return result, err
+	if command.RowsAffected() == 0 {
+		return result, pgx.ErrNoRows
+	}
+	return result, nil
+}
+
+// decodeAVResult decodes a stored private result outside SQL classification:
+// readable but incompatible JSON is an ordinary decode error. SQL NULL and JSON
+// null both mean no saved result, as when pgx decoded into *mediaproc.Result.
+func decodeAVResult(raw []byte) (mediaproc.Result, bool, error) {
+	var saved *mediaproc.Result
+	if raw != nil {
+		if err := json.Unmarshal(raw, &saved); err != nil {
+			return mediaproc.Result{}, false, fmt.Errorf("decode private AV result: %w", err)
+		}
+	}
+	if saved == nil {
+		return mediaproc.Result{}, false, nil
+	}
+	return *saved, true, nil
 }
 
 func applyAV(input *agent.Input, id, kind string, result mediaproc.Result) {
@@ -224,15 +251,20 @@ func rationalMillis(value mediaproc.Rational) int64 {
 
 func (b *Bot) addAVInput(ctx context.Context, owner, id string, input *agent.Input) (bool, error) {
 	var kind string
-	var result *mediaproc.Result
+	var raw []byte
 	err := b.DB.QueryRow(ctx, `SELECT m.av_kind,a.private_result FROM bot.media_intake m
-	LEFT JOIN bot.av_results a ON a.intake_id=m.id WHERE m.owner=$1 AND m.id=$2`, owner, id).Scan(&kind, &result)
+	LEFT JOIN bot.av_results a ON a.intake_id=m.id WHERE m.owner=$1 AND m.id=$2`, owner, id).Scan(&kind, &raw)
+	if err != nil {
+		return false, core.DatabaseOperationError(err)
+	}
+	// Decoding precedes the kind check, as it did inside the former row scan.
+	result, found, err := decodeAVResult(raw)
 	if err != nil || kind == "" {
 		return false, err
 	}
-	if result == nil {
+	if !found {
 		return true, errors.New("private AV result unavailable")
 	}
-	applyAV(input, id, kind, *result)
+	applyAV(input, id, kind, result)
 	return true, nil
 }

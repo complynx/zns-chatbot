@@ -6,6 +6,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -89,7 +91,7 @@ func recordChange(
 		Dishes: dishChanges(before, order.Choice), CustomerFields: customerChanges(before, order.Choice)}
 	_, err := tx.Exec(ctx, `INSERT INTO core.order_audit(order_id,actor,origin,action,version,snapshot)
 		VALUES($1,$2,$3,$4,$5,$6)`, order.ID, actor, origin, action, order.Version, change)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 // History returns only the authenticated owner's recent committed changes.
@@ -101,16 +103,16 @@ func (s Service) History(ctx context.Context, owner, event string) ([]Change, er
 		WHERE o.owner=$1 AND o.event_id=$2 AND a.snapshot IS NOT NULL
 		ORDER BY a.id DESC LIMIT 30) recent ORDER BY id`, owner, event)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	result := []Change{}
 	for rows.Next() {
 		var change Change
 		if err = rows.Scan(&change, &change.At); err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		result = append(result, change)
 	}
-	return result, rows.Err()
+	return result, core.DatabaseOperationError(rows.Err())
 }

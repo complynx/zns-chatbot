@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -39,7 +40,7 @@ func (b *Bot) forOrderUpdate(ctx context.Context, in incoming, update telegram.U
 	}
 	if err := b.DB.QueryRow(ctx, `SELECT content #>> '{}' FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind='order_event'`, in.owner, update.ID).
 		Scan(&event); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationContextError(ctx, err)
 	}
 	scoped := *b
 	scoped.OrderEventID = event
@@ -54,6 +55,7 @@ func (b *Bot) orderCallbackEvent(ctx context.Context, in incoming, update int64,
 		}
 		return event, err
 	}
+	// Absence keeps the caller's default event; any other lookup failure is SQL-origin.
 	var err error
 	if token, ok := strings.CutPrefix(in.text, orderPagePrefix); ok {
 		err = b.DB.QueryRow(ctx, `SELECT event_id FROM bot.order_page_buttons WHERE owner=$1 AND token=$2`, in.owner, token).
@@ -62,5 +64,5 @@ func (b *Bot) orderCallbackEvent(ctx context.Context, in incoming, update int64,
 		err = b.DB.QueryRow(ctx, `SELECT command->>'event_id' FROM bot.order_buttons WHERE owner=$1 AND token=$2`, in.owner, orderToken).
 			Scan(&event)
 	}
-	return event, err
+	return event, core.DatabaseOperationContextError(ctx, err)
 }

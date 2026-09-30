@@ -121,7 +121,7 @@ func problem(status int, code string) error { return &core.ProblemError{Status: 
 func authenticated(ctx context.Context, q queryer, actor string) error {
 	var exists bool
 	if err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.users WHERE id=$1)`, actor).Scan(&exists); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !exists {
 		return problem(http.StatusForbidden, "forbidden")

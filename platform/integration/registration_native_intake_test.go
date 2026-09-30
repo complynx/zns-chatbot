@@ -190,19 +190,27 @@ func TestRegistrationRetentionNativeImmutableAndMetadataRole(t *testing.T) {
 	valid, err := registrationnative.Check(ctx, roleTx, envelope)
 	require.NoError(t, err, "the real API role must hold the exact transport binding through commit")
 	require.True(t, valid)
-	for _, statement := range []string{
-		"UPDATE bot.pass_views SET state=state WHERE owner='alice'",
-		"UPDATE bot.pass_buttons SET action=action WHERE owner='alice'",
-		"INSERT INTO bot.pass_views(owner,chat_id,revision,state) VALUES('visitor',303,1,'{}')",
-		"DELETE FROM bot.pass_buttons WHERE owner='alice'",
+	// Application projections own view state and retire old buttons. They cannot
+	// rewrite the command carried by an existing button.
+	for _, mutation := range []struct {
+		statement string
+		allowed   bool
+	}{
+		{"UPDATE bot.pass_views SET state=state WHERE owner='alice'", true},
+		{"UPDATE bot.pass_buttons SET action=action WHERE owner='alice'", false},
+		{"INSERT INTO bot.pass_views(owner,chat_id,revision,state) VALUES('visitor',303,1,'{}')", true},
+		{"DELETE FROM bot.pass_buttons WHERE owner='alice'", true},
 	} {
 		attempt, saveErr := roleTx.Begin(ctx)
 		require.NoError(t, saveErr)
-		_, writeErr := attempt.Exec(ctx, statement)
-		require.Error(t, writeErr, "metadata lock privilege must not grant %s", statement)
-		var denied *pgconn.PgError
-		require.ErrorAs(t, writeErr, &denied)
-		require.Equal(t, "42501", denied.Code)
+		_, writeErr := attempt.Exec(ctx, mutation.statement)
+		if mutation.allowed {
+			require.NoError(t, writeErr, "application projection must permit %s", mutation.statement)
+		} else {
+			var denied *pgconn.PgError
+			require.ErrorAs(t, writeErr, &denied)
+			require.Equal(t, "42501", denied.Code)
+		}
 		require.NoError(t, attempt.Rollback(ctx))
 	}
 	require.NoError(t, roleTx.Rollback(ctx))

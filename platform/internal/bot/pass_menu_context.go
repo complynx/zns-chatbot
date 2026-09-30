@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -29,23 +30,17 @@ func (r *passMenuRenderer) eventHeading(ctx context.Context) error {
 }
 
 func (r *passMenuRenderer) paymentContact(ctx context.Context, booking passbooking.Booking) error {
-	owner := booking.PaymentAdmin
-	if owner == "" {
-		owner = r.state.PaymentAdmin
-	}
-	if owner == "" {
-		return nil
-	}
-	contacts, err := r.bot.API.PassPaymentAdmins(ctx, r.owner, r.state.Event)
+	view, err := (interaction.RegistrationHomeReader{Domain: r.bot.API}).Contacts(
+		ctx, r.owner, r.state.Event, &interaction.RegistrationContactSelection{
+			BookingAdmin: booking.PaymentAdmin, PendingAdmin: r.state.PaymentAdmin,
+		})
 	if err != nil {
 		return err
 	}
-	for _, contact := range contacts {
-		if contact.Owner == owner {
-			r.lines = append(r.lines, r.text(i18n.RegistrationAdmin)+": "+passMenuLabel(contact.Name))
-			r.contact(contact)
-			break
-		}
+	if view.Selected != nil {
+		contact := *view.Selected
+		r.lines = append(r.lines, r.text(i18n.RegistrationAdmin)+": "+passMenuLabel(contact.Name))
+		r.contact(contact)
 	}
 	return nil
 }

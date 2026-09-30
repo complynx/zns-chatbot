@@ -99,6 +99,9 @@ func (b *Bot) handleAdminMessageInput(ctx context.Context, in incoming, u telegr
 		map[string]int64{broadcastChatKey: in.chat},
 		&pending,
 	)
+	if core.IsDatabaseFailure(err) {
+		return false, core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status == http.StatusForbidden {
 		return false, nil
 	}

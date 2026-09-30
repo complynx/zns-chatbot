@@ -313,6 +313,7 @@ func assertPrivilegedRetirement(t *testing.T, f *fixture, language string) {
 	)
 	require.Equal(t, "notice", kind)
 	require.Equal(t, "ready", state)
+	pumpBotDeliveries(t, f.b)
 	var wire struct {
 		Messages []telegram.Message `json:"Messages"`
 	}
@@ -325,4 +326,35 @@ func assertPrivilegedRetirement(t *testing.T, f *fixture, language string) {
 		require.NotContains(t, message.Text, "privileged-1")
 		require.NotContains(t, message.Text, "visitor")
 	}
+}
+
+// Definitive source revocation ends the admitted turn. A new input gets fresh
+// context; it must not inherit the retired run or its transformed private result.
+func assertPrivilegedFreshInput(t *testing.T, f *fixture, model *knowledgeModel, marker string) {
+	t.Helper()
+	require.NotEmpty(t, marker)
+	require.Len(t, model.inputs, 1, "definitive revocation must end the admitted model turn")
+	assertPrivilegedRetirement(t, f, model.inputs[0].Language)
+	var before []byte
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='alice' AND update_id=1989 AND kind='script_runs'`).Scan(&before))
+	require.NotContains(t, string(before), marker)
+	effects := privilegedEffectDigest(t, f)
+	handleVisible(t, f.b, message(1989, identity.AliceTelegramID, "Read my saved history and orders"))
+	require.Len(t, model.inputs, 1, "replaying the terminal update must not replan")
+	assertPrivilegedRetirement(t, f, model.inputs[0].Language)
+	handleVisible(t, f.b, message(1990, identity.AliceTelegramID, "Read my current available information"))
+	require.Len(t, model.inputs, 2, "an independent fresh input must remain usable")
+	require.NotNil(t, model.inputs[1].Script)
+	require.EqualValues(t, 1990, model.inputs[1].Script.UpdateID)
+	require.Empty(t, model.inputs[1].Script.Runs, "the new input cannot resume the retired VM")
+	require.Empty(t, model.inputs[1].Script.ReadAuthorities)
+	fresh, err := json.Marshal(model.inputs[1])
+	require.NoError(t, err)
+	require.NotContains(t, string(fresh), marker)
+	var after []byte
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='alice' AND update_id=1989 AND kind='script_runs'`).Scan(&after))
+	require.JSONEq(t, string(before), string(after), "replay and fresh input cannot resurrect retired source evidence")
+	require.Equal(t, effects, privilegedEffectDigest(t, f))
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/applicationauth"
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 
 	"github.com/stretchr/testify/require"
 
@@ -183,16 +184,21 @@ func TestBotDeliveryPostgresCardReplayPreservesBinding(t *testing.T) {
 
 func botDeliveryTestBot(db *pgxpool.Pool) Bot {
 	settings := botIntentTestSettings()
+	authorizer := applicationauth.Authorizer{
+		DB:     db,
+		Verify: func(_ context.Context, token string) (string, error) { return token, nil },
+	}
 	return Bot{
 		DB:       db,
 		Delivery: settings,
+		API: appclient.Client{
+			SandboxToken: func(owner string) string { return owner },
+			LocalHistory: &appclient.LocalHistory{Service: conversation.Service{DB: db}, Authorizer: authorizer},
+		},
 		Host: appclient.Host{
 			LocalBotDelivery: &appclient.LocalBotDelivery{
-				Service: botdelivery.Service{DB: db, Delivery: settings},
-				Authorizer: applicationauth.Authorizer{
-					DB:     db,
-					Verify: func(_ context.Context, token string) (string, error) { return token, nil },
-				},
+				Service:    botdelivery.Service{DB: db, Delivery: settings},
+				Authorizer: authorizer,
 			},
 			UserToken: func(_ context.Context, owner string) (string, error) { return owner, nil },
 		},

@@ -7,6 +7,8 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const legacyToggleBookings = 51
@@ -21,16 +23,16 @@ func (s Service) LegacyPractitionerBooking(ctx context.Context, actor, event, id
  SELECT target_id FROM core.legacy_massage_import_references WHERE source_kind='booking' AND event_id=$1
  AND (target_id=$3 OR source_record->'_id'->>'$oid'=$3)) AND event_id=$1 AND specialist=$2`, event, actor, id)
 	if err != nil {
-		return Reservation{}, err
+		return Reservation{}, core.DatabaseOperationError(err)
 	}
 	result, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByPos[Reservation])
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, problem(http.StatusNotFound, "not_found")
 	}
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // LegacyTogglePreferences retains the source toggle intent once per delivered
@@ -45,11 +47,11 @@ func (s Service) LegacyTogglePreferences(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Preferences{}, err
+		return Preferences{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('massage:'||$1,0))`, actor); err != nil {
-		return Preferences{}, err
+		return Preferences{}, core.DatabaseOperationError(err)
 	}
 	var value Preferences
 	err = tx.QueryRow(ctx, `SELECT notify_bookings,notify_next FROM core.massage_specialists WHERE event_id=$1 AND owner=$2 FOR UPDATE`, event, actor).
@@ -58,7 +60,7 @@ func (s Service) LegacyTogglePreferences(
 		return value, problem(http.StatusForbidden, "forbidden")
 	}
 	if err != nil {
-		return value, err
+		return value, core.DatabaseOperationError(err)
 	}
 	fingerprint := event + ":" + strconv.Itoa(choice)
 	var prior string
@@ -68,10 +70,10 @@ func (s Service) LegacyTogglePreferences(
 		if prior != fingerprint {
 			return value, problem(http.StatusConflict, "idempotency_conflict")
 		}
-		return value, tx.Commit(ctx)
+		return value, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return value, err
+		return value, core.DatabaseOperationError(err)
 	}
 	if choice == legacyToggleBookings {
 		value.Bookings = !value.Bookings
@@ -89,9 +91,9 @@ func (s Service) LegacyTogglePreferences(
 		fingerprint,
 		value,
 	); err != nil {
-		return value, err
+		return value, core.DatabaseOperationError(err)
 	}
-	return value, tx.Commit(ctx)
+	return value, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (s Service) LegacyInstant(ctx context.Context, actor, event, key string, length int) (Reservation, error) {
@@ -113,7 +115,7 @@ func (s Service) LegacyInstant(ctx context.Context, actor, event, key string, le
 		return Reservation{}, problem(http.StatusConflict, "no_current_party")
 	}
 	if err != nil {
-		return Reservation{}, err
+		return Reservation{}, core.DatabaseOperationError(err)
 	}
 	return s.Execute(
 		ctx,

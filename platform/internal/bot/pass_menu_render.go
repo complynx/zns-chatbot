@@ -14,6 +14,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -140,7 +141,7 @@ func (b *Bot) deliverPassMenu(
 			token := hex.EncodeToString(digest[:16])
 			if _, err = b.DB.Exec(ctx, `INSERT INTO bot.pass_buttons(owner,token,revision,action) VALUES($1,$2,$3,$4)
 			ON CONFLICT(owner,token) DO NOTHING`, owner, token, revision, choice.action); err != nil {
-				return err
+				return core.DatabaseOperationError(err)
 			}
 			tokens = append(tokens, token)
 			button.Data = passMenuPrefix + token
@@ -154,7 +155,7 @@ func (b *Bot) deliverPassMenu(
 	var previous string
 	if err = b.DB.QueryRow(ctx, "SELECT message_id,view_hash FROM bot.pass_views WHERE owner=$1", owner).
 		Scan(&payload.MessageID, &previous); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if payload.MessageID > 0 && previous == hash {
 		return nil

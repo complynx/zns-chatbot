@@ -7,6 +7,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const scriptLedgerAttempts = 4
@@ -27,10 +29,10 @@ func (s ScriptStore) ledgerSnapshot(ctx context.Context, owner string, updateID 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return snapshot, nil
 	}
-	if err == nil {
-		err = json.Unmarshal(snapshot.raw, &snapshot.records)
+	if err != nil {
+		return snapshot, core.DatabaseOperationContextError(ctx, err)
 	}
-	return snapshot, err
+	return snapshot, json.Unmarshal(snapshot.raw, &snapshot.records)
 }
 
 // Only the SQL-only choice claim runs after the revision check. Authorization,
@@ -39,7 +41,7 @@ func (s ScriptStore) commitLedger(ctx context.Context, owner string, updateID in
 	snapshot scriptLedgerSnapshot, write bool, claim func(pgx.Tx, []ScriptRecord) error) (bool, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationContextError(ctx, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = LockScript(ctx, tx, owner, updateID); err != nil {
@@ -49,7 +51,7 @@ func (s ScriptStore) commitLedger(ctx context.Context, owner string, updateID in
 	err = tx.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3 FOR UPDATE`, owner, updateID, scriptRunsKind).
 		Scan(&current)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return false, err
+		return false, core.DatabaseOperationContextError(ctx, err)
 	}
 	if !bytes.Equal(current, snapshot.raw) {
 		return false, nil
@@ -63,10 +65,10 @@ func (s ScriptStore) commitLedger(ctx context.Context, owner string, updateID in
 		_, err = tx.Exec(ctx, `INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES($1,$2,$3,$4)
  ON CONFLICT(owner,update_id,kind) DO UPDATE SET content=excluded.content`, owner, updateID, scriptRunsKind, snapshot.records)
 		if err != nil {
-			return false, err
+			return false, core.DatabaseOperationContextError(ctx, err)
 		}
 	}
-	return true, tx.Commit(ctx)
+	return true, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 }
 
 func scriptRetired(record ScriptRecord) bool {

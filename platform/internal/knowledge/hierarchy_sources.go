@@ -49,7 +49,7 @@ func resolveMemorySources(ctx context.Context, tx pgx.Tx, actor string, keys []s
 			return nil, missing()
 		}
 		if err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		ids = append(ids, id)
 	}
@@ -103,7 +103,7 @@ func bindMemorySources(ctx context.Context, tx pgx.Tx, actor string, result Resu
 				id,
 			)
 			if err != nil {
-				return err
+				return core.DatabaseOperationError(err)
 			}
 		}
 		return nil
@@ -132,7 +132,7 @@ func bindMemorySources(ctx context.Context, tx pgx.Tx, actor string, result Resu
 			id,
 		)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	if result.Proposal != nil {
@@ -149,7 +149,7 @@ func bindMemorySources(ctx context.Context, tx pgx.Tx, actor string, result Resu
 			ref.Version,
 			result.Proposal.ID,
 		)
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return nil
 }
@@ -187,21 +187,21 @@ func (s Service) MemorySources(ctx context.Context, actor, reference string) (co
  WHERE s.namespace=$1 AND s.owner=$2 AND s.scope=$3 AND s.topic=$4 AND s.item_key=$5 AND s.source_kind=$6 AND s.version=$7 AND s.source_owner=$8
  ORDER BY e.id LIMIT $9`, ref.Namespace, owner, ref.Event, ref.Topic, ref.Key, ref.SourceKind, ref.Version, actor, conversation.MaxPage)
 	if err != nil {
-		return conversation.Page{}, err
+		return conversation.Page{}, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	ids := []int64{}
 	for rows.Next() {
 		var id int64
 		if err = rows.Scan(&id); err != nil {
-			return conversation.Page{}, err
+			return conversation.Page{}, core.DatabaseOperationError(err)
 		}
 		ids = append(ids, id)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return conversation.Page{}, err
+		return conversation.Page{}, core.DatabaseOperationError(err)
 	}
 	result, err := (conversation.Service{DB: s.DB}).ReadSelected(ctx, actor, ids)
 	if err != nil {
@@ -221,7 +221,7 @@ func (s Service) MemorySources(ctx context.Context, actor, reference string) (co
 func (s Service) AttachMemorySources(ctx context.Context, actor, operationKey string, keys []string) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = lockActor(ctx, tx, actor); err != nil {
@@ -234,7 +234,7 @@ func (s Service) AttachMemorySources(ctx context.Context, actor, operationKey st
 		return nil
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	var result Result
 	if err = json.Unmarshal(data, &result); err != nil {
@@ -244,7 +244,7 @@ func (s Service) AttachMemorySources(ctx context.Context, actor, operationKey st
 		if err = attachProposalSources(ctx, tx, actor, result, keys); err != nil {
 			return err
 		}
-		return tx.Commit(ctx)
+		return core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	ref, active := resultMemoryReference(result)
 	if !active {
@@ -261,7 +261,7 @@ func (s Service) AttachMemorySources(ctx context.Context, actor, operationKey st
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.memory_revisions WHERE namespace=$1 AND owner=$2 AND scope=$3 AND topic=$4 AND item_key=$5 AND source_kind=$6 AND version=$7 AND active AND body<>'')`, ref.Namespace, owner, ref.Event, ref.Topic, ref.Key, ref.SourceKind, ref.Version).
 		Scan(&retained)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !retained {
 		return nil
@@ -277,12 +277,12 @@ func (s Service) AttachMemorySources(ctx context.Context, actor, operationKey st
 	err = tx.QueryRow(ctx, `SELECT count(*) FROM core.memory_sources WHERE namespace=$1 AND owner=$2 AND scope=$3 AND topic=$4 AND item_key=$5 AND source_kind=$6 AND version=$7`, ref.Namespace, owner, ref.Event, ref.Topic, ref.Key, ref.SourceKind, ref.Version).
 		Scan(&count)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if count > conversation.MaxPage {
 		return invalid()
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func attachProposalSources(ctx context.Context, tx pgx.Tx, actor string, result Result, keys []string) error {
@@ -303,7 +303,7 @@ func attachProposalSources(ctx context.Context, tx pgx.Tx, actor string, result 
 	err = tx.QueryRow(ctx, `SELECT count(*) FROM core.memory_proposal_sources WHERE proposal_id=$1`, result.Proposal.ID).
 		Scan(&count)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	const maxProposalSources = 8
 	if count > maxProposalSources {
@@ -321,5 +321,5 @@ func attachProposalSources(ctx context.Context, tx pgx.Tx, actor string, result 
  WHERE p.id=$1 AND p.state='approved' ON CONFLICT DO NOTHING`,
 		result.Proposal.ID,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }

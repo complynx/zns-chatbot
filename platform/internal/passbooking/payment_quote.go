@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 type PaymentQuote struct {
@@ -27,5 +29,5 @@ AND EXISTS(SELECT 1 FROM core.users u WHERE u.id=$2 AND u.can_book)`, eventID, a
 	if errors.Is(err, pgx.ErrNoRows) {
 		return PaymentQuote{}, conflict("pass_payment_state")
 	}
-	return quote, err
+	return quote, core.DatabaseOperationError(err)
 }

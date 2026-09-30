@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -13,20 +15,28 @@ type Links struct {
 	DB     *pgxpool.Pool
 	Issuer string
 	BotID  int64
+	// InvalidateSubject runs after an authoritative inactive binding is observed.
+	// A committed local revocation may call the same hook directly.
+	InvalidateSubject func(string)
 }
 
 type User struct{ Owner, Subject string }
 
 func (l Links) Telegram(ctx context.Context, telegramID int64) (User, error) {
 	var user User
-	err := l.DB.QueryRow(ctx, `SELECT z.owner,z.subject FROM core.zitadel_identities z
+	var active bool
+	err := l.DB.QueryRow(ctx, `SELECT z.owner,z.subject,z.active FROM core.zitadel_identities z
  JOIN core.telegram_identities t ON t.owner=z.owner JOIN core.users u ON u.id=z.owner
- WHERE z.issuer=$1 AND z.active AND t.bot_id=$2 AND t.telegram_id=$3 AND u.telegram_id=$3`,
-		l.Issuer, l.BotID, telegramID).Scan(&user.Owner, &user.Subject)
+ WHERE z.issuer=$1 AND t.bot_id=$2 AND t.telegram_id=$3 AND u.telegram_id=$3`,
+		l.Issuer, l.BotID, telegramID).Scan(&user.Owner, &user.Subject, &active)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return User{}, ErrZitadelIdentity
 	}
-	return user, err
+	if err == nil && !active {
+		l.invalidate(user.Subject)
+		return User{}, ErrZitadelIdentity
+	}
+	return user, identityLookupFailure(ctx, err)
 }
 
 func (l Links) Subject(ctx context.Context, subject string) (string, error) {
@@ -34,9 +44,29 @@ func (l Links) Subject(ctx context.Context, subject string) (string, error) {
 	err := l.DB.QueryRow(ctx, `SELECT owner FROM core.zitadel_identities WHERE issuer=$1 AND subject=$2 AND active`, l.Issuer, subject).
 		Scan(&owner)
 	if errors.Is(err, pgx.ErrNoRows) {
+		l.invalidate(subject)
 		return "", ErrZitadelIdentity
 	}
-	return owner, err
+	return owner, identityLookupFailure(ctx, err)
+}
+
+func identityLookupFailure(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return core.DatabaseFailure(errors.New("identity lookup unavailable"))
+}
+
+func (l Links) invalidate(subject string) {
+	if l.InvalidateSubject != nil {
+		l.InvalidateSubject(subject)
+	}
 }
 
 // Bind is an operator/importer provisioning operation, not an HTTP or model tool.

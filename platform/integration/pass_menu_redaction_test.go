@@ -25,6 +25,7 @@ func TestPassMenuRevocationTombstoneSurvivesRestoredAuthority(t *testing.T) {
 				`await tools.passes.registration.read({event:"archive",view:"payment"}); return tools.passes.registration.show({event:"archive",view:"payment"});`,
 			)
 			require.Empty(t, run.Error)
+			pumpBotDeliveries(t, f.b)
 			before := passMenuCard(t, f, 101)
 			var original string
 			require.NoError(
@@ -40,6 +41,7 @@ func TestPassMenuRevocationTombstoneSurvivesRestoredAuthority(t *testing.T) {
 			)
 			require.NoError(t, err)
 			require.NoError(t, f.b.RenderPassMenu(t.Context(), "alice", 101, ""))
+			pumpBotDeliveries(t, f.b)
 			text, err := i18n.Translate(language, i18n.RegistrationUnavailable, nil)
 			require.NoError(t, err)
 			redacted := passMenuCard(t, f, 101)
@@ -52,6 +54,7 @@ func TestPassMenuRevocationTombstoneSurvivesRestoredAuthority(t *testing.T) {
 			)
 			require.NoError(t, err)
 			require.NoError(t, f.b.RenderPassMenu(t.Context(), "alice", 101, ""))
+			pumpBotDeliveries(t, f.b)
 			require.Equal(t, text, passMenuCard(t, f, 101).Text)
 			var source string
 			var tombstone bool

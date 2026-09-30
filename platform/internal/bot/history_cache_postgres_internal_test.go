@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+	"github.com/complynx/zns-chatbot/platform/internal/applicationauth"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
@@ -70,6 +72,18 @@ func TestHistoryCachePostgresDeletionAndCompletion(t *testing.T) {
 		},
 	}
 	b.Host = appclient.Host{Base: server.URL, UserToken: b.API.UserToken}
+	b.Host.LocalMemoryReadState = &appclient.LocalMemoryReadState{
+		Service: agenthost.MemoryReadStore{DB: db},
+		Authorizer: applicationauth.Authorizer{
+			DB: db,
+			Verify: func(_ context.Context, token string) (string, error) {
+				if token != "delegated-token" {
+					return "", identity.ErrZitadelIdentity
+				}
+				return "alice", nil
+			},
+		},
+	}
 	ctx, owner, err := b.API.AuthenticateTelegram(t.Context(), 101)
 	require.NoError(t, err)
 	index, err := b.scriptHost().Store.ReserveRun(

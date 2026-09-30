@@ -2,7 +2,6 @@ package appclient
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"mime"
@@ -10,7 +9,6 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 )
 
@@ -41,12 +39,7 @@ func (c Client) DownloadOrderProof(ctx context.Context, owner, event, id string)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		var problem core.ProblemError
-		if err = json.NewDecoder(io.LimitReader(response.Body, MaxAPIBytes)).Decode(&problem); err != nil {
-			return orders.Proof{}, err
-		}
-		problem.Status = response.StatusCode
-		return orders.Proof{}, &problem
+		return orders.Proof{}, coreResponseError(ctx, response, "invalid proof response")
 	}
 	proof := orders.Proof{ID: response.Header.Get("X-Proof-Id"), Attempt: response.Header.Get("X-Payment-Attempt")}
 	proof.Version, err = strconv.ParseInt(response.Header.Get("X-Order-Version"), 10, 64)

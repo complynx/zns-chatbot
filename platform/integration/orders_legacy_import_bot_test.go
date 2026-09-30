@@ -21,17 +21,15 @@ import (
 func legacyBotFixture(t *testing.T) (*fixture, orders.Service, orders.Order) {
 	t.Helper()
 	f := setup(t)
-	server := httptest.NewServer(
-		api.Handler(
-			appservices.NewServices(f.db, appservices.Options{LegacyOrderBotID: 77}),
-			f.b.Host.Signer,
-			slog.New(slog.DiscardHandler),
-		),
-	)
+	// Same fixture composition as setup (synthetic delivery identity bound to every
+	// domain copy), plus the legacy source bot required by imported callbacks.
+	services := notificationFixtureServices(f.db, appservices.Options{LegacyOrderBotID: 77})
+	require.Equal(t, int64(77), services.LegacyOrders.LegacyBotID)
+	server := httptest.NewServer(api.Handler(services, f.b.Host.Signer, slog.New(slog.DiscardHandler)))
 	t.Cleanup(server.Close)
 	f.b.API.Base = server.URL
 	f.b.Host.Base = f.b.API.Base
-	service := orders.Service{DB: f.db, LegacyBotID: 77}
+	service := services.LegacyOrders
 	order, err := service.Execute(t.Context(), "alice", orders.Command{
 		EventID: "sandbox-festival",
 		Name:    "create",
@@ -131,7 +129,7 @@ func TestLegacyOrderBotCloseInBothLocales(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			t.Parallel()
 			f, _, _ := legacyBotFixture(t)
-			handle(t, f.b, message(7300, 101, "/language "+language))
+			handleOrderVisible(t, f, message(7300, 101, "/language "+language))
 			old, err := f.b.TG.Send(
 				t.Context(),
 				telegram.Send{
@@ -141,7 +139,7 @@ func TestLegacyOrderBotCloseInBothLocales(t *testing.T) {
 				},
 			)
 			require.NoError(t, err)
-			handle(t, f.b, aliceCallback(7301, old.ID, "orders|close"))
+			handleOrderVisible(t, f, aliceCallback(7301, old.ID, "orders|close"))
 			for _, message := range chatMessages(t, f, 101) {
 				if message.ID == old.ID {
 					assert.Contains(
@@ -165,8 +163,8 @@ func TestLegacyOrderBotExportRequiresCurrentAdmin(t *testing.T) {
 	require.NoError(t, err)
 	update := aliceCallback(7401, old.ID, "orders|xlsx")
 	update.Callback.From.ID, update.Callback.Message.Chat.ID = 202, 202
-	handle(t, f.b, update)
-	handle(t, f.b, update)
+	handleOrderVisible(t, f, update)
+	handleOrderVisible(t, f, update) // Replay after delivery must not export twice.
 	var sent int
 	require.NoError(
 		t,
@@ -176,7 +174,7 @@ func TestLegacyOrderBotExportRequiresCurrentAdmin(t *testing.T) {
 	assert.Equal(t, 1, sent)
 	_, err = f.db.Exec(t.Context(), `DELETE FROM core.order_admins WHERE owner='bob'`)
 	require.NoError(t, err)
-	handle(t, f.b, update)
+	handleOrderVisible(t, f, update)
 	for _, message := range chatMessages(t, f, 202) {
 		if message.ID == old.ID {
 			assert.Contains(t, message.Text, "forbidden")
@@ -187,7 +185,7 @@ func TestLegacyOrderBotExportRequiresCurrentAdmin(t *testing.T) {
 	old, err = f.b.TG.Send(t.Context(), telegram.Send{ChatID: 101, Text: "Imported menu button"})
 	require.NoError(t, err)
 	before := chatMessages(t, f, 101)
-	handle(t, f.b, aliceCallback(7402, old.ID, "orders|start"))
+	handleOrderVisible(t, f, aliceCallback(7402, old.ID, "orders|start"))
 	after := chatMessages(t, f, 101)
 	assert.Len(t, after, len(before), "denied navigation must not render order cards")
 }

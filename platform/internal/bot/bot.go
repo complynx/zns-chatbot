@@ -83,7 +83,7 @@ func (b *Bot) record(ctx context.Context, owner string, id int64, kind string, c
 		raw,
 	)
 	if e != nil {
-		return e
+		return core.DatabaseOperationContextError(ctx, e)
 	}
 	return nil
 }
@@ -161,7 +161,10 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) (resultErr error) {
 	if authErr != nil {
 		return authErr
 	}
-	ctx, diagnostic := b.startAgentDiagnostics(ctx, in.owner, u.ID)
+	ctx, diagnostic, diagnosticErr := b.startAgentDiagnostics(ctx, in.owner, u.ID)
+	if diagnosticErr != nil {
+		return diagnosticErr
+	}
 	defer func() { diagnostic.Finish(resultErr) }()
 	if err := b.recordPrivateUpdate(ctx, in, u); err != nil {
 		return err
@@ -278,7 +281,7 @@ func (b *Bot) handleManual(ctx context.Context, in incoming, u telegram.Update) 
 		return err
 	}
 	if u.Callback != nil {
-		b.acknowledge(ctx, u.Callback.ID)
+		return b.acknowledge(ctx, u.Callback.ID)
 	}
 	return nil
 }
@@ -371,10 +374,17 @@ func (b *Bot) addProfileContext(ctx context.Context, owner string, input *agent.
 	return nil
 }
 
-func (b *Bot) acknowledge(ctx context.Context, id string) {
-	if err := b.TG.Call(ctx, "answerCallbackQuery", map[string]string{"callback_query_id": id}, nil); err != nil {
+// Acknowledgement is best-effort except for positive SQL provenance from
+// control pacing, which is returned as the safe sentinel before cancellation.
+func (b *Bot) acknowledge(ctx context.Context, id string) error {
+	err := b.TG.Call(ctx, "answerCallbackQuery", map[string]string{"callback_query_id": id}, nil)
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
+	if err != nil {
 		b.logger().WarnContext(ctx, "callback acknowledgement failed")
 	}
+	return nil
 }
 func (b *Bot) execute(ctx context.Context, owner string, id int64, a workflow.Action) (string, error) {
 	w, e := b.API.Execute(ctx, owner, a)
@@ -384,6 +394,10 @@ func (b *Bot) execute(ctx context.Context, owner string, id int64, a workflow.Ac
 func (b *Bot) workflowOutcome(ctx context.Context, owner string, id int64,
 	a workflow.Action, w workflow.Workflow, e error) (string, error) {
 	if e != nil {
+		// Positive SQL provenance must not become a recorded workflow refusal.
+		if core.IsDatabaseFailure(e) {
+			return "", core.ErrDatabase
+		}
 		var p *core.ProblemError
 		if errors.As(e, &p) && p.Status < 500 {
 			if e = b.record(
@@ -430,7 +444,7 @@ func (b *Bot) Render(ctx context.Context, owner string, chat int64) error {
 	if err != nil {
 		return err
 	}
-	notice, native, err := b.latestNotice(ctx, owner, preference.Language)
+	notice, native, receipt, err := b.latestNotice(ctx, owner, preference.Language)
 	if err != nil {
 		return err
 	}
@@ -447,37 +461,51 @@ func (b *Bot) Render(ctx context.Context, owner string, chat int64) error {
 	if err = b.addModelSettingsMenu(ctx, owner, preference.Language, &payload); err != nil {
 		return err
 	}
+	if receipt != nil {
+		ctx = withBotCard(ctx, receipt.ref)
+	}
 	return b.deliverCard(ctx, owner, payload)
 }
 
-func (b *Bot) latestNotice(ctx context.Context, owner, language string) (string, bool, error) {
+func (b *Bot) latestNotice(
+	ctx context.Context, owner, language string,
+) (string, bool, *registrationReceiptNotice, error) {
 	notice, err := (interaction.Store{DB: b.DB}).LatestNotice(ctx, owner)
 	raw, native, update := notice.Content, notice.Native, notice.UpdateID
 	systemNotice, passRedacted := notice.System, notice.SourceRevoked
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
+		return "", false, nil, nil
 	}
 	if err != nil {
-		return "", false, err
+		return "", false, nil, err
 	}
 	if passRedacted {
 		text, translateErr := i18n.Translate(language, i18n.AgentSourceUnavailable, nil)
-		return text, false, translateErr
+		return text, false, nil, translateErr
 	}
 	visible, err := b.derivedReplyVisible(ctx, owner, update)
 	if err != nil || !visible {
-		return "", false, err
+		return "", false, nil, err
+	}
+	if systemNotice == i18n.AgentUnavailable {
+		receipt, found, receiptErr := b.registrationReceiptNotice(ctx, owner, language, update)
+		if receiptErr != nil {
+			return "", false, nil, receiptErr
+		}
+		if found {
+			return receipt.text, false, &receipt, nil
+		}
 	}
 	if systemNotice != "" {
 		text, translateErr := i18n.Translate(language, systemNotice, nil)
-		return text, false, translateErr
+		return text, false, nil, translateErr
 	}
 	var text string
 	err = json.Unmarshal(raw, &text)
 	if err == nil && !native {
 		text, err = b.localizeWorkflowNotice(ctx, owner, update, language, text)
 	}
-	return text, native, err
+	return text, native, nil, err
 }
 
 func defaultNotice(language, state string) (string, error) {
@@ -552,11 +580,21 @@ func (b *Bot) deliverCard(ctx context.Context, owner string, payload telegram.Se
 	if err != nil {
 		return err
 	}
+	ref := botdelivery.Reference{Family: scriptWorkflowView, CardKey: scriptWorkflowView}
+	if receipt, ok := ctx.Value(botCardContextKey{}).(botdelivery.Reference); ok {
+		ref = receipt
+		if strings.HasPrefix(ref.Object, registrationReceiptObject) {
+			hash, err = registrationReceiptViewHash(hash, ref)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	var previous string
 	err = b.DB.QueryRow(ctx, "SELECT message_id,view_hash FROM bot.messages WHERE owner=$1", owner).
 		Scan(&payload.MessageID, &previous)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	if payload.MessageID > 0 && previous == hash {
 		return nil
@@ -565,7 +603,7 @@ func (b *Bot) deliverCard(ctx context.Context, owner string, payload telegram.Se
 		ctx,
 		owner,
 		payload,
-		botdelivery.Reference{Family: scriptWorkflowView, CardKey: scriptWorkflowView},
+		ref,
 		botdelivery.Continuation{Kind: "workflow_card", ViewHash: hash},
 	)
 }
@@ -577,6 +615,8 @@ const (
 
 // Run holds a PostgreSQL session lock: only one poller/renderer may own this bot.
 func (b *Bot) Run(ctx context.Context) (runErr error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	defer func() {
 		runErr = b.creditCutoverRunResult(ctx, runErr)
 	}()
@@ -585,12 +625,12 @@ func (b *Bot) Run(ctx context.Context) (runErr error) {
 	}
 	conn, err := b.DB.Acquire(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	defer conn.Release()
 	var locked bool
 	if err = conn.QueryRow(ctx, `SELECT pg_try_advisory_lock(918273)`).Scan(&locked); err != nil {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	if !locked {
 		return errors.New("bot already running")
@@ -600,18 +640,33 @@ func (b *Bot) Run(ctx context.Context) (runErr error) {
 	if err != nil {
 		return err
 	}
-	stopDelivery := startBotDelivery(ctx, b.dispatchQueuedDeliveries)
-	defer stopDelivery()
+	fatal := make(chan error, 1)
+	stopDelivery := startBotDelivery(ctx, b.dispatchQueuedDeliveries, func(err error) {
+		select {
+		case fatal <- err:
+		default:
+		}
+		cancel()
+	})
+	defer func() { runErr = finishBotDelivery(stopDelivery, fatal, runErr) }()
+	return b.runPolling(ctx, conn, offset)
+}
+
+func (b *Bot) runPolling(ctx context.Context, conn *pgxpool.Conn, offset int64) error {
+	var err error
 	for ctx.Err() == nil {
 		if err = conn.Ping(ctx); err != nil {
-			return err
+			return core.DatabaseOperationContextError(ctx, err)
 		}
 		offset, err = b.poll(ctx, offset)
-		if err != nil {
-			if _, invalid := errors.AsType[creditCutoverError](err); invalid {
-				return err
-			}
-			b.logger().WarnContext(ctx, "bot retry pending", "error", err)
+		if core.IsDatabaseFailure(err) {
+			return core.ErrDatabase
+		}
+		if cancellation := ctx.Err(); cancellation != nil {
+			return cancellation
+		}
+		if err = b.handlePollError(ctx, err); err != nil {
+			return err
 		}
 		if err = b.reconcileAllViews(ctx); err != nil {
 			return err
@@ -624,6 +679,20 @@ func (b *Bot) Run(ctx context.Context) (runErr error) {
 			return nil
 		case <-time.After(pollInterval):
 		}
+	}
+	return nil
+}
+
+// SQL and invalid cutover state require a new runtime, not another poll attempt.
+func (b *Bot) handlePollError(ctx context.Context, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
+	if _, invalid := errors.AsType[creditCutoverError](err); invalid {
+		return err
+	}
+	if err != nil {
+		b.logger().WarnContext(ctx, "bot retry pending", "error", err)
 	}
 	return nil
 }
@@ -659,7 +728,7 @@ func (b *Bot) poll(ctx context.Context, offset int64) (int64, error) {
 func (b *Bot) reconcileViews(ctx context.Context) error {
 	rows, err := b.DB.Query(ctx, `SELECT owner,chat_id FROM bot.messages`)
 	if err != nil {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	type view struct {
 		owner string
@@ -670,22 +739,28 @@ func (b *Bot) reconcileViews(ctx context.Context) error {
 		var v view
 		if err = rows.Scan(&v.owner, &v.chat); err != nil {
 			rows.Close()
-			return err
+			return core.DatabaseOperationContextError(ctx, err)
 		}
 		views = append(views, v)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	for _, v := range views {
 		viewContext, authErr := b.API.NotificationContext(ctx, v.owner, v.chat)
 		if authErr != nil {
+			if failure := reconcileDatabaseFailure(authErr); failure != nil {
+				return failure
+			}
 			b.logger().WarnContext(ctx, "view identity pending")
 			continue
 		}
 		if err = b.Render(viewContext, v.owner, v.chat); err != nil {
+			if failure := reconcileDatabaseFailure(err); failure != nil {
+				return failure
+			}
 			b.logger().WarnContext(ctx, "view reconciliation pending", "error", err)
 		}
 	}

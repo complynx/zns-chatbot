@@ -78,7 +78,7 @@ func TestMassageTimetableWebEntryUsesAuthorizedEvent(t *testing.T) {
 	t.Parallel()
 	f := massageBotFixture(t)
 	f.b.WebAppURL = "https://bot.example/miniapp/?order_id=old"
-	handle(t, f.b, message(9901, 202, "/massage"))
+	handleNotificationUpdate(t, f, message(9901, 202, "/massage"))
 	card := massageCard(t, f, 202)
 	found := false
 	for _, row := range card.Markup.Rows {
@@ -90,7 +90,7 @@ func TestMassageTimetableWebEntryUsesAuthorizedEvent(t *testing.T) {
 		}
 	}
 	assert.True(t, found)
-	handle(t, f.b, message(9902, 101, "/massage"))
+	handleNotificationUpdate(t, f, message(9902, 101, "/massage"))
 	for _, row := range massageCard(t, f, 101).Markup.Rows {
 		for _, button := range row {
 			assert.Nil(t, button.WebApp)

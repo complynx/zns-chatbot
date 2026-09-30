@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -42,12 +41,7 @@ func (c Host) ExportPassSnapshot(ctx context.Context, owner string) (passbooking
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		var problem core.ProblemError
-		if err = json.NewDecoder(io.LimitReader(response.Body, MaxAPIBytes)).Decode(&problem); err != nil {
-			return passbooking.ExportSnapshot{}, clientBoundaryError(ctx, err, "invalid export response")
-		}
-		problem.Status = response.StatusCode
-		return result, &problem
+		return result, coreResponseError(ctx, response, "invalid export response")
 	}
 	const maxEnvelopeBytes = passbooking.MaxExportBytes*4/3 + passbooking.MaxExportAuthorityBytes
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxEnvelopeBytes+1))

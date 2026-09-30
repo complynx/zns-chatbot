@@ -58,9 +58,15 @@ Agent tool dispatch and end-user Functional QA are not yet accepted.
 ## Execute transport
 
 Execute uses CONNECT /execute on the same Unix socket and admission slot. The
-supervisor relays bounded jrpc2 records to a fresh child. Whole execution is
-five seconds, the child watchdog six seconds and supervisor/client deadline
-seven seconds. The cumulative 200 ms JS budget pauses during host calls.
+supervisor relays bounded jrpc2 records to a fresh child. The existing C5 limits
+are 60 seconds for the shared execution, 61 seconds for the child watchdog and
+62 seconds for transport. Each host operation is bounded by ten seconds and the
+remaining shared deadline; an earlier parent deadline wins. Callbacks cannot
+renew that deadline. The cumulative 200 ms VM-active elapsed-time budget pauses
+during host calls; it includes serialization and scheduling delay, not just CPU
+time. Canonical values are in `platform/internal/scriptprotocol/budgets.go`.
+These limits supersede the earlier 5/6/7-second Execute limits, but do not close
+or change the separate five-second D-001 acceptance check.
 The child receives only code, explicit input and caller-visible tool metadata.
 See [agent-scripting.md](agent-scripting.md) for discovery, callback validation,
 byte budgets and durable mutation requirements. Legacy Evaluate limits and its

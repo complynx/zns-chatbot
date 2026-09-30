@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const lookupTimeout = 15 * time.Second
@@ -48,6 +50,9 @@ func Resolve(ctx context.Context, resolver Resolver, chats []string) (map[string
 			return nil, ErrUnavailable
 		}
 		id, err := resolver.ResolveChat(ctx, chat)
+		if core.IsDatabaseFailure(err) {
+			return nil, core.DatabaseFailure(ErrUnavailable)
+		}
 		if err != nil || id == 0 {
 			return nil, ErrUnavailable
 		}
@@ -70,9 +75,11 @@ func (b *Bindings) Refresh(ctx context.Context, resolver Resolver, chats []strin
 	b.mu.RUnlock()
 	next := make(map[string]binding, len(chats))
 	failed := false
+	databaseFailed := false
 	for result := range refreshAliases(ctx, resolver, chats, ttl) {
 		if result.err != nil {
 			failed = true
+			databaseFailed = databaseFailed || core.IsDatabaseFailure(result.err)
 			if old, exists := previous[result.alias]; exists {
 				next[result.alias] = old
 			}
@@ -83,6 +90,9 @@ func (b *Bindings) Refresh(ctx context.Context, resolver Resolver, chats []strin
 	b.mu.Lock()
 	b.chats = next
 	b.mu.Unlock()
+	if databaseFailed {
+		return core.DatabaseFailure(ErrUnavailable)
+	}
 	if failed {
 		return ErrUnavailable
 	}

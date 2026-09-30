@@ -50,7 +50,7 @@ func (r ScriptRegistry) Entries(ctx context.Context, owner string) ([]ScriptTool
 func (r ScriptRegistry) entries(ctx context.Context, owner string) ([]ScriptToolEntry, error) {
 	capabilities, err := r.Catalog.Capabilities(ctx, owner)
 	if err != nil {
-		return nil, errors.New("tool unavailable")
+		return nil, scriptPublicError(err, errors.New("tool unavailable"))
 	}
 	profiles := r.baseEntries(capabilities)
 	food, err := r.Catalog.Food(ctx, owner)
@@ -60,7 +60,7 @@ func (r ScriptRegistry) entries(ctx context.Context, owner string) ([]ScriptTool
 	profiles = append(profiles, food...)
 	privileged, err := r.Catalog.Privileged(ctx, owner)
 	if err != nil {
-		return nil, errors.New("tool unavailable")
+		return nil, scriptPublicError(err, errors.New("tool unavailable"))
 	}
 	profiles = append(profiles, privileged...)
 	broadcast, err := r.Catalog.Broadcast(ctx, owner)
@@ -154,7 +154,7 @@ func (r ScriptRegistry) resolve(ctx context.Context, owner, name string) (Script
 	}
 	capabilities, err := r.Catalog.Capabilities(ctx, owner)
 	if err != nil {
-		return ScriptToolEntry{}, errors.New("tool unavailable")
+		return ScriptToolEntry{}, scriptPublicError(err, errors.New("tool unavailable"))
 	}
 	if entry, found := findScriptEntry(r.baseEntries(capabilities), name); found {
 		return entry, nil
@@ -164,10 +164,11 @@ func (r ScriptRegistry) resolve(ctx context.Context, owner, name string) (Script
 		return ScriptToolEntry{}, errors.New("tool unavailable")
 	}
 	entries, err := load(ctx, owner)
-	if err == nil {
-		if entry, found := findScriptEntry(entries, name); found {
-			return entry, nil
-		}
+	if err != nil {
+		return ScriptToolEntry{}, scriptPublicError(err, errors.New("tool unavailable"))
+	}
+	if entry, found := findScriptEntry(entries, name); found {
+		return entry, nil
 	}
 	return ScriptToolEntry{}, errors.New("tool unavailable")
 }

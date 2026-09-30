@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // Event precedence is resolved before any search expression is evaluated.
@@ -113,7 +115,7 @@ func (s Service) validateMemoryActor(ctx context.Context, actor string, q Memory
 	var exists bool
 	if err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.events WHERE id=$1)`, q.Event).
 		Scan(&exists); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !exists {
 		return missing()
@@ -148,7 +150,7 @@ func (s Service) SearchMemory(ctx context.Context, actor string, query MemoryQue
  FROM resolved WHERE (namespace,topic,item_key,source_kind)>($5,$6,$7,$11)
  ORDER BY namespace,topic,item_key,source_kind LIMIT $10`, actor, q.Event, q.Topic, q.Namespace, cursor.Namespace, cursor.Topic, cursor.Key, q.Mode, q.Text, memoryScanLimit+1, cursor.SourceKind)
 	if err != nil {
-		return MemoryPage{}, err
+		return MemoryPage{}, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	page := MemoryPage{Entries: []MemoryEntry{}}
@@ -172,7 +174,7 @@ func (s Service) SearchMemory(ctx context.Context, actor string, query MemoryQue
 			&entry.SourceKind,
 			&textMatch,
 		); err != nil {
-			return MemoryPage{}, err
+			return MemoryPage{}, core.DatabaseOperationError(err)
 		}
 		page.Scanned++
 		next := cursor
@@ -206,7 +208,7 @@ func (s Service) SearchMemory(ctx context.Context, actor string, query MemoryQue
 		page.NextCursor = ""
 	}
 	if err = rows.Err(); err != nil {
-		return page, err
+		return page, core.DatabaseOperationError(err)
 	}
 	rows.Close()
 	page.Entries, err = s.authorizeMemoryEntries(ctx, actor, page.Entries)

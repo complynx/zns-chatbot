@@ -70,12 +70,15 @@ func TestZitadelActorRenewal(t *testing.T) {
 	}
 	assert.EqualValues(t, 1, acquisitions.Load())
 	time.Sleep(time.Second)
-	_, err = client.Exchange(t.Context(), "mapped-user")
+	_, err = client.Exchange(t.Context(), "second-user")
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, acquisitions.Load())
 	fail.Store(true)
 	time.Sleep(time.Second)
-	token, err := client.Exchange(t.Context(), "mapped-user")
+	cached, err := client.Exchange(t.Context(), "mapped-user")
+	require.NoError(t, err, "valid delegation survives an actor renewal outage")
+	assert.Equal(t, "delegated", cached)
+	token, err := client.Exchange(t.Context(), "third-user")
 	require.ErrorIs(t, err, identity.ErrZitadelUnavailable)
 	assert.Empty(t, token)
 }

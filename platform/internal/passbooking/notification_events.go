@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
@@ -149,7 +150,7 @@ func notifyKnownInvitee(
 		return nil
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return enqueuePassNotice(ctx, tx, botID, pending, b, owner, kind, noticeVersion(b), "")
 }

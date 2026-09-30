@@ -2,7 +2,9 @@ package integration_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -62,13 +64,24 @@ func boundaryRoleHost(t *testing.T, f *fixture, local bool) appclient.Host {
 		appservices.Options{Delivery: syntheticDeliverySettings(), LegacyOrderBotID: 77},
 	)
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
-	host := appclient.Host{Signer: signer, UserToken: func(ctx context.Context, owner string) (string, error) {
-		if err := boundaryNoOpenTX(ctx, f.db); err != nil {
-			return "", err
-		}
-		return signer.Token(owner), nil
-	}}
+	host := appclient.Host{
+		Base:   f.b.Host.Base,
+		Signer: signer,
+		UserToken: func(ctx context.Context, owner string) (string, error) {
+			if txErr := boundaryNoOpenTX(ctx, f.db); txErr != nil {
+				return "", txErr
+			}
+			return signer.Token(owner), nil
+		},
+	}
 	if local {
+		f.b.API.LocalHistory = &appclient.LocalHistory{
+			Service: services.Conversation,
+			Authorizer: applicationauth.Authorizer{
+				DB:     db,
+				Verify: func(_ context.Context, token string) (string, error) { return signer.Verify(token) },
+			},
+		}
 		host.LocalBotDelivery = &appclient.LocalBotDelivery{
 			Service: services.BotDelivery,
 			Authorizer: applicationauth.Authorizer{
@@ -232,14 +245,124 @@ func TestBotDeliveryBoundaryRevocationAfterRender(t *testing.T) {
 			require.Zero(t, retired.Attempt)
 			require.Zero(t, wire.calls.Load())
 			if kind == "grant" {
-				_, err := f.db.Exec(
+				_, restoreErr := f.db.Exec(
 					t.Context(),
 					`INSERT INTO core.knowledge_permissions(scope,actor,permission) VALUES('','alice','review')`,
 				)
-				require.NoError(t, err)
+				require.NoError(t, restoreErr)
 				require.NoError(t, f.b.DeliverBotIntent(t.Context(), i.QueueReference()))
 				require.Zero(t, wire.calls.Load())
 			}
 		})
 	}
+}
+
+func TestBotDeliveryBoundaryGenerationWithRestrictedRole(t *testing.T) {
+	t.Parallel()
+	for _, local := range []bool{false, true} {
+		for _, kind := range []botdelivery.Kind{botdelivery.CardIntent, botdelivery.DocumentIntent} {
+			for _, stale := range []bool{false, true} {
+				t.Run(fmt.Sprintf("local_%t/%s/stale_%t", local, kind, stale), func(t *testing.T) {
+					t.Parallel()
+					runBotDeliveryGenerationBoundary(t, local, kind, stale)
+				})
+			}
+		}
+	}
+}
+
+func runBotDeliveryGenerationBoundary(t *testing.T, local bool, kind botdelivery.Kind, stale bool) {
+	t.Helper()
+	f := memorySplitRoleFixture(t)
+	f.b.Host = boundaryRoleHost(t, f, local)
+	_, err := f.b.DB.Exec(t.Context(), `SELECT generation FROM core.conversation_history_generations`)
+	var denied *pgconn.PgError
+	require.ErrorAs(t, err, &denied)
+	require.Equal(t, "42501", denied.Code)
+	_, err = f.db.Exec(
+		t.Context(),
+		`INSERT INTO core.conversation_history_generations(owner,generation) VALUES('alice',7);
+INSERT INTO core.pass_booking_admins(owner) VALUES('alice') ON CONFLICT DO NOTHING`,
+	)
+	require.NoError(t, err)
+	wire := boundaryGenerationTransport(t, f)
+	if kind == botdelivery.CardIntent {
+		require.NoError(t, f.b.RenderProfile(t.Context(), "alice", identity.AliceTelegramID))
+	} else {
+		handle(t, f.b, message(42001, identity.AliceTelegramID, "/get_file opaque_id"))
+	}
+	ref := delivery.Reference{Owner: delivery.Bot}
+	require.NoError(t, f.b.DB.QueryRow(t.Context(),
+		`SELECT operation_key,effect_key FROM bot.delivery_intents WHERE owner='alice' AND reference->>'kind'=$1`,
+		string(kind)).Scan(&ref.Key, &ref.Effect))
+	queued, readErr := botdelivery.Read(t.Context(), f.b.DB, f.b.Delivery.BotID, ref, false)
+	require.NoError(t, readErr)
+	require.NotNil(t, queued.Reference.Generation)
+	require.EqualValues(t, 7, *queued.Reference.Generation)
+	require.Nil(t, queued.Reference.Source, "exercise generation binding without a derived source")
+	require.Zero(t, wire.calls.Load(), "enqueue must not send to Telegram")
+	if stale {
+		_, err = f.db.Exec(
+			t.Context(),
+			`UPDATE core.conversation_history_generations SET generation=8 WHERE owner='alice'`,
+		)
+		require.NoError(t, err)
+	}
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), ref))
+	done, doneErr := botdelivery.Read(t.Context(), f.b.DB, f.b.Delivery.BotID, ref, false)
+	require.NoError(t, doneErr)
+	require.EqualValues(t, 7, *done.Reference.Generation, "dispatch must preserve the captured generation")
+	if stale {
+		require.Equal(t, delivery.Cancelled, done.State)
+		require.Zero(t, wire.calls.Load(), "deleted history must prevent private transport")
+	} else {
+		require.Equal(t, delivery.Succeeded, done.State)
+		require.Positive(t, done.MessageID)
+		require.True(t, done.ContinuationDone)
+		require.Positive(t, wire.calls.Load())
+	}
+	calls := wire.calls.Load()
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), ref))
+	require.Equal(t, calls, wire.calls.Load(), "terminal effects must never resend")
+}
+
+func boundaryGenerationTransport(t *testing.T, f *fixture) *boundaryTransport {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /botsynthetic/getFile", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).
+			Encode(map[string]any{"ok": true, "result": telegram.File{Path: "documents/original.pdf", Size: 9}})
+	})
+	mux.HandleFunc("GET /file/botsynthetic/documents/original.pdf", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("synthetic"))
+	})
+	mux.HandleFunc("POST /botsynthetic/sendDocument", func(w http.ResponseWriter, r *http.Request) {
+		file, header, err := r.FormFile("document")
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		body, readErr := io.ReadAll(file)
+		if readErr != nil || string(body) != "synthetic" || header.Filename != "opaque_id.pdf" ||
+			r.FormValue("chat_id") != "101" {
+			t.Errorf(
+				"unexpected document: filename=%q chat=%q body=%q error=%v",
+				header.Filename,
+				r.FormValue("chat_id"),
+				body,
+				readErr,
+			)
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1}}`))
+	})
+	mux.HandleFunc("POST /botsynthetic/sendMessage", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":1}}`))
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	wire := &boundaryTransport{}
+	f.b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: &http.Client{Transport: wire}}
+	return wire
 }

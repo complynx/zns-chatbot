@@ -160,8 +160,8 @@ func TestMediaTerminalRetryReplaysCommittedCommandWithoutSource(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "proof", before.State)
 	expireTerminalMediaSource(t, f)
-	handle(t, f.b, photo)
-	handle(t, f.b, photo)
+	handleVisible(t, f.b, photo)
+	handleVisible(t, f.b, photo)
 	assertTerminalReceipt(t, f, order, original)
 	after, err := f.b.API.Order(t.Context(), "alice", order.EventID, order.ID)
 	require.NoError(t, err)
@@ -184,7 +184,7 @@ func TestMediaTerminalRetryChecksPersistedCommandVersion(t *testing.T) {
 	changed, err := f.b.API.ExecuteOrder(t.Context(), "alice", edit)
 	require.NoError(t, err)
 	expireTerminalMediaSource(t, f)
-	handle(t, f.b, photo)
+	handleVisible(t, f.b, photo)
 	after, err := f.b.API.Order(t.Context(), "alice", order.EventID, order.ID)
 	require.NoError(t, err)
 	assert.Equal(t, changed, after)
@@ -206,8 +206,8 @@ func TestMediaDurableReceiptSurvivesExpiryAcrossEntryPoints(t *testing.T) {
 			order := intakeOrder(t, f, "first")
 			photo, original := intakePhoto(t, f)
 			f.model.plan = agent.Plan{View: agent.MediaView, Text: "Choose the attachment purpose."}
-			handle(t, f.b, photo)
-			handle(t, f.b, proofMediaClick(t, f, 101, "This is a receipt"))
+			handleVisible(t, f.b, photo)
+			handleVisible(t, f.b, proofMediaClick(t, f, 101, "This is a receipt"))
 			selection := intakeChoice(t, f, 102, order.ID)
 			operation := selection
 			if entry == "text" {
@@ -226,9 +226,9 @@ func TestMediaDurableReceiptSurvivesExpiryAcrossEntryPoints(t *testing.T) {
 			expireTerminalMediaSource(t, f)
 			switch entry {
 			case "upload":
-				handle(t, f.b, photo)
+				handleVisible(t, f.b, photo)
 			case "callback", "text":
-				handle(t, f.b, operation)
+				handleVisible(t, f.b, operation)
 			case "reconcile":
 				startMediaReconciler(t, f)
 				require.Eventually(t, func() bool {
@@ -264,8 +264,8 @@ func TestMediaExpiredUnselectedCannotStartReceipt(t *testing.T) {
 			order := intakeOrder(t, f, "first")
 			photo, _ := intakePhoto(t, f)
 			f.model.plan = agent.Plan{View: agent.MediaView, Text: "Choose the attachment purpose."}
-			handle(t, f.b, photo)
-			handle(t, f.b, proofMediaClick(t, f, 101, "This is a receipt"))
+			handleVisible(t, f.b, photo)
+			handleVisible(t, f.b, proofMediaClick(t, f, 101, "This is a receipt"))
 			operation := intakeChoice(t, f, 102, order.ID)
 			if entry == "text" {
 				f.model.plan = agent.Plan{View: agent.MediaView, MediaAction: &agent.MediaProposal{
@@ -273,7 +273,7 @@ func TestMediaExpiredUnselectedCannotStartReceipt(t *testing.T) {
 				operation = message(102, 101, "Use order "+order.ID)
 			}
 			expireTerminalMediaSource(t, f)
-			handle(t, f.b, operation)
+			handleVisible(t, f.b, operation)
 			after, err := f.b.API.Order(t.Context(), "alice", order.EventID, order.ID)
 			require.NoError(t, err)
 			assert.Equal(t, order, after)
@@ -307,7 +307,7 @@ func TestMediaCommittedReceiptRevocationReportsUnknownOutcome(t *testing.T) {
 	require.Equal(t, "proof", before.State)
 	_, err = f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
 	require.NoError(t, err)
-	handle(t, f.b, photo)
+	handleVisible(t, f.b, photo)
 	var outcome string
 	require.NoError(
 		t,

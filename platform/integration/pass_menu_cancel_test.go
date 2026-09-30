@@ -18,8 +18,8 @@ func TestPassMenuCancellationAvailability(t *testing.T) {
  VALUES('dance','alice',1,$1,'leader','solo',0,'bob',now(),
  CASE WHEN $1 IN ('assigned','paid') THEN now() END)`, state)
 			require.NoError(t, err)
-			handle(t, f.b, message(1, 101, "/passes"))
-			handle(t, f.b, passMenuClick(t, f, 101, 2, "Dance"))
+			handleVisible(t, f.b, message(1, 101, "/passes"))
+			handleVisible(t, f.b, passMenuClick(t, f, 101, 2, "Dance"))
 			var available bool
 			for _, row := range passMenuCard(t, f, 101).Markup.Rows {
 				for _, button := range row {

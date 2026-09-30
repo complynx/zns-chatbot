@@ -25,7 +25,7 @@ func (b *Bot) addCurrentAV(ctx context.Context, in incoming, input *agent.Input)
 	err := b.DB.QueryRow(ctx, `SELECT av_kind FROM bot.media_intake WHERE owner=$1 AND id=$2`, in.owner, in.mediaID).
 		Scan(&kind)
 	if err != nil || kind == "" {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return b.addCurrentMedia(ctx, in, input)
 }
@@ -42,7 +42,7 @@ func (b *Bot) avHint(ctx context.Context, owner string, hint *agent.MediaHint) e
 		return nil
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	hint.Kind = kind
 	hint.DurationMS = rationalMillis(duration)
@@ -52,6 +52,9 @@ func (b *Bot) avHint(ctx context.Context, owner string, hint *agent.MediaHint) e
 	}
 	var attachment media.Attachment
 	err = b.API.Call(ctx, owner, http.MethodGet, "/v1/media/"+url.PathEscape(attachmentID), nil, &attachment)
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return b.clearAVResults(ctx, owner, []string{hint.ID})
 	}
@@ -70,7 +73,7 @@ func (b *Bot) avInspectionContext(
 	err := b.DB.QueryRow(ctx, `SELECT rounds FROM bot.av_refinements WHERE owner=$1 AND update_id=$2`, owner, updateID).
 		Scan(&rounds)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	const maxRounds = 2
 	return &agent.AVInspectionContext{Remaining: maxRounds - rounds, Completed: []agent.AVInspection{}}, nil
@@ -98,13 +101,16 @@ func (b *Bot) refineAV(
 		return i18n.MediaUnavailable, nil
 	}
 	if err != nil {
-		return "", err
+		return "", core.DatabaseOperationError(err)
 	}
 	if big.NewRat(proposal.EndMS, avMillisPerSecond).Cmp(big.NewRat(duration.Numerator, duration.Denominator)) > 0 {
 		return i18n.AVRangeInvalid, nil
 	}
 	attachment, err := b.API.Media(ctx, owner, attachmentID)
 	if err != nil {
+		if core.IsDatabaseFailure(err) {
+			return "", err
+		}
 		if problem, ok := errors.AsType[*core.ProblemError](
 			err,
 		); ok &&
@@ -145,7 +151,8 @@ func (b *Bot) reserveAVRound(ctx context.Context, owner string, updateID int64) 
 	err := b.DB.QueryRow(ctx, `INSERT INTO bot.av_refinements(owner,update_id,rounds) VALUES($1,$2,1)
 	ON CONFLICT(owner,update_id) DO UPDATE SET rounds=bot.av_refinements.rounds+1
 	WHERE bot.av_refinements.rounds<2 RETURNING rounds`, owner, updateID).Scan(&rounds)
-	return rounds, err
+	// NoRows is the exhausted two-round budget and survives classification.
+	return rounds, core.DatabaseOperationError(err)
 }
 
 func (b *Bot) acceptAVRange(
@@ -158,6 +165,9 @@ func (b *Bot) acceptAVRange(
 ) (i18n.ID, error) {
 	_, err := b.API.Media(ctx, owner, attachmentID)
 	if err != nil {
+		if core.IsDatabaseFailure(err) {
+			return "", err
+		}
 		if problem, ok := errors.AsType[*core.ProblemError](
 			err,
 		); ok &&

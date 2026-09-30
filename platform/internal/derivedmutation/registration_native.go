@@ -32,7 +32,7 @@ type NativeRegistrationResolver struct {
 func (r NativeRegistrationResolver) ResolveRegistrationIntake(ctx context.Context, event string) error {
 	rows, err := dbgen.New(r.Service.DB).PendingNativeCandidates(ctx, event)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if len(rows) == 0 {
 		return nil
@@ -67,7 +67,7 @@ func (r NativeRegistrationResolver) resolveCandidate(
 ) error {
 	tx, err := r.Service.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var source readsource.Derivation
@@ -100,9 +100,9 @@ func (r NativeRegistrationResolver) resolveCandidate(
 		Outcome:  outcome,
 		IntentID: pgtype.Int8{Int64: intentID, Valid: intentID > 0},
 	}); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (r NativeRegistrationResolver) captureCandidate(
@@ -143,6 +143,9 @@ func (r NativeRegistrationResolver) captureCandidate(
 }
 
 func nativeRegistrationRefusal(err error) bool {
+	if core.IsDatabaseFailure(err) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
 	var problem *core.ProblemError
 	if !errors.As(err, &problem) {
 		return false
@@ -161,14 +164,18 @@ func (r NativeRegistrationResolver) captureCandidateAttempt(
 ) (passbooking.Admission, error) {
 	attempt, err := tx.Begin(ctx)
 	if err != nil {
-		return passbooking.Admission{}, err
+		return passbooking.Admission{}, core.DatabaseOperationError(err)
 	}
 	admission, err := r.captureCandidate(ctx, attempt, row, envelope)
 	if err == nil {
-		return admission, attempt.Commit(ctx)
+		return admission, core.DatabaseOperationError(attempt.Commit(ctx))
 	}
 	if rollbackErr := attempt.Rollback(ctx); rollbackErr != nil {
-		return passbooking.Admission{}, rollbackErr
+		rollbackFailure := core.DatabaseOperationError(rollbackErr)
+		if core.IsDatabaseFailure(rollbackFailure) {
+			return passbooking.Admission{}, rollbackFailure
+		}
+		return passbooking.Admission{}, errors.Join(err, rollbackFailure)
 	}
 	return passbooking.Admission{}, err
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
@@ -38,22 +39,33 @@ func (s Service) readRetiredPassOperation(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return PassOperationRead{}, err
+		return PassOperationRead{}, core.DatabaseOperationContextError(ctx, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = lockBatchPrelude(ctx, tx, w.Event, actors, nil); err != nil {
 		return PassOperationRead{}, err
 	}
-	receipt, err := s.Registration.WitnessOperationReceipt(ctx, tx, actor, w, batch)
+	var receipt passbooking.OperationReceipt
+	var booking *passbooking.Booking
+	if input.ObserveOwnerBooking {
+		var current passbooking.Booking
+		receipt, current, err = s.Registration.WitnessOwnerBookingReceipt(ctx, tx, actor, w)
+		if err == nil {
+			booking = &current
+		}
+	} else {
+		receipt, err = s.Registration.WitnessOperationReceipt(ctx, tx, actor, w, batch)
+	}
 	if err != nil {
 		return PassOperationRead{}, err
 	}
 	summary := PassOperationSummary{Continuation: "unavailable"}
 	applyReceiptStatus(&summary, receipt)
 	if err = tx.Commit(ctx); err != nil {
-		return PassOperationRead{}, err
+		return PassOperationRead{}, core.DatabaseOperationContextError(ctx, err)
 	}
-	return PassOperationRead{Summary: summary, ReadAuthorities: readsource.Registration(receipt.ReadAuthorities)}, nil
+	return PassOperationRead{Summary: summary, CurrentBooking: booking,
+		ReadAuthorities: readsource.Registration(receipt.ReadAuthorities)}, nil
 }
 
 func operationWitnessMatches(input PassOperationInput) bool {

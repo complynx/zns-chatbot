@@ -18,6 +18,10 @@ const CurrentFormatVersion = 1
 
 var ErrUnsupportedFormat = errors.New("unsupported saved turn format")
 
+// ErrInvalidSavedTurn marks a current-format row that can never become valid by
+// retrying. Callers must fail closed; replay never falls back to planning again.
+var ErrInvalidSavedTurn = errors.New("invalid saved turn")
+
 type SavedPlan struct {
 	FormatVersion             int                          `json:"format_version"`
 	Kind                      PlanKind                     `json:"-"`
@@ -96,7 +100,7 @@ func (p *SavedPlan) Validate() error {
 	if p.FormatVersion != CurrentFormatVersion {
 		return ErrUnsupportedFormat
 	}
-	invalid := errors.New("invalid saved turn")
+	invalid := ErrInvalidSavedTurn
 	if c := p.OrderCommand; c != nil && c.Origin == "agent" && (c.Name == "create" || c.Name == "edit") &&
 		(c.HistoryGeneration == nil || *c.HistoryGeneration != p.HistoryGeneration) {
 		return invalid

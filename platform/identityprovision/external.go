@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 type ExternalIdentity struct{ IDP, Subject string }
@@ -35,7 +37,7 @@ func (s ExternalLinker) EnsureExternal(ctx context.Context, input Telegram, exte
  (issuer,bot_id,telegram_id,idp_id,external_subject,owner,subject) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
 		s.Provisioner.Issuer, s.Provisioner.BotID, input.ID, s.IDP, externalSubject, binding.Owner, binding.Subject)
 	if err != nil {
-		return Binding{}, err
+		return Binding{}, core.DatabaseOperationError(err)
 	}
 	if err = s.linkReserved(ctx, input.ID, binding, externalSubject); err != nil {
 		return Binding{}, err
@@ -51,7 +53,7 @@ func (s ExternalLinker) linkReserved(
 ) error {
 	tx, err := s.Provisioner.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var reserved Binding
@@ -70,7 +72,7 @@ func (s ExternalLinker) linkReserved(
 		return ErrConflict
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if reserved != binding || subject != externalSubject {
 		return ErrConflict
@@ -87,9 +89,9 @@ func (s ExternalLinker) linkReserved(
 		s.IDP,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (s ExternalLinker) ensureLink(ctx context.Context, subject string, wanted ExternalIdentity, ready bool) error {

@@ -32,7 +32,7 @@ func OperationReadAuthorities(
 			return nil, forbidden()
 		}
 		if err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationContextError(ctx, err)
 		}
 		refs = append(refs, ReadAuthority{Kind: ReadOperationTarget, Event: event, Action: action,
 			Owner: owner, TargetTelegramID: telegramID})
@@ -49,7 +49,7 @@ func ExportOperationAuthority(ctx context.Context, tx pgx.Tx, actor string) ([]R
 		return nil, forbidden()
 	}
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	return checkedOperationAuthorities(ctx, tx, actor, []ReadAuthority{{Kind: ReadExportPermission, Event: event}})
 }
@@ -84,7 +84,7 @@ func lockExportPermission(ctx context.Context, tx pgx.Tx, actor, event string) (
 	var allowed bool
 	err = tx.QueryRow(ctx, exportEvents+`SELECT EXISTS(SELECT 1 FROM allowed_events WHERE id=$2)`, actor, event).
 		Scan(&allowed)
-	return allowed, err
+	return allowed, core.DatabaseOperationError(err)
 }
 
 func operationPermissionDenied(err error) bool {

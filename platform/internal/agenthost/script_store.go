@@ -3,6 +3,7 @@ package agenthost
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
@@ -68,7 +70,7 @@ func LockScript(ctx context.Context, tx pgx.Tx, owner string, updateID int64) er
 		`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
 		"script:"+owner+":"+strconv.FormatInt(updateID, 10),
 	)
-	return err
+	return core.DatabaseOperationContextError(ctx, err)
 }
 
 func (s ScriptStore) CompleteRecord(
@@ -124,16 +126,22 @@ func (s ScriptStore) persistRetirement(
 ) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = LockScript(ctx, tx, owner, updateID); err != nil {
 		return err
 	}
-	var records []ScriptRecord
+	var raw []byte
 	if err = tx.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3 FOR UPDATE`, owner, updateID, scriptRunsKind).
-		Scan(&records); err != nil {
-		return err
+		Scan(&raw); err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	var records []ScriptRecord
+	if raw != nil {
+		if err = json.Unmarshal(raw, &records); err != nil {
+			return err
+		}
 	}
 	for _, target := range targets {
 		if target.index >= len(records) {
@@ -147,17 +155,22 @@ func (s ScriptStore) persistRetirement(
 			RedactPassScript(&records[target.index])
 		}
 	}
+	// Encode JSON null explicitly; a nil slice parameter would become SQL NULL.
+	raw, err = json.Marshal(records)
+	if err != nil {
+		return err
+	}
 	if _, err = tx.Exec(
 		ctx,
 		`UPDATE bot.interactions SET content=$4 WHERE owner=$1 AND update_id=$2 AND kind=$3`,
 		owner,
 		updateID,
 		scriptRunsKind,
-		records,
+		raw,
 	); err != nil {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 }
 
 func (s ScriptStore) AdmitSource(ctx context.Context, owner string, updateID int64, index int) error {
@@ -332,9 +345,19 @@ func (s ScriptStore) AdmitCall(ctx context.Context, owner string, updateID int64
 		return nil
 	})
 	if err == nil {
+		restoreAdmittedProfile(&admitted, intent)
 		*call = admitted
 	}
 	return sequence, err
+}
+
+// Restore only the live value after admission commits; ledger copies stay redacted.
+func restoreAdmittedProfile(admitted *ScriptToolRecord, intent ScriptToolRecord) {
+	if admitted.Profile != nil {
+		profile := *admitted.Profile
+		profile.Value = intent.Profile.Value
+		admitted.Profile = &profile
+	}
 }
 
 func (s ScriptStore) CompleteCall(ctx context.Context, owner string, updateID int64,

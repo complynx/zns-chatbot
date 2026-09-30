@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood/dbgen"
 )
@@ -28,7 +29,7 @@ func (s Service) PrepareNotification(ctx context.Context, id int64) (Notificatio
 	q := dbgen.New(s.DB)
 	missing, err := q.MissingNotificationIndex(ctx, s.Delivery.BotID)
 	if err != nil {
-		return Notification{}, false, err
+		return Notification{}, false, core.DatabaseOperationError(err)
 	}
 	if missing {
 		return Notification{}, false, delivery.ErrQueueReference
@@ -38,7 +39,7 @@ func (s Service) PrepareNotification(ctx context.Context, id int64) (Notificatio
 		return Notification{}, false, nil
 	}
 	if err != nil {
-		return Notification{}, false, err
+		return Notification{}, false, core.DatabaseOperationError(err)
 	}
 	notice, err := s.notificationProjection(ctx, q, row)
 	return notice, err == nil, err
@@ -65,7 +66,7 @@ func (s Service) RecoveryNotifications(ctx context.Context) ([]Notification, err
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		notice, err := s.notificationProjection(ctx, q, row)
 		if err != nil {
@@ -79,7 +80,7 @@ func (s Service) RecoveryNotifications(ctx context.Context) ([]Notification, err
 func (s Service) recoverNotificationSends(ctx context.Context) error {
 	missing, err := dbgen.New(s.DB).MissingNotificationIndex(ctx, s.Delivery.BotID)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if missing {
 		return delivery.ErrQueueReference
@@ -102,7 +103,7 @@ func (s Service) recoverNotificationSends(ctx context.Context) error {
 func (s Service) recoverNotificationSend(ctx context.Context) (bool, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	row, err := dbgen.New(tx).ExpiredNotification(ctx, s.Delivery.BotID)
@@ -110,7 +111,7 @@ func (s Service) recoverNotificationSend(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	outcome := delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"}
 	if err = delivery.Project(
@@ -127,11 +128,12 @@ func (s Service) recoverNotificationSend(ctx context.Context) (bool, error) {
 	if err = s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, outcome, "", time.Time{}, 0); err != nil {
 		return false, err
 	}
-	return true, tx.Commit(ctx)
+	return true, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // collectNotificationRegistration retains intent when trusted routing is absent.
 // It only collects new rows; lane registration occurs after all owner writes.
+// The pause write is its only SQL operation and returns a safe database failure.
 func collectNotificationRegistration(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -139,7 +141,7 @@ func collectNotificationRegistration(
 	pending *[]delivery.Registration,
 ) error {
 	if botID <= 0 || chat == 0 {
-		return dbgen.New(tx).PauseUnroutableNotification(ctx, id)
+		return core.DatabaseOperationError(dbgen.New(tx).PauseUnroutableNotification(ctx, id))
 	}
 	*pending = append(
 		*pending,

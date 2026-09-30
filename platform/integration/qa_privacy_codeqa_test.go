@@ -21,11 +21,18 @@ func TestCodeQARevokedReplyDoesNotReturnThroughHistory(t *testing.T) {
 	latePlanModel(t, f, "direct", func(agent.Input) (agent.Plan, error) {
 		return agent.Plan{View: "workflow", Text: latePlanSecret}, nil
 	})
-	handle(t, f.b, message(47001, 101, "Read private registration"))
+	handleVisible(t, f.b, message(47001, 101, "Read private registration"))
+	before := workflowCard(t, f)
+	require.Contains(t, before.Text, latePlanSecret, "authorized private reply must first be actually delivered")
 	removeArchivedBooking(t, f)
 	require.NoError(t, f.b.Render(t.Context(), "alice", 101))
-	require.NotContains(t, workflowCard(t, f).Text, latePlanSecret)
+	pumpBotDeliveries(t, f.b)
+	after := workflowCard(t, f)
+	require.Equal(t, before.ID, after.ID, "revocation must update the existing card")
+	require.NotContains(t, after.Text, latePlanSecret)
+	historyChecked := false
 	f.b.Model = avModel(func(_ context.Context, input agent.Input) (agent.Plan, error) {
+		historyChecked = true
 		data, err := json.Marshal(input.History)
 		require.NoError(t, err)
 		require.NotContains(
@@ -36,7 +43,9 @@ func TestCodeQARevokedReplyDoesNotReturnThroughHistory(t *testing.T) {
 		)
 		return agent.Plan{View: "workflow", Text: "ok"}, nil
 	})
-	handle(t, f.b, message(47002, 101, "Next ordinary question"))
+	handleVisible(t, f.b, message(47002, 101, "Next ordinary question"))
+	require.True(t, historyChecked, "the next provider call must inspect the reauthorized history")
+	require.NotContains(t, workflowCard(t, f).Text, latePlanSecret)
 }
 
 func TestCodeQABeforeProviderAuthorityOutageRemainsRetryable(t *testing.T) {

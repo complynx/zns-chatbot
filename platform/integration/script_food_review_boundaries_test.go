@@ -82,12 +82,8 @@ func TestScriptFoodExportRechecksBeforeSecondFile(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &result))
 	assert.False(t, result.Complete)
 	assert.NotEmpty(t, result.Continuation)
+	pumpBotDeliveries(t, f.b)
 	assert.Equal(t, 1, transport.sent)
-	var receipts int
-	require.NoError(
-		t,
-		f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions WHERE owner='bob' AND update_id=28020 AND kind IN ('food_orders_export','food_summary_export')`).
-			Scan(&receipts),
-	)
-	assert.Equal(t, 1, receipts)
+	assertFoodExportStopped(t, f, 28020)
+	assert.Equal(t, 1, transport.sent, "terminal delivery replay must not resend")
 }

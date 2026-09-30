@@ -96,6 +96,14 @@ cancellation notices are not newly emitted for imported history. Existing sent
 flags suppress reminder replay. notify=true creates a pending additional notice
 only for a nondeleted booking starting on/after captured_at.
 
+Historical sent-marker notices have delivery_state=sent, remain unbound to a bot
+or delivery queue, and retain captured_at as their existing migration timestamp
+marker. No Telegram message ID or new delivery success is invented. An eligible
+additional notice binds the resolved owner, snapshot bot and same-bot Telegram
+chat in its owner row and shared delivery queue within the import transaction.
+Queue registration is the final phase after all owner/source writes; any failure
+rolls back both the domain projection and its queue binding.
+
 Draft normalized state is `{party,length,page,selected,choices}`: party is the
 target party ID (empty if unselected), absent length becomes zero; selected keys
 are mapped specialist owners; choice keys remain source numeric strings and
@@ -121,8 +129,19 @@ deferred specialist obligations. Existing event scopes or references cause a
 conflict, never overwrite. Any missing dependency, malformed draft, constraint
 failure or receipt failure rolls back all target rows and obligations. Restart
 reapplies the same artifact; successful exact replay only verifies the captured
-projection and identity mappings. Changed source/resolution/target/runtime state
-fails reconciliation, including draft versions and preference changes.
+projection and identity mappings. Changed source/resolution/target state fails
+reconciliation, including draft versions and preference changes. The receipt
+captures the exact imported notice IDs. Historical marker rows remain exact;
+additional notices retain exact ID, booking, owner, kind, creation time, bot and
+chat. Their queue owner/effect, bot, destination/thread, lane sequence and traffic
+class remain exact. Missing or changed bindings fail without repair.
+
+Delivery owns additional-notice attempt, lease, deadline, failure, text, sent and
+followup progress, plus queue state/not_before. Reconciliation permits changes
+to those delivery fields and does not claim to audit their transition history.
+Later runtime reminder IDs are outside the imported notice set. Other imported
+booking, draft, configuration, identity and source projections remain exact.
+Replay verifies the original receipt; it never rewrites it to accept drift.
 
 No source collection is changed and there is no production connection. Rollback
 before commit is automatic. After commit, use a disposable database restore or

@@ -31,9 +31,11 @@ INSERT INTO core.pass_events(id,finishes_at) VALUES('surviving-payment-scope',no
 INSERT INTO core.pass_payment_admins(event_id,owner) VALUES('surviving-payment-scope','alice')`)
 				require.NoError(t, err)
 				var marker string
+				workerRuns := 0
 				model := runScriptReads(t, f, hostScriptFunc(func(
 					ctx context.Context, _ []scriptclient.Tool, callback scriptclient.Callback,
 				) (json.RawMessage, error) {
+					workerRuns++
 					data := scriptCall(ctx, t, callback, tool, `{"event":"script-dance"}`)
 					if tool == "passes.payments.history" {
 						require.Contains(t, string(data), "visitor")
@@ -47,14 +49,12 @@ INSERT INTO core.pass_payment_admins(event_id,owner) VALUES('surviving-payment-s
 					result, encodeErr := json.Marshal(map[string]string{"digest": marker})
 					return result, encodeErr
 				}))
-				require.Len(t, model.inputs, 2)
-				encoded, err := json.Marshal(model.inputs[1])
-				require.NoError(t, err)
 				if revoke {
-					assert.NotContains(t, string(encoded), marker)
-				} else {
-					assert.Contains(t, string(encoded), marker)
+					assertPrivilegedFreshInput(t, f, model, marker)
 				}
+				require.Equal(t, 1, workerRuns)
+				require.Len(t, model.inputs, 2)
+				assertPrivilegedPaymentMarker(t, model, marker, revoke)
 				caps, err := (core.Service{DB: f.db}).PrivilegedReads(t.Context(), "alice")
 				require.NoError(t, err)
 				assert.True(t, caps.PaymentReads, "the unrelated event grant remains usable")
@@ -63,6 +63,17 @@ INSERT INTO core.pass_payment_admins(event_id,owner) VALUES('surviving-payment-s
 				require.NoError(t, err)
 			})
 		}
+	}
+}
+
+func assertPrivilegedPaymentMarker(t *testing.T, model *knowledgeModel, marker string, revoke bool) {
+	t.Helper()
+	encoded, err := json.Marshal(model.inputs[1])
+	require.NoError(t, err)
+	if revoke {
+		assert.NotContains(t, string(encoded), marker)
+	} else {
+		assert.Contains(t, string(encoded), marker)
 	}
 }
 

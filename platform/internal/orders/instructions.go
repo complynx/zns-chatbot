@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"unicode/utf8"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
@@ -56,7 +58,7 @@ func (s Service) Instructions(ctx context.Context, actor, event, id string) (Pay
 		return result, problem(http.StatusNotFound, "payment_context_unavailable")
 	}
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	if localized == nil {
 		localized = map[string]string{}

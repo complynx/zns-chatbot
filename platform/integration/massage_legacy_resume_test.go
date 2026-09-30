@@ -47,7 +47,7 @@ func TestLegacyMassageResumeUnavailableParty(t *testing.T) {
 			require.NoError(t, err)
 			assert.Zero(t, before.Version, "ineligible saved choice must not book or consume the draft")
 			resume := click(901, "massage|ed|"+legacyDraftID)
-			handle(t, f.b, resume)
+			handleNotificationUpdate(t, f, resume)
 			var view string
 			require.NoError(
 				t,
@@ -61,12 +61,12 @@ func TestLegacyMassageResumeUnavailableParty(t *testing.T) {
 			require.NoError(t, err)
 			assert.EqualValues(t, 1, after.Version)
 			assert.Equal(t, before.State, after.State)
-			handle(t, f.b, resume)
+			handleNotificationUpdate(t, f, resume)
 			replay, err := service.LegacyDraft(t.Context(), "alice", "sandbox-festival", legacyDraftID)
 			require.NoError(t, err)
 			assert.Equal(t, after, replay)
 			next := time.Date(2030, time.October, 3, 21, 0, 0, 0, time.UTC).Format("02.01 15:04")
-			handle(t, f.b, massageClick(t, f, 101, 902, next))
+			handleNotificationUpdate(t, f, massageClick(t, f, 101, 902, next))
 			card = massageCard(t, f, 101)
 			assert.Contains(t, card.Text, "57 BYN")
 			handle(t, f.b, massageClick(t, f, 101, 903, "❌ Master"))

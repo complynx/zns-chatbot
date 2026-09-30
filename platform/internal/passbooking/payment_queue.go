@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 type PaymentReview struct {
@@ -37,7 +39,7 @@ func (s Service) PaymentQueue(ctx context.Context, actor, eventID, after string)
 	err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.pass_payment_admins WHERE event_id=$1 AND owner=$2)`, eventID, actor).
 		Scan(&allowed)
 	if err != nil {
-		return PaymentPage{}, err
+		return PaymentPage{}, core.DatabaseOperationError(err)
 	}
 	if !allowed {
 		return PaymentPage{}, forbidden()
@@ -53,7 +55,7 @@ WHERE p.event_id=$1 AND p.decision='pending' AND b.state='paid' AND p.id>$3
 AND EXISTS(SELECT 1 FROM core.pass_payment_admins a WHERE a.event_id=$1 AND a.owner=$2)
 ORDER BY p.id,u.telegram_id LIMIT $4`, eventID, actor, after, pageSize+1)
 	if err != nil {
-		return PaymentPage{}, err
+		return PaymentPage{}, core.DatabaseOperationError(err)
 	}
 	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (PaymentReview, error) {
 		var item PaymentReview
@@ -78,7 +80,7 @@ ORDER BY p.id,u.telegram_id LIMIT $4`, eventID, actor, after, pageSize+1)
 		return item, scanErr
 	})
 	if err != nil {
-		return PaymentPage{}, err
+		return PaymentPage{}, core.DatabaseOperationError(err)
 	}
 	page := PaymentPage{Items: items}
 	if len(items) > pageSize {

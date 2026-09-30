@@ -12,6 +12,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
+	"github.com/complynx/zns-chatbot/platform/internal/observability"
 )
 
 func runtimeAuth(
@@ -34,7 +35,10 @@ func runtimeAuth(
 	if err != nil || botID <= 0 {
 		return nil, nil, identity.Links{}, errors.New("invalid runtime Telegram bot identity")
 	}
-	links := identity.Links{DB: db, Issuer: cfg.Auth.Zitadel.Issuer, BotID: botID}
+	links := identity.Links{
+		DB: db, Issuer: cfg.Auth.Zitadel.Issuer, BotID: botID,
+		InvalidateSubject: adapter.InvalidateSubject,
+	}
 	return api.ZitadelOwner(adapter, links), adapter, links, nil
 }
 
@@ -51,5 +55,13 @@ func configureBotAuth(ctx context.Context, b *bot.Bot, cfg config.Config, signer
 		b.API.SandboxToken = signer.Token
 	}
 	b.Host = appclient.Host{Base: b.API.Base, HTTP: b.API.HTTP, Signer: signer, UserToken: b.API.UserToken}
-	return verifyBotIdentity(ctx, b, cfg)
+	if err = verifyBotIdentity(ctx, b, cfg); err != nil {
+		return err
+	}
+	if adapter != nil {
+		if runtime, ok := b.Observer.(*observability.Runtime); ok && runtime != nil {
+			return runtime.RegisterIdentityCaches(observability.IdentityCacheBot, adapter)
+		}
+	}
+	return nil
 }

@@ -68,7 +68,15 @@ SELECT event_id FROM core.orders WHERE id=sqlc.arg(order_id)::text;
 SELECT id FROM core.orders WHERE id=sqlc.arg(order_id)::text FOR UPDATE;
 
 -- name: NotificationCurrent :one
-SELECT (u.can_book AND CASE WHEN n.payload->>'kind'='payment_request' THEN
+SELECT (u.can_book AND CASE WHEN n.payload->>'kind'='refund_request' THEN
+ EXISTS(SELECT 1 FROM core.order_refund_tasks r
+ JOIN core.pass_bookings b ON b.event_id=r.event_id AND b.owner=r.owner
+ WHERE r.id=(n.payload->>'refund_id')::bigint AND r.version=(n.payload->>'refund_version')::bigint
+ AND r.state='pending' AND r.order_id=n.order_id AND r.notification_id=n.id
+ AND r.ambassador=n.recipient AND b.payment_admin=n.recipient AND b.state<>'cancelled'
+ AND (EXISTS(SELECT 1 FROM core.pass_booking_admins a WHERE a.owner=n.recipient)
+ OR EXISTS(SELECT 1 FROM core.pass_payment_admins a WHERE a.event_id=r.event_id AND a.owner=n.recipient)))
+ WHEN n.payload->>'kind'='payment_request' THEN
  o.state IN ('proof','cash') AND o.attempt=n.payload->>'attempt' AND o.payment_admin=n.recipient
  AND EXISTS(SELECT 1 FROM core.order_admins a WHERE a.event_id=o.event_id AND a.owner=n.recipient)
  WHEN n.payload->>'kind' IN ('accept','reject') THEN o.state=n.payload->>'state'

@@ -17,11 +17,11 @@ VALUES(sqlc.arg(bot_id)::bigint,sqlc.arg(owner_kind)::text,sqlc.arg(owner_key)::
 ON CONFLICT(bot_id,owner_kind,owner_key,effect_key) DO NOTHING;
 
 -- name: ReadDeliveryEntry :one
-SELECT * FROM core.delivery_queue WHERE bot_id=sqlc.arg(bot_id)::bigint
+SELECT bot_id,owner_kind,owner_key,effect_key,chat,thread_id,lane_sequence,traffic_class,state,not_before FROM core.delivery_queue WHERE bot_id=sqlc.arg(bot_id)::bigint
 AND owner_kind=sqlc.arg(owner_kind)::text AND owner_key=sqlc.arg(owner_key)::text AND effect_key=sqlc.arg(effect_key)::text;
 
 -- name: LockDeliveryEntry :one
-SELECT * FROM core.delivery_queue WHERE bot_id=sqlc.arg(bot_id)::bigint
+SELECT bot_id,owner_kind,owner_key,effect_key,chat,thread_id,lane_sequence,traffic_class,state,not_before FROM core.delivery_queue WHERE bot_id=sqlc.arg(bot_id)::bigint
 AND owner_kind=sqlc.arg(owner_kind)::text AND owner_key=sqlc.arg(owner_key)::text AND effect_key=sqlc.arg(effect_key)::text
 FOR UPDATE;
 
@@ -45,11 +45,11 @@ WHERE bot_id=sqlc.arg(bot_id)::bigint AND chat=sqlc.arg(chat)::text;
 
 -- name: DeliveryCandidates :many
 WITH heads AS (
- SELECT DISTINCT ON (bot_id,chat) * FROM core.delivery_queue
+ SELECT DISTINCT ON (bot_id,chat) bot_id,owner_kind,owner_key,effect_key,chat,thread_id,lane_sequence,traffic_class,state,not_before FROM core.delivery_queue
  WHERE bot_id=sqlc.arg(bot_id)::bigint AND state IN ('pending','sending','unknown','parked','paused')
  ORDER BY bot_id,chat,lane_sequence
 )
-SELECT h.* FROM heads h JOIN core.delivery_lanes l USING(bot_id,chat)
+SELECT h.bot_id,h.owner_kind,h.owner_key,h.effect_key,h.chat,h.thread_id,h.lane_sequence,h.traffic_class,h.state,h.not_before FROM heads h JOIN core.delivery_lanes l USING(bot_id,chat)
 LEFT JOIN core.delivery_fairness f USING(bot_id)
 LEFT JOIN core.delivery_pacing b ON b.bot_id=h.bot_id AND b.chat=''
 LEFT JOIN core.delivery_pacing c ON c.bot_id=h.bot_id AND c.chat=h.chat

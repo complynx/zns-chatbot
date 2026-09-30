@@ -4,7 +4,19 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
+
+// reconcileDatabaseFailure stops reconciliation only for a positively classified
+// SQL failure. Identity, provider and domain failures remain per-view warnings,
+// while a positive SQL failure survives concurrent shutdown.
+func reconcileDatabaseFailure(err error) error {
+	if !core.IsDatabaseFailure(err) {
+		return nil
+	}
+	return core.ErrDatabase
+}
 
 func (b *Bot) reconcileAllViews(ctx context.Context) error {
 	if err := b.reconcilePassMenus(ctx); err != nil {
@@ -29,7 +41,7 @@ func (b *Bot) refreshOpenProfile(ctx context.Context, owner string, chat int64) 
 	var opened bool
 	if err := b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.order_cards WHERE owner=$1 AND card_key='profile')`, owner).
 		Scan(&opened); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if opened {
 		return b.RenderProfile(ctx, owner, chat)
@@ -38,9 +50,15 @@ func (b *Bot) refreshOpenProfile(ctx context.Context, owner string, chat int64) 
 }
 
 func (b *Bot) reconcileProfileViews(ctx context.Context) error {
-	rows, err := b.DB.Query(ctx, `SELECT owner,chat_id FROM bot.order_cards WHERE card_key='profile'`)
+	return b.reconcileNamedCard(ctx, "profile", b.RenderProfile)
+}
+
+func (b *Bot) reconcileNamedCard(
+	ctx context.Context, key string, render func(context.Context, string, int64) error,
+) error {
+	rows, err := b.DB.Query(ctx, `SELECT owner,chat_id FROM bot.order_cards WHERE card_key=$1`, key)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	type view struct {
 		Owner string
@@ -48,16 +66,22 @@ func (b *Bot) reconcileProfileViews(ctx context.Context) error {
 	}
 	views, err := pgx.CollectRows(rows, pgx.RowToStructByPos[view])
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, item := range views {
 		viewContext, authErr := b.API.NotificationContext(ctx, item.Owner, item.Chat)
 		if authErr != nil {
-			b.logger().WarnContext(ctx, "profile view identity pending")
+			if failure := reconcileDatabaseFailure(authErr); failure != nil {
+				return failure
+			}
+			b.logger().WarnContext(ctx, "card view identity pending", "card", key)
 			continue
 		}
-		if err = b.RenderProfile(viewContext, item.Owner, item.Chat); err != nil {
-			b.logger().WarnContext(ctx, "profile view reconciliation pending")
+		if err = render(viewContext, item.Owner, item.Chat); err != nil {
+			if failure := reconcileDatabaseFailure(err); failure != nil {
+				return failure
+			}
+			b.logger().WarnContext(ctx, "card view reconciliation pending", "card", key)
 		}
 	}
 	return nil

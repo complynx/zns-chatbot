@@ -6,6 +6,8 @@ import (
 	"slices"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // LockDeliveryExportInTx checks every event included in the rendered file.
@@ -44,7 +46,7 @@ func LockDeliveryProofInTx(
 			return forbidden()
 		}
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	var currentVersion int64
@@ -55,7 +57,7 @@ func LockDeliveryProofInTx(
 		return forbidden()
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if currentVersion != version || currentAttempt != attempt {
 		return conflict("pass_receipt_unavailable")

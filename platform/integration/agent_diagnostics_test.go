@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/observability"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
@@ -90,18 +91,38 @@ func TestAgentDiagnosticPartialScriptAndReplay(t *testing.T) {
 	require.Len(t, orders, 1)
 }
 
-func TestAgentDiagnosticPersistenceFailureIsNonfatal(t *testing.T) {
+func TestAgentDiagnosticFailureClassification(t *testing.T) {
 	t.Parallel()
-	f := setup(t)
-	var log bytes.Buffer
-	f.b.Logger = observability.NewLogger(&log, observability.LogConfig{})
-	_, err := f.db.Exec(
-		t.Context(),
-		`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',21902,'diagnostic_context','{"correlation":"private-canary","attempt":"invalid-canary"}')`,
-	)
-	require.NoError(t, err)
-	handle(t, f.b, message(21902, identity.AliceTelegramID, "hello"))
-	require.Contains(t, log.String(), "agent diagnostics omitted")
-	require.NotContains(t, log.String(), "canary")
-	require.Equal(t, 1, f.model.calls)
+	for _, scenario := range []struct {
+		name    string
+		content string
+		sql     bool
+	}{
+		{"SQL", `{"correlation":"private-canary","attempt":"invalid-canary"}`, true},
+		{"optional recorder", `{"correlation":"private-canary","attempt":1}`, false},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			f := setup(t)
+			var log bytes.Buffer
+			f.b.Logger = observability.NewLogger(&log, observability.LogConfig{})
+			_, err := f.db.Exec(
+				t.Context(),
+				`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',21902,'diagnostic_context',$1)`,
+				json.RawMessage(scenario.content),
+			)
+			require.NoError(t, err)
+			err = f.b.Handle(t.Context(), message(21902, identity.AliceTelegramID, "hello"))
+			require.NotContains(t, log.String(), "canary")
+			if scenario.sql {
+				require.ErrorIs(t, err, core.ErrDatabase)
+				require.EqualError(t, err, core.ErrDatabase.Error())
+				require.Zero(t, f.model.calls)
+				return
+			}
+			require.NoError(t, err)
+			require.Contains(t, log.String(), "agent diagnostics omitted")
+			require.Equal(t, 1, f.model.calls)
+		})
+	}
 }

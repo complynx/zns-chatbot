@@ -8,11 +8,14 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -64,10 +67,11 @@ func TestDerivedPassMenuRetainsSourceThroughRefreshAndFallback(t *testing.T) {
 					Scan(&bound),
 			)
 			require.True(t, bound)
+			pumpBotDeliveries(t, f.b)
 			before := chatMessages(t, f, 101)
 			beforeCard := passMenuCard(t, f, 101)
+			failed := false
 			if fallback {
-				failed := false
 				f.b.TG.HTTP = &http.Client{
 					Transport: passDeliveryTransport(func(request *http.Request) (*http.Response, error) {
 						if !failed && strings.HasSuffix(request.URL.Path, "/editMessageText") {
@@ -91,6 +95,12 @@ func TestDerivedPassMenuRetainsSourceThroughRefreshAndFallback(t *testing.T) {
 				deletePassDeliveryHistory(t, f, "alice")
 			}
 			require.NoError(t, f.b.RenderPassMenu(t.Context(), "alice", 101, i18n.RegistrationSaved))
+			pumpBotDeliveries(t, f.b)
+			if fallback {
+				require.True(t, failed, "fallback must reach the injected edit failure")
+				// The missing-edit response defers the send phase without a provider cooldown.
+				pumpBotDeliveries(t, f.b)
+			}
 			after := chatMessages(t, f, 101)
 			require.Len(t, after, len(before), "revocation must not send a new card")
 			card := passMenuCard(t, f, 101)
@@ -181,20 +191,43 @@ func TestDerivedPassExportRejectsLateSourceAndPartialGrantRevocation(t *testing.
 			f.b.Host.HTTP = &http.Client{
 				Transport: passDeliveryTransport(func(request *http.Request) (*http.Response, error) {
 					response, requestErr := http.DefaultTransport.RoundTrip(request)
-					if requestErr == nil && request.URL.Path == "/internal/passes/export-snapshot" {
+					if requestErr == nil && !hit && response.StatusCode == http.StatusOK &&
+						request.URL.Path == "/internal/passes/export-snapshot" {
 						hit = true
 						revokePassExportSource(t, f, kind)
 					}
 					return response, requestErr
 				}),
 			}
-			runErr := runPassDeliveryVM(t, f, 72100, 202, `return tools.passes.export({});`)
-			if kind == "history" {
-				require.Error(t, runErr, "history revocation terminates the admitted turn")
-			} else {
-				require.NoError(t, runErr)
+			wire := 0
+			f.b.TG.HTTP = &http.Client{
+				Transport: passDeliveryTransport(func(request *http.Request) (*http.Response, error) {
+					if strings.HasSuffix(request.URL.Path, "/sendDocument") {
+						wire++
+					}
+					return http.DefaultTransport.RoundTrip(request)
+				}),
 			}
-			require.True(t, hit)
+			require.NoError(t, runPassDeliveryVM(t, f, 72100, 202, "return tools.passes.export({});"))
+			require.False(t, hit, "admission must not render the document")
+			require.Zero(t, wire)
+			operation, effect := botdelivery.ResultOperation("bob", 72100, "document:pass_export::")
+			ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+			before, readErr := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, ref, false)
+			require.NoError(t, readErr)
+			require.Equal(t, delivery.Deferred, before.State)
+			require.NotNil(t, before.Reference.Source)
+			waitExportBoundaryCandidate(t, f, ref, time.Second)
+			require.NoError(t, f.b.DeliverBotIntent(t.Context(), ref))
+			require.True(t, hit, "revoke after the worker obtained its authorized snapshot")
+			after, readErr := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, ref, false)
+			require.NoError(t, readErr)
+			require.Equal(t, delivery.Cancelled, after.State)
+			require.Equal(t, before.Reference, after.Reference)
+			require.Zero(t, after.MessageID)
+			require.Zero(t, wire)
+			require.NoError(t, f.b.DeliverBotIntent(t.Context(), ref))
+			require.Zero(t, wire, "cancelled export must not replay")
 			var receipts int
 			require.NoError(
 				t,
@@ -290,4 +323,16 @@ func revokePassExportSource(t *testing.T, f *fixture, kind string) {
 	}
 	_, err := f.db.Exec(t.Context(), `DELETE FROM core.pass_payment_admins WHERE event_id='dance' AND owner='bob'`)
 	require.NoError(t, err)
+}
+
+func waitExportBoundaryCandidate(t *testing.T, f *fixture, ref delivery.Reference, timeout time.Duration) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		for _, entry := range botDeliveryCandidates(t, f.b) {
+			if entry.Reference == ref {
+				return true
+			}
+		}
+		return false
+	}, timeout, 50*time.Millisecond)
 }

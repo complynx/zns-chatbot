@@ -51,8 +51,9 @@ func (b *Bot) queueBotDocument(
 	if ref.Source != nil && ref.Source.Generation != nil {
 		generation = *ref.Source.Generation
 	} else {
-		if err := b.DB.QueryRow(ctx, "SELECT COALESCE((SELECT generation FROM core.conversation_history_generations WHERE owner=$1),0)", owner).
-			Scan(&generation); err != nil {
+		var err error
+		generation, err = b.API.HistoryGeneration(ctx, owner)
+		if err != nil {
 			return botdelivery.Observation{}, err
 		}
 	}

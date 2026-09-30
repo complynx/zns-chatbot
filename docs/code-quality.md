@@ -1,16 +1,26 @@
 # Code quality gates
 
 Every stage needs two independent reviews: Code QA and functional Senior QA.
+Temporary override from Daniel on 2026-09-30: use Codex for all development and
+QA until he explicitly restores Claude. Do not launch or probe Claude. Suspend
+the alternating developer route and every-third Opus review described below;
+keep the QA counter continuous and record the Codex route. Existing Opus work
+still receives independent Codex review.
 Count fresh Code QA requests from the 2026-09-29 resumption, starting at 1.
-Route requests 3, 6, 9, and so on through `claude-opus-5-5` when the SSH Claude
-tunnel and model are available. Record the request number, scope, route and any
+Code written by Opus always receives fresh independent Codex review. This takes
+precedence over routing requests 3, 6, 9, and so on through `claude-opus-5-5` when
+the SSH Claude tunnel and model are available. Keep the counter continuous when
+authorship changes the route. Record the request number, authorship, scope, route and any
 availability limit in the developer tracking record before dispatch; add the
 result afterward. Do not send that record, audit findings or fix hints to the
 reviewer. This routing rule does not replace either independent gate or relax
 freshness, read-only scope, required checks or acceptance conditions.
 The review procedure is in [the migration plan](go-migration.md).
 Implementation agents may be reused across related development tasks so they keep
-project context. Acceptance reviewers must be independent of implementation and
+project context. Alternate new developer assignments 1:1 between Opus 5.5 medium
+and Codex. Transfer repeatedly unsuccessful or unjustifiably expanding fixes to
+the other developer for a fresh assessment of requirements and evidence.
+Acceptance reviewers must be independent of implementation and
 fresh for the stage or substantive affected change. Give Code QA the original
 requirements, scope and frozen source/diff. Give Functional QA requirements,
 public contracts and sandbox access only. Do not supply development conversation,
@@ -222,3 +232,5 @@ that unauthorized approval/rejection names are absent from provider input and
 script discovery; guessed names/help produce generic unavailability. A role for
 event A must not expose event B operations. Recheck authorization at execution.
 Keep Code QA and independent Telegram-like Functional QA evidence and limitations.
+
+Daniel's 2026-09-30 clarification: synthetic stand data and unused stands may be deleted or changed when the action does not conflict with another test, including tests sharing that stand. Assign ownership and isolate conflicting scenarios. The previous no-deletion pause instruction no longer blocks synthetic deletion acceptance. Production authorization remains separate.

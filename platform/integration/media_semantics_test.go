@@ -35,12 +35,12 @@ func TestMediaUnknownPurposePreservesManualContinuation(t *testing.T) {
 	const answer = "I cannot inspect this text file. Tell me its purpose or choose a button."
 	f.model.plan = agent.Plan{View: agent.MediaView, Text: answer,
 		MediaAction: &agent.MediaProposal{MediaID: "tg-media-100", Intent: "other"}}
-	handle(t, f.b, update)
+	handleVisible(t, f.b, update)
 	card := mediaReconcileCard(t, f, "tg-media-100")
 	require.Contains(t, card.Text, answer)
 	require.NotEmpty(t, card.Markup.Rows)
 	assert.Nil(t, f.model.input.Attachment, "unsupported bytes must not be interpreted as an image")
-	handle(t, f.b, proofMediaClick(t, f, 101, "This is a receipt"))
+	handleVisible(t, f.b, proofMediaClick(t, f, 101, "This is a receipt"))
 	handle(t, f.b, intakeChoice(t, f, 102, order.ID))
 	current, err := f.b.API.Order(t.Context(), "alice", order.EventID, order.ID)
 	require.NoError(t, err)
@@ -62,9 +62,9 @@ func TestMediaExplicitDismissalRemainsTerminal(t *testing.T) {
 				upload.Message.Caption = "Discard this attachment."
 				f.model.plan.MediaAction = &agent.MediaProposal{MediaID: "tg-media-100", Intent: "cancel"}
 			}
-			handle(t, f.b, upload)
+			handleVisible(t, f.b, upload)
 			if action != "agent cancel" {
-				handle(t, f.b, proofMediaClick(t, f, 101, action))
+				handleVisible(t, f.b, proofMediaClick(t, f, 101, action))
 			}
 			card := mediaReconcileCard(t, f, "tg-media-100")
 			assert.Contains(t, card.Text, "Attachment request closed. No order was changed.")
@@ -84,8 +84,8 @@ func TestMediaLatestKnownReceiptExcludesNewUnpaidOrder(t *testing.T) {
 	receiptOrder := intakeOrder(t, f, "receipt")
 	upload := unknownPurposeUpload(t, f, 100)
 	f.model.plan = agent.Plan{View: agent.MediaView, Text: "Please choose the purpose."}
-	handle(t, f.b, upload)
-	handle(t, f.b, proofMediaClick(t, f, 101, "This is a receipt"))
+	handleVisible(t, f.b, upload)
+	handleVisible(t, f.b, proofMediaClick(t, f, 101, "This is a receipt"))
 	handle(t, f.b, intakeChoice(t, f, 102, receiptOrder.ID))
 	newer := intakeOrder(t, f, "newer-unpaid")
 	unrelated := unknownPurposeUpload(t, f, 103)

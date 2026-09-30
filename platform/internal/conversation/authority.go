@@ -46,7 +46,7 @@ func (s Service) authoritySnapshot(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	state := &authoritySnapshot{tx: tx, byEvent: map[int64][]readsource.Authority{}, allowed: true}
 	if err = state.lock(ctx, actor, extra, scope); err != nil {
@@ -67,7 +67,7 @@ func (s *authoritySnapshot) lock(
 		`SELECT pg_advisory_xact_lock(hashtextextended('conversation-authority:' || $1,0))`,
 		actor,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	ids, err := scope.selectedIDs(ctx, s.tx, actor)
 	if err != nil {
@@ -77,9 +77,12 @@ func (s *authoritySnapshot) lock(
 	if err = checkHistoryReadBudget(ctx, s.tx, actor, ids, scope.summary, scope.textOnly); err != nil {
 		return err
 	}
-	rows, err := dbgen.New(s.tx).ReadAuthorities(ctx, dbgen.ReadAuthoritiesParams{Owner: actor, Column2: ids})
-	if err != nil {
-		return err
+	var rows []dbgen.CoreConversationReadAuthority
+	if len(ids) > 0 {
+		rows, err = dbgen.New(s.tx).ReadAuthorities(ctx, dbgen.ReadAuthoritiesParams{Owner: actor, Column2: ids})
+		if err != nil {
+			return core.DatabaseOperationError(err)
+		}
 	}
 	all, err := s.loadEventAuthorities(rows, extra)
 	if err != nil {
@@ -113,9 +116,9 @@ func (s *authoritySnapshot) invalidateStale(
 	var generation int64
 	if err := s.tx.QueryRow(ctx, `SELECT COALESCE((SELECT generation FROM core.conversation_history_generations WHERE owner=$1),0)`, actor).
 		Scan(&generation); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	stale, err := dbgen.New(s.tx).UnprovenRuntimeIDs(ctx, dbgen.UnprovenRuntimeIDsParams{Owner: actor, Column2: s.ids})
+	stale, err := s.unprovenRuntimeIDs(ctx, actor)
 	if err != nil {
 		return err
 	}
@@ -123,7 +126,7 @@ func (s *authoritySnapshot) invalidateStale(
 	if checkSummary {
 		unknownSummary, err = dbgen.New(s.tx).HasUnprovenRuntimeSummary(ctx, actor)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	advanceGeneration := len(stale) > 0 || unknownSummary
@@ -157,10 +160,18 @@ func (s *authoritySnapshot) invalidateStale(
 	return invalidateDerived(ctx, s.tx, actor, stale, advanceGeneration)
 }
 
+func (s *authoritySnapshot) unprovenRuntimeIDs(ctx context.Context, actor string) ([]int64, error) {
+	if len(s.ids) == 0 {
+		return nil, nil
+	}
+	ids, err := dbgen.New(s.tx).UnprovenRuntimeIDs(ctx, dbgen.UnprovenRuntimeIDsParams{Owner: actor, Column2: s.ids})
+	return ids, core.DatabaseOperationError(err)
+}
+
 func (s authorityScope) selectedIDs(ctx context.Context, tx pgx.Tx, actor string) ([]int64, error) {
 	queries := dbgen.New(tx)
 	if s.page.Limit > 0 {
-		return queries.AuthorityPageIDs(
+		ids, err := queries.AuthorityPageIDs(
 			ctx,
 			dbgen.AuthorityPageIDsParams{
 				Owner:     actor,
@@ -169,12 +180,14 @@ func (s authorityScope) selectedIDs(ctx context.Context, tx pgx.Tx, actor string
 				PageLimit: int64(s.page.Limit),
 			},
 		)
+		return ids, core.DatabaseOperationError(err)
 	}
 	if s.batchBefore > 0 {
-		return queries.AuthorityBatchIDs(
+		ids, err := queries.AuthorityBatchIDs(
 			ctx,
 			dbgen.AuthorityBatchIDsParams{Owner: actor, ID: s.batchBefore, Limit: MaxPage},
 		)
+		return ids, core.DatabaseOperationError(err)
 	}
 	return s.ids, nil
 }
@@ -185,10 +198,10 @@ func lockSummary(ctx context.Context, tx pgx.Tx, actor string) error {
 		`INSERT INTO core.conversation_summaries(owner) VALUES($1) ON CONFLICT DO NOTHING`,
 		actor,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	_, err := tx.Exec(ctx, `SELECT version FROM core.conversation_summaries WHERE owner=$1 FOR UPDATE`, actor)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func invalidateDerived(ctx context.Context, tx pgx.Tx, actor string, ids []int64, advanceGeneration bool) error {
@@ -210,7 +223,7 @@ func invalidateDerived(ctx context.Context, tx pgx.Tx, actor string, ids []int64
 			actor,
 		)
 	}
-	return tx.SendBatch(ctx, batch).Close()
+	return core.DatabaseOperationError(tx.SendBatch(ctx, batch).Close())
 }
 
 func (s *authoritySnapshot) summaryAuthorities(ids []int64) ([]readsource.Authority, error) {
@@ -250,7 +263,7 @@ func (s Service) CheckReadAuthorities(
 	}
 	defer func() { _ = state.tx.Rollback(ctx) }()
 	if err = state.tx.Commit(ctx); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !state.allowed {
 		return staleHistory()

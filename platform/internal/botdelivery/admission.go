@@ -13,6 +13,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/conversation/fence"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
@@ -24,7 +25,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 		return Observation{}, err
 	}
 	if !reference.Valid(owner) || chat <= 0 ||
-		(phase != "send" && phase != "document") {
+		(phase != phaseSend && phase != "document") {
 		return Observation{}, ErrBinding
 	}
 	i := Intent{
@@ -38,7 +39,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Observation{}, err
+		return Observation{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = s.lockSource(ctx, tx, i); err != nil {
@@ -62,7 +63,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 		i.Target,
 	)
 	if err != nil {
-		return Observation{}, err
+		return Observation{}, core.DatabaseOperationError(err)
 	}
 	current, err := Read(ctx, tx, i.BotID, i.QueueReference(), true)
 	if err != nil {
@@ -82,7 +83,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 	if err != nil {
 		return Observation{}, err
 	}
-	return current.Observation(), tx.Commit(ctx)
+	return current.Observation(), core.DatabaseOperationError(tx.Commit(ctx))
 }
 func (s Service) lockSource(ctx context.Context, tx pgx.Tx, i Intent) error {
 	return s.lockRenderedSource(ctx, tx, i, nil)
@@ -109,8 +110,15 @@ func (s Service) lockRenderedSource(ctx context.Context, tx pgx.Tx, i Intent, ex
 		return familyMissing(err)
 	}
 	actors := []string{i.Owner}
-	if i.Reference.Family == "pass_proof" {
+	if i.Reference.Family == familyPassProof {
 		actors = append(actors, i.Reference.Object)
+	}
+	f.refundAmbassador, err = refundDeliveryActor(ctx, tx, i)
+	if err != nil {
+		return familyMissing(err)
+	}
+	if f.refundAmbassador != "" {
+		actors = append(actors, f.refundAmbassador)
 	}
 	if err = readsource.LockActors(ctx, tx, actors, expanded); err != nil {
 		return err
@@ -118,7 +126,7 @@ func (s Service) lockRenderedSource(ctx context.Context, tx pgx.Tx, i Intent, ex
 	var chat int64
 	if err = tx.QueryRow(ctx, `SELECT telegram_id FROM core.users WHERE id=$1 FOR SHARE`, i.Owner).
 		Scan(&chat); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if chat != i.Chat {
 		return ErrStale
@@ -131,7 +139,7 @@ func (s Service) lockRenderedSource(ctx context.Context, tx pgx.Tx, i Intent, ex
 		return err
 	}
 	if slices.Contains(valid, false) {
-		return &core.ProblemError{Status: http.StatusConflict, Code: "pass_source_stale"}
+		return &core.ProblemError{Status: http.StatusConflict, Code: codePassSourceStale}
 	}
 	if i.Reference.Source != nil {
 		if err = fence.LockGeneration(ctx, tx, i.Owner, i.Reference.Source.Generation); err != nil {
@@ -144,20 +152,29 @@ func (s Service) lockRenderedSource(ctx context.Context, tx pgx.Tx, i Intent, ex
 	return lockViewBinding(ctx, tx, i, f)
 }
 
+func refundDeliveryActor(ctx context.Context, tx pgx.Tx, i Intent) (string, error) {
+	if i.Reference.Family != familyRefund {
+		return "", nil
+	}
+	if i.Reference.Refund == nil {
+		return "", ErrBinding
+	}
+	return orders.RefundDeliveryActorInTx(ctx, tx, i.Owner, i.Reference.Event, *i.Reference.Refund)
+}
+
 func (s Service) begin(
 	ctx context.Context,
 	observed Intent,
 	target int64,
 	exportEvents []string,
 ) (Intent, bool, error) {
-
 	if err := s.Delivery.Validate(); err != nil {
 		return observed, false, err
 	}
 	if observed.BotID != s.Delivery.BotID || observed.QueueReference().Owner != delivery.Bot {
 		return observed, false, ErrBinding
 	}
-	if observed.Reference.Family == "pass_export" && !passbooking.ValidExportEvents(exportEvents) {
+	if observed.Reference.Family == familyPassExport && !passbooking.ValidExportEvents(exportEvents) {
 		return observed, false, ErrBinding
 	}
 	stored, err := Read(ctx, s.DB, observed.BotID, observed.QueueReference(), false)
@@ -172,7 +189,7 @@ func (s Service) begin(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return observed, false, err
+		return observed, false, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = s.lockRenderedSource(ctx, tx, observed, exportEvents); err != nil {
@@ -193,16 +210,21 @@ func (s Service) begin(
 	if current.State != delivery.Deferred || current.Attempt != observed.Attempt {
 		return current, false, nil
 	}
+	return s.beginAttempt(ctx, tx, current, target)
+}
+
+func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, target int64) (Intent, bool, error) {
+	var err error
 	if current.Reference.Kind == CardIntent {
 		var pendingReceipt bool
 		err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.delivery_intents
    WHERE bot_id=$1 AND owner=$2 AND state='sent' AND NOT continuation_done
    AND reference->>'kind'='card' AND reference->>'card_key'=$3)`, current.BotID, current.Owner, current.Reference.CardKey).Scan(&pendingReceipt)
 		if err != nil {
-			return current, false, err
+			return current, false, core.DatabaseOperationError(err)
 		}
 		if pendingReceipt {
-			return current, false, tx.Commit(ctx)
+			return current, false, core.DatabaseOperationError(tx.Commit(ctx))
 		}
 	}
 	admission, err := delivery.Begin(ctx, tx, s.Delivery, current.QueueReference())
@@ -210,14 +232,14 @@ func (s Service) begin(
 		return current, false, err
 	}
 	if !admission.Ready {
-		return current, false, tx.Commit(ctx)
+		return current, false, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	current.Attempt++
 	current.State = delivery.Sending
 	// A missing edit target is a persistent phase transition. Do not infer edit
 	// again from an old view receipt after a definite fallback was admitted.
 	if current.Attempt == 1 && current.Reference.Kind == CardIntent && target > 0 {
-		current.Phase = "edit"
+		current.Phase = phaseEdit
 		current.Target = target
 	}
 	_, err = tx.Exec(
@@ -232,9 +254,9 @@ func (s Service) begin(
 		current.Target,
 	)
 	if err != nil {
-		return current, false, err
+		return current, false, core.DatabaseOperationError(err)
 	}
-	return current, true, tx.Commit(ctx)
+	return current, true, core.DatabaseOperationError(tx.Commit(ctx))
 }
 func (s Service) Begin(ctx context.Context, in BeginRequest) (BeginResult, error) {
 	i, ready, err := s.begin(ctx, in.Observed, in.Target, in.ExportEvents)
@@ -257,7 +279,7 @@ func lockDerivation(ctx context.Context, tx pgx.Tx, owner string, source readsou
 		return err
 	}
 	if slices.Contains(valid, false) {
-		return &core.ProblemError{Status: http.StatusConflict, Code: "pass_source_stale"}
+		return &core.ProblemError{Status: http.StatusConflict, Code: codePassSourceStale}
 	}
 	return fence.LockGeneration(ctx, tx, owner, source.Generation)
 }

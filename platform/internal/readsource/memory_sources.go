@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
 )
 
@@ -24,7 +25,7 @@ func memoryEvidence(ctx context.Context, tx pgx.Tx, ref knowledgeauthority.ReadA
 		return []Authority{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if len(raw) > MaxAuthorityBytes {
 		return nil, ErrLimit
@@ -73,7 +74,7 @@ func memoryAncestorBefore(
 		return nil
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !earlier {
 		return ErrLimit

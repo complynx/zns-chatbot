@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
 )
 
@@ -17,15 +18,15 @@ const budgetLegacy = "legacy"
 func (b *Bot) bindBudget(ctx context.Context, owner string, update int64) (context.Context, error) {
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
-		return ctx, err
+		return ctx, core.DatabaseOperationContextError(ctx, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,39001))`, owner); err != nil {
-		return ctx, err
+		return ctx, core.DatabaseOperationContextError(ctx, err)
 	}
 	var epoch *time.Time
 	if err = tx.QueryRow(ctx, `SELECT (SELECT epoch FROM credits.cutover WHERE singleton)`).Scan(&epoch); err != nil {
-		return ctx, err
+		return ctx, core.DatabaseOperationContextError(ctx, err)
 	}
 	var mode string
 	err = tx.QueryRow(ctx, `SELECT mode FROM bot.budget_operations WHERE owner=$1 AND update_id=$2`, owner, update).
@@ -35,7 +36,7 @@ func (b *Bot) bindBudget(ctx context.Context, owner string, update int64) (conte
 		var existing bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.agent_quota WHERE owner=$1 AND update_id=$2)`, owner, update).
 			Scan(&existing); err != nil {
-			return ctx, err
+			return ctx, core.DatabaseOperationContextError(ctx, err)
 		}
 		if epoch != nil && !existing {
 			mode = botFamilyCredits
@@ -49,14 +50,15 @@ func (b *Bot) bindBudget(ctx context.Context, owner string, update int64) (conte
 			epoch,
 		)
 	}
+	// Either the non-absent mode read or the budget insert failed: both are SQL.
 	if err != nil {
-		return ctx, err
+		return ctx, core.DatabaseOperationContextError(ctx, err)
 	}
 	if err = b.creditCutoverConfiguration(epoch != nil); err != nil {
 		return ctx, err
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return ctx, err
+		return ctx, core.DatabaseOperationContextError(ctx, err)
 	}
 	scope := credits.ScopeFromContext(ctx)
 	scope.LegacyBudget = mode == budgetLegacy

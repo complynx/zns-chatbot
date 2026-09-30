@@ -19,7 +19,8 @@ func TestAdminBroadcastNameSnapshotConcurrentOverride(t *testing.T) {
 	)
 	require.NoError(t, err)
 	service := adminmessage.Service{
-		DB: db,
+		Delivery: syntheticDeliverySettings(),
+		DB:       db,
 		InformalName: func(ctx context.Context, names map[string]any) (string, error) {
 			assert.Equal(t, "Alice", names["first_name"])
 			_, writeErr := db.Exec(
@@ -64,7 +65,8 @@ func TestAdminBroadcastNameSnapshotBeforeRecipientRender(t *testing.T) {
 	require.NoError(t, err)
 	calls := 0
 	service := adminmessage.Service{
-		DB: db,
+		Delivery: syntheticDeliverySettings(),
+		DB:       db,
 		InformalName: func(ctx context.Context, names map[string]any) (string, error) {
 			calls++
 			_, writeErr := db.Exec(

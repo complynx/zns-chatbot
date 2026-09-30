@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery/dbgen"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
@@ -31,7 +32,7 @@ func Read(
 		)
 	}
 	if err != nil {
-		return Intent{}, err
+		return Intent{}, core.DatabaseOperationError(err)
 	}
 	i := Intent{
 		BotID:            row.BotID,

@@ -69,11 +69,11 @@ func (s Service) PractitionerSchedule(
 	rows, err := tx.Query(ctx, `SELECT id,starts_at,ends_at FROM core.massage_work
  WHERE event_id=$1 AND specialist=$2 AND ($3='' OR (starts_at,id)>($4,$5)) ORDER BY starts_at,id LIMIT $6`, event, actor, cursor.Position, boundary.At, id, core.ReadPageItems+1)
 	if err != nil {
-		return core.ReadPage[PractitionerWork]{}, err
+		return core.ReadPage[PractitionerWork]{}, core.DatabaseOperationError(err)
 	}
 	items, err := pgx.CollectRows(rows, pgx.RowToStructByPos[PractitionerWork])
 	if err != nil {
-		return core.ReadPage[PractitionerWork]{}, err
+		return core.ReadPage[PractitionerWork]{}, core.DatabaseOperationError(err)
 	}
 	page, err := core.NavigationPage(items, cursor, func(item PractitionerWork) string {
 		return practitionerPosition(item.Start, strconv.FormatInt(item.ID, 10))
@@ -81,7 +81,7 @@ func (s Service) PractitionerSchedule(
 	if err != nil {
 		return page, err
 	}
-	return page, tx.Commit(ctx)
+	return page, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (s Service) PractitionerBookings(
@@ -101,11 +101,11 @@ func (s Service) PractitionerBookings(
  WHERE event_id=$1 AND specialist=$2 AND cancelled_at IS NULL AND ($3='' OR party_id=$3)
  AND ($4='' OR (starts_at,id)>($5,$6)) ORDER BY starts_at,id LIMIT $7`, event, actor, party, cursor.Position, boundary.At, boundary.ID, core.ReadPageItems+1)
 	if err != nil {
-		return core.ReadPage[Reservation]{}, err
+		return core.ReadPage[Reservation]{}, core.DatabaseOperationError(err)
 	}
 	items, err := pgx.CollectRows(rows, pgx.RowToStructByPos[Reservation])
 	if err != nil {
-		return core.ReadPage[Reservation]{}, err
+		return core.ReadPage[Reservation]{}, core.DatabaseOperationError(err)
 	}
 	page, err := core.NavigationPage(
 		items,
@@ -115,5 +115,5 @@ func (s Service) PractitionerBookings(
 	if err != nil {
 		return page, err
 	}
-	return page, tx.Commit(ctx)
+	return page, core.DatabaseOperationError(tx.Commit(ctx))
 }

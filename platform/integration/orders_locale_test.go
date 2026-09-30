@@ -30,7 +30,7 @@ func TestOrdersLocaleRefreshAndRecipientNotifications(t *testing.T) {
 	f := setup(t)
 	_, err := f.b.API.SetLanguage(t.Context(), "alice", "ru", false)
 	require.NoError(t, err)
-	handle(t, f.b, message(950, 101, "/orders"))
+	handleVisible(t, f.b, message(950, 101, "/orders"))
 	created, err := f.b.API.ExecuteOrder(
 		t.Context(),
 		"alice",
@@ -43,8 +43,8 @@ func TestOrdersLocaleRefreshAndRecipientNotifications(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	handle(t, f.b, message(951, 101, "/language"))
-	handle(t, f.b, orderClick(t, f, 101, 952, "en"))
+	handleVisible(t, f.b, message(951, 101, "/language"))
+	handleVisible(t, f.b, orderClick(t, f, 101, 952, "en"))
 	english := orderChatText(t, f, 101)
 	for _, label := range []string{"Festival orders.", "New order", "Status: Unpaid", "Preparty", "Send receipt", "Delete order"} {
 		assert.Contains(t, english, label)
@@ -57,6 +57,7 @@ func TestOrdersLocaleRefreshAndRecipientNotifications(t *testing.T) {
 	_, err = f.b.API.ExecuteOrder(t.Context(), "alice", cash)
 	require.NoError(t, err)
 	require.NoError(t, f.b.DeliverNotifications(t.Context()))
+	pumpBotDeliveries(t, f.b)
 	admin := orderChatText(t, f, 202)
 	assert.Contains(t, admin, "Awaiting payment review")
 	assert.Contains(t, admin, "Accept payment")
@@ -64,14 +65,16 @@ func TestOrdersLocaleRefreshAndRecipientNotifications(t *testing.T) {
 	_, err = f.b.API.SetLanguage(t.Context(), "alice", "ru", false)
 	require.NoError(t, err)
 	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	pumpBotDeliveries(t, f.b)
 	russian := orderChatText(t, f, 101)
 	assert.Contains(t, russian, "Заказы фестиваля")
 	assert.Contains(t, russian, "Новый заказ")
 	assert.Contains(t, russian, "Препати")
 	assert.Contains(t, russian, "Запрошена оплата наличными")
 	f.model.plan = agent.Plan{View: agent.OrdersView, Text: "Your order is awaiting review."}
-	handle(t, f.b, message(953, 101, "Please explain my order in English."))
+	handleVisible(t, f.b, message(953, 101, "Please explain my order in English."))
 	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	pumpBotDeliveries(t, f.b)
 	assert.Contains(
 		t,
 		orderChatText(t, f, 101),

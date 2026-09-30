@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -16,7 +18,7 @@ func LockDeliveryExportInTx(ctx context.Context, tx pgx.Tx, actor, event string)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return problem(http.StatusForbidden, "forbidden")
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 // LockDeliveryProofInTx validates the exact attachment/version under row locks.
@@ -30,7 +32,7 @@ func LockDeliveryProofInTx(
 	var owner string
 	if err := tx.QueryRow(ctx, `SELECT owner FROM core.orders WHERE id=$1 AND event_id=$2`, id, event).
 		Scan(&owner); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if owner != actor {
 		if err := LockDeliveryExportInTx(ctx, tx, actor, event); err != nil {
@@ -44,7 +46,7 @@ func LockDeliveryProofInTx(
 		return problem(http.StatusNotFound, "proof_not_found")
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if current.Version != version || current.Attempt != attempt {
 		return problem(http.StatusConflict, "proof_stale")
@@ -60,5 +62,5 @@ func LockDeliveryPaymentInTx(ctx context.Context, tx pgx.Tx, actor, event, id st
 	if errors.Is(err, pgx.ErrNoRows) {
 		return problem(http.StatusNotFound, "order_not_found")
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }

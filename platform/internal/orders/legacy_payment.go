@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -32,7 +34,7 @@ func (op *operation) checkPaymentAttempt(ctx context.Context, order *Order) erro
 		return problem(http.StatusConflict, "stale_attempt")
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if op.command.Name == actionAccept {
 		// This confirmation is a new host action, not an invented legacy token.

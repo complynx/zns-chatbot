@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
 )
 
@@ -39,7 +40,7 @@ func (s *snapshot) mutate(ctx context.Context, tx pgx.Tx, b *Booking, c Command)
 			b.Owner,
 			b.PaymentAdmin,
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		s.touch(b)
 	case commandAdminCancel, "admin_uncouple":
@@ -72,7 +73,7 @@ func (s *snapshot) identity(ctx context.Context, tx pgx.Tx, owner string) (passa
 		return "", conflict("pass_profile_required")
 	}
 	if err != nil {
-		return "", err
+		return "", core.DatabaseOperationError(err)
 	}
 	if s.event.passport && (name == "" || passport == "") {
 		return "", conflict("pass_identity_required")
@@ -112,27 +113,19 @@ func (s *snapshot) register(ctx context.Context, tx pgx.Tx, b *Booking, c Comman
 	}
 	newRegistration := b.Version == 0 || b.State == cancelled
 	if newRegistration {
-		if role != passallocation.Leader && role != passallocation.Follower {
-			return conflict("pass_role_required")
-		}
-		b.Role = role
-		b.CreatedAt = s.now
-		b.PaymentAdmin = c.PaymentAdmin
-		if b.PaymentAdmin == "" {
-			err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT p.payment_admin FROM core.pass_contact_preferences p
- JOIN core.pass_payment_admins a ON a.event_id=p.event_id AND a.owner=p.payment_admin
- WHERE p.event_id=$1 AND p.owner=$2 AND NOT a.hidden),'')`, s.event.id, b.Owner).Scan(&b.PaymentAdmin)
-			if err != nil {
-				return err
-			}
+		if err = s.initializeRegistration(ctx, tx, b, role, c.PaymentAdmin); err != nil {
+			return err
 		}
 	}
 	if err = s.chooseAdmin(b, newRegistration); err != nil {
 		return err
 	}
+	sameInvitation := b.State == pending && b.InvitationTarget == c.InviteTelegramID
+	invitationStartedAt := b.InvitationStartedAt
 	b.State = waitlist
 	b.Kind = solo
 	b.InvitationTarget = 0
+	b.InvitationStartedAt = nil
 	b.Partner = ""
 	b.AssignedAt = nil
 	b.Price = nil
@@ -142,10 +135,32 @@ func (s *snapshot) register(ctx context.Context, tx pgx.Tx, b *Booking, c Comman
 		if err = s.invite(b, c.InviteTelegramID); err != nil {
 			return err
 		}
+		// Repeating the same active invitation must not extend its window.
+		if sameInvitation {
+			b.InvitationStartedAt = invitationStartedAt
+		}
 	}
 	s.bookings[b.Owner] = b
 	s.touch(b)
 	return nil
+}
+
+func (s *snapshot) initializeRegistration(
+	ctx context.Context, tx pgx.Tx, b *Booking, role passallocation.Role, admin string,
+) error {
+	if role != passallocation.Leader && role != passallocation.Follower {
+		return conflict("pass_role_required")
+	}
+	b.Role = role
+	b.CreatedAt = s.now
+	b.PaymentAdmin = admin
+	if admin != "" {
+		return nil
+	}
+	err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT p.payment_admin FROM core.pass_contact_preferences p
+ JOIN core.pass_payment_admins a ON a.event_id=p.event_id AND a.owner=p.payment_admin
+ WHERE p.event_id=$1 AND p.owner=$2 AND NOT a.hidden),'')`, s.event.id, b.Owner).Scan(&b.PaymentAdmin)
+	return core.DatabaseOperationError(err)
 }
 
 func (s *snapshot) chooseAdmin(b *Booking, newRegistration bool) error {
@@ -179,6 +194,7 @@ func (s *snapshot) invite(b *Booking, target int64) error {
 	b.State = pending
 	b.Kind = couple
 	b.InvitationTarget = target
+	b.InvitationStartedAt = &s.now
 	return nil
 }
 
@@ -192,6 +208,7 @@ func (s *snapshot) respond(ctx context.Context, tx pgx.Tx, b *Booking, c Command
 		inviter.State = waitlist
 		inviter.Kind = solo
 		inviter.InvitationTarget = 0
+		inviter.InvitationStartedAt = nil
 		s.touch(inviter)
 		return nil
 	}
@@ -215,6 +232,7 @@ func (s *snapshot) respond(ctx context.Context, tx pgx.Tx, b *Booking, c Command
 	b.State = waitlist
 	b.Partner = inviter.Owner
 	b.InvitationTarget = 0
+	b.InvitationStartedAt = nil
 	b.Role = passallocation.Leader
 	if inviter.Role == passallocation.Leader {
 		b.Role = passallocation.Follower
@@ -222,6 +240,7 @@ func (s *snapshot) respond(ctx context.Context, tx pgx.Tx, b *Booking, c Command
 	inviter.State = waitlist
 	inviter.Partner = b.Owner
 	inviter.InvitationTarget = 0
+	inviter.InvitationStartedAt = nil
 	s.bookings[b.Owner] = b
 	s.touch(b)
 	s.touch(inviter)
@@ -252,6 +271,7 @@ func (s *snapshot) tombstone(b *Booking) {
 	s.unlink(b)
 	b.State = cancelled
 	b.InvitationTarget = 0
+	b.InvitationStartedAt = nil
 	b.AssignedAt = nil
 	b.Price = nil
 	b.TierIndex = nil

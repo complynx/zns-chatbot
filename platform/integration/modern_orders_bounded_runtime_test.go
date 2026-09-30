@@ -62,7 +62,7 @@ func TestModernOrdersBoundedRuntime(t *testing.T) {
 				agent.Plan{View: agent.OrdersView, ScriptAction: &agent.ScriptProposal{Code: code, InputJSON: "null"}},
 				agent.Plan{View: agent.OrdersView, Text: "Order read checkpoint saved."},
 			)
-			completeInbox(t, f, update+1)
+			completeModernOrderPresentation(t, f, update+1, order.ID)
 			assertModernRuntimeFixtureConsumed(t, f, update, 2)
 			assertModernRuntimeInspect(t, f, update, !scenario.catalog)
 			card := pagingCard(t, f, 101, order.ID)
@@ -146,4 +146,19 @@ func assertModernRuntimeInspect(t *testing.T, f *fixture, update int64, more boo
 	assert.Equal(t, more, result.More)
 	assert.Zero(t, result.Offset)
 	assert.Positive(t, result.Characters)
+}
+
+func completeModernOrderPresentation(t *testing.T, f *fixture, want int64, orderID string) {
+	t.Helper()
+	runInboxUntil(t, f, func() bool {
+		var cursor int64
+		var pending int
+		var visible bool
+		err := f.db.QueryRow(t.Context(),
+			"SELECT value,(SELECT count(*) FROM bot.telegram_inbox),"+
+				"EXISTS(SELECT 1 FROM bot.order_cards WHERE owner='alice' AND card_key=$1 AND visible AND message_id>0) "+
+				"FROM bot.cursors WHERE name='telegram'",
+			orderID).Scan(&cursor, &pending, &visible)
+		return err == nil && cursor == want && pending == 0 && visible
+	})
 }

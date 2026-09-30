@@ -15,7 +15,7 @@ func readTierStatistics(ctx context.Context, tx pgx.Tx, eventID string) (statist
 	rows, err := tx.Query(ctx, `SELECT state,role,price,tier_index,skip_balance FROM core.pass_bookings
  WHERE event_id=$1 AND state IN ('assigned','paid','waitlist')`, eventID)
 	if err != nil {
-		return statistics{}, err
+		return statistics{}, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	usageBytes := 2
@@ -28,7 +28,7 @@ func readTierStatistics(ctx context.Context, tx pgx.Tx, eventID string) (statist
 			&booking.TierIndex,
 			&booking.SkipBalance,
 		); err != nil {
-			return statistics{}, err
+			return statistics{}, core.DatabaseOperationError(err)
 		}
 		usageBytes = nextUsageBytes(usageBytes, result, &booking)
 		// Each role map is a subset of this output map, so none can grow independently.
@@ -38,7 +38,7 @@ func readTierStatistics(ctx context.Context, tx pgx.Tx, eventID string) (statist
 		result.observe(&booking)
 	}
 	if err = rows.Err(); err != nil {
-		return statistics{}, err
+		return statistics{}, core.DatabaseOperationError(err)
 	}
 	return result, nil
 }

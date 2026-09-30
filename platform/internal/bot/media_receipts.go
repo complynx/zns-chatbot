@@ -25,6 +25,9 @@ func (b *Bot) addKnownReceipt(ctx context.Context, owner string, input *agent.In
 	result := &agent.ReceiptSummary{OrderID: latest.OrderID, SubmittedAt: latest.At,
 		SubmittedVersion: latest.Version, Origin: latest.Origin}
 	current, err := b.API.Order(ctx, owner, b.currentOrderEvent(), latest.OrderID)
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status == http.StatusNotFound {
 		input.MediaContext.LatestKnownReceipt = result
 		return nil

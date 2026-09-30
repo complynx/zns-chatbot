@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -136,7 +137,7 @@ func (r *knowledgeRenderer) navigation(ctx context.Context, scopes []knowledge.S
 	err := r.bot.DB.QueryRow(ctx, `SELECT content,update_id FROM bot.interactions WHERE owner=$1 AND kind=$2 ORDER BY id DESC LIMIT 1`, r.owner, knowledgeReply).
 		Scan(&raw, &updateID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if err == nil {
 		visible, visibleErr := r.bot.derivedReplyVisible(ctx, r.owner, updateID)
@@ -335,11 +336,11 @@ func (r *knowledgeRenderer) retire(ctx context.Context) error {
 		r.owner,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, key := range keys {
 		if !r.keys[key] {
@@ -357,29 +358,7 @@ func (r *knowledgeRenderer) retire(ctx context.Context) error {
 }
 
 func (b *Bot) reconcileKnowledgeViews(ctx context.Context) error {
-	rows, err := b.DB.Query(ctx, `SELECT owner,chat_id FROM bot.order_cards WHERE card_key='knowledge:main'`)
-	if err != nil {
-		return err
-	}
-	type view struct {
-		Owner string
-		Chat  int64
-	}
-	views, err := pgx.CollectRows(rows, pgx.RowToStructByPos[view])
-	if err != nil {
-		return err
-	}
-	for _, item := range views {
-		viewContext, authErr := b.API.NotificationContext(ctx, item.Owner, item.Chat)
-		if authErr != nil {
-			b.logger().WarnContext(ctx, "knowledge view identity pending")
-			continue
-		}
-		if err = b.RenderKnowledge(viewContext, item.Owner, item.Chat); err != nil {
-			b.logger().WarnContext(ctx, "knowledge view reconciliation pending")
-		}
-	}
-	return nil
+	return b.reconcileNamedCard(ctx, "knowledge:main", b.RenderKnowledge)
 }
 
 func (r *knowledgeRenderer) sourceCard(

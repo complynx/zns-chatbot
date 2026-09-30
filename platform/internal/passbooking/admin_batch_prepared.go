@@ -7,6 +7,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // RuntimeBatchState contains the immutable grounded input and its committed
@@ -46,7 +48,7 @@ func (s Service) ReadRuntimeBatch(ctx context.Context, actor string, c RuntimeBa
 	err := s.DB.QueryRow(ctx, `SELECT request_hash,plan,source_derivation FROM core.pass_admin_batches WHERE actor=$1 AND key_hash=$2`, actor, b.key).
 		Scan(&request, &b.plan, &b.Source)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	raw, err := json.Marshal(c)
 	if err != nil {
@@ -90,7 +92,7 @@ func (s Service) PrepareRuntimeBatchInTx(
 		return b, true, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, false, err
+		return nil, false, core.DatabaseOperationError(err)
 	}
 	b.plan, err = groundRuntimeBatch(ctx, tx, actor, c)
 	return b, false, err
@@ -110,13 +112,18 @@ func (b *RuntimeBatchState) Persist(ctx context.Context, tx pgx.Tx, c RuntimeBat
 		b.plan,
 		source,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func (b *RuntimeBatchState) LockRuntimeBatchInTx(ctx context.Context, tx pgx.Tx) error {
 	var source json.RawMessage
+	var plan []byte
 	if err := tx.QueryRow(ctx, `SELECT plan,source_derivation FROM core.pass_admin_batches WHERE actor=$1 AND key_hash=$2 FOR UPDATE`, b.actor, b.key).
-		Scan(&b.plan, &source); err != nil {
+		Scan(&plan, &source); err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	b.plan = runtimeBatchPlan{}
+	if err := json.Unmarshal(plan, &b.plan); err != nil {
 		return err
 	}
 	if !bytes.Equal(source, b.Source) {
@@ -216,5 +223,5 @@ func (b *RuntimeBatchState) SaveOutcome(ctx context.Context, tx pgx.Tx, index in
 		b.key,
 		b.plan,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }

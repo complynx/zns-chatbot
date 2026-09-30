@@ -2,12 +2,15 @@ package agenthost
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
@@ -67,9 +70,38 @@ func (s ScriptStore) registrationAdmissions(
  WHERE ($2='' OR request->>'id'=$2) ORDER BY request->>'id',created_at ASC) recent
  ORDER BY created_at DESC, request->>'id' LIMIT 20`, owner, exactID)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationContextError(ctx, err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[registrationAdmission])
+	return collectRegistrationAdmissions(ctx, rows)
+}
+
+func collectRegistrationAdmissions(ctx context.Context, rows pgx.Rows) ([]registrationAdmission, error) {
+	type admissionRow struct {
+		Request   []byte
+		Source    []byte
+		CreatedAt time.Time
+		Retired   bool
+	}
+	stored, err := pgx.CollectRows(rows, pgx.RowToStructByPos[admissionRow])
+	if err != nil {
+		return nil, core.DatabaseOperationContextError(ctx, err)
+	}
+	admitted := make([]registrationAdmission, 0, len(stored))
+	for _, row := range stored {
+		item := registrationAdmission{CreatedAt: row.CreatedAt, Retired: row.Retired}
+		if row.Request != nil {
+			if err = json.Unmarshal(row.Request, &item.Request); err != nil {
+				return nil, err
+			}
+		}
+		if row.Source != nil {
+			if err = json.Unmarshal(row.Source, &item.Source); err != nil {
+				return nil, err
+			}
+		}
+		admitted = append(admitted, item)
+	}
+	return admitted, nil
 }
 
 func (s ScriptStore) ReadRegistrationOperations(
@@ -80,6 +112,53 @@ func (s ScriptStore) ReadRegistrationOperations(
 	if err != nil {
 		return nil, err
 	}
+	return projectRegistrationAdmissions(admitted), nil
+}
+
+// ReadRegistrationOperationsForUpdate selects only original admissions from one
+// owner/update, in run/call order. It grants no authority to execute them.
+func (s ScriptStore) ReadRegistrationOperationsForUpdate(
+	ctx context.Context, owner string, update int64,
+) ([]interaction.RegistrationOperation, error) {
+	if update <= 0 {
+		return nil, errors.New("invalid registration operation update")
+	}
+	const limit = agent.MaxScriptRuns * MaxScriptCalls
+	rows, err := s.DB.Query(ctx, `SELECT call.value->'pass',call.value->'source',i.created_at,
+ COALESCE((run.value->>'pass_redacted')::boolean,false)
+ OR COALESCE((run.value->>'history_redacted')::boolean,false)
+ OR COALESCE((run.value->>'memory_redacted')::boolean,false)
+ FROM (SELECT content,created_at FROM bot.interactions
+ WHERE owner=$1 AND update_id=$2 AND kind='script_runs') i
+ CROSS JOIN LATERAL jsonb_array_elements(i.content) WITH ORDINALITY run(value,position)
+ CROSS JOIN LATERAL jsonb_array_elements(run.value->'calls') WITH ORDINALITY call(value,position)
+ WHERE call.value->'pass' IS NOT NULL
+ ORDER BY run.position,call.position LIMIT $3`, owner, update, limit+1)
+	if err != nil {
+		return nil, core.DatabaseOperationContextError(ctx, err)
+	}
+	admitted, err := collectRegistrationAdmissions(ctx, rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(admitted) > limit {
+		return nil, errors.New("registration operation admission limit exceeded")
+	}
+	seen := make(map[string]bool, len(admitted))
+	for _, admission := range admitted {
+		id := admission.Request.ID
+		if id == "" {
+			continue
+		}
+		if seen[id] {
+			return nil, errors.New("ambiguous registration operation admission")
+		}
+		seen[id] = true
+	}
+	return projectRegistrationAdmissions(admitted), nil
+}
+
+func projectRegistrationAdmissions(admitted []registrationAdmission) []interaction.RegistrationOperation {
 	result := make([]interaction.RegistrationOperation, 0, len(admitted))
 	for _, row := range admitted {
 		request := row.Request
@@ -100,7 +179,7 @@ func (s ScriptStore) ReadRegistrationOperations(
 		}
 		result = append(result, item)
 	}
-	return result, nil
+	return result
 }
 
 // ReadRegistrationOperation returns only an executable original admission.

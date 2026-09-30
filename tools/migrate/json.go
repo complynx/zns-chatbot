@@ -8,12 +8,16 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 	"unicode/utf8"
 )
 
 func validJSON(data []byte) error {
 	if !utf8.Valid(data) {
 		return errors.New("invalid_utf8")
+	}
+	if !validUnicodeEscapes(data) {
+		return errors.New("invalid_unicode_escape")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
@@ -171,4 +175,45 @@ func objectFields(data []byte, allowed string) (map[string]json.RawMessage, erro
 		}
 	}
 	return fields, nil
+}
+
+// encoding/json replaces unpaired UTF-16 surrogates with U+FFFD. Validate
+// escapes before decoding, while leaving JSON structure to the existing parser.
+func validUnicodeEscapes(data []byte) bool {
+	for i := 0; i < len(data); i++ {
+		if data[i] != '\\' {
+			continue
+		}
+		if i+1 >= len(data) {
+			return false
+		}
+		if data[i+1] != 'u' {
+			i++
+			continue
+		}
+		value, ok := unicodeEscape(data[i:])
+		if !ok {
+			return false
+		}
+		i += unicodeEscapeBytes - 1
+		if !utf16.IsSurrogate(value) {
+			continue
+		}
+		next, paired := unicodeEscape(data[i+1:])
+		if !paired || utf16.DecodeRune(value, next) == utf8.RuneError {
+			return false
+		}
+		i += unicodeEscapeBytes
+	}
+	return true
+}
+
+const unicodeEscapeBytes = 6
+
+func unicodeEscape(data []byte) (rune, bool) {
+	if len(data) < unicodeEscapeBytes || data[0] != '\\' || data[1] != 'u' {
+		return 0, false
+	}
+	value, err := strconv.ParseUint(string(data[2:unicodeEscapeBytes]), 16, 16)
+	return rune(value), err == nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
@@ -42,7 +43,7 @@ func (s Service) ArchiveDerived(ctx context.Context, actor string, input Derived
  WHERE owner=$1 AND source_key=$2 AND text='[sensitive text omitted]')`, actor,
 		"tg-user-"+strconv.FormatInt(input.ReplyToUpdateID, 10)).Scan(&sensitive)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	text := input.Text
 	if sensitive {

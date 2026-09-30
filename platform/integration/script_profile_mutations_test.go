@@ -20,7 +20,7 @@ func TestScriptProfileSemanticWritesLanguagesPrivacyAndReplay(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			t.Parallel()
 			f := setup(t)
-			handle(t, f.b, message(9800, 101, "/profile"))
+			handleVisible(t, f.b, message(9800, 101, "/profile"))
 			f.b.Scripts = scopeVM{}
 			code := `const name=tools.profile.set({field:"legal_name",value:"Private Canary Name"});
 const passport=tools.profile.set({field:"passport",value:"Private Passport Canary"});
@@ -73,7 +73,7 @@ return {name,passport,role,language,privateEcho:current.passport};`
 			)
 			assert.Equal(t, 3, count)
 			// A later manual action sees the semantic write and the selected locale.
-			handle(t, f.b, message(9802, 101, "/profile"))
+			handleVisible(t, f.b, message(9802, 101, "/profile"))
 			history, err := f.b.API.PassProfileHistoryPage(t.Context(), "alice", 0)
 			require.NoError(t, err)
 			require.Len(t, history.Items, 3)

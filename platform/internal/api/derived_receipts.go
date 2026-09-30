@@ -23,6 +23,7 @@ func derivedReceiptRoutes(
 	signer identity.Signer,
 	logger *slog.Logger,
 ) {
+	derivedPaymentReceiptRoute(mux, service, authorizer, signer, logger)
 	mux.Handle(
 		"POST /internal/derived/order-actions/receipt",
 		authenticatedDerivation(authorizer, signer, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

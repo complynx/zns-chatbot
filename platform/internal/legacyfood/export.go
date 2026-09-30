@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 type Export struct {
@@ -33,7 +35,7 @@ type exportItem struct {
 func (s Service) Export(ctx context.Context, actor, event string) (Export, error) {
 	tx, err := s.DB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return Export{}, err
+		return Export{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	if err = allowed(ctx, tx, actor); err != nil {
@@ -54,7 +56,7 @@ func (s Service) Export(ctx context.Context, actor, event string) (Export, error
  FROM core.food_orders o JOIN core.users u ON u.id=o.owner LEFT JOIN core.pass_profiles p ON p.owner=o.owner
  WHERE o.event_id=$1 ORDER BY o.created_at,o.id LIMIT 10001`, event)
 	if err != nil {
-		return Export{}, err
+		return Export{}, core.DatabaseOperationError(err)
 	}
 	identities, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (exportIdentity, error) {
 		var id exportIdentity
@@ -62,7 +64,7 @@ func (s Service) Export(ctx context.Context, actor, event string) (Export, error
 		return id, scanErr
 	})
 	if err != nil {
-		return Export{}, err
+		return Export{}, core.DatabaseOperationError(err)
 	}
 	if len(identities) > exportLimit {
 		return Export{}, problem("food_export_limit")
@@ -264,5 +266,5 @@ func aggregatePayment(ctx context.Context, tx pgx.Tx, payment Payment) (bool, er
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.legacy_food_import_references
  WHERE source_key=$1 AND source_kind='food' AND source_record ? 'payment_confirmed_date')`,
 		payment.LegacySourceKey).Scan(&present)
-	return present, err
+	return present, core.DatabaseOperationError(err)
 }

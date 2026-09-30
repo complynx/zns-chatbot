@@ -51,6 +51,9 @@ func (b *Bot) handleAdminUtility(ctx context.Context, in incoming, u telegram.Up
 	if err == nil {
 		text, err = b.adminUtilityCommand(ctx, in, u, messages)
 	}
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < 500 {
 		text = messages.text(i18n.AdminUtilityFailed, nil)
 		err = nil

@@ -12,6 +12,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -134,7 +135,7 @@ func (b *Bot) deliverMassageCard(ctx context.Context, owner string, payload tele
 	var previous string
 	if err = b.DB.QueryRow(ctx, "SELECT message_id,view_hash FROM bot.massage_views WHERE owner=$1", owner).
 		Scan(&payload.MessageID, &previous); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if payload.MessageID > 0 && previous == hash {
 		return nil
@@ -186,7 +187,7 @@ func (b *Bot) massageButtons(
 		_, err = b.DB.Exec(ctx, `INSERT INTO bot.massage_buttons(owner,token,revision,action) VALUES($1,$2,$3,$4)
 		ON CONFLICT(owner,token) DO NOTHING`, owner, token, revision, choice.action)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, core.DatabaseOperationError(err)
 		}
 		tokens = append(tokens, token)
 		rows = append(rows, []telegram.Button{{Text: choice.label, Data: massagePrefix + token}})

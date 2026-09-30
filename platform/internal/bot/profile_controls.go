@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -94,7 +95,7 @@ func (b *Bot) profileButtons(
 			token,
 			command,
 		); err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		label, err := i18n.Translate(language, choice.id, nil)
 		if err != nil {
@@ -104,7 +105,7 @@ func (b *Bot) profileButtons(
 		tokens = append(tokens, token)
 	}
 	_, err := b.DB.Exec(ctx, `DELETE FROM bot.profile_buttons WHERE owner=$1 AND NOT(token=ANY($2))`, owner, tokens)
-	return rows, err
+	return rows, core.DatabaseOperationError(err)
 }
 
 const profilePassportField = "passport"

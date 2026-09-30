@@ -3,8 +3,12 @@ package bot
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const mediaModelReplyKind = "media_model_reply"
@@ -44,15 +48,24 @@ func (b *Bot) storeMediaModelReply(
 }
 
 func (b *Bot) passMediaTextVisible(ctx context.Context, owner, id string) (bool, error) {
-	var planUpdate int64
-	err := b.DB.QueryRow(ctx, `SELECT (r.content#>>'{}')::bigint FROM bot.media_intake m
+	// Read the stored reference as text and parse it here, so an incompatible
+	// persisted value is not reported as a database failure.
+	var reference *string
+	err := b.DB.QueryRow(ctx, `SELECT r.content#>>'{}' FROM bot.media_intake m
  JOIN bot.interactions r ON r.owner=m.owner AND r.update_id=m.update_id AND r.kind=$3
- WHERE m.owner=$1 AND m.id=$2`, owner, id, mediaModelReplyKind).Scan(&planUpdate)
+ WHERE m.owner=$1 AND m.id=$2`, owner, id, mediaModelReplyKind).Scan(&reference)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
+	}
+	var planUpdate int64
+	if reference != nil {
+		planUpdate, err = strconv.ParseInt(strings.TrimSpace(*reference), 10, 64)
+	}
+	if reference == nil || err != nil {
+		return false, errors.New("invalid media reply plan reference")
 	}
 	return b.planAuthorization().ReplyVisible(ctx, owner, planUpdate)
 }

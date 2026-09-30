@@ -51,6 +51,9 @@ func (b *Bot) handleCredits(ctx context.Context, in incoming, u telegram.Update)
 	}
 	messages := &orderMessages{language: prefs.Language}
 	text, err := b.creditsCommand(ctx, in, u, messages)
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < 500 {
 		text = messages.text(i18n.BillingDenied, nil)
 		err = nil

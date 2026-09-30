@@ -10,7 +10,7 @@ x-environment: &environment
   ZNS_CONFIG_FILE: /etc/zns/product.yaml
   ZNS_DATABASE__URL: postgres://zns_app:sandbox-product-only@postgres/zns?sslmode=disable
   ZNS_AUTH__SIGNING_KEY: sandbox-product-only-not-for-production-123456789
-  TELEGRAM_TOKEN: sandbox
+  TELEGRAM_TOKEN: "999:sandbox"
 x-decoder: &decoder
   network_mode: none
   read_only: true
@@ -126,6 +126,7 @@ services:
     volumes: ["media-ipc:/run/media-ipc:ro"]
     environment:
       MEDIA_WORKER_SECRET: sandbox-product-media-only
+      DATABASE_URL: postgres://zns_meter:sandbox-meter-only@postgres/zns?sslmode=disable
       OPENAI_API_KEY: sandbox-only-synthetic-asr
       OPENAI_TRANSCRIPTION_MODEL: gpt-transcribe
       OPENAI_TRANSCRIPTION_URL: http://fake:8080/lab/asr

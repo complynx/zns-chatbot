@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 func (s *snapshot) adminPayments(ctx context.Context, tx pgx.Tx, actor string, c AdminAssignment,
@@ -31,7 +33,7 @@ func (s *snapshot) adminPayments(ctx context.Context, tx pgx.Tx, actor string, c
 			attachment,
 		)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	return nil
@@ -60,7 +62,7 @@ func (s *snapshot) freePayment(
 		actor,
 	)
 	if err != nil {
-		return "", err
+		return "", core.DatabaseOperationError(err)
 	}
 	_, err = tx.Exec(
 		ctx,
@@ -69,5 +71,5 @@ func (s *snapshot) freePayment(
 		b.Owner,
 		b.AssignedAt,
 	)
-	return id, err
+	return id, core.DatabaseOperationError(err)
 }

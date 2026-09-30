@@ -26,7 +26,7 @@ func TestActiveEventCallbacksReplayAndNewRequests(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	secondOrderEvent(t, f)
-	handle(t, f.b, message(1, 101, "/orders"))
+	handleVisible(t, f.b, message(1, 101, "/orders"))
 	oldCreate := orderClick(t, f, 101, 2, "Новый заказ")
 	f.b.OrderEventID = "second-event"
 	handle(t, f.b, oldCreate)
@@ -37,7 +37,7 @@ func TestActiveEventCallbacksReplayAndNewRequests(t *testing.T) {
 	newer, err := f.b.API.Orders(t.Context(), "alice", "second-event")
 	require.NoError(t, err)
 	require.Empty(t, newer)
-	handle(t, f.b, message(3, 101, "/orders"))
+	handleVisible(t, f.b, message(3, 101, "/orders"))
 	handle(t, f.b, orderClick(t, f, 101, 4, "Новый заказ"))
 	newer, err = f.b.API.Orders(t.Context(), "alice", "second-event")
 	require.NoError(t, err)
@@ -139,7 +139,7 @@ func TestActiveEventOpaqueReceiptChoiceKeepsOriginalOrder(t *testing.T) {
 		View:        agent.MediaView,
 		MediaAction: &agent.MediaProposal{MediaID: "tg-media-100", Intent: "receipt", Amount: "35", Currency: "BYN"},
 	}
-	handle(t, f.b, photo)
+	handleVisible(t, f.b, photo)
 	choice := intakeChoice(t, f, 101, first.ID)
 	f.b.OrderEventID = "second-event"
 	handle(t, f.b, choice)

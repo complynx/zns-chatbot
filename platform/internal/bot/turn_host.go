@@ -6,6 +6,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
@@ -129,11 +130,14 @@ func (s turnLeaves) Commands(
 func (s turnLeaves) MediaSelection(cached *interaction.SavedPlan, input, request agent.Input) {
 	cacheMediaSelection(cached, s.input, input, request)
 }
+
+// Failure propagates database failures so the durable inbox row survives and
+// Run stops, instead of saving an "agent unavailable" reply.
 func (s turnLeaves) Failure(err error) (i18n.ID, bool) {
 	return paidFailureNotice(
 			err,
 		), errors.Is(err, errPassPlanTerminal) || errors.Is(err, interaction.ErrOrderReadUnavailable) ||
-			errors.Is(err, errPassAuthorityUnavailable)
+			errors.Is(err, errPassAuthorityUnavailable) || core.IsDatabaseFailure(err)
 }
 
 type turnExposure struct {

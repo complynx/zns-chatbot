@@ -14,6 +14,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/derivedmutation"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
@@ -45,24 +46,11 @@ func (b *Bot) preparePassTool(
 		if err := decodeScriptArguments(call.Arguments, &args); err != nil {
 			return record, err
 		}
-		request, originalSource, err := b.loadPassOperation(ctx, owner, args.ID)
+		return b.preparePassResume(ctx, owner, args.ID, record)
+	case scriptPassExport:
+		request, originalSource, err := b.preparePassExport(ctx, owner, updateID, call)
 		record.Pass, record.Source = request, originalSource
 		return record, err
-	case scriptPassExport:
-		if err := decodeScriptArguments(call.Arguments, &struct{}{}); err != nil {
-			return record, err
-		}
-		source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
-		if !ok || source.owner != owner {
-			return record, errors.New("pass delivery source unavailable")
-		}
-		record.Pass = &agenthost.ScriptPassRequest{
-			ID:           rand.Text(),
-			Name:         call.Name,
-			ExportUpdate: updateID,
-			Chat:         source.in.chat,
-		}
-		return record, nil
 	case scriptPassBatchAssign, scriptPassBatchCancel, scriptRegistrationBatchUncouple:
 		request, err := preparePassBatch(call, input)
 		record.Pass = request
@@ -115,6 +103,31 @@ func (b *Bot) preparePassTool(
 	}
 	record.Pass = request
 	return record, nil
+}
+
+func (b *Bot) preparePassExport(
+	ctx context.Context,
+	owner string,
+	updateID int64,
+	call scriptclient.ToolCall,
+) (*agenthost.ScriptPassRequest, *readsource.Derivation, error) {
+	if err := decodeScriptArguments(call.Arguments, &struct{}{}); err != nil {
+		return nil, nil, err
+	}
+	source, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
+	if !ok || source.owner != owner {
+		return nil, nil, errors.New("pass delivery source unavailable")
+	}
+	previous, originalSource, err := b.previousPassExport(ctx, owner, updateID, source.in.chat)
+	if err != nil || previous != nil {
+		return previous, originalSource, err
+	}
+	return &agenthost.ScriptPassRequest{
+		ID:           rand.Text(),
+		Name:         call.Name,
+		ExportUpdate: updateID,
+		Chat:         source.in.chat,
+	}, nil, nil
 }
 
 func (b *Bot) authorizePassRequest(ctx context.Context, owner string, request *agenthost.ScriptPassRequest) error {
@@ -203,4 +216,36 @@ func (b *Bot) preparePassShow(
 		ExportUpdate: updateID,
 		Chat:         source.in.chat,
 	}, nil
+}
+
+// Export has no arguments. Its immutable identity is owner/update/chat/family;
+// repeats retain the first admission while execution rechecks current authority.
+func (b *Bot) previousPassExport(
+	ctx context.Context,
+	owner string,
+	updateID, chat int64,
+) (*agenthost.ScriptPassRequest, *readsource.Derivation, error) {
+	records, err := b.scriptHost().Store.LoadAuthorized(ctx, owner, updateID)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, record := range records {
+		for _, call := range record.Calls {
+			request := call.Pass
+			if request == nil || request.Name != scriptPassExport {
+				continue
+			}
+			if request.ExportUpdate != updateID || request.Chat != chat || request.ID == "" || request.Command != nil ||
+				request.Assignment != nil ||
+				request.Batch != nil ||
+				request.Menu != nil ||
+				call.Source == nil ||
+				!call.Source.Valid() {
+				return nil, nil, errors.New("incompatible pass export admission")
+			}
+			source := call.Source.Clone()
+			return request, &source, nil
+		}
+	}
+	return nil, nil, nil
 }

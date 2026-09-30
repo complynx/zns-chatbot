@@ -50,7 +50,7 @@ func (b *Bot) handleProfile(ctx context.Context, in incoming, update telegram.Up
 		return err
 	}
 	if update.Callback != nil {
-		b.acknowledge(ctx, update.Callback.ID)
+		return b.acknowledge(ctx, update.Callback.ID)
 	}
 	return nil
 }
@@ -135,6 +135,9 @@ func (b *Bot) profileOutcome(ctx context.Context, in incoming, id int64, command
 	noticeID := i18n.ProfileSaved
 	switch {
 	case executionErr != nil:
+		if core.IsDatabaseFailure(executionErr) {
+			return "", core.ErrDatabase
+		}
 		problem, ok := errors.AsType[*core.ProblemError](executionErr)
 		if !ok || problem.Status >= http.StatusInternalServerError {
 			return "", executionErr
@@ -186,7 +189,7 @@ func (b *Bot) RenderProfile(ctx context.Context, owner string, chat int64) error
 	err = b.DB.QueryRow(ctx, `SELECT content,kind,native_markdown,update_id FROM bot.interactions WHERE owner=$1 AND kind IN ('profile_reply','profile_answer') ORDER BY id DESC LIMIT 1`, owner).
 		Scan(&content, &kind, &native, &updateID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if err == nil {
 		visible, visibleErr := b.derivedReplyVisible(ctx, owner, updateID)

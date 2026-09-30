@@ -70,7 +70,7 @@ func scan(row pgx.Row) (Profile, error) {
 		&p.ExpiresAt,
 		&p.PassportAfter,
 	)
-	return p, err
+	return p, core.DatabaseOperationError(err)
 }
 
 // Get returns only the authenticated owner's profile. Expired pending input remains
@@ -83,7 +83,7 @@ func (s Service) Get(ctx context.Context, actor string) (Profile, error) {
 		if err == nil && !exists {
 			return Profile{}, problem(http.StatusForbidden, "forbidden")
 		}
-		return Profile{Owner: actor}, err
+		return Profile{Owner: actor}, core.DatabaseOperationError(err)
 	}
 	return p, err
 }
@@ -98,7 +98,7 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Profile,
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Profile{}, err
+		return Profile{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // Cleanup after commit or an operation error.
 	prepared, err := s.PrepareInTx(ctx, tx, actor, c)
@@ -109,7 +109,7 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Profile,
 	if err != nil {
 		return Profile{}, err
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 type PreparedCommand struct {
@@ -133,11 +133,11 @@ func (s Service) PrepareInTx(ctx context.Context, tx pgx.Tx, actor string, c Com
 		return nil, problem(http.StatusForbidden, "forbidden")
 	}
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO core.pass_profiles(owner) VALUES($1) ON CONFLICT DO NOTHING`, actor)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	p, err := scan(tx.QueryRow(ctx, `SELECT `+columns+` FROM core.pass_profiles WHERE owner=$1 FOR UPDATE`, actor))
 	if err != nil {
@@ -167,7 +167,7 @@ func (s Service) PrepareInTx(ctx context.Context, tx pgx.Tx, actor string, c Com
 		return prepared, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	return prepared, nil
 }
@@ -184,7 +184,7 @@ func (prepared *PreparedCommand) Apply(ctx context.Context) (Profile, error) {
 	}
 	var now time.Time
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return Profile{}, err
+		return Profile{}, core.DatabaseOperationError(err)
 	}
 	if err := apply(&p, c, now); err != nil {
 		return Profile{}, err
@@ -203,7 +203,7 @@ func (prepared *PreparedCommand) Apply(ctx context.Context) (Profile, error) {
 		p.PassportAfter,
 	)
 	if err != nil {
-		return Profile{}, err
+		return Profile{}, core.DatabaseOperationError(err)
 	}
 	_, err = tx.Exec(
 		ctx,
@@ -213,7 +213,7 @@ func (prepared *PreparedCommand) Apply(ctx context.Context) (Profile, error) {
 		prepared.requestHash,
 	)
 	if err != nil {
-		return Profile{}, err
+		return Profile{}, core.DatabaseOperationError(err)
 	}
 	if err = recordProfileChanges(ctx, tx, actor, p.Version, c); err != nil {
 		return Profile{}, err

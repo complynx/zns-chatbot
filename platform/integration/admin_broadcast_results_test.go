@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
+	deliverypolicy "github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
 func TestAdminBroadcastResultsPreserveDeliveryContent(t *testing.T) {
@@ -18,7 +19,7 @@ func TestAdminBroadcastResultsPreserveDeliveryContent(t *testing.T) {
 		t.Run(content.Text, func(t *testing.T) {
 			t.Parallel()
 			db, _ := bookingFixture(t)
-			service := adminmessage.Service{DB: db}
+			service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 			preview, err := service.Preview(t.Context(), "bob", "results", adminmessage.Request{
 				Destinations: []adminmessage.Destination{{Chat: "101"}}, Content: content,
 			})
@@ -41,6 +42,12 @@ func TestAdminBroadcastResultsPreserveDeliveryContent(t *testing.T) {
 			delivery, found, err := service.Claim(t.Context())
 			require.NoError(t, err)
 			require.True(t, found)
+			gate, err := service.BeginDelivery(
+				t.Context(),
+				deliverypolicy.Attempt{ID: delivery.ID, Generation: delivery.Attempt},
+			)
+			require.NoError(t, err)
+			require.True(t, gate.Ready)
 			require.NoError(t, service.Complete(t.Context(), delivery.ID, delivery.Attempt, 88, "", false))
 			results, err := service.Results(t.Context(), "bob", preview.ID)
 			require.NoError(t, err)
@@ -63,7 +70,7 @@ func TestAdminBroadcastResultsUsePersonalizedSnapshot(t *testing.T) {
 		`INSERT INTO core.admin_broadcast_profiles(owner,fields) VALUES('alice','{"first_name":"Frozen","informal_name":"Frozen"}') ON CONFLICT(owner) DO UPDATE SET fields=EXCLUDED.fields,overrides='{}'`,
 	)
 	require.NoError(t, err)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	preview, err := service.PreviewCommand(
 		t.Context(),
 		"bob",

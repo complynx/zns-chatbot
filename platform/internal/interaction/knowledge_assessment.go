@@ -54,7 +54,8 @@ func (c KnowledgeCoordinator) assessmentVerdict(
 			Reason: KnowledgeDeferredUnconfigured,
 		}, nil
 	}
-	attempt, err := c.Assessor.AssessKnowledge(ctx, owner, p)
+	assessmentCtx := agent.WithRequestScope(ctx, agent.RequestScope{Owner: owner, UpdateID: updateID})
+	attempt, err := c.Assessor.AssessKnowledge(assessmentCtx, owner, p)
 	if ctx.Err() != nil {
 		return verdict, KnowledgeAssessmentState{}, errors.Join(ctx.Err(), err)
 	}

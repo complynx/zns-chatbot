@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 
@@ -63,14 +64,14 @@ func (s Service) liveNotification(
 		notice.Owner,
 	)
 	if err != nil {
-		return notice, err
+		return notice, core.DatabaseOperationError(err)
 	}
 	b, err := pgx.CollectOneRow(rows, pgx.RowToStructByPos[Booking])
 	if errors.Is(err, pgx.ErrNoRows) {
 		return notice, nil
 	}
 	if err != nil {
-		return notice, err
+		return notice, core.DatabaseOperationError(err)
 	}
 	notice.Version, notice.State, notice.Price, notice.Partner = b.Version, b.State, b.Price, b.Partner
 	notice.Attempt = old.Attempt
@@ -82,7 +83,7 @@ func (s Service) liveNotification(
  WHERE event_id=$1 AND owner=$2 AND kind=$4 AND id>$3)`, notice.Event, notice.Owner, notice.ID, notice.Kind).
 			Scan(&notice.Current)
 		if err != nil {
-			return notice, err
+			return notice, core.DatabaseOperationError(err)
 		}
 	}
 	if old.Attempt != "" {
@@ -96,7 +97,7 @@ func (s Service) liveNotification(
 			return notice, nil
 		}
 		if err != nil {
-			return notice, err
+			return notice, core.DatabaseOperationError(err)
 		}
 		notice.Current = paymentNoticeCurrent(notice.Kind, b.State, decision)
 	}
@@ -119,14 +120,14 @@ func (s Service) livePaymentRequest(
  AND EXISTS(SELECT 1 FROM core.pass_payment_admins a WHERE a.event_id=b.event_id AND a.owner=$3)
  ORDER BY u.telegram_id LIMIT 1`, notice.Event, attempt, notice.Recipient)
 	if err != nil {
-		return notice, err
+		return notice, core.DatabaseOperationError(err)
 	}
 	b, err := pgx.CollectOneRow(rows, pgx.RowToStructByPos[Booking])
 	if errors.Is(err, pgx.ErrNoRows) {
 		return notice, nil
 	}
 	if err != nil {
-		return notice, err
+		return notice, core.DatabaseOperationError(err)
 	}
 	notice.Owner, notice.Version, notice.State, notice.Price, notice.Partner = b.Owner, b.Version, b.State, b.Price, b.Partner
 	notice.Current = true
@@ -165,7 +166,7 @@ func paymentNoticeCurrent(kind, state, decision string) bool {
 	case "payment_accepted":
 		return state == paid && decision == paymentAccepted
 	case "payment_rejected":
-		return state == assigned && decision == "rejected"
+		return state == assigned && decision == paymentRejected
 	default:
 		return false
 	}
@@ -196,7 +197,7 @@ func enqueuePassNotice(
 		return nil
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return collectNotificationRegistration(ctx, tx, botID, row.ID, row.DeliveryChat, pending)
 }

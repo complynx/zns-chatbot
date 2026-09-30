@@ -7,6 +7,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // SaveLegacyMenu binds the old versionless wire request once. The current editor
@@ -36,7 +38,7 @@ func (s Service) SaveLegacyMenu(ctx context.Context, actor, event, key string, m
 func (s Service) bindLegacyMenu(ctx context.Context, actor, event, key string, meals MealSelection) (Command, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Command{}, err
+		return Command{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	if err = allowed(ctx, tx, actor); err != nil {
@@ -52,16 +54,20 @@ func (s Service) bindLegacyMenu(ctx context.Context, actor, event, key string, m
 	requestHash := digest(raw)
 	var savedHash string
 	var command Command
+	var saved []byte
 	err = tx.QueryRow(ctx, `SELECT request_hash,command FROM core.food_legacy_menu_bindings WHERE actor=$1 AND event_id=$2 AND key_hash=$3`, actor, event, key).
-		Scan(&savedHash, &command)
+		Scan(&savedHash, &saved)
 	if err == nil {
+		if err = decodeStoredJSON(saved, &command); err != nil {
+			return Command{}, err
+		}
 		if savedHash != requestHash {
 			return Command{}, problem("idempotency_conflict")
 		}
 		return command, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return Command{}, err
+		return Command{}, core.DatabaseOperationError(err)
 	}
 	order, err := loadOrder(ctx, tx, event, "", actor)
 	if err != nil && !noOrder(err) {
@@ -85,10 +91,10 @@ func (s Service) bindLegacyMenu(ctx context.Context, actor, event, key string, m
 		command,
 	)
 	if err != nil {
-		return Command{}, err
+		return Command{}, core.DatabaseOperationError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return Command{}, err
+		return Command{}, core.DatabaseOperationError(err)
 	}
 	return command, nil
 }

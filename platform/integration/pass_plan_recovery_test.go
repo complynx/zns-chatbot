@@ -6,11 +6,15 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
-	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 )
 
 const latePlanSecret = "late private registration canary"
@@ -141,6 +145,7 @@ func TestPassPlanDeliveryRetryAndRender(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			f := latePlanFixture(t)
+			f.b.Delivery.Fallback = time.Second
 			calls := latePlanModel(
 				t,
 				f,
@@ -149,7 +154,11 @@ func TestPassPlanDeliveryRetryAndRender(t *testing.T) {
 			)
 			post(t, f.fake.URL+"/lab/fault", map[string]string{"mode": "transient"})
 			update := message(46993, 101, "Read my private registration")
-			require.Error(t, f.b.Handle(t.Context(), update))
+			require.NoError(t, f.b.Handle(t.Context(), update))
+			failed := assertBotRateLimited(t, f)
+			require.Equal(t, "language", failed.Reference.Family,
+				"the script language effect is queued before its private workflow reply")
+			require.Empty(t, chatMessages(t, f, 101))
 			require.Equal(t, 2, *calls)
 			switch scenario {
 			case "outage":
@@ -160,9 +169,23 @@ func TestPassPlanDeliveryRetryAndRender(t *testing.T) {
 				require.ErrorContains(t, f.b.Handle(t.Context(), update), "registration authority unavailable")
 				require.Positive(t, transport.hits.Load(), "authority outage must be injected")
 				transport.fail.Store(false)
-				handle(t, f.b, update)
+				waitBotRetryDeadline(t, f, failed)
+				handleVisible(t, f.b, update)
 				require.Contains(t, workflowCard(t, f).Text, latePlanSecret)
 			case "missing_authority":
+				privateRef := delivery.Reference{Owner: delivery.Bot}
+				require.NoError(t, f.db.QueryRow(t.Context(), `SELECT operation_key,effect_key FROM bot.delivery_intents
+ WHERE owner='alice' AND reference->>'family'='workflow' AND (reference->>'update')::bigint=$1`, update.ID).
+					Scan(&privateRef.Key, &privateRef.Effect))
+				privateBefore, privateErr := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, privateRef, false)
+				require.NoError(t, privateErr)
+				require.Equal(t, delivery.Deferred, privateBefore.State)
+				require.Zero(
+					t,
+					privateBefore.Attempt,
+					"the private reply remains behind the rate-limited language card",
+				)
+				require.NotNil(t, privateBefore.Reference.Source)
 				_, err := f.db.Exec(
 					t.Context(),
 					`UPDATE interaction.saved_turns SET payload=payload-'pass_authority' WHERE owner='alice' AND update_id=46993`,
@@ -171,15 +194,47 @@ func TestPassPlanDeliveryRetryAndRender(t *testing.T) {
 				for range 2 {
 					require.ErrorContains(t, f.b.Handle(t.Context(), update), "invalid saved turn")
 				}
-				require.NoError(t, f.b.Render(t.Context(), "alice", 101))
+				waitBotRetryDeadline(t, f, failed)
+				// An explicit render fails closed instead of exposing or replanning the turn.
+				require.ErrorIs(t, f.b.Render(t.Context(), "alice", 101), interaction.ErrInvalidSavedTurn)
+				pumpBotDeliveries(t, f.b)
+				privateAfter, privateErr := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, privateRef, false)
+				require.NoError(t, privateErr)
+				require.Equal(t, delivery.Cancelled, privateAfter.State)
+				require.Equal(
+					t,
+					privateBefore.Attempt,
+					privateAfter.Attempt,
+					"invalid provenance prevents any private wire attempt",
+				)
+				require.Zero(t, privateAfter.MessageID)
+				require.Len(t, chatMessages(t, f, 101), 1, "only the independent language card is sent")
 				cards, err := json.Marshal(chatMessages(t, f, 101))
 				require.NoError(t, err)
 				require.NotContains(t, string(cards), latePlanSecret)
 			default:
 				removeArchivedBooking(t, f)
 				require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
+				waitBotRetryDeadline(t, f, failed)
 				require.NoError(t, f.b.Render(t.Context(), "alice", 101))
+				pumpBotDeliveries(t, f.b)
 				require.NotContains(t, workflowCard(t, f).Text, latePlanSecret)
+			}
+			receipt, readErr := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, failed.QueueReference(), false)
+			require.NoError(t, readErr)
+			require.Equal(t, delivery.Succeeded, receipt.State)
+			require.EqualValues(t, 2, receipt.Attempt)
+			if scenario == "revoked" {
+				notice, noticeErr := i18n.Translate("en", i18n.AgentSourceUnavailable, nil)
+				require.NoError(t, noticeErr)
+				require.Contains(t, workflowCard(t, f).Text, notice)
+				// Core retires revoked archive rows on the next authority-checked read.
+				window, historyErr := f.b.API.ConversationWindow(t.Context(), "alice", 10)
+				require.NoError(t, historyErr)
+				history, marshalErr := json.Marshal(window)
+				require.NoError(t, marshalErr)
+				require.NotContains(t, string(history), latePlanSecret)
+				assertPassPlanTerminal(t, f, update.ID)
 			}
 			require.Equal(t, 2, *calls, "delivery retry does not repeat model work")
 			var operations int
@@ -216,19 +271,15 @@ func TestPassPlanPostModelOutageRecovery(t *testing.T) {
 	)
 	require.Zero(t, plans)
 	transport.fail.Store(false)
-	f.b = &bot.Bot{
-		DB:      f.db,
-		API:     f.b.API,
-		Host:    f.b.Host,
-		TG:      f.b.TG,
-		Scripts: scopeVM{},
-		Model: avModel(func(_ context.Context, input agent.Input) (agent.Plan, error) {
-			require.Equal(t, 1, input.Script.Remaining)
-			require.Contains(t, string(input.Script.Runs[0].Result), latePlanSecret)
-			return agent.Plan{View: "workflow", Text: latePlanSecret}, nil
-		}),
-	}
-	handle(t, f.b, update)
+	restarted := *f.b
+	restarted.Scripts = scopeVM{}
+	restarted.Model = avModel(func(_ context.Context, input agent.Input) (agent.Plan, error) {
+		require.Equal(t, 1, input.Script.Remaining)
+		require.Contains(t, string(input.Script.Runs[0].Result), latePlanSecret)
+		return agent.Plan{View: "workflow", Text: latePlanSecret}, nil
+	})
+	f.b = &restarted
+	handleVisible(t, f.b, update)
 	require.Equal(t, 2, *calls)
 	require.Contains(t, workflowCard(t, f).Text, latePlanSecret)
 }
@@ -236,6 +287,7 @@ func TestPassPlanPostModelOutageRecovery(t *testing.T) {
 func TestPassPlanCommittedStatusRetry(t *testing.T) {
 	t.Parallel()
 	f := latePlanFixture(t)
+	f.b.Delivery.Fallback = time.Second
 	_, err := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=true WHERE id='alice'`)
 	require.NoError(t, err)
 	calls := latePlanModel(t, f, "direct", func(agent.Input) (agent.Plan, error) {
@@ -248,12 +300,15 @@ func TestPassPlanCommittedStatusRetry(t *testing.T) {
 	})
 	update := message(46999, 101, "Create an order after checking my registration")
 	err = f.b.Handle(t.Context(), update)
-	require.Error(t, err)
+	require.NoError(t, err)
+	failed := assertBotRateLimited(t, f)
+	require.Empty(t, chatMessages(t, f, 101))
 	var orders int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.orders WHERE owner='alice'`).Scan(&orders))
 	require.Equal(t, 1, orders, "the domain operation committed before delivery failed")
 	removeArchivedBooking(t, f)
-	handle(t, f.b, update)
+	waitBotRetryDeadline(t, f, failed)
+	handleVisible(t, f.b, update)
 	require.Equal(t, 2, *calls)
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.orders WHERE owner='alice'`).Scan(&orders))
 	require.Equal(t, 1, orders)

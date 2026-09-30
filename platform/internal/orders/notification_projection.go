@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/orders/dbgen"
@@ -27,6 +29,21 @@ func (s Service) notificationProjection(
 		ctx,
 		dbgen.NotificationCurrentParams{ID: row.ID, BotID: s.Delivery.BotID},
 	)
+	err = core.DatabaseOperationError(err)
+	if err == nil && notice.Current && notice.Kind == refundRequest {
+		task, readErr := scanRefund(
+			s.DB.QueryRow(
+				ctx,
+				`SELECT `+refundColumns+` FROM core.order_refund_tasks t WHERE t.id=$1`,
+				notice.RefundID,
+			),
+		)
+		if readErr != nil {
+			return notice, readErr
+		}
+		task.CanConfirm = task.State == refundPending
+		notice.Refund = &task
+	}
 	return notice, err
 }
 
@@ -34,31 +51,59 @@ func (s Service) lockNotificationEligibility(ctx context.Context, tx pgx.Tx, id 
 	q := dbgen.New(tx)
 	row, err := q.ReadNotification(ctx, dbgen.ReadNotificationParams{ID: id, BotID: s.Delivery.BotID})
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	event, err := q.NotificationEvent(ctx, row.OrderID)
 	if err != nil {
+		return false, core.DatabaseOperationError(err)
+	}
+	var notice Notification
+	if err = json.Unmarshal(row.Payload, &notice); err != nil {
 		return false, err
+	}
+	if notice.Kind == refundRequest {
+		if err = lockRefundPassEvent(ctx, tx, event); err != nil {
+			return false, err
+		}
 	}
 	if err = LockEvent(ctx, tx, event); err != nil {
 		return false, err
 	}
 	if _, err = q.LockNotificationOrder(ctx, row.OrderID); err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
+	}
+	if notice.Kind == refundRequest {
+		task, readErr := scanRefund(
+			tx.QueryRow(
+				ctx,
+				`SELECT `+refundColumns+` FROM core.order_refund_tasks t WHERE t.id=$1 FOR UPDATE`,
+				notice.RefundID,
+			),
+		)
+		if readErr != nil {
+			return false, readErr
+		}
+		if err = lockRefundAmbassador(ctx, tx, task); err != nil {
+			return false, err
+		}
 	}
 	recipient, err := q.LockNotificationRecipient(ctx, row.Recipient)
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	if !recipient.CanBook || recipient.TelegramID <= 0 || recipient.TelegramID != row.DeliveryChat {
 		return false, nil
 	}
-	return q.NotificationCurrent(ctx, dbgen.NotificationCurrentParams{ID: id, BotID: s.Delivery.BotID})
+	current, err := q.NotificationCurrent(ctx, dbgen.NotificationCurrentParams{ID: id, BotID: s.Delivery.BotID})
+	return current, core.DatabaseOperationError(err)
 }
 
 // PendingNotifications prepares only lane heads. Wire admission is a separate check.
 func (s Service) PendingNotifications(ctx context.Context) ([]Notification, error) {
 	if err := s.Delivery.Validate(); err != nil {
+		return nil, err
+	}
+	if _, err := s.RouteRefunds(ctx); err != nil {
 		return nil, err
 	}
 	q := dbgen.New(s.DB)
@@ -72,7 +117,7 @@ func (s Service) PendingNotifications(ctx context.Context) ([]Notification, erro
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		notice, err := s.notificationProjection(ctx, q, row)
 		if err != nil {

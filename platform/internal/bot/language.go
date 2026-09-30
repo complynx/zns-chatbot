@@ -70,8 +70,8 @@ func (b *Bot) handleLanguage(ctx context.Context, in incoming, update telegram.U
 			[]telegram.Button{{Text: string(locale), Data: languageCallbackPrefix + string(locale)}},
 		)
 	}
-	ctx = withBotCard(ctx, botdelivery.Reference{Family: languageKey, CardKey: languageKey, Notice: noticeID})
-	if err = b.deliverOrderCard(ctx, in.owner, languageKey, payload); err != nil {
+	cardCtx := withBotCard(ctx, botdelivery.Reference{Family: languageKey, CardKey: languageKey, Notice: noticeID})
+	if err = b.deliverOrderCard(cardCtx, in.owner, languageKey, payload); err != nil {
 		return err
 	}
 	if err = b.record(ctx, in.owner, update.ID, languageKey, preference); err != nil {
@@ -81,7 +81,7 @@ func (b *Bot) handleLanguage(ctx context.Context, in incoming, update telegram.U
 		return err
 	}
 	if update.Callback != nil {
-		b.acknowledge(ctx, update.Callback.ID)
+		return b.acknowledge(ctx, update.Callback.ID)
 	}
 	return nil
 }

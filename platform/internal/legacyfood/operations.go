@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 
 	"github.com/jackc/pgx/v5"
@@ -37,7 +38,7 @@ type PreparedCommand struct {
 func (s Service) Execute(ctx context.Context, actor string, command Command) (Order, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Order{}, err
+		return Order{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	prepared, err := s.PrepareInTx(ctx, tx, actor, command)
@@ -48,7 +49,7 @@ func (s Service) Execute(ctx context.Context, actor string, command Command) (Or
 	if err != nil {
 		return Order{}, err
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // LockEvent establishes the same event-before-actor order for manual and derived commands.
@@ -71,9 +72,13 @@ func (s Service) PrepareInTx(ctx context.Context, tx pgx.Tx, actor string, comma
 	}
 	p.hash, p.key = digest(raw), digest([]byte(command.Key))
 	var previous string
+	var saved []byte
 	err = tx.QueryRow(ctx, `SELECT request_hash,result FROM core.food_operations WHERE event_id=$1 AND actor=$2 AND key_hash=$3`, command.EventID, actor, p.key).
-		Scan(&previous, &p.result)
+		Scan(&previous, &saved)
 	if err == nil {
+		if err = decodeStoredJSON(saved, &p.result); err != nil {
+			return p, err
+		}
 		if p.hash != previous {
 			return p, problem("idempotency_conflict")
 		}
@@ -83,7 +88,7 @@ func (s Service) PrepareInTx(ctx context.Context, tx pgx.Tx, actor string, comma
 	if errors.Is(err, pgx.ErrNoRows) {
 		return p, nil
 	}
-	return p, err
+	return p, core.DatabaseOperationError(err)
 }
 
 func (p PreparedCommand) Replay() (Order, bool) { return p.result, p.found }
@@ -107,7 +112,7 @@ func (p PreparedCommand) Apply(ctx context.Context) (Order, error) {
 	if err = op.save(ctx, result); err != nil {
 		return Order{}, err
 	}
-	_, err = op.tx.Exec(
+	if _, err = op.tx.Exec(
 		ctx,
 		`INSERT INTO core.food_operations(event_id,actor,key_hash,request_hash,result) VALUES($1,$2,$3,$4,$5)`,
 		op.command.EventID,
@@ -115,11 +120,10 @@ func (p PreparedCommand) Apply(ctx context.Context) (Order, error) {
 		p.key,
 		p.hash,
 		result,
-	)
-	if err == nil {
-		err = delivery.RegisterBatch(ctx, op.tx, op.service.Delivery.BotID, op.notificationRegistrations)
+	); err != nil {
+		return result, core.DatabaseOperationError(err)
 	}
-	return result, err
+	return result, delivery.RegisterBatch(ctx, op.tx, op.service.Delivery.BotID, op.notificationRegistrations)
 }
 
 func (op *operation) authorize(ctx context.Context) error {
@@ -135,14 +139,14 @@ func (op *operation) authorize(ctx context.Context) error {
 		return forbidden()
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if op.command.Name == commandAccept || op.command.Name == commandReject {
 		if err = adminPermission(ctx, op.tx, op.actor, op.event.ID, "review", true); err != nil {
 			return err
 		}
 	}
-	return op.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&op.now)
+	return core.DatabaseOperationError(op.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&op.now))
 }
 
 func (op *operation) load(ctx context.Context) (Order, error) {
@@ -197,7 +201,7 @@ func (op *operation) save(ctx context.Context, order Order) error {
 		order.LastUpdated,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, payment := range []Payment{order.MealPayment, order.ActivityPayment} {
 		if err = op.savePayment(ctx, order.ID, payment); err != nil {
@@ -230,5 +234,5 @@ func (op *operation) savePayment(ctx context.Context, id string, p Payment) erro
 		p.RejectedAt,
 		p.LegacySourceKey,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }

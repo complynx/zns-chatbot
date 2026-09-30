@@ -196,36 +196,34 @@ func pendingKnowledgeRefresh(records []ScriptRecord) bool {
 	return false
 }
 
-// ownPrivateDeletion permits only a canonical, still-current deletion receipt to
-// explain retirement. It never accepts VM output as evidence of an effect.
-func (s ScriptHost) ownPrivateDeletion(ctx context.Context, owner string, updateID int64, index int) (bool, error) {
+// ownPrivateDeletion accepts only the deletion's own exact epoch transition.
+// Its canonical receipt reauthorizes the whole admitted source, including opaque
+// origin grants. An unrelated history deletion or revoked grant makes it stale.
+func (s ScriptHost) ownPrivateDeletion(ctx context.Context, owner string, record ScriptRecord) (bool, error) {
 	reader, ok := s.Store.Policy.(scriptKnowledgeReceiptReader)
-	if !ok {
+	if !ok || !record.MemoryRedacted || len(record.Calls) == 0 {
 		return false, nil
 	}
-	snapshot, err := s.Store.ledgerSnapshot(ctx, owner, updateID)
+	// A deletion retires its VM immediately; later calls cannot share this proof.
+	call := record.Calls[len(record.Calls)-1]
+	if call.Memory == nil || call.Source == nil || call.Source.Generation == nil ||
+		(call.Memory.Name != knowledge.MemoDelete && call.Memory.Name != knowledge.DocumentDelete) {
+		return false, nil
+	}
+	receipt, err := reader.KnowledgeReceipt(ctx, owner, *call.Memory, *call.Source)
 	if err != nil {
 		return false, err
 	}
-	if index < 0 || index >= len(snapshot.records) {
+	witness := receipt.Result.PrivateDeletion
+	if !receipt.Found || witness == nil || !witness.Current ||
+		witness.BeforeHistory != *call.Source.Generation || witness.AfterHistory != record.HistoryGeneration ||
+		witness.AfterMemory != record.MemoryState ||
+		witness.AfterMemory.PrivateGeneration <= witness.BeforeMemory.PrivateGeneration ||
+		witness.AfterMemory.SharedGeneration != witness.BeforeMemory.SharedGeneration {
 		return false, nil
 	}
-	record := snapshot.records[index]
-	if !scriptRetired(record) {
+	if record.HistoryRedacted && witness.AfterHistory <= witness.BeforeHistory {
 		return false, nil
 	}
-	for _, call := range record.Calls {
-		if call.Memory == nil || call.Source == nil ||
-			(call.Memory.Name != knowledge.MemoDelete && call.Memory.Name != knowledge.DocumentDelete) {
-			continue
-		}
-		receipt, receiptErr := reader.KnowledgeReceipt(ctx, owner, *call.Memory, *call.Source)
-		if receiptErr != nil {
-			return false, receiptErr
-		}
-		if receipt.Found && receipt.Result.PrivateDeletion != nil && receipt.Result.PrivateDeletion.Current {
-			return true, nil
-		}
-	}
-	return false, nil
+	return true, nil
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
@@ -65,11 +66,17 @@ func (b *Bot) saveKnowledgeView(ctx context.Context, owner string, view knowledg
 
 func (b *Bot) currentKnowledgeView(ctx context.Context, owner string) (knowledgeView, error) {
 	view := knowledgeView{Mode: knowledgeFactsMode}
+	var content []byte
 	err := b.DB.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=0 AND kind=$2`, owner, knowledgeStateKind).
-		Scan(&view)
+		Scan(&content)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return view, nil
 	}
+	if err != nil {
+		return view, core.DatabaseOperationError(err)
+	}
+	view = knowledgeView{}
+	err = json.Unmarshal(content, &view)
 	return view, err
 }
 
@@ -97,7 +104,7 @@ func (b *Bot) handleKnowledge(ctx context.Context, in incoming, update telegram.
 		return err
 	}
 	if update.Callback != nil {
-		b.acknowledge(ctx, update.Callback.ID)
+		return b.acknowledge(ctx, update.Callback.ID)
 	}
 	return nil
 }

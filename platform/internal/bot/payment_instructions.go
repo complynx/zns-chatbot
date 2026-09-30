@@ -46,6 +46,9 @@ func (b *Bot) paymentInstructionsWithSource(
 	}
 	info, err := b.API.PaymentInstructions(ctx, in.owner, event, id)
 	if err != nil {
+		if core.IsDatabaseFailure(err) {
+			return "", core.ErrDatabase
+		}
 		if problem, ok := errors.AsType[*core.ProblemError](
 			err,
 		); ok &&
@@ -175,7 +178,7 @@ func (b *Bot) paymentInstructionsUnavailable(ctx context.Context, in incoming, i
 	key := paymentCardPrefix + id
 	if err = b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.order_cards WHERE owner=$1 AND card_key=$2)`, in.owner, key).
 		Scan(&opened); err != nil {
-		return "", err
+		return "", core.DatabaseOperationError(err)
 	}
 	if opened {
 		err = b.deliverOrderCard(
@@ -199,7 +202,7 @@ func (b *Bot) refreshPaymentInstructions(
 	var opened bool
 	if err := b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.order_cards WHERE owner=$1 AND card_key=$2)`, owner, key).
 		Scan(&opened); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !opened && order.State != stateCash {
 		return nil

@@ -62,28 +62,36 @@ stage are test fixtures only. Trusted administrative provisioning must grant
 the appropriate scope explicitly.
 
 - A curator can create, replace or remove a fact using its expected version.
-- Any existing authenticated user can submit a suggestion, limited to ten
+- Any existing authenticated user can create a suggestion, limited to ten
   unresolved suggestions across all scopes. It starts as `pending_filter` and
   is not retrieved as a fact or exposed in the human review queue.
 - The trusted host classification workflow calls `Assess(ctx, actor,
   Assessment)` for that actor's own proposal and expected version. A worthwhile
-  result changes it to `pending_review`; otherwise it becomes `filtered`.
+  result changes it to `awaiting_submission`, an author-private draft;
+  otherwise it becomes `filtered`. Neither state exposes it to reviewers.
   This method has **no public API route and no conversational agent tool**.
   Classifier results cannot publish a fact, assign a role or select a different
   owner. The integration must generate the verdict from the classifier, not
   accept a user's asserted verdict. This does not require an elevated agent
   identity.
+- The author must explicitly submit the displayed draft through the manual
+  submission action before it becomes `pending_review`. Consent binds the
+  proposal ID, version, event, topic, fact key and exact body. Another actor,
+  changed draft or stale version cannot supply that consent. The submission
+  rechecks current source authority, including on replay. It exposes only the
+  consented body to permitted reviewers, not private source text or the
+  classifier reason. An agent tool cannot submit consent for the author.
 - A human with explicit `review` permission for the proposal's scope can approve
-  or reject a `pending_review` proposal. A reviewer cannot review their own
-  suggestion, even if they also have curation rights. Curators may instead make
+  or reject a submitted `pending_review` proposal. A reviewer cannot review their
+  own suggestion, even if they also have curation rights. Curators may instead make
   an explicit direct edit under their separate permission.
 - Approval checks the proposal version and the fact version captured at
   suggestion time. A concurrent curator correction cannot be overwritten by
   an older queued suggestion. Rejection can close such a stale proposal.
 
 Users can list their own proposal statuses. Reviewers can list only another
-owner's `pending_review` proposals within an authorized scope. List pages contain
-at most 20 records, newest first; pass the last ID as `after` for the next page.
+owner's submitted `pending_review` proposals within an authorized scope. List
+pages contain at most 20 records, newest first; pass the last ID as `after` for the next page.
 Pending, filtered and rejected text never enters approved knowledge retrieval.
 
 ## Transactions, idempotency and privacy
@@ -161,9 +169,10 @@ remains a separate gate.
 review inbox when the actor has explicit scope permission. `/memo` opens only the
 actor's private notes. Natural language requests use the selected `knowledge`
 skill; no text keywords route business intent. Fact creation/editing and memo
-creation/editing are conversational. Manual cards support note deletion, scoped
-proposal review and retrying an unavailable automatic assessment. Lists are
-bounded; proposal pages have an opaque next button. Fact results expose at most
+creation/editing are conversational. Manual cards support author submission of
+private drafts, note deletion, scoped proposal review and retrying an unavailable
+automatic assessment. Lists are bounded; proposal pages have an opaque next
+button. Fact results expose at most
 20 entries, and the agent can narrow them by topic or literal text search.
 
 The seventh plan field, `knowledge_action`, is one of bounded reads or a typed
@@ -187,12 +196,15 @@ After `suggest`, a separate bounded classifier request returns only a boolean
 and a short reason. OpenAI and local Codex implement this narrow interface; the
 remote model endpoint transports that verdict without an application actor or
 API credential. The host calls owner-bound `Service.Assess`. A positive verdict
-only queues human review, never publishes. If classification is unavailable,
+prepares an `awaiting_submission` private draft; explicit author consent is
+required to enter the human review queue, and authorized approval is required
+to publish. If classification is unavailable,
 the proposal stays visibly `pending_filter` and its owner can retry. The saved
 verdict prevents successful update replay from repeating the model call.
 
-Approve/reject and note-delete callbacks reference stored owner-bound commands
-through opaque tokens. The host supplies expected versions and stable keys.
+Author-submission callbacks bind the exact displayed draft and its expected
+version. Approve/reject and note-delete callbacks reference stored owner-bound
+commands through opaque tokens. The host supplies expected versions and stable keys.
 Current domain authorization applies on every callback, including replays.
 Review cards are refreshed from the current permitted queue; old/off-page or
 revoked cards lose their action buttons. An agent `review_card` request only

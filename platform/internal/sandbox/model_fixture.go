@@ -16,6 +16,8 @@ const maxModelFixtureStepBytes = 64 * 1024
 const maxModelFixtureSteps = 32
 const maxModelFixtureCases = 32
 const maxModelFixtureInputBytes = 512 * 1024
+const fixtureAccepted = "accepted"
+const invalidFixtureScope = "invalid fixture scope"
 
 // Expectations are partial Input objects: maps match subsets, arrays match exactly.
 // Plans remain proposals; normal bot/API authorization must still execute them.
@@ -25,10 +27,11 @@ type modelFixtureStep struct {
 }
 
 type modelFixtureInstall struct {
-	Input    *modelFixtureInput `json:"input,omitempty"`
-	Owner    string             `json:"owner"`
-	UpdateID int64              `json:"update_id"`
-	Steps    []modelFixtureStep `json:"steps"`
+	Assessment json.RawMessage    `json:"assessment,omitempty"`
+	Input      *modelFixtureInput `json:"input,omitempty"`
+	Owner      string             `json:"owner"`
+	UpdateID   int64              `json:"update_id"`
+	Steps      []modelFixtureStep `json:"steps"`
 }
 
 type modelFixtureInput struct {
@@ -49,11 +52,13 @@ type frozenModelStep struct {
 }
 
 type modelFixtureCase struct {
-	steps      []frozenModelStep
-	next       int
-	accepted   int
-	rejected   int
-	lastStatus string
+	assessment      *frozenFixtureAssessment
+	assessmentState modelFixtureAssessmentState
+	steps           []frozenModelStep
+	next            int
+	accepted        int
+	rejected        int
+	lastStatus      string
 }
 
 type modelFixtures struct {
@@ -64,12 +69,13 @@ type modelFixtures struct {
 }
 
 type modelFixtureState struct {
-	UpdateID   int64  `json:"update_id"`
-	NextTurn   int    `json:"next_turn"`
-	Total      int    `json:"total"`
-	Accepted   int    `json:"accepted"`
-	Rejected   int    `json:"rejected"`
-	LastStatus string `json:"last_status"`
+	Assessment modelFixtureAssessmentState `json:"assessment"`
+	UpdateID   int64                       `json:"update_id"`
+	NextTurn   int                         `json:"next_turn"`
+	Total      int                         `json:"total"`
+	Accepted   int                         `json:"accepted"`
+	Rejected   int                         `json:"rejected"`
+	LastStatus string                      `json:"last_status"`
 }
 
 func modelFixtureKey(owner string, update int64) string {
@@ -116,9 +122,9 @@ func freezeModelSteps(steps []modelFixtureStep) ([]frozenModelStep, int, error) 
 
 func (m *modelFixtures) install(value modelFixtureInstall) error {
 	if !syntheticFixtureOwner(value.Owner) || value.UpdateID <= 0 {
-		return errors.New("invalid fixture scope")
+		return errors.New(invalidFixtureScope)
 	}
-	steps, size, err := freezeModelSteps(value.Steps)
+	steps, assessment, size, err := freezeModelFixture(value)
 	if err != nil {
 		return err
 	}
@@ -131,19 +137,24 @@ func (m *modelFixtures) install(value modelFixtureInstall) error {
 	if _, exists := m.cases[key]; exists {
 		return errors.New("fixture already configured")
 	}
-	if len(m.cases) >= maxModelFixtureCases || m.steps+len(steps) > maxModelFixtureSteps ||
+	entries := len(steps)
+	if assessment != nil {
+		entries++
+	}
+	if len(m.cases) >= maxModelFixtureCases || m.steps+entries > maxModelFixtureSteps ||
 		m.bytes+size > maxModelFixtureBytes {
 		return errors.New("fixture capacity reached")
 	}
-	m.cases[key] = &modelFixtureCase{steps: steps, lastStatus: "ready"}
-	m.steps += len(steps)
+	m.cases[key] = &modelFixtureCase{steps: steps, lastStatus: "ready", assessment: assessment,
+		assessmentState: modelFixtureAssessmentState{Configured: assessment != nil}}
+	m.steps += entries
 	m.bytes += size
 	return nil
 }
 
 func (m *modelFixtures) plan(scope modelFixtureScope, input agent.Input) (agent.Plan, error) {
 	if !syntheticFixtureOwner(scope.Owner) || scope.UpdateID <= 0 || scope.Turn < 0 {
-		return agent.Plan{}, errors.New("invalid fixture scope")
+		return agent.Plan{}, errors.New(invalidFixtureScope)
 	}
 	data, err := json.Marshal(input)
 	if err != nil || len(data) > maxModelFixtureInputBytes {
@@ -178,7 +189,7 @@ func (m *modelFixtures) plan(scope modelFixtureScope, input agent.Input) (agent.
 	}
 	value.next++
 	value.accepted++
-	value.lastStatus = "accepted"
+	value.lastStatus = fixtureAccepted
 	return plan, nil
 }
 

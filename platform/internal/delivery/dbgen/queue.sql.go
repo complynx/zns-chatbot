@@ -42,11 +42,11 @@ func (q *Queries) AllocateDeliverySequence(ctx context.Context, arg AllocateDeli
 
 const deliveryCandidates = `-- name: DeliveryCandidates :many
 WITH heads AS (
- SELECT DISTINCT ON (bot_id,chat) bot_id, owner_kind, owner_key, effect_key, chat, thread_id, lane_sequence, traffic_class, state, not_before FROM core.delivery_queue
+ SELECT DISTINCT ON (bot_id,chat) bot_id,owner_kind,owner_key,effect_key,chat,thread_id,lane_sequence,traffic_class,state,not_before FROM core.delivery_queue
  WHERE bot_id=$2::bigint AND state IN ('pending','sending','unknown','parked','paused')
  ORDER BY bot_id,chat,lane_sequence
 )
-SELECT h.bot_id, h.owner_kind, h.owner_key, h.effect_key, h.chat, h.thread_id, h.lane_sequence, h.traffic_class, h.state, h.not_before FROM heads h JOIN core.delivery_lanes l USING(bot_id,chat)
+SELECT h.bot_id,h.owner_kind,h.owner_key,h.effect_key,h.chat,h.thread_id,h.lane_sequence,h.traffic_class,h.state,h.not_before FROM heads h JOIN core.delivery_lanes l USING(bot_id,chat)
 LEFT JOIN core.delivery_fairness f USING(bot_id)
 LEFT JOIN core.delivery_pacing b ON b.bot_id=h.bot_id AND b.chat=''
 LEFT JOIN core.delivery_pacing c ON c.bot_id=h.bot_id AND c.chat=h.chat
@@ -175,7 +175,7 @@ func (q *Queries) IsDeliveryHead(ctx context.Context, arg IsDeliveryHeadParams) 
 }
 
 const lockDeliveryEntry = `-- name: LockDeliveryEntry :one
-SELECT bot_id, owner_kind, owner_key, effect_key, chat, thread_id, lane_sequence, traffic_class, state, not_before FROM core.delivery_queue WHERE bot_id=$1::bigint
+SELECT bot_id,owner_kind,owner_key,effect_key,chat,thread_id,lane_sequence,traffic_class,state,not_before FROM core.delivery_queue WHERE bot_id=$1::bigint
 AND owner_kind=$2::text AND owner_key=$3::text AND effect_key=$4::text
 FOR UPDATE
 `
@@ -187,14 +187,27 @@ type LockDeliveryEntryParams struct {
 	EffectKey string
 }
 
-func (q *Queries) LockDeliveryEntry(ctx context.Context, arg LockDeliveryEntryParams) (CoreDeliveryQueue, error) {
+type LockDeliveryEntryRow struct {
+	BotID        int64
+	OwnerKind    string
+	OwnerKey     string
+	EffectKey    string
+	Chat         string
+	ThreadID     int64
+	LaneSequence int64
+	TrafficClass string
+	State        string
+	NotBefore    pgtype.Timestamptz
+}
+
+func (q *Queries) LockDeliveryEntry(ctx context.Context, arg LockDeliveryEntryParams) (LockDeliveryEntryRow, error) {
 	row := q.db.QueryRow(ctx, lockDeliveryEntry,
 		arg.BotID,
 		arg.OwnerKind,
 		arg.OwnerKey,
 		arg.EffectKey,
 	)
-	var i CoreDeliveryQueue
+	var i LockDeliveryEntryRow
 	err := row.Scan(
 		&i.BotID,
 		&i.OwnerKind,
@@ -274,7 +287,7 @@ func (q *Queries) ProjectDeliveryEntry(ctx context.Context, arg ProjectDeliveryE
 }
 
 const readDeliveryEntry = `-- name: ReadDeliveryEntry :one
-SELECT bot_id, owner_kind, owner_key, effect_key, chat, thread_id, lane_sequence, traffic_class, state, not_before FROM core.delivery_queue WHERE bot_id=$1::bigint
+SELECT bot_id,owner_kind,owner_key,effect_key,chat,thread_id,lane_sequence,traffic_class,state,not_before FROM core.delivery_queue WHERE bot_id=$1::bigint
 AND owner_kind=$2::text AND owner_key=$3::text AND effect_key=$4::text
 `
 
@@ -285,14 +298,27 @@ type ReadDeliveryEntryParams struct {
 	EffectKey string
 }
 
-func (q *Queries) ReadDeliveryEntry(ctx context.Context, arg ReadDeliveryEntryParams) (CoreDeliveryQueue, error) {
+type ReadDeliveryEntryRow struct {
+	BotID        int64
+	OwnerKind    string
+	OwnerKey     string
+	EffectKey    string
+	Chat         string
+	ThreadID     int64
+	LaneSequence int64
+	TrafficClass string
+	State        string
+	NotBefore    pgtype.Timestamptz
+}
+
+func (q *Queries) ReadDeliveryEntry(ctx context.Context, arg ReadDeliveryEntryParams) (ReadDeliveryEntryRow, error) {
 	row := q.db.QueryRow(ctx, readDeliveryEntry,
 		arg.BotID,
 		arg.OwnerKind,
 		arg.OwnerKey,
 		arg.EffectKey,
 	)
-	var i CoreDeliveryQueue
+	var i ReadDeliveryEntryRow
 	err := row.Scan(
 		&i.BotID,
 		&i.OwnerKind,

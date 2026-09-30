@@ -90,7 +90,9 @@ const replay=tools.orders.export({});
 return {inbox,read,accepted,exported,replay};`, list[0].ID, list[0].ID),
 			)
 			assert.Contains(t, string(result), `"state":"paid"`)
-			assert.Contains(t, string(result), `"status":"delivered"`)
+			assert.Contains(t, string(result), `"status":"pending"`)
+			drainOrderPresentations(t, f)
+			assert.Len(t, exportDocuments(t, f, identity.BobTelegramID), 1)
 			var deliveries int
 			err = f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions WHERE kind='modern_order_delivery:orders.export' AND owner='bob'`).
 				Scan(&deliveries)
@@ -135,16 +137,37 @@ func TestModernOrdersSobekProofCountryCancellation(t *testing.T) {
 		f,
 		38101,
 		identity.AliceTelegramID,
-		"Show receipt, select Belarus and Bob, then cancel proof for "+order.ID,
+		"Show receipt for "+order.ID,
+		fmt.Sprintf(
+			`tools.orders.inspect({order_id:%q}); return tools.orders.proof({order_id:%q});`,
+			order.ID,
+			order.ID,
+		),
+	)
+	assert.Contains(t, string(result), `"status":"pending"`)
+	drainOrderPresentations(t, f)
+	var deliveredProofs int
+	for _, card := range chatMessages(t, f, identity.AliceTelegramID) {
+		if card.Document != nil {
+			deliveredProofs++
+			body, downloadErr := f.b.TG.Download(t.Context(), *card.Document)
+			require.NoError(t, downloadErr)
+			proof, proofErr := s.OrderProof(t.Context(), "alice", order.EventID, order.ID)
+			require.NoError(t, proofErr)
+			assert.Equal(t, proof.Body, body)
+		}
+	}
+	require.Equal(t, 1, deliveredProofs)
+	result = runModernVM(
+		t, f, 38103, identity.AliceTelegramID,
+		"Select Belarus and Bob, then cancel proof for "+order.ID,
 		fmt.Sprintf(`
 tools.orders.inspect({order_id:%q});
-const shown=tools.orders.proof({order_id:%q});
 tools.orders.update({name:"country",order_id:%q,country:"be",contact:"bob"});
 tools.orders.inspect({order_id:%q});
 const cancelled=tools.orders.update({name:"cancel_proof",order_id:%q});
-return {shown,cancelled};`, order.ID, order.ID, order.ID, order.ID, order.ID),
+return {cancelled};`, order.ID, order.ID, order.ID, order.ID),
 	)
-	assert.Contains(t, string(result), `"status":"delivered"`)
 	assert.Contains(t, string(result), `"state":"unpaid"`)
 	assert.NotContains(t, string(result), command.ProofFile)
 	order, err = s.Get(t.Context(), "alice", order.EventID, order.ID)
@@ -166,6 +189,33 @@ return {shown,cancelled};`, order.ID, order.ID, order.ID, order.ID, order.ID),
 	page, err := s.HistoryPage(t.Context(), "alice", order.EventID, "")
 	require.NoError(t, err)
 	assert.Len(t, page.Items, 5)
+}
+
+func TestModernOrdersProofCancelledBeforeWire(t *testing.T) {
+	t.Parallel()
+	f := setup(t)
+	s := orders.Service{DB: f.db}
+	order, err := s.Execute(t.Context(), "alice", orders.Command{
+		EventID: "sandbox-festival",
+		Name:    "create",
+		Origin:  "manual",
+		Key:     "cancel-before-wire",
+		Choice:  orderChoice("preparty"),
+	})
+	require.NoError(t, err)
+	command := orderCommand("proof", order)
+	command.ProofFile = uploadProof(t, s, "alice")
+	order, err = s.Execute(t.Context(), "alice", command)
+	require.NoError(t, err)
+	result := runModernVM(t, f, 38104, identity.AliceTelegramID, "Show then cancel receipt for "+order.ID,
+		fmt.Sprintf(`tools.orders.inspect({order_id:%q}); const shown=tools.orders.proof({order_id:%q});
+const cancelled=tools.orders.update({name:"cancel_proof",order_id:%q}); return {shown,cancelled};`, order.ID, order.ID, order.ID))
+	assert.Contains(t, string(result), `"status":"pending"`)
+	assert.Contains(t, string(result), `"state":"unpaid"`)
+	drainOrderPresentations(t, f)
+	for _, card := range chatMessages(t, f, identity.AliceTelegramID) {
+		assert.Nil(t, card.Document, "cancelled proof must not reach Telegram")
+	}
 }
 
 func TestModernOrdersObservedPaymentReplacement(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 )
 
@@ -24,14 +25,14 @@ func (s Service) notificationProjection(
 	}
 	titles, err := dbgen.New(reader).NotificationTitles(ctx, row.EventID)
 	if err != nil {
-		return notice, err
+		return notice, core.DatabaseOperationError(err)
 	}
 	if err = json.Unmarshal(titles, &notice.EventTitles); err != nil {
 		return notice, err
 	}
 	recipient, err := dbgen.New(reader).LockNotificationRecipient(ctx, row.Recipient)
 	if err != nil {
-		return notice, err
+		return notice, core.DatabaseOperationError(err)
 	}
 	notice, err = s.liveNotification(ctx, reader, notice, snapshot)
 	notice.Current = notice.Current && recipient.CanBook && recipient.TelegramID > 0 &&
@@ -43,10 +44,10 @@ func (s Service) lockNotificationEligibility(ctx context.Context, tx pgx.Tx, id 
 	q := dbgen.New(tx)
 	row, err := q.ReadNotification(ctx, dbgen.ReadNotificationParams{ID: id, BotID: s.Delivery.BotID})
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	if _, err = q.LockNotificationEvent(ctx, row.EventID); err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	notice, err := s.notificationProjection(ctx, tx, row)
 	return notice.Current, err
@@ -68,7 +69,7 @@ func (s Service) PendingNotifications(ctx context.Context) ([]Notification, erro
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		notice, err := s.notificationProjection(ctx, s.DB, row)
 		if err != nil {

@@ -26,6 +26,7 @@ type ReadAuthority interface {
 // ReadStore owns consumed read budgets and privacy reconciliation. Domain
 // fetches run outside the transactions, after durable reservation.
 type ReadStore struct {
+	Memory MemoryReadState
 	DB     *pgxpool.Pool
 	Policy ReadAuthority
 }
@@ -146,36 +147,10 @@ func (s ReadStore) ReserveKnowledge(
 	updateID int64,
 	p agent.KnowledgeProposal,
 ) (int, error) {
-	tx, err := s.DB.Begin(ctx)
-	if err != nil {
-		return 0, err
+	if s.Memory == nil {
+		return 0, errors.New("memory read-state service is not configured")
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	state, err := knowledge.LockMemoryDeletions(ctx, tx, owner)
-	if err != nil {
-		return 0, err
-	}
-	if err = knowledgeReadLock(ctx, tx, owner, updateID); err != nil {
-		return 0, err
-	}
-	var reads []agent.KnowledgeReadResult
-	err = tx.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3 FOR UPDATE`, owner, updateID, knowledgeReadsKind).
-		Scan(&reads)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return 0, err
-	}
-	RedactKnowledgeReads(reads, state)
-	if len(reads) >= agent.MaxKnowledgeReads {
-		return 0, errors.New("knowledge read budget exhausted")
-	}
-	index := len(reads)
-	reads = append(reads, agent.KnowledgeReadResult{Request: p, MemoryState: state, Error: "interrupted"})
-	_, err = tx.Exec(ctx, `INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES($1,$2,$3,$4)
- ON CONFLICT(owner,update_id,kind) DO UPDATE SET content=excluded.content`, owner, updateID, knowledgeReadsKind, reads)
-	if err != nil {
-		return 0, err
-	}
-	return index, tx.Commit(ctx)
+	return s.Memory.ReserveKnowledge(ctx, owner, updateID, p)
 }
 
 func knowledgeReadLock(ctx context.Context, tx pgx.Tx, owner string, updateID int64) error {
@@ -309,60 +284,11 @@ func (s ReadStore) ReconcileHistory(ctx context.Context, owner string, generatio
 	return tx.Commit(ctx)
 }
 
-func (s ReadStore) ReconcileMemory(ctx context.Context, owner string, _ knowledge.MemoryDeletionState) error {
-	tx, err := s.DB.Begin(ctx)
-	if err != nil {
-		return err
+func (s ReadStore) ReconcileMemory(ctx context.Context, owner string, state knowledge.MemoryDeletionState) error {
+	if s.Memory == nil {
+		return errors.New("memory read-state service is not configured")
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	// A caller's captured epochs can be older than an already committed read.
-	// Acquire current domain generations before taking interaction row locks.
-	state, err := knowledge.LockMemoryDeletions(ctx, tx, owner)
-	if err != nil {
-		return err
-	}
-	rows, err := tx.Query(ctx, `SELECT update_id,kind,content FROM bot.interactions WHERE owner=$1 AND kind IN ($2,$4)
- AND EXISTS(SELECT 1 FROM jsonb_array_elements(content) r WHERE COALESCE(r->'memory_state','{}'::jsonb)<>$3::jsonb)
- ORDER BY update_id,kind LIMIT 100 FOR UPDATE SKIP LOCKED`, owner, scriptRunsKind, state, knowledgeReadsKind)
-	if err != nil {
-		return err
-	}
-	type retained struct {
-		updateID int64
-		kind     string
-		content  json.RawMessage
-	}
-	var batch []retained
-	for rows.Next() {
-		var item retained
-		if err = rows.Scan(&item.updateID, &item.kind, &item.content); err != nil {
-			rows.Close()
-			return err
-		}
-		batch = append(batch, item)
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	for _, item := range batch {
-		content, redactErr := RedactMemoryInteraction(item.kind, item.content, state)
-		if redactErr != nil {
-			return redactErr
-		}
-		if _, err = tx.Exec(
-			ctx,
-			`UPDATE bot.interactions SET content=$3 WHERE owner=$1 AND update_id=$2 AND kind=$4`,
-			owner,
-			item.updateID,
-			content,
-			item.kind,
-		); err != nil {
-			return err
-		}
-	}
-	return tx.Commit(ctx)
+	return s.Memory.ReconcileMemory(ctx, owner, state)
 }
 
 func (s ReadStore) CompleteKnowledge(
@@ -372,50 +298,10 @@ func (s ReadStore) CompleteKnowledge(
 	index int,
 	result agent.KnowledgeReadResult,
 ) ([]agent.KnowledgeReadResult, error) {
-	tx, err := s.DB.Begin(ctx)
-	if err != nil {
-		return nil, err
+	if s.Memory == nil {
+		return nil, errors.New("memory read-state service is not configured")
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	state, err := knowledge.LockMemoryDeletions(ctx, tx, owner)
-	if err != nil {
-		return nil, err
-	}
-	if err = knowledgeReadLock(ctx, tx, owner, updateID); err != nil {
-		return nil, err
-	}
-	var reads []agent.KnowledgeReadResult
-	if err = tx.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3 FOR UPDATE`, owner, updateID, knowledgeReadsKind).
-		Scan(&reads); err != nil {
-		return nil, err
-	}
-	if index < 0 || index >= len(reads) {
-		return nil, errors.New("knowledge read reservation missing")
-	}
-	// Retirement belongs to the reservation, not the delayed fetch's epoch.
-	RedactKnowledgeReads(reads, state)
-	if !reads[index].Omitted {
-		result.Request = reads[index].Request
-		reads[index] = result
-	}
-	// Reconcile the locked current row, including siblings, against the
-	// domain generations retained through commit. A late fetch cannot revive it.
-	RedactKnowledgeReads(reads, state)
-	_, err = tx.Exec(
-		ctx,
-		`UPDATE bot.interactions SET content=$4 WHERE owner=$1 AND update_id=$2 AND kind=$3`,
-		owner,
-		updateID,
-		knowledgeReadsKind,
-		reads,
-	)
-	if err != nil {
-		return nil, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-	return reads, nil
+	return s.Memory.CompleteKnowledge(ctx, owner, updateID, index, result)
 }
 
 func (s ReadStore) CompleteRegistration(

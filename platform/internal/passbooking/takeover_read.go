@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // TakeoverTarget separates the current contact from recorded receiving provenance.
@@ -27,7 +29,7 @@ func (s Service) TakeoverTarget(ctx context.Context, actor, eventID string, tele
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = readEvent(ctx, tx, eventID); err != nil {
@@ -42,7 +44,7 @@ func (s Service) TakeoverTarget(ctx context.Context, actor, eventID string, tele
 		return result, forbidden()
 	}
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	records, err := readBookings(ctx, tx, eventID)
 	if err != nil {
@@ -61,11 +63,11 @@ LEFT JOIN core.legacy_pass_payment_metadata legacy ON p.legacy_source_key IS NOT
 LEFT JOIN core.pass_receiver_backfills f ON f.event_id=b.event_id AND f.owner=b.owner AND f.assigned_at=b.assigned_at
 WHERE b.event_id=$1 AND b.owner=$2`, eventID, owner).Scan(&result.ReceivingAdmin)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	if err = tx.QueryRow(ctx, `SELECT titles FROM core.pass_events WHERE id=$1`, eventID).
 		Scan(&result.EventTitles); err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	if err = result.readContacts(ctx, tx); err != nil {
 		return result, err
@@ -76,10 +78,10 @@ WHERE b.event_id=$1 AND b.owner=$2`, eventID, owner).Scan(&result.ReceivingAdmin
  WHERE b.event_id=$1 AND (b.owner=$2 OR (b.owner=$3 AND b.partner=$2))
  AND b.state='paid' AND b.assigned_at IS NOT NULL AND b.payment_attempt IS NULL AND f.owner IS NULL)`, eventID, b.Owner, b.Partner).Scan(&result.CanBackfill)
 		if err != nil {
-			return result, err
+			return result, core.DatabaseOperationError(err)
 		}
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (t *TakeoverTarget) readContacts(ctx context.Context, tx pgx.Tx) error {
@@ -93,7 +95,7 @@ func (t *TakeoverTarget) readContacts(ctx context.Context, tx pgx.Tx) error {
 		contact := &Contact{Owner: item.owner}
 		if err := tx.QueryRow(ctx, `SELECT name,telegram_id FROM core.users WHERE id=$1`, item.owner).
 			Scan(&contact.Name, &contact.TelegramID); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		*item.destination = contact
 	}

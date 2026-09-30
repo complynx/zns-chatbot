@@ -126,6 +126,14 @@ func TestAdminMessageRuntimeHonorsLongCooldown(t *testing.T) {
 			`UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'`,
 		)
 		require.NoError(t, err)
+		_, err = f.db.Exec(
+			t.Context(),
+			`UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'
+WHERE owner_kind='admin' AND owner_key IN
+ (SELECT id::text FROM core.admin_message_deliveries WHERE message_id=$1)`,
+			preview.ID,
+		)
+		require.NoError(t, err)
 	}
 }
 

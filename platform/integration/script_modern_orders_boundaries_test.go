@@ -14,7 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -129,24 +131,29 @@ func TestModernOrdersExportUncertaintyAndRestart(t *testing.T) {
 		"Export modern orders",
 		`const first=tools.orders.export({});const second=tools.orders.export({});return {first:first.status,second:second.status};`,
 	)
-	assert.JSONEq(t, `{"first":"uncertain","second":"uncertain"}`, string(result))
+	assert.JSONEq(t, `{"first":"pending","second":"pending"}`, string(result))
+	assert.Zero(t, transport.sent)
+	pumpBotDeliveries(t, f.b)
 	assert.Equal(t, 1, transport.sent)
 	documents := exportDocuments(t, f, identity.BobTelegramID)
 	require.Len(t, documents, 1)
 	body, err := f.b.TG.Download(t.Context(), telegram.Document{FileID: documents[0], Filename: "orders.xlsx"})
 	require.NoError(t, err)
 	digest := sha256.Sum256(body)
-	var receipt struct {
-		SHA256 string `json:"sha256"`
-		Bytes  int    `json:"bytes"`
-	}
-	err = f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions WHERE owner='bob' AND update_id=38601 AND kind='modern_order_delivery:orders.export'`).
-		Scan(&receipt)
+	operation, effect := botdelivery.ResultOperation("bob", 38601, "document:modern_order_export:sandbox-festival:")
+	ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+	intent, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, ref, false)
 	require.NoError(t, err)
-	assert.Equal(t, hex.EncodeToString(digest[:]), receipt.SHA256)
-	assert.Equal(t, len(body), receipt.Bytes)
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: f.b.Model}
+	assert.Equal(t, delivery.Uncertain, intent.State)
+	require.NotNil(t, intent.Receipt.Document)
+	assert.Equal(t, hex.EncodeToString(digest[:]), intent.Receipt.Document.SHA256)
+	assert.Equal(t, len(body), intent.Receipt.Document.Bytes)
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: f.b.Model, Delivery: f.b.Delivery}
 	handle(t, f.b, message(38601, identity.BobTelegramID, "Export modern orders"))
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), ref))
+	after, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, ref, false)
+	require.NoError(t, err)
+	assert.Equal(t, intent, after, "uncertain transport must not be retried or rewritten")
 	assert.Equal(t, 1, transport.sent)
 }
 

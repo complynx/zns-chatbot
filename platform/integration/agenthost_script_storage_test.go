@@ -13,7 +13,7 @@ func TestAgentHostReadReservationsSurviveRestart(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	const updateID int64 = 94001
-	store := agenthost.ReadStore{DB: f.db}
+	store := agenthost.ReadStore{DB: f.db, Memory: agenthost.MemoryReadStore{DB: f.db}}
 	first := agent.KnowledgeProposal{Text: "first read"}
 	index, err := store.ReserveKnowledge(t.Context(), "alice", updateID, first)
 	require.NoError(t, err)
@@ -21,7 +21,7 @@ func TestAgentHostReadReservationsSurviveRestart(t *testing.T) {
 
 	// Reconstruct the host after an interrupted fetch. The durable slot stays
 	// consumed; a new host instance cannot reset the update's budget.
-	store = agenthost.ReadStore{DB: f.db}
+	store = agenthost.ReadStore{DB: f.db, Memory: agenthost.MemoryReadStore{DB: f.db}}
 	reads, err := store.Knowledge(t.Context(), "alice", updateID)
 	require.NoError(t, err)
 	require.Len(t, reads, 1)
@@ -43,7 +43,7 @@ func TestAgentHostReadReservationsSurviveRestart(t *testing.T) {
 	registration := agent.RegistrationProposal{Event: "sandbox", View: "events"}
 	_, err = store.ReserveRegistration(t.Context(), "alice", updateID, registration)
 	require.NoError(t, err)
-	store = agenthost.ReadStore{DB: f.db}
+	store = agenthost.ReadStore{DB: f.db, Memory: agenthost.MemoryReadStore{DB: f.db}}
 	_, err = store.ReserveRegistration(t.Context(), "alice", updateID, registration)
 	require.ErrorContains(t, err, "already available")
 	var persisted []agent.RegistrationReadResult

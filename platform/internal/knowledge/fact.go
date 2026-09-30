@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // Fact returns the exact scoped record, including an inactive version needed
@@ -25,7 +27,7 @@ func (s Service) Fact(ctx context.Context, actor, event, topic, key string) (Fac
 		return result, nil
 	}
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	entry, err := s.authorizeMemoryEntry(ctx, actor, factMemoryEntry(result))
 	result.ReadAuthorities = entry.ReadAuthorities

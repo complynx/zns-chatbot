@@ -10,7 +10,11 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
 )
 
+// Positive SQL provenance is never a profile refusal; callers then map it as fatal.
 func registrationProfileFailure(err error) bool {
+	if core.IsDatabaseFailure(err) {
+		return false
+	}
 	problem, ok := errors.AsType[*core.ProblemError](err)
 	if !ok {
 		return false

@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
 )
 
@@ -107,7 +108,7 @@ func (s *snapshot) appendAdminTier(
 		count,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	s.event.tiers[tier].Amount += count
 	return nil

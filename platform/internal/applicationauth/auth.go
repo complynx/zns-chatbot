@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
@@ -52,7 +53,13 @@ func (a Authorizer) Authorize(ctx context.Context, token string) (Principal, err
 	var exists bool
 	if err = a.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.users WHERE id=$1)`, owner).
 		Scan(&exists); err != nil {
-		return Principal{}, err
+		if ctx.Err() != nil {
+			return Principal{}, ctx.Err()
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return Principal{}, err
+		}
+		return Principal{}, core.DatabaseFailure(errors.New("owner lookup unavailable"))
 	}
 	if !exists {
 		return Principal{}, ErrForbidden

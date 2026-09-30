@@ -53,13 +53,13 @@ const exportProjection = `SELECT jsonb_build_array(u.telegram_id::text,u.usernam
 func (s Service) ExportSnapshot(ctx context.Context, actor string) (ExportSnapshot, error) {
 	tx, err := s.DB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return ExportSnapshot{}, err
+		return ExportSnapshot{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var allowed bool
 	if err = tx.QueryRow(ctx, exportEvents+`SELECT EXISTS(SELECT 1 FROM allowed_events)`, actor).
 		Scan(&allowed); err != nil {
-		return ExportSnapshot{}, err
+		return ExportSnapshot{}, core.DatabaseOperationError(err)
 	}
 	if !allowed {
 		return ExportSnapshot{}, forbidden()
@@ -72,14 +72,14 @@ func (s Service) ExportSnapshot(ctx context.Context, actor string) (ExportSnapsh
 	err = tx.QueryRow(ctx, exportEvents+`, export_rows AS (`+exportProjection+`)
  SELECT count(*),COALESCE(sum(octet_length(cells::text)),0) FROM export_rows`, actor).Scan(&count, &size)
 	if err != nil {
-		return ExportSnapshot{}, err
+		return ExportSnapshot{}, core.DatabaseOperationError(err)
 	}
 	if count > maxExportRows || size > maxExportInputBytes {
 		return ExportSnapshot{}, exportTooLarge()
 	}
 	rows, err := tx.Query(ctx, exportEvents+exportProjection+` ORDER BY b.event_id,b.created_at,u.telegram_id`, actor)
 	if err != nil {
-		return ExportSnapshot{}, err
+		return ExportSnapshot{}, core.DatabaseOperationError(err)
 	}
 	list, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) ([]any, error) {
 		var cells []any
@@ -87,10 +87,10 @@ func (s Service) ExportSnapshot(ctx context.Context, actor string) (ExportSnapsh
 		return cells, scanErr
 	})
 	if err != nil {
-		return ExportSnapshot{}, err
+		return ExportSnapshot{}, core.DatabaseOperationError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return ExportSnapshot{}, err
+		return ExportSnapshot{}, core.DatabaseOperationError(err)
 	}
 	body, err := renderPassExport(ctx, list)
 	return ExportSnapshot{Body: body, Events: events}, err

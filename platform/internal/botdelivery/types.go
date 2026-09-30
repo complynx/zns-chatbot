@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
@@ -25,26 +26,52 @@ const (
 	IdentityIntent Kind = "identity_unavailable"
 )
 
+const (
+	phaseSend                = "send"
+	phaseEdit                = "edit"
+	familyPasses             = "passes"
+	familyRefund             = "order_refund"
+	familyRefundRedaction    = "order_refund_redaction"
+	familyPassRedaction      = "pass_redaction"
+	familyPassExport         = "pass_export"
+	familyPassProof          = "pass_proof"
+	familyMassage            = "massage"
+	familyStatic             = "static"
+	familyOrderExport        = "order_export"
+	familyModernOrderExport  = "modern_order_export"
+	familyOrderProof         = "order_proof"
+	familyModernOrderProof   = "modern_order_proof"
+	familyFoodOrdersExport   = "food_orders_export"
+	familyFoodSummaryExport  = "food_summary_export"
+	familyFoodProofMeals     = "food_proof_meals"
+	familyFoodProofActivity  = "food_proof_activity"
+	familyFoodReviewMeals    = "food_review_meals"
+	familyFoodReviewActivity = "food_review_activity"
+	codePassSourceStale      = "pass_source_stale"
+	foodReviewScope          = "review"
+)
+
 // Reference contains domain/private-result references, never wire
 // text, file bytes, credentials or a serialized callback.
 type Reference struct {
-	ProofAttempt string                 `json:"proof_attempt,omitempty"`
-	Kind         Kind                   `json:"kind"`
-	Family       string                 `json:"family,omitempty"`
-	CardKey      string                 `json:"card_key,omitempty"`
-	Event        string                 `json:"event,omitempty"`
-	Object       string                 `json:"object,omitempty"`
-	Update       int64                  `json:"update,omitempty"`
-	Revision     int64                  `json:"revision,omitempty"`
-	Version      int64                  `json:"version,omitempty"`
-	Attempt      int64                  `json:"attempt,omitempty"`
-	ResultKind   string                 `json:"result_kind,omitempty"`
-	Notice       i18n.ID                `json:"notice,omitempty"`
-	Language     string                 `json:"language,omitempty"`
-	Generation   *int64                 `json:"generation,omitempty"`
-	Source       *readsource.Derivation `json:"source,omitempty"`
-	Continuation Continuation           `json:"continuation"`
-	Authorities  []readsource.Authority `json:"authorities,omitempty"`
+	Refund       *orders.RefundDeliveryRead `json:"refund,omitempty"`
+	ProofAttempt string                     `json:"proof_attempt,omitempty"`
+	Kind         Kind                       `json:"kind"`
+	Family       string                     `json:"family,omitempty"`
+	CardKey      string                     `json:"card_key,omitempty"`
+	Event        string                     `json:"event,omitempty"`
+	Object       string                     `json:"object,omitempty"`
+	Update       int64                      `json:"update,omitempty"`
+	Revision     int64                      `json:"revision,omitempty"`
+	Version      int64                      `json:"version,omitempty"`
+	Attempt      int64                      `json:"attempt,omitempty"`
+	ResultKind   string                     `json:"result_kind,omitempty"`
+	Notice       i18n.ID                    `json:"notice,omitempty"`
+	Language     string                     `json:"language,omitempty"`
+	Generation   *int64                     `json:"generation,omitempty"`
+	Source       *readsource.Derivation     `json:"source,omitempty"`
+	Continuation Continuation               `json:"continuation"`
+	Authorities  []readsource.Authority     `json:"authorities,omitempty"`
 }
 
 type Continuation struct {
@@ -121,18 +148,18 @@ func (r Reference) Valid(owner string) bool {
 			return false
 		}
 		switch r.Family {
-		case "order_export",
-			"modern_order_export",
-			"order_proof",
-			"modern_order_proof",
-			"pass_export",
-			"pass_proof",
-			"food_orders_export",
-			"food_summary_export",
-			"food_proof_meals",
-			"food_proof_activity",
-			"food_review_meals",
-			"food_review_activity",
+		case familyOrderExport,
+			familyModernOrderExport,
+			familyOrderProof,
+			familyModernOrderProof,
+			familyPassExport,
+			familyPassProof,
+			familyFoodOrdersExport,
+			familyFoodSummaryExport,
+			familyFoodProofMeals,
+			familyFoodProofActivity,
+			familyFoodReviewMeals,
+			familyFoodReviewActivity,
 			"admin_file":
 			return true
 		default:

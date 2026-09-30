@@ -31,7 +31,7 @@ func (s Service) ApplyReceipt(ctx context.Context, in ReceiptRequest) error {
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	denied := false
@@ -43,7 +43,7 @@ func (s Service) ApplyReceipt(ctx context.Context, in ReceiptRequest) error {
 	}
 	key := fmt.Sprintf("%d:%s:%s", current.BotID, current.Operation, current.Effect)
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,81081))", key); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	current, err = Read(ctx, tx, observed.BotID, observed.QueueReference(), true)
 	if err != nil {
@@ -53,7 +53,7 @@ func (s Service) ApplyReceipt(ctx context.Context, in ReceiptRequest) error {
 		return ErrBinding
 	}
 	if current.ContinuationDone {
-		return tx.Commit(ctx)
+		return core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	if !denied {
 		if err = s.projectReceipt(ctx, tx, current); err != nil {
@@ -70,9 +70,9 @@ func (s Service) ApplyReceipt(ctx context.Context, in ReceiptRequest) error {
 		current.MessageID,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 func sameReceipt(a, b Intent) bool {
 	return sameBinding(a, b) && a.State == delivery.Succeeded && a.Attempt == b.Attempt && a.MessageID == b.MessageID &&
@@ -84,7 +84,7 @@ func sourceDenied(err error) bool {
 	}
 	p, ok := errors.AsType[*core.ProblemError](err)
 	return ok &&
-		(p.Code == "history_stale" || p.Code == "pass_source_stale" || p.Code == "source_revoked" || p.Status == 403)
+		(p.Code == "history_stale" || p.Code == codePassSourceStale || p.Code == "source_revoked" || p.Status == 403)
 }
 func (s Service) projectReceipt(ctx context.Context, tx pgx.Tx, i Intent) error {
 	if i.State != delivery.Succeeded || i.MessageID <= 0 {
@@ -146,16 +146,13 @@ func (s Service) projectReceipt(ctx context.Context, tx pgx.Tx, i Intent) error 
 				)
 			}
 		}
-		if err != nil {
-			return err
-		}
-		return nil
-	case "pass_redaction":
+		return core.DatabaseOperationError(err)
+	case familyPassRedaction:
 		_, err = tx.Exec(ctx, "UPDATE bot.pass_views SET message_id=$2 WHERE owner=$1", i.Owner, i.MessageID)
 	default:
 		return s.projectResultReceipt(ctx, tx, i)
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 func (s Service) projectResultReceipt(ctx context.Context, tx pgx.Tx, i Intent) error {
 	switch i.Receipt.Kind {

@@ -2,11 +2,15 @@ package integration_test
 
 import (
 	"net/http"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -34,6 +38,7 @@ func TestScriptPassAssignmentAndManualCard(t *testing.T) {
 		`return tools.passes.registration.show({event:"dance",view:"payment"});`,
 	)
 	require.Empty(t, shown.Error)
+	deliverScriptPassCards(t, f)
 	assert.Contains(t, passMenuCard(t, f, 101).Text, "150")
 }
 
@@ -161,24 +166,43 @@ func TestScriptPassPaymentGenerationAndExecutionACL(t *testing.T) {
 			if scenario == "reject" {
 				action = "reject"
 			}
-			run := runPassVM(
+			model := capturePassCompletion(
 				t,
 				f,
 				19600,
-				202,
 				"Review Alice payment",
 				`await tools.passes.payments.review({event:"dance"});return tools.passes.payments.`+action+`({event:"dance",target:"alice"});`,
 			)
 			payment, err := service.Payment(t.Context(), "alice", "dance", "alice")
 			require.NoError(t, err)
 			if scenario == "replaced" || scenario == "revoked" {
-				assert.NotEmpty(t, run.Error)
+				require.Len(t, model.inputs, 1, "stale authority must prevent subsequent model calls")
+				assertRetiredPassPayment(t, f, 19600)
 				assert.Equal(t, "pending", payment.Decision)
 			} else {
+				require.Len(t, model.inputs, 2)
+				runs := model.inputs[1].Script.Runs
+				require.NotEmpty(t, runs)
+				run := runs[len(runs)-1]
 				require.Empty(t, run.Error)
 				assert.Equal(t, action+"ed", payment.Decision)
 			}
 		})
+	}
+}
+
+func assertRetiredPassPayment(t *testing.T, f *fixture, updateID int64) {
+	t.Helper()
+	var records []agenthost.ScriptRecord
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='bob' AND update_id=$1 AND kind='script_runs'`, updateID).Scan(&records))
+	require.NotEmpty(t, records)
+	for _, record := range records {
+		require.True(t, record.PassRedacted)
+		require.NotEmpty(t, record.Run.Error)
+		for _, call := range record.Calls {
+			require.Empty(t, call.Outcome.Result, "retired payment evidence must be scrubbed")
+		}
 	}
 }
 
@@ -198,4 +222,47 @@ func TestScriptPassRejectsModelAuthority(t *testing.T) {
 	booking, err := (passbooking.Service{DB: f.db}).Get(t.Context(), "alice", "dance")
 	require.NoError(t, err)
 	assert.Zero(t, booking.Version)
+}
+
+// Drive each real shared-queue owner. A failed attempt is not retried here.
+func deliverScriptPassCards(t *testing.T, f *fixture) {
+	t.Helper()
+	for range 20 {
+		pumpBotDeliveries(t, f.b)
+		delay := max(f.b.Delivery.BotInterval, f.b.Delivery.ChatInterval)
+		require.LessOrEqual(t, delay, 100*time.Millisecond)
+		select {
+		case <-time.After(delay + time.Millisecond):
+		case <-t.Context().Done():
+			t.Fatal(t.Context().Err())
+		}
+		dispatched := false
+		for _, entry := range botDeliveryCandidates(t, f.b) {
+			if entry.Reference.Owner != delivery.Passes {
+				continue
+			}
+			id, err := strconv.ParseInt(entry.Reference.Key, 10, 64)
+			require.NoError(t, err)
+			require.NoError(t, f.b.DeliverPassNotification(t.Context(), id))
+			var state string
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), `SELECT state FROM core.delivery_queue WHERE bot_id=$1 AND owner_kind='passes' AND owner_key=$2 AND effect_key=$3`, f.b.Delivery.BotID, entry.Reference.Key, entry.Reference.Effect).
+					Scan(&state),
+			)
+			require.Contains(
+				t,
+				[]string{string(delivery.Succeeded), string(delivery.Cancelled)},
+				state,
+				"fixture must not hide a failed transport attempt",
+			)
+			dispatched = true
+			break
+		}
+		if !dispatched {
+			pumpBotDeliveries(t, f.b)
+			return
+		}
+	}
+	t.Fatal("pass delivery queue did not settle")
 }

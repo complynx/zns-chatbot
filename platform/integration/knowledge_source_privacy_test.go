@@ -206,10 +206,11 @@ func TestKnowledgeSavedAnswerRevocation(t *testing.T) {
 	require.Equal(t, 1, calls)
 	_, err = f.db.Exec(t.Context(), `DELETE FROM core.knowledge_permissions WHERE actor='bob'`)
 	require.NoError(t, err)
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: model}
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Delivery: f.b.Delivery, Model: model}
 	require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal")
 	require.Equal(t, 1, calls)
 	require.NoError(t, f.b.Render(t.Context(), "bob", identity.BobTelegramID))
+	pumpBotDeliveries(t, f.b)
 	cards, err := json.Marshal(chatMessages(t, f, identity.BobTelegramID))
 	require.NoError(t, err)
 	require.NotContains(t, string(cards), "saved private review answer")

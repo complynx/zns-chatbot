@@ -86,9 +86,9 @@ func TestDeletedPaymentCardKeepsSelectedLanguage(t *testing.T) {
 		Choice: orderChoice("preparty"),
 	})
 	require.NoError(t, err)
-	handle(t, f.b, message(900, 101, "/language en"))
-	handle(t, f.b, message(901, 101, "/orders"))
-	handle(t, f.b, orderClick(t, f, 101, 902, "Payment methods"))
+	handleVisible(t, f.b, message(900, 101, "/language en"))
+	handleVisible(t, f.b, message(901, 101, "/orders"))
+	handleVisible(t, f.b, orderClick(t, f, 101, 902, "Payment methods"))
 	opened := paymentMessage(t, f)
 	_, err = f.b.API.ExecuteOrder(t.Context(), "alice", orders.Command{
 		EventID: order.EventID, OrderID: order.ID, Version: order.Version,
@@ -96,6 +96,7 @@ func TestDeletedPaymentCardKeepsSelectedLanguage(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	pumpBotDeliveries(t, f.b)
 	var found bool
 	for _, item := range chatMessages(t, f, 101) {
 		if item.ID == opened.ID {

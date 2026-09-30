@@ -68,7 +68,7 @@ func (s Service) EventsPage(ctx context.Context, actor, raw string) (core.ReadPa
 		actor,
 	)
 	if err != nil {
-		return core.ReadPage[NavigationEvent]{}, err
+		return core.ReadPage[NavigationEvent]{}, core.DatabaseOperationError(err)
 	}
 	items, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (NavigationEvent, error) {
 		item := NavigationEvent{TitlesExcerpt: true, DetailAvailable: true}
@@ -85,7 +85,7 @@ func (s Service) EventsPage(ctx context.Context, actor, raw string) (core.ReadPa
 		return item, scanErr
 	})
 	if err != nil {
-		return core.ReadPage[NavigationEvent]{}, err
+		return core.ReadPage[NavigationEvent]{}, core.DatabaseOperationError(err)
 	}
 	return core.NavigationPage(items, cursor, func(item NavigationEvent) string {
 		start := eventSaleStart(item.Event)
@@ -113,7 +113,7 @@ func (s Service) EventDetail(ctx context.Context, actor, eventID, raw string) (c
 		return core.ReadChunk{}, &core.ProblemError{Status: http.StatusNotFound, Code: "pass_event_unknown"}
 	}
 	if err != nil {
-		return core.ReadChunk{}, err
+		return core.ReadChunk{}, core.DatabaseOperationError(err)
 	}
 	if tooLarge {
 		return core.ReadChunk{}, core.ReadProblem("read_result_limit")

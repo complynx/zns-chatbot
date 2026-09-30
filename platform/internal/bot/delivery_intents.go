@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 
 	"github.com/jackc/pgx/v5"
 
@@ -63,7 +64,7 @@ func (b *Bot) finishBotIntent(
 ) error {
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	current, err := botdelivery.Read(ctx, tx, attempt.BotID, attempt.QueueReference(), true)
@@ -87,7 +88,7 @@ func (b *Bot) finishBotIntent(
 	}
 	if deadline.IsZero() {
 		if err = tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&deadline); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	raw, err := json.Marshal(receipt)
@@ -110,15 +111,15 @@ func (b *Bot) finishBotIntent(
 		target,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent, terminal bool) error {
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	current, err := botdelivery.Read(ctx, tx, observed.BotID, observed.QueueReference(), true)
@@ -132,7 +133,7 @@ func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent
 	var deadline time.Time
 	if err = tx.QueryRow(ctx, "SELECT clock_timestamp()+$1::bigint*interval '1 microsecond'", b.Delivery.Fallback.Microseconds()).
 		Scan(&deadline); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if terminal {
 		state, reason = delivery.Cancelled, "source_unavailable"
@@ -151,9 +152,9 @@ func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent
 		deadline,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // RecoverBotIntents runs only after runtime proves exclusive replacement
@@ -165,7 +166,7 @@ func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 	for {
 		tx, err := b.DB.Begin(ctx)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		var operation, effect string
 		err = tx.QueryRow(ctx, `SELECT operation_key,effect_key FROM bot.delivery_intents
@@ -176,20 +177,21 @@ func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 		}
 		if err != nil {
 			_ = tx.Rollback(ctx)
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
 		err = delivery.Project(ctx, tx, b.Delivery.BotID, ref, delivery.Uncertain, time.Time{})
 		if err == nil {
 			_, err = tx.Exec(ctx, `UPDATE bot.delivery_intents SET state='unknown',reason='delivery_interrupted'
  WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`, b.Delivery.BotID, operation, effect)
+			err = core.DatabaseOperationError(err)
 		}
 		if err != nil {
 			_ = tx.Rollback(ctx)
 			return err
 		}
 		if err = tx.Commit(ctx); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 }

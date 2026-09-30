@@ -76,7 +76,14 @@ func TestScriptPassDerivedInvitationIncarnation(t *testing.T) {
 			} else {
 				invalidateInvitationIdentity(t, f, first, scenario)
 			}
-			f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Scripts: scopeVM{}}
+			f.b = &bot.Bot{
+				Delivery: f.b.Delivery,
+				DB:       f.db,
+				API:      f.b.API,
+				Host:     f.b.Host,
+				TG:       f.b.TG,
+				Scripts:  scopeVM{},
+			}
 			input := retryPassDiscovery(t, f, update)
 			if scenario == "outage" {
 				require.Contains(t, string(input.Script.Runs[0].Result), invitationIdentityCanary)

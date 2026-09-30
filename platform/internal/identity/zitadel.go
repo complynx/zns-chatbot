@@ -2,6 +2,8 @@ package identity
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -36,6 +38,8 @@ type Zitadel struct {
 	actorMu      sync.Mutex
 	actorToken   string
 	actorRefresh time.Time
+	exchanges    positiveIdentityCache
+	verified     positiveIdentityCache
 }
 
 var ErrZitadelIdentity = errors.New("invalid Zitadel identity")
@@ -89,10 +93,17 @@ func (z *Zitadel) Exchange(ctx context.Context, subject string) (string, error) 
 	if subject == "" || len(subject) > 256 || strings.ContainsAny(subject, "\r\n") {
 		return "", ErrZitadelIdentity
 	}
-	actorToken, err := z.getActorToken(ctx)
-	if err != nil {
-		return "", err
-	}
+	return z.exchanges.resolve(ctx, subject, func(ctx context.Context) (cachedIdentity, error) {
+		actorToken, err := z.getActorToken(ctx)
+		if err != nil {
+			return cachedIdentity{}, err
+		}
+		return z.exchange(ctx, subject, actorToken)
+	})
+}
+
+func (z *Zitadel) exchange(ctx context.Context, subject, actorToken string) (cachedIdentity, error) {
+	started := time.Now()
 	form := url.Values{
 		"grant_type":           {"urn:ietf:params:oauth:grant-type:token-exchange"},
 		"subject_token":        {subject},
@@ -109,15 +120,18 @@ func (z *Zitadel) Exchange(ctx context.Context, subject string) (string, error) 
 		IssuedType  string `json:"issued_token_type"`
 		ExpiresIn   int64  `json:"expires_in"`
 	}
-	if err = z.post(ctx, "/oauth/v2/token", z.config.BotClientID, z.config.BotClientSecret, form, &token); err != nil {
-		return "", err
+	if err := z.post(ctx, "/oauth/v2/token", z.config.BotClientID, z.config.BotClientSecret, form, &token); err != nil {
+		return cachedIdentity{}, err
 	}
 	if token.AccessToken == "" || len(token.AccessToken) > 16<<10 || token.TokenType != "Bearer" ||
-		token.ExpiresIn <= 0 ||
+		token.ExpiresIn <= 0 || token.ExpiresIn > 365*24*60*60 ||
 		token.IssuedType != "urn:ietf:params:oauth:token-type:jwt" {
-		return "", ErrZitadelIdentity
+		return cachedIdentity{}, ErrZitadelIdentity
 	}
-	return token.AccessToken, nil
+	const exchangeTTL = 5 * time.Minute
+	const renewalNumerator, renewalDenominator = 9, 10
+	lifetime := min(exchangeTTL, time.Duration(token.ExpiresIn)*time.Second*renewalNumerator/renewalDenominator)
+	return cachedIdentity{value: token.AccessToken, subject: subject, until: started.Add(lifetime)}, nil
 }
 
 // getActorToken shares one audience-scoped token across exchanges, renewing at
@@ -169,12 +183,27 @@ func (z *Zitadel) getActorToken(ctx context.Context) (string, error) {
 	return token.AccessToken, nil
 }
 
-// Verify performs authenticated introspection for each API request. Audience is
-// necessary but does not grant business permissions; domain services check those.
+// Verify reuses a successful introspection for at most five minutes or token
+// expiry, whichever comes first. Hits and outages never extend that deadline.
+// Local identity bindings and business permissions are still checked per call.
 func (z *Zitadel) Verify(ctx context.Context, token string) (string, error) {
 	if token == "" || len(token) > 16<<10 || strings.ContainsAny(token, "\r\n") {
 		return "", ErrZitadelIdentity
 	}
+	digest := sha256.Sum256([]byte(token))
+	key := hex.EncodeToString(digest[:])
+	previousSubject := z.verified.subject(key)
+	return z.verified.resolve(ctx, key, func(ctx context.Context) (cachedIdentity, error) {
+		entry, err := z.verify(ctx, token)
+		if errors.Is(err, ErrZitadelIdentity) && previousSubject != "" {
+			z.InvalidateSubject(previousSubject)
+		}
+		return entry, err
+	})
+}
+
+func (z *Zitadel) verify(ctx context.Context, token string) (cachedIdentity, error) {
+	started := time.Now()
 	var claims struct {
 		Active    bool     `json:"active"`
 		Subject   string   `json:"sub"`
@@ -196,7 +225,7 @@ func (z *Zitadel) Verify(ctx context.Context, token string) (string, error) {
 		url.Values{"token": {token}},
 		&claims,
 	); err != nil {
-		return "", err
+		return cachedIdentity{}, err
 	}
 	now := time.Now().Unix()
 	if !claims.Active || claims.Subject == "" || claims.Issuer != z.config.Issuer ||
@@ -206,9 +235,14 @@ func (z *Zitadel) Verify(ctx context.Context, token string) (string, error) {
 		claims.NotBefore > now ||
 		claims.Actor.Subject != z.config.ActorID ||
 		(claims.Actor.Issuer != "" && claims.Actor.Issuer != z.config.Issuer) {
-		return "", ErrZitadelIdentity
+		return cachedIdentity{}, ErrZitadelIdentity
 	}
-	return claims.Subject, nil
+	const verificationTTL = 5 * time.Minute
+	deadline := started.Add(verificationTTL)
+	if expires := time.Unix(claims.Expires, 0); expires.Before(deadline) {
+		deadline = expires
+	}
+	return cachedIdentity{value: claims.Subject, subject: claims.Subject, until: deadline}, nil
 }
 
 func (z *Zitadel) post(ctx context.Context, path, clientID, secret string, form url.Values, out any) error {

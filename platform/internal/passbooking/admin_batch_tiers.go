@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
 )
 
@@ -30,7 +31,7 @@ func (s Service) TierStatus(ctx context.Context, actor, eventID string) (TierSta
 	var result TierStatus
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	e, err := readTierEvent(ctx, tx, actor, eventID)
@@ -43,14 +44,14 @@ func (s Service) TierStatus(ctx context.Context, actor, eventID string) (TierSta
 	}
 	var now time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	result = tierStatus(e, stats, now)
 	if err = checkTierResult(result); err != nil {
 		return TierStatus{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return TierStatus{}, err
+		return TierStatus{}, core.DatabaseOperationError(err)
 	}
 	return result, nil
 }

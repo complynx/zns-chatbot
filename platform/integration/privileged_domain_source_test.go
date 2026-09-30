@@ -19,11 +19,13 @@ import (
 func domainScriptMarker(t *testing.T, f *fixture, tool, args, revocation string) (*knowledgeModel, string) {
 	t.Helper()
 	var marker string
+	workerRuns := 0
 	model := runScriptReads(
 		t,
 		f,
 		hostScriptFunc(
 			func(ctx context.Context, _ []scriptclient.Tool, callback scriptclient.Callback) (json.RawMessage, error) {
+				workerRuns++
 				data := scriptCall(ctx, t, callback, tool, args)
 				marker = fmt.Sprintf("domain-source-%x", sha256.Sum256(data))
 				if revocation != "" {
@@ -34,6 +36,10 @@ func domainScriptMarker(t *testing.T, f *fixture, tool, args, revocation string)
 			},
 		),
 	)
+	if revocation != "" {
+		assertPrivilegedFreshInput(t, f, model, marker)
+	}
+	require.Equal(t, 1, workerRuns)
 	require.Len(t, model.inputs, 2)
 	encoded, err := json.Marshal(model.inputs[1])
 	require.NoError(t, err)

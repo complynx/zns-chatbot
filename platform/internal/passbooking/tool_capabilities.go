@@ -5,6 +5,8 @@ import (
 	"slices"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // ToolCapabilities is a discovery union only. Each event operation still checks
@@ -21,7 +23,7 @@ func (s Service) ToolCapabilities(ctx context.Context, actor string) (ToolCapabi
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
@@ -30,11 +32,11 @@ func (s Service) ToolCapabilities(ctx context.Context, actor string) (ToolCapabi
 	rows, err := tx.Query(ctx, `SELECT min(id) FROM core.pass_events HAVING count(*)>0
  UNION SELECT min(event_id) FROM core.pass_payment_admins WHERE owner=$1 HAVING count(*)>0`, actor)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	events, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	for _, event := range events {
 		capability, readErr := capabilitiesInTx(ctx, tx, actor, event)
@@ -47,7 +49,7 @@ func (s Service) ToolCapabilities(ctx context.Context, actor string) (ToolCapabi
 	result.Actions = slices.Compact(result.Actions)
 	err = tx.QueryRow(ctx, exportEvents+`SELECT EXISTS(SELECT 1 FROM allowed_events)`, actor).Scan(&result.Export)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }

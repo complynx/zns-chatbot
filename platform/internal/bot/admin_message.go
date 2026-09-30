@@ -23,7 +23,7 @@ func isAdminMessageUpdate(in incoming, u telegram.Update) bool {
 		(u.Message != nil && (in.text == "/send_message_to" || strings.HasPrefix(in.text, "/send_message_to ")))
 }
 
-func (b *Bot) handleAdminMessage(ctx context.Context, in incoming, u telegram.Update) error {
+func (b *Bot) handleAdminMessage(ctx context.Context, in incoming, u telegram.Update) (resultErr error) {
 	ctx = withAdminMessageSource(ctx, in, u)
 	prefs, err := b.API.Preferences(ctx, in.owner)
 	if err != nil {
@@ -31,7 +31,12 @@ func (b *Bot) handleAdminMessage(ctx context.Context, in incoming, u telegram.Up
 	}
 	messages := &orderMessages{language: prefs.Language}
 	if u.Callback != nil {
-		defer b.acknowledge(ctx, u.Callback.ID)
+		// Acknowledgement SQL dominates the handler result; otherwise keep it.
+		defer func() {
+			if ackErr := b.acknowledge(ctx, u.Callback.ID); ackErr != nil {
+				resultErr = ackErr
+			}
+		}()
 	}
 	err = b.authorizeAdminMessage(ctx, in.owner)
 	if err == nil {
@@ -40,6 +45,9 @@ func (b *Bot) handleAdminMessage(ctx context.Context, in incoming, u telegram.Up
 		} else {
 			err = b.handleAdminMessageCommand(ctx, in, u, messages)
 		}
+	}
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
 	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < 500 {
 		return b.queueBotResult(

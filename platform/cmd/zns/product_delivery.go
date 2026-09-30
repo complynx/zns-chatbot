@@ -24,6 +24,11 @@ func configuredTelegramClient(
 	if err != nil {
 		return telegram.Client{}, err
 	}
+	if runtime != nil {
+		if err = runtime.RegisterDeliveryQueue(db, settings.BotID); err != nil {
+			return telegram.Client{}, err
+		}
+	}
 	return telegram.Client{
 		Base:    cfg.Telegram.BaseURL,
 		Token:   cfg.Telegram.Token.Value(),
@@ -34,15 +39,22 @@ func configuredTelegramClient(
 
 // Refresh runs in the existing joined maintenance worker, outside owner
 // transactions. One unavailable alias does not discard other valid bindings.
-func refreshAnnouncementBindings(ctx context.Context, services appservices.Services, logger *slog.Logger) {
+// Only a positive database failure is returned; the refresh timeout and
+// destination-provider failures stay optional warnings.
+func refreshAnnouncementBindings(ctx context.Context, services appservices.Services, logger *slog.Logger) error {
 	if services.Registration.AnnouncementBindings == nil {
-		return
+		return nil
 	}
 	refreshCtx, cancel := context.WithTimeout(ctx, announcementRefreshTimeout)
 	defer cancel()
-	if err := services.Registration.RefreshAnnouncementDestinations(
+	err := services.Registration.RefreshAnnouncementDestinations(
 		refreshCtx, services.AdminMessages.DestinationResolver, announcementBindingTTL,
-	); err != nil && ctx.Err() == nil {
+	)
+	if fatal := databaseFatal(err); fatal != nil {
+		return fatal
+	}
+	if err != nil && ctx.Err() == nil {
 		logger.WarnContext(ctx, "announcement destination refresh incomplete", "error", err)
 	}
+	return nil
 }

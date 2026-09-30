@@ -182,7 +182,7 @@ func (b *Bot) executeScriptProfileMutation(
 		)
 		if problem, ok := errors.AsType[*core.ProblemError](
 			err,
-		); ok && problem.Status == http.StatusConflict &&
+		); !core.IsDatabaseFailure(err) && ok && problem.Status == http.StatusConflict &&
 			problem.Code == "pass_profile_stale" {
 			return nil, appclient.ErrReadStale
 		}

@@ -25,6 +25,9 @@ func (b *Bot) executePassTool(
 	record agenthost.ScriptToolRecord,
 	input *agent.Input,
 ) (any, error) {
+	if record.PassReceiptID != "" {
+		return b.executePassReceipt(ctx, owner, call, record)
+	}
 	if record.Pass == nil {
 		if call.Name == scriptPassOperations {
 			var query derivedmutation.PassOperationQuery
@@ -47,6 +50,9 @@ func (b *Bot) executePassTool(
 	}
 	result, err := b.executePassRequest(ctx, owner, request, *record.Source)
 	if err != nil {
+		if core.IsDatabaseFailure(err) {
+			return nil, core.ErrDatabase
+		}
 		var problem *core.ProblemError
 		if errors.As(err, &problem) && problem.Status < http.StatusInternalServerError {
 			return nil, err
@@ -55,7 +61,12 @@ func (b *Bot) executePassTool(
 		// a new mutation; expose its owner-bound reference for exact continuation.
 		return map[string]any{registrationOperationID: request.ID, "complete": false, "interrupted": true}, nil
 	}
-	return map[string]any{registrationOperationID: request.ID, "complete": true, "result": result}, nil
+	complete := true
+	if request.Name == scriptPassExport {
+		delivered, ok := result.(map[string]bool)
+		complete = ok && delivered[botReceiptDelivered]
+	}
+	return map[string]any{registrationOperationID: request.ID, "complete": complete, "result": result}, nil
 }
 
 func (b *Bot) executePassRequest(
@@ -91,10 +102,7 @@ func (b *Bot) executePassRequest(
 			request.ExportUpdate,
 			&source,
 		)
-		if err == nil && notice != i18n.RegistrationExported {
-			return nil, errors.New("pass export unavailable")
-		}
-		return map[string]bool{botReceiptDelivered: err == nil}, err
+		return map[string]bool{botReceiptDelivered: err == nil && notice == i18n.RegistrationExported}, err
 	default:
 		return nil, errors.New("pass operation unavailable")
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -63,6 +64,9 @@ func (r *passMenuRenderer) payment(ctx context.Context) error {
 		r.lines = append(r.lines, r.text(i18n.RegistrationPaymentHint))
 	}
 	payment, err := r.bot.API.PassPayment(ctx, r.owner, r.state.Event, r.owner)
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](
 		err,
 	); ok &&
@@ -112,29 +116,28 @@ const registrationRejected = "rejected"
 const statePaid = "paid"
 
 func (r *passMenuRenderer) paymentQueue(ctx context.Context) error {
-	page, err := r.bot.API.PassPaymentQueue(ctx, r.owner, r.state.Event, r.state.After)
+	view, err := (interaction.RegistrationMenuReader{Domain: r.bot.API}).
+		PaymentQueue(ctx, r.owner, r.state.Event, r.state.After, nil)
 	if err != nil {
 		return err
 	}
-	own, err := r.bot.API.PassBooking(ctx, r.owner, r.state.Event)
-	if err != nil {
-		return err
-	}
-	first, last := r.page(len(page.Items), page.Next)
-	for _, item := range page.Items[first:last] {
+	first, last := r.page(len(view.Entries), view.Page.Next)
+	for _, entry := range view.Entries[first:last] {
+		item := entry.Review
 		r.takeoverLink(item.TelegramID, " · "+strconv.FormatInt(item.TelegramID, 10))
 		// The queue authorizes this contact; no unrelated profile is fetched.
 		label := strconv.FormatInt(item.TelegramID, 10)
 		r.contact(passbooking.Contact{Owner: item.Owner, TelegramID: item.TelegramID, Name: label})
 		r.lines = append(r.lines, label+" · "+r.paymentStatus(item.Payment))
 		r.paymentFile(item.Owner, item.Payment, " · "+label)
-		for _, accept := range []bool{true, false} {
-			name, id := registrationProofReject, i18n.RegistrationPaymentReject
-			if accept {
-				name, id = registrationProofAccept, i18n.RegistrationPaymentAccept
+		for _, command := range []passbooking.Command{entry.Accept, entry.Reject} {
+			var id i18n.ID
+			switch command.Name {
+			case registrationProofAccept:
+				id = i18n.RegistrationPaymentAccept
+			case registrationProofReject:
+				id = i18n.RegistrationPaymentReject
 			}
-			command := passbooking.Command{Name: name, Event: r.state.Event, Version: own.Version,
-				Target: item.Owner, TargetVersion: item.Payment.Version, PaymentAttempt: item.Payment.Attempt}
 			r.choices = append(
 				r.choices,
 				passMenuChoice{label: r.text(id) + " · " + label, action: passMenuAction{Command: &command}},

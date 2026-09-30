@@ -28,7 +28,7 @@ func (s Service) absentOwnerPayment(
 		Owner: owner,
 	})
 	if err != nil {
-		return Payment{}, err
+		return Payment{}, core.DatabaseOperationError(err)
 	}
 	if absent {
 		return Payment{}, &core.ProblemError{

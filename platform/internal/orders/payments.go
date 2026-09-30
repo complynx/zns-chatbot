@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -17,9 +19,10 @@ func (s Service) PaymentAdmins(ctx context.Context, event string) ([]PaymentAdmi
 	rows, err := s.DB.Query(ctx, `SELECT u.id,u.name,a.country FROM core.order_admins a
 		JOIN core.users u ON u.id=a.owner WHERE a.event_id=$1 ORDER BY u.id`, event)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[PaymentAdmin])
+	admins, err := pgx.CollectRows(rows, pgx.RowToStructByPos[PaymentAdmin])
+	return admins, core.DatabaseOperationError(err)
 }
 
 func (s Service) authorizeInbox(ctx context.Context, actor, event string) error {
@@ -27,7 +30,7 @@ func (s Service) authorizeInbox(ctx context.Context, actor, event string) error 
 	err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.order_admins a JOIN core.users u ON u.id=a.owner
 		WHERE a.owner=$1 AND a.event_id=$2 AND u.can_book)`, actor, event).Scan(&allowed)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !allowed {
 		return problem(http.StatusForbidden, "forbidden")

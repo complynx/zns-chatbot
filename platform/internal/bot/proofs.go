@@ -41,6 +41,10 @@ func (b *Bot) selectProofOrder(
 }
 
 func (b *Bot) proofFailure(ctx context.Context, owner string, err error) (string, error) {
+	// SQL provenance wins; Telegram and document failures below stay provider controls.
+	if core.IsDatabaseFailure(err) {
+		return "", core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return b.orderMessage(ctx, owner, i18n.OrderProofRejected, map[string]string{orderCodeParameter: problem.Code})
 	}

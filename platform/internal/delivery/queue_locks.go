@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery/dbgen"
 )
 
@@ -18,7 +19,7 @@ func LockReferences(ctx context.Context, tx pgx.Tx, botID int64, refs []Referenc
 	}
 	q := dbgen.New(tx)
 	seen := make(map[Reference]bool, len(refs))
-	rows := make([]dbgen.CoreDeliveryQueue, 0, len(refs))
+	rows := make([]dbgen.ReadDeliveryEntryRow, 0, len(refs))
 	for _, ref := range refs {
 		if !ref.valid() {
 			return ErrQueueReference
@@ -48,7 +49,7 @@ func LockReferences(ctx context.Context, tx pgx.Tx, botID int64, refs []Referenc
 			continue
 		}
 		if _, err := q.LockDeliveryLane(ctx, dbgen.LockDeliveryLaneParams{BotID: botID, Chat: row.Chat}); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		previous = row.Chat
 	}
@@ -62,7 +63,7 @@ func LockReferences(ctx context.Context, tx pgx.Tx, botID int64, refs []Referenc
 				EffectKey: row.EffectKey,
 			},
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	return nil

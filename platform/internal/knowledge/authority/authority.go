@@ -66,7 +66,7 @@ func LockPermission(ctx context.Context, tx pgx.Tx, actor, scope, permission str
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &core.ProblemError{Status: http.StatusForbidden, Code: "forbidden"}
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func lockRead(ctx context.Context, tx pgx.Tx, actor string, a ReadAuthority) (bool, error) {
@@ -90,7 +90,7 @@ func lockRead(ctx context.Context, tx pgx.Tx, actor string, a ReadAuthority) (bo
 		if errors.Is(err, pgx.ErrNoRows) {
 			return a.Generation == 0, nil
 		}
-		return current == a.Generation, err
+		return current == a.Generation, core.DatabaseOperationError(err)
 	}
 	err := LockPermission(ctx, tx, actor, a.Scope, Review)
 	if p, ok := errors.AsType[*core.ProblemError](err); ok && p.Status == http.StatusForbidden {
@@ -123,7 +123,8 @@ func LockReads(ctx context.Context, tx pgx.Tx, actor string, refs []ReadAuthorit
 // LockSharedGate precedes all scope-specific grants when sources are combined.
 func LockSharedGate(ctx context.Context, tx pgx.Tx) error {
 	var scope string
-	return tx.QueryRow(ctx, `SELECT scope FROM core.knowledge_scopes WHERE scope='' FOR SHARE`).Scan(&scope)
+	err := tx.QueryRow(ctx, `SELECT scope FROM core.knowledge_scopes WHERE scope='' FOR SHARE`).Scan(&scope)
+	return core.DatabaseOperationError(err)
 }
 
 func lockDerivedRevision(ctx context.Context, tx pgx.Tx, actor string, a ReadAuthority) (bool, error) {
@@ -138,7 +139,7 @@ func lockDerivedRevision(ctx context.Context, tx pgx.Tx, actor string, a ReadAut
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
-	return allowed, err
+	return allowed, core.DatabaseOperationError(err)
 }
 
 func lockDerivedProposal(ctx context.Context, tx pgx.Tx, actor string, a ReadAuthority) (bool, error) {
@@ -158,7 +159,7 @@ func lockDerivedProposal(ctx context.Context, tx pgx.Tx, actor string, a ReadAut
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
-	return valid, err
+	return valid, core.DatabaseOperationError(err)
 }
 
 func (a ReadAuthority) validDerivedMemory() bool {

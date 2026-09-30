@@ -2,7 +2,7 @@ package appclient
 
 import (
 	"context"
-	"encoding/json"
+
 	"errors"
 	"io"
 	"mime"
@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -89,12 +88,7 @@ func (c Client) DownloadPassProof(ctx context.Context, actor, event, owner strin
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		var problem core.ProblemError
-		if err = json.NewDecoder(io.LimitReader(response.Body, MaxAPIBytes)).Decode(&problem); err != nil {
-			return orders.Proof{}, clientBoundaryError(ctx, err, "invalid payment file response")
-		}
-		problem.Status = response.StatusCode
-		return orders.Proof{}, &problem
+		return orders.Proof{}, coreResponseError(ctx, response, "invalid payment file response")
 	}
 	proof := orders.Proof{Attempt: response.Header.Get("X-Payment-Attempt")}
 	proof.Version, err = strconv.ParseInt(response.Header.Get("X-Pass-Version"), 10, 64)

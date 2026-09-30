@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // DocumentState returns only owner-scoped mutation metadata. New keys have
@@ -22,7 +24,7 @@ func (s Service) DocumentState(ctx context.Context, actor, topic, key string) (D
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, nil
 	}
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }
 
 func writeDocument(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, error) {
@@ -30,7 +32,7 @@ func writeDocument(ctx context.Context, tx pgx.Tx, actor string, c Command) (Res
 	err := tx.QueryRow(ctx, `SELECT version FROM core.memory_documents WHERE owner=$1 AND topic=$2 AND document_key=$3`, actor, c.Topic, c.FactKey).
 		Scan(&version)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return Result{}, err
+		return Result{}, core.DatabaseOperationError(err)
 	}
 	if version != c.Version {
 		return Result{}, conflict("knowledge_stale")
@@ -43,7 +45,7 @@ func writeDocument(ctx context.Context, tx pgx.Tx, actor string, c Command) (Res
 		err = tx.QueryRow(ctx, `SELECT count(*) FROM core.memory_documents WHERE owner=$1 AND active AND (topic,document_key)<>($2,$3)`, actor, c.Topic, c.FactKey).
 			Scan(&count)
 		if err != nil {
-			return Result{}, err
+			return Result{}, core.DatabaseOperationError(err)
 		}
 		if count >= MaxDocuments {
 			return Result{}, conflict("knowledge_document_capacity")
@@ -67,7 +69,7 @@ func writeDocument(ctx context.Context, tx pgx.Tx, actor string, c Command) (Res
 		document.Version,
 		document.Active,
 	)
-	return Result{Document: &document}, err
+	return Result{Document: &document}, core.DatabaseOperationError(err)
 }
 
 func (s Service) readDocument(
@@ -86,5 +88,5 @@ func (s Service) readDocument(
 		return MemoryEntry{}, conflict("knowledge_stale")
 	}
 	entry.Phase = MemoryPrivate
-	return entry, err
+	return entry, core.DatabaseOperationError(err)
 }

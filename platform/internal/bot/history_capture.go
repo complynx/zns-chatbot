@@ -132,6 +132,9 @@ func (b *Bot) archiveAssistantReply(ctx context.Context, owner string, id int64,
 		plan.HistoryGeneration,
 		plan.PassAuthority.ReadAuthorities,
 	)
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	var problem *core.ProblemError
 	if errors.As(err, &problem) && problem.Code == historyStale {
 		if passErr := b.planAuthorization().ValidateAuthority(ctx, owner, id, plan); passErr != nil {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
+	deliverypolicy "github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -51,7 +52,7 @@ func TestDerivedBroadcastRetainsSourceUntilPublication(t *testing.T) {
 			require.True(t, preview.ConfirmationRequired)
 			require.NoError(t, f.b.DeliverAdminMessages(ctx))
 			require.Empty(t, chatMessages(t, f, 202), "an agent preview is not publication approval")
-			service := adminmessage.Service{DB: f.db}
+			service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: f.db}
 			if stage == "queued" {
 				callback := message(29101, 101, "")
 				callback.Message = nil
@@ -96,7 +97,7 @@ func TestDerivedBroadcastManualPublicationBindsFrozenContent(t *testing.T) {
 		Authorities:    []readsource.Authority{},
 		PrivateHistory: true,
 	}
-	service := adminmessage.Service{DB: f.db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: f.db}
 	draft, err := service.PreviewDerivedCommand(
 		ctx,
 		"alice",
@@ -116,6 +117,9 @@ func TestDerivedBroadcastManualPublicationBindsFrozenContent(t *testing.T) {
 	require.True(t, found, "manual publication supports unmapped group recipients")
 	require.Equal(t, "-100123", delivery.Destination.Chat)
 	require.Equal(t, "approved frozen content", delivery.Content.Text)
+	gate, err := service.BeginDelivery(ctx, deliverypolicy.Attempt{ID: delivery.ID, Generation: delivery.Attempt})
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
 	require.NoError(t, service.Complete(ctx, delivery.ID, delivery.Attempt, 901, "", false))
 	require.Error(
 		t,
@@ -144,7 +148,7 @@ func TestDerivedBroadcastManualAttachmentRetainsPendingLineage(t *testing.T) {
 		Authorities:    []readsource.Authority{},
 		PrivateHistory: true,
 	}
-	service := adminmessage.Service{DB: f.db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: f.db}
 	input, err := service.BeginDerivedInput(ctx, "alice", "derived-pending", "/send_message_to 202", 101, source)
 	require.NoError(t, err)
 	require.NoError(t, service.RegisterPrompt(ctx, "alice", input.ID, 101, 50))
@@ -193,7 +197,8 @@ func TestDerivedBroadcastProviderReturnCannotPersistRevokedContent(t *testing.T)
 	require.NoError(t, err)
 	calls := 0
 	service := adminmessage.Service{
-		DB: db,
+		Delivery: syntheticDeliverySettings(),
+		DB:       db,
 		InformalName: func(callCtx context.Context, _ map[string]any) (string, error) {
 			calls++
 			return "revoked generated canary", history.DeleteContent(callCtx, "bob", original)
@@ -248,7 +253,7 @@ func TestDerivedBroadcastClaimedRetryCannotResurrectRevokedSource(t *testing.T) 
 		Authorities:    []readsource.Authority{},
 		PrivateHistory: true,
 	}
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	draft, err := service.PreviewDerivedCommand(
 		ctx,
 		"bob",
@@ -261,6 +266,9 @@ func TestDerivedBroadcastClaimedRetryCannotResurrectRevokedSource(t *testing.T) 
 	delivery, found, err := service.Claim(ctx)
 	require.NoError(t, err)
 	require.True(t, found)
+	gate, err := service.BeginDelivery(ctx, deliverypolicy.Attempt{ID: delivery.ID, Generation: delivery.Attempt})
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
 	require.NoError(t, history.DeleteContent(ctx, "bob", original))
 	requireCode(t, service.CheckPublication(ctx, "bob", draft.ID), "source_revoked")
 	require.NoError(t, service.Complete(ctx, delivery.ID, delivery.Attempt, 0, "provider_unavailable", true))

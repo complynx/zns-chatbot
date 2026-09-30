@@ -12,22 +12,25 @@ import (
 )
 
 type result struct {
-	PrepareIdentities *migrate.IdentityPrepareSummary `json:"prepare_identities,omitempty"`
-	Massage           *migrate.MassagePlanSummary     `json:"massage,omitempty"`
-	ApplyMassage      *migrate.MassageApplySummary    `json:"apply_massage,omitempty"`
-	Food              *migrate.FoodPlanSummary        `json:"food,omitempty"`
-	ApplyFood         *migrate.FoodApplySummary       `json:"apply_food,omitempty"`
-	Passes            *migrate.PassPlanSummary        `json:"passes,omitempty"`
-	ApplyPasses       *migrate.PassApplySummary       `json:"apply_passes,omitempty"`
-	ApplyOrders       *migrate.OrderApplySummary      `json:"apply_orders,omitempty"`
-	Orders            *migrate.OrderPlanSummary       `json:"orders,omitempty"`
-	Events            *migrate.EventPlanSummary       `json:"events,omitempty"`
-	ApplyEvents       *migrate.EventApplySummary      `json:"apply_events,omitempty"`
-	ApplyUsers        *migrate.UserApplySummary       `json:"apply_users,omitempty"`
-	Users             *migrate.UserPlanSummary        `json:"users,omitempty"`
-	Report            *migrate.Report                 `json:"report,omitempty"`
-	Reused            bool                            `json:"reused"`
-	Error             string                          `json:"error,omitempty"`
+	ApplyMessages     *migrate.MessageApplySummary      `json:"apply_messages,omitempty"`
+	Messages          *migrate.MessagePlanSummary       `json:"messages,omitempty"`
+	ValidateMessages  *migrate.MessageValidationSummary `json:"validate_messages,omitempty"`
+	PrepareIdentities *migrate.IdentityPrepareSummary   `json:"prepare_identities,omitempty"`
+	Massage           *migrate.MassagePlanSummary       `json:"massage,omitempty"`
+	ApplyMassage      *migrate.MassageApplySummary      `json:"apply_massage,omitempty"`
+	Food              *migrate.FoodPlanSummary          `json:"food,omitempty"`
+	ApplyFood         *migrate.FoodApplySummary         `json:"apply_food,omitempty"`
+	Passes            *migrate.PassPlanSummary          `json:"passes,omitempty"`
+	ApplyPasses       *migrate.PassApplySummary         `json:"apply_passes,omitempty"`
+	ApplyOrders       *migrate.OrderApplySummary        `json:"apply_orders,omitempty"`
+	Orders            *migrate.OrderPlanSummary         `json:"orders,omitempty"`
+	Events            *migrate.EventPlanSummary         `json:"events,omitempty"`
+	ApplyEvents       *migrate.EventApplySummary        `json:"apply_events,omitempty"`
+	ApplyUsers        *migrate.UserApplySummary         `json:"apply_users,omitempty"`
+	Users             *migrate.UserPlanSummary          `json:"users,omitempty"`
+	Report            *migrate.Report                   `json:"report,omitempty"`
+	Reused            bool                              `json:"reused"`
+	Error             string                            `json:"error,omitempty"`
 }
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout)) }
@@ -47,6 +50,9 @@ func run(arguments []string, output io.Writer) int {
 }
 
 func execute(arguments []string) (result, error) {
+	if len(arguments) > 1 && arguments[1] == "messages" {
+		return executeMessages(arguments)
+	}
 	if len(arguments) > 0 && arguments[0] == "prepare-identities" {
 		return executePrepareIdentities(arguments[1:])
 	}

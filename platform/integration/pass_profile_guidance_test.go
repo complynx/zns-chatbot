@@ -24,17 +24,18 @@ UPDATE core.pass_profiles SET role='leader',legal_name='Alice Smith',passport='s
 			if language == "ru" {
 				event, solo, guidance, leader = "Танцы", "Зарегистрироваться соло", "Заполните обязательные данные для регистрации ниже.", "Лидер"
 			}
-			handle(t, f.b, message(900, 101, "/passes"))
-			handle(t, f.b, passMenuClick(t, f, 101, 901, event))
+			handleVisible(t, f.b, message(900, 101, "/passes"))
+			handleVisible(t, f.b, passMenuClick(t, f, 101, 901, event))
 			choice := passMenuClick(t, f, 101, 902, solo)
 			_, err = f.db.Exec(
 				t.Context(),
 				`UPDATE core.pass_profiles SET role='',legal_name='',passport='',version=version+1 WHERE owner='alice'`,
 			)
 			require.NoError(t, err)
-			handle(t, f.b, choice)
+			handleVisible(t, f.b, choice)
 			restarted := *f.b
 			require.NoError(t, restarted.RenderPassMenu(t.Context(), "alice", 101, ""))
+			pumpBotDeliveries(t, &restarted)
 			card := passMenuCard(t, f, 101)
 			assert.Contains(t, card.Text, guidance)
 			labels := []string{}
@@ -46,7 +47,7 @@ UPDATE core.pass_profiles SET role='leader',legal_name='Alice Smith',passport='s
 			assert.Contains(t, labels, leader)
 			assert.NotContains(t, labels, solo)
 			f.model.plan = agent.Plan{View: "workflow", Text: "Four."}
-			handle(t, f.b, message(903, 101, "What is two plus two?"))
+			handleVisible(t, f.b, message(903, 101, "What is two plus two?"))
 			var count int
 			require.NoError(
 				t,
@@ -59,8 +60,9 @@ UPDATE core.pass_profiles SET role='leader',legal_name='Alice Smith',passport='s
 			)
 			require.NoError(t, err)
 			require.NoError(t, restarted.RenderPassMenu(t.Context(), "alice", 101, ""))
+			pumpBotDeliveries(t, &restarted)
 			assert.NotContains(t, passMenuCard(t, f, 101).Text, guidance)
-			handle(t, f.b, passMenuClick(t, f, 101, 904, solo))
+			handleVisible(t, f.b, passMenuClick(t, f, 101, 904, solo))
 			require.NoError(
 				t,
 				f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.pass_bookings WHERE owner='alice'`).Scan(&count),

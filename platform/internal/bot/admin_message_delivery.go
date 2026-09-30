@@ -86,6 +86,9 @@ func (b *Bot) finishAdminAuthorizationFailure(
 	delivery adminmessage.Delivery,
 	authErr error,
 ) error {
+	if core.IsDatabaseFailure(authErr) {
+		return authErr
+	}
 	denied := errors.Is(authErr, identity.ErrZitadelIdentity) || errors.Is(authErr, identity.ErrZitadelUserInactive)
 	if problem, ok := errors.AsType[*core.ProblemError](authErr); ok {
 		denied = denied || problem.Status == http.StatusUnauthorized || problem.Status == http.StatusForbidden

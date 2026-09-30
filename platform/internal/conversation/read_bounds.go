@@ -18,7 +18,7 @@ func checkHistoryReadBudget(ctx context.Context, tx pgx.Tx, actor string, ids []
 		Owner: actor, EventIds: ids, IncludeSummary: summary, TextOnly: textOnly, Budget: core.ReadResourceBytes,
 	})
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !allowed {
 		return core.ReadProblem("read_result_limit")

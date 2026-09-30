@@ -7,9 +7,12 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const operationPending = "pending"
+const operationCommitted = "committed"
 
 // OperationReceipt is a body-free projection of a canonical operation receipt.
 // It is read under current domain authorization, never from a script result.
@@ -81,7 +84,7 @@ func (s Service) AssignmentOperationReceipt(
 
 func receiptStatus(found bool) OperationReceipt {
 	if found {
-		return OperationReceipt{Status: "committed"}
+		return OperationReceipt{Status: operationCommitted}
 	}
 	return OperationReceipt{Status: "not_committed"}
 }
@@ -93,7 +96,7 @@ func operationTarget(ctx context.Context, tx pgx.Tx, event, action, owner string
 		return forbidden()
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	valid, err := lockReadTarget(
 		ctx,
@@ -211,7 +214,7 @@ func (b *RuntimeBatchState) operationItemReceipt(
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.pass_booking_operations WHERE actor=$1 AND event_id=$2 AND key_hash=$3 AND request_hash=$4)`, b.actor, c.Event, hash([]byte(c.Key)), hash(raw)).
 		Scan(&valid)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationContextError(ctx, err)
 	}
 	if !valid {
 		return nil, conflict("source_stale")

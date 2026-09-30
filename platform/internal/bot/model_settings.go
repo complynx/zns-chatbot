@@ -45,6 +45,9 @@ func (b *Bot) handleModelSettings(ctx context.Context, in incoming, u telegram.U
 	}
 	m := &orderMessages{language: prefs.Language}
 	payload, err := b.modelSettingsCommand(ctx, in, u, m)
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
 	if p, ok := errors.AsType[*core.ProblemError](err); ok && p.Status < 500 {
 		id := i18n.ModelSettingsFailed
 		if p.Status == http.StatusForbidden {
@@ -85,7 +88,9 @@ func (b *Bot) handleModelSettings(ctx context.Context, in incoming, u telegram.U
 		return err
 	}
 	if u.Callback != nil {
-		b.acknowledge(ctx, u.Callback.ID)
+		if err = b.acknowledge(ctx, u.Callback.ID); err != nil {
+			return err
+		}
 	}
 	return b.record(ctx, in.owner, u.ID, botFamilyModelSettings, map[string]string{"text": payload.Text})
 }
@@ -276,6 +281,9 @@ func parseModelSettingsChange(parts []string, callback bool, version, id int64) 
 func (b *Bot) addModelSettingsMenu(ctx context.Context, owner, language string, payload *telegram.Send) error {
 	var permissions map[string]bool
 	if err := b.API.Call(ctx, owner, http.MethodGet, "/v1/model-settings/permissions", nil, &permissions); err != nil {
+		if core.IsDatabaseFailure(err) {
+			return core.ErrDatabase
+		}
 		// An optional menu must not prevent a safe reply during an ACL outage.
 		// Show no settings controls unless the permission check succeeds.
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

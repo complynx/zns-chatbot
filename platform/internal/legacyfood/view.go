@@ -3,6 +3,8 @@ package legacyfood
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 type View struct {
@@ -94,7 +96,7 @@ func (s Service) View(ctx context.Context, actor, event, id string) (View, error
 			return view, nil
 		}
 		if err != nil {
-			return view, err
+			return view, core.DatabaseOperationError(err)
 		}
 		if err = json.Unmarshal(raw, &view.Instructions); err != nil {
 			return view, err

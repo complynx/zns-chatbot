@@ -13,12 +13,13 @@ func TestDeliveryWorkerStopJoinsActivePass(t *testing.T) {
 	entered := make(chan struct{})
 	cancelled := make(chan struct{})
 	release := make(chan struct{})
-	stop := startBotDelivery(t.Context(), func(ctx context.Context) {
+	stop := startBotDelivery(t.Context(), func(ctx context.Context) error {
 		close(entered)
 		<-ctx.Done()
 		close(cancelled)
 		<-release
-	})
+		return nil
+	}, func(error) { t.Error("unexpected fatal delivery result") })
 	t.Cleanup(stop)
 	select {
 	case <-entered:
@@ -51,7 +52,11 @@ func TestDeliveryWorkerCancelledParentDoesNotDeliver(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	calls := make(chan struct{}, 1)
-	stop := startBotDelivery(ctx, func(context.Context) { calls <- struct{}{} })
+	stop := startBotDelivery(ctx, func(context.Context) error {
+		calls <- struct{}{}
+		return nil
+	},
+		func(error) { t.Error("unexpected fatal delivery result") })
 	stop()
 	require.Empty(t, calls)
 }

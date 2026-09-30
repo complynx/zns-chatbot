@@ -8,6 +8,7 @@ import (
 )
 
 func orderRoutes(mux *http.ServeMux, service orders.Service, logger *slog.Logger) {
+	orderRefundRoutes(mux, service, logger)
 	orderAgentReadRoutes(mux, service, logger)
 	proofRoutes(mux, service, logger)
 	mux.HandleFunc("GET /v1/orders/{order}", func(w http.ResponseWriter, r *http.Request) {

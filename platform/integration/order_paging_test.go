@@ -87,7 +87,7 @@ func TestOrderPagingNavigationRetiresOldCardsAndSurvivesRestart(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	seedPagingOrders(t, f, false)
-	handle(t, f.b, message(100, 101, "/orders"))
+	handleOrderVisible(t, f, message(100, 101, "/orders"))
 	first := pagingCard(t, f, 101, "paging:orders")
 	assert.Contains(t, first.Text, "1/3")
 	require.Len(t, first.Markup.Rows, 1)
@@ -100,22 +100,24 @@ func TestOrderPagingNavigationRetiresOldCardsAndSurvivesRestart(t *testing.T) {
 	)
 	assert.Equal(t, 10, count)
 	next := pageClick(t, f, 101, 101, "orders", true)
-	handle(t, f.b, next)
+	handleOrderVisible(t, f, next)
 	assert.Contains(t, pagingCard(t, f, 101, "paging:orders").Text, "2/3")
 	retired := pagingCard(t, f, 101, "page-0001")
 	assert.Empty(t, retired.Markup.Rows)
 	assert.Contains(t, retired.Text, "вне текущей страницы")
 	assert.NotContains(t, retired.Text, "удалён")
 	// New Bot instance uses the persisted view rather than an in-memory page counter.
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: f.model}
+	// Process configuration (delivery identity/pacing) survives restart; in-memory state does not.
+	f.b = &bot.Bot{Delivery: f.b.Delivery, DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: f.model}
 	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	drainOrderPresentations(t, f)
 	assert.Contains(t, pagingCard(t, f, 101, "paging:orders").Text, "2/3")
-	handle(t, f.b, pageClick(t, f, 101, 102, "orders", true))
+	handleOrderVisible(t, f, pageClick(t, f, 101, 102, "orders", true))
 	last := pagingCard(t, f, 101, "paging:orders")
 	assert.Contains(t, last.Text, "3/3")
 	require.Len(t, last.Markup.Rows[0], 1)
 	assert.Equal(t, "Назад", last.Markup.Rows[0][0].Text)
-	handle(t, f.b, next) // Delayed duplicate must not rewind the newer page.
+	handleOrderVisible(t, f, next) // Delayed duplicate must not rewind the newer page.
 	assert.Contains(t, pagingCard(t, f, 101, "paging:orders").Text, "3/3")
 	require.NoError(
 		t,
@@ -124,8 +126,8 @@ func TestOrderPagingNavigationRetiresOldCardsAndSurvivesRestart(t *testing.T) {
 	)
 	assert.Equal(t, 3, count)
 	for update := int64(103); update < 107; update += 2 {
-		handle(t, f.b, pageClick(t, f, 101, update, "orders", false))
-		handle(t, f.b, pageClick(t, f, 101, update+1, "orders", true))
+		handleOrderVisible(t, f, pageClick(t, f, 101, update, "orders", false))
+		handleOrderVisible(t, f, pageClick(t, f, 101, update+1, "orders", true))
 	}
 	require.NoError(
 		t,
@@ -140,6 +142,7 @@ func TestOrderPagingNavigationRetiresOldCardsAndSurvivesRestart(t *testing.T) {
 		f.db.QueryRow(t.Context(), `SELECT (data->>'Edits')::int FROM bot.fake_state WHERE id`).Scan(&editsBefore),
 	)
 	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	drainOrderPresentations(t, f) // Any queued rewrite must reach the transport before counting edits.
 	require.NoError(
 		t,
 		f.db.QueryRow(t.Context(), `SELECT (data->>'Edits')::int FROM bot.fake_state WHERE id`).Scan(&editsAfter),
@@ -149,13 +152,14 @@ func TestOrderPagingNavigationRetiresOldCardsAndSurvivesRestart(t *testing.T) {
 	_, err := f.db.Exec(t.Context(), `UPDATE core.orders SET state='deleted' WHERE id>'page-0005'`)
 	require.NoError(t, err)
 	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	drainOrderPresentations(t, f)
 	assert.Contains(t, pagingCard(t, f, 101, "paging:orders").Text, "1/1")
 	assert.Empty(t, pagingCard(t, f, 101, "paging:orders").Markup.Rows)
 	assert.Empty(t, pagingCard(t, f, 101, "page-0023").Markup.Rows)
 	_, err = f.db.Exec(t.Context(), `UPDATE core.orders SET state='deleted'`)
 	require.NoError(t, err)
 	next.ID = 200
-	handle(t, f.b, next)
+	handleOrderVisible(t, f, next)
 	empty := pagingCard(t, f, 101, "paging:orders")
 	assert.Contains(t, empty.Text, "1/1")
 	assert.Contains(t, empty.Text, "всего 0")
@@ -172,21 +176,23 @@ func TestOrderPagingRejectsForgedAndForeignCallbacks(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	seedPagingOrders(t, f, false)
-	handle(t, f.b, message(100, 101, "/orders"))
+	handleVisible(t, f.b, message(100, 101, "/orders"))
 	foreign := pageClick(t, f, 101, 101, "orders", true)
 	foreign.Callback.From.ID = 202
 	foreign.Callback.Message.Chat.ID = 202
-	handle(t, f.b, foreign)
+	handleVisible(t, f.b, foreign)
 	var count int
 	require.NoError(
 		t,
 		f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.order_pages WHERE owner='bob'`).Scan(&count),
 	)
 	assert.Zero(t, count)
-	assert.Contains(t, chatMessages(t, f, 202)[0].Text, "недоступна")
+	messages := chatMessages(t, f, 202)
+	require.NotEmpty(t, messages)
+	assert.Contains(t, messages[0].Text, "недоступна")
 	forged := pageClick(t, f, 101, 102, "orders", true)
 	forged.Callback.Data = "o:page:" + strings.Repeat("0", 32)
-	handle(t, f.b, forged)
+	handleVisible(t, f.b, forged)
 	assert.Contains(t, pagingCard(t, f, 101, "paging:orders").Text, "1/3")
 	for _, message := range chatMessages(t, f, 202) {
 		assert.NotContains(t, message.Text, "page-0001")
@@ -197,12 +203,12 @@ func TestOrderPagingAgentFocusesExplicitOffPageOrder(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	seedPagingOrders(t, f, false)
-	handle(t, f.b, message(100, 101, "/orders"))
+	handleOrderVisible(t, f, message(100, 101, "/orders"))
 	f.model.plan = agent.Plan{
 		View:        agent.OrdersView,
 		OrderAction: &agent.OrderProposal{Name: "add_extra", OrderID: "page-0023", Extra: "preparty"},
 	}
-	handle(t, f.b, message(101, 101, "add preparty to order page-0023"))
+	handleOrderVisible(t, f, message(101, 101, "add preparty to order page-0023"))
 	assert.Contains(t, pagingCard(t, f, 101, "paging:orders").Text, "3/3")
 	card := pagingCard(t, f, 101, "page-0023")
 	assert.Contains(t, card.Text, "версия 2")
@@ -214,11 +220,11 @@ func TestPaymentInboxPagingIsIndependentAndRevocationAware(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	seedPagingOrders(t, f, true)
-	handle(t, f.b, message(100, 101, "/orders"))
-	handle(t, f.b, message(101, 202, "/orders"))
+	handleOrderVisible(t, f, message(100, 101, "/orders"))
+	handleOrderVisible(t, f, message(101, 202, "/orders"))
 	assert.Contains(t, pagingCard(t, f, 202, "paging:admin").Text, "1/3")
 	next := pageClick(t, f, 202, 102, "admin", true)
-	handle(t, f.b, next)
+	handleOrderVisible(t, f, next)
 	assert.Contains(t, pagingCard(t, f, 202, "paging:admin").Text, "2/3")
 	assert.Contains(t, pagingCard(t, f, 101, "paging:orders").Text, "1/3")
 	assert.Empty(t, pagingCard(t, f, 202, "admin:page-0001").Markup.Rows)
@@ -226,7 +232,7 @@ func TestPaymentInboxPagingIsIndependentAndRevocationAware(t *testing.T) {
 	_, err := f.db.Exec(t.Context(), `DELETE FROM core.order_admins WHERE owner='bob'`)
 	require.NoError(t, err)
 	next.ID = 103
-	handle(t, f.b, next)
+	handleOrderVisible(t, f, next)
 	assert.Empty(t, pagingCard(t, f, 202, "admin:page-0011").Markup.Rows)
 	assert.Empty(t, pagingCard(t, f, 202, "paging:admin").Markup.Rows)
 }

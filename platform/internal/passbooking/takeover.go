@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const CommandTakeover = "takeover"
@@ -14,14 +16,14 @@ func authorizeTakeover(ctx context.Context, tx pgx.Tx, actor, eventID string) er
 	var owner string
 	err := tx.QueryRow(ctx, `SELECT owner FROM core.pass_booking_admins WHERE owner=$1 FOR SHARE`, actor).Scan(&owner)
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	err = tx.QueryRow(ctx, `SELECT owner FROM core.pass_payment_admins WHERE owner=$1 AND event_id=$2 FOR SHARE`, actor, eventID).
 		Scan(&owner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return forbidden()
 	}
-	return err
+	return core.DatabaseOperationContextError(ctx, err)
 }
 
 func (s *snapshot) takeover(ctx context.Context, tx pgx.Tx, actor string, c Command) error {
@@ -71,5 +73,5 @@ func (s *snapshot) backfillReceiver(ctx context.Context, tx pgx.Tx, b *Booking, 
 	if err == nil && result.RowsAffected() > 0 {
 		s.touch(b)
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }

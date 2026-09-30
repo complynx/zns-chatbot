@@ -9,11 +9,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
 const legacySourceAction = "source"
@@ -70,11 +69,16 @@ func readLegacyDraft(ctx context.Context, q queryer, actor, event, id string, lo
 		query += " FOR UPDATE OF d"
 	}
 	var result LegacyDraft
+	var raw []byte
 	err := q.QueryRow(ctx, query, actor, event, id).
-		Scan(&result.ID, &result.Event, &result.Version, &result.State, &result.Booking, &result.Closed, &result.Cancelled)
+		Scan(&result.ID, &result.Event, &result.Version, &raw, &result.Booking, &result.Closed, &result.Cancelled)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, problem(http.StatusNotFound, "not_found")
 	}
+	if err != nil {
+		return result, core.DatabaseOperationError(err)
+	}
+	err = json.Unmarshal(raw, &result.State)
 	return result, err
 }
 
@@ -93,20 +97,20 @@ func (s Service) ExecuteLegacy(ctx context.Context, actor string, c LegacyComman
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return LegacyDraft{}, err
+		return LegacyDraft{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = authenticated(ctx, tx, actor); err != nil {
 		return LegacyDraft{}, err
 	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('massage:'||$1,0))`, actor); err != nil {
-		return LegacyDraft{}, err
+		return LegacyDraft{}, core.DatabaseOperationError(err)
 	}
 	draft, err := readLegacyDraft(ctx, tx, actor, c.Event, c.ID, true)
 	if err != nil {
 		if p, ok := errors.AsType[*core.ProblemError](err); ok && p.Status == http.StatusNotFound {
 			if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
-				return draft, rollbackErr
+				return draft, core.DatabaseOperationError(rollbackErr)
 			}
 			return s.executeLegacyBooking(ctx, actor, c)
 		}
@@ -135,17 +139,17 @@ func (s Service) executeLockedLegacy(
 		if prior != fingerprint {
 			return draft, problem(http.StatusConflict, "idempotency_conflict")
 		}
-		return draft, tx.Commit(ctx)
+		return draft, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return draft, err
+		return draft, core.DatabaseOperationError(err)
 	}
 	if draft.Closed {
-		return draft, tx.Commit(ctx)
+		return draft, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	if c.Action == legacySourceAction || c.Action == legacySourceBack || c.Action == legacySourceCancel {
 		if draft.Version != 0 {
-			return draft, tx.Commit(ctx)
+			return draft, core.DatabaseOperationError(tx.Commit(ctx))
 		}
 		c, err = legacySourceCommand(c, draft.State)
 		if err != nil {
@@ -168,7 +172,7 @@ func (s Service) executeLockedLegacy(
 		draft.Closed,
 	)
 	if err != nil {
-		return draft, err
+		return draft, core.DatabaseOperationError(err)
 	}
 	_, err = tx.Exec(
 		ctx,
@@ -179,9 +183,9 @@ func (s Service) executeLockedLegacy(
 		draft,
 	)
 	if err != nil {
-		return draft, err
+		return draft, core.DatabaseOperationError(err)
 	}
-	return draft, tx.Commit(ctx)
+	return draft, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func legacySourceCommand(c LegacyCommand, state LegacyState) (LegacyCommand, error) {
@@ -279,7 +283,7 @@ func (s Service) selectLegacySpecialist(
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.massage_specialists WHERE event_id=$1 AND owner=$2 AND min_length<=$3 AND max_length>=$3)`, d.Event, c.Specialist, d.State.Length).
 		Scan(&eligible)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !eligible {
 		return problem(http.StatusConflict, "specialist_unavailable")

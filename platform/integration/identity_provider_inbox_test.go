@@ -24,9 +24,24 @@ import (
 )
 
 type inboxOAuth struct {
-	mode   atomic.Int32
-	calls  atomic.Int64
-	issuer string
+	mode     atomic.Int32
+	calls    atomic.Int64
+	inactive atomic.Int64
+	issuer   string
+}
+
+type invalidateAdmittedSubject struct {
+	adapter     *identity.Zitadel
+	invalidated atomic.Bool
+}
+
+func (p *invalidateAdmittedSubject) Exchange(ctx context.Context, subject string) (string, error) {
+	token, err := p.adapter.Exchange(ctx, subject)
+	if err == nil && subject == "z-alice" && p.invalidated.CompareAndSwap(false, true) {
+		// Model an explicit in-app invalidation after admission cached the token.
+		p.adapter.InvalidateSubject(subject)
+	}
+	return token, err
 }
 
 func (p *inboxOAuth) serve(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +61,7 @@ func (p *inboxOAuth) serve(w http.ResponseWriter, r *http.Request) {
 	if subject == "z-alice" {
 		calls := p.calls.Add(1)
 		if p.mode.Load() == 5 && calls > 1 {
+			p.inactive.Add(1)
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":"invalid_request","error_description":"Errors.User.NotActive"}`))
 			return
@@ -102,7 +118,7 @@ func providerInboxFixture(t *testing.T, mode int32, language string) (*fixture, 
 	require.NoError(t, links.Bind(t.Context(), "bob", 202, "z-bob"))
 	server := httptest.NewServer(
 		api.AuthenticatedHandler(
-			appservices.NewServices(f.db, appservices.Options{}),
+			notificationFixtureServices(f.db, appservices.Options{}),
 			f.b.Host.Signer,
 			slog.New(slog.DiscardHandler),
 			api.ZitadelOwner(adapter, links),
@@ -110,6 +126,9 @@ func providerInboxFixture(t *testing.T, mode int32, language string) (*fixture, 
 	)
 	t.Cleanup(server.Close)
 	f.b.API.Base, f.b.API.Links, f.b.API.Exchange = server.URL, links, adapter
+	if mode == 5 {
+		f.b.API.Exchange = &invalidateAdmittedSubject{adapter: adapter}
+	}
 	f.b.Host.Base = f.b.API.Base
 	f.b.Logger = slog.New(slog.DiscardHandler)
 	f.b.Onboarding = func(context.Context, telegram.User) error {
@@ -145,7 +164,7 @@ func TestInactiveProviderUserCompletesDeniedUpdateWithoutReplay(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			t.Parallel()
 			f, provider, acks := providerInboxFixture(t, 1, language)
-			completeInbox(t, f, 9302)
+			completeIdentityInbox(t, f, 9302)
 			var privateUpdates int
 			require.NoError(
 				t,
@@ -166,7 +185,7 @@ func TestInactiveProviderUserCompletesDeniedUpdateWithoutReplay(t *testing.T) {
 			)
 			require.Positive(t, cards, "healthy successor must receive its reply")
 			provider.mode.Store(0)
-			completeInbox(t, f, 9302)
+			completeIdentityInbox(t, f, 9302)
 			current, err := (workflow.Service{DB: f.db}).Current(t.Context(), "alice")
 			require.NoError(t, err)
 			assert.EqualValues(t, 2, current.Version, "reactivation must not execute rejected callback")
@@ -182,12 +201,21 @@ func TestProviderInfrastructureFailureKeepsDurableUpdate(t *testing.T) {
 			func(t *testing.T) {
 				t.Parallel()
 				f, provider, _ := providerInboxFixture(t, mode, "en")
-				runInboxUntil(t, f, func() bool { return provider.calls.Load() > 0 })
+				runInboxUntil(t, f, func() bool {
+					var recorded bool
+					err := f.db.QueryRow(
+						t.Context(),
+						`SELECT failures=1 AND state='pending' AND next_attempt_at>clock_timestamp()
+ FROM bot.telegram_inbox WHERE update_id=9300`,
+					).Scan(&recorded)
+					return err == nil && recorded
+				})
 				var pending int
-				require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&pending))
-				require.Equal(t, 2, pending)
+				require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox
+ WHERE update_id=9300 AND state='pending' AND failures=1`).Scan(&pending))
+				require.Equal(t, 1, pending, "the original failed update must remain durable")
 				provider.mode.Store(0)
-				completeInbox(t, f, 9302)
+				completeInboxAfterCooldown(t, f, 9302, 9300)
 				current, err := (workflow.Service{DB: f.db}).Current(t.Context(), "alice")
 				require.NoError(t, err)
 				assert.EqualValues(
@@ -203,12 +231,26 @@ func TestProviderInfrastructureFailureKeepsDurableUpdate(t *testing.T) {
 
 func TestProviderUserDeactivatedAfterAdmissionIsTerminal(t *testing.T) {
 	t.Parallel()
+	// Explicit subject invalidation forces a fresh provider check after admission;
+	// this does not assume immediate detection of external deactivation through a cache.
 	f, provider, acknowledgements := providerInboxFixture(t, 5, "en")
 	completeInbox(t, f, 9302)
+	require.GreaterOrEqual(t, provider.calls.Load(), int64(2))
+	require.Positive(t, provider.inactive.Load(), "the provider must explicitly reject the exchanged user")
 	require.Positive(t, acknowledgements.Load())
-	provider.mode.Store(0)
-	completeInbox(t, f, 9302)
 	current, err := (workflow.Service{DB: f.db}).Current(t.Context(), "alice")
 	require.NoError(t, err)
-	assert.EqualValues(t, 2, current.Version)
+	require.EqualValues(t, 2, current.Version, "the rejected callback must not cancel the booking")
+	var archived int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.conversation_events
+ WHERE owner='alice' AND source_key='tg-user-9300'`).Scan(&archived))
+	require.Zero(t, archived, "the rejected callback must not enter private history")
+	calls, inactive := provider.calls.Load(), provider.inactive.Load()
+	provider.mode.Store(0)
+	completeInbox(t, f, 9302)
+	current, err = (workflow.Service{DB: f.db}).Current(t.Context(), "alice")
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, current.Version, "reactivation must not replay the rejected callback")
+	assert.Equal(t, calls, provider.calls.Load(), "completed input must not request another Alice exchange")
+	assert.Equal(t, inactive, provider.inactive.Load())
 }

@@ -2,12 +2,14 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -115,14 +117,18 @@ func (b *Bot) commitRegistrationReceipt(ctx context.Context, in incoming, item m
 			return b.mediaExecutionError(ctx, in, item, err)
 		}
 		command.ProofID = proof.ID
+		encoded, encodeErr := json.Marshal(command)
+		if encodeErr != nil {
+			return encodeErr
+		}
 		if _, err = b.DB.Exec(
 			ctx,
 			`UPDATE bot.media_intake SET registration_command=$3 WHERE owner=$1 AND id=$2`,
 			in.owner,
 			item.ID,
-			command,
+			encoded,
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	item.RegistrationCommand = &command
@@ -138,7 +144,7 @@ func (b *Bot) commitRegistrationReceipt(ctx context.Context, in incoming, item m
 		item.ID,
 		string(i18n.MediaSaved),
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	state := interaction.RegistrationMenu{Event: command.Event, View: registrationPayment}
 	_, revision, err := b.passMenuState(ctx, in.owner)

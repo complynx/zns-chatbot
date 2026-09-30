@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,13 +14,21 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -385,41 +394,254 @@ func TestNotificationDeliveryKnownResultPrecedesFollowupFailure(t *testing.T) {
 	for _, domain := range []string{"orders", "registration", "massage", "food"} {
 		t.Run(domain, func(t *testing.T) {
 			t.Parallel()
-			r := notificationRuntime(t, domain)
-			spy := attachNotificationWireSpy(t, r.f, "")
-			restore := r.failFollowup(t)
-			require.Error(t, r.deliver(t.Context()))
-			before := r.status(t, r.first)
-			require.Equal(t, "sent", before.State)
-			require.Positive(t, before.MessageID)
-			require.True(t, before.FollowupPending)
-			assert.Equal(t, "notification_followup_unavailable", before.FollowupFailure)
-			assert.EqualValues(t, 1, before.FollowupAttempts)
+			r, spy, before, restore := notificationSQLFollowupFailure(t, domain)
+			r.expireNotificationLeases(t)
 			r.wake(t)
-			require.Error(t, r.deliver(t.Context()))
-			assert.Equal(t, 1, spy.calls(202), "a durable sent result retries only follow-up")
+			err := observeNotificationSQLStop(t, r)
+			require.ErrorIs(t, err, core.ErrDatabase)
+			assert.NotContains(t, err.Error(), "synthetic follow-up failure")
+			assert.Equal(t, 1, spy.calls(202), "sent transport must not be repeated")
 			assert.Equal(t, "pending", r.status(t, r.second).State)
-			assert.Equal(t, "sent", r.status(t, r.other).State)
+			failed := r.status(t, r.first)
+			assert.Equal(t, before.MessageID, failed.MessageID)
+			assert.True(t, failed.FollowupPending)
+			assert.Zero(t, failed.FollowupAttempts, "SQL failure must not schedule an ordinary retry")
 			restore()
-			r.wake(t)
-			require.NoError(t, r.deliver(t.Context()))
-			after := r.status(t, r.first)
-			assert.Equal(t, before.MessageID, after.MessageID)
-			assert.False(t, after.FollowupPending)
-			assert.Empty(t, after.FollowupFailure)
-			assert.Equal(t, 1, spy.calls(202), "successful follow-up also does not resend")
-			r.wake(t)
-			require.NoError(t, r.deliver(t.Context()))
-			assert.Equal(
-				t,
-				"sent",
-				r.status(t, r.second).State,
-				"the next same-chat item follows completed history/view work",
-			)
+			r.restartNotificationOwner(t, domain)
+			r.finishNotificationFollowup(t, spy, before)
 		})
 	}
 }
 
+// Observe the actual receipt SQL failure, not the beginning of a batch: other
+// lanes may legitimately be selected before this failed follow-up.
+type notificationSQLCutoff struct {
+	failed        atomic.Bool
+	queriesAfter  atomic.Int64
+	requestsAfter atomic.Int64
+}
+
+func (c *notificationSQLCutoff) TraceQueryStart(
+	ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData,
+) context.Context {
+	if c.failed.Load() {
+		c.queriesAfter.Add(1)
+	}
+	return ctx
+}
+
+func (c *notificationSQLCutoff) TraceQueryEnd(_ context.Context, _ *pgx.Conn, data pgx.TraceQueryEndData) {
+	var failure *pgconn.PgError
+	if errors.As(data.Err, &failure) && failure.Code == "P0001" && failure.Message == "synthetic follow-up failure" {
+		c.failed.Store(true)
+	}
+}
+
+func (c *notificationSQLCutoff) client(previous *http.Client) *http.Client {
+	client := http.Client{}
+	if previous != nil {
+		client = *previous
+	}
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	client.Transport = qaArchiveBoundaryTransport(func(request *http.Request) (*http.Response, error) {
+		if c.failed.Load() {
+			c.requestsAfter.Add(1)
+		}
+		return transport.RoundTrip(request)
+	})
+	return &client
+}
+
+func observeNotificationSQLStop(t *testing.T, r *notificationRuntimeFixture) error {
+	t.Helper()
+	cutoff := &notificationSQLCutoff{}
+	config := r.f.db.Config()
+	config.ConnConfig.Tracer = cutoff
+	pool, err := pgxpool.NewWithConfig(t.Context(), config)
+	require.NoError(t, err)
+	defer pool.Close()
+	b := r.f.b
+	previousDB, previousAPI, previousHost, previousTG := b.DB, b.API.HTTP, b.Host.HTTP, b.TG.HTTP
+	b.DB = pool
+	b.API.HTTP, b.Host.HTTP, b.TG.HTTP = cutoff.client(
+		previousAPI,
+	), cutoff.client(
+		previousHost,
+	), cutoff.client(
+		previousTG,
+	)
+	defer func() {
+		b.DB, b.API.HTTP, b.Host.HTTP, b.TG.HTTP = previousDB, previousAPI, previousHost, previousTG
+	}()
+	err = r.deliver(t.Context())
+	require.True(t, cutoff.failed.Load(), "the real receipt trigger must reach the observed SQL boundary")
+	require.Zero(t, cutoff.queriesAfter.Load(), "no later local SQL after the fatal receipt failure")
+	require.Zero(
+		t,
+		cutoff.requestsAfter.Load(),
+		"no later API, Host or Telegram request after the fatal receipt failure",
+	)
+	return err
+}
+
+func notificationSQLFollowupFailure(t *testing.T, domain string) (
+	*notificationRuntimeFixture, *notificationWireSpy, notificationRuntimeStatus, func(),
+) {
+	t.Helper()
+	r := notificationRuntime(t, domain)
+	spy := attachNotificationWireSpy(t, r.f, "")
+	restore := r.failFollowup(t)
+	err := r.deliver(t.Context())
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.NotContains(t, err.Error(), "synthetic follow-up failure")
+	before := r.status(t, r.first)
+	require.Equal(t, "sent", before.State)
+	require.Positive(t, before.MessageID)
+	require.True(t, before.FollowupPending)
+	require.Empty(t, before.FollowupFailure)
+	require.Zero(t, before.FollowupAttempts)
+	require.Equal(t, 1, spy.calls(202))
+	var leaseLive bool
+	require.NoError(t, r.f.db.QueryRow(t.Context(),
+		"SELECT lease_until>clock_timestamp() FROM "+r.table+" WHERE id=$1", r.first).Scan(&leaseLive))
+	require.True(t, leaseLive, "SQL stop preserves the live follow-up claim")
+	return r, spy, before, restore
+}
+
+func (r *notificationRuntimeFixture) restartNotificationOwner(t *testing.T, domain string) {
+	t.Helper()
+	previous := r.f.b
+	r.f.b = &bot.Bot{
+		DB: previous.DB, API: previous.API, Host: previous.Host, TG: previous.TG,
+		Delivery: previous.Delivery, OrderEventID: previous.OrderEventID, Model: previous.Model,
+	}
+	switch domain {
+	case "orders":
+		r.deliver = r.f.b.DeliverNotifications
+	case "registration":
+		r.deliver = r.f.b.DeliverPassNotifications
+	case "massage":
+		r.deliver = r.f.b.DeliverMassageNotifications
+	case "food":
+		r.deliver = r.f.b.DeliverFoodNotifications
+	default:
+		t.Fatal("unknown notification domain")
+	}
+}
+
+func (r *notificationRuntimeFixture) finishNotificationFollowup(
+	t *testing.T, spy *notificationWireSpy, before notificationRuntimeStatus,
+) {
+	t.Helper()
+	r.expireNotificationLeases(t)
+	r.wake(t)
+	require.NoError(t, r.deliver(t.Context()))
+	after := r.status(t, r.first)
+	assert.Equal(t, before.MessageID, after.MessageID)
+	assert.Equal(t, "sent", after.State)
+	assert.False(t, after.FollowupPending)
+	assert.Empty(t, after.FollowupFailure)
+	assert.Equal(t, 1, spy.calls(202), "reconstructed owner resumes follow-up, not transport")
+	beforeSuccessor := notificationSinkMessageIDs(t, r.f, 202)
+	require.Contains(t, beforeSuccessor, before.MessageID)
+	r.wake(t)
+	require.NoError(t, r.deliver(t.Context()))
+	successor := r.status(t, r.second)
+	require.Equal(t, "sent", successor.State, "same-chat successor follows completed continuation")
+	require.Positive(t, successor.MessageID)
+	require.NotEqual(t, before.MessageID, successor.MessageID)
+	assert.Equal(t, "sent", r.status(t, r.other).State, "other lane progresses once invocation is healthy")
+	expectedIDs := beforeSuccessor
+	expectedIDs = append(expectedIDs, successor.MessageID)
+	require.ElementsMatch(t, expectedIDs, notificationSinkMessageIDs(t, r.f, 202),
+		"only the legitimate successor adds a message, even when its text matches the first")
+	callsAfterSuccessor := spy.calls(202)
+	r.wake(t)
+	require.NoError(t, r.deliver(t.Context()))
+	assert.Equal(t, callsAfterSuccessor, spy.calls(202), "terminal receipt replay makes no repeat request")
+	assert.Equal(t, before.MessageID, r.status(t, r.first).MessageID)
+	assert.Equal(t, successor.MessageID, r.status(t, r.second).MessageID)
+	assert.ElementsMatch(t, expectedIDs, notificationSinkMessageIDs(t, r.f, 202))
+}
+
+func notificationSinkMessageIDs(t *testing.T, f *fixture, chat int64) []int64 {
+	t.Helper()
+	var ids []int64
+	for _, message := range chatMessages(t, f, chat) {
+		ids = append(ids, message.ID)
+	}
+	return ids
+}
+
+// This provider is deliberately outside SQL: a lookup transport EOF must retain
+// ordinary follow-up retry accounting rather than become a fatal database error.
+type notificationFollowupProvider struct {
+	token func(string) string
+	calls int
+}
+
+func (p *notificationFollowupProvider) Telegram(_ context.Context, sender int64) (identity.User, error) {
+	if sender == 202 {
+		p.calls++
+		return identity.User{}, io.ErrUnexpectedEOF
+	}
+	owner, ok := identity.Subject(sender)
+	if !ok {
+		return identity.User{}, identity.ErrZitadelIdentity
+	}
+	return identity.User{Owner: owner, Subject: owner}, nil
+}
+
+func (p *notificationFollowupProvider) Exchange(_ context.Context, subject string) (string, error) {
+	return p.token(subject), nil
+}
+
+func TestNotificationFollowupProviderFailureKeepsRetryAccounting(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			// Establish a real sent-but-unfinished receipt, then remove the SQL
+			// fault completely before exercising this separate provider boundary.
+			r, spy, before, restore := notificationSQLFollowupFailure(t, domain)
+			restore()
+			original := r.f.b.API
+			provider := &notificationFollowupProvider{token: original.SandboxToken}
+			r.f.b.API.Links, r.f.b.API.Exchange = provider, provider
+			r.expireNotificationLeases(t)
+			r.wake(t)
+			err := r.deliver(t.Context())
+			require.False(t, core.IsDatabaseFailure(err))
+			require.NoError(t, err, "ordinary identity failure is persisted as follow-up deferral")
+			require.Positive(t, provider.calls)
+			deferred := r.status(t, r.first)
+			require.Equal(t, before.MessageID, deferred.MessageID)
+			require.Equal(t, "sent", deferred.State)
+			require.True(t, deferred.FollowupPending)
+			require.Equal(t, "notification_followup_unavailable", deferred.FollowupFailure)
+			require.EqualValues(t, 1, deferred.FollowupAttempts)
+			require.True(t, deferred.AvailableAt.After(time.Now()))
+			require.Equal(t, "pending", r.status(t, r.second).State)
+			require.Equal(t, "sent", r.status(t, r.other).State)
+			require.Equal(t, 1, spy.calls(202))
+			r.f.b.API = original
+			r.restartNotificationOwner(t, domain)
+			r.finishNotificationFollowup(t, spy, before)
+		})
+	}
+}
+
+func (r *notificationRuntimeFixture) expireNotificationLeases(t *testing.T) {
+	t.Helper()
+	// The failed invocation has stopped. Model expiry of its claim clocks;
+	// retain state, attempt generation, message ID, payload and continuation.
+	_, err := r.f.db.Exec(t.Context(), "UPDATE "+r.table+
+		" SET lease_until=clock_timestamp()-interval '1 second' WHERE lease_until IS NOT NULL AND delivery_state IN ('pending','sent')")
+	require.NoError(t, err)
+}
 func (r *notificationRuntimeFixture) prepare(t *testing.T) {
 	t.Helper()
 	var err error

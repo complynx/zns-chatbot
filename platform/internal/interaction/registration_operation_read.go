@@ -119,6 +119,9 @@ func registrationOperationSummary(
 }
 
 func registrationOperationDenied(err error) bool {
+	if core.IsDatabaseFailure(err) {
+		return false
+	}
 	var problem *core.ProblemError
 	return errors.As(err, &problem) && (problem.Status == http.StatusForbidden || problem.Status == http.StatusNotFound)
 }

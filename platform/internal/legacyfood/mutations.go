@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood/dbgen"
 
 	"github.com/jackc/pgx/v5"
@@ -73,7 +74,7 @@ func (op *operation) toggle(ctx context.Context, order *Order) error {
 	err := op.tx.QueryRow(ctx, `SELECT count(*) FROM core.food_orders WHERE event_id=$1 AND activities->'cacao'='true'::jsonb`, order.EventID).
 		Scan(&selected)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	order.Activities, err = ToggleActivities(order.Activities, op.command.Activity, selected < op.event.CacaoCapacity)
 	if err != nil {
@@ -123,7 +124,7 @@ func (op *operation) assignReceiver(ctx context.Context, order *Order) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return problem("food_payment_admin_unavailable")
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func (op *operation) submitProof(ctx context.Context, order *Order) error {
@@ -141,7 +142,7 @@ func (op *operation) submitProof(ctx context.Context, order *Order) error {
 	err = op.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.order_proofs WHERE id=$1 AND owner=$2)`, op.command.ProofID, order.Owner).
 		Scan(&owned)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !owned {
 		return problem("food_invalid_proof")
@@ -156,7 +157,7 @@ func (op *operation) receiverAvailable(ctx context.Context, order *Order) error 
 	err := op.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.food_admins a JOIN core.users u ON u.id=a.owner
  WHERE a.event_id=$1 AND a.owner=$2 AND (a.can_assign OR a.can_review) AND u.can_book)`, order.EventID, order.PaymentAdmin).Scan(&exists)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !exists {
 		return problem("food_payment_admin_unavailable")
@@ -202,7 +203,7 @@ func (op *operation) notice(ctx context.Context, order *Order, owner, kind strin
 		return nil
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return collectNotificationRegistration(
 		ctx,

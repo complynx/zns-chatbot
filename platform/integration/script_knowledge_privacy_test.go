@@ -10,8 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+	"github.com/complynx/zns-chatbot/platform/internal/conversation"
+	"github.com/complynx/zns-chatbot/platform/internal/derivedmutation"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptprotocol"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptworker"
@@ -250,4 +255,259 @@ func TestScriptKnowledgeMemoDeleteThenListPreservesRemainingMemo(t *testing.T) {
  AND result->'memo'->>'version'='2' AND result->'memo'->>'active'='false'`).Scan(&receipts))
 	assert.Equal(t, 1, effects)
 	assert.Equal(t, 1, receipts, "one canonical deletion receipt survives script retirement")
+}
+
+// retirementPolicy injects a one-shot completion failure after durable admission.
+// Retired reloads must still check the current access decision.
+type retirementPolicy struct {
+	finished bool
+	memory   bool
+	history  bool
+	revoked  bool
+	failure  error
+}
+
+func (p *retirementPolicy) Generation(context.Context, string) (int64, error) {
+	if p.finished && p.history {
+		return 1, nil
+	}
+	return 0, nil
+}
+func (p *retirementPolicy) MemoryState(context.Context, string) (knowledge.MemoryDeletionState, error) {
+	state := knowledge.MemoryDeletionState{}
+	if p.finished && p.memory {
+		state.PrivateGeneration = 1
+	}
+	return state, nil
+}
+func (p *retirementPolicy) AccessChanged(context.Context, string, agenthost.ScriptRecord) (bool, error) {
+	if !p.finished {
+		return false, nil
+	}
+	failure := p.failure
+	p.failure = nil
+	return p.revoked || failure != nil, failure
+}
+
+func (*retirementPolicy) KnowledgeReceipt(
+	context.Context,
+	string,
+	knowledge.Command,
+	readsource.Derivation,
+) (derivedmutation.Receipt[knowledge.Result], error) {
+	return derivedmutation.Receipt[knowledge.Result]{
+		Found:  true,
+		Result: knowledge.Result{PrivateDeletion: &knowledge.PrivateDeletionWitness{Current: true}},
+	}, nil
+}
+
+type retirementVM struct{ finish func() }
+
+func (vm retirementVM) Evaluate(context.Context, scriptclient.Request) (json.RawMessage, error) {
+	vm.finish()
+	return json.RawMessage(`{"private":"retired-canary"}`), nil
+}
+func TestScriptRetirementCompletionDoesNotHideFailure(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []struct {
+		name                                      string
+		receipt, memory, history, revoked, joined bool
+	}{
+		{name: "owned_joined_failure", receipt: true, memory: true, joined: true},
+		{name: "owned_permission_retirement", receipt: true, memory: true, revoked: true},
+		{name: "owned_history_retirement", receipt: true, history: true},
+		{name: "external_permission_and_memory", memory: true, revoked: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			t.Parallel()
+			db := database(t)
+			stale := errors.New("retirement stale")
+			failure := errors.New("transient authorization failure")
+			policy := &retirementPolicy{memory: scenario.memory, history: scenario.history, revoked: scenario.revoked}
+			if scenario.joined {
+				policy.failure = failure
+			}
+			executions := 0
+			host := agenthost.ScriptHost{
+				Store: agenthost.ScriptStore{
+					DB:         db,
+					Reads:      agenthost.ReadStore{DB: db, Memory: agenthost.MemoryReadStore{DB: db}},
+					Policy:     policy,
+					StaleError: stale,
+				},
+			}
+			host.Worker = retirementVM{finish: func() {
+				executions++
+				if scenario.receipt {
+					call := agenthost.ScriptToolRecord{
+						Memory:  &knowledge.Command{Name: knowledge.MemoDelete, Key: "delete", FactKey: "private"},
+						Source:  &readsource.Derivation{},
+						Outcome: agent.ScriptToolResult{Name: "knowledge.memo_delete"},
+					}
+					raw, err := json.Marshal([]agenthost.ScriptToolRecord{call})
+					require.NoError(t, err)
+					_, err = db.Exec(
+						t.Context(),
+						`UPDATE bot.interactions SET content=jsonb_set(content,'{0,calls}',$1::jsonb) WHERE owner='alice' AND update_id=15996 AND kind='script_runs'`,
+						raw,
+					)
+					require.NoError(t, err)
+				}
+				policy.finished = true
+			}}
+			input := agent.Input{Script: &agent.ScriptContext{Remaining: 1}}
+			err := host.Perform(
+				t.Context(),
+				"alice",
+				15996,
+				agent.ScriptProposal{Code: "return 1;", InputJSON: "null"},
+				&input,
+			)
+			require.ErrorIs(t, err, stale)
+			if scenario.joined {
+				require.ErrorIs(t, err, failure)
+			}
+			assert.Equal(t, 1, executions)
+		})
+	}
+}
+
+func TestScriptMemoryRetirementRechecksPaymentScope(t *testing.T) {
+	t.Parallel()
+	f := setup(t)
+	seedPrivilegedReads(t, f)
+	_, err := f.b.API.ExecuteKnowledge(
+		t.Context(),
+		"alice",
+		knowledge.Command{Name: knowledge.MemoSet, Key: "seed", FactKey: "private", Text: "mixed-retirement-canary"},
+	)
+	require.NoError(t, err)
+	executions := 0
+	f.b.Scripts = hostScriptFunc(
+		func(ctx context.Context, _ []scriptclient.Tool, callback scriptclient.Callback) (json.RawMessage, error) {
+			executions++
+			scriptCall(ctx, t, callback, "passes.payments.history", `{"event":"script-dance"}`)
+			scriptCall(ctx, t, callback, "knowledge.memos", `{}`)
+			_, deleteErr := f.b.API.ExecuteKnowledge(
+				t.Context(),
+				"alice",
+				knowledge.Command{Name: knowledge.MemoDelete, Key: "external-delete", FactKey: "private", Version: 1},
+			)
+			require.NoError(t, deleteErr)
+			_, deleteErr = f.db.Exec(
+				t.Context(),
+				`DELETE FROM core.pass_payment_admins WHERE event_id='script-dance' AND owner='alice'`,
+			)
+			require.NoError(t, deleteErr)
+			return json.RawMessage(`{"private":"mixed-retirement-canary"}`), nil
+		},
+	)
+	model := &knowledgeModel{plans: []agent.Plan{
+		{View: agent.KnowledgeView, ScriptAction: &agent.ScriptProposal{Code: "return {};", InputJSON: "null"}},
+		{View: agent.KnowledgeView, Text: "must not continue after permission retirement"},
+	}}
+	f.b.Model = model
+	require.NoError(
+		t,
+		f.b.Handle(t.Context(), message(15997, identity.AliceTelegramID, "Read my payment history and private memo")),
+	)
+	require.Len(t, model.inputs, 1, "permission retirement must not permit another model call")
+	assert.Equal(t, 1, executions)
+	var records []agenthost.ScriptRecord
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions WHERE owner='alice' AND update_id=15997 AND kind='script_runs'`).
+			Scan(&records),
+	)
+	require.Len(t, records, 1)
+	require.Len(t, records[0].Calls, 2)
+	require.NotNil(t, records[0].Calls[0].PrivilegedRead, "revoked payment scope must survive result redaction")
+	assert.Equal(t, "script-dance", records[0].Calls[0].PrivilegedRead.Event)
+}
+
+func TestScriptOwnedDeletionRejectsUnrelatedRetirement(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"history", "payment_scope"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			f := setup(t)
+			seedPrivilegedReads(t, f)
+			archive := conversation.Service{DB: f.db}
+			require.NoError(
+				t,
+				archive.AppendOriginal(t.Context(), "alice", "unrelated-private", "user", "unrelated-history-canary"),
+			)
+			var eventID int64
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), `SELECT id FROM core.conversation_events WHERE owner='alice' AND source_key='unrelated-private'`).
+					Scan(&eventID),
+			)
+			_, err := f.b.API.ExecuteKnowledge(
+				t.Context(),
+				"alice",
+				knowledge.Command{
+					Name:    knowledge.MemoSet,
+					Key:     "seed",
+					FactKey: "private",
+					Text:    "owned-deletion-canary",
+				},
+			)
+			require.NoError(t, err)
+			executions := 0
+			f.b.Scripts = hostScriptFunc(
+				func(ctx context.Context, _ []scriptclient.Tool, callback scriptclient.Callback) (json.RawMessage, error) {
+					executions++
+					scriptCall(ctx, t, callback, "passes.payments.history", `{"event":"script-dance"}`)
+					scriptCall(ctx, t, callback, "knowledge.memo_read", `{"fact_key":"private"}`)
+					_, _ = callback(
+						ctx,
+						scriptclient.ToolCall{
+							Name:      "knowledge.memo_delete",
+							Arguments: json.RawMessage(`{"fact_key":"private"}`),
+						},
+					)
+					memo, readErr := f.b.API.Memo(t.Context(), "alice", "private")
+					require.NoError(t, readErr)
+					require.False(t, memo.Active, "the owned deletion must commit before the unrelated retirement")
+					if mode == "history" {
+						require.NoError(t, archive.DeleteContent(t.Context(), "alice", eventID))
+					} else {
+						_, deleteErr := f.db.Exec(
+							t.Context(),
+							`DELETE FROM core.pass_payment_admins WHERE event_id='script-dance' AND owner='alice'`,
+						)
+						require.NoError(t, deleteErr)
+					}
+					return json.RawMessage(`{"done":true}`), nil
+				},
+			)
+			model := &knowledgeModel{plans: []agent.Plan{
+				{View: agent.KnowledgeView, ScriptAction: &agent.ScriptProposal{Code: "return {};", InputJSON: "null"}},
+				{View: agent.KnowledgeView, Text: "must not continue after unrelated retirement"},
+			}}
+			f.b.Model = model
+			update := message(15998, identity.AliceTelegramID, "Delete my private memo after reading payment history")
+			handleErr := f.b.Handle(t.Context(), update)
+			if mode == "history" {
+				require.ErrorIs(t, handleErr, appclient.ErrReadStale)
+			} else {
+				require.NoError(t, handleErr)
+			}
+			require.Len(t, model.inputs, 1, "an owned receipt cannot explain an independent retirement")
+			assert.Equal(t, 1, executions)
+			memo, err := f.b.API.Memo(t.Context(), "alice", "private")
+			require.NoError(t, err)
+			assert.False(t, memo.Active)
+			assert.EqualValues(t, 2, memo.Version)
+			replayErr := f.b.Handle(t.Context(), update)
+			if mode == "history" {
+				require.ErrorIs(t, replayErr, appclient.ErrReadStale)
+			} else {
+				require.NoError(t, replayErr)
+			}
+			assert.Len(t, model.inputs, 1)
+			assert.Equal(t, 1, executions, "replay must not rerun the retired VM or deletion")
+		})
+	}
 }

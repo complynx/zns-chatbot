@@ -53,7 +53,7 @@ func (b *Bot) handleOrders(ctx context.Context, in incoming, update telegram.Upd
 		return err
 	}
 	if update.Callback != nil {
-		b.acknowledge(ctx, update.Callback.ID)
+		return b.acknowledge(ctx, update.Callback.ID)
 	}
 	return nil
 }
@@ -72,6 +72,9 @@ func (b *Bot) handleOrderCallback(ctx context.Context, in incoming, update int64
 		return "", err
 	}
 	command.Key = fmt.Sprintf("tg-order-%d", update)
+	if command.Name == refundListAction || command.Name == refundConfirmAction {
+		return b.handleRefundCommand(ctx, in, update, command)
+	}
 	if command.Name == actionExport {
 		return b.exportOrders(ctx, in, update)
 	}
@@ -148,7 +151,7 @@ func (b *Bot) orderButton(ctx context.Context, owner, label string, command orde
 		token,
 		encoded,
 	)
-	return telegram.Button{Text: label, Data: orderCallbackPrefix + token}, err
+	return telegram.Button{Text: label, Data: orderCallbackPrefix + token}, core.DatabaseOperationError(err)
 }
 
 func (b *Bot) RenderOrders(ctx context.Context, owner string, chat int64) error {
@@ -194,6 +197,9 @@ func (b *Bot) RenderOrders(ctx context.Context, owner string, chat int64) error 
 	if err = b.renderPaymentInbox(ctx, owner, chat, event, admins, active, available, preference.Language); err != nil {
 		return err
 	}
+	if err = b.renderRefunds(ctx, owner, chat, preference.Language, active); err != nil {
+		return err
+	}
 	return b.retireOrderCards(ctx, owner, chat, active, available, preference.Language)
 }
 
@@ -205,7 +211,7 @@ func (b *Bot) renderOrderMenu(ctx context.Context, owner string, chat int64, can
 	err := b.DB.QueryRow(ctx, `SELECT r.content,r.native_markdown,r.update_id,COALESCE(l.content#>>'{}','') FROM bot.interactions r LEFT JOIN bot.interactions l ON l.owner=r.owner AND l.update_id=r.update_id AND l.kind='orders_reply_locale' WHERE r.owner=$1 AND r.kind='orders_reply' ORDER BY r.id DESC LIMIT 1`, owner).
 		Scan(&raw, &native, &updateID, &replyLocale)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if err == nil {
 		visible, visibleErr := b.derivedReplyVisible(ctx, owner, updateID)
@@ -238,6 +244,16 @@ func (b *Bot) renderOrderMenu(ctx context.Context, owner string, chat int64, can
 		return err
 	}
 	buttons := [][]telegram.Button{{button}}
+	refundButton, err := b.orderButton(
+		ctx,
+		owner,
+		messages.text(i18n.RefundList, nil),
+		orders.Command{Name: refundListAction},
+	)
+	if err != nil {
+		return err
+	}
+	buttons = append(buttons, []telegram.Button{refundButton})
 	if canExport {
 		exportButton, buttonError := b.orderButton(ctx, owner, "📥 XLSX", orders.Command{Name: actionExport})
 		if buttonError != nil {
@@ -263,6 +279,9 @@ func (b *Bot) renderPaymentInbox(
 	language string,
 ) error {
 	inbox, err := b.API.PaymentInbox(ctx, owner, event.ID)
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status == http.StatusForbidden {
 		return nil
 	}
@@ -339,7 +358,7 @@ func (b *Bot) orderPayload(
 			nil,
 		) + "\n" + payload.Text + "\n" + messages.text(
 			i18n.OrderOwner,
-			map[string]string{"owner": order.Owner},
+			map[string]string{ownerField: order.Owner},
 		)
 	}
 	buttons := orderActions(order, event, admins, admin, &messages)

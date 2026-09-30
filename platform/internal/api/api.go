@@ -117,6 +117,7 @@ func AuthenticatedHandler(
 	})
 	authorizer := applicationauth.Authorizer{DB: s.DB, Verify: applicationauth.VerifyOwner(verify)}
 	botDeliveryRoutes(mux, deps.BotDelivery, authorizer, signer, logger)
+	memoryReadStateRoutes(mux, deps.MemoryReadState, authorizer, signer, logger)
 	derivedMutationRoutes(mux, deps.DerivedMutations, authorizer, signer, logger)
 	derivedReceiptRoutes(mux, deps.DerivedMutations, deps.Knowledge, authorizer, signer, logger)
 	derivedSettingsRoutes(mux, deps.DerivedMutations, authorizer, signer, logger)
@@ -158,11 +159,16 @@ func respond(logger *slog.Logger, w http.ResponseWriter, v any, e error) {
 		JSON(w, http.StatusOK, v)
 		return
 	}
+	databaseFailure := markDatabaseFailure(w, e)
 	if p, ok := errors.AsType[*core.ProblemError](e); ok {
 		JSON(w, p.Status, p)
 		return
 	}
-	logger.Error("API request failed", "error", e)
+	if databaseFailure {
+		logger.Error("API database request failed")
+	} else {
+		logger.Error("API request failed", "error", e)
+	}
 	JSON(w, http.StatusInternalServerError, map[string]string{codeField: internalError})
 }
 

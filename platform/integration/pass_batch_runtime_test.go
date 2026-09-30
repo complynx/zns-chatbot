@@ -224,7 +224,11 @@ func TestPassBatchRuntimeTelegramCommands(t *testing.T) {
 			f := registrationPaymentFixture(t)
 			_, err := f.db.Exec(t.Context(), `UPDATE core.users SET language=$1 WHERE id='bob'`, language)
 			require.NoError(t, err)
-			handle(t, f.b, message(9901, 202, `/passes_assign --pass_key dance --price 0 --comment "Guest pass" 101`))
+			handleVisible(
+				t,
+				f.b,
+				message(9901, 202, `/passes_assign --pass_key dance --price 0 --comment "Guest pass" 101`),
+			)
 			messages := chatMessages(t, f, 202)
 			require.NotEmpty(t, messages)
 			if language == "ru" {
@@ -237,12 +241,16 @@ func TestPassBatchRuntimeTelegramCommands(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "paid", current.State)
 			assert.Equal(t, "Guest pass", current.Comment)
-			handle(t, f.b, message(9901, 202, `/passes_assign --pass_key dance --price 0 --comment "Guest pass" 101`))
+			handleVisible(
+				t,
+				f.b,
+				message(9901, 202, `/passes_assign --pass_key dance --price 0 --comment "Guest pass" 101`),
+			)
 			replay, err := service.Get(t.Context(), "alice", "dance")
 			require.NoError(t, err)
 			assert.Equal(t, current.Version, replay.Version)
-			handle(t, f.b, message(9902, 202, `/passes_tier --pass_key dance`))
-			handle(t, f.b, message(9903, 202, `/passes_cancel --pass_key dance 101`))
+			handleVisible(t, f.b, message(9902, 202, `/passes_tier --pass_key dance`))
+			handleVisible(t, f.b, message(9903, 202, `/passes_cancel --pass_key dance 101`))
 			final, err := service.Get(t.Context(), "alice", "dance")
 			require.NoError(t, err)
 			assert.Equal(t, "cancelled", final.State)

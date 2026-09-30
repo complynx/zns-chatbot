@@ -14,7 +14,7 @@ import (
 func (s Service) knownActor(ctx context.Context, actor string) error {
 	known, err := dbgen.New(s.DB).KnownActor(ctx, actor)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !known {
 		return &core.ProblemError{Status: http.StatusForbidden, Code: "forbidden"}
@@ -39,13 +39,13 @@ func (s Service) Read(ctx context.Context, actor string, q Query) (Page, error) 
 	queries := dbgen.New(state.tx)
 	generation, err := queries.HistoryGeneration(ctx, actor)
 	if err != nil {
-		return Page{}, err
+		return Page{}, core.DatabaseOperationError(err)
 	}
 	rows, err := queries.ReadEvents(ctx, dbgen.ReadEventsParams{
 		Owner: actor, BeforeID: q.Before, AfterID: q.After, PageLimit: int64(q.Limit + 1),
 	})
 	if err != nil {
-		return Page{}, err
+		return Page{}, core.DatabaseOperationError(err)
 	}
 	events := make([]Event, len(rows))
 	for index, row := range rows {
@@ -58,7 +58,7 @@ func (s Service) Read(ctx context.Context, actor string, q Query) (Page, error) 
 	if len(result.Events) > 0 {
 		result.NextBefore = result.Events[len(result.Events)-1].ID
 	}
-	return boundedHistoryResult(result, state.tx.Commit(ctx))
+	return boundedHistoryResult(result, core.DatabaseOperationError(state.tx.Commit(ctx)))
 }
 
 func (s Service) Window(ctx context.Context, actor string, count int) (Window, error) {
@@ -73,11 +73,11 @@ func (s Service) Window(ctx context.Context, actor string, count int) (Window, e
 	queries := dbgen.New(state.tx)
 	generation, err := queries.HistoryGeneration(ctx, actor)
 	if err != nil {
-		return Window{}, err
+		return Window{}, core.DatabaseOperationError(err)
 	}
 	rows, err := queries.RecentEvents(ctx, dbgen.RecentEventsParams{Owner: actor, RecentLimit: int64(count)})
 	if err != nil {
-		return Window{}, err
+		return Window{}, core.DatabaseOperationError(err)
 	}
 	recent := make([]Event, len(rows))
 	for index, row := range rows {
@@ -89,7 +89,7 @@ func (s Service) Window(ctx context.Context, actor string, count int) (Window, e
 	}
 	summary, err := queries.ReadSummary(ctx, actor)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return Window{}, err
+		return Window{}, core.DatabaseOperationError(err)
 	}
 	result.Summary = Summary{Version: summary.Version, ThroughID: summary.ThroughID, Text: summary.Text}
 	result.Summary.ReadAuthorities, err = state.summaryAuthorities(nil)
@@ -98,9 +98,9 @@ func (s Service) Window(ctx context.Context, actor string, count int) (Window, e
 	}
 	result.Gap, err = queries.HasSummaryGap(ctx, dbgen.HasSummaryGapParams{Owner: actor, ID: result.BeforeID})
 	if err != nil {
-		return Window{}, err
+		return Window{}, core.DatabaseOperationError(err)
 	}
-	return boundedHistoryResult(result, state.tx.Commit(ctx))
+	return boundedHistoryResult(result, core.DatabaseOperationError(state.tx.Commit(ctx)))
 }
 
 // SummaryBatch returns only uncovered older events, including late commits with
@@ -118,13 +118,13 @@ func (s Service) SummaryBatch(ctx context.Context, actor string, before int64) (
 		Owner: actor, Column2: state.ids,
 	})
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	events := make([]Event, len(rows))
 	for index, row := range rows {
 		events[index] = eventFromRow(dbgen.ReadEventsRow(row), state.byEvent[row.ID])
 	}
-	return boundedHistoryResult(events, state.tx.Commit(ctx))
+	return boundedHistoryResult(events, core.DatabaseOperationError(state.tx.Commit(ctx)))
 }
 
 // ReadSelected returns bounded owner-bound source messages through the same
@@ -141,15 +141,15 @@ func (s Service) ReadSelected(ctx context.Context, actor string, ids []int64) (P
 	queries := dbgen.New(state.tx)
 	generation, err := queries.HistoryGeneration(ctx, actor)
 	if err != nil {
-		return Page{}, err
+		return Page{}, core.DatabaseOperationError(err)
 	}
 	rows, err := queries.ReadSelectedEvents(ctx, dbgen.ReadSelectedEventsParams{Owner: actor, Column2: ids})
 	if err != nil {
-		return Page{}, err
+		return Page{}, core.DatabaseOperationError(err)
 	}
 	result := Page{Events: make([]Event, 0, len(rows)), Generation: generation}
 	for _, row := range rows {
 		result.Events = append(result.Events, eventFromRow(dbgen.ReadEventsRow(row), state.byEvent[row.ID]))
 	}
-	return boundedHistoryResult(result, state.tx.Commit(ctx))
+	return boundedHistoryResult(result, core.DatabaseOperationError(state.tx.Commit(ctx)))
 }

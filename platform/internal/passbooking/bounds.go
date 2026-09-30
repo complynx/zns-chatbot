@@ -31,12 +31,12 @@ func collectCatalog(rows pgx.Rows) ([]Event, error) {
 		var event Event
 		if err := rows.Scan(&event.ID, &event.Titles, &event.FinishesAt, &event.PassportRequired,
 			&event.SalesStart, &event.ShortTitles, &event.CountryEmoji, &event.OpenEnded, &oversized); err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		events = append(events, event)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if len(events) > maxCatalogEvents {
 		return nil, conflict("pass_event_limit")

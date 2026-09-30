@@ -20,5 +20,6 @@ func (s Service) OwnsEventBookings(ctx context.Context, actor string, events []s
 	if err := s.requireActor(ctx, actor); err != nil {
 		return false, err
 	}
-	return dbgen.New(s.DB).OwnsEventBookings(ctx, dbgen.OwnsEventBookingsParams{Events: events, Owner: actor})
+	owned, err := dbgen.New(s.DB).OwnsEventBookings(ctx, dbgen.OwnsEventBookingsParams{Events: events, Owner: actor})
+	return owned, core.DatabaseOperationError(err)
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/conversation/fence"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // AppendOriginal records source correspondence. Imported assistant messages are
@@ -69,10 +70,10 @@ func (s Service) append(
 	err = tx.QueryRow(ctx, `INSERT INTO core.conversation_events(owner,source_key,kind,text,omitted,origin)
  VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(owner,source_key) DO NOTHING RETURNING id`, actor, key, kind, excerpt, omitted, origin).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return tx.Commit(ctx)
+		return core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if authorities != nil {
 		if _, err = tx.Exec(
@@ -82,7 +83,7 @@ func (s Service) append(
 			authorities,
 			*generation,
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	// Only a newly inserted event may gain a body. Replays cannot restore a
@@ -91,10 +92,10 @@ func (s Service) append(
 		_, err = tx.Exec(ctx, `INSERT INTO core.conversation_message_bodies(event_id,body,body_sha256,character_count)
  VALUES($1,$2,encode(sha256(convert_to($2,'UTF8')),'hex'),char_length($2))`, id, text)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // LockGeneration retains the public conversation fence for existing callers.
@@ -124,16 +125,16 @@ func (s Service) CommitSummary(ctx context.Context, actor string, version int64,
 		`INSERT INTO core.conversation_summaries(owner) VALUES($1) ON CONFLICT DO NOTHING`,
 		actor,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	var current, through int64
 	if err = tx.QueryRow(ctx, `SELECT version,through_id FROM core.conversation_summaries WHERE owner=$1 FOR UPDATE`, actor).
 		Scan(&current, &through); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if current != version {
 		if err = tx.Commit(ctx); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		return errors.New("conversation summary changed")
 	}
@@ -151,7 +152,7 @@ func (s Service) CommitSummary(ctx context.Context, actor string, version int64,
 		version+1,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if tag.RowsAffected() != int64(len(ids)) {
 		return errors.New("invalid conversation coverage")
@@ -170,7 +171,7 @@ func (s Service) CommitSummary(ctx context.Context, actor string, version int64,
 		append([]readsource.Authority{}, authorities...),
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }

@@ -1,12 +1,15 @@
 package integration_test
 
 import (
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -81,20 +84,26 @@ func TestTelegramMetadataTrustedSenderAndExport(t *testing.T) {
 func TestTelegramMetadataCallbackRetryAndOptionalClear(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
-	handle(t, f.b, message(9210, 101, "/language en"))
+	f.b.Delivery.Fallback = time.Second
+	handleVisible(t, f.b, message(9210, 101, "/language en"))
 	assert.Equal(t, "Алиса", readTelegramMetadata(t, f).Name, "synthetic updates omit first_name")
 	update := aliceCallback(9211, 1, "language:ru")
 	update.Callback.From = telegram.User{ID: 101, FirstName: "Sender", LastName: "Old", Username: "old_name"}
 	update.Callback.Message.From = telegram.User{ID: 202, FirstName: "Wrong callback author"}
 	post(t, f.fake.URL+"/lab/fault", map[string]string{"mode": "transient"})
-	require.Error(t, f.b.Handle(t.Context(), update))
+	require.NoError(t, f.b.Handle(t.Context(), update))
+	failed := assertBotRateLimited(t, f)
 	assert.Equal(t, "Sender Old", readTelegramMetadata(t, f).PrintName)
 	newer := message(9212, 101, "/language en")
 	newer.Message.From.FirstName = "New sender"
 	handle(t, f.b, newer)
+	waitBotRetryDeadline(t, f, failed)
+	pumpBotDeliveries(t, f.b)
 	want := telegramMetadata{"", "New sender", "", "New sender", "New sender", 9212}
 	assert.Equal(t, want, readTelegramMetadata(t, f))
-	handle(t, f.b, update)
+	before := len(chatMessages(t, f, 101))
+	handleVisible(t, f.b, update)
+	assert.Len(t, chatMessages(t, f, 101), before, "callback replay must not create a duplicate card")
 	assert.Equal(t, want, readTelegramMetadata(t, f), "failed older event replay cannot regress metadata")
 	newer.Message.From.FirstName = "Same ID replacement"
 	handle(t, f.b, newer)
@@ -124,7 +133,10 @@ func TestTelegramMetadataRejectsInvalidAndUntrustedUpdates(t *testing.T) {
 	require.NoError(t, err)
 	bound := message(9231, 101, "/language en")
 	bound.Message.From.FirstName = "Mismatched binding"
-	handle(t, f.b, bound)
+	var rejected *core.ProblemError
+	require.ErrorAs(t, f.b.Handle(t.Context(), bound), &rejected)
+	require.Equal(t, http.StatusConflict, rejected.Status)
+	require.Equal(t, "bot_delivery_stale", rejected.Code)
 	assert.Equal(t, want, readTelegramMetadata(t, f))
 	var users int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.users`).Scan(&users))

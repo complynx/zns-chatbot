@@ -28,10 +28,15 @@ import (
 // Local order, registration, history and knowledge calls share the HTTP authorizer and services without a
 // loopback request. Other adapters retain their current transport boundaries.
 func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
-	logger *slog.Logger, cfg config.Config, runtime *observability.Runtime) error {
+	logger *slog.Logger, cfg config.Config, runtime *observability.Runtime) (runErr error) {
 	verify, identityAdapter, identityLinks, err := runtimeAuth(db, cfg, signer)
 	if err != nil {
 		return err
+	}
+	if identityAdapter != nil && runtime != nil {
+		if err = runtime.RegisterIdentityCaches(observability.IdentityCacheAPI, identityAdapter); err != nil {
+			return err
+		}
 	}
 	deliverySettings, err := cfg.DeliverySettings()
 	if err != nil {
@@ -100,11 +105,14 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	defer closeScripts()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stopMaintenance, err := startProductMaintenance(ctx, db, logger, cfg, services)
+	fatal := newFatalLatch(cancel)
+	stopMaintenance, err := startProductMaintenance(ctx, db, logger, cfg, services, fatal.report)
 	if err != nil {
-		return err
+		return fatal.result(err)
 	}
-	defer stopMaintenance()
+	// Maintenance workers join before the retained failure is read. A fatal
+	// cancels ctx, which runAppServers already propagates to bot and HTTP.
+	defer func() { stopMaintenance(); runErr = fatal.result(runErr) }()
 	if err = configureBrowserAuth(b, cfg, base); err != nil {
 		return err
 	}
@@ -191,6 +199,10 @@ func publicHandler(mux *http.ServeMux, cfg config.Config) http.Handler {
 }
 
 func configureLocalHost(host *appclient.Host, services appservices.Services, authorizer applicationauth.Authorizer) {
+	host.LocalMemoryReadState = &appclient.LocalMemoryReadState{
+		Service:    services.MemoryReadState,
+		Authorizer: authorizer,
+	}
 	host.LocalBotDelivery = &appclient.LocalBotDelivery{Service: services.BotDelivery, Authorizer: authorizer}
 	host.LocalHistory = &appclient.LocalHistory{Service: services.Conversation, Authorizer: authorizer}
 	host.LocalKnowledge = &appclient.LocalKnowledge{Service: services.Knowledge, Authorizer: authorizer}

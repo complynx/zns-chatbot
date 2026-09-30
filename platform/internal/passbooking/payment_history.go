@@ -50,7 +50,7 @@ func (s Service) PaymentHistoryPage(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return core.ReadPage[PaymentHistoryEntry]{}, err
+		return core.ReadPage[PaymentHistoryEntry]{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	permitted, err := lockPaymentReadRole(ctx, tx, actor, event)
@@ -71,11 +71,11 @@ func (s Service) PaymentHistoryPage(
  WHERE p.event_id=$1 AND ($2='' OR (p.received_at,p.id,COALESCE(member.owner,''))>($3,$4,$5))
  ORDER BY p.received_at,p.id,COALESCE(member.owner,'') LIMIT $6`, event, cursor.Position, boundary.At, boundary.Attempt, boundary.Participant, core.ReadPageItems+1)
 	if err != nil {
-		return core.ReadPage[PaymentHistoryEntry]{}, err
+		return core.ReadPage[PaymentHistoryEntry]{}, core.DatabaseOperationError(err)
 	}
 	items, err := pgx.CollectRows(rows, pgx.RowToStructByPos[PaymentHistoryEntry])
 	if err != nil {
-		return core.ReadPage[PaymentHistoryEntry]{}, err
+		return core.ReadPage[PaymentHistoryEntry]{}, core.DatabaseOperationError(err)
 	}
 	page, err := core.NavigationPage(items, cursor, func(item PaymentHistoryEntry) string {
 		data, _ := json.Marshal(
@@ -86,5 +86,5 @@ func (s Service) PaymentHistoryPage(
 	if err != nil {
 		return page, err
 	}
-	return page, tx.Commit(ctx)
+	return page, core.DatabaseOperationError(tx.Commit(ctx))
 }

@@ -138,7 +138,12 @@ func ScriptToolResultMetadata(name string, data json.RawMessage) (int, bool) {
 	return len(items), len(items) == 0 && !page.More
 }
 
+// ScriptSourceFailure never converts a database failure into a recoverable
+// tool outcome, even when it is joined with source retirement.
 func ScriptSourceFailure(err, staleError error) json.RawMessage {
+	if core.IsDatabaseFailure(err) {
+		return nil
+	}
 	if staleError != nil && errors.Is(err, staleError) {
 		return json.RawMessage(`{"error":"stale","restart":true}`)
 	}
@@ -172,7 +177,7 @@ func NormalizeScriptOutcome(
 		}
 		err = nil
 	}
-	if readLimitError != nil && errors.Is(err, readLimitError) {
+	if readLimitError != nil && errors.Is(err, readLimitError) && !core.IsDatabaseFailure(err) {
 		result = json.RawMessage(`{"error":"result_limit"}`)
 		err = nil
 		outcomeError = "result_limit"

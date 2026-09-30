@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 
 	"github.com/jackc/pgx/v5"
@@ -16,11 +17,11 @@ import (
 func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('pass-passport-reminder',0))`); err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (b.owner) `+bookingColumns+` FROM core.pass_bookings b
  JOIN core.users u ON u.id=b.owner JOIN core.pass_profiles p ON p.owner=b.owner
@@ -29,11 +30,11 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
  AND p.passport='' AND NOT EXISTS(SELECT 1 FROM core.pass_passport_reminders r WHERE r.owner=b.owner)
  ORDER BY b.owner,e.display_order,e.id`)
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	bookings, err := pgx.CollectRows(rows, pgx.RowToStructByPos[Booking])
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	var pending []delivery.Registration
 	count := 0
@@ -41,7 +42,7 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 		var passport string
 		if err = tx.QueryRow(ctx, `SELECT passport FROM core.pass_profiles WHERE owner=$1 FOR SHARE`, booking.Owner).
 			Scan(&passport); err != nil {
-			return 0, err
+			return 0, core.DatabaseOperationError(err)
 		}
 		if passport != "" {
 			continue
@@ -53,7 +54,7 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 			continue
 		}
 		if err != nil {
-			return 0, err
+			return 0, core.DatabaseOperationError(err)
 		}
 		if err = enqueuePassNotice(ctx, tx, s.Delivery.BotID, &pending,
 			&booking,
@@ -69,7 +70,7 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
 		return 0, err
 	}
-	return count, tx.Commit(ctx)
+	return count, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (s Service) livePassportReminder(
@@ -81,5 +82,5 @@ func (s Service) livePassportReminder(
  JOIN core.pass_events e ON e.id=b.event_id WHERE p.owner=$1 AND p.passport=''
  AND b.state IN ('assigned','paid') AND e.passport_required AND e.finishes_at>clock_timestamp())`, notice.Owner).
 		Scan(&notice.Current)
-	return notice, err
+	return notice, core.DatabaseOperationError(err)
 }

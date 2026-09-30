@@ -61,6 +61,9 @@ func TestInboxCrashRecovery(t *testing.T) {
 	f := setup(t)
 	post(t, f.fake.URL+"/lab/input", map[string]any{"user": 101, "text": "first"})
 	post(t, f.fake.URL+"/lab/input", map[string]any{"user": 101, "text": "second"})
+	batch, err := f.b.TG.Updates(t.Context(), 0)
+	require.NoError(t, err)
+	require.Len(t, batch, 2)
 	executable, err := os.Executable()
 	require.NoError(t, err)
 	connection, err := url.Parse(f.db.Config().ConnString())
@@ -101,14 +104,38 @@ func TestInboxCrashRecovery(t *testing.T) {
 	var pending int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&pending))
 	require.Equal(t, 2, pending)
+	require.Equal(t, batch, retryInboxPayloads(t, f), "process death preserves the complete received payloads")
+	var failures int
+	var state string
+	var deadline time.Time
+	require.NoError(t, f.db.QueryRow(t.Context(),
+		"SELECT failures,state,next_attempt_at FROM bot.telegram_inbox WHERE update_id=1").
+		Scan(&failures, &state, &deadline))
+	require.Zero(t, failures, "process death is not a conclusive handler failure")
+	require.Equal(t, "pending", state)
 	upstream, err := f.b.TG.Updates(t.Context(), 3)
 	require.NoError(t, err)
 	require.Empty(t, upstream)
+	require.Equal(t, batch, retryInboxPayloads(t, f), "upstream acknowledgement does not lose either update")
 	require.Eventually(t, func() bool {
 		var released bool
 		queryErr := f.db.QueryRow(t.Context(), `SELECT pg_try_advisory_xact_lock(918273)`).Scan(&released)
 		return queryErr == nil && released
 	}, 5*time.Second, 10*time.Millisecond)
-	completeInbox(t, f, 3)
+	var seen []string
+	f.b.Model = avModel(func(_ context.Context, input agent.Input) (agent.Plan, error) {
+		seen = append(seen, input.Text)
+		return f.model.Plan(t.Context(), input)
+	})
+	stop := startRetryInbox(t, f)
+	require.Eventually(t, func() bool {
+		var cursor int64
+		var count int
+		queryErr := f.db.QueryRow(t.Context(), `SELECT value,(SELECT count(*) FROM bot.telegram_inbox)
+FROM bot.cursors WHERE name='telegram'`).Scan(&cursor, &count)
+		return queryErr == nil && cursor == 3 && count == 0
+	}, max(time.Until(deadline), 0)+5*time.Second, 10*time.Millisecond)
+	stop()
+	assert.Equal(t, []string{"first", "second"}, seen)
 	assert.Equal(t, 2, f.model.calls)
 }

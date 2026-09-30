@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
@@ -144,7 +145,7 @@ func (b *Bot) registrationReplyPayload(
 		return payload, nil
 	}
 	if err != nil {
-		return payload, err
+		return payload, core.DatabaseOperationError(err)
 	}
 	visible, err := b.derivedReplyVisible(ctx, owner, revision)
 	if err != nil || !visible {

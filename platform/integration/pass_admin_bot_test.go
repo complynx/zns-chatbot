@@ -41,30 +41,30 @@ func TestPassAdminManualFreeAssignmentOwnerAndReplay(t *testing.T) {
 	f := registrationPaymentFixture(t)
 	_, err := f.db.Exec(t.Context(), `UPDATE core.users SET language='en' WHERE id='bob'`)
 	require.NoError(t, err)
-	handle(t, f.b, message(600, 202, "/passes"))
-	handle(t, f.b, passMenuClick(t, f, 202, 601, "Dance"))
-	handle(t, f.b, passMenuClick(t, f, 202, 602, "Registration queue"))
-	handle(t, f.b, passMenuClick(t, f, 202, 603, "Assign / adjust pass · 101"))
-	handle(t, f.b, passMenuClick(t, f, 202, 604, "Free pass"))
+	handlePassVisible(t, f, message(600, 202, "/passes"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 601, "Dance"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 602, "Registration queue"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 603, "Assign / adjust pass · 101"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 604, "Free pass"))
 	f.model.plan = agent.Plan{View: "workflow", Text: "Four."}
-	handle(t, f.b, message(607, 202, "What is two plus two?"))
+	handlePassVisible(t, f, message(607, 202, "What is two plus two?"))
 	apply := passMenuClick(t, f, 202, 605, "Apply assignment")
 	foreign := apply
 	copyCallback := *apply.Callback
 	copyCallback.From.ID = 101
 	foreign.Callback, foreign.ID = &copyCallback, 606
-	handle(t, f.b, foreign)
+	handlePassVisible(t, f, foreign)
 	service := passbooking.Service{DB: f.db}
 	before, err := service.Get(t.Context(), "alice", "dance")
 	require.NoError(t, err)
 	assert.Equal(t, "assigned", before.State)
-	handle(t, f.b, apply)
+	handlePassVisible(t, f, apply)
 	after, err := service.Get(t.Context(), "alice", "dance")
 	require.NoError(t, err)
 	assert.Equal(t, "paid", after.State)
 	require.NotNil(t, after.Price)
 	assert.Zero(t, *after.Price)
-	handle(t, f.b, apply)
+	handlePassVisible(t, f, apply)
 	replayed, err := service.Get(t.Context(), "alice", "dance")
 	require.NoError(t, err)
 	assert.Equal(t, after.Version, replayed.Version)
@@ -138,9 +138,9 @@ func TestPassAdminAgentCreatesExplicitIdentityAndBindsVersions(t *testing.T) {
 				Create: true, Role: "leader", LegalName: &name}}},
 	}}
 	f.b.Model = model
-	handle(
+	handlePassVisible(
 		t,
-		f.b,
+		f,
 		message(700, 202, "Создай для 101 заявку на Танцы: Alice Smith, лидер, volunteer, 125 рублей, evening only"),
 	)
 	require.Len(t, model.inputs, 2)
@@ -153,9 +153,9 @@ func TestPassAdminAgentCreatesExplicitIdentityAndBindsVersions(t *testing.T) {
 	assert.Equal(t, kind, booking.Kind)
 	assert.Equal(t, comment, booking.Comment)
 	assert.Contains(t, passMenuCard(t, f, 202).Text, "Сохранено.")
-	handle(
+	handlePassVisible(
 		t,
-		f.b,
+		f,
 		message(700, 202, "Создай для 101 заявку на Танцы: Alice Smith, лидер, volunteer, 125 рублей, evening only"),
 	)
 	assert.Len(t, model.inputs, 2)

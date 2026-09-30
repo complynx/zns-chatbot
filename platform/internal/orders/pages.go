@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -40,7 +42,7 @@ func (s Service) ListPage(ctx context.Context, actor, event, cursor string, inbo
 		AND ($3='' OR (created_at,id)>(SELECT created_at,id FROM core.orders WHERE id=$3 AND event_id=$1 AND ($4 OR owner=$2)))
 		ORDER BY created_at,id LIMIT $5`, event, actor, cursor, inbox, orderPageSize+1)
 	if err != nil {
-		return Page{}, err
+		return Page{}, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	page := Page{Orders: []Order{}}
@@ -64,7 +66,7 @@ func (s Service) ListPage(ctx context.Context, actor, event, cursor string, inbo
 		page.Orders = append(page.Orders, order)
 		size += len(encoded)
 	}
-	return page, rows.Err()
+	return page, core.DatabaseOperationError(rows.Err())
 }
 
 // GetByID uses the same owner visibility as Get without assuming the current event.

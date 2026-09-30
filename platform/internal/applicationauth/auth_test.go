@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/applicationauth"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
@@ -35,7 +36,7 @@ func (q *ownerQuery) Scan(dest ...any) error {
 func TestAuthorizeFailureBoundaries(t *testing.T) {
 	t.Parallel()
 	providerErr := errors.New("identity provider unavailable")
-	databaseErr := errors.New("database unavailable")
+	databaseErr := errors.New("private database password")
 	for _, test := range []struct {
 		name, token, owner     string
 		verifyErr, dbErr, want error
@@ -51,7 +52,9 @@ func TestAuthorizeFailureBoundaries(t *testing.T) {
 		{name: "deadline", token: "token", verifyErr: context.DeadlineExceeded, want: context.DeadlineExceeded},
 		{name: "empty owner", token: "token", want: applicationauth.ErrUnauthorized},
 		{name: "unknown owner", token: "token", owner: "missing", want: applicationauth.ErrForbidden, calls: 1},
-		{name: "database outage", token: "token", owner: "alice", dbErr: databaseErr, want: databaseErr, calls: 1},
+		{name: "database outage", token: "token", owner: "alice", dbErr: databaseErr, want: core.ErrDatabase, calls: 1},
+		{name: "database canceled", token: "token", owner: "alice", dbErr: context.Canceled, want: context.Canceled, calls: 1},
+		{name: "database deadline", token: "token", owner: "alice", dbErr: context.DeadlineExceeded, want: context.DeadlineExceeded, calls: 1},
 		{name: "valid", token: "token", owner: "alice", known: true, calls: 1},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -70,6 +73,11 @@ func TestAuthorizeFailureBoundaries(t *testing.T) {
 				require.Empty(t, principal.Owner())
 			}
 			require.Equal(t, test.calls, query.calls)
+			require.Equal(t, errors.Is(test.want, core.ErrDatabase), core.IsDatabaseFailure(err))
+			if errors.Is(test.want, core.ErrDatabase) {
+				require.EqualError(t, err, "owner lookup unavailable")
+				require.NotErrorIs(t, err, databaseErr)
+			}
 		})
 	}
 }

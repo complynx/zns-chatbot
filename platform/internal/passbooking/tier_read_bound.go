@@ -23,7 +23,7 @@ func readTierEvent(ctx context.Context, tx pgx.Tx, actor, eventID string) (event
 		return event{}, conflict("pass_event_unknown")
 	}
 	if err != nil {
-		return event{}, err
+		return event{}, core.DatabaseOperationError(err)
 	}
 	if _, err = authorize(ctx, tx, actor, commandAdminCancel, eventID); err != nil {
 		return event{}, err
@@ -31,7 +31,7 @@ func readTierEvent(ctx context.Context, tx pgx.Tx, actor, eventID string) (event
 	var count int
 	if err = tx.QueryRow(ctx, `SELECT count(*) FROM core.pass_event_tiers WHERE event_id=$1`, eventID).
 		Scan(&count); err != nil {
-		return event{}, err
+		return event{}, core.DatabaseOperationError(err)
 	}
 	if count > core.ReadResourceBytes/minimumTierBytes {
 		return event{}, core.ReadProblem("read_result_limit")
@@ -42,7 +42,7 @@ func readTierEvent(ctx context.Context, tx pgx.Tx, actor, eventID string) (event
 		eventID,
 	)
 	if err != nil {
-		return event{}, err
+		return event{}, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -56,14 +56,14 @@ func readTierEvent(ctx context.Context, tx pgx.Tx, actor, eventID string) (event
 			&tier.Promo,
 			&tier.BlockedByDate,
 		); err != nil {
-			return event{}, err
+			return event{}, core.DatabaseOperationError(err)
 		}
 		if position != len(e.tiers) {
 			return event{}, conflict("pass_tiers_invalid")
 		}
 		e.tiers = append(e.tiers, tier)
 	}
-	return e, rows.Err()
+	return e, core.DatabaseOperationError(rows.Err())
 }
 func checkTierResult(result TierStatus) error {
 	data, err := json.Marshal(result)

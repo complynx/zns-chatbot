@@ -87,13 +87,15 @@ func Seed(ctx context.Context, db *pgxpool.Pool) error {
 		MenuJSON,
 		extras,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func (s Service) Event(ctx context.Context, id string) (Event, error) {
 	var e Event
-	err := s.DB.QueryRow(ctx, `SELECT id,deadline,menu,extras FROM core.order_events WHERE id=$1`, id).
-		Scan(&e.ID, &e.Deadline, &e.Menu, &e.Extras)
+	err := core.DatabaseOperationError(
+		s.DB.QueryRow(ctx, `SELECT id,deadline,menu,extras FROM core.order_events WHERE id=$1`, id).
+			Scan(&e.ID, &e.Deadline, &e.Menu, &e.Extras),
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return e, problem(http.StatusNotFound, "event_not_found")
 	}
@@ -101,7 +103,9 @@ func (s Service) Event(ctx context.Context, id string) (Event, error) {
 }
 func (s Service) Quote(ctx context.Context, actor, event string, in ChoiceInput) (Choice, error) {
 	var allowed bool
-	err := s.DB.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1`, actor).Scan(&allowed)
+	err := core.DatabaseOperationError(
+		s.DB.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1`, actor).Scan(&allowed),
+	)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !allowed) {
 		return Choice{}, problem(http.StatusForbidden, "forbidden")
 	}
@@ -141,7 +145,7 @@ func scan(row pgx.Row) (Order, error) {
 		&o.Country,
 		&o.CreatedAt,
 	)
-	return o, err
+	return o, core.DatabaseOperationError(err)
 }
 func (s Service) List(ctx context.Context, actor, event string) ([]Order, error) {
 	rows, err := s.DB.Query(
@@ -151,7 +155,7 @@ func (s Service) List(ctx context.Context, actor, event string) ([]Order, error)
 		event,
 	)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	out := []Order{}
@@ -162,7 +166,7 @@ func (s Service) List(ctx context.Context, actor, event string) ([]Order, error)
 		}
 		out = append(out, o)
 	}
-	return out, rows.Err()
+	return out, core.DatabaseOperationError(rows.Err())
 }
 func save(ctx context.Context, tx pgx.Tx, o Order) error {
 	_, err := tx.Exec(
@@ -184,7 +188,7 @@ func save(ctx context.Context, tx pgx.Tx, o Order) error {
 		o.Country,
 		o.CreatedAt,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }
 func clearPayment(o *Order) {
 	o.State = "unpaid"
@@ -230,7 +234,7 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Order, e
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Order{}, err
+		return Order{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // Cleanup after commit or a reported operation error.
 	prepared, err := s.PrepareInTx(ctx, tx, actor, c)
@@ -244,7 +248,8 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Order, e
 	if err != nil {
 		return Order{}, err
 	}
-	return result, tx.Commit(ctx)
+	// A failed commit has an uncertain outcome; keep its SQL provenance.
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (c Command) isAdmin() bool { return c.Name == actionAccept || c.Name == actionReject }
@@ -274,7 +279,10 @@ func (op *operation) authorize(ctx context.Context) error {
 	}
 	// Foreign-key checks for another user's capacity notice must remain compatible.
 	var allowed bool
-	err := op.tx.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1 FOR NO KEY UPDATE`, op.actor).Scan(&allowed)
+	err := core.DatabaseOperationError(
+		op.tx.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1 FOR NO KEY UPDATE`, op.actor).
+			Scan(&allowed),
+	)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !allowed) {
 		return problem(http.StatusForbidden, "forbidden")
 	}
@@ -282,8 +290,10 @@ func (op *operation) authorize(ctx context.Context) error {
 		return err
 	}
 	e := &op.event
-	err = op.tx.QueryRow(ctx, `SELECT id,deadline,menu,extras FROM core.order_events WHERE id=$1`, op.command.EventID).
-		Scan(&e.ID, &e.Deadline, &e.Menu, &e.Extras)
+	err = core.DatabaseOperationError(
+		op.tx.QueryRow(ctx, `SELECT id,deadline,menu,extras FROM core.order_events WHERE id=$1`, op.command.EventID).
+			Scan(&e.ID, &e.Deadline, &e.Menu, &e.Extras),
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return problem(http.StatusNotFound, "event_not_found")
 	}
@@ -294,8 +304,10 @@ func (op *operation) authorize(ctx context.Context) error {
 		return nil
 	}
 	var admin bool
-	err = op.tx.QueryRow(ctx, `SELECT true FROM core.order_admins WHERE event_id=$1 AND owner=$2 FOR SHARE`, e.ID, op.actor).
-		Scan(&admin)
+	err = core.DatabaseOperationError(
+		op.tx.QueryRow(ctx, `SELECT true FROM core.order_admins WHERE event_id=$1 AND owner=$2 FOR SHARE`, e.ID, op.actor).
+			Scan(&admin),
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return problem(http.StatusForbidden, "forbidden")
 	}
@@ -311,8 +323,10 @@ func (op *operation) authorize(ctx context.Context) error {
 func (op *operation) replay(ctx context.Context, hash string) (Order, bool, error) {
 	var previous string
 	var out Order
-	err := op.tx.QueryRow(ctx, `SELECT request_hash,result FROM core.order_operations WHERE actor=$1 AND key=$2`, op.actor, op.command.Key).
-		Scan(&previous, &out)
+	err := core.DatabaseOperationError(
+		op.tx.QueryRow(ctx, `SELECT request_hash,result FROM core.order_operations WHERE actor=$1 AND key=$2`, op.actor, op.command.Key).
+			Scan(&previous, &out),
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return out, false, nil
 	}
@@ -421,7 +435,7 @@ func (op *operation) paymentAdmin(ctx context.Context, admin, country string) er
 	err := op.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.order_admins WHERE event_id=$1 AND owner=$2 AND country=$3)`, op.event.ID, admin, country).
 		Scan(&exists)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !exists {
 		return problem(http.StatusBadRequest, "invalid_payment_admin")
@@ -445,7 +459,7 @@ func (op *operation) startPayment(ctx context.Context, o *Order) error {
 		var owned bool
 		if err := op.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.order_proofs WHERE id=$1 AND owner=$2)`, c.ProofFile, o.Owner).
 			Scan(&owned); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		if !owned {
 			return problem(http.StatusBadRequest, "invalid_proof")
@@ -522,7 +536,7 @@ func (op *operation) persist(ctx context.Context, o Order, hash string) (Order, 
 		hash,
 		result,
 	)
-	if err == nil {
+	if err = core.DatabaseOperationError(err); err == nil {
 		err = delivery.RegisterBatch(ctx, op.tx, op.deliveryBotID, op.notificationRegistrations)
 	}
 	return result, err
@@ -534,7 +548,7 @@ func reconcile(ctx context.Context, tx pgx.Tx, e Event, deliveryBotID int64, pen
 	rows, err := tx.Query(ctx, `SELECT `+columns+` FROM core.orders WHERE event_id=$1 AND state<>'deleted'
 	ORDER BY CASE WHEN state IN ('proof','paid') THEN 0 ELSE 1 END,COALESCE(attempt_at,created_at),id`, e.ID)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	all := []Order{}
 	for rows.Next() {
@@ -545,7 +559,7 @@ func reconcile(ctx context.Context, tx pgx.Tx, e Event, deliveryBotID int64, pen
 		}
 		all = append(all, o)
 	}
-	err = rows.Err()
+	err = core.DatabaseOperationError(rows.Err())
 	rows.Close()
 	if err != nil {
 		return err
@@ -566,6 +580,9 @@ func reconcile(ctx context.Context, tx pgx.Tx, e Event, deliveryBotID int64, pen
 		if err = save(ctx, tx, o); err != nil {
 			return err
 		}
+		if err = createCapacityRefund(ctx, tx, o, before, removed); err != nil {
+			return err
+		}
 		if err = recordChange(ctx, tx, o.Owner, "system", "capacity", before, o); err != nil {
 			return err
 		}
@@ -582,7 +599,7 @@ func reconcile(ctx context.Context, tx pgx.Tx, e Event, deliveryBotID int64, pen
 			int64(o.Choice.Total),
 		)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	return nil

@@ -53,6 +53,7 @@ type ScriptToolRecord struct {
 	ChoiceUse               string                            `json:"choice_use,omitempty"`
 	ModernOrder             *ModernOrderRequest               `json:"modern_order,omitempty"`
 	CreditPolicy            *CreditToolCommand                `json:"credit_policy,omitempty"`
+	PassReceiptID           string                            `json:"pass_receipt_id,omitempty"`
 	Pass                    *ScriptPassRequest                `json:"pass,omitempty"`
 	BroadcastReview         *BroadcastReviewRequest           `json:"broadcast_review,omitempty"`
 	FoodExport              *FoodExportRequest                `json:"food_export,omitempty"`

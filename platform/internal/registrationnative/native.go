@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
@@ -32,7 +33,7 @@ func Classify(ctx context.Context, tx pgx.Tx, chat int64, token string) (Envelop
 	}
 	rows, err := dbgen.New(tx).NativeBindings(ctx, dbgen.NativeBindingsParams{ChatID: chat, Token: token})
 	if err != nil {
-		return Envelope{}, false, err
+		return Envelope{}, false, core.DatabaseOperationError(err)
 	}
 	if len(rows) != 1 {
 		return Envelope{}, false, nil
@@ -98,7 +99,7 @@ func Check(ctx context.Context, tx pgx.Tx, e Envelope) (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	current, found, err := decode(row.Action, row.State, row.Owner, e.Chat, e.Token, row.Revision)
 	if err != nil || !found {

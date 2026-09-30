@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/workflow"
 
 	"github.com/jackc/pgx/v5"
@@ -60,7 +61,7 @@ func (b *Bot) localizeWorkflowNotice(
 		return fallback, nil
 	}
 	if err != nil {
-		return "", err
+		return "", core.DatabaseOperationContextError(ctx, err)
 	}
 	if kind == "error" {
 		var code string

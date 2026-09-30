@@ -518,8 +518,10 @@ func (b *Bot) prepareModernOrderRead(
 	if err != nil {
 		return err
 	}
-	if previous.ReadSnapshot != "" && previous.ReadSnapshot != fingerprint {
-		return appclient.ErrReadStale
+	if previous.ReadSnapshot != "" {
+		// Keep the admitted continuation snapshot. Execution reports a changed
+		// snapshot through the durable stale-result path without adopting it.
+		fingerprint = previous.ReadSnapshot
 	}
 	_, err = core.DecodeReadCursor(args.Cursor, owner, name+":"+event+":"+args.OrderID)
 	if err != nil {

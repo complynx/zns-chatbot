@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -175,12 +176,14 @@ func TestScriptPassDiscoveryLaterPageLateRevocation(t *testing.T) {
  INSERT INTO core.pass_bookings(event_id,owner,version,state,role,kind,payment_admin,created_at)
  SELECT 'history-'||lpad(n::text,2,'0'),'alice',1,'cancelled','leader','solo','bob','2025-09-01' FROM generate_series(1,45) n;`)
 	require.NoError(t, err)
+	hooks := 0
 	f.b.Scripts = archivedPassLateVM{after: func() {
+		hooks++
 		var pages int
 		require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions,
  jsonb_array_elements(content->0->'calls') call WHERE owner='alice' AND update_id=29992 AND kind='script_runs'
  AND call->'outcome'->>'name'='passes.events'`).Scan(&pages))
-		require.Equal(t, 3, pages)
+		require.Equal(t, 3, pages, "all three pages were admitted before the revocation")
 		_, removeErr := f.db.Exec(
 			t.Context(),
 			`DELETE FROM core.pass_bookings WHERE event_id='history-45' AND owner='alice'`,
@@ -194,10 +197,64 @@ func TestScriptPassDiscoveryLaterPageLateRevocation(t *testing.T) {
 		{View: "workflow", Text: "Checked"},
 	}}
 	f.b.Model = model
-	handle(t, f.b, message(29992, 101, "List my historical events"))
-	require.Len(t, model.inputs, 2)
-	raw, err := json.Marshal(model.inputs[1].Script)
+	update := message(29992, 101, "List my historical events")
+	handle(t, f.b, update)
+	require.Equal(t, 1, hooks, "the late revocation ran once, after the VM finished")
+	// A plain pass revocation is not a memory-retirement projection, so the stale
+	// completion ends the turn: the only model input predates the revocation.
+	require.Len(t, model.inputs, 1, "revocation prevents every subsequent model call")
+	requireNoLaterPageTitles(t, model.inputs)
+	var remaining int
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.pass_bookings WHERE owner='alice' AND event_id LIKE 'history-%'`).
+			Scan(&remaining),
+	)
+	require.Equal(t, 44, remaining, "only the history-45 membership was revoked")
+	records := laterPageRetiredLedger(t, f)
+	// Replaying the exact update must not rerun the script or reopen its results.
+	replay := &knowledgeModel{plans: []agent.Plan{{View: "workflow", Text: "Checked"}}}
+	f.b.Model = replay
+	handle(t, f.b, update)
+	require.Equal(t, 1, hooks, "replay does not execute the retired script again")
+	requireNoLaterPageTitles(t, replay.inputs)
+	require.Equal(t, records, laterPageRetiredLedger(t, f), "replay leaves the retired ledger unchanged")
+	for _, sent := range chatMessages(t, f, 101) {
+		require.NotContains(t, sent.Text, "later-page-")
+	}
+}
+
+func requireNoLaterPageTitles(t *testing.T, inputs []agent.Input) {
+	t.Helper()
+	raw, err := json.Marshal(inputs)
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), "later-page-")
-	require.Contains(t, string(raw), "pass_access_changed")
+}
+
+// laterPageRetiredLedger proves the single persisted run for update 29992 kept
+// its three page receipts but retired every result and call output.
+func laterPageRetiredLedger(t *testing.T, f *fixture) string {
+	t.Helper()
+	var stored string
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT content::text FROM bot.interactions WHERE owner='alice' AND update_id=29992 AND kind='script_runs'`).
+			Scan(&stored),
+	)
+	require.NotContains(t, stored, "later-page-")
+	var records []agenthost.ScriptRecord
+	require.NoError(t, json.Unmarshal([]byte(stored), &records))
+	require.Len(t, records, 1, "exactly one script run for the update")
+	record := records[0]
+	require.True(t, record.PassRedacted)
+	require.JSONEq(t, `{"omitted":true,"reason":"pass_access_changed"}`, string(record.Run.Result))
+	pages := 0
+	for _, call := range record.Calls {
+		require.Empty(t, call.Outcome.Result, "retired call outputs are removed")
+		if call.Outcome.Name == "passes.events" {
+			pages++
+		}
+	}
+	require.Equal(t, 3, pages, "the three page receipts remain as retired evidence")
+	return stored
 }

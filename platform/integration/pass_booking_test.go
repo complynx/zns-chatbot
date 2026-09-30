@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
@@ -426,7 +427,8 @@ CREATE TRIGGER fail_pair BEFORE INSERT ON core.pass_bookings FOR EACH ROW EXECUT
 		TargetVersion: alice.Version,
 	}
 	_, err = s.Execute(t.Context(), "bob", accept)
-	require.ErrorContains(t, err, "injected write failure")
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.NotContains(t, err.Error(), "injected write failure")
 	unchanged, err := s.Get(t.Context(), "alice", "dance")
 	require.NoError(t, err)
 	assert.Equal(t, alice, unchanged)

@@ -71,7 +71,7 @@ func TestMediaReconcileRefreshesChoicesAndLanguage(t *testing.T) {
 	photo, _ := intakePhoto(t, f)
 	f.model.plan = agent.Plan{View: agent.MediaView, MediaAction: &agent.MediaProposal{
 		MediaID: "tg-media-100", Intent: "receipt", Amount: "35", Currency: "BYN"}}
-	handle(t, f.b, photo)
+	handleVisible(t, f.b, photo)
 	old := intakeChoice(t, f, 101, first.ID)
 	command := orderCommand("edit", first)
 	command.Choice = orderChoice("shuttle")
@@ -114,7 +114,7 @@ func TestMediaReconcileRetiresUnavailableCards(t *testing.T) {
 			require.NoError(t, err)
 			photo, _ := intakePhoto(t, f)
 			f.model.plan = agent.Plan{View: agent.MediaView, Text: "What is this photo?"}
-			handle(t, f.b, photo)
+			handleVisible(t, f.b, photo)
 			before := mediaReconcileCard(t, f, "tg-media-100")
 			require.NotEmpty(t, before.Markup.Rows)
 			_, err = f.db.Exec(t.Context(), test.query)

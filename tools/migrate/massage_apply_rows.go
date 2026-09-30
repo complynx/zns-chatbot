@@ -71,7 +71,7 @@ func insertMassageBooking(
 		if n.sent {
 			if _, err = tx.Exec(
 				ctx,
-				`INSERT INTO core.massage_notices(booking_id,owner,kind,created_at,sent_at) VALUES($1,$2,$3,$4,$4)`,
+				`INSERT INTO core.massage_notices(booking_id,owner,kind,created_at,sent_at,delivery_state) VALUES($1,$2,$3,$4,$4,'sent')`,
 				b.ID,
 				n.owner,
 				n.kind,
@@ -84,10 +84,12 @@ func insertMassageBooking(
 	if b.Additional && !b.Deleted && !b.Start.Before(captured) {
 		if _, err = tx.Exec(
 			ctx,
-			`INSERT INTO core.massage_notices(booking_id,owner,kind,created_at) VALUES($1,$2,'additional',$3)`,
+			`INSERT INTO core.massage_notices(booking_id,owner,kind,created_at,bot_id,delivery_chat) VALUES($1,$2,'additional',$3,$4,$5)`,
 			b.ID,
 			owners[b.Owner],
 			captured,
+			p.Plan.BotID,
+			b.Owner,
 		); err != nil {
 			return errors.New("massage_notice_conflict")
 		}

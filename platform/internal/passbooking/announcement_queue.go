@@ -55,7 +55,7 @@ func enqueueRegistrationAnnouncements(
 		botID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	type queued struct {
 		id      int64
@@ -70,7 +70,7 @@ func enqueueRegistrationAnnouncements(
 		return item, scanErr
 	})
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if botID <= 0 {
 		return []delivery.Registration{}, nil
@@ -122,11 +122,11 @@ func (s Service) RefreshAnnouncementDestinations(
 		`SELECT DISTINCT thread_channel FROM core.pass_events WHERE thread_channel<>'' AND (open_ended OR finishes_at>clock_timestamp()) ORDER BY thread_channel`,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	chats, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return s.AnnouncementBindings.Refresh(ctx, resolver, chats, ttl)
 }
@@ -140,7 +140,7 @@ func (s Service) PrepareRegistrationAnnouncement(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return RegistrationAnnouncement{}, false, err
+		return RegistrationAnnouncement{}, false, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = s.lockAnnouncementSource(ctx, tx, id); errors.Is(err, pgx.ErrNoRows) {
@@ -158,7 +158,7 @@ func (s Service) PrepareRegistrationAnnouncement(
 		return item, false, nil
 	}
 	if err != nil {
-		return item, false, err
+		return item, false, core.DatabaseOperationError(err)
 	}
 	entry, err := delivery.ReadReference(ctx, tx, s.Delivery.BotID, announcementReference(id))
 	if err != nil {
@@ -178,27 +178,27 @@ func (s Service) PrepareRegistrationAnnouncement(
 		item.Attempts,
 	)
 	if err != nil {
-		return item, false, err
+		return item, false, core.DatabaseOperationError(err)
 	}
-	return item, true, tx.Commit(ctx)
+	return item, true, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (s Service) lockAnnouncementSource(ctx context.Context, tx pgx.Tx, id int64) error {
 	var eventID, owner string
 	if err := tx.QueryRow(ctx, `SELECT event_id,owner FROM core.pass_registration_announcements WHERE id=$1 AND bot_id=$2`, id, s.Delivery.BotID).
 		Scan(&eventID, &owner); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	q := dbgen.New(tx)
 	if _, err := q.LockAnnouncementEvent(ctx, eventID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if _, err := q.LockAnnouncementBooking(
 		ctx,
 		dbgen.LockAnnouncementBookingParams{EventID: eventID, Owner: owner},
 	); err != nil &&
 		!errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return nil
 }
@@ -216,11 +216,11 @@ func (s Service) RecoverRegistrationAnnouncements(ctx context.Context) error {
  AND (e.open_ended OR e.finishes_at>clock_timestamp()) AND e.thread_channel=a.channel
  AND COALESCE(e.thread_id,0)=COALESCE(a.thread_id,0)))) ORDER BY a.id LIMIT 100`, s.Delivery.BotID)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, id := range ids {
 		if err = s.recoverAnnouncement(ctx, id); err != nil {
@@ -232,7 +232,7 @@ func (s Service) RecoverRegistrationAnnouncements(ctx context.Context) error {
 func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = s.lockAnnouncementSource(ctx, tx, id); err != nil {
@@ -241,7 +241,7 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 	var attempt int64
 	if err = tx.QueryRow(ctx, `SELECT attempts FROM core.pass_registration_announcements WHERE id=$1 AND bot_id=$2 FOR UPDATE`, id, s.Delivery.BotID).
 		Scan(&attempt); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	q := dbgen.New(tx)
 	row, err := q.LockAnnouncementAttempt(
@@ -249,7 +249,7 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 		dbgen.LockAnnouncementAttemptParams{ID: id, BotID: s.Delivery.BotID, Attempt: attempt},
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	var state delivery.Kind
 	reason := ""
@@ -282,5 +282,5 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }

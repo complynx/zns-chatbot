@@ -10,14 +10,15 @@ import (
 // PassOperationInput contains domain parameters from an admitted operation.
 // The execution ledger and its IDs, timestamps and tool names belong to the host.
 type PassOperationInput struct {
-	Command    *passbooking.Command          `json:"command,omitempty"`
-	Assignment *passbooking.AdminAssignment  `json:"assignment,omitempty"`
-	Batch      *passbooking.RuntimeBatch     `json:"batch,omitempty"`
-	Menu       *PassOperationMenu            `json:"menu,omitempty"`
-	Export     bool                          `json:"export,omitempty"`
-	Source     *readsource.Derivation        `json:"source,omitempty"`
-	Witness    *passbooking.OperationWitness `json:"witness,omitempty"`
-	Retired    bool                          `json:"retired,omitempty"`
+	Command             *passbooking.Command          `json:"command,omitempty"`
+	Assignment          *passbooking.AdminAssignment  `json:"assignment,omitempty"`
+	Batch               *passbooking.RuntimeBatch     `json:"batch,omitempty"`
+	Menu                *PassOperationMenu            `json:"menu,omitempty"`
+	Export              bool                          `json:"export,omitempty"`
+	Source              *readsource.Derivation        `json:"source,omitempty"`
+	Witness             *passbooking.OperationWitness `json:"witness,omitempty"`
+	Retired             bool                          `json:"retired,omitempty"`
+	ObserveOwnerBooking bool                          `json:"observe_owner_booking,omitempty"`
 }
 
 type PassOperationMenu struct {
@@ -27,6 +28,7 @@ type PassOperationMenu struct {
 
 // PassOperationRead is atomic receipt evidence. ReadAuthorities are host-only.
 type PassOperationRead struct {
+	CurrentBooking  *passbooking.Booking   `json:"current_booking,omitempty"`
 	Summary         PassOperationSummary   `json:"summary"`
 	ReadAuthorities []readsource.Authority `json:"read_authorities"`
 }
@@ -39,6 +41,10 @@ func (r PassOperationInput) Validate() error {
 		}
 	}
 	if count != 1 || r.Source != nil && !r.Source.Valid() {
+		return unavailablePassOperation()
+	}
+	if r.ObserveOwnerBooking && (!r.Retired || r.Command == nil ||
+		r.Command.Name != "invite" || r.Command.Target != "" || r.Command.QueueInvitation) {
 		return unavailablePassOperation()
 	}
 	return nil

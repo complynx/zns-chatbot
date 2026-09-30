@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -40,7 +41,11 @@ func TestPassTakeoverAgentAndManualOwnerBoundControls(t *testing.T) {
 				}
 				return agent.Plan{View: agent.RegistrationView, RegistrationAction: p}, nil
 			})
-			handle(t, f.b, message(1100, 101, "Show payment-contact controls for event dance, Telegram ID 101"))
+			handlePassVisible(
+				t,
+				f,
+				message(1100, 101, "Show payment-contact controls for event dance, Telegram ID 101"),
+			)
 			missing, err := i18n.Translate(language, i18n.RegistrationReceiverMissing, nil)
 			require.NoError(t, err)
 			assert.Contains(t, passMenuCard(t, f, 101).Text, missing)
@@ -58,6 +63,7 @@ func TestPassTakeoverAgentAndManualOwnerBoundControls(t *testing.T) {
 			assert.Equal(t, "bob", before.PaymentAdmin)
 			handle(t, f.b, apply)
 			handle(t, f.b, apply)
+			drainPassNotices(t, f)
 			after, err := service.Get(t.Context(), "alice", "dance")
 			require.NoError(t, err)
 			assert.Equal(t, "alice", after.PaymentAdmin)
@@ -200,10 +206,10 @@ func TestPassTakeoverManualDivergentPairContacts(t *testing.T) {
 				}
 				return agent.Plan{View: agent.RegistrationView, RegistrationAction: p}, nil
 			})
-			handle(t, f.b, message(1900, 202, "Show payment-contact controls for Telegram ID 202"))
+			handlePassVisible(t, f, message(1900, 202, "Show payment-contact controls for Telegram ID 202"))
 			label, err := i18n.Translate(language, i18n.RegistrationTakeoverApply, nil)
 			require.NoError(t, err)
-			handle(t, f.b, passMenuClick(t, f, 202, 1901, label))
+			handlePassVisible(t, f, passMenuClick(t, f, 202, 1901, label))
 			after, err := s.Get(t.Context(), "alice", "dance")
 			require.NoError(t, err)
 			assert.Equal(t, "bob", after.PaymentAdmin)
@@ -212,7 +218,7 @@ func TestPassTakeoverManualDivergentPairContacts(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, bob, unchanged)
 			// A fresh paired-target button is safe when both contacts already match.
-			handle(t, f.b, passMenuClick(t, f, 202, 1902, label))
+			handlePassVisible(t, f, passMenuClick(t, f, 202, 1902, label))
 			repeated, err := s.Get(t.Context(), "alice", "dance")
 			require.NoError(t, err)
 			assert.Equal(t, after, repeated)
@@ -225,10 +231,12 @@ func TestPassTakeoverDelayedContactCycleDeliversLatestNotice(t *testing.T) {
 	f := registrationPaymentFixture(t)
 	_, err := f.db.Exec(
 		t.Context(),
-		`INSERT INTO core.pass_booking_admins(owner) VALUES('alice'); UPDATE core.pass_notifications SET delivered_at=now()`,
+		`INSERT INTO core.pass_booking_admins(owner) VALUES('alice')`,
 	)
 	require.NoError(t, err)
-	s := passbooking.Service{DB: f.db}
+	drainPassNotices(t, f)
+	before := chatMessages(t, f, 101)
+	s := passbooking.Service{DB: f.db, Delivery: f.b.Delivery}
 	for index, actor := range []string{"alice", "bob", "alice"} {
 		target, readErr := s.TakeoverTarget(t.Context(), actor, "dance", 101)
 		require.NoError(t, readErr)
@@ -238,34 +246,42 @@ func TestPassTakeoverDelayedContactCycleDeliversLatestNotice(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
-	var latest int64
+	var noticeIDs []int64
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), `SELECT max(id) FROM core.pass_notifications WHERE kind='payment_contact_changed'`).
-			Scan(&latest),
+		f.db.QueryRow(t.Context(), `SELECT array_agg(id ORDER BY id) FROM core.pass_notifications WHERE kind='payment_contact_changed'`).
+			Scan(&noticeIDs),
 	)
-	for _, expectedCurrent := range []bool{false, false, true} {
-		notices, readErr := s.PendingNotifications(t.Context())
+	require.Len(t, noticeIDs, 3)
+	latest := noticeIDs[2]
+	for index, id := range noticeIDs {
+		require.NoError(t, f.b.DeliverPassNotification(t.Context(), id))
+		status, readErr := s.NotificationStatus(t.Context(), id)
 		require.NoError(t, readErr)
-		require.Len(t, notices, 1)
-		assert.Equal(t, expectedCurrent, notices[0].Current)
-		if expectedCurrent {
-			assert.Equal(t, latest, notices[0].ID)
+		if index == 2 {
+			assert.Equal(t, string(delivery.Succeeded), status.State)
+			assert.Positive(t, status.MessageID)
+			assert.Equal(t, latest, status.ID)
+		} else {
+			assert.Equal(t, string(delivery.Cancelled), status.State)
+			assert.Equal(t, "notification_no_longer_current", status.Reason)
+			assert.Zero(t, status.MessageID)
 		}
-		require.NoError(t, f.b.DeliverPassNotifications(t.Context()))
 	}
 	pending, err := s.PendingNotifications(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, pending)
-	require.Len(t, chatMessages(t, f, 101), 1, "only the latest contact notification reaches Telegram")
+	require.Len(t, chatMessages(t, f, 101), len(before)+1, "only the latest contact notification reaches Telegram")
 	var deliveries, history int
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.pass_notification_deliveries`).Scan(&deliveries),
+		f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.pass_notification_deliveries d
+ JOIN core.pass_notifications n ON n.id=d.notice_id WHERE n.kind='payment_contact_changed'`).Scan(&deliveries),
 	)
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.conversation_events WHERE source_key LIKE 'pass-notification-%'`).
+		f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.conversation_events e
+ JOIN core.pass_notifications n ON e.source_key='pass-notification-'||n.id::text WHERE n.kind='payment_contact_changed'`).
 			Scan(&history),
 	)
 	assert.Equal(t, 1, deliveries)
@@ -273,7 +289,8 @@ func TestPassTakeoverDelayedContactCycleDeliversLatestNotice(t *testing.T) {
 	var delivered int64
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), `SELECT notice_id FROM bot.pass_notification_deliveries`).Scan(&delivered),
+		f.db.QueryRow(t.Context(), `SELECT d.notice_id FROM bot.pass_notification_deliveries d
+ JOIN core.pass_notifications n ON n.id=d.notice_id WHERE n.kind='payment_contact_changed'`).Scan(&delivered),
 	)
 	assert.Equal(t, latest, delivered)
 }

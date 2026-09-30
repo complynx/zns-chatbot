@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/conversation/fence"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
@@ -29,7 +30,7 @@ func privateDeletionState(ctx context.Context, tx pgx.Tx, actor string) (int64, 
 	}
 	var memory MemoryDeletionState
 	err = tx.QueryRow(ctx, memoryDeletionStateQuery, actor).Scan(&memory.PrivateGeneration, &memory.SharedGeneration)
-	return history, memory, err
+	return history, memory, core.DatabaseOperationError(err)
 }
 
 func privateDeletionIdentity(command Command) (string, string) {
@@ -143,7 +144,7 @@ func currentPrivateDeletion(ctx context.Context, tx pgx.Tx, actor string, comman
  WHERE owner=$1 AND topic=$2 AND document_key=$3 AND version=$4 AND NOT active)`,
 			actor, command.Topic, command.FactKey, command.Version+1).Scan(&current)
 	}
-	return current, err
+	return current, core.DatabaseOperationError(err)
 }
 
 func verifyPrivateDeletion(ctx context.Context, tx pgx.Tx, actor string, command Command,

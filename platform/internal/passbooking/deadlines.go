@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const (
@@ -28,13 +30,13 @@ type deadlineMarker struct {
 // the same row lock as booking mutations and reads the clock after acquiring it.
 func (s Service) ProcessDeadlines(ctx context.Context) (int64, error) {
 	var total int64
-	var firstFailure error
+	var failures error
 	failed := 0
 	after := ""
 	for {
 		events, err := s.maintenanceEvents(ctx, after)
 		if err != nil {
-			return total, errors.Join(firstFailure, err)
+			return total, errors.Join(failures, err)
 		}
 		for _, id := range events {
 			count, processErr := s.processEventDeadlines(ctx, id)
@@ -43,12 +45,10 @@ func (s Service) ProcessDeadlines(ctx context.Context) (int64, error) {
 				continue
 			}
 			if ctx.Err() != nil {
-				return total, errors.Join(firstFailure, ctx.Err())
+				return total, errors.Join(failures, processErr, ctx.Err())
 			}
 			failed++
-			if firstFailure == nil {
-				firstFailure = processErr
-			}
+			failures = errors.Join(failures, processErr)
 		}
 		if len(events) < deadlineEventBatch {
 			break
@@ -57,8 +57,8 @@ func (s Service) ProcessDeadlines(ctx context.Context) (int64, error) {
 		// blocked. They must not starve later events on every maintenance tick.
 		after = events[len(events)-1]
 	}
-	if firstFailure != nil {
-		return total, fmt.Errorf("pass maintenance failed for %d events: %w", failed, firstFailure)
+	if failures != nil {
+		return total, fmt.Errorf("pass maintenance failed for %d events: %w", failed, failures)
 	}
 	return total, nil
 }
@@ -71,7 +71,7 @@ func (s Service) maintenanceEvents(ctx context.Context, after string) ([]string,
  WHERE e.id>$2 AND e.finishes_at>clock_timestamp() AND (
  EXISTS(SELECT 1 FROM core.registration_intents i WHERE i.event_id=e.id AND i.state='captured') OR
  EXISTS(SELECT 1 FROM core.registration_ingress g WHERE g.native_event=e.id AND g.native_payload IS NOT NULL AND g.native_outcome='') OR b.state='waitlist' OR
- (b.state='waiting-for-couple' AND b.created_at<clock_timestamp()-interval '58 hours') OR
+ (b.state='waiting-for-couple' AND COALESCE(b.invitation_started_at,b.created_at)<clock_timestamp()-interval '58 hours') OR
  (b.state='assigned' AND ((m.first_at IS NULL AND b.assigned_at<clock_timestamp()-interval '6 days') OR
  m.first_at<clock_timestamp()-interval '2 days' OR (m.second_at IS NULL AND m.first_at<clock_timestamp()-interval '1 day'))))
  ORDER BY e.id LIMIT $1`,
@@ -79,9 +79,10 @@ func (s Service) maintenanceEvents(ctx context.Context, after string) ([]string,
 		after,
 	)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
-	return pgx.CollectRows(rows, pgx.RowTo[string])
+	events, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	return events, core.DatabaseOperationError(err)
 }
 
 func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, error) {
@@ -90,7 +91,7 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	e, err := readEvent(ctx, tx, id)
@@ -107,10 +108,10 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 	}
 	var now time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	if !now.Before(e.finishes) {
-		return 0, tx.Commit(ctx)
+		return 0, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	before := copyBookings(bookings)
 	if err = refreshRegistrationTurns(ctx, tx, id, s.registrationRetention(), now); err != nil {
@@ -144,18 +145,18 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 	if err = state.notifyChanges(ctx, tx, before, "deadline"); err != nil {
 		return 0, err
 	}
-	return count, tx.Commit(ctx)
+	return count, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func readDeadlineMarkers(ctx context.Context, tx pgx.Tx, event string) (map[string]deadlineMarker, error) {
 	rows, err := tx.Query(ctx, `SELECT m.owner,m.first_at,m.second_at FROM core.pass_deadline_markers m
  JOIN core.pass_bookings b ON b.event_id=m.event_id AND b.owner=m.owner AND b.assigned_at=m.assigned_at WHERE m.event_id=$1`, event)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	markers, err := pgx.CollectRows(rows, pgx.RowToStructByPos[deadlineMarker])
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	result := make(map[string]deadlineMarker, len(markers))
 	for _, marker := range markers {
@@ -165,7 +166,7 @@ func readDeadlineMarkers(ctx context.Context, tx pgx.Tx, event string) (map[stri
 }
 
 func (s *snapshot) processDeadline(ctx context.Context, tx pgx.Tx, b *Booking, marker deadlineMarker) (bool, error) {
-	if b.State == pending && b.CreatedAt.Before(s.now.Add(-invitationAfter)) {
+	if b.State == pending && b.invitationStart().Before(s.now.Add(-invitationAfter)) {
 		return true, s.expireInvitation(ctx, tx, b)
 	}
 	if b.State != assigned || b.AssignedAt == nil {
@@ -186,7 +187,7 @@ func (s *snapshot) processDeadline(ctx context.Context, tx pgx.Tx, b *Booking, m
 			s.now,
 		)
 		if err != nil {
-			return false, err
+			return false, core.DatabaseOperationError(err)
 		}
 		return true, enqueuePassNotice(ctx, tx, s.deliveryBotID, &s.notificationRegistrations,
 			b,
@@ -206,7 +207,7 @@ func (s *snapshot) processDeadline(ctx context.Context, tx pgx.Tx, b *Booking, m
 			s.now,
 		)
 		if err != nil {
-			return false, err
+			return false, core.DatabaseOperationError(err)
 		}
 		return true, enqueuePassNotice(ctx, tx, s.deliveryBotID, &s.notificationRegistrations,
 			b,
@@ -224,6 +225,7 @@ func (s *snapshot) expireInvitation(ctx context.Context, tx pgx.Tx, b *Booking) 
 	b.State = waitlist
 	b.Kind = solo
 	b.InvitationTarget = 0
+	b.InvitationStartedAt = nil
 	b.Partner = ""
 	s.touch(b)
 	if err := enqueuePassNotice(ctx, tx, s.deliveryBotID, &s.notificationRegistrations,
@@ -236,4 +238,13 @@ func (s *snapshot) expireInvitation(ctx context.Context, tx pgx.Tx, b *Booking) 
 		return err
 	}
 	return notifyKnownInvitee(ctx, tx, s.deliveryBotID, &s.notificationRegistrations, b, invited, "invitation_expired")
+}
+
+// Historical and imported rows without an invitation start retain their legacy
+// deadline. Their registration time is not claimed as a known invitation start.
+func (b Booking) invitationStart() time.Time {
+	if b.InvitationStartedAt != nil {
+		return *b.InvitationStartedAt
+	}
+	return b.CreatedAt
 }

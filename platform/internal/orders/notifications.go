@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 
 	"github.com/complynx/zns-chatbot/platform/internal/orders/dbgen"
@@ -19,19 +21,22 @@ type Notification struct {
 	DeliveryText    string `json:"delivery_text,omitempty"`
 	FollowupPending bool   `json:"followup_pending,omitempty"`
 
-	ID         int64    `json:"id"`
-	Recipient  string   `json:"recipient"`
-	TelegramID int64    `json:"telegram_id"`
-	EventID    string   `json:"event_id"`
-	OrderID    string   `json:"order_id"`
-	Kind       string   `json:"kind"`
-	Version    int64    `json:"version"`
-	Attempt    string   `json:"attempt,omitempty"`
-	State      string   `json:"state"`
-	Total      Money    `json:"total"`
-	Country    string   `json:"country,omitempty"`
-	Removed    []string `json:"removed,omitempty"`
-	Current    bool     `json:"current"`
+	ID            int64       `json:"id"`
+	Recipient     string      `json:"recipient"`
+	TelegramID    int64       `json:"telegram_id"`
+	EventID       string      `json:"event_id"`
+	OrderID       string      `json:"order_id"`
+	Kind          string      `json:"kind"`
+	Version       int64       `json:"version"`
+	Attempt       string      `json:"attempt,omitempty"`
+	State         string      `json:"state"`
+	Total         Money       `json:"total"`
+	Country       string      `json:"country,omitempty"`
+	Removed       []string    `json:"removed,omitempty"`
+	Current       bool        `json:"current"`
+	RefundID      int64       `json:"refund_id,omitempty"`
+	RefundVersion int64       `json:"refund_version,omitempty"`
+	Refund        *RefundTask `json:"refund,omitempty"`
 }
 
 func enqueueNotification(
@@ -53,7 +58,7 @@ func enqueueNotification(
 	row, err := dbgen.New(tx).EnqueueNotification(ctx, dbgen.EnqueueNotificationParams{
 		Recipient: recipient, OrderID: order.ID, Payload: payload, BotID: botID})
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return collectNotificationRegistration(ctx, tx, botID, row.ID, row.DeliveryChat, pending)
 }

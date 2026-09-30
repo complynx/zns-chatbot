@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // DeliveryRead describes the existing view/export/proof contract, not a grant.
@@ -36,7 +38,7 @@ func (s Service) LockDeliveryReadInTx(ctx context.Context, tx pgx.Tx, actor stri
 		return problem("food_order_not_found")
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if owner != actor && in.Scope == "" {
 		if err = adminPermission(ctx, tx, actor, in.Event, "review", true); err != nil {
@@ -49,14 +51,18 @@ func (s Service) LockDeliveryReadInTx(ctx context.Context, tx pgx.Tx, actor stri
 	if in.Kind == "" {
 		return nil
 	}
+	return lockDeliveryProofInTx(ctx, tx, owner, in)
+}
+
+func lockDeliveryProofInTx(ctx context.Context, tx pgx.Tx, owner string, in DeliveryRead) error {
 	var available bool
-	err = tx.QueryRow(ctx, `SELECT p.id IS NOT NULL FROM core.food_payments f JOIN core.order_proofs p ON p.id=f.proof_id AND p.owner=$4 WHERE f.order_id=$1 AND f.kind=$2 AND f.generation=$3 FOR SHARE OF f,p`, in.Order, in.Kind, in.Generation, owner).
+	err := tx.QueryRow(ctx, `SELECT p.id IS NOT NULL FROM core.food_payments f JOIN core.order_proofs p ON p.id=f.proof_id AND p.owner=$4 WHERE f.order_id=$1 AND f.kind=$2 AND f.generation=$3 FOR SHARE OF f,p`, in.Order, in.Kind, in.Generation, owner).
 		Scan(&available)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return problem("food_proof_unavailable")
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !available {
 		return problem("food_proof_unavailable")
@@ -65,7 +71,7 @@ func (s Service) LockDeliveryReadInTx(ctx context.Context, tx pgx.Tx, actor stri
 		var latest int64
 		if err = tx.QueryRow(ctx, `SELECT max(generation) FROM core.food_payments WHERE order_id=$1 AND kind=$2`, in.Order, in.Kind).
 			Scan(&latest); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		if latest != in.Generation {
 			return problem("food_stale_payment")

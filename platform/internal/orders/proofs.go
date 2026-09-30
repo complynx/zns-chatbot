@@ -9,6 +9,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -31,7 +33,9 @@ func (s Service) UploadProof(ctx context.Context, owner, filename string, body [
 		return Proof{}, problem(http.StatusBadRequest, "invalid_proof")
 	}
 	var allowed bool
-	err := s.DB.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1`, owner).Scan(&allowed)
+	err := core.DatabaseOperationError(
+		s.DB.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1`, owner).Scan(&allowed),
+	)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !allowed) {
 		return Proof{}, problem(http.StatusForbidden, "forbidden")
 	}
@@ -50,7 +54,7 @@ func (s Service) UploadProof(ctx context.Context, owner, filename string, body [
 		filename,
 		body,
 	)
-	return proof, err
+	return proof, core.DatabaseOperationError(err)
 }
 
 // OrderProof authorizes against the current order, never a client-supplied file ID.
@@ -61,7 +65,7 @@ func (s Service) OrderProof(ctx context.Context, actor, event, id string) (Proof
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Proof{}, problem(http.StatusNotFound, "proof_not_found")
 	}
-	return proof, err
+	return proof, core.DatabaseOperationError(err)
 }
 
 const orderProofScope = `FROM core.orders o
@@ -78,5 +82,5 @@ func (s Service) OrderProofMetadata(ctx context.Context, actor, event, id string
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Proof{}, problem(http.StatusNotFound, "proof_not_found")
 	}
-	return proof, err
+	return proof, core.DatabaseOperationError(err)
 }

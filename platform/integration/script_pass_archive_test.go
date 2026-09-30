@@ -122,6 +122,7 @@ func TestScriptPassArchivedOwnerReadAndShow(t *testing.T) {
 		`return tools.passes.registration.show({event:"archive",view:"payment"});`,
 	)
 	require.Empty(t, show.Error)
+	pumpBotDeliveries(t, f.b)
 	var shown struct {
 		Complete bool `json:"complete"`
 	}
@@ -139,7 +140,8 @@ func TestScriptPassArchivedOwnerReadAndShow(t *testing.T) {
 		`await tools.passes.registration.read({event:"archive",view:"home"}); return tools.passes.registration.show({event:"archive",view:"home"});`,
 	)
 	require.Empty(t, show.Error)
-	handle(t, f.b, passMenuClick(t, f, 101, 19803, "Оплата"))
+	pumpBotDeliveries(t, f.b)
+	handleVisible(t, f.b, passMenuClick(t, f, 101, 19803, "Оплата"))
 	assert.Contains(t, passMenuCard(t, f, 101).Text, "подтверждена")
 	var mutable int
 	require.NoError(
@@ -156,6 +158,7 @@ func TestScriptPassArchivedOwnerReadAndShow(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, f.b.RenderPassMenu(t.Context(), "alice", 101, ""))
+	pumpBotDeliveries(t, f.b)
 	assert.NotContains(t, passMenuCard(t, f, 101).Text, "подтверждена")
 }
 

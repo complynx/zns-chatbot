@@ -39,6 +39,12 @@ func (c Client) Media(ctx context.Context, owner, id string) (media.Attachment, 
 		return result, errors.New("media download unavailable")
 	}
 	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		failure := coreResponseError(ctx, response, "media download unavailable")
+		if core.IsDatabaseFailure(failure) {
+			return result, failure
+		}
+	}
 	if response.StatusCode == http.StatusNotFound || response.StatusCode == http.StatusForbidden {
 		return result, &core.ProblemError{Status: response.StatusCode, Code: "media_not_found"}
 	}

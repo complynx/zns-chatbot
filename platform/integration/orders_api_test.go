@@ -62,6 +62,7 @@ func TestLargeOrderListsDoNotBlockOtherTelegramUsers(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	require.NoError(t, f.b.Handle(ctx, message(100, 101, "/orders")))
+	pumpBotDeliveries(t, f.b)
 	var visibleOrders int
 	require.NoError(t, f.db.QueryRow(
 		t.Context(),
@@ -69,6 +70,8 @@ func TestLargeOrderListsDoNotBlockOtherTelegramUsers(t *testing.T) {
 	).Scan(&visibleOrders))
 	assert.Equal(t, 10, visibleOrders, "Telegram rendering must be bounded without truncating API access")
 	require.NoError(t, f.b.Handle(ctx, message(101, 202, "/start")))
+	pumpBotDeliveries(t, f.b)
+	assert.NotEmpty(t, chatMessages(t, f, 202), "Bob must receive an actual Telegram reply")
 	var cards int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.messages WHERE owner='bob'`).Scan(&cards))
 	assert.Equal(t, 1, cards, "another user's next update must be processed")
@@ -92,7 +95,7 @@ func TestLargeOrderListsDoNotBlockOtherTelegramUsers(t *testing.T) {
 	assert.Equal(t, name, updated.Choice.FirstName, "context compaction must not erase full saved choices")
 	_, err = f.b.API.Order(t.Context(), "bob", "sandbox-festival", updated.ID)
 	requireCode(t, err, "order_not_found")
-	handle(t, f.b, message(105, 101, "add preparty to order bulk-0320"))
+	handleVisible(t, f.b, message(105, 101, "add preparty to order bulk-0320"))
 	offPage, err := f.b.API.Order(t.Context(), "alice", "sandbox-festival", "bulk-0320")
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, offPage.Version)

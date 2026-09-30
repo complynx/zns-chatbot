@@ -105,6 +105,7 @@ func respondKnowledge(logger *slog.Logger, w http.ResponseWriter, value any, err
 		JSON(w, http.StatusUnprocessableEntity, map[string]string{codeField: "source_authority_limit"})
 		return
 	}
+	markDatabaseFailure(w, err)
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok {
 		JSON(w, problem.Status, problem)
 		return

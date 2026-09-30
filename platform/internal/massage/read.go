@@ -2,6 +2,7 @@ package massage
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -20,10 +21,11 @@ func (s Service) Parties(ctx context.Context, actor, event string) ([]EventParty
 	rows, err := s.DB.Query(ctx, `SELECT p.id,p.event_id,p.starts_at,p.ends_at,p.tables,p.is_open,e.daily_limit
 	FROM core.massage_parties p JOIN core.massage_events e ON e.id=p.event_id WHERE p.event_id=$1 ORDER BY p.position,p.starts_at,p.id`, event)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[EventParty])
+	parties, err := pgx.CollectRows(rows, pgx.RowToStructByPos[EventParty])
+	return parties, core.DatabaseOperationError(err)
 }
 
 func loadParty(ctx context.Context, q queryer, event, id string, lock bool) (EventParty, error) {
@@ -38,7 +40,7 @@ func loadParty(ctx context.Context, q queryer, event, id string, lock bool) (Eve
 	if errors.Is(err, pgx.ErrNoRows) {
 		return party, problem(http.StatusNotFound, "not_found")
 	}
-	return party, err
+	return party, core.DatabaseOperationError(err)
 }
 
 func providers(ctx context.Context, q queryer, event string) ([]Provider, error) {
@@ -56,27 +58,39 @@ func readProviders(ctx context.Context, q queryer, event string, navigation bool
 		core.ReadExcerptRunes,
 	)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
-	result, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Provider, error) {
+	defer rows.Close()
+	result := []Provider{}
+	for rows.Next() {
 		var p Provider
-		scanErr := row.Scan(
+		var about []byte
+		err = rows.Scan(
 			&p.Owner,
 			&p.ID,
 			&p.Name,
 			&p.Icon,
-			&p.About,
+			&about,
 			&p.MinLength,
 			&p.MaxLength,
 			&p.LegacyTableFlag,
 			&p.NotifyBookings,
 			&p.NotifyNext,
 		)
-		return p, scanErr
-	})
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, core.DatabaseOperationError(err)
+		}
+		if about != nil {
+			if err = json.Unmarshal(about, &p.About); err != nil {
+				return nil, err
+			}
+		}
+		result = append(result, p)
 	}
+	if err = rows.Err(); err != nil {
+		return nil, core.DatabaseOperationError(err)
+	}
+	rows.Close()
 	for index := range result {
 		work, workErr := q.Query(
 			ctx,
@@ -85,11 +99,11 @@ func readProviders(ctx context.Context, q queryer, event string, navigation bool
 			result[index].Owner,
 		)
 		if workErr != nil {
-			return nil, workErr
+			return nil, core.DatabaseOperationError(workErr)
 		}
 		result[index].Work, err = pgx.CollectRows(work, pgx.RowToStructByPos[Span])
 		if err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 	}
 	return result, nil
@@ -103,9 +117,10 @@ func reservations(ctx context.Context, q queryer, event, party string) ([]Reserv
 		party,
 	)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[Reservation])
+	bookings, err := pgx.CollectRows(rows, pgx.RowToStructByPos[Reservation])
+	return bookings, core.DatabaseOperationError(err)
 }
 
 func (s Service) Slots(ctx context.Context, actor, event, partyID string, length int) (Availability, error) {
@@ -123,7 +138,7 @@ func (s Service) slots(
 	}
 	tx, err := s.DB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return Availability{}, err
+		return Availability{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	party, err := loadParty(ctx, tx, event, partyID, false)
@@ -168,7 +183,7 @@ func (s Service) slots(
 		}
 		return result.Slots[i].Specialist < result.Slots[j].Specialist
 	})
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func snapshot(ctx context.Context, q queryer, event, party string) ([]Provider, []Reservation, error) {
@@ -193,9 +208,10 @@ func (s Service) Bookings(ctx context.Context, actor, event, party, view string)
 	rows, err := s.DB.Query(ctx, `SELECT `+reservationColumns+` FROM core.massage_bookings
 	WHERE event_id=$1 AND ($2='' OR party_id=$2) AND `+condition+` ORDER BY starts_at,id`, event, party, actor)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[Reservation])
+	bookings, err := pgx.CollectRows(rows, pgx.RowToStructByPos[Reservation])
+	return bookings, core.DatabaseOperationError(err)
 }
 
 func (s Service) viewCondition(ctx context.Context, actor, event, view string) (string, error) {
@@ -206,7 +222,7 @@ func (s Service) viewCondition(ctx context.Context, actor, event, view string) (
 	err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.massage_specialists WHERE event_id=$1 AND owner=$2),
 	EXISTS(SELECT 1 FROM core.order_admins WHERE event_id=$1 AND owner=$2)`, event, actor).Scan(&specialist, &admin)
 	if err != nil {
-		return "", err
+		return "", core.DatabaseOperationError(err)
 	}
 	switch {
 	case view == "clients" && specialist:

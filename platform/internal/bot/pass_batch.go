@@ -6,11 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
@@ -73,36 +70,21 @@ func (b *Bot) handlePassBatch(ctx context.Context, in incoming, update telegram.
 }
 
 func (b *Bot) passBatchInput(ctx context.Context, in incoming, id int64) (passbooking.RuntimeBatch, error) {
-	var command passbooking.RuntimeBatch
-	err := b.DB.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind='pass_batch_input'`, in.owner, id).
-		Scan(&command)
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return command, err
+	command, err := (interaction.RegistrationBatchAdmission{
+		Store: registrationBatchInputStore{DB: b.DB}, Events: b.API,
+	}).Manual(ctx, in.owner, id, func() (passbooking.RuntimeBatch, error) {
+		return parsePassBatch(in.text)
+	})
+	if errors.Is(err, interaction.ErrRegistrationBatchEvent) {
+		return passbooking.RuntimeBatch{}, errPassBatchSyntax
 	}
-	command, err = parsePassBatch(in.text)
-	if err != nil {
-		return command, err
-	}
-	command.Key = "telegram-pass-batch-" + strconv.FormatInt(id, 10)
-	if command.Event == "" {
-		events, readErr := b.API.PassEvents(ctx, in.owner)
-		if readErr != nil {
-			return command, readErr
-		}
-		if len(events) == 0 {
-			return command, errPassBatchSyntax
-		}
-		command.Event = passbooking.ClosestEvent(events, time.Now())
-	}
-	if err = b.record(ctx, in.owner, id, "pass_batch_input", command); err != nil {
-		return command, err
-	}
-	err = b.DB.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind='pass_batch_input'`, in.owner, id).
-		Scan(&command)
 	return command, err
 }
 
 func (b *Bot) passBatchError(ctx context.Context, in incoming, language string, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return b.sendPassBatchText(
 			ctx,

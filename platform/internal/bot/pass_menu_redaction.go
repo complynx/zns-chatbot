@@ -16,8 +16,12 @@ import (
 const passSourceStale = "source_stale"
 
 func stalePassMenuSource(err error) bool {
+	if core.IsDatabaseFailure(err) {
+		return false
+	}
 	problem, ok := errors.AsType[*core.ProblemError](err)
-	return ok && (problem.Code == passSourceStale || problem.Code == historyStale)
+	return ok &&
+		(problem.Code == passSourceStale || problem.Code == "pass_source_stale" || problem.Code == historyStale)
 }
 
 // Revocation retires the original view without turning its inputs into manual data.
@@ -27,24 +31,24 @@ func (b *Bot) redactPassMenu(
 ) error {
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	tombstone := botdelivery.PassMenu{Source: saved.Source, Redacted: true}
 	result, err := tx.Exec(ctx, `UPDATE bot.pass_views SET state=$4,view_hash=''
  WHERE owner=$1 AND revision=$2 AND state->'source'=$3 AND NOT COALESCE((state->>'redacted')::boolean,false)`, owner, revision, saved.Source, tombstone)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if result.RowsAffected() == 0 {
 		return nil // A newer or already redacted view owns the card now.
 	}
 	_, err = tx.Exec(ctx, `DELETE FROM bot.pass_buttons WHERE owner=$1 AND revision=$2`, owner, revision)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return b.renderRedactedPassMenu(ctx, owner, chat, revision, tombstone)
 }
@@ -81,7 +85,7 @@ func (b *Bot) renderRedactedPassMenu(
 		return nil
 	}
 	if err != nil || payload.MessageID == 0 {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return b.queueBotCard(
 		live,

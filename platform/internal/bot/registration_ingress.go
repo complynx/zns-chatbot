@@ -47,14 +47,14 @@ func (b *Bot) registrationIngressContext(ctx context.Context, update telegram.Up
 	}
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
-		return ctx, err
+		return ctx, inboxDatabaseError(ctx, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = b.saveRegistrationIngress(ctx, tx, update); err != nil {
 		return ctx, err
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return ctx, err
+		return ctx, inboxDatabaseError(ctx, err)
 	}
 	return registrationingress.WithReference(
 		ctx,

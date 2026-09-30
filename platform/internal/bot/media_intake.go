@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -45,30 +46,66 @@ type mediaIntake struct {
 }
 
 func (b *Bot) loadMediaIntake(ctx context.Context, owner, id string) (mediaIntake, error) {
-	var item mediaIntake
-	err := b.DB.QueryRow(ctx, `SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,command_source,last_origin FROM bot.media_intake
-WHERE owner=$1 AND id=$2 AND expires_at>now()`, owner, id).
-		Scan(&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text, &item.Command, &item.RegistrationCommand, &item.FoodCommand, &item.CommandSource, &item.CommandOrigin)
-	return item, err
+	row := b.DB.QueryRow(
+		ctx,
+		`SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,command_source,last_origin FROM bot.media_intake
+WHERE owner=$1 AND id=$2 AND expires_at>now()`,
+		owner,
+		id,
+	)
+	return scanMediaIntake(ctx, row, nil)
 }
 
 // Completed notices outlive neutral attachment storage; this never loads an actionable intake.
 func (b *Bot) loadMediaOutcome(ctx context.Context, owner, id string) (mediaIntake, error) {
-	var item mediaIntake
-	err := b.DB.QueryRow(ctx, `SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,command_source,last_origin FROM bot.media_intake
-WHERE owner=$1 AND id=$2 AND status='done'`, owner, id).
-		Scan(&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text, &item.Command, &item.RegistrationCommand, &item.FoodCommand, &item.CommandSource, &item.CommandOrigin)
-	return item, err
+	row := b.DB.QueryRow(
+		ctx,
+		`SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,command_source,last_origin FROM bot.media_intake
+WHERE owner=$1 AND id=$2 AND status='done'`,
+		owner,
+		id,
+	)
+	return scanMediaIntake(ctx, row, nil)
 }
 
 // Upload retries inspect durable effects before deciding whether an expired source is needed.
 func (b *Bot) loadMediaUploadState(ctx context.Context, owner, id string) (mediaIntake, bool, error) {
-	var item mediaIntake
 	var expired bool
-	err := b.DB.QueryRow(ctx, `SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,command_source,last_origin,expires_at<=now()
-FROM bot.media_intake WHERE owner=$1 AND id=$2`, owner, id).
-		Scan(&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text, &item.Command, &item.RegistrationCommand, &item.FoodCommand, &item.CommandSource, &item.CommandOrigin, &expired)
+	row := b.DB.QueryRow(
+		ctx,
+		`SELECT id,attachment_id,status,notice,model_text,command,registration_command,food_command,command_source,last_origin,expires_at<=now()
+FROM bot.media_intake WHERE owner=$1 AND id=$2`,
+		owner,
+		id,
+	)
+	item, err := scanMediaIntake(ctx, row, &expired)
 	return item, expired, err
+}
+
+func scanMediaIntake(ctx context.Context, row pgx.Row, expired *bool) (mediaIntake, error) {
+	var item mediaIntake
+	var raw [4][]byte
+	columns := []any{
+		&item.ID, &item.AttachmentID, &item.Status, &item.Notice, &item.Text,
+		&raw[0], &raw[1], &raw[2], &raw[3], &item.CommandOrigin,
+	}
+	if expired != nil {
+		columns = append(columns, expired)
+	}
+	if err := row.Scan(columns...); err != nil {
+		return item, core.DatabaseOperationContextError(ctx, err)
+	}
+	for index, target := range []any{
+		&item.Command, &item.RegistrationCommand, &item.FoodCommand, &item.CommandSource,
+	} {
+		if raw[index] == nil {
+			continue
+		}
+		if err := json.Unmarshal(raw[index], target); err != nil {
+			return item, err
+		}
+	}
+	return item, nil
 }
 
 func (b *Bot) handleMediaUpload(ctx context.Context, in incoming, update telegram.Update) error {
@@ -94,6 +131,9 @@ func (b *Bot) handleMediaUpload(ctx context.Context, in incoming, update telegra
 		return avErr
 	}
 	err = b.handleAgentUpdate(ctx, in, update.ID)
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok &&
 		(problem.Code == "media_not_found" || problem.Code == mediaForbidden) && problem.Status < http.StatusInternalServerError {
 		return b.retireMediaView(ctx, mediaView{ID: in.mediaID, Owner: in.owner, Chat: in.chat})
@@ -123,6 +163,9 @@ func (b *Bot) resumeMediaIntake(ctx context.Context, in incoming, item mediaInta
 }
 
 func terminalMediaUploadFailure(err error) bool {
+	if core.IsDatabaseFailure(err) {
+		return false
+	}
 	if errors.Is(err, telegram.ErrInvalidDocument) || errors.Is(err, telegram.ErrAVAttachment) {
 		return true
 	}
@@ -169,7 +212,7 @@ func (b *Bot) saveMediaUpload(ctx context.Context, in incoming, update telegram.
 	}
 	_, err = b.DB.Exec(ctx, `INSERT INTO bot.media_intake(id,owner,update_id,attachment_id,av_kind)
 VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`, in.mediaID, in.owner, update.ID, attachment.ID, string(av.Kind))
-	return err
+	return core.DatabaseOperationContextError(ctx, err)
 }
 
 func (b *Bot) mediaNotice(ctx context.Context, in incoming, id i18n.ID) error {
@@ -192,7 +235,7 @@ AND status<>'done' AND expires_at>now()
 ORDER BY (id=$2) DESC,(strpos($3,id)>0) DESC,(status='choose') DESC,update_id DESC LIMIT 10`,
 		in.owner, in.mediaID, agenthost.CurrentRequestEvidence(*input))
 	if err != nil {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	type pendingHint struct {
 		ID   string
@@ -200,7 +243,7 @@ ORDER BY (id=$2) DESC,(strpos($3,id)>0) DESC,(status='choose') DESC,update_id DE
 	}
 	pending, err := pgx.CollectRows(rows, pgx.RowToStructByPos[pendingHint])
 	if err != nil {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	hints := make([]agent.MediaHint, 0, len(pending))
 	for _, item := range pending {
@@ -231,19 +274,32 @@ ORDER BY (id=$2) DESC,(strpos($3,id)>0) DESC,(status='choose') DESC,update_id DE
 		return err
 	}
 	input.MediaContext.Candidates = candidates
-	var selected orders.Command
-	err = b.DB.QueryRow(ctx, `SELECT command FROM bot.proof_pending WHERE owner=$1`, in.owner).Scan(&selected)
-	if err == nil {
-		for _, candidate := range candidates {
-			if candidate.OrderID == selected.OrderID && candidate.Version == selected.Version {
-				input.MediaContext.SelectedOrderID = selected.OrderID
-			}
-		}
-	}
+	selected, err := b.selectedMediaOrder(ctx, in.owner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	for _, candidate := range candidates {
+		if candidate.OrderID == selected.OrderID && candidate.Version == selected.Version {
+			input.MediaContext.SelectedOrderID = selected.OrderID
+		}
+	}
+	return nil
+}
+
+func (b *Bot) selectedMediaOrder(ctx context.Context, owner string) (orders.Command, error) {
+	var selected orders.Command
+	var raw []byte
+	err := b.DB.QueryRow(ctx, `SELECT command FROM bot.proof_pending WHERE owner=$1`, owner).Scan(&raw)
+	if err != nil {
+		return selected, core.DatabaseOperationContextError(ctx, err)
+	}
+	if raw != nil {
+		err = json.Unmarshal(raw, &selected)
+	}
+	return selected, err
 }
 
 func (b *Bot) addCurrentMedia(ctx context.Context, in incoming, input *agent.Input) error {
@@ -285,16 +341,24 @@ func (b *Bot) mediaCandidates(ctx context.Context, owner string) ([]agent.MediaC
 	if err != nil {
 		return nil, err
 	}
-	var pending orders.Command
-	pendingErr := b.DB.QueryRow(ctx, `SELECT command FROM bot.proof_pending WHERE owner=$1`, owner).Scan(&pending)
+	// Scan bytes and decode separately: incompatible stored JSON is not a database failure.
+	var raw []byte
+	pendingErr := b.DB.QueryRow(ctx, `SELECT command FROM bot.proof_pending WHERE owner=$1`, owner).Scan(&raw)
 	if pendingErr != nil && !errors.Is(pendingErr, pgx.ErrNoRows) {
-		return nil, pendingErr
+		return nil, core.DatabaseOperationContextError(ctx, pendingErr)
+	}
+	var pending orders.Command
+	if pendingErr == nil {
+		if err = json.Unmarshal(raw, &pending); err != nil {
+			return nil, err
+		}
 	}
 	if pendingErr == nil && pending.EventID != b.currentOrderEvent() {
 		selected, selectedErr := b.API.Order(ctx, owner, pending.EventID, pending.OrderID)
 		if selectedErr == nil {
 			list = append(list, selected)
-		} else if problem, ok := errors.AsType[*core.ProblemError](selectedErr); !ok || problem.Status >= http.StatusInternalServerError {
+		} else if problem, ok := errors.AsType[*core.ProblemError](selectedErr); core.IsDatabaseFailure(selectedErr) ||
+			!ok || problem.Status >= http.StatusInternalServerError {
 			return nil, selectedErr
 		}
 	}

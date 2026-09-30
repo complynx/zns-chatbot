@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery/dbgen"
 )
 
@@ -30,13 +31,13 @@ func Register(
 		ctx,
 		dbgen.EnsureDeliveryLaneParams{BotID: botID, Chat: destination.Chat},
 	); err != nil {
-		return Entry{}, err
+		return Entry{}, core.DatabaseOperationError(err)
 	}
 	if _, err := q.LockDeliveryLane(
 		ctx,
 		dbgen.LockDeliveryLaneParams{BotID: botID, Chat: destination.Chat},
 	); err != nil {
-		return Entry{}, err
+		return Entry{}, core.DatabaseOperationError(err)
 	}
 	row, err := readQueue(ctx, q, botID, ref)
 	if err == nil {
@@ -50,14 +51,14 @@ func Register(
 		dbgen.AllocateDeliverySequenceParams{BotID: botID, Chat: destination.Chat},
 	)
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, core.DatabaseOperationError(err)
 	}
 	err = q.InsertDeliveryEntry(ctx, dbgen.InsertDeliveryEntryParams{
 		BotID: botID, OwnerKind: string(ref.Owner), OwnerKey: ref.Key, EffectKey: ref.Effect,
 		Chat: destination.Chat, ThreadID: destination.Thread, LaneSequence: sequence, TrafficClass: string(class),
 	})
 	if err != nil {
-		return Entry{}, err
+		return Entry{}, core.DatabaseOperationError(err)
 	}
 	row, err = readQueue(ctx, q, botID, ref)
 	if err != nil {
@@ -66,7 +67,7 @@ func Register(
 	return registeredEntry(row, destination, class)
 }
 
-func registeredEntry(row dbgen.CoreDeliveryQueue, destination Destination, class Class) (Entry, error) {
+func registeredEntry(row dbgen.ReadDeliveryEntryRow, destination Destination, class Class) (Entry, error) {
 	entry := queueEntry(row)
 	if entry.Destination != destination || entry.Class != class {
 		return Entry{}, ErrQueueBinding
@@ -103,7 +104,7 @@ func Begin(ctx context.Context, tx pgx.Tx, settings Settings, ref Reference) (Ad
 	}
 	grant, err := q.AdvanceDeliveryFairness(ctx, settings.BotID)
 	if err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	// This lane was already locked before pacing and the cursor; no new lane
 	// lock is acquired after the cursor.
@@ -111,10 +112,10 @@ func Begin(ctx context.Context, tx pgx.Tx, settings Settings, ref Reference) (Ad
 		ctx,
 		dbgen.MarkDeliveryLaneServedParams{BotID: settings.BotID, Chat: row.Chat, Grants: grant},
 	)
-	return gate, err
+	return gate, core.DatabaseOperationError(err)
 }
 
-func queueAdmission(ctx context.Context, q *dbgen.Queries, row dbgen.CoreDeliveryQueue) (Admission, error) {
+func queueAdmission(ctx context.Context, q *dbgen.Queries, row dbgen.ReadDeliveryEntryRow) (Admission, error) {
 	if Kind(row.State) != Deferred {
 		return Admission{Reason: "delivery_not_pending"}, nil
 	}
@@ -123,14 +124,14 @@ func queueAdmission(ctx context.Context, q *dbgen.Queries, row dbgen.CoreDeliver
 		dbgen.IsDeliveryHeadParams{BotID: row.BotID, Chat: row.Chat, LaneSequence: row.LaneSequence},
 	)
 	if err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	if !head.Valid || !head.Bool {
 		return Admission{Reason: "delivery_lane_blocked"}, nil
 	}
 	clock, err := q.DeliveryClock(ctx)
 	if err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	if row.NotBefore.InfinityModifier == pgtype.Infinity || row.NotBefore.Time.After(clock.Time) {
 		return Admission{Reason: "delivery_cooldown", NotBefore: row.NotBefore.Time}, nil
@@ -207,24 +208,25 @@ func Candidates(ctx context.Context, tx pgx.Tx, botID int64, maximum int32) ([]E
 	}
 	rows, err := dbgen.New(tx).DeliveryCandidates(ctx, dbgen.DeliveryCandidatesParams{BotID: botID, Maximum: maximum})
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	entries := make([]Entry, 0, len(rows))
 	for _, row := range rows {
-		entries = append(entries, queueEntry(dbgen.CoreDeliveryQueue(row)))
+		entries = append(entries, queueEntry(dbgen.ReadDeliveryEntryRow(row)))
 	}
 	return entries, nil
 }
 
-func readQueue(ctx context.Context, q *dbgen.Queries, botID int64, ref Reference) (dbgen.CoreDeliveryQueue, error) {
-	return q.ReadDeliveryEntry(ctx, dbgen.ReadDeliveryEntryParams{
+func readQueue(ctx context.Context, q *dbgen.Queries, botID int64, ref Reference) (dbgen.ReadDeliveryEntryRow, error) {
+	row, err := q.ReadDeliveryEntry(ctx, dbgen.ReadDeliveryEntryParams{
 		BotID: botID, OwnerKind: string(ref.Owner), OwnerKey: ref.Key, EffectKey: ref.Effect,
 	})
+	return row, core.DatabaseOperationError(err)
 }
 
-func lockQueue(ctx context.Context, tx pgx.Tx, botID int64, ref Reference) (dbgen.CoreDeliveryQueue, error) {
+func lockQueue(ctx context.Context, tx pgx.Tx, botID int64, ref Reference) (dbgen.ReadDeliveryEntryRow, error) {
 	if botID <= 0 || !ref.valid() {
-		return dbgen.CoreDeliveryQueue{}, ErrQueueReference
+		return dbgen.ReadDeliveryEntryRow{}, ErrQueueReference
 	}
 	q := dbgen.New(tx)
 	row, err := readQueue(ctx, q, botID, ref)
@@ -235,17 +237,18 @@ func lockQueue(ctx context.Context, tx pgx.Tx, botID int64, ref Reference) (dbge
 		return row, err
 	}
 	if _, err = q.LockDeliveryLane(ctx, dbgen.LockDeliveryLaneParams{BotID: botID, Chat: row.Chat}); err != nil {
-		return row, err
+		return row, core.DatabaseOperationError(err)
 	}
-	return q.LockDeliveryEntry(ctx, dbgen.LockDeliveryEntryParams{
+	locked, err := q.LockDeliveryEntry(ctx, dbgen.LockDeliveryEntryParams{
 		BotID: botID, OwnerKind: string(ref.Owner), OwnerKey: ref.Key, EffectKey: ref.Effect,
 	})
+	return dbgen.ReadDeliveryEntryRow(locked), core.DatabaseOperationError(err)
 }
 
 func projectQueue(
 	ctx context.Context,
 	q *dbgen.Queries,
-	row dbgen.CoreDeliveryQueue,
+	row dbgen.ReadDeliveryEntryRow,
 	state Kind,
 	deadline time.Time,
 ) error {
@@ -260,10 +263,10 @@ func projectQueue(
 	if err == nil && count != 1 {
 		return ErrQueueReference
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 
-func queueEntry(row dbgen.CoreDeliveryQueue) Entry {
+func queueEntry(row dbgen.ReadDeliveryEntryRow) Entry {
 	return Entry{
 		Reference:   Reference{Owner: Owner(row.OwnerKind), Key: row.OwnerKey, Effect: row.EffectKey},
 		Destination: Destination{Chat: row.Chat, Thread: row.ThreadID}, Sequence: row.LaneSequence,

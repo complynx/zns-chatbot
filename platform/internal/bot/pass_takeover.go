@@ -30,10 +30,12 @@ func (r *passMenuRenderer) takeoverTarget(ctx context.Context) error {
 	if r.state.AdminTargetTelegramID == 0 {
 		return r.takeoverHint(ctx)
 	}
-	target, err := r.bot.API.PassTakeoverTarget(ctx, r.owner, r.state.Event, r.state.AdminTargetTelegramID)
+	view, err := (interaction.RegistrationMenuReader{Domain: r.bot.API}).
+		Takeover(ctx, r.owner, r.state.Event, r.state.AdminTargetTelegramID)
 	if err != nil {
 		return err
 	}
+	target := view.Target
 	r.lines = append(
 		r.lines,
 		passMenuLabel(target.Name),
@@ -57,19 +59,11 @@ func (r *passMenuRenderer) takeoverTarget(ctx context.Context) error {
 	} else {
 		r.lines = append([]string{passMenuLabel(target.Booking.Event)}, r.lines...)
 	}
-	command := passbooking.Command{
-		Name:          passbooking.CommandTakeover,
-		Event:         target.Booking.Event,
-		Version:       target.ActorVersion,
-		Target:        target.Booking.Owner,
-		TargetVersion: target.Booking.Version,
+	if view.Takeover != nil {
+		r.command(i18n.RegistrationTakeoverApply, *view.Takeover)
 	}
-	if target.Booking.PaymentAdmin != r.owner || target.Booking.Partner != "" {
-		r.command(i18n.RegistrationTakeoverApply, command)
-	}
-	if target.CanBackfill {
-		command.Name = passbooking.CommandReceivedOnly
-		r.command(i18n.RegistrationReceiverApply, command)
+	if view.ReceivedOnly != nil {
+		r.command(i18n.RegistrationReceiverApply, *view.ReceivedOnly)
 	}
 	return nil
 }

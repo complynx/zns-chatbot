@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
@@ -20,8 +21,9 @@ func (b *Bot) DeliverFoodNotifications(ctx context.Context) error {
 	}
 	var failures error
 	for _, notice := range notices {
-		failures = errors.Join(failures, b.deliverFoodNotification(ctx, notice))
-		if ctx.Err() != nil {
+		err = b.deliverFoodNotification(ctx, notice)
+		failures = errors.Join(failures, deliveryFailure(err))
+		if core.IsDatabaseFailure(err) || ctx.Err() != nil {
 			return errors.Join(failures, ctx.Err())
 		}
 	}
@@ -29,6 +31,9 @@ func (b *Bot) DeliverFoodNotifications(ctx context.Context) error {
 }
 
 func (b *Bot) deferFoodNotification(ctx context.Context, n legacyfood.Notification, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	if n.FollowupPending {
 		done, reason := notificationFollowupResult(err)
 		return b.Host.CompleteFoodNotificationFollowup(
@@ -94,6 +99,7 @@ func (b *Bot) deliverFoodNotification(ctx context.Context, notice legacyfood.Not
 	)
 	err = dbgen.New(b.DB).
 		StoreFoodNotificationReceipt(ctx, dbgen.StoreFoodNotificationReceiptParams{Owner: notice.Owner, Key: "food:notification:" + strconv.FormatInt(notice.ID, 10), Chat: notice.TelegramID, MessageID: notice.MessageID})
+	err = core.DatabaseOperationError(err)
 	if err == nil && payload.OrderID != "" {
 		err = b.renderFood(
 			ctx,
@@ -102,6 +108,9 @@ func (b *Bot) deliverFoodNotification(ctx context.Context, notice legacyfood.Not
 			payload.OrderID,
 			notice.Kind == legacyfood.Submitted,
 		)
+	}
+	if core.IsDatabaseFailure(err) {
+		return err
 	}
 	done, reason := notificationFollowupResult(err)
 	completeErr := b.Host.CompleteFoodNotificationFollowup(
@@ -197,8 +206,9 @@ func (b *Bot) RecoverFoodNotifications(ctx context.Context) error {
 	}
 	var failures error
 	for _, notice := range notices {
-		failures = errors.Join(failures, b.deliverFoodNotification(ctx, notice))
-		if ctx.Err() != nil {
+		err = b.deliverFoodNotification(ctx, notice)
+		failures = errors.Join(failures, deliveryFailure(err))
+		if core.IsDatabaseFailure(err) || ctx.Err() != nil {
 			return errors.Join(failures, ctx.Err())
 		}
 	}

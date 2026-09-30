@@ -15,6 +15,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -135,9 +136,13 @@ func TestAgentHostRetirementRepairPreservesOriginalFailure(t *testing.T) {
 	policy.retired, policy.cause = true, original
 	_, err = store.LoadAuthorized(ctx, "bob", 47900)
 	require.ErrorIs(t, err, original, "repair failure must not replace the original cause")
+	// The failed retirement UPDATE is joined as a sanitized database failure.
+	require.ErrorIs(t, err, core.ErrDatabase, "repair failure must remain visible")
+	require.True(t, core.IsDatabaseFailure(err))
+	require.NotErrorIs(t, err, core.ErrDatabaseSerialization)
 	var databaseError *pgconn.PgError
-	require.ErrorAs(t, err, &databaseError)
-	require.Equal(t, "P0001", databaseError.Code)
+	require.NotErrorAs(t, err, &databaseError, "driver diagnostics must not escape")
+	require.NotContains(t, err.Error(), "synthetic retirement write failure")
 }
 
 func TestAgentHostRetirementScrubsAdmittedPrivateCarriers(t *testing.T) {

@@ -346,10 +346,10 @@ func post(t *testing.T, url string, body any) {
 func TestManualAgentContinuationAndStaleButtons(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
-	handle(t, f.b, message(100, 101, "/start"))
+	handleVisible(t, f.b, message(100, 101, "/start"))
 	mid := f.aliceCard(t)
-	handle(t, f.b, aliceCallback(101, mid, "select:massage-1:0"))
-	handle(t, f.b, message(102, 101, "помоги закончить"))
+	handleVisible(t, f.b, aliceCallback(101, mid, "select:massage-1:0"))
+	handleVisible(t, f.b, message(102, 101, "помоги закончить"))
 	if f.model.input.Workflow.State != "draft" {
 		t.Fatal("agent missing draft")
 	}
@@ -362,8 +362,8 @@ func TestManualAgentContinuationAndStaleButtons(t *testing.T) {
 	if !found {
 		t.Fatal("agent missing manual history")
 	}
-	handle(t, f.b, aliceCallback(103, mid, "confirm::1"))
-	handle(t, f.b, aliceCallback(103, mid, "confirm::1"))
+	handleVisible(t, f.b, aliceCallback(103, mid, "confirm::1"))
+	handleVisible(t, f.b, aliceCallback(103, mid, "confirm::1"))
 	w, e := f.b.API.Current(t.Context(), "alice")
 	if e != nil || w.State != "booked" || w.Version != 2 {
 		t.Fatalf("%v %v", w, e)
@@ -371,12 +371,12 @@ func TestManualAgentContinuationAndStaleButtons(t *testing.T) {
 	if f.aliceCard(t) != mid {
 		t.Fatal("did not update original GUI")
 	}
-	handle(t, f.b, aliceCallback(104, mid, "cancel::1"))
+	handleVisible(t, f.b, aliceCallback(104, mid, "cancel::1"))
 	w, _ = f.b.API.Current(t.Context(), "alice")
 	if w.State != "booked" {
 		t.Fatal("stale cancellation accepted")
 	}
-	handle(t, f.b, message(105, 202, "hello"))
+	handleVisible(t, f.b, message(105, 202, "hello"))
 	if f.model.input.Workflow.State != "empty" {
 		t.Fatal("cross user workflow")
 	}
@@ -391,8 +391,8 @@ func TestAgentProposalRetryAndHostileModel(t *testing.T) {
 	f := setup(t)
 	f.model.plan.Action = &agent.Proposal{Name: "select", SlotID: "shuttle-1"}
 	u := message(201, 101, "выбери трансфер")
-	handle(t, f.b, u)
-	handle(t, f.b, u)
+	handleVisible(t, f.b, u)
+	handleVisible(t, f.b, u)
 	if f.model.calls != 1 {
 		t.Fatal("retry re-ran model")
 	}
@@ -401,12 +401,12 @@ func TestAgentProposalRetryAndHostileModel(t *testing.T) {
 		t.Fatal("retry mutated twice")
 	}
 	f.model.plan.Action = &agent.Proposal{Name: "confirm"}
-	handle(t, f.b, message(202, 101, "confirm now"))
+	handleVisible(t, f.b, message(202, 101, "confirm now"))
 	w, _ = f.b.API.Current(t.Context(), "alice")
 	if w.State != "draft" {
 		t.Fatal("model confirmed a write")
 	}
-	handle(t, f.b, aliceCallback(203, f.aliceCard(t), "confirm::1"))
+	handleVisible(t, f.b, aliceCallback(203, f.aliceCard(t), "confirm::1"))
 	w, _ = f.b.API.Current(t.Context(), "alice")
 	if w.State != "booked" {
 		t.Fatal("manual blocked by model failure")
@@ -415,20 +415,31 @@ func TestAgentProposalRetryAndHostileModel(t *testing.T) {
 func TestTelegramFailureAndPersistence(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
-	handle(t, f.b, message(301, 101, "/start"))
+	f.b.Delivery.Fallback = time.Second
+	handleVisible(t, f.b, message(301, 101, "/start"))
 	old := f.aliceCard(t)
 	post(t, f.fake.URL+"/lab/fault", map[string]string{"mode": "transient"})
 	u := aliceCallback(302, old, "select:massage-1:0")
-	if e := f.b.Handle(t.Context(), u); e == nil {
-		t.Fatal("429 not surfaced for retry")
-	}
-	handle(t, f.b, u)
+	require.NoError(t, f.b.Handle(t.Context(), u))
+	failed := assertBotRateLimited(t, f)
+	require.NoError(t, f.b.Handle(t.Context(), u))
+	waitBotRetryDeadline(t, f, failed)
+	pumpBotDeliveries(t, f.b)
 	w, _ := f.b.API.Current(t.Context(), "alice")
 	if w.Version != 1 {
 		t.Fatal("retry wrote twice")
 	}
 	post(t, f.fake.URL+"/lab/fault", map[string]string{"mode": "edit_missing"})
-	handle(t, f.b, message(303, 101, "help"))
+	handleVisible(t, f.b, message(303, 101, "help"))
+	var replacementReady time.Time
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT not_before FROM bot.delivery_intents
+ WHERE owner='alice' AND state='pending' AND reason='edit_target_missing'`).Scan(&replacementReady))
+	require.Eventually(t, func() bool {
+		var ready bool
+		err := f.db.QueryRow(t.Context(), `SELECT clock_timestamp()>=$1`, replacementReady).Scan(&ready)
+		return err == nil && ready
+	}, 5*time.Second, 10*time.Millisecond)
+	pumpBotDeliveries(t, f.b)
 	if f.aliceCard(t) == old {
 		t.Fatal("missing edit not replaced")
 	}
@@ -439,7 +450,7 @@ func TestTelegramFailureAndPersistence(t *testing.T) {
 	defer server.Close()
 	oldClient := f.b.TG
 	f.b.TG.Base = server.URL
-	handle(t, f.b, aliceCallback(304, f.aliceCard(t), "confirm::1"))
+	handleVisible(t, f.b, aliceCallback(304, f.aliceCard(t), "confirm::1"))
 	f.b.TG = oldClient
 	var n int
 	if e = f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.audit WHERE owner='alice'`).
@@ -487,7 +498,7 @@ func TestDeniedProposalDoesNotClaimSuccessAndStartReflectsState(t *testing.T) {
 		View:   "workflow",
 		Action: &agent.Proposal{Name: "select", SlotID: "massage-1"},
 	}
-	handle(t, f.b, message(401, 303, "выбери массаж"))
+	handleVisible(t, f.b, message(401, 303, "выбери массаж"))
 	cardText := func(user string) string {
 		resp, e := http.Get(f.fake.URL + "/lab/state?user=" + user)
 		require.NoError(t, e)
@@ -508,11 +519,11 @@ func TestDeniedProposalDoesNotClaimSuccessAndStartReflectsState(t *testing.T) {
 	if strings.Contains(text, "Подготовил") || !strings.Contains(text, "forbidden") {
 		t.Fatal(text)
 	}
-	handle(t, f.b, message(402, 101, "/start"))
+	handleVisible(t, f.b, message(402, 101, "/start"))
 	mid := f.aliceCard(t)
-	handle(t, f.b, aliceCallback(403, mid, "select:massage-1:0"))
-	handle(t, f.b, aliceCallback(404, mid, "confirm::1"))
-	handle(t, f.b, message(405, 101, "/start"))
+	handleVisible(t, f.b, aliceCallback(403, mid, "select:massage-1:0"))
+	handleVisible(t, f.b, aliceCallback(404, mid, "confirm::1"))
+	handleVisible(t, f.b, message(405, 101, "/start"))
 	text = cardText("101")
 	if strings.Contains(text, "Выберите услугу") || !strings.Contains(text, "Бронирование оформлено") {
 		t.Fatal(text)

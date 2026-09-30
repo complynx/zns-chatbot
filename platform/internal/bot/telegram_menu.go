@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -67,12 +68,12 @@ func (b *Bot) startTelegramPolling(ctx context.Context) (int64, error) {
 INSERT INTO bot.cursors(name,value) SELECT 'telegram_received',value FROM bot.cursors WHERE name='telegram'
 ON CONFLICT(name) DO UPDATE SET value=GREATEST(bot.cursors.value,EXCLUDED.value)`,
 	); err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	var offset int64
 	if err := b.DB.QueryRow(ctx, `SELECT value FROM bot.cursors WHERE name='telegram_received'`).
 		Scan(&offset); err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	return offset, nil
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
@@ -27,34 +28,46 @@ func dispatchDeliveryPass(
 		}
 		heads, err := selectHeads(ctx)
 		if err != nil {
-			return errors.Join(append(failures, err)...)
+			return errors.Join(append(failures, deliveryFailure(err))...)
 		}
 		if err = ctx.Err(); err != nil {
 			return errors.Join(append(failures, err)...)
 		}
-		var next delivery.Reference
-		found := false
-		for _, head := range heads {
-			if !attempted[head.Reference] {
-				next, found = head.Reference, true
-				break
-			}
-		}
+		next, found := nextDeliveryHead(heads, attempted)
 		if !found {
 			break
 		}
 		attempted[next] = true
 		if err = dispatch(ctx, next); err != nil {
-			failures = append(failures, err)
+			failures = append(failures, deliveryFailure(err))
+			if core.IsDatabaseFailure(err) {
+				return errors.Join(append(failures, ctx.Err())...)
+			}
 		}
 	}
 	return errors.Join(failures...)
 }
 
+func nextDeliveryHead(heads []delivery.Entry, attempted map[delivery.Reference]bool) (delivery.Reference, bool) {
+	for _, head := range heads {
+		if !attempted[head.Reference] {
+			return head.Reference, true
+		}
+	}
+	return delivery.Reference{}, false
+}
+
+func deliveryFailure(err error) error {
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
+	return err
+}
+
 func (b *Bot) deliveryHeads(ctx context.Context) ([]delivery.Entry, error) {
 	tx, err := b.DB.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	heads, err := delivery.Candidates(ctx, tx, b.Delivery.BotID, deliveryPassLimit)
@@ -64,7 +77,7 @@ func (b *Bot) deliveryHeads(ctx context.Context) ([]delivery.Entry, error) {
 	// No selection transaction remains open while an owner acquires its locks
 	// or calls Telegram. The owner revalidates this advisory reference.
 	if err = tx.Commit(ctx); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	return heads, nil
 }
@@ -114,7 +127,7 @@ func (b *Bot) deliverAnnouncementID(ctx context.Context, id int64) error {
 }
 
 // Run calls this only from its joined serial worker under exclusive bot ownership.
-func (b *Bot) dispatchQueuedDeliveries(ctx context.Context) {
+func (b *Bot) dispatchQueuedDeliveries(ctx context.Context) error {
 	steps := []func(context.Context) error{
 		b.RecoverBotIntents,
 		b.RecoverOrderNotifications,
@@ -127,14 +140,23 @@ func (b *Bot) dispatchQueuedDeliveries(ctx context.Context) {
 		b.ContinueBotIntentReceipts,
 	}
 	for _, step := range steps {
-		if ctx.Err() != nil {
-			return
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		if err := step(ctx); err != nil {
+			if core.IsDatabaseFailure(err) {
+				return core.ErrDatabase
+			}
 			b.logger().WarnContext(ctx, "delivery recovery pending", "error", err)
 		}
 	}
-	if err := dispatchDeliveryPass(ctx, b.deliveryHeads, b.dispatchDelivery); err != nil && ctx.Err() == nil {
-		b.logger().WarnContext(ctx, "delivery pass incomplete", "error", err)
+	if err := dispatchDeliveryPass(ctx, b.deliveryHeads, b.dispatchDelivery); err != nil {
+		if core.IsDatabaseFailure(err) {
+			return core.ErrDatabase
+		}
+		if ctx.Err() == nil {
+			b.logger().WarnContext(ctx, "delivery pass incomplete", "error", err)
+		}
 	}
+	return nil
 }

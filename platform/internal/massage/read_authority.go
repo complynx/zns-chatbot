@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // ReadAuthority retains the exact practitioner event that exposed private data.
@@ -37,5 +39,5 @@ func lockPractitionerRole(ctx context.Context, tx pgx.Tx, actor, event string) (
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
-	return err == nil, err
+	return err == nil, core.DatabaseOperationError(err)
 }

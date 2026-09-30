@@ -110,10 +110,10 @@ func (c RegistrationReader) Read(
 		return err
 	}
 	result, err := c.fetch(ctx, owner, p)
+	if failure := registrationReadFailure(ctx, err); failure != nil {
+		return failure
+	}
 	if err != nil {
-		if registrationReadFailure(err) != nil {
-			return err
-		}
 		result = agent.RegistrationReadResult{Request: p, Error: "unavailable"}
 	}
 	encoded, err := json.Marshal(result)
@@ -179,7 +179,7 @@ func (c RegistrationReader) fetch(
 		return result, err
 	}
 	if !found {
-		if booking.Version == 0 || !HistoricalPassView(p.View) {
+		if !RegistrationHistoricalAllowed(booking, p.View) {
 			result.Error = "unknown_event"
 			return result, nil
 		}
@@ -195,7 +195,6 @@ func (c RegistrationReader) fetchDetails(
 	p agent.RegistrationProposal,
 	result agent.RegistrationReadResult,
 ) (agent.RegistrationReadResult, error) {
-	var err error
 	switch p.View {
 	case agent.RegistrationTakeoverTarget:
 		return c.fetchTakeoverTarget(ctx, owner, p, result)
@@ -204,34 +203,45 @@ func (c RegistrationReader) fetchDetails(
 		if parseErr != nil {
 			return result, parseErr
 		}
-		target, readErr := c.Domain.PassAdminTarget(ctx, owner, p.Event, telegramID)
+		view, readErr := (RegistrationMenuReader{Domain: c.Domain}).Assignment(ctx, owner, p.Event, telegramID, nil)
+		target := view.Target
 		target.Name = RegistrationLabel(target.Name)
 		result.AdminTarget = &target
 		return result, readErr
 	case registrationPaymentView:
-		payment, readErr := c.Domain.PassPayment(ctx, owner, p.Event, owner)
-		if result.Historical && historicalPaymentAbsent(readErr) {
-			return result, nil
+		if result.Historical {
+			payment, readErr := (RegistrationHomeReader{Domain: c.Domain}).HistoricalPayment(ctx, owner, p.Event)
+			result.Payment = payment.Payment
+			return result, readErr
 		}
+		payment, readErr := c.Domain.PassPayment(ctx, owner, p.Event, owner)
 		result.Payment = &payment
 		return result, readErr
 	case registrationPaymentQueueView:
-		page, readErr := c.Domain.PassPaymentQueue(ctx, owner, p.Event, p.Cursor)
-		result.PaymentQueue, result.Next = page.Items, page.Next
+		view, readErr := (RegistrationMenuReader{Domain: c.Domain}).
+			PaymentQueue(ctx, owner, p.Event, p.Cursor, result.Booking)
+		result.PaymentQueue, result.Next = view.Page.Items, view.Page.Next
 		return result, readErr
 	case registrationQueueView:
-		page, readErr := c.Domain.PassQueue(ctx, owner, p.Event, p.Cursor)
-		result.Queue, result.Next = page.Bookings, page.Next
+		view, readErr := (RegistrationMenuReader{Domain: c.Domain}).Queue(ctx, owner, p.Event, p.Cursor, result.Booking)
+		result.Queue, result.Next = view.Page.Bookings, view.Page.Next
 		return result, readErr
 	case registrationInvitationsView:
-		page, readErr := c.Domain.PassInvitations(ctx, owner, p.Event, p.Cursor)
-		result.Invitations, result.Next = page.Invitations, page.Next
+		view, readErr := (RegistrationMenuReader{Domain: c.Domain}).Invitations(
+			ctx,
+			owner,
+			p.Event,
+			p.Cursor,
+			result.Booking,
+		)
+		result.Invitations, result.Next = view.Page.Invitations, view.Page.Next
 		for index := range result.Invitations {
 			result.Invitations[index].From.Name = RegistrationLabel(result.Invitations[index].From.Name)
 		}
 		return result, readErr
 	default:
-		result.PaymentAdmins, err = c.Domain.PassPaymentAdmins(ctx, owner, p.Event)
+		contacts, readErr := (RegistrationHomeReader{Domain: c.Domain}).Contacts(ctx, owner, p.Event, nil)
+		result.PaymentAdmins = contacts.Contacts
 		if len(result.PaymentAdmins) > registrationEventLimit {
 			result.PaymentAdmins = result.PaymentAdmins[:registrationEventLimit]
 			result.Omitted = true
@@ -239,7 +249,7 @@ func (c RegistrationReader) fetchDetails(
 		for index := range result.PaymentAdmins {
 			result.PaymentAdmins[index].Name = RegistrationLabel(result.PaymentAdmins[index].Name)
 		}
-		return result, err
+		return result, readErr
 	}
 }
 
@@ -253,18 +263,24 @@ func (c RegistrationReader) fetchTakeoverTarget(
 	if err != nil {
 		return result, err
 	}
-	target, err := c.Domain.PassTakeoverTarget(ctx, owner, p.Event, id)
+	view, err := (RegistrationMenuReader{Domain: c.Domain}).Takeover(ctx, owner, p.Event, id)
+	target := view.Target
 	target.Name = RegistrationLabel(target.Name)
 	result.TakeoverTarget = &target
 	return result, err
 }
-func registrationReadFailure(err error) error {
+func registrationReadFailure(ctx context.Context, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return nil
 	}
 	return err
-}
-func historicalPaymentAbsent(err error) bool {
-	problem, ok := errors.AsType[*core.ProblemError](err)
-	return ok && problem.Status == http.StatusNotFound && problem.Code == "pass_payment_missing"
 }

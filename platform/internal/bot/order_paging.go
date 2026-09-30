@@ -32,7 +32,7 @@ func (b *Bot) saveOrderPage(ctx context.Context, owner, scope string, page int, 
 	_, err := b.DB.Exec(ctx, `INSERT INTO bot.order_pages(owner,scope,page,last_update,event_id) VALUES($1,$2,$3,$4,$5)
  ON CONFLICT(owner,scope,event_id) DO UPDATE SET page=$3,last_update=greatest(bot.order_pages.last_update,$4)
  WHERE $4=0 OR bot.order_pages.last_update <= $4`, owner, scope, page, update, b.currentOrderEvent())
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func (b *Bot) currentOrderPage(ctx context.Context, owner, scope string, total int) (int, error) {
@@ -40,7 +40,7 @@ func (b *Bot) currentOrderPage(ctx context.Context, owner, scope string, total i
 	err := b.DB.QueryRow(ctx, `SELECT page FROM bot.order_pages WHERE owner=$1 AND scope=$2 AND event_id=$3`, owner, scope, b.currentOrderEvent()).
 		Scan(&page)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	bounded := boundedOrderPage(page, total)
 	if bounded != page {
@@ -63,7 +63,7 @@ func (b *Bot) orderPageButton(ctx context.Context, owner, scope, label string, p
 		page,
 		b.currentOrderEvent(),
 	)
-	return telegram.Button{Text: label, Data: orderPagePrefix + token}, err
+	return telegram.Button{Text: label, Data: orderPagePrefix + token}, core.DatabaseOperationError(err)
 }
 
 func (b *Bot) handleOrderPage(ctx context.Context, in incoming, update int64) (string, error) {
@@ -82,6 +82,9 @@ func (b *Bot) handleOrderPage(ctx context.Context, in incoming, update int64) (s
 		return i18n.Translate(preference.Language, i18n.OrderPageUnavailable, nil)
 	}
 	list, err := b.orderPageList(ctx, in.owner, scope)
+	if core.IsDatabaseFailure(err) {
+		return "", core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status == http.StatusForbidden {
 		return i18n.Translate(preference.Language, i18n.OrderPageUnavailable, nil)
 	}
@@ -150,7 +153,7 @@ func (b *Bot) pagedOrders(
 	var opened bool
 	if err = b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.order_cards WHERE owner=$1 AND card_key=$2)`, owner, key).
 		Scan(&opened); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if len(list) > orderPageSize || opened {
 		active[key] = true

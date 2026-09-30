@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 )
 
@@ -33,18 +34,18 @@ func refreshRegistrationTurns(
 		ctx,
 		dbgen.InitializeRegistrationTurnsParams{EventID: eventID, RetentionMicroseconds: retention.Microseconds()},
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	ids, err := q.ExpiredRegistrationTurns(
 		ctx,
 		dbgen.ExpiredRegistrationTurnsParams{EventID: eventID, ObservedAt: pgtype.Timestamptz{Time: now, Valid: true}},
 	)
 	if err != nil || len(ids) == 0 {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	// Match ingress allocation's short lock so future intake ranks after rotation.
 	if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(782619)"); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, id := range ids {
 		if err = q.RotateRegistrationTurn(
@@ -55,7 +56,7 @@ func refreshRegistrationTurns(
 				ObservedAt: pgtype.Timestamptz{Time: now, Valid: true},
 			},
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	return nil
@@ -64,7 +65,7 @@ func refreshRegistrationTurns(
 func (s *snapshot) loadRegistrationRanks(ctx context.Context, tx pgx.Tx) error {
 	rows, err := dbgen.New(tx).RegistrationRanks(ctx, s.event.id)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	s.registrationRanks = make(map[string]int64, len(rows))
 	s.unfinishedRegistrations = make(map[string]bool)
@@ -76,7 +77,7 @@ func (s *snapshot) loadRegistrationRanks(ctx context.Context, tx pgx.Tx) error {
 	}
 	pending, err := dbgen.New(tx).PendingNativeRegistrationRanks(ctx, s.event.id)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, row := range pending {
 		if previous := s.registrationRanks[row.Owner]; previous == 0 || row.Position < previous {

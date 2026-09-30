@@ -15,7 +15,9 @@ type TelegramOnboarding func(context.Context, telegram.User) error
 
 func (b *Bot) denyOnboarding(ctx context.Context, in incoming, update telegram.Update) error {
 	if update.Callback != nil {
-		b.acknowledge(ctx, update.Callback.ID)
+		if err := b.acknowledge(ctx, update.Callback.ID); err != nil {
+			return err
+		}
 	}
 	ref := botdelivery.Reference{
 		Kind:     botdelivery.IdentityIntent,

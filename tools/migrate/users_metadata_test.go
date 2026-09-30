@@ -52,7 +52,7 @@ func TestUsersMetadataInvalidAndAbsentDispositions(t *testing.T) {
 		{"wrong type", `,"last_name":false`, "last_name", "invalid_value"},
 		{"control", `,"first_name":"a\nb"`, "first_name", "invalid_value"},
 		{"noncharacter", `,"last_name":"\uffff"`, "last_name", "invalid_value"},
-		{"surrogate", `,"print_name":"\ud800"`, "print_name", "invalid_value"},
+		{"replacement metadata", `,"print_name":"\ufffd"`, "print_name", "invalid_value"},
 		{"long username", `,"username":"` + strings.Repeat("a", 65) + `"`, "username", "invalid_value"},
 		{"long first", `,"first_name":"` + strings.Repeat("界", 257) + `"`, "first_name", "invalid_value"},
 		{"long print", `,"print_name":"` + strings.Repeat("a", 514) + `"`, "print_name", "invalid_value"},

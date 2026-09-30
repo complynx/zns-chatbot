@@ -92,7 +92,7 @@ func passToolDescriptor(name string) scriptclient.Tool {
 		properties = map[string]any{}
 		required = []string{}
 		if name == scriptPassExport {
-			description = "Deliver passes.xlsx for all currently authorized active pass events to this Telegram chat. No spreadsheet bytes enter model results. Repeated delivery in the same update uses its receipt."
+			description = "Queue passes.xlsx for all currently authorized active pass events to this Telegram chat. No spreadsheet bytes enter model results. Pending delivery returns complete=false and delivered=false. Repeated calls in this update reuse the same operation; use passes.resume with operation_id to observe its actual delivery receipt."
 		} else {
 			properties[registrationOperationID] = map[string]string{registrationSchemaType: registrationSchemaString}
 			description = "Read recent currently authorized pass operations, or one exact operation_id. Choose by admitted_at, tool, authorized context and canonical receipt status. Retired sources remove context and disable continuation; committed effects are not rolled back. References grant no authority. Transport delivery status is not a domain commit."

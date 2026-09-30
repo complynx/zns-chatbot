@@ -63,6 +63,71 @@ unless a prior API read supplied them.
 
 ## Scope and evidence
 
+### Synthetic knowledge assessments
+
+An optional `assessment` object programs the classifier for one synthetic
+owner/update case. Combine it with the ordinary suggestion plan and input in
+the same installation envelope:
+
+```json
+{
+  "assessment": {
+    "expect": {
+      "event": "",
+      "topic": "travel",
+      "fact_key": "arrival",
+      "text": "The synthetic shuttle leaves at 18:00."
+    },
+    "result": {
+      "worthwhile": true,
+      "reason": "Programmed synthetic verdict for manual review."
+    }
+  }
+}
+```
+
+This fragment is not a complete installation. Supply either `input` with plan
+steps or a known `owner` and positive `update_id`. Assessment-only cases are
+allowed for an explicit later retry. A case must contain at least one plan step
+or assessment. Install-and-enqueue validates the complete case before publishing
+the input update.
+
+Assessment field names are case-sensitive; aliases such as `Worthwhile` are
+rejected, including when the canonical spelling is also present.
+All four expected strings and both result fields are required, even when an
+identifier is empty or `worthwhile` is false. Expected strings match exactly;
+there are no subset or wildcard matches. Text must be nonblank. Identifiers
+are limited to 100 Unicode characters, text to 2,000, and reason to 512.
+NUL, invalid UTF-8, null fields, duplicate or unknown keys, and wrong types are
+rejected. Assessment requests are limited to 16 KiB and encoded results to
+4,096 bytes. Plan steps and assessments share the retained 32-entry and 256-KiB
+global capacity; consumed entries still count.
+
+`POST /lab/model/knowledge-assessment` uses host-supplied actor/update scope and
+the same synthetic lab boundary. Assessment does not consume a planning turn.
+Each case permits one successful assessment. Missing configuration or changed
+input fails closed. An identical second request is rejected rather than returning
+a cached verdict. This one-assessment limit belongs only to the fixture: it does
+not restrict the product classifier. Multiple script assessments in one update
+are outside this fixture's scope.
+
+`GET /lab/model/state` includes separate `assessment` fields: `configured`,
+`accepted`, `rejected`, and `last_status`. It exposes no expected text or reason.
+The existing plan counters retain their meaning. Assessment counters are
+in-memory test evidence, not durable application receipts.
+
+A positive synthetic verdict prepares only the author's private draft. Manual
+submission and current authorized review are still required for publication.
+Provider guards still check source authority immediately before HTTP I/O. This
+tests application behavior, not factual correctness or real-model quality.
+
+The application checks its persisted verdict before calling the fixture again.
+A response lost before durable storage is not silently replayed by the fixture;
+use a separately programmed explicit retry update through normal application
+controls. Do not reset Telegram cursors or replay business effects to rearm a
+fixture. Drain pending work before restarting the fake; restarting clears fixture
+definitions, not application history.
+
 ### Pair registration plans
 
 Use `view: "passes"` for these plans. Each read needs a following fixture step;
@@ -232,8 +297,9 @@ fallback. Manual commands that bypass the model continue normally.
 
 ## Bounds and limitations
 
-The process retains at most 32 cases and 32 total plan steps, including consumed
-steps. Each step is at most 64 KiB; stored serialized steps total at most 256 KiB.
+The process retains at most 32 cases and 32 total entries, counting plan steps
+and assessments together, including consumed entries. Each entry is at most
+64 KiB; stored serialized entries total at most 256 KiB.
 Installation bodies are at most 256 KiB and model input at most 512 KiB. JSON
 nesting is bounded. Input injection retains the existing 5,000-byte message and
 pending-update limits. Reinstalling the same scope is rejected.
@@ -245,9 +311,9 @@ the fixture does not resume an interrupted model sequence across fake-server
 restarts. A failed injected-message persistence operation publishes no update;
 its fixture may retain capacity until restart.
 
-The fixture implements Plan only. It does not implement the separate knowledge
-assessment or semantic history-summary interfaces. Those unavailable paths
-must not be reported as positive classification or summary acceptance.
+The fixture implements planning and explicitly programmed knowledge assessment.
+It does not implement semantic history summaries. Programmed responses do not
+prove real-model reasoning, classification quality or summary acceptance.
 
 `X-Sandbox` is a lab marker, not production authentication. These endpoints are
 for a private, loopback-exposed synthetic stand. Lab operators can install

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
@@ -28,7 +29,10 @@ func (b *Bot) DeliverMassageNotifications(ctx context.Context) error {
 		}
 		notices, noticeErr := b.Host.MassageDeliveryNotices(ctx, recipient.Owner)
 		if noticeErr != nil {
-			failures = errors.Join(failures, noticeErr)
+			failures = errors.Join(failures, deliveryFailure(noticeErr))
+			if core.IsDatabaseFailure(noticeErr) || ctx.Err() != nil {
+				return errors.Join(failures, ctx.Err())
+			}
 			continue
 		}
 		for _, notice := range notices {
@@ -36,8 +40,9 @@ func (b *Bot) DeliverMassageNotifications(ctx context.Context) error {
 				break
 			}
 			delivered++
-			failures = errors.Join(failures, b.deliverMassageNotice(ctx, recipient.Owner, notice.TelegramID, notice))
-			if ctx.Err() != nil {
+			err = b.deliverMassageNotice(ctx, recipient.Owner, notice.TelegramID, notice)
+			failures = errors.Join(failures, deliveryFailure(err))
+			if core.IsDatabaseFailure(err) || ctx.Err() != nil {
 				return errors.Join(failures, ctx.Err())
 			}
 		}
@@ -48,6 +53,9 @@ func (b *Bot) DeliverMassageNotifications(ctx context.Context) error {
 const massageDeliveryBatch = 10
 
 func (b *Bot) deferMassageNotification(ctx context.Context, owner string, n massage.Notice, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	if n.FollowupPending {
 		done, reason := notificationFollowupResult(err)
 		return b.Host.CompleteMassageNoticeFollowup(
@@ -107,6 +115,9 @@ func (b *Bot) deliverMassageNotice(ctx context.Context, owner string, chat int64
 		delivery.Reference{Owner: delivery.Massage, Key: strconv.FormatInt(notice.ID, 10), Effect: botRefreshEffect},
 	)
 	err = b.followupMassageNotification(ctx, owner, chat, notice)
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	done, reason := notificationFollowupResult(err)
 	completeErr := b.Host.CompleteMassageNoticeFollowup(
 		ctx,
@@ -160,11 +171,11 @@ func (b *Bot) followupMassageNotification(ctx context.Context, owner string, cha
 		ctx,
 		dbgen.StoreMassageNotificationReceiptParams{ID: notice.ID, MessageID: notice.MessageID},
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	opened, err := q.MassageNotificationViewOpened(ctx, owner)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if opened {
 		return b.RenderMassage(ctx, owner, chat, "")
@@ -185,7 +196,7 @@ func (r *massageRenderer) reservationQuote(reservation massage.Reservation) stri
 func (b *Bot) reconcileMassageViews(ctx context.Context) error {
 	rows, err := b.DB.Query(ctx, `SELECT owner,chat_id FROM bot.massage_views ORDER BY owner`)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	type view struct {
 		owner string
@@ -197,15 +208,21 @@ func (b *Bot) reconcileMassageViews(ctx context.Context) error {
 		return result, scanErr
 	})
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, view := range views {
 		viewContext, authErr := b.API.NotificationContext(ctx, view.owner, view.chat)
 		if authErr != nil {
+			if failure := reconcileDatabaseFailure(authErr); failure != nil {
+				return failure
+			}
 			b.logger().WarnContext(ctx, "massage view identity pending")
 			continue
 		}
 		if err = b.RenderMassage(viewContext, view.owner, view.chat, ""); err != nil {
+			if failure := reconcileDatabaseFailure(err); failure != nil {
+				return failure
+			}
 			b.logger().WarnContext(ctx, "massage view reconciliation pending")
 		}
 	}
@@ -272,8 +289,9 @@ func (b *Bot) RecoverMassageNotifications(ctx context.Context) error {
 	}
 	var failures error
 	for _, notice := range notices {
-		failures = errors.Join(failures, b.deliverMassageNotice(ctx, notice.Owner, notice.TelegramID, notice))
-		if ctx.Err() != nil {
+		err = b.deliverMassageNotice(ctx, notice.Owner, notice.TelegramID, notice)
+		failures = errors.Join(failures, deliveryFailure(err))
+		if core.IsDatabaseFailure(err) || ctx.Err() != nil {
 			return errors.Join(failures, ctx.Err())
 		}
 	}

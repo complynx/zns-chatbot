@@ -32,15 +32,24 @@ func TestHistoryReplyVisibilityAfterDeletionAndRestart(t *testing.T) {
 			)
 			f.model.plan = agent.Plan{View: view, Text: canary}
 			update := message(70001, 101, "recall the previous detail")
-			handle(t, f.b, update)
+			handleVisible(t, f.b, update)
 			assert.Contains(t, replyVisibilityState(t, f), canary)
 			require.NoError(t, renderHistoryView(t.Context(), f.b, view))
+			pumpBotDeliveries(t, f.b)
 			assert.Contains(t, replyVisibilityState(t, f), canary, "current saved generation remains renderable")
 			require.NoError(t, archive.DeleteContent(t.Context(), "alice", eventID))
 			restarted := *f.b
 			f.b = &restarted
 			require.NoError(t, renderHistoryView(t.Context(), f.b, view))
+			pumpBotDeliveries(t, f.b)
 			assert.NotContains(t, replyVisibilityState(t, f), canary)
+			if view == agent.RegistrationView {
+				preferences, preferenceErr := f.b.API.Preferences(t.Context(), "alice")
+				require.NoError(t, preferenceErr)
+				unavailable, noticeErr := i18n.Translate(preferences.Language, i18n.RegistrationUnavailable, nil)
+				require.NoError(t, noticeErr)
+				assert.Contains(t, replyVisibilityState(t, f), unavailable)
+			}
 			var retained int
 			require.NoError(
 				t,
@@ -58,6 +67,7 @@ func TestHistoryReplyVisibilityAfterDeletionAndRestart(t *testing.T) {
 			err := f.b.Handle(t.Context(), update)
 			require.ErrorContains(t, err, "terminal history plan")
 			require.NoError(t, renderHistoryView(t.Context(), f.b, view))
+			pumpBotDeliveries(t, f.b)
 			assert.NotContains(t, replyVisibilityState(t, f), canary)
 		})
 	}
@@ -103,6 +113,7 @@ func TestHistoryReplyVisibilityPreservesManualAndSystemNotices(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, f.b.Render(t.Context(), "alice", 101))
+	pumpBotDeliveries(t, f.b)
 	assert.Contains(t, replyVisibilityState(t, f), "manual fixed notice")
 	_, err = (interaction.Store{DB: f.db}).SaveWinner(
 		t.Context(),
@@ -119,6 +130,7 @@ func TestHistoryReplyVisibilityPreservesManualAndSystemNotices(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NoError(t, f.b.Render(t.Context(), "alice", 101))
+	pumpBotDeliveries(t, f.b)
 	preference, err := f.b.API.Preferences(t.Context(), "alice")
 	require.NoError(t, err)
 	notice, err := i18n.Translate(preference.Language, i18n.AgentQuotaReached, nil)

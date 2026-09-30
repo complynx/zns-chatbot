@@ -13,9 +13,39 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+// Drain owner dispatchers in shared lane order before inspecting an order UI.
+func drainOrderPresentations(t *testing.T, f *fixture) {
+	t.Helper()
+	for range 100 {
+		pumpBotDeliveries(t, f.b)
+		found := false
+		for _, entry := range botDeliveryCandidates(t, f.b) {
+			if entry.Reference.Owner != delivery.Orders {
+				continue
+			}
+			id, err := strconv.ParseInt(entry.Reference.Key, 10, 64)
+			require.NoError(t, err)
+			require.NoError(t, f.b.DeliverOrderNotification(t.Context(), id))
+			found = true
+			break
+		}
+		if !found {
+			return
+		}
+	}
+	t.Fatal("order presentation did not settle within 100 dispatches")
+}
+
+func handleOrderVisible(t *testing.T, f *fixture, update telegram.Update) {
+	t.Helper()
+	handle(t, f.b, update)
+	drainOrderPresentations(t, f)
+}
 
 func TestProofFilesAreOwnerBoundAndPrivate(t *testing.T) {
 	t.Parallel()
@@ -132,15 +162,15 @@ func TestTelegramProofSelectionSubmissionReviewAndRetry(t *testing.T) {
 	f := setup(t)
 	_, localeErr := f.b.API.SetLanguage(t.Context(), "alice", "en", false)
 	require.NoError(t, localeErr)
-	handle(t, f.b, message(1, 101, "/orders"))
-	handle(t, f.b, orderClick(t, f, 101, 2, "New order"))
-	handle(t, f.b, orderClick(t, f, 101, 3, "Add: Preparty"))
-	handle(t, f.b, orderClick(t, f, 101, 4, "Send receipt"))
+	handleOrderVisible(t, f, message(1, 101, "/orders"))
+	handleOrderVisible(t, f, orderClick(t, f, 101, 2, "New order"))
+	handleOrderVisible(t, f, orderClick(t, f, 101, 3, "Add: Preparty"))
+	handleOrderVisible(t, f, orderClick(t, f, 101, 4, "Send receipt"))
 	document := uploadTelegramDocument(t, f, 101)
 	// The fake and this direct harness have independent update counters.
 	document.ID = 100
-	handle(t, f.b, document)
-	handle(t, f.b, document)
+	handleOrderVisible(t, f, document)
+	handleOrderVisible(t, f, document)
 	list, err := f.b.API.Orders(t.Context(), "alice", "sandbox-festival")
 	require.NoError(t, err)
 	require.Len(t, list, 1)
@@ -149,10 +179,10 @@ func TestTelegramProofSelectionSubmissionReviewAndRetry(t *testing.T) {
 	assert.Contains(t, f.model.input.Text, "unsupported visual format application/pdf")
 	assert.Contains(t, f.model.input.Text, "bytes were not interpreted")
 	assert.NotContains(t, f.model.input.Text, "%PDF-1.4 receipt")
-	handle(t, f.b, proofMediaClick(t, f, 101, "This is a receipt"))
+	handleOrderVisible(t, f, proofMediaClick(t, f, 101, "This is a receipt"))
 	selection := proofMediaClick(t, f, 102, list[0].ID)
-	handle(t, f.b, selection)
-	handle(t, f.b, selection)
+	handleOrderVisible(t, f, selection)
+	handleOrderVisible(t, f, selection)
 	list, err = f.b.API.Orders(t.Context(), "alice", "sandbox-festival")
 	require.NoError(t, err)
 	assert.Equal(t, "proof", list[0].State)
@@ -160,7 +190,7 @@ func TestTelegramProofSelectionSubmissionReviewAndRetry(t *testing.T) {
 	history, err := f.b.API.OrderHistory(t.Context(), "alice", "sandbox-festival")
 	require.NoError(t, err)
 	require.Len(t, history, 3)
-	handle(t, f.b, orderClick(t, f, 101, 110, "Payment BE: Борис"))
+	handleOrderVisible(t, f, orderClick(t, f, 101, 110, "Payment BE: Борис"))
 	// The submitted Telegram file can change; review must still use Core's bytes.
 	_, err = f.db.Exec(
 		t.Context(),
@@ -169,8 +199,8 @@ func TestTelegramProofSelectionSubmissionReviewAndRetry(t *testing.T) {
 		[]byte("replaced receipt"),
 	)
 	require.NoError(t, err)
-	handle(t, f.b, message(111, 202, "/orders"))
-	handle(t, f.b, orderClick(t, f, 202, 112, "Открыть чек"))
+	handleOrderVisible(t, f, message(111, 202, "/orders"))
+	handleOrderVisible(t, f, orderClick(t, f, 202, 112, "Открыть чек"))
 	var forwarded *telegram.Document
 	for _, message := range chatMessages(t, f, 202) {
 		if message.Document != nil {
@@ -184,7 +214,7 @@ func TestTelegramProofSelectionSubmissionReviewAndRetry(t *testing.T) {
 	assert.Equal(t, []byte("%PDF-1.4 receipt"), body)
 	_, err = f.db.Exec(t.Context(), `DELETE FROM bot.fake_files WHERE id=$1`, document.Message.Document.FileID)
 	require.NoError(t, err)
-	handle(t, f.b, orderClick(t, f, 202, 113, "Открыть чек"))
+	handleOrderVisible(t, f, orderClick(t, f, 202, 113, "Открыть чек"))
 	for _, message := range chatMessages(t, f, 202) {
 		if message.Document != nil {
 			forwarded = message.Document
@@ -193,18 +223,19 @@ func TestTelegramProofSelectionSubmissionReviewAndRetry(t *testing.T) {
 	body, err = f.b.TG.Download(t.Context(), *forwarded)
 	require.NoError(t, err)
 	assert.Equal(t, []byte("%PDF-1.4 receipt"), body, "deleting source file cannot break receipt review")
-	handle(t, f.b, orderClick(t, f, 202, 114, "Отклонить оплату"))
+	handleOrderVisible(t, f, orderClick(t, f, 202, 114, "Отклонить оплату"))
 	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
-	handle(t, f.b, orderClick(t, f, 101, 115, "Send receipt"))
+	pumpBotDeliveries(t, f.b)
+	handleOrderVisible(t, f, orderClick(t, f, 101, 115, "Send receipt"))
 	pending := uploadTelegramDocument(t, f, 101)
 	pending.ID = 116
-	handle(t, f.b, pending)
-	handle(t, f.b, proofMediaClick(t, f, 117, "This is a receipt"))
+	handleOrderVisible(t, f, pending)
+	handleOrderVisible(t, f, proofMediaClick(t, f, 117, "This is a receipt"))
 	stale := proofMediaClick(t, f, 119, list[0].ID)
-	handle(t, f.b, orderClick(t, f, 101, 118, "Add: Shuttle"))
+	handleOrderVisible(t, f, orderClick(t, f, 101, 118, "Add: Shuttle"))
 	before, err := f.b.API.Orders(t.Context(), "alice", "sandbox-festival")
 	require.NoError(t, err)
-	handle(t, f.b, stale)
+	handleOrderVisible(t, f, stale)
 	var staleText string
 	for _, message := range chatMessages(t, f, 101) {
 		if message.ID == stale.Callback.Message.ID {

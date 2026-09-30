@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/observability"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
@@ -84,7 +85,12 @@ func (s ScriptHost) Perform(
 		},
 		p.Code,
 	)
-	defer func() { diagnostic.Finish(resultErr) }()
+	defer func() {
+		if core.IsDatabaseFailure(resultErr) {
+			resultErr = core.ErrDatabase
+		}
+		diagnostic.Finish(resultErr)
+	}()
 	if s.Worker == nil || input.Script == nil || input.Script.Remaining <= 0 {
 		diagnostic.Outcome("limited", "budget")
 		return errors.New("script tool unavailable or exhausted")
@@ -122,14 +128,7 @@ func (s ScriptHost) Perform(
 	}
 	recordScriptResult(diagnostic, run)
 	records, err := s.Store.CompleteRun(ctx, owner, updateID, index, run)
-	if s.Store.StaleError != nil && errors.Is(err, s.Store.StaleError) {
-		owned, receiptErr := s.ownPrivateDeletion(ctx, owner, updateID, index)
-		if receiptErr != nil {
-			return receiptErr
-		}
-		if owned {
-			return s.AddContext(ctx, owner, updateID, input)
-		}
+	if s.Store.StaleError != nil && errors.Is(err, s.Store.StaleError) && !core.IsDatabaseFailure(err) {
 		projected, projectionErr := s.projectRetiredMemory(ctx, owner, updateID, index, input, err)
 		if projectionErr != nil {
 			return projectionErr
@@ -188,18 +187,28 @@ func (s ScriptHost) evaluateTools(
 	callCtx, stopSource := context.WithCancelCause(callCtx)
 	defer stopSource(nil)
 	scope := scriptRunScope(tools)
+	fence := &scriptDatabaseFence{}
 	result, err := executor.Execute(
 		callCtx,
 		scriptclient.Request{Code: p.Code, Input: json.RawMessage(p.InputJSON)},
 		scriptBindings(tools),
 		func(ctx context.Context, call scriptclient.ToolCall) (json.RawMessage, error) {
+			// A caught SQL failure admits no later effect, whatever context the executor passes.
+			if fence.tripped(callCtx) {
+				return nil, core.ErrDatabase
+			}
 			ctx = context.WithValue(ctx, scriptRunScopeKey{}, scope)
 			ctx = context.WithValue(ctx, scriptSourceStopKey{}, stopSource)
+			ctx = context.WithValue(ctx, scriptDatabaseFenceKey{}, fence)
 			return s.Call(ctx, owner, updateID, index, call, input)
 		},
 	)
 	if ctx.Err() != nil {
 		return run, ctx.Err()
+	}
+	// Leave the durable run interrupted; the caller must not complete it.
+	if fence.tripped(callCtx) {
+		return run, core.ErrDatabase
 	}
 	if errors.Is(context.Cause(callCtx), errScriptRegistrationCommitted) {
 		return run, errScriptRegistrationCommitted

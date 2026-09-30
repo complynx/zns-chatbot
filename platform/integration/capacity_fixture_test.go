@@ -15,7 +15,7 @@ import (
 func TestCapacityFixturePreservesReservationsAndEnablesDisplacement(t *testing.T) {
 	t.Parallel()
 	db := database(t)
-	service := orders.Service{DB: db}
+	service := orders.Service{DB: db, Delivery: syntheticDeliverySettings()}
 	const extra = "excursion_grodno_overview"
 	create := func(owner, key string) orders.Order {
 		t.Helper()

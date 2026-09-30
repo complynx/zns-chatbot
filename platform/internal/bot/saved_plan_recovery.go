@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 
@@ -117,6 +118,9 @@ func (b *Bot) savedOrderReceipt(ctx context.Context, in incoming, id int64, plan
 	}
 	command.Key = "tg-order-" + strconv.FormatInt(id, 10)
 	receipt, err := b.Host.OrderReceipt(ctx, in.owner, command, source)
+	if core.IsDatabaseFailure(err) {
+		return "", receipt.Found, err
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Code == mediaForbidden {
 		coordinator := interaction.OrderCoordinator{Store: interaction.Store{DB: b.DB}}
 		outcome, recordErr := coordinator.RecordRefusal(ctx, in.owner, id, problem)
@@ -165,8 +169,44 @@ func (b *Bot) savedKnowledgeReceipt(ctx context.Context, in incoming, id int64, 
 	if err != nil || !receipt.Found {
 		return "", receipt.Found, err
 	}
+	// The saved turn stays Ready after completion, so a lost-reply retry and a
+	// completed replay both arrive here after the receipt's current source and
+	// permission checks. The knowledge reply is recorded only after original-source
+	// linkage succeeds; once it exists, replay is handled here and never enters
+	// attachment, the command endpoint, assessment or the pending continuation.
+	reply, completed, err := b.recordedKnowledgeReply(ctx, in.owner, id)
+	if err != nil {
+		return "", true, err
+	}
+	if completed {
+		return b.completedKnowledgeReceiptNotice(ctx, in, command, receipt.Result, reply)
+	}
 	if err = b.knowledgeCoordinator().FinalizeCommand(ctx, in.owner, id, command, receipt.Result); err != nil {
 		return "", true, err
 	}
 	return b.knowledgeReceiptNotice(ctx, in, command, receipt.Result)
+}
+
+// recordedKnowledgeReply reads the one durable reply of this owner and update
+// (unique by owner, update and kind). It is catalog text written by the bot.
+func (b *Bot) recordedKnowledgeReply(ctx context.Context, owner string, id int64) (string, bool, error) {
+	var raw json.RawMessage
+	err := b.DB.QueryRow(
+		ctx,
+		`SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3`,
+		owner,
+		id,
+		knowledgeReply,
+	).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, core.DatabaseOperationContextError(ctx, err)
+	}
+	var text string
+	if err = json.Unmarshal(raw, &text); err != nil {
+		return "", true, err
+	}
+	return text, true, nil
 }

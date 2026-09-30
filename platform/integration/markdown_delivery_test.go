@@ -42,7 +42,7 @@ func TestMarkdownBrowser(t *testing.T) {
 func TestMarkdownProfileNameRemainsLiteral(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
-	handle(t, f.b, message(90, 101, "/name"))
+	handleVisible(t, f.b, message(90, 101, "/name"))
 	profile, err := f.b.API.PassProfile(t.Context(), "alice")
 	require.NoError(t, err)
 	command := profileCommand("set", "legal_name", "markdown-name", profile)
@@ -50,7 +50,7 @@ func TestMarkdownProfileNameRemainsLiteral(t *testing.T) {
 	_, err = f.b.API.ExecutePassProfile(t.Context(), "alice", command)
 	require.NoError(t, err)
 	f.model.plan = agent.Plan{View: agent.ProfilesView, Text: "**Answer**"}
-	handle(t, f.b, message(91, 101, "explain my profile"))
+	handleVisible(t, f.b, message(91, 101, "explain my profile"))
 	card := profileCard(t, f)
 	assert.Contains(t, card.Text, "Avery *Example*")
 	require.Len(t, card.Entities, 1)
@@ -65,7 +65,7 @@ func TestMarkdownAgentDeliveryAndEditedManualView(t *testing.T) {
 		View: "workflow",
 		Text: "🚀 **Привет** [Даня](tg://user?id=101) [тема](https://t.me/c/123/7/9?thread=7&single)\n\n```go\na := `x`\n```",
 	}
-	handle(t, f.b, message(100, 101, "tell me"))
+	handleVisible(t, f.b, message(100, 101, "tell me"))
 	messages := chatMessages(t, f, 101)
 	require.Len(t, messages, 1)
 	card := messages[0]
@@ -97,7 +97,7 @@ func TestMarkdownAgentDeliveryAndEditedManualView(t *testing.T) {
 	require.Len(t, state.Messages, 1)
 	assert.Equal(t, card.Entities, state.Messages[0].Entities)
 	// An ordinary manual action replaces the formatted answer in the same message.
-	handle(t, f.b, message(101, 101, "/start"))
+	handleVisible(t, f.b, message(101, 101, "/start"))
 	edited := chatMessages(t, f, 101)
 	require.Len(t, edited, 1)
 	assert.Equal(t, card.ID, edited[0].ID)
@@ -110,7 +110,7 @@ func TestMarkdownUnsafeTargetFallsBackWithoutLosingAnswer(t *testing.T) {
 	f := setup(t)
 	source := "[опасно](javascript:alert) **оригинальный ответ** <b>literal</b>"
 	f.model.plan = agent.Plan{View: agent.OrdersView, Text: source}
-	handle(t, f.b, message(100, 101, "tell me about orders"))
+	handleVisible(t, f.b, message(100, 101, "tell me about orders"))
 	card := pagingCard(t, f, 101, "menu")
 	assert.Equal(t, source, card.Text)
 	assert.Empty(t, card.Entities)

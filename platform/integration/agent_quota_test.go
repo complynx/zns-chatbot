@@ -21,10 +21,10 @@ func TestAssistantQuotaLocalesManualAndOwnerIsolation(t *testing.T) {
 			f.b.AssistantDailyLimit = 1
 			_, err := f.b.API.SetLanguage(t.Context(), "alice", locale, false)
 			require.NoError(t, err)
-			handle(t, f.b, message(9100, 101, "question"))
+			handleVisible(t, f.b, message(9100, 101, "question"))
 			require.NotNil(t, f.model.input.AssistantQuestionsRemaining)
 			assert.Zero(t, *f.model.input.AssistantQuestionsRemaining)
-			handle(t, f.b, message(9101, 101, "another question"))
+			handleVisible(t, f.b, message(9101, 101, "another question"))
 			assert.Equal(t, 1, f.model.calls)
 			text, err := i18n.Translate(locale, i18n.AgentQuotaReached, nil)
 			require.NoError(t, err)
@@ -35,12 +35,12 @@ func TestAssistantQuotaLocalesManualAndOwnerIsolation(t *testing.T) {
 					Scan(&reply),
 			)
 			assert.Equal(t, text, reply)
-			handle(t, f.b, message(9102, 101, "/start"))
-			handle(t, f.b, aliceCallback(9103, f.aliceCard(t), "select:massage-1:0"))
+			handleVisible(t, f.b, message(9102, 101, "/start"))
+			handleVisible(t, f.b, aliceCallback(9103, f.aliceCard(t), "select:massage-1:0"))
 			workflow, err := f.b.API.Current(t.Context(), "alice")
 			require.NoError(t, err)
 			assert.Equal(t, "draft", workflow.State)
-			handle(t, f.b, message(9104, 202, "question"))
+			handleVisible(t, f.b, message(9104, 202, "question"))
 			assert.Equal(t, 2, f.model.calls)
 		})
 	}

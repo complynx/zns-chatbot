@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 )
 
@@ -33,5 +34,5 @@ func (s Service) ReviewProof(
 	if errors.Is(err, pgx.ErrNoRows) {
 		return proof, problem("food_stale_payment")
 	}
-	return proof, err
+	return proof, core.DatabaseOperationError(err)
 }

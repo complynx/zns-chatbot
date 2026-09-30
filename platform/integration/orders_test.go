@@ -52,7 +52,7 @@ func TestProofCountryRoutingRemainsAvailableAfterDeadline(t *testing.T) {
 func TestOrderReconciliationPreservesHistoricalPrices(t *testing.T) {
 	t.Parallel()
 	db := database(t)
-	s := orders.Service{DB: db}
+	s := orders.Service{DB: db, Delivery: syntheticDeliverySettings()}
 	create := orders.Command{
 		EventID: "sandbox-festival",
 		Name:    "create",

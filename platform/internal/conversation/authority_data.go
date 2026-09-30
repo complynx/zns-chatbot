@@ -47,7 +47,7 @@ func (s *authoritySnapshot) loadSummaryAuthorities(ctx context.Context, actor st
 		return nil
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	s.summary, err = decodeReadAuthorities(data)
 	return err

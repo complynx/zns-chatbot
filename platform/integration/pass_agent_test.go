@@ -33,7 +33,7 @@ func TestRegistrationAgentTrustedContactReadMutationReplay(t *testing.T) {
 	f.b.Model = model
 	update := message(800, 101, "Invite this contact to Dance")
 	update.Message.Contact = &telegram.Contact{UserID: 202, FirstName: "Boris"}
-	handle(t, f.b, update)
+	handlePassVisible(t, f, update)
 	require.Len(t, model.inputs, 2)
 	assert.Equal(t, []int64{202}, model.inputs[0].Registration.TrustedPartnerIDs)
 	require.Len(t, model.inputs[1].Registration.Reads, 1)
@@ -43,7 +43,7 @@ func TestRegistrationAgentTrustedContactReadMutationReplay(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 202, booking.InvitationTarget)
 	assert.Contains(t, passMenuCard(t, f, 101).Text, "Waiting for partner")
-	handle(t, f.b, update)
+	handlePassVisible(t, f, update)
 	assert.Len(t, model.inputs, 2)
 	var operations int
 	require.NoError(
@@ -89,6 +89,7 @@ func TestRegistrationAgentRejectsGuessedPartnerAndStaleVersion(t *testing.T) {
 			require.NoError(t, err)
 			assert.Zero(t, booking.InvitationTarget)
 			if stale {
+				drainPassNotices(t, f)
 				assert.Contains(t, passMenuCard(t, f, 101).Text, "outdated")
 			} else {
 				assert.Zero(t, booking.Version)
@@ -135,12 +136,12 @@ func TestRegistrationAgentReadBudgetAndDuplicateRead(t *testing.T) {
 func TestRegistrationAgentPendingPartnerDoesNotCaptureUnrelatedText(t *testing.T) {
 	t.Parallel()
 	f := passMenuFixture(t)
-	handle(t, f.b, message(830, 101, "/passes"))
-	handle(t, f.b, passMenuClick(t, f, 101, 831, "Dance"))
-	handle(t, f.b, passMenuClick(t, f, 101, 832, "Invite a partner"))
+	handlePassVisible(t, f, message(830, 101, "/passes"))
+	handlePassVisible(t, f, passMenuClick(t, f, 101, 831, "Dance"))
+	handlePassVisible(t, f, passMenuClick(t, f, 101, 832, "Invite a partner"))
 	model := &knowledgeModel{plans: []agent.Plan{{View: "workflow", Text: "I can help with that separate question."}}}
 	f.b.Model = model
-	handle(t, f.b, message(833, 101, "What does this word mean?"))
+	handlePassVisible(t, f, message(833, 101, "What does this word mean?"))
 	require.Len(t, model.inputs, 1)
 	assert.True(t, model.inputs[0].Registration.PendingPartner)
 	var count int

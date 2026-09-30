@@ -102,6 +102,16 @@ func ScriptCallResultAuthorities(call ScriptToolRecord) ([]readsource.Authority,
 		}
 		return MergeReadAuthorities(result.ReadAuthorities)
 	}
+	if call.PassReceiptID != "" {
+		var result interaction.RegistrationReceiptObservation
+		if err := json.Unmarshal(call.Outcome.Result, &result); err != nil {
+			return nil, err
+		}
+		if result.ID != call.PassReceiptID || !result.Complete || result.ReadAuthorities == nil {
+			return nil, errors.New("pass receipt read authority missing")
+		}
+		return MergeReadAuthorities(result.ReadAuthorities)
+	}
 	if call.Memory != nil {
 		return ScriptMemoryResultAuthorities(call.Outcome.Result)
 	}

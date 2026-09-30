@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -49,18 +50,24 @@ type massageButtonAction struct {
 func (b *Bot) massageState(ctx context.Context, owner string) (massageView, int64, error) {
 	state := massageView{Event: b.currentOrderEvent(), View: massageHome}
 	var revision int64
+	var raw []byte
 	err := b.DB.QueryRow(ctx, `SELECT state,revision FROM bot.massage_views WHERE owner=$1`, owner).
-		Scan(&state, &revision)
+		Scan(&raw, &revision)
 	if errors.Is(err, pgx.ErrNoRows) {
-		err = nil
+		return state, revision, nil
 	}
+	if err != nil {
+		return state, revision, core.DatabaseOperationError(err)
+	}
+	state = massageView{}
+	err = json.Unmarshal(raw, &state)
 	return state, revision, err
 }
 
 func (b *Bot) saveMassageState(ctx context.Context, owner string, chat, revision int64, state massageView) error {
 	_, err := b.DB.Exec(ctx, `INSERT INTO bot.massage_views(owner,chat_id,revision,state) VALUES($1,$2,$3,$4)
 	ON CONFLICT(owner) DO UPDATE SET chat_id=$2,revision=$3,state=$4 WHERE bot.massage_views.revision<=$3`, owner, chat, revision, state)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func (b *Bot) handleMassage(ctx context.Context, in incoming, update telegram.Update) error {
@@ -90,7 +97,7 @@ func (b *Bot) handleMassage(ctx context.Context, in incoming, update telegram.Up
 		return err
 	}
 	if update.Callback != nil {
-		b.acknowledge(ctx, update.Callback.ID)
+		return b.acknowledge(ctx, update.Callback.ID)
 	}
 	return nil
 }
@@ -144,6 +151,9 @@ func (b *Bot) applyMassageButton(
 }
 
 func massageFailure(state massageView, notice i18n.ID, err error) (massageView, i18n.ID, error) {
+	if core.IsDatabaseFailure(err) {
+		return state, "", err
+	}
 	if err == nil {
 		return state, notice, nil
 	}

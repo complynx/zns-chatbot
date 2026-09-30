@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress/dbgen"
 )
 
@@ -65,9 +66,9 @@ func SaveClassifiedTelegram(ctx context.Context, tx pgx.Tx, ref Reference, sende
 		params.NativePayload = native.Payload
 	}
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(782619)`); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return dbgen.New(tx).InsertIngress(ctx, params)
+	return core.DatabaseOperationError(dbgen.New(tx).InsertIngress(ctx, params))
 }
 
 func TelegramPosition(ctx context.Context, tx pgx.Tx, ref Reference, sender int64) (int64, error) {
@@ -78,16 +79,16 @@ func TelegramPosition(ctx context.Context, tx pgx.Tx, ref Reference, sender int6
 	err := tx.QueryRow(ctx, `SELECT id FROM core.registration_ingress
  WHERE kind='telegram' AND bot_id=$1 AND request_key=$2 AND telegram_id=$3 AND owner=''`,
 		ref.BotID, strconv.FormatInt(ref.UpdateID, 10), sender).Scan(&id)
-	return id, err
+	return id, core.DatabaseOperationError(err)
 }
 
 func ApplicationPosition(ctx context.Context, tx pgx.Tx, owner, key string) (int64, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(782619)`); err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	var id int64
 	err := tx.QueryRow(ctx, `INSERT INTO core.registration_ingress(kind,bot_id,request_key,owner)
  VALUES('application',0,$1,$2) ON CONFLICT(kind,bot_id,request_key,owner)
  DO UPDATE SET request_key=EXCLUDED.request_key RETURNING id`, key, owner).Scan(&id)
-	return id, err
+	return id, core.DatabaseOperationError(err)
 }

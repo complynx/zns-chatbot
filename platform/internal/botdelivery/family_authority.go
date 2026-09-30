@@ -2,13 +2,16 @@ package botdelivery
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
@@ -22,6 +25,7 @@ type familyRead struct {
 	menu                      PassMenu
 	events                    []string
 	massageEvent, massageView string
+	refundAmbassador          string
 }
 
 func (s Service) prepareFamily(
@@ -48,40 +52,74 @@ func (s Service) prepareFamily(
 		return f, nil, err
 	}
 	switch i.Reference.Family {
-	case "passes", "pass_redaction":
-		var revision int64
-		if err = tx.QueryRow(ctx, `SELECT state,revision FROM bot.pass_views WHERE owner=$1`, i.Owner).
-			Scan(&f.menu, &revision); err != nil {
-			return f, nil, err
-		}
-		if revision != i.Reference.Revision || !reflect.DeepEqual(f.menu.Source, i.Reference.Source) {
-			return f, nil, ErrStale
-		}
+	case familyRefund:
+		f.events = []string{i.Reference.Event}
+	case familyPasses, familyPassRedaction:
+		f.menu, err = readPassMenuFamily(ctx, tx, i)
 		if f.menu.Event != "" {
 			f.events = []string{f.menu.Event}
 		}
-	case "pass_export":
+	case familyPassExport:
 		f.events = exportEvents
 		if len(f.events) == 0 {
 			f.events, err = passbooking.DeliveryExportEvents(ctx, tx, i.Owner)
 		}
-	case "pass_proof", "pass_tier":
+	case familyPassProof, "pass_tier":
 		f.events = []string{i.Reference.Event}
-	case "massage":
+	case familyMassage:
 		var revision int64
 		err = tx.QueryRow(ctx, `SELECT COALESCE(state->>'event',''),COALESCE(state->>'view',''),revision FROM bot.massage_views WHERE owner=$1`, i.Owner).
 			Scan(&f.massageEvent, &f.massageView, &revision)
+		err = core.DatabaseOperationError(err)
 		if err == nil && revision != i.Reference.Revision {
 			err = ErrStale
 		}
 	}
 	return f, refs, err
 }
+
+func readPassMenuFamily(ctx context.Context, tx pgx.Tx, i Intent) (PassMenu, error) {
+	var menu PassMenu
+	var state []byte
+	var revision int64
+	if err := tx.QueryRow(ctx, `SELECT state,revision FROM bot.pass_views WHERE owner=$1`, i.Owner).
+		Scan(&state, &revision); err != nil {
+		return menu, core.DatabaseOperationError(err)
+	}
+	// Incompatible stored state keeps its decode provenance.
+	if err := json.Unmarshal(state, &menu); err != nil {
+		return PassMenu{}, err
+	}
+	if revision != i.Reference.Revision || !passMenuSourceMatches(menu, i.Reference) {
+		return menu, ErrStale
+	}
+	return menu, nil
+}
+
+func passMenuSourceMatches(menu PassMenu, reference Reference) bool {
+	if reference.Family == familyPassRedaction {
+		// Only the fixed tombstone notice has source-free authority.
+		expected := Reference{
+			Kind: CardIntent, Family: familyPassRedaction, CardKey: familyPasses, Revision: reference.Revision,
+			Continuation: Continuation{Kind: familyPassRedaction, Revision: reference.Revision},
+		}
+		return reflect.DeepEqual(reference, expected)
+	}
+	return reflect.DeepEqual(menu.Source, reference.Source)
+}
+
 func (s Service) lockFamily(ctx context.Context, tx pgx.Tx, i Intent, f familyRead) error {
 	r := i.Reference
 	switch r.Family {
-	case "static", "legacy_order", "workflow", "orders", "profile", "language", "media":
+	case familyStatic, "legacy_order", "workflow", "profile", "language", "media":
 		return nil
+	case "orders":
+		if strings.HasPrefix(r.CardKey, "refund:") && r.CardKey != "refund:list" {
+			return ErrBinding
+		}
+		return nil
+	case familyRefund, familyRefundRedaction:
+		return lockRefundCard(ctx, tx, i, f.refundAmbassador)
 	case "knowledge":
 		private := strings.HasPrefix(r.CardKey, "knowledge:memo:") ||
 			strings.HasPrefix(r.CardKey, "knowledge:proposal:")
@@ -97,19 +135,19 @@ func (s Service) lockFamily(ctx context.Context, tx pgx.Tx, i Intent, f familyRe
 		return modelsettings.LockDeliveryReadInTx(ctx, tx, i.Owner, r.Object)
 	case "admin_view", "admin_page", "admin_prompt", "admin_expiry", "admin_utility", "admin_file":
 		return s.AdminMessages.LockDeliveryInTx(ctx, tx, i.Owner, r.Family, r.Version, i.Chat)
-	case "order_export", "modern_order_export":
+	case familyOrderExport, familyModernOrderExport:
 		return orders.LockDeliveryExportInTx(ctx, tx, i.Owner, r.Event)
-	case "order_proof", "modern_order_proof":
+	case familyOrderProof, familyModernOrderProof:
 		return orders.LockDeliveryProofInTx(ctx, tx, i.Owner, r.Event, r.Object, r.Version, r.ProofAttempt)
-	case "pass_export":
+	case familyPassExport:
 		return passbooking.LockDeliveryExportInTx(ctx, tx, i.Owner, f.events)
-	case "pass_proof":
+	case familyPassProof:
 		return passbooking.LockDeliveryProofInTx(ctx, tx, i.Owner, r.Event, r.Object, r.Version, r.ProofAttempt)
-	case "passes", "pass_redaction":
+	case familyPasses, familyPassRedaction:
 		return lockPassMenu(ctx, tx, i, f)
 	case "pass_tier":
 		return lockRegistrationCapability(ctx, tx, i.Owner, r.Event, "admin_assign")
-	case "massage":
+	case familyMassage:
 		return lockMassageMenu(ctx, tx, i, f)
 	default:
 		return s.lockFood(ctx, tx, i)
@@ -132,8 +170,8 @@ func lockRegistrationCapability(ctx context.Context, tx pgx.Tx, owner, event, ac
 }
 func lockPassMenu(ctx context.Context, tx pgx.Tx, i Intent, f familyRead) error {
 	current := f.menu
-	if i.Reference.Family == "pass_redaction" {
-		if !current.Redacted {
+	if i.Reference.Family == familyPassRedaction {
+		if !current.Redacted || i.Phase != phaseEdit || i.Target <= 0 {
 			return ErrStale
 		}
 		return nil
@@ -175,19 +213,19 @@ func (s Service) lockFood(ctx context.Context, tx pgx.Tx, i Intent) error {
 	switch r.Family {
 	case "food", "food_closed":
 	case "food_review":
-		in.Scope = "review"
-	case "food_orders_export", "food_summary_export":
+		in.Scope = foodReviewScope
+	case familyFoodOrdersExport, familyFoodSummaryExport:
 		in.Scope = "export"
-	case "food_proof_meals":
+	case familyFoodProofMeals:
 		in.Kind = legacyfood.Meals
-	case "food_proof_activity":
+	case familyFoodProofActivity:
 		in.Kind = legacyfood.Activity
-	case "food_review_meals":
+	case familyFoodReviewMeals:
 		in.Kind = legacyfood.Meals
-		in.Scope = "review"
-	case "food_review_activity":
+		in.Scope = foodReviewScope
+	case familyFoodReviewActivity:
 		in.Kind = legacyfood.Activity
-		in.Scope = "review"
+		in.Scope = foodReviewScope
 	default:
 		return ErrBinding
 	}
@@ -203,23 +241,30 @@ func familyMissing(err error) error {
 // View rows follow source and history locks, before the immutable intent lock.
 func lockViewBinding(ctx context.Context, tx pgx.Tx, i Intent, f familyRead) error {
 	switch i.Reference.Family {
-	case "passes", "pass_redaction":
+	case familyPasses, familyPassRedaction:
 		var current PassMenu
+		var state []byte
 		var revision int64
 		if err := tx.QueryRow(ctx, `SELECT state,revision FROM bot.pass_views WHERE owner=$1 FOR SHARE`, i.Owner).
-			Scan(&current, &revision); err != nil {
+			Scan(&state, &revision); err != nil {
+			return core.DatabaseOperationError(err)
+		}
+		if err := json.Unmarshal(state, &current); err != nil {
 			return err
 		}
 		if revision != i.Reference.Revision || !reflect.DeepEqual(current, f.menu) {
 			return ErrStale
 		}
-	case "massage":
+		if i.Reference.Family == familyPassRedaction {
+			return lockRenderedTarget(ctx, tx, i, i.Target)
+		}
+	case familyMassage:
 		var event, view string
 		var revision int64
 		err := tx.QueryRow(ctx, `SELECT COALESCE(state->>'event',''),COALESCE(state->>'view',''),revision FROM bot.massage_views WHERE owner=$1 FOR SHARE`, i.Owner).
 			Scan(&event, &view, &revision)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		if revision != i.Reference.Revision || event != f.massageEvent || view != f.massageView {
 			return ErrStale
@@ -230,21 +275,40 @@ func lockViewBinding(ctx context.Context, tx pgx.Tx, i Intent, f familyRead) err
 
 func (s Service) lockFamilyEvent(ctx context.Context, tx pgx.Tx, i Intent) error {
 	switch i.Reference.Family {
-	case "order_export", "modern_order_export", "order_proof", "modern_order_proof", "payment":
+	case familyOrderExport, familyModernOrderExport, familyOrderProof, familyModernOrderProof, "payment", familyRefund:
 		return orders.LockEvent(ctx, tx, i.Reference.Event)
 	case "food",
 		"food_closed",
 		"food_review",
-		"food_orders_export",
-		"food_summary_export",
-		"food_proof_meals",
-		"food_proof_activity",
-		"food_review_meals",
-		"food_review_activity":
+		familyFoodOrdersExport,
+		familyFoodSummaryExport,
+		familyFoodProofMeals,
+		familyFoodProofActivity,
+		familyFoodReviewMeals,
+		familyFoodReviewActivity:
 		return s.Food.LockEvent(ctx, tx, i.Reference.Event)
 	default:
 		return nil
 	}
+}
+
+func lockRefundCard(ctx context.Context, tx pgx.Tx, i Intent, ambassador string) error {
+	r := i.Reference
+	id, err := strconv.ParseInt(r.Object, 10, 64)
+	if err != nil || id <= 0 || strconv.FormatInt(id, 10) != r.Object || r.CardKey != "refund:"+r.Object ||
+		r.Kind != CardIntent || r.Source != nil || len(r.Authorities) != 0 {
+		return ErrBinding
+	}
+	if r.Family == familyRefundRedaction {
+		if r.Refund != nil || !r.Continuation.Retired || i.Phase != phaseEdit || i.Target <= 0 {
+			return ErrBinding
+		}
+		return lockRenderedTarget(ctx, tx, i, i.Target)
+	}
+	if r.Refund == nil || r.Refund.ID != id || r.Continuation.Retired {
+		return ErrBinding
+	}
+	return orders.LockDeliveryRefundInTx(ctx, tx, i.Owner, r.Event, ambassador, *r.Refund)
 }
 func lockRenderedTarget(ctx context.Context, tx pgx.Tx, i Intent, target int64) error {
 	var chat, message int64
@@ -253,10 +317,10 @@ func lockRenderedTarget(ctx context.Context, tx pgx.Tx, i Intent, target int64) 
 	case "workflow":
 		err = tx.QueryRow(ctx, `SELECT chat_id,message_id FROM bot.messages WHERE owner=$1 FOR SHARE`, i.Owner).
 			Scan(&chat, &message)
-	case "passes", "pass_redaction":
+	case familyPasses, familyPassRedaction:
 		err = tx.QueryRow(ctx, `SELECT chat_id,message_id FROM bot.pass_views WHERE owner=$1 FOR SHARE`, i.Owner).
 			Scan(&chat, &message)
-	case "massage":
+	case familyMassage:
 		err = tx.QueryRow(ctx, `SELECT chat_id,message_id FROM bot.massage_views WHERE owner=$1 FOR SHARE`, i.Owner).
 			Scan(&chat, &message)
 	default:
@@ -267,7 +331,7 @@ func lockRenderedTarget(ctx context.Context, tx pgx.Tx, i Intent, target int64) 
 		return nil
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if chat != i.Chat || message != target {
 		return ErrStale

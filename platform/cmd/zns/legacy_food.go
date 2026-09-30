@@ -9,28 +9,28 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 )
 
-func startFoodMaintenance(ctx context.Context, service legacyfood.Service, logger *slog.Logger) (func(), error) {
+func startFoodMaintenance(
+	ctx context.Context, service legacyfood.Service, logger *slog.Logger, onFatal func(error),
+) (func(), error) {
 	if err := service.QueueReminders(ctx); err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		ticker := time.NewTicker(foodReminderInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := service.QueueReminders(ctx); err != nil {
-					logger.WarnContext(ctx, "food reminder scan pending", "error", err)
-				}
-			}
+	return startTicks(ctx, foodReminderInterval, foodReminderTick(service, logger), onFatal), nil
+}
+
+// foodReminderTick returns only a safe positive database failure; ordinary
+// scan failures are logged and retried on the next tick.
+func foodReminderTick(service legacyfood.Service, logger *slog.Logger) func(context.Context) error {
+	return func(ctx context.Context) error {
+		err := service.QueueReminders(ctx)
+		if fatal := databaseFatal(err); fatal != nil {
+			return fatal
 		}
-	}()
-	return func() { cancel(); <-done }, nil
+		if err != nil {
+			logger.WarnContext(ctx, "food reminder scan pending", "error", err)
+		}
+		return nil
+	}
 }
 
 const foodReminderInterval = 30 * time.Second

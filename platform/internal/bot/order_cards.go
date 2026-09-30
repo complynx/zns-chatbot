@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -40,7 +41,7 @@ func (b *Bot) deliverOrderCardChecked(
 	err = b.DB.QueryRow(ctx, "SELECT message_id,view_hash FROM bot.order_cards WHERE owner=$1 AND card_key=$2", owner, key).
 		Scan(&payload.MessageID, &previous)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if payload.MessageID > 0 && previous == hash {
 		return nil
@@ -62,11 +63,11 @@ func (b *Bot) retireOrderCards(
 ) error {
 	rows, err := b.DB.Query(ctx, `SELECT card_key FROM bot.order_cards WHERE owner=$1 AND visible`, owner)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	keys, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, key := range keys {
 		if strings.HasPrefix(key, mediaPrefix) || strings.HasPrefix(key, knowledgePrefix) ||
@@ -89,7 +90,7 @@ func (b *Bot) reconcileOrderViews(ctx context.Context) error {
 		`SELECT DISTINCT owner,chat_id FROM bot.order_cards WHERE card_key NOT IN ('language','profile') AND card_key NOT LIKE 'media:%' AND card_key NOT LIKE 'knowledge:%' AND card_key NOT LIKE 'food:%'`,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	type view struct {
 		Owner string
@@ -97,15 +98,21 @@ func (b *Bot) reconcileOrderViews(ctx context.Context) error {
 	}
 	views, err := pgx.CollectRows(rows, pgx.RowToStructByPos[view])
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, view := range views {
 		viewContext, authErr := b.API.NotificationContext(ctx, view.Owner, view.Chat)
 		if authErr != nil {
+			if failure := reconcileDatabaseFailure(authErr); failure != nil {
+				return failure
+			}
 			b.logger().WarnContext(ctx, "order view identity pending")
 			continue
 		}
 		if err = b.RenderOrders(viewContext, view.Owner, view.Chat); err != nil {
+			if failure := reconcileDatabaseFailure(err); failure != nil {
+				return failure
+			}
 			b.logger().WarnContext(ctx, "order view reconciliation pending", "error", err)
 		}
 	}

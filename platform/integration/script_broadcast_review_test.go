@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,7 +38,7 @@ func TestBroadcastReviewSobekPaginationAndManualControls(t *testing.T) {
 	f := setup(t)
 	_, err := f.db.Exec(t.Context(), `INSERT INTO core.pass_booking_admins(owner) VALUES('alice')`)
 	require.NoError(t, err)
-	service := adminmessage.Service{DB: f.db}
+	service := adminmessage.Service{DB: f.db, BotID: f.b.Delivery.BotID, Delivery: f.b.Delivery}
 	request := adminmessage.Request{Content: adminmessage.Content{Text: strings.Repeat("complete content", 5)}}
 	for index := range 21 {
 		request.Destinations = append(request.Destinations, adminmessage.Destination{Chat: strconv.Itoa(1000 + index)})
@@ -71,6 +72,7 @@ const page=JSON.parse(text); return {total:page.total,more:page.more,count:page.
 	result = broadcastScript(t, f, 19102,
 		`return await tools.broadcasts.show({id:input.id,offset:20});`, map[string]any{"id": draft.ID})
 	assert.JSONEq(t, fmt.Sprintf(`{"id":%d,"displayed":true,"manual_send_required":true}`, draft.ID), string(result))
+	pumpBotDeliveries(t, f.b)
 	cards := chatMessages(t, f, 101)
 	encoded, err := json.Marshal(cards)
 	require.NoError(t, err)
@@ -109,7 +111,7 @@ func TestBroadcastReviewSobekPreparationAndDeliveryResults(t *testing.T) {
 			require.NoError(t, err)
 			_, err = f.db.Exec(t.Context(), `UPDATE core.users SET language=$1 WHERE id='alice'`, language)
 			require.NoError(t, err)
-			service := adminmessage.Service{DB: f.db}
+			service := adminmessage.Service{DB: f.db, BotID: f.b.Delivery.BotID, Delivery: f.b.Delivery}
 			draft, err := service.Preview(t.Context(), "alice", "preparation", adminmessage.Request{
 				Destinations: []adminmessage.Destination{
 					{Chat: "202"},
@@ -136,6 +138,7 @@ func TestBroadcastReviewSobekPreparationAndDeliveryResults(t *testing.T) {
 				f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.admin_message_deliveries`).Scan(&deliveries),
 			)
 			assert.Zero(t, deliveries)
+			pumpBotDeliveries(t, f.b)
 			cards := chatMessages(t, f, 101)
 			var sendCard int64
 			for _, card := range cards {
@@ -148,21 +151,48 @@ func TestBroadcastReviewSobekPreparationAndDeliveryResults(t *testing.T) {
 				}
 			}
 			require.Positive(t, sendCard)
+			// Review and display alone never reach the destination, even with the worker running.
+			require.NoError(t, f.b.DeliverAdminMessages(t.Context()))
+			require.Empty(t, chatMessages(t, f, 202))
 			handle(t, f.b, aliceCallback(19402, sendCard, fmt.Sprintf("adminmsg:send:%d", draft.ID)))
-			delivery, found, err := service.Claim(t.Context())
-			require.NoError(t, err)
-			require.True(t, found)
-			require.NoError(t, service.Complete(t.Context(), delivery.ID, delivery.Attempt, 9001, "", false))
+			pumpBotDeliveries(t, f.b)
+			// Manual confirmation only enqueues; the durable worker owns the send.
+			require.Empty(t, chatMessages(t, f, 202))
+			waitBroadcastPacing(t, f)
+			require.NoError(t, f.b.DeliverAdminMessages(t.Context()))
+			sent := chatMessages(t, f, 202)
+			require.Len(t, sent, 1)
+			assert.Equal(t, "Prepared text", sent[0].Text)
+			require.Positive(t, sent[0].ID)
+			// A further worker poll must not repeat the completed effect.
+			require.NoError(t, f.b.DeliverAdminMessages(t.Context()))
+			assert.Len(t, chatMessages(t, f, 202), 1)
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.admin_message_deliveries`).Scan(&deliveries),
+			)
+			assert.Equal(t, 1, deliveries)
 			require.NoError(t, json.Unmarshal(broadcastScript(t, f, 19403, read, input), &page))
 			assert.Equal(t, "queued", page.State)
 			require.Len(t, page.Items, 1)
-			assert.EqualValues(t, 9001, page.Items[0].TelegramMessageID)
+			assert.Equal(t, sent[0].ID, page.Items[0].TelegramMessageID)
 			assert.EqualValues(t, 1, page.Items[0].Attempt)
 			assert.Equal(t, "sent", page.Items[0].State)
 		})
 	}
 }
 
+// Wait only ordinary fixture pacing before the broadcast worker runs.
+func waitBroadcastPacing(t *testing.T, f *fixture) {
+	t.Helper()
+	pacing := time.NewTimer(max(f.b.Delivery.BotInterval, f.b.Delivery.ChatInterval) + time.Millisecond)
+	select {
+	case <-pacing.C:
+	case <-t.Context().Done():
+		pacing.Stop()
+		t.Fatal(t.Context().Err())
+	}
+}
 func TestBroadcastReviewSobekCurrentAuthority(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
@@ -201,7 +231,7 @@ func TestBroadcastReviewSobekFullContentStaleAndOwnership(t *testing.T) {
 	f := setup(t)
 	_, err := f.db.Exec(t.Context(), `INSERT INTO core.pass_booking_admins(owner) VALUES('alice'),('bob')`)
 	require.NoError(t, err)
-	service := adminmessage.Service{DB: f.db}
+	service := adminmessage.Service{DB: f.db, BotID: f.b.Delivery.BotID, Delivery: f.b.Delivery}
 	request := adminmessage.Request{
 		Destinations: []adminmessage.Destination{{Chat: "202"}},
 		Content:      adminmessage.Content{Text: strings.Repeat("Я", 4096)},

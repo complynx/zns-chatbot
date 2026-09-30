@@ -51,29 +51,23 @@ func (r *passMenuRenderer) page(total int, next string) (int, int) {
 }
 
 func (r *passMenuRenderer) invitations(ctx context.Context) error {
-	page, err := r.bot.API.PassInvitations(ctx, r.owner, r.state.Event, r.state.After)
+	view, err := (interaction.RegistrationMenuReader{Domain: r.bot.API}).
+		Invitations(ctx, r.owner, r.state.Event, r.state.After, nil)
 	if err != nil {
 		return err
 	}
-	booking, err := r.bot.API.PassBooking(ctx, r.owner, r.state.Event)
-	if err != nil {
-		return err
-	}
-	first, last := r.page(len(page.Invitations), page.Next)
-	for _, invite := range page.Invitations[first:last] {
+	first, last := r.page(len(view.Entries), view.Page.Next)
+	for _, entry := range view.Entries[first:last] {
+		invite := entry.Invitation
 		r.lines = append(r.lines, passMenuLabel(invite.From.Name))
 		r.contact(invite.From)
-		for _, accept := range []bool{true, false} {
-			name, id := passDecline, i18n.RegistrationDecline
-			if accept {
-				name, id = passAccept, i18n.RegistrationAccept
-			}
-			command := passbooking.Command{
-				Name:          name,
-				Event:         r.state.Event,
-				Version:       booking.Version,
-				Target:        invite.From.Owner,
-				TargetVersion: invite.Version,
+		for _, command := range []passbooking.Command{entry.Accept, entry.Decline} {
+			var id i18n.ID
+			switch command.Name {
+			case passAccept:
+				id = i18n.RegistrationAccept
+			case passDecline:
+				id = i18n.RegistrationDecline
 			}
 			r.choices = append(
 				r.choices,
@@ -88,16 +82,14 @@ func (r *passMenuRenderer) invitations(ctx context.Context) error {
 }
 
 func (r *passMenuRenderer) queue(ctx context.Context) error {
-	page, err := r.bot.API.PassQueue(ctx, r.owner, r.state.Event, r.state.After)
+	view, err := (interaction.RegistrationMenuReader{Domain: r.bot.API}).
+		Queue(ctx, r.owner, r.state.Event, r.state.After, nil)
 	if err != nil {
 		return err
 	}
-	own, err := r.bot.API.PassBooking(ctx, r.owner, r.state.Event)
-	if err != nil {
-		return err
-	}
-	first, last := r.page(len(page.Bookings), page.Next)
-	for _, booking := range page.Bookings[first:last] {
+	first, last := r.page(len(view.Entries), view.Page.Next)
+	for _, entry := range view.Entries[first:last] {
+		booking := entry.Booking
 		r.takeoverLink(booking.TelegramID, " · "+strconv.FormatInt(booking.TelegramID, 10))
 		state := interaction.RegistrationMenu{
 			Event:                 r.state.Event,
@@ -112,36 +104,27 @@ func (r *passMenuRenderer) queue(ctx context.Context) error {
 			},
 		)
 		label := strconv.FormatInt(booking.TelegramID, 10)
-		if name := page.Names[booking.Owner]; name != "" {
+		if name := view.Page.Names[booking.Owner]; name != "" {
 			label = passMenuLabel(name) + " · " + label
 		}
 		r.lines = append(r.lines, label+"\n"+r.bookingText(booking))
 		r.contact(passbooking.Contact{Name: label, TelegramID: booking.TelegramID})
-		if booking.State == passStateCancelled {
+		if entry.Cancel == nil {
 			continue
-		}
-		command := passbooking.Command{
-			Name:          "admin_cancel",
-			Event:         r.state.Event,
-			Version:       own.Version,
-			Target:        booking.Owner,
-			TargetVersion: booking.Version,
 		}
 		r.choices = append(
 			r.choices,
 			passMenuChoice{
 				label:  r.text(i18n.RegistrationCancel) + " · " + label,
-				action: passMenuAction{Command: &command},
+				action: passMenuAction{Command: entry.Cancel},
 			},
 		)
-		if booking.Partner != "" {
-			uncouple := command
-			uncouple.Name = "admin_uncouple"
+		if entry.Uncouple != nil {
 			r.choices = append(
 				r.choices,
 				passMenuChoice{
 					label:  r.text(i18n.RegistrationUncouple) + " · " + label,
-					action: passMenuAction{Command: &uncouple},
+					action: passMenuAction{Command: entry.Uncouple},
 				},
 			)
 		}

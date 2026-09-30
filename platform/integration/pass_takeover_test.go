@@ -3,10 +3,12 @@ package integration_test
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -283,14 +285,17 @@ func TestPassReceiverBackfillMixedCoupleAndExport(t *testing.T) {
 
 func TestPassTakeoverConcurrentReplayAndNoticeCurrentness(t *testing.T) {
 	t.Parallel()
-	db, s := bookingFixture(t)
-	alice, err := s.Execute(t.Context(), "alice", bookingCommand("solo", "solo", passbooking.Booking{}))
+	f := registrationPaymentFixture(t)
+	db := f.db
+	s := passbooking.Service{DB: db, Delivery: f.b.Delivery}
+	alice, err := s.Get(t.Context(), "alice", "dance")
 	require.NoError(t, err)
 	_, err = db.Exec(
 		t.Context(),
-		`INSERT INTO core.pass_booking_admins(owner) VALUES('alice'); UPDATE core.pass_notifications SET delivered_at=now()`,
+		`INSERT INTO core.pass_booking_admins(owner) VALUES('alice')`,
 	)
 	require.NoError(t, err)
+	drainPassNotices(t, f)
 	c := passbooking.Command{
 		Name:          passbooking.CommandTakeover,
 		Event:         "dance",
@@ -332,18 +337,31 @@ func TestPassTakeoverConcurrentReplayAndNoticeCurrentness(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	_, err = db.Exec(t.Context(), `UPDATE core.pass_notifications SET available_at=now()`)
-	require.NoError(t, err)
-	notices, err = s.PendingNotifications(t.Context())
+	require.Eventually(t, func() bool {
+		notices, err = s.PendingNotifications(t.Context())
+		return err != nil || len(notices) > 0
+	}, 35*time.Second, 100*time.Millisecond)
 	require.NoError(t, err)
 	require.Len(t, notices, 1)
 	assert.False(t, notices[0].Current, "superseded contact notice is not delivered")
-	require.NoError(t, cancelPassTestNotice(t, s, notices[0]))
-	notices, err = s.PendingNotifications(t.Context())
+	gate, err := s.BeginNotification(
+		t.Context(),
+		delivery.Attempt{ID: notices[0].ID, Generation: notices[0].DeliveryAttempt},
+	)
 	require.NoError(t, err)
-	require.Len(t, notices, 1)
-	assert.True(t, notices[0].Current)
-	require.NoError(t, cancelPassTestNotice(t, s, notices[0]))
+	assert.False(t, gate.Ready)
+	assert.Equal(t, "notification_no_longer_current", gate.Reason)
+	var latest int64
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT max(id) FROM core.pass_notifications WHERE kind='payment_contact_changed'`).
+			Scan(&latest),
+	)
+	require.NoError(t, f.b.DeliverPassNotification(t.Context(), latest))
+	status, err := s.NotificationStatus(t.Context(), latest)
+	require.NoError(t, err)
+	assert.Equal(t, string(delivery.Succeeded), status.State, "current contact notice is delivered")
+	assert.Positive(t, status.MessageID)
 	notices, err = s.PendingNotifications(t.Context())
 	require.NoError(t, err)
 	assert.Empty(t, notices)

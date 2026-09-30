@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood/dbgen"
@@ -25,10 +26,12 @@ type Notification struct {
 }
 
 // QueueReminders preserves the domain windows and binds trusted delivery identity.
+// Each direct SQL operation returns a safe database failure; cancellation and
+// delivery domain errors keep their own identity.
 func (s Service) QueueReminders(ctx context.Context) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	q := dbgen.New(tx)
@@ -37,14 +40,14 @@ func (s Service) QueueReminders(ctx context.Context) error {
 		dbgen.QueueOrderRemindersParams{BotID: s.Delivery.BotID, EventBotID: s.BotID},
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	missing, err := q.QueueMissingOrderReminders(
 		ctx,
 		dbgen.QueueMissingOrderRemindersParams{BotID: s.Delivery.BotID, EventBotID: s.BotID},
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	var pending []delivery.Registration
 	for _, row := range append(rows, missing...) {
@@ -62,5 +65,5 @@ func (s Service) QueueReminders(ctx context.Context) error {
 	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }

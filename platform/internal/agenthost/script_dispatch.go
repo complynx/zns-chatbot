@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync/atomic"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -18,9 +19,34 @@ const scriptDiscoveryList = "$list"
 const sourceAuthorityLimit = "source_authority_limit"
 
 type scriptSourceStopKey struct{}
+type scriptDatabaseFenceKey struct{}
 
+// scriptDatabaseFence records a SQL failure for one VM run independently of
+// the first cancellation cause, so database provenance outranks stale stops.
+type scriptDatabaseFence struct{ failed atomic.Bool }
+
+func (f *scriptDatabaseFence) tripped(ctx context.Context) bool {
+	return f.failed.Load() || errors.Is(context.Cause(ctx), core.ErrDatabase)
+}
+
+// scriptPublicError keeps sanitized SQL provenance; every other failure keeps
+// its generic public text.
+func scriptPublicError(err, fallback error) error {
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
+	return fallback
+}
+
+// stopStale ends the VM run on database failure (checked first, so it wins over
+// a joined stale error), source retirement, ledger conflict or registration.
 func (s ScriptHost) stopStale(ctx context.Context, err error) {
-	if !errors.Is(err, s.Store.StaleError) && !errors.Is(err, ErrScriptLedgerConflict) &&
+	if core.IsDatabaseFailure(err) {
+		if fence, ok := ctx.Value(scriptDatabaseFenceKey{}).(*scriptDatabaseFence); ok {
+			fence.failed.Store(true)
+		}
+		err = core.ErrDatabase
+	} else if !errors.Is(err, s.Store.StaleError) && !errors.Is(err, ErrScriptLedgerConflict) &&
 		!errors.Is(err, errScriptRegistrationCommitted) {
 		return
 	}
@@ -39,7 +65,7 @@ func (s ScriptHost) Call(
 	if call.Name == "profile.set" {
 		if err := s.Store.MarkPrivateProfile(ctx, owner, updateID, index); err != nil {
 			s.stopStale(ctx, err)
-			return nil, err
+			return nil, scriptPublicError(err, err)
 		}
 	}
 	operation := call.Name
@@ -50,6 +76,10 @@ func (s ScriptHost) Call(
 		observability.AgentEvent{Phase: "tool", Operation: operation, InputBytes: len(call.Arguments)})
 	output, err := s.callObserved(ctx, owner, updateID, index, call, input, diagnostic)
 	s.stopStale(ctx, err)
+	if core.IsDatabaseFailure(err) {
+		// Only the sanitized marker leaves the host; driver details stay behind.
+		output, err = nil, core.ErrDatabase
+	}
 	ClearUncommittedModernOrderRead(input, call.Name, err == nil)
 	count, empty := ScriptToolResultMetadata(call.Name, output)
 	diagnostic.Result(len(output), count, empty && err == nil)
@@ -66,7 +96,7 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 	entry, err := s.Registry.Resolve(ctx, owner, call.Name)
 	if err != nil {
 		diagnostic.Outcome("denied", "unavailable")
-		return nil, errors.New("tool unavailable")
+		return nil, scriptPublicError(err, errors.New("tool unavailable"))
 	}
 	stageCtx, stage := observability.StartAgentEvent(
 		ctx,
@@ -91,7 +121,7 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 	if err != nil {
 		// Preparation also reads fresh domain state; an error is not proof of bad model input.
 		diagnostic.Outcome("error", "unavailable")
-		return nil, errors.New("tool unavailable or invalid arguments")
+		return nil, scriptPublicError(err, errors.New("tool unavailable or invalid arguments"))
 	}
 	stageCtx, stage = observability.StartAgentEvent(
 		ctx,
@@ -113,6 +143,10 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 	result, err := entry.Execute(stageCtx, owner, call, record, input)
 	stage.Finish(err)
 	result, outcomeError, err := NormalizeScriptOutcome(result, err, diagnostic, s.Store.StaleError, s.ReadLimitError)
+	if core.IsDatabaseFailure(err) {
+		// The admitted call stays interrupted; Call stops the run before later effects.
+		return nil, core.ErrDatabase
+	}
 	if err != nil {
 		var problem *core.ProblemError
 		if errors.As(err, &problem) && problem.Status < 500 {
@@ -129,8 +163,7 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 		diagnostic.Outcome("limited", "result_limit")
 		return nil, err
 	}
-	err = s.completeObservedCall(ctx, owner, updateID, index, sequence, record)
-	if err != nil {
+	if err = s.completeObservedCall(ctx, owner, updateID, index, sequence, record); err != nil {
 		return nil, err
 	}
 	return visible, nil
@@ -157,7 +190,7 @@ func (s ScriptHost) discover(
 		}
 		tools, err := s.Registry.Available(ctx, owner)
 		if err != nil {
-			return nil, errors.New("tool unavailable")
+			return nil, scriptPublicError(err, errors.New("tool unavailable"))
 		}
 		type summary struct {
 			Name        string `json:"name"`

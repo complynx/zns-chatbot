@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -16,7 +18,7 @@ func ensureCapacitySlots(ctx context.Context, tx pgx.Tx, e Event) error {
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.order_capacity_slots s
 	WHERE s.event_id=$1 AND s.reservation_id IS NOT NULL
 	AND s.seat >= COALESCE(($2::jsonb->s.service->>'capacity')::integer,0))`, e.ID, e.Extras).Scan(&orphaned); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if orphaned {
 		return problem(http.StatusConflict, "capacity_configuration_conflict")
@@ -27,7 +29,7 @@ func ensureCapacitySlots(ctx context.Context, tx pgx.Tx, e Event) error {
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO core.order_capacity_slots(event_id,service,seat)
 		SELECT $1,$2,generate_series(0,$3::integer-1) ON CONFLICT DO NOTHING`, e.ID, service, extra.Capacity); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	// Python only cleans up missing orders for claims with payment tokens.
@@ -36,7 +38,7 @@ func ensureCapacitySlots(ctx context.Context, tx pgx.Tx, e Event) error {
 	reservation_attempt_token=NULL,reservation_attempt_created_at=NULL,reserved_at=NULL
 	WHERE s.event_id=$1 AND s.reservation_attempt_token IS NOT NULL AND NOT EXISTS
 	(SELECT 1 FROM core.orders o WHERE o.event_id=s.event_id AND o.id=s.reservation_id AND o.state<>'deleted')`, e.ID)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func capacityToken(o Order) string {
@@ -67,14 +69,14 @@ func releaseCapacity(ctx context.Context, tx pgx.Tx, before, after Order) error 
 	reservation_attempt_token=NULL,reservation_attempt_created_at=NULL,reserved_at=NULL
 	WHERE event_id=$1 AND reservation_id=$2 AND ($5 OR reservation_attempt_token=$3)
 	AND $4::jsonb ? service`, before.EventID, before.ID, capacityToken(before), before.Choice.Extras, deleted)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func capacityAvailable(ctx context.Context, tx pgx.Tx, event, service string, capacity int) (bool, error) {
 	var available bool
 	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.order_capacity_slots
 	WHERE event_id=$1 AND service=$2 AND seat<$3 AND reservation_id IS NULL)`, event, service, capacity).Scan(&available)
-	return available, err
+	return available, core.DatabaseOperationError(err)
 }
 
 // Preserve an existing seat. A new payment may adopt only its own older attempt;
@@ -84,9 +86,11 @@ func claimCapacity(ctx context.Context, tx pgx.Tx, o Order, service string, capa
 	var attempt *string
 	var created *time.Time
 	token, at := capacityToken(o), capacityTime(o)
-	err := tx.QueryRow(ctx, `SELECT seat,reservation_attempt_token,reservation_attempt_created_at
+	err := core.DatabaseOperationError(
+		tx.QueryRow(ctx, `SELECT seat,reservation_attempt_token,reservation_attempt_created_at
 	FROM core.order_capacity_slots WHERE event_id=$1 AND service=$2 AND reservation_id=$3`, o.EventID, service, o.ID).
-		Scan(&seat, &attempt, &created)
+			Scan(&seat, &attempt, &created),
+	)
 	if err == nil {
 		if attempt != nil && *attempt == token {
 			return true, nil
@@ -111,7 +115,7 @@ func claimCapacity(ctx context.Context, tx pgx.Tx, o Order, service string, capa
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	return writeCapacityClaim(ctx, tx, o, service, seat)
 }
@@ -120,7 +124,7 @@ func writeCapacityClaim(ctx context.Context, tx pgx.Tx, o Order, service string,
 	_, err := tx.Exec(ctx, `UPDATE core.order_capacity_slots SET reservation_id=$4,
 	reservation_attempt_token=$5,reservation_attempt_created_at=$6,reserved_at=clock_timestamp()
 	WHERE event_id=$1 AND service=$2 AND seat=$3`, o.EventID, service, seat, o.ID, capacityToken(o), capacityTime(o))
-	return err == nil, err
+	return err == nil, core.DatabaseOperationError(err)
 }
 
 func reconcileOrderCapacity(ctx context.Context, tx pgx.Tx, o *Order, e Event) ([]string, error) {

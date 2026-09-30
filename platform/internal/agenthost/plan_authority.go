@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
@@ -195,7 +196,7 @@ func (policy PlanAuthorization) ValidatePlan(
 		var completed bool
 		if err := policy.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND ((kind='registration_action' AND content->>'committed'='true') OR (kind='reply_origin' AND content='"authoritative"'::jsonb)))`, owner, updateID).
 			Scan(&completed); err != nil {
-			return err
+			return core.DatabaseOperationContextError(ctx, err)
 		}
 		if completed {
 			return nil
@@ -277,7 +278,7 @@ func (policy PlanAuthorization) validateMissingReply(ctx context.Context, owner 
  AND NOT EXISTS(SELECT 1 FROM bot.interactions WHERE owner=$1 AND update_id=$2
  AND kind='reply_origin' AND content='"authoritative"'::jsonb)`, owner, updateID).Scan(&modelReply)
 	if err != nil || !modelReply {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	generation, err := policy.Sources.Generation(ctx, owner)
 	if err != nil {
@@ -335,7 +336,7 @@ func (policy PlanAuthorization) ValidateHistoryInteractions(
  AND (COALESCE((CASE WHEN i.kind='script_runs' THEN r->>'history_generation' ELSE r->>'generation' END)::bigint,0)<>$3
  OR r->>'history_redacted'='true' OR r->>'error'='history_deleted'))`, owner, updateID, generation).Scan(&stale)
 	if err != nil || !stale {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	return policy.ValidateHistoryPlan(
 		ctx,

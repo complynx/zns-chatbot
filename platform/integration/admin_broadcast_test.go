@@ -12,12 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
+	deliverypolicy "github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
 func TestAdminBroadcastInputOwnershipExpiryReplay(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	input, err := service.BeginInput(t.Context(), "bob", "start", "/send_message_to 101 --forward", 202)
 	require.NoError(t, err)
 	require.NoError(t, service.RegisterPrompt(t.Context(), "bob", input.ID, 202, 50))
@@ -80,7 +81,7 @@ func TestAdminBroadcastInputOwnershipExpiryReplay(t *testing.T) {
 func TestAdminBroadcastLargeAudiencePagedSnapshot(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	var request adminmessage.Request
 	request.Content = adminmessage.Content{Text: "stable"}
 	for id := 1; id <= 1021; id++ {
@@ -117,6 +118,12 @@ func TestAdminBroadcastLargeAudiencePagedSnapshot(t *testing.T) {
 		assert.False(t, claimed[delivery.Destination.Chat])
 		claimed[delivery.Destination.Chat] = true
 		assert.Equal(t, "stable", delivery.Content.Text)
+		gate, beginErr := service.BeginDelivery(
+			t.Context(),
+			deliverypolicy.Attempt{ID: delivery.ID, Generation: delivery.Attempt},
+		)
+		require.NoError(t, beginErr)
+		require.True(t, gate.Ready)
 		require.NoError(t, service.Complete(t.Context(), delivery.ID, delivery.Attempt, 1, "", false))
 	}
 	assert.Len(t, claimed, 1021)
@@ -132,10 +139,14 @@ func TestAdminBroadcastInterruptedRenderResumesFrozenProfile(t *testing.T) {
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	service := adminmessage.Service{DB: db, InformalName: func(context.Context, map[string]any) (string, error) {
-		cancel()
-		return "", context.Canceled
-	}}
+	service := adminmessage.Service{
+		Delivery: syntheticDeliverySettings(),
+		DB:       db,
+		InformalName: func(context.Context, map[string]any) (string, error) {
+			cancel()
+			return "", context.Canceled
+		},
+	}
 	preview, err := service.PreviewCommand(
 		ctx,
 		"bob",
@@ -176,7 +187,7 @@ func TestAdminBroadcastInterruptedRenderResumesFrozenProfile(t *testing.T) {
 func TestAdminBroadcastCommandReplayPreservesAudience(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	command := `/send_message_to $dance:admins --msg "stable"`
 	first, err := service.PreviewCommand(t.Context(), "bob", "audience", command)
 	require.NoError(t, err)
@@ -197,7 +208,8 @@ func TestAdminBroadcastTemplateSnapshotAndNameCache(t *testing.T) {
 	require.NoError(t, err)
 	calls := 0
 	service := adminmessage.Service{
-		DB: db,
+		Delivery: syntheticDeliverySettings(),
+		DB:       db,
 		InformalName: func(ctx context.Context, names map[string]any) (string, error) {
 			calls++
 			assert.Equal(t, "<Alice>", names["first_name"])
@@ -238,7 +250,7 @@ func TestAdminBroadcastTemplateSnapshotAndNameCache(t *testing.T) {
 func TestAdminBroadcastTemplateErrorsCannotEnqueue(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	_, err := db.Exec(
 		t.Context(),
 		`INSERT INTO core.admin_broadcast_profiles(owner,fields) VALUES('alice','{"first_name":"Alice","informal_name":null}') ON CONFLICT(owner) DO UPDATE SET fields=EXCLUDED.fields,overrides='{}'`,
@@ -261,7 +273,7 @@ func TestAdminBroadcastTemplateErrorsCannotEnqueue(t *testing.T) {
 func TestAdminBroadcastSnapshotPreservesNumericLink(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	_, err := db.Exec(t.Context(), `UPDATE core.users SET telegram_id=9007199254740993 WHERE id='alice'`)
 	require.NoError(t, err)
 	_, err = db.Exec(
@@ -285,7 +297,7 @@ func TestAdminBroadcastSnapshotPreservesNumericLink(t *testing.T) {
 func TestAdminBroadcastInputExpiryRecovery(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	input, err := service.BeginInput(t.Context(), "bob", "expiry-notice", "/send_message_to 101", 202)
 	require.NoError(t, err)
 	_, err = db.Exec(
@@ -320,7 +332,7 @@ func TestAdminBroadcastInputExpiryRecovery(t *testing.T) {
 func TestAdminBroadcastAudienceCompleteAndChunked(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	_, err := db.Exec(
 		t.Context(),
 		`INSERT INTO core.admin_broadcast_profiles(owner,fields) SELECT id,jsonb_build_object('first_name',id,'user_id',telegram_id) FROM core.users ON CONFLICT(owner) DO NOTHING`,
@@ -383,7 +395,7 @@ func TestAdminBroadcastTrustedDeploymentIdentity(t *testing.T) {
 		`INSERT INTO core.admin_broadcast_profiles(owner,fields) VALUES('alice','{"bot_id":666,"informal_name":null}'),('bob','{"informal_name":null}') ON CONFLICT(owner) DO UPDATE SET fields=EXCLUDED.fields,overrides='{}'`,
 	)
 	require.NoError(t, err)
-	service := adminmessage.Service{DB: db, BotID: 77}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db, BotID: 77}
 	_, err = db.Exec(
 		t.Context(),
 		`INSERT INTO core.admin_broadcast_profiles(owner,fields) SELECT id,'{}' FROM core.users ON CONFLICT(owner) DO NOTHING`,

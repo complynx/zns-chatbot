@@ -3,6 +3,7 @@ package knowledge
 import (
 	"context"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
@@ -59,7 +60,7 @@ func (s Service) derivedTopicEntries(
 		readsource.MaxAuthorities+1,
 	)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	entries := []MemoryEntry{}
 	for rows.Next() {
@@ -73,14 +74,14 @@ func (s Service) derivedTopicEntries(
 			&entry.SourceKind,
 		); err != nil {
 			rows.Close()
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		entries = append(entries, entry)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if len(entries) > readsource.MaxAuthorities {
 		return nil, readsource.ErrLimit

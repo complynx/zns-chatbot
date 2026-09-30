@@ -16,8 +16,7 @@ func (b *Bot) knowledgeReceiptNotice(
 	command knowledge.Command,
 	result knowledge.Result,
 ) (string, bool, error) {
-	if !result.Redacted && command.Name == knowledge.Suggest && result.Proposal != nil &&
-		result.Proposal.State == knowledgePendingFilter {
+	if pendingKnowledgeSuggestion(command, result) {
 		return "", false, nil
 	}
 	preference, err := b.API.Preferences(ctx, in.owner)
@@ -40,4 +39,33 @@ func (b *Bot) knowledgeReceiptNotice(
 	}
 	text, err := i18n.Translate(preference.Language, notice, nil)
 	return text, err == nil, err
+}
+
+// A completed turn is a handled replay. The authorized receipt still decides
+// redaction first. A suggestion receipt keeps its original pending_filter state
+// even after assessment or deferral, so its notice is the durable catalog reply
+// recorded by that turn, never a new attachment, command, assessment or guess.
+func (b *Bot) completedKnowledgeReceiptNotice(
+	ctx context.Context,
+	in incoming,
+	command knowledge.Command,
+	result knowledge.Result,
+	recorded string,
+) (string, bool, error) {
+	if !pendingKnowledgeSuggestion(command, result) {
+		return b.knowledgeReceiptNotice(ctx, in, command, result)
+	}
+	if err := b.saveKnowledgeView(
+		ctx,
+		in.owner,
+		knowledgeView{Event: command.Event, Mode: knowledgeCommandMode(command.Name)},
+	); err != nil {
+		return "", true, err
+	}
+	return recorded, true, nil
+}
+
+func pendingKnowledgeSuggestion(command knowledge.Command, result knowledge.Result) bool {
+	return !result.Redacted && command.Name == knowledge.Suggest && result.Proposal != nil &&
+		result.Proposal.State == knowledgePendingFilter
 }

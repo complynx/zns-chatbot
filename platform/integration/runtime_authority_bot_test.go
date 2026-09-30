@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 )
 
@@ -210,6 +213,8 @@ func TestRuntimeAuthorityTerminalInboxNotice(t *testing.T) {
 	})
 	post(t, f.fake.URL+"/lab/input", map[string]any{"user": 101, "text": "Read private registration"})
 	completeInbox(t, f, 2)
+	assertPassPlanTerminal(t, f, 1)
+	pumpBotDeliveries(t, f.b)
 	require.Equal(t, 2, *calls)
 	var pending int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&pending))
@@ -227,7 +232,10 @@ func TestRuntimeAuthorityTerminalInboxNotice(t *testing.T) {
 	require.NoError(t, err)
 	require.NotContains(t, string(data), latePlanSecret)
 	completeInbox(t, f, 2)
+	assertPassPlanTerminal(t, f, 1)
+	pumpBotDeliveries(t, f.b)
 	require.Equal(t, 2, *calls)
+	require.Equal(t, cards, chatMessages(t, f, 101), "restart must not duplicate or replace the safe refusal")
 }
 
 func TestRuntimeAuthorityTerminalNoticeDeliveryRecovery(t *testing.T) {
@@ -244,15 +252,17 @@ func TestRuntimeAuthorityTerminalNoticeDeliveryRecovery(t *testing.T) {
 				return agent.Plan{View: "workflow", Text: latePlanSecret}, nil
 			})
 			update := message(1, 101, "Read private registration")
-			err = f.b.Handle(t.Context(), update)
-			require.Error(t, err)
-			require.NotContains(
-				t,
-				err.Error(),
-				"terminal registration plan",
-				"delivery failure must keep inbox retryable",
-			)
+			require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
 			assertPassPlanTerminal(t, f, 1)
+			failed := assertBotRateLimited(t, f)
+			require.Equal(t, "alice", failed.Owner)
+			require.EqualValues(t, 101, failed.Chat)
+			require.Equal(t, delivery.Deferred, failed.State)
+			require.Zero(t, failed.MessageID)
+			before := chatMessages(t, f, 101)
+			data, err := json.Marshal(before)
+			require.NoError(t, err)
+			require.NotContains(t, string(data), latePlanSecret)
 			payload, err := json.Marshal(update)
 			require.NoError(t, err)
 			_, err = f.db.Exec(t.Context(), `INSERT INTO bot.telegram_inbox(update_id,payload) VALUES(1,$1)`, payload)
@@ -261,17 +271,51 @@ func TestRuntimeAuthorityTerminalNoticeDeliveryRecovery(t *testing.T) {
 			f.b = &restarted
 			completeInbox(t, f, 2)
 			require.Equal(t, 2, *calls)
+			assertPassPlanTerminal(t, f, 1)
+			retained, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, failed.QueueReference(), false)
+			require.NoError(t, err)
+			require.Equal(t, failed, retained, "terminal intake must retain the exact deferred delivery")
+			require.Equal(t, before, chatMessages(t, f, 101), "restart must respect the provider deadline")
+			waitTerminalNoticeDeadline(t, f, failed)
+			pumpBotDeliveries(t, f.b)
+			sent, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, failed.QueueReference(), false)
+			require.NoError(t, err)
+			require.Equal(t, delivery.Succeeded, sent.State)
+			require.Equal(t, failed.Attempt+1, sent.Attempt)
+			require.Equal(t, failed.Owner, sent.Owner)
+			require.Equal(t, failed.Chat, sent.Chat)
+			require.Equal(t, failed.Reference, sent.Reference)
+			require.Positive(t, sent.MessageID)
+			require.True(t, sent.ContinuationDone)
 			notice, err := i18n.Translate(language, i18n.AgentSourceUnavailable, nil)
 			require.NoError(t, err)
 			cards := chatMessages(t, f, 101)
-			require.NotEmpty(t, cards)
+			require.Len(t, cards, len(before)+1, "initial recovery must deliver exactly one new refusal")
+			for index := range before {
+				require.Equal(t, before[index], cards[index], "recovery must preserve earlier messages")
+			}
+			require.Equal(t, sent.MessageID, cards[len(cards)-1].ID)
 			require.Contains(t, cards[len(cards)-1].Text, notice)
+			data, err = json.Marshal(cards)
+			require.NoError(t, err)
+			require.NotContains(t, string(data), latePlanSecret)
+			var effects int
+			require.NoError(t, f.db.QueryRow(t.Context(),
+				`SELECT count(*) FROM core.language_operations WHERE owner='alice'`).Scan(&effects))
+			require.Zero(t, effects, "retired plan must not execute its business action")
 			require.NoError(t, f.b.Render(t.Context(), "alice", 101))
+			pumpBotDeliveries(t, f.b)
 			require.Equal(t, cards, chatMessages(t, f, 101), "normal reconciliation must retain the refusal")
 			require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
+			pumpBotDeliveries(t, f.b)
 			require.Equal(t, cards, chatMessages(t, f, 101), "a replay must not duplicate the delivered refusal")
 			completeInbox(t, f, 2)
+			pumpBotDeliveries(t, f.b)
 			require.Equal(t, 2, *calls)
+			require.Equal(t, cards, chatMessages(t, f, 101))
+			final, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, failed.QueueReference(), false)
+			require.NoError(t, err)
+			require.Equal(t, sent, final, "completed receipt must not acquire another attempt")
 			var quota int
 			require.NoError(
 				t,
@@ -281,6 +325,19 @@ func TestRuntimeAuthorityTerminalNoticeDeliveryRecovery(t *testing.T) {
 			require.Equal(t, 1, quota)
 		})
 	}
+}
+
+func waitTerminalNoticeDeadline(t *testing.T, f *fixture, failed botdelivery.Intent) {
+	t.Helper()
+	// The fake's 429 has no retry_after: retain the configured fallback and
+	// observe its persisted deadline without moving either clock or queue state.
+	require.Positive(t, f.b.Delivery.Fallback)
+	require.LessOrEqual(t, f.b.Delivery.Fallback, time.Minute)
+	require.Eventually(t, func() bool {
+		var ready bool
+		err := f.db.QueryRow(t.Context(), `SELECT clock_timestamp()>=$1`, failed.NotBefore).Scan(&ready)
+		return err == nil && ready
+	}, f.b.Delivery.Fallback+5*time.Second, 10*time.Millisecond)
 }
 
 func TestRuntimeAuthorityTerminalNoticeDoesNotAuthorizeLegacyArchive(t *testing.T) {

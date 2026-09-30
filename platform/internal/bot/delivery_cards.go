@@ -148,6 +148,12 @@ func (b *Bot) orderCardReference(ctx context.Context, owner, key string) (botdel
 		Event:   b.currentOrderEvent(),
 	}
 	switch {
+	case strings.HasPrefix(key, refundCardPrefix) && key != refundCardPrefix+"list":
+		retired, _ := ctx.Value(botRetiredCardKey{}).(bool)
+		if !retired {
+			return ref, botdelivery.ErrBinding
+		}
+		ref.Family, ref.Object = botFamilyRefundRedaction, strings.TrimPrefix(key, refundCardPrefix)
 	case key == profileCardKey:
 		ref.Family = profileCardKey
 	case key == languageKey:
@@ -189,10 +195,12 @@ func (b *Bot) bindBotCardSource(ctx context.Context, owner string, ref *botdeliv
 	if ref.Family == botFamilyPassRedaction {
 		return nil
 	}
-	var generation int64
-	if err := b.DB.QueryRow(ctx, "SELECT COALESCE((SELECT generation FROM core.conversation_history_generations WHERE owner=$1),0)", owner).
-		Scan(&generation); err != nil {
+	generation, err := b.API.HistoryGeneration(ctx, owner)
+	if err != nil {
 		return err
+	}
+	if strings.HasPrefix(ref.Object, registrationReceiptObject) {
+		return b.bindRegistrationReceiptCard(ctx, owner, ref, generation)
 	}
 	ref.Generation = &generation
 	kinds := botCardReplyKinds(*ref)
@@ -200,7 +208,7 @@ func (b *Bot) bindBotCardSource(ctx context.Context, owner string, ref *botdeliv
 		return nil
 	}
 	var update int64
-	err := b.DB.QueryRow(ctx, "SELECT update_id FROM bot.interactions WHERE owner=$1 AND kind=ANY($2) ORDER BY id DESC LIMIT 1", owner, kinds).
+	err = b.DB.QueryRow(ctx, "SELECT update_id FROM bot.interactions WHERE owner=$1 AND kind=ANY($2) ORDER BY id DESC LIMIT 1", owner, kinds).
 		Scan(&update)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -252,8 +260,10 @@ func (b *Bot) renderBotCard(ctx context.Context, i botdelivery.Intent) (botRende
 	switch i.Reference.Family {
 	case scriptWorkflowView:
 		err = scoped.Render(ctx, i.Owner, i.Chat)
-	case ownOrdersScope:
+	case ownOrdersScope, botFamilyRefund:
 		err = scoped.RenderOrders(ctx, i.Owner, i.Chat)
+	case botFamilyRefundRedaction:
+		return scoped.renderRefundRedaction(ctx, i)
 	case profileCardKey:
 		err = scoped.RenderProfile(ctx, i.Owner, i.Chat)
 	case botFamilyKnowledge:
@@ -368,7 +378,14 @@ func (c *botCardCapture) capture(
 	if c.owner != owner || c.reference.CardKey != ref.CardKey || c.reference.Family != ref.Family {
 		return nil
 	}
+	if strings.HasPrefix(c.reference.Object, registrationReceiptObject) ||
+		strings.HasPrefix(ref.Object, registrationReceiptObject) {
+		if c.reference.Update != ref.Update || !reflect.DeepEqual(c.reference.Generation, ref.Generation) {
+			return botdelivery.ErrStale
+		}
+	}
 	if c.reference.Revision != ref.Revision || c.reference.Version != ref.Version || c.reference.Object != ref.Object ||
+		!reflect.DeepEqual(c.reference.Refund, ref.Refund) ||
 		!reflect.DeepEqual(c.reference.Authorities, ref.Authorities) ||
 		!reflect.DeepEqual(c.reference.Source, ref.Source) {
 		return botdelivery.ErrStale

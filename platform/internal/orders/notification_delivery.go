@@ -29,7 +29,7 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return delivery.Admission{}, err
+		return delivery.Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	current, err := s.lockNotificationEligibility(ctx, tx, attempt.ID)
@@ -42,7 +42,7 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 		dbgen.LockNotificationAttemptParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
 	)
 	if err != nil {
-		return delivery.Admission{}, notificationAttemptError(err)
+		return delivery.Admission{}, notificationAttemptError(core.DatabaseOperationError(err))
 	}
 
 	if row.DeliveryState != notificationPending || !row.LeaseLive {
@@ -53,7 +53,7 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 		if err = s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {
 			return delivery.Admission{}, err
 		}
-		return delivery.Admission{Reason: outcome.Reason}, tx.Commit(ctx)
+		return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	gate, err := delivery.Begin(
 		ctx,
@@ -69,19 +69,19 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 		if err = s.saveNotificationOutcome(ctx, q, attempt, outcome, "", gate.NotBefore, 0); err != nil {
 			return delivery.Admission{}, err
 		}
-		return gate, tx.Commit(ctx)
+		return gate, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	count, err := q.BeginNotificationSend(
 		ctx,
 		dbgen.BeginNotificationSendParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
 	)
 	if err != nil {
-		return delivery.Admission{}, err
+		return delivery.Admission{}, core.DatabaseOperationError(err)
 	}
 	if count != 1 {
 		return delivery.Admission{}, notificationStale()
 	}
-	return gate, tx.Commit(ctx)
+	return gate, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // CompleteNotification retains known wire outcomes even after eligibility changes.
@@ -98,13 +98,13 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	row, err := dbgen.New(tx).
 		LockNotificationAttempt(ctx, dbgen.LockNotificationAttemptParams{ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt})
 	if err != nil {
-		return notificationAttemptError(err)
+		return notificationAttemptError(core.DatabaseOperationError(err))
 	}
 
 	if (row.DeliveryState != notificationPending || !row.LeaseLive) &&
@@ -121,7 +121,7 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 	if err = s.finishNotification(ctx, tx, attempt, result.Outcome, result.Text); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func notificationOutcomeAllowed(state string, kind delivery.Kind) bool {
@@ -188,7 +188,7 @@ func (s Service) saveNotificationOutcome(
 	if err == nil && count != 1 {
 		return notificationStale()
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 // CompleteNotificationFollowup does not change the canonical transport outcome.
@@ -202,7 +202,7 @@ func (s Service) CompleteNotificationFollowup(ctx context.Context, result Notifi
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := dbgen.New(tx)
@@ -211,7 +211,7 @@ func (s Service) CompleteNotificationFollowup(ctx context.Context, result Notifi
 		dbgen.LockNotificationAttemptParams{ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt},
 	)
 	if err != nil {
-		return notificationAttemptError(err)
+		return notificationAttemptError(core.DatabaseOperationError(err))
 	}
 
 	if row.DeliveryState != "sent" || row.TelegramMessageID <= 0 {
@@ -240,12 +240,12 @@ func (s Service) CompleteNotificationFollowup(ctx context.Context, result Notifi
 		ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt, Done: result.Done,
 		Failure: result.Failure, AvailableAt: pgtype.Timestamptz{Time: deadline, Valid: true}})
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if count != 1 {
 		return notificationStale()
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func validNotificationFollowup(result NotificationFollowup) bool {
@@ -284,7 +284,7 @@ func (s Service) NotificationStatus(ctx context.Context, id int64) (Notification
 		}
 	}
 	if err != nil {
-		return NotificationDeliveryStatus{}, err
+		return NotificationDeliveryStatus{}, core.DatabaseOperationError(err)
 	}
 
 	return NotificationDeliveryStatus{

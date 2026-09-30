@@ -10,6 +10,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const MemorySourceKind = "source"
@@ -47,7 +49,7 @@ func (s Service) ConfigureSource(ctx context.Context, slot, identity string) err
  attempted_at=CASE WHEN assistant_sources.identity=excluded.identity THEN assistant_sources.attempted_at ELSE NULL END,
  refreshed_at=CASE WHEN assistant_sources.identity=excluded.identity THEN assistant_sources.refreshed_at ELSE NULL END,
  error_code=CASE WHEN assistant_sources.identity=excluded.identity THEN assistant_sources.error_code ELSE '' END`, slot, identity)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func sourceSlot(slot string) bool { return slot == AssistantQA || slot == AssistantAbout }
@@ -84,7 +86,7 @@ func (s Service) ReplaceSource(ctx context.Context, slot, identity, sourceDigest
 	encoded, _ := json.Marshal(texts)
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var current, previous, previousText string
@@ -94,7 +96,8 @@ func (s Service) ReplaceSource(ctx context.Context, slot, identity, sourceDigest
  WHERE s.slot=$1 FOR UPDATE OF s`, slot).
 		Scan(&current, &previous, &version, &previousText)
 	if err != nil {
-		return err
+		// An unconfigured slot keeps its existing pgx.ErrNoRows outcome.
+		return core.DatabaseOperationError(err)
 	}
 	if current != identity {
 		return conflict("knowledge_stale")
@@ -106,9 +109,9 @@ func (s Service) ReplaceSource(ctx context.Context, slot, identity, sourceDigest
 			slot,
 		)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
-		return tx.Commit(ctx)
+		return core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	version++
 	if _, err = tx.Exec(
@@ -117,7 +120,7 @@ func (s Service) ReplaceSource(ctx context.Context, slot, identity, sourceDigest
 		slot,
 		identity,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if err = insertSourceDocuments(ctx, tx, slot, identity, version, texts); err != nil {
 		return err
@@ -132,7 +135,7 @@ func (s Service) ReplaceSource(ctx context.Context, slot, identity, sourceDigest
 		digest(encoded),
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	_, err = tx.Exec(
 		ctx,
@@ -142,9 +145,9 @@ func (s Service) ReplaceSource(ctx context.Context, slot, identity, sourceDigest
 		sourceDigest,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func insertSourceDocuments(ctx context.Context, tx pgx.Tx, slot, identity string, version int64, texts []string) error {
@@ -165,7 +168,7 @@ func insertSourceDocuments(ctx context.Context, tx pgx.Tx, slot, identity string
 				version,
 			)
 			if err != nil {
-				return err
+				return core.DatabaseOperationError(err)
 			}
 			_, err = tx.Exec(
 				ctx,
@@ -176,7 +179,7 @@ func insertSourceDocuments(ctx context.Context, tx pgx.Tx, slot, identity string
 				body,
 			)
 			if err != nil {
-				return err
+				return core.DatabaseOperationError(err)
 			}
 			offset = end
 		}
@@ -198,7 +201,7 @@ func (s Service) SourceFailure(ctx context.Context, slot, identity, code string)
 		identity,
 		code,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func (s Service) SourceStatuses(ctx context.Context) ([]SourceStatus, error) {
@@ -207,9 +210,10 @@ func (s Service) SourceStatuses(ctx context.Context) ([]SourceStatus, error) {
 		`SELECT slot,status,version,attempted_at,refreshed_at,error_code FROM core.assistant_sources ORDER BY slot`,
 	)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[SourceStatus])
+	statuses, err := pgx.CollectRows(rows, pgx.RowToStructByPos[SourceStatus])
+	return statuses, core.DatabaseOperationError(err)
 }
 
 func (s Service) sourceReferenceCurrent(ctx context.Context, ref memoryReference) error {
@@ -220,7 +224,7 @@ func (s Service) sourceReferenceCurrent(ctx context.Context, ref memoryReference
 	err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.assistant_source_documents d JOIN core.assistant_sources s ON s.slot=d.slot AND s.identity=d.identity AND s.digest<>'' WHERE d.slot=$1 AND d.item_key=$2)`, ref.Topic, ref.Key).
 		Scan(&exists)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !exists {
 		return conflict("knowledge_stale")
@@ -249,5 +253,5 @@ func (s Service) readSource(
 	entry.Active = true
 	entry.Phase = "source"
 	entry.Source = &provenance
-	return entry, err
+	return entry, core.DatabaseOperationError(err)
 }

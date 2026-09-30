@@ -38,7 +38,7 @@ VALUES('dance',1,20,200,clock_timestamp()+interval '1 day',true)`)
 	results := make(chan error, 2)
 	for range 2 {
 		group.Go(func() {
-			_, scanErr := (passbooking.Service{DB: db}).ProcessDeadlines(t.Context())
+			_, scanErr := (passbooking.Service{DB: db, Delivery: service.Delivery}).ProcessDeadlines(t.Context())
 			results <- scanErr
 		})
 	}

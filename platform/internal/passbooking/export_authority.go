@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const MaxExportEvents = 1000
@@ -46,11 +48,14 @@ func exportSnapshotEvents(ctx context.Context, tx pgx.Tx, actor string) ([]strin
 		MaxExportEvents+1,
 	)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	events, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
+	}
+	if len(events) == 0 {
+		return nil, forbidden()
 	}
 	if !ValidExportEvents(events) {
 		return nil, exportTooLarge()
@@ -68,7 +73,7 @@ func (s Service) CheckExportSnapshot(ctx context.Context, actor string, events [
 	err := s.DB.QueryRow(ctx, exportEvents+`SELECT count(*)=$3 FROM allowed_events WHERE id=ANY($2::text[])`, actor, events, len(events)).
 		Scan(&allowed)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !allowed {
 		return forbidden()

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/broadcastprofile"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 )
 
@@ -45,7 +46,7 @@ func (s Service) PrepareLanguageInTx(
 		return nil, fail(http.StatusNotFound, "user_not_found")
 	}
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	p.found, err = languageReplay(ctx, tx, owner, input.OperationKey, language, input.Initialize)
 	return p, err
@@ -79,7 +80,7 @@ func (p *PreparedLanguage) Apply(ctx context.Context) (Preferences, error) {
 	err := p.tx.QueryRow(ctx, `UPDATE core.users SET language=CASE WHEN $3 AND language<>'' THEN language ELSE $2 END
 		WHERE id=$1 RETURNING COALESCE(NULLIF(language,''),'en')`, p.owner, p.language, p.input.Initialize).Scan(&value.Language)
 	if err != nil {
-		return value, err
+		return value, core.DatabaseOperationError(err)
 	}
 	if !p.input.Initialize || (p.rawLanguage == "" && p.input.Language != "") {
 		if err = broadcastprofile.Language(ctx, p.tx, p.owner, p.input.Language); err != nil {
@@ -95,6 +96,7 @@ func (p *PreparedLanguage) Apply(ctx context.Context) (Preferences, error) {
 			p.language,
 			p.input.Initialize,
 		)
+		err = core.DatabaseOperationError(err)
 	}
 	return value, err
 }

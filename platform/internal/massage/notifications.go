@@ -5,12 +5,12 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/massage/dbgen"
 )
 
@@ -26,7 +26,7 @@ func (s Service) Preferences(ctx context.Context, actor, event string) (Preferen
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, problem(http.StatusForbidden, "forbidden")
 	}
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }
 
 func (s Service) SetPreferences(
@@ -36,7 +36,7 @@ func (s Service) SetPreferences(
 ) (Preferences, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Preferences{}, err
+		return Preferences{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	prepared, err := s.PreparePreferencesInTx(ctx, tx, actor, event, preferences)
@@ -47,7 +47,7 @@ func (s Service) SetPreferences(
 	if err != nil {
 		return Preferences{}, err
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // PreparedPreferences holds the current practitioner row until the caller commits.
@@ -68,9 +68,9 @@ func (s Service) PreparePreferencesInTx(
 	err := tx.QueryRow(ctx, `SELECT owner FROM core.massage_specialists WHERE event_id=$1 AND owner=$2 FOR UPDATE`, event, actor).
 		Scan(&owner)
 	if errors.Is(err, pgx.ErrNoRows) {
-		err = problem(http.StatusForbidden, "forbidden")
+		return p, problem(http.StatusForbidden, "forbidden")
 	}
-	return p, err
+	return p, core.DatabaseOperationError(err)
 }
 
 func (p PreparedPreferences) Apply(ctx context.Context) (Preferences, error) {
@@ -96,7 +96,7 @@ func setPreferences(
 		preferences.Next,
 	)
 	if err != nil {
-		return Preferences{}, err
+		return Preferences{}, core.DatabaseOperationError(err)
 	}
 	if result.RowsAffected() != 1 {
 		return Preferences{}, problem(http.StatusForbidden, "forbidden")
@@ -110,13 +110,13 @@ func setPreferences(
 func (s Service) QueueReminders(ctx context.Context, event string) (int64, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	rows, err := dbgen.New(tx).
 		QueueNotificationReminders(ctx, dbgen.QueueNotificationRemindersParams{BotID: s.Delivery.BotID, Event: event, Now: pgtype.Timestamptz{Time: s.now(), Valid: true}})
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	var pending []delivery.Registration
 	for _, row := range rows {
@@ -134,7 +134,7 @@ func (s Service) QueueReminders(ctx context.Context, event string) (int64, error
 	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
 		return 0, err
 	}
-	return int64(len(rows)), tx.Commit(ctx)
+	return int64(len(rows)), core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 type Notice struct {
@@ -159,11 +159,12 @@ func (s Service) PendingNotices(ctx context.Context, actor string) ([]Notice, er
 	AND (n.kind<>'additional' OR b.starts_at>=$2)
 	ORDER BY n.id LIMIT 100`, actor, s.now())
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
-	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (Notice, error) {
+	notices, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Notice, error) {
 		var n Notice
 		scanErr := row.Scan(&n.ID, &n.Booking, &n.Kind)
 		return n, scanErr
 	})
+	return notices, core.DatabaseOperationError(err)
 }

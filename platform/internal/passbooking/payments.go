@@ -40,7 +40,7 @@ func (s *snapshot) submitProof(ctx context.Context, tx pgx.Tx, b *Booking, c Com
 		return forbidden()
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	participants := []*Booking{b}
 	if b.Partner != "" {
@@ -68,7 +68,7 @@ func (s *snapshot) submitProof(ctx context.Context, tx pgx.Tx, b *Booking, c Com
 		s.now,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, participant := range participants {
 		_, err = tx.Exec(
@@ -79,7 +79,7 @@ func (s *snapshot) submitProof(ctx context.Context, tx pgx.Tx, b *Booking, c Com
 			participant.AssignedAt,
 		)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		_, err = tx.Exec(
 			ctx,
@@ -89,7 +89,7 @@ func (s *snapshot) submitProof(ctx context.Context, tx pgx.Tx, b *Booking, c Com
 			id,
 		)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		participant.State = paid
 		s.touch(participant)
@@ -110,7 +110,7 @@ WHERE p.id=$1 AND p.event_id=$2 AND b.owner=$3`, c.PaymentAttempt, c.Event, c.Ta
 		return conflict("pass_payment_stale")
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	owners, err := s.paymentParticipants(ctx, tx, c)
 	if err != nil {
@@ -118,7 +118,7 @@ WHERE p.id=$1 AND p.event_id=$2 AND b.owner=$3`, c.PaymentAttempt, c.Event, c.Ta
 	}
 	decision = paymentAccepted
 	if c.Name == commandProofReject {
-		decision = "rejected"
+		decision = paymentRejected
 	}
 	_, err = tx.Exec(
 		ctx,
@@ -129,7 +129,7 @@ WHERE p.id=$1 AND p.event_id=$2 AND b.owner=$3`, c.PaymentAttempt, c.Event, c.Ta
 		s.now,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	for _, owner := range owners {
 		b := s.bookings[owner]
@@ -150,7 +150,7 @@ COALESCE(b.state='paid' AND b.assigned_at=p.assigned_at,false)
 FROM core.pass_payment_participants p LEFT JOIN core.pass_bookings b ON b.owner=p.owner AND b.event_id=$2
 WHERE p.attempt=$1 ORDER BY p.owner`, c.PaymentAttempt, c.Event)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	var owners []string
@@ -158,7 +158,7 @@ WHERE p.attempt=$1 ORDER BY p.owner`, c.PaymentAttempt, c.Event)
 		var owner string
 		var attached, current bool
 		if err = rows.Scan(&owner, &attached, &current); err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		// Cancellation or a new assignment detaches the old attempt. Reviewing
 		// its surviving participant must not revive or alter the detached one.
@@ -171,7 +171,7 @@ WHERE p.attempt=$1 ORDER BY p.owner`, c.PaymentAttempt, c.Event)
 		owners = append(owners, owner)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if len(owners) == 0 {
 		return nil, conflict("pass_payment_stale")
@@ -198,8 +198,9 @@ AND (b.owner=$3 OR EXISTS(SELECT 1 FROM core.pass_payment_admins a WHERE a.event
 		if err != nil && actor == owner {
 			return s.absentOwnerPayment(ctx, actor, eventID, payment, err)
 		}
+		return payment, err
 	}
-	return payment, err
+	return payment, core.DatabaseOperationError(err)
 }
 
 // PaymentProof binds file authorization and current attachment in one statement.
@@ -216,10 +217,14 @@ AND (b.owner=$3 OR EXISTS(SELECT 1 FROM core.pass_payment_admins a WHERE a.event
 		Scan(&proof.ID, &proof.Filename, &proof.Body, &proof.Version, &proof.Attempt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		payment, paymentErr := s.Payment(ctx, actor, eventID, owner)
+		if core.IsDatabaseFailure(paymentErr) || errors.Is(paymentErr, context.Canceled) ||
+			errors.Is(paymentErr, context.DeadlineExceeded) {
+			return orders.Proof{}, paymentErr
+		}
 		if paymentErr == nil && payment.ProofUnavailable {
 			return orders.Proof{}, conflict("pass_receipt_unavailable")
 		}
 		return orders.Proof{}, forbidden()
 	}
-	return proof, err
+	return proof, core.DatabaseOperationError(err)
 }

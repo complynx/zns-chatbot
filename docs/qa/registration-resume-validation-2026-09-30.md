@@ -1,0 +1,12 @@
+# Registration implementation checks — resumed 30 September
+
+Root applied exact hash-guarded candidates after fresh independent static reviews: shared target binding (QA195) and receipt observation rev3 (QA197). Full stage C and Functional QA remain open.
+
+- Shared target binding first run: 45 PASS test events, no FAIL/SKIP, exit0; includes target identity/assignment continuity plus PostgreSQL takeover/assignment groups. Log `qa.local/go-resume-20260929/c-registration-binding-pg1.jsonl`.
+- Initial receipt run preserved its encoding fixture failure (monotonic time is not JSON data); corrected deterministic timestamp retains full authority equality. SQL/cancellation provenance separate run: 2 PASS events, exit0.
+- Final selected combined receipt/binding run: 31 PASS events, no FAIL/SKIP, exit0; owner/repeated/foreign/revoked/deleted-history, authority encoding, SQL/cancellation and target identity checks. Log `r56-c-receipt-pg2.jsonl`.
+- Affected pinned lint covers agenthost, interaction, passbooking, derivedmutation, bot and integration: exit0 after reviewed receipt helpers, pinned formatting and independent test parallelism. Log `r56-c-platform-lint3.log`. Fresh QA199 confirmed the parallelism delta; original QA197 confirmed eight applied files exact and two tag-alignment-only. Earlier failed lint logs are retained.
+
+Counts include package outcomes and subtests, not independent product requirements. PostgreSQL was the isolated loopback55432 stand. No production writes. EN/RU Telegram-like current-state, retries and changed-rights acceptance still required on the resulting source.
+
+Shared menu reads then applied after independent QA200. Coordinator unit selection:16PASS events, exit0. PostgreSQL takeover selection:10PASS; separate original menu selection:13PASS; noFAIL/SKIP, both exit0. Logs c-registration-menu-unit1.jsonl / c-registration-menu-pg1.jsonl / c-registration-menu-pg2.jsonl. The first PG selector inadvertently selected only takeover; the separate menu run supplies the omitted scope. Menu affectedlint1 found12 formatting/testparallel findings; external correction received clean freshQA202 and was applied after live provider reference review finished. Pinned affected lint2 exit0 (c-registration-menu-lint2.log). Entire interaction package then gave101PASS/0FAIL/SKIP exit0 (c-registration-interaction-full1.jsonl). No menu Functional acceptance claimed.

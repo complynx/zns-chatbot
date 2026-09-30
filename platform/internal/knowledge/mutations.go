@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 func factVersion(ctx context.Context, tx pgx.Tx, c Command) (int64, error) {
@@ -14,7 +16,7 @@ func factVersion(ctx context.Context, tx pgx.Tx, c Command) (int64, error) {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
 	}
-	return version, err
+	return version, core.DatabaseOperationError(err)
 }
 
 func curate(ctx context.Context, tx pgx.Tx, c Command) (Result, error) {
@@ -49,7 +51,7 @@ func curate(ctx context.Context, tx pgx.Tx, c Command) (Result, error) {
 		fact.Active,
 	)
 	if err != nil {
-		return Result{}, err
+		return Result{}, core.DatabaseOperationError(err)
 	}
 	if c.Event == "" {
 		fact.Phase = "general"
@@ -57,7 +59,7 @@ func curate(ctx context.Context, tx pgx.Tx, c Command) (Result, error) {
 		err = tx.QueryRow(ctx, `SELECT CASE WHEN finishes_at<=clock_timestamp() THEN 'past' ELSE 'active_or_upcoming' END FROM core.events WHERE id=$1`, c.Event).
 			Scan(&fact.Phase)
 	}
-	return Result{Fact: &fact}, err
+	return Result{Fact: &fact}, core.DatabaseOperationError(err)
 }
 
 func suggest(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, error) {
@@ -68,7 +70,7 @@ func suggest(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, e
 	err := tx.QueryRow(ctx, `SELECT count(*) FROM core.knowledge_proposals WHERE owner=$1 AND state IN ('pending_filter','awaiting_submission','pending_review')`, actor).
 		Scan(&count)
 	if err != nil {
-		return Result{}, err
+		return Result{}, core.DatabaseOperationError(err)
 	}
 	if count >= MaxPending {
 		return Result{}, conflict("knowledge_pending_capacity")
@@ -82,7 +84,7 @@ func suggest(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, e
 		c.Event, actor, c.Topic, c.FactKey, c.Text, version, pendingFilter).
 		Scan(&id)
 	if err != nil {
-		return Result{}, err
+		return Result{}, core.DatabaseOperationError(err)
 	}
 	p, err := readProposal(ctx, tx, id, c.Event)
 	return Result{Proposal: &p}, err
@@ -121,7 +123,7 @@ func scanProposal(row pgx.Row) (Proposal, error) {
 		&p.CreatedAt,
 		&p.Submitted,
 	)
-	return p, err
+	return p, core.DatabaseOperationError(err)
 }
 
 func decide(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, error) {
@@ -189,7 +191,7 @@ func updateProposal(ctx context.Context, tx pgx.Tx, p Proposal, reason string) (
 		p.Version,
 		p.Reason,
 	)
-	return p, err
+	return p, core.DatabaseOperationError(err)
 }
 
 func writeMemo(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result, error) {
@@ -197,7 +199,7 @@ func writeMemo(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result,
 	err := tx.QueryRow(ctx, `SELECT version FROM core.knowledge_memos WHERE owner=$1 AND memo_key=$2`, actor, c.FactKey).
 		Scan(&version)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return Result{}, err
+		return Result{}, core.DatabaseOperationError(err)
 	}
 	if version != c.Version {
 		return Result{}, conflict("knowledge_stale")
@@ -210,7 +212,7 @@ func writeMemo(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result,
 		err = tx.QueryRow(ctx, `SELECT count(*) FROM core.knowledge_memos WHERE owner=$1 AND active AND memo_key<>$2`, actor, c.FactKey).
 			Scan(&count)
 		if err != nil {
-			return Result{}, err
+			return Result{}, core.DatabaseOperationError(err)
 		}
 		if count >= MaxMemos {
 			return Result{}, conflict("knowledge_memo_capacity")
@@ -219,5 +221,5 @@ func writeMemo(ctx context.Context, tx pgx.Tx, actor string, c Command) (Result,
 	memo := Memo{Key: c.FactKey, Text: c.Text, Version: version + 1, Active: c.Name == MemoSet}
 	_, err = tx.Exec(ctx, `INSERT INTO core.knowledge_memos(owner,memo_key,body,version,active) VALUES($1,$2,$3,$4,$5)
  ON CONFLICT(owner,memo_key) DO UPDATE SET body=excluded.body,version=excluded.version,active=excluded.active`, actor, c.FactKey, c.Text, memo.Version, memo.Active)
-	return Result{Memo: &memo}, err
+	return Result{Memo: &memo}, core.DatabaseOperationError(err)
 }

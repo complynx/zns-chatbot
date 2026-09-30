@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/complynx/zns-chatbot/platform/internal/conversation/fence"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 
 	"github.com/jackc/pgx/v5"
@@ -33,7 +34,7 @@ func (s Service) Assess(ctx context.Context, actor string, input Assessment) (Re
 		return Result{}, missing()
 	}
 	if err != nil {
-		return Result{}, err
+		return Result{}, core.DatabaseOperationError(err)
 	}
 	decision := "reject"
 	if input.Worthwhile {
@@ -56,7 +57,7 @@ func (s Service) execute(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Result{}, err
+		return Result{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	proposalSource, refs, err := knowledgeCommandSources(ctx, tx, c, source)
@@ -92,7 +93,7 @@ func (s Service) execute(
 		); err != nil {
 			return Result{}, err
 		}
-		return previous, tx.Commit(ctx)
+		return previous, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 
 	if err = lockKnowledgeEffect(ctx, tx, actor, source, proposalSource); err != nil {
@@ -118,7 +119,7 @@ func (s Service) execute(
 	if err = saveKnowledgeOperation(ctx, tx, actor, c, result, keyHash, requestHash); err != nil {
 		return Result{}, err
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func saveKnowledgeOperation(
@@ -142,7 +143,7 @@ func saveKnowledgeOperation(
 		data,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	subject, version := resultSubject(result)
 	_, err = tx.Exec(
@@ -154,10 +155,7 @@ func saveKnowledgeOperation(
 		subject,
 		version,
 	)
-	if err != nil {
-		return err
-	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func lockActor(ctx context.Context, tx pgx.Tx, actor string) error {
@@ -166,7 +164,7 @@ func lockActor(ctx context.Context, tx pgx.Tx, actor string) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return forbidden()
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func lockScope(ctx context.Context, tx pgx.Tx, scope string) error {
@@ -177,18 +175,21 @@ func lockScope(ctx context.Context, tx pgx.Tx, scope string) error {
 			return missing()
 		}
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		if _, err = tx.Exec(
 			ctx,
 			`INSERT INTO core.knowledge_scopes(scope,event_id) VALUES($1,$1) ON CONFLICT DO NOTHING`,
 			scope,
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	var found string
-	return tx.QueryRow(ctx, `SELECT scope FROM core.knowledge_scopes WHERE scope=$1 FOR UPDATE`, scope).Scan(&found)
+	// DatabaseOperationError keeps an unexpected pgx.ErrNoRows unchanged.
+	return core.DatabaseOperationError(
+		tx.QueryRow(ctx, `SELECT scope FROM core.knowledge_scopes WHERE scope=$1 FOR UPDATE`, scope).Scan(&found),
+	)
 }
 
 func authorize(ctx context.Context, tx pgx.Tx, actor string, c Command) error {
@@ -213,7 +214,7 @@ func replay(ctx context.Context, tx pgx.Tx, actor, key, hash string) (Result, bo
 		return Result{}, false, nil
 	}
 	if err != nil {
-		return Result{}, false, err
+		return Result{}, false, core.DatabaseOperationError(err)
 	}
 	if previous != hash {
 		return Result{}, false, conflict("idempotency_conflict")
@@ -396,14 +397,19 @@ func retainKnowledgeReplay(
 		return replayErr
 	}
 	if terminal {
-		if _, err := tx.Exec(
+		// Encode separately so a JSON failure is not attributed to the UPDATE.
+		data, err := json.Marshal(previous)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec(
 			ctx,
 			`UPDATE core.knowledge_operations SET result=$3 WHERE actor=$1 AND key_hash=$2`,
 			actor,
 			keyHash,
-			previous,
+			data,
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	return nil

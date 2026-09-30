@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // CommandReceipt recovers only a previously committed operation. It never
@@ -25,7 +27,7 @@ func (s Service) CommandReceipt(
 	source = source.Clone()
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Result{}, false, err
+		return Result{}, false, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	proposal := proposalCausalRecord{}
@@ -64,11 +66,11 @@ func (s Service) CommandReceipt(
 			keyHash,
 			result,
 		); err != nil {
-			return Result{}, false, err
+			return Result{}, false, core.DatabaseOperationError(err)
 		}
 	}
 	if err = verifyPrivateDeletion(ctx, tx, actor, c, source, &result); err != nil {
 		return Result{}, false, err
 	}
-	return result, true, tx.Commit(ctx)
+	return result, true, core.DatabaseOperationError(tx.Commit(ctx))
 }

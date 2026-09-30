@@ -21,6 +21,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/identityprovision"
 	"github.com/complynx/zns-chatbot/platform/internal/api"
 	"github.com/complynx/zns-chatbot/platform/internal/appservices"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -310,8 +311,10 @@ func TestIdentityProvisioningSQLFailureKeepsReservation(t *testing.T) {
 	require.NoError(t, err)
 	_, err = service.EnsureTelegram(t.Context(), input)
 	var databaseError *pgconn.PgError
-	require.ErrorAs(t, err, &databaseError)
-	require.Equal(t, "40001", databaseError.Code)
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.NotErrorAs(t, err, &databaseError)
+	require.ErrorIs(t, err, core.ErrDatabaseSerialization)
+	require.NotContains(t, err.Error(), "synthetic transaction failure")
 	require.NotErrorIs(t, err, identityprovision.ErrConflict)
 	var reserved identityprovision.Binding
 	var ready bool
@@ -389,7 +392,7 @@ func TestIdentityProvisioningFirstMessageContinues(t *testing.T) {
 	links := identity.Links{DB: f.db, Issuer: service.Issuer, BotID: service.BotID}
 	server := httptest.NewServer(api.WithTelegramProvisioning(
 		api.Handler(
-			appservices.NewServices(f.db, appservices.Options{}),
+			notificationFixtureServices(f.db, appservices.Options{}),
 			signer,
 			slog.New(slog.DiscardHandler),
 		),
@@ -417,7 +420,7 @@ func TestIdentityProvisioningFirstMessageContinues(t *testing.T) {
 	update := message(9100, 95107, "/orders")
 	update.Message.From.FirstName = "Synthetic"
 	update.Message.From.LanguageCode = "en"
-	handle(t, f.b, update)
+	handleVisible(t, f.b, update)
 	bound, err := links.Telegram(t.Context(), 95107)
 	require.NoError(t, err)
 	var allowed bool
@@ -433,11 +436,11 @@ func TestIdentityProvisioningFirstMessageContinues(t *testing.T) {
 	)
 	require.Positive(t, cards, "the first request must continue to its ordinary orders menu")
 	require.Positive(t, delivered.Load())
-	handle(t, f.b, update)
+	handleVisible(t, f.b, update)
 	restarted := *f.b
 	update.ID++
 	update.Message.ID++
-	handle(t, &restarted, update)
+	handleVisible(t, &restarted, update)
 	require.Equal(t, 1, onboardingCalls)
 	require.Equal(t, 1, provider.creates)
 }

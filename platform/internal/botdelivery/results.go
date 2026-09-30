@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -35,13 +36,13 @@ func (s Service) EnqueueResult(ctx context.Context, in ResultRequest) error {
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = s.enqueueResultTx(ctx, tx, in); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 func (s Service) enqueueResultTx(ctx context.Context, tx pgx.Tx, in ResultRequest) error {
 	owner, chat, update, effect, ref, result, target := in.Owner, in.Chat, in.Update, in.Effect, in.Reference, in.Result, in.Target
@@ -60,9 +61,9 @@ func (s Service) enqueueResultTx(ctx context.Context, tx pgx.Tx, in ResultReques
 	if !ref.Valid(owner) {
 		return ErrBinding
 	}
-	phase := "send"
+	phase := phaseSend
 	if target > 0 {
-		phase = "edit"
+		phase = phaseEdit
 	}
 	i := Intent{
 		BotID:     s.Delivery.BotID,
@@ -98,7 +99,7 @@ func (s Service) enqueueResultTx(ctx context.Context, tx pgx.Tx, in ResultReques
 		target,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	current, err := Read(ctx, tx, i.BotID, key, true)
 	if err != nil {
@@ -149,7 +150,7 @@ func bindBotResultGeneration(
 	} else if ref.Generation != nil {
 		result.Generation = *ref.Generation
 	} else if err := tx.QueryRow(ctx, "SELECT COALESCE((SELECT generation FROM core.conversation_history_generations WHERE owner=$1),0)", owner).Scan(&result.Generation); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return nil
 }
@@ -178,11 +179,16 @@ func storeBotResult(ctx context.Context, tx pgx.Tx, i Intent, result StoredResul
 		raw,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	var stored StoredResult
+	var content []byte
 	if err = tx.QueryRow(ctx, "SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3", i.Owner, i.Reference.Update, i.Reference.ResultKind).
-		Scan(&stored); err != nil {
+		Scan(&content); err != nil {
+		return core.DatabaseOperationError(err)
+	}
+	// An existing incompatible row keeps its decode provenance.
+	var stored StoredResult
+	if err = json.Unmarshal(content, &stored); err != nil {
 		return err
 	}
 	if stored.Generation != result.Generation || !reflect.DeepEqual(stored.Source, result.Source) {

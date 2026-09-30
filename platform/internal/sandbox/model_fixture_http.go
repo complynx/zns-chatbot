@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/api"
@@ -16,6 +17,7 @@ func (f *Fake) modelFixtureRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /lab/model/fixtures", f.installModelFixture)
 	mux.HandleFunc("GET /lab/model/state", f.modelFixtureState)
 	mux.HandleFunc("POST /lab/model/plan", f.modelFixturePlan)
+	mux.HandleFunc("POST /lab/model/knowledge-assessment", f.modelFixtureAssessment)
 }
 
 func (f *Fake) installModelFixture(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +45,7 @@ func (f *Fake) modelFixturePlan(w http.ResponseWriter, r *http.Request) {
 	turn, turnErr := strconv.Atoi(r.Header.Get("X-Sandbox-Turn"))
 	owner := r.Header.Get("X-Sandbox-Actor")
 	if updateErr != nil || turnErr != nil || !syntheticFixtureOwner(owner) || update <= 0 || turn < 0 {
-		api.JSON(w, http.StatusForbidden, map[string]string{errorField: "invalid fixture scope"})
+		api.JSON(w, http.StatusForbidden, map[string]string{errorField: invalidFixtureScope})
 		return
 	}
 	var input agent.Input
@@ -66,7 +68,7 @@ func (f *Fake) modelFixtureState(w http.ResponseWriter, r *http.Request) {
 	owner := r.URL.Query().Get("owner")
 	update, err := strconv.ParseInt(r.URL.Query().Get("update_id"), 10, 64)
 	if !syntheticFixtureOwner(owner) || err != nil || update <= 0 {
-		api.JSON(w, http.StatusBadRequest, map[string]string{errorField: "invalid fixture scope"})
+		api.JSON(w, http.StatusBadRequest, map[string]string{errorField: invalidFixtureScope})
 		return
 	}
 	f.modelFixtures.mu.Lock()
@@ -80,6 +82,7 @@ func (f *Fake) modelFixtureState(w http.ResponseWriter, r *http.Request) {
 		w,
 		http.StatusOK,
 		modelFixtureState{
+			Assessment: value.assessmentState,
 			UpdateID:   update,
 			NextTurn:   value.next,
 			Total:      len(value.steps),
@@ -99,6 +102,9 @@ func readFixtureBody(w http.ResponseWriter, r *http.Request, limit int64, target
 }
 
 func strictFixtureJSON(data []byte, target any) error {
+	if !utf8.Valid(data) {
+		return errors.New("invalid fixture encoding")
+	}
 	keys := json.NewDecoder(bytes.NewReader(data))
 	if err := fixtureJSONValue(keys, 0); err != nil {
 		return err

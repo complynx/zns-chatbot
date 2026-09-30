@@ -68,12 +68,17 @@ func TestHistoryArchiveRejectionSurvivesInboxRestart(t *testing.T) {
  BEGIN IF OLD.update_id=1 THEN RAISE EXCEPTION 'synthetic acknowledgement failure'; END IF; RETURN OLD; END $$;
  CREATE TRIGGER hold_archive_ack BEFORE DELETE ON bot.telegram_inbox FOR EACH ROW EXECUTE FUNCTION bot.hold_archive_ack()`)
 	require.NoError(t, err)
-	runInboxUntil(t, f, func() bool {
-		var terminal bool
-		queryErr := f.db.QueryRow(t.Context(), `SELECT COALESCE((kind='terminal' AND state='privacy_terminal' AND reason='history_deleted'),false) FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
-			Scan(&terminal)
-		return queryErr == nil && terminal
-	})
+	runInboxDatabaseFailure(t, f)
+	var terminal bool
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT
+ kind='terminal' AND state='privacy_terminal' AND reason='history_deleted'
+ FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).Scan(&terminal))
+	require.True(t, terminal)
+	var failures int
+	require.NoError(t,
+		f.db.QueryRow(t.Context(), `SELECT failures FROM bot.telegram_inbox WHERE update_id=1`).Scan(&failures),
+	)
+	require.Zero(t, failures, "SQL acknowledgement failure must not consume the poison budget")
 	require.True(t, deleted.Load())
 	require.EqualValues(t, 1, calls.Load())
 	var count int
@@ -105,7 +110,7 @@ func TestHistoryArchiveRejectionSurvivesInboxRestart(t *testing.T) {
 		assert.NotContains(t, string(raw), canary)
 		return agent.Plan{View: "workflow", Text: "fresh reply"}, nil
 	})
-	completeInbox(t, f, 3)
+	completeInboxAfterCooldown(t, f, 3, 1)
 	require.EqualValues(t, 2, calls.Load())
 	restartedAgain := *f.b
 	f.b = &restartedAgain

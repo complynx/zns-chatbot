@@ -23,10 +23,15 @@ func runAPI(
 	logger *slog.Logger,
 	cfg config.Config,
 	runtime *observability.Runtime,
-) error {
+) (runErr error) {
 	verify, identityAdapter, identityLinks, err := runtimeAuth(db, cfg, signer)
 	if err != nil {
 		return err
+	}
+	if identityAdapter != nil && runtime != nil {
+		if err = runtime.RegisterIdentityCaches(observability.IdentityCacheAPI, identityAdapter); err != nil {
+			return err
+		}
 	}
 	deliverySettings, err := cfg.DeliverySettings()
 	if err != nil {
@@ -56,11 +61,14 @@ func runAPI(
 		AnnouncementBindings: &destination.Bindings{},
 		DestinationResolver:  tg,
 	})
-	stop, err := startProductMaintenance(ctx, db, logger, cfg, services)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	fatal := newFatalLatch(cancel)
+	stop, err := startProductMaintenance(ctx, db, logger, cfg, services, fatal.report)
 	if err != nil {
-		return err
+		return fatal.result(err)
 	}
-	defer stop()
+	defer func() { stop(); runErr = fatal.result(runErr) }()
 	handler, closeProvisioning, err := configureCoreProvisioning(ctx,
 		api.AuthenticatedHandler(
 			services,
@@ -82,11 +90,14 @@ func startMaintenance(
 	services appservices.Services,
 	logger *slog.Logger,
 	after time.Duration,
+	onFatal func(error),
 ) (func(), error) {
 	service := services.Orders
 	attachments := services.Media
 	registrations := services.Registration
-	refreshAnnouncementBindings(ctx, services, logger)
+	if err := refreshAnnouncementBindings(ctx, services, logger); err != nil {
+		return nil, err
+	}
 	if _, err := registrations.ProcessPassportReminders(ctx); err != nil {
 		return nil, err
 	}
@@ -96,39 +107,54 @@ func startMaintenance(
 	if _, err := service.QueueDueReminders(ctx, after); err != nil {
 		return nil, err
 	}
+	if _, err := service.RouteRefunds(ctx); err != nil {
+		return nil, err
+	}
 	if _, err := registrations.ProcessDeadlines(ctx); err != nil {
+		if fatal := databaseFatal(err); fatal != nil {
+			return nil, fatal
+		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 		logger.WarnContext(ctx, "pass deadline scan pending", "error", err)
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	finished := make(chan struct{})
-	go func() {
-		defer close(finished)
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				runMaintenanceTick(ctx, services, logger, after)
-			}
-		}
-	}()
-	return func() { cancel(); <-finished }, nil
+	tick := func(live context.Context) error { return runMaintenanceTick(live, services, logger, after) }
+	return startTicks(ctx, time.Minute, tick, onFatal), nil
 }
 
-func runMaintenanceTick(ctx context.Context, services appservices.Services, logger *slog.Logger, after time.Duration) {
-	refreshAnnouncementBindings(ctx, services, logger)
+// runMaintenanceTick returns only a safe positive database failure, stopping
+// the pass there. Ordinary provider/domain failures are logged and retried on
+// the next tick.
+func runMaintenanceTick(
+	ctx context.Context, services appservices.Services, logger *slog.Logger, after time.Duration,
+) error {
+	if err := refreshAnnouncementBindings(ctx, services, logger); err != nil {
+		return err
+	}
 	if _, err := services.Media.PruneExpired(ctx); err != nil {
+		if fatal := databaseFatal(err); fatal != nil {
+			return fatal
+		}
 		logger.WarnContext(ctx, "media cleanup pending")
 	}
 	if _, err := services.Orders.QueueDueReminders(ctx, after); err != nil {
+		if fatal := databaseFatal(err); fatal != nil {
+			return fatal
+		}
 		logger.WarnContext(ctx, "reminder scan pending", "error", err)
 	}
+	if _, err := services.Orders.RouteRefunds(ctx); err != nil {
+		if fatal := databaseFatal(err); fatal != nil {
+			return fatal
+		}
+		logger.WarnContext(ctx, "refund routing pending", "error", err)
+	}
 	if _, err := services.Registration.ProcessDeadlines(ctx); err != nil {
+		if fatal := databaseFatal(err); fatal != nil {
+			return fatal
+		}
 		logger.WarnContext(ctx, "pass deadline scan pending", "error", err)
 	}
+	return nil
 }

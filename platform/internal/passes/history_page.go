@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // HistoryPage contains bounded owner-only metadata, newest first.
@@ -24,11 +26,11 @@ func (s Service) HistoryPage(ctx context.Context, actor string, before int64) (H
 	rows, err := s.DB.Query(ctx, `SELECT version,action,field,origin,at FROM core.pass_profile_history
  WHERE owner=$1 AND ($2::bigint=0 OR version<$2) ORDER BY version DESC LIMIT $3`, actor, before, limit+1)
 	if err != nil {
-		return HistoryPage{}, err
+		return HistoryPage{}, core.DatabaseOperationError(err)
 	}
 	changes, err := pgx.CollectRows(rows, pgx.RowToStructByPos[Change])
 	if err != nil {
-		return HistoryPage{}, err
+		return HistoryPage{}, core.DatabaseOperationError(err)
 	}
 	page := HistoryPage{Items: changes}
 	if len(changes) > limit {

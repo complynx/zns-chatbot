@@ -46,8 +46,9 @@ func TestFoodDeadlineDirectOperationsAndNormalEntry(t *testing.T) {
 			requireCode(t, err, "food_payment_unavailable")
 			original, err := f.b.TG.Send(t.Context(), telegram.Send{ChatID: 101, Text: "Open food"})
 			require.NoError(t, err)
-			handle(t, f.b, aliceCallback(29300, original.ID, "food|submit_activities"))
+			handleVisible(t, f.b, aliceCallback(29300, original.ID, "food|submit_activities"))
 			messages := chatMessages(t, f, 101)
+			require.NotEmpty(t, messages)
 			card := messages[len(messages)-1]
 			if language == "en" {
 				assert.Contains(t, card.Text, "Meal ordering is closed")

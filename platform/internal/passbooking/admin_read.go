@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
 )
 
@@ -33,7 +34,7 @@ func (s Service) AdminTarget(ctx context.Context, actor, eventID string, telegra
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	e, err := readEvent(ctx, tx, eventID)
@@ -52,7 +53,7 @@ FROM core.users u LEFT JOIN core.pass_profiles p ON p.owner=u.id WHERE u.telegra
 		return result, forbidden()
 	}
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	records, err := readBookings(ctx, tx, eventID)
 	if err != nil {
@@ -66,17 +67,17 @@ FROM core.users u LEFT JOIN core.pass_profiles p ON p.owner=u.id WHERE u.telegra
 		err = tx.QueryRow(ctx, `SELECT role FROM core.pass_bookings WHERE owner=$1 ORDER BY created_at DESC,event_id LIMIT 1`, result.Booking.Owner).
 			Scan(&result.Role)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			return result, err
+			return result, core.DatabaseOperationError(err)
 		}
 	}
 	var now time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	result.CurrentTier = newSnapshot(e, records, now).currentAdminTier()
 	result.CanAssign = now.Before(e.finishes) && result.Booking.State != pending
 	result.CanCreateFromProfile = result.CanAssign &&
 		(result.Booking.Version == 0 || result.Booking.State == cancelled) &&
 		(result.Role == passallocation.Leader || result.Role == passallocation.Follower)
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }

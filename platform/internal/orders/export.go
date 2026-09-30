@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/jackc/pgx/v5"
 )
 
@@ -24,14 +26,14 @@ type exportOrder struct {
 func (s Service) Export(ctx context.Context, actor, event string) ([]byte, error) {
 	tx, err := s.DB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // Cleanup after commit or a reported error.
 	var allowed bool
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.order_admins a JOIN core.users u ON u.id=a.owner
 	 WHERE a.event_id=$1 AND a.owner=$2 AND u.can_book)`, event, actor).Scan(&allowed)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if !allowed {
 		return nil, problem(http.StatusForbidden, "forbidden")
@@ -40,14 +42,14 @@ func (s Service) Export(ctx context.Context, actor, event string) ([]byte, error
 	err = tx.QueryRow(ctx, `SELECT count(*),COALESCE(sum(octet_length(choice::text)),0)
 	 FROM core.orders WHERE event_id=$1 AND state<>'deleted'`, event).Scan(&count, &size)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if count > maxExportOrders || size > maxExportChoiceBytes {
 		return nil, problem(http.StatusRequestEntityTooLarge, "export_too_large")
 	}
 	var raw json.RawMessage
 	if err = tx.QueryRow(ctx, `SELECT menu FROM core.order_events WHERE id=$1`, event).Scan(&raw); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	var catalog Catalog
 	if err = json.Unmarshal(raw, &catalog); err != nil {
@@ -58,7 +60,7 @@ func (s Service) Export(ctx context.Context, actor, event string) ([]byte, error
 		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	return renderExport(ctx, catalog, list)
 }
@@ -68,16 +70,16 @@ func exportSnapshot(ctx context.Context, tx pgx.Tx, event string) ([]exportOrder
 	 FROM core.orders o JOIN core.users u ON u.id=o.owner LEFT JOIN core.users a ON a.id=o.payment_admin
 	 WHERE o.event_id=$1 AND o.state<>'deleted' ORDER BY o.created_at,o.id`, event)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	list := []exportOrder{}
 	for rows.Next() {
 		var entry exportOrder
 		if err = rows.Scan(&entry.Order, &entry.TelegramID, &entry.PaymentAdmin, &entry.UpdatedAt); err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		list = append(list, entry)
 	}
-	return list, rows.Err()
+	return list, core.DatabaseOperationError(rows.Err())
 }

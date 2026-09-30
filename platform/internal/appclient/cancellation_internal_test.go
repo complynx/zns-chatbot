@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
@@ -96,4 +97,26 @@ func TestCanceledCallerSurvivesSanitizedTransportError(t *testing.T) {
 	}
 	_, _, err = client.AuthenticateTelegram(ctx, 101)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestIdentityLookupPreservesDatabaseClassification(t *testing.T) {
+	t.Parallel()
+	link := failingIdentity{err: core.DatabaseFailure(errors.New("private SQL password"))}
+	client := Client{Links: link, Exchange: link}
+	_, owner, err := client.AuthenticateTelegram(t.Context(), 101)
+	require.Empty(t, owner)
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.EqualError(t, err, "identity lookup unavailable")
+	require.NotContains(t, err.Error(), "private")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, _, err = client.AuthenticateTelegram(ctx, 101)
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.EqualError(t, err, "identity lookup unavailable")
+	require.NotContains(t, err.Error(), "private")
+	link.err = identity.ErrZitadelUnavailable
+	client.Links = link
+	_, _, err = client.AuthenticateTelegram(t.Context(), 101)
+	require.False(t, core.IsDatabaseFailure(err))
+	require.EqualError(t, err, "identity lookup unavailable")
 }

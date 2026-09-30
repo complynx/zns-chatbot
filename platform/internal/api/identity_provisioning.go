@@ -51,6 +51,7 @@ func WithTelegramProvisioning(
 		_, err = service.EnsureTelegram(r.Context(), identityprovision.Telegram{ID: input.User.ID,
 			FirstName: input.User.FirstName, LastName: input.User.LastName, Language: input.User.LanguageCode})
 		if err != nil {
+			markDatabaseFailure(w, err)
 			status, code := http.StatusServiceUnavailable, "identity_provisioning_unavailable"
 			if errors.Is(err, identityprovision.ErrConflict) {
 				status, code = http.StatusConflict, "identity_conflict"

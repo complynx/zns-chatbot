@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 func (s Service) bind(ctx context.Context, tx pgx.Tx, telegramID int64, b Binding, c Creation, ready bool) error {
@@ -27,7 +29,7 @@ func (s Service) bind(ctx context.Context, tx pgx.Tx, telegramID int64, b Bindin
 		}
 		for _, command := range commands {
 			if _, err := tx.Exec(ctx, command.query, command.args...); err != nil {
-				return err
+				return core.DatabaseOperationError(err)
 			}
 		}
 	}
@@ -37,7 +39,7 @@ func (s Service) bind(ctx context.Context, tx pgx.Tx, telegramID int64, b Bindin
  WHERE u.id=$1 AND u.telegram_id=$2 AND z.issuer=$3 AND z.subject=$4 AND z.active AND t.bot_id=$5 AND t.telegram_id=$2)`,
 		b.Owner, telegramID, s.Issuer, b.Subject, s.BotID).Scan(&matches)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !matches {
 		return ErrConflict
@@ -49,5 +51,5 @@ func (s Service) bind(ctx context.Context, tx pgx.Tx, telegramID int64, b Bindin
 		s.BotID,
 		telegramID,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }

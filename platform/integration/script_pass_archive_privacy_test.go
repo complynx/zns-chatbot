@@ -31,8 +31,9 @@ func TestScriptPassArchivedAssignedWithoutPayment(t *testing.T) {
 		`return tools.passes.registration.show({event:"archive",view:"home"});`,
 	)
 	require.Empty(t, home.Error)
+	pumpBotDeliveries(t, f.b)
 	t.Logf("home card: %s", passMenuCard(t, f, 101).Text)
-	handle(t, f.b, passMenuClick(t, f, 101, 29801, "Pass payment"))
+	handleVisible(t, f.b, passMenuClick(t, f, 101, 29801, "Pass payment"))
 	require.Contains(t, passMenuCard(t, f, 101).Text, "No payment has been recorded")
 	t.Logf("payment callback card: %s", passMenuCard(t, f, 101).Text)
 	var state struct {
@@ -89,30 +90,72 @@ func TestScriptPassArchivedAssignedWithoutPayment(t *testing.T) {
 		`return tools.passes.registration.show({event:"archive",view:"payment"});`,
 	)
 	require.Empty(t, shown.Error)
+	pumpBotDeliveries(t, f.b)
 	require.Contains(t, passMenuCard(t, f, 101).Text, "Оплата этого пасса не записана")
 }
 
 func TestScriptPassCurrentAssignedPaymentUpload(t *testing.T) {
 	t.Parallel()
 	f := registrationPaymentFixture(t)
-	handle(t, f.b, message(29830, 101, "/passes"))
-	handle(t, f.b, passMenuClick(t, f, 101, 29831, "Dance"))
-	handle(t, f.b, passMenuClick(t, f, 101, 29832, "Pass payment"))
+	// The domain registration queues a deferred pass notice at Alice's lane head;
+	// drive domain and Bot delivery so the manual card is actually delivered.
+	drainPassNotices(t, f)
+	handlePassVisible(t, f, message(29830, 101, "/passes"))
+	handlePassVisible(t, f, passMenuClick(t, f, 101, 29831, "Dance"))
+	handlePassVisible(t, f, passMenuClick(t, f, 101, 29832, "Pass payment"))
 	card := passMenuCard(t, f, 101).Text
 	require.Contains(t, card, "Total to pay:")
 	require.Contains(t, card, "Send a receipt photo or document")
 	require.NotContains(t, card, "No payment has been recorded")
+	service := passbooking.Service{DB: f.db}
+	assigned, err := service.Get(t.Context(), "alice", "dance")
+	require.NoError(t, err)
+	require.Equal(t, "assigned", assigned.State)
+	require.Equal(t, "bob", assigned.PaymentAdmin)
 	photo, body := intakePhoto(t, f)
 	f.model.plan = agent.Plan{View: agent.MediaView, MediaAction: &agent.MediaProposal{
 		MediaID: "tg-media-100", Intent: "receipt", Amount: "100", Currency: "RUB",
 	}}
 	handle(t, f.b, photo)
-	payment, err := (passbooking.Service{DB: f.db}).Payment(t.Context(), "alice", "dance", "alice")
+	booked, err := service.Get(t.Context(), "alice", "dance")
+	require.NoError(t, err)
+	require.Equal(t, assigned.Version+1, booked.Version)
+	require.Equal(t, "paid", booked.State)
+	require.Equal(t, assigned.AssignedAt, booked.AssignedAt)
+	require.Equal(t, "bob", booked.PaymentAdmin)
+	payment, err := service.Payment(t.Context(), "alice", "dance", "alice")
 	require.NoError(t, err)
 	require.Equal(t, "pending", payment.Decision)
+	require.Equal(t, booked.Version, payment.Version)
+	require.Equal(t, "bob", payment.ReceivingAdmin)
 	proof, err := f.b.API.DownloadPassProof(t.Context(), "alice", "dance", "alice")
 	require.NoError(t, err)
 	require.Equal(t, body, proof.Body)
+	require.Equal(t, booked.Version, proof.Version)
+	require.Equal(t, payment.Attempt, proof.Attempt)
+	queue, err := service.PaymentQueue(t.Context(), "bob", "dance", "")
+	require.NoError(t, err)
+	require.Len(t, queue.Items, 1, "the assigned payment admin sees the receipt")
+	require.Equal(t, "alice", queue.Items[0].Owner)
+	require.Equal(t, booked.CreatedAt, queue.Items[0].BookingCreatedAt)
+	require.Equal(t, booked.Version, queue.Items[0].Payment.Version)
+	require.Equal(t, "bob", queue.Items[0].Payment.ReceivingAdmin)
+	require.Equal(t, payment.Attempt, queue.Items[0].Payment.Attempt)
+	handle(t, f.b, photo)
+	replayed, err := service.Get(t.Context(), "alice", "dance")
+	require.NoError(t, err)
+	require.Equal(t, booked, replayed, "replaying the same upload must preserve booking version and assignment")
+	replayedPayment, err := service.Payment(t.Context(), "alice", "dance", "alice")
+	require.NoError(t, err)
+	require.Equal(t, payment, replayedPayment)
+	replayedProof, err := f.b.API.DownloadPassProof(t.Context(), "alice", "dance", "alice")
+	require.NoError(t, err)
+	require.Equal(t, proof, replayedProof, "replay preserves original bytes and versioned proof binding")
+	var attempts int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.pass_payment_attempts`).Scan(&attempts))
+	require.Equal(t, 1, attempts, "upload and replay record exactly one payment attempt")
+	_, err = service.PaymentQueue(t.Context(), "alice", "dance", "")
+	requireCode(t, err, "forbidden")
 }
 
 func TestScriptPassArchivedRemovedReadRetry(t *testing.T) {
@@ -242,13 +285,22 @@ func assertArchivedLateResult(t *testing.T, code string) {
 		`UPDATE core.pass_bookings SET comment='late-private-canary' WHERE event_id='archive'`,
 	)
 	require.NoError(t, err)
-	f.b.Scripts = archivedPassLateVM{after: func() {
+	workerRuns := 0
+	f.b.Scripts = hostScriptFunc(func(
+		ctx context.Context, tools []scriptclient.Tool, callback scriptclient.Callback,
+	) (json.RawMessage, error) {
+		workerRuns++
+		request := scriptclient.Request{Code: code, Input: json.RawMessage(`null`)}
+		result, runErr := (scopeVM{}).Execute(ctx, request, tools, callback)
+		require.NoError(t, runErr)
+		require.Contains(t, string(result), "late-private-canary", "prove the original private source reached the VM")
 		_, updateErr := f.db.Exec(
 			t.Context(),
 			`UPDATE core.pass_bookings SET version=version+1,comment='' WHERE event_id='archive'`,
 		)
 		require.NoError(t, updateErr)
-	}}
+		return result, runErr
+	})
 	model := &knowledgeModel{plans: []agent.Plan{
 		{
 			View: "workflow",
@@ -260,10 +312,53 @@ func assertArchivedLateResult(t *testing.T, code string) {
 		{View: "workflow", Text: "Checked"},
 	}}
 	f.b.Model = model
-	handle(t, f.b, message(29820, 101, "Read my archive registration"))
+	update := message(29820, 101, "Read my archive registration")
+	handleVisible(t, f.b, update)
+	require.Len(t, model.inputs, 1, "a changed source ends the admitted turn")
+	retired := archivedLateRetirement(t, f)
+	handleVisible(t, f.b, update)
+	require.Len(t, model.inputs, 1, "same-update replay must not replan")
+	handleVisible(t, f.b, message(29821, 101, "Read my current available information"))
 	require.Len(t, model.inputs, 2)
+	require.Equal(t, 1, workerRuns)
+	require.NotNil(t, model.inputs[1].Script)
+	require.EqualValues(t, 29821, model.inputs[1].Script.UpdateID)
+	require.Empty(t, model.inputs[1].Script.Runs)
 	encoded, err := json.Marshal(model.inputs[1])
 	require.NoError(t, err)
 	require.NotContains(t, string(encoded), "late-private-canary")
-	require.Contains(t, string(encoded), "pass_access_changed")
+	require.JSONEq(t, retired, archivedLateRetirement(t, f), "new input must not resurrect the old execution")
+}
+
+func archivedLateRetirement(t *testing.T, f *fixture) string {
+	t.Helper()
+	var raw string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content::text FROM bot.interactions
+ WHERE owner='alice' AND update_id=29820 AND kind='script_runs'`).Scan(&raw))
+	require.NotContains(t, raw, "late-private-canary")
+	require.Contains(t, raw, "pass_access_changed")
+	var retired []struct {
+		PassRedacted bool                 `json:"pass_redacted"`
+		Request      agent.ScriptProposal `json:"request"`
+		Run          agent.ScriptRun      `json:"run"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(raw), &retired))
+	require.Len(t, retired, 1)
+	require.True(t, retired[0].PassRedacted)
+	require.Empty(t, retired[0].Request.Code)
+	require.Empty(t, retired[0].Request.InputJSON)
+	require.Empty(t, retired[0].Run.Code)
+	require.Empty(t, retired[0].Run.Calls)
+	require.JSONEq(t, `{"omitted":true,"reason":"pass_access_changed"}`, string(retired[0].Run.Result))
+	var kind, state string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT kind,state FROM interaction.saved_turns
+ WHERE owner='alice' AND update_id=29820`).Scan(&kind, &state))
+	require.Equal(t, "notice", kind)
+	require.Equal(t, "ready", state)
+	messages := chatMessages(t, f, 101)
+	require.NotEmpty(t, messages)
+	for _, msg := range messages {
+		require.NotContains(t, msg.Text, "late-private-canary")
+	}
+	return raw
 }

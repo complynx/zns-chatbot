@@ -142,3 +142,8 @@ sql:
         sql_package: pgx/v5
         emit_empty_slices: true
         omit_unused_structs: true
+        overrides:
+          - db_type: timestamptz
+            go_type:
+              import: time
+              type: Time

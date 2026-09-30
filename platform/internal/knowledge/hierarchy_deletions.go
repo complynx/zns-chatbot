@@ -6,6 +6,8 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // MemoryDeletionState invalidates retained tool output without exposing another
@@ -26,7 +28,7 @@ func (s Service) MemoryDeletions(ctx context.Context, actor string) (MemoryDelet
 	}
 	err := s.DB.QueryRow(ctx, memoryDeletionStateQuery, actor).
 		Scan(&result.PrivateGeneration, &result.SharedGeneration)
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }
 
 // LockMemoryDeletions keeps both retirement generations stable through the
@@ -41,5 +43,5 @@ func LockMemoryDeletions(ctx context.Context, tx pgx.Tx, actor string) (MemoryDe
 	}
 	err := tx.QueryRow(ctx, memoryDeletionStateQuery, actor).
 		Scan(&result.PrivateGeneration, &result.SharedGeneration)
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }

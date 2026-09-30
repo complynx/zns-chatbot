@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const commandBatchUncouple = "admin_uncouple"
@@ -36,14 +38,14 @@ func authorizeBatchCancel(ctx context.Context, tx pgx.Tx, actor, event string) e
 	var owner string
 	err := tx.QueryRow(ctx, `SELECT owner FROM core.pass_booking_admins WHERE owner=$1 FOR SHARE`, actor).Scan(&owner)
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	err = tx.QueryRow(ctx, `SELECT owner FROM core.pass_payment_admins WHERE owner=$1 AND event_id=$2 FOR SHARE`, actor, event).
 		Scan(&owner)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return forbidden()
 	}
-	return err
+	return core.DatabaseOperationContextError(ctx, err)
 }
 
 func validateRuntimeBatch(c RuntimeBatch) error {
@@ -105,7 +107,7 @@ func (s Service) RunBatch(ctx context.Context, actor string, c RuntimeBatch) ([]
 func (s Service) prepareRuntimeBatch(ctx context.Context, actor string, c RuntimeBatch) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	batch, found, err := s.PrepareRuntimeBatchInTx(ctx, tx, actor, c)
@@ -120,7 +122,7 @@ func (s Service) prepareRuntimeBatch(ctx context.Context, actor string, c Runtim
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeBatch) (runtimeBatchPlan, error) {
 	plan := runtimeBatchPlan{Action: c.Action, Event: c.Event, Items: make([]RuntimeBatchItem, len(c.Recipients))}
@@ -145,7 +147,7 @@ func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeB
 		if errors.Is(err, pgx.ErrNoRows) {
 			outcome.Status, outcome.Code = AdminBatchRejected, "pass_recipient_unknown"
 		} else if err != nil {
-			return plan, err
+			return plan, core.DatabaseOperationError(err)
 		}
 		command.TargetVersion = bookingVersion(records[command.Target])
 		outcome.Target = command.Target
@@ -167,7 +169,7 @@ func (s Service) runRuntimeBatchItem(
 ) ([]RuntimeBatchItem, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	var plan runtimeBatchPlan
@@ -178,7 +180,7 @@ func (s Service) runRuntimeBatchItem(
 	err = tx.QueryRow(ctx, `SELECT plan,source_derivation FROM core.pass_admin_batches WHERE actor=$1 AND key_hash=$2 FOR UPDATE`, actor, hash([]byte(c.Key))).
 		Scan(&plan, &source)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if len(source) > 0 {
 		return nil, conflict("derived_batch_requires_coordinator")
@@ -203,10 +205,10 @@ func (s Service) runRuntimeBatchItem(
 			plan,
 		)
 		if err != nil {
-			return plan.Items, err
+			return plan.Items, core.DatabaseOperationError(err)
 		}
 	}
-	return plan.Items, tx.Commit(ctx)
+	return plan.Items, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (s Service) executeRuntimeBatchItem(
@@ -219,13 +221,13 @@ func (s Service) executeRuntimeBatchItem(
 	// persisting the terminal rejection, while retaining the batch row lock.
 	tx, err := outer.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = s.mutateRuntimeBatchItem(ctx, tx, actor, action, item); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (s Service) mutateRuntimeBatchItem(

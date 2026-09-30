@@ -3,12 +3,14 @@ package bot
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -70,10 +72,16 @@ func (b *Bot) renderMediaHint(ctx context.Context, owner string, chat int64, id 
 		}
 	}
 	err = b.deliverOrderCard(ctx, owner, mediaPrefix+id, telegram.Send{ChatID: chat, Text: text, Markup: markup})
-	if err == nil {
-		_, err = b.DB.Exec(ctx, `UPDATE bot.media_intake SET rendered=$3 WHERE owner=$1 AND id=$2`, owner, id, hint)
+	if err != nil {
+		return hint, err
 	}
-	return hint, err
+	// Encode first: only the UPDATE itself is a known SQL operation.
+	rendered, err := json.Marshal(hint)
+	if err != nil {
+		return hint, err
+	}
+	_, err = b.DB.Exec(ctx, `UPDATE bot.media_intake SET rendered=$3 WHERE owner=$1 AND id=$2`, owner, id, rendered)
+	return hint, core.DatabaseOperationError(err)
 }
 
 func (b *Bot) mediaMarkup(ctx context.Context, owner, id string, choices []agent.MediaChoice) (telegram.Markup, error) {
@@ -109,11 +117,16 @@ func (b *Bot) mediaButton(
 VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(owner,intake_id,action,order_id,registration_event,version)
 DO UPDATE SET token=bot.media_buttons.token RETURNING token`, token, owner, id, action, candidate.OrderID, candidate.Version, candidate.RegistrationEvent).
 		Scan(&token)
-	return telegram.Button{Text: label, Data: mediaPrefix + token}, err
+	return telegram.Button{Text: label, Data: mediaPrefix + token}, core.DatabaseOperationError(err)
 }
 
-func (b *Bot) handleMediaCallback(ctx context.Context, in incoming, update telegram.Update) error {
-	defer b.acknowledge(ctx, update.Callback.ID)
+func (b *Bot) handleMediaCallback(ctx context.Context, in incoming, update telegram.Update) (resultErr error) {
+	// Acknowledgement SQL dominates the handler result; otherwise keep it.
+	defer func() {
+		if ackErr := b.acknowledge(ctx, update.Callback.ID); ackErr != nil {
+			resultErr = ackErr
+		}
+	}()
 	var id, action string
 	var candidate agent.MediaCandidate
 	err := b.DB.QueryRow(ctx, `SELECT intake_id,action,order_id,version,registration_event FROM bot.media_buttons WHERE owner=$1 AND token=$2`,

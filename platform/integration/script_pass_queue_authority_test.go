@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -76,23 +77,70 @@ func TestScriptPassQueueAuthorityExecutionRevocation(t *testing.T) {
 		`INSERT INTO core.pass_bookings(event_id,owner,version,state,role,kind,payment_admin,created_at) VALUES('dance','alice',1,'waitlist','leader','solo','bob',now())`,
 	)
 	require.NoError(t, err)
-	f.b.API.HTTP = &http.Client{Transport: &passActionTransport{before: func() {
+	transport := &queueGrantRevocationTransport{revoke: func() {
 		_, e := f.db.Exec(t.Context(), `DELETE FROM core.pass_booking_admins WHERE owner='bob'`)
 		require.NoError(t, e)
-	}}}
+	}}
+	f.b.API.HTTP = &http.Client{Transport: transport}
 	f.b.Host.HTTP = f.b.API.HTTP
-	r := runPassVM(
-		t,
-		f,
-		29803,
-		202,
-		"Invite Alice from the authorized queue",
-		`const q=await tools.passes.admin.queue({event:"dance"});return tools.passes.registration.invite({event:"dance",invite_telegram_id:q.queue.find(b=>b.owner==="alice").telegram_id});`,
-	)
-	after, err := (passbooking.Service{DB: f.db}).Get(t.Context(), "bob", "dance")
+	// Local capture: a retired admin-derived run ends the turn, so the shared
+	// two-call runPassVM helper does not apply here.
+	f.b.Scripts = scopeVM{}
+	model := &knowledgeModel{plans: []agent.Plan{
+		{View: "workflow", ScriptAction: &agent.ScriptProposal{
+			Code:      `const q=await tools.passes.admin.queue({event:"dance"});return tools.passes.registration.invite({event:"dance",invite_telegram_id:q.queue.find(b=>b.owner==="alice").telegram_id});`,
+			InputJSON: "null",
+		}},
+		{View: "workflow", Text: "Checked"},
+	}}
+	f.b.Model = model
+	require.NoError(t, f.b.Handle(t.Context(), message(29803, 202, "Invite Alice from the authorized queue")))
+	require.Equal(t, 1, transport.revocations, "the queue grant was revoked exactly once before dispatch")
+	require.Len(t, model.inputs, 1, "revocation prevents every subsequent model call")
+	service := passbooking.Service{DB: f.db}
+	after, err := service.Get(t.Context(), "bob", "dance")
 	require.NoError(t, err)
-	t.Logf("error=%q result=%s target=%d", r.Error, r.Result, after.InvitationTarget)
 	assert.Zero(t, after.InvitationTarget, "queue grant revoked between reservation and execution")
+	assert.Zero(t, after.Version, "no invitation booking was created for the revoked actor")
+	target, err := service.Get(t.Context(), "alice", "dance")
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, target.Version, "the queued booking is untouched")
+	assert.Equal(t, "waitlist", target.State)
+	assert.Empty(t, target.Partner)
+	var records []agenthost.ScriptRecord
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions WHERE owner='bob' AND update_id=29803 AND kind='script_runs'`).
+			Scan(&records),
+	)
+	require.Len(t, records, 1, "one reserved run, no replayed run")
+	for _, record := range records {
+		require.True(t, record.PassRedacted)
+		require.JSONEq(t, `{"omitted":true,"reason":"pass_access_changed"}`, string(record.Run.Result))
+		for _, call := range record.Calls {
+			require.Empty(t, call.Outcome.Result)
+		}
+		visible, marshalErr := json.Marshal(record.Run)
+		require.NoError(t, marshalErr)
+		require.NotContains(t, string(visible), "telegram_id", "retired run output omits queue data")
+		require.NotContains(t, string(visible), "alice", "retired run output omits queue identities")
+	}
+}
+
+// queueGrantRevocationTransport revokes the booking-admin grant once, immediately
+// before the first pass action dispatch, and records that it did so.
+type queueGrantRevocationTransport struct {
+	revoke      func()
+	revocations int
+}
+
+func (tr *queueGrantRevocationTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if (req.URL.Path == "/v1/passes/actions" || req.URL.Path == "/internal/derived/pass-actions") &&
+		tr.revocations == 0 {
+		tr.revocations++
+		tr.revoke()
+	}
+	return http.DefaultTransport.RoundTrip(req)
 }
 
 func TestScriptPassOrdinaryInvitationIgnoresQueueGrant(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
 )
 
@@ -68,7 +69,7 @@ func proposalEvidence(ctx context.Context, tx pgx.Tx, a knowledgeauthority.ReadA
 		return []Authority{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if len(raw) > MaxAuthorityBytes {
 		return nil, ErrLimit

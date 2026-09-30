@@ -62,10 +62,9 @@ func ModelProposals(items []knowledge.Proposal) []knowledge.Proposal {
 
 func ModelToolEvidence(value any) any {
 	switch value := value.(type) {
-	case interaction.RegistrationOperationRead:
-		return value.Summaries
-	case *interaction.RegistrationOperationRead:
-		return value.Summaries
+	case interaction.RegistrationReceiptObservation, *interaction.RegistrationReceiptObservation,
+		interaction.RegistrationOperationRead, *interaction.RegistrationOperationRead:
+		return modelRegistrationEvidence(value)
 	case *knowledge.MemoryPage:
 		return ModelToolEvidence(*value)
 	case *knowledge.MemoryOverview:
@@ -109,6 +108,22 @@ func ModelToolEvidence(value any) any {
 	case ScriptHistoryChunk:
 		value.ReadAuthorities = nil
 		return value
+	default:
+		return value
+	}
+}
+
+func modelRegistrationEvidence(value any) any {
+	switch value := value.(type) {
+	case interaction.RegistrationReceiptObservation:
+		value.ReadAuthorities = nil
+		return value
+	case *interaction.RegistrationReceiptObservation:
+		return modelRegistrationEvidence(*value)
+	case interaction.RegistrationOperationRead:
+		return value.Summaries
+	case *interaction.RegistrationOperationRead:
+		return value.Summaries
 	default:
 		return value
 	}

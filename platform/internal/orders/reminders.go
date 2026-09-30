@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 
 	"time"
@@ -21,7 +23,7 @@ func (s Service) QueueDueReminders(ctx context.Context, after time.Duration) (in
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // Cleanup after commit or a reported scan error.
 	rows, err := tx.Query(ctx, `WITH due AS (
@@ -32,11 +34,11 @@ func (s Service) QueueDueReminders(ctx context.Context, after time.Duration) (in
  ) UPDATE core.orders SET reminder_claimed_at=clock_timestamp() FROM due WHERE id=due.candidate_id RETURNING `+columns,
 		int64(after/time.Second), reminderBatchSize)
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	due, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Order, error) { return scan(row) })
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	var pending []delivery.Registration
 	for _, order := range due {
@@ -56,5 +58,5 @@ func (s Service) QueueDueReminders(ctx context.Context, after time.Duration) (in
 	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
 		return 0, err
 	}
-	return len(due), tx.Commit(ctx)
+	return len(due), core.DatabaseOperationError(tx.Commit(ctx))
 }

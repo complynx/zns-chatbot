@@ -11,6 +11,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/applicationauth"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 )
@@ -34,6 +35,40 @@ func localOrderClient(t *testing.T, f *fixture) appclient.Client {
 		},
 	}
 	return c
+}
+
+func TestDirectOrdersDatabaseFailurePreservesClassification(t *testing.T) {
+	t.Parallel()
+	f := setup(t)
+	c := localOrderClient(t, f)
+	_, err := f.db.Exec(t.Context(), `CREATE FUNCTION core.reject_test_order() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN RAISE EXCEPTION 'private SQL diagnostic'; END $$;
+CREATE TRIGGER reject_test_order BEFORE INSERT ON core.orders FOR EACH ROW EXECUTE FUNCTION core.reject_test_order()`)
+	require.NoError(t, err)
+	command := orders.Command{EventID: "sandbox-festival", Name: "create", Origin: "manual",
+		Key: "database-failure", Choice: orderChoice("preparty")}
+	_, err = c.ExecuteOrder(t.Context(), "alice", command)
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.EqualError(t, err, "internal_error")
+	var problem *core.ProblemError
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, http.StatusInternalServerError, problem.Status)
+	body, marshalErr := json.Marshal(err)
+	require.NoError(t, marshalErr)
+	require.JSONEq(t, `{"code":"internal_error"}`, string(body))
+	list, err := c.Orders(t.Context(), "alice", command.EventID)
+	require.NoError(t, err)
+	require.Empty(t, list, "failed transaction must not create an order")
+	_, err = f.db.Exec(t.Context(), `DROP TRIGGER reject_test_order ON core.orders`)
+	require.NoError(t, err)
+	created, err := c.ExecuteOrder(t.Context(), "alice", command)
+	require.NoError(t, err)
+	replayed, err := c.ExecuteOrder(t.Context(), "alice", command)
+	require.NoError(t, err)
+	require.Equal(t, created, replayed)
+	list, err = c.Orders(t.Context(), "alice", command.EventID)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
 }
 
 func TestDirectOrdersTypedBoundary(t *testing.T) {

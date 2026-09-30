@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery/dbgen"
 )
 
@@ -26,7 +27,7 @@ func Reserve(ctx context.Context, tx pgx.Tx, settings Settings, destination Dest
 	}
 	clock, err := q.DeliveryClock(ctx)
 	if err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	if bot.PauseReason != "" {
 		return Admission{Reason: bot.PauseReason, NotBefore: clock.Time.Add(settings.Fallback)}, nil
@@ -70,7 +71,7 @@ func Schedule(
 	q := dbgen.New(tx)
 	clock, err := q.DeliveryClock(ctx)
 	if err != nil {
-		return Outcome{}, time.Time{}, err
+		return Outcome{}, time.Time{}, core.DatabaseOperationError(err)
 	}
 	deadline := clock.Time
 	if outcome.Kind == Deferred {
@@ -112,22 +113,22 @@ func lockPacing(
 ) (dbgen.LockPacingRow, dbgen.LockPacingRow, error) {
 	var bot, row dbgen.LockPacingRow
 	if err := q.EnsurePacing(ctx, dbgen.EnsurePacingParams{BotID: botID, Chat: ""}); err != nil {
-		return bot, row, err
+		return bot, row, core.DatabaseOperationError(err)
 	}
 	var err error
 	bot, err = q.LockPacing(ctx, dbgen.LockPacingParams{BotID: botID, Chat: ""})
 	if err != nil {
-		return bot, row, err
+		return bot, row, core.DatabaseOperationError(err)
 	}
 	if err = q.EnsurePacing(ctx, dbgen.EnsurePacingParams{BotID: botID, Chat: chat}); err != nil {
-		return bot, row, err
+		return bot, row, core.DatabaseOperationError(err)
 	}
 	row, err = q.LockPacing(ctx, dbgen.LockPacingParams{BotID: botID, Chat: chat})
-	return bot, row, err
+	return bot, row, core.DatabaseOperationError(err)
 }
 
 func extend(ctx context.Context, q *dbgen.Queries, botID int64, chat string, deadline time.Time, reason string) error {
-	return q.ExtendPacing(
+	err := q.ExtendPacing(
 		ctx,
 		dbgen.ExtendPacingParams{
 			BotID:       botID,
@@ -136,4 +137,5 @@ func extend(ctx context.Context, q *dbgen.Queries, botID int64, chat string, dea
 			PauseReason: reason,
 		},
 	)
+	return core.DatabaseOperationError(err)
 }

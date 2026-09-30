@@ -2,12 +2,11 @@ package appclient
 
 import (
 	"context"
-	"encoding/json"
+
 	"errors"
 	"io"
 	"net/http"
 
-	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -31,12 +30,7 @@ func (c Client) ExportPasses(ctx context.Context, owner string) ([]byte, error) 
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		var problem core.ProblemError
-		if err = json.NewDecoder(io.LimitReader(response.Body, MaxAPIBytes)).Decode(&problem); err != nil {
-			return nil, err
-		}
-		problem.Status = response.StatusCode
-		return nil, &problem
+		return nil, coreResponseError(ctx, response, "invalid export response")
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, passbooking.MaxExportBytes+1))
 	if err != nil {

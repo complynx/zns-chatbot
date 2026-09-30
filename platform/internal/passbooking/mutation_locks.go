@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // LockMutationEvents takes the strongest lock for the sorted source/target union,
@@ -15,5 +17,5 @@ func LockMutationEvents(ctx context.Context, tx pgx.Tx, events []string) error {
 		`SELECT id FROM core.pass_events WHERE id=ANY($1::text[]) ORDER BY id FOR NO KEY UPDATE`,
 		events,
 	)
-	return err
+	return core.DatabaseOperationContextError(ctx, err)
 }

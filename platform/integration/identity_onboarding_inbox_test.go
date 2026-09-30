@@ -61,7 +61,11 @@ func onboardingInboxFixture(t *testing.T, language string) (*fixture, *unavailab
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
 	server := httptest.NewServer(
 		api.WithTelegramProvisioning(
-			api.Handler(appservices.NewServices(f.db, appservices.Options{}), signer, slog.New(slog.DiscardHandler)),
+			api.Handler(
+				notificationFixtureServices(f.db, appservices.Options{}),
+				signer,
+				slog.New(slog.DiscardHandler),
+			),
 			provider,
 			signer,
 			77,
@@ -103,6 +107,20 @@ func onboardingInboxFixture(t *testing.T, language string) (*fixture, *unavailab
 	return f, provider
 }
 
+// Wait for the real runtime worker and its receipts before asserting visible replies.
+func completeIdentityInbox(t *testing.T, f *fixture, want int64) {
+	t.Helper()
+	runInboxUntil(t, f, func() bool {
+		var cursor int64
+		var pending, deliveries int
+		err := f.db.QueryRow(t.Context(), `SELECT value,
+ (SELECT count(*) FROM bot.telegram_inbox),
+ (SELECT count(*) FROM bot.delivery_intents WHERE bot_id=$1
+  AND (state IN ('pending','sending') OR (state='sent' AND NOT continuation_done)))
+FROM bot.cursors WHERE name='telegram'`, f.b.Delivery.BotID).Scan(&cursor, &pending, &deliveries)
+		return err == nil && cursor == want && pending == 0 && deliveries == 0
+	})
+}
 func TestPermanentOnboardingDenialDoesNotBlockInbox(t *testing.T) {
 	t.Parallel()
 	for _, language := range []string{"en", "ru", "blocked", "callback"} {
@@ -112,7 +130,7 @@ func TestPermanentOnboardingDenialDoesNotBlockInbox(t *testing.T) {
 			if language == "blocked" {
 				post(t, f.fake.URL+"/lab/blocked", map[string]any{"user": 101, "blocked": true})
 			}
-			completeInbox(t, f, 9202)
+			completeIdentityInbox(t, f, 9202)
 			var active, canBook bool
 			require.NoError(
 				t,
@@ -146,11 +164,17 @@ func TestTransientOnboardingFailureRemainsRetryable(t *testing.T) {
 	t.Parallel()
 	f, provider := onboardingInboxFixture(t, "en")
 	provider.unavailable.Store(true)
-	runInboxUntil(t, f, func() bool { return provider.calls.Load() > 0 })
+	runInboxUntil(t, f, func() bool {
+		var recorded bool
+		err := f.db.QueryRow(t.Context(), `SELECT failures=1 AND state='pending' AND next_attempt_at>clock_timestamp()
+ FROM bot.telegram_inbox WHERE update_id=9200`).Scan(&recorded)
+		return err == nil && recorded
+	})
 	var pending int
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&pending))
-	require.Equal(t, 2, pending)
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox
+ WHERE update_id=9200 AND state='pending' AND failures=1`).Scan(&pending))
+	require.Equal(t, 1, pending, "the original failed update must remain durable")
 	provider.unavailable.Store(false)
-	completeInbox(t, f, 9202)
+	completeInboxAfterCooldown(t, f, 9202, 9200)
 	require.GreaterOrEqual(t, provider.calls.Load(), int64(2))
 }

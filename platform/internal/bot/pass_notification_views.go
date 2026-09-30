@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -11,7 +12,7 @@ func (b *Bot) refreshPassNotificationViews(ctx context.Context, notice passbooki
 	var opened bool
 	if err = b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.pass_views WHERE owner=$1)`, notice.Recipient).
 		Scan(&opened); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if opened {
 		if err = b.RenderPassMenu(ctx, notice.Recipient, notice.TelegramID, ""); err != nil {

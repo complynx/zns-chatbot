@@ -6,6 +6,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // Sender contains only fields written by an accepted account metadata refresh.
@@ -46,7 +48,7 @@ func write(ctx context.Context, tx pgx.Tx, owner string, fields map[string]any) 
  ON CONFLICT(owner) DO UPDATE
  SET overrides=core.admin_broadcast_profiles.overrides || EXCLUDED.overrides`, owner, fields)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if result.RowsAffected() != 1 {
 		return errors.New("broadcast_profile_missing")

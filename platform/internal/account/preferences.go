@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 type Preferences struct {
@@ -22,7 +24,7 @@ func (s Service) Preferences(ctx context.Context, owner string) (Preferences, er
 	if errors.Is(err, pgx.ErrNoRows) {
 		return value, fail(http.StatusNotFound, "user_not_found")
 	}
-	return value, err
+	return value, core.DatabaseOperationError(err)
 }
 
 // SetLanguage updates only the authenticated owner's preference. Initialization
@@ -45,7 +47,7 @@ func (s Service) SetLanguageWithOperation(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Preferences{}, err
+		return Preferences{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }() // Cleanup only; return the operation error.
 	prepared, err := s.PrepareLanguageInTx(ctx, tx, owner, input)
@@ -59,7 +61,7 @@ func (s Service) SetLanguageWithOperation(
 	if err != nil {
 		return value, err
 	}
-	return value, tx.Commit(ctx)
+	return value, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func languageReplay(
@@ -84,7 +86,7 @@ func languageReplay(
 		return true, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	return false, nil
 }

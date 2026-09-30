@@ -21,5 +21,5 @@ func (b *Bot) scriptHost() agenthost.ScriptHost {
 }
 
 func (b *Bot) readStore() agenthost.ReadStore {
-	return agenthost.ReadStore{DB: b.DB, Policy: botScriptAuthority{bot: b}}
+	return agenthost.ReadStore{DB: b.DB, Policy: botScriptAuthority{bot: b}, Memory: b.Host}
 }

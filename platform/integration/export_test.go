@@ -6,12 +6,14 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/xuri/excelize/v2"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -129,8 +131,8 @@ func TestTelegramAndAgentExportShareRightsAndReceipt(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	callback := modernExportCallback(t, f)
-	handle(t, f.b, callback)
-	handle(t, f.b, callback)
+	handleVisible(t, f.b, callback)
+	handleVisible(t, f.b, callback)
 	files := exportDocuments(t, f, 202)
 	require.Len(t, files, 1, "completed update replay must not send again")
 	body, err := f.b.TG.Download(t.Context(), telegram.Document{FileID: files[0], Filename: "orders.xlsx"})
@@ -141,14 +143,18 @@ func TestTelegramAndAgentExportShareRightsAndReceipt(t *testing.T) {
 		openExport(t, body).GetSheetList(),
 	)
 	f.model.plan = agent.Plan{View: "orders", OrderAction: &agent.OrderProposal{Name: "export"}}
-	handle(t, f.b, message(2, 202, "экспорт заказов"))
+	handleVisible(t, f.b, message(2, 202, "экспорт заказов"))
 	assert.Len(t, exportDocuments(t, f, 202), 2)
 	for index, user := range []int64{101, 303} {
-		handle(t, f.b, message(int64(index+3), user, "экспорт заказов"))
+		requireCode(t, f.b.Handle(t.Context(), message(int64(index+3), user, "экспорт заказов")), "forbidden")
+		var documents int
+		require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.delivery_intents
+WHERE chat_id=$1 AND reference->>'kind'='document'`, user).Scan(&documents))
+		require.Zero(t, documents, "denied agent export must not enqueue a document")
 		denied := aliceCallback(int64(index+5), callback.Callback.Message.ID, callback.Callback.Data)
 		denied.Callback.From.ID = user
 		denied.Callback.Message.Chat.ID = user
-		handle(t, f.b, denied)
+		handleVisible(t, f.b, denied)
 		assert.Empty(t, exportDocuments(t, f, user))
 	}
 	var content json.RawMessage
@@ -157,8 +163,11 @@ func TestTelegramAndAgentExportShareRightsAndReceipt(t *testing.T) {
 		f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions WHERE owner='bob' AND update_id=2 AND kind='order_export'`).
 			Scan(&content),
 	)
-	assert.Contains(t, string(content), `"origin": "agent"`)
 	assert.NotContains(t, string(content), "customer")
+	var input json.RawMessage
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+WHERE owner='bob' AND update_id=2 AND kind='input'`).Scan(&input))
+	assert.Contains(t, string(input), `"origin": "agent"`)
 }
 
 func TestExportRefusesOversizedSnapshotWithoutPartialFile(t *testing.T) {
@@ -221,16 +230,33 @@ func TestExportDoesNotMixEventsAndRetriesTelegramFailure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, exportRows(t, openExport(t, body), "Заказы"), 1)
 	callback := modernExportCallback(t, f)
+	f.b.Delivery.Fallback = 10 * time.Millisecond
 	post(t, f.fake.URL+"/lab/fault", map[string]string{"mode": "transient"})
-	require.Error(t, f.b.Handle(t.Context(), callback))
+	started := time.Now()
+	handleVisible(t, f.b, callback)
 	assert.Empty(t, exportDocuments(t, f, 202))
-	handle(t, f.b, callback)
+	var state string
+	var attempts int64
+	var next time.Time
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT state,attempt,not_before FROM bot.delivery_intents
+WHERE owner='bob' AND reference->>'family'='order_export' AND reference->>'update'='1'`).Scan(&state, &attempts, &next))
+	require.Equal(t, string(delivery.Deferred), state)
+	require.EqualValues(t, 1, attempts)
+	require.True(t, next.After(started), "the rejected attempt must persist its retry deadline")
+	timer := time.NewTimer(time.Until(next))
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-t.Context().Done():
+		t.Fatal(t.Context().Err())
+	}
+	handleVisible(t, f.b, callback)
 	assert.Len(t, exportDocuments(t, f, 202), 1)
 }
 
 func modernExportCallback(t *testing.T, f *fixture) telegram.Update {
 	t.Helper()
-	handle(t, f.b, message(100, 202, "/orders"))
+	handleVisible(t, f.b, message(100, 202, "/orders"))
 	var token string
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT token FROM bot.order_buttons
 WHERE owner='bob' AND command->>'name'='export' LIMIT 1`).Scan(&token))

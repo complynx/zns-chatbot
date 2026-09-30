@@ -102,7 +102,14 @@ INSERT INTO core.pass_payment_admins(event_id,owner) SELECT 'archive','extra-adm
 			}
 			invalidateDirectPassContext(t, f, scenario)
 			// Resume with a fresh bot instance using only the durable database/API.
-			f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Scripts: scopeVM{}}
+			f.b = &bot.Bot{
+				Delivery: f.b.Delivery,
+				DB:       f.db,
+				API:      f.b.API,
+				Host:     f.b.Host,
+				TG:       f.b.TG,
+				Scripts:  scopeVM{},
+			}
 			input := retryPassDiscovery(t, f, update)
 			raw, err := json.Marshal(input.Script)
 			require.NoError(t, err)

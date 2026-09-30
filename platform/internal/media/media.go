@@ -90,5 +90,5 @@ func (s Service) PromoteProof(ctx context.Context, owner, id string) (orders.Pro
 func (s Service) PruneExpired(ctx context.Context) (int64, error) {
 	result, err := s.DB.Exec(ctx, `DELETE FROM core.media WHERE id IN
  (SELECT id FROM core.media WHERE expires_at<=now() ORDER BY expires_at LIMIT 100 FOR UPDATE SKIP LOCKED)`)
-	return result.RowsAffected(), err
+	return result.RowsAffected(), core.DatabaseOperationError(err)
 }

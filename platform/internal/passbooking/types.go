@@ -22,22 +22,23 @@ type Service struct {
 }
 
 type Booking struct {
-	Event            string              `json:"event"`
-	Owner            string              `json:"owner"`
-	TelegramID       int64               `json:"telegram_id"`
-	Version          int64               `json:"version"`
-	State            string              `json:"state"`
-	Role             passallocation.Role `json:"role"`
-	Kind             string              `json:"kind"`
-	Partner          string              `json:"partner"`
-	InvitationTarget int64               `json:"invitation_target"`
-	PaymentAdmin     string              `json:"payment_admin"`
-	CreatedAt        time.Time           `json:"created_at"`
-	AssignedAt       *time.Time          `json:"assigned_at,omitempty"`
-	Price            *int                `json:"price,omitempty"`
-	TierIndex        *int                `json:"tier_index,omitempty"`
-	SkipBalance      *bool               `json:"skip_balance,omitempty"`
-	Comment          string              `json:"comment"`
+	Event               string              `json:"event"`
+	Owner               string              `json:"owner"`
+	TelegramID          int64               `json:"telegram_id"`
+	Version             int64               `json:"version"`
+	State               string              `json:"state"`
+	Role                passallocation.Role `json:"role"`
+	Kind                string              `json:"kind"`
+	Partner             string              `json:"partner"`
+	InvitationTarget    int64               `json:"invitation_target"`
+	PaymentAdmin        string              `json:"payment_admin"`
+	CreatedAt           time.Time           `json:"created_at"`
+	AssignedAt          *time.Time          `json:"assigned_at,omitempty"`
+	Price               *int                `json:"price,omitempty"`
+	TierIndex           *int                `json:"tier_index,omitempty"`
+	SkipBalance         *bool               `json:"skip_balance,omitempty"`
+	Comment             string              `json:"comment"`
+	InvitationStartedAt *time.Time          `json:"invitation_started_at,omitempty"`
 }
 
 // Command never grants authority. Actor identity comes from the authenticated adapter.

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -85,7 +86,11 @@ func TestLocalRegistrationBatchStoredSource(t *testing.T) {
 		Options:    passbooking.AdminAssignment{AppendTier: &tier},
 	}
 	_, err = service.RunPassBatch(t.Context(), "bob", command, source)
-	require.ErrorContains(t, err, "synthetic second marker interruption")
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.NotErrorIs(t, err, core.ErrDatabaseSerialization)
+	require.NotContains(t, err.Error(), "synthetic second marker interruption")
+	var databaseError *pgconn.PgError
+	require.NotErrorAs(t, err, &databaseError)
 	var original string
 	require.NoError(
 		t,

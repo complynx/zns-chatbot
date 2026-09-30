@@ -4,8 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,7 +75,7 @@ func TestScriptFoodReviewerSobekIndependentKinds(t *testing.T) {
 			f, s, order := foodSubmittedFixture(t)
 			_, err := f.db.Exec(t.Context(), `UPDATE core.users SET language=$1 WHERE id='bob'`, language)
 			require.NoError(t, err)
-			result := runFoodAdminVM(t, f, 28001, identity.BobTelegramID, `const queue=tools.food.review.queue({});
+			result := runFoodProofVM(t, f, 28001, `const queue=tools.food.review.queue({});
 const read=tools.food.review.read({order_id:queue.items[0].order_id});
 const proof=tools.food.review.proof({kind:"meals"});
 const meals=tools.food.review.decide({kind:"meals",decision:"accept"});
@@ -80,7 +85,19 @@ return {queue,read,proof,meals,activities};`)
 			assert.NotContains(t, string(result), "PRIVATE FOOD PROOF")
 			var fields map[string]json.RawMessage
 			require.NoError(t, json.Unmarshal(result, &fields))
-			assert.JSONEq(t, `{"displayed":true}`, string(fields["proof"]))
+			assert.JSONEq(t, `{"displayed":false,"delivery_state":"pending"}`, string(fields["proof"]))
+			documents := 0
+			for _, sent := range chatMessages(t, f, identity.BobTelegramID) {
+				if sent.Document == nil {
+					continue
+				}
+				documents++
+				require.Positive(t, sent.ID)
+				body, downloadErr := f.b.TG.Download(t.Context(), *sent.Document)
+				require.NoError(t, downloadErr)
+				assert.Equal(t, "%PDF-1.4 PRIVATE FOOD PROOF", string(body))
+			}
+			require.Equal(t, 1, documents)
 			got, err := s.Get(t.Context(), "alice", order.EventID, order.ID)
 			require.NoError(t, err)
 			assert.Equal(t, legacyfood.Paid, got.MealPayment.Status)
@@ -205,8 +222,9 @@ func TestScriptFoodReviewerStaleAndAuthorityFields(t *testing.T) {
 func TestScriptFoodExportContinuationReplayAndRevoke(t *testing.T) {
 	t.Parallel()
 	f, _, _ := foodSubmittedFixture(t)
-	transport := &foodExportSecondFailure{}
+	transport := &foodExportRetry{}
 	f.b.TG.HTTP = &http.Client{Transport: transport}
+	f.b.Delivery.Fallback = 10 * time.Millisecond
 	first := runFoodAdminVM(t, f, 28010, identity.BobTelegramID, `return tools.food.export({});`)
 	var result struct {
 		Continuation string `json:"continuation"`
@@ -215,6 +233,7 @@ func TestScriptFoodExportContinuationReplayAndRevoke(t *testing.T) {
 	require.NoError(t, json.Unmarshal(first, &result))
 	require.NotEmpty(t, result.Continuation)
 	assert.False(t, result.Complete)
+	pumpBotDeliveries(t, f.b)
 	assert.EqualValues(t, 2, transport.documents.Load())
 	assert.NotContains(t, string(first), "alice")
 	assert.NotContains(t, string(first), "PRIVATE")
@@ -222,6 +241,10 @@ func TestScriptFoodExportContinuationReplayAndRevoke(t *testing.T) {
 	restarted := *f.b
 	f.b = &restarted
 	code := fmt.Sprintf(`return tools.food.export({continuation:%q});`, result.Continuation)
+	pending := runFoodAdminVM(t, f, 28015, identity.BobTelegramID, code)
+	require.NoError(t, json.Unmarshal(pending, &result))
+	require.False(t, result.Complete, "a continuation preserves the pending operation and its source")
+	require.EqualValues(t, 2, transport.documents.Load())
 	_, err := f.db.Exec(t.Context(), `UPDATE core.food_admins SET can_export=false WHERE owner='bob'`)
 	require.NoError(t, err)
 	denied := runFoodAdminVM(t, f, 28011, identity.BobTelegramID, `return {available:typeof tools.food.export};`)
@@ -229,6 +252,8 @@ func TestScriptFoodExportContinuationReplayAndRevoke(t *testing.T) {
 	assert.EqualValues(t, 2, transport.documents.Load())
 	_, err = f.db.Exec(t.Context(), `UPDATE core.food_admins SET can_export=true WHERE owner='bob'`)
 	require.NoError(t, err)
+	waitFoodExportRetry(t, f, 28010)
+	pumpBotDeliveries(t, f.b)
 	for _, update := range []int64{28012, 28013} {
 		done := runFoodAdminVM(t, f, update, identity.BobTelegramID, code)
 		require.NoError(t, json.Unmarshal(done, &result))
@@ -260,4 +285,37 @@ func TestScriptFoodExportContinuationReplayAndRevoke(t *testing.T) {
 	)
 	assert.JSONEq(t, `{"denied":true}`, string(stolen))
 	assert.EqualValues(t, 3, transport.documents.Load())
+}
+
+func waitFoodExportRetry(t *testing.T, f *fixture, update int64) {
+	t.Helper()
+	var deadline time.Time
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT not_before FROM bot.delivery_intents
+WHERE owner='bob' AND reference->>'update'=$1 AND reference->>'family'='food_summary_export'
+AND state='pending' AND reason='telegram_rate_limit'`, strconv.FormatInt(update, 10)).Scan(&deadline))
+	require.False(t, deadline.IsZero())
+	timer := time.NewTimer(time.Until(deadline))
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-t.Context().Done():
+		t.Fatal(t.Context().Err())
+	}
+}
+
+// The second request is explicitly rejected before acceptance, so retry is safe.
+type foodExportRetry struct{ documents atomic.Int64 }
+
+func (f *foodExportRetry) RoundTrip(request *http.Request) (*http.Response, error) {
+	if strings.HasSuffix(request.URL.Path, "/sendDocument") && f.documents.Add(1) == 2 {
+		return &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     make(http.Header),
+			Body: io.NopCloser(
+				strings.NewReader(`{"ok":false,"error_code":429,"description":"synthetic known refusal"}`),
+			),
+			Request: request,
+		}, nil
+	}
+	return http.DefaultTransport.RoundTrip(request)
 }

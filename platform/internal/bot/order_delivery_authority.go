@@ -2,12 +2,14 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"reflect"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
@@ -82,18 +84,24 @@ type paymentSourceBinding struct {
 func (b *Bot) bindPaymentSource(ctx context.Context, owner, id string, source *readsource.Derivation) error {
 	_, err := b.DB.Exec(ctx, `INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES($1,0,$2,$3)
 	ON CONFLICT(owner,update_id,kind) DO UPDATE SET content=$3`, owner, "payment_source:"+id, paymentSourceBinding{Original: source == nil, Source: source})
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func (b *Bot) paymentSource(ctx context.Context, owner, id string) (*readsource.Derivation, error) {
-	var binding paymentSourceBinding
+	var raw []byte
 	err := b.DB.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=0 AND kind=$2`, owner, "payment_source:"+id).
-		Scan(&binding)
+		Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, appclient.ErrReadStale
 	}
-	if err == nil &&
-		(binding.Original != (binding.Source == nil) || (binding.Source != nil && !binding.Source.Valid())) {
+	if err != nil {
+		return nil, core.DatabaseOperationError(err)
+	}
+	var binding paymentSourceBinding
+	if err = json.Unmarshal(raw, &binding); err != nil {
+		return nil, err
+	}
+	if binding.Original != (binding.Source == nil) || (binding.Source != nil && !binding.Source.Valid()) {
 		return nil, appclient.ErrReadStale
 	}
 	return binding.Source, err

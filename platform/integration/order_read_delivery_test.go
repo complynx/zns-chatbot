@@ -1,18 +1,28 @@
 package integration_test
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
+	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
 func TestModelPaymentInstructionsUseCanonicalReadAction(t *testing.T) {
@@ -40,7 +50,7 @@ func TestModelPaymentInstructionsUseCanonicalReadAction(t *testing.T) {
 				View:        agent.OrdersView,
 				OrderAction: &agent.OrderProposal{Name: orders.ActionPaymentInstructions, OrderID: order.ID},
 			}
-			handle(t, f.b, message(29801, 101, "Show payment instructions for order "+order.ID))
+			handleVisible(t, f.b, message(29801, 101, "Show payment instructions for order "+order.ID))
 			require.Contains(t, paymentMessage(t, f).Text, order.ID)
 			pref, prefErr := f.b.API.Preferences(ctx, "alice")
 			require.NoError(t, prefErr)
@@ -84,52 +94,82 @@ func TestOrderExportRechecksSourceAndCurrentGrantBeforeSend(t *testing.T) {
 	for _, mode := range []string{"model_source", "model_grant", "manual_grant", "script_grant"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
-			f := setup(t)
-			fired := false
-			f.b.API.HTTP = &http.Client{
-				Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
-					response, err := http.DefaultTransport.RoundTrip(r)
-					if err == nil && strings.HasSuffix(r.URL.Path, "/export") && !fired {
-						fired = true
-						if mode == "model_source" {
-							orderDeliveryHistoryDelete(t, f, "bob")
-						} else {
-							_, writeErr := f.db.Exec(
-								t.Context(),
-								`DELETE FROM core.order_admins WHERE owner='bob' AND event_id='sandbox-festival'`,
-							)
-							require.NoError(t, writeErr)
-						}
-					}
-					return response, err
-				}),
-			}
-			f.b.Host.HTTP = f.b.API.HTTP
-			f.model.plan = agent.Plan{View: agent.OrdersView, OrderAction: &agent.OrderProposal{Name: "export"}}
-			update := message(29802, 202, "Export orders")
-			if mode == "manual_grant" {
-				update = modernExportCallback(t, f)
-			}
-			if mode == "script_grant" {
-				f.b.Scripts = scopeVM{}
-				f.b.Model = &knowledgeModel{
-					plans: []agent.Plan{
-						{
-							View: agent.OrdersView,
-							ScriptAction: &agent.ScriptProposal{
-								Code:      `try { return tools.orders.export({}); } catch(e) { return {denied:true}; }`,
-								InputJSON: "null",
-							},
-						},
-						{View: agent.OrdersView, Text: "Checked"},
-					},
-				}
-			}
-			_ = f.b.Handle(t.Context(), update)
-			require.True(t, fired, "test reached the completed export snapshot")
-			require.Empty(t, exportDocuments(t, f, 202), "late source/grant revocation must prevent Telegram exposure")
+			testOrderExportSnapshotBoundary(t, mode)
 		})
 	}
+}
+
+func testOrderExportSnapshotBoundary(t *testing.T, mode string) {
+	t.Helper()
+	f := setup(t)
+	seedSurvivingOrderExportGrant(t, f, mode)
+	fired := false
+	f.b.API.HTTP = &http.Client{
+		Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
+			response, err := http.DefaultTransport.RoundTrip(r)
+			if err == nil && response.StatusCode == http.StatusOK && strings.HasSuffix(r.URL.Path, "/export") &&
+				!fired {
+				body, bodyErr := io.ReadAll(response.Body)
+				require.NoError(t, bodyErr)
+				require.NoError(t, response.Body.Close())
+				require.NotEmpty(t, body)
+				response.Body = io.NopCloser(bytes.NewReader(body))
+				fired = true
+				if mode == "model_source" {
+					orderDeliveryHistoryDelete(t, f, "bob")
+				} else {
+					_, writeErr := f.db.Exec(
+						t.Context(),
+						`DELETE FROM core.order_admins WHERE owner='bob' AND event_id='sandbox-festival'`,
+					)
+					require.NoError(t, writeErr)
+				}
+			}
+			return response, err
+		}),
+	}
+	f.b.Host.HTTP = f.b.API.HTTP
+	f.model.plan = agent.Plan{View: agent.OrdersView, OrderAction: &agent.OrderProposal{Name: "export"}}
+	update := message(29802, 202, "Export orders")
+	if mode == "manual_grant" {
+		update = modernExportCallback(t, f)
+	}
+	if mode == "script_grant" {
+		f.b.Scripts = scopeVM{}
+		f.b.Model = &knowledgeModel{
+			plans: []agent.Plan{
+				{
+					View: agent.OrdersView,
+					ScriptAction: &agent.ScriptProposal{
+						Code:      `try { return tools.orders.export({}); } catch(e) { return {denied:true}; }`,
+						InputJSON: "null",
+					},
+				},
+				{View: agent.OrdersView, Text: "Checked"},
+			},
+		}
+	}
+	wire := orderSnapshotWireCounter(f)
+	require.NoError(t, f.b.Handle(t.Context(), update))
+	require.False(t, fired, "admission does not render an export")
+	family := "order_export"
+	if mode == "script_grant" {
+		family = "modern_order_export"
+	}
+	operation, effect := botdelivery.ResultOperation("bob", update.ID, "document:"+family+":sandbox-festival:")
+	ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+	before, readErr := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, ref, false)
+	require.NoError(t, readErr)
+	require.Equal(t, delivery.Deferred, before.State)
+	if mode != "manual_grant" {
+		require.NotNil(t, before.Reference.Source)
+	}
+	waitExportBoundaryCandidate(t, f, ref, time.Second)
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), ref))
+	require.True(t, fired, "test reached the completed export snapshot")
+	assertOrderSnapshotCancelled(t, f, before, wire)
+	assertSurvivingOrderExportGrant(t, f, mode)
+	require.Empty(t, exportDocuments(t, f, 202), "late source/grant revocation must prevent Telegram exposure")
 }
 
 func TestPaymentCardKeepsOriginalSourceThroughRefreshAndFallback(t *testing.T) {
@@ -223,7 +263,7 @@ func testPaymentCardSource(t *testing.T, fallback bool) {
 
 func TestModernProofRechecksExactBindingAfterDownload(t *testing.T) {
 	t.Parallel()
-	for _, revoke := range []string{"version", "history"} {
+	for _, revoke := range []string{"version", "attempt", "proof_file", "history", "unchanged"} {
 		t.Run(revoke, func(t *testing.T) {
 			t.Parallel()
 			f := setup(t)
@@ -255,22 +295,32 @@ func TestModernProofRechecksExactBindingAfterDownload(t *testing.T) {
 			command.ProofFile = uploadProof(t, service, "alice")
 			order, err = service.Execute(ctx, "alice", command)
 			require.NoError(t, err)
+			expected, err := service.OrderProof(ctx, "alice", order.EventID, order.ID)
+			require.NoError(t, err)
+			wire := orderSnapshotWireCounter(f)
 			fired := false
+			downloads := 0
 			f.b.API.HTTP = &http.Client{
 				Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
 					response, readErr := http.DefaultTransport.RoundTrip(r)
-					if readErr == nil && strings.HasSuffix(r.URL.Path, "/proof/file") && !fired {
+					if readErr == nil && response.StatusCode == http.StatusOK &&
+						strings.HasSuffix(r.URL.Path, "/proof/file") {
+						downloads++
+						require.False(t, fired, "terminal replay must not download private bytes again")
+						body, bodyErr := io.ReadAll(response.Body)
+						require.NoError(t, bodyErr)
+						require.NoError(t, response.Body.Close())
+						require.Equal(t, expected.Body, body)
+						require.Equal(t, expected.ID, response.Header.Get("X-Proof-Id"))
+						require.Equal(
+							t,
+							strconv.FormatInt(expected.Version, 10),
+							response.Header.Get("X-Order-Version"),
+						)
+						require.Equal(t, expected.Attempt, response.Header.Get("X-Payment-Attempt"))
+						response.Body = io.NopCloser(bytes.NewReader(body))
 						fired = true
-						if revoke == "history" {
-							orderDeliveryHistoryDelete(t, f, "alice")
-						} else {
-							_, writeErr := f.db.Exec(
-								ctx,
-								`UPDATE core.orders SET version=version+1 WHERE id=$1`,
-								order.ID,
-							)
-							require.NoError(t, writeErr)
-						}
+						mutateOrderProofSnapshot(t, f, revoke, order, expected)
 					}
 					return response, readErr
 				}),
@@ -294,7 +344,19 @@ func TestModernProofRechecksExactBindingAfterDownload(t *testing.T) {
 				},
 			}
 			f.b.Model = model
-			_ = f.b.Handle(ctx, message(29805, 101, "Show receipt for "+order.ID))
+			require.NoError(t, f.b.Handle(ctx, message(29805, 101, "Show receipt for "+order.ID)))
+			require.False(t, fired, "admission must not download the proof")
+			operation, effect := botdelivery.ResultOperation("alice", 29805,
+				"document:modern_order_proof:sandbox-festival:"+order.ID)
+			ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+			before, readErr := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, ref, false)
+			require.NoError(t, readErr)
+			require.Equal(t, delivery.Deferred, before.State)
+			require.Equal(t, expected.Version, before.Reference.Version)
+			require.Equal(t, expected.Attempt, before.Reference.ProofAttempt)
+			require.NotNil(t, before.Reference.Source)
+			waitExportBoundaryCandidate(t, f, ref, time.Second)
+			require.NoError(t, f.b.DeliverBotIntent(ctx, ref))
 			require.NotEmpty(t, model.inputs)
 			require.Contains(
 				t,
@@ -303,67 +365,344 @@ func TestModernProofRechecksExactBindingAfterDownload(t *testing.T) {
 				"the provider observed the source before the download barrier",
 			)
 			require.True(t, fired)
-			for _, item := range chatMessages(t, f, 101) {
-				require.Nil(t, item.Document, "stale proof bytes must never reach Telegram")
+			require.Equal(t, 1, downloads)
+			if revoke == "unchanged" {
+				assertOrderSnapshotProof(t, f, before, expected, wire)
+			} else {
+				assertOrderSnapshotCancelled(t, f, before, wire)
+				for _, item := range chatMessages(t, f, 101) {
+					require.Nil(t, item.Document, "stale proof bytes must never reach Telegram")
+				}
 			}
-			var status string
-			require.NoError(
-				t,
-				f.db.QueryRow(ctx, `SELECT content->>'status' FROM bot.interactions WHERE owner='alice' AND update_id=29805 AND kind=$1`, "modern_order_delivery:orders.proof:"+order.ID).
-					Scan(&status),
-			)
-			require.Equal(t, "blocked", status)
+			require.Equal(t, 1, downloads, "terminal replay must retain the completed snapshot identity")
 		})
 	}
 }
 
 func TestModernExportRetriesAuthorityOutageBeforeTransport(t *testing.T) {
 	t.Parallel()
+	for _, revoked := range []bool{false, true} {
+		t.Run(fmt.Sprintf("revoked_%t", revoked), func(t *testing.T) {
+			t.Parallel()
+			testModernExportAuthorityRecovery(t, revoked)
+		})
+	}
+}
+
+type modernExportAuthorityProbe struct {
+	t           *testing.T
+	f           *fixture
+	ref         delivery.Reference
+	snapshots   int
+	unavailable bool
+	wire        int
+	body        []byte
+}
+
+func (p *modernExportAuthorityProbe) RoundTrip(r *http.Request) (*http.Response, error) {
+	if strings.HasSuffix(r.URL.Path, "/business-capabilities") && p.snapshots == 1 && !p.unavailable {
+		p.unavailable = true
+		i, err := botdelivery.Read(p.t.Context(), p.f.db, p.f.b.Delivery.BotID, p.ref, false)
+		require.NoError(p.t, err)
+		require.Equal(p.t, delivery.Deferred, i.State)
+		require.Zero(p.t, i.Attempt)
+		require.Zero(p.t, i.MessageID)
+		require.Zero(p.t, p.wire)
+		require.Empty(p.t, exportDocuments(p.t, p.f, 202))
+		return &http.Response{
+			StatusCode: http.StatusServiceUnavailable,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"code":"authority_unavailable"}`)),
+			Request:    r,
+		}, nil
+	}
+	if strings.HasSuffix(r.URL.Path, "/export") {
+		p.snapshots++
+	}
+	response, err := http.DefaultTransport.RoundTrip(r)
+	if err == nil && strings.HasSuffix(r.URL.Path, "/export") && response.StatusCode == http.StatusOK {
+		p.body, err = io.ReadAll(response.Body)
+		require.NoError(p.t, err)
+		require.NoError(p.t, response.Body.Close())
+		response.Body = io.NopCloser(bytes.NewReader(p.body))
+	}
+	return response, err
+}
+
+func modernExportProjectionCount(t *testing.T, f *fixture) int {
+	t.Helper()
+	var count int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions
+ WHERE owner='bob' AND update_id=29806 AND kind='modern_order_delivery:orders.export'`).Scan(&count))
+	return count
+}
+
+func testModernExportAuthorityRecovery(t *testing.T, revoked bool) {
+	t.Helper()
 	f := setup(t)
-	snapshots := 0
-	unavailable := false
-	f.b.API.HTTP = &http.Client{Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
-		if strings.HasSuffix(r.URL.Path, "/business-capabilities") && snapshots == 1 && !unavailable {
-			unavailable = true
-			var admitted int
-			require.NoError(
-				t,
-				f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions WHERE owner='bob' AND update_id=29806 AND kind='modern_order_delivery:orders.export'`).
-					Scan(&admitted),
-			)
-			require.Equal(t, 1, admitted, "the fault occurs after durable admission but before Telegram")
-			return &http.Response{
-				StatusCode: http.StatusServiceUnavailable,
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(`{"code":"authority_unavailable"}`)),
-				Request:    r,
-			}, nil
-		}
-		if strings.HasSuffix(r.URL.Path, "/export") {
-			snapshots++
-			if snapshots == 2 {
-				var admitted int
-				require.NoError(
-					t,
-					f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions WHERE owner='bob' AND update_id=29806 AND kind='modern_order_delivery:orders.export'`).
-						Scan(&admitted),
-				)
-				require.Zero(t, admitted, "known-not-attempted admission must not become a permanent uncertain receipt")
-			}
+	ctx := t.Context()
+	operation, effect := botdelivery.ResultOperation("bob", 29806, "document:modern_order_export:sandbox-festival:")
+	ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+	probe := &modernExportAuthorityProbe{t: t, f: f, ref: ref}
+	f.b.API.HTTP = &http.Client{Transport: probe}
+	f.b.Host.HTTP = f.b.API.HTTP
+	f.b.TG.HTTP = &http.Client{Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/sendDocument") {
+			probe.wire++
 		}
 		return http.DefaultTransport.RoundTrip(r)
 	})}
-	f.b.Host.HTTP = f.b.API.HTTP
+	var operationsBefore int
+	require.NoError(t, f.db.QueryRow(ctx, `SELECT count(*) FROM core.order_operations`).Scan(&operationsBefore))
 	result := runModernVM(
 		t,
 		f,
 		29806,
 		202,
 		"Export orders",
-		`let failed=false;try{tools.orders.export({});}catch(e){failed=true;}const retried=tools.orders.export({});return {failed,status:retried.status};`,
+		`const first=tools.orders.export({});const second=tools.orders.export({});return {first:first.status,second:second.status};`,
 	)
-	require.True(t, unavailable)
-	require.Equal(t, 2, snapshots)
-	require.JSONEq(t, `{"failed":true,"status":"delivered"}`, string(result))
-	require.Len(t, exportDocuments(t, f, 202), 1)
+	require.JSONEq(t, `{"first":"pending","second":"pending"}`, string(result))
+	require.Zero(t, probe.snapshots)
+	require.Zero(t, probe.wire)
+	require.Zero(t, modernExportProjectionCount(t, f))
+	original, err := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, ref, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Deferred, original.State)
+	err = f.b.DeliverBotIntent(ctx, ref)
+	var problem *core.ProblemError
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, http.StatusServiceUnavailable, problem.Status)
+	require.Equal(t, "authority_unavailable", problem.Code)
+	require.True(t, probe.unavailable)
+	require.Equal(t, 1, probe.snapshots)
+	require.Zero(t, probe.wire)
+	require.Empty(t, exportDocuments(t, f, 202))
+	require.Zero(t, modernExportProjectionCount(t, f))
+	pending, err := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, ref, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Deferred, pending.State)
+	require.Equal(t, original.Reference, pending.Reference)
+	require.Zero(t, pending.Attempt)
+	require.Zero(t, pending.MessageID)
+	require.False(t, pending.ContinuationDone)
+	require.True(t, pending.NotBefore.After(original.NotBefore))
+	var queueState string
+	var queueDeadline time.Time
+	require.NoError(t, f.db.QueryRow(ctx, `SELECT state,not_before FROM core.delivery_queue
+ WHERE bot_id=$1 AND owner_kind=$2 AND owner_key=$3 AND effect_key=$4`,
+		f.b.Delivery.BotID, string(ref.Owner), ref.Key, ref.Effect).Scan(&queueState, &queueDeadline))
+	require.Equal(t, string(delivery.Deferred), queueState)
+	require.True(t, queueDeadline.Equal(pending.NotBefore))
+	if revoked {
+		_, err = f.db.Exec(ctx, `DELETE FROM core.order_admins WHERE owner='bob' AND event_id='sandbox-festival'`)
+		require.NoError(t, err)
+	}
+	// Preserve the real configured fallback. Selection, not a test SQL rewrite,
+	// determines when the same durable effect can be retried.
+	require.Eventually(t, func() bool {
+		for _, entry := range botDeliveryCandidates(t, f.b) {
+			if entry.Reference == ref {
+				return true
+			}
+		}
+		return false
+	}, f.b.Delivery.Fallback+5*time.Second, 50*time.Millisecond)
+	require.NoError(t, f.b.DeliverBotIntent(ctx, ref))
+	after, err := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, ref, false)
+	require.NoError(t, err)
+	require.Equal(t, original.Reference, after.Reference)
+	require.Equal(t, 2, probe.snapshots)
+	if revoked {
+		require.Equal(t, delivery.Cancelled, after.State)
+		require.Zero(t, after.MessageID)
+		require.Zero(t, probe.wire)
+		require.Zero(t, modernExportProjectionCount(t, f))
+		require.Empty(t, exportDocuments(t, f, 202))
+	} else {
+		require.Equal(t, delivery.Succeeded, after.State)
+		require.Positive(t, after.MessageID)
+		require.True(t, after.ContinuationDone)
+		require.Equal(t, 1, modernExportProjectionCount(t, f))
+		require.Equal(t, 1, probe.wire)
+		documents := exportDocuments(t, f, 202)
+		require.Len(t, documents, 1)
+		body, readErr := f.b.TG.Download(ctx, telegram.Document{FileID: documents[0], Filename: "orders.xlsx"})
+		require.NoError(t, readErr)
+		require.NotEmpty(t, probe.body)
+		require.Equal(t, probe.body, body)
+	}
+	require.NoError(t, f.b.DeliverBotIntent(ctx, ref))
+	require.Equal(t, 2, probe.snapshots)
+	final, err := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, ref, false)
+	require.NoError(t, err)
+	require.Equal(t, after, final)
+	if !revoked {
+		handle(t, f.b, message(29806, 202, "Export orders"))
+		require.Equal(t, 1, probe.wire)
+		require.Equal(t, 2, probe.snapshots)
+		require.Len(t, exportDocuments(t, f, 202), 1)
+	}
+	var operationsAfter int
+	require.NoError(t, f.db.QueryRow(ctx, `SELECT count(*) FROM core.order_operations`).Scan(&operationsAfter))
+	require.Equal(t, operationsBefore, operationsAfter)
+}
+
+func orderSnapshotWireCounter(f *fixture) *atomic.Int64 {
+	var wire atomic.Int64
+	f.b.TG.HTTP = &http.Client{Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/sendDocument") {
+			wire.Add(1)
+		}
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	return &wire
+}
+
+func assertOrderSnapshotCancelled(t *testing.T, f *fixture, before botdelivery.Intent, wire *atomic.Int64) {
+	t.Helper()
+	after, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, before.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, before.Reference, after.Reference)
+	require.Equal(t, delivery.Cancelled, after.State)
+	require.Zero(t, after.Attempt)
+	require.Zero(t, after.MessageID)
+	require.Nil(t, after.Receipt.Document)
+	require.Zero(t, wire.Load())
+	var projections int
+	require.NoError(t, f.db.QueryRow(t.Context(),
+		"SELECT count(*) FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3",
+		before.Owner, before.Reference.Update, before.Reference.Continuation.Key).Scan(&projections))
+	require.Zero(t, projections, "a pre-send cancellation cannot fabricate a document receipt")
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), before.QueueReference()))
+	final, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, before.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, after, final)
+	require.Zero(t, wire.Load())
+}
+
+func assertOrderSnapshotProof(
+	t *testing.T,
+	f *fixture,
+	before botdelivery.Intent,
+	expected orders.Proof,
+	wire *atomic.Int64,
+) {
+	t.Helper()
+	after, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, before.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, before.Reference, after.Reference)
+	require.Equal(t, delivery.Succeeded, after.State)
+	require.Positive(t, after.MessageID)
+	require.True(t, after.ContinuationDone)
+	require.NotNil(t, after.Receipt.Document)
+	digest := sha256.Sum256(expected.Body)
+	require.Equal(t, &botdelivery.DocumentReceipt{
+		Filename: expected.Filename, SHA256: hex.EncodeToString(digest[:]), Bytes: len(expected.Body),
+	}, after.Receipt.Document)
+	var projection botdelivery.ModernReceipt
+	require.NoError(t, f.db.QueryRow(t.Context(),
+		"SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3",
+		before.Owner, before.Reference.Update, before.Reference.Continuation.Key).Scan(&projection))
+	require.Equal(t, botdelivery.ModernReceipt{
+		Status: "delivered", EventID: before.Reference.Event, ChatID: before.Chat,
+		Filename: expected.Filename, SHA256: hex.EncodeToString(digest[:]),
+		Bytes: len(expected.Body), MessageID: after.MessageID,
+	}, projection)
+	documents := 0
+	for _, item := range chatMessages(t, f, before.Chat) {
+		if item.Document == nil {
+			continue
+		}
+		documents++
+		require.Equal(t, after.MessageID, item.ID)
+		require.Equal(t, expected.Filename, item.Document.Filename)
+		body, readErr := f.b.TG.Download(t.Context(), *item.Document)
+		require.NoError(t, readErr)
+		require.Equal(t, expected.Body, body)
+	}
+	require.Equal(t, 1, documents)
+	require.EqualValues(t, 1, wire.Load())
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), before.QueueReference()))
+	final, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, before.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, after, final)
+	require.EqualValues(t, 1, wire.Load())
+}
+
+func mutateOrderProofSnapshot(
+	t *testing.T,
+	f *fixture,
+	mode string,
+	order orders.Order,
+	original orders.Proof,
+) {
+	t.Helper()
+	service := orders.Service{DB: f.db}
+	expected := original
+	var query string
+	var value any
+	switch mode {
+	case "history":
+		orderDeliveryHistoryDelete(t, f, "alice")
+		return
+	case "unchanged":
+		return
+	case "version":
+		query, value = "UPDATE core.orders SET version=$2 WHERE id=$1", original.Version+1
+		expected.Version++
+	case "attempt":
+		query, value = "UPDATE core.orders SET attempt=$2 WHERE id=$1", original.Attempt+"-replacement"
+		expected.Attempt = original.Attempt + "-replacement"
+	case "proof_file":
+		body := append(bytes.Clone(original.Body), []byte("replacement proof")...)
+		replacement, err := service.UploadProof(t.Context(), "alice", original.Filename, body)
+		require.NoError(t, err)
+		require.NotEqual(t, original.ID, replacement.ID)
+		query, value = "UPDATE core.orders SET proof_file=$2 WHERE id=$1", replacement.ID
+		expected.ID, expected.Body = replacement.ID, body
+	default:
+		t.Fatalf("unsupported proof mutation %q", mode)
+	}
+	tag, err := f.db.Exec(t.Context(), query, order.ID, value)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, tag.RowsAffected())
+	current, err := service.OrderProof(t.Context(), "alice", order.EventID, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, expected, current, "only the selected current proof binding may change")
+}
+
+const survivingOrderExportEvent = "other-export-event"
+
+func seedSurvivingOrderExportGrant(t *testing.T, f *fixture, mode string) {
+	t.Helper()
+	if mode == "model_source" {
+		return
+	}
+	_, err := f.db.Exec(
+		t.Context(),
+		"INSERT INTO core.order_events(id,deadline,menu,extras) SELECT $1,deadline,menu,extras FROM core.order_events WHERE id='sandbox-festival'",
+		survivingOrderExportEvent,
+	)
+	require.NoError(t, err)
+	_, err = f.db.Exec(t.Context(),
+		"INSERT INTO core.order_admins(event_id,owner,country) VALUES($1,'bob','be')",
+		survivingOrderExportEvent)
+	require.NoError(t, err)
+}
+
+func assertSurvivingOrderExportGrant(t *testing.T, f *fixture, mode string) {
+	t.Helper()
+	if mode == "model_source" {
+		return
+	}
+	capability, err := f.b.API.BusinessCapabilities(t.Context(), "bob", survivingOrderExportEvent)
+	require.NoError(t, err)
+	require.True(t, capability.CanBook)
+	require.True(t, capability.CanExportOrders, "the unrelated export grant must survive")
+	body, err := f.b.API.ExportOrders(t.Context(), "bob", survivingOrderExportEvent)
+	require.NoError(t, err)
+	require.NotEmpty(t, body, "the surviving grant must authorize a real export")
+	_, err = f.b.API.ExportOrders(t.Context(), "bob", "sandbox-festival")
+	requireCode(t, err, "forbidden")
 }

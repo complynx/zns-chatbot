@@ -6,6 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+
 	"github.com/complynx/zns-chatbot/platform/internal/workflow"
 
 	"github.com/complynx/zns-chatbot/platform/internal/account"
@@ -31,6 +33,7 @@ import (
 // Services contains ready domain services. Transports adapt requests without
 // reconstructing services or starting background work.
 type Services struct {
+	MemoryReadState  agenthost.MemoryReadStore
 	BotDelivery      botdelivery.Service
 	Workflow         workflow.Service
 	Account          account.Service
@@ -85,6 +88,7 @@ func NewServices(db *pgxpool.Pool, options Options) Services {
 	settings := modelsettings.Service{DB: db}
 	creditService := credits.Service{DB: db}
 	return Services{
+		MemoryReadState: agenthost.MemoryReadStore{DB: db},
 		BotDelivery: botdelivery.Service{
 			DB:            db,
 			Delivery:      options.Delivery,

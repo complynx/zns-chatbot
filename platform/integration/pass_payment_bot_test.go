@@ -15,7 +15,7 @@ func registrationPaymentFixture(t *testing.T) *fixture {
 	f := passMenuFixture(t)
 	command := bookingCommand("solo", "registration-payment", passbooking.Booking{})
 	command.PaymentAdmin = "bob"
-	booking, err := (passbooking.Service{DB: f.db}).Execute(t.Context(), "alice", command)
+	booking, err := (passbooking.Service{DB: f.db, Delivery: f.b.Delivery}).Execute(t.Context(), "alice", command)
 	require.NoError(t, err)
 	require.Equal(t, "assigned", booking.State)
 	return f
@@ -27,7 +27,7 @@ func TestRegistrationReceiptAgentAmountAndManualReview(t *testing.T) {
 	photo, body := intakePhoto(t, f)
 	f.model.plan = agent.Plan{View: agent.MediaView, MediaAction: &agent.MediaProposal{
 		MediaID: "tg-media-100", Intent: "receipt", Amount: "100", Currency: "RUB"}}
-	handle(t, f.b, photo)
+	handlePassVisible(t, f, photo)
 	assert.Equal(t, body, f.model.input.Attachment.Body, "model receives the actual uploaded artwork")
 	service := passbooking.Service{DB: f.db}
 	payment, err := service.Payment(t.Context(), "alice", "dance", "alice")
@@ -43,13 +43,13 @@ func TestRegistrationReceiptAgentAmountAndManualReview(t *testing.T) {
 		`UPDATE bot.media_intake SET status='choose',expires_at=now()-interval '1 day' WHERE id='tg-media-100'`,
 	)
 	require.NoError(t, err)
-	handle(t, f.b, photo)
+	handlePassVisible(t, f, photo)
 	assert.Equal(t, 1, f.model.calls)
 	_, err = f.db.Exec(t.Context(), `UPDATE core.users SET language='en' WHERE id='bob'`)
 	require.NoError(t, err)
-	handle(t, f.b, message(201, 202, "/passes"))
-	handle(t, f.b, passMenuClick(t, f, 202, 202, "Dance"))
-	handle(t, f.b, passMenuClick(t, f, 202, 203, "Pass receipts to review"))
+	handlePassVisible(t, f, message(201, 202, "/passes"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 202, "Dance"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 203, "Pass receipts to review"))
 	accept := passMenuClick(t, f, 202, 204, "Accept payment · 101")
 	foreign := accept
 	copyCallback := *accept.Callback
@@ -59,17 +59,18 @@ func TestRegistrationReceiptAgentAmountAndManualReview(t *testing.T) {
 	payment, err = service.Payment(t.Context(), "alice", "dance", "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "pending", payment.Decision)
-	handle(t, f.b, accept)
+	handlePassVisible(t, f, accept)
 	payment, err = service.Payment(t.Context(), "alice", "dance", "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "accepted", payment.Decision)
 	assert.NotContains(t, passMenuCard(t, f, 202).Text, "awaiting review")
-	handle(t, f.b, accept)
+	handlePassVisible(t, f, accept)
 	var attempts int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM core.pass_payment_attempts`).Scan(&attempts))
 	assert.Equal(t, 1, attempts)
 	restarted := *f.b
 	require.NoError(t, restarted.RenderPassMenu(t.Context(), "alice", 101, ""))
+	drainPassNotices(t, f)
 	assert.Contains(t, passMenuCard(t, f, 101).Text, "Payment accepted")
 }
 
@@ -81,7 +82,7 @@ func TestRegistrationReceiptRussianSemanticChoiceAndAgentReview(t *testing.T) {
 	photo, _ := intakePhoto(t, f)
 	f.model.plan = agent.Plan{View: agent.MediaView, Text: "Уточните назначение", MediaAction: &agent.MediaProposal{
 		MediaID: "tg-media-100", Intent: "receipt"}}
-	handle(t, f.b, photo)
+	handlePassVisible(t, f, photo)
 	f.model.plan = agent.Plan{View: "workflow", Text: "Четыре."}
 	handle(t, f.b, message(102, 101, "Сколько будет два плюс два?"))
 	var attempts int
@@ -89,7 +90,7 @@ func TestRegistrationReceiptRussianSemanticChoiceAndAgentReview(t *testing.T) {
 	assert.Zero(t, attempts)
 	f.model.plan = agent.Plan{View: agent.MediaView, MediaAction: &agent.MediaProposal{
 		MediaID: "tg-media-100", Intent: "receipt", RegistrationEvent: "dance"}}
-	handle(t, f.b, message(103, 101, "Первый вариант"))
+	handlePassVisible(t, f, message(103, 101, "Первый вариант"))
 	assert.Contains(t, passMenuCard(t, f, 101).Text, "ожидает проверки")
 	service := passbooking.Service{DB: f.db}
 	payment, err := service.Payment(t.Context(), "alice", "dance", "alice")
@@ -104,6 +105,7 @@ func TestRegistrationReceiptRussianSemanticChoiceAndAgentReview(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "rejected", payment.Decision)
 	require.NoError(t, f.b.RenderPassMenu(t.Context(), "alice", 101, ""))
+	drainPassNotices(t, f)
 	assert.Contains(t, passMenuCard(t, f, 101).Text, "Чек отклонён")
 }
 
@@ -123,7 +125,7 @@ func TestRegistrationReceiptAmbiguousDestinationAndStaleChoice(t *testing.T) {
 	photo, _ := intakePhoto(t, f)
 	f.model.plan = agent.Plan{View: agent.MediaView, MediaAction: &agent.MediaProposal{
 		MediaID: "tg-media-100", Intent: "receipt", Amount: quote.TotalRUB, Currency: "RUB"}}
-	handle(t, f.b, photo)
+	handlePassVisible(t, f, photo)
 	choice := orderClick(t, f, 101, 301, "Pass payment · Dance · 1050 RUB")
 	service := passbooking.Service{DB: f.db}
 	booking, err := service.Get(t.Context(), "alice", "dance")

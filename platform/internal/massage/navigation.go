@@ -108,6 +108,7 @@ func (s Service) ProviderDetail(ctx context.Context, actor, event, provider, raw
 		return core.ReadChunk{}, err
 	}
 	var value PublicProvider
+	var about []byte
 	var tooLarge bool
 	err = s.DB.QueryRow(ctx, `SELECT s.owner,u.telegram_id,
  CASE WHEN octet_length(s.name)+octet_length(s.icon)+octet_length(s.about::text)<=$3 THEN s.name ELSE '' END,
@@ -115,12 +116,17 @@ func (s Service) ProviderDetail(ctx context.Context, actor, event, provider, raw
  CASE WHEN octet_length(s.name)+octet_length(s.icon)+octet_length(s.about::text)<=$3 THEN s.about ELSE '{}'::jsonb END,
  s.min_length,s.max_length,octet_length(s.name)+octet_length(s.icon)+octet_length(s.about::text)>$3
  FROM core.massage_specialists s JOIN core.users u ON u.id=s.owner WHERE s.event_id=$1 AND s.owner=$2`, event, provider, core.ReadResourceBytes).
-		Scan(&value.Owner, &value.ID, &value.Name, &value.Icon, &value.About, &value.MinLength, &value.MaxLength, &tooLarge)
+		Scan(&value.Owner, &value.ID, &value.Name, &value.Icon, &about, &value.MinLength, &value.MaxLength, &tooLarge)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return core.ReadChunk{}, &core.ProblemError{Status: http.StatusNotFound, Code: "not_found"}
 	}
 	if err != nil {
-		return core.ReadChunk{}, err
+		return core.ReadChunk{}, core.DatabaseOperationError(err)
+	}
+	if about != nil {
+		if err = json.Unmarshal(about, &value.About); err != nil {
+			return core.ReadChunk{}, err
+		}
 	}
 	if tooLarge {
 		return core.ReadChunk{}, core.ReadProblem("read_result_limit")

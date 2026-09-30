@@ -2,14 +2,13 @@ package bot
 
 import (
 	"context"
-	"errors"
-	"net/http"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -38,34 +37,27 @@ func samePassSnapshot(previous, current passbooking.Booking) bool {
 
 // Historical menus expose only owner reads and existing receipt downloads.
 func (r *passMenuRenderer) historicalPass(ctx context.Context) error {
-	booking, err := r.bot.API.PassBooking(ctx, r.owner, r.state.Event)
+	view, err := (interaction.RegistrationHomeReader{Domain: r.bot.API}).
+		Historical(ctx, r.owner, r.state.Event, r.state.View)
 	if err != nil {
+		if core.IsDatabaseFailure(err) {
+			return core.ErrDatabase
+		}
 		return err
 	}
-	if booking.Version == 0 || !historicalPassView(r.state.View) {
-		return &core.ProblemError{Status: http.StatusForbidden, Code: mediaForbidden}
-	}
-	r.lines = append(r.lines, r.bookingText(booking))
+	r.lines = append(r.lines, r.bookingText(view.Booking))
 	if r.state.View != registrationPayment {
-		if booking.State == statePaid || booking.State == registrationAssigned {
+		if view.ShowPayment {
 			r.navigate(i18n.RegistrationPayment, registrationPayment)
 		}
 		return nil
 	}
-	payment, err := r.bot.API.PassPayment(ctx, r.owner, r.state.Event, r.owner)
-	if historicalPaymentAbsent(err) {
+	if view.PaymentAbsent {
 		r.lines = append(r.lines, r.text(i18n.RegistrationPaymentAbsent))
 		return nil
 	}
-	if err != nil {
-		return err
-	}
+	payment := *view.Payment
 	r.lines = append(r.lines, r.paymentStatus(payment))
 	r.paymentFile(r.owner, payment, "")
 	return nil
-}
-
-func historicalPaymentAbsent(err error) bool {
-	problem, ok := errors.AsType[*core.ProblemError](err)
-	return ok && problem.Status == http.StatusNotFound && problem.Code == "pass_payment_missing"
 }

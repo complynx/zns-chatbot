@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
@@ -40,14 +41,14 @@ func (s Service) CaptureAdmission(ctx context.Context, actor string, request Adm
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, err := s.CaptureAdmissionInTx(ctx, tx, actor, request)
 	if err != nil {
 		return Admission{}, err
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // CaptureAdmissionInTx validates current command authority before capture.
@@ -106,7 +107,7 @@ func (p *PreparedCommand) captureAdmission(ctx context.Context, ref *registratio
 		p.requestHash,
 		result.ID,
 	)
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }
 
 func (p *PreparedCommand) existingAdmission(ctx context.Context) (Admission, bool, error) {
@@ -120,7 +121,7 @@ func (p *PreparedCommand) existingAdmission(ctx context.Context) (Admission, boo
 		return Admission{}, false, nil
 	}
 	if err != nil {
-		return Admission{}, false, err
+		return Admission{}, false, core.DatabaseOperationError(err)
 	}
 	if previous != p.requestHash {
 		return Admission{}, false, conflict("idempotency_conflict")
@@ -134,7 +135,7 @@ func (p *PreparedCommand) captureNewAdmission(
 ) (Admission, error) {
 	var now time.Time
 	if err := p.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	if !now.Before(p.event.finishes) {
 		return Admission{}, conflict("pass_event_finished")
@@ -148,7 +149,7 @@ func (p *PreparedCommand) captureNewAdmission(
 		return p.reconcileAdmission(ctx, active, ref)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	position, err := p.admissionPosition(ctx, ref)
 	if err != nil {
@@ -157,7 +158,7 @@ func (p *PreparedCommand) captureNewAdmission(
 	var retired bool
 	if err = p.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.registration_intents WHERE event_id=$1 AND owner=$2 AND state='cancelled' AND closed_through_position >= $3)`, p.command.Event, p.actor, position).
 		Scan(&retired); err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	if retired {
 		return Admission{}, conflict("pass_admission_cancelled")
@@ -197,7 +198,7 @@ func (p *PreparedCommand) insertAdmission(ctx context.Context, position int64, o
  RETURNING id,generation,COALESCE(ingress_id,0),state,sales_open,origin`,
 		p.command.Event, p.actor, ingress, origin, state, observedOpen, bookingTime, p.registrationRetention.Microseconds(), p.nativeReceivedAt).
 		Scan(&result.ID, &result.Generation, &result.Position, &result.State, &result.SalesOpen, &result.Origin)
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }
 
 func (p *PreparedCommand) checkAdmission(ctx context.Context) error {
@@ -236,7 +237,7 @@ func (s *snapshot) persistAdmissions(ctx context.Context, tx pgx.Tx) error {
 			b.CreatedAt,
 			reason,
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	return nil
@@ -257,7 +258,7 @@ func (p *PreparedCommand) cancelUnfinishedAdmission(ctx context.Context) (bool, 
 		p.actor,
 	)
 	if err != nil || tag.RowsAffected() == 0 {
-		return false, err
+		return false, core.DatabaseOperationError(err)
 	}
 	_, err = p.tx.Exec(
 		ctx,
@@ -270,7 +271,7 @@ func (p *PreparedCommand) cancelUnfinishedAdmission(ctx context.Context) (bool, 
 	if err == nil {
 		p.current.State = cancelled
 	}
-	return true, err
+	return true, core.DatabaseOperationError(err)
 }
 
 func (p *PreparedCommand) reconcileAdmission(
@@ -291,7 +292,7 @@ func (p *PreparedCommand) reconcileAdmission(
 	if err = p.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.registration_intents
  WHERE event_id=$1 AND owner=$2 AND state='cancelled' AND closed_through_position >= $3)`,
 		p.command.Event, p.actor, position).Scan(&retired); err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	if retired {
 		return Admission{}, conflict("pass_admission_cancelled")
@@ -305,7 +306,7 @@ func (p *PreparedCommand) reconcileAdmission(
 		p.registrationRetention.Microseconds(),
 	)
 	result.Position = position
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }
 
 // reconcileStaleAdmission retains earlier trusted ordering evidence without
@@ -329,7 +330,7 @@ func (p *PreparedCommand) reconcileStaleAdmission(
 		return Admission{}, conflict("pass_booking_stale")
 	}
 	if err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	previous := result.Position
 	result, err = p.reconcileAdmission(ctx, result, ref)

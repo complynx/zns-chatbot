@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/destination"
 )
 
@@ -57,14 +58,14 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Booking,
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Booking{}, err
+		return Booking{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, err := s.executeInTx(ctx, tx, actor, c)
 	if err != nil {
 		return Booking{}, err
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // executeInTx retains the shared command semantics for durable transactional adapters.
@@ -160,7 +161,7 @@ func (s Service) prepareCommand(
 		return p, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	return p, nil
 }
@@ -188,7 +189,7 @@ func (p *PreparedCommand) Apply(ctx context.Context) (Booking, error) {
 	// Transaction start can precede a long lock wait. All decisions use the clock
 	// after event, permission and required profile locks have been acquired.
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return Booking{}, err
+		return Booking{}, core.DatabaseOperationError(err)
 	}
 	if err := refreshRegistrationTurns(ctx, tx, c.Event, p.registrationRetention, now); err != nil {
 		return Booking{}, err
@@ -218,7 +219,7 @@ func (p *PreparedCommand) Apply(ctx context.Context) (Booking, error) {
 		p.requestHash,
 	)
 	if err != nil {
-		return Booking{}, err
+		return Booking{}, core.DatabaseOperationError(err)
 	}
 	return *current, nil
 }
@@ -232,7 +233,7 @@ func lockRegistrationProfile(ctx context.Context, tx pgx.Tx, actor, name string,
 	if errors.Is(err, pgx.ErrNoRows) {
 		return conflict("pass_profile_required")
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func authorize(ctx context.Context, tx pgx.Tx, actor, name, eventID string) (int64, error) {
@@ -244,7 +245,7 @@ func authorize(ctx context.Context, tx pgx.Tx, actor, name, eventID string) (int
 		return 0, forbidden()
 	}
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationContextError(ctx, err)
 	}
 	if name == CommandTakeover || name == CommandReceivedOnly {
 		return telegramID, authorizeTakeover(ctx, tx, actor, eventID)
@@ -256,7 +257,7 @@ func authorize(ctx context.Context, tx pgx.Tx, actor, name, eventID string) (int
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, forbidden()
 		}
-		return telegramID, err
+		return telegramID, core.DatabaseOperationContextError(ctx, err)
 	}
 	if name == commandAdminCancel {
 		return telegramID, authorizeBatchCancel(ctx, tx, actor, eventID)
@@ -268,7 +269,7 @@ func authorize(ctx context.Context, tx pgx.Tx, actor, name, eventID string) (int
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, forbidden()
 		}
-		return telegramID, err
+		return telegramID, core.DatabaseOperationContextError(ctx, err)
 	}
 	if !canBook {
 		return 0, forbidden()

@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -253,15 +254,19 @@ func (b *Bot) commitMediaReceipt(ctx context.Context, in incoming, item mediaInt
 			return b.mediaExecutionError(ctx, in, item, err)
 		}
 		command.ProofFile = proof.ID
+		encoded, encodeErr := json.Marshal(command)
+		if encodeErr != nil {
+			return encodeErr
+		}
 		_, err = b.DB.Exec(
 			ctx,
 			`UPDATE bot.media_intake SET command=$3 WHERE owner=$1 AND id=$2`,
 			in.owner,
 			item.ID,
-			command,
+			encoded,
 		)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	item.Command = &command
@@ -282,7 +287,7 @@ func (b *Bot) commitMediaReceipt(ctx context.Context, in incoming, item mediaInt
 		string(i18n.MediaSaved),
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if err = b.RenderOrders(ctx, in.owner, in.chat); err != nil {
 		return err
@@ -291,6 +296,9 @@ func (b *Bot) commitMediaReceipt(ctx context.Context, in incoming, item mediaInt
 }
 
 func (b *Bot) mediaExecutionError(ctx context.Context, in incoming, item mediaIntake, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	problem, ok := errors.AsType[*core.ProblemError](err)
 	if !ok || problem.Status >= http.StatusInternalServerError {
 		return err
@@ -313,7 +321,7 @@ func (b *Bot) mediaExecutionError(ctx context.Context, in incoming, item mediaIn
 		string(notice),
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return b.RenderMedia(ctx, in.owner, in.chat, item.ID)
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // LegacyCallbackRequest carries callback data, never a trusted bot namespace.
@@ -96,7 +98,7 @@ func (s Service) ResolveLegacyCallback(
 	var allowed bool
 	if err = s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.users WHERE id=$1 AND can_book)`, actor).
 		Scan(&allowed); err != nil {
-		return LegacyCallbackBinding{}, err
+		return LegacyCallbackBinding{}, core.DatabaseOperationError(err)
 	}
 	if !allowed {
 		return LegacyCallbackBinding{}, problem(http.StatusForbidden, "forbidden")
@@ -124,6 +126,10 @@ func (s Service) legacyNavigation(
 	binding LegacyCallbackBinding,
 ) (LegacyCallbackBinding, error) {
 	if _, err := s.Event(ctx, binding.EventID); err != nil {
+		// A failed event read is not absence; retain its SQL provenance.
+		if core.IsDatabaseFailure(err) {
+			return LegacyCallbackBinding{}, err
+		}
 		return LegacyCallbackBinding{}, problem(http.StatusNotFound, "event_not_found")
 	}
 	if binding.Action == "xlsx" {
@@ -142,7 +148,7 @@ func (s Service) legacyOrder(
 	rows, err := s.DB.Query(ctx, `SELECT target_id,event_id,source_record FROM core.legacy_order_import_references
 	WHERE bot_id=$1 AND source_domain='orders' AND lower(source_record->'_id'->>'$oid')=$2 LIMIT 2`, s.LegacyBotID, callback.id)
 	if err != nil {
-		return Order{}, nil, err
+		return Order{}, nil, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	type reference struct {
@@ -155,7 +161,7 @@ func (s Service) legacyOrder(
 		return ref, scanErr
 	})
 	if err != nil {
-		return Order{}, nil, err
+		return Order{}, nil, core.DatabaseOperationError(err)
 	}
 	if len(refs) != 1 {
 		return Order{}, nil, problem(http.StatusNotFound, "order_not_found")
@@ -222,7 +228,7 @@ func (s Service) legacyRUAdmin(ctx context.Context, event string) (int64, error)
 	FROM core.legacy_order_import_references WHERE bot_id=$1 AND event_id=$2 AND source_domain='configuration'`,
 		s.LegacyBotID, event).Scan(&count, &raw)
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
 	if count != 1 || raw == nil {
 		return 0, problem(http.StatusConflict, "payment_context_unavailable")
@@ -265,7 +271,7 @@ func (s Service) legacyAdmin(ctx context.Context, event string, telegramID int64
 	JOIN core.telegram_identities t ON t.owner=a.owner WHERE a.event_id=$1 AND a.country=$2
 	AND t.bot_id=$3 AND t.telegram_id=$4`, event, country, s.LegacyBotID, telegramID).Scan(&owner)
 	if errors.Is(err, pgx.ErrNoRows) {
-		err = problem(http.StatusBadRequest, "invalid_payment_admin")
+		return owner, problem(http.StatusBadRequest, "invalid_payment_admin")
 	}
-	return owner, err
+	return owner, core.DatabaseOperationError(err)
 }

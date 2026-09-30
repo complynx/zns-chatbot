@@ -1,6 +1,10 @@
 package legacyfood
 
-import "context"
+import (
+	"context"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+)
 
 // OwnerCapabilities identifies the current food event without disclosing its
 // catalogue to a restricted actor. Commands still authorize inside their transaction.
@@ -18,11 +22,11 @@ func (s Service) OwnerCapabilities(ctx context.Context, actor string) (OwnerCapa
  AND EXISTS(SELECT 1 FROM core.users WHERE id=$2 AND can_book)
  ORDER BY p.display_order,p.finishes_at,p.id LIMIT 1),'')`, s.BotID, actor).Scan(&result.EventID)
 	if err != nil || result.EventID == "" {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	err = s.DB.QueryRow(ctx, `SELECT COALESCE(bool_or(can_review),false), COALESCE(bool_or(can_export),false)
  FROM core.food_admins WHERE event_id=$1 AND owner=$2`, result.EventID, actor).Scan(&result.CanReview, &result.CanExport)
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }
 
 // EventCapabilities is scoped to an explicit previously bound event. It does
@@ -35,5 +39,5 @@ func (s Service) EventCapabilities(ctx context.Context, actor, event string) (Ow
 	result.EventID = event
 	err := s.DB.QueryRow(ctx, `SELECT COALESCE(bool_or(can_review),false), COALESCE(bool_or(can_export),false)
  FROM core.food_admins WHERE event_id=$1 AND owner=$2`, event, actor).Scan(&result.CanReview, &result.CanExport)
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }

@@ -31,7 +31,13 @@ func (f *orderRestartTransport) RoundTrip(r *http.Request) (*http.Response, erro
 	if r.Method != http.MethodPost ||
 		(r.URL.Path != "/v1/order-actions" && r.URL.Path != "/internal/derived/order-actions" && r.URL.Path != "/internal/derived/order-actions/receipt") {
 		if f.armed && f.window == "delivery" {
-			return nil, errors.New("order test delivery interrupted")
+			return &http.Response{
+				StatusCode: http.StatusTooManyRequests,
+				Header:     make(http.Header),
+				Body: io.NopCloser(bytes.NewBufferString(
+					`{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":1}}`,
+				)),
+			}, nil
 		}
 		return http.DefaultTransport.RoundTrip(r)
 	}
@@ -101,7 +107,7 @@ func restartOrderBot(f *fixture) *recordingModel {
 	model := &recordingModel{
 		plan: agent.Plan{View: agent.OrdersView, OrderAction: &agent.OrderProposal{Name: "create"}},
 	}
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: model}
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: model, Delivery: f.b.Delivery}
 	return model
 }
 
@@ -128,7 +134,21 @@ func TestOrderInteractionRestartsAtDurableBoundaries(t *testing.T) {
 			delivery := &orderRestartTransport{window: "delivery", armed: window == "delivery"}
 			f.b.TG.HTTP = &http.Client{Transport: delivery}
 			update := message(88001, 101, "add preparty to order "+original.ID)
-			require.Error(t, f.b.Handle(t.Context(), update))
+			if window == "delivery" {
+				require.NoError(t, f.b.Handle(t.Context(), update))
+				pumpBotDeliveries(t, f.b)
+				var deferred int
+				require.NoError(
+					t,
+					f.db.QueryRow(
+						t.Context(),
+						`SELECT count(*) FROM bot.delivery_intents WHERE owner='alice' AND state='pending' AND attempt=1 AND not_before>clock_timestamp()`,
+					).Scan(&deferred),
+				)
+				require.Positive(t, deferred, "provider retry must remain durable after admission succeeds")
+			} else {
+				require.Error(t, f.b.Handle(t.Context(), update))
+			}
 			require.Equal(t, 1, f.model.calls)
 			before := savedOrderPlan(t, f)
 			var bound struct {
@@ -161,6 +181,16 @@ func TestOrderInteractionRestartsAtDurableBoundaries(t *testing.T) {
 			model := restartOrderBot(f)
 			wire.armed, delivery.armed = false, false
 			require.NoError(t, f.b.Handle(t.Context(), update))
+			if window == "delivery" {
+				_, resetErr := f.db.Exec(
+					t.Context(),
+					`UPDATE bot.delivery_intents SET not_before=clock_timestamp()-interval '1 second' WHERE owner='alice' AND state='pending';
+				UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second';
+				UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'`,
+				)
+				require.NoError(t, resetErr)
+			}
+			pumpBotDeliveries(t, f.b)
 			assert.Zero(t, model.calls)
 			assert.Equal(t, before, savedOrderPlan(t, f), "restart must use the saved winner unchanged")
 			require.Len(t, wire.commands, 2)

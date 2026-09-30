@@ -24,14 +24,14 @@ func (s Service) Capabilities(ctx context.Context, actor, eventID string) (Capab
 	result := Capabilities{Event: eventID, Actions: []string{}}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	returnValue, err := capabilitiesInTx(ctx, tx, actor, eventID)
 	if err != nil {
 		return result, err
 	}
-	return returnValue, tx.Commit(ctx)
+	return returnValue, core.DatabaseOperationError(tx.Commit(ctx))
 }
 func capabilitiesInTx(ctx context.Context, tx pgx.Tx, actor, eventID string) (Capabilities, error) {
 	result := Capabilities{Event: eventID, Actions: []string{}}
@@ -39,7 +39,7 @@ func capabilitiesInTx(ctx context.Context, tx pgx.Tx, actor, eventID string) (Ca
 	var exists bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.pass_events WHERE id=$1)`, eventID).
 		Scan(&exists); err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	if !exists {
 		return result, conflict("pass_event_unknown")

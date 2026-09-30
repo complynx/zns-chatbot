@@ -65,7 +65,7 @@ func runMassageImport(
 	if !verify {
 		if _, err = tx.Exec(
 			ctx,
-			`CREATE SCHEMA IF NOT EXISTS migrate_import; CREATE TABLE IF NOT EXISTS migrate_import.massage_receipts(manifest_sha256 text PRIMARY KEY, plan_sha256 text NOT NULL,resolution_sha256 text NOT NULL,owners jsonb NOT NULL,snapshot jsonb NOT NULL)`,
+			`CREATE SCHEMA IF NOT EXISTS migrate_import; CREATE TABLE IF NOT EXISTS migrate_import.massage_receipts(manifest_sha256 text PRIMARY KEY, plan_sha256 text NOT NULL,resolution_sha256 text NOT NULL,owners jsonb NOT NULL,notice_ids bigint[] NOT NULL,snapshot jsonb NOT NULL)`,
 		); err != nil {
 			return summary, errors.New("apply_schema_unavailable")
 		}
@@ -136,8 +136,9 @@ func massageReceipt(
 ) (bool, error) {
 	var err error
 	var planHash, resolutionHash string
-	err = tx.QueryRow(ctx, `SELECT plan_sha256,resolution_sha256 FROM migrate_import.massage_receipts WHERE manifest_sha256=$1`, p.Plan.ManifestSHA256).
-		Scan(&planHash, &resolutionHash)
+	var noticeIDs []int64
+	err = tx.QueryRow(ctx, `SELECT plan_sha256,resolution_sha256,notice_ids FROM migrate_import.massage_receipts WHERE manifest_sha256=$1`, p.Plan.ManifestSHA256).
+		Scan(&planHash, &resolutionHash, &noticeIDs)
 	reused := err == nil
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return false, errors.New("apply_receipt_unavailable")
@@ -147,7 +148,7 @@ func massageReceipt(
 			return false, errors.New("apply_receipt_conflict")
 		}
 		var matched bool
-		if err = tx.QueryRow(ctx, `SELECT owners=$2::jsonb AND snapshot=(`+massageSnapshotSQL+`) FROM migrate_import.massage_receipts WHERE manifest_sha256=$3`, p.eventNames(), owners, p.Plan.ManifestSHA256, p.Plan.BotID).
+		if err = tx.QueryRow(ctx, `SELECT owners=$2::jsonb AND snapshot=(`+massageSnapshotSQL+`) FROM migrate_import.massage_receipts WHERE manifest_sha256=$3`, p.eventNames(), owners, p.Plan.ManifestSHA256, p.Plan.BotID, noticeIDs).
 			Scan(&matched); err != nil ||
 			!matched {
 			return false, errors.New("apply_reconciliation_failed")
@@ -162,13 +163,17 @@ func massageReceipt(
 	if err = insertMassageStage(ctx, tx, p, owners); err != nil {
 		return false, err
 	}
+	if noticeIDs, err = registerMassageDelivery(ctx, tx, p); err != nil {
+		return false, err
+	}
 	if _, err = tx.Exec(
 		ctx,
-		`INSERT INTO migrate_import.massage_receipts SELECT $3,$5,$6,$2,(`+massageSnapshotSQL+`)`,
+		`INSERT INTO migrate_import.massage_receipts SELECT $3,$6,$7,$2,$5,(`+massageSnapshotSQL+`)`,
 		p.eventNames(),
 		owners,
 		p.Plan.ManifestSHA256,
 		p.Plan.BotID,
+		noticeIDs,
 		p.PlanHash,
 		p.ResolutionHash,
 	); err != nil {

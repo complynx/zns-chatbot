@@ -1,13 +1,16 @@
 package integration_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/destination"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -22,7 +25,17 @@ UPDATE core.pass_events SET thread_channel='@synthetic_refresh',thread_id=42;
 UPDATE core.pass_bookings SET assigned_at=clock_timestamp()-interval '7 days' WHERE owner='alice'`)
 	require.NoError(t, err)
 	settings := syntheticDeliverySettings()
-	services := appservices.NewServices(db, appservices.Options{LegacyOrderBotID: settings.BotID, Delivery: settings})
+	bindings := &destination.Bindings{}
+	require.NoError(
+		t,
+		bindings.Refresh(t.Context(), publicationResolver(func(_ context.Context, alias string) (int64, error) {
+			require.Equal(t, "@synthetic_refresh", alias)
+			return -100123, nil
+		}), []string{"@synthetic_refresh"}, time.Minute),
+	)
+	services := appservices.NewServices(db, appservices.Options{
+		LegacyOrderBotID: settings.BotID, Delivery: settings, AnnouncementBindings: bindings,
+	})
 	_, err = services.AdminUtilities.Refresh(t.Context(), "bob")
 	require.NoError(t, err)
 	var boundBot int64
@@ -35,7 +48,7 @@ UPDATE core.pass_bookings SET assigned_at=clock_timestamp()-interval '7 days' WH
 	item, found, err := services.Registration.ClaimRegistrationAnnouncement(t.Context())
 	require.NoError(t, err)
 	require.True(t, found)
-	assert.Equal(t, "@synthetic_refresh", item.Channel)
+	assert.Equal(t, "-100123", item.Channel)
 	gate, err := services.Registration.BeginRegistrationAnnouncement(
 		t.Context(),
 		delivery.Attempt{ID: item.ID, Generation: item.Attempts},

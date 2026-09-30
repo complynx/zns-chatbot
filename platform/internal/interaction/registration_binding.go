@@ -61,7 +61,9 @@ func BindRegistrationPlan(requestEvidence string,
 		if payment == nil {
 			return nil, nil, errors.New("payment review lacks evidence")
 		}
-		command.Target, command.TargetVersion, command.PaymentAttempt = p.Target, payment.Version, payment.Attempt
+		bound := RegistrationPaymentReviewCommand(p.Name, p.Event, booking.Version, p.Target, *payment)
+		bound.PaymentAdmin = command.PaymentAdmin
+		*command = bound
 		state.View = "payment_queue"
 	case "invite":
 		if !GroundedRegistrationContact(requestEvidence, input, p.InviteTelegramID) &&
@@ -71,11 +73,12 @@ func BindRegistrationPlan(requestEvidence string,
 		command.InviteTelegramID = p.InviteTelegramID
 		command.QueueInvitation = !GroundedRegistrationContact(requestEvidence, input, p.InviteTelegramID)
 	case "accept", "decline", "admin_cancel", "admin_uncouple":
-		version, found := registrationTarget(context, *p)
+		bound, found := registrationTargetCommand(context, *p, booking.Version)
 		if !found {
 			return nil, nil, errors.New("registration target lacks evidence")
 		}
-		command.Target, command.TargetVersion = p.Target, version
+		bound.PaymentAdmin = command.PaymentAdmin
+		*command = bound
 	case "recalculate":
 		if !registrationQueueRead(context, p.Event) {
 			return nil, nil, errors.New("administrator read required")
@@ -172,7 +175,9 @@ func registrationQueueRead(context *agent.RegistrationContext, event string) boo
 	return false
 }
 
-func registrationTarget(context *agent.RegistrationContext, p agent.RegistrationProposal) (int64, bool) {
+func registrationTargetCommand(context *agent.RegistrationContext, p agent.RegistrationProposal,
+	actorVersion int64,
+) (passbooking.Command, bool) {
 	for _, read := range slices.Backward(context.Reads) {
 		if read.Error != "" || read.Request.Event != p.Event {
 			continue
@@ -180,18 +185,18 @@ func registrationTarget(context *agent.RegistrationContext, p agent.Registration
 		if p.Name == "accept" || p.Name == "decline" {
 			for _, invite := range read.Invitations {
 				if invite.From.Owner == p.Target {
-					return invite.Version, true
+					return RegistrationInvitationCommand(p.Name, p.Event, actorVersion, invite), true
 				}
 			}
 		} else {
 			for _, booking := range read.Queue {
 				if booking.Owner == p.Target {
-					return booking.Version, true
+					return RegistrationQueueCommand(p.Name, p.Event, actorVersion, booking), true
 				}
 			}
 		}
 	}
-	return 0, false
+	return passbooking.Command{}, false
 }
 
 func GroundedRegistrationContact(requestEvidence string, input agent.Input, id int64) bool {
@@ -242,9 +247,10 @@ func BindAdminAssignment(requestEvidence string,
 		return nil, nil, errors.New("assignment target lacks evidence")
 	}
 	options := p.Assignment
-	command := &passbooking.AdminAssignment{Event: p.Event, Version: target.ActorVersion,
-		Target: target.Booking.Owner, TargetVersion: target.Booking.Version, TotalPrice: options.TotalPrice,
-		Kind: options.Kind, Comment: options.Comment, SkipBalance: options.SkipBalance, AppendTier: options.AppendTier}
+	bound := RegistrationAssignmentDraft(p.Event, *target, nil)
+	command := &bound
+	command.TotalPrice, command.Kind, command.Comment = options.TotalPrice, options.Kind, options.Comment
+	command.SkipBalance, command.AppendTier = options.SkipBalance, options.AppendTier
 	if options.Create {
 		if options.FromProfile && !target.CanCreateFromProfile {
 			return nil, nil, errors.New("profile cannot supply assignment defaults")
@@ -353,14 +359,8 @@ func bindTakeover(
 	if p.Name == agent.RegistrationShow {
 		return nil, state, nil
 	}
-	command := &passbooking.Command{
-		Name:          p.Name,
-		Event:         p.Event,
-		Version:       target.ActorVersion,
-		Target:        p.Target,
-		TargetVersion: target.Booking.Version,
-	}
-	return command, state, nil
+	command := RegistrationTakeoverCommand(p.Name, p.Event, *target)
+	return &command, state, nil
 }
 
 func TakeoverEventGrounded(requestEvidence string, input agent.Input, event string) bool {

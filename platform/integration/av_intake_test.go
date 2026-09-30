@@ -333,7 +333,7 @@ func TestAVUnavailableAndDurationRejectionLocalized(t *testing.T) {
 			_, err := f.b.API.SetLanguage(t.Context(), "alice", language, false)
 			require.NoError(t, err)
 			update := avUpload(t, f, "audio")
-			handle(t, f.b, update)
+			handleVisible(t, f.b, update)
 			assert.Zero(t, f.model.calls)
 			var notice, status string
 			require.NoError(
@@ -353,7 +353,7 @@ func TestAVUnavailableAndDurationRejectionLocalized(t *testing.T) {
 			}
 			worker.failure = errors.New("worker offline")
 			update.ID = 101
-			handle(t, f.b, update)
+			handleVisible(t, f.b, update)
 			require.NoError(
 				t,
 				f.db.QueryRow(t.Context(), "SELECT notice FROM bot.media_intake WHERE update_id=101").Scan(&notice),

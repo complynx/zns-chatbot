@@ -1,6 +1,10 @@
 package massage
 
-import "context"
+import (
+	"context"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+)
 
 type CalendarClient struct {
 	Owner      string `json:"owner"`
@@ -44,7 +48,7 @@ func (s Service) Timetable(ctx context.Context, actor, event string) (Calendar, 
 		err = s.DB.QueryRow(ctx, `SELECT id,name,telegram_id FROM core.users WHERE id=$1`, booking.Owner).
 			Scan(&client.Owner, &client.Name, &client.TelegramID)
 		if err != nil {
-			return Calendar{}, err
+			return Calendar{}, core.DatabaseOperationError(err)
 		}
 		seen[booking.Owner] = true
 		result.Clients = append(result.Clients, client)

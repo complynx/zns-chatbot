@@ -5,6 +5,8 @@ import (
 
 	"strconv"
 	"strings"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // MemorySummary is a small navigation surface. Authors write summary records
@@ -28,20 +30,20 @@ func (s Service) MemorySummary(ctx context.Context, actor string, query MemoryQu
 		MaxResults+1,
 	)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	for rows.Next() {
 		var topic MemoryTopic
 		if err = rows.Scan(&topic.Namespace, &topic.Topic, &topic.Count); err != nil {
 			rows.Close()
-			return result, err
+			return result, core.DatabaseOperationError(err)
 		}
 		result.Topics = append(result.Topics, topic)
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	if len(result.Topics) > MaxResults {
 		result.More = true
@@ -157,7 +159,7 @@ func (s Service) MemoryHistory(ctx context.Context, actor, reference, cursor str
  AND ($8<>'source' OR EXISTS(SELECT 1 FROM core.assistant_source_documents d JOIN core.assistant_sources s ON s.slot=d.slot AND s.identity=d.identity AND s.digest<>'' WHERE d.slot=$4 AND d.item_key=$5))
  ORDER BY version LIMIT $7`, ref.Namespace, owner, ref.Event, ref.Topic, ref.Key, after, MaxResults+1, ref.SourceKind)
 	if err != nil {
-		return MemoryPage{}, err
+		return MemoryPage{}, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	page := MemoryPage{Entries: []MemoryEntry{}}
@@ -173,7 +175,7 @@ func (s Service) MemoryHistory(ctx context.Context, actor, reference, cursor str
 			SourceKind: ref.SourceKind,
 		}
 		if err = rows.Scan(&entry.Version, &entry.Text, &entry.Active, &entry.CapturedAt); err != nil {
-			return MemoryPage{}, err
+			return MemoryPage{}, core.DatabaseOperationError(err)
 		}
 		entry.Ref = memoryEncode(
 			memoryReference{
@@ -190,7 +192,7 @@ func (s Service) MemoryHistory(ctx context.Context, actor, reference, cursor str
 		page.Entries = append(page.Entries, entry)
 	}
 	if err = rows.Err(); err != nil {
-		return page, err
+		return page, core.DatabaseOperationError(err)
 	}
 	if len(page.Entries) > MaxResults {
 		page.More = true

@@ -13,6 +13,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // Exercise the durable poller boundary, including a failed acknowledgement and
@@ -53,8 +54,9 @@ func TestHistoryTerminalPlanDoesNotPoisonInboxAfterRestart(t *testing.T) {
 	})
 	post(t, f.fake.URL+"/lab/input", map[string]any{"user": 101, "text": "history race"})
 	post(t, f.fake.URL+"/lab/input", map[string]any{"user": 101, "text": "next request"})
-	_, err := f.db.Exec(t.Context(), `CREATE FUNCTION bot.hold_terminal_ack() RETURNS trigger LANGUAGE plpgsql AS $$
- BEGIN IF OLD.update_id=1 THEN RAISE EXCEPTION 'synthetic acknowledgement failure'; END IF; RETURN OLD; END $$;
+	_, err := f.db.Exec(t.Context(), `CREATE SEQUENCE bot.terminal_ack_attempts;
+ CREATE FUNCTION bot.hold_terminal_ack() RETURNS trigger LANGUAGE plpgsql AS $$
+ BEGIN IF OLD.update_id=1 THEN PERFORM nextval('bot.terminal_ack_attempts'); RAISE EXCEPTION 'synthetic acknowledgement failure'; END IF; RETURN OLD; END $$;
  CREATE TRIGGER hold_terminal_ack BEFORE DELETE ON bot.telegram_inbox FOR EACH ROW EXECUTE FUNCTION bot.hold_terminal_ack()`)
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -74,12 +76,36 @@ func TestHistoryTerminalPlanDoesNotPoisonInboxAfterRestart(t *testing.T) {
 			Scan(&terminal)
 		return queryErr == nil && terminal
 	}, 5*time.Second, 10*time.Millisecond)
+	select {
+	case runErr := <-done:
+		require.ErrorIs(t, runErr, core.ErrDatabase)
+		require.NoError(t, ctx.Err(), "the failed acknowledgement must stop the runtime before cancellation")
+	case <-time.After(5 * time.Second):
+		t.Fatal("failed acknowledgement did not stop the runtime")
+	}
 	cancel()
-	require.NoError(t, <-done)
+	var attempts int
+	var called bool
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT last_value,is_called FROM bot.terminal_ack_attempts`).
+			Scan(&attempts, &called),
+	)
+	assert.True(t, called, "the acknowledgement fault must actually execute")
+	assert.Equal(t, 1, attempts)
 	require.EqualValues(t, 2, calls.Load())
 	var pending int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&pending))
 	require.Equal(t, 2, pending, "failed acknowledgement must preserve both durable updates")
+	var failures int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT sum(failures) FROM bot.telegram_inbox`).Scan(&failures))
+	assert.Zero(t, failures, "acknowledgement SQL failure does not consume the poison-update budget")
+	var processed int64
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT value FROM bot.cursors WHERE name='telegram'`).Scan(&processed),
+	)
+	assert.Zero(t, processed, "the failed acknowledgement rolls back its cursor update")
 	_, err = f.db.Exec(t.Context(), `DROP TRIGGER hold_terminal_ack ON bot.telegram_inbox`)
 	require.NoError(t, err)
 	// A fresh host instance must consume the saved terminal marker without a model
@@ -97,7 +123,7 @@ func TestHistoryTerminalPlanDoesNotPoisonInboxAfterRestart(t *testing.T) {
 		assert.NotContains(t, string(raw), canary)
 		return agent.Plan{View: "workflow", Text: "Following request completed"}, nil
 	})
-	completeInbox(t, f, 3)
+	completeInboxAfterCooldown(t, f, 3, 1)
 	require.EqualValues(t, 1, followingCalls.Load())
 	var effects int
 	require.NoError(

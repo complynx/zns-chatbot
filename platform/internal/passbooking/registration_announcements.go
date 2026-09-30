@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 )
@@ -36,7 +37,7 @@ func (s Service) ClaimRegistrationAnnouncement(ctx context.Context) (Registratio
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return RegistrationAnnouncement{}, false, err
+		return RegistrationAnnouncement{}, false, core.DatabaseOperationError(err)
 	}
 	entries, err := delivery.Candidates(ctx, tx, s.Delivery.BotID, announcementCandidateLimit)
 	_ = tx.Rollback(ctx)
@@ -70,7 +71,7 @@ func (s Service) BeginRegistrationAnnouncement(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return delivery.Admission{}, err
+		return delivery.Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := dbgen.New(tx)
@@ -98,7 +99,7 @@ func (s Service) BeginRegistrationAnnouncement(
 		if err = s.finishAnnouncement(ctx, q, attempt, outcome, deadline); err != nil {
 			return delivery.Admission{}, err
 		}
-		return delivery.Admission{Reason: outcome.Reason}, tx.Commit(ctx)
+		return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	gate, err := delivery.Begin(ctx, tx, s.Delivery, announcementReference(attempt.ID))
 	if err != nil {
@@ -118,6 +119,7 @@ func (s Service) BeginRegistrationAnnouncement(
 			ctx,
 			dbgen.BeginAnnouncementSendParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
 		)
+		err = core.DatabaseOperationError(err)
 		if err == nil && count != 1 {
 			err = conflict("pass_announcement_stale")
 		}
@@ -125,7 +127,7 @@ func (s Service) BeginRegistrationAnnouncement(
 	if err != nil {
 		return delivery.Admission{}, err
 	}
-	return gate, tx.Commit(ctx)
+	return gate, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input AnnouncementCompletion) error {
@@ -134,7 +136,7 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := dbgen.New(tx)
@@ -143,7 +145,7 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 		dbgen.LockAnnouncementAttemptParams{ID: input.ID, BotID: s.Delivery.BotID, Attempt: input.Attempt},
 	)
 	if err != nil {
-		return announcementAttemptError(err)
+		return announcementAttemptError(core.DatabaseOperationError(err))
 	}
 	if row.State == operationPending &&
 		(input.Outcome.Kind == delivery.Succeeded || input.Outcome.Kind == delivery.Uncertain) {
@@ -162,7 +164,7 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 	); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (s Service) finishAnnouncement(
@@ -194,7 +196,7 @@ func (s Service) finishAnnouncement(
 	if err == nil && count != 1 {
 		return conflict("pass_announcement_stale")
 	}
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func announcementAttemptError(err error) error {
@@ -215,23 +217,23 @@ func (s Service) lockAnnouncementAdmission(
 		dbgen.AnnouncementAttemptSourceParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
 	)
 	if err != nil {
-		return dbgen.LockAnnouncementAttemptRow{}, announcementAttemptError(err)
+		return dbgen.LockAnnouncementAttemptRow{}, announcementAttemptError(core.DatabaseOperationError(err))
 	}
 	if _, err = q.LockAnnouncementEvent(ctx, source.EventID); err != nil {
-		return dbgen.LockAnnouncementAttemptRow{}, err
+		return dbgen.LockAnnouncementAttemptRow{}, core.DatabaseOperationError(err)
 	}
 	if _, err = q.LockAnnouncementBooking(
 		ctx,
 		dbgen.LockAnnouncementBookingParams(source),
 	); err != nil {
-		return dbgen.LockAnnouncementAttemptRow{}, err
+		return dbgen.LockAnnouncementAttemptRow{}, core.DatabaseOperationError(err)
 	}
 	row, err := q.LockAnnouncementAttempt(
 		ctx,
 		dbgen.LockAnnouncementAttemptParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
 	)
 	if err != nil {
-		return dbgen.LockAnnouncementAttemptRow{}, announcementAttemptError(err)
+		return dbgen.LockAnnouncementAttemptRow{}, announcementAttemptError(core.DatabaseOperationError(err))
 	}
 	return row, nil
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
@@ -130,17 +131,20 @@ func TestScriptMemoReceiptCannotRestoreDeletedHistory(t *testing.T) {
 		{View: agent.KnowledgeView, Text: "No private result restored"},
 	}}
 	f.b.Model = model
-	_ = f.b.Handle(t.Context(), message(79502, 101, "Save this private memo"))
+	require.ErrorIs(t, f.b.Handle(t.Context(), message(79502, 101, "Save this private memo")), appclient.ErrReadStale)
+	require.Len(t, model.inputs, 1, "history retirement terminates before another model call")
 	records := scriptMemoRecords(t, f, 79502)
 	require.Len(t, records, 1)
 	require.Len(t, records[0].Calls, 1)
 	assert.NotEmpty(t, records[0].Calls[0].Outcome.Error)
 	assert.Empty(t, records[0].Calls[0].Outcome.Result)
-	for _, input := range model.inputs[1:] {
-		encoded, err := json.Marshal(input.Script)
-		require.NoError(t, err)
-		assert.NotContains(t, string(encoded), "deleted-history-canary")
-	}
+	var persisted string
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT COALESCE(jsonb_agg(content)::text,'[]') FROM bot.interactions WHERE owner='alice' AND update_id=79502`).
+			Scan(&persisted),
+	)
+	assert.NotContains(t, persisted, "deleted-history-canary")
 	assert.EqualValues(t, 1, transport.calls.Load())
 }
 
@@ -153,42 +157,19 @@ type failedKnowledgeRefreshTransport struct {
 }
 
 func (transport *failedKnowledgeRefreshTransport) RoundTrip(request *http.Request) (*http.Response, error) {
-	card := false
-	if strings.Contains(request.URL.Path, "sendMessage") || strings.Contains(request.URL.Path, "editMessage") {
-		err := transport.fixture.db.QueryRow(request.Context(), `SELECT EXISTS(
- SELECT 1 FROM bot.delivery_intents WHERE owner='alice' AND state='sending'
- AND reference->>'family'='knowledge')`).Scan(&card)
+	card, err := transport.sendingKnowledgeCard(request)
+	if err != nil {
+		return nil, err
+	}
+	if card && transport.unavailable.Load() {
+		return transport.rejectRefresh(request)
+	}
+	if ref := transport.reference.Load(); card && ref != nil {
+		err = transport.fixture.db.QueryRow(request.Context(), `SELECT EXISTS(
+ SELECT 1 FROM bot.delivery_intents WHERE operation_key=$1 AND effect_key=$2 AND state='sending')`,
+			ref.Key, ref.Effect).Scan(&card)
 		if err != nil {
 			return nil, err
-		}
-		if card && transport.unavailable.Load() {
-			ref := &delivery.Reference{Owner: delivery.Bot}
-			if err = transport.fixture.db.QueryRow(request.Context(), `SELECT operation_key,effect_key
- FROM bot.delivery_intents WHERE owner='alice' AND state='sending'
- AND reference->>'family'='knowledge'`).Scan(&ref.Key, &ref.Effect); err != nil {
-				return nil, err
-			}
-			transport.reference.Store(ref)
-			transport.failed.Store(true)
-			// Reject before forwarding: this explicit provider response is definitely unsent.
-			return &http.Response{
-				StatusCode: http.StatusTooManyRequests,
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body: io.NopCloser(
-					strings.NewReader(
-						`{"ok":false,"error_code":429,"description":"synthetic refresh unavailable","parameters":{"retry_after":0}}`,
-					),
-				),
-				Request: request,
-			}, nil
-		}
-		if ref := transport.reference.Load(); card && ref != nil {
-			err = transport.fixture.db.QueryRow(request.Context(), `SELECT EXISTS(
- SELECT 1 FROM bot.delivery_intents WHERE operation_key=$1 AND effect_key=$2 AND state='sending')`,
-				ref.Key, ref.Effect).Scan(&card)
-			if err != nil {
-				return nil, err
-			}
 		}
 	}
 	response, err := http.DefaultTransport.RoundTrip(request)
@@ -198,6 +179,38 @@ func (transport *failedKnowledgeRefreshTransport) RoundTrip(request *http.Reques
 	return response, err
 }
 
+func (transport *failedKnowledgeRefreshTransport) sendingKnowledgeCard(request *http.Request) (bool, error) {
+	if !strings.Contains(request.URL.Path, "sendMessage") && !strings.Contains(request.URL.Path, "editMessage") {
+		return false, nil
+	}
+	var card bool
+	err := transport.fixture.db.QueryRow(request.Context(), `SELECT EXISTS(
+ SELECT 1 FROM bot.delivery_intents WHERE owner='alice' AND state='sending'
+ AND reference->>'family'='knowledge')`).Scan(&card)
+	return card, err
+}
+
+// rejectRefresh records a definitely-unsent provider failure before forwarding.
+func (transport *failedKnowledgeRefreshTransport) rejectRefresh(request *http.Request) (*http.Response, error) {
+	ref := &delivery.Reference{Owner: delivery.Bot}
+	if err := transport.fixture.db.QueryRow(request.Context(), `SELECT operation_key,effect_key
+ FROM bot.delivery_intents WHERE owner='alice' AND state='sending'
+ AND reference->>'family'='knowledge'`).Scan(&ref.Key, &ref.Effect); err != nil {
+		return nil, err
+	}
+	transport.reference.Store(ref)
+	transport.failed.Store(true)
+	return &http.Response{
+		StatusCode: http.StatusTooManyRequests,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(
+			strings.NewReader(
+				`{"ok":false,"error_code":429,"description":"synthetic refresh unavailable","parameters":{"retry_after":0}}`,
+			),
+		),
+		Request: request,
+	}, nil
+}
 func TestScriptMemoRefreshFailureKeepsDurableOutcome(t *testing.T) {
 	t.Parallel()
 	f := setup(t)

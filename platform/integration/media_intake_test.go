@@ -76,7 +76,7 @@ func TestMediaIntakeAmbiguityInterruptionAndStaleChoice(t *testing.T) {
 		View:        agent.MediaView,
 		MediaAction: &agent.MediaProposal{MediaID: "tg-media-100", Intent: "receipt", Amount: "35", Currency: "BYN"},
 	}
-	handle(t, f.b, photo)
+	handleVisible(t, f.b, photo)
 	choice := intakeChoice(t, f, 101, first.ID)
 	f.model.plan = agent.Plan{View: "workflow", Text: "Four."}
 	handle(t, f.b, message(102, 101, "What is two plus two?"))
@@ -142,7 +142,7 @@ func TestMediaIntakeClarificationContextAndManualHistory(t *testing.T) {
 	const question = "Which order did you pay for?"
 	f.model.plan = agent.Plan{View: agent.MediaView, Text: question,
 		MediaAction: &agent.MediaProposal{MediaID: "tg-media-100", Intent: "receipt", Amount: "35", Currency: "BYN"}}
-	handle(t, f.b, photo)
+	handleVisible(t, f.b, photo)
 	selection := intakeChoice(t, f, 102, second.ID)
 	f.model.plan = agent.Plan{View: "workflow", Text: "Four."}
 	handle(t, f.b, message(101, 101, "What is two plus two?"))
@@ -199,7 +199,7 @@ func TestMediaIntakeFollowupUsesLastDisplayedChoices(t *testing.T) {
 	photo, _ := intakePhoto(t, f)
 	f.model.plan = agent.Plan{View: agent.MediaView,
 		MediaAction: &agent.MediaProposal{MediaID: "tg-media-100", Intent: "receipt", Amount: "35", Currency: "BYN"}}
-	handle(t, f.b, photo)
+	handleVisible(t, f.b, photo)
 	old := intakeChoice(t, f, 101, first.ID)
 	command := orderCommand("edit", first)
 	command.Choice = orderChoice("shuttle")
@@ -208,7 +208,7 @@ func TestMediaIntakeFollowupUsesLastDisplayedChoices(t *testing.T) {
 	_, err = f.b.API.SetLanguage(t.Context(), "alice", "ru", false)
 	require.NoError(t, err)
 	f.model.plan = agent.Plan{View: "workflow", Text: "Here are your current choices."}
-	handle(t, f.b, message(102, 101, "Which choices are available?"))
+	handleVisible(t, f.b, message(102, 101, "Which choices are available?"))
 	updated := intakeChoice(t, f, 103, first.ID)
 	assert.Equal(t, old.Callback.Message.ID, updated.Callback.Message.ID)
 	require.Len(t, f.model.input.MediaContext.Pending, 1)

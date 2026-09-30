@@ -232,24 +232,60 @@ func TestScriptPassTierAndExportReceipt(t *testing.T) {
 	require.Empty(t, result.Error)
 	var exported struct {
 		A struct {
-			Result struct {
+			ID       string `json:"operation_id"`
+			Complete bool   `json:"complete"`
+			Result   struct {
 				Delivered bool `json:"delivered"`
 			} `json:"result"`
 		} `json:"a"`
+		B struct {
+			ID       string `json:"operation_id"`
+			Complete bool   `json:"complete"`
+		} `json:"b"`
 		Tiers struct {
 			More bool `json:"more"`
 		} `json:"tiers"`
 	}
 	require.NoError(t, json.Unmarshal(result.Result, &exported))
-	assert.True(t, exported.A.Result.Delivered)
+	require.NotEmpty(t, exported.A.ID)
+	require.Equal(t, exported.A.ID, exported.B.ID)
+	require.False(t, exported.A.Complete)
+	require.False(t, exported.B.Complete)
+	require.False(t, exported.A.Result.Delivered)
 	assert.False(t, exported.Tiers.More)
-	var receipts int
+	var receipts, intents int
 	require.NoError(
 		t,
 		f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions WHERE owner='bob' AND kind='pass_export'`).
 			Scan(&receipts),
 	)
-	assert.Equal(t, 1, receipts)
+	require.Zero(t, receipts)
+	pumpBotDeliveries(t, f.b)
+	resumed := runPassVM(
+		t,
+		f,
+		19301,
+		202,
+		"Check export",
+		fmt.Sprintf(`return tools.passes.resume({operation_id:%q});`, exported.A.ID),
+	)
+	require.Empty(t, resumed.Error)
+	require.NoError(t, json.Unmarshal(resumed.Result, &exported.A))
+	require.True(t, exported.A.Complete)
+	require.True(t, exported.A.Result.Delivered)
+	require.Equal(t, exported.B.ID, exported.A.ID)
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions WHERE owner='bob' AND kind='pass_export'`).
+			Scan(&receipts),
+	)
+	require.Equal(t, 1, receipts)
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.delivery_intents WHERE owner='bob' AND reference->>'family'='pass_export'`).
+			Scan(&intents),
+	)
+	require.Equal(t, 1, intents)
 	assert.NotContains(t, string(result.Result), "UEsDB")
 	assert.Less(t, len(result.Result), 5000)
 }

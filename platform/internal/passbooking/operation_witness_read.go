@@ -2,9 +2,12 @@ package passbooking
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // WitnessBatch reads only the existing canonical batch for lock planning. It
@@ -15,9 +18,13 @@ func (s Service) WitnessBatch(ctx context.Context, actor string, w OperationWitn
 	}
 	b := &RuntimeBatchState{actor: actor, key: hash([]byte(w.Key))}
 	var digest string
+	var plan []byte
 	err := s.DB.QueryRow(ctx, `SELECT request_hash,plan,source_derivation FROM core.pass_admin_batches WHERE actor=$1 AND key_hash=$2`, actor, b.key).
-		Scan(&digest, &b.plan, &b.Source)
+		Scan(&digest, &plan, &b.Source)
 	if err != nil {
+		return nil, core.DatabaseOperationContextError(ctx, err)
+	}
+	if err = json.Unmarshal(plan, &b.plan); err != nil {
 		return nil, err
 	}
 	if digest != w.Digest || !witnessBatchMatches(w, b) {
@@ -78,12 +85,12 @@ func (s Service) WitnessOperationReceipt(
 		return OperationReceipt{Status: "not_committed", ReadAuthorities: refs}, nil
 	}
 	if err != nil {
-		return OperationReceipt{}, err
+		return OperationReceipt{}, core.DatabaseOperationContextError(ctx, err)
 	}
 	if digest != w.Digest {
 		return OperationReceipt{}, conflict("source_stale")
 	}
-	return OperationReceipt{Status: "committed", ReadAuthorities: refs}, nil
+	return OperationReceipt{Status: operationCommitted, ReadAuthorities: refs}, nil
 }
 
 func (s Service) witnessBatchReceipt(
@@ -107,7 +114,7 @@ func (s Service) witnessBatchReceipt(
 	var digest string
 	if err := tx.QueryRow(ctx, `SELECT request_hash FROM core.pass_admin_batches WHERE actor=$1 AND key_hash=$2`, actor, b.key).
 		Scan(&digest); err != nil {
-		return OperationReceipt{}, err
+		return OperationReceipt{}, core.DatabaseOperationContextError(ctx, err)
 	}
 	if digest != w.Digest {
 		return OperationReceipt{}, conflict("source_stale")

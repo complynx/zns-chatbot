@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // Imported booking callbacks resolve an owner-scoped immutable reference, then
@@ -21,7 +23,7 @@ func (s Service) executeLegacyBooking(ctx context.Context, actor string, c Legac
 		return result, problem(http.StatusNotFound, "not_found")
 	}
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	result.ID = result.Booking
 	result.Closed = true

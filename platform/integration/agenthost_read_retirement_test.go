@@ -113,7 +113,7 @@ func TestAgentHostKnowledgeCompletionCannotRestoreRetiredReads(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	store := agenthost.ReadStore{DB: s.DB}
+	store := agenthost.ReadStore{DB: s.DB, Memory: agenthost.MemoryReadStore{DB: s.DB}}
 	first := agent.KnowledgeProposal{Text: "retired first request"}
 	second := agent.KnowledgeProposal{Text: "retired second request"}
 	_, err = store.ReserveKnowledge(ctx, owner, updateID, first)
@@ -143,7 +143,7 @@ func TestAgentHostKnowledgeCompletionCannotRestoreRetiredReads(t *testing.T) {
 	pool, err := pgxpool.NewWithConfig(ctx, config)
 	require.NoError(t, err)
 	defer func() { release(); pool.Close() }()
-	completion := agenthost.ReadStore{DB: pool}
+	completion := agenthost.ReadStore{DB: pool, Memory: agenthost.MemoryReadStore{DB: pool}}
 	fetched.Request = first
 	type completionResult struct {
 		reads []agent.KnowledgeReadResult
@@ -185,6 +185,7 @@ func TestAgentHostKnowledgeCompletionCannotRestoreRetiredReads(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { release(); allowRepair(); reconcilePool.Close() }()
 	store.DB = reconcilePool
+	store.Memory = agenthost.MemoryReadStore{DB: reconcilePool}
 	reconciled := make(chan error, 1)
 	go func() { reconciled <- store.ReconcileMemory(ctx, owner, state) }()
 	reconcileFinished := false
@@ -209,7 +210,11 @@ func TestAgentHostKnowledgeCompletionCannotRestoreRetiredReads(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("completion did not finish after release")
 	}
-	immediate, err := (agenthost.ReadStore{DB: s.DB}).Knowledge(ctx, owner, updateID)
+	immediate, err := (agenthost.ReadStore{DB: s.DB, Memory: agenthost.MemoryReadStore{DB: s.DB}}).Knowledge(
+		ctx,
+		owner,
+		updateID,
+	)
 	require.NoError(t, err)
 	for _, reads := range [][]agent.KnowledgeReadResult{completed.reads, immediate} {
 		require.Len(t, reads, agent.MaxKnowledgeReads)
@@ -264,7 +269,7 @@ func TestAgentHostKnowledgeCompletionSerializesWithDeletion(t *testing.T) {
 		knowledge.Command{Name: knowledge.MemoSet, Key: "gate-create", FactKey: "gate", Text: "private gate body"},
 	)
 	require.NoError(t, err)
-	store := agenthost.ReadStore{DB: s.DB}
+	store := agenthost.ReadStore{DB: s.DB, Memory: agenthost.MemoryReadStore{DB: s.DB}}
 	_, err = store.ReserveKnowledge(ctx, owner, updateID, agent.KnowledgeProposal{})
 	require.NoError(t, err)
 	barrier := &knowledgeCompletionBarrier{reached: make(chan struct{}), release: make(chan struct{})}
@@ -278,7 +283,7 @@ func TestAgentHostKnowledgeCompletionSerializesWithDeletion(t *testing.T) {
 	defer func() { release(); pool.Close() }()
 	done := make(chan error, 1)
 	go func() {
-		_, completeErr := (agenthost.ReadStore{DB: pool}).CompleteKnowledge(
+		_, completeErr := (agenthost.ReadStore{DB: pool, Memory: agenthost.MemoryReadStore{DB: pool}}).CompleteKnowledge(
 			context.WithValue(ctx, completionBarrierKey{}, true),
 			owner,
 			updateID,
@@ -368,7 +373,7 @@ func TestAgentHostKnowledgeRetiredReservationRejectsNewEpochFetch(t *testing.T) 
 		t.Run(map[bool]string{false: "private", true: "shared"}[shared], func(t *testing.T) {
 			t.Parallel()
 			s := knowledgeFixture(t)
-			store := agenthost.ReadStore{DB: s.DB}
+			store := agenthost.ReadStore{DB: s.DB, Memory: agenthost.MemoryReadStore{DB: s.DB}}
 			request := agent.KnowledgeProposal{Text: "retired request text must stay absent"}
 			_, err := store.ReserveKnowledge(t.Context(), "alice", 94101, request)
 			require.NoError(t, err)
@@ -403,7 +408,7 @@ func TestAgentHostKnowledgeDelayedReconcilePreservesNewEpochRead(t *testing.T) {
 		t.Run(map[bool]string{false: "private", true: "shared"}[shared], func(t *testing.T) {
 			t.Parallel()
 			s := knowledgeFixture(t)
-			store := agenthost.ReadStore{DB: s.DB}
+			store := agenthost.ReadStore{DB: s.DB, Memory: agenthost.MemoryReadStore{DB: s.DB}}
 			retireHostReadMemory(t, s, shared, "first")
 			captured, err := s.MemoryDeletions(t.Context(), "alice")
 			require.NoError(t, err)

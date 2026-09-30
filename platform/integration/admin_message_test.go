@@ -8,12 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
+	deliverypolicy "github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
 func TestAdminMessageDurableDelivery(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	request := adminmessage.Request{
 		Destinations: []adminmessage.Destination{{Chat: "101"}, {Chat: "101"}, {Chat: "-100123", Thread: 4}},
 		Content:      adminmessage.Content{Text: "Synthetic message", ParseMode: "HTML"},
@@ -39,10 +40,13 @@ func TestAdminMessageDurableDelivery(t *testing.T) {
 	requireCode(t, service.Enqueue(t.Context(), "alice", preview.ID), "not_found")
 	require.NoError(t, service.Enqueue(t.Context(), "bob", preview.ID))
 	require.NoError(t, service.Enqueue(t.Context(), "bob", preview.ID))
-	service = adminmessage.Service{DB: db}
+	service = adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	first, found, err := service.Claim(t.Context())
 	require.NoError(t, err)
 	require.True(t, found)
+	gate, err := service.BeginDelivery(t.Context(), deliverypolicy.Attempt{ID: first.ID, Generation: first.Attempt})
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
 	require.NoError(t, service.Complete(t.Context(), first.ID, first.Attempt, 51, "", false))
 	second, found, err := service.Claim(t.Context())
 	require.NoError(t, err)
@@ -50,7 +54,7 @@ func TestAdminMessageDurableDelivery(t *testing.T) {
 	assert.NotEqual(t, first.ID, second.ID)
 	_, err = db.Exec(
 		t.Context(),
-		`UPDATE core.admin_message_deliveries SET available_at=now()-interval '1 second' WHERE id=$1`,
+		`UPDATE core.admin_message_deliveries SET available_at=now()-interval '1 second',lease_until=now()-interval '1 second' WHERE id=$1`,
 		second.ID,
 	)
 	require.NoError(t, err)
@@ -63,6 +67,12 @@ func TestAdminMessageDurableDelivery(t *testing.T) {
 		service.Complete(t.Context(), second.ID, second.Attempt, 52, "", false),
 		"admin_message_stale_attempt",
 	)
+	gate, err = service.BeginDelivery(
+		t.Context(),
+		deliverypolicy.Attempt{ID: recovered.ID, Generation: recovered.Attempt},
+	)
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
 	require.NoError(
 		t,
 		service.Complete(t.Context(), recovered.ID, recovered.Attempt, 0, "synthetic blocked recipient", false),
@@ -70,8 +80,17 @@ func TestAdminMessageDurableDelivery(t *testing.T) {
 	results, err := service.Results(t.Context(), "bob", preview.ID)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
-	assert.Equal(t, "sent", results[0].State)
-	assert.Equal(t, "failed", results[1].State)
+	for _, result := range results {
+		switch result.ID {
+		case first.ID:
+			assert.Equal(t, "sent", result.State)
+			assert.EqualValues(t, 51, result.TelegramMessageID)
+		case recovered.ID:
+			assert.Equal(t, "failed", result.State)
+		default:
+			t.Fatalf("unexpected delivery result %d", result.ID)
+		}
+	}
 	_, found, err = service.Claim(t.Context())
 	require.NoError(t, err)
 	assert.False(t, found)
@@ -80,7 +99,7 @@ func TestAdminMessageDurableDelivery(t *testing.T) {
 func TestAdminMessageCancellationAndRevocation(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	request := adminmessage.Request{
 		Destinations: []adminmessage.Destination{{Chat: "101"}},
 		Content:      adminmessage.Content{FromChat: 202, FromMessage: 4},
@@ -105,7 +124,7 @@ func TestAdminMessageCancellationAndRevocation(t *testing.T) {
 func TestAdminMessageRecipientValidation(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	destinations, err := service.ResolveShortcut(t.Context(), "bob", "$dance:admins")
 	require.NoError(t, err)
 	assert.Equal(t, []adminmessage.Destination{{Chat: "202"}}, destinations)
@@ -130,7 +149,7 @@ func TestAdminMessageRecipientValidation(t *testing.T) {
 func TestAdminMessageContentValidation(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	for _, content := range []adminmessage.Content{
 		{}, {Text: "hello", ParseMode: "unsupported"}, {Text: "hello", FromChat: 1, FromMessage: 1},
 		{FromChat: 1}, {FromMessage: 1}, {Text: strings.Repeat("😀", 2049)},
@@ -151,7 +170,7 @@ func TestAdminMessageContentValidation(t *testing.T) {
 func TestAdminMessageShortcutCategoriesExcludeCancelled(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)
-	service := adminmessage.Service{DB: db}
+	service := adminmessage.Service{Delivery: syntheticDeliverySettings(), DB: db}
 	_, err := db.Exec(t.Context(), `
 INSERT INTO core.users(id,telegram_id,name) VALUES
  ('msg-paid',1001,'Paid'),('msg-assigned',1002,'Assigned'),

@@ -78,8 +78,8 @@ func historyInterruptedFinalPlan(t *testing.T, mode string) {
 	var pending int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&pending))
 	require.Equal(t, 2, pending, "interrupted model must preserve both durable updates")
-	// A fresh host must save a terminal marker before acknowledging this update.
-	// call or repeated effect, then process the following request normally.
+	// A fresh host must save a terminal marker before acknowledging this update,
+	// without a model call or repeated effect, then process the following request.
 	restarted := *f.b
 	f.b = &restarted
 	var followingCalls atomic.Int64
@@ -95,6 +95,8 @@ func historyInterruptedFinalPlan(t *testing.T, mode string) {
 	})
 	prepareInterruptedHistoryLedger(t, f, mode)
 	assertInterruptedMarkerRetry(t, f, &followingCalls)
+	recovered := *f.b
+	f.b = &recovered
 	completeInbox(t, f, 3)
 	require.EqualValues(t, 1, followingCalls.Load())
 	var effects int
@@ -159,15 +161,38 @@ func assertInterruptedMarkerRetry(t *testing.T, f *fixture, calls *atomic.Int64)
  BEGIN PERFORM nextval('bot.marker_attempts'); RAISE EXCEPTION 'synthetic marker persistence failure'; END $$;
  CREATE TRIGGER reject_terminal_marker BEFORE INSERT ON interaction.saved_turns FOR EACH ROW EXECUTE FUNCTION bot.reject_terminal_marker()`)
 	require.NoError(t, err)
-	runInboxUntil(t, f, func() bool {
-		var attempts int
-		queryErr := f.db.QueryRow(t.Context(), `SELECT last_value FROM bot.marker_attempts`).Scan(&attempts)
-		return queryErr == nil && attempts >= 2
-	})
-	assert.Zero(t, calls.Load(), "persistence failure must retry without model regeneration")
+	for range 2 {
+		restarted := *f.b
+		f.b = &restarted
+		runInboxDatabaseFailure(t, f)
+	}
+	var attempts int
+	var called bool
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT last_value,is_called FROM bot.marker_attempts`).Scan(&attempts, &called),
+	)
+	assert.True(t, called)
+	assert.Equal(t, 2, attempts, "each SQL failure stops its runtime before another attempt")
+	assert.Zero(t, calls.Load(), "fresh runtimes must retry persistence without model regeneration")
 	var pending int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&pending))
 	assert.Equal(t, 2, pending, "no acknowledgement before a durable terminal marker")
+	var terminalRows, failures int
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT count(*) FROM interaction.saved_turns WHERE owner='alice' AND update_id=1`).
+			Scan(&terminalRows),
+	)
+	assert.Zero(t, terminalRows, "failed terminal writes cannot acknowledge a stale update")
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT sum(failures) FROM bot.telegram_inbox`).Scan(&failures))
+	assert.Zero(t, failures, "SQL failures do not consume the poison-update budget")
+	var processed int64
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT value FROM bot.cursors WHERE name='telegram'`).Scan(&processed),
+	)
+	assert.Zero(t, processed, "failed terminal persistence cannot advance completion")
 	_, err = f.db.Exec(t.Context(), `DROP TRIGGER reject_terminal_marker ON interaction.saved_turns`)
 	require.NoError(t, err)
 }

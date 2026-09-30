@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/complynx/zns-chatbot/platform/internal/broadcastprofile"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // SenderMetadata is the authenticated transport sender, never model input.
@@ -38,14 +39,14 @@ func (s Service) RefreshTelegramMetadata(ctx context.Context, owner string, upda
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	changed, err := tx.Exec(ctx, `UPDATE core.users SET username=$3,first_name=$4,last_name=$5,print_name=$6,name=$6,
  telegram_metadata_update=$7 WHERE id=$1 AND telegram_id=$2 AND telegram_metadata_update<$7`,
 		owner, sender.ID, sender.Username, sender.FirstName, sender.LastName, printName, update.UpdateID)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if changed.RowsAffected() > 0 {
 		if err = broadcastprofile.Telegram(ctx, tx, owner, broadcastprofile.Sender{
@@ -55,7 +56,7 @@ func (s Service) RefreshTelegramMetadata(ctx context.Context, owner string, upda
 			return err
 		}
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func ValidTelegramMetadata(sender SenderMetadata) bool {

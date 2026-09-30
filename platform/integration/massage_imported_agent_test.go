@@ -34,7 +34,7 @@ func TestMassageImportedDraftDoesNotTrapGenericAgentText(t *testing.T) {
 	service := massage.Service{DB: f.db}
 	before, err := service.LegacyDraft(t.Context(), "alice", "imported-massage", legacyDraftID)
 	require.NoError(t, err)
-	handle(t, f.b, message(950, 101, "Please answer an ordinary question"))
+	handleNotificationUpdate(t, f, message(950, 101, "Please answer an ordinary question"))
 	assert.Equal(t, 1, model.calls)
 	assert.Equal(t, "Please answer an ordinary question", model.input.Text)
 	after, err := service.LegacyDraft(t.Context(), "alice", "imported-massage", legacyDraftID)

@@ -101,7 +101,7 @@ func revokeMemoryResult(ctx context.Context, tx pgx.Tx, actor string, result Res
 			`UPDATE core.knowledge_proposal_authorities SET revoked=true WHERE proposal_id=$1`,
 			result.Proposal.ID,
 		)
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return nil
 }

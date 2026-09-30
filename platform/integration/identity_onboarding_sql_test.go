@@ -29,15 +29,18 @@ func TestOnboardingSQLFailureKeepsInboxAndRetriesReservedIdentity(t *testing.T) 
  CREATE TRIGGER fail_onboarding_test BEFORE INSERT ON core.users FOR EACH ROW EXECUTE FUNCTION core.fail_onboarding_test()`)
 	require.NoError(t, err)
 	var failureStatus atomic.Int64
+	var databaseFailure atomic.Bool
 	f.b.Onboarding = func(ctx context.Context, user telegram.User) error {
 		requestErr := f.b.Host.ProvisionTelegram(ctx, 77, user)
+		databaseFailure.Store(errors.Is(requestErr, core.ErrDatabase))
 		if problem, ok := errors.AsType[*core.ProblemError](requestErr); ok {
 			failureStatus.Store(int64(problem.Status))
 		}
 		return requestErr
 	}
-	runInboxUntil(t, f, func() bool { return failureStatus.Load() != 0 })
+	runInboxDatabaseFailure(t, f)
 	require.Equal(t, int64(http.StatusServiceUnavailable), failureStatus.Load())
+	require.True(t, databaseFailure.Load(), "the SQL origin must survive the authenticated HTTP boundary")
 	var pending int
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&pending))
 	require.Equal(t, 2, pending)
@@ -52,6 +55,7 @@ func TestOnboardingSQLFailureKeepsInboxAndRetriesReservedIdentity(t *testing.T) 
 	_, err = f.db.Exec(t.Context(), `DROP TRIGGER fail_onboarding_test ON core.users`)
 	require.NoError(t, err)
 	completeInbox(t, f, 9202)
+	pumpBotDeliveries(t, f.b)
 	actual, err := provider.service.EnsureTelegram(t.Context(), identityprovision.Telegram{ID: 95108})
 	require.NoError(t, err)
 	require.Equal(t, reserved, actual)

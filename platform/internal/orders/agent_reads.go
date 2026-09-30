@@ -29,9 +29,10 @@ func (s Service) RecentHistory(ctx context.Context, owner, event string) ([]Hist
 	 JOIN core.orders o ON o.id=a.order_id WHERE o.owner=$1 AND o.event_id=$2 AND a.snapshot IS NOT NULL
 	 ORDER BY a.id DESC LIMIT 30) recent ORDER BY recent.id`, owner, event)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[HistoryItem])
+	items, err := pgx.CollectRows(rows, pgx.RowToStructByPos[HistoryItem])
+	return items, core.DatabaseOperationError(err)
 }
 
 // HistoryPage includes legacy metadata and deleted orders, using a stable audit ID.
@@ -51,11 +52,11 @@ func (s Service) HistoryPage(ctx context.Context, owner, event, raw string) (cor
 	 JOIN core.orders o ON o.id=a.order_id WHERE o.owner=$1 AND o.event_id=$2
 	 AND ($3::bigint=0 OR a.id<$3) ORDER BY a.id DESC LIMIT $4`, owner, event, before, core.ReadPageItems+1)
 	if err != nil {
-		return core.ReadPage[HistoryItem]{}, err
+		return core.ReadPage[HistoryItem]{}, core.DatabaseOperationError(err)
 	}
 	items, err := pgx.CollectRows(rows, pgx.RowToStructByPos[HistoryItem])
 	if err != nil {
-		return core.ReadPage[HistoryItem]{}, err
+		return core.ReadPage[HistoryItem]{}, core.DatabaseOperationError(err)
 	}
 	return core.NavigationPage(items, cursor, func(item HistoryItem) string { return item.ID })
 }
@@ -83,9 +84,11 @@ func (s Service) historyDetail(
 		Change           *Change `json:"change"`
 		DetailsAvailable bool    `json:"details_available"`
 	}
-	err = s.DB.QueryRow(ctx, `SELECT a.id::text,o.id,a.action,a.version,a.created_at,a.snapshot FROM core.order_audit a JOIN core.orders o ON o.id=a.order_id
+	err = core.DatabaseOperationError(
+		s.DB.QueryRow(ctx, `SELECT a.id::text,o.id,a.action,a.version,a.created_at,a.snapshot FROM core.order_audit a JOIN core.orders o ON o.id=a.order_id
 	 WHERE o.owner=$1 AND o.event_id=$2 AND a.id::text=$3`, owner, event, id).
-		Scan(&detail.ID, &detail.OrderID, &detail.Action, &detail.Version, &detail.At, &detail.Change)
+			Scan(&detail.ID, &detail.OrderID, &detail.Action, &detail.Version, &detail.At, &detail.Change),
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return core.ReadChunk{}, problem(http.StatusNotFound, "history_not_found")
 	}
@@ -139,11 +142,11 @@ func (s Service) EventsPage(ctx context.Context, actor, raw string) (core.ReadPa
 		core.ReadPageItems+1,
 	)
 	if err != nil {
-		return core.ReadPage[string]{}, err
+		return core.ReadPage[string]{}, core.DatabaseOperationError(err)
 	}
 	items, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		return core.ReadPage[string]{}, err
+		return core.ReadPage[string]{}, core.DatabaseOperationError(err)
 	}
 	return core.NavigationPage(items, cursor, func(id string) string { return id })
 }

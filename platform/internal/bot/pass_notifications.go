@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -15,13 +16,17 @@ import (
 // DeliverPassNotifications preserves each canonical outcome before follow-up work.
 func (b *Bot) DeliverPassNotifications(ctx context.Context) error {
 	failures := b.deliverRegistrationAnnouncement(ctx)
+	if core.IsDatabaseFailure(failures) || ctx.Err() != nil {
+		return errors.Join(deliveryFailure(failures), ctx.Err())
+	}
 	notices, err := b.Host.PendingPassNotifications(ctx)
 	if err != nil {
 		return errors.Join(failures, err)
 	}
 	for _, notice := range notices {
-		failures = errors.Join(failures, b.deliverPassNotification(ctx, notice))
-		if ctx.Err() != nil {
+		err = b.deliverPassNotification(ctx, notice)
+		failures = errors.Join(failures, deliveryFailure(err))
+		if core.IsDatabaseFailure(err) || ctx.Err() != nil {
 			return errors.Join(failures, ctx.Err())
 		}
 	}
@@ -29,6 +34,9 @@ func (b *Bot) DeliverPassNotifications(ctx context.Context) error {
 }
 
 func (b *Bot) deferPassNotification(ctx context.Context, n passbooking.Notification, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	if n.FollowupPending {
 		done, reason := notificationFollowupResult(err)
 		return b.Host.CompletePassNotificationFollowup(
@@ -86,6 +94,9 @@ func (b *Bot) deliverPassNotification(ctx context.Context, notice passbooking.No
 	if err == nil {
 		err = b.refreshPassNotificationViews(ctx, notice)
 	}
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	done, reason := notificationFollowupResult(err)
 	completeErr := b.Host.CompletePassNotificationFollowup(
 		ctx,
@@ -128,8 +139,9 @@ func (b *Bot) storePassNotificationDelivery(
 	); err != nil {
 		return err
 	}
-	return dbgen.New(b.DB).
+	err := dbgen.New(b.DB).
 		StorePassNotificationReceipt(ctx, dbgen.StorePassNotificationReceiptParams{ID: notice.ID, MessageID: messageID})
+	return core.DatabaseOperationError(err)
 }
 
 // A known canonical outcome permits follow-up; deferred or rejected work does not.
@@ -186,8 +198,9 @@ func (b *Bot) RecoverPassNotifications(ctx context.Context) error {
 	}
 	var failures error
 	for _, notice := range notices {
-		failures = errors.Join(failures, b.deliverPassNotification(ctx, notice))
-		if ctx.Err() != nil {
+		err = b.deliverPassNotification(ctx, notice)
+		failures = errors.Join(failures, deliveryFailure(err))
+		if core.IsDatabaseFailure(err) || ctx.Err() != nil {
 			return errors.Join(failures, ctx.Err())
 		}
 	}

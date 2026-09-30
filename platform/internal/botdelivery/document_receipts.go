@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
@@ -14,7 +15,7 @@ func (s Service) projectDocumentReceipt(ctx context.Context, tx pgx.Tx, i Intent
 	}
 	doc := i.Receipt.Document
 	var content any = map[string]any{"message_id": i.MessageID, "filename": doc.Filename, "event_id": i.Reference.Event}
-	if i.Reference.Family == "modern_order_export" || i.Reference.Family == "modern_order_proof" {
+	if i.Reference.Family == familyModernOrderExport || i.Reference.Family == familyModernOrderProof {
 		content = ModernReceipt{
 			Status:    "delivered",
 			EventID:   i.Reference.Event,
@@ -34,18 +35,18 @@ func (s Service) projectDocumentReceipt(ctx context.Context, tx pgx.Tx, i Intent
 			i.Receipt.Key,
 			content,
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	if i.Reference.Notice == "" {
 		return nil
 	}
-	if i.Reference.Family == "food_orders_export" || i.Reference.Family == "food_summary_export" {
+	if i.Reference.Family == familyFoodOrdersExport || i.Reference.Family == familyFoodSummaryExport {
 		var complete bool
 		if err := tx.QueryRow(ctx, `SELECT count(*)=2 FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind IN ('food_orders_export','food_summary_export')`, i.Owner, i.Reference.Update).
 			Scan(&complete); err != nil ||
 			!complete {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	return s.enqueueResultTx(
@@ -56,7 +57,7 @@ func (s Service) projectDocumentReceipt(ctx context.Context, tx pgx.Tx, i Intent
 			Chat:      i.Chat,
 			Update:    i.Reference.Update,
 			Effect:    "document-notice:" + string(i.Reference.Notice),
-			Reference: Reference{Family: "static", Generation: i.Reference.Generation, Source: i.Reference.Source},
+			Reference: Reference{Family: familyStatic, Generation: i.Reference.Generation, Source: i.Reference.Source},
 			Result:    StoredResult{Notice: i.Reference.Notice, Source: i.Reference.Source},
 		},
 	)

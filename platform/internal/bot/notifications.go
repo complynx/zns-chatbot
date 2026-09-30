@@ -26,8 +26,9 @@ func (b *Bot) DeliverNotifications(ctx context.Context) error {
 	}
 	var failures error
 	for _, notice := range notices {
-		failures = errors.Join(failures, b.deliverNotification(ctx, notice))
-		if ctx.Err() != nil {
+		err = b.deliverNotification(ctx, notice)
+		failures = errors.Join(failures, deliveryFailure(err))
+		if core.IsDatabaseFailure(err) || ctx.Err() != nil {
 			return errors.Join(failures, ctx.Err())
 		}
 	}
@@ -55,6 +56,9 @@ func notificationFollowupResult(err error) (bool, string) {
 }
 
 func (b *Bot) deferOrderNotification(ctx context.Context, n orders.Notification, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	if n.FollowupPending {
 		done, reason := notificationFollowupResult(err)
 		return b.Host.CompleteNotificationFollowup(
@@ -106,6 +110,7 @@ func (b *Bot) deliverNotification(ctx context.Context, notice orders.Notificatio
 	)
 	err = dbgen.New(b.DB).
 		StoreOrderNotificationReceipt(ctx, dbgen.StoreOrderNotificationReceiptParams{ID: notice.ID, MessageID: notice.MessageID})
+	err = core.DatabaseOperationError(err)
 	if err == nil {
 		err = b.record(
 			ctx,
@@ -117,6 +122,9 @@ func (b *Bot) deliverNotification(ctx context.Context, notice orders.Notificatio
 	}
 	if err == nil {
 		err = b.RenderOrders(ctx, notice.Recipient, notice.TelegramID)
+	}
+	if core.IsDatabaseFailure(err) {
+		return err
 	}
 	done, reason := notificationFollowupResult(err)
 	completeErr := b.Host.CompleteNotificationFollowup(
@@ -131,6 +139,15 @@ func notificationText(notice orders.Notification, language string) (string, erro
 	id := i18n.OrderNoticeUpdated
 	values := map[string]string{mediaOrderChoice: notice.OrderID}
 	switch notice.Kind {
+	case "refund_request":
+		if notice.Refund == nil {
+			return "", errors.New("refund notification has no canonical task")
+		}
+		text, err := refundText(language, *notice.Refund)
+		if err != nil {
+			return "", err
+		}
+		return messages.text(i18n.RefundNotice, nil) + "\n" + text, messages.err
 	case "payment_request":
 		id = i18n.OrderNoticeReview
 	case "accept":
@@ -211,8 +228,9 @@ func (b *Bot) RecoverOrderNotifications(ctx context.Context) error {
 	}
 	var failures error
 	for _, notice := range notices {
-		failures = errors.Join(failures, b.deliverNotification(ctx, notice))
-		if ctx.Err() != nil {
+		err = b.deliverNotification(ctx, notice)
+		failures = errors.Join(failures, deliveryFailure(err))
+		if core.IsDatabaseFailure(err) || ctx.Err() != nil {
 			return errors.Join(failures, ctx.Err())
 		}
 	}

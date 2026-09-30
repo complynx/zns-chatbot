@@ -62,7 +62,7 @@ func (c Client) Call(ctx context.Context, owner, method, path string, in, out an
 	return c.Request(ctx, owner, method, path, body, out)
 }
 
-// Request exchanges the verified principal for a fresh user token per request.
+// Request obtains a bounded-lifetime user token for the verified principal.
 func (c Client) Request(ctx context.Context, owner, method, path string, body []byte, out any) error {
 	token, err := c.UserToken(ctx, owner)
 	if err != nil {
@@ -119,14 +119,8 @@ func requestAuthorizedLimit(
 		return clientBoundaryError(ctx, e, "core API unavailable")
 	}
 	defer resp.Body.Close()
-	d := json.NewDecoder(io.LimitReader(resp.Body, MaxAPIBytes))
 	if resp.StatusCode != http.StatusOK {
-		var p core.ProblemError
-		if e = d.Decode(&p); e != nil {
-			return clientBoundaryError(ctx, e, "invalid core API response")
-		}
-		p.Status = resp.StatusCode
-		return &p
+		return coreResponseError(ctx, resp, "invalid core API response")
 	}
 	data, e := io.ReadAll(io.LimitReader(resp.Body, responseLimit+1))
 	if e != nil {
@@ -138,8 +132,35 @@ func requestAuthorizedLimit(
 	return json.Unmarshal(data, out)
 }
 
+// Called only for non-success responses from the authenticated configured Core.
+// A malformed response cannot establish database provenance, even with a header.
+func coreResponseError(ctx context.Context, response *http.Response, invalid string) error {
+	body, err := io.ReadAll(io.LimitReader(response.Body, MaxAPIBytes+1))
+	if err != nil {
+		return clientBoundaryError(ctx, err, invalid)
+	}
+	if len(body) > MaxAPIBytes {
+		return errors.New(invalid)
+	}
+	var problem core.ProblemError
+	if err = json.Unmarshal(body, &problem); err != nil {
+		return clientBoundaryError(ctx, err, invalid)
+	}
+	if problem.Code == "" {
+		return errors.New(invalid)
+	}
+	problem.Status = response.StatusCode
+	if response.StatusCode >= http.StatusBadRequest && response.Header.Get(core.DatabaseFailureHeader) == "1" {
+		return core.DatabaseFailure(&problem)
+	}
+	return &problem
+}
+
 // Keep cancellation observable without exposing wrapped transport or database details.
 func clientBoundaryError(ctx context.Context, err error, message string) error {
+	if core.IsDatabaseFailure(err) {
+		return core.DatabaseFailure(errors.New(message))
+	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}

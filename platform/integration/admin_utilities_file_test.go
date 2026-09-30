@@ -41,7 +41,7 @@ func TestAdminUtilityFilePreservesDocument(t *testing.T) {
 	defer server.Close()
 	f := registrationPaymentFixture(t)
 	f.b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
-	handle(t, f.b, message(9812, 202, "/get_file opaque_id"))
+	handleVisible(t, f.b, message(9812, 202, "/get_file opaque_id"))
 	assert.Equal(t, "opaque_id.pdf", filename)
 	assert.Equal(t, []byte("synthetic"), uploaded)
 }

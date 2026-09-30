@@ -6,8 +6,10 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
@@ -133,4 +135,53 @@ func TestDeliveryDispatcherRejectsInvalidDomainReference(t *testing.T) {
 		var b Bot
 		require.ErrorIs(t, b.dispatchDelivery(t.Context(), ref), delivery.ErrQueueReference)
 	}
+}
+
+func TestDeliveryDispatcherRetainsDatabaseFailureAfterProviderAndCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	provider := errors.New("provider unavailable")
+	first, second := dispatchTestEntry("provider"), dispatchTestEntry("database")
+	var sent []string
+	err := dispatchDeliveryPass(ctx, func(context.Context) ([]delivery.Entry, error) {
+		return []delivery.Entry{first, second}, nil
+	}, func(_ context.Context, ref delivery.Reference) error {
+		sent = append(sent, ref.Key)
+		if ref == first.Reference {
+			return provider
+		}
+		cancel()
+		return &pgconn.PgError{Code: "08006", Message: "private database detail"}
+	})
+	require.Equal(t, []string{"provider", "database"}, sent)
+	require.ErrorIs(t, err, provider)
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.True(t, core.IsDatabaseFailure(err))
+	require.NotContains(t, err.Error(), "private database detail")
+}
+
+func TestDeliveryDispatcherStopsBeforeHealthyHeadAfterDatabaseFailure(t *testing.T) {
+	t.Parallel()
+	provider := errors.New("provider unavailable")
+	heads := []delivery.Entry{
+		dispatchTestEntry("provider"), dispatchTestEntry("database"), dispatchTestEntry("healthy"),
+	}
+	var sent []string
+	err := dispatchDeliveryPass(t.Context(), func(context.Context) ([]delivery.Entry, error) {
+		return heads, nil
+	}, func(_ context.Context, ref delivery.Reference) error {
+		sent = append(sent, ref.Key)
+		if ref == heads[0].Reference {
+			return provider
+		}
+		if ref == heads[1].Reference {
+			return &pgconn.PgError{Code: "08006"}
+		}
+		return nil
+	})
+	require.Equal(t, []string{"provider", "database"}, sent)
+	require.ErrorIs(t, err, provider)
+	require.ErrorIs(t, err, core.ErrDatabase)
 }

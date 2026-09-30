@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/conversation"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/derivedmutation"
 	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -52,7 +53,8 @@ CREATE TRIGGER pause_successor BEFORE UPDATE ON core.pass_admin_batches FOR EACH
 	)
 	require.NoError(t, err)
 	_, err = service.RunPassBatch(t.Context(), "visitor", command, source)
-	require.ErrorContains(t, err, "synthetic successor interruption")
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.NotContains(t, err.Error(), "synthetic successor interruption")
 	var first, second string
 	require.NoError(
 		t,

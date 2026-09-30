@@ -154,7 +154,7 @@ func TestLegacyMassageTelegramResumeBothLocales(t *testing.T) {
 					Message: telegram.Message{ID: 1, Chat: telegram.Chat{ID: 101, Type: "private"}},
 				},
 			}
-			handle(t, f.b, update)
+			handleNotificationUpdate(t, f, update)
 			card := massageCard(t, f, 101)
 			assert.Contains(t, card.Text, map[string]string{"en": "Massage", "ru": "Массаж"}[locale])
 			handle(t, f.b, massageClick(t, f, 101, 801, "❌ Bob"))
@@ -261,7 +261,7 @@ func TestLegacyMassagePractitionerTelegramCallbacks(t *testing.T) {
 			},
 		}
 	}
-	handle(t, f.b, callback(850, "massage|notifications|51"))
+	handleNotificationUpdate(t, f, callback(850, "massage|notifications|51"))
 	assert.Contains(t, massageCard(t, f, 202).Text, "Уведомления")
 	var enabled bool
 	require.NoError(
@@ -301,7 +301,7 @@ func TestLegacyMassagePractitionerTelegramCallbacks(t *testing.T) {
 	)
 	require.NoError(t, err)
 	handle(t, f.b, callback(852, "massage|clientlist|2"))
-	handle(t, f.b, callback(853, "massage|sped|"+legacyDraftID))
+	handleNotificationUpdate(t, f, callback(853, "massage|sped|"+legacyDraftID))
 	assert.NotEmpty(t, massageCard(t, f, 202).Markup.Rows)
 	_, err = f.b.API.ExecuteMassage(
 		t.Context(),
@@ -315,6 +315,6 @@ func TestLegacyMassagePractitionerTelegramCallbacks(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	handle(t, f.b, callback(854, "massage|sped|"+legacyDraftID))
+	handleNotificationUpdate(t, f, callback(854, "massage|sped|"+legacyDraftID))
 	assert.Contains(t, massageCard(t, f, 202).Text, "Отменено")
 }

@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -16,28 +17,27 @@ func (r *passMenuRenderer) adminAssignment(ctx context.Context) error {
 		r.lines = append(r.lines, r.text(i18n.RegistrationAssignmentTarget))
 		return nil
 	}
-	target, err := r.bot.API.PassAdminTarget(ctx, r.owner, r.state.Event, r.state.AdminTargetTelegramID)
+	view, err := (interaction.RegistrationMenuReader{Domain: r.bot.API}).
+		Assignment(ctx, r.owner, r.state.Event, r.state.AdminTargetTelegramID, r.state.Assignment)
 	if err != nil {
 		return err
 	}
+	target := view.Target
 	r.lines = append(
 		r.lines,
 		passMenuLabel(target.Name),
 		r.bookingText(target.Booking),
 		r.text(i18n.RegistrationAssignmentHint),
 	)
-	if !target.CanAssign {
+	if view.Draft == nil {
 		return nil
 	}
-	command := registrationAssignmentDraft(target, r.state.Assignment)
-	r.state.Assignment = &command
-	if target.Booking.Version == 0 || target.Booking.State == passStateCancelled {
-		if !target.CanCreateFromProfile {
-			r.lines = append(r.lines, r.text(i18n.RegistrationAssignmentTarget))
-			return nil
-		}
-		command.Create = &passbooking.AdminCreate{FromProfile: true, ProfileVersion: target.ProfileVersion}
+	r.state.Assignment = view.Draft
+	if view.Command == nil {
+		r.lines = append(r.lines, r.text(i18n.RegistrationAssignmentTarget))
+		return nil
 	}
+	command := *view.Command
 	r.assignmentChoices(command, target.CurrentTier)
 	r.assignmentSummary(command)
 	label := i18n.RegistrationAssignmentApply
@@ -49,18 +49,6 @@ func (r *passMenuRenderer) adminAssignment(ctx context.Context) error {
 		passMenuChoice{label: r.text(label), action: passMenuAction{Assignment: &command}},
 	)
 	return nil
-}
-
-func registrationAssignmentDraft(
-	target passbooking.AdminTarget,
-	previous *passbooking.AdminAssignment,
-) passbooking.AdminAssignment {
-	if previous != nil && previous.Target == target.Booking.Owner && previous.TargetVersion == target.Booking.Version &&
-		previous.Version == target.ActorVersion && (previous.Create == nil || previous.Create.ProfileVersion == target.ProfileVersion) {
-		return *previous
-	}
-	return passbooking.AdminAssignment{Event: target.Booking.Event, Version: target.ActorVersion,
-		Target: target.Booking.Owner, TargetVersion: target.Booking.Version}
 }
 
 func (r *passMenuRenderer) assignmentOption(label string, command passbooking.AdminAssignment) {

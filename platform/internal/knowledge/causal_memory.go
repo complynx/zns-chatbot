@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
@@ -46,7 +47,7 @@ func loadMemoryCausal(
 		return record, nil
 	}
 	if err != nil {
-		return record, err
+		return record, core.DatabaseOperationError(err)
 	}
 	if origin == "original" && raw == nil {
 		return record, nil
@@ -78,7 +79,7 @@ func (s Service) authorizeMemoryEntries(
 ) ([]MemoryEntry, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	records := make([]memoryCausalRecord, len(entries))
@@ -132,7 +133,7 @@ func (s Service) authorizeMemoryEntries(
 		}
 		result = append(result, entry)
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func compareMemoryEntries(a, b MemoryEntry) int {
@@ -175,7 +176,7 @@ func revokeMemoryCausal(ctx context.Context, tx pgx.Tx, actor string, entry Memo
 		entry.SourceKind,
 		entry.Version,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 func bindMemoryCausal(ctx context.Context, tx pgx.Tx, actor string, result Result, source readsource.Derivation) error {
@@ -215,7 +216,7 @@ func bindMemoryCausalRefs(
 		ref.SourceKind,
 		ref.Version,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	_, err := tx.Exec(
 		ctx,
@@ -230,7 +231,7 @@ func bindMemoryCausalRefs(
 		refs,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	leaf := knowledgeauthority.ReadAuthority{
 		Kind:       knowledgeauthority.DerivedMemory,

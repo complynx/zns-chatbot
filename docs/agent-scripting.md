@@ -76,10 +76,16 @@ stream is bounded before JSON-RPC framing allocates; total traffic is 512 KiB in
 each direction, arguments 128 KiB, individual results 64 KiB, catalog 64 KiB and
 at most 128 tool bindings. The application sends only authorized names to the worker; full schemas remain in the host and are fetched by live `$help()`. The unchanged catalog byte limit still applies. Names support up to three segments.
 
-Execute has a cumulative 200 ms JavaScript budget, paused only during synchronous
-host IO, a five-second whole execution deadline, a six-second child watchdog,
-and a seven-second independent supervisor/client deadline. Hard container memory
-and network restrictions still apply. Cancellation closes the per-run connection;
+Execute has a cumulative 200 ms VM-active elapsed-time budget, paused during
+synchronous host IO. This includes serialization and scheduling delay; it is not
+a CPU-time budget. Host operations have a ten-second limit inside one shared
+60-second execution deadline, with a 61-second child watchdog and a 62-second
+transport deadline. An earlier parent deadline wins; callbacks cannot renew the
+shared deadline. These are the existing C5 limits in
+`platform/internal/scriptprotocol/budgets.go`, replacing the earlier 5/6/7-second
+Execute limits. They do not replace the separate five-second D-001 acceptance
+check, which remains unresolved. Hard container memory and network restrictions
+still apply. Cancellation closes the per-run connection;
 callbacks use the original host run context rather than the RPC library's
 connection-only callback context. The legacy Evaluate budgets below are unchanged.
 

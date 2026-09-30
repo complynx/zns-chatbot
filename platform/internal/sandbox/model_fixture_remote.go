@@ -25,6 +25,22 @@ func (m FixtureRemote) Plan(ctx context.Context, input agent.Input) (agent.Plan,
 	const timeout = 10 * time.Second
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	return m.scopedRemote(scope).Plan(ctx, input)
+}
+
+func (m FixtureRemote) AssessKnowledge(
+	ctx context.Context,
+	input agent.KnowledgeAssessmentInput,
+) (agent.KnowledgeAssessment, error) {
+	scope, ok := agent.RequestScopeFromContext(ctx)
+	if !ok || !syntheticFixtureOwner(scope.Owner) || scope.UpdateID <= 0 {
+		return agent.KnowledgeAssessment{}, errors.New("fixture request scope missing")
+	}
+	return m.scopedRemote(scope).AssessKnowledge(ctx, input)
+}
+
+func (m FixtureRemote) scopedRemote(scope agent.RequestScope) agent.Remote {
+	const timeout = 10 * time.Second
 	client := http.Client{Timeout: timeout}
 	if m.HTTP != nil {
 		client = *m.HTTP
@@ -35,7 +51,7 @@ func (m FixtureRemote) Plan(ctx context.Context, input agent.Input) (agent.Plan,
 	}
 	client.Transport = fixtureScopeTransport{base: transport, scope: scope}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return (agent.Remote{URL: m.URL, HTTP: &client}).Plan(ctx, input)
+	return agent.Remote{URL: m.URL, HTTP: &client}
 }
 
 type fixtureScopeTransport struct {

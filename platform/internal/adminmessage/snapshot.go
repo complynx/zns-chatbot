@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 
 	"github.com/jackc/pgx/v5"
@@ -160,6 +161,9 @@ func (s Service) previewWithSource(ctx context.Context, actor, key, raw string, 
 }
 
 func serializationConflict(err error) bool {
+	if errors.Is(err, core.ErrDatabaseSerialization) {
+		return true
+	}
 	databaseError, ok := errors.AsType[*pgconn.PgError](err)
 	return ok && databaseError.Code == "40001"
 }

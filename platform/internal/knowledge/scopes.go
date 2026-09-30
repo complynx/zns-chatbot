@@ -1,6 +1,10 @@
 package knowledge
 
-import "context"
+import (
+	"context"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+)
 
 // Scopes reports current explicit grants for GUI/tool discovery. A displayed
 // capability is not authorization; every later mutation checks the grant again.
@@ -17,16 +21,16 @@ func (s Service) Scopes(ctx context.Context, actor string) ([]Scope, error) {
  EXISTS(SELECT 1 FROM core.knowledge_permissions p WHERE p.scope=scopes.event AND p.actor=$1 AND p.permission='review')
  FROM scopes ORDER BY rank,finishes_at DESC NULLS FIRST,event LIMIT $2`, actor, MaxResults)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	result := make([]Scope, 0)
 	for rows.Next() {
 		var scope Scope
 		if err = rows.Scan(&scope.Event, &scope.Phase, &scope.CanCurate, &scope.CanReview); err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		result = append(result, scope)
 	}
-	return result, rows.Err()
+	return result, core.DatabaseOperationError(rows.Err())
 }

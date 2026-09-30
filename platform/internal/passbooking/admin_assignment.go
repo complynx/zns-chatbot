@@ -7,9 +7,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/destination"
-
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/destination"
 )
 
 // AdminAssign serializes forced assignments with normal event registration.
@@ -23,14 +24,14 @@ func (s Service) AdminAssign(ctx context.Context, actor string, c AdminAssignmen
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return AdminAssignmentResult{}, err
+		return AdminAssignmentResult{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, err := s.adminAssignInTx(ctx, tx, actor, c)
 	if err != nil {
 		return AdminAssignmentResult{}, err
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // adminAssignInTx lets durable adapters commit the result marker with the command.
@@ -126,7 +127,7 @@ func (p *PreparedAssignment) Apply(ctx context.Context) (AdminAssignmentResult, 
 	}
 	var now time.Time
 	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return AdminAssignmentResult{}, err
+		return AdminAssignmentResult{}, core.DatabaseOperationError(err)
 	}
 	if !now.Before(e.finishes) {
 		return AdminAssignmentResult{}, conflict("pass_event_finished")
@@ -196,11 +197,11 @@ func lockAdminUsers(ctx context.Context, tx pgx.Tx, actor, target string) error 
 		[]string{actor, target},
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	owners, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !slices.Contains(owners, actor) || !slices.Contains(owners, target) {
 		return forbidden()
@@ -217,7 +218,7 @@ func adminReplay(ctx context.Context, tx pgx.Tx, actor string, c AdminAssignment
 		return AdminAssignmentResult{}, false, nil
 	}
 	if err != nil {
-		return AdminAssignmentResult{}, false, err
+		return AdminAssignmentResult{}, false, core.DatabaseOperationError(err)
 	}
 	if previous != requestHash {
 		return AdminAssignmentResult{}, false, conflict("idempotency_conflict")
@@ -227,7 +228,7 @@ func adminReplay(ctx context.Context, tx pgx.Tx, actor string, c AdminAssignment
 	err = tx.QueryRow(ctx, `SELECT assigned_count,after_records FROM core.pass_admin_assignments WHERE event_id=$1 AND actor=$2 AND key_hash=$3`, c.Event, actor, keyHash).
 		Scan(&result.AssignedCount, &prior)
 	if err != nil {
-		return result, false, err
+		return result, false, core.DatabaseOperationError(err)
 	}
 	var old []Booking
 	if err = json.Unmarshal(prior, &old); err != nil {
@@ -276,7 +277,7 @@ func recordAdminAssignment(ctx context.Context, tx pgx.Tx, actor string, c Admin
 		requestHash,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	_, err = tx.Exec(
 		ctx,
@@ -290,5 +291,5 @@ func recordAdminAssignment(ctx context.Context, tx pgx.Tx, actor string, c Admin
 		after,
 		now,
 	)
-	return err
+	return core.DatabaseOperationError(err)
 }

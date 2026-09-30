@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 const paymentAccepted = "accepted"
@@ -22,5 +24,5 @@ func (s Service) legacyFreePayment(ctx context.Context, actor, eventID, owner st
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Payment{}, forbidden()
 	}
-	return payment, err
+	return payment, core.DatabaseOperationError(err)
 }

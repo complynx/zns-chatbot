@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
@@ -23,7 +24,7 @@ func (s Service) EnqueueCard(ctx context.Context, in CardRequest) error {
 
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	i := Intent{
@@ -32,10 +33,10 @@ func (s Service) EnqueueCard(ctx context.Context, in CardRequest) error {
 		Chat:      in.Chat,
 		Reference: ref,
 		Effect:    "view",
-		Phase:     "send",
+		Phase:     phaseSend,
 	}
 	if in.Target > 0 {
-		i.Phase, i.Target = "edit", in.Target
+		i.Phase, i.Target = phaseEdit, in.Target
 	}
 	if err = s.lockSource(ctx, tx, i); err != nil {
 		return err
@@ -45,7 +46,7 @@ func (s Service) EnqueueCard(ctx context.Context, in CardRequest) error {
 		"SELECT pg_advisory_xact_lock(hashtextextended($1,81080))",
 		fmt.Sprintf("%d:%s:%s:%s", i.BotID, owner, ref.Family, ref.CardKey),
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	raw, err := json.Marshal(ref)
 	if err != nil {
@@ -56,14 +57,14 @@ func (s Service) EnqueueCard(ctx context.Context, in CardRequest) error {
  AND (($4 AND operation_key=$5 AND effect_key=$6) OR (NOT $4 AND (state IN ('pending','sending','unknown','parked','paused') OR (state='sent' AND NOT continuation_done))))
  ORDER BY created_at LIMIT 1`, i.BotID, owner, raw, child, operation, effect).Scan(&existing)
 	if err == nil {
-		return tx.Commit(ctx)
+		return core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	var sequence int64
 	if err = tx.QueryRow(ctx, "SELECT nextval('bot.delivery_effect_ids')").Scan(&sequence); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	i.Operation = "card:" + strconv.FormatInt(sequence, 10)
 	if child {
@@ -83,7 +84,7 @@ func (s Service) EnqueueCard(ctx context.Context, in CardRequest) error {
 		i.Target,
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if _, err = delivery.Register(
 		ctx,
@@ -95,5 +96,5 @@ func (s Service) EnqueueCard(ctx context.Context, in CardRequest) error {
 	); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }

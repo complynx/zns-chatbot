@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
 )
 
@@ -81,11 +83,15 @@ type proposalWindowTx struct {
 	t        *testing.T
 	evidence map[int64][]byte
 	lockErr  error
-	locks    int
+	queries  []string
+	args     [][]any
 }
 
-func (tx *proposalWindowTx) Query(context.Context, string, ...any) (pgx.Rows, error) {
-	tx.locks++
+// Query records every lock query and fails it with a private driver-like error.
+// Known SQL operations sanitize that error, so observation uses the recording.
+func (tx *proposalWindowTx) Query(_ context.Context, query string, args ...any) (pgx.Rows, error) {
+	tx.queries = append(tx.queries, query)
+	tx.args = append(tx.args, args)
 	return nil, tx.lockErr
 }
 func (tx *proposalWindowTx) QueryRow(_ context.Context, query string, args ...any) pgx.Row {
@@ -147,7 +153,31 @@ func TestProposalWindowUnionDoesNotUseStoredLimit(t *testing.T) {
 			},
 		)
 	}
-	_, err := lockProposalValidity(t.Context(), tx, "alice", refs)
-	require.ErrorIs(t, err, tx.lockErr, "bounded proposal closures may form a larger validation-only union")
-	require.Equal(t, 1, tx.locks)
+	// Each stored closure fits the persisted bound; their validation union does
+	// not, so an aggregate Merge would reject this window before any lock.
+	closures, err := proposalClosures(t.Context(), tx, refs)
+	require.NoError(t, err)
+	require.Len(t, closures, len(refs))
+	for _, closure := range closures {
+		require.True(t, Valid(closure))
+	}
+	require.False(t, Valid(proposalWindowAuthorities(closures)), "the window union must exceed the stored bound")
+	_, err = Merge(closures...)
+	require.ErrorIs(t, err, ErrLimit)
+	require.Empty(t, tx.queries, "closure expansion takes no locks")
+
+	_, err = lockProposalValidity(t.Context(), tx, "alice", refs)
+	// The larger union reaches exactly one globally ordered event-lock query.
+	// This fixture has no registration leaves, so its event list is empty.
+	if assert.Len(t, tx.queries, 1, "bounded proposal closures may form a larger validation-only union: %v", err) {
+		assert.Contains(t, tx.queries[0], "FROM core.pass_events WHERE id=ANY($1::text[]) ORDER BY id FOR SHARE")
+		assert.Equal(t, []any{[]string{}}, tx.args[0])
+	}
+	// The known SQL operation sanitizes the injected failure.
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.True(t, core.IsDatabaseFailure(err))
+	require.NotErrorIs(t, err, core.ErrDatabaseSerialization)
+	require.NotErrorIs(t, err, ErrLimit, "the window must not apply the stored-record budget")
+	require.NotErrorIs(t, err, tx.lockErr, "driver diagnostics must not escape")
+	require.NotContains(t, err.Error(), tx.lockErr.Error())
 }

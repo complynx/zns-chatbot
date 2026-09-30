@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery/dbgen"
 )
 
@@ -36,7 +37,7 @@ func NewControlPacer(db *pgxpool.Pool, settings Settings) (*ControlPacer, error)
 func (p *ControlPacer) Admit(ctx context.Context) (Admission, error) {
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, err := ReserveControl(ctx, tx, p.settings)
@@ -44,7 +45,7 @@ func (p *ControlPacer) Admit(ctx context.Context) (Admission, error) {
 		return Admission{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	return result, nil
 }
@@ -52,7 +53,7 @@ func (p *ControlPacer) Admit(ctx context.Context) (Admission, error) {
 func (p *ControlPacer) Observe(ctx context.Context, outcome Outcome) (Outcome, time.Time, error) {
 	tx, err := p.db.Begin(ctx)
 	if err != nil {
-		return Outcome{}, time.Time{}, err
+		return Outcome{}, time.Time{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	result, deadline, err := ScheduleControl(ctx, tx, p.settings, outcome)
@@ -60,7 +61,7 @@ func (p *ControlPacer) Observe(ctx context.Context, outcome Outcome) (Outcome, t
 		return Outcome{}, time.Time{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return Outcome{}, time.Time{}, err
+		return Outcome{}, time.Time{}, core.DatabaseOperationError(err)
 	}
 	return result, deadline, nil
 }
@@ -78,7 +79,7 @@ func ReserveControl(ctx context.Context, tx pgx.Tx, settings Settings) (Admissio
 	}
 	clock, err := q.DeliveryClock(ctx)
 	if err != nil {
-		return Admission{}, err
+		return Admission{}, core.DatabaseOperationError(err)
 	}
 	deadline := clock.Time
 	for _, row := range []dbgen.LockPacingRow{bot, control} {
@@ -120,7 +121,7 @@ func ScheduleControl(ctx context.Context, tx pgx.Tx, settings Settings, outcome 
 	}
 	clock, err := q.DeliveryClock(ctx)
 	if err != nil {
-		return Outcome{}, time.Time{}, err
+		return Outcome{}, time.Time{}, core.DatabaseOperationError(err)
 	}
 	deadline := clock.Time
 	if outcome.Kind == Deferred {
@@ -143,7 +144,8 @@ func ScheduleControl(ctx context.Context, tx pgx.Tx, settings Settings, outcome 
 
 func lockControlPacing(ctx context.Context, q *dbgen.Queries, botID int64) (dbgen.LockPacingRow, error) {
 	if err := q.EnsurePacing(ctx, dbgen.EnsurePacingParams{BotID: botID, Chat: ""}); err != nil {
-		return dbgen.LockPacingRow{}, err
+		return dbgen.LockPacingRow{}, core.DatabaseOperationError(err)
 	}
-	return q.LockPacing(ctx, dbgen.LockPacingParams{BotID: botID, Chat: ""})
+	row, err := q.LockPacing(ctx, dbgen.LockPacingParams{BotID: botID, Chat: ""})
+	return row, core.DatabaseOperationError(err)
 }

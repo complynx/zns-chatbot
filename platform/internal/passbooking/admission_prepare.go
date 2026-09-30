@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
@@ -34,7 +35,7 @@ func (s Service) PrepareAdmissionInTx(
 		return nil, forbidden()
 	}
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	e, err := readEventLocked(ctx, tx, c.Event, false)
 	if err != nil {
@@ -73,7 +74,7 @@ func (s Service) RefreshAdmissionTurnsInTx(ctx context.Context, tx pgx.Tx, event
 	}
 	var now time.Time
 	if err := tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return refreshRegistrationTurns(ctx, tx, eventID, s.registrationRetention(), now)
 }

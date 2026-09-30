@@ -48,9 +48,12 @@ or reviewed database fixture for large historical bodies, rather than treating
 this interactive input endpoint as an archive importer.
 
 In sandbox mode, the numeric prefix of `TELEGRAM_TOKEN` supplies the trusted bot
-namespace, for example `77:synthetic-test-only`. Do not configure `auth.zitadel`
-fields in this mode. Identity revocation in Zitadel must be tested with the
-Zitadel adapter, not inferred from sandbox behavior.
+namespace. The bundled app and Fake Telegram share the synthetic token
+`999:sandbox`, which supplies bot ID 999; `compose.product.fixture.yaml` inherits
+this setting. This token is separate from the API signing key
+`ZNS_AUTH__SIGNING_KEY`. Do not configure `auth.zitadel` fields in this mode.
+Identity revocation in Zitadel must be tested with the Zitadel adapter, not
+inferred from sandbox behavior.
 
 The fixture creates:
 

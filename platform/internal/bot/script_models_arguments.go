@@ -27,13 +27,13 @@ func decodeModelTool(call scriptclient.ToolCall) (scriptModelArguments, error) {
 	invalid := errors.New("invalid model tool arguments")
 	keys := []string{}
 	if strings.HasPrefix(call.Name, "models.others.") {
-		keys = append(keys, "owner")
+		keys = append(keys, ownerField)
 	}
 	if strings.HasSuffix(call.Name, ".set") {
 		keys = append(keys, "model", "effort")
 	}
 	if call.Name == scriptModelsGrant {
-		keys = []string{"owner", "capability", "enabled"}
+		keys = []string{ownerField, "capability", "enabled"}
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(call.Arguments, &fields); err != nil {

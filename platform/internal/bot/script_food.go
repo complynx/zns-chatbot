@@ -18,7 +18,7 @@ import (
 const scriptFoodView = "food.view"
 const scriptFoodQuote = "food.quote"
 const scriptFoodChange = "food.change"
-const scriptFoodPrepare = "food.payment.Prepare"
+const scriptFoodPrepare = "food.payment.prepare"
 const scriptFoodSaveMeals = "save_meals"
 const scriptFoodDeleteMeals = "delete_meals"
 const scriptFoodToggle = "toggle_activity"

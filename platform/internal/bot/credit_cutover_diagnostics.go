@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/complynx/zns-chatbot/platform/internal/config"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // A closed diagnostic contains no configuration values or external error text.
@@ -51,7 +52,7 @@ func (b *Bot) validateCreditCutover(ctx context.Context) error {
 	var active bool
 	if err := b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM credits.cutover WHERE singleton)`).
 		Scan(&active); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	return b.creditCutoverConfiguration(active)
 }
@@ -59,7 +60,7 @@ func (b *Bot) validateCreditCutover(ctx context.Context) error {
 // Report the closed diagnostic before application shutdown joins it with other
 // errors. Ordinary shutdown and arbitrary errors retain their existing behavior.
 func (b *Bot) creditCutoverRunResult(ctx context.Context, err error) error {
-	if ctx.Err() != nil {
+	if ctx.Err() != nil && !core.IsDatabaseFailure(err) {
 		err = nil
 	}
 	if diagnostic, ok := errors.AsType[creditCutoverError](err); ok {

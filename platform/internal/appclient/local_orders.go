@@ -46,7 +46,11 @@ func orderApplicationError(err error) error {
 	if _, known := errors.AsType[*core.ProblemError](err); known {
 		return err
 	}
-	return &core.ProblemError{Status: http.StatusInternalServerError, Code: "internal_error"}
+	public := &core.ProblemError{Status: http.StatusInternalServerError, Code: "internal_error"}
+	if core.IsDatabaseFailure(err) {
+		return core.DatabaseFailure(public)
+	}
+	return public
 }
 
 func (c Client) localOrderPages(ctx context.Context, owner, event string, inbox bool) ([]orders.Order, error) {

@@ -3,6 +3,7 @@ package derivedmutation
 import (
 	"context"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
@@ -21,11 +22,21 @@ func (s Service) CapturePassAdmission(
 	if !source.Valid() {
 		return passbooking.Admission{}, invalidSource()
 	}
-	tx, err := s.beginSourceMutation(ctx, []string{actor, request.Command.Target}, source)
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return passbooking.Admission{}, err
+		return passbooking.Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	if err = lockRegistrationPrelude(
+		ctx,
+		tx,
+		actor,
+		request.Command.Target,
+		request.Command.Event,
+		source,
+	); err != nil {
+		return passbooking.Admission{}, err
+	}
 	// Preserve target authorization and stale-version denial before source capture.
 	prepared, err := s.Registration.PrepareAdmissionInTx(ctx, tx, actor, request.Command)
 	if err != nil {
@@ -41,5 +52,5 @@ func (s Service) CapturePassAdmission(
 	if err != nil {
 		return passbooking.Admission{}, err
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }

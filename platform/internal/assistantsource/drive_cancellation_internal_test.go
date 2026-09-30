@@ -59,8 +59,9 @@ func TestDriveTokenAcquisitionStopsOnFetchCancellation(t *testing.T) {
 func TestRunnerStopCancelsBlockedTokenAcquisition(t *testing.T) {
 	t.Parallel()
 	drive, started, release := blockedTokenDrive(t)
-	store := &sourceStore{identities: map[string]string{}, values: map[string][]string{}}
-	stop, err := (Runner{Store: store, Drive: drive}).Start(t.Context())
+	store := newSourceStore()
+	onFatal, reports := fatalRecorder()
+	stop, err := (Runner{Store: store, Drive: drive}).Start(t.Context(), onFatal)
 	require.NoError(t, err)
 	t.Cleanup(func() { close(release); stop() })
 	select {
@@ -79,4 +80,5 @@ func TestRunnerStopCancelsBlockedTokenAcquisition(t *testing.T) {
 	}
 	assert.Empty(t, store.values)
 	assert.Empty(t, store.failure, "shutdown must not publish a source failure")
+	assert.Empty(t, reports, "canceling a stalled OAuth fetch is not a database failure")
 }

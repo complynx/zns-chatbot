@@ -6,6 +6,8 @@ import (
 	"errors"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 // Capabilities reports current explicit grants across all scopes, including
@@ -37,7 +39,7 @@ func (s Service) Capabilities(ctx context.Context, actor string) (Capabilities, 
 	err := s.DB.QueryRow(ctx, `SELECT
  EXISTS(SELECT 1 FROM core.knowledge_permissions WHERE actor=$1 AND permission='curate'),
  EXISTS(SELECT 1 FROM core.knowledge_permissions WHERE actor=$1 AND permission='review')`, actor).Scan(&result.CanCurate, &result.CanReview)
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }
 
 func (s Service) Scope(ctx context.Context, actor, event string) (Scope, error) {
@@ -53,7 +55,7 @@ func (s Service) Scope(ctx context.Context, actor, event string) (Scope, error) 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return result, missing()
 	}
-	return result, err
+	return result, core.DatabaseOperationError(err)
 }
 
 func (s Service) ScopePage(ctx context.Context, actor, cursor string) (ScopePage, error) {
@@ -81,18 +83,18 @@ func (s Service) ScopePage(ctx context.Context, actor, cursor string) (ScopePage
 		MaxResults+1,
 	)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var scope Scope
 		if err = rows.Scan(&scope.Event, &scope.Phase, &scope.CanCurate, &scope.CanReview); err != nil {
-			return result, err
+			return result, core.DatabaseOperationError(err)
 		}
 		result.Items = append(result.Items, scope)
 	}
 	if err = rows.Err(); err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	result.More = len(result.Items) > MaxResults
 	if result.More {

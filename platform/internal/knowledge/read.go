@@ -6,13 +6,15 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 func (s Service) knownActor(ctx context.Context, actor string) error {
 	var exists bool
 	err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.users WHERE id=$1)`, actor).Scan(&exists)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !exists {
 		return forbidden()
@@ -39,7 +41,7 @@ func (s Service) retrieve(ctx context.Context, actor string, q Query) ([]Fact, e
 		var exists bool
 		if err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.events WHERE id=$1)`, q.Event).
 			Scan(&exists); err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		} else if !exists {
 			return nil, missing()
 		}
@@ -61,7 +63,7 @@ func (s Service) retrieve(ctx context.Context, actor string, q Query) ([]Fact, e
  FROM candidates WHERE rank=1 AND body ILIKE $3 ESCAPE '\' AND (topic,fact_key)>($5,$6)
  ORDER BY topic,fact_key LIMIT $4`, q.Event, q.Topic, pattern, MaxResults+1, afterTopic, afterKey)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	result := make([]Fact, 0)
@@ -76,11 +78,11 @@ func (s Service) retrieve(ctx context.Context, actor string, q Query) ([]Fact, e
 			&fact.Phase,
 			&fact.HistoricalFallback,
 		); err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		result = append(result, fact)
 	}
-	return result, rows.Err()
+	return result, core.DatabaseOperationError(rows.Err())
 }
 
 func (s Service) Proposals(ctx context.Context, actor string, q ProposalQuery) ([]Proposal, error) {
@@ -89,7 +91,7 @@ func (s Service) Proposals(ctx context.Context, actor string, q ProposalQuery) (
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = lockActor(ctx, tx, actor); err != nil {
@@ -104,7 +106,7 @@ func (s Service) Proposals(ctx context.Context, actor string, q ProposalQuery) (
  AND (($2 AND state='pending_review' AND owner<>$3 AND `+proposalSubmittedSQL+`) OR (NOT $2 AND owner=$3))
  AND ($4::bigint=0 OR id<$4) ORDER BY id DESC LIMIT $5`, q.Event, q.ReviewQueue, actor, q.After, MaxResults)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	result := make([]Proposal, 0)
 	for rows.Next() {
@@ -118,10 +120,10 @@ func (s Service) Proposals(ctx context.Context, actor string, q ProposalQuery) (
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	return s.authorizeProposals(ctx, actor, result)
 }
@@ -137,19 +139,19 @@ func (s Service) Memos(ctx context.Context, actor string) ([]Memo, error) {
 		MaxMemos,
 	)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	result := make([]Memo, 0)
 	for rows.Next() {
 		var memo Memo
 		if err = rows.Scan(&memo.Key, &memo.Text, &memo.Version, &memo.Active); err != nil {
-			return nil, err
+			return nil, core.DatabaseOperationError(err)
 		}
 		result = append(result, memo)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	rows.Close()
 	return s.authorizeMemos(ctx, actor, result)
@@ -169,7 +171,7 @@ func (s Service) Memo(ctx context.Context, actor, key string) (Memo, error) {
 		return memo, nil
 	}
 	if err != nil {
-		return memo, err
+		return memo, core.DatabaseOperationError(err)
 	}
 	entry, err := s.authorizeMemoryEntry(ctx, actor, memoMemoryEntry(memo))
 	memo.ReadAuthorities = entry.ReadAuthorities

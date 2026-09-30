@@ -32,29 +32,29 @@ func passMenuFixture(t *testing.T) *fixture {
 func TestPassMenuProfileControlsBindOwnerAndVersion(t *testing.T) {
 	t.Parallel()
 	f := passMenuFixture(t)
-	handle(t, f.b, message(600, 101, "/role"))
+	handlePassVisible(t, f, message(600, 101, "/role"))
 	choice := orderClick(t, f, 101, 601, "Follower")
 	foreign := choice
 	copyCallback := *choice.Callback
 	copyCallback.From.ID = 202
 	foreign.Callback = &copyCallback
 	foreign.ID = 602
-	handle(t, f.b, foreign)
+	handlePassVisible(t, f, foreign)
 	s := passes.Service{DB: f.db}
 	before, err := s.Get(t.Context(), "bob")
 	require.NoError(t, err)
 	assert.Zero(t, before.Version)
-	handle(t, f.b, choice)
+	handlePassVisible(t, f, choice)
 	profile, err := s.Get(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "follower", profile.Role)
 	choice.ID = 603
 	choice.Callback.ID = "603"
-	handle(t, f.b, choice)
+	handlePassVisible(t, f, choice)
 	after, err := s.Get(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.Equal(t, profile.Version, after.Version)
-	handle(t, f.b, message(604, 101, "/passport"))
+	handlePassVisible(t, f, message(604, 101, "/passport"))
 	profile, err = s.Get(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "passport", profile.Pending)
@@ -77,20 +77,21 @@ func TestPassMenuQueueTraversesAPIPagesAndClampsAfterChanges(t *testing.T) {
 	SELECT 'dance','pass-page-'||i,1,'waitlist','leader','solo','bob',now()+i*interval '1 second' FROM generate_series(1,31) i`,
 	)
 	require.NoError(t, err)
-	handle(t, f.b, message(700, 202, "/passes"))
-	handle(t, f.b, passMenuClick(t, f, 202, 701, "Танцы"))
-	handle(t, f.b, passMenuClick(t, f, 202, 702, "Очередь регистрации"))
+	handlePassVisible(t, f, message(700, 202, "/passes"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 701, "Танцы"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 702, "Очередь регистрации"))
 	for update := int64(703); update < 709; update++ {
-		handle(t, f.b, passMenuClick(t, f, 202, update, "Далее"))
+		handlePassVisible(t, f, passMenuClick(t, f, 202, update, "Далее"))
 	}
 	assert.Contains(t, passMenuCard(t, f, 202).Text, "50031")
-	handle(t, f.b, passMenuClick(t, f, 202, 709, "Назад"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 709, "Назад"))
 	assert.Contains(t, passMenuCard(t, f, 202).Text, "50026")
 	_, err = f.db.Exec(t.Context(), `DELETE FROM core.pass_bookings WHERE owner LIKE 'pass-page-%'`)
 	require.NoError(t, err)
 	require.NoError(t, f.b.RenderPassMenu(t.Context(), "bob", 202, ""))
+	drainPassNotices(t, f)
 	assert.NotContains(t, passMenuCard(t, f, 202).Text, "50026")
-	handle(t, f.b, passMenuClick(t, f, 202, 710, "К началу списка"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 710, "К началу списка"))
 	var count int
 	require.NoError(
 		t,
@@ -141,54 +142,55 @@ func passMenuClick(t *testing.T, f *fixture, user, id int64, label string) teleg
 func TestPassMenuSoloForeignStaleCancelPersistence(t *testing.T) {
 	t.Parallel()
 	f := passMenuFixture(t)
-	handle(t, f.b, message(400, 101, "/passes"))
-	handle(t, f.b, passMenuClick(t, f, 101, 401, "Dance"))
+	handlePassVisible(t, f, message(400, 101, "/passes"))
+	handlePassVisible(t, f, passMenuClick(t, f, 101, 401, "Dance"))
 	register := passMenuClick(t, f, 101, 402, "Register solo")
 	foreign := register
 	copyCallback := *register.Callback
 	copyCallback.From.ID = 303
 	foreign.Callback = &copyCallback
 	foreign.ID = 403
-	handle(t, f.b, foreign)
-	s := passbooking.Service{DB: f.db}
+	handlePassVisible(t, f, foreign)
+	s := passbooking.Service{DB: f.db, Delivery: f.b.Delivery}
 	booking, err := s.Get(t.Context(), "alice", "dance")
 	require.NoError(t, err)
 	assert.Zero(t, booking.Version)
-	handle(t, f.b, register)
+	handlePassVisible(t, f, register)
 	booking, err = s.Get(t.Context(), "alice", "dance")
 	require.NoError(t, err)
 	assert.Positive(t, booking.Version)
 	register.ID = 404
 	register.Callback.ID = "404"
-	handle(t, f.b, register)
+	handlePassVisible(t, f, register)
 	assert.Contains(t, passMenuCard(t, f, 101).Text, "outdated")
-	handle(t, f.b, passMenuClick(t, f, 101, 405, "Cancel registration"))
+	handlePassVisible(t, f, passMenuClick(t, f, 101, 405, "Cancel registration"))
 	assert.Contains(t, passMenuCard(t, f, 101).Text, "Cancelled")
 	card := passMenuCard(t, f, 101)
 	restarted := *f.b
 	require.NoError(t, restarted.RenderPassMenu(t.Context(), "alice", 101, ""))
+	pumpBotDeliveries(t, &restarted)
 	assert.Equal(t, card.ID, passMenuCard(t, f, 101).ID)
 }
 
 func TestPassMenuRussianInvitationAndAdminQueue(t *testing.T) {
 	t.Parallel()
 	f := passMenuFixture(t)
-	s := passbooking.Service{DB: f.db}
+	s := passbooking.Service{DB: f.db, Delivery: f.b.Delivery}
 	command := bookingCommand("invite", "menu-invite", passbooking.Booking{})
 	command.InviteTelegramID = 202
 	_, err := s.Execute(t.Context(), "alice", command)
 	require.NoError(t, err)
-	handle(t, f.b, message(500, 202, "/passes"))
-	handle(t, f.b, passMenuClick(t, f, 202, 501, "Танцы"))
-	handle(t, f.b, passMenuClick(t, f, 202, 502, "Приглашения"))
-	handle(t, f.b, passMenuClick(t, f, 202, 503, "Принять"))
+	handlePassVisible(t, f, message(500, 202, "/passes"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 501, "Танцы"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 502, "Приглашения"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 503, "Принять"))
 	booking, err := s.Get(t.Context(), "bob", "dance")
 	require.NoError(t, err)
 	assert.Equal(t, "alice", booking.Partner)
-	handle(t, f.b, passMenuClick(t, f, 202, 504, "Меню регистрации"))
-	handle(t, f.b, passMenuClick(t, f, 202, 505, "Очередь регистрации"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 504, "Меню регистрации"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 505, "Очередь регистрации"))
 	assert.Contains(t, passMenuCard(t, f, 202).Text, "Выделен")
-	handle(t, f.b, passMenuClick(t, f, 202, 506, "Разъединить пару"))
+	handlePassVisible(t, f, passMenuClick(t, f, 202, 506, "Разъединить пару"))
 	booking, err = s.Get(t.Context(), "bob", "dance")
 	require.NoError(t, err)
 	assert.Empty(t, booking.Partner)

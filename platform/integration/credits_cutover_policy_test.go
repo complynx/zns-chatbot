@@ -48,8 +48,9 @@ func TestCreditsUnlimitedPolicySourceIsAccount(t *testing.T) {
 	for index, language := range []string{"en", "ru"} {
 		_, err = f.b.API.SetLanguage(t.Context(), "alice", language, false)
 		require.NoError(t, err)
-		handle(t, f.b, message(98601+int64(index), 101, "/usage"))
+		handleVisible(t, f.b, message(98601+int64(index), 101, "/usage"))
 		messages := chatMessages(t, f, 101)
+		require.NotEmpty(t, messages)
 		got := messages[len(messages)-1].Text
 		want := "account policy"
 		if language == "ru" {

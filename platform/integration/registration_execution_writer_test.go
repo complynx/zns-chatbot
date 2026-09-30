@@ -54,12 +54,16 @@ func TestRegistrationBotMetadataFailureRecoversWithoutModel(t *testing.T) {
 
 			// A new Bot value keeps the durable DB and real HTTP adapters. No new model plan is provided.
 			restarted := *f.b
+			f.b = &restarted
 			require.NoError(t, restarted.Handle(t.Context(), update))
+			drainPassNotices(t, f)
 			require.Zero(t, f.model.calls)
 			assertRegistrationBotExecution(t, f, exactKey, 1)
 			visible := chatMessages(t, f, 101)
 			require.NotEmpty(t, visible)
+			require.NotEmpty(t, passMenuCard(t, f, 101).Text)
 			require.NoError(t, restarted.Handle(t.Context(), update))
+			drainPassNotices(t, f)
 			require.Equal(t, visible, chatMessages(t, f, 101), "duplicate ingress must not add a second reply")
 			require.Zero(t, f.model.calls)
 			after, err := service.Get(t.Context(), "alice", "dance")

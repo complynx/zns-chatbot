@@ -22,8 +22,9 @@ type mediaView struct {
 
 // Page through open, visible cards; completed history needs no periodic refresh.
 func (b *Bot) reconcileMediaViews(ctx context.Context) error {
+	// purgeExpiredAV is exactly one SQL Exec, so its result is a known SQL origin.
 	if err := b.purgeExpiredAV(ctx); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	const pageSize = 100
 	after := ""
@@ -32,14 +33,17 @@ func (b *Bot) reconcileMediaViews(ctx context.Context) error {
 FROM bot.media_intake m JOIN bot.order_cards c ON c.owner=m.owner AND c.card_key='media:'||m.id
 WHERE m.status<>'done' AND m.id>$1 ORDER BY m.id LIMIT $2`, after, pageSize)
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		views, err := pgx.CollectRows(rows, pgx.RowToStructByPos[mediaView])
 		if err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 		for _, view := range views {
 			if err = b.reconcileMediaView(ctx, view); err != nil {
+				if failure := reconcileDatabaseFailure(err); failure != nil {
+					return failure
+				}
 				b.logger().WarnContext(ctx, "media view reconciliation pending")
 			}
 			after = view.ID
@@ -68,6 +72,9 @@ func (b *Bot) reconcileMediaView(ctx context.Context, view mediaView) error {
 	}
 	var metadata media.Attachment
 	err = b.API.Call(ctx, view.Owner, http.MethodGet, "/v1/media/"+url.PathEscape(item.AttachmentID), nil, &metadata)
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok &&
 		(problem.Status == http.StatusForbidden || problem.Status == http.StatusNotFound) {
 		return b.retireMediaView(ctx, view)
@@ -119,5 +126,5 @@ func (b *Bot) retireMediaView(ctx context.Context, view mediaView) error {
 	}
 	_, err = b.DB.Exec(ctx, `UPDATE bot.media_intake SET status='done',notice=$3,model_text='',rendered=NULL
 WHERE owner=$1 AND id=$2 AND status<>'done'`, view.Owner, view.ID, string(i18n.MediaUnavailable))
-	return err
+	return core.DatabaseOperationError(err)
 }

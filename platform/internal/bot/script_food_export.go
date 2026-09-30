@@ -61,6 +61,13 @@ func (b *Bot) executeFoodExport(ctx context.Context, owner string, record agenth
 	if request == nil || !ok || source.owner != owner || request.ChatID != source.in.chat {
 		return nil, errors.New("food export binding missing")
 	}
+	// Source binding reloads the request; the admitted ledger identity must stay immutable.
+	detached := *request
+	if request.Source != nil {
+		original := request.Source.Clone()
+		detached.Source = &original
+	}
+	request = &detached
 	if record.Source == nil || !record.Source.Valid() {
 		return nil, errors.New("missing admitted source")
 	}
@@ -89,7 +96,7 @@ func (b *Bot) executeFoodExport(ctx context.Context, owner string, record agenth
 	if !locked {
 		return result, nil
 	}
-	err = b.exportFoodEvent(ctx, source.in, request.UpdateID, request.EventID, record.Source)
+	err = b.exportFoodEvent(ctx, source.in, request.UpdateID, request.EventID, request.Source)
 	if err != nil {
 		return result, err
 	}

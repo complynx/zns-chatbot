@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -37,17 +38,21 @@ func (b *Bot) foodButton(ctx context.Context, owner, label string, command foodB
 		ctx,
 		`DELETE FROM bot.food_buttons WHERE ctid IN (SELECT ctid FROM bot.food_buttons WHERE expires_at<=now() AND consumed_at IS NULL ORDER BY expires_at LIMIT 100)`,
 	); err != nil {
+		return telegram.Button{}, core.DatabaseOperationError(err)
+	}
+	encoded, err := json.Marshal(command)
+	if err != nil {
 		return telegram.Button{}, err
 	}
 	token := rand.Text()
-	_, err := b.DB.Exec(
+	_, err = b.DB.Exec(
 		ctx,
 		`INSERT INTO bot.food_buttons(owner,token,command) VALUES($1,$2,$3)`,
 		owner,
 		token,
-		command,
+		encoded,
 	)
-	return telegram.Button{Text: label, Data: foodPrefix + token}, err
+	return telegram.Button{Text: label, Data: foodPrefix + token}, core.DatabaseOperationError(err)
 }
 
 // Old callback data has no attempt token. Pin its first authorized meaning so a
@@ -82,9 +87,14 @@ func (b *Bot) bindFoodLegacy(ctx context.Context, in incoming) (legacyfood.Callb
 	return saved, err
 }
 
-func (b *Bot) handleFood(ctx context.Context, in incoming, update telegram.Update) error {
+func (b *Bot) handleFood(ctx context.Context, in incoming, update telegram.Update) (resultErr error) {
 	if update.Callback != nil {
-		defer b.acknowledge(ctx, update.Callback.ID)
+		// Acknowledgement SQL dominates the handler result; otherwise keep it.
+		defer func() {
+			if ackErr := b.acknowledge(ctx, update.Callback.ID); ackErr != nil {
+				resultErr = ackErr
+			}
+		}()
 	}
 	if in.text == "/exportfoodorders" {
 		return b.exportFood(ctx, in, update.ID)
@@ -155,6 +165,9 @@ func (b *Bot) performFood(ctx context.Context, in incoming, update int64, comman
 	}
 	order, err := b.API.ExecuteFood(ctx, in.owner, command)
 	if err != nil {
+		if core.IsDatabaseFailure(err) {
+			return core.ErrDatabase
+		}
 		if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Code == "stale_version" {
 			if err = b.foodNotice(ctx, in, i18n.FoodUnavailable); err != nil {
 				return err
@@ -203,6 +216,9 @@ func (b *Bot) finishOrderedFoodCommand(
 }
 
 func (b *Bot) foodFailure(ctx context.Context, in incoming, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return b.foodNotice(ctx, in, i18n.FoodUnavailable)
 	}

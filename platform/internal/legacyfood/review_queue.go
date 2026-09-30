@@ -26,19 +26,19 @@ func (s Service) ReviewQueue(ctx context.Context, actor, event, raw string) (cor
  FROM core.food_payments n WHERE n.order_id=p.order_id AND n.kind=p.kind))
  ORDER BY o.id LIMIT $3`, event, cursor.Position, core.ReadPageItems+1)
 	if err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	items := []ReviewItem{}
 	for rows.Next() {
 		var item ReviewItem
 		if err = rows.Scan(&item.OrderID, &item.Owner, &item.Version); err != nil {
-			return result, err
+			return result, core.DatabaseOperationError(err)
 		}
 		items = append(items, item)
 	}
 	if err = rows.Err(); err != nil {
-		return result, err
+		return result, core.DatabaseOperationError(err)
 	}
 	return core.NavigationPage(items, cursor, func(item ReviewItem) string { return item.OrderID })
 }

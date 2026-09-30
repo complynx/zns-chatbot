@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/account"
 
@@ -50,11 +51,16 @@ func TestLanguageOperationReplayPreservesNewerChoice(t *testing.T) {
 func TestLanguageInterruptedDeliveryReplayRefreshesCurrentCards(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
-	handle(t, f.b, message(710, 101, "/language ru"))
-	handle(t, f.b, message(711, 101, "/orders"))
+	f.b.Delivery.Fallback = time.Second
+	handleVisible(t, f.b, message(710, 101, "/language ru"))
+	handleVisible(t, f.b, message(711, 101, "/orders"))
+	before := chatMessages(t, f, 101)
 	post(t, f.fake.URL+"/lab/fault", map[string]string{"mode": "transient"})
 	interrupted := message(712, 101, "/language en")
-	require.Error(t, f.b.Handle(t.Context(), interrupted))
+	require.NoError(t, f.b.Handle(t.Context(), interrupted))
+	failed := assertBotRateLimited(t, f)
+	assert.Equal(t, "language", failed.Reference.Family)
+	assert.Equal(t, before, chatMessages(t, f, 101))
 	value, err := f.b.API.Preferences(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "en", value.Language)
@@ -62,7 +68,7 @@ func TestLanguageInterruptedDeliveryReplayRefreshesCurrentCards(t *testing.T) {
 	err = f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions WHERE owner='alice' AND update_id=712 AND kind='language'`).
 		Scan(&records)
 	require.NoError(t, err)
-	assert.Zero(t, records)
+	assert.Equal(t, 1, records)
 	var languageID int64
 	err = f.db.QueryRow(t.Context(), `SELECT message_id FROM bot.order_cards WHERE owner='alice' AND card_key='language'`).
 		Scan(&languageID)
@@ -72,14 +78,26 @@ func TestLanguageInterruptedDeliveryReplayRefreshesCurrentCards(t *testing.T) {
 	value, err = f.b.API.Preferences(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "ru", value.Language)
-	handle(t, f.b, aliceCallback(714, languageID, "language:en"))
-	handle(t, f.b, aliceCallback(713, languageID, "language:ru"))
+	waitBotRetryDeadline(t, f, failed)
+	pumpBotDeliveries(t, f.b)
+	russian, err := i18n.Translate("ru", i18n.LanguageCurrent, map[string]string{"language": "ru"})
+	require.NoError(t, err)
+	found := false
+	for _, card := range chatMessages(t, f, 101) {
+		if card.ID == languageID {
+			found = true
+			assert.Contains(t, card.Text, russian)
+		}
+	}
+	require.True(t, found)
+	handleVisible(t, f.b, aliceCallback(714, languageID, "language:en"))
+	handleVisible(t, f.b, aliceCallback(713, languageID, "language:ru"))
 	value, err = f.b.API.Preferences(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "en", value.Language)
 	current, err := i18n.Translate("en", i18n.LanguageCurrent, map[string]string{"language": "en"})
 	require.NoError(t, err)
-	found := false
+	found = false
 	for _, card := range chatMessages(t, f, 101) {
 		if card.ID == languageID {
 			found = true
@@ -123,15 +141,15 @@ func TestTelegramLanguageInitializesOnceAndDoesNotOpenOrders(t *testing.T) {
 	require.NoError(t, err)
 	update := message(950, 101, "/language")
 	update.Message.From.LanguageCode = "ua"
-	handle(t, f.b, update)
+	handleVisible(t, f.b, update)
 	pref, err := f.b.API.Preferences(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "uk", pref.Language)
 	assert.Len(t, chatMessages(t, f, 101), 1)
-	handle(t, f.b, message(951, 101, "/language en"))
+	handleVisible(t, f.b, message(951, 101, "/language en"))
 	update.ID = 952
 	update.Message.From.LanguageCode = "ru"
-	handle(t, f.b, update)
+	handleVisible(t, f.b, update)
 	pref, err = f.b.API.Preferences(t.Context(), "alice")
 	require.NoError(t, err)
 	assert.Equal(t, "en", pref.Language)
@@ -164,18 +182,18 @@ func TestLanguageSwitchRefreshesPaymentCardAndRevocationRemovesInstructions(t *t
 		},
 	)
 	require.NoError(t, err)
-	handle(t, f.b, message(700, 101, "/language en"))
-	handle(t, f.b, message(701, 101, "/orders"))
+	handleVisible(t, f.b, message(700, 101, "/language en"))
+	handleVisible(t, f.b, message(701, 101, "/orders"))
 	label, err := i18n.Translate("en", i18n.PaymentMethods, nil)
 	require.NoError(t, err)
-	handle(t, f.b, orderClick(t, f, 101, 702, label))
+	handleVisible(t, f.b, orderClick(t, f, 101, 702, label))
 	english := paymentMessage(t, f)
 	assert.Contains(t, english.Text, "TEST PAYMENT DETAILS")
 	assert.Contains(t, english.Text, "1,050.00")
 	require.NotEmpty(t, english.Markup.Rows)
 	assert.Equal(t, "tg://user?id=202", english.Markup.Rows[0][0].URL)
-	handle(t, f.b, message(703, 101, "/language ru"))
-	handle(t, f.b, message(700, 101, "/language en"))
+	handleVisible(t, f.b, message(703, 101, "/language ru"))
+	handleVisible(t, f.b, message(700, 101, "/language en"))
 	russian := paymentMessage(t, f)
 	assert.Equal(t, english.ID, russian.ID)
 	assert.Contains(t, russian.Text, "ТЕСТОВЫЕ РЕКВИЗИТЫ")
@@ -183,6 +201,7 @@ func TestLanguageSwitchRefreshesPaymentCardAndRevocationRemovesInstructions(t *t
 	_, err = f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
 	require.NoError(t, err)
 	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	pumpBotDeliveries(t, f.b)
 	for _, current := range chatMessages(t, f, 101) {
 		if current.ID == russian.ID {
 			assert.NotContains(t, current.Text, "ТЕСТОВЫЕ РЕКВИЗИТЫ")

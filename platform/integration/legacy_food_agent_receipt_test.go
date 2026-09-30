@@ -1,17 +1,22 @@
 package integration_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/media"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -75,17 +80,34 @@ func foodAgentReceiptFixture(t *testing.T) (*fixture, legacyfood.Service, legacy
 	return f, service, order
 }
 
-type foodExportSecondFailure struct{ documents atomic.Int64 }
+type foodExportSecondFailure struct {
+	documents  atomic.Int64
+	rejectedAt atomic.Int64
+	retriedAt  atomic.Int64
+	uncertain  bool
+}
 
 func (f *foodExportSecondFailure) RoundTrip(request *http.Request) (*http.Response, error) {
-	if strings.HasSuffix(request.URL.Path, "/sendDocument") && f.documents.Add(1) == 2 {
+	if !strings.HasSuffix(request.URL.Path, "/sendDocument") {
+		return http.DefaultTransport.RoundTrip(request)
+	}
+	attempt := f.documents.Add(1)
+	if attempt == 3 {
+		f.retriedAt.Store(time.Now().UnixNano())
+	}
+	if attempt == 2 {
+		status := http.StatusTooManyRequests
+		body := "{\"ok\":false,\"error_code\":429,\"description\":\"synthetic cooldown\",\"parameters\":{\"retry_after\":5}}"
+		if f.uncertain {
+			status = http.StatusServiceUnavailable
+			body = "{\"ok\":false,\"description\":\"synthetic temporary failure\"}"
+		}
+		f.rejectedAt.Store(time.Now().UnixNano())
 		return &http.Response{
-			StatusCode: http.StatusServiceUnavailable,
-			Header:     make(http.Header),
-			Body: io.NopCloser(
-				strings.NewReader(`{"ok":false,"description":"synthetic temporary failure"}`),
-			),
-			Request: request,
+			StatusCode: status,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    request,
 		}, nil
 	}
 	return http.DefaultTransport.RoundTrip(request)
@@ -93,47 +115,171 @@ func (f *foodExportSecondFailure) RoundTrip(request *http.Request) (*http.Respon
 
 func TestFoodCSVPartialRetryAndRevokedGrant(t *testing.T) {
 	t.Parallel()
-	for _, revoke := range []bool{false, true} {
-		name := "retry"
-		if revoke {
-			name = "revoked"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, scenario := range []string{"retry", "revoked", "uncertain"} {
+		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
-			f, _, _ := foodAgentReceiptFixture(t)
-			transport := &foodExportSecondFailure{}
-			f.b.TG.HTTP = &http.Client{Transport: transport}
-			update := message(8740, 202, "/exportfoodorders")
-			require.Error(t, f.b.Handle(t.Context(), update))
-			var receipts int
-			require.NoError(
-				t,
-				f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions WHERE owner='bob' AND update_id=8740 AND kind IN ('food_orders_export','food_summary_export')`).
-					Scan(&receipts),
-			)
-			assert.Equal(t, 1, receipts)
-			if revoke {
-				_, err := f.db.Exec(t.Context(), `UPDATE core.food_admins SET can_export=false WHERE owner='bob'`)
-				require.NoError(t, err)
-				_, err = f.b.API.ExportFood(t.Context(), "bob", "food-bot")
-				requireCode(t, err, "forbidden")
-				handle(t, f.b, update)
-				assert.EqualValues(t, 2, transport.documents.Load(), "revocation must prevent the remaining send")
-				return
-			}
-			handle(t, f.b, update)
-			handle(t, f.b, update)
-			assert.EqualValues(t, 3, transport.documents.Load(), "retry sends only the failed second file")
-			require.NoError(
-				t,
-				f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions WHERE owner='bob' AND update_id=8740 AND kind IN ('food_orders_export','food_summary_export')`).
-					Scan(&receipts),
-			)
-			assert.Equal(t, 2, receipts)
+			testFoodCSVDeliveryBoundary(t, scenario)
 		})
 	}
 }
 
+func testFoodCSVDeliveryBoundary(t *testing.T, scenario string) {
+	t.Helper()
+	f, _, _ := foodAgentReceiptFixture(t)
+	transport := &foodExportSecondFailure{uncertain: scenario == "uncertain"}
+	f.b.TG.HTTP = &http.Client{Transport: transport}
+	exported, err := f.b.API.ExportFood(t.Context(), "bob", "food-bot")
+	require.NoError(t, err)
+	update := message(8740, 202, "/exportfoodorders")
+	require.NoError(t, f.b.Handle(t.Context(), update))
+	require.Zero(t, transport.documents.Load(), "admission does not send documents")
+	first := foodCSVReference("food_orders_export")
+	second := foodCSVReference("food_summary_export")
+	waitExportBoundaryCandidate(t, f, first, time.Second)
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), first))
+	firstSent := assertFoodCSVReceipt(t, f, first, "food_orders_food-bot.csv", exported.Orders)
+	waitExportBoundaryCandidate(t, f, second, time.Second)
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), second),
+		"provider outcome is persisted by the delivery owner")
+	require.EqualValues(t, 2, transport.documents.Load())
+	require.Equal(t, 1, foodCSVProjectionCount(t, f))
+	pending, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, second, false)
+	require.NoError(t, err)
+	require.Zero(t, pending.MessageID)
+	require.False(t, pending.ContinuationDone)
+	require.EqualValues(t, 1, pending.Attempt)
+	restarted := *f.b
+	f.b = &restarted
+	if scenario == "uncertain" {
+		require.Equal(t, delivery.Uncertain, pending.State)
+		// Revocation cannot turn a possibly accepted remote send into a pre-send cancellation.
+		revokeFoodCSVGrant(t, f)
+		assertFoodCSVReplay(t, f, update, true)
+		require.NoError(t, f.b.DeliverBotIntent(t.Context(), second))
+		after, readErr := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, second, false)
+		require.NoError(t, readErr)
+		require.Equal(t, delivery.Uncertain, after.State)
+		require.Equal(t, pending, after, "uncertain outcome and receipt must remain immutable")
+		require.Zero(t, after.MessageID)
+		require.EqualValues(t, 2, transport.documents.Load())
+		require.Equal(t, 1, foodCSVProjectionCount(t, f))
+		require.NoError(t, f.b.DeliverBotIntent(t.Context(), first))
+		require.Equal(t, firstSent, assertFoodCSVReceipt(t, f, first, "food_orders_food-bot.csv", exported.Orders))
+		return
+	}
+	require.Equal(t, delivery.Deferred, pending.State)
+	require.True(t, pending.NotBefore.After(time.Now()))
+	require.Positive(t, transport.rejectedAt.Load())
+	cooldownEnd := time.Unix(0, transport.rejectedAt.Load()).Add(5 * time.Second)
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), second))
+	require.EqualValues(t, 2, transport.documents.Load(), "cooldown prevents an early wire call")
+	if scenario == "revoked" {
+		revokeFoodCSVGrant(t, f)
+	}
+	waitExportBoundaryCandidate(t, f, second, 10*time.Second)
+	require.False(t, time.Now().Before(cooldownEnd), "eligibility must honor all five retry_after seconds")
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), second))
+	after, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, second, false)
+	require.NoError(t, err)
+	require.Equal(t, pending.Reference, after.Reference)
+	if scenario == "revoked" {
+		require.Equal(t, delivery.Cancelled, after.State)
+		require.Zero(t, after.MessageID)
+		require.EqualValues(t, 2, transport.documents.Load())
+		require.Equal(t, 1, foodCSVProjectionCount(t, f))
+	} else {
+		assertFoodCSVReceipt(t, f, second, "meal_summary_food-bot.csv", exported.Summary)
+		require.EqualValues(t, 3, transport.documents.Load())
+		require.Positive(t, transport.retriedAt.Load())
+		require.False(t, time.Unix(0, transport.retriedAt.Load()).Before(cooldownEnd),
+			"the actual retry wire call must honor all five retry_after seconds")
+		require.Equal(t, 2, foodCSVProjectionCount(t, f))
+	}
+	calls := transport.documents.Load()
+	assertFoodCSVReplay(t, f, update, scenario == "revoked")
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), first))
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), second))
+	require.Equal(t, calls, transport.documents.Load(), "replay must not resend either document")
+	replayed, readErr := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, second, false)
+	require.NoError(t, readErr)
+	require.Equal(t, after, replayed, "replay must preserve the final delivery state and receipt")
+	require.Equal(t, firstSent, assertFoodCSVReceipt(t, f, first, "food_orders_food-bot.csv", exported.Orders))
+}
+
+// Manual export admission rechecks current capability, even for a known update.
+// The capability refusal is an ordinary Bot error, not the API's typed forbidden response.
+func assertFoodCSVReplay(t *testing.T, f *fixture, update telegram.Update, denied bool) {
+	t.Helper()
+	err := f.b.Handle(t.Context(), update)
+	if denied {
+		require.EqualError(t, err, "food export unavailable")
+		return
+	}
+	require.NoError(t, err)
+}
+
+func foodCSVReference(family string) delivery.Reference {
+	operation, effect := botdelivery.ResultOperation("bob", 8740, "document:"+family+":food-bot:")
+	return delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+}
+
+func foodCSVProjectionCount(t *testing.T, f *fixture) int {
+	t.Helper()
+	var count int
+	require.NoError(t, f.db.QueryRow(
+		t.Context(),
+		"SELECT count(*) FROM bot.interactions WHERE owner='bob' AND update_id=8740 AND kind IN ('food_orders_export','food_summary_export')",
+	).
+		Scan(&count))
+	return count
+}
+
+func revokeFoodCSVGrant(t *testing.T, f *fixture) {
+	t.Helper()
+	_, err := f.db.Exec(t.Context(), "UPDATE core.food_admins SET can_export=false WHERE owner='bob'")
+	require.NoError(t, err)
+	_, err = f.b.API.ExportFood(t.Context(), "bob", "food-bot")
+	requireCode(t, err, "forbidden")
+}
+
+func assertFoodCSVReceipt(
+	t *testing.T,
+	f *fixture,
+	ref delivery.Reference,
+	filename string,
+	expected []byte,
+) botdelivery.Intent {
+	t.Helper()
+	intent, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, ref, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Succeeded, intent.State)
+	require.True(t, intent.ContinuationDone)
+	require.NotNil(t, intent.Receipt.Document)
+	require.Equal(t, filename, intent.Receipt.Document.Filename)
+	digest := sha256.Sum256(expected)
+	require.Equal(t, hex.EncodeToString(digest[:]), intent.Receipt.Document.SHA256)
+	require.Equal(t, len(expected), intent.Receipt.Document.Bytes)
+	var projectedID int64
+	require.NoError(t, f.db.QueryRow(
+		t.Context(),
+		"SELECT (content->>'message_id')::bigint FROM bot.interactions WHERE owner='bob' AND update_id=8740 AND kind=$1",
+		intent.Reference.Family,
+	).Scan(&projectedID))
+	require.Equal(t, intent.MessageID, projectedID)
+	found := 0
+	for _, sent := range chatMessages(t, f, 202) {
+		if sent.Document == nil || sent.Document.Filename != filename {
+			continue
+		}
+		found++
+		require.Equal(t, intent.MessageID, sent.ID)
+		body, downloadErr := f.b.TG.Download(t.Context(), *sent.Document)
+		require.NoError(t, downloadErr)
+		require.Equal(t, expected, body)
+	}
+	require.Equal(t, 1, found, "exactly one accepted document must match its durable receipt")
+	return intent
+}
 func TestFoodAgentExplicitDisplayedTarget(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
@@ -343,24 +489,34 @@ func TestFoodCSVExportsRemainIndependentOfModernXLSX(t *testing.T) {
 	f, _, _ := foodAgentReceiptFixture(t)
 	expected, err := f.b.API.ExportFood(t.Context(), "bob", "food-bot")
 	require.NoError(t, err)
-	handle(t, f.b, message(8730, 202, "/exportfoodorders"))
-	handle(t, f.b, message(8730, 202, "/exportfoodorders"))
-	files := map[string][]byte{}
-	count := 0
-	for _, message := range chatMessages(t, f, 202) {
-		if message.Document == nil {
-			continue
+	visibleFiles := func() (map[string][]byte, int) {
+		files := map[string][]byte{}
+		count := 0
+		for _, message := range chatMessages(t, f, 202) {
+			if message.Document == nil {
+				continue
+			}
+			count++
+			body, downloadErr := f.b.TG.Download(t.Context(), *message.Document)
+			require.NoError(t, downloadErr)
+			files[message.Document.Filename] = body
 		}
-		count++
-		body, downloadErr := f.b.TG.Download(t.Context(), *message.Document)
-		require.NoError(t, downloadErr)
-		files[message.Document.Filename] = body
+		return files, count
 	}
-	require.Equal(t, 2, count, "completed update replay must not duplicate CSV delivery")
+	handleVisible(t, f.b, message(8730, 202, "/exportfoodorders"))
+	files, count := visibleFiles()
+	require.Equal(t, 2, count, "both CSV files must be delivered before replay")
 	assert.Equal(t, expected.Orders, files["food_orders_food-bot.csv"])
 	assert.Equal(t, expected.Summary, files["meal_summary_food-bot.csv"])
 	assert.Empty(t, exportDocuments(t, f, 202))
-	handle(t, f.b, message(8731, 101, "/exportfoodorders"))
+	handleVisible(t, f.b, message(8730, 202, "/exportfoodorders"))
+	replayed, replayCount := visibleFiles()
+	require.Equal(t, count, replayCount, "completed update replay must not duplicate CSV delivery")
+	assert.Equal(t, files, replayed, "completed update replay must preserve CSV bytes")
+	assert.Empty(t, exportDocuments(t, f, 202))
+	err = f.b.Handle(t.Context(), message(8731, 101, "/exportfoodorders"))
+	require.EqualError(t, err, "food export unavailable")
+	pumpBotDeliveries(t, f.b)
 	for _, message := range chatMessages(t, f, 101) {
 		assert.Nil(t, message.Document, "owner without export role must not receive files")
 	}

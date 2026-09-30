@@ -39,6 +39,9 @@ func (policy ScriptAuthorization) PassBookingReceipt(ctx context.Context, owner 
 // payload. The rebased clone is never written or exposed to a model.
 func (s ScriptStore) completeRegistrationCall(ctx context.Context, owner string, updateID int64,
 	index, sequence int, call ScriptToolRecord) (bool, error) {
+	if paymentRegistrationCompletion(call) {
+		return s.completePaymentCall(ctx, owner, updateID, index, sequence, call)
+	}
 	reader, ok := s.Policy.(scriptRegistrationReceiptReader)
 	if !ok || !ownerRegistrationCompletion(call) {
 		return false, nil
@@ -60,7 +63,7 @@ func (s ScriptStore) completeRegistrationCall(ctx context.Context, owner string,
 	if !found {
 		return false, nil
 	}
-	return s.commitRegistrationTransition(ctx, owner, updateID, index, sequence, call, before, booking)
+	return s.commitRegistrationTransition(ctx, owner, updateID, index, sequence, call, before, booking, nil)
 }
 
 // Commit the retired payloads and trusted receipt in the same ledger revision.
@@ -72,6 +75,7 @@ func (s ScriptStore) commitRegistrationTransition(
 	call ScriptToolRecord,
 	before interaction.BookingIdentity,
 	booking passbooking.Booking,
+	payment *passbooking.PaymentCompletionReceipt,
 ) (bool, error) {
 	var identity []byte
 	for range scriptLedgerAttempts {
@@ -92,6 +96,7 @@ func (s ScriptStore) commitRegistrationTransition(
 			call,
 			before,
 			booking,
+			payment,
 		)
 		if prepareErr != nil {
 			if errors.Is(prepareErr, s.StaleError) {
@@ -127,6 +132,7 @@ func (s ScriptStore) prepareRegistrationCompletion(
 	completed ScriptToolRecord,
 	before interaction.BookingIdentity,
 	booking passbooking.Booking,
+	payment *passbooking.PaymentCompletionReceipt,
 ) (bool, error) {
 	record := &records[index]
 	if sequence < 0 || sequence >= len(record.Calls) {
@@ -148,7 +154,7 @@ func (s ScriptStore) prepareRegistrationCompletion(
 		return false, err
 	}
 	validation.Calls[sequence] = completed
-	found, err := rebaseRegistrationValidation(owner, &validation, before, PassIdentity(booking))
+	found, err := rebaseRegistrationValidation(owner, &validation, before, PassIdentity(booking), payment)
 	if err != nil || !found {
 		return false, err
 	}
@@ -171,11 +177,12 @@ func (s ScriptStore) prepareRegistrationCompletion(
 		validation,
 		before,
 		PassIdentity(booking),
+		payment,
 	)
 	if err != nil {
 		return false, err
 	}
-	trusted, err := registrationReceiptCall(completed, booking)
+	trusted, err := registrationReceiptCall(completed, booking, payment)
 	if err != nil {
 		return false, err
 	}
@@ -200,8 +207,16 @@ func rebaseRegistrationValidation(
 	owner string,
 	record *ScriptRecord,
 	before, after interaction.BookingIdentity,
+	payment *passbooking.PaymentCompletionReceipt,
 ) (bool, error) {
-	found := replaceRegistrationAuthority(owner, record.HistoryGeneration, record.ReadAuthorities, before, after)
+	found := replaceRegistrationAuthority(
+		owner,
+		record.HistoryGeneration,
+		record.ReadAuthorities,
+		before,
+		after,
+		payment,
+	)
 	for index := range record.PassContext {
 		dependency := &record.PassContext[index]
 		if dependency.Booking != nil && sameRegistrationIdentity(*dependency.Booking, before) {
@@ -209,6 +224,7 @@ func rebaseRegistrationValidation(
 			dependency.Booking = &replacement
 			found = true
 		}
+		found = replacePaymentQueueAuthority(dependency, payment) || found
 	}
 	for index := range record.Calls {
 		call := &record.Calls[index]
@@ -217,12 +233,26 @@ func rebaseRegistrationValidation(
 			return false, err
 		}
 		call.ResultAuthorities = readsource.CloneAuthorities(refs)
-		found = replaceRegistrationAuthority(owner, record.HistoryGeneration, call.ResultAuthorities, before, after) ||
+		found = replaceRegistrationAuthority(
+			owner,
+			record.HistoryGeneration,
+			call.ResultAuthorities,
+			before,
+			after,
+			payment,
+		) ||
 			found
 		if call.Source != nil {
 			source := call.Source.Clone()
 			call.Source = &source
-			found = replaceRegistrationAuthority(owner, record.HistoryGeneration, source.Authorities, before, after) ||
+			found = replaceRegistrationAuthority(
+				owner,
+				record.HistoryGeneration,
+				source.Authorities,
+				before,
+				after,
+				payment,
+			) ||
 				found
 		}
 	}
@@ -230,14 +260,15 @@ func rebaseRegistrationValidation(
 }
 
 func replaceRegistrationAuthority(owner string, generation int64, refs []readsource.Authority,
-	before, after interaction.BookingIdentity) bool {
+	before, after interaction.BookingIdentity, payment *passbooking.PaymentCompletionReceipt) bool {
 	found := false
 	for index := range refs {
 		ref := &refs[index]
 		if causal := ref.Causal; causal != nil {
 			if causal.Actor == owner && !causal.Published && causal.Generation != nil &&
 				*causal.Generation == generation {
-				found = replaceRegistrationAuthority(owner, generation, causal.Authorities, before, after) || found
+				found = replaceRegistrationAuthority(owner, generation, causal.Authorities, before, after, payment) ||
+					found
 			}
 			continue
 		}
@@ -248,6 +279,12 @@ func replaceRegistrationAuthority(owner string, generation int64, refs []readsou
 			Version:   old.Version,
 			CreatedAt: old.CreatedAt,
 		}
+		if payment != nil && samePaymentReadAuthority(old, payment.Before) &&
+			sameRegistrationIdentity(identity, before) {
+			ref.Registration = payment.After
+			found = true
+			continue
+		}
 		if old.Kind == passbooking.ReadOwnerBooking && sameRegistrationIdentity(identity, before) {
 			ref.Registration = BookingReadAuthority(after)
 			found = true
@@ -256,11 +293,42 @@ func replaceRegistrationAuthority(owner string, generation int64, refs []readsou
 	return found
 }
 
+// A payment review read captured by an earlier run holds the exact pending
+// attempt. Rebase only that entry in the detached copy; every other queue item
+// and the queue read request itself remain checked against current authority.
+func replacePaymentQueueAuthority(
+	dependency *interaction.PassContextDependency,
+	payment *passbooking.PaymentCompletionReceipt,
+) bool {
+	if payment == nil || len(dependency.QueueAuthorities) == 0 {
+		return false
+	}
+	found := false
+	refs := append([]passbooking.ReadAuthority{}, dependency.QueueAuthorities...)
+	for index := range refs {
+		if samePaymentReadAuthority(refs[index], payment.Before) {
+			refs[index] = payment.After
+			found = true
+		}
+	}
+	if found {
+		dependency.QueueAuthorities = refs
+	}
+	return found
+}
+
 func sameRegistrationIdentity(a, b interaction.BookingIdentity) bool {
 	return a.Owner == b.Owner && a.Event == b.Event && a.Version == b.Version && a.CreatedAt.Equal(b.CreatedAt)
 }
 
-func registrationReceiptCall(call ScriptToolRecord, booking passbooking.Booking) (ScriptToolRecord, error) {
+func registrationReceiptCall(
+	call ScriptToolRecord,
+	booking passbooking.Booking,
+	payment *passbooking.PaymentCompletionReceipt,
+) (ScriptToolRecord, error) {
+	if payment != nil {
+		return paymentReceiptCall(call, *payment)
+	}
 	trusted, err := cloneScriptCall(call)
 	if err != nil {
 		return trusted, err
@@ -353,8 +421,15 @@ func registrationResponseMatches(call ScriptToolRecord, current passbooking.Book
 		response.ID == call.Pass.ID && PassIdentity(response.Result).Matches(current)
 }
 
-func (s ScriptStore) authorizeRegistrationTransition(ctx context.Context, owner string, records []ScriptRecord,
-	index int, validation ScriptRecord, before, after interaction.BookingIdentity) ([]int, error) {
+func (s ScriptStore) authorizeRegistrationTransition(
+	ctx context.Context,
+	owner string,
+	records []ScriptRecord,
+	index int,
+	validation ScriptRecord,
+	before, after interaction.BookingIdentity,
+	payment *passbooking.PaymentCompletionReceipt,
+) ([]int, error) {
 	retired := []int{}
 	for position, previous := range records {
 		if scriptRetired(previous) {
@@ -371,7 +446,7 @@ func (s ScriptStore) authorizeRegistrationTransition(ctx context.Context, owner 
 			if err != nil {
 				return nil, err
 			}
-			affected, err := rebaseRegistrationValidation(owner, &clone, before, after)
+			affected, err := rebaseRegistrationValidation(owner, &clone, before, after, payment)
 			if err != nil {
 				return nil, err
 			}
@@ -385,4 +460,129 @@ func (s ScriptStore) authorizeRegistrationTransition(ctx context.Context, owner 
 		}
 	}
 	return retired, nil
+}
+
+type scriptPaymentReceiptReader interface {
+	PassPaymentReceipt(
+		context.Context,
+		string,
+		passbooking.Command,
+		readsource.Derivation,
+	) (passbooking.PaymentCompletionReceipt, error)
+}
+
+func (policy ScriptAuthorization) PassPaymentReceipt(
+	ctx context.Context,
+	owner string,
+	command passbooking.Command,
+	source readsource.Derivation,
+) (passbooking.PaymentCompletionReceipt, error) {
+	reader, ok := policy.ScriptDomainAuthority.(scriptPaymentReceiptReader)
+	if !ok {
+		return passbooking.PaymentCompletionReceipt{}, nil
+	}
+	return reader.PassPaymentReceipt(ctx, owner, command, source)
+}
+
+// An admitted payment decision is completed from the canonical receipt both
+// after a complete response and after an uncertain one whose reply was lost.
+func paymentRegistrationCompletion(call ScriptToolRecord) bool {
+	if call.Outcome.Error != "" || call.Pass == nil || call.Pass.Command == nil || call.Source == nil ||
+		!call.Source.Valid() || (!CommittedPassReceipt(call) && !interruptedPassCall(call)) {
+		return false
+	}
+	command := call.Pass.Command
+	switch call.Pass.Name {
+	case "passes.payments.accept", "passes.payments.reject":
+		return command.Target != "" && command.TargetVersion > 0 && command.PaymentAttempt != "" &&
+			command.Name == PassToolActions()[call.Pass.Name]
+	default:
+		return false
+	}
+}
+
+// The executor reports this exact admission as uncertain; it may have committed.
+func interruptedPassCall(call ScriptToolRecord) bool {
+	var response struct {
+		ID          string `json:"operation_id"`
+		Complete    bool   `json:"complete"`
+		Interrupted bool   `json:"interrupted"`
+	}
+	return json.Unmarshal(call.Outcome.Result, &response) == nil && response.Interrupted && !response.Complete &&
+		response.ID != "" && response.ID == call.Pass.ID
+}
+
+func (s ScriptStore) completePaymentCall(
+	ctx context.Context,
+	owner string,
+	updateID int64,
+	index, sequence int,
+	call ScriptToolRecord,
+) (bool, error) {
+	reader, ok := s.Policy.(scriptPaymentReceiptReader)
+	if !ok {
+		return false, nil
+	}
+	receipt, err := reader.PassPaymentReceipt(ctx, owner, *call.Pass.Command, *call.Source)
+	if err != nil {
+		return true, err
+	}
+	if !paymentReceiptMatches(*call.Pass.Command, receipt) {
+		return false, nil
+	}
+	before := interaction.BookingIdentity{
+		Owner:     receipt.Before.Owner,
+		Event:     receipt.Before.Event,
+		Version:   receipt.Before.Version,
+		CreatedAt: receipt.Before.CreatedAt,
+	}
+	after := passbooking.Booking{
+		Owner:     receipt.After.Owner,
+		Event:     receipt.After.Event,
+		Version:   receipt.After.Version,
+		CreatedAt: receipt.After.CreatedAt,
+	}
+	if !CommittedPassReceipt(call) {
+		// The reply was lost after dispatch. Validate the probed canonical receipt,
+		// never the uncertain response, and never dispatch the command again.
+		call, err = paymentReceiptCall(call, receipt)
+		if err != nil {
+			return true, err
+		}
+	}
+	return s.commitRegistrationTransition(ctx, owner, updateID, index, sequence, call, before, after, &receipt)
+}
+
+// The receipt must describe exactly the admitted target, attempt and version.
+func paymentReceiptMatches(command passbooking.Command, receipt passbooking.PaymentCompletionReceipt) bool {
+	before, after := receipt.Before, receipt.After
+	return receipt.Found && receipt.Decision != "" && receipt.Attempt == command.PaymentAttempt &&
+		before.PaymentAttempt == command.PaymentAttempt && before.Owner == command.Target &&
+		before.Event == command.Event && before.Version == command.TargetVersion && !before.CreatedAt.IsZero() &&
+		after.Owner == before.Owner && after.Event == before.Event && after.Version == before.Version+1 &&
+		after.CreatedAt.Equal(before.CreatedAt) && after.PaymentAttempt == ""
+}
+
+// This host receipt exposes the committed decision, never the retired review page.
+func paymentReceiptCall(call ScriptToolRecord, receipt passbooking.PaymentCompletionReceipt) (ScriptToolRecord, error) {
+	trusted, err := cloneScriptCall(call)
+	if err != nil {
+		return trusted, err
+	}
+	result := map[string]any{
+		"operation_id": call.Pass.ID,
+		"complete":     true,
+		"result":       map[string]string{"decision": receipt.Decision},
+	}
+	trusted.Outcome.Result, err = json.Marshal(ModelToolEvidence(result))
+	trusted.ResultAuthorities = readsource.Registration([]passbooking.ReadAuthority{receipt.After})
+	return trusted, err
+}
+
+func samePaymentReadAuthority(a, b passbooking.ReadAuthority) bool {
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return false
+	}
+	a.CreatedAt = b.CreatedAt
+	return a == b
 }

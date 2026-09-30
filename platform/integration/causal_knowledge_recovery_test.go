@@ -70,8 +70,9 @@ func TestCausalKnowledgeLostResponseResumesFiltering(t *testing.T) {
 				require.NoError(t, err)
 			}
 			restarted := &knowledgeModel{}
-			f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Model: restarted}
+			f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Delivery: f.b.Delivery, Model: restarted}
 			require.NoError(t, f.b.Handle(ctx, update))
+			pumpBotDeliveries(t, f.b)
 			wantCalls := 0
 			if scenario == "authorized" {
 				wantCalls = 1
@@ -89,6 +90,7 @@ func TestCausalKnowledgeLostResponseResumesFiltering(t *testing.T) {
 				assertKnowledgeRecoveryState(t, f, knowledge.AwaitingSubmission, 2)
 			}
 			require.NoError(t, f.b.Handle(ctx, update))
+			pumpBotDeliveries(t, f.b)
 			require.Equal(t, wantCalls, restarted.assessments, "replay must reuse the verdict")
 			cards, err := json.Marshal(chatMessages(t, f, identity.BobTelegramID))
 			require.NoError(t, err)

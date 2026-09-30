@@ -196,6 +196,9 @@ func (b *Bot) executeScriptModel(
 	} else {
 		err = b.API.Call(ctx, owner, http.MethodGet, request.Endpoint, nil, &state)
 	}
+	if core.IsDatabaseFailure(err) {
+		return nil, err
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok &&
 		problem.Status == http.StatusConflict && problem.Code == "stale_model_settings" {
 		return nil, appclient.ErrReadStale

@@ -216,6 +216,7 @@ func TestMassageBotSlotPagesAndOrderCardIsolation(t *testing.T) {
 	_, err = f.db.Exec(t.Context(), `DELETE FROM core.massage_work`)
 	require.NoError(t, err)
 	require.NoError(t, f.b.RenderMassage(t.Context(), "alice", 101, ""))
+	deliverNotificationBotCards(t, f)
 	assert.Len(t, massageCard(t, f, 101).Markup.Rows, 1)
 }
 

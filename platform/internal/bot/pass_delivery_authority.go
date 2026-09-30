@@ -2,12 +2,14 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
@@ -18,10 +20,16 @@ func (b *Bot) passMenuRecord(ctx context.Context, owner string) (botdelivery.Pas
 	var value botdelivery.PassMenu
 	value.View = passMenuEvents
 	var revision int64
-	err := b.DB.QueryRow(ctx, `SELECT state,revision FROM bot.pass_views WHERE owner=$1`, owner).Scan(&value, &revision)
+	var raw []byte
+	err := b.DB.QueryRow(ctx, `SELECT state,revision FROM bot.pass_views WHERE owner=$1`, owner).Scan(&raw, &revision)
 	if errors.Is(err, pgx.ErrNoRows) {
-		err = nil
+		return value, revision, nil
 	}
+	if err != nil {
+		return value, revision, core.DatabaseOperationError(err)
+	}
+	value = botdelivery.PassMenu{}
+	err = json.Unmarshal(raw, &value)
 	return value, revision, err
 }
 

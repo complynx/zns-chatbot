@@ -20,9 +20,9 @@ func (s Service) Generation(ctx context.Context, actor string) (int64, error) {
 	defer func() { _ = state.tx.Rollback(ctx) }()
 	generation, err := dbgen.New(state.tx).HistoryGeneration(ctx, actor)
 	if err != nil {
-		return 0, err
+		return 0, core.DatabaseOperationError(err)
 	}
-	return generation, state.tx.Commit(ctx)
+	return generation, core.DatabaseOperationError(state.tx.Commit(ctx))
 }
 
 // ReadText uses character offsets and reads only a bounded slice in PostgreSQL.
@@ -48,10 +48,10 @@ func (s Service) ReadText(
 		return TextChunk{}, &core.ProblemError{Status: http.StatusNotFound, Code: "history_missing"}
 	}
 	if err != nil {
-		return TextChunk{}, err
+		return TextChunk{}, core.DatabaseOperationError(err)
 	}
 	if err = state.tx.Commit(ctx); err != nil {
-		return TextChunk{}, err
+		return TextChunk{}, core.DatabaseOperationError(err)
 	}
 	if digest != "" && digest != row.Digest {
 		return TextChunk{}, staleHistory()
@@ -82,7 +82,7 @@ func (s Service) DeleteContent(ctx context.Context, actor string, id int64) erro
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if _, err = tx.Exec(
@@ -90,7 +90,7 @@ func (s Service) DeleteContent(ctx context.Context, actor string, id int64) erro
 		`INSERT INTO core.conversation_summaries(owner) VALUES($1) ON CONFLICT DO NOTHING`,
 		actor,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	// Same first lock as CommitSummary: no in-flight summary can revive content.
 	if _, err = tx.Exec(
@@ -98,7 +98,7 @@ func (s Service) DeleteContent(ctx context.Context, actor string, id int64) erro
 		`SELECT version FROM core.conversation_summaries WHERE owner=$1 FOR UPDATE`,
 		actor,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	var omitted bool
 	err = tx.QueryRow(ctx, `SELECT omission_reason='deleted' FROM core.conversation_events WHERE owner=$1 AND id=$2 FOR UPDATE`, actor, id).
@@ -107,10 +107,10 @@ func (s Service) DeleteContent(ctx context.Context, actor string, id int64) erro
 		return &core.ProblemError{Status: http.StatusNotFound, Code: "history_missing"}
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if omitted {
-		return tx.Commit(ctx)
+		return core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	batch := new(pgx.Batch)
 	batch.Queue(
@@ -130,7 +130,7 @@ func (s Service) DeleteContent(ctx context.Context, actor string, id int64) erro
 		actor,
 	)
 	if err = tx.SendBatch(ctx, batch).Close(); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }

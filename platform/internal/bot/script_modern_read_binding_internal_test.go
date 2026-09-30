@@ -25,39 +25,7 @@ func TestModernReadImmutableBinding(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			b, order, version := modernReadBindingFixture(t)
-			args := modernOrderArguments{Event: order.EventID, OrderID: order.ID}
-			if scenario == "continuation" || scenario == "resume" {
-				page, err := core.JSONReadChunk(
-					order,
-					core.ReadCursor{Actor: "alice", Scope: modernOrdersInspect + ":" + order.EventID + ":" + order.ID},
-				)
-				require.NoError(t, err)
-				require.True(t, page.More)
-				snapshot, err := modernOrderFingerprint(order)
-				require.NoError(t, err)
-				body, err := json.Marshal(page)
-				require.NoError(t, err)
-				record := agenthost.ScriptRecord{Calls: []agenthost.ScriptToolRecord{
-					{
-						ModernOrder: &agenthost.ModernOrderRequest{
-							Event:        order.EventID,
-							ReadOrderID:  order.ID,
-							ReadSnapshot: snapshot,
-						},
-						Outcome: agent.ScriptToolResult{Name: modernOrdersInspect, Result: body},
-					},
-				}}
-				_, err = b.DB.Exec(
-					t.Context(),
-					`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',48800,'script_runs',$1)`,
-					[]agenthost.ScriptRecord{record},
-				)
-				require.NoError(t, err)
-				args.Cursor = page.NextCursor
-				if scenario == "resume" {
-					args.Cursor, args.Resume = "", true
-				}
-			}
+			args := modernReadBindingArguments(t, b, order, scenario)
 			arguments, err := json.Marshal(args)
 			require.NoError(t, err)
 			call := scriptclient.ToolCall{Name: modernOrdersInspect, Arguments: arguments}
@@ -105,6 +73,45 @@ func TestModernReadImmutableBinding(t *testing.T) {
 			assert.JSONEq(t, string(before), string(after), "execution must not mutate admitted request identity")
 		})
 	}
+}
+
+func modernReadBindingArguments(t *testing.T, b *Bot, order orders.Order, scenario string) modernOrderArguments {
+	t.Helper()
+	args := modernOrderArguments{Event: order.EventID, OrderID: order.ID}
+	if scenario != "continuation" && scenario != "resume" {
+		return args
+	}
+	page, err := core.JSONReadChunk(
+		order,
+		core.ReadCursor{Actor: "alice", Scope: modernOrdersInspect + ":" + order.EventID + ":" + order.ID},
+	)
+	require.NoError(t, err)
+	require.True(t, page.More)
+	snapshot, err := modernOrderFingerprint(order)
+	require.NoError(t, err)
+	body, err := json.Marshal(page)
+	require.NoError(t, err)
+	record := agenthost.ScriptRecord{Calls: []agenthost.ScriptToolRecord{
+		{
+			ModernOrder: &agenthost.ModernOrderRequest{
+				Event:        order.EventID,
+				ReadOrderID:  order.ID,
+				ReadSnapshot: snapshot,
+			},
+			Outcome: agent.ScriptToolResult{Name: modernOrdersInspect, Result: body},
+		},
+	}}
+	_, err = b.DB.Exec(
+		t.Context(),
+		`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',48800,'script_runs',$1)`,
+		[]agenthost.ScriptRecord{record},
+	)
+	require.NoError(t, err)
+	args.Cursor = page.NextCursor
+	if scenario == "resume" {
+		args.Cursor, args.Resume = "", true
+	}
+	return args
 }
 
 func modernReadBindingFixture(t *testing.T) (*Bot, orders.Order, *atomic.Int64) {

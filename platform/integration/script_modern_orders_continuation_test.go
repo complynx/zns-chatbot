@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
@@ -29,7 +30,7 @@ func TestModernOrdersCompleteCursorAcrossTurns(t *testing.T) {
 	t.Parallel()
 	f, _, order := modernLargeOrder(t, false)
 	cursor := startModernContinuation(t, f, identity.AliceTelegramID, order.ID, "orders.inspect")
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG}
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Delivery: f.b.Delivery}
 	result := runModernContinuation(t, f, 42001, identity.AliceTelegramID, "Continue reading "+order.ID, fmt.Sprintf(`
 const p=tools.orders.inspect({order_id:%q,cursor:%q});return {offset:p.offset,more:p.more};`, order.ID, cursor))
 	assert.JSONEq(t, `{"offset":32000,"more":true}`, string(result))
@@ -50,7 +51,7 @@ let denied=false;try{tools.orders.inspect({event:"different-event",order_id:%q,c
 	changed.Choice = &orders.ChoiceInput{Customer: "Changed manually"}
 	_, err := s.Execute(t.Context(), "alice", changed)
 	require.NoError(t, err)
-	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG}
+	f.b = &bot.Bot{DB: f.db, API: f.b.API, Host: f.b.Host, TG: f.b.TG, Delivery: f.b.Delivery}
 	result = runModernContinuation(t, f, 42103, identity.AliceTelegramID, "Continue and delete "+order.ID, fmt.Sprintf(`
 const stale=tools.orders.inspect({order_id:%q,resume:true});let edited=false;try{tools.orders.update({name:"delete",order_id:%q});edited=true;}catch(_){}
 return {stale,edited};`, order.ID, order.ID))
@@ -164,16 +165,28 @@ func TestModernOrdersCompleteUncommittedReadCannotAuthorize(t *testing.T) {
 	 CREATE TRIGGER reject_modern_read_receipt BEFORE UPDATE ON bot.interactions FOR EACH ROW EXECUTE FUNCTION bot.reject_modern_read_receipt()`,
 	)
 	require.NoError(t, err)
-	result := runModernContinuation(t, f, 42400, identity.AliceTelegramID, "Read then delete "+order.ID, fmt.Sprintf(`
+	f.b.Scripts = scopeVM{}
+	model := &knowledgeModel{plans: []agent.Plan{{
+		View: agent.KnowledgeView,
+		ScriptAction: &agent.ScriptProposal{InputJSON: "null", Code: fmt.Sprintf(`
 let read=false,deleted=false;try{tools.orders.inspect({order_id:%q});read=true;}catch(_){}
-try{tools.orders.update({name:"delete",order_id:%q});deleted=true;}catch(_){}return {read,deleted};`, order.ID, order.ID))
-	assert.JSONEq(t, `{"read":false,"deleted":false}`, string(result))
+try{tools.orders.update({name:"delete",order_id:%q});deleted=true;}catch(_){}return {read,deleted};`, order.ID, order.ID)},
+	}}}
+	f.b.Model = model
+	err = f.b.Handle(t.Context(), message(42400, identity.AliceTelegramID, "Read then delete "+order.ID))
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.NotContains(t, err.Error(), "synthetic read receipt write failure")
+	require.Len(t, model.inputs, 1, "SQL failure must stop model continuation even when the script catches it")
+	unchanged, err := s.Get(t.Context(), "alice", order.EventID, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, order.Version, unchanged.Version)
+	require.Equal(t, order.State, unchanged.State)
 	_, err = f.db.Exec(
 		t.Context(),
 		`DROP TRIGGER reject_modern_read_receipt ON bot.interactions; DROP FUNCTION bot.reject_modern_read_receipt()`,
 	)
 	require.NoError(t, err)
-	result = runModernContinuation(
+	result := runModernContinuation(
 		t,
 		f,
 		42401,

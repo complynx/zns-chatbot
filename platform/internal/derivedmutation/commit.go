@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
@@ -22,7 +23,7 @@ func (s Service) beginSourceMutation(
 ) (pgx.Tx, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	if err = readsource.LockEvents(ctx, tx, source.Authorities); err == nil {
 		err = readsource.LockActors(ctx, tx, actors, source.Authorities)
@@ -54,5 +55,5 @@ func commitPrepared[T any](
 	if err != nil {
 		return zero, err
 	}
-	return result, tx.Commit(ctx)
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }

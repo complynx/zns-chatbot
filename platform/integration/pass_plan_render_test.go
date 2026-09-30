@@ -22,7 +22,7 @@ func TestPassPlanRenderViews(t *testing.T) {
 				require.NoError(t, err)
 				photo, _ := intakePhoto(t, f)
 				f.model.plan = agent.Plan{View: agent.MediaView, Text: "What should I do with this image?"}
-				handle(t, f.b, photo)
+				handleVisible(t, f.b, photo)
 			}
 			latePlanModel(t, f, "script", func(agent.Input) (agent.Plan, error) {
 				plan := agent.Plan{View: view, Text: latePlanSecret}
@@ -31,12 +31,13 @@ func TestPassPlanRenderViews(t *testing.T) {
 				}
 				return plan, nil
 			})
-			handle(t, f.b, message(46995, 101, "Read my private registration"))
+			handleVisible(t, f.b, message(46995, 101, "Read my private registration"))
 			cards, err := json.Marshal(chatMessages(t, f, 101))
 			require.NoError(t, err)
 			require.Contains(t, string(cards), latePlanSecret)
 			removeArchivedBooking(t, f)
 			require.NoError(t, renderPassPlanView(t.Context(), f, view))
+			pumpBotDeliveries(t, f.b)
 			cards, err = json.Marshal(chatMessages(t, f, 101))
 			require.NoError(t, err)
 			require.NotContains(t, string(cards), latePlanSecret)
@@ -71,7 +72,7 @@ func TestPassPlanMissingSavedProvenance(t *testing.T) {
 				return agent.Plan{View: "workflow", Text: latePlanSecret}, nil
 			})
 			update := message(46996, 101, "Read my private registration")
-			handle(t, f.b, update)
+			handleVisible(t, f.b, update)
 			require.Contains(t, workflowCard(t, f).Text, latePlanSecret)
 			_, err := f.db.Exec(
 				t.Context(),
@@ -89,6 +90,7 @@ func TestPassPlanMissingSavedProvenance(t *testing.T) {
 			require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
 			require.Equal(t, 2, *calls)
 			require.NoError(t, f.b.Render(t.Context(), "alice", 101))
+			pumpBotDeliveries(t, f.b)
 			require.NotContains(t, workflowCard(t, f).Text, latePlanSecret)
 		})
 	}
@@ -120,6 +122,7 @@ func TestPassPlanArchiveBoundary(t *testing.T) {
 	require.ErrorContains(t, f.b.Handle(t.Context(), update), "terminal registration plan")
 	require.Equal(t, 2, *calls)
 	require.NoError(t, f.b.Render(t.Context(), "alice", 101))
+	pumpBotDeliveries(t, f.b)
 	require.NotContains(t, workflowCard(t, f).Text, latePlanSecret)
 }
 
@@ -127,10 +130,11 @@ func TestPassPlanMissingSavedSystemNotice(t *testing.T) {
 	t.Parallel()
 	f := setup(t)
 	f.b.Model = &unavailableWorkflowModel{}
-	handle(t, f.b, message(46998, 101, "help"))
+	handleVisible(t, f.b, message(46998, 101, "help"))
 	notice := workflowCard(t, f).Text
 	_, err := f.db.Exec(t.Context(), `DELETE FROM interaction.saved_turns WHERE owner='alice' AND update_id=46998`)
 	require.NoError(t, err)
 	require.NoError(t, f.b.Render(t.Context(), "alice", 101))
+	pumpBotDeliveries(t, f.b)
 	require.Equal(t, notice, workflowCard(t, f).Text)
 }

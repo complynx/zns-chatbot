@@ -39,6 +39,9 @@ func (b *Bot) bindLegacyOrder(ctx context.Context, in incoming, update int64) (l
 		receipt.Digest = hash
 		receipt.Binding, err = b.API.ResolveLegacyOrderCallback(ctx, in.owner,
 			orders.LegacyCallbackRequest{Data: in.text, Event: b.currentOrderEvent()})
+		if core.IsDatabaseFailure(err) {
+			return legacyOrderReceipt{}, core.ErrDatabase
+		}
 		if problem, ok := errors.AsType[*core.ProblemError](
 			err,
 		); ok &&
@@ -70,20 +73,7 @@ func (b *Bot) handleLegacyOrder(ctx context.Context, in incoming, update telegra
 	if err != nil {
 		return err
 	}
-	if err = b.record(ctx, in.owner, update.ID, "legacy_order_reply", notice); err != nil {
-		return err
-	}
-	if err = b.queueBotResult(
-		ctx,
-		in.owner,
-		in.chat,
-		update.ID,
-		"legacy_order_reply",
-		botdelivery.Reference{Family: "legacy_order"},
-		botdelivery.StoredResult{Payload: telegram.Send{ChatID: in.chat,
-			Text: notice, Markup: telegram.Markup{Rows: [][]telegram.Button{}}}},
-		update.Callback.Message.ID,
-	); err != nil {
+	if err = b.queueLegacyOrderReply(ctx, in, update, notice); err != nil {
 		return err
 	}
 	if receipt.Code == "" && receipt.Binding.Action != "close" {
@@ -91,13 +81,40 @@ func (b *Bot) handleLegacyOrder(ctx context.Context, in incoming, update telegra
 			return err
 		}
 	}
-	b.acknowledge(ctx, update.Callback.ID)
-	return nil
+	return b.acknowledge(ctx, update.Callback.ID)
+}
+
+func (b *Bot) queueLegacyOrderReply(ctx context.Context, in incoming, update telegram.Update, notice string) error {
+	// A queued export has no result text until its document receipt is durable.
+	if notice == "" {
+		return nil
+	}
+	if err := b.record(ctx, in.owner, update.ID, "legacy_order_reply", notice); err != nil {
+		return err
+	}
+	// A current authorization refusal must not reuse a prior success reply.
+	// Identical feedback still shares one durable delivery effect.
+	digest := sha256.Sum256([]byte(notice))
+	effect := "legacy_order_reply:" + hex.EncodeToString(digest[:])
+	return b.queueBotResult(
+		ctx,
+		in.owner,
+		in.chat,
+		update.ID,
+		effect,
+		botdelivery.Reference{Family: "legacy_order"},
+		botdelivery.StoredResult{Payload: telegram.Send{ChatID: in.chat,
+			Text: notice, Markup: telegram.Markup{Rows: [][]telegram.Button{}}}},
+		update.Callback.Message.ID,
+	)
 }
 
 func (b *Bot) renderLegacyOrders(ctx context.Context, in incoming) error {
 	_, err := b.API.ResolveLegacyOrderCallback(ctx, in.owner,
 		orders.LegacyCallbackRequest{Data: "orders|start", Event: b.currentOrderEvent()})
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return nil
 	}
@@ -124,6 +141,9 @@ func (b *Bot) legacyOrderAction(
 	// access through Core without replacing the pinned event/order or version.
 	current, err := b.API.ResolveLegacyOrderCallback(ctx, in.owner,
 		orders.LegacyCallbackRequest{Data: in.text, Event: binding.EventID})
+	if core.IsDatabaseFailure(err) {
+		return "", core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return b.orderMessage(ctx, in.owner, i18n.OrderRejected, map[string]string{orderCodeParameter: problem.Code})
 	}

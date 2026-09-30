@@ -50,6 +50,7 @@ func respondPassProfile(logger *slog.Logger, w http.ResponseWriter, value any, e
 		JSON(w, http.StatusOK, value)
 		return
 	}
+	markDatabaseFailure(w, err)
 	if p, ok := errors.AsType[*core.ProblemError](err); ok {
 		JSON(w, p.Status, p)
 		return

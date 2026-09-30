@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
@@ -9,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 )
@@ -78,10 +80,16 @@ func receiptFollowupEvidence(in incoming, input agent.Input, target string) (str
 
 // Interpret replies against the last delivered card, never a freshly reordered list.
 func (b *Bot) visibleMediaHint(ctx context.Context, owner, id, kind string) (agent.MediaHint, error) {
-	var hint *agent.MediaHint
-	err := b.DB.QueryRow(ctx, `SELECT rendered FROM bot.media_intake WHERE owner=$1 AND id=$2`, owner, id).Scan(&hint)
+	var raw []byte
+	err := b.DB.QueryRow(ctx, `SELECT rendered FROM bot.media_intake WHERE owner=$1 AND id=$2`, owner, id).Scan(&raw)
 	if err != nil {
-		return agent.MediaHint{}, err
+		return agent.MediaHint{}, core.DatabaseOperationContextError(ctx, err)
+	}
+	var hint *agent.MediaHint
+	if raw != nil {
+		if err = json.Unmarshal(raw, &hint); err != nil {
+			return agent.MediaHint{}, err
+		}
 	}
 	if hint == nil {
 		hint = &agent.MediaHint{ID: id, Kind: kind}
@@ -95,9 +103,10 @@ func (b *Bot) mediaRecent(ctx context.Context, owner string) ([]agent.MediaEvent
 COALESCE(command->>'order_id',''),COALESCE((command->>'version')::bigint,(registration_command->>'version')::bigint,0),notice
 FROM bot.media_intake WHERE owner=$1 ORDER BY update_id DESC LIMIT 20`, owner)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationContextError(ctx, err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[agent.MediaEvent])
+	events, err := pgx.CollectRows(rows, pgx.RowToStructByPos[agent.MediaEvent])
+	return events, core.DatabaseOperationContextError(ctx, err)
 }
 
 // Choices share the same source with rendered buttons, without copying opaque

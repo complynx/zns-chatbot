@@ -55,7 +55,7 @@ func (s Service) Events(ctx context.Context, actor string) ([]Event, error) {
  ORDER BY COALESCE(b.sales_start,'9999-12-31 23:59:59.999999+00'::timestamptz),b.display_order,b.id`,
 		maxCatalogEvents+1, core.ReadResourceBytes)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
 	return collectCatalog(rows)
 }
@@ -71,9 +71,10 @@ func (s Service) PaymentAdmins(ctx context.Context, actor, eventID string) ([]Co
  AND (a.owner IS NOT NULL OR EXISTS(SELECT 1 FROM core.pass_booking_admins g WHERE g.owner=u.id)))
  ORDER BY u.id`, eventID, actor)
 	if err != nil {
-		return nil, err
+		return nil, core.DatabaseOperationError(err)
 	}
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[Contact])
+	contacts, err := pgx.CollectRows(rows, pgx.RowToStructByPos[Contact])
+	return contacts, core.DatabaseOperationError(err)
 }
 
 func (s Service) Invitations(ctx context.Context, actor, eventID, after string) (InvitationPage, error) {
@@ -91,7 +92,7 @@ func (s Service) Invitations(ctx context.Context, actor, eventID, after string) 
  AND ($3='' OR (b.created_at,u.telegram_id)>($4,$5))
  ORDER BY b.created_at,u.telegram_id LIMIT $6`, eventID, actor, after, at, telegramID, pageSize+1)
 	if err != nil {
-		return InvitationPage{}, err
+		return InvitationPage{}, core.DatabaseOperationError(err)
 	}
 	defer rows.Close()
 	page := InvitationPage{Invitations: []Invitation{}}
@@ -105,19 +106,19 @@ func (s Service) Invitations(ctx context.Context, actor, eventID, after string) 
 		if err = rows.Scan(
 			&invite.From.Owner, &invite.From.Name, &invite.From.TelegramID, &invite.Version, &invite.CreatedAt,
 		); err != nil {
-			return InvitationPage{}, err
+			return InvitationPage{}, core.DatabaseOperationError(err)
 		}
 		page.Invitations = append(page.Invitations, invite)
 		boundary = pageCursor(invite.CreatedAt, invite.From.TelegramID)
 	}
-	return page, rows.Err()
+	return page, core.DatabaseOperationError(rows.Err())
 }
 
 func (s Service) requireActor(ctx context.Context, actor string) error {
 	var exists bool
 	if err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.users WHERE id=$1)`, actor).
 		Scan(&exists); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !exists {
 		return forbidden()

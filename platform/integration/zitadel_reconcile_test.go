@@ -54,12 +54,15 @@ func TestZitadelBackgroundReconcilesSeparateRecipients(t *testing.T) {
 		require.NoError(t, f.b.Render(ctx, owner, chat))
 		require.NoError(t, f.b.RenderProfile(ctx, owner, chat))
 	}
+	pumpBotDeliveries(t, f.b)
 	links := identity.Links{DB: f.db, Issuer: "https://identity.invalid", BotID: 123}
 	require.NoError(t, links.Bind(ctx, "alice", 101, "z-alice"))
 	require.NoError(t, links.Bind(ctx, "bob", 202, "z-bob"))
 	provider := &reconciliationProvider{subjects: map[string]int{}}
 	server := httptest.NewServer(
-		api.AuthenticatedHandler(appservices.NewServices(f.db, appservices.Options{}), f.b.Host.Signer,
+		api.AuthenticatedHandler(appservices.NewServices(f.db, appservices.Options{
+			Delivery: f.b.Delivery,
+		}), f.b.Host.Signer,
 			slog.New(slog.DiscardHandler), api.ZitadelOwner(runtimeProvider{}, links)),
 	)
 	t.Cleanup(server.Close)
@@ -75,11 +78,17 @@ func TestZitadelBackgroundReconcilesSeparateRecipients(t *testing.T) {
 	awaitReconciled := func(owner string) {
 		t.Helper()
 		require.Eventually(t, func() bool {
-			var count int
+			var count, refreshed int
 			queryErr := f.db.QueryRow(ctx, `SELECT count(*) FROM (
 SELECT view_hash FROM bot.messages WHERE owner=$1 UNION ALL
 SELECT view_hash FROM bot.order_cards WHERE owner=$1 AND card_key='profile') v WHERE view_hash='refresh'`, owner).Scan(&count)
-			return queryErr == nil && count == 0
+			if queryErr != nil || count != 0 {
+				return false
+			}
+			queryErr = f.db.QueryRow(ctx, `SELECT count(*) FROM (
+SELECT message_id FROM bot.messages WHERE owner=$1 UNION ALL
+SELECT message_id FROM bot.order_cards WHERE owner=$1 AND card_key='profile') v WHERE message_id>0`, owner).Scan(&refreshed)
+			return queryErr == nil && refreshed == 2
 		}, 5*time.Second, 20*time.Millisecond)
 	}
 	awaitReconciled("alice")

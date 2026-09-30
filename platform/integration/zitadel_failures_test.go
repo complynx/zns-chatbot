@@ -47,7 +47,9 @@ func enableRuntimeIdentity(t *testing.T, f *fixture) identity.Links {
 	require.NoError(t, links.Bind(t.Context(), "alice", 101, "z-alice"))
 	require.NoError(t, links.Bind(t.Context(), "bob", 202, "z-bob"))
 	server := httptest.NewServer(
-		api.AuthenticatedHandler(appservices.NewServices(f.db, appservices.Options{}), f.b.Host.Signer,
+		api.AuthenticatedHandler(appservices.NewServices(f.db, appservices.Options{
+			Delivery: f.b.Delivery,
+		}), f.b.Host.Signer,
 			slog.New(slog.DiscardHandler), api.ZitadelOwner(runtimeProvider{}, links)),
 	)
 	t.Cleanup(server.Close)
@@ -60,8 +62,8 @@ func enableRuntimeIdentity(t *testing.T, f *fixture) identity.Links {
 func TestZitadelProviderDenialDoesNotStopMassageRefresh(t *testing.T) {
 	t.Parallel()
 	f := massageBotFixture(t)
-	handle(t, f.b, message(100, 101, "/massage"))
-	handle(t, f.b, message(101, 202, "/massage"))
+	handleVisible(t, f.b, message(100, 101, "/massage"))
+	handleVisible(t, f.b, message(101, 202, "/massage"))
 	enableRuntimeIdentity(t, f)
 	provider := &deniedAlice{}
 	f.b.API.Exchange = provider
@@ -88,13 +90,18 @@ func TestZitadelReminderRetriesUnattemptedIdentityFailure(t *testing.T) {
 		t.Run(map[bool]string{false: "link outage", true: "provider denial"}[failProvider], func(t *testing.T) {
 			t.Parallel()
 			f := setup(t)
+			f.b.Delivery.Fallback = 10 * time.Millisecond
 			order, _ := cashOrder(t, f, "identity-reminder")
 			require.NoError(t, f.b.DeliverNotifications(t.Context()))
 			require.NoError(t, sandbox.ApplyOrderFixture(t.Context(), f.db,
 				sandbox.OrderFixture{OrderID: order.ID, Age: 72 * time.Hour}))
-			count, err := (orders.Service{DB: f.db}).QueueDueReminders(t.Context(), orders.DefaultReminderAfter)
+			count, err := (orders.Service{DB: f.db, Delivery: f.b.Delivery}).QueueDueReminders(
+				t.Context(),
+				orders.DefaultReminderAfter,
+			)
 			require.NoError(t, err)
 			require.Equal(t, 1, count)
+			before := chatMessages(t, f, 101)
 			links := enableRuntimeIdentity(t, f)
 			unavailable := &unavailableIdentity{links: links}
 			unavailable.failed.Store(!failProvider)
@@ -103,25 +110,49 @@ func TestZitadelReminderRetriesUnattemptedIdentityFailure(t *testing.T) {
 				f.b.API.Exchange = &deniedAlice{}
 			}
 			require.NoError(t, f.b.DeliverNotifications(t.Context()))
-			var attempted, delivered bool
-			require.NoError(t, f.db.QueryRow(t.Context(), `SELECT attempted_at IS NOT NULL,delivered_at IS NOT NULL
-FROM core.order_notifications WHERE payload->>'kind'='reminder'`).Scan(&attempted, &delivered))
-			assert.False(t, attempted)
+			var sent, delivered bool
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), `SELECT delivery_state='sent' AND telegram_message_id>0,delivered_at IS NOT NULL
+FROM core.order_notifications WHERE payload->>'kind'='reminder'`).
+					Scan(&sent, &delivered),
+			)
+			assert.False(t, sent)
 			assert.False(t, delivered)
+			assert.Equal(t, before, chatMessages(t, f, 101), "identity failure must not reach Telegram")
+			var deadline time.Time
+			var generation int64
+			var reason string
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), `SELECT greatest(n.available_at,q.not_before),n.delivery_attempt,n.failure
+FROM core.order_notifications n JOIN core.delivery_queue q ON q.bot_id=n.bot_id
+AND q.owner_kind='orders' AND q.owner_key=n.id::text AND q.effect_key='send'
+WHERE n.payload->>'kind'='reminder' AND n.bot_id=$1 AND n.delivery_state='pending'`, f.b.Delivery.BotID).
+					Scan(&deadline, &generation, &reason),
+			)
+			require.Positive(t, generation, "the unavailable identity must have been checked")
+			require.Equal(t, "notification_preflight_unavailable", reason)
 			unavailable.failed.Store(false)
 			f.b.API.Exchange = runtimeProvider{}
-			_, err = f.db.Exec(
-				t.Context(),
-				`UPDATE core.order_notifications SET available_at=clock_timestamp() WHERE payload->>'kind'='reminder'`,
-			)
-			require.NoError(t, err)
+			timer := time.NewTimer(time.Until(deadline))
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-t.Context().Done():
+				t.Fatal(t.Context().Err())
+			}
 			require.NoError(t, f.b.DeliverNotifications(t.Context()))
-			require.NoError(t, f.db.QueryRow(t.Context(), `SELECT attempted_at IS NOT NULL,delivered_at IS NOT NULL
-FROM core.order_notifications WHERE payload->>'kind'='reminder'`).Scan(&attempted, &delivered))
-			assert.True(t, attempted)
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), `SELECT delivery_state='sent' AND telegram_message_id>0,delivered_at IS NOT NULL
+FROM core.order_notifications WHERE payload->>'kind'='reminder'`).
+					Scan(&sent, &delivered),
+			)
+			assert.True(t, sent)
 			assert.True(t, delivered)
 			messages := chatMessages(t, f, 101)
-			require.NotEmpty(t, messages)
+			require.Greater(t, len(messages), len(before))
 			require.NoError(t, f.b.DeliverNotifications(t.Context()))
 			assert.Equal(t, messages, chatMessages(t, f, 101))
 			var receipts int

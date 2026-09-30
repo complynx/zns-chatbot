@@ -2,6 +2,7 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -24,6 +25,9 @@ func (b *Bot) foodMediaMarkup(
 	hint *agent.MediaHint,
 ) error {
 	view, err := b.API.FoodViewForReview(ctx, owner, "", "", false)
+	if core.IsDatabaseFailure(err) {
+		return core.ErrDatabase
+	}
 	if problem, ok := errors.AsType[*core.ProblemError](err); ok && problem.Status < http.StatusInternalServerError {
 		return nil
 	}
@@ -147,14 +151,18 @@ func (b *Bot) commitFoodReceipt(ctx context.Context, in incoming, item mediaInta
 			return b.mediaExecutionError(ctx, in, item, err)
 		}
 		command.ProofID = proof.ID
+		encoded, encodeErr := json.Marshal(command)
+		if encodeErr != nil {
+			return encodeErr
+		}
 		if _, err = b.DB.Exec(
 			ctx,
 			`UPDATE bot.media_intake SET food_command=$3 WHERE owner=$1 AND id=$2`,
 			in.owner,
 			item.ID,
-			command,
+			encoded,
 		); err != nil {
-			return err
+			return core.DatabaseOperationError(err)
 		}
 	}
 	item.FoodCommand = &command
@@ -175,7 +183,7 @@ func (b *Bot) commitFoodReceipt(ctx context.Context, in incoming, item mediaInta
 		item.ID,
 		string(i18n.MediaSaved),
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if err = b.renderFood(ctx, in, order.EventID, order.ID, false); err != nil {
 		return err

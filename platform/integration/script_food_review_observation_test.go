@@ -112,7 +112,9 @@ func TestFoodReviewProofChecksVersionAtByteRead(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			f, _, order := foodSubmittedFixture(t)
+			proofReads := 0
 			f.b.API.HTTP = &http.Client{Transport: foodObservedProofTransport{before: func() {
+				proofReads++
 				if mode == "revoked" {
 					_, err := f.db.Exec(t.Context(), `UPDATE core.food_admins SET can_review=false WHERE owner='bob'`)
 					require.NoError(t, err)
@@ -132,7 +134,8 @@ func TestFoodReviewProofChecksVersionAtByteRead(t *testing.T) {
 				`tools.food.review.read({order_id:%q});let displayed=false;try{displayed=tools.food.review.proof({kind:"meals"}).displayed;}catch(_){}return {displayed};`,
 				order.ID,
 			)
-			result := runFoodAdminVM(t, f, 29202, identity.BobTelegramID, code)
+			result := runFoodProofVM(t, f, 29202, code)
+			require.Equal(t, 1, proofReads, "the delivery worker must reach the actual proof byte read")
 			if mode == "revoked" {
 				assert.JSONEq(t, `{"omitted":true,"reason":"pass_access_changed"}`, string(result))
 				var redacted bool

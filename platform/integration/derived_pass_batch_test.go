@@ -3,8 +3,10 @@ package integration_test
 import (
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/derivedmutation"
 	knowledgeauthority "github.com/complynx/zns-chatbot/platform/internal/knowledge/authority"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -40,7 +42,14 @@ func TestDerivedPassBatchResumesWithStoredSource(t *testing.T) {
 		Options:    passbooking.AdminAssignment{AppendTier: &tier},
 	}
 	_, err = service.RunPassBatch(t.Context(), "bob", command, source)
-	require.ErrorContains(t, err, "synthetic second marker interruption")
+	// The trigger rejects the second outcome UPDATE; SaveOutcome reports it as a
+	// sanitized database failure without the trigger text or driver error.
+	require.ErrorIs(t, err, core.ErrDatabase)
+	require.True(t, core.IsDatabaseFailure(err))
+	require.NotErrorIs(t, err, core.ErrDatabaseSerialization)
+	require.NotContains(t, err.Error(), "synthetic second marker interruption")
+	var databaseError *pgconn.PgError
+	require.NotErrorAs(t, err, &databaseError, "driver diagnostics must not escape")
 	var first, second string
 	require.NoError(
 		t,

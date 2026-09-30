@@ -8,7 +8,11 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 )
 
-const MaxRequestBytes = (2 << 20) + (64 << 10)
+const (
+	maxRequestPayloadBytes  = 2 << 20
+	maxRequestEnvelopeBytes = 64 << 10
+	MaxRequestBytes         = maxRequestPayloadBytes + maxRequestEnvelopeBytes
+)
 
 type Service struct {
 	DB            *pgxpool.Pool

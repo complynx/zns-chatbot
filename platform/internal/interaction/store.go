@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction/dbgen"
 )
@@ -26,13 +27,13 @@ type Notice struct {
 
 func (s Store) ReplyOrigin(ctx context.Context, owner string, updateID int64) (ReplyOrigin, error) {
 	origin, err := dbgen.New(s.DB).ReplyOrigin(ctx, dbgen.ReplyOriginParams{Owner: owner, UpdateID: updateID})
-	return ReplyOrigin(origin), err
+	return ReplyOrigin(origin), core.DatabaseOperationError(err)
 }
 
 func (s Store) LatestNotice(ctx context.Context, owner string) (Notice, error) {
 	row, err := dbgen.New(s.DB).LatestNotice(ctx, owner)
 	if err != nil {
-		return Notice{}, err
+		return Notice{}, core.DatabaseOperationError(err)
 	}
 	notice := Notice{Content: row.Content, Native: row.NativeMarkdown, UpdateID: row.UpdateID}
 	if row.Payload != nil {
@@ -85,7 +86,7 @@ func (s Store) Load(ctx context.Context, owner string, updateID int64) (SavedPla
 	}
 	row, err := dbgen.New(s.DB).LoadTurn(ctx, dbgen.LoadTurnParams{Owner: owner, UpdateID: updateID})
 	if err != nil {
-		return SavedPlan{}, err
+		return SavedPlan{}, core.DatabaseOperationError(err)
 	}
 	return decodePlan(row)
 }
@@ -145,7 +146,7 @@ func (s Store) MarkTerminal(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := dbgen.New(tx)
@@ -171,7 +172,7 @@ func (s Store) MarkTerminal(
 		},
 	)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if affected != 1 {
 		return ErrUnsupportedFormat
@@ -185,7 +186,7 @@ func (s Store) MarkTerminal(
 		}
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
-	return tx.Commit(ctx)
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }

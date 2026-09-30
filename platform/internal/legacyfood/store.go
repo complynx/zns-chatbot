@@ -2,9 +2,14 @@ package legacyfood
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"reflect"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
 type queryer interface {
@@ -14,13 +19,40 @@ type queryer interface {
 const orderColumns = `id,event_id,owner,version,meals,meal_total,complete,activities,activity_total,
  COALESCE(payment_admin,''),created_at,last_updated`
 
+// decodeStoredJSON decodes a column read as raw bytes, so a stored value the
+// domain type rejects stays a data error instead of a database failure. It keeps
+// the pgx codec contract: SQL NULL zeroes reference kinds and rejects others;
+// otherwise the destination is zeroed before decoding.
+func decodeStoredJSON[T any](raw []byte, dst *T) error {
+	var zero T
+	if raw == nil {
+		kind := reflect.TypeFor[T]().Kind()
+		if kind == reflect.Map || kind == reflect.Slice || kind == reflect.Pointer || kind == reflect.Interface {
+			*dst = zero
+			return nil
+		}
+		return fmt.Errorf("cannot scan NULL into %T", dst)
+	}
+	*dst = zero
+	return json.Unmarshal(raw, dst)
+}
+
+// loadOrder reads the order row and delegates payments to loadPayment; SQL
+// failures are sanitized at each statement and absence remains pgx.ErrNoRows.
 func loadOrder(ctx context.Context, q queryer, event, id, owner string) (Order, error) {
 	var order Order
+	var meals, activities []byte
 	err := q.QueryRow(ctx, `SELECT `+orderColumns+` FROM core.food_orders WHERE event_id=$1
  AND (($2<>'' AND id=$2) OR ($2='' AND owner=$3))`, event, id, owner).
-		Scan(&order.ID, &order.EventID, &order.Owner, &order.Version, &order.Meals, &order.MealTotal, &order.Complete,
-			&order.Activities, &order.ActivityTotal, &order.PaymentAdmin, &order.CreatedAt, &order.LastUpdated)
+		Scan(&order.ID, &order.EventID, &order.Owner, &order.Version, &meals, &order.MealTotal, &order.Complete,
+			&activities, &order.ActivityTotal, &order.PaymentAdmin, &order.CreatedAt, &order.LastUpdated)
 	if err != nil {
+		return order, core.DatabaseOperationError(err)
+	}
+	if err = decodeStoredJSON(meals, &order.Meals); err != nil {
+		return order, err
+	}
+	if err = decodeStoredJSON(activities, &order.Activities); err != nil {
 		return order, err
 	}
 	order.MealPayment, err = loadPayment(ctx, q, order.ID, Meals)
@@ -41,7 +73,7 @@ func loadPayment(ctx context.Context, q queryer, id, kind string) (Payment, erro
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil
 	}
-	return payment, err
+	return payment, core.DatabaseOperationError(err)
 }
 
 func (s Service) event(ctx context.Context, q queryer, id string, lock bool) (Event, error) {
@@ -52,19 +84,26 @@ func (s Service) event(ctx context.Context, q queryer, id string, lock bool) (Ev
 	if lock {
 		query += ` FOR UPDATE OF f`
 	}
-	err := q.QueryRow(ctx, query, id, s.BotID).Scan(&event.ID, &event.Menu, &event.MenuSHA256, &event.MealPrices,
-		&event.ActivityPrices, &event.Deadline, &event.CacaoCapacity, &event.Active)
+	var mealPrices, activityPrices []byte
+	err := q.QueryRow(ctx, query, id, s.BotID).Scan(&event.ID, &event.Menu, &event.MenuSHA256, &mealPrices,
+		&activityPrices, &event.Deadline, &event.CacaoCapacity, &event.Active)
 	if errors.Is(err, pgx.ErrNoRows) {
-		err = problem("food_event_unavailable")
+		return event, problem("food_event_unavailable")
 	}
-	return event, err
+	if err != nil {
+		return event, core.DatabaseOperationError(err)
+	}
+	if err = decodeStoredJSON(mealPrices, &event.MealPrices); err != nil {
+		return event, err
+	}
+	return event, decodeStoredJSON(activityPrices, &event.ActivityPrices)
 }
 
 func allowed(ctx context.Context, q queryer, actor string) error {
 	var permitted bool
 	err := q.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.users WHERE id=$1 AND can_book)`, actor).Scan(&permitted)
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !permitted {
 		return forbidden()
@@ -88,7 +127,7 @@ func adminPermission(ctx context.Context, q queryer, actor, event, scope string,
 		return forbidden()
 	}
 	if err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if !permitted {
 		return forbidden()
@@ -114,7 +153,7 @@ func (s Service) CurrentEvent(ctx context.Context, actor string) (Event, error) 
 		return Event{}, problem("food_event_unavailable")
 	}
 	if err != nil {
-		return Event{}, err
+		return Event{}, core.DatabaseOperationError(err)
 	}
 	return s.event(ctx, s.DB, id, false)
 }

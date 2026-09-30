@@ -1,8 +1,10 @@
 # Legacy assistant history migration
 
-Status: approved retention contract; implemented in the disposable importer
-candidate. Full composed-runtime acceptance remains pending. On 2026-09-27
-Daniel chose the full available history, with no date cutoff.
+Status: approved retention contract. The historical disposable-importer candidate
+implements this contract, but the current CLI has no messages command. R109 is
+preparing a bounded port against the current composition. Current implementation
+gates and full composed-runtime acceptance remain pending. On 2026-09-27 Daniel
+chose the full available history, with no date cutoff.
 
 ## Source and ownership
 

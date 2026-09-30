@@ -74,7 +74,7 @@ func TestPassNotificationsInvitationExpiryAndPaidSafety(t *testing.T) {
 	drainPassDomainNotices(t, service)
 	_, err = db.Exec(
 		t.Context(),
-		`UPDATE core.pass_bookings SET created_at=clock_timestamp()-interval '59 hours' WHERE owner='alice'`,
+		`UPDATE core.pass_bookings SET invitation_started_at=clock_timestamp()-interval '59 hours' WHERE owner='alice'`,
 	)
 	require.NoError(t, err)
 	_, err = service.ProcessDeadlines(t.Context())

@@ -8,6 +8,8 @@ import (
 	"maps"
 	"net/http"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+
 	"github.com/complynx/zns-chatbot/platform/internal/conversation/fence"
 
 	"github.com/jackc/pgx/v5"
@@ -17,7 +19,7 @@ import (
 // ordered source/target prelude. Authorization remains in PrepareInTx.
 func LockEvent(ctx context.Context, tx pgx.Tx, event string) error {
 	_, err := tx.Exec(ctx, `SELECT id FROM core.order_events WHERE id=$1 FOR UPDATE`, event)
-	return err
+	return core.DatabaseOperationError(err)
 }
 
 // PreparedCommand retains authorized command state inside its caller's transaction.
@@ -70,7 +72,7 @@ func (p *PreparedCommand) Apply(ctx context.Context) (Order, error) {
 		return Order{}, problem(http.StatusConflict, "catalog_changed")
 	}
 	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&op.now); err != nil {
-		return Order{}, err
+		return Order{}, core.DatabaseOperationError(err)
 	}
 	if !c.isAdmin() && c.Name != actionCountry && !op.now.Before(op.event.Deadline) {
 		return Order{}, problem(http.StatusConflict, "deadline")

@@ -13,7 +13,8 @@ import (
 
 // CurrentGeneration reads under the caller's existing history lock.
 func CurrentGeneration(ctx context.Context, tx pgx.Tx, actor string) (int64, error) {
-	return dbgen.New(tx).HistoryGeneration(ctx, actor)
+	generation, err := dbgen.New(tx).HistoryGeneration(ctx, actor)
+	return generation, core.DatabaseOperationError(err)
 }
 
 // LockGeneration serializes a derived write with history deletion until its
@@ -29,18 +30,18 @@ func LockGeneration(ctx context.Context, tx pgx.Tx, actor string, generation *in
 		`INSERT INTO core.conversation_summaries(owner) VALUES($1) ON CONFLICT DO NOTHING`,
 		actor,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	if _, err := tx.Exec(
 		ctx,
 		`SELECT version FROM core.conversation_summaries WHERE owner=$1 FOR UPDATE`,
 		actor,
 	); err != nil {
-		return err
+		return core.DatabaseOperationError(err)
 	}
 	current, readErr := dbgen.New(tx).HistoryGeneration(ctx, actor)
 	if readErr != nil {
-		return readErr
+		return core.DatabaseOperationError(readErr)
 	}
 	if current != *generation {
 		return &core.ProblemError{Status: http.StatusConflict, Code: "history_stale"}

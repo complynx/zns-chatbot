@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
@@ -33,7 +34,7 @@ func (p *PreparedCommand) nativeAdmissionTime(
 		return time.Time{}, nil
 	}
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, core.DatabaseOperationError(err)
 	}
 	if evidence.NativeOutcome == admissionRejected {
 		return time.Time{}, conflict("pass_admission_rejected")
