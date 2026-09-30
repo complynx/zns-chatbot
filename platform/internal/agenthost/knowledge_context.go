@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"slices"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -124,6 +126,9 @@ func (k KnowledgeReader) SanitizeKnowledgeReads(
 			owner,
 			knowledge.ProposalQuery{Event: read.Request.Event, ReviewQueue: true},
 		)
+		if failure := knowledgeReviewFailure(ctx, err); failure != nil {
+			return failure
+		}
 		if err == nil {
 			continue
 		}
@@ -134,6 +139,58 @@ func (k KnowledgeReader) SanitizeKnowledgeReads(
 		*read = agent.KnowledgeReadResult{Request: read.Request, Error: "forbidden", Omitted: read.Omitted}
 	}
 	return nil
+}
+
+// knowledgeReviewFailure preserves public SQL provenance before caller cancellation.
+func knowledgeReviewFailure(ctx context.Context, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	if statement, ok := errors.AsType[*pgconn.PgError](err); ok {
+		return core.DatabaseOperationContextError(ctx, statement)
+	}
+	if positiveKnowledgeConnectionFailure(err) {
+		return core.ErrDatabase
+	}
+	if connection, ok := errors.AsType[*pgconn.ConnectError](err); ok {
+		return core.DatabaseOperationContextError(ctx, connection)
+	}
+	if cancellation := ctx.Err(); cancellation != nil {
+		return cancellation
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return nil
+}
+
+// pgconn aggregates dial causes inside ConnectError; inspect all connection siblings.
+func positiveKnowledgeConnectionFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		return slices.ContainsFunc(joined.Unwrap(), positiveKnowledgeConnectionFailure)
+	}
+	if connection, ok := errors.AsType[*pgconn.ConnectError](err); ok &&
+		positiveKnowledgeDialCause(connection.Unwrap()) {
+		return true
+	}
+	return positiveKnowledgeConnectionFailure(errors.Unwrap(err))
+}
+
+// A cancellation-only dial tree is not an independent positive connection failure.
+func positiveKnowledgeDialCause(err error) bool {
+	if err == nil {
+		return false
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		return slices.ContainsFunc(joined.Unwrap(), positiveKnowledgeDialCause)
+	}
+	if cause := errors.Unwrap(err); cause != nil {
+		return positiveKnowledgeDialCause(cause)
+	}
+	return !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
 }
 
 // Reserve before I/O. A crash/cancellation consumes its slot rather than giving
