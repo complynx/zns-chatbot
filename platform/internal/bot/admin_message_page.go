@@ -43,6 +43,7 @@ func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset 
 			broadcastItemsKey: strings.Join(lines, "\n"),
 		},
 	)
+	text = adminMessageProgressText(page.Progress, messages) + "\n" + text
 	if offset > 0 {
 		rows = append(
 			rows,
@@ -115,6 +116,22 @@ func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset 
 		return err
 	}
 	return b.sendAdminMessageView(ctx, in.chat, text, id, messages)
+}
+
+func adminMessageProgressText(progress adminmessage.JobProgress, messages *orderMessages) string {
+	return messages.text(i18n.AdminMessageProgress, map[string]string{
+		"succeeded":    strconv.FormatInt(progress.Succeeded, 10),
+		"queued":       strconv.FormatInt(progress.Queued, 10),
+		"deferred":     strconv.FormatInt(progress.Deferred, 10),
+		"sending":      strconv.FormatInt(progress.Sending, 10),
+		"refused":      strconv.FormatInt(progress.Rejected, 10),
+		"cancelled":    strconv.FormatInt(progress.Cancelled, 10),
+		"uncertain":    strconv.FormatInt(progress.Uncertain, 10),
+		"parked":       strconv.FormatInt(progress.Parked, 10),
+		"paused":       strconv.FormatInt(progress.Paused, 10),
+		"sharedpaused": strconv.FormatInt(progress.SharedPaused, 10),
+		"notqueued":    strconv.FormatInt(progress.NotQueued, 10),
+	})
 }
 
 func (b *Bot) adminMessagePageCallback(ctx context.Context, in incoming, messages *orderMessages) (bool, error) {
