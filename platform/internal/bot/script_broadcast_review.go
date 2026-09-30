@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -15,38 +14,10 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
-const scriptBroadcastReview = "broadcasts.review"
 const scriptBroadcastShow = "broadcasts.show"
 
 // The receipt binds the selected campaign and native destination before display.
 // Interrupted transport remains uncertain; script recovery must not resend it.
-
-func (b *Bot) broadcastReviewEntries() []agenthost.ScriptToolEntry {
-	tools := []scriptclient.Tool{
-		{
-			Name:        scriptBroadcastReview,
-			Description: "Read your broadcast campaign status and complete recipient content/results without changing it. Each offset selects a page of up to 20 recipients, serialized into JSON chunks. Concatenate json until more=false and JSON.parse; then advance offset by page.items.length while page.more. Reuse id/offset with next_cursor for chunks. A stale read requires restarting that page. Delivery attempts are not proof of exactly-once delivery.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"id":{"type":"integer","minimum":1},"offset":{"type":"integer","minimum":0},"cursor":{"type":"string","maxLength":2048}},"required":["id"],"additionalProperties":false}`,
-			),
-		},
-		{
-			Name:        scriptBroadcastShow,
-			Description: "Show your campaign's existing native review and manual continuation buttons in the current chat. May resume unfinished content preparation through the existing renderer, but never enqueues or sends the campaign. Sending requires the user's separate manual Send confirmation. Interrupted display may have reached Telegram; inspect host outcomes before requesting another display.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"id":{"type":"integer","minimum":1},"offset":{"type":"integer","minimum":0}},"required":["id"],"additionalProperties":false}`,
-			),
-		},
-	}
-	entries := make([]agenthost.ScriptToolEntry, 0, len(tools))
-	for _, tool := range tools {
-		entries = append(entries, agenthost.ScriptToolEntry{
-			Descriptor: tool, Prepare: b.prepareBroadcastReview, Execute: b.executeBroadcastReview,
-			ResultLimit: maxScriptReadBytes,
-		})
-	}
-	return entries
-}
 
 func (b *Bot) prepareBroadcastReview(ctx context.Context, owner string, _ int64,
 	call scriptclient.ToolCall, _ agent.Input) (agenthost.ScriptToolRecord, error) {
