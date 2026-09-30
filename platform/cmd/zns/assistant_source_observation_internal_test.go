@@ -15,6 +15,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/assistantsource"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/observability"
 	"github.com/complynx/zns-chatbot/platform/internal/store"
@@ -47,7 +48,9 @@ func TestSourceObservationUsesSuppliedKnowledgeAtMaintenanceStartup(t *testing.T
 	workersDB, sourceDB := runtimeServerDatabase(t), runtimeServerDatabase(t)
 	require.NoError(t, store.Migrate(t.Context(), workersDB))
 	require.NoError(t, store.Migrate(t.Context(), sourceDB))
-	services := appservices.NewServices(workersDB, appservices.Options{})
+	services := appservices.NewServices(workersDB, appservices.Options{Delivery: delivery.Settings{
+		BotID: 1, BotInterval: time.Millisecond, ChatInterval: time.Millisecond, Fallback: time.Second,
+	}})
 	services.Knowledge = knowledge.Service{DB: sourceDB}
 	identity := assistantsource.Digest([]byte("private-source-identity"))
 	digest := assistantsource.Digest([]byte("private-source-body"))
