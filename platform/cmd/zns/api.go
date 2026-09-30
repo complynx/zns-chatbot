@@ -59,7 +59,7 @@ func runAPI(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	fatal := newFatalLatch(cancel)
-	stop, err := startProductMaintenance(ctx, db, logger, cfg, services, fatal.report)
+	stop, err := startProductMaintenance(ctx, db, logger, cfg, services, runtime, fatal.report)
 	if err != nil {
 		return fatal.result(err)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/observability"
 )
 
 // Core workers run only in API/app mode. Each failed startup unwinds workers
@@ -22,8 +23,15 @@ func startProductMaintenance(
 	logger *slog.Logger,
 	cfg config.Config,
 	services appservices.Services,
+	runtime *observability.Runtime,
 	onFatal func(error),
 ) (func(), error) {
+	// Observe supplied owner state without enabling sources or requiring a new service.
+	if runtime != nil && services.Knowledge.DB != nil {
+		if err := runtime.RegisterAssistantSources(services.Knowledge); err != nil {
+			return nil, err
+		}
+	}
 	stopMaintenance, err := startMaintenance(ctx, services, logger, cfg.Orders.ReminderAfter, onFatal)
 	if err != nil {
 		return nil, err
