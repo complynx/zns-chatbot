@@ -84,6 +84,10 @@ func readPassMenuFamily(ctx context.Context, tx pgx.Tx, i Intent) (PassMenu, err
 	var revision int64
 	if err := tx.QueryRow(ctx, `SELECT state,revision FROM bot.pass_views WHERE owner=$1`, i.Owner).
 		Scan(&state, &revision); err != nil {
+		if i.Reference.Family == familyPasses && errors.Is(err, pgx.ErrNoRows) {
+			// Missing projection cannot skip immutable receipt/source authority.
+			return menu, ErrStale
+		}
 		return menu, core.DatabaseOperationError(err)
 	}
 	// Incompatible stored state keeps its decode provenance.
@@ -179,17 +183,13 @@ func lockPassMenu(ctx context.Context, tx pgx.Tx, i Intent, f familyRead) error 
 	if current.Redacted {
 		return ErrStale
 	}
-	action := ""
-	switch current.View {
-	case "queue", "admin_target":
-		action = "admin_assign"
-	case "payment_queue":
-		action = "proof_accept"
-	case "takeover_target":
-		action = "takeover"
-	}
+	action := PassCardBinding(current.RegistrationMenu, 0).Capability
 	if action != "" {
-		return lockRegistrationCapability(ctx, tx, i.Owner, current.Event, action)
+		err := lockRegistrationCapability(ctx, tx, i.Owner, current.Event, action)
+		if errors.Is(err, ErrStale) {
+			return passMenuDenied(i, err)
+		}
+		return err
 	}
 	return nil
 }

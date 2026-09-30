@@ -43,9 +43,11 @@ type ResultRequest struct {
 	Target       int64
 }
 type BeginRequest struct {
-	Observed     Intent
-	Target       int64
-	ExportEvents []string
+	PreparationFailure bool             `json:"preparation_failure,omitempty"`
+	Pass               *PassCardReceipt `json:"pass,omitempty"`
+	Observed           Intent
+	Target             int64
+	ExportEvents       []string
 }
 type BeginResult struct {
 	Intent Intent

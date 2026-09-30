@@ -97,7 +97,23 @@ func (b *Bot) queueBotCard(
 		return err
 	}
 	if capture, ok := ctx.Value(botCardCaptureKey{}).(*botCardCapture); ok {
-		return capture.capture(owner, ref, payload, receipt)
+		// A matching pass retirement is a durable cleanup effect, not the old card.
+		retirement := capture.owner == owner && capture.reference.Family == botFamilyPasses &&
+			capture.reference.Source != nil &&
+			ref.Family == botFamilyPassRedaction && ref.CardKey == capture.reference.CardKey &&
+			ref.Revision == capture.reference.Revision && receipt.Kind == botFamilyPassRedaction &&
+			payload.MessageID > 0
+		if !retirement {
+			return capture.capture(owner, ref, payload, receipt)
+		}
+		saved, revision, err := b.passMenuRecord(ctx, owner)
+		if err != nil {
+			return err
+		}
+		if !saved.Redacted || revision != ref.Revision ||
+			!reflect.DeepEqual(saved.Source, capture.reference.Source) {
+			return botdelivery.ErrStale
+		}
 	}
 	ref.Continuation = receipt
 	return b.storeBotCard(ctx, owner, payload, ref, operation, effect, child)
@@ -241,6 +257,9 @@ func (b *Bot) bindBotCardSource(ctx context.Context, owner string, ref *botdeliv
 }
 
 func (b *Bot) renderBotCard(ctx context.Context, i botdelivery.Intent) (botRenderedDelivery, error) {
+	if i.Reference.Family == botdelivery.PassReceiptRedactionFamily {
+		return b.renderBotPassReceiptRedaction(ctx, i)
+	}
 	// The causal reply/source must still match; never attach the old effect to a
 	// newly valid model result after revocation or history deletion.
 	observed := i.Reference

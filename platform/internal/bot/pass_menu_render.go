@@ -56,6 +56,9 @@ func (b *Bot) RenderPassMenu(ctx context.Context, owner string, chat int64, noti
 	}
 	err = b.renderCurrentPassMenu(ctx, owner, chat, revision, saved, notice)
 	if saved.Source != nil && stalePassMenuSource(err) {
+		if capture, _ := ctx.Value(botCardCaptureKey{}).(*botCardCapture); capture != nil {
+			return err
+		}
 		return b.redactPassMenu(ctx, owner, chat, revision, saved)
 	}
 	return err
@@ -172,7 +175,13 @@ func (b *Bot) deliverPassMenu(
 		owner,
 		payload,
 		ref,
-		botdelivery.Continuation{Kind: botPassCardReceipt, Revision: revision, ViewHash: hash, Tokens: tokens},
+		botdelivery.Continuation{
+			Kind:     botPassCardReceipt,
+			Revision: revision,
+			ViewHash: hash,
+			Tokens:   tokens,
+			Pass:     botdelivery.PassCardBinding(state, payload.MessageID),
+		},
 	)
 }
 func passMenuEditFallback(err error) (bool, error) {

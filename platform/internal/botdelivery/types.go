@@ -30,6 +30,7 @@ const (
 	phaseSend                = "send"
 	phaseEdit                = "edit"
 	familyPasses             = "passes"
+	passCardReceiptKind      = "pass_card"
 	familyRefund             = "order_refund"
 	familyRefundRedaction    = "order_refund_redaction"
 	familyPassRedaction      = "pass_redaction"
@@ -75,6 +76,7 @@ type Reference struct {
 }
 
 type Continuation struct {
+	Pass     *PassCardReceipt `json:"pass,omitempty"`
 	Document *DocumentReceipt `json:"document,omitempty"`
 	Retired  bool             `json:"retired,omitempty"`
 	Kind     string           `json:"kind,omitempty"`
@@ -191,4 +193,12 @@ type ModernReceipt struct {
 	SHA256    string `json:"sha256"`
 	Bytes     int    `json:"bytes"`
 	MessageID int64  `json:"message_id,omitempty"`
+}
+
+// PassCardReceipt binds the actual rendered payload's authority and its first
+// admitted edit target. It contains no message body or callback data.
+type PassCardReceipt struct {
+	PreviousMessageID int64  `json:"previous_message_id,omitempty"`
+	Event             string `json:"event,omitempty"`
+	Capability        string `json:"capability,omitempty"`
 }
