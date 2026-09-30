@@ -56,7 +56,7 @@ func openRuntimeDatabase(
 	if instance == (runtimeapp.Instance{}) {
 		return store.Open(ctx, cfg.Database.URL.Value(), runtime.PGXTracer())
 	}
-	if cfg.Model.Provider != openAIProvider || cfg.Media.URL != "http://media-broker:8091" ||
+	if !managedModelAllowed(cfg) || cfg.Media.URL != "http://media-broker:8091" ||
 		cfg.Sticker.Worker.URL != "http://sticker-broker:8098" ||
 		(cfg.Script.Enabled && cfg.Script.Socket != "/run/script-ipc/evaluate.sock") {
 		return nil, errors.New("runtime topology is outside the managed deployment group")
@@ -66,6 +66,14 @@ func openRuntimeDatabase(
 		return nil, err
 	}
 	return store.OpenNamed(ctx, cfg.Database.URL.Value(), name, runtime.PGXTracer())
+}
+
+// Managed synthetic stands reuse the existing scoped fixture model. Production
+// keeps OpenAI; fixture requests cannot leave the stand's fixed fake endpoint.
+func managedModelAllowed(cfg config.Config) bool {
+	return cfg.Model.Provider == openAIProvider ||
+		(cfg.Env == "sandbox" && cfg.SyntheticOnly && cfg.Model.Provider == fixtureMode &&
+			cfg.Model.URL == "http://fake:8080/lab/model")
 }
 
 func admissionConfig(db *pgxpool.Pool) (*pgx.ConnConfig, error) {
