@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
@@ -50,7 +51,7 @@ func TestIdentityCacheCollectorFailureOmitsPriorSnapshot(t *testing.T) {
 	scrape := func() string {
 		response := httptest.NewRecorder()
 		promhttp.HandlerFor(registry, promhttp.HandlerOpts{}).
-			ServeHTTP(response, httptest.NewRequest("GET", "/metrics", nil))
+			ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 		require.Equal(t, 200, response.Code)
 		select {
 		case observed := <-evidence:
@@ -107,6 +108,6 @@ func TestIdentityCacheRegistrationRolesAndBounds(t *testing.T) {
 		values, gatherErr := registry.Gather()
 		require.NoError(t, gatherErr)
 		require.Len(t, values, 1)
-		require.Equal(t, float64(0), values[0].GetMetric()[0].GetGauge().GetValue())
+		require.Zero(t, values[0].GetMetric()[0].GetGauge().GetValue())
 	}
 }

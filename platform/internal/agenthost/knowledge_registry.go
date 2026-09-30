@@ -36,11 +36,14 @@ func (c KnowledgeScriptCatalog) Entries(ctx context.Context, owner string) ([]Sc
 	}
 	return knowledgeToolEntries(capabilities.CanCurate, capabilities.CanReview, c.Binding), nil
 }
+
+type knowledgeToolSpec struct {
+	name, description, properties string
+	allowed                       bool
+}
+
 func knowledgeToolEntries(curate, review bool, binding ScriptToolEntry) []ScriptToolEntry {
-	specs := []struct {
-		name, description, properties string
-		allowed                       bool
-	}{
+	specs := []knowledgeToolSpec{
 		{
 			scriptKnowledgeScopes,
 			"Read current knowledge scopes and rights in event ID order; follow next_cursor while more=true. " +
@@ -134,22 +137,20 @@ func knowledgeToolEntries(curate, review bool, binding ScriptToolEntry) []Script
 		if !spec.allowed {
 			continue
 		}
-		entries = append(
-			entries,
-			ScriptToolEntry{Descriptor: scriptclient.Tool{
-				Name:        spec.name,
-				Description: spec.description,
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{` + spec.properties +
-						`},"additionalProperties":false` + knowledgeToolRequiredFields(
-						spec.name,
-					) + `}`,
-				),
-			},
-				Prepare: binding.Prepare, Execute: binding.Execute, ResultLimit: binding.ResultLimit},
-		)
+		entries = append(entries, knowledgeToolEntry(spec, binding))
 	}
 	return entries
+}
+
+func knowledgeToolEntry(spec knowledgeToolSpec, binding ScriptToolEntry) ScriptToolEntry {
+	return ScriptToolEntry{Descriptor: scriptclient.Tool{
+		Name:        spec.name,
+		Description: spec.description,
+		InputSchema: json.RawMessage(
+			`{"type":"object","properties":{` + spec.properties +
+				`},"additionalProperties":false` + knowledgeToolRequiredFields(spec.name) + `}`,
+		),
+	}, Prepare: binding.Prepare, Execute: binding.Execute, ResultLimit: binding.ResultLimit}
 }
 
 func knowledgeToolRequiredFields(name string) string {

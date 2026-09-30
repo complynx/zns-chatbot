@@ -42,6 +42,25 @@ func runtimeAuth(
 	return api.ZitadelOwner(adapter, links), adapter, links, nil
 }
 
+// observedRuntimeAuth registers the existing API adapter before composition.
+func observedRuntimeAuth(
+	db *pgxpool.Pool,
+	cfg config.Config,
+	signer identity.Signer,
+	runtime *observability.Runtime,
+) (api.VerifyOwner, *identity.Zitadel, identity.Links, error) {
+	verify, adapter, links, err := runtimeAuth(db, cfg, signer)
+	if err != nil {
+		return nil, nil, identity.Links{}, err
+	}
+	if adapter != nil && runtime != nil {
+		if err = runtime.RegisterIdentityCaches(observability.IdentityCacheAPI, adapter); err != nil {
+			return nil, nil, identity.Links{}, err
+		}
+	}
+	return verify, adapter, links, nil
+}
+
 func configureBotAuth(ctx context.Context, b *bot.Bot, cfg config.Config, signer identity.Signer) error {
 	_, adapter, links, err := runtimeAuth(b.DB, cfg, signer)
 	if err != nil {
