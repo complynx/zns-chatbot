@@ -134,3 +134,99 @@ both from5a4d2f27. Exclusive zns_model_usage_qa DB was created after absent chec
 No reviewed final commits/gates claimed for those new tasks. Ready queues remain0;
 three stands preparing, READY/FROZEN/FQA executed0. Observed stand wait589 seconds
 since baseline; historical start unknown. Returns since baseline0.
+
+## Reconciliation observation: 2026-09-30T23:01:21Z
+
+Manager restored after root committed00ad10e3; root relinquished the three tracking
+files. Git HEAD00ad10e3, product source81a9cf73. Read current QA233/234/235 reports,
+public handoff and A's actual execution report. Historical rows stay unchanged;
+new records reconcile observed state without reconstructing when unobserved events
+started or finished.
+
+Model usage merged e72338e1 after QA233. Root usage gate135PASS/7SKIP/0FAIL includes
+four package outcomes; no PG endpoint. Models/credits/broadcast catalog merged
+81a9cf73 after QA235. Root host gates968PASS/84SKIP/0FAIL comprise966 testcase PASS
+and two package outcomes, without PG. All six affected package pinned lint gates
+passed with zero issues. These are separate scoped commands, not the full failing
+baseline or a full lifecycle/data-preservation acceptance. Original Windows
+EvalSymlinks failure evidence preserved.
+
+Three capability lanes active: C registration context/current authorization nine
+paths; D job progress nine paths; E shared composition two paths. F02 menu SQL fix
+was transferred after QA234 finding, counted as one observed return since baseline.
+No finished branch awaiting review/merge reported at this observation. Do not
+interpret zero ready queue as no unfinished work.
+
+Stand seam QA231 mergedce427ca5. Two manual-scope stands handed off with frozen
+image digest; A completed one scoped UI report and released flows ownership to
+lead, B remains active on recovery. Import unprepared. fqa_executed counts one
+finished independent batch, not whole-stage PASS. Original40 plan rows remain:
+F13 retain partial/blocked obligations, R18 active scoped execution, I9 not handed
+off. A observed seven bounded PASS rows and one fixture capability success; no
+full C or migration acceptance. Callback acknowledgement remains blocked.
+
+Current stand states: flows released manual-ready, recovery frozen manual scope,
+import preparing. Full-scope ready count is zero; two manual handoffs exist, one
+active frozen stand, one completed scoped report. Historical zero stand/FQA rows
+are superseded, not rewritten. Exact earlier freeze/release timestamps unavailable;
+never report an invented duration for those completed waits. Ongoing import wait
+has been observed56min28s since first baseline; earlier start unknown.
+
+## Fix ownership observation: 2026-09-30T23:04:55Z
+
+Root transferred090 preservation proof to menu_sql_developer as part of23 approved
+paths: original21 plus queue and credit observation upgrade tests. Genuine087/088
+→090 old-ledger/all-row/replay assertions remain mandatory. Developer resolves
+scope/gates locally including full affected store PostgreSQL before fresh review;
+root owns overall E-epoch integration. No extra migration logic added. This is a
+scope refinement during the existing return iteration, not a second return.
+
+## Targeted observation: 2026-09-30T23:06:53Z
+
+B completed and released recovery. Read B's independent report and lead's combined
+40-row accounting: A13 rows retain blocked obligations; B R01PARTIAL, R02–R18
+BLOCKED, I01–I09BLOCKED. Two completed scoped independent reports, zero active
+reviewer freeze, both stands preserved/released to lead; full-stage readiness0.
+Do not interpret lower-level manual PASS as a full original scenario PASS.
+
+Engineer acknowledged only the approved three-path next-control plan/branch;
+no new build or epoch. E prepared382b778b/base00ad10e3 developerPG65PASS0SKIP/lint0
+now on fresh QA236. Ready review0, reviewing1, ready merge0. C9 units green final
+lint pending; D initial synthetic alias fixture failed/corrected next gate pending;
+menu23 gates/090 proof in progress. No green handoff inferred for C/D/menu.
+Returns remain1: a failed local preparation fixture does not count as a new
+review→developer return. Import wait observed62minutes, historical start unknown.
+Exact completed A/B freeze/release timestamps still unavailable; no invented waits.
+
+## Post-commit observation: 2026-09-30T23:19:55Z
+
+Root acknowledged9c5cbc41 including42 prior CSV events; exclusive tracking resumed.
+QA236 PASS shared composition382b778b mergedf2bcbc5c. QA237 PASS registration
+revalidation4f071bb1 merged1b729672; current root source/HEAD1b729672. Root host
+native985PASS/84SKIP/0FAIL comprises983cases plus2packages, not PG. Previous usage
+135PASS/7SKIP is a separate historical command; no whole baseline/FQA accepted.
+
+Actual next C lane: six approved registration fixture paths on
+codex/c-registration-fixture and exclusive synthetic_qa_zns_registration_fixture
+DB. E lane: six offline CLI/removal harness paths on
+codex/e-rehearsal-harness-20261001. Lead retains infrastructure/final090 execution
+ownership. D nine paths final realPG gate active e297bbdc/base1b729672. Menu23
+rebased76b70790 on1b729672 with owned-content equivalence; finalPG/race wait for D,
+no green handoff. Engineer three code files sandbox gates active; no image/stand
+writes. Ready review/reviewing/merge=0/0/0. Do not classify an active gate as PASS.
+
+Three capability lanes remain active, fix separate; two previous scoped FQA
+reports remain partial, all40 original obligations preserved. Stands preserved
+and released, full C/D/E readiness/acceptance still NO-GO. Import ongoing observed
+wait1h15m2s since baseline; historical start unknown. Returns since baseline1.
+
+## Tiny transition observation: 2026-09-30T23:22:25Z
+
+D e297bbdc/base1b729672 realPG terminalPASS reported135.951s; resource released.
+Clean local gates complete and fresh QA238 actually reviewing, report pending.
+Record gate duration as reported evidence only, not reconstructed queue wait.
+Menu finalPG/race resumed after D release; no terminal PASS handoff. C6 fixture
+and E6 harness actual development continue. D next source-observations scope is
+planning only/unapproved, not another active development assignment.
+Ready review/reviewing/merge=0/1/0; ongoing import observedwait1h17m32s, historical
+start unknown. No other queue duration inferred. Files paused for root commit.

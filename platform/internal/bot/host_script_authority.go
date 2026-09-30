@@ -23,7 +23,7 @@ func (p botScriptAuthority) MemoryState(ctx context.Context, owner string) (know
 }
 
 func (p botScriptAuthority) Registration(ctx context.Context, owner string, read *agent.RegistrationReadResult) error {
-	return p.bot.reauthorizeRegistrationRead(ctx, owner, read)
+	return p.bot.registrationRevalidator().Read(ctx, owner, read)
 }
 
 func (p botScriptAuthority) SourcesChanged(
@@ -39,7 +39,7 @@ func (p botScriptAuthority) RegistrationContextChanged(
 	owner string,
 	dependency interaction.PassContextDependency,
 ) (bool, error) {
-	return p.bot.passContextChanged(ctx, owner, dependency)
+	return p.bot.registrationRevalidator().DependencyChanged(ctx, owner, dependency)
 }
 
 func (p botScriptAuthority) RegistrationCallChanged(
