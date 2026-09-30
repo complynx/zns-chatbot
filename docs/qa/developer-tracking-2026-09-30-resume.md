@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through227, next228. All authorship/routes Codex under override;
+Fresh requests through229, next230. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -22,7 +22,9 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 | 224 | Host/cache quality correction | Static PASS; exact d9d00ca9 merged75a65e21, integrated49PASS/lint0issues |
 | 225 | Menu retirement rev7 | FAIL; two authority defects and one SQL cancellation defect; branch correction assigned |
 | 226 | Knowledge SQL/cancellation rev3 | P2 finding; mixed ConnectError causes; transferred to another developer |
-| 227 | Complete registration/massage/food host catalogs | Exact Git e71c535 parent75a65e21; fresh review running |
+| 227 | Complete registration/massage/food host catalogs | Static PASS e71c535; merged5d81be9a, integrated195host+24botPASS/lint0issues |
+| 228 | Knowledge SQL/cancellation Git successor | Exact a88c23c9; fresh review running |
+| 229 | Managed synthetic agent capability | Exact b2263f; fresh review running |
 
 Daniel authorized Git consolidation and developer worktrees. Root creates a
 checkpoint of applied state and serializes integration merges. C developer owns
@@ -38,6 +40,16 @@ root commits the finished board. Menu branch owns isolated synthetic PostgreSQL
 database zns_menu_authority_qa, not the shared zns database or container lifecycle.
 Knowledge error correction transferred to provider_compatibility_developer on
 codex/knowledge-error-precedence at ce994271 after repeated failed static reviews.
+
+Daniel authorized three isolated stands and two independent FQA reviewers; FQAlead
+manages allocation/freeze/handoffs. fqa_lead coordinates stand_engineer on branch
+codex/functional-stands and source-blind fqa_flows. Recovery reviewer creation is
+temporarily limited by the agent thread cap; retry when a review slot is released.
+No ready UI stand or second active FQA reviewer claimed yet. Ports58401–58424
+checked free by lead. Root shared PostgreSQL55432 remains separate. C capability
+developer continues privileged-read catalog/admission on codex/c-host-continuations;
+D model-usage runtime binding is read-only scope planning while QA229 holds its
+current commit immutable. No unreviewed source is passed off as accepted runtime.
 No extra slots required at this point. Same-reviewer applied-source addenda do not
 increment the fresh request counter.
 

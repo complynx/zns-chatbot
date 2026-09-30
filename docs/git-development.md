@@ -13,6 +13,9 @@ their preserved local evidence directories until moved into task branches.
 2. Complete the feature and run pinned formatting, affected lint and focused
    tests locally. Use a separate PostgreSQL database/stand for concurrent tests;
    the shared database and integration stand require exclusive ownership.
+   The developer also updates the branch against the integration branch and
+   resolves conflicts in their own worktree. Repeat affected gates after resolving
+   conflicts. A failing affected gate is not a ready Code QA handoff.
 3. Commit explicit task paths, including focused tests. Record exact commands,
    outcomes and limitations. Never commit credentials, caches, local evidence
    dumps or generated binaries. Preserve original evidence rather than deleting it.
@@ -23,6 +26,10 @@ their preserved local evidence directories until moved into task branches.
    commit into the integration branch while holding that slot. Conflicts require
    explicit resolution and affected verification/review. Do not force-reset or
    overwrite another task's work. Root may perform the same serialized merge.
+   The developer owns merge preparation and conflict resolution. If the integration
+   base advances after review, stop and prepare the updated branch; substantive
+   resolution receives fresh affected review before merging. Metadata-only rebases
+   must retain exact reviewed source and record their equivalence and base binding.
 6. Run affected integrated checks and update PROGRESS.html. Fresh Functional QA
    uses a frozen stand and EN/RU Telegram-like UI. A merged feature is implemented,
    not automatically accepted. Both QA gates remain required for stage acceptance.
