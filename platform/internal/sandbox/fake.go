@@ -35,22 +35,23 @@ const editMessageTextMethod = "editMessageText"
 const errorField = "error"
 
 type Fake struct {
-	delay         *editDelay
-	menu          telegramMenuState
-	menuFailure   *menuFault
-	modelFixtures modelFixtures
-	MiniAppURL    string
-	mu            sync.Mutex
-	next          int64
-	updates       []telegram.Update
-	messages      []telegram.Message
-	edits         int
-	asrCalls      int
-	fault         string
-	blocked       map[int64]bool
-	stickers      map[string]telegram.Sticker
-	DB            *pgxpool.Pool
-	Token         string
+	callbackEvidence callbackEvidence
+	delay            *editDelay
+	menu             telegramMenuState
+	menuFailure      *menuFault
+	modelFixtures    modelFixtures
+	MiniAppURL       string
+	mu               sync.Mutex
+	next             int64
+	updates          []telegram.Update
+	messages         []telegram.Message
+	edits            int
+	asrCalls         int
+	fault            string
+	blocked          map[int64]bool
+	stickers         map[string]telegram.Sticker
+	DB               *pgxpool.Pool
+	Token            string
 }
 
 type snapshot struct {
@@ -135,6 +136,7 @@ func (f *Fake) Handler() http.Handler {
 	)
 	mux.HandleFunc("POST /{bot}/{method}", f.telegram)
 	mux.HandleFunc("GET /lab/state", f.labState)
+	mux.HandleFunc("GET /lab/callback-receipts", f.callbackReceiptState)
 	mux.HandleFunc("POST /lab/input", f.labInput)
 	mux.HandleFunc("POST /lab/fault", f.labFault)
 	mux.HandleFunc("POST /lab/blocked", f.labBlocked)
@@ -179,7 +181,7 @@ func (f *Fake) telegram(w http.ResponseWriter, r *http.Request) {
 	case "getUpdates":
 		f.getUpdates(w, r)
 	case "answerCallbackQuery":
-		tgOK(w, true)
+		f.answerCallbackQuery(w, r)
 	case "getMe":
 		tgOK(w, telegram.User{ID: fakeBotID, IsBot: true, FirstName: "Sandbox"})
 	case "sendMessage", editMessageTextMethod:
@@ -240,6 +242,7 @@ func (f *Fake) getUpdates(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	tgOK(w, batch)
+	f.observeDeliveredCallbacks(batch)
 }
 
 func (f *Fake) writeMessage(w http.ResponseWriter, r *http.Request, method string) {
