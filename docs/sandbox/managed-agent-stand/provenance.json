@@ -1,0 +1,234 @@
+{
+  "scope": "Managed synthetic agent-flow stand successor; fixed existing FixtureRemote endpoint",
+  "base_commit": "75a65e21b429c2a0a91c7016671077b7c29ab554",
+  "branch": "codex/d-agent-stand",
+  "checked_out_source": [
+    {
+      "sha256": "D7527B51CE5D9A263798095662A825604300ED9A3A9001EB3566710D4384EB97",
+      "path": "platform/go.mod"
+    },
+    {
+      "sha256": "A6B60302A3E8714F159467519D18783799214DC03E6E886F2846EDDC2FCAEDD2",
+      "path": "platform/go.sum"
+    },
+    {
+      "sha256": "5CD1BA34EABE4DDFC44685C471BA299ECCEB437B6A780E2A438558DF5DC6D8CC",
+      "path": "platform/.golangci.yml"
+    },
+    {
+      "sha256": "D8A1AAAC795EC6E543730E3599B20DFEFDAFCE1CA96807C4FBE8DEDDF36EA5CF",
+      "path": "platform/cmd/zns/runtime_lifecycle.go"
+    },
+    {
+      "sha256": "CD1318C01F1F0F131CA8483708D52BB2F6D86A4A4B207A7ED67069F119939A5E",
+      "path": "platform/cmd/zns/managed_fixture_internal_test.go"
+    },
+    {
+      "sha256": "3E62AE369EBB25230653D1C48A0EF2976BF9FD757D2B088151295950F71D4178",
+      "path": "platform/cmd/zns/main.go"
+    },
+    {
+      "sha256": "0A18F257D5A553A148E20A64FB365F21BCBBC058823CDCBA096AB709DB49D70E",
+      "path": "platform/cmd/zns/config.go"
+    },
+    {
+      "sha256": "E5ED4DC5E782D2CF96815DB614B2D09FD8EECB2908A66AA7E2DCBD2378A68C5D",
+      "path": "platform/internal/config/validate.go"
+    },
+    {
+      "sha256": "12A53F7506446019F1D367B552021B71757B1F7328446C238B3FE04C637BAC34",
+      "path": "platform/internal/config/production.go"
+    },
+    {
+      "sha256": "34FDB015FCFE2BE0792D2A9D6F904D00B94296F7CB73FE2CCCAC1332082D2BBE",
+      "path": "platform/internal/agenthost/plan_loop.go"
+    },
+    {
+      "sha256": "24CBA7B576FB42E707418A58B54B88E592B469F158972C3FAB1E2031A6DE1927",
+      "path": "platform/internal/interaction/turn_coordinator.go"
+    },
+    {
+      "sha256": "E3C25A1BD1A6F698665072182BEB40A2FCC7734F755FCA9808368ADDC5877BDF",
+      "path": "platform/internal/sandbox/model_fixture.go"
+    },
+    {
+      "sha256": "DC5ADADA54E90C31C117A88D903DC52C9D28981F5DE05974498C0A345653D35B",
+      "path": "platform/internal/sandbox/model_fixture_remote.go"
+    },
+    {
+      "sha256": "3C96D8C574690902567BFB25D51E7139AAB7F5992C2917E39D371032BC2BA33C",
+      "path": "platform/internal/sandbox/model_fixture_enqueue.go"
+    },
+    {
+      "sha256": "91CCF8B5E621CA1F134AD6E8354D6A01AD2516A097E1E5C4DEB2F49AE79CB8D1",
+      "path": "platform/internal/sandbox/model_fixture_http.go"
+    },
+    {
+      "sha256": "A7BEA0E5366D94E7BE0677C20F197C0F73F033885563FD8F7C113DAF24925529",
+      "path": "platform/internal/sandbox/fake.go"
+    }
+  ],
+  "stand_artifacts": [
+    {
+      "sha256": "DB1258D0D23479FF2469359653BF1915EF936BD56A739F23B87A8A48EA3F8E1E",
+      "path": "docs/sandbox/managed-agent-stand/runtime.yaml"
+    },
+    {
+      "sha256": "DF46557B395B57A89ACE1DE56CCCA81A6517189A271101606BE7110064ABF433",
+      "path": "docs/sandbox/managed-agent-stand/runtime.compose.yaml"
+    },
+    {
+      "sha256": "33D52DA52B6AC1FE8EDF845D2BB13BA3A585D2CB1824E45E591DCDE07D692F0A",
+      "path": "docs/sandbox/managed-agent-stand/scenarios.en.json"
+    },
+    {
+      "sha256": "D0E201C9BC9A6741BCD1678673DFAAE008C21BC5936016D4205C6CECC3E49F89",
+      "path": "docs/sandbox/managed-agent-stand/scenarios.ru.json"
+    },
+    {
+      "sha256": "23633DE8D4343AFD9623A05A0DF9B247765DC430F7ADC7F582267CAA3E3BA964",
+      "path": "docs/sandbox/managed-agent-stand/RUNBOOK.md"
+    }
+  ],
+  "deferred_dependencies": [
+    {
+      "name": "R108 rev7 frozen stand",
+      "root": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final",
+      "files": [
+        {
+          "sha256": "75AE70E0490C034ECD8C7768771ACDFE114BC09596E09CC1BC5DC55C18627880",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/coordinator.Dockerfile"
+        },
+        {
+          "sha256": "299F71E16CD5D977E2D20DC27B76C3D9125A7D01E259CDCCBF3B36E67EACD9FC",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/fake-build-receipt.template.json"
+        },
+        {
+          "sha256": "EB86243EC8610E62560956D677622BECECB40ADD837308B5F498744BE6EAB1EA",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/fake.Dockerfile"
+        },
+        {
+          "sha256": "5F5F0D01CC21B3936D57B897978E3C76FB3F716BB446DBA798EC6EDF990B4379",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/fake.runtime.yaml"
+        },
+        {
+          "sha256": "4A49EDA32566E2F4886EC5D8B72FEA2C3A60570942ECCB31986F1CF4A3B526C0",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/images.env.example"
+        },
+        {
+          "sha256": "EEBB41DE7A0F870D78AB260EE79212D773397FD7203008F768C8AAFCEDBFE031",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/inventory-role.sql"
+        },
+        {
+          "sha256": "9C9152F02236240168879CEFC9DC594DE540CB48AF10907D077FFA4DC9F264C7",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/manifest.json"
+        },
+        {
+          "sha256": "2C7F73F9E4BBE47D70BCAD3FC97C760EF44403454166438FC519C692D9980A6B",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/owner.compose.yaml"
+        },
+        {
+          "sha256": "1B9F2566A14F356E539DBF9383922513B92CCB7F4F53D9BBD068B0776E16F9A8",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/prerequisites.compose.yaml"
+        },
+        {
+          "sha256": "E9090DE2E7A4AB58EA8CD369C3CE77F07DD899E01496EA9F1273766FBC3DD2E9",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/product-roles.sql"
+        },
+        {
+          "sha256": "B3D665C41F07032E71B7B5E3812761B9AE9910D0A1E6C6A75F39441081D49AC9",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/reference-hashes.json"
+        },
+        {
+          "sha256": "ED93DA6C072BF4EBC10D5474F8C9A83D1417948C75DB99F18523EB7704B50E0E",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/replacement.json"
+        },
+        {
+          "sha256": "8AB9104E1DD40815B7BA77A7926E7579BC8AD38AE0B1BF488424FF702B4E6CB0",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/RUNBOOK.md"
+        },
+        {
+          "sha256": "1E8B1052E9280AC36D32C32BFC2C0975A4AB71BB18F5441C6F71B26A10832068",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/runtime.compose.yaml"
+        },
+        {
+          "sha256": "FDA7D781B33C7488B19992FE68070B0DB991C8A95663706F1E1FD705E07470AB",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/runtime.yaml"
+        },
+        {
+          "sha256": "DEC45D951C9AADA1474B2CAE6279A793985BD488F0C1EE8B62D189033632F27A",
+          "path": "qa.local/go-resume-20260929/r108-managed-provider-stand/rev7/final/source-epoch.json"
+        }
+      ],
+      "state": "deferred assembly dependency; unchanged; no deployment or image claim"
+    },
+    {
+      "name": "R104 rev3 frozen provider overlay",
+      "root": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final",
+      "files": [
+        {
+          "sha256": "D4DEC7745DBE0C230850EA976AE7B66F41AA197299A03DFF078C54D2B4C44FE9",
+          "path": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final/cmd/zns/fake_server.go"
+        },
+        {
+          "sha256": "D83805AA7B9D8AB3CAF46B6CF7136089FE5DECA38BE2D46ED87E703971C6F9AA",
+          "path": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final/cmd/zns/main.go"
+        },
+        {
+          "sha256": "49EE17513FD80FE4187E2F89A7BEFC2AF8B4E6331732EBB82C1A278B8607419A",
+          "path": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final/internal/sandbox/edit_delay_contention_test.go"
+        },
+        {
+          "sha256": "689A76F722FD1756DB59B4A4BB368BB32737AD55077811BD1330ED32BB458754",
+          "path": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final/internal/sandbox/edit_delay_journal.go"
+        },
+        {
+          "sha256": "C36A0045CDBB401BD063E5F378A0C529BDAEE4110563CCA58ACB5C1181E32331",
+          "path": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final/internal/sandbox/edit_delay_resources_test.go"
+        },
+        {
+          "sha256": "EA6CE6178B894F73256614822BCC4E4B52BDE5FC97FCD3D20A209442F2720800",
+          "path": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final/internal/sandbox/edit_delay_test.go"
+        },
+        {
+          "sha256": "A45AD29DC246C15848457D5AB10C815CD5E182A097C445FB8DBC8DB868D8A7B2",
+          "path": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final/internal/sandbox/edit_delay.go"
+        },
+        {
+          "sha256": "B060CFA90C48B9255D1067F202E738AAB4E4020B6F25D01FFC6F29F36FD4E234",
+          "path": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final/internal/sandbox/fake.go"
+        },
+        {
+          "sha256": "44801DB4C11CB1816324CD20F7671D5D7FD2B44F582C5D33F150609ACCC3F357",
+          "path": "qa.local/go-resume-20260929/r104-provider-reassessment-20260930/rev3/final/RUNBOOK.md"
+        }
+      ],
+      "state": "deferred overlay; not applied to checked-out product sources or included in tested binary"
+    }
+  ],
+  "gates": {
+    "tests": "go test ./cmd/zns ./internal/config ./internal/sandbox -count=1: passed; TEST_DATABASE_URL empty",
+    "go": "Go 1.27.0",
+    "lint": "Pinned golangci-lint 2.14.0 run ./cmd/zns ./internal/config ./internal/sandbox: 0 issues",
+    "formatter": "Pinned golangci-lint 2.14.0 fmt; owned Go files",
+    "cache": "Assigned worktree platform/.cache/d-agent-stand only",
+    "runtime": "No Docker, DB, stand or provider overlay execution; no independent QA acceptance"
+  },
+  "limits": [
+    "Deterministic typed proposals do not prove real-model language understanding",
+    "Interrupted pre-save consumed model turn replay unsupported",
+    "Fake reboot does not preserve in-memory model fixtures",
+    "Saved-plan delivery recovery still requires actual bilingual UI and physical replacement acceptance"
+  ],
+  "author": "Written by d_observability_developer (gpt-6/Codex) on behalf of Daniel Drizhuk",
+  "tool_binaries": [
+    {
+      "sha256": "7D828191BA32519A9C9361789AB647486236ED45C660889196C7770A8FF1985C",
+      "name": "Go 1.27.0"
+    },
+    {
+      "sha256": "E93596CDA100C06A5FFDBDC84DD86C73390A589DB5C40956EBD9FA12747767EC",
+      "name": "golangci-lint 2.14.0"
+    }
+  ]
+}
