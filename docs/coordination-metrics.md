@@ -197,3 +197,36 @@ menu23 gates/090 proof in progress. No green handoff inferred for C/D/menu.
 Returns remain1: a failed local preparation fixture does not count as a new
 review→developer return. Import wait observed62minutes, historical start unknown.
 Exact completed A/B freeze/release timestamps still unavailable; no invented waits.
+
+## Post-commit observation: 2026-09-30T23:19:55Z
+
+Root acknowledged9c5cbc41 including42 prior CSV events; exclusive tracking resumed.
+QA236 PASS shared composition382b778b mergedf2bcbc5c. QA237 PASS registration
+revalidation4f071bb1 merged1b729672; current root source/HEAD1b729672. Root host
+native985PASS/84SKIP/0FAIL comprises983cases plus2packages, not PG. Previous usage
+135PASS/7SKIP is a separate historical command; no whole baseline/FQA accepted.
+
+Actual next C lane: six approved registration fixture paths on
+codex/c-registration-fixture and exclusive synthetic_qa_zns_registration_fixture
+DB. E lane: six offline CLI/removal harness paths on
+codex/e-rehearsal-harness-20261001. Lead retains infrastructure/final090 execution
+ownership. D nine paths final realPG gate active e297bbdc/base1b729672. Menu23
+rebased76b70790 on1b729672 with owned-content equivalence; finalPG/race wait for D,
+no green handoff. Engineer three code files sandbox gates active; no image/stand
+writes. Ready review/reviewing/merge=0/0/0. Do not classify an active gate as PASS.
+
+Three capability lanes remain active, fix separate; two previous scoped FQA
+reports remain partial, all40 original obligations preserved. Stands preserved
+and released, full C/D/E readiness/acceptance still NO-GO. Import ongoing observed
+wait1h15m2s since baseline; historical start unknown. Returns since baseline1.
+
+## Tiny transition observation: 2026-09-30T23:22:25Z
+
+D e297bbdc/base1b729672 realPG terminalPASS reported135.951s; resource released.
+Clean local gates complete and fresh QA238 actually reviewing, report pending.
+Record gate duration as reported evidence only, not reconstructed queue wait.
+Menu finalPG/race resumed after D release; no terminal PASS handoff. C6 fixture
+and E6 harness actual development continue. D next source-observations scope is
+planning only/unapproved, not another active development assignment.
+Ready review/reviewing/merge=0/1/0; ongoing import observedwait1h17m32s, historical
+start unknown. No other queue duration inferred. Files paused for root commit.
