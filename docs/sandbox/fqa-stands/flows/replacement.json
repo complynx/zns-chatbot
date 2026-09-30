@@ -1,0 +1,8 @@
+{
+  "installation": "010400000201",
+  "state_directory": "/state",
+  "compose_project": "synthetic-qa-zns-fqa-flows-runtime",
+  "compose_files": ["/config/runtime.compose.yaml"],
+  "runtime_database_host": "postgres",
+  "managed_roles": ["zns_app", "zns_meter"]
+}

@@ -1,0 +1,48 @@
+# Deployment owner only. Do not label this as a managed runtime component.
+name: synthetic-qa-zns-fqa-import-owner
+services:
+  coordinator:
+    image: ${ZNS_COORDINATOR_IMAGE:?Supply the reviewed local coordinator image}
+    user: '0:0'
+    entrypoint: [/usr/local/bin/znsreplace]
+    command: [/config/replacement.json]
+    pull_policy: never
+    restart: on-failure
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 45s
+    environment:
+      ZNS_INVENTORY_DATABASE_URL: postgres://zns_inventory:fqa-import-synthetic-inventory-only@postgres/synthetic_qa_zns_fqa_import?sslmode=disable
+      ZNS_APP_IMAGE: ${ZNS_APP_IMAGE:?}
+      ZNS_SCRIPT_IMAGE: ${ZNS_SCRIPT_IMAGE:?}
+      ZNS_MEDIA_DECODER_IMAGE: ${ZNS_MEDIA_DECODER_IMAGE:?}
+      ZNS_MEDIA_BROKER_IMAGE: ${ZNS_MEDIA_BROKER_IMAGE:?}
+      ZNS_STICKER_DECODER_IMAGE: ${ZNS_STICKER_DECODER_IMAGE:?}
+      ZNS_STICKER_BROKER_IMAGE: ${ZNS_STICKER_BROKER_IMAGE:?}
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        bind: {create_host_path: false}
+      - type: bind
+        source: /etc/machine-id
+        target: /etc/machine-id
+        read_only: true
+        bind: {create_host_path: false}
+      - state:/state
+      - config:/config:ro
+    networks: [sandbox]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m,mode=1777"]
+networks:
+  sandbox:
+    external: true
+    name: synthetic-qa-zns-fqa-import
+volumes:
+  state:
+    external: true
+    name: synthetic-qa-zns-fqa-import-state
+
+  config:
+    external: true
+    name: synthetic-qa-zns-fqa-import-config

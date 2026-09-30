@@ -126,7 +126,7 @@ func runDatabaseCommand(ctx context.Context, logger *slog.Logger, cfg config.Con
 			return fakeError
 		}
 		fake.MiniAppURL = cfg.Sandbox.MiniAppURL
-		return serve(ctx, telemetryHandler(runtime, fake.Handler()), logger, cfg)
+		return serveFake(ctx, fake, telemetryHandler(runtime, fake.Handler()), logger, cfg)
 	case "bot":
 		deliverySettings, deliveryErr := cfg.DeliverySettings()
 		if deliveryErr != nil {
