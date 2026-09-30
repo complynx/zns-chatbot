@@ -1,0 +1,69 @@
+[
+  {
+    "input": {
+      "language_code": "ru",
+      "text": "Запиши моё полное имя: Алекс Учебный.",
+      "user": 101
+    },
+    "steps": [
+      {
+        "plan": {
+          "view": "profile",
+          "text": "",
+          "profile_action": {
+            "field": "legal_name",
+            "name": "set",
+            "value": "Алекс Учебный"
+          }
+        },
+        "expect": {
+          "language": "ru",
+          "text": "Запиши моё полное имя: Алекс Учебный."
+        }
+      }
+    ]
+  },
+  {
+    "input": {
+      "language_code": "ru",
+      "text": "Покажи мой профиль.",
+      "user": 101
+    },
+    "steps": [
+      {
+        "plan": {
+          "text": "",
+          "view": "profile"
+        },
+        "expect": {
+          "language": "ru",
+          "text": "Покажи мой профиль."
+        }
+      }
+    ]
+  },
+  {
+    "input": {
+      "language_code": "ru",
+      "text": "Покажи мою регистрацию на тестовый фестиваль.",
+      "user": 101
+    },
+    "steps": [
+      {
+        "plan": {
+          "view": "passes",
+          "text": "",
+          "registration_action": {
+            "view": "home",
+            "name": "show",
+            "event": "sandbox-festival"
+          }
+        },
+        "expect": {
+          "language": "ru",
+          "text": "Покажи мою регистрацию на тестовый фестиваль."
+        }
+      }
+    ]
+  }
+]
