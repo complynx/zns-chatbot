@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/scriptclient"
 )
 
-const scriptCreditUsage = "credits.usage"
 const scriptCreditHistory = "credits.history"
 const scriptCreditAdminUsage = "credits.admin.usage"
 const scriptCreditAdminHistory = "credits.admin.history"
@@ -32,70 +30,14 @@ type creditToolArguments struct {
 }
 
 func (b *Bot) scriptCreditEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
-	var permissions map[string]bool
-	if err := b.API.Call(ctx, owner, http.MethodGet, "/v1/credits/permissions", nil, &permissions); err != nil {
-		return nil, err
-	}
-	empty := json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
-	page := json.RawMessage(
-		`{"type":"object","properties":{"cursor":{"type":"string","maxLength":2048}},"additionalProperties":false}`,
-	)
-	descriptors := []scriptclient.Tool{
-		{
-			Name:        scriptCreditUsage,
-			Description: "Read your current monthly API credit allowance, spend, holds and unknown count. Monetary values are exact decimal strings. Unlimited usage is still tracked.",
-			InputSchema: empty,
+	return (agenthost.CreditScriptCatalog{
+		ReadPermissions: func(ctx context.Context, owner string) (map[string]bool, error) {
+			var permissions map[string]bool
+			err := b.API.Call(ctx, owner, http.MethodGet, "/v1/credits/permissions", nil, &permissions)
+			return permissions, err
 		},
-		{
-			Name:        scriptCreditHistory,
-			Description: "Read your paid attempts, including failures and unknown costs. Follow next_cursor while more is true. Amounts are decimal strings; null is unknown, never zero.",
-			InputSchema: page,
-		},
-	}
-	if permissions["admin"] {
-		descriptors = append(
-			descriptors,
-			scriptclient.Tool{
-				Name:        scriptCreditAdminUsage,
-				Description: "Read an explicit payer's credit report under your current global administrator role.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"payer":{"type":"string","maxLength":256}},"required":["payer"],"additionalProperties":false}`,
-				),
-			},
-			scriptclient.Tool{
-				Name:        scriptCreditAdminHistory,
-				Description: "Read an explicit payer's paginated paid-attempt history. Current administrator access is checked on every call.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"payer":{"type":"string","maxLength":256},"cursor":{"type":"string","maxLength":2048}},"required":["payer"],"additionalProperties":false}`,
-				),
-			},
-			scriptclient.Tool{
-				Name:        scriptCreditDefault,
-				Description: "Read the current ordinary monthly default and its version. No allowance carries over.",
-				InputSchema: empty,
-			},
-			scriptclient.Tool{
-				Name:        scriptCreditPolicy,
-				Description: "Apply an explicitly requested administrator credit policy. Supply the observed version and exact decimal amount, unlimited or default. Payer * changes the ordinary default and requires a decimal amount. This changes future admissions, not past charges.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"payer":{"type":"string","maxLength":256},"amount":{"type":"string","maxLength":30},"version":{"type":"integer","minimum":1,"maximum":9007199254740991}},"required":["payer","amount","version"],"additionalProperties":false}`,
-				),
-			},
-		)
-	}
-	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		entries = append(
-			entries,
-			agenthost.ScriptToolEntry{
-				Descriptor:  descriptor,
-				Prepare:     prepareCreditTool,
-				Execute:     b.executeCreditTool,
-				ResultLimit: maxScriptReadBytes,
-			},
-		)
-	}
-	return entries, nil
+		Binding: agenthost.ScriptToolEntry{Prepare: prepareCreditTool, Execute: b.executeCreditTool, ResultLimit: maxScriptReadBytes},
+	}).Entries(ctx, owner)
 }
 
 func prepareCreditTool(

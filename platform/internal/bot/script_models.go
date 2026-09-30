@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -24,75 +23,14 @@ const scriptModelsGrant = "models.grants.set"
 // Each capability has separate bindings so discovery never advertises a setter
 // to an actor who cannot use it. The domain service checks the current grant again.
 func (b *Bot) scriptModelEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
-	var permissions map[string]bool
-	if err := b.API.Call(ctx, owner, http.MethodGet, "/v1/model-settings/permissions", nil, &permissions); err != nil {
-		return nil, err
-	}
-	empty := json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
-	descriptors := []scriptclient.Tool{
-		{
-			Name:        scriptModelsEffective,
-			Description: "Read the effective model and reasoning for your dialogue.",
-			InputSchema: empty,
+	return (agenthost.ModelScriptCatalog{
+		ReadPermissions: func(ctx context.Context, owner string) (map[string]bool, error) {
+			var permissions map[string]bool
+			err := b.API.Call(ctx, owner, http.MethodGet, "/v1/model-settings/permissions", nil, &permissions)
+			return permissions, err
 		},
-	}
-	for _, scope := range []string{modelsettings.Own, modelsettings.Others, modelsettings.Global} {
-		if !permissions[scope] {
-			continue
-		}
-		namespace := "models." + scope
-		properties, required := "", ""
-		if scope == modelsettings.Others {
-			properties = `"owner":{"type":"string","minLength":1,"maxLength":200},`
-			required = `"owner",`
-		}
-		readSchema := empty
-		if scope == modelsettings.Others {
-			readSchema = json.RawMessage(
-				`{"type":"object","properties":{"owner":{"type":"string","minLength":1,"maxLength":200}},"required":["owner"],"additionalProperties":false}`,
-			)
-		}
-		descriptors = append(
-			descriptors,
-			scriptclient.Tool{
-				Name:        namespace + ".get",
-				Description: "Read " + scope + " model settings and the supported model/reasoning catalog. Other-user targets must come from the user's request or authorized records.",
-				InputSchema: readSchema,
-			},
-			scriptclient.Tool{
-				Name:        namespace + ".set",
-				Description: "Set " + scope + " model and reasoning for subsequent requests. Use empty model and effort to restore inheritance. Host binds current version and replay key; existing domain permissions apply.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{` + properties + `"model":{"type":"string","maxLength":100},"effort":{"type":"string","maxLength":30}},"required":[` + required + `"model","effort"],"additionalProperties":false}`,
-				),
-			},
-		)
-	}
-	if permissions[modelsettings.GrantPermission] {
-		descriptors = append(
-			descriptors,
-			scriptclient.Tool{
-				Name:        scriptModelsGrant,
-				Description: "Grant or revoke only model-setting own/others/global permission for an explicitly selected user. Requires current superadmin authority; this cannot grant superadmin.",
-				InputSchema: json.RawMessage(
-					`{"type":"object","properties":{"owner":{"type":"string","minLength":1,"maxLength":200},"capability":{"enum":["own","others","global"]},"enabled":{"type":"boolean"}},"required":["owner","capability","enabled"],"additionalProperties":false}`,
-				),
-			},
-		)
-	}
-	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		entries = append(
-			entries,
-			agenthost.ScriptToolEntry{
-				Descriptor:  descriptor,
-				Prepare:     b.prepareScriptModel,
-				Execute:     b.executeScriptModel,
-				ResultLimit: maxOrdinaryScriptResult,
-			},
-		)
-	}
-	return entries, nil
+		Binding: agenthost.ScriptToolEntry{Prepare: b.prepareScriptModel, Execute: b.executeScriptModel, ResultLimit: maxOrdinaryScriptResult},
+	}).Entries(ctx, owner)
 }
 
 func modelToolEndpoint(name, actor, target string) (string, error) {

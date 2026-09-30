@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -21,38 +20,6 @@ const scriptBroadcastProfile = "broadcasts.profile"
 type broadcastReadArguments struct {
 	UserID string `json:"user_id,omitempty"`
 	Cursor string `json:"cursor,omitempty"`
-}
-
-func (b *Bot) broadcastReadEntries() []agenthost.ScriptToolEntry {
-	tools := []scriptclient.Tool{
-		{
-			Name:        scriptBroadcastAudience,
-			Description: "Administrator-only keyset pages of same-deployment user IDs, display-name excerpts and available profile field names. Follow next_cursor until more=false. Use broadcasts.profile to inspect complete values and filter with JavaScript; preview explicit recipient IDs afterward. No SQL.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"cursor":{"type":"string","maxLength":2048}},"additionalProperties":false}`,
-			),
-		},
-		{
-			Name:        scriptBroadcastProfile,
-			Description: "Read an authorized broadcast profile as complete JSON chunks. Concatenate json fields until more=false, then JSON.parse. Missing fields stay absent, null stays null. Stale means restart; do not use incomplete chunks. Current global administrator access required.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"user_id":{"type":"string","maxLength":20},"cursor":{"type":"string","maxLength":2048}},"required":["user_id"],"additionalProperties":false}`,
-			),
-		},
-	}
-	entries := make([]agenthost.ScriptToolEntry, 0, len(tools))
-	for _, tool := range tools {
-		entries = append(
-			entries,
-			agenthost.ScriptToolEntry{
-				Descriptor:  tool,
-				Prepare:     prepareBroadcastRead,
-				Execute:     b.executeBroadcastRead,
-				ResultLimit: maxScriptReadBytes,
-			},
-		)
-	}
-	return entries
 }
 
 func prepareBroadcastRead(

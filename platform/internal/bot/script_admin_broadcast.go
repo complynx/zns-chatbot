@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -29,53 +28,24 @@ func withAdminMessageSource(ctx context.Context, in incoming, u telegram.Update)
 }
 
 func (b *Bot) scriptBroadcastEntries(ctx context.Context, owner string) ([]agenthost.ScriptToolEntry, error) {
-	var capability struct {
-		Allowed bool `json:"allowed"`
-	}
-	if err := b.API.Call(ctx, owner, http.MethodPost, "/v1/admin-messages/capabilities", nil, &capability); err != nil {
-		return nil, err
-	}
-	if !capability.Allowed {
-		return nil, nil
-	}
-	empty := json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
-	id := json.RawMessage(
-		`{"type":"object","properties":{"input_id":{"type":"integer","minimum":1}},"required":["input_id"],"additionalProperties":false}`,
-	)
-	descriptors := []scriptclient.Tool{
-		{
-			Name:        scriptBroadcastPreview,
-			Description: "Create an administrator broadcast preview from an explicit /send_message_to command. Recipients must reflect the user's request. Missing content asks for input. Sending always requires a manual confirmation button.",
-			InputSchema: json.RawMessage(
-				`{"type":"object","properties":{"command":{"type":"string","maxLength":16384}},"required":["command"],"additionalProperties":false}`,
-			),
+	return (agenthost.BroadcastScriptCatalog{
+		Allowed: func(ctx context.Context, owner string) (bool, error) {
+			var capability struct {
+				Allowed bool `json:"allowed"`
+			}
+			err := b.API.Call(ctx, owner, http.MethodPost, "/v1/admin-messages/capabilities", nil, &capability)
+			return capability.Allowed, err
 		},
-		{
-			Name:        scriptBroadcastPending,
-			Description: "Read pending broadcast input hints in this chat. They never make unrelated messages broadcast content.",
-			InputSchema: empty,
+		ActionBinding: agenthost.ScriptToolEntry{
+			Prepare: b.prepareBroadcastTool, Execute: b.executeBroadcastTool, ResultLimit: maxOrdinaryScriptResult,
 		},
-		{
-			Name:        scriptBroadcastAttach,
-			Description: "Use the current received message as content for a pending input only when the user requests that intent. Source chat/message/content are host-bound. Creates preview, never sends.",
-			InputSchema: id,
+		ReadBinding: agenthost.ScriptToolEntry{
+			Prepare: prepareBroadcastRead, Execute: b.executeBroadcastRead, ResultLimit: maxScriptReadBytes,
 		},
-		{Name: scriptBroadcastCancel, Description: "Cancel an owner-scoped pending broadcast input.", InputSchema: id},
-	}
-	entries := make([]agenthost.ScriptToolEntry, 0, len(descriptors))
-	for _, descriptor := range descriptors {
-		entries = append(
-			entries,
-			agenthost.ScriptToolEntry{
-				Descriptor:  descriptor,
-				Prepare:     b.prepareBroadcastTool,
-				Execute:     b.executeBroadcastTool,
-				ResultLimit: maxOrdinaryScriptResult,
-			},
-		)
-	}
-	entries = append(entries, b.broadcastReadEntries()...)
-	return append(entries, b.broadcastReviewEntries()...), nil
+		ReviewBinding: agenthost.ScriptToolEntry{
+			Prepare: b.prepareBroadcastReview, Execute: b.executeBroadcastReview, ResultLimit: maxScriptReadBytes,
+		},
+	}).Entries(ctx, owner)
 }
 
 func (b *Bot) prepareBroadcastTool(
