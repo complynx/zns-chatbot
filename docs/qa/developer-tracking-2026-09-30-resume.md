@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through229, next230. All authorship/routes Codex under override;
+Fresh requests through235, next236. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -23,8 +23,24 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 | 225 | Menu retirement rev7 | FAIL; two authority defects and one SQL cancellation defect; branch correction assigned |
 | 226 | Knowledge SQL/cancellation rev3 | P2 finding; mixed ConnectError causes; transferred to another developer |
 | 227 | Complete registration/massage/food host catalogs | Static PASS e71c535; merged5d81be9a, integrated195host+24botPASS/lint0issues |
-| 228 | Knowledge SQL/cancellation Git successor | Exact a88c23c9; fresh review running |
-| 229 | Managed synthetic agent capability | Exact b2263f; fresh review running |
+| 228 | Knowledge SQL/cancellation Git successor | PASS a88c23c9 and5f3ca030 baseaddendum; mergedcb65243f |
+| 229 | Managed synthetic agent capability | PASS b2263f andecfbd188 baseaddendum; merged1c485ddd |
+| 230 | Host privileged-read policy and admission | PASS7e8dacee; merged5a4d2f27 |
+| 231 | Go-fake provider and three isolated stand templates | PASS146e17cc preparedon5a4d2f27; mergedce427ca5; actualimages/UI/SQL/lifecycle/FQA pending |
+| 232 | Complete modern-order host catalog | PASS73687953; mergedbeforece427ca5; Functional/wholeC pending |
+| 233 | Durable model usage and runtime binding | Static PASS c56c9e4f; merged e72338e1; developer native PG/local gates passed, root integrated135PASS/7SKIP/0FAIL without PG endpoint; Functional/D/E open |
+| 234 | Complete menu authority and context-aware SQL successor | Codex author, Codex override;1770e5f4 review requires SQL-provenance correction; transferred menu_sql_developer,21paths preserved |
+| 235 | Complete models/credits/broadcast host policy | Codex author, Codex override; PASS90d84e14; merged81a9cf73; actual2KiB/32KiB live limits preserved, wholeC/Functional open |
+
+Current coordination (1 October): two real flows/recovery stands run sealed
+ce427ca5 images. Lead verified manual callbacks/edits/uploads; deterministic agent
+recipe remains a preparation defect, not accepted agent readiness. The two source-blind
+FQA reviewers now execute their separate scoped manual/UI subsets after lead freeze.
+The e72338e1 usage merge belongs to the next batch. Dedicated capability lanes:
+C remaining host-policy scope/assessment, D whole-job delivery observations, and E
+full-import/removal capability planning. Menu correction is a parallel fix lane.
+Kanban manager owns board plus CSV/Markdown metrics; root owns integration and
+PROGRESS. Historical assignment paragraphs below do not describe current ownership.
 
 Daniel authorized Git consolidation and developer worktrees. Root creates a
 checkpoint of applied state and serializes integration merges. C developer owns

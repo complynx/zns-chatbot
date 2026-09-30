@@ -1,4 +1,21 @@
-## Current Git transition and validated scope — 2026-09-30
+## Current integrated source and expanded QA — 2026-10-01
+
+Reviewed developer branches integrated throughce427ca5:knowledge SQL precedence
+(QA228+baseaddendum), managed fixtureagent(QA229+baseaddendum), privileged-read
+hostpolicy(QA230), modern-order catalog(QA232), Go-fake/three standtemplates(QA231).
+Developers own localgates and mergeprep/conflicts; root serializes merges. Observed
+queues and handoffs recorded in coordination-metrics.md/CSV and KANBAN.html.
+
+Root combined native5a4d2f27 before lasttwo merges:678PASS/0FAIL/5SKIP testevents,
+sixpackagePASS, affectedlint0issues. PG/lifecycle/Zitadel skips are not acceptance.
+Engineer builds exactce427ca5; FQAlead manages3isolatedstands and2freshreviewers.
+40planned scenarios unexecuted; no READY/FROZEN or FunctionalPASS claimed yet.
+Menu correction and modelusage remain separate developer branches; final model,
+credit and broadcast hostpolicy developing. Production NO-GO; fullbaseline/Edata
+removal/parity/reals/rebase/release gates remain open. No new unresolved Daniel
+choice; independent work continues.
+
+## Historical Git transition and validated scope — 2026-09-30
 
 Daniel authorized consolidation into the current integration branch and separate
 developer branches/worktrees. See git-development.md. No push or production action.
@@ -1463,3 +1480,7 @@ AUD-16 combined PG 18.221s exit 1: все новые `TestOrderRefund*` / `TestR
 GLOBAL SOURCE FREEZE: `native-pg-all-3` actual session 66612 выполняется; manifest `qa.local/go-resume-20260929/native-pg-all-3-source.json` включает tracked + untracked `platform` и `tools/migrate`. Full lint 5 actual session 79086 выполняется. Source edits и другие PG jobs запрещены до снятия freeze; docs разрешены. Core cache/refund/payment текущий состав заморожен, результаты полных gates UNKNOWN до terminal.
 
 Code QA №17 static PASS, report готов. №18 payment exact Opus выполняется по девяти frozen файлам; следующий №19 обычный. Приёмка этапа не повышена.
+
+## Current scope update — 1 October
+
+Common integration81a9cf73 now includes QA233 usage and QA235 models/credits/broadcast policy. Full baseline and architecture acceptance remain open. Menu QA234 found one affected SQL-provenance gap; a new developer owns the correction, so migration090 and payment-retirement integration are pending. Two actualce427ca5 stands are frozen for independent manual/UI acceptance; two reviewers are executing, and no fullFunctionalPASS is claimed. The agent locale prerequisite is documented; reviewers establish its capability independently. Final E materialization must include the future reviewed089/090 schema and actual new CLI/image receipts.

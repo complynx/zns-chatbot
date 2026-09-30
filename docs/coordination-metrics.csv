@@ -1,0 +1,22 @@
+observed_utc,task,object,state,owner,commit,base,evidence,limitations,event_utc
+2026-09-30T22:04:53Z,C01,catalogs,integrated_pass,root,5d81be9a,,QA227 plus root integrated195host24bot and lint0,Scoped proof only; full C FQA pending,
+2026-09-30T22:04:53Z,C01,privileged_reads,ready_for_review,c_registration_developer,7e8dacee,133104f6,Root verified full local gates green and final merge preparation,QA230 assignment not yet confirmed; historical wait start unknown,
+2026-09-30T22:04:53Z,D01,agent_fixture,ready_for_merge,root,ecfbd188,133104f6,Root verified eight-file equivalence to QA229 b2263f13 clean status and local gates,No merge or integrated proof yet; historical wait start unknown,
+2026-09-30T22:04:53Z,F03,knowledge_precedence,local_gates,provider_compatibility_developer,4db4b7c3,133104f6,QA228 a88c23c9 and root metadata-equivalent rebase report,Final full lint pending GoLock; no merge,
+2026-09-30T22:04:53Z,D01,stand_overlay,running_gate,stand_engineer,,5d81be9a,Root verified lint clean and full local tests PASS; Linux race handle3541 running,No completed race or image proof,
+2026-09-30T22:04:53Z,D01,stand_flows,stand_preparing,stand_engineer,,,docs/qa/fqa-lead-2026-09-30-readiness.md,Not READY or FROZEN,
+2026-09-30T22:04:53Z,D05,stand_recovery,stand_preparing,stand_engineer,,,docs/qa/fqa-lead-2026-09-30-readiness.md,Not READY or FROZEN,
+2026-09-30T22:04:53Z,E03,stand_import,stand_preparing,stand_engineer,,,docs/qa/fqa-lead-2026-09-30-readiness.md,Not READY or FROZEN,
+2026-09-30T22:04:53Z,C02,fqa_flows,fqa_planned,fqa_flows,,,docs/qa/fqa-flows-20260930-plan.md,13 scenarios UNTESTED; execution0,
+2026-09-30T22:04:53Z,D05,fqa_recovery_import,fqa_planned,fqa_recovery_import,,,docs/qa/fqa-recovery-import-plan.md,27 scenarios UNTESTED; execution0,
+2026-09-30T22:06:15Z,C01,privileged_reads,reviewing,code_qa_230,7e8dacee,133104f6,Root verified fresh QA230 actually dispatched,No verdict; immutable reviewed commit,
+2026-09-30T22:06:15Z,F03,knowledge_precedence,ready_for_merge,root,5f3ca030,133104f6,Root verified clean full host tests pinned lint green and two source blobs equivalent to QA228 a88c23c9,Root equivalence and reviewer base addendum verification before merge; no merge yet,
+2026-09-30T22:10:07Z,F03,knowledge_precedence,merged,root,cb65243f,133104f6,Git merge commit time verified; QA228 successor source/base addendum PASS,Prepared5f3ca030 clean full local gates; affected integrated checks and FQA pending,2026-09-30T22:07:40Z
+2026-09-30T22:10:07Z,D01,agent_fixture,merged,root,1c485ddd,cb65243f,Git merge commit time verified; QA229 successor equivalence/base addendum PASS,Preparedecfbd188 clean local gates; no integrated/FQA proof yet,2026-09-30T22:07:40Z
+2026-09-30T22:10:07Z,C01,privileged_reads,merged,root,5a4d2f27,1c485ddd,Git merge commit time verified; QA230 static PASS,Prepared7e8dacee clean full local gates; no content conflicts; integrated/FQA pending,2026-09-30T22:07:40Z
+2026-09-30T22:10:07Z,D01,stand_overlay,local_gates,stand_engineer,5cffa904,48197f0,Root verified Linux race terminalPASS and three template configurations,Developer rebase and affected gates on current base required before fresh QA; no running stands/images,
+2026-09-30T22:14:42Z,C01,privileged_reads,integrated_pass,root,5a4d2f27,,Root batched six-package native command exit0 and pinned affected lint0; JSON verified678PASS5SKIP,Unit/config scope only; database URL empty; no stage/FQA acceptance,
+2026-09-30T22:14:42Z,D01,agent_fixture,integrated_pass,root,5a4d2f27,,Root batched six-package native command exit0 and pinned affected lint0; JSON verified678PASS5SKIP,Same shared command not another678PASS; no full PG lifecycle Zitadel or FQA proof,
+2026-09-30T22:14:42Z,F03,knowledge_precedence,integrated_pass,root,5a4d2f27,,Root batched six-package native command exit0 and pinned affected lint0; JSON verified678PASS5SKIP,Same shared command not another678PASS; five skipped scenarios remain unproven,
+2026-09-30T22:14:42Z,C01,order_host_policy,developing,c_registration_developer,,5a4d2f27,Root approved four paths and assigned codex/c-order-host-policy; Git branch exists,No reviewed commit or gates confirmed yet,
+2026-09-30T22:14:42Z,D03,model_usage,developing,d_observability_developer,,5a4d2f27,Root approved ten paths and assigned codex/d-model-usage; exclusive DB zns_model_usage_qa created after absent check,No reviewed commit or gate acceptance yet; DB exclusively assigned,

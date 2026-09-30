@@ -38,6 +38,31 @@ Commits/branches/merges are locally authorized. Push, publication and production
 cutover remain separate. Keep current failing baseline and untested flows visible.
 Do not amend a reviewed commit while its review is running; make a successor.
 
+## Queue and acceptance batches
+
+Keep at most three finished branches waiting for review or merge. At the limit,
+developers help clear their gate/conflict/readiness dependencies before opening
+another finished handoff. Maintain the agreed two–three capability developer lanes;
+this limit concerns the handoff queue, not all active development.
+
+Functional QA consumes an immutable batch identified by integration commit and
+image digests. New merges belong to the next batch; they do not rebuild an active
+QA stand. Build each required image once per exact source/build configuration and
+reuse its immutable digest across isolated stands. Changed build inputs require a
+new receipt; matching commit names alone do not prove matching images.
+
+Developer handoff contains: branch, exact commit/base, owned paths, clean status,
+conflict resolution, formatting/lint/test commands and outcomes, evidence paths,
+remaining limitations and required independent acceptance scope. No ready handoff
+with failing affected gates. Gate evidence is for coordination; reviewers receive
+requirements and immutable diff/source, not author conclusions or earlier findings.
+
+FQA lead manages stand preparation, freeze/release, reviewer allocation and the
+requirement-to-scenario matrix. Kanban manager owns observed queue/wait metrics
+and task handoffs. Root owns integration/release decisions and verified shared gate
+outcomes. Record waiting times only from observed events; unknown historical starts
+stay unknown. Test counts are evidence quantities, never a readiness percentage.
+
 Existing candidates enter this workflow by checking their before/dependency
 hashes, applying their exact final files on a task branch, and committing them.
 Record the candidate-to-commit mapping. If the base has changed, resolve and review
