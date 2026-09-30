@@ -74,6 +74,7 @@ type RegistrationFixtureRow struct {
 
 // ApplyRegistrationFixture requires the dedicated database's owning role and
 // all three original synthetic identities. Repeating init never restores grants.
+// Prepare the ordinary product fixtures first so their later replay is inert.
 func ApplyRegistrationFixture(
 	ctx context.Context,
 	db *pgxpool.Pool,
@@ -150,20 +151,18 @@ func initializeRegistrationFixture(ctx context.Context, tx pgx.Tx, opens time.Ti
 	err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM core.pass_bookings)
  AND NOT EXISTS(SELECT 1 FROM core.registration_intents)
  AND NOT EXISTS(SELECT 1 FROM core.pass_events WHERE id IN ($1,$2))
- AND ((NOT EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name='product-v1')
- AND NOT EXISTS(SELECT 1 FROM core.pass_booking_admins)
- AND NOT EXISTS(SELECT 1 FROM core.pass_payment_admins))
- OR (EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name='product-v1')
+ AND EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name='product-v1')
+ AND EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name='product-passport-v1')
  AND (SELECT count(*) FROM core.pass_booking_admins)=1
  AND EXISTS(SELECT 1 FROM core.pass_booking_admins WHERE owner='bob')
  AND (SELECT count(*) FROM core.pass_payment_admins)=2
  AND (SELECT count(*) FROM core.pass_payment_admins WHERE owner='bob'
- AND event_id IN ('sandbox-festival','sandbox-passport-pair'))=2))`, RegistrationFixtureEventA, RegistrationFixtureEventB).Scan(&clean)
+ AND event_id IN ('sandbox-festival','sandbox-passport-pair'))=2`, RegistrationFixtureEventA, RegistrationFixtureEventB).Scan(&clean)
 	if err != nil {
 		return err
 	}
 	if !clean {
-		return errors.New("registration fixture requires a fresh registration database")
+		return errors.New("registration fixture requires fresh original product fixtures and unchanged roles")
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO core.pass_events(id,finishes_at,titles,assignment_rule,amount_cap_per_role)
  VALUES($1,$3::timestamptz+interval '7 days','{"en":"Registration A","ru":"Регистрация A"}','paired',1),
@@ -172,7 +171,7 @@ func initializeRegistrationFixture(ctx context.Context, tx pgx.Tx, opens time.Ti
 		return err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO core.pass_event_tiers(event_id,position,amount,price,starts_at)
- VALUES($1,0,2,100,$3),($1,1,2,150,$3),($2,0,2,100,$3)`, RegistrationFixtureEventA, RegistrationFixtureEventB, opens)
+ VALUES($1,0,2,100,$3),($1,1,2,150,$3::timestamptz+interval '1 day'),($2,0,2,100,$3)`, RegistrationFixtureEventA, RegistrationFixtureEventB, opens)
 	if err != nil {
 		return err
 	}

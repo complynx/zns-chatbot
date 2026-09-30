@@ -201,6 +201,7 @@ func TestRegistrationFixtureRealStateAndRevocation(t *testing.T) {
 	f.Action, f.OpensAt = "init", time.Now().Add(24*time.Hour)
 	_, err = sandbox.ApplyRegistrationFixture(ctx, db, f)
 	require.NoError(t, err)
+	require.NoError(t, sandbox.ApplyProductFixture(ctx, db))
 	caps, err = service.Capabilities(ctx, "bob", sandbox.RegistrationFixtureEventA)
 	require.NoError(t, err)
 	assert.NotContains(t, caps.Actions, "proof_accept")
