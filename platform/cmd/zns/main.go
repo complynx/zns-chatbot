@@ -254,6 +254,11 @@ func botModel(cfg config.Config, runtime *observability.Runtime, recorders ...cr
 		return nil, err
 	}
 	if len(recorders) > 0 {
+		if service, ok := recorders[0].(credits.Service); ok {
+			if err = runtime.RegisterModelUsage(service); err != nil {
+				return nil, err
+			}
+		}
 		switch typed := model.(type) {
 		case agent.Remote:
 			typed.Receipts, _ = recorders[0].(credits.RemoteReceiptVerifier)

@@ -57,12 +57,13 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	require.NoError(t, err)
 	const lastOld = "087_telegram_inbox_retries.sql"
 	const upgrade = "088_delivery_queue_observation.sql"
+	const current = "089_credit_usage_observation.sql"
 	foundOld, foundUpgrade := false, false
 	expectedOldLedger := make([]queueUpgradeLedgerEntry, 0, len(entries))
 	for _, entry := range entries {
-		if entry.Name() > upgrade {
+		if entry.Name() > current {
 			t.Fatalf(
-				"upgrade proof is pinned to the 088 embedded schema epoch; newer migration %s requires a new scoped fixture",
+				"upgrade proof is pinned to the 089 embedded schema epoch; newer migration %s requires a new scoped fixture",
 				entry.Name(),
 			)
 		}
@@ -113,6 +114,10 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		append([]queueUpgradeLedgerEntry(nil), expectedOldLedger...),
 		queueUpgradeLedgerEntry{Name: upgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(upgradeBody))},
 	)
+	currentBody, err := migrations.ReadFile("migrations/" + current)
+	require.NoError(t, err)
+	expectedUpgradedLedger = append(expectedUpgradedLedger,
+		queueUpgradeLedgerEntry{Name: current, Checksum: fmt.Sprintf("%x", sha256.Sum256(currentBody))})
 	var hadTimestamp bool
 	require.NoError(
 		t,
@@ -142,15 +147,15 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		t,
 		expectedUpgradedLedger,
 		queueUpgradeLedger(t, db),
-		"only the actual 088 ledger entry is added; old entries remain exact",
+		"only actual 088 and 089 ledger entries are added; old entries remain exact",
 	)
 	require.JSONEq(
 		t,
 		oldLedgerSnapshot,
 		queueUpgradeLedgerSnapshot(t, db, lastOld),
-		"088 must preserve every old ledger field including applied timestamps",
+		"the upgrade must preserve every old ledger field including applied timestamps",
 	)
-	upgradedLedgerSnapshot := queueUpgradeLedgerSnapshot(t, db, upgrade)
+	upgradedLedgerSnapshot := queueUpgradeLedgerSnapshot(t, db, current)
 	after := queueUpgradeState(t, db, true)
 	require.JSONEq(t, before, after, "all existing order/retry/cooldown metadata must survive")
 	var unknown int64
@@ -214,7 +219,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	require.JSONEq(
 		t,
 		upgradedLedgerSnapshot,
-		queueUpgradeLedgerSnapshot(t, db, upgrade),
+		queueUpgradeLedgerSnapshot(t, db, current),
 		"replay preserves the complete ledger including applied timestamps",
 	)
 }
