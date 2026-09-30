@@ -34,7 +34,7 @@ func (b *Bot) scriptPassToolReadChanged(
 			privileged && read.Request.View != view {
 			return true, nil
 		}
-		if err := b.reauthorizeRegistrationRead(ctx, owner, &read); err != nil {
+		if err := b.registrationRevalidator().Read(ctx, owner, &read); err != nil {
 			return false, err
 		}
 		return read.Error != "", nil
@@ -84,22 +84,5 @@ func (b *Bot) scriptPassInvitationsChanged(
 	if err != nil {
 		return true, passMenuFailure(err)
 	}
-	return !passInvitationsPresent(previous.Items, current.Invitations), nil
-}
-
-func passInvitationsPresent(previous, current []passbooking.Invitation) bool {
-	for _, before := range previous {
-		found := false
-		for _, after := range current {
-			if before.From.Owner == after.From.Owner && before.Version == after.Version &&
-				!before.CreatedAt.IsZero() && before.CreatedAt.Equal(after.CreatedAt) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-	return true
+	return !agenthost.PassInvitationsPresent(previous.Items, current.Invitations), nil
 }
