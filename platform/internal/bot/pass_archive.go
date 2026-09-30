@@ -5,7 +5,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 
-	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
@@ -14,19 +13,6 @@ import (
 
 func historicalPassView(view string) bool {
 	return view == "" || view == passMenuHome || view == registrationPayment
-}
-
-func (b *Bot) reauthorizeOwnerPass(ctx context.Context, owner string, read *agent.RegistrationReadResult) error {
-	booking, err := b.API.PassBooking(ctx, owner, read.Request.Event)
-	if err != nil && passMenuFailure(err) != nil {
-		return err
-	}
-	if err != nil || booking.Version == 0 {
-		*read = agent.RegistrationReadResult{Request: read.Request, Error: mediaForbidden}
-	} else if read.Booking != nil && !samePassSnapshot(*read.Booking, booking) {
-		*read = agent.RegistrationReadResult{Request: read.Request, Error: "stale"}
-	}
-	return nil
 }
 
 // Creation identity prevents a recreated booking with a reset version from

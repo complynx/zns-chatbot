@@ -38,7 +38,7 @@ func (s botContextSources) RefreshRegistration(
 	owner string,
 	value *agent.RegistrationContext,
 ) error {
-	return s.bot.reauthorizeRegistrationContext(ctx, owner, value)
+	return s.bot.registrationRevalidator().Context(ctx, owner, value)
 }
 func (s botContextSources) Script(ctx context.Context, owner string, id int64) (*agent.ScriptContext, error) {
 	input := agent.Input{}
@@ -52,4 +52,8 @@ func (b *Bot) historyReader() agenthost.HistoryReader {
 
 func (b *Bot) knowledgeReader() agenthost.KnowledgeReader {
 	return agenthost.KnowledgeReader{Domain: b.API, Store: b.readStore()}
+}
+
+func (b *Bot) registrationRevalidator() agenthost.RegistrationRevalidator {
+	return agenthost.RegistrationRevalidator{Domain: b.API, Authority: b.Host}
 }
