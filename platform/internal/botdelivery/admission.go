@@ -40,7 +40,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Observation{}, core.DatabaseOperationError(err)
+		return Observation{}, core.DatabaseOperationContextError(ctx, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = s.lockSource(ctx, tx, i); err != nil {
@@ -64,7 +64,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 		i.Target,
 	)
 	if err != nil {
-		return Observation{}, core.DatabaseOperationError(err)
+		return Observation{}, core.DatabaseOperationContextError(ctx, err)
 	}
 	current, err := Read(ctx, tx, i.BotID, i.QueueReference(), true)
 	if err != nil {
@@ -84,7 +84,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 	if err != nil {
 		return Observation{}, err
 	}
-	return current.Observation(), core.DatabaseOperationError(tx.Commit(ctx))
+	return current.Observation(), core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 }
 func (s Service) lockSource(ctx context.Context, tx pgx.Tx, i Intent) error {
 	return s.lockRenderedSource(ctx, tx, i, nil)
@@ -181,7 +181,7 @@ func (s Service) begin(
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return observed, false, core.DatabaseOperationError(err)
+		return observed, false, core.DatabaseOperationContextError(ctx, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if observed.Reference.Family == familyPasses && observed.Reference.Source != nil &&
@@ -223,10 +223,10 @@ func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, ta
    WHERE bot_id=$1 AND owner=$2 AND state='sent' AND NOT continuation_done
    AND reference->>'kind'='card' AND reference->>'card_key'=$3)`, current.BotID, current.Owner, current.Reference.CardKey).Scan(&pendingReceipt)
 		if err != nil {
-			return current, false, core.DatabaseOperationError(err)
+			return current, false, core.DatabaseOperationContextError(ctx, err)
 		}
 		if pendingReceipt {
-			return current, false, core.DatabaseOperationError(tx.Commit(ctx))
+			return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 		}
 	}
 	admission, err := delivery.Begin(ctx, tx, s.Delivery, current.QueueReference())
@@ -234,7 +234,7 @@ func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, ta
 		return current, false, err
 	}
 	if !admission.Ready {
-		return current, false, core.DatabaseOperationError(tx.Commit(ctx))
+		return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 	}
 	current.Attempt++
 	current.State = delivery.Sending
@@ -261,9 +261,9 @@ func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, ta
 		receipt,
 	)
 	if err != nil {
-		return current, false, core.DatabaseOperationError(err)
+		return current, false, core.DatabaseOperationContextError(ctx, err)
 	}
-	return current, true, core.DatabaseOperationError(tx.Commit(ctx))
+	return current, true, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 }
 func (s Service) Begin(ctx context.Context, in BeginRequest) (BeginResult, error) {
 	if in.PreparationFailure {
@@ -374,7 +374,7 @@ func (s Service) lockPayloadActors(
 	var chat int64
 	if err = tx.QueryRow(ctx, `SELECT telegram_id FROM core.users WHERE id=$1 FOR SHARE`, i.Owner).
 		Scan(&chat); err != nil {
-		return core.DatabaseOperationError(err)
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	if chat != i.Chat {
 		return ErrStale

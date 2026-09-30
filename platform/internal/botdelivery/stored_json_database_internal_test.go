@@ -82,7 +82,7 @@ func TestStoredPassMenuIncompatibleJSONIsNotDatabaseFailure(t *testing.T) {
 
 	missing := Intent{Owner: "bob", Chat: 202, Reference: i.Reference}
 	_, err = readPassMenuFamily(t.Context(), tx, missing)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrStale)
 	require.False(t, core.IsDatabaseFailure(err))
 	err = lockViewBinding(t.Context(), tx, missing, familyRead{})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -133,7 +133,7 @@ func TestStoredJSONSyntheticSQLAndDecodeProvenance(t *testing.T) {
 		lockErr := lockViewBinding(t.Context(), tx, passes, familyRead{})
 		storeErr := storeBotResult(t.Context(), tx, result, stored)
 		for index, err := range []error{readErr, lockErr, storeErr} {
-			assertStoredJSONFailure(t, index == 0, failure, err)
+			assertStoredJSONFailure(t, index, failure, err)
 		}
 	}
 	// A successful SQL row is decoded only after the scan into raw bytes.
@@ -154,16 +154,16 @@ func TestStoredJSONSyntheticSQLAndDecodeProvenance(t *testing.T) {
 	}
 }
 
-func assertStoredJSONFailure(t *testing.T, menu bool, failure, actual error) {
+func assertStoredJSONFailure(t *testing.T, boundary int, failure, actual error) {
 	t.Helper()
 	expected := failure
 	if errors.Is(failure, io.EOF) {
 		expected = core.ErrDatabase
 	}
-	if menu && errors.Is(failure, pgx.ErrNoRows) {
+	if boundary == 0 && errors.Is(failure, pgx.ErrNoRows) {
 		expected = ErrStale
 	}
-	if menu && errors.Is(failure, context.Canceled) {
+	if boundary < 2 && errors.Is(failure, context.Canceled) {
 		expected = core.ErrDatabase
 	}
 	require.ErrorIs(t, actual, expected)
