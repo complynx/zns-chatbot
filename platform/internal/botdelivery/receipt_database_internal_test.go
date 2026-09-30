@@ -54,8 +54,9 @@ func TestRenderedTargetDatabaseFailureAndAbsentView(t *testing.T) {
 
 // admissionSQLFailure permits actor prelocks and fails the actual binding read.
 type admissionSQLFailure struct {
-	receiptSQLFailure
+	pgx.Tx
 
+	err     error
 	pending bool
 }
 
@@ -69,14 +70,14 @@ func (admissionSQLFailure) Query(context.Context, string, ...any) (pgx.Rows, err
 	return admissionEmptyRows{}, nil
 }
 
-func (tx admissionSQLFailure) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+func (tx admissionSQLFailure) QueryRow(context.Context, string, ...any) pgx.Row {
 	if tx.pending {
 		return readDatabaseRow(func(dest ...any) error {
 			*dest[0].(*bool) = true
 			return nil
 		})
 	}
-	return tx.receiptSQLFailure.QueryRow(ctx, sql, args...)
+	return readDatabaseRow(func(...any) error { return tx.err })
 }
 
 func (tx admissionSQLFailure) Commit(context.Context) error { return tx.err }
@@ -86,7 +87,7 @@ func TestAdmissionSQLBoundariesPreserveProvenance(t *testing.T) {
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 	expired, expire := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
-	defer expire()
+	t.Cleanup(expire)
 	cases := []struct {
 		name          string
 		ctx           context.Context
@@ -97,7 +98,12 @@ func TestAdmissionSQLBoundariesPreserveProvenance(t *testing.T) {
 		{"caller_cancel", cancelled, context.Canceled, context.Canceled},
 		{"caller_deadline", expired, context.DeadlineExceeded, context.DeadlineExceeded},
 		{"cancelled_SQL", cancelled, &pgconn.PgError{Code: "42601", Message: "private statement"}, core.ErrDatabase},
-		{"cancelled_serialization", cancelled, &pgconn.PgError{Code: "40001", Message: "private statement"}, core.ErrDatabaseSerialization},
+		{
+			"cancelled_serialization",
+			cancelled,
+			&pgconn.PgError{Code: "40001", Message: "private statement"},
+			core.ErrDatabaseSerialization,
+		},
 		{"absence", t.Context(), pgx.ErrNoRows, pgx.ErrNoRows},
 	}
 	boundaries := []struct {
@@ -136,7 +142,8 @@ func TestAdmissionSQLBoundariesPreserveProvenance(t *testing.T) {
 			for _, testcase := range cases {
 				t.Run(testcase.name, func(t *testing.T) {
 					t.Parallel()
-					err := boundary.run(testcase.ctx, admissionSQLFailure{receiptSQLFailure: receiptSQLFailure{err: testcase.failure}})
+					tx := admissionSQLFailure{err: testcase.failure}
+					err := boundary.run(testcase.ctx, tx)
 					require.ErrorIs(t, err, testcase.want)
 					require.NotContains(t, err.Error(), "private statement")
 				})

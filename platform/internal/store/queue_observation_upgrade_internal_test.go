@@ -57,13 +57,14 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	require.NoError(t, err)
 	const lastOld = "087_telegram_inbox_retries.sql"
 	const upgrade = "088_delivery_queue_observation.sql"
-	const current = "089_credit_usage_observation.sql"
+	const credit = "089_credit_usage_observation.sql"
+	const current = passDeliveryTargetsUpgrade
 	foundOld, foundUpgrade := false, false
 	expectedOldLedger := make([]queueUpgradeLedgerEntry, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Name() > current {
 			t.Fatalf(
-				"upgrade proof is pinned to the 089 embedded schema epoch; newer migration %s requires a new scoped fixture",
+				"upgrade proof is pinned to the 090 embedded schema epoch; newer migration %s requires a new scoped fixture",
 				entry.Name(),
 			)
 		}
@@ -116,6 +117,10 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	)
 	currentBody, err := migrations.ReadFile("migrations/" + current)
 	require.NoError(t, err)
+	creditBody, err := migrations.ReadFile("migrations/" + credit)
+	require.NoError(t, err)
+	expectedUpgradedLedger = append(expectedUpgradedLedger,
+		queueUpgradeLedgerEntry{Name: credit, Checksum: fmt.Sprintf("%x", sha256.Sum256(creditBody))})
 	expectedUpgradedLedger = append(expectedUpgradedLedger,
 		queueUpgradeLedgerEntry{Name: current, Checksum: fmt.Sprintf("%x", sha256.Sum256(currentBody))})
 	var hadTimestamp bool
@@ -140,6 +145,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
  SELECT id,'{"chat":"101"}','pending',7,4,4242,'infinity',statement_timestamp()+interval '1 hour','telegram_rate_limit' FROM core.admin_messages`,
 	)
 	require.NoError(t, err)
+	seedPassDeliveryTargetsUpgrade(t, db)
 	// Compare the exact pre-upgrade durable scheduling state, not invented values.
 	before := queueUpgradeState(t, db, false)
 	require.NoError(t, Migrate(t.Context(), db))
@@ -147,7 +153,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		t,
 		expectedUpgradedLedger,
 		queueUpgradeLedger(t, db),
-		"only actual 088 and 089 ledger entries are added; old entries remain exact",
+		"only actual 088, 089 and 090 ledger entries are added; old entries remain exact",
 	)
 	require.JSONEq(
 		t,
@@ -158,6 +164,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	upgradedLedgerSnapshot := queueUpgradeLedgerSnapshot(t, db, current)
 	after := queueUpgradeState(t, db, true)
 	require.JSONEq(t, before, after, "all existing order/retry/cooldown metadata must survive")
+	checkPassDeliveryTargetsUpgrade(t, db)
 	var unknown int64
 	require.NoError(
 		t,
@@ -209,7 +216,10 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 			Scan(&retained),
 	)
 	require.Equal(t, original, retained, "retry projection retains the initial enqueue age")
+	replayState := queueUpgradeState(t, db, true)
 	require.NoError(t, Migrate(t.Context(), db), "restart migration is idempotent")
+	require.JSONEq(t, replayState, queueUpgradeState(t, db, true),
+		"replay preserves every durable scheduling and receipt field")
 	require.Equal(
 		t,
 		expectedUpgradedLedger,
@@ -222,6 +232,8 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		queueUpgradeLedgerSnapshot(t, db, current),
 		"replay preserves the complete ledger including applied timestamps",
 	)
+	checkPassDeliveryTargetsUpgrade(t, db)
+	checkPassDeliveryTargetsPlan(t, db)
 }
 
 type queueUpgradeLedgerEntry struct {
@@ -261,8 +273,64 @@ func queueUpgradeState(t *testing.T, db *pgxpool.Pool, after bool) string {
  'pacing',(SELECT jsonb_agg(to_jsonb(p) ORDER BY p.chat) FROM core.delivery_pacing p),
  'fairness',(SELECT jsonb_agg(to_jsonb(f) ORDER BY f.bot_id) FROM core.delivery_fairness f),
  'jobs',(SELECT jsonb_agg(to_jsonb(m) ORDER BY m.id) FROM core.admin_messages m),
- 'attempts',(SELECT jsonb_agg(to_jsonb(d) ORDER BY d.id) FROM core.admin_message_deliveries d))::text`
+ 'attempts',(SELECT jsonb_agg(to_jsonb(d) ORDER BY d.id) FROM core.admin_message_deliveries d),
+ 'bot_intents',(SELECT jsonb_agg(to_jsonb(i) ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`
 	var value string
 	require.NoError(t, db.QueryRow(t.Context(), query).Scan(&value))
 	return value
+}
+
+const passDeliveryTargetsUpgrade = "090_pass_delivery_targets.sql"
+
+func seedPassDeliveryTargetsUpgrade(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	var present bool
+	require.NoError(t, db.QueryRow(t.Context(),
+		`SELECT to_regclass('bot.bot_pass_delivery_targets') IS NOT NULL`).Scan(&present))
+	require.False(t, present, "the genuine predecessor schema does not contain the 090 index")
+	_, err := db.Exec(t.Context(), `INSERT INTO bot.delivery_intents
+ (bot_id,operation_key,effect_key,owner,chat_id,reference,state,phase,message_id,target_message_id,attempt,receipt)
+ VALUES(4242,'old-pass','view','upgrade-actor',101,'{"family":"passes"}','sent','send',42,0,1,'{"tokens":["retained"]}'),
+ (4242,'pending-pass','view','upgrade-actor',101,'{"family":"passes"}','pending','edit',0,42,0,'{}'),
+ (4242,'other-family','view','upgrade-actor',101,'{"family":"orders"}','sent','send',43,0,1,'{}')`)
+	require.NoError(t, err)
+}
+
+func checkPassDeliveryTargetsUpgrade(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	var definition string
+	require.NoError(t, db.QueryRow(
+		t.Context(),
+		`SELECT indexdef FROM pg_indexes WHERE schemaname='bot' AND indexname='bot_pass_delivery_targets'`,
+	).Scan(&definition))
+	require.Equal(
+		t,
+		"CREATE INDEX bot_pass_delivery_targets ON bot.delivery_intents USING btree (bot_id, owner, chat_id, message_id, attempted_at DESC NULLS LAST, created_at DESC, operation_key DESC, effect_key DESC) WHERE ((state = 'sent'::text) AND ((reference ->> 'family'::text) = 'passes'::text))",
+		definition,
+		"090 has the exact bounded receipt lookup keys, deterministic order and private pass predicate",
+	)
+}
+
+func checkPassDeliveryTargetsPlan(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	tx, err := db.Begin(t.Context())
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(t.Context()) }()
+	_, err = tx.Exec(t.Context(), `INSERT INTO bot.delivery_intents
+ (bot_id,operation_key,effect_key,owner,chat_id,reference,state,phase,message_id)
+ SELECT 4242,'plan-history-'||n,'view','unrelated-owner',202,'{"family":"passes"}','sent','send',n
+ FROM generate_series(1,10000) n`)
+	require.NoError(t, err)
+	_, err = tx.Exec(t.Context(), "ANALYZE bot.delivery_intents")
+	require.NoError(t, err)
+	var plan string
+	require.NoError(t, tx.QueryRow(t.Context(), `EXPLAIN (FORMAT JSON)
+ SELECT operation_key,effect_key FROM bot.delivery_intents
+ WHERE bot_id=$1 AND owner=$2 AND chat_id=$3 AND state='sent' AND message_id=$4
+ AND reference->>'family'='passes'
+ ORDER BY attempted_at DESC NULLS LAST,created_at DESC,operation_key DESC,effect_key DESC LIMIT 1`,
+		int64(4242), "upgrade-actor", int64(101), int64(42)).Scan(&plan))
+	require.Contains(t, plan, `"Index Name": "bot_pass_delivery_targets"`,
+		"the bounded successful-receipt lookup uses 090 with large unrelated history")
+	require.Contains(t, plan, `"Node Type": "Limit"`)
 }
