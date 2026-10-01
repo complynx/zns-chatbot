@@ -454,7 +454,7 @@ func TestRegistrationClockAnnouncementsAndPassportEligibility(t *testing.T) {
 			// A second assigned owner remains unmarked after domain finish although wall time is still before finish.
 			_, err = db.Exec(
 				t.Context(),
-				"INSERT INTO core.pass_bookings(event_id,owner,version,state,role,kind,created_at,assigned_at,price) VALUES('dance','bob',1,'assigned','follower','solo',$1,$1,100)",
+				"INSERT INTO core.pass_bookings(event_id,owner,version,state,role,kind,payment_admin,created_at,assigned_at,price) VALUES('dance','bob',1,'assigned','follower','solo','bob',$1,$1,100)",
 				start,
 			)
 			require.NoError(t, err)
