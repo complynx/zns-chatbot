@@ -68,3 +68,5 @@ Fresh reviews267/268 are terminalFAIL, not pending or acceptance. Payment7 trans
 Full40 Cclock candidate93cab989 terminal authorLinux/PG/race/default/manual compatibility gates passed, resourcecleanupconfirmed. FreshQA269actuallyreadonlyCLI86645; no source/FQA acceptance yet. Operator5 successor planning transferred runtime developer afteracceptedC, no concurrentoldworktreewrites.
 
 QA269terminalFAIL3 overrides any pending-review statement: actualfull40 scopedgatesPASS not acceptance. Clockcorrection transferred freshdeveloper isolatedsame40. Rootproduct stillbd150, no rejectedcandidateintegrated. Payment andmodel correctionsparallel; operator5 readonlyplanprepared. Finalcomposition/FQA40/fullbaseline/production remainopen.
+
+Newmodel10 immutable482214b4 actualroot68525 fullPG failure/reboot selectorPASS7.952s, noFAILSKIP, exactrawhashmanifest/currentsourceclean/identicalDBinventory. FreshQA270CLI24715active. Parity-current inventory refreshed70verifiedsourceanchors,3actualentrygaps; architecture/parity acceptance unchanged. Rootproductbd150, documents e1ad9c17. Next271.

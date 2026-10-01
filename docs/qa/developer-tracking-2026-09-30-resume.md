@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through269, next270. All authorship/routes Codex under override;
+Fresh requests through270, next271. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -185,3 +185,5 @@ QA267 terminal CLI70176 FAIL1 revoked can_book unavailable-card fallback Send; a
 Request269 allocated BEFORE dispatch: fresh full40 Cclock immutable93cab98916ae3e49e1b90be20320d3786a15dde5/basebd150d5b1b6f91977d1597686e889543dab22330,39changed plus existing unchangedadmission_retention.go. All final authoractualLinux startup/RO/race/clock6/default19/supplementalnilclock14PG gates terminal0 no LinuxFAILSKIP; Windowsunitfmtlintbothtargets/build/sqlc clean withexistingWindowsDB/OSskips explicit. Fresh standalone readonly CodexCLIoverride, originalscope only no authorreports/findings/tracking/history. Next270.
 
 QA269terminal CLI86645 FAIL3: writable mountalias boundary, passport postprofilelock time, announcement postattemptlock time. After repeated263/269 returns transferred fresh clock_final_boundary_developer (existing payment_card_developer nownewclockassignment) isolated newworktree full40 scope, original93/1ae/3345 protected. No Claude or reviewerhintleak; next270 unallocated. Operatorpreparation5 completed read-only. Parity inventory assigned separate sourceanalysis, not formalQA.
+
+Request270 allocatedBEFOREdispatch: complete10 immutable482214b48161b368246dbcc8abf673f130da5668/basebd150d5b1b6f91977d1597686e889543dab22330. Codex author freshreadonly standalone CodexCLIoverride, allauthorunits/race/pinnedfmtlint/build terminalPASS, root68525 actualoriginal2PG plus immediate_reboot/later_save_then_reboot bothPASS/package7.952s0FAILSKIP;10rawhashes and identicalparentDBsnapshots verified, sourceclean. Originalscopeonly no priorfindings/tracking/authorreports. Next271.
