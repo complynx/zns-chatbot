@@ -24,7 +24,7 @@ const adminPageIngressUpgrade = "091_admin_page_ingress_proof.sql"
 
 func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	t.Parallel()
-	db := creditObservationUpgradeDatabase(t)
+	db := isolatedCreditObservationUpgradeDatabase(t)
 	expectedOld := applyCreditObservationPredecessor(t, db)
 	require.Equal(t, expectedOld, queueUpgradeLedger(t, db))
 	oldLedger := queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql")
@@ -98,9 +98,28 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	checkCreditObservationIndexPlan(t, db, item)
 }
 
-func creditObservationUpgradeDatabase(t *testing.T) *pgxpool.Pool {
+func isolatedCreditObservationUpgradeDatabase(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	address := os.Getenv("TEST_DATABASE_URL")
+	if address != "" {
+		// Only this fixture needs a separate cluster for the index safety horizon.
+		address = os.Getenv("TEST_CREDIT_UPGRADE_DATABASE_URL")
+		if address == "" {
+			t.Fatal(
+				"TEST_CREDIT_UPGRADE_DATABASE_URL required: use a separate PostgreSQL cluster for the credit upgrade proof",
+			)
+		}
+	}
+	return creditObservationUpgradeDatabaseAt(t, address)
+}
+
+func creditObservationUpgradeDatabase(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	return creditObservationUpgradeDatabaseAt(t, os.Getenv("TEST_DATABASE_URL"))
+}
+
+func creditObservationUpgradeDatabaseAt(t *testing.T, address string) *pgxpool.Pool {
+	t.Helper()
 	if address == "" {
 		if os.Getenv("CI") != "" {
 			t.Fatal("TEST_DATABASE_URL required in CI")
