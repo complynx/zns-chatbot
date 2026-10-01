@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"slices"
 	"strconv"
@@ -697,4 +698,95 @@ func notificationBusinessSnapshot(t *testing.T, r *notificationRuntimeFixture) s
  'food',(SELECT jsonb_agg(to_jsonb(v) ORDER BY v.id) FROM core.food_orders v),
  'food_payments',(SELECT jsonb_agg(to_jsonb(v) ORDER BY v.order_id,v.kind,v.generation) FROM core.food_payments v))`).Scan(&raw))
 	return string(raw)
+}
+
+func heldNotification429(t *testing.T) (string, <-chan telegram.Send, func()) {
+	t.Helper()
+	arrived := make(chan telegram.Send, 1)
+	unblock := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(unblock) }) }
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		var send telegram.Send
+		if json.NewDecoder(request.Body).Decode(&send) != nil {
+			http.Error(w, "invalid synthetic request", http.StatusBadRequest)
+			return
+		}
+		select {
+		case arrived <- send:
+		case <-request.Context().Done():
+			return
+		}
+		select {
+		case <-unblock:
+		case <-request.Context().Done():
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = fmt.Fprint(
+			w,
+			`{"ok":false,"error_code":429,"description":"synthetic confirmed cooldown","parameters":{"retry_after":60}}`,
+		)
+	}))
+	t.Cleanup(func() { release(); server.Close() })
+	return server.URL, arrived, release
+}
+
+func TestNotificationUncertainRetryKnown429FencesContradictoryReceipt(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		for _, policy := range []string{"pending", "cancelled"} {
+			t.Run(domain+"/"+policy, func(t *testing.T) {
+				t.Parallel()
+				r := notificationRuntime(t, domain)
+				url, arrived, release := heldNotification429(t)
+				r.f.b.TG.Base = url
+				finished := make(chan error, 1)
+				go func() { finished <- exactNotificationDelivery(r, domain)(t.Context(), r.first) }()
+				var request telegram.Send
+				select {
+				case request = <-arrived:
+				case <-t.Context().Done():
+					t.Fatal("admitted wire did not reach held synthetic provider")
+				}
+				require.NotEmpty(t, request.Text)
+				admitted := r.status(t, r.first)
+				require.Equal(t, "sending", admitted.State)
+				command, err := r.f.db.Exec(t.Context(), "UPDATE "+r.table+
+					" SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1 AND delivery_attempt=$2 AND delivery_state='sending'",
+					r.first, admitted.Attempt)
+				require.NoError(t, err)
+				require.EqualValues(t, 1, command.RowsAffected())
+				require.NoError(t, recoverNotificationDelivery(r, domain)(t.Context()))
+				recovered := r.status(t, r.first)
+				require.Equal(t, "pending", recovered.State)
+				require.Equal(t, admitted.Attempt, recovered.Attempt)
+				require.Equal(t, admitted.Attempt, recovered.LastUncertainAttempt)
+				release()
+				require.NoError(t, <-finished)
+				known := r.status(t, r.first)
+				require.Equal(
+					t,
+					"telegram_rate_limit",
+					known.Reason,
+					"the real held HTTP response must be classified and committed",
+				)
+				require.Equal(t, recovered.LastUncertainAttempt, known.LastUncertainAttempt)
+				if policy == "cancelled" {
+					r.postAttempt(t, "complete", map[string]any{
+						"id": r.first, "attempt": admitted.Attempt,
+						"outcome": delivery.Outcome{Kind: delivery.Cancelled, Reason: "synthetic_policy_cancel"},
+					}, http.StatusOK)
+				}
+				before := notificationReceiptSnapshot(t, r)
+				// This rejected input contradicts the confirmed 429; it is not a delivered receipt.
+				r.postAttempt(t, "complete", map[string]any{
+					"id": r.first, "attempt": admitted.Attempt, "text": request.Text,
+					"outcome": delivery.Outcome{Kind: delivery.Succeeded, MessageID: 987654},
+				}, http.StatusConflict)
+				assert.Equal(t, before, notificationReceiptSnapshot(t, r))
+			})
+		}
+	}
 }
