@@ -65,8 +65,8 @@ func TestRegistrationAnnouncementDispatcherUsesCapturedText(t *testing.T) {
 		string(<-requests),
 	)
 	assert.Equal(t, delivery.Uncertain, completed.Outcome.Kind)
-	assert.EqualValues(t, item.ID, completed.ID)
-	assert.EqualValues(t, item.Attempts, completed.Attempt)
+	assert.Equal(t, item.ID, completed.ID)
+	assert.Equal(t, item.Attempts, completed.Attempt)
 	item.Text = ""
 	require.ErrorContains(t, b.deliverPreparedRegistrationAnnouncement(t.Context(), item), "text is not captured")
 	assert.Empty(t, requests, "missing durable capture must not send")
