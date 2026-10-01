@@ -45,8 +45,11 @@ func runPassIndependentSourceBudgets(t *testing.T, scenario string) {
 	pumpBotDeliveries(t, f.b)
 	prior, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, prior.QueueReference(), false)
 	require.NoError(t, err)
-	require.Equal(t, delivery.Succeeded, prior.State, "phase=%s object=%s update=%d",
-		prior.Phase, prior.Reference.Object, prior.Reference.Update)
+	var projectedSourceCount int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT jsonb_array_length(state->'source'->'authorities')
+ FROM bot.pass_views WHERE owner='alice'`).Scan(&projectedSourceCount))
+	require.Equal(t, delivery.Succeeded, prior.State, "phase=%s object=%s update=%d projected_sources=%d",
+		prior.Phase, prior.Reference.Object, prior.Reference.Update, projectedSourceCount)
 	require.True(t, prior.ContinuationDone)
 	require.NotEmpty(t, prior.Receipt.Tokens)
 	if scenario != "admission_valid" {
