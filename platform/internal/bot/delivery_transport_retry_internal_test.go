@@ -68,10 +68,11 @@ func TestBotTransportRetryCapturedLanguageCard(t *testing.T) {
 	defer server.Close()
 	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
 	ref := botdelivery.Reference{Kind: botdelivery.CardIntent, Family: languageKey, CardKey: languageKey}
+	require.NoError(t, b.bindBotCardSource(ctx, "alice", &ref))
 	queued, err := b.enqueueBotIntent(ctx, "alice", 101, "captured-language", "view", ref, "send")
 	require.NoError(t, err)
-	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
-	original := <-requests
+	testBotCaptureDeliverReady(t, &b, queued.Reference)
+	original := testBotCaptureRequest(t, requests)
 	_, err = db.Exec(ctx, `UPDATE core.users SET language='ru' WHERE id='alice'`)
 	require.NoError(t, err)
 	current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
@@ -80,27 +81,63 @@ func TestBotTransportRetryCapturedLanguageCard(t *testing.T) {
 	restarted.Delivery, restarted.API, restarted.TG = b.Delivery, b.API, b.TG
 	restarted.Host.LocalBotDelivery.Service.Delivery = b.Delivery
 	require.NoError(t, restarted.RecoverBotIntents(ctx))
-	time.Sleep(time.Until(current.NotBefore) + 20*time.Millisecond)
-	require.NoError(t, restarted.DeliverBotIntent(ctx, queued.Reference))
+	require.Equal(t, delivery.Deferred, current.State)
+	testBotCaptureDeliverReady(t, &restarted, queued.Reference)
 	require.JSONEq(
 		t,
 		string(original),
-		string(<-requests),
+		string(testBotCaptureRequest(t, requests)),
 		"resend preserves the original normalized text and keyboard",
 	)
+	require.NoError(t, restarted.bindBotCardSource(ctx, "alice", &ref))
 	_, err = restarted.enqueueBotIntent(ctx, "alice", 101, "fresh-language", "view", ref, "send")
 	require.NoError(t, err)
-	require.NoError(
-		t,
-		restarted.DeliverBotIntent(ctx, delivery.Reference{Owner: delivery.Bot, Key: "fresh-language", Effect: "view"}),
-	)
-	fresh := <-requests
+	testBotCaptureDeliverReady(t, &restarted, delivery.Reference{Owner: delivery.Bot, Key: "fresh-language", Effect: "view"})
+	fresh := testBotCaptureRequest(t, requests)
 	require.NotEqual(t, string(original), string(fresh), "new intents render current Russian preferences")
 	var originalPayload, freshPayload telegram.Send
 	require.NoError(t, json.Unmarshal(original, &originalPayload))
 	require.NoError(t, json.Unmarshal(fresh, &freshPayload))
 	require.NotEqual(t, originalPayload.Text, freshPayload.Text)
 	require.EqualValues(t, 3, calls.Load())
+}
+
+func testBotCaptureDeliverReady(t *testing.T, b *Bot, key delivery.Reference) {
+	t.Helper()
+	var notBefore time.Time
+	require.NoError(t, b.DB.QueryRow(t.Context(), `SELECT GREATEST(i.not_before,
+ (SELECT not_before FROM core.delivery_pacing WHERE bot_id=i.bot_id AND chat=''),
+ (SELECT not_before FROM core.delivery_pacing WHERE bot_id=i.bot_id AND chat=i.chat::text))
+ FROM bot.delivery_intents i WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+		b.Delivery.BotID, key.Key, key.Effect).Scan(&notBefore))
+	wait := time.NewTimer(max(time.Until(notBefore), 0) + 20*time.Millisecond)
+	defer wait.Stop()
+	select {
+	case <-wait.C:
+	case <-t.Context().Done():
+		t.Fatal("test deadline reached before delivery eligibility")
+	}
+	require.NoError(t, b.DeliverBotIntent(t.Context(), key))
+	current, err := botdelivery.Read(t.Context(), b.DB, b.Delivery.BotID, key, false)
+	require.NoError(t, err)
+	require.Positive(t, current.Attempt, "eligible delivery must reach the wire admission")
+}
+
+func testBotCaptureRequest(t *testing.T, requests <-chan []byte) []byte {
+	t.Helper()
+	deadline, ok := t.Deadline()
+	require.True(t, ok, "the test uses the original Go test deadline")
+	wait := time.NewTimer(max(time.Until(deadline)-time.Second, 0))
+	defer wait.Stop()
+	select {
+	case body := <-requests:
+		return body
+	case <-wait.C:
+		t.Fatal("no admitted HTTP request before the test deadline")
+	case <-t.Context().Done():
+		t.Fatal("test cancelled before an admitted HTTP request")
+	}
+	return nil
 }
 
 func TestBotTransportRetryCapturedDocument(t *testing.T) {
@@ -259,7 +296,7 @@ func testBotCapturePrivateFault(t *testing.T, fault string) {
 	require.NoError(t, err)
 	require.NotContains(t, string(visibleHistory), "private original", "wire storage is absent from model history")
 	applyBotCaptureFault(t, &b, fault)
-	require.NoError(t, b.DeliverBotIntent(ctx, key))
+	testBotCaptureDeliverReady(t, &b, key)
 	failed, err := botdelivery.Read(ctx, db, 999, key, false)
 	require.NoError(t, err)
 	expected := delivery.Rejected
@@ -293,7 +330,7 @@ func applyBotCaptureFault(t *testing.T, b *Bot, fault string) {
 		query = `INSERT INTO core.conversation_history_generations(owner,generation) VALUES('alice',1)
  ON CONFLICT(owner) DO UPDATE SET generation=core.conversation_history_generations.generation+1`
 	case "revoke":
-		query = `UPDATE core.users SET can_book=false WHERE id='alice'`
+		query = `UPDATE core.users SET telegram_id=102 WHERE id='alice'`
 	case "missing":
 		query = `DELETE FROM bot.interactions WHERE owner='alice' AND kind LIKE 'delivery_wire:%'`
 	case "corrupt":
@@ -415,7 +452,11 @@ func TestBotTransportRetryCaptureBindingAndStaging(t *testing.T) {
 	require.True(t, ready)
 	wire, err := botdelivery.AdmittedWire(ctx, db, admitted)
 	require.NoError(t, err)
-	require.Equal(t, payload, wire.Payload)
+	expectedWire, err := json.Marshal(payload)
+	require.NoError(t, err)
+	actualWire, err := json.Marshal(wire.Payload)
+	require.NoError(t, err)
+	require.JSONEq(t, string(expectedWire), string(actualWire))
 	require.NoError(t, b.finishBotIntent(ctx, admitted,
 		delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"}, wire.Receipt, false))
 	current, err = botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
