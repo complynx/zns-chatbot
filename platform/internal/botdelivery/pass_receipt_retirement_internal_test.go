@@ -3,6 +3,7 @@ package botdelivery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -14,8 +15,46 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
+
+func TestPassPreparationLockWindowKeepsSeparateSourceBudgets(t *testing.T) {
+	t.Parallel()
+	record := func(prefix string, count int) []readsource.Authority {
+		refs := make([]readsource.Authority, count)
+		for index := range refs {
+			refs[index].Registration = passbooking.ReadAuthority{Kind: passbooking.ReadOwnerMenu,
+				Event: fmt.Sprintf("%s-%03d", prefix, index)}
+		}
+		return refs
+	}
+	current, previous := record("current", 129), record("previous", 129)
+	require.True(t, readsource.Valid(current))
+	require.True(t, readsource.Valid(previous))
+	require.False(t, readsource.Valid(append(append([]readsource.Authority{}, current...), previous...)))
+	prior := Intent{Reference: Reference{Source: &readsource.Derivation{Authorities: previous}}}
+	records, err := passPreparationLocks(current, prior)
+	require.NoError(t, err)
+	require.Len(t, records, 3)
+	require.Equal(t, current, records[0])
+	require.Equal(t, previous, records[2])
+	// Both records reach SQL locking, rather than a false aggregate limit.
+	require.ErrorIs(t, readsource.LockRegistrationMutationPrelude(t.Context(), receiptSQLFailure{err: io.EOF},
+		records[0], nil, []string{"alice"}, records[1:]...), core.ErrDatabase)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, readsource.LockRegistrationMutationPrelude(ctx, receiptSQLFailure{err: context.Canceled},
+		records[0], nil, []string{"alice"}, records[1:]...), context.Canceled)
+	oversized := record("oversized", readsource.MaxAuthorities+1)
+	_, err = passPreparationLocks(oversized, prior)
+	require.ErrorIs(t, err, readsource.ErrLimit)
+	prior.Reference.Source.Authorities = oversized
+	_, err = passPreparationLocks(current, prior)
+	require.ErrorIs(t, err, readsource.ErrLimit)
+	require.ErrorIs(t, readsource.LockRegistrationMutationPrelude(t.Context(), nil, current, nil, nil, oversized),
+		readsource.ErrLimit)
+}
 
 func TestPredecessorPassReceiptRequiresTrustedCanonicalMetadata(t *testing.T) {
 	t.Parallel()

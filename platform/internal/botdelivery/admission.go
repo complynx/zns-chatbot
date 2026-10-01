@@ -121,21 +121,8 @@ func (s Service) lockPayloadSources(
 	if err != nil {
 		return err
 	}
-	lockRefs := refs
-	if retained != nil {
-		lockRefs, err = passPreparationLocks(refs, *retained)
-		if err != nil {
-			return err
-		}
-		if retained.Receipt.Pass != nil && retained.Receipt.Pass.Event != "" {
-			f.events = append(f.events, retained.Receipt.Pass.Event)
-		}
-	}
-	expanded, err := readsource.ExpandProposalSources(ctx, tx, lockRefs)
+	expanded, err := lockPayloadPrelude(ctx, tx, i.Owner, refs, f.events, retained)
 	if err != nil {
-		return err
-	}
-	if err = readsource.LockRegistrationMutationEvents(ctx, tx, expanded, f.events); err != nil {
 		return err
 	}
 	if err = s.lockFamilyEvent(ctx, tx, i); err != nil {
@@ -153,6 +140,29 @@ func (s Service) lockPayloadSources(
 		}
 	}
 	return s.validatePayloadSource(ctx, tx, i, refs, f, viewStale)
+}
+
+func lockPayloadPrelude(ctx context.Context, tx pgx.Tx, owner string, refs []readsource.Authority,
+	events []string, retained *Intent,
+) ([]readsource.Authority, error) {
+	if retained == nil {
+		expanded, err := readsource.ExpandProposalSources(ctx, tx, refs)
+		if err != nil {
+			return nil, err
+		}
+		return expanded, readsource.LockRegistrationMutationEvents(ctx, tx, expanded, events)
+	}
+	records, err := passPreparationLocks(refs, *retained)
+	if err != nil {
+		return nil, err
+	}
+	if retained.Receipt.Pass != nil && retained.Receipt.Pass.Event != "" {
+		events = append(events, retained.Receipt.Pass.Event)
+	}
+	// Prior targets occur only for pass cards. Lock their events/actors together;
+	// later payload validation still uses each independent persisted record.
+	return nil, readsource.LockRegistrationMutationPrelude(ctx, tx, records[0], events,
+		[]string{owner}, records[1:]...)
 }
 
 func refundDeliveryActor(ctx context.Context, tx pgx.Tx, i Intent) (string, error) {

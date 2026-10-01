@@ -3,6 +3,8 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -18,8 +20,157 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+func TestPassIndependentSourceBudgetsAdmissionAndRetirement(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"admission_valid", "preparation_revoked_prior", "receipt_revoked_prior"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			runPassIndependentSourceBudgets(t, scenario)
+		})
+	}
+}
+
+func runPassIndependentSourceBudgets(t *testing.T, scenario string) {
+	t.Helper()
+	f := passMenuFixture(t)
+	priorRun := runPassVM(t, f, 73200, 101, "Show my pass",
+		`return tools.passes.registration.show({event:"dance",view:"home"});`)
+	require.Empty(t, priorRun.Error)
+	prior := widenPendingPassSource(t, f, "prior-budget")
+	pumpBotDeliveries(t, f.b)
+	prior, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, prior.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Succeeded, prior.State)
+	require.True(t, prior.ContinuationDone)
+	require.NotEmpty(t, prior.Receipt.Tokens)
+	if scenario != "admission_valid" {
+		deletePassDeliveryHistory(t, f, "alice")
+	}
+	currentRun := runPassVM(t, f, 73201, 101, "Show my pass again",
+		`return tools.passes.registration.show({event:"dance",view:"home"});`)
+	require.Empty(t, currentRun.Error)
+	current := widenPendingPassSource(t, f, "current-budget")
+	require.Equal(t, prior.MessageID, current.Target)
+	require.False(t, readsource.Valid(append(readsource.CloneAuthorities(prior.Reference.Source.Authorities),
+		current.Reference.Source.Authorities...)), "the transient union exceeds one persisted-record budget")
+	changed, refused := false, false
+	if scenario == "preparation_revoked_prior" {
+		_, err = f.db.Exec(t.Context(), `INSERT INTO core.pass_payment_admins(event_id,owner) VALUES('dance','alice');
+ UPDATE bot.pass_views SET state=jsonb_set(state,'{view}','"payment_queue"') WHERE owner='alice'`)
+		require.NoError(t, err)
+		f.b.Host.HTTP = &http.Client{
+			Transport: passDeliveryTransport(func(request *http.Request) (*http.Response, error) {
+				if !changed && request.URL.Path == "/internal/bot-delivery/begin" {
+					_, revokeErr := f.db.Exec(
+						request.Context(),
+						`DELETE FROM core.pass_payment_admins WHERE event_id='dance' AND owner='alice'`,
+					)
+					if revokeErr != nil {
+						return nil, revokeErr
+					}
+					changed = true
+				}
+				return http.DefaultTransport.RoundTrip(request)
+			}),
+		}
+	}
+	if scenario == "receipt_revoked_prior" {
+		f.b.TG.HTTP = &http.Client{
+			Transport: passDeliveryTransport(func(request *http.Request) (*http.Response, error) {
+				if !refused && strings.HasSuffix(request.URL.Path, "/editMessageText") {
+					refused = true
+					return passRefusedEditResponse(request), nil
+				}
+				return http.DefaultTransport.RoundTrip(request)
+			}),
+		}
+	}
+	pumpBotDeliveries(t, f.b)
+	pumpBotDeliveries(t, f.b)
+	assertPassIndependentSourceResult(t, f, scenario, current, prior, changed, refused)
+}
+
+func assertPassIndependentSourceResult(t *testing.T, f *fixture, scenario string,
+	current, prior botdelivery.Intent, changed, refused bool,
+) {
+	t.Helper()
+	actual, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, current.QueueReference(), false)
+	require.NoError(t, err)
+	if scenario == "preparation_revoked_prior" {
+		require.True(t, changed, "withdraw capability after rendering and before admission")
+		require.Equal(t, delivery.Cancelled, actual.State)
+		require.Zero(t, actual.Attempt)
+	} else {
+		require.Equal(t, delivery.Succeeded, actual.State)
+		require.True(
+			t,
+			actual.ContinuationDone,
+			"valid current receipt must not remain blocked by the prior record's union",
+		)
+		require.NoError(t, f.b.DeliverBotIntent(t.Context(), current.QueueReference()))
+		require.NotEmpty(t, passMenuCardOrEmpty(t, f, actual.MessageID).Markup.Rows)
+		if scenario == "receipt_revoked_prior" {
+			require.True(t, refused)
+			require.NotEqual(t, prior.MessageID, actual.MessageID)
+		} else {
+			require.Equal(t, prior.MessageID, actual.MessageID)
+		}
+	}
+	var cleanup, oldCallbacks int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.delivery_intents
+ WHERE reference->>'family'=$1 AND target_message_id=$2 AND state='sent'`,
+		botdelivery.PassReceiptRedactionFamily, prior.MessageID).Scan(&cleanup))
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.pass_buttons
+ WHERE owner='alice' AND revision=$1 AND token=ANY($2)`, prior.Receipt.Revision, prior.Receipt.Tokens).Scan(&oldCallbacks))
+	if scenario == "admission_valid" {
+		require.Zero(t, cleanup)
+	} else {
+		require.Equal(t, 1, cleanup)
+		require.Zero(t, oldCallbacks)
+		retired := passMenuCardOrEmpty(t, f, prior.MessageID)
+		require.Equal(t, prior.MessageID, retired.ID)
+		require.Empty(t, retired.Markup.Rows)
+		require.Contains(t, retired.Text, "/passes")
+	}
+}
+
+// Supply trusted fixture read evidence before the producer materializes a card.
+// No successful receipt is rewritten to manufacture predecessor compatibility.
+func widenPendingPassSource(t *testing.T, f *fixture, prefix string) botdelivery.Intent {
+	t.Helper()
+	i := pendingPassReceipt(t, f)
+	require.NotNil(t, i.Reference.Source)
+	refs := make([]readsource.Authority, 129)
+	events := make([]string, len(refs))
+	for index := range refs {
+		events[index] = fmt.Sprintf("%s-%03d", prefix, index)
+		refs[index].Registration = passbooking.ReadAuthority{Kind: passbooking.ReadOwnerMenu, Event: events[index]}
+	}
+	require.True(t, readsource.Valid(refs))
+	_, err := f.db.Exec(t.Context(), `INSERT INTO core.pass_events(id,finishes_at)
+ SELECT unnest($1::text[]),clock_timestamp()+interval '1 year'`, events)
+	require.NoError(t, err)
+	i.Reference.Source.Authorities = refs
+	require.True(t, i.Reference.Valid(i.Owner))
+	reference, err := json.Marshal(i.Reference)
+	require.NoError(t, err)
+	source, err := json.Marshal(i.Reference.Source)
+	require.NoError(t, err)
+	updated, err := f.db.Exec(t.Context(), `UPDATE bot.delivery_intents SET reference=$4
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3 AND state='pending' AND attempt=0`,
+		i.BotID, i.Operation, i.Effect, reference)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, updated.RowsAffected())
+	_, err = f.db.Exec(t.Context(), `UPDATE bot.pass_views SET state=jsonb_set(state,'{source}',$1::jsonb)
+ WHERE owner='alice' AND revision=$2`, source, i.Reference.Revision)
+	require.NoError(t, err)
+	return i
+}
 
 func TestPassCleanupPreservesNewerSameTargetManualPayload(t *testing.T) {
 	t.Parallel()

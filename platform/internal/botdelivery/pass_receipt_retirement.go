@@ -345,15 +345,17 @@ func (s Service) retirePassPreparation(ctx context.Context, tx pgx.Tx, pending, 
 
 // Combine only lock discovery. Current and prior payload validity remain
 // independently checked, so one revoked payload cannot condemn the other.
-func passPreparationLocks(current []readsource.Authority, prior Intent) ([]readsource.Authority, error) {
-	refs, err := readsource.Merge(current, prior.Reference.Authorities)
-	if err != nil {
-		return nil, err
-	}
+func passPreparationLocks(current []readsource.Authority, prior Intent) ([][]readsource.Authority, error) {
+	records := [][]readsource.Authority{current, prior.Reference.Authorities}
 	if prior.Reference.Source != nil {
-		return readsource.Merge(refs, prior.Reference.Source.Authorities)
+		records = append(records, prior.Reference.Source.Authorities)
 	}
-	return refs, nil
+	for _, record := range records {
+		if !readsource.Valid(record) {
+			return nil, readsource.ErrLimit
+		}
+	}
+	return records, nil
 }
 
 func validPassReceipt(i Intent) bool {
