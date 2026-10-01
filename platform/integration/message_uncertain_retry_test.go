@@ -23,6 +23,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/store"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -561,36 +562,39 @@ func TestLegacyAdminInvalidCaptureNeverReachesTransport(t *testing.T) {
 	for _, scenario := range []struct {
 		capture string
 		retry   bool
-	}{{"{}", false}, {"null", false}, {"{}", true}, {"null", true}} {
+	}{{"{}", false}, {"null", false}, {"{}", true}, {"null", true}, {"SQL NULL", true}} {
 		t.Run(fmt.Sprintf("%s/retry=%t", scenario.capture, scenario.retry), func(t *testing.T) {
 			t.Parallel()
 			f := passMenuFixture(t)
 			s := configureDeliveryFixture(t, f)
 			enqueueSyntheticDelivery(t, s, "legacy-invalid-capture", "101")
+			_, err := f.db.Exec(
+				t.Context(),
+				`UPDATE core.admin_message_deliveries SET content='{"text":"Personalized original","parse_mode":"HTML"}'::jsonb`,
+			)
+			require.NoError(t, err)
 			var calls atomic.Int64
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				if calls.Add(1) == 1 && scenario.retry {
-					connection, _, err := http.NewResponseController(w).Hijack()
-					if err != nil {
-						t.Error(err)
-						return
-					}
-					_ = connection.Close()
-					return
-				}
-				_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":91}}`))
-			}))
+			requests := make(chan []byte, 4)
+			server := httptest.NewServer(adminCaptureReply(t, requests, &calls, scenario.retry))
 			t.Cleanup(server.Close)
 			f.b.TG = telegram.Client{Base: server.URL, Token: "synthetic"}
 			if scenario.retry {
 				require.NoError(t, f.b.DeliverAdminMessages(t.Context()))
 				require.EqualValues(t, 1, calls.Load(), "original admitted request crossed HTTP and lost its reply")
+				var original map[string]any
+				require.NoError(t, json.Unmarshal(<-requests, &original))
+				assert.Equal(t, "Personalized original", original["text"])
+				assert.Equal(t, "HTML", original["parse_mode"])
 			}
 			transportBefore := calls.Load()
-			_, err := f.db.Exec(
+			var capture any = scenario.capture
+			if scenario.capture == "SQL NULL" {
+				capture = nil
+			}
+			_, err = f.db.Exec(
 				t.Context(),
 				`UPDATE core.admin_message_deliveries SET state='unknown',content=$1::jsonb,failure='telegram_outcome_unknown'`,
-				scenario.capture,
+				capture,
 			)
 			require.NoError(t, err)
 			_, err = f.db.Exec(t.Context(), `UPDATE core.delivery_queue SET state='unknown'`)
@@ -624,6 +628,222 @@ func TestLegacyAdminInvalidCaptureNeverReachesTransport(t *testing.T) {
 			assert.Equal(t, before, after, "capture refusal cannot mutate lease, attempt, receipt or retry budget")
 		})
 	}
+}
+
+func adminCaptureReply(t *testing.T, requests chan<- []byte, calls *atomic.Int64, retry bool) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			t.Error(readErr)
+			return
+		}
+		requests <- body
+		if calls.Add(1) == 1 && retry {
+			connection, _, hijackErr := http.NewResponseController(w).Hijack()
+			if hijackErr != nil {
+				t.Error(hijackErr)
+				return
+			}
+			_ = connection.Close()
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":91}}`))
+	}
+}
+
+// Restore the predecessor schema only in this test's disposable database.
+func restoreAdminCapturePredecessor(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	_, err := db.Exec(t.Context(), `ALTER TABLE core.admin_message_deliveries
+ DROP COLUMN IF EXISTS content_captured,
+ DROP COLUMN last_confirmed_attempt,DROP COLUMN last_uncertain_attempt,
+ DROP COLUMN last_uncertain_reason,DROP COLUMN last_uncertain_recorded_at,DROP COLUMN uncertain_resends;
+ ALTER TABLE core.pass_registration_announcements
+ DROP COLUMN rendered_text,DROP COLUMN rendered_admitted,
+ DROP COLUMN last_confirmed_attempt,DROP COLUMN last_uncertain_attempt,
+ DROP COLUMN last_uncertain_reason,DROP COLUMN last_uncertain_recorded_at,DROP COLUMN uncertain_resends;
+ DELETE FROM public.zns_schema_migrations WHERE name='094_message_uncertain_retry.sql'`)
+	require.NoError(t, err)
+}
+
+func TestLegacyAdminNullCapturesNextAdmittedWire(t *testing.T) {
+	t.Parallel()
+	for _, refusal := range []string{"pause", "pacing", "expired-preparation"} {
+		t.Run(refusal, func(t *testing.T) {
+			t.Parallel()
+			checkLegacyAdminNullCapture(t, refusal)
+		})
+	}
+}
+
+func TestAdminCaptureUpgradePreservesPredecessor(t *testing.T) {
+	t.Parallel()
+	db, _ := bookingFixture(t)
+	s := adminmessage.Service{DB: db, Delivery: syntheticDeliverySettings()}
+	enqueueSyntheticDelivery(t, s, "historical-null", "101")
+	enqueueSyntheticDelivery(t, s, "historical-content", "202")
+	restoreAdminCapturePredecessor(t, db)
+	_, err := db.Exec(
+		t.Context(),
+		`UPDATE core.admin_message_deliveries SET content=NULL,state='unknown',failure='telegram_outcome_unknown',attempt=7,failure_count=2,telegram_message_id=91 WHERE destination->>'chat'='101'`,
+	)
+	require.NoError(t, err)
+	var before string
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT jsonb_agg(to_jsonb(d) ORDER BY id)::text FROM core.admin_message_deliveries d`).
+			Scan(&before),
+	)
+	require.NoError(t, store.Migrate(t.Context(), db))
+	require.NoError(t, store.Migrate(t.Context(), db), "replay must preserve capture classification")
+	var after string
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT jsonb_agg(to_jsonb(d)-ARRAY['content_captured','last_confirmed_attempt','last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends'] ORDER BY id)::text FROM core.admin_message_deliveries d`).
+			Scan(&after),
+	)
+	assert.JSONEq(t, before, after, "upgrade/replay must preserve every predecessor field")
+	var truthful bool
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT bool_and(content_captured=(content IS NOT NULL) AND last_uncertain_attempt IS NULL AND last_confirmed_attempt IS NULL AND uncertain_resends=0) FROM core.admin_message_deliveries`).
+			Scan(&truthful),
+	)
+	assert.True(t, truthful, "migration classifies custody without inventing admission history")
+	enqueueSyntheticDelivery(t, s, "new-captured", "303")
+	var captured bool
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT content_captured FROM core.admin_message_deliveries WHERE destination->>'chat'='303'`).
+			Scan(&captured),
+	)
+	assert.True(t, captured, "new stored snapshots never inherit historical fallback")
+}
+
+func checkLegacyAdminNullCapture(t *testing.T, refusal string) {
+	t.Helper()
+	f := passMenuFixture(t)
+	s := configureDeliveryFixture(t, f)
+	enqueueSyntheticDelivery(t, s, "legacy-null", "101")
+	restoreAdminCapturePredecessor(t, f.db)
+	_, err := f.db.Exec(
+		t.Context(),
+		`UPDATE core.admin_message_deliveries SET content=NULL,state='unknown',failure='telegram_outcome_unknown'; UPDATE core.delivery_queue SET state='unknown'`,
+	)
+	require.NoError(t, err)
+	require.NoError(t, store.Migrate(t.Context(), f.db))
+	require.NoError(t, s.RecoverDeliveries(t.Context()))
+	_, err = f.db.Exec(
+		t.Context(),
+		`UPDATE core.admin_message_deliveries SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'`,
+	)
+	require.NoError(t, err)
+	first, found, err := s.Claim(t.Context())
+	require.NoError(t, err)
+	require.True(t, found)
+	if refusal == "expired-preparation" {
+		_, err = f.db.Exec(
+			t.Context(),
+			`UPDATE core.admin_message_deliveries SET lease_until=clock_timestamp()-interval '1 second'`,
+		)
+		require.NoError(t, err)
+	} else {
+		_, err = f.db.Exec(
+			t.Context(),
+			`INSERT INTO core.delivery_pacing(bot_id,chat) VALUES($1,'') ON CONFLICT DO NOTHING`,
+			s.Delivery.BotID,
+		)
+		require.NoError(t, err)
+		query := `UPDATE core.delivery_pacing SET not_before=clock_timestamp()+interval '120 seconds'`
+		if refusal == "pause" {
+			query = `UPDATE core.delivery_pacing SET pause_reason='synthetic_operator_pause'`
+		}
+		_, err = f.db.Exec(t.Context(), query)
+		require.NoError(t, err)
+		gate, beginErr := s.BeginDelivery(t.Context(), delivery.Attempt{ID: first.ID, Generation: first.Attempt})
+		require.NoError(t, beginErr)
+		require.False(t, gate.Ready)
+	}
+	var resends int64
+	var contentCaptured bool
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT uncertain_resends,content_captured FROM core.admin_message_deliveries`).
+			Scan(&resends, &contentCaptured),
+	)
+	assert.Zero(t, resends)
+	assert.False(t, contentCaptured, "prewire refusal cannot freeze the provisional candidate")
+	_, err = f.db.Exec(
+		t.Context(),
+		`UPDATE core.admin_messages SET request=jsonb_set(request,'{content}','{"text":"Next admitted candidate","parse_mode":"HTML"}'::jsonb);
+ UPDATE core.admin_message_deliveries SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second',pause_reason=''`,
+	)
+	require.NoError(t, err)
+	item, found, err := s.Claim(t.Context())
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.NotEqual(t, first.Content, item.Content)
+	assert.Equal(t, "Next admitted candidate", item.Content.Text)
+	gate, err := s.BeginDelivery(t.Context(), delivery.Attempt{ID: item.ID, Generation: item.Attempt})
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
+	var captured []byte
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT content,uncertain_resends,content_captured FROM core.admin_message_deliveries`).
+			Scan(&captured, &resends, &contentCaptured),
+	)
+	var content adminmessage.Content
+	require.NoError(t, json.Unmarshal(captured, &content))
+	assert.Equal(t, item.Content, content, "the next actual admission durably freezes its returned candidate")
+	assert.True(t, contentCaptured)
+	assert.EqualValues(t, 1, resends)
+	wires := make(chan []byte, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			t.Error(readErr)
+			return
+		}
+		wires <- body
+		connection, _, hijackErr := http.NewResponseController(w).Hijack()
+		if hijackErr != nil {
+			t.Error(hijackErr)
+			return
+		}
+		_ = connection.Close()
+	}))
+	t.Cleanup(server.Close)
+	client := telegram.Client{Base: server.URL, Token: "synthetic"}
+	var reply telegram.Message
+	sendErr := client.Call(
+		t.Context(),
+		"sendMessage",
+		map[string]any{"chat_id": 101, "text": item.Content.Text, "parse_mode": item.Content.ParseMode},
+		&reply,
+	)
+	require.Error(t, sendErr)
+	firstWire := <-wires
+	require.NoError(
+		t,
+		s.CompleteDelivery(
+			t.Context(),
+			adminmessage.Completion{
+				ID:      item.ID,
+				Attempt: item.Attempt,
+				Outcome: telegram.DeliveryOutcome(reply.ID, sendErr),
+			},
+		),
+	)
+	_, err = f.db.Exec(
+		t.Context(),
+		`UPDATE core.admin_messages SET request=jsonb_set(request,'{content}','{"text":"Different publication"}'::jsonb); UPDATE core.admin_message_deliveries SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'`,
+	)
+	require.NoError(t, err)
+	f.b.TG = client
+	require.NoError(t, f.b.DeliverAdminMessages(t.Context()))
+	assert.Equal(t, firstWire, <-wires, "publication changes cannot reconstruct the admitted wire")
 }
 
 func TestTerminalPositiveReceiptRejectsContradictoryNegative(t *testing.T) {

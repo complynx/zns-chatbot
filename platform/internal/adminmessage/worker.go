@@ -93,7 +93,7 @@ func (s Service) prepareDelivery(ctx context.Context, candidate dbgen.NextAdminD
 		return Delivery{}, false, delivery.ErrQueueBinding
 	}
 	item.Destination.Chat = entry.Destination.Chat
-	item.Attempt, err = q.PrepareAdminDelivery(ctx, item.ID)
+	item.Attempt, err = q.PrepareAdminDelivery(ctx, dbgen.PrepareAdminDeliveryParams{ID: item.ID, Content: row.Content})
 	if err != nil {
 		return Delivery{}, false, err
 	}

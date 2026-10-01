@@ -37,6 +37,7 @@ func (q *Queries) AdminAttemptOwner(ctx context.Context, arg AdminAttemptOwnerPa
 
 const beginAdminSend = `-- name: BeginAdminSend :execrows
 UPDATE core.admin_message_deliveries SET state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+ content_captured=true,
  uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=$1::bigint AND bot_id=$2::bigint AND attempt=$3::bigint
  AND state='pending' AND lease_until>clock_timestamp()
@@ -179,7 +180,8 @@ func (q *Queries) LockAdminAttempt(ctx context.Context, arg LockAdminAttemptPara
 }
 
 const lockAdminDelivery = `-- name: LockAdminDelivery :one
-SELECT d.id,d.message_id,d.destination,COALESCE(d.content,m.request->'content')::jsonb AS content,
+SELECT d.id,d.message_id,d.destination,
+ CASE WHEN d.content_captured THEN d.content ELSE m.request->'content' END::jsonb AS content,
  d.state,d.attempt,m.actor,u.telegram_id
 FROM core.admin_message_deliveries d JOIN core.admin_messages m ON m.id=d.message_id
 JOIN core.pass_booking_admins a ON a.owner=m.actor JOIN core.users u ON u.id=m.actor
@@ -261,12 +263,18 @@ func (q *Queries) NextAdminDeliveries(ctx context.Context, botID int64) ([]NextA
 }
 
 const prepareAdminDelivery = `-- name: PrepareAdminDelivery :one
-UPDATE core.admin_message_deliveries SET attempt=attempt+1,lease_until=clock_timestamp()+interval '2 minutes'
-WHERE id=$1::bigint RETURNING attempt
+UPDATE core.admin_message_deliveries SET attempt=attempt+1,lease_until=clock_timestamp()+interval '2 minutes',
+ content=CASE WHEN content_captured THEN content ELSE $1::jsonb END
+WHERE id=$2::bigint RETURNING attempt
 `
 
-func (q *Queries) PrepareAdminDelivery(ctx context.Context, id int64) (int64, error) {
-	row := q.db.QueryRow(ctx, prepareAdminDelivery, id)
+type PrepareAdminDeliveryParams struct {
+	Content []byte
+	ID      int64
+}
+
+func (q *Queries) PrepareAdminDelivery(ctx context.Context, arg PrepareAdminDeliveryParams) (int64, error) {
+	row := q.db.QueryRow(ctx, prepareAdminDelivery, arg.Content, arg.ID)
 	var attempt int64
 	err := row.Scan(&attempt)
 	return attempt, err
