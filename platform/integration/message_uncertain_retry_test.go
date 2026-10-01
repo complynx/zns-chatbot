@@ -1486,104 +1486,109 @@ func TestActualCanonicalNegativeGenerationReplayPreservesSchedule(t *testing.T) 
 		for _, phase := range []string{"admitted-resend", "initial"} {
 			t.Run(owner+"/"+phase, func(t *testing.T) {
 				t.Parallel()
-				f := prepareRecoveredReply(t, owner)
-				var calls atomic.Int64
-				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					body, err := io.ReadAll(r.Body)
-					if err != nil {
-						t.Error(err)
-						return
-					}
-					if len(body) == 0 {
-						t.Error("empty admitted HTTP request")
-						return
-					}
-					if calls.Add(1) == 1 && phase == "admitted-resend" {
-						connection, _, hijackErr := http.NewResponseController(w).Hijack()
-						if hijackErr != nil {
-							t.Error(hijackErr)
-							return
-						}
-						_ = connection.Close()
-						return
-					}
-					_, _ = w.Write(
-						[]byte(
-							`{"ok":false,"error_code":429,"description":"actual rate limit","parameters":{"retry_after":120}}`,
-						),
-					)
-				}))
-				t.Cleanup(server.Close)
-				client := telegram.Client{Base: server.URL, Token: "synthetic"}
-				send := func() delivery.Outcome {
-					var reply telegram.Message
-					err := client.Call(t.Context(), "sendMessage", f.payload, &reply)
-					return telegram.DeliveryOutcome(reply.ID, err)
-				}
-				var markerBefore string
-				if phase == "admitted-resend" {
-					unknown := send()
-					require.Equal(t, delivery.Uncertain, unknown.Kind)
-					require.EqualValues(t, 1, calls.Load(), "generation 1 crossed the actual HTTP boundary")
-					require.NoError(t, f.finish(unknown))
-					require.NoError(
-						t,
-						f.db.QueryRow(t.Context(), `SELECT jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text FROM core.`+f.table+` WHERE id=$1`, f.id).
-							Scan(&markerBefore),
-					)
-					// Wait for the real uncertainty deadline; do not rewrite clocks or schedules.
-					var readyAt time.Time
-					require.NoError(
-						t,
-						f.db.QueryRow(t.Context(), `SELECT available_at FROM core.`+f.table+` WHERE id=$1`, f.id).
-							Scan(&readyAt),
-					)
-					time.Sleep(max(time.Until(readyAt)+50*time.Millisecond, time.Duration(0)))
-					f = admitCanonicalResend(t, f, owner)
-					require.EqualValues(t, 2, f.attempt)
-				}
-				outcome := send()
-				require.Equal(t, delivery.Deferred, outcome.Kind)
-				require.Equal(t, "telegram_rate_limit", outcome.Reason)
-				require.EqualValues(t, 120, outcome.RetryAfter)
-				require.NoError(t, f.finish(outcome))
-				var confirmed, resends int64
-				var marker string
-				require.NoError(
-					t,
-					f.db.QueryRow(t.Context(), `SELECT last_confirmed_attempt,uncertain_resends,jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text FROM core.`+f.table+` WHERE id=$1`, f.id).
-						Scan(&confirmed, &resends, &marker),
-				)
-				require.Equal(t, f.attempt, confirmed)
-				if phase == "admitted-resend" {
-					require.EqualValues(t, 2, calls.Load())
-					require.EqualValues(t, 1, resends)
-					require.Equal(
-						t,
-						markerBefore,
-						marker,
-						"generation 2 confirmation preserves generation 1 uncertainty",
-					)
-				} else {
-					require.EqualValues(t, 1, calls.Load())
-					require.Zero(t, resends)
-					require.Equal(t, "[null, null, null]", marker)
-				}
-				chat := "101"
-				if owner == "announcement" {
-					chat = "-100123"
-				}
-				enqueueSyntheticDelivery(
-					t,
-					adminmessage.Service{DB: f.db, Delivery: syntheticDeliverySettings()},
-					"negative-replay-follower",
-					chat,
-				)
-				checkRecoveredNegativeReplay(t, f, outcome)
-				assert.Equal(t, confirmed, calls.Load(), "callback replay issues no further HTTP request")
+				checkActualCanonicalNegativeReplay(t, owner, phase)
 			})
 		}
 	}
+}
+
+func checkActualCanonicalNegativeReplay(t *testing.T, owner, phase string) {
+	t.Helper()
+	f := prepareRecoveredReply(t, owner)
+	var calls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if len(body) == 0 {
+			t.Error("empty admitted HTTP request")
+			return
+		}
+		if calls.Add(1) == 1 && phase == "admitted-resend" {
+			connection, _, hijackErr := http.NewResponseController(w).Hijack()
+			if hijackErr != nil {
+				t.Error(hijackErr)
+				return
+			}
+			_ = connection.Close()
+			return
+		}
+		_, _ = w.Write(
+			[]byte(
+				`{"ok":false,"error_code":429,"description":"actual rate limit","parameters":{"retry_after":120}}`,
+			),
+		)
+	}))
+	t.Cleanup(server.Close)
+	client := telegram.Client{Base: server.URL, Token: "synthetic"}
+	send := func() delivery.Outcome {
+		var reply telegram.Message
+		err := client.Call(t.Context(), "sendMessage", f.payload, &reply)
+		return telegram.DeliveryOutcome(reply.ID, err)
+	}
+	var markerBefore string
+	if phase == "admitted-resend" {
+		unknown := send()
+		require.Equal(t, delivery.Uncertain, unknown.Kind)
+		require.EqualValues(t, 1, calls.Load(), "generation 1 crossed the actual HTTP boundary")
+		require.NoError(t, f.finish(unknown))
+		require.NoError(
+			t,
+			f.db.QueryRow(t.Context(), `SELECT jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text FROM core.`+f.table+` WHERE id=$1`, f.id).
+				Scan(&markerBefore),
+		)
+		// Wait for the real uncertainty deadline; do not rewrite clocks or schedules.
+		var readyAt time.Time
+		require.NoError(
+			t,
+			f.db.QueryRow(t.Context(), `SELECT available_at FROM core.`+f.table+` WHERE id=$1`, f.id).
+				Scan(&readyAt),
+		)
+		time.Sleep(max(time.Until(readyAt)+50*time.Millisecond, time.Duration(0)))
+		f = admitCanonicalResend(t, f, owner)
+		require.EqualValues(t, 2, f.attempt)
+	}
+	outcome := send()
+	require.Equal(t, delivery.Deferred, outcome.Kind)
+	require.Equal(t, "telegram_rate_limit", outcome.Reason)
+	require.EqualValues(t, 120, outcome.RetryAfter)
+	require.NoError(t, f.finish(outcome))
+	var confirmed, resends int64
+	var marker string
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT last_confirmed_attempt,uncertain_resends,jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text FROM core.`+f.table+` WHERE id=$1`, f.id).
+			Scan(&confirmed, &resends, &marker),
+	)
+	require.Equal(t, f.attempt, confirmed)
+	if phase == "admitted-resend" {
+		require.EqualValues(t, 2, calls.Load())
+		require.EqualValues(t, 1, resends)
+		require.Equal(
+			t,
+			markerBefore,
+			marker,
+			"generation 2 confirmation preserves generation 1 uncertainty",
+		)
+	} else {
+		require.EqualValues(t, 1, calls.Load())
+		require.Zero(t, resends)
+		require.Equal(t, "[null, null, null]", marker)
+	}
+	chat := "101"
+	if owner == "announcement" {
+		chat = "-100123"
+	}
+	enqueueSyntheticDelivery(
+		t,
+		adminmessage.Service{DB: f.db, Delivery: syntheticDeliverySettings()},
+		"negative-replay-follower",
+		chat,
+	)
+	checkRecoveredNegativeReplay(t, f, outcome)
+	assert.Equal(t, confirmed, calls.Load(), "callback replay issues no further HTTP request")
 }
 
 func admitCanonicalResend(t *testing.T, f recoveredReplyFixture, owner string) recoveredReplyFixture {
