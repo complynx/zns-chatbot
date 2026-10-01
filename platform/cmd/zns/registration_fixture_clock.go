@@ -22,8 +22,6 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
-const registrationClockAPIMode = "api"
-const registrationClockBotMode = "bot"
 const registrationClockAppMode = "app"
 const registrationClockReadAttempts = 3
 
@@ -58,35 +56,39 @@ func rejectRegistrationClockMode(command string) error {
 
 // Preflight validates the effective connection and private initial publication
 // before opening the database. Live fixture validation precedes admission.
-func preflightRegistrationClock(ctx context.Context, command string, cfg config.Config) (*registrationFileClock, error) {
+func preflightRegistrationClock(
+	ctx context.Context,
+	command string,
+	cfg config.Config,
+) (*registrationFileClock, bool, error) {
 	if err := rejectRegistrationClockMode(command); err != nil {
-		return nil, err
+		return nil, true, err
 	}
 	settings := registrationClockEnvironment()
 	if !settings.Enabled() {
-		return nil, nil
+		return nil, false, nil
 	}
 	if cfg.Env != "sandbox" || !cfg.SyntheticOnly {
-		return nil, errors.New("registration clock requires synthetic sandbox mode")
+		return nil, true, errors.New("registration clock requires synthetic sandbox mode")
 	}
 	if err := settings.Validate(); err != nil {
-		return nil, err
+		return nil, true, err
 	}
 	if err := registrationClockPlatform(); err != nil {
-		return nil, err
+		return nil, true, err
 	}
 	connection, err := pgxpool.ParseConfig(cfg.Database.URL.Value())
 	if err != nil {
-		return nil, errors.New("invalid database configuration")
+		return nil, true, errors.New("invalid database configuration")
 	}
 	if err = registrationClockAllocation(connection, settings); err != nil {
-		return nil, err
+		return nil, true, err
 	}
 	clock := &registrationFileClock{config: settings}
 	if _, err = clock.Now(ctx); err != nil {
-		return nil, err
+		return nil, true, err
 	}
-	return clock, nil
+	return clock, true, nil
 }
 
 func configuredRegistrationClock(
@@ -98,7 +100,7 @@ func configuredRegistrationClock(
 	if !settings.Enabled() {
 		return nil, false, nil
 	}
-	clock, err := preflightRegistrationClock(ctx, registrationClockAppMode, cfg)
+	clock, _, err := preflightRegistrationClock(ctx, registrationClockAppMode, cfg)
 	if err != nil {
 		return nil, true, err
 	}

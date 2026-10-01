@@ -248,7 +248,11 @@ func TestRegistrationClockTurnRotationWait(t *testing.T) {
 			start := clock.now
 			service.RegistrationClock = clock
 			if scenario == "second-expiry-sales" {
-				_, err := db.Exec(t.Context(), "UPDATE core.pass_event_tiers SET starts_at=$1", start.Add(11*time.Minute))
+				_, err := db.Exec(
+					t.Context(),
+					"UPDATE core.pass_event_tiers SET starts_at=$1",
+					start.Add(11*time.Minute),
+				)
 				require.NoError(t, err)
 			} else {
 				_, err := db.Exec(t.Context(), "UPDATE core.pass_events SET finishes_at=$1", start.Add(11*time.Minute))

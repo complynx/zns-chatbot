@@ -93,7 +93,7 @@ func runCommandWithDatabase(
 	runtime *observability.Runtime,
 	openDatabase func(context.Context, config.Config, *observability.Runtime) (*pgxpool.Pool, error),
 ) (result error) {
-	registrationClock, clockErr := preflightRegistrationClock(ctx, command, cfg)
+	registrationClock, _, clockErr := preflightRegistrationClock(ctx, command, cfg)
 	if clockErr != nil {
 		return clockErr
 	}

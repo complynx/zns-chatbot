@@ -123,6 +123,7 @@ func TestRegistrationClockDecodeRequiresExactUniqueFields(t *testing.T) {
 
 func TestRegistrationClockStartupPreflightPrecedesDatabase(t *testing.T) {
 	settings := clockSettings()
+	t.Setenv("REGISTRATION_CLOCK_FILE", settings.File)
 	for key, value := range map[string]string{
 		"REGISTRATION_CLOCK_FILE": settings.File, "REGISTRATION_CLOCK_INSTALLATION": settings.Installation,
 		"REGISTRATION_CLOCK_CASE": settings.Case, "REGISTRATION_CLOCK_DATABASE_ADDRESS": settings.DatabaseAddress,
@@ -220,10 +221,21 @@ func TestRegistrationClockFileReadsFreshStateAndFailsVisibly(t *testing.T) {
 }
 
 func TestRegistrationClockRejectsEveryUnsupportedCommandBeforeDatabase(t *testing.T) {
+	t.Setenv("REGISTRATION_CLOCK_FILE", "")
 	for _, name := range []string{"REGISTRATION_CLOCK_FILE", "REGISTRATION_CLOCK_INSTALLATION", "REGISTRATION_CLOCK_CASE", "REGISTRATION_CLOCK_DATABASE_ADDRESS", "REGISTRATION_CLOCK_ANCHOR"} {
 		t.Setenv(name, "")
 	}
-	commands := []string{"migrate", "fixture", "product-fixture", "export-fixture", "api", "bot", "fake", "model", "health"}
+	commands := []string{
+		"migrate",
+		"fixture",
+		"product-fixture",
+		"export-fixture",
+		"api",
+		"bot",
+		"fake",
+		"model",
+		"health",
+	}
 	for _, command := range commands {
 		require.NoError(t, rejectRegistrationClockMode(command))
 	}
@@ -272,6 +284,7 @@ func TestRegistrationClockLinuxStartupBoundary(t *testing.T) {
 		t.Skip("requires isolated Linux /run publication")
 	}
 	settings := clockSettings()
+	t.Setenv("REGISTRATION_CLOCK_FILE", settings.File)
 	for key, value := range map[string]string{
 		"REGISTRATION_CLOCK_FILE": settings.File, "REGISTRATION_CLOCK_INSTALLATION": settings.Installation,
 		"REGISTRATION_CLOCK_CASE": settings.Case, "REGISTRATION_CLOCK_DATABASE_ADDRESS": settings.DatabaseAddress,
@@ -296,8 +309,13 @@ func TestRegistrationClockLinuxStartupBoundary(t *testing.T) {
 		require.NoError(t, os.WriteFile(settings.File, raw, 0o600))
 		require.NoError(t, os.Chmod(settings.File, 0o600))
 	}
-	cfg := config.Config{Env: "sandbox", SyntheticOnly: true,
-		Database: config.Database{URL: config.Secret("postgres://postgres/" + registrationclock.Database + "?sslmode=disable")}}
+	cfg := config.Config{
+		Env:           "sandbox",
+		SyntheticOnly: true,
+		Database: config.Database{
+			URL: config.Secret("postgres://postgres/" + registrationclock.Database + "?sslmode=disable"),
+		},
+	}
 	opened := false
 	opener := func(context.Context, config.Config, *observability.Runtime) (*pgxpool.Pool, error) {
 		opened = true
@@ -317,7 +335,9 @@ func TestRegistrationClockLinuxStartupBoundary(t *testing.T) {
 		case "wrong-database":
 			invalid.Database.URL = "postgres://postgres/unrelated?sslmode=disable"
 		case "wrong-effective-host":
-			invalid.Database.URL = config.Secret("postgres://postgres/" + registrationclock.Database + "?host=other&sslmode=disable")
+			invalid.Database.URL = config.Secret(
+				"postgres://postgres/" + registrationclock.Database + "?host=other&sslmode=disable",
+			)
 		case "missing":
 			require.NoError(t, os.Remove(settings.File))
 		case "malformed":
@@ -340,6 +360,7 @@ func TestRegistrationClockLinuxLiveStartupGuard(t *testing.T) {
 	dsn := os.Getenv("REGISTRATION_CLOCK_STARTUP_DATABASE_URL")
 	require.NotEmpty(t, dsn, "isolated startup gate must supply its private fixture connection")
 	settings := clockSettings()
+	t.Setenv("REGISTRATION_CLOCK_FILE", settings.File)
 	for key, value := range map[string]string{
 		"REGISTRATION_CLOCK_FILE": settings.File, "REGISTRATION_CLOCK_INSTALLATION": settings.Installation,
 		"REGISTRATION_CLOCK_CASE": settings.Case, "REGISTRATION_CLOCK_DATABASE_ADDRESS": settings.DatabaseAddress,
@@ -370,24 +391,36 @@ func TestRegistrationClockLinuxLiveStartupGuard(t *testing.T) {
 	})
 	cfg := config.Config{Env: "sandbox", SyntheticOnly: true, Database: config.Database{URL: config.Secret(dsn)}}
 	cfg.Shutdown.TelemetryFlush = time.Second
-	run := func() error {
+	startApp := func() error {
 		t.Helper()
 		telemetry, telemetryErr := observability.New(t.Context(), observability.Config{})
 		require.NoError(t, telemetryErr)
-		return runCommandWithDatabase(t.Context(), "app", nil, cfg, telemetry, func(ctx context.Context, cfg config.Config, _ *observability.Runtime) (*pgxpool.Pool, error) {
-			return store.Open(ctx, cfg.Database.URL.Value())
-		})
+		return runCommandWithDatabase(
+			t.Context(),
+			"app",
+			nil,
+			cfg,
+			telemetry,
+			func(ctx context.Context, cfg config.Config, _ *observability.Runtime) (*pgxpool.Pool, error) {
+				return store.Open(ctx, cfg.Database.URL.Value())
+			},
+		)
 	}
-	require.ErrorIs(t, run(), runtimeapp.ErrBusy, "valid fixture reaches real runtime admission")
+	require.ErrorIs(t, startApp(), runtimeapp.ErrBusy, "valid fixture reaches real runtime admission")
 	_, err = db.Exec(t.Context(), "DELETE FROM public.zns_sandbox_fixtures WHERE name=$1", registrationclock.Marker)
 	require.NoError(t, err)
-	require.ErrorContains(t, run(), "database owner, identities or case marker mismatch", "live mismatch is rejected before the held admission lock")
+	require.ErrorContains(
+		t,
+		startApp(),
+		"database owner, identities or case marker mismatch",
+		"live mismatch is rejected before the held admission lock",
+	)
 	_, err = db.Exec(t.Context(), "INSERT INTO public.zns_sandbox_fixtures(name) VALUES($1)", registrationclock.Marker)
 	require.NoError(t, err)
 	_, err = db.Exec(t.Context(), "UPDATE core.users SET telegram_id=999 WHERE id='alice'")
 	require.NoError(t, err)
-	require.ErrorContains(t, run(), "database owner, identities or case marker mismatch")
+	require.ErrorContains(t, startApp(), "database owner, identities or case marker mismatch")
 	_, err = db.Exec(t.Context(), "UPDATE core.users SET telegram_id=101 WHERE id='alice'")
 	require.NoError(t, err)
-	require.ErrorIs(t, run(), runtimeapp.ErrBusy, "restored fixture again reaches admission")
+	require.ErrorIs(t, startApp(), runtimeapp.ErrBusy, "restored fixture again reaches admission")
 }
