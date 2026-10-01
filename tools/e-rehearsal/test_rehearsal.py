@@ -17,6 +17,7 @@ class GuardTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
         rehearse.ALLOCATION = None
+        rehearse.EVIDENCE = None
         self.epoch = {"commit": "a" * 40, "last_migration": "089_observation.sql",
                       "database": "synthetic_qa_zns_guard", "project": "synthetic-qa-zns-guard",
                       "marker": prepare.SCOPE, "status": "offline", "owner": "guard-test"}
@@ -301,11 +302,11 @@ class GuardTests(unittest.TestCase):
         projections = {}
         probes = {}
         inventory = {}
-        for name in ("removal", "coverage"):
+        for name in ("removal", "coverage", "sql"):
             projection = self.write(name + "-projection.json", {key: allocation[key]
                                     for key in ("database", "marker", "host", "port", "transport")})
             value = prepare.read(projection)
-            value["role"] = "zns_app"
+            value["role"] = "postgres" if name == "sql" else "zns_app"
             projection.write_text(json.dumps(value), encoding="utf-8")
             projections[name] = projection
             source = Path(__file__).parent / "probes" / name / "main.go"
@@ -323,6 +324,19 @@ class GuardTests(unittest.TestCase):
         inventory_path = self.write("evidence/probe-inventory.json", inventory)
         allocation.update(probes=str(manifest), probes_sha256=prepare.digest(manifest),
                           probe_inventory_sha256=prepare.digest(inventory_path))
+        binary = Path(config["runtime_source"]) / "dist" / ("offline-sql.exe" if rehearse.os.name == "nt" else "offline-sql")
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_bytes(b"offline guard fixture; not an executable or real build proof")
+        receipt = {"commit": epoch["commit"], "importer_absent": False,
+                   "source_inventory_sha256": config["source_inventory_sha256"],
+                   "migration_inventory_sha256": config["migration_inventory_sha256"],
+                   "probes_sha256": allocation["probes_sha256"],
+                   "probe_inventory_sha256": allocation["probe_inventory_sha256"],
+                   "preconnection_tests": {"exit": 0},
+                   "programs": {"sql": {"exit": 0, "sha256": prepare.digest(binary),
+                               "command": ["go", "build", "-mod=readonly", "-o", str(binary), "./cmd/e-sql-probe"]}}}
+        build = self.write("evidence/offline-runtime-build.json", receipt)
+        allocation["sql_build_sha256"] = prepare.digest(build)
         allocation_path = self.write("allocation.json", allocation)
         return config, evidence, allocation_path, manifest, projections
 
@@ -336,7 +350,7 @@ class GuardTests(unittest.TestCase):
                     changed.write_bytes(original)
                     with patch.dict(rehearse.os.environ, {"MIGRATE_DATABASE_URL": url}):
                         rehearse.allocate(allocation, prepare.digest(allocation), config, evidence)
-                    self.assertIsInstance(rehearse.preflight(config, evidence), dict)
+                        self.assertIsInstance(rehearse.preflight(config, evidence), dict)
                     changed.write_bytes(original + b" ")
                     argv = ["rehearse", action, "--inputs", str(evidence / "inputs.json"),
                             "--inputs-sha256", prepare.digest(evidence / "inputs.json"),
@@ -350,6 +364,69 @@ class GuardTests(unittest.TestCase):
                         database.assert_not_called()
                         executor.assert_not_called()
             changed.write_bytes(original)
+
+    def test_native_owner_argv_and_environment_follow_exact_port(self):
+        config, evidence, path, manifest, projections = self.allocated_probe_fixture()
+        allocation = prepare.read(path)
+        commands = []
+        for port in (25432, 25433):
+            allocation["port"] = port
+            probes = prepare.read(manifest)
+            for name, projection in projections.items():
+                value = prepare.read(projection)
+                value["port"] = port
+                projection.write_text(json.dumps(value), encoding="utf-8")
+                probes[name]["projection_sha256"] = prepare.digest(projection)
+            manifest.write_text(json.dumps(probes), encoding="utf-8")
+            allocation["probes_sha256"] = prepare.digest(manifest)
+            build_path = evidence / "offline-runtime-build.json"
+            build = prepare.read(build_path)
+            build["probes_sha256"] = allocation["probes_sha256"]
+            build_path.write_text(json.dumps(build), encoding="utf-8")
+            allocation["sql_build_sha256"] = prepare.digest(build_path)
+            path.write_text(json.dumps(allocation), encoding="utf-8")
+            url = "postgres://postgres:synthetic@127.0.0.1:" + str(port) + "/" + allocation["database"]
+            with (patch.dict(rehearse.os.environ, {"MIGRATE_DATABASE_URL": url, "PGHOST": "other", "pgService": "other"}),
+                  patch.object(rehearse, "command", return_value="safe-result\n") as executor):
+                rehearse.allocate(path, prepare.digest(path), config, evidence)
+                self.assertEqual(rehearse.sql("SELECT 1;"), "safe-result\n")
+                argv = executor.call_args.args[0]
+                env = executor.call_args.kwargs["env"]
+                self.assertEqual(argv[1:], [str(projections["sql"]), prepare.digest(projections["sql"])])
+                self.assertNotIn("synthetic@", " ".join(argv))
+                self.assertFalse(any(key.upper().startswith("PG") for key in env))
+                self.assertEqual(env["MIGRATE_DATABASE_URL"], url + "?sslmode=disable")
+                self.assertEqual(executor.call_args.kwargs["data"], "SELECT 1;")
+                commands.append(argv)
+        self.assertNotEqual(commands[0], commands[1])
+
+    def test_native_owner_binary_and_build_mutation_stop_before_execution(self):
+        config, evidence, path, _, _ = self.allocated_probe_fixture()
+        allocation = prepare.read(path)
+        binary = Path(config["runtime_source"]) / "dist" / ("offline-sql.exe" if rehearse.os.name == "nt" else "offline-sql")
+        url = "postgres://postgres:synthetic@127.0.0.1:58421/" + allocation["database"]
+        for changed in (binary, evidence / "offline-runtime-build.json"):
+            original = changed.read_bytes()
+            with (patch.dict(rehearse.os.environ, {"MIGRATE_DATABASE_URL": url}),
+                  patch.object(rehearse, "command") as executor):
+                rehearse.allocate(path, prepare.digest(path), config, evidence)
+                changed.write_bytes(original + b" ")
+                with self.assertRaisesRegex(RuntimeError, "reviewed_file_hash_mismatch"):
+                    rehearse.sql("SELECT 1;")
+                with self.assertRaisesRegex(RuntimeError, "reviewed_file_hash_mismatch"):
+                    rehearse.preflight(config, evidence)
+                executor.assert_not_called()
+            changed.write_bytes(original)
+
+    def test_owner_localhost_is_rejected_before_executor(self):
+        config, evidence, path, _, _ = self.allocated_probe_fixture()
+        allocation = prepare.read(path)
+        allocation["host"] = "localhost"
+        path.write_text(json.dumps(allocation), encoding="utf-8")
+        with patch.object(rehearse, "command") as executor:
+            with self.assertRaisesRegex(RuntimeError, "exclusive_reviewed_operator_allocation_required"):
+                rehearse.allocate(path, prepare.digest(path), config, evidence)
+            executor.assert_not_called()
 
     def test_runtime_projection_binds_exact_allocation(self):
         allocation = {"database": "synthetic_qa_zns_guard", "marker": prepare.SCOPE,

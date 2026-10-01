@@ -66,9 +66,9 @@ successor. Do not reuse or clean failed evidence to make a command appear green.
 
 ## Offline probe compilation
 
-Create a reviewed probe manifest and pass its digest. It has exactly `removal`
-and `coverage` entries, each with `source`, `sha256`, `projection` and
-`projection_sha256`, plus `test_source` and `test_sha256` for each adjacent main_test.go. Source files are the two successor main.go files under
+Create a reviewed probe manifest and pass its digest. It has exactly `removal`, `coverage`
+and `sql` entries, each with `source`, `sha256`, `projection` and
+`projection_sha256`, plus `test_source` and `test_sha256` for each adjacent main_test.go. Source files are the three successor main.go files under
 tools/e-rehearsal/probes. Removal projection is the preserved probe-spec.json;
 coverage projection is the preserved e-runtime-coverage expected.json. Bind
 the bytes directly. Do not derive expected values from observed runtime output.
@@ -79,13 +79,29 @@ python tools/e-rehearsal/rehearse.py compile-probes \
   --probes <probes.json> --probes-sha256 <sha256>
 ```
 
-This copies both hash-bound probes and their focused pre-connection tests into new command directories inside
+This copies all three hash-bound clients and their focused pre-connection tests into new command directories inside
 the isolated platform module. That is the legitimate context for platform/internal
-imports. It builds the normal zns command and both probes, records dependencies
+imports. It builds the normal zns command and all three clients, records dependencies
 and executable hashes, runs the actual compiled pre-connection tests with private hash-bound inputs, and checks every retained source byte. The probe source inventory includes both main.go and main_test.go files. It has no DB or
 Docker action and explicitly records importer_absent:false. It does not prove
 runtime acceptance or importer removal. Run pinned Go formatting/lint in this
-actual compiled module on the two probe command packages.
+actual compiled module on the three command packages.
+
+Owner SQL uses the native `offline-sql[.exe]` built by this exact preparation,
+never container psql or a socket. Its private projection contains the same
+host, port, database, marker and transport plus role:postgres. The credential
+URL stays in MIGRATE_DATABASE_URL. Every owner action checks the actual build
+receipt, source/test/projection hashes and selected binary hash before any DB
+or Docker call; each SQL execution rechecks the binary. The client rejects PG
+settings, localhost, alternate endpoints, DNS, TLS and fallback configuration.
+
+The client takes `<owner-projection.json> <sha256>` and reads SQL as UTF-8 stdin
+(up to 1 MiB). One column per result is supported; command tags are ignored.
+UTF-8 result rows use newline separation, capped at 16 MiB including delimiters;
+backend message bodies have the same cap. A 60-second context covers connection,
+ownership guard and query/result reads. Errors return a fixed failure marker,
+with no partial stdout, SQL, credentials or server errors. These limits support
+the existing JSON/single-column fingerprints; multi-column results fail visibly.
 
 ## Frozen allocation for database/removal actions
 
@@ -94,12 +110,11 @@ adds reviewed_schema:true, input_reviewed:true, inputs_sha256, writer:e_rehearsa
 managed_roles:[zns_app,zns_meter], managed_stopped:true, prerequisites_compose and
 its SHA256, images_env and its SHA256, cli_image as a local repo@sha256 digest,
 config_volume below the allocated project prefix, probe_inventory_sha256, the exact probe manifest path in probes and
-probes_sha256, runtime_source_inventory_sha256 and raw_migration_inventory_sha256
+probes_sha256, sql_build_sha256 (the actual offline-runtime-build.json digest), runtime_source_inventory_sha256 and raw_migration_inventory_sha256
 matching the prepared source. Source/input/probe and actual image provenance
 review must precede these flags.
 
-This bounded version supports only transport:host-loopback with host127.0.0.1 or
-localhost, an exact port and endpoint_verified:true. MIGRATE_DATABASE_URL must
+This bounded version supports only transport:host-loopback with host:127.0.0.1, an exact port and endpoint_verified:true. MIGRATE_DATABASE_URL must
 match that exact host/port/database and postgres owner role. The engineer must
 use a URL without a query, or with only the exact `sslmode=disable` query.
 The validated queryless form is normalized to explicit sslmode=disable before
@@ -132,8 +147,8 @@ seven-domain apply/replay, requires reconciliation and zero new replay mutations
 proved by food's explicit `reused:true` and each other domain's integer
 `applied:0`. Missing counters never prove replay success. Before any database
 or Docker call, allocation and the common preflight validate the actual probe
-manifest path/digest, both private projection hashes and allocated endpoint fields,
-and all four bound probe source/test hashes against the probe inventory. These
+manifest path/digest, all three private projection hashes and allocated endpoint fields,
+and all six bound client source/test hashes against the probe inventory. These
 are static input checks; they do not claim successful importer-absent runtime
 execution. Owner actions also validate actual source, raw migrations, source
 export, stages, plans, resolutions, permanent resources and importer binary.

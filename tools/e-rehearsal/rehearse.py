@@ -15,6 +15,7 @@ from prepare import (SCOPE, binding, checked, clean_build_env, migration_invento
 DATABASE = None
 PROJECT = None
 ALLOCATION = None
+EVIDENCE = None
 DOMAINS = ("users", "events", "orders", "passes", "food", "massage", "messages")
 RECEIPTS = ("user_receipts", "event_receipts", "order_receipts", "pass_receipts",
             "food_receipts", "massage_receipts", "message_receipts")
@@ -48,7 +49,7 @@ def save(path, value):
 
 
 def command(argv, *, cwd=None, data=None, env=None):
-    result = subprocess.run(argv, cwd=cwd, input=data, env=env, text=True,
+    result = subprocess.run(argv, cwd=cwd, input=data, env=env, text=True, encoding="utf-8",
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             timeout=300, check=False)
     if result.returncode:
@@ -58,13 +59,39 @@ def command(argv, *, cwd=None, data=None, env=None):
 
 
 def sql(query):
-    if ALLOCATION is None:
+    if ALLOCATION is None or EVIDENCE is None:
         raise RuntimeError("reviewed_allocation_required")
-    return command(["docker", "--context", "desktop-linux", "compose", "-p", PROJECT,
-                    "-f", ALLOCATION["prerequisites_compose"],
-                    "--env-file", ALLOCATION["images_env"], "exec", "-T", "postgres",
-                    "psql", "-X", "-A", "-t", "-U", "postgres", "-d", DATABASE,
-                    "-v", "ON_ERROR_STOP=1"], data=query)
+    config = read(checked(EVIDENCE / "inputs.json", ALLOCATION["inputs_sha256"]))
+    epoch = read(checked(EVIDENCE / "binding.json", config["binding_sha256"]))
+    argv = owner_sql_binding(ALLOCATION, EVIDENCE, epoch)
+    return command(argv, data=query, env=importer_env(ALLOCATION))
+
+
+def owner_sql_binding(allocation, evidence, epoch):
+    """Bind the native client to the actual build and same owner endpoint before execution."""
+    if allocation.get("host") != "127.0.0.1" or allocation.get("transport") != "host-loopback":
+        raise RuntimeError("allocated_native_owner_transport_required")
+    importer_env(allocation)
+    probes = bound_probes(allocation, evidence, epoch)
+    build = read(checked(evidence / "offline-runtime-build.json", allocation.get("sql_build_sha256", "")))
+    config = read(checked(evidence / "inputs.json", allocation["inputs_sha256"]))
+    root = Path(config["runtime_source"]).resolve(strict=True)
+    if root == Path(config["repository_root"]).resolve() or not root.is_relative_to(evidence):
+        raise RuntimeError("isolated_build_source_required")
+    binary = safe_path(root, "dist/" + ("offline-sql.exe" if os.name == "nt" else "offline-sql"))
+    expected = {"commit": epoch["commit"], "probes_sha256": allocation["probes_sha256"],
+                "source_inventory_sha256": allocation["runtime_source_inventory_sha256"],
+                "migration_inventory_sha256": allocation["raw_migration_inventory_sha256"],
+                "probe_inventory_sha256": allocation["probe_inventory_sha256"]}
+    sql_build = build.get("programs", {}).get("sql", {})
+    if (any(build.get(key) != value for key, value in expected.items())
+            or build.get("importer_absent") is not False
+            or build.get("preconnection_tests", {}).get("exit") != 0
+            or sql_build.get("exit") != 0
+            or sql_build.get("command") != ["go", "build", "-mod=readonly", "-o", str(binary), "./cmd/e-sql-probe"]):
+        raise RuntimeError("actual_native_owner_build_required")
+    checked(binary, sql_build.get("sha256", ""))
+    return [str(binary), probes["sql"]["projection"], probes["sql"]["projection_sha256"]]
 
 
 def guard():
@@ -81,13 +108,13 @@ def guard():
 
 
 def allocate(path, sha, config, evidence):
-    global DATABASE, PROJECT, ALLOCATION
+    global DATABASE, PROJECT, ALLOCATION, EVIDENCE
     value = binding(path, sha, frozen=True)
     epoch = read(checked(evidence / "binding.json", config["binding_sha256"]))
     for key in ("commit", "last_migration", "database", "project", "marker", "owner"):
         if value[key] != epoch[key]:
             raise RuntimeError("allocation_preparation_epoch_mismatch")
-    if (value.get("transport") != "host-loopback" or value.get("host") not in ("127.0.0.1", "localhost")
+    if (value.get("transport") != "host-loopback" or value.get("host") != "127.0.0.1"
             or not isinstance(value.get("port"), int) or not 1024 <= value["port"] <= 65535
             or value.get("endpoint_verified") is not True or value.get("writer") != "e_rehearsal"
             or value.get("managed_roles") != ["zns_app", "zns_meter"]
@@ -104,7 +131,9 @@ def allocate(path, sha, config, evidence):
             or not re.fullmatch(re.escape(value["project"]) + r"-[a-z0-9-]+", value.get("config_volume", ""))):
         raise RuntimeError("allocated_immutable_resources_required")
     importer_env(value)
+    owner_sql_binding(value, evidence, epoch)
     DATABASE, PROJECT, ALLOCATION = value["database"], value["project"], value
+    EVIDENCE = evidence
 
 
 def importer_env(allocation):
@@ -245,6 +274,7 @@ def preflight(config, evidence, *, retired=False):
     if ALLOCATION is not None:
         epoch = read(checked(evidence / "binding.json", config["binding_sha256"]))
         bound_probes(ALLOCATION, evidence, epoch)
+        owner_sql_binding(ALLOCATION, evidence, epoch)
     provenance(config, evidence, retired=retired)
     archived = archive_binding(config)
     binary = Path(config["importer_binary"]).resolve(strict=not retired)
@@ -372,12 +402,12 @@ def archive_importer(config, evidence):
     save(evidence / "importer-unavailable.json", {"package_absent": True, "binary_absent": True})
 
 
-def probe_projection(entry, epoch, allocation=None):
+def probe_projection(entry, epoch, allocation=None, *, owner=False):
     """Verify the private, reviewed endpoint binding without exposing credentials."""
     projection = read(checked(entry["projection"], entry["projection_sha256"]))
     if (projection.get("database") != epoch["database"] or projection.get("marker") != epoch["marker"]
-            or projection.get("transport") != "host-loopback" or projection.get("role") != "zns_app"
-            or projection.get("host") not in ("127.0.0.1", "localhost")
+            or projection.get("transport") != "host-loopback" or projection.get("role") != ("postgres" if owner else "zns_app")
+            or projection.get("host") not in (("127.0.0.1",) if owner else ("127.0.0.1", "localhost"))
             or type(projection.get("port")) is not int or not 1024 <= projection["port"] <= 65535):
         raise RuntimeError("reviewed_probe_endpoint_required")
     if allocation is not None and any(projection[key] != allocation[key]
@@ -391,11 +421,11 @@ def bound_probes(allocation, evidence, epoch):
     if not allocation.get("probes") or not allocation.get("probes_sha256"):
         raise RuntimeError("allocated_probe_manifest_required")
     probes = read(checked(allocation["probes"], allocation["probes_sha256"]))
-    if set(probes) != {"removal", "coverage"}:
-        raise RuntimeError("both_bound_probes_required")
+    if set(probes) != {"removal", "coverage", "sql"}:
+        raise RuntimeError("all_bound_clients_required")
     inventory = {}
     for name, entry in probes.items():
-        probe_projection(entry, epoch, allocation)
+        probe_projection(entry, epoch, allocation, owner=name == "sql")
         for filename, path_key, sha_key in (("main.go", "source", "sha256"),
                                              ("main_test.go", "test_source", "test_sha256")):
             checked(entry[path_key], entry[sha_key])
@@ -420,12 +450,12 @@ def build_runtime(config, evidence, probes_path, probes_sha, *, retired):
                     or not (evidence / "importer-unavailable.json").is_file()):
         raise RuntimeError("importer_retirement_required")
     probes = read(checked(probes_path, probes_sha))
-    if set(probes) != {"removal", "coverage"}:
-        raise RuntimeError("both_bound_probes_required")
+    if set(probes) != {"removal", "coverage", "sql"}:
+        raise RuntimeError("all_bound_clients_required")
     epoch = read(checked(evidence / "binding.json", config["binding_sha256"]))
     added = {}
     for name, entry in probes.items():
-        probe_projection(entry, epoch, ALLOCATION if retired else None)
+        probe_projection(entry, epoch, ALLOCATION if retired else None, owner=name == "sql")
         for filename, path_key, sha_key in (("main.go", "source", "sha256"),
                                              ("main_test.go", "test_source", "test_sha256")):
             source = checked(entry[path_key], entry[sha_key])
@@ -445,12 +475,15 @@ def build_runtime(config, evidence, probes_path, probes_sha, *, retired):
         save(inventory_file, added)
     phase = "retired" if retired else "offline"
     env = clean_build_env(evidence / (phase + "-build-cache"))
-    record = {"importer_absent": retired, "probes_sha256": probes_sha, "programs": {}}
-    tests = ["go", "test", "-mod=readonly", "-count=1", "./cmd/e-removal-probe", "./cmd/e-coverage-probe"]
+    record = {"importer_absent": retired, "commit": epoch["commit"], "probes_sha256": probes_sha,
+              "source_inventory_sha256": config["source_inventory_sha256"],
+              "migration_inventory_sha256": config["migration_inventory_sha256"],
+              "probe_inventory_sha256": digest(inventory_file), "programs": {}}
+    tests = ["go", "test", "-mod=readonly", "-count=1", "./cmd/e-removal-probe", "./cmd/e-coverage-probe", "./cmd/e-sql-probe"]
     record["preconnection_tests"] = {"command": tests, "exit": 0,
                                       "output": command(tests, cwd=root / "platform", env=env)}
     for name, target in (("zns", "./cmd/zns"), ("removal", "./cmd/e-removal-probe"),
-                         ("coverage", "./cmd/e-coverage-probe")):
+                         ("coverage", "./cmd/e-coverage-probe"), ("sql", "./cmd/e-sql-probe")):
         deps = command(["go", "list", "-deps", target], cwd=root / "platform", env=env)
         if "github.com/complynx/zns-chatbot/tools/migrate" in deps:
             raise RuntimeError("runtime_importer_dependency_rejected")

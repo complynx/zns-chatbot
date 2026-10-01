@@ -69,7 +69,7 @@ def command(argv, *, cwd=None, data=None, env=None, binary=False):
 def clean_build_env(cache):
     env = os.environ.copy()
     for key in tuple(env):
-        if key.startswith(("MIGRATE_", "E_RUNTIME_", "ZNS_", "PG")):
+        if key.upper().startswith(("MIGRATE_", "E_RUNTIME_", "ZNS_", "PG")):
             del env[key]
     env.update(GOWORK="off", GOCACHE=str(cache), GOPROXY="off", GOTOOLCHAIN="local")
     return env
