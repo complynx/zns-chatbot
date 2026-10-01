@@ -17,3 +17,5 @@ QA266 completed FAIL2 despite the above scoped native PASS. Candidate80d0 is not
 ## Fresh developer successor f2720ebb
 
 New developer owns clean immutable f2720ebb2e7f497042817ef8454ccea1bd56c69c/basebd150d5b, complete original10 paths. Actual developer units, full pinned lint, format, native build, integration compile-only and Linux race PASS; DB-dependent unit skips remain limitations. Root70273 ran exact original2 PostgreSQL cases on exclusive58441/native8090:2.24s/3.82s, package6.282s,0FAILSKIP. Authenticated before/after snapshots and sorted parent database names identical.8090 and58441 released. Raw .worktrees/model-interruption-owner-fix/qa.local/root-pg/tests.jsonl SHA256 CD305E5C1CF9677387AE01F0061A95742B34FFA8B10CC0F21A36D114A9BCCE1B. Fresh full readonly QA268 launched; no merge, business recovery or Functional acceptance inferred.
+
+Terminal update: fullQA268FAIL2 despite native f272 tests passing. Durable ordering and expired completion are correcting in separate codex/model-consumption-durable-fix; original f272 retained, no merge/business acceptance.

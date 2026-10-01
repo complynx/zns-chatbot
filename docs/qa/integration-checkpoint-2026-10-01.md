@@ -66,3 +66,5 @@ Latest immutable handoffs: payment c5e770e7 complete7/root12PGPASS92.881s nowfre
 Fresh reviews267/268 are terminalFAIL, not pending or acceptance. Payment7 transferred new developer, model10 durable correction in separate branch CLI54485. Root still productbd150/docs57118257, no failed source merged. C93cab989 mainactualLinuxPG matrix clean, final compatibility gate pending. Lead listonly exact1060integration preliminary8shard manifests prepared, finalsource required.
 
 Full40 Cclock candidate93cab989 terminal authorLinux/PG/race/default/manual compatibility gates passed, resourcecleanupconfirmed. FreshQA269actuallyreadonlyCLI86645; no source/FQA acceptance yet. Operator5 successor planning transferred runtime developer afteracceptedC, no concurrentoldworktreewrites.
+
+QA269terminalFAIL3 overrides any pending-review statement: actualfull40 scopedgatesPASS not acceptance. Clockcorrection transferred freshdeveloper isolatedsame40. Rootproduct stillbd150, no rejectedcandidateintegrated. Payment andmodel correctionsparallel; operator5 readonlyplanprepared. Finalcomposition/FQA40/fullbaseline/production remainopen.

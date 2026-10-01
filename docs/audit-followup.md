@@ -1,4 +1,12 @@
-## Current integrated source and expanded QA — 2026-10-01, source33540321
+## Current integrated source and corrective ownership — 2026-10-01
+
+Integrated product remains bd150d5b; runtime14 role/configuration preparation passed QA264 and root focused fixtures. No rejected clock/payment/model candidate is integrated. Documentation checkpoint813efe70 preserves the latest evidence. Imagesce427 remain historical scopes, not current-source acceptance.
+
+Fresh full QA267 payment7 FAIL1, QA268 model10 FAIL2, QA269 clock40 FAIL3. Payment unavailability after can_book revocation transferred to menu_retirement_fix; durable model ordering/expiry correction owns CLI54485; writable clock aliases and post-lock eligibility transferred to fresh clock_final_boundary_developer. All source candidates and failed reports preserved. Next fresh Code QA270; allCodexoverride, Claude disabled/unprobed.
+
+Operator5 private-role plan prepared read-only, implementation waits reviewed C. Job19/091 likewise waits C ingress. Native58441/58451 are released; new bare58461/58471 prerequisites verified and released without product schema. Lead actual list-only1060integration/2187platform/136importer preliminary exact eight-shard plan prepared; final frozen source and Linux/browser/lifecycle/private-role prerequisites still required. No full baseline or40-row FQA acceptance. Independent actual-source parity inventory refresh is active, owner only parity-current.md. Human question remains final Telegram numeric testaccountID in PROGRESS. Production NO-GO.
+
+## Historical expanded QA checkpoint — 2026-10-01, source33540321
 
 Authoritative integrated Gitbd150d5b includes reviewed ACK observation QA241,
 source diagnostics QA243, registration fixture QA245 and HTTP observations

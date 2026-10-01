@@ -10,3 +10,5 @@ Own synthetic Linux resources/credentials and child databases cleaned; retained 
 
 Written by root (gpt-6/Codex)
 on behalf of Daniel Drizhuk
+
+Terminal update: fullQA269FAIL3 despite the above scoped gate passes.93cab989 is not accepted/integrated. Fresh developer owns separate full40 correction for mount writable aliases and post-lock current eligibility. Original raw gates and candidates preserved.
