@@ -42,15 +42,9 @@ func (b *Bot) DeliverBotIntent(ctx context.Context, ref delivery.Reference) erro
 			return b.botPreparationFailure(ctx, i, err)
 		}
 	}
-	rendered, err := b.renderBotIntent(live, i)
+	rendered, err := b.prepareBotWire(live, i)
 	if err != nil {
 		return b.botPreparationFailure(ctx, i, err)
-	}
-	if i.Phase != botDocumentKind {
-		rendered.Payload, err = telegram.PrepareSend(rendered.Payload)
-		if err != nil {
-			return b.botPreparationFailure(ctx, i, botdelivery.ErrStale)
-		}
 	}
 	attempt, ready, err := b.beginBotIntent(live, i, rendered)
 	if err != nil {
@@ -59,6 +53,15 @@ func (b *Bot) DeliverBotIntent(ctx context.Context, ref delivery.Reference) erro
 	if !ready {
 		return nil
 	}
+	wire, err := botdelivery.AdmittedWire(live, b.DB, attempt)
+	if err != nil {
+		if !errors.Is(err, botdelivery.ErrWireUnavailable) {
+			return err
+		}
+		return b.finishBotIntent(live, attempt,
+			delivery.Outcome{Kind: delivery.Rejected, Reason: "original_wire_unavailable"}, rendered.Receipt, false)
+	}
+	rendered = renderedBotWire(wire, rendered.Wire)
 	outcome, fallback := b.sendBotIntent(live, attempt, rendered)
 	// A known provider response must be persisted even when shutdown cancelled
 	// the caller while the response was being read.
@@ -78,6 +81,29 @@ func (b *Bot) DeliverBotIntent(ctx context.Context, ref delivery.Reference) erro
 		return nil
 	}
 	return b.continueBotIntent(cleanup, completed)
+}
+
+func (b *Bot) prepareBotWire(ctx context.Context, i botdelivery.Intent) (botRenderedDelivery, error) {
+	wire, ref, err := botdelivery.RetryWire(ctx, b.DB, i)
+	if err != nil {
+		return botRenderedDelivery{}, err
+	}
+	if ref != nil {
+		return renderedBotWire(wire, ref), nil
+	}
+	rendered, err := b.renderBotIntent(ctx, i)
+	if err != nil {
+		return rendered, err
+	}
+	if i.Phase != botDocumentKind {
+		rendered.Payload, err = telegram.PrepareSend(rendered.Payload)
+		if err != nil {
+			return rendered, botdelivery.ErrStale
+		}
+	}
+	storage := botdelivery.Service{DB: b.DB, Delivery: b.Delivery}
+	rendered.Wire, err = storage.StageWire(ctx, i, rendered.privateWire())
+	return rendered, err
 }
 
 func (b *Bot) sendBotIntent(ctx context.Context, i botdelivery.Intent, r botRenderedDelivery) (delivery.Outcome, bool) {
@@ -117,6 +143,9 @@ func (b *Bot) botPreparationFailure(ctx context.Context, i botdelivery.Intent, c
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()
+	}
+	if errors.Is(cause, botdelivery.ErrWireUnavailable) {
+		return b.postponeBotIntent(ctx, i, true, "original_wire_unavailable")
 	}
 	// Retire at the shared failure boundary, after reconstruction or admission.
 	// The immutable reference can only retire its exact saved source and revision.

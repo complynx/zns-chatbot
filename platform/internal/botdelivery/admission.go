@@ -182,6 +182,7 @@ func (s Service) begin(
 	target int64,
 	exportEvents []string,
 	pass *PassCardReceipt,
+	wire *WireReference,
 ) (Intent, bool, error) {
 	stored, err := s.readBeginObservation(ctx, observed, exportEvents)
 	if err != nil {
@@ -206,6 +207,9 @@ func (s Service) begin(
 	if err = s.lockPayloadSources(ctx, tx, stored, exportEvents, previous, pass); err != nil {
 		return s.failPassAdmission(ctx, tx, stored, previous, err)
 	}
+	if err = lockWireGeneration(ctx, tx, stored, wire); err != nil {
+		return observed, false, err
+	}
 	if observed.Reference.Kind == CardIntent && observed.Attempt == 0 &&
 		observed.Reference.Family != PassReceiptRedactionFamily {
 		if err = lockRenderedTarget(ctx, tx, observed, target); err != nil {
@@ -223,7 +227,7 @@ func (s Service) begin(
 		return current, false, nil
 	}
 	current = bindAdmittedPass(current, pass)
-	return s.beginAttempt(ctx, tx, current, target, previous)
+	return s.beginAttempt(ctx, tx, current, target, previous, wire)
 }
 
 func (s Service) beginAttempt(
@@ -232,7 +236,12 @@ func (s Service) beginAttempt(
 	current Intent,
 	target int64,
 	previous *Intent,
+	capture ...*WireReference,
 ) (Intent, bool, error) {
+	var wire *WireReference
+	if len(capture) != 0 {
+		wire = capture[0]
+	}
 	var resends int
 	var chain bool
 	if err := tx.QueryRow(ctx, `SELECT last_uncertain_attempt IS NOT NULL,uncertain_resends
@@ -297,6 +306,9 @@ func (s Service) beginAttempt(
 		current.Phase = phaseEdit
 		current.Target = target
 	}
+	if err = bindWireAttempt(ctx, tx, current, wire); err != nil {
+		return current, false, err
+	}
 	receipt, err := json.Marshal(current.Receipt)
 	if err != nil {
 		return current, false, err
@@ -323,7 +335,7 @@ func (s Service) Begin(ctx context.Context, in BeginRequest) (BeginResult, error
 	if in.PreparationFailure {
 		return s.failPassPreparation(ctx, in.Observed)
 	}
-	i, ready, err := s.begin(ctx, in.Observed, in.Target, in.ExportEvents, in.Pass)
+	i, ready, err := s.begin(ctx, in.Observed, in.Target, in.ExportEvents, in.Pass, in.Wire)
 	if err != nil {
 		return BeginResult{}, err
 	}

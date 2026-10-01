@@ -1,9 +1,13 @@
 package bot
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,12 +21,479 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
+func TestBotTransportRetryCapturedLanguageCard(t *testing.T) {
+	t.Parallel()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	b.Delivery.BotID = 999
+	b.Delivery.UncertaintyRetryBase = time.Second
+	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	_, err := db.Exec(ctx, `UPDATE core.users SET telegram_id=101,language='en' WHERE id='alice'`)
+	require.NoError(t, err)
+	preferences := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var language string
+		if readErr := db.QueryRow(r.Context(), `SELECT language FROM core.users WHERE id='alice'`).
+			Scan(&language); readErr != nil {
+			http.Error(w, "unavailable", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"language": language})
+	}))
+	defer preferences.Close()
+	b.API.Base, b.API.HTTP = preferences.URL, preferences.Client()
+	fake, err := sandbox.New(ctx, db, "synthetic")
+	require.NoError(t, err)
+	requests := make(chan []byte, 3)
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(io.LimitReader(r.Body, botdelivery.MaxRequestBytes+1))
+		if readErr != nil {
+			http.Error(w, "unavailable", http.StatusBadRequest)
+			return
+		}
+		requests <- body
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		if calls.Add(1) == 1 {
+			fake.Handler().ServeHTTP(httptest.NewRecorder(), r)
+			connection, _, hijackErr := http.NewResponseController(w).Hijack()
+			if hijackErr == nil {
+				_ = connection.Close()
+			}
+			return
+		}
+		fake.Handler().ServeHTTP(w, r)
+	}))
+	defer server.Close()
+	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+	ref := botdelivery.Reference{Kind: botdelivery.CardIntent, Family: languageKey, CardKey: languageKey}
+	queued, err := b.enqueueBotIntent(ctx, "alice", 101, "captured-language", "view", ref, "send")
+	require.NoError(t, err)
+	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
+	original := <-requests
+	_, err = db.Exec(ctx, `UPDATE core.users SET language='ru' WHERE id='alice'`)
+	require.NoError(t, err)
+	current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
+	require.NoError(t, err)
+	restarted := botDeliveryTestBot(db)
+	restarted.Delivery, restarted.API, restarted.TG = b.Delivery, b.API, b.TG
+	restarted.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	require.NoError(t, restarted.RecoverBotIntents(ctx))
+	time.Sleep(time.Until(current.NotBefore) + 20*time.Millisecond)
+	require.NoError(t, restarted.DeliverBotIntent(ctx, queued.Reference))
+	require.JSONEq(
+		t,
+		string(original),
+		string(<-requests),
+		"resend preserves the original normalized text and keyboard",
+	)
+	_, err = restarted.enqueueBotIntent(ctx, "alice", 101, "fresh-language", "view", ref, "send")
+	require.NoError(t, err)
+	require.NoError(
+		t,
+		restarted.DeliverBotIntent(ctx, delivery.Reference{Owner: delivery.Bot, Key: "fresh-language", Effect: "view"}),
+	)
+	fresh := <-requests
+	require.NotEqual(t, string(original), string(fresh), "new intents render current Russian preferences")
+	var originalPayload, freshPayload telegram.Send
+	require.NoError(t, json.Unmarshal(original, &originalPayload))
+	require.NoError(t, json.Unmarshal(fresh, &freshPayload))
+	require.NotEqual(t, originalPayload.Text, freshPayload.Text)
+	require.EqualValues(t, 3, calls.Load())
+}
+
+func TestBotTransportRetryCapturedDocument(t *testing.T) {
+	t.Parallel()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	b.Delivery.BotID = 999
+	b.Delivery.UncertaintyRetryBase = time.Second
+	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	_, err := db.Exec(ctx, `UPDATE core.users SET telegram_id=101 WHERE id='alice';
+ INSERT INTO core.pass_booking_admins(owner) VALUES('alice') ON CONFLICT DO NOTHING`)
+	require.NoError(t, err)
+	original := bytes.Repeat([]byte("x"), telegram.MaxDocumentBytes)
+	_, err = db.Exec(
+		ctx,
+		`INSERT INTO bot.fake_files(id,filename,body) VALUES('captured_original','original.bin',$1)`,
+		original,
+	)
+	require.NoError(t, err)
+	authorization := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer authorization.Close()
+	b.API.Base, b.API.HTTP = authorization.URL, authorization.Client()
+	fake, err := sandbox.New(ctx, db, "synthetic")
+	require.NoError(t, err)
+	var sends, fileLookups atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/getFile") {
+			fileLookups.Add(1)
+		}
+		if strings.HasSuffix(r.URL.Path, "/sendDocument") && sends.Add(1) == 1 {
+			fake.Handler().ServeHTTP(httptest.NewRecorder(), r)
+			connection, _, hijackErr := http.NewResponseController(w).Hijack()
+			if hijackErr == nil {
+				_ = connection.Close()
+			}
+			return
+		}
+		fake.Handler().ServeHTTP(w, r)
+	}))
+	defer server.Close()
+	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+	queued, err := b.queueBotDocument(
+		ctx,
+		"alice",
+		101,
+		botdelivery.Reference{Family: "admin_file", Object: "captured_original",
+			Update: 71, Continuation: botdelivery.Continuation{Kind: "document"}},
+	)
+	require.NoError(t, err)
+	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
+	current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
+	require.NoError(t, err)
+	wire, ref, err := botdelivery.RetryWire(ctx, db, current)
+	require.NoError(t, err)
+	require.Len(t, wire.Body, len(original))
+	require.Equal(t, sha256.Sum256(original), sha256.Sum256(wire.Body))
+	envelope, err := json.Marshal(botdelivery.BeginRequest{Observed: current, Wire: ref})
+	require.NoError(t, err)
+	require.Less(t, len(envelope), botdelivery.MaxRequestBytes, "20MiB body stays outside host JSON")
+	_, err = db.Exec(
+		ctx,
+		`UPDATE bot.fake_files SET body=$1,filename='changed.bin' WHERE id='captured_original'`,
+		[]byte("changed source"),
+	)
+	require.NoError(t, err)
+	restarted := botDeliveryTestBot(db)
+	restarted.Delivery, restarted.API, restarted.TG = b.Delivery, b.API, b.TG
+	restarted.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	require.NoError(t, restarted.RecoverBotIntents(ctx))
+	time.Sleep(time.Until(current.NotBefore) + 20*time.Millisecond)
+	require.NoError(t, restarted.DeliverBotIntent(ctx, queued.Reference))
+	require.EqualValues(t, 2, sends.Load())
+	require.EqualValues(t, 1, fileLookups.Load(), "resend must not download a mutable source again")
+	state := httptest.NewRecorder()
+	fake.Handler().ServeHTTP(state, httptest.NewRequest(http.MethodGet, "/lab/state?user=101", nil))
+	var visible struct {
+		Messages []telegram.Message `json:"messages"`
+	}
+	require.NoError(t, json.Unmarshal(state.Body.Bytes(), &visible))
+	require.Len(t, visible.Messages, 2)
+	for _, message := range visible.Messages {
+		require.NotNil(t, message.Document)
+		var filename string
+		var body []byte
+		require.NoError(
+			t,
+			db.QueryRow(ctx, `SELECT filename,body FROM bot.fake_files WHERE id=$1`, message.Document.FileID).
+				Scan(&filename, &body),
+		)
+		require.Equal(t, wire.Filename, filename)
+		require.Equal(t, sha256.Sum256(original), sha256.Sum256(body))
+	}
+}
+
+func TestBotTransportRetryCapturePrivacyAndCorruption(t *testing.T) {
+	t.Parallel()
+	for _, fault := range []string{"history", "revoke", "missing", "corrupt"} {
+		t.Run(fault, func(t *testing.T) {
+			t.Parallel()
+			testBotCapturePrivateFault(t, fault)
+		})
+	}
+}
+
+func testBotCapturePrivateFault(t *testing.T, fault string) {
+	t.Helper()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	b.Delivery.BotID = 999
+	b.Delivery.UncertaintyRetryBase = time.Second
+	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	_, err := db.Exec(ctx, `UPDATE core.users SET telegram_id=101 WHERE id='alice'`)
+	require.NoError(t, err)
+	require.NoError(
+		t,
+		b.queueBotResult(ctx, "alice", 101, 72, "private-capture", botdelivery.Reference{Family: "static"},
+			botdelivery.StoredResult{Payload: telegram.Send{Text: "private original"}}, 0),
+	)
+	operation, effect := botdelivery.ResultOperation("alice", 72, "private-capture")
+	key := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+	current, err := botdelivery.Read(ctx, db, 999, key, false)
+	require.NoError(t, err)
+	payload, err := telegram.PrepareSend(telegram.Send{ChatID: 101, Text: "private original"})
+	require.NoError(t, err)
+	storage := botdelivery.Service{DB: db, Delivery: b.Delivery}
+	ref, err := storage.StageWire(ctx, current, botdelivery.Wire{Payload: payload})
+	require.NoError(t, err)
+	rendered := botRenderedDelivery{Payload: payload, Wire: ref}
+	admitted, ready, err := b.beginBotIntent(ctx, current, rendered)
+	require.NoError(t, err)
+	require.True(t, ready)
+	fake, err := sandbox.New(ctx, db, "synthetic")
+	require.NoError(t, err)
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		fake.Handler().ServeHTTP(httptest.NewRecorder(), r)
+		connection, _, hijackErr := http.NewResponseController(w).Hijack()
+		if hijackErr == nil {
+			_ = connection.Close()
+		}
+	}))
+	defer server.Close()
+	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+	outcome, fallback := b.sendBotIntent(ctx, admitted, rendered)
+	require.Equal(t, delivery.Uncertain, outcome.Kind)
+	require.NoError(t, b.finishBotIntent(ctx, admitted, outcome, rendered.Receipt, fallback))
+	window, err := b.API.ConversationWindow(ctx, "alice", 10)
+	require.NoError(t, err)
+	visibleHistory, err := json.Marshal(window)
+	require.NoError(t, err)
+	require.NotContains(t, string(visibleHistory), "private original", "wire storage is absent from model history")
+	applyBotCaptureFault(t, &b, fault)
+	require.NoError(t, b.DeliverBotIntent(ctx, key))
+	failed, err := botdelivery.Read(ctx, db, 999, key, false)
+	require.NoError(t, err)
+	expected := delivery.Rejected
+	if fault == "history" || fault == "revoke" {
+		expected = delivery.Cancelled
+	}
+	require.Equal(t, expected, failed.State)
+	require.False(t, failed.ContinuationDone)
+	require.Zero(t, failed.MessageID)
+	require.EqualValues(t, 1, calls.Load(), "unavailable private source must not reconstruct or resend")
+	var lastAttempt, resends int
+	var reason string
+	require.NoError(
+		t,
+		db.QueryRow(ctx, `SELECT last_uncertain_attempt,uncertain_resends,reason FROM bot.delivery_intents
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`, b.Delivery.BotID, operation, effect).
+			Scan(&lastAttempt, &resends, &reason),
+	)
+	require.Equal(t, 1, lastAttempt)
+	require.Zero(t, resends)
+	if expected == delivery.Rejected {
+		require.Equal(t, "original_wire_unavailable", reason)
+	}
+}
+
+func applyBotCaptureFault(t *testing.T, b *Bot, fault string) {
+	t.Helper()
+	var query string
+	switch fault {
+	case "history":
+		query = `INSERT INTO core.conversation_history_generations(owner,generation) VALUES('alice',1)
+ ON CONFLICT(owner) DO UPDATE SET generation=core.conversation_history_generations.generation+1`
+	case "revoke":
+		query = `UPDATE core.users SET can_book=false WHERE id='alice'`
+	case "missing":
+		query = `DELETE FROM bot.interactions WHERE owner='alice' AND kind LIKE 'delivery_wire:%'`
+	case "corrupt":
+		query = `UPDATE bot.interactions SET content=jsonb_set(content,'{wire,payload,text}','"corrupt"')
+ WHERE owner='alice' AND kind LIKE 'delivery_wire:%'`
+	}
+	_, err := b.DB.Exec(t.Context(), query)
+	require.NoError(t, err)
+	if fault == "history" {
+		var bodies int
+		require.NoError(t, b.DB.QueryRow(t.Context(), `SELECT count(*) FROM bot.interactions
+ WHERE owner='alice' AND (kind LIKE 'delivery_wire:%' OR kind LIKE 'delivery_result:%')`).Scan(&bodies))
+		require.Zero(t, bodies, "private results and staged/admitted wire disappear together")
+	}
+}
+
+func TestBotTransportRetryDefaultBaseKeepsMissingCooldown(t *testing.T) {
+	t.Parallel()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	b.Delivery.BotID = 999
+	b.Delivery.Fallback = 30 * time.Second
+	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	require.Zero(t, b.Delivery.UncertaintyRetryBase)
+	fake, err := sandbox.New(ctx, db, "synthetic")
+	require.NoError(t, err)
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			fake.Handler().ServeHTTP(httptest.NewRecorder(), r)
+			connection, _, hijackErr := http.NewResponseController(w).Hijack()
+			if hijackErr == nil {
+				_ = connection.Close()
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"ok":false,"error_code":429,"description":"Too Many Requests"}`))
+	}))
+	defer server.Close()
+	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+	queued, err := b.enqueueBotIntent(ctx, "", 101, "default-cooldown", "notice", botdelivery.Reference{
+		Kind: botdelivery.IdentityIntent, Update: 75, Notice: i18n.IdentityUnavailable, Language: "en"}, "send")
+	require.NoError(t, err)
+	started := time.Now()
+	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
+	current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, current.NotBefore.Sub(started), 5*time.Second)
+	require.Less(
+		t,
+		current.NotBefore.Sub(started),
+		10*time.Second,
+		"missing-cooldown fallback is not the first uncertainty delay",
+	)
+	time.Sleep(time.Until(current.NotBefore) + 20*time.Millisecond)
+	started = time.Now()
+	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
+	current, err = botdelivery.Read(ctx, db, 999, queued.Reference, false)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, current.NotBefore.Sub(started), 30*time.Second)
+	var global, chat time.Time
+	require.NoError(t, db.QueryRow(ctx, `SELECT
+ (SELECT not_before FROM core.delivery_pacing WHERE bot_id=999 AND chat=''),
+ (SELECT not_before FROM core.delivery_pacing WHERE bot_id=999 AND chat='101')`).Scan(&global, &chat))
+	require.GreaterOrEqual(t, global.Sub(started), 30*time.Second)
+	require.GreaterOrEqual(t, chat.Sub(started), 30*time.Second)
+	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
+	require.EqualValues(t, 2, calls.Load())
+	var lastAttempt, resends int
+	require.NoError(t, db.QueryRow(ctx, `SELECT last_uncertain_attempt,uncertain_resends FROM bot.delivery_intents
+ WHERE operation_key='default-cooldown'`).Scan(&lastAttempt, &resends))
+	require.Equal(t, 1, lastAttempt, "confirmed429 does not replace factual uncertainty")
+	require.Equal(t, 1, resends)
+}
+
+func TestBotTransportRetryCaptureBindingAndStaging(t *testing.T) {
+	t.Parallel()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	b.Delivery.UncertaintyRetryBase = time.Second
+	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	queued, err := b.enqueueBotIntent(ctx, "", 101, "capture-binding", "notice", botdelivery.Reference{
+		Kind: botdelivery.IdentityIntent, Update: 76, Notice: i18n.IdentityUnavailable, Language: "en"}, "send")
+	require.NoError(t, err)
+	current, err := botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
+	require.NoError(t, err)
+	storage := botdelivery.Service{DB: db, Delivery: b.Delivery}
+	payload, err := telegram.PrepareSend(telegram.Send{ChatID: 101, Text: "first candidate"})
+	require.NoError(t, err)
+	first, err := storage.StageWire(ctx, current, botdelivery.Wire{Payload: payload})
+	require.NoError(t, err)
+	payload.Text = "second candidate"
+	second, err := storage.StageWire(ctx, current, botdelivery.Wire{Payload: payload})
+	require.NoError(t, err)
+	_, ready, err := b.beginBotIntent(ctx, current, botRenderedDelivery{Payload: payload, Wire: first})
+	require.ErrorIs(t, err, botdelivery.ErrWireUnavailable)
+	require.False(t, ready)
+	var attempt, resends int
+	var capture *string
+	require.NoError(t, db.QueryRow(ctx, `SELECT attempt,uncertain_resends,wire_capture_key FROM bot.delivery_intents
+ WHERE operation_key='capture-binding'`).Scan(&attempt, &resends, &capture))
+	require.Zero(t, attempt)
+	require.Zero(t, resends)
+	require.Nil(t, capture, "staging alone does not freeze an admitted original")
+	wrong := current
+	wrong.BotID++
+	_, err = storage.StageWire(ctx, wrong, botdelivery.Wire{Payload: payload})
+	require.ErrorIs(t, err, botdelivery.ErrBinding)
+	wrong = current
+	wrong.Owner = "alice"
+	_, err = storage.StageWire(ctx, wrong, botdelivery.Wire{Payload: payload})
+	require.ErrorIs(t, err, botdelivery.ErrBinding)
+	admitted, ready, err := b.beginBotIntent(ctx, current, botRenderedDelivery{Payload: payload, Wire: second})
+	require.NoError(t, err)
+	require.True(t, ready)
+	wire, err := botdelivery.AdmittedWire(ctx, db, admitted)
+	require.NoError(t, err)
+	require.Equal(t, payload, wire.Payload)
+	require.NoError(t, b.finishBotIntent(ctx, admitted,
+		delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"}, wire.Receipt, false))
+	current, err = botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
+	require.NoError(t, err)
+	payload.Text = "must not replace original"
+	_, err = storage.StageWire(ctx, current, botdelivery.Wire{Payload: payload})
+	require.NoError(t, err)
+	wire, _, err = botdelivery.RetryWire(ctx, db, current)
+	require.NoError(t, err)
+	require.Equal(t, "second candidate", wire.Payload.Text)
+	wrong = admitted
+	wrong.Attempt++
+	_, err = botdelivery.AdmittedWire(ctx, db, wrong)
+	require.ErrorIs(t, err, botdelivery.ErrWireUnavailable)
+}
+
+func TestBotTransportRetryLegacyUnknownCapturesNextWire(t *testing.T) {
+	t.Parallel()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	b.Delivery.BotID = 999
+	b.Delivery.UncertaintyRetryBase = time.Second
+	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	queued, err := b.enqueueBotIntent(ctx, "", 101, "legacy-capture", "notice", botdelivery.Reference{
+		Kind: botdelivery.IdentityIntent, Update: 77, Notice: i18n.IdentityUnavailable, Language: "en"}, "send")
+	require.NoError(t, err)
+	current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
+	require.NoError(t, err)
+	admitted, ready, err := b.beginBotIntent(ctx, current, botRenderedDelivery{})
+	require.NoError(t, err)
+	require.True(t, ready)
+	require.NoError(t, b.finishBotIntent(
+		ctx,
+		admitted,
+		delivery.Outcome{
+			Kind:   delivery.Uncertain,
+			Reason: "telegram_outcome_unknown",
+		},
+		botdelivery.Continuation{},
+		false,
+	))
+	current, err = botdelivery.Read(ctx, db, 999, queued.Reference, false)
+	require.NoError(t, err)
+	_, capture, err := botdelivery.RetryWire(ctx, db, current)
+	require.NoError(t, err)
+	require.Nil(t, capture, "legacy uncertainty has no fabricated original capture")
+	fake, err := sandbox.New(ctx, db, "synthetic")
+	require.NoError(t, err)
+	server := httptest.NewServer(fake.Handler())
+	defer server.Close()
+	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+	time.Sleep(time.Until(current.NotBefore) + 20*time.Millisecond)
+	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
+	current, err = botdelivery.Read(ctx, db, 999, queued.Reference, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Succeeded, current.State)
+	require.True(t, current.ContinuationDone)
+	var originalUnknown, resends int
+	var key, hash string
+	require.NoError(
+		t,
+		db.QueryRow(ctx, `SELECT last_uncertain_attempt,uncertain_resends,wire_capture_key,wire_capture_hash
+ FROM bot.delivery_intents WHERE operation_key='legacy-capture'`).Scan(&originalUnknown, &resends, &key, &hash),
+	)
+	require.Equal(t, 1, originalUnknown, "new capture does not invent historical delivery evidence")
+	require.Equal(t, 1, resends)
+	require.NotEmpty(t, key)
+	require.Len(t, hash, sha256.Size*2)
+}
+
 func TestBotTransportRetryLostResponse(t *testing.T) {
 	t.Parallel()
 	db := foodPendingDatabase(t)
 	ctx := t.Context()
 	b := botDeliveryTestBot(db)
 	b.Delivery.BotID = 999
+	b.Delivery.UncertaintyRetryBase = time.Second
 	b.Delivery.Fallback = time.Second
 	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
 	fake, err := sandbox.New(ctx, db, "synthetic")
@@ -109,6 +580,7 @@ func testBotTransportRetryBudgetAndFollower(t *testing.T, rateLimited bool) {
 	ctx := t.Context()
 	b := botDeliveryTestBot(db)
 	b.Delivery.BotID = 999
+	b.Delivery.UncertaintyRetryBase = time.Second
 	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
 	fake, err := sandbox.New(ctx, db, "synthetic")
 	require.NoError(t, err)
@@ -362,6 +834,7 @@ func TestBotTransportRetryTerminalResponseWorker(t *testing.T) {
 	ctx := t.Context()
 	b := botDeliveryTestBot(db)
 	b.Delivery.BotID = 999
+	b.Delivery.UncertaintyRetryBase = time.Second
 	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
 	fake, err := sandbox.New(ctx, db, "synthetic")
 	require.NoError(t, err)

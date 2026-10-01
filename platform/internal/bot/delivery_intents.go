@@ -47,6 +47,7 @@ func (b *Bot) beginBotIntent(
 	result, err := b.Host.BeginBotDelivery(
 		ctx,
 		botdelivery.BeginRequest{
+			Wire:         rendered.Wire,
 			Observed:     observed,
 			Pass:         rendered.Receipt.Pass,
 			Target:       rendered.Payload.MessageID,
@@ -184,7 +185,12 @@ func recordBotTerminalReceipt(
 	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
-func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent, terminal bool) error {
+func (b *Bot) postponeBotIntent(
+	ctx context.Context,
+	observed botdelivery.Intent,
+	terminal bool,
+	failureReason ...string,
+) error {
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
 		return core.DatabaseOperationError(err)
@@ -205,6 +211,9 @@ func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent
 	}
 	if terminal {
 		state, reason = delivery.Cancelled, "source_unavailable"
+	}
+	if len(failureReason) != 0 {
+		state, reason = delivery.Rejected, failureReason[0]
 	}
 	if err = delivery.Project(ctx, tx, current.BotID, current.QueueReference(), state, deadline); err != nil {
 		return err
@@ -316,8 +325,9 @@ func (b *Bot) retryBotTransport(ctx context.Context, tx pgx.Tx, current botdeliv
 			deadline,
 		)
 	}
-	seconds := int64(b.Delivery.Fallback / time.Second)
-	if b.Delivery.Fallback%time.Second != 0 {
+	base := b.Delivery.UncertaintyRetryBaseOrDefault()
+	seconds := int64(base / time.Second)
+	if base%time.Second != 0 {
 		seconds++
 	}
 	backoff, valid := delivery.Deadline(now, seconds<<resends)

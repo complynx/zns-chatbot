@@ -346,7 +346,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	)
 	var inventedMetadata, spentBudget int64
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
- (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
+ (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
 		Scan(&inventedMetadata, &spentBudget))
 	require.Zero(t, inventedMetadata, "upgrade must not invent historical uncertainty")
 	require.Zero(t, spentBudget, "upgrade must not consume resend budget")
@@ -414,7 +414,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	replayState := queueUpgradeState(t, db, true)
 	require.NoError(t, Migrate(t.Context(), db), "restart migration is idempotent")
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
- (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
+ (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
 		Scan(&inventedMetadata, &spentBudget))
 	require.Zero(t, inventedMetadata, "replay must not invent historical uncertainty")
 	require.Zero(t, spentBudget, "replay must not consume resend budget")
@@ -474,7 +474,7 @@ func queueUpgradeState(t *testing.T, db *pgxpool.Pool, after bool) string {
  'fairness',(SELECT jsonb_agg(to_jsonb(f) ORDER BY f.bot_id) FROM core.delivery_fairness f),
  'jobs',(SELECT jsonb_agg(to_jsonb(m) ORDER BY m.id) FROM core.admin_messages m),
  'attempts',(SELECT jsonb_agg(to_jsonb(d) ORDER BY d.id) FROM core.admin_message_deliveries d),
- 'bot_intents',(SELECT jsonb_agg(to_jsonb(i)-ARRAY['last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends'] ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`
+ 'bot_intents',(SELECT jsonb_agg(to_jsonb(i)-ARRAY['last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends','wire_capture_key','wire_capture_hash'] ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`
 	var value string
 	require.NoError(t, db.QueryRow(t.Context(), query).Scan(&value))
 	return value

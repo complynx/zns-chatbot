@@ -6,9 +6,20 @@ import (
 )
 
 type botRenderedDelivery struct {
+	Wire         *botdelivery.WireReference
 	Payload      telegram.Send
 	Filename     string
 	Body         []byte
 	Receipt      botdelivery.Continuation
 	ExportEvents []string
+}
+
+func (r botRenderedDelivery) privateWire() botdelivery.Wire {
+	return botdelivery.Wire{Payload: r.Payload, Filename: r.Filename, Body: r.Body,
+		Receipt: r.Receipt, ExportEvents: r.ExportEvents}
+}
+
+func renderedBotWire(wire botdelivery.Wire, ref *botdelivery.WireReference) botRenderedDelivery {
+	return botRenderedDelivery{Payload: wire.Payload, Filename: wire.Filename, Body: wire.Body,
+		Receipt: wire.Receipt, ExportEvents: wire.ExportEvents, Wire: ref}
 }
