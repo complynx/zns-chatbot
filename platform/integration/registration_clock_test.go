@@ -1196,6 +1196,8 @@ func seedRegistrationClockSecondEvent(t *testing.T, db *pgxpool.Pool, start time
 	_, err = db.Exec(t.Context(), `INSERT INTO core.pass_event_tiers(event_id,position,amount,price,starts_at)
  VALUES('dance-b',0,20,100,$1)`, start.Add(-time.Hour))
 	require.NoError(t, err)
+	_, err = db.Exec(t.Context(), `INSERT INTO core.pass_payment_admins(event_id,owner) VALUES('dance-b','bob')`)
+	require.NoError(t, err)
 }
 
 func TestRegistrationClockPassportRetriesWholeEventSelection(t *testing.T) {
