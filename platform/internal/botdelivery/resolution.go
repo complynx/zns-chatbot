@@ -164,11 +164,11 @@ func (s Service) resolve(ctx context.Context, tx pgx.Tx, actor string, r Resolut
 		return Inspection{}, ErrBinding
 	}
 	prior, err := s.priorResolution(ctx, tx, actor, r)
-	if err != nil {
-		return Inspection{}, err
-	}
-	if prior != nil {
+	if err == nil {
 		return *prior, core.DatabaseOperationError(tx.Commit(ctx))
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return Inspection{}, err
 	}
 	q := dbgen.New(tx)
 	ref := delivery.Reference{Owner: delivery.Bot, Key: r.Operation, Effect: r.Effect}
@@ -231,7 +231,7 @@ func (s Service) priorResolution(ctx context.Context, tx pgx.Tx, actor string, r
 		ctx, dbgen.GetBotDeliveryResolutionParams{Actor: actor, OperationKey: r.Key},
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+		return nil, pgx.ErrNoRows
 	}
 	if err != nil {
 		return nil, core.DatabaseOperationError(err)
