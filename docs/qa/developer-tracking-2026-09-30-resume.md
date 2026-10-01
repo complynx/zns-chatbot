@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through261, next262. All authorship/routes Codex under override;
+Fresh requests through262, next263. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -157,3 +157,9 @@ Current staffing refresh: three active capability developers: C host capability 
 C28 immutable eec24665 is completing full Linux/PostgreSQL clock/default/startup gates in its own ephemeral fixture; native55432 released. D10 immutable df5199ad passed local tests/lint/build and root actual two PostgreSQL cases run on58441 with exclusive8090. Payment6 root repeat failed47.615s only on the missing-edit terminal-status assertion; all other selected cases passed and parent DB readback passed. Author corrects exact Rejected contract and an identified still-live off-page payment boundary within the same scope, retaining original-source locking and no-send retirement assertions. No acceptance yet.
 
 Runtime14 transferred after QA261. First real PG17.11 roles/bootstrap/7operator-actions/fake-persistence and zero-managed-session inventory checks passed; negative/config/lint gates remain. ManagedC204 unstarted. Live clock read/advance also require the private operator guard; operator5 is prepared only after reviewed C integration. Full F08 business-plan/effects/UI observation remains separate. Counter261,next262; all Codex override. Root source33540321, no production release.
+
+## Fresh request262 — allocated before dispatch
+
+Codex authored complete model-interruption controls df5199ada7eb192b5f613270b392b24d86ca4b16 based33540321, exact10 paths. Route Codex under user override, Claude unprobed. Developer local gates passed; root native58441 two PG cases passed with unchanged parent DB inventory. Fresh independent read-only review receives original requirements and complete immutable base/final scope only; not this tracking record or author findings. Full F08/UI acceptance separate. Next263.
+
+Request262 actual route: builtin fresh spawn rejected at thread limit; standalone fresh read-only Codex CLI v0.159.2 defaultgpt-6.1-sol medium started03:39UTC, session60022, session UUID01a0f58b-5a01-7a61-9911-ac96eba50ce1. Original scope/full immutable diff only, no implementer gate history; reviewer sandboxreadonly/approvalnever. Own local final output copied to report only after terminal; no Claude. Native2PG PASS3.83s+5.78s/package10.16s with unchanged parent DBnames.
