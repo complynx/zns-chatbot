@@ -446,6 +446,13 @@ class GuardTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     rehearse.probe_projection(entry, allocation, allocation)
 
+        # A matching localhost epoch/allocation must also fail the standalone projection contract.
+        path.write_text(json.dumps(dict(value, host="localhost")), encoding="utf-8")
+        entry["projection_sha256"] = prepare.digest(path)
+        matching = dict(allocation, host="localhost")
+        with self.assertRaisesRegex(RuntimeError, "reviewed_probe_endpoint_required"):
+            rehearse.probe_projection(entry, matching, matching)
+
     def test_save_does_not_overwrite_evidence(self):
         path = self.root / "receipt.json"
         prepare.save(path, {"existing": True})

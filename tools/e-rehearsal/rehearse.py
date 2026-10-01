@@ -408,7 +408,7 @@ def probe_projection(entry, epoch, allocation=None, *, owner=False):
     projection = read(checked(entry["projection"], entry["projection_sha256"]))
     if (projection.get("database") != epoch["database"] or projection.get("marker") != epoch["marker"]
             or projection.get("transport") != "host-loopback" or projection.get("role") != ("postgres" if owner else "zns_app")
-            or projection.get("host") not in (("127.0.0.1",) if owner else ("127.0.0.1", "localhost"))
+            or projection.get("host") != "127.0.0.1"
             or type(projection.get("port")) is not int or not 1024 <= projection["port"] <= 65535):
         raise RuntimeError("reviewed_probe_endpoint_required")
     if allocation is not None and any(projection[key] != allocation[key]

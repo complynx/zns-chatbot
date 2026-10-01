@@ -183,8 +183,9 @@ the SHA256 of each exact JSON file to its executable. The removal probe takes
 `<projection.json> <sha256>`. Both validate the URL and effective pgx host/port/database/role before pool creation.
 Use only a postgres/postgresql URL with no query or exactly sslmode=disable.
 Reject all PG environment settings, service/hostaddr/query target overrides,
-keyword/multihost DSNs, unknown transport and SSL fallbacks. localhost resolves
-only to 127.0.0.1 in this supported transport. A copied synthetic database at any
+keyword/multihost DSNs, unknown transport and SSL fallbacks. All clients require
+the literal 127.0.0.1 host; localhost is rejected before connection even when
+the projection and URL both use that alias. A copied synthetic database at any
 other endpoint is rejected before connection, including delete mode.
 Database/comment and absent importer schema checks remain before business calls. The assertions preserve history
 hashes/tombstones, drafts, domain projections, proof bytes/ACL and credit semantics.

@@ -153,7 +153,7 @@ func loadExpected(path, expectedHash string) (expected, error) {
 // runtimeConfig binds the supported loopback transport before pool creation.
 func runtimeConfig(host string, port uint16, database, role, transport string) (*pgxpool.Config, error) {
 	rejected := errors.New("allocated_runtime_target_required")
-	if transport != "host-loopback" || (host != "127.0.0.1" && host != "localhost") || port < 1024 ||
+	if transport != "host-loopback" || host != "127.0.0.1" || port < 1024 ||
 		role != "zns_app" {
 		return nil, rejected
 	}
@@ -177,7 +177,7 @@ func runtimeConfig(host string, port uint16, database, role, transport string) (
 		effective.Password != password || effective.TLSConfig != nil || len(effective.Fallbacks) != 0 || len(effective.RuntimeParams) != 0 {
 		return nil, rejected
 	}
-	// localhost is an explicitly supported loopback alias, not ambient DNS authority.
+	// Only the literal allocated IPv4 endpoint is accepted; no alias or DNS lookup.
 	effective.LookupFunc = func(_ context.Context, name string) ([]string, error) {
 		if name != host {
 			return nil, rejected

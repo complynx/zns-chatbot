@@ -56,10 +56,8 @@ func TestRuntimeConfig(t *testing.T) {
 	}
 	t.Setenv("E_RUNTIME_DATABASE_URL", strings.Replace(allocatedURL, "127.0.0.1", "localhost", 1))
 	config, err := runtimeConfig("localhost", 25432, "synthetic_qa_zns_guard", "zns_app", "host-loopback")
-	require.NoError(t, err)
-	addresses, err := config.ConnConfig.LookupFunc(t.Context(), "localhost")
-	require.NoError(t, err)
-	require.Equal(t, []string{"127.0.0.1"}, addresses)
+	require.Nil(t, config)
+	require.EqualError(t, err, "allocated_runtime_target_required")
 }
 
 func TestPGEnvironmentRejected(t *testing.T) {
@@ -110,6 +108,14 @@ func TestRunRejectsTargetBeforePool(t *testing.T) {
 		t.Setenv("E_RUNTIME_DATABASE_URL", dsn)
 		require.EqualError(t, run(arguments), "allocated_runtime_target_required")
 	}
+	spec.Host = "localhost"
+	raw, err = json.Marshal(spec)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, raw, 0o600))
+	sum = sha256.Sum256(raw)
+	arguments[len(arguments)-1] = hex.EncodeToString(sum[:])
+	t.Setenv("E_RUNTIME_DATABASE_URL", strings.Replace(allocatedURL, "127.0.0.1", "localhost", 1))
+	require.EqualError(t, run(arguments), "allocated_runtime_target_required")
 	arguments[len(arguments)-1] = strings.Repeat("0", 64)
 	require.EqualError(t, run(arguments), "reviewed_probe_input_hash_required")
 }
