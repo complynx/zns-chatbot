@@ -16,6 +16,7 @@ Explicit full-file read acknowledgments received from:
 - payment_code_qa_282
 - fqa_current_flows_a (fresh independent reviewer, before execution)
 - fqa_current_recovery_b (fresh independent reviewer, before execution)
+- profile_callback_ack_developer (new defect owner, before investigation)
 
 e_probe_guard_developer has no initialized assignment. The instruction was queued
 for acknowledgment before any activation; no execution has been assigned to it.

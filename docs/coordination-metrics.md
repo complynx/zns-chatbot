@@ -792,3 +792,41 @@ context cleanrebase8947d64dcd finalgatesactive. FreshQA283 unallocated, counter2
 returns31unchanged. No finalCDEstageclosure/daydecrement. Whole40 stillopen and
 productionNO-GO. Onlymanagerboard/metricsdescription updated; CSV unchanged.
 Writespaused; ownership returnsroot beforecommit.
+
+## First subset FQA report and targeted identity implementation: 2026-10-01T09:55:06Z
+
+Read-only CSV211/latest09:45:40 unchanged. A finite report actual complete/released:
+EN staleprofilecallback12/17 ACKmissing FAIL2UIcells; RU22/27 ACKpresent. A2four
+presentationcellsPASSsubset;32mediaupload/renderPASSsubset, notsemantic/download/
+replykeyboard. Root no-download clarification applies to software; A regranted205
+solewindow for originalown syntheticdownloads, addendumpending. B actualfaults
+running+B2exactfakeRELEASEleadwindow; nofinalverdict. Completed report is not whole
+row/full40 acceptance. Engineer frozen source6bee remains separate from latermerges.
+Profile_callback_ack_developer READONLYevidence/source/minimalpathproposal only,
+noedits or205ownership. This Functional defect does not increment CodeQAreturns.
+
+Identity owner menu_retirement_fix now IMPLEMENTATION exactlyidentity/zitadel.go
+andzitadel_cache_internal_test.go onidentity-exchange-invalidation-fix/basea179f9
+(productdcd). Reproduce inactiveexchange oldpositiveVerify theninvalidateboth
+specificuser caches; genericoutages/Bob retained. No newrevokepolicy/schema/dependency.
+D2observability implementation active; C8947finalgatesactive, freshQA283unallocated.
+Counter282/31reviewreturns unchanged. No stageclosure/daydecrement; writes paused.
+
+## Owner downloads completed and ACK implementation scope: 2026-10-01T10:01:42Z
+
+Read-onlyCSV212/latest09:55:49 functionalA1return; CodeQAreturncount31 unchanged.
+A actualdownloadaddendum terminal/RELEASE205:32browserownfiles exactbyteshashPASS,
+64otheractor404 syntheticadapterfence only. Eight initial locatorfailures retained,
+corrected8PASS. A1ENmissingACKFAIL unchanged; media semantics/replykeyboard/core
+identity/authorization stillblocked. B actualfaultcases running, B2exactfakeengineer
+execution pending, nofinalverdict. Scoped results not whole40/stageclosure.
+
+ProfileACK owner IMPLEMENTATION max4: bot.go ACKONLY +existingack_database_test +
+newack_control_test +telegram/control.go commentonly, branchprofile-callback-ack-fix
+froma179. NohelddomainTx at callsite verified; realownPG58721 approved afterlabel/
+unusedchecks, no205writes. D diagnostics2 ownchecks andidentity2 reprochecks active.
+C8947 rebase nativeunits(shortrepoGOTMPDIR)/PG/build/compile/sqlc/LinuxraceunitsPASS;
+fullpinnedlint timeout +helpergocognit27>20FAIL preserved. Author minimalownedtest
+helperfix/freshgates, noQA283allocated. Counter282next283/returns31 retained;
+no estimate decrement/waitduration invented. Onlytwo assigned docs updated,
+CSV/product/stand/PROGRESS/codequality untouched. Writespaused, ownershiproot.
