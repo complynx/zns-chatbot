@@ -874,7 +874,10 @@ func TestBotTransportRetryRecoveredKnownOutcomeFencesPositive(t *testing.T) {
 				recovery <- readErr
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusTooManyRequests)
-				_, _ = io.WriteString(w, `{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}`)
+				_, _ = io.WriteString(
+					w,
+					`{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}`,
+				)
 			}))
 			defer server.Close()
 			b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
@@ -897,7 +900,12 @@ func TestBotTransportRetryRecoveredKnownOutcomeFencesPositive(t *testing.T) {
 			if state == "cancelled_before" {
 				select {
 				case before := <-terminalBefore:
-					require.JSONEq(t, before, snapshot("last_confirmed_attempt"), "terminal negative writes only the known-outcome fence")
+					require.JSONEq(
+						t,
+						before,
+						snapshot("last_confirmed_attempt"),
+						"terminal negative writes only the known-outcome fence",
+					)
 				default:
 					t.Fatal("actual negative response did not follow cancellation")
 				}
