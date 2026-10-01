@@ -16,7 +16,8 @@ type cachedIdentity struct {
 }
 
 type identityFlight struct {
-	done        chan struct{}
+	done chan struct{}
+	// value retains the prior association while pending; load replaces it before closing done.
 	value       cachedIdentity
 	err         error
 	generation  uint64
@@ -46,6 +47,7 @@ func (c *positiveIdentityCache) resolve(
 		c.mu.Unlock()
 		return entry.value, nil
 	}
+	previous := c.values[key]
 	delete(c.values, key)
 	flight := c.flights[key]
 	if flight == nil {
@@ -56,7 +58,7 @@ func (c *positiveIdentityCache) resolve(
 		if c.flights == nil {
 			c.flights = make(map[string]*identityFlight)
 		}
-		flight = &identityFlight{done: make(chan struct{}), generation: c.generation}
+		flight = &identityFlight{done: make(chan struct{}), value: previous, generation: c.generation}
 		c.flights[key] = flight
 		go c.load(context.WithoutCancel(ctx), key, flight, load)
 	}
@@ -169,6 +171,11 @@ func (c *positiveIdentityCache) subjectsForValue(value string) []string {
 	for _, entry := range c.values {
 		if entry.value == value {
 			subjects = append(subjects, entry.subject)
+		}
+	}
+	for _, flight := range c.flights {
+		if flight.value.value == value {
+			subjects = append(subjects, flight.value.subject)
 		}
 	}
 	return subjects

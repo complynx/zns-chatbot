@@ -452,3 +452,62 @@ func TestZitadelFirstDenialInvalidatesEveryMatchingExchange(t *testing.T) {
 	}
 	require.EqualValues(t, 4, provider.exchanges.Load())
 }
+
+func TestZitadelFirstDenialRetiresPendingExchangeRefresh(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"waiting", "cancelled"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			adapter, provider := cacheAdapter(t, 3600)
+			for _, subject := range []string{"alice", "bob"} {
+				_, err := adapter.Exchange(t.Context(), subject)
+				require.NoError(t, err)
+			}
+			adapter.exchanges.mu.Lock()
+			entry := adapter.exchanges.values["alice"]
+			entry.until = time.Now().Add(-time.Second)
+			adapter.exchanges.values["alice"] = entry
+			adapter.exchanges.mu.Unlock()
+			provider.exchangeStarted = make(chan struct{}, 1)
+			provider.exchangeRelease = make(chan struct{})
+			result := make(chan error, 1)
+			finished := false
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			t.Cleanup(func() {
+				close(provider.exchangeRelease)
+				if !finished {
+					_ = awaitCacheError(t, result)
+				}
+			})
+			go func() { _, err := adapter.Exchange(ctx, "alice"); result <- err }()
+			awaitCacheSignal(t, provider.exchangeStarted)
+			adapter.exchanges.mu.Lock()
+			flight := adapter.exchanges.flights["alice"]
+			adapter.exchanges.mu.Unlock()
+			require.NotNil(t, flight)
+			if mode == "cancelled" {
+				cancel()
+				require.ErrorIs(t, awaitCacheError(t, result), context.Canceled)
+				finished = true
+			}
+			provider.inactive.Store(true)
+			_, err := adapter.Verify(t.Context(), "token-alice")
+			require.ErrorIs(t, err, ErrZitadelIdentity)
+			provider.exchangeRelease <- struct{}{}
+			awaitCacheSignal(t, flight.done)
+			if mode == "waiting" {
+				err = awaitCacheError(t, result)
+				finished = true
+				require.ErrorIs(t, err, ErrZitadelIdentity, "the pending successful exchange must be retired")
+			}
+			provider.failed.Store(true)
+			_, nextErr := adapter.Exchange(t.Context(), "alice")
+			require.ErrorIs(t, nextErr, ErrZitadelUnavailable, "a late refresh cannot restore the rejected token")
+			bobToken, err := adapter.Exchange(t.Context(), "bob")
+			require.NoError(t, err)
+			require.Equal(t, "token-bob", bobToken)
+			require.EqualValues(t, 4, provider.exchanges.Load())
+		})
+	}
+}
