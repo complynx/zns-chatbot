@@ -306,3 +306,77 @@ QA245/0070f944 and source-only focused two-package PASS already recorded above;
 current Code QA queues still0/0/0, fixes not ready. Menu short P1/P2 PASS and full
 PG/race in-progress limits unchanged. No fabricated run duration. Ongoing import
 observedwait2h7m22s; all40 obligations/whole acceptance limitations preserved.
+
+## Baseline execution and new returns: 2026-10-01T00:31:06Z
+
+Dedicated baseline58441 preflightREADY/released to solebaseline_09_runner; actual
+run STARTsession66624 on exact0070f944/schema089. Last root observation partial
+1194PASS/3SKIP/0FAIL, NONTERMINAL. This is not acceptance and not a new completed
+baseline. No process was sampled/restarted by manager; authoritative live handle
+was provided by root. FQA imagesce427 and original40 obligations unchanged.
+
+QA246 on1782be90 failed runtime-probe effectiveDSN binding; fresh
+ e_probe_guard_developer owns six paths plus two optional focused tests. QA247
+on c1049610 failed curriedCounterVec panic/nilRoundTrip; four-path author successor
+in progress. Returns now8, counter247next248, no active fresh reviews. Immutable
+failed originals remain unmerged and historical. E capability planning separate.
+
+Root fullESLint PASS; initial fullPrettier FAIL four files preserved, root format
+three tracked files plus local marker without exclusions; full recheck terminalPASS.
+Those three nonsubstantive tracked edits not yet committed. GitHEAD5ae35999,
+reviewed functional source0070f944. Do not claim the dirty worktree itself is the
+exact immutable baseline source.
+
+Menu broad native600s aggregate timeout preserved; isolatedRU12.04s PASS and
+manual/home/new-legacy cases PASS; exact required native focused gate running
+then Linuxrace owned55432window, no acceptance. Job replay fourteen paths units/
+lint0 ready, exclusive idle synthetic_qa_zns_job_replay allocated/renamed before use,
+PG window not yet granted. C clock plan continues; new isolatedC58431–58434 only
+planning, not started. Ready review/reviewing/merge0/0/0; full gates prevent ready
+handoff. Import ongoing observation2h26m13s since baseline, start historically unknown.
+Files paused for second checkpoint; no invented process durations or goal narrowing.
+
+## New source and failure ownership: 2026-10-01T01:11:59Z
+
+Git root91ff00f1 HTTP QA248PASS8bc883eb merged; root two focused packagesPASS.
+Format-onlyff575042 committed and root fullESLint/fullPrettier PASS. Frozen baseline
+is still exact0070f944 on separate58441/schema089, integration phase active with
+three role-prerequisite failures and payment order_not_found observed. Nonterminal,
+no importer result, not green baseline or whole-stage proof. Actual receipt/run
+information retained; manager did not resample or restart any process.
+
+QA249 e8677a08 fourteen paths failed legitimate durable ingress/original generation
+and canonical keyboard. PriorPG passed/released; proof extension five exactpaths
+approved total19, migration091 reserved only. Job developer must resolve overlap
+with C ingress before review. QA250 eight-path E guard failed owner-bound manifest/
+projection and queryless SSLfallback; author correction active. Return count10,
+counter250next251, no active fresh reviews or ready handoffs.
+
+C clock implementation approved26paths; lead verified installation204 unused and
+corrected documentation, preserved E203; no new stand. D updatefailure feature
+approved threepaths. Menu74ab native fourpackagesPASS, integration159.897sPASS,
+lint0/fmt/sqlcPASS; LinuxPG race active session33229 sole55432window, nonterminal.
+E final schema090 or later pending;091 reserved is not built or accepted. All40
+FQA obligations and unchangedce427 preserved. Ongoing import observedwait3h7m6s,
+older start unknown. Pause tracked writes for docs checkpoint.
+
+## Immediate final handoff: 2026-10-01T01:14:46Z
+
+Menu74ab/base91ff actual LinuxPG race terminalPASS allfour packages, no race
+warnings, integration262.890s. All processes released/container absent, clean
+23scope passed to freshQA251 actually running. Counter251next252, queue0/1/0,
+no review verdict or Functional acceptance yet. This supersedes87event snapshot
+at01:11:59; all prior events preserved, no historical rewrite.
+
+C now sole55432 zns_registration_clock_qa. One concrete shared state.go extension
+approved total27, C sole owner. Job approved five extra existing ingress proof
+paths total19/migration091; no unnamed extra test paths. Stand engineer operator
+three-path capability approved in separate worktree, two Linux/nonLinux helper
+paths request pending; no stand resources/build/templates. Three capability
+lanes C/D/operator with job/menu/E corrections parallel. Installation204/E203
+constraints unchanged. Lead two scoped reports paused/preserved. Import ongoing
+observedwait3h9m53s; actual previous starts unknown. Pause immediately for checkpoint.
+
+Operator-only allocation event2026-10-01T01:16:29Z: two platform helper paths now
+approved, totalfive. Prior requested-only state historical. No templates/resources
+or acceptance. All other current facts unchanged; paused for immediate root commit.

@@ -2,9 +2,17 @@
 
 ## Current integration — 2026-10-01
 
-Authoritative product source is Git0070f944691050677cd915a215e4ac0beea69fb6.
+Last functional product merge is Git91ff00f19c40e1ab709ba160a73ef804f9133cff.
+Subsequent product-source commitff575042 changes only three Prettier formatting
+files (Compose quotes, replacement JSON indentation, documentation blank line);
+there is no Go logic, schema or runtime value change. Whole-source raw hashes
+still differ and final build inventories must include this formatting commit.
 Reviewed callback observations62b9eebc were merged6812e359; source diagnostics
 b857b8b9 were mergedf56bebd3; registration fixtures54766266 were merged0070f944.
+Reviewed HTTP observations8bc883eb (QA248) were merged91ff00f1 without
+product conflict resolution. Root focused HTTP/telemetry tests passed both
+affected packages; Functional acceptance remains open. Baseline09 stays frozen
+at0070f944 and does not include this later feature.
 Each merge preserved the independently reviewed candidate; no product conflict
 resolution or additional product edits occurred during these three merges.
 The working root documentation is updated separately. Functional images remain

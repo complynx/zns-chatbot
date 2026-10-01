@@ -1,23 +1,31 @@
-## Current integrated source and expanded QA — 2026-10-01, source0070f944
+## Current integrated source and expanded QA — 2026-10-01, source91ff00f1
 
-Authoritative product Git source0070f944 includes reviewed ACK observation
-(QA241, merge6812e359), source-status runtime diagnostics (QA243, mergef56bebd3)
-and bounded genuine registration fixtures (QA245, merge0070f944). Developer
-native PostgreSQL/quality gates passed; root integrated focused checks passed
-without PG. Built/source-reviewed is not whole Functional acceptance.
+Authoritative product Git91ff00f1 includes reviewed ACK observation QA241,
+source diagnostics QA243, registration fixture QA245 and HTTP observations
+QA248. Root focused integrated checks and full pinned JS gates passed;
+Functional images remain sealedce427 and do not certify the newer source.
 
-Menu090 remains unmerged after QA240 target-retirement/legacy compatibility
-findings; successor developer owns focused/full PG/race. Job summary QA244
-requires stable persisted page manifests and transferred developer ownership.
-E rehearsal QA242 requires effective-target guards, all hashes before DB and
-honest food replay evidence. Neither rejected candidate is merged.
+Menu090 successor74ab passed scoped actual native PostgreSQL and Linux race;
+fresh independent whole23-path Code QA251 is running, no merge yet. Job
+successor failed QA249; developer owns bounded original ingress proof and
+keyboard correction (19 paths, additive091 reserved). E eight-path rehearsal
+successor failed QA250 before-owner binding and importer SSL-fallback guards;
+same fresh developer is correcting it. No rejected candidate is merged.
 
-Two independent scoped EN/RU Functional runs completed on sealedce427ca5;
-states preserved, all40 original whole-stage obligations remain incomplete.
-Lead prepares next exact-source epoch and an authorized separate baseline
-PG58441. No new full baseline or finalE apply/removal is claimed. Real Telegram
-test-account ID is missing and listed in PROGRESS Questions; unrelated work
-continues. Production NO-GO. Routing through245, next246, allCodex.
+Three capability lanes are active: registration-domain clock (C27 paths),
+incoming-update diagnostics (D3 paths), and Linux atomic clock operator
+(engineer5 paths). Separate worktrees preserve ownership; overlapping ingress
+changes require developer merge preparation before review. C owns developer
+PostgreSQL55432 after menu released it. New C installation204 is verified
+unused; E retains203. No C clock stand resources are started.
+
+Two scoped EN/RU Functional runs on ce427 completed and were released with
+state preserved; all40 original whole-stage obligations remain open. Full
+baseline09 is still frozen0070 on separate58441; observed missing-role
+prerequisites and payment failure are preserved, with no mid-run repair or
+terminal whole-suite claim. Final E apply/removal and current runtime/UI
+acceptance remain outstanding. Telegram test-account ID is in PROGRESS;
+independent work continues. Production NO-GO. Counter251, next252, all Codex.
 
 ## Historical integrated snapshot — 2026-10-01, ce427ca5
 

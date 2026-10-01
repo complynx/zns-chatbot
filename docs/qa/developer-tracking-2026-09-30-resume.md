@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through245, next246. All authorship/routes Codex under override;
+Fresh requests through251, next252. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -41,19 +41,26 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 | 243 | Source-status observations and existing runtime binding | Codex author, Codex override; PASS b857b8b9/base075e5dd7, seven paths; merged f56bebd3; focused integrated three packages PASS, no PG/Functional claim |
 | 244 | Complete durable job-result delivery summary | Codex author, Codex override; FAIL b581dd2d/base075e5dd7: changing-page replay adds new effects; transferred job_replay_developer, original candidate preserved |
 | 245 | Genuine registration fixture and CLI initialization | Codex author, Codex override; PASS54766266/base075e5dd7, six paths; four native PG cases PASS; merged0070f944, integrated two focused packages PASS, Functional open |
+| 246 | Complete E rehearsal guard successor | Codex author, Codex override; FAIL1782be90/base5ae35999: actual runtime probe DSNs unbound before DB access; transferred e_probe_guard_developer, six paths plus two optional focused tests; original immutable, no DB execution |
+| 247 | HTTP failure classification and actual runtime client proof | Codex author, Codex override; FAILc1049610/base0070f944: curried registry observer panic and nil-runtime execution; author correcting four-path successor |
+| 248 | Complete HTTP observation successor | Codex author, Codex override; PASS8bc883eb/base5ae35999, same four paths; full affected units/pinned lint/fmt passed; merged91ff00f1, Functional open |
+| 249 | Complete durable job page manifest successor | Codex author, Codex override; FAILe8677a08/baseff575042: durable original ingress/generation binding missing; noncanonical keyboards; authorassessing14pathsuccessor, no merge |
+| 250 | Complete E probe target and rehearsal successor | Codex author, Codex override; FAIL298d1bee/baseff575042, eight paths: bound manifest/projections not checked before owner actions; queryless importer SSL fallback. Same fresh author correcting; no merge or live E execution |
+| 251 | Complete pass target and predecessor compatibility candidate | Codex author, Codex override; allocated before dispatch74ab3378/base91ff00f1,23paths. Final scoped nativePG/Linuxrace/fmt/lint/sqlc passed; fresh whole-candidate read-only Code QA pending. No merge/Functional claim |
 
-Current coordination (1 October, source0070f944): two scoped source-blind
+Current coordination (1 October, source91ff00f1): two scoped source-blind
 Functional runs completed on sealedce427ca5; states preserved and released.
-Both proved one bounded deterministic profile agent recipe, not whole agent
-registration or C–E acceptance. Root merged QA241/243/245; all40 whole-stage
-obligations remain open. C plans real invitation clock acceptance, D develops
-approved four-path HTTP classification, E corrects six-path harness guards.
-Menu latest-target/legacy compatibility and job replay manifests have separate
-fix developers. Lead prepares next source epoch and exclusive baseline PG58441;
-developer PG55432 remains assigned to menu. Kanban manager owns board/CSV/metrics;
-root owns serialized integration/PROGRESS. No active fresh review after245;
-next246 waits a fully gated immutable candidate. Historical paragraphs below
-do not describe current ownership or readiness.
+Whole C–E and agent registration acceptance remain open. Root merged
+QA241/243/245/248; current fresh counter251, next252. C owns27-path domain
+clock capability; D owns3-path update-failure observation capability; E probe
+successor8 paths is correcting QA250; engineer owns three-path clock operator. Job14-path successor failed QA249;
+additional five-path immutable ingress proof is approved for development,
+with091 reserved after menu090. Menu74ab final native selected PG scope passed;
+actual Linux race passed; C now owns exclusive developer55432. Baseline09
+continues frozen0070 on separate58441; observed role prerequisite and payment
+failures are preserved without repairs. No terminal full result yet.
+Kanban manager owns board/CSV/metrics; root owns integration/PROGRESS.
+Historical paragraphs below do not describe current ownership or readiness.
 
 ## Historical Git coordination snapshot
 
