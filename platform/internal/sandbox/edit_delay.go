@@ -13,12 +13,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
 
 const (
 	delayStateArmed         = "armed"
+	delayStateReleasing     = "releasing"
 	delayModeBefore         = "before_apply"
 	delayStateReleased      = "released_unresolved"
 	delayStateInvalidated   = "invalidated"
@@ -108,6 +110,7 @@ type delayEvent struct {
 // editDelay belongs only to the independently running synthetic provider.
 // It never changes a product receipt, queue, admission, or acknowledgement.
 type editDelay struct {
+	modelControl  *modelFixtureControl
 	mu            sync.Mutex
 	arm           delayArm
 	state         string
@@ -141,13 +144,14 @@ func (f *Fake) enableEditDelay(ctx context.Context) error {
 		return err
 	}
 	d := &editDelay{
-		state:       "idle",
-		release:     make(chan struct{}),
-		ctx:         ctx,
-		key:         key,
-		journal:     newDelayJournal(ctx, journal),
-		dataSlots:   make(chan struct{}, delayDataConnections),
-		invalidated: make(chan struct{}),
+		modelControl: f.modelControl,
+		state:        "idle",
+		release:      make(chan struct{}),
+		ctx:          ctx,
+		key:          key,
+		journal:      newDelayJournal(ctx, journal),
+		dataSlots:    make(chan struct{}, delayDataConnections),
+		invalidated:  make(chan struct{}),
 	}
 	f.delay = d
 	server := &http.Server{
@@ -368,6 +372,10 @@ func (d *editDelay) control(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusRequestEntityTooLarge)
 		return
 	}
+	if strings.HasPrefix(r.URL.Path, "/control/model/") && d.modelControl != nil {
+		d.modelControl.control(w, r, body)
+		return
+	}
 	if r.Method == http.MethodGet && r.URL.Path == "/control/state" {
 		d.mu.Lock()
 		snapshot := struct {
@@ -444,7 +452,7 @@ func (d *editDelay) controlRelease(w http.ResponseWriter) {
 		w.WriteHeader(http.StatusConflict)
 		return
 	}
-	d.state = "releasing"
+	d.state = delayStateReleasing
 	d.mu.Unlock()
 	if d.record(delayEvent{Kind: "release_accepted"}) != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
