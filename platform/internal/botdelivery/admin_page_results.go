@@ -37,6 +37,7 @@ const (
 	adminPageFamily            = "admin_page"
 	adminPageSize              = 20
 	adminPageMaxNavigationRows = adminPageSize + 3
+	adminPageMaxEffects        = 64
 )
 
 type adminPageManifest struct {
@@ -88,7 +89,7 @@ func (s Service) EnqueueAdminPageResults(ctx context.Context, in AdminPageResult
 	}
 	for _, effect := range manifest.Request.Effects {
 		if err = s.enqueueResultTx(ctx, tx, ResultRequest{
-			Owner: in.Owner, Chat: in.Chat, Update: in.Update, Effect: effect.Effect,
+			Owner: in.Owner, Chat: in.Chat, Update: in.Update, Effect: adminPageResultEffect(in, effect.Effect),
 			Reference: Reference{Family: adminPageFamily, Version: in.ID, Generation: &manifest.Generation},
 			Result:    StoredResult{Generation: manifest.Generation, Payload: effect.Payload},
 		}); err != nil {
@@ -314,10 +315,11 @@ func (s Service) savedAdminPageManifest(
 func (s Service) createAdminPageManifest(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
 	generation int64, operation, kind string,
 ) (adminPageManifest, error) {
-	// Erased manifests and legacy partial result sets cannot authorize a new
-	// snapshot for an already persisted ingress.
+	// Erased manifests and partial page results cannot authorize a new snapshot
+	// of that page. Other independently admitted pages may share this update.
 	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.delivery_intents WHERE bot_id=$1 AND operation_key=$2)`, s.Delivery.BotID, operation).
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.delivery_intents
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=ANY($3::text[]))`, s.Delivery.BotID, operation, adminPageResultKeys(in)).
 		Scan(&exists); err != nil {
 		return adminPageManifest{}, core.DatabaseOperationError(err)
 	}
@@ -343,12 +345,38 @@ func (s Service) createAdminPageManifest(ctx context.Context, tx pgx.Tx, in Admi
 	return manifest, core.DatabaseOperationError(err)
 }
 
+// Finals and chunks already identify their page. Action-card chunks also need
+// that parent identity so two offsets cannot share stored results or queue work.
+func adminPageResultEffect(in AdminPageResultsRequest, effect string) string {
+	if strings.HasPrefix(effect, "admin_view:") {
+		return fmt.Sprintf("admin_page:%d:%d:%s", in.ID, in.Offset, effect)
+	}
+	return effect
+}
+
+// Check the entire bounded page domain, including children absent from a changed
+// replay request. Exact hashes keep another page's effects outside this guard.
+func adminPageResultKeys(in AdminPageResultsRequest) []string {
+	final := fmt.Sprintf("admin_page:%d:%d", in.ID, in.Offset)
+	keys := make([]string, 0, 1+2*adminPageMaxEffects)
+	appendKey := func(effect string) {
+		_, key := ResultOperation(in.Owner, in.Update, adminPageResultEffect(in, effect))
+		keys = append(keys, key)
+	}
+	appendKey(final)
+	for index := range adminPageMaxEffects {
+		appendKey(fmt.Sprintf("%s:chunk:%d", final, index))
+		appendKey(fmt.Sprintf("admin_view:%d:%d", in.ID, index))
+	}
+	return keys
+}
+
 func validateAdminPageResults(in AdminPageResultsRequest) error {
 	// Twenty rows each have at most 1000 failure bytes and bounded destinations.
 	// Both the page and its action-card copy plus 4096 content units fit in 64
 	// chunks of 1800 runes. The byte cap also matches stored private results.
 	if in.Owner == "" || in.Chat <= 0 || in.Update < 0 || in.ID <= 0 || in.Offset < 0 || len(in.Effects) == 0 ||
-		len(in.Effects) > 64 {
+		len(in.Effects) > adminPageMaxEffects {
 		return ErrBinding
 	}
 	final := fmt.Sprintf("admin_page:%d:%d", in.ID, in.Offset)

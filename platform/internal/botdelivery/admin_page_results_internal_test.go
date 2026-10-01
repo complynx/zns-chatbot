@@ -319,6 +319,163 @@ func TestAdminPageResultsManualAndAgentNativeBindings(t *testing.T) {
 	require.ErrorIs(t, s.EnqueueAdminPageResults(ctx, request(other.ID, 303)), ErrBinding)
 }
 
+func adminPageMultiCallFixture(
+	t *testing.T,
+	differentJob bool,
+) (Service, AdminPageResultsRequest, AdminPageResultsRequest) {
+	t.Helper()
+	db := storedJSONDatabase(t)
+	ctx := t.Context()
+	_, err := db.Exec(ctx, `INSERT INTO core.pass_booking_admins(owner) VALUES('bob') ON CONFLICT DO NOTHING`)
+	require.NoError(t, err)
+	settings := delivery.Settings{BotID: 77, BotInterval: time.Microsecond,
+		ChatInterval: time.Microsecond, Fallback: time.Second}
+	admin := adminmessage.Service{DB: db, Delivery: settings}
+	message, err := admin.Preview(ctx, "bob", "first", adminmessage.Request{
+		Destinations: []adminmessage.Destination{{Chat: "101"}}, Content: adminmessage.Content{Text: "source"},
+	})
+	require.NoError(t, err)
+	otherID, otherOffset := message.ID, int64(20)
+	if differentJob {
+		other, previewErr := admin.Preview(ctx, "bob", "second", message.Request)
+		require.NoError(t, previewErr)
+		otherID, otherOffset = other.ID, 0
+	}
+	update := telegram.Update{ID: 602, Message: &telegram.Message{
+		ID: 802, From: telegram.User{ID: 202}, Chat: telegram.Chat{ID: 202, Type: "private"},
+		Text: "show both saved pages",
+	}}
+	adminPageCaptureNative(t, db, settings.BotID, update)
+	records := fmt.Sprintf(`[{"history_generation":0,"calls":[
+ {"source":{"generation":0,"authorities":[]},"outcome":{"name":"broadcasts.show"},"broadcast_review":{"owner":"bob","chat":202,"arguments":{"id":%d,"offset":0}}},
+ {"source":{"generation":0,"authorities":[]},"outcome":{"name":"broadcasts.show"},"broadcast_review":{"owner":"bob","chat":202,"arguments":{"id":%d,"offset":%d}}}]}]`,
+		message.ID, otherID, otherOffset)
+	_, err = db.Exec(
+		ctx,
+		`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('bob',602,'script_runs',$1)`,
+		json.RawMessage(records),
+	)
+	require.NoError(t, err)
+	request := func(id, offset int64, text string) AdminPageResultsRequest {
+		page := telegram.Send{ChatID: 202, Text: text}
+		if offset > 0 {
+			page.Markup.Rows = [][]telegram.Button{{{Text: "Previous", Data: fmt.Sprintf("adminmsg:page:%d:0", id)}}}
+		}
+		view := telegram.Send{ChatID: 202, Text: text, Markup: telegram.Markup{Rows: [][]telegram.Button{
+			{{Text: "Send", Data: fmt.Sprintf("adminmsg:send:%d", id)}},
+			{{Text: "Results", Data: fmt.Sprintf("adminmsg:results:%d", id)}},
+			{{Text: "Cancel", Data: fmt.Sprintf("adminmsg:cancel:%d", id)}},
+		}}}
+		return AdminPageResultsRequest{Owner: "bob", Chat: 202, Update: update.ID, ID: id, Offset: offset,
+			Effects: []AdminPageEffect{
+				{Effect: fmt.Sprintf("admin_page:%d:%d", id, offset), Payload: page},
+				{Effect: fmt.Sprintf("admin_view:%d:0", id), Payload: view},
+			}}
+	}
+	s := Service{DB: db, Delivery: settings, AdminMessages: admin}
+	first, second := request(message.ID, 0, "first page"), request(otherID, otherOffset, "second page")
+	return s, first, second
+}
+
+func TestAdminPageResultsMultipleAuthorizedPagesOneUpdate(t *testing.T) {
+	t.Parallel()
+	for _, differentJob := range []bool{true, false} {
+		t.Run(fmt.Sprintf("different_job=%t", differentJob), func(t *testing.T) {
+			t.Parallel()
+			s, first, second := adminPageMultiCallFixture(t, differentJob)
+			ctx := t.Context()
+			require.NoError(t, s.EnqueueAdminPageResults(ctx, first))
+			require.NoError(
+				t,
+				s.EnqueueAdminPageResults(ctx, second),
+				"independently admitted page must coexist in the native update",
+			)
+			var count int64
+			require.NoError(
+				t,
+				s.DB.QueryRow(ctx, `SELECT count(*) FROM bot.delivery_intents WHERE owner='bob'`).Scan(&count),
+			)
+			require.Equal(t, int64(4), count, "each page has its own final and action card")
+			require.NoError(t, s.EnqueueAdminPageResults(ctx, first))
+			require.NoError(t, s.EnqueueAdminPageResults(ctx, second))
+			require.NoError(
+				t,
+				s.DB.QueryRow(ctx, `SELECT count(*) FROM bot.delivery_intents WHERE owner='bob'`).Scan(&count),
+			)
+			require.Equal(t, int64(4), count, "exact replay must not duplicate either page")
+			var firstViews, secondViews int64
+			require.NoError(
+				t,
+				s.DB.QueryRow(ctx, `SELECT count(*) FILTER (WHERE content->'payload'->>'text'='first page'),
+ count(*) FILTER (WHERE content->'payload'->>'text'='second page') FROM bot.interactions
+ WHERE owner='bob' AND update_id=602 AND kind LIKE 'delivery_result:%' AND kind NOT LIKE 'delivery_result:admin_page_manifest:%'`).
+					Scan(&firstViews, &secondViews),
+			)
+			require.Equal(t, int64(2), firstViews)
+			require.Equal(t, int64(2), secondViews, "second offset must retain its own action-card body")
+		})
+	}
+}
+
+func TestAdminPageResultsOrphansRemainPageScoped(t *testing.T) {
+	t.Parallel()
+	for _, keep := range []int{0, 1, 2} {
+		t.Run(fmt.Sprintf("remaining_effect=%d", keep), func(t *testing.T) {
+			t.Parallel()
+			s, first, second := adminPageMultiCallFixture(t, false)
+			ctx := t.Context()
+			final := fmt.Sprintf("admin_page:%d:0", first.ID)
+			first.Effects = append([]AdminPageEffect{{Effect: final + ":chunk:0",
+				Payload: telegram.Send{ChatID: first.Chat, Text: "first chunk"}}}, first.Effects...)
+			require.NoError(t, s.EnqueueAdminPageResults(ctx, first))
+			operation, manifestKey := ResultOperation(first.Owner, first.Update, final)
+			_, err := s.DB.Exec(
+				ctx,
+				`DELETE FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3`,
+				first.Owner,
+				first.Update,
+				fmt.Sprintf("delivery_result:admin_page_manifest:%d:%s", s.Delivery.BotID, manifestKey),
+			)
+			require.NoError(t, err)
+			require.ErrorIs(
+				t,
+				s.EnqueueAdminPageResults(ctx, first),
+				ErrStale,
+				"erased manifest cannot freeze its page again",
+			)
+			// Leave only one old child/final. A changed candidate omits that effect.
+			_, remaining := ResultOperation(
+				first.Owner,
+				first.Update,
+				adminPageResultEffect(first, first.Effects[keep].Effect),
+			)
+			_, err = s.DB.Exec(
+				ctx,
+				`DELETE FROM bot.delivery_intents WHERE bot_id=$1 AND operation_key=$2 AND effect_key<>$3`,
+				s.Delivery.BotID,
+				operation,
+				remaining,
+			)
+			require.NoError(t, err)
+			changed := first
+			changed.Effects = []AdminPageEffect{
+				{Effect: final, Payload: adminPagePreparingPayload(first.ID, "changed")},
+			}
+			require.ErrorIs(
+				t,
+				s.EnqueueAdminPageResults(ctx, changed),
+				ErrStale,
+				"any exact page remnant blocks recreation",
+			)
+			require.NoError(
+				t,
+				s.EnqueueAdminPageResults(ctx, second),
+				"another authorized offset must remain independent",
+			)
+		})
+	}
+}
+
 func TestAdminPageResultsAttachmentNativeBinding(t *testing.T) {
 	t.Parallel()
 	db := storedJSONDatabase(t)
