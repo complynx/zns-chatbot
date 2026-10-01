@@ -26,6 +26,8 @@ func TestAdminMessageNativeIntakePreservesRegistrationClock(t *testing.T) {
 	ctx := t.Context()
 	db := foodPendingDatabase(t)
 	b := botDeliveryTestBot(db)
+	_, err := db.Exec(ctx, `INSERT INTO bot.cursors(name,value) VALUES('telegram_received',0)`)
+	require.NoError(t, err)
 	first := time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
 	b.RegistrationClock = passBatchClock{now: first}
 	update := telegram.Update{ID: 601, Callback: &telegram.Callback{
