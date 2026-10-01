@@ -105,6 +105,7 @@ func TestNotificationUncertainRetrySurvivesRestart(t *testing.T) {
 		t.Run(domain, func(t *testing.T) {
 			t.Parallel()
 			r := notificationRuntime(t, domain)
+			business := notificationBusinessSnapshot(t, r)
 			loss := &notificationLostResponse{drops: 1}
 			r.f.b.TG.HTTP = &http.Client{Transport: loss}
 			dispatch := exactNotificationDelivery(r, domain)
@@ -132,6 +133,12 @@ func TestNotificationUncertainRetrySurvivesRestart(t *testing.T) {
 			assert.Equal(t, 2, loss.count())
 			require.NoError(t, dispatch(t.Context(), r.first))
 			assert.Equal(t, 2, loss.count(), "known success does not resend")
+			assert.JSONEq(
+				t,
+				business,
+				notificationBusinessSnapshot(t, r),
+				"message retry must not replay booking or payment business",
+			)
 		})
 	}
 }
@@ -289,10 +296,11 @@ func TestNotificationUncertainRetryTerminalReceiptOnly(t *testing.T) {
 
 func notificationReceiptSnapshot(t *testing.T, r *notificationRuntimeFixture) map[string]any {
 	t.Helper()
+	owner := map[string]string{"core.order_notifications": "orders", "core.pass_notifications": "passes", "core.massage_notices": "massage", "core.food_notifications": "food"}[r.table]
 	var raw []byte
 	require.NoError(
 		t,
-		r.f.db.QueryRow(t.Context(), "SELECT to_jsonb(n) || jsonb_build_object('queue',(SELECT to_jsonb(q) FROM core.delivery_queue q WHERE q.bot_id=n.bot_id AND q.owner_key=n.id::text AND q.owner_kind= AND q.effect_key='send')) FROM "+r.table+" n WHERE n.id=$1", r.first, owner).
+		r.f.db.QueryRow(t.Context(), "SELECT to_jsonb(n) || jsonb_build_object('queue',(SELECT to_jsonb(q) FROM core.delivery_queue q WHERE q.bot_id=n.bot_id AND q.owner_key=n.id::text AND q.owner_kind=$2 AND q.effect_key='send')) FROM "+r.table+" n WHERE n.id=$1", r.first, owner).
 			Scan(&raw),
 	)
 	var result map[string]any
@@ -336,4 +344,50 @@ func TestNotificationUncertainRetryCountsRateLimitedSends(t *testing.T) {
 			assert.Equal(t, 3, spy.calls(202))
 		})
 	}
+}
+
+func TestNotificationUncertainRetryPrewirePacingKeepsBudget(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			dispatch := exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			original := r.status(t, r.first)
+			r.wake(t)
+			_, err := r.f.db.Exec(
+				t.Context(),
+				"UPDATE core.delivery_pacing SET not_before=clock_timestamp()+interval '1 minute'",
+			)
+			require.NoError(t, err)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			current := r.status(t, r.first)
+			assert.Equal(t, "pending", current.State)
+			assert.Zero(t, current.UncertainResends)
+			assert.Equal(t, original.LastUncertainAttempt, current.LastUncertainAttempt)
+			assert.Equal(t, 1, loss.count())
+			deadline := current.AvailableAt
+			require.NoError(t, recoverNotificationDelivery(r, domain)(t.Context()))
+			assert.Equal(t, deadline, r.status(t, r.first).AvailableAt)
+			r.wake(t)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			assert.Equal(t, "sent", r.status(t, r.first).State)
+			assert.Equal(t, int64(1), r.status(t, r.first).UncertainResends)
+			assert.Equal(t, 2, loss.count())
+		})
+	}
+}
+func notificationBusinessSnapshot(t *testing.T, r *notificationRuntimeFixture) string {
+	t.Helper()
+	var raw []byte
+	require.NoError(t, r.f.db.QueryRow(t.Context(), `SELECT jsonb_build_object(
+ 'orders',(SELECT jsonb_agg(to_jsonb(v) ORDER BY v.id) FROM core.orders v),
+ 'passes',(SELECT jsonb_agg(to_jsonb(v) ORDER BY v.event_id,v.owner) FROM core.pass_bookings v),
+ 'massage',(SELECT jsonb_agg(to_jsonb(v) ORDER BY v.id) FROM core.massage_bookings v),
+ 'food',(SELECT jsonb_agg(to_jsonb(v) ORDER BY v.id) FROM core.food_orders v),
+ 'food_payments',(SELECT jsonb_agg(to_jsonb(v) ORDER BY v.order_id,v.kind,v.generation) FROM core.food_payments v))`).Scan(&raw))
+	return string(raw)
 }
