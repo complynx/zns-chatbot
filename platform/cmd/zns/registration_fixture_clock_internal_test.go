@@ -183,6 +183,9 @@ func TestRegistrationClockFileReadsFreshStateAndFailsVisibly(t *testing.T) {
 	t.Parallel()
 	settings := clockSettings()
 	settings.File = filepath.Join(t.TempDir(), "state.json")
+	if runtime.GOOS == "linux" {
+		require.NoError(t, os.Chmod(filepath.Dir(settings.File), 0o700))
+	}
 	anchor, err := settings.AnchorTime()
 	require.NoError(t, err)
 	write := func(current time.Time, revision uint64) {
