@@ -181,6 +181,7 @@ func (s Service) begin(
 	target int64,
 	exportEvents []string,
 	pass *PassCardReceipt,
+	prepared ...PreparedAttempt,
 ) (Intent, bool, error) {
 	stored, err := s.readBeginObservation(ctx, observed, exportEvents)
 	if err != nil {
@@ -222,7 +223,7 @@ func (s Service) begin(
 		return current, false, nil
 	}
 	current = bindAdmittedPass(current, pass)
-	return s.beginAttempt(ctx, tx, current, target, previous)
+	return s.beginAttempt(ctx, tx, current, target, previous, prepared...)
 }
 
 func (s Service) beginAttempt(
@@ -231,6 +232,7 @@ func (s Service) beginAttempt(
 	current Intent,
 	target int64,
 	previous *Intent,
+	prepared ...PreparedAttempt,
 ) (Intent, bool, error) {
 	var err error
 	if current.Reference.Kind == CardIntent {
@@ -263,6 +265,15 @@ func (s Service) beginAttempt(
 		current.Phase = phaseEdit
 		current.Target = target
 	}
+	if len(prepared) != 0 {
+		if current.Reference.Family == familyPasses && current.Receipt.Pass != nil {
+			prepared[0].Continuation.Pass = current.Receipt.Pass
+		}
+		if err = captureAttempt(ctx, tx, current, prepared[0]); err != nil {
+			return current, false, err
+		}
+		current.Receipt = prepared[0].Continuation
+	}
 	receipt, err := json.Marshal(current.Receipt)
 	if err != nil {
 		return current, false, err
@@ -288,7 +299,11 @@ func (s Service) Begin(ctx context.Context, in BeginRequest) (BeginResult, error
 	if in.PreparationFailure {
 		return s.failPassPreparation(ctx, in.Observed)
 	}
-	i, ready, err := s.begin(ctx, in.Observed, in.Target, in.ExportEvents, in.Pass)
+	var prepared []PreparedAttempt
+	if in.Prepared != nil {
+		prepared = append(prepared, *in.Prepared)
+	}
+	i, ready, err := s.begin(ctx, in.Observed, in.Target, in.ExportEvents, in.Pass, prepared...)
 	if err != nil {
 		return BeginResult{}, err
 	}

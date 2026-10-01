@@ -2,7 +2,6 @@ package bot
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -44,10 +43,15 @@ func (b *Bot) beginBotIntent(
 	observed botdelivery.Intent,
 	rendered botRenderedDelivery,
 ) (botdelivery.Intent, bool, error) {
+	prepared, err := prepareBotAttempt(observed, rendered)
+	if err != nil {
+		return observed, false, err
+	}
 	result, err := b.Host.BeginBotDelivery(
 		ctx,
 		botdelivery.BeginRequest{
 			Observed:     observed,
+			Prepared:     &prepared,
 			Pass:         rendered.Receipt.Pass,
 			Target:       rendered.Payload.MessageID,
 			ExportEvents: rendered.ExportEvents,
@@ -63,64 +67,11 @@ func (b *Bot) finishBotIntent(
 	receipt botdelivery.Continuation,
 	fallback bool,
 ) error {
-	tx, err := b.DB.Begin(ctx)
-	if err != nil {
-		return core.DatabaseOperationError(err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	current, err := botdelivery.Read(ctx, tx, attempt.BotID, attempt.QueueReference(), true)
-	if err != nil {
-		return err
-	}
-	if current.Attempt != attempt.Attempt ||
-		(current.State != delivery.Sending && current.State != delivery.Uncertain) {
-		return botdelivery.ErrBinding
-	}
-	if fallback && (current.Phase != botPhaseEdit || outcome.Kind != delivery.Deferred) {
-		return botdelivery.ErrBinding
-	}
-	outcome, deadline, err := delivery.Finish(ctx, tx, b.Delivery, current.QueueReference(), outcome)
-	if err != nil {
-		return err
-	}
-	phase, target := current.Phase, current.Target
-	if fallback {
-		phase, target = botPhaseSend, 0
-	}
-	if deadline.IsZero() {
-		if err = tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&deadline); err != nil {
-			return core.DatabaseOperationError(err)
-		}
-	}
-	if current.Reference.Family == botFamilyPasses && current.Receipt.Pass != nil {
-		// Preserve the canonical admission binding across fallback and success.
-		receipt.Pass = current.Receipt.Pass
-	}
-	raw, err := json.Marshal(receipt)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(
+	return (botdelivery.Service{DB: b.DB, Delivery: b.Delivery}).Complete(
 		ctx,
-		`UPDATE bot.delivery_intents SET state=$4,message_id=$5,reason=$6,not_before=$7,receipt=$8,phase=$9,target_message_id=$10
- WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
-		current.BotID,
-		current.Operation,
-		current.Effect,
-		outcome.Kind,
-		outcome.MessageID,
-		outcome.Reason,
-		deadline,
-		raw,
-		phase,
-		target,
+		botdelivery.CompletionRequest{Attempt: attempt, Outcome: outcome, Receipt: receipt, Fallback: fallback},
 	)
-	if err != nil {
-		return core.DatabaseOperationError(err)
-	}
-	return core.DatabaseOperationError(tx.Commit(ctx))
 }
-
 func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent, terminal bool) error {
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
