@@ -26,7 +26,7 @@ func TestAdminMessageRuntimeDeliveryFailuresAndTopics(t *testing.T) {
 	}{
 		{"success", `{"ok":true,"result":{"message_id":55}}`, "sent", ""},
 		{"blocked", `{"ok":false,"error_code":403,"description":"sensitive recipient failure"}`, "failed", "telegram_recipient_rejected"},
-		{"ambiguous", `broken JSON`, "unknown", "telegram_outcome_unknown"},
+		{"ambiguous", `broken JSON`, "pending", "telegram_outcome_unknown"},
 		{"rate_limit", `{"ok":false,"error_code":429,"description":"retry"}`, "pending", "telegram_rate_limit"},
 		{"negative_cooldown", `{"ok":false,"error_code":429,"parameters":{"retry_after":-1}}`, "parked", "telegram_invalid_cooldown"},
 		{"large_cooldown", `{"ok":false,"error_code":429,"parameters":{"retry_after":86401}}`, "pending", "telegram_rate_limit"},

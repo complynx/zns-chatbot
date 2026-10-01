@@ -158,15 +158,26 @@ func (s Service) PrepareRegistrationAnnouncement(
 	}
 	var item RegistrationAnnouncement
 	var thread pgtype.Int8
-	err = tx.QueryRow(ctx, `SELECT id,channel,thread_id,locale,name,role,attempts+1 FROM core.pass_registration_announcements
+	var rendered pgtype.Text
+	var uncertain pgtype.Int8
+	var admitted bool
+	err = tx.QueryRow(ctx, `SELECT id,channel,thread_id,locale,name,role,attempts+1,rendered_text,last_uncertain_attempt,rendered_admitted FROM core.pass_registration_announcements
  WHERE id=$1 AND bot_id=$2 AND state='pending' AND available_at<=clock_timestamp()
  AND (lease_until IS NULL OR lease_until<=clock_timestamp()) FOR UPDATE SKIP LOCKED`, id, s.Delivery.BotID).
-		Scan(&item.ID, &item.Channel, &thread, &item.Locale, &item.Name, &item.Role, &item.Attempts)
+		Scan(&item.ID, &item.Channel, &thread, &item.Locale, &item.Name, &item.Role, &item.Attempts, &rendered, &uncertain, &admitted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return item, false, nil
 	}
 	if err != nil {
 		return item, false, core.DatabaseOperationError(err)
+	}
+	item.Text = rendered.String
+	admitted = uncertain.Valid && admitted
+	if !admitted || !rendered.Valid {
+		item.Text, err = RegistrationAnnouncementText(item)
+		if err != nil {
+			return item, false, err
+		}
 	}
 	entry, err := delivery.ReadReference(ctx, tx, s.Delivery.BotID, announcementReference(id))
 	if err != nil {
@@ -181,9 +192,11 @@ func (s Service) PrepareRegistrationAnnouncement(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`UPDATE core.pass_registration_announcements SET attempts=$2,lease_until=clock_timestamp()+interval '2 minutes' WHERE id=$1`,
+		`UPDATE core.pass_registration_announcements SET attempts=$2,rendered_text=$3,rendered_admitted=$4,lease_until=clock_timestamp()+interval '2 minutes' WHERE id=$1`,
 		id,
 		item.Attempts,
+		item.Text,
+		admitted,
 	)
 	if err != nil {
 		return item, false, core.DatabaseOperationError(err)
@@ -214,8 +227,8 @@ func (s Service) lockAnnouncementSource(ctx context.Context, tx pgx.Tx, id int64
 	return nil
 }
 
-// RecoverRegistrationAnnouncements retires invalid unsent effects and preserves
-// uncertain wire attempts. Each owner transaction acquires its own lane only.
+// RecoverRegistrationAnnouncements records uncertainty before bounded resends.
+// Each owner transaction acquires source authority before its own lane.
 func (s Service) RecoverRegistrationAnnouncements(ctx context.Context) error {
 	if err := s.Delivery.Validate(); err != nil {
 		return err
@@ -225,7 +238,7 @@ func (s Service) RecoverRegistrationAnnouncements(ctx context.Context) error {
 		return err
 	}
 	rows, err := s.DB.Query(ctx, `SELECT a.id FROM core.pass_registration_announcements a WHERE a.bot_id=$1 AND
- ((a.state='sending' AND a.lease_until<=clock_timestamp()) OR
+ (a.state='unknown' OR (a.state='sending' AND a.lease_until<=clock_timestamp()) OR
  (a.state='pending' AND NOT EXISTS(SELECT 1 FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
  WHERE e.id=a.event_id AND b.owner=a.owner AND b.created_at=a.created_at AND b.state<>'cancelled'
  AND (e.open_ended OR e.finishes_at>COALESCE($2::timestamptz,clock_timestamp())) AND e.thread_channel=a.channel
@@ -276,24 +289,24 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 	if err != nil {
 		return core.DatabaseOperationError(err)
 	}
-	var state delivery.Kind
-	reason := ""
-	if row.State == "sending" && !row.LeaseLive {
-		state = delivery.Uncertain
-		reason = "telegram_outcome_unknown"
-	}
-	if row.State == operationPending && !row.Current {
-		state = delivery.Cancelled
-		reason = "announcement_superseded"
-	}
-	if reason != "" {
+	uncertain := row.State == string(delivery.Uncertain) || (row.State == "sending" && !row.LeaseLive)
+	if uncertain || (row.State == operationPending && !row.Current) {
+		outcome, deadline, outcomeErr := s.announcementRecoveryOutcome(
+			ctx,
+			q,
+			delivery.Attempt{ID: id, Generation: attempt},
+			row,
+		)
+		if outcomeErr != nil {
+			return outcomeErr
+		}
 		if err = delivery.Project(
 			ctx,
 			tx,
 			s.Delivery.BotID,
 			announcementReference(id),
-			state,
-			time.Time{},
+			outcome.Kind,
+			deadline,
 		); err != nil {
 			return err
 		}
@@ -301,8 +314,8 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 			ctx,
 			q,
 			delivery.Attempt{ID: id, Generation: attempt},
-			delivery.Outcome{Kind: state, Reason: reason},
-			time.Now(),
+			outcome,
+			deadline,
 		); err != nil {
 			return err
 		}
@@ -311,4 +324,52 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 		return err
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+func (s Service) announcementRecoveryOutcome(
+	ctx context.Context,
+	q *dbgen.Queries,
+	attempt delivery.Attempt,
+	row dbgen.LockAnnouncementAttemptRow,
+) (delivery.Outcome, time.Time, error) {
+	deadline := time.Now()
+	cancelled := delivery.Outcome{Kind: delivery.Cancelled, Reason: "announcement_superseded"}
+	if row.State == operationPending {
+		return cancelled, deadline, nil
+	}
+	reason := announcementOutcomeUnknown
+	if row.State == string(delivery.Uncertain) && row.Failure != "" {
+		reason = row.Failure
+	}
+	if err := q.RecordAnnouncementUncertainty(
+		ctx,
+		dbgen.RecordAnnouncementUncertaintyParams{
+			ID:      attempt.ID,
+			BotID:   s.Delivery.BotID,
+			Attempt: attempt.Generation,
+			Reason:  reason,
+		},
+	); err != nil {
+		return delivery.Outcome{}, time.Time{}, core.DatabaseOperationError(err)
+	}
+	if !row.Current {
+		return cancelled, deadline, nil
+	}
+	outcome := announcementRetryOutcome(
+		delivery.Outcome{Kind: delivery.Uncertain, Reason: reason},
+		row.UncertainResends,
+		true,
+		s.Delivery,
+	)
+	if outcome.Kind != delivery.Deferred {
+		return outcome, deadline, nil
+	}
+	deadline, representable := delivery.Deadline(deadline, outcome.RetryAfter)
+	if !representable {
+		return delivery.Outcome{Kind: delivery.Parked, Reason: "telegram_invalid_cooldown"}, time.Now(), nil
+	}
+	if row.AvailableAt.Time.After(deadline) {
+		deadline = row.AvailableAt.Time
+	}
+	return outcome, deadline, nil
 }

@@ -91,6 +91,17 @@ func TestPublicationQueueAliasesFreezeOneLane(t *testing.T) {
 			},
 		),
 	)
+	var uncertainAttempt, resends int64
+	require.NoError(
+		t,
+		db.QueryRow(
+			t.Context(),
+			`SELECT last_uncertain_attempt,uncertain_resends FROM core.admin_message_deliveries WHERE id=$1`,
+			first.ID,
+		).Scan(&uncertainAttempt, &resends),
+	)
+	require.Equal(t, first.Attempt, uncertainAttempt)
+	require.Zero(t, resends, "a late known response must not admit another send")
 	candidates := queueCandidates(t, db)
 	require.Len(t, candidates, 1)
 	require.Equal(t, "-100123", candidates[0].Destination.Chat)

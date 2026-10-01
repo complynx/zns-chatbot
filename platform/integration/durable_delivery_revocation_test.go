@@ -1,8 +1,10 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,7 +19,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-func TestDurableDeliveryRevocationPreservesDispatchedLane(t *testing.T) {
+func TestDurableDeliveryRevocationCancelsUncertaintyAndReleasesFollower(t *testing.T) {
 	t.Parallel()
 	f := passMenuFixture(t)
 	s := configureDeliveryFixture(t, f)
@@ -37,7 +39,16 @@ func TestDurableDeliveryRevocationPreservesDispatchedLane(t *testing.T) {
 	release := make(chan struct{})
 	var once sync.Once
 	var sends atomic.Int64
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	received := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Text string `json:"text"`
+		}
+		if decodeErr := json.NewDecoder(r.Body).Decode(&payload); decodeErr != nil {
+			t.Error(decodeErr)
+			return
+		}
+		received <- payload.Text
 		sends.Add(1)
 		entered <- struct{}{}
 		<-release
@@ -53,6 +64,7 @@ func TestDurableDeliveryRevocationPreservesDispatchedLane(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("synthetic transport did not observe dispatch")
 	}
+	require.Equal(t, "private delivery canary", <-received)
 	require.NoError(t, history.DeleteContent(t.Context(), "bob", original))
 	requireCode(t, s.CheckPublication(t.Context(), "bob", active), "source_revoked")
 	requireCode(t, s.CheckPublication(t.Context(), "bob", pending), "source_revoked")
@@ -69,20 +81,78 @@ func TestDurableDeliveryRevocationPreservesDispatchedLane(t *testing.T) {
 	)
 	require.NoError(t, err)
 	restarted := adminmessage.Service{DB: f.db, Delivery: syntheticDeliverySettings()}
-	_, found, err = restarted.Claim(t.Context())
-	require.NoError(t, err)
-	assert.False(t, found, "unknown head must retain its lane fence")
-	assertRevokedDelivery(t, f, active, "unknown")
+	require.NoError(t, restarted.RecoverDeliveries(t.Context()))
+	assertRevokedDelivery(t, f, active, "cancelled")
+	entries := messageRetryCandidates(t, f.db, s.Delivery.BotID)
+	require.Len(t, entries, 2)
+	var followerID int64
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT d.id FROM core.admin_message_deliveries d JOIN core.admin_messages m ON m.id=d.message_id WHERE m.actor='bob' AND m.key='behind-active'`).
+			Scan(&followerID),
+	)
+	heads := make(map[string]string)
+	for _, entry := range entries {
+		heads[entry.Reference.Key] = entry.Destination.Chat
+	}
+	assert.Equal(
+		t,
+		map[string]string{strconv.FormatInt(independent.ID, 10): "202", strconv.FormatInt(followerID, 10): "101"},
+		heads,
+	)
+	var independentAttempt int64
+	var independentLeaseLive bool
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT attempt,lease_until>clock_timestamp() FROM core.admin_message_deliveries WHERE id=$1`, independent.ID).
+			Scan(&independentAttempt, &independentLeaseLive),
+	)
+	assert.Equal(t, independent.Attempt, independentAttempt)
+	assert.True(t, independentLeaseLive, "advisory heads retain the existing independent preparation lease")
+	var marker, resends, messageID, activeID int64
+	var reason, failure, terminalBefore string
+	var recorded time.Time
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT id,last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at,uncertain_resends,telegram_message_id,failure,to_jsonb(d)::text FROM core.admin_message_deliveries d WHERE message_id=$1`, active).
+			Scan(&activeID, &marker, &reason, &recorded, &resends, &messageID, &failure, &terminalBefore),
+	)
+	assert.NotContains(t, heads, strconv.FormatInt(activeID, 10), "revoked work is no longer an eligible head")
+	assert.EqualValues(t, 1, marker)
+	assert.Equal(t, "telegram_outcome_unknown", reason)
+	assert.WithinDuration(t, time.Now(), recorded, 5*time.Second)
+	assert.Zero(t, resends)
+	assert.Zero(t, messageID)
+	assert.Equal(t, "publication_cancelled", failure)
 	once.Do(func() { close(release) })
 	select {
 	case err = <-done:
-		require.NoError(t, err)
+		require.ErrorContains(t, err, "admin_message_stale_attempt")
 	case <-time.After(10 * time.Second):
 		t.Fatal("delivery did not complete after transport release")
 	}
-	assertRevokedDelivery(t, f, active, "unknown")
+	assertRevokedDelivery(t, f, active, "cancelled")
+	var terminalAfter string
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT to_jsonb(d)::text FROM core.admin_message_deliveries d WHERE message_id=$1`, active).
+			Scan(&terminalAfter),
+	)
+	assert.JSONEq(
+		t,
+		terminalBefore,
+		terminalAfter,
+		"late malformed uncertainty cannot change terminal state or factual evidence",
+	)
 	require.NoError(t, f.b.DeliverAdminMessages(t.Context()))
-	assert.EqualValues(t, 1, sends.Load(), "neither the uncertain send nor its successor may be sent automatically")
+	select {
+	case text := <-received:
+		require.Equal(t, "synthetic", text, "only the ordinary follower may cross the wire after cancellation")
+	case <-time.After(10 * time.Second):
+		t.Fatal("ordinary follower did not reach the synthetic transport")
+	}
+	assert.EqualValues(t, 2, sends.Load())
+	assertRevokedDelivery(t, f, active, "cancelled")
 }
 
 func enqueueDerivedRevocationDelivery(t *testing.T, s adminmessage.Service, key, chat string) int64 {

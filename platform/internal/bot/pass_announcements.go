@@ -2,12 +2,10 @@ package bot
 
 import (
 	"context"
-	"html"
+	"errors"
 	"strconv"
-	"strings"
 
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
@@ -24,9 +22,8 @@ func (b *Bot) deliverPreparedRegistrationAnnouncement(
 	ctx context.Context,
 	item passbooking.RegistrationAnnouncement,
 ) error {
-	text, err := registrationAnnouncementText(item)
-	if err != nil {
-		return err
+	if item.Text == "" {
+		return errors.New("registration announcement text is not captured")
 	}
 	gate, err := b.Host.BeginRegistrationAnnouncement(ctx, delivery.Attempt{ID: item.ID, Generation: item.Attempts})
 	if err != nil {
@@ -39,7 +36,7 @@ func (b *Bot) deliverPreparedRegistrationAnnouncement(
 	if numeric, parseErr := strconv.ParseInt(item.Channel, 10, 64); parseErr == nil {
 		chat = numeric
 	}
-	payload := map[string]any{"chat_id": chat, textField: text, "parse_mode": "HTML"}
+	payload := map[string]any{"chat_id": chat, textField: item.Text, "parse_mode": "HTML"}
 	if item.ThreadID != nil {
 		payload["message_thread_id"] = *item.ThreadID
 	}
@@ -59,25 +56,7 @@ func (b *Bot) deliverPreparedRegistrationAnnouncement(
 }
 
 func registrationAnnouncementText(item passbooking.RegistrationAnnouncement) (string, error) {
-	// Source thread locales use exact/base then English, not user-locale aliases.
-	base, _, _ := strings.Cut(strings.ToLower(item.Locale), "-")
-	locale := "en"
-	if base == "ru" {
-		locale = "ru"
-	}
-	roleID := i18n.RegistrationAnnouncementFollower
-	if item.Role == "leader" {
-		roleID = i18n.RegistrationAnnouncementLeader
-	}
-	role, err := i18n.Translate(locale, roleID, nil)
-	if err != nil {
-		return "", err
-	}
-	return i18n.Translate(
-		locale,
-		i18n.RegistrationAnnouncement,
-		map[string]string{profileNameValue: html.EscapeString(item.Name), "role": role},
-	)
+	return passbooking.RegistrationAnnouncementText(item)
 }
 
 func announcementCompletion(id, messageID int64, err error) passbooking.AnnouncementCompletion {

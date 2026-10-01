@@ -133,7 +133,7 @@ func TestDurableDeliveryPreparedAttemptFencingAndUnknownLane(t *testing.T) {
 		t,
 		db.QueryRow(t.Context(), `SELECT state FROM core.admin_message_deliveries WHERE id=$1`, first.ID).Scan(&state),
 	)
-	assert.Equal(t, "unknown", state)
+	assert.Equal(t, "pending", state)
 }
 
 func TestDurableDeliveryLockedLaneDoesNotBlockIndependentChat(t *testing.T) {

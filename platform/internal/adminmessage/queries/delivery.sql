@@ -21,7 +21,8 @@ WHERE d.bot_id=sqlc.arg(bot_id)::bigint AND m.state='queued' AND d.state='pendin
 ORDER BY d.id LIMIT 25;
 
 -- name: LockAdminDelivery :one
-SELECT d.id,d.message_id,d.destination,COALESCE(d.content,m.request->'content')::jsonb AS content,
+SELECT d.id,d.message_id,d.destination,
+ CASE WHEN d.content_captured THEN d.content ELSE m.request->'content' END::jsonb AS content,
  d.state,d.attempt,m.actor,u.telegram_id
 FROM core.admin_message_deliveries d JOIN core.admin_messages m ON m.id=d.message_id
 JOIN core.pass_booking_admins a ON a.owner=m.actor JOIN core.users u ON u.id=m.actor
@@ -31,7 +32,8 @@ WHERE d.id=sqlc.arg(id)::bigint AND d.bot_id=sqlc.arg(bot_id)::bigint
 FOR UPDATE OF d,m SKIP LOCKED FOR SHARE OF a;
 
 -- name: PrepareAdminDelivery :one
-UPDATE core.admin_message_deliveries SET attempt=attempt+1,lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.admin_message_deliveries SET attempt=attempt+1,lease_until=clock_timestamp()+interval '2 minutes',
+ content=CASE WHEN content_captured THEN content ELSE sqlc.arg(content)::jsonb END
 WHERE id=sqlc.arg(id)::bigint RETURNING attempt;
 
 -- name: AdminAttemptOwner :one
@@ -40,16 +42,26 @@ WHERE d.id=sqlc.arg(id)::bigint AND d.bot_id=sqlc.arg(bot_id)::bigint AND d.atte
  AND (d.state IN ('pending','sending','unknown') OR (d.state='cancelled' AND d.failure='source_revoked'));
 
 -- name: LockAdminAttempt :one
-SELECT d.destination,d.state,d.telegram_message_id,d.available_at,
+SELECT d.destination,d.state,d.telegram_message_id,d.available_at,d.failure,
+ d.last_uncertain_attempt,d.last_confirmed_attempt,d.uncertain_resends,d.lease_until,
  COALESCE(d.lease_until>clock_timestamp(),false)::boolean AS lease_live
 FROM core.admin_message_deliveries d WHERE d.id=sqlc.arg(id)::bigint
  AND d.bot_id=sqlc.arg(bot_id)::bigint AND d.attempt=sqlc.arg(attempt)::bigint
 FOR UPDATE;
 
 -- name: BeginAdminSend :execrows
-UPDATE core.admin_message_deliveries SET state='sending',lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.admin_message_deliveries SET state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+ content_captured=true,
+ uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempt=sqlc.arg(attempt)::bigint
- AND state='pending' AND lease_until>clock_timestamp();
+ AND state='pending' AND lease_until>clock_timestamp()
+ AND (last_uncertain_attempt IS NULL OR uncertain_resends<3);
+
+-- name: RecordAdminUncertainty :exec
+UPDATE core.admin_message_deliveries SET last_uncertain_attempt=sqlc.arg(attempt)::bigint,
+ last_uncertain_reason=sqlc.arg(reason)::text,last_uncertain_recorded_at=clock_timestamp()
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempt=sqlc.arg(attempt)::bigint
+ AND (last_uncertain_attempt IS NULL OR last_uncertain_attempt<sqlc.arg(attempt)::bigint);
 
 -- name: FinishAdminDelivery :execrows
 UPDATE core.admin_message_deliveries SET state=sqlc.arg(state)::text,
@@ -58,6 +70,25 @@ UPDATE core.admin_message_deliveries SET state=sqlc.arg(state)::text,
  failure_count=failure_count+sqlc.arg(failure_increment)::bigint
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempt=sqlc.arg(attempt)::bigint
  AND (state IN ('pending','sending','unknown') OR (state='cancelled' AND failure='source_revoked'));
+
+-- name: RecordAdminConfirmation :exec
+UPDATE core.admin_message_deliveries SET last_confirmed_attempt=sqlc.arg(attempt)::bigint
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempt=sqlc.arg(attempt)::bigint;
+
+-- name: RecordAdminTerminalConfirmation :execrows
+UPDATE core.admin_message_deliveries SET last_confirmed_attempt=sqlc.arg(attempt)::bigint
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
+ AND attempt=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=sqlc.arg(attempt)::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL AND telegram_message_id=0;
+
+-- name: RecordAdminTerminalReceipt :execrows
+UPDATE core.admin_message_deliveries SET telegram_message_id=sqlc.arg(message_id)::bigint
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
+ AND attempt=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=sqlc.arg(attempt)::bigint
+ AND COALESCE(last_confirmed_attempt,0)<sqlc.arg(attempt)::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL
+ AND sqlc.arg(message_id)::bigint>0
+ AND (telegram_message_id=0 OR telegram_message_id=sqlc.arg(message_id)::bigint);
 
 -- name: EnqueueAdminDeliveries :exec
 INSERT INTO core.admin_message_deliveries(message_id,destination,content,bot_id)
