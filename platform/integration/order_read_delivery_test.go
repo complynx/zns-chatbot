@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -203,8 +204,15 @@ func testPaymentCardSource(t *testing.T, fallback bool) {
 		View:        agent.OrdersView,
 		OrderAction: &agent.OrderProposal{Name: orders.ActionPaymentInstructions, OrderID: order.ID},
 	}
-	handle(t, f.b, message(29803, 101, "Show payment instructions for "+order.ID))
+	handleVisible(t, f.b, message(29803, 101, "Show payment instructions for "+order.ID))
 	before := paymentMessage(t, f)
+	var originalSource []byte
+	require.NoError(t, f.db.QueryRow(
+		ctx,
+		`SELECT content FROM bot.interactions WHERE owner='alice' AND update_id=0 AND kind=$1`,
+		"payment_source:"+order.ID,
+	).
+		Scan(&originalSource))
 	var bound bool
 	require.NoError(
 		t,
@@ -219,27 +227,41 @@ func testPaymentCardSource(t *testing.T, fallback bool) {
 	)
 	require.NoError(t, err)
 	fallbackSeen := false
+	var sends atomic.Int64
 	if fallback {
-		f.b.TG.HTTP = &http.Client{Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
-			if strings.HasSuffix(r.URL.Path, "/editMessageText") {
-				fallbackSeen = true
-				orderDeliveryHistoryDelete(t, f, "alice")
-				return &http.Response{
-					StatusCode: http.StatusBadRequest,
-					Header:     http.Header{},
-					Body: io.NopCloser(
-						strings.NewReader(`{"ok":false,"error_code":400,"description":"message to edit not found"}`),
-					),
-					Request: r,
-				}, nil
-			}
-			return http.DefaultTransport.RoundTrip(r)
-		})}
+		var historyID int64
+		require.NoError(t, f.db.QueryRow(
+			ctx,
+			`SELECT id FROM core.conversation_events WHERE owner='alice' AND origin='original' AND omission_reason<>'deleted' ORDER BY id LIMIT 1`,
+		).
+			Scan(&historyID))
+		f.b.TG.HTTP = &http.Client{Transport: paymentSourceEditRefusal(f, before.ID, historyID, &fallbackSeen, &sends)}
+		require.NoError(t, f.b.RenderOrders(ctx, "alice", 101))
+		var operation, effect string
+		require.NoError(t, f.db.QueryRow(ctx, `SELECT operation_key,effect_key FROM bot.delivery_intents
+			WHERE owner='alice' AND reference->>'family'='payment' AND state='pending'
+			ORDER BY created_at DESC LIMIT 1`).Scan(&operation, &effect))
+		ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+		pumpBotDeliveries(t, f.b)
+		require.True(t, fallbackSeen, "provider must reject the exact payment edit after source revocation")
+		require.NoError(t, f.b.DeliverBotIntent(ctx, ref))
+		cancelled, readErr := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, ref, false)
+		require.NoError(t, readErr)
+		require.Equal(t, delivery.Cancelled, cancelled.State)
+		require.Zero(t, sends.Load(), "revoked payment source must prevent fallback sends")
 	} else {
 		orderDeliveryHistoryDelete(t, f, "alice")
+		require.Error(t, f.b.RenderOrders(ctx, "alice", 101))
 	}
-	require.Error(t, f.b.RenderOrders(ctx, "alice", 101))
 	require.Equal(t, fallback, fallbackSeen)
+	var retainedSource []byte
+	require.NoError(t, f.db.QueryRow(
+		ctx,
+		`SELECT content FROM bot.interactions WHERE owner='alice' AND update_id=0 AND kind=$1`,
+		"payment_source:"+order.ID,
+	).
+		Scan(&retainedSource))
+	require.JSONEq(t, string(originalSource), string(retainedSource))
 	for _, item := range chatMessages(t, f, 101) {
 		require.NotContains(t, item.Text, "new payment canary")
 		if item.ID == before.ID {
@@ -247,7 +269,7 @@ func testPaymentCardSource(t *testing.T, fallback bool) {
 		}
 	}
 	f.b.TG.HTTP = nil
-	handle(t, f.b, orderClick(t, f, 101, 29804, "Payment methods"))
+	handleVisible(t, f.b, orderClick(t, f, 101, 29804, "Payment methods"))
 	require.NoError(
 		t,
 		f.db.QueryRow(ctx, `SELECT content->'source'<>'null'::jsonb FROM bot.interactions WHERE owner='alice' AND update_id=0 AND kind=$1`, "payment_source:"+order.ID).
@@ -259,6 +281,50 @@ func testPaymentCardSource(t *testing.T, fallback bool) {
 		found = found || strings.Contains(item.Text, "new payment canary")
 	}
 	require.True(t, found)
+}
+
+func paymentSourceEditRefusal(
+	f *fixture,
+	target, historyID int64,
+	seen *bool,
+	sends *atomic.Int64,
+) qaArchiveBoundaryTransport {
+	return func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/sendMessage") {
+			sends.Add(1)
+		}
+		if strings.HasSuffix(r.URL.Path, "/editMessageText") {
+			raw, readErr := io.ReadAll(r.Body)
+			if readErr != nil {
+				return nil, readErr
+			}
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+			var payload telegram.Send
+			if readErr = json.Unmarshal(raw, &payload); readErr != nil {
+				return nil, readErr
+			}
+			if payload.MessageID != target {
+				return http.DefaultTransport.RoundTrip(r)
+			}
+			*seen = true
+			if readErr = (conversation.Service{DB: f.db}).DeleteContent(
+				r.Context(),
+				"alice",
+				historyID,
+			); readErr != nil {
+				return nil, readErr
+			}
+			return &http.Response{
+				StatusCode: http.StatusBadRequest,
+				Header:     http.Header{},
+				Body: io.NopCloser(
+					strings.NewReader(`{"ok":false,"error_code":400,"description":"message to edit not found"}`),
+				),
+				Request: r,
+			}, nil
+		}
+		return http.DefaultTransport.RoundTrip(r)
+	}
 }
 
 func TestModernProofRechecksExactBindingAfterDownload(t *testing.T) {

@@ -7,6 +7,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
@@ -181,6 +184,13 @@ func (b *Bot) paymentInstructionsUnavailable(ctx context.Context, in incoming, i
 		return "", core.DatabaseOperationError(err)
 	}
 	if opened {
+		if retired, _ := ctx.Value(botRetiredCardKey{}).(bool); retired {
+			ref, unavailable, bindingErr := b.paymentRetirementReference(ctx, in.owner, key, id)
+			if bindingErr != nil || !unavailable {
+				return text, bindingErr
+			}
+			ctx = withBotCard(ctx, ref)
+		}
 		err = b.deliverOrderCard(
 			ctx,
 			in.owner,
@@ -189,6 +199,62 @@ func (b *Bot) paymentInstructionsUnavailable(ctx context.Context, in incoming, i
 		)
 	}
 	return text, err
+}
+
+func (b *Bot) paymentRetirementReference(
+	ctx context.Context,
+	owner, key, id string,
+) (botdelivery.Reference, bool, error) {
+	var event, state string
+	err := b.DB.QueryRow(ctx, `SELECT event_id,state FROM core.orders WHERE owner=$1 AND id=$2`, owner, id).
+		Scan(&event, &state)
+	if err != nil {
+		return botdelivery.Reference{}, false, core.DatabaseOperationContextError(ctx, err)
+	}
+	if state != "deleted" {
+		return botdelivery.Reference{}, false, nil
+	}
+	prior := &botdelivery.PaymentRetirement{}
+	err = b.DB.QueryRow(ctx, `SELECT i.operation_key,i.effect_key,c.view_hash
+ FROM bot.order_cards c JOIN bot.delivery_intents i
+ ON i.owner=c.owner AND i.chat_id=c.chat_id AND i.message_id=c.message_id
+ WHERE c.owner=$1 AND c.card_key=$2 AND c.visible AND c.message_id>0 AND i.bot_id=$3
+ AND i.state='sent' AND i.reference->>'family'='payment' AND i.reference->>'card_key'=$2
+ ORDER BY i.attempted_at DESC NULLS LAST,i.created_at DESC,i.operation_key DESC,i.effect_key DESC LIMIT 1`,
+		owner, key, b.Delivery.BotID).Scan(&prior.Operation, &prior.Effect, &prior.ViewHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return botdelivery.Reference{}, false, botdelivery.ErrStale
+	}
+	if err != nil {
+		return botdelivery.Reference{}, false, core.DatabaseOperationContextError(ctx, err)
+	}
+	return botdelivery.Reference{
+		Kind: botdelivery.CardIntent, Family: registrationPayment, CardKey: key,
+		Event: event, Object: id, Notice: i18n.PaymentUnavailable, PaymentRetirement: prior,
+	}, true, nil
+}
+
+// A retirement reconstructs only a fixed notice for the existing payment card.
+func (b *Bot) renderPaymentRetirement(ctx context.Context, i botdelivery.Intent) (botRenderedDelivery, error) {
+	if !i.Reference.Continuation.Retired || i.Target <= 0 || i.Phase != botPhaseEdit {
+		return botRenderedDelivery{}, botdelivery.ErrBinding
+	}
+	preference, err := b.API.Preferences(ctx, i.Owner)
+	if err != nil {
+		return botRenderedDelivery{}, err
+	}
+	text, err := i18n.Translate(preference.Language, i18n.PaymentUnavailable,
+		map[string]string{orderCodeParameter: "payment_context_unavailable"})
+	if err != nil {
+		return botRenderedDelivery{}, err
+	}
+	payload := telegram.Send{
+		ChatID: i.Chat, MessageID: i.Target, Text: text, Markup: telegram.Markup{Rows: [][]telegram.Button{}},
+	}
+	hash, err := botCardHash(payload)
+	receipt := i.Reference.Continuation
+	receipt.ViewHash = hash
+	return botRenderedDelivery{Payload: payload, Receipt: receipt}, err
 }
 
 func (b *Bot) refreshPaymentInstructions(

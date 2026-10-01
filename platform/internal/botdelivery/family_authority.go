@@ -13,6 +13,8 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/modelsettings"
@@ -131,8 +133,8 @@ func (s Service) lockFamily(ctx context.Context, tx pgx.Tx, i Intent, f familyRe
 			return ErrBinding
 		}
 		return nil
-	case "payment":
-		return orders.LockDeliveryPaymentInTx(ctx, tx, i.Owner, r.Event, r.Object)
+	case familyPayment:
+		return lockPaymentCard(ctx, tx, i)
 	case "credits":
 		return credits.LockDeliveryReadInTx(ctx, tx, i.Owner, r.Object)
 	case "model_settings":
@@ -157,6 +159,108 @@ func (s Service) lockFamily(ctx context.Context, tx pgx.Tx, i Intent, f familyRe
 		return s.lockFood(ctx, tx, i)
 	}
 }
+
+func lockPaymentCard(ctx context.Context, tx pgx.Tx, i Intent) error {
+	r := i.Reference
+	if r.Notice != i18n.PaymentUnavailable {
+		if r.PaymentRetirement != nil {
+			return ErrBinding
+		}
+		return orders.LockDeliveryPaymentInTx(ctx, tx, i.Owner, r.Event, r.Object)
+	}
+	if !r.Continuation.Retired || r.Kind != CardIntent || r.Object == "" || r.CardKey != "payment:"+r.Object ||
+		r.Source != nil || len(r.Authorities) != 0 || r.Update != 0 ||
+		r.Continuation.Kind != "order_card" || r.Continuation.Key != r.CardKey ||
+		i.Phase != phaseEdit || i.Target <= 0 || r.PaymentRetirement == nil ||
+		r.PaymentRetirement.Operation == "" || r.PaymentRetirement.Effect == "" || r.PaymentRetirement.ViewHash == "" {
+		return ErrBinding
+	}
+	var event, state string
+	err := tx.QueryRow(ctx, `SELECT event_id,state FROM core.orders WHERE owner=$1 AND id=$2 FOR SHARE`, i.Owner, r.Object).
+		Scan(&event, &state)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrStale
+	}
+	if err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	if event != r.Event || state != "deleted" {
+		return ErrStale
+	}
+	return lockPaymentRetirementProjection(ctx, tx, i)
+}
+
+func lockPaymentRetirementProjection(ctx context.Context, tx pgx.Tx, i Intent) error {
+	var chat, message int64
+	var hash string
+	var visible bool
+	err := tx.QueryRow(ctx, `SELECT chat_id,message_id,view_hash,visible FROM bot.order_cards
+ WHERE owner=$1 AND card_key=$2 FOR SHARE`, i.Owner, i.Reference.CardKey).Scan(&chat, &message, &hash, &visible)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrStale
+	}
+	if err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	prior := i.Reference.PaymentRetirement
+	if chat != i.Chat || message != i.Target || hash != prior.ViewHash || !visible {
+		return ErrStale
+	}
+	var operation, effect string
+	err = tx.QueryRow(ctx, `SELECT operation_key,effect_key FROM bot.delivery_intents
+ WHERE bot_id=$1 AND owner=$2 AND chat_id=$3 AND message_id=$4 AND state='sent'
+ AND reference->>'family'='payment' AND reference->>'card_key'=$5
+ AND NOT(operation_key=$6 AND effect_key=$7)
+ ORDER BY attempted_at DESC NULLS LAST,created_at DESC,operation_key DESC,effect_key DESC LIMIT 1 FOR SHARE`,
+		i.BotID, i.Owner, i.Chat, i.Target, i.Reference.CardKey, i.Operation, i.Effect).Scan(&operation, &effect)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrStale
+	}
+	if err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	if operation != prior.Operation || effect != prior.Effect {
+		return ErrStale
+	}
+	return lockPaymentRetirementSource(ctx, tx, i)
+}
+
+func lockPaymentRetirementSource(ctx context.Context, tx pgx.Tx, i Intent) error {
+	bound := i.Reference.PaymentRetirement
+	prior, err := Read(ctx, tx, i.BotID,
+		delivery.Reference{Owner: delivery.Bot, Key: bound.Operation, Effect: bound.Effect}, false)
+	if err != nil {
+		return err
+	}
+	r := prior.Reference
+	if prior.Owner != i.Owner || prior.Chat != i.Chat || prior.MessageID != i.Target ||
+		prior.State != delivery.Succeeded || !prior.ContinuationDone || prior.Receipt.ViewHash != bound.ViewHash ||
+		r.Kind != CardIntent || r.Family != familyPayment || r.CardKey != i.Reference.CardKey ||
+		r.Object != i.Reference.Object || r.Event != i.Reference.Event || r.PaymentRetirement != nil {
+		return ErrStale
+	}
+	var raw []byte
+	err = tx.QueryRow(ctx, `SELECT content FROM bot.interactions
+ WHERE owner=$1 AND update_id=0 AND kind=$2 FOR SHARE`, i.Owner, "payment_source:"+r.Object).Scan(&raw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrStale
+	}
+	if err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	var source struct {
+		Original bool                   `json:"original"`
+		Source   *readsource.Derivation `json:"source"`
+	}
+	if err = json.Unmarshal(raw, &source); err != nil {
+		return err
+	}
+	if source.Original != (source.Source == nil) || !reflect.DeepEqual(source.Source, r.Source) {
+		return ErrStale
+	}
+	return nil
+}
+
 func lockRegistrationCapability(ctx context.Context, tx pgx.Tx, owner, event, action string) error {
 	valid, err := passbooking.LockReadAuthorities(
 		ctx,
@@ -275,7 +379,12 @@ func lockViewBinding(ctx context.Context, tx pgx.Tx, i Intent, f familyRead) err
 
 func (s Service) lockFamilyEvent(ctx context.Context, tx pgx.Tx, i Intent) error {
 	switch i.Reference.Family {
-	case familyOrderExport, familyModernOrderExport, familyOrderProof, familyModernOrderProof, "payment", familyRefund:
+	case familyOrderExport,
+		familyModernOrderExport,
+		familyOrderProof,
+		familyModernOrderProof,
+		familyPayment,
+		familyRefund:
 		return orders.LockEvent(ctx, tx, i.Reference.Event)
 	case "food",
 		"food_closed",

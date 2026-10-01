@@ -309,6 +309,9 @@ func (b *Bot) renderBotCard(ctx context.Context, i botdelivery.Intent) (botRende
 			i.Reference.Family == botFamilyFoodReview,
 		)
 	case registrationPayment:
+		if i.Reference.Notice == i18n.PaymentUnavailable {
+			return scoped.renderPaymentRetirement(ctx, i)
+		}
 		_, err = scoped.paymentInstructionsWithSource(
 			ctx,
 			incoming{owner: i.Owner, chat: i.Chat},

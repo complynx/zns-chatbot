@@ -32,6 +32,7 @@ const (
 	familyPasses             = "passes"
 	passCardReceiptKind      = "pass_card"
 	familyRefund             = "order_refund"
+	familyPayment            = "payment"
 	familyRefundRedaction    = "order_refund_redaction"
 	familyPassRedaction      = "pass_redaction"
 	familyPassExport         = "pass_export"
@@ -55,24 +56,33 @@ const (
 // Reference contains domain/private-result references, never wire
 // text, file bytes, credentials or a serialized callback.
 type Reference struct {
-	Refund       *orders.RefundDeliveryRead `json:"refund,omitempty"`
-	ProofAttempt string                     `json:"proof_attempt,omitempty"`
-	Kind         Kind                       `json:"kind"`
-	Family       string                     `json:"family,omitempty"`
-	CardKey      string                     `json:"card_key,omitempty"`
-	Event        string                     `json:"event,omitempty"`
-	Object       string                     `json:"object,omitempty"`
-	Update       int64                      `json:"update,omitempty"`
-	Revision     int64                      `json:"revision,omitempty"`
-	Version      int64                      `json:"version,omitempty"`
-	Attempt      int64                      `json:"attempt,omitempty"`
-	ResultKind   string                     `json:"result_kind,omitempty"`
-	Notice       i18n.ID                    `json:"notice,omitempty"`
-	Language     string                     `json:"language,omitempty"`
-	Generation   *int64                     `json:"generation,omitempty"`
-	Source       *readsource.Derivation     `json:"source,omitempty"`
-	Continuation Continuation               `json:"continuation"`
-	Authorities  []readsource.Authority     `json:"authorities,omitempty"`
+	PaymentRetirement *PaymentRetirement         `json:"payment_retirement,omitempty"`
+	Refund            *orders.RefundDeliveryRead `json:"refund,omitempty"`
+	ProofAttempt      string                     `json:"proof_attempt,omitempty"`
+	Kind              Kind                       `json:"kind"`
+	Family            string                     `json:"family,omitempty"`
+	CardKey           string                     `json:"card_key,omitempty"`
+	Event             string                     `json:"event,omitempty"`
+	Object            string                     `json:"object,omitempty"`
+	Update            int64                      `json:"update,omitempty"`
+	Revision          int64                      `json:"revision,omitempty"`
+	Version           int64                      `json:"version,omitempty"`
+	Attempt           int64                      `json:"attempt,omitempty"`
+	ResultKind        string                     `json:"result_kind,omitempty"`
+	Notice            i18n.ID                    `json:"notice,omitempty"`
+	Language          string                     `json:"language,omitempty"`
+	Generation        *int64                     `json:"generation,omitempty"`
+	Source            *readsource.Derivation     `json:"source,omitempty"`
+	Continuation      Continuation               `json:"continuation"`
+	Authorities       []readsource.Authority     `json:"authorities,omitempty"`
+}
+
+// PaymentRetirement identifies the successful payload being removed, without
+// copying its private source or granting authority to render it again.
+type PaymentRetirement struct {
+	Operation string `json:"operation"`
+	Effect    string `json:"effect"`
+	ViewHash  string `json:"view_hash"`
 }
 
 type Continuation struct {
