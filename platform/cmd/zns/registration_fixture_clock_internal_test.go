@@ -17,6 +17,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/observability"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationclock"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 	"github.com/complynx/zns-chatbot/platform/internal/store"
 )
@@ -157,10 +158,7 @@ func TestRegistrationClockConfigurationIsOptIn(t *testing.T) {
 	}
 	clock, configured, err := configuredRegistrationClock(t.Context(), nil, config.Config{Env: "production"})
 	require.NoError(t, err)
-	require.Nil(t, clock, "defaults do not touch a database or file")
-	if clock != nil {
-		t.Fatal("default startup must return a nil clock interface")
-	}
+	require.Equal(t, registrationingress.Clock(nil), clock, "default startup must return a nil clock interface")
 	require.False(t, configured)
 	require.NoError(t, rejectRegistrationClockMode("api"))
 	t.Setenv("REGISTRATION_CLOCK_FILE", registrationclock.Path)
