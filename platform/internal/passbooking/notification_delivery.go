@@ -20,6 +20,8 @@ const (
 	passportNotificationKind = "passport_required"
 )
 
+const notificationUncertainResendLimit int64 = 3
+
 // BeginNotification checks current domain eligibility before reserving shared pacing.
 // No domain or ledger lock is held while the adapter contacts Telegram.
 
@@ -58,6 +60,19 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 	}
 	if !current {
 		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
+	}
+	if row.LastUncertainAttempt.Valid && row.UncertainResends >= notificationUncertainResendLimit {
+		if err = s.exhaustNotificationRetry(ctx, tx, attempt); err != nil {
+			return delivery.Admission{}, err
+		}
+		if err = clockAttempt.Check(ctx); err != nil {
+			return delivery.Admission{}, err
+		}
+		return delivery.Admission{
+			Reason: "telegram_uncertain_retry_exhausted",
+		}, core.DatabaseOperationError(
+			tx.Commit(ctx),
+		)
 	}
 	gate, current, err := s.beginCurrentNotification(ctx, tx, attempt, row)
 	if err != nil {
@@ -155,7 +170,7 @@ func (s Service) cancelNotificationAdmission(
 }
 
 // CompleteNotification retains known wire outcomes even after eligibility changes.
-// Unknown attempts can resolve from a late transport response, never from a new send.
+// A late result can resolve the same admitted generation before a new retry begins.
 func (s Service) CompleteNotification(ctx context.Context, result NotificationCompletion) error {
 	if err := s.Delivery.Validate(); err != nil {
 		return err
@@ -177,6 +192,23 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 		return notificationAttemptError(core.DatabaseOperationError(err))
 	}
 
+	if notificationTerminalReceipt(row, result.Outcome) {
+		count, receiptErr := dbgen.New(tx).
+			RecordTerminalNotificationReceipt(ctx, dbgen.RecordTerminalNotificationReceiptParams{
+				ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt, MessageID: result.Outcome.MessageID,
+			})
+		if receiptErr != nil {
+			return core.DatabaseOperationError(receiptErr)
+		}
+		if count != 1 {
+			return notificationStale()
+		}
+		return core.DatabaseOperationError(tx.Commit(ctx))
+	}
+	if result.Outcome.Kind == delivery.Uncertain && row.LastUncertainAttempt.Valid &&
+		row.LastUncertainAttempt.Int64 == result.Attempt && row.DeliveryState != "sending" {
+		return nil
+	}
 	if (row.DeliveryState != notificationPending || !row.LeaseLive) &&
 		row.DeliveryState == string(result.Outcome.Kind) &&
 		row.TelegramMessageID == result.Outcome.MessageID &&
@@ -184,17 +216,56 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 		row.DeliveryText == result.Text {
 		return nil
 	}
-	if !notificationOutcomeAllowed(row.DeliveryState, result.Outcome.Kind) {
+	if !notificationOutcomeAllowed(row, result.Outcome.Kind) {
 		return notificationStale()
 	}
 	attempt := delivery.Attempt{ID: result.ID, Generation: result.Attempt}
-	if err = s.finishNotification(ctx, tx, attempt, result.Outcome, result.Text); err != nil {
+	if notificationLateSuccess(row, result.Outcome.Kind) {
+		if err = s.finishLateNotificationSuccess(ctx, tx, attempt, result.Outcome, result.Text); err != nil {
+			return err
+		}
+	} else if err = s.finishNotification(ctx, tx, attempt, result.Outcome, result.Text); err != nil {
 		return err
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
-func notificationOutcomeAllowed(state string, kind delivery.Kind) bool {
+// A terminal policy stays terminal; a late receipt records only the known wire ID.
+func notificationTerminalReceipt(row dbgen.LockNotificationAttemptRow, outcome delivery.Outcome) bool {
+	return (row.DeliveryState == "failed" || row.DeliveryState == "cancelled") &&
+		outcome.Kind == delivery.Succeeded && outcome.MessageID > 0 && !row.LeaseUntil.Valid &&
+		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == row.DeliveryAttempt &&
+		(row.TelegramMessageID == 0 || row.TelegramMessageID == outcome.MessageID)
+}
+func notificationLateSuccess(row dbgen.LockNotificationAttemptRow, kind delivery.Kind) bool {
+	return row.DeliveryState == notificationPending && kind == delivery.Succeeded && !row.LeaseUntil.Valid &&
+		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == row.DeliveryAttempt
+}
+
+func (s Service) finishLateNotificationSuccess(
+	ctx context.Context,
+	tx pgx.Tx,
+	attempt delivery.Attempt,
+	outcome delivery.Outcome,
+	text string,
+) error {
+	result, deadline, err := delivery.FinishUncertainSuccess(
+		ctx,
+		tx,
+		s.Delivery,
+		notificationReference(attempt.ID),
+		outcome,
+	)
+	if err != nil {
+		return err
+	}
+	return s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, result, text, deadline, 0)
+}
+func notificationOutcomeAllowed(row dbgen.LockNotificationAttemptRow, kind delivery.Kind) bool {
+	state := row.DeliveryState
+	if notificationLateSuccess(row, kind) {
+		return true
+	}
 	if state != notificationPending && state != "sending" && state != "unknown" {
 		return false
 	}
@@ -239,9 +310,69 @@ func (s Service) finishNotification(
 		(result.Kind == delivery.Deferred && result.Reason != "telegram_rate_limit") {
 		failures = 1
 	}
-	return s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, result, text, deadline, failures)
+	if err = s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, result, text, deadline, failures); err != nil {
+		return err
+	}
+	if result.Kind == delivery.Uncertain || result.Kind == delivery.Deferred {
+		return s.rescheduleNotification(ctx, tx, attempt, result.Kind == delivery.Uncertain, deadline)
+	}
+	return nil
 }
 
+// notificationRetryMissing accepts only absence, never a joined SQL/cancellation failure.
+func notificationRetryMissing(ctx context.Context, err error) bool {
+	return ctx.Err() == nil && errors.Is(err, pgx.ErrNoRows) && !core.IsDatabaseFailure(err) &&
+		!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded)
+}
+
+// rescheduleNotification retains the factual unknown while changing only intent scheduling.
+func (s Service) rescheduleNotification(
+	ctx context.Context,
+	tx pgx.Tx,
+	attempt delivery.Attempt,
+	uncertain bool,
+	providerDeadline time.Time,
+) error {
+	seconds := int64(s.Delivery.Fallback / time.Second)
+	if s.Delivery.Fallback%time.Second != 0 {
+		seconds++
+	}
+	row, err := dbgen.New(tx).RescheduleUncertainNotification(ctx, dbgen.RescheduleUncertainNotificationParams{
+		ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation,
+		Uncertain: uncertain, FallbackSeconds: seconds,
+		ProviderDeadline: pgtype.Timestamptz{Time: providerDeadline, Valid: true},
+	})
+	if notificationRetryMissing(ctx, err) {
+		return nil
+	}
+	if err != nil {
+		return core.DatabaseOperationError(err)
+	}
+	return delivery.Project(
+		ctx,
+		tx,
+		s.Delivery.BotID,
+		notificationReference(attempt.ID),
+		delivery.Kind(row.DeliveryState),
+		row.AvailableAt.Time,
+	)
+}
+
+// Exhaustion is an owner policy decision, not a fabricated transport rejection.
+func (s Service) exhaustNotificationRetry(ctx context.Context, tx pgx.Tx, attempt delivery.Attempt) error {
+	if err := delivery.Project(
+		ctx,
+		tx,
+		s.Delivery.BotID,
+		notificationReference(attempt.ID),
+		delivery.Rejected,
+		time.Time{},
+	); err != nil {
+		return err
+	}
+	return s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt,
+		delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}, "", time.Time{}, 0)
+}
 func (s Service) saveNotificationOutcome(
 	ctx context.Context,
 	q *dbgen.Queries,
@@ -357,16 +488,24 @@ func (s Service) NotificationStatus(ctx context.Context, id int64) (Notification
 		return NotificationDeliveryStatus{}, core.DatabaseOperationError(err)
 	}
 
-	return NotificationDeliveryStatus{
-		ID:               row.ID,
-		Attempt:          row.DeliveryAttempt,
-		State:            row.DeliveryState,
-		MessageID:        row.TelegramMessageID,
-		Reason:           row.Failure,
-		FailureCount:     row.FailureCount,
-		AvailableAt:      row.AvailableAt.Time,
-		FollowupPending:  row.FollowupPending,
-		FollowupFailure:  row.FollowupFailure,
-		FollowupAttempts: row.FollowupAttempts,
-	}, nil
+	status := NotificationDeliveryStatus{
+		ID:                   row.ID,
+		Attempt:              row.DeliveryAttempt,
+		State:                row.DeliveryState,
+		MessageID:            row.TelegramMessageID,
+		Reason:               row.Failure,
+		FailureCount:         row.FailureCount,
+		AvailableAt:          row.AvailableAt.Time,
+		FollowupPending:      row.FollowupPending,
+		FollowupFailure:      row.FollowupFailure,
+		FollowupAttempts:     row.FollowupAttempts,
+		LastUncertainAttempt: row.LastUncertainAttempt.Int64,
+		LastUncertainReason:  row.LastUncertainReason.String,
+		UncertainResends:     row.UncertainResends,
+	}
+	if row.LastUncertainRecordedAt.Valid {
+		value := row.LastUncertainRecordedAt.Time
+		status.LastUncertainRecordedAt = &value
+	}
+	return status, nil
 }

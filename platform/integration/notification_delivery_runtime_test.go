@@ -46,15 +46,19 @@ type notificationRuntimeFixture struct {
 }
 
 type notificationRuntimeStatus struct {
-	State            string    `json:"state"`
-	Attempt          int64     `json:"attempt"`
-	MessageID        int64     `json:"message_id"`
-	Reason           string    `json:"reason"`
-	FailureCount     int64     `json:"failure_count"`
-	FollowupPending  bool      `json:"followup_pending"`
-	FollowupFailure  string    `json:"followup_failure"`
-	FollowupAttempts int64     `json:"followup_attempts"`
-	AvailableAt      time.Time `json:"available_at"`
+	State                   string     `json:"state"`
+	Attempt                 int64      `json:"attempt"`
+	MessageID               int64      `json:"message_id"`
+	Reason                  string     `json:"reason"`
+	FailureCount            int64      `json:"failure_count"`
+	FollowupPending         bool       `json:"followup_pending"`
+	FollowupFailure         string     `json:"followup_failure"`
+	FollowupAttempts        int64      `json:"followup_attempts"`
+	AvailableAt             time.Time  `json:"available_at"`
+	LastUncertainAttempt    int64      `json:"last_uncertain_attempt"`
+	LastUncertainReason     string     `json:"last_uncertain_reason"`
+	LastUncertainRecordedAt *time.Time `json:"last_uncertain_recorded_at"`
+	UncertainResends        int64      `json:"uncertain_resends"`
 }
 
 func notificationRuntime(t *testing.T, domain string) *notificationRuntimeFixture {
@@ -378,13 +382,16 @@ func TestNotificationDeliveryUnknownBlocksOnlyItsLane(t *testing.T) {
 			r := notificationRuntime(t, domain)
 			spy := attachNotificationWireSpy(t, r.f, "unknown")
 			require.NoError(t, r.deliver(t.Context()))
-			assert.Equal(t, "unknown", r.status(t, r.first).State)
-			r.wake(t)
+			assert.Equal(t, "pending", r.status(t, r.first).State)
 			require.NoError(t, r.deliver(t.Context()))
 			assert.Equal(t, 1, spy.calls(202))
 			assert.Equal(t, "pending", r.status(t, r.second).State)
 			assert.Equal(t, "sent", r.status(t, r.other).State)
 			assert.Positive(t, spy.calls(101), "an unrelated chat is not held behind uncertainty")
+			r.wake(t)
+			require.NoError(t, r.deliver(t.Context()))
+			assert.Equal(t, "sent", r.status(t, r.first).State)
+			assert.Equal(t, 2, spy.calls(202), "the same notification retries after its backoff")
 		})
 	}
 }
@@ -733,7 +740,7 @@ func TestNotificationDeliveryExactAttemptAndExpiredSend(t *testing.T) {
 			require.NoError(t, err)
 			r.prepare(t)
 			expired := r.status(t, r.first)
-			assert.Equal(t, "unknown", expired.State)
+			assert.Equal(t, "pending", expired.State)
 			assert.Equal(t, current.Attempt, expired.Attempt, "an expired send is not a fresh attempt")
 			r.postAttempt(t, "begin", delivery.Attempt{ID: r.first, Generation: current.Attempt}, http.StatusConflict)
 			assert.Zero(t, spy.calls(202), "claim/lease recovery does not invent a transport send")

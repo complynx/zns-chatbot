@@ -187,7 +187,7 @@ func TestNotificationLostCanonicalAckDoesNotBlindResend(t *testing.T) {
 		f.db.QueryRow(t.Context(), `SELECT delivery_state,failure FROM core.order_notifications ORDER BY id LIMIT 1`).
 			Scan(&state, &failure),
 	)
-	assert.Equal(t, "unknown", state)
+	assert.Equal(t, "pending", state)
 	assert.Equal(t, "telegram_outcome_unknown", failure)
 }
 func TestOrderFixturesEnableDeadlineAndRURouting(t *testing.T) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -98,7 +97,7 @@ func (s Service) recoverNotificationSends(ctx context.Context) error {
 	return nil
 }
 
-// Each expired attempt owns a separate transaction, so recovery never acquires
+// Each recovered attempt owns a separate transaction, so recovery never acquires
 // a second owner row after locking the first row's delivery lane.
 func (s Service) recoverNotificationSend(ctx context.Context) (bool, error) {
 	tx, err := s.DB.Begin(ctx)
@@ -106,26 +105,54 @@ func (s Service) recoverNotificationSend(ctx context.Context) (bool, error) {
 		return false, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	row, err := dbgen.New(tx).ExpiredNotification(ctx, s.Delivery.BotID)
-	if errors.Is(err, pgx.ErrNoRows) {
+	s, clockAttempt := s.WithClockAttempt()
+	q := dbgen.New(tx)
+	candidate, err := q.ExpiredNotification(ctx, s.Delivery.BotID)
+	if notificationRetryMissing(ctx, err) {
 		return false, nil
 	}
 	if err != nil {
 		return false, core.DatabaseOperationError(err)
 	}
-	outcome := delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"}
-	if err = delivery.Project(
-		ctx,
-		tx,
-		s.Delivery.BotID,
-		notificationReference(row.ID),
-		outcome.Kind,
-		time.Time{},
-	); err != nil {
+	// Candidate selection does not hold the owner row ahead of its source locks.
+	current, err := s.lockNotificationEligibility(ctx, tx, candidate.ID)
+	if err != nil && !notificationRetryMissing(ctx, err) {
 		return false, err
 	}
+	row, err := q.LockNotificationAttempt(ctx, dbgen.LockNotificationAttemptParams{
+		ID: candidate.ID, BotID: s.Delivery.BotID, Attempt: candidate.DeliveryAttempt,
+	})
+	if notificationRetryMissing(ctx, err) {
+		return true, nil
+	}
+	if err != nil {
+		return false, core.DatabaseOperationError(err)
+	}
+	if row.DeliveryState != "unknown" && (row.DeliveryState != "sending" || row.LeaseLive) {
+		return true, nil
+	}
+	current, err = s.currentPassportNotification(ctx, tx, row, current)
+	if err != nil {
+		return false, err
+	}
+	outcome := delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"}
+	if !current {
+		count, recordErr := q.RecordNotificationUncertainty(ctx, dbgen.RecordNotificationUncertaintyParams{
+			ID: row.ID, BotID: s.Delivery.BotID, Attempt: row.DeliveryAttempt,
+		})
+		if recordErr != nil {
+			return false, core.DatabaseOperationError(recordErr)
+		}
+		if count != 1 {
+			return false, notificationStale()
+		}
+		outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: "notification_no_longer_current"}
+	}
 	attempt := delivery.Attempt{ID: row.ID, Generation: row.DeliveryAttempt}
-	if err = s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, outcome, "", time.Time{}, 0); err != nil {
+	if err = s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {
+		return false, err
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
 		return false, err
 	}
 	return true, core.DatabaseOperationError(tx.Commit(ctx))

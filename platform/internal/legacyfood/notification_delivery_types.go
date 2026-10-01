@@ -24,14 +24,18 @@ type NotificationFollowup struct {
 
 // NotificationDeliveryStatus exposes bounded operational metadata without message content.
 type NotificationDeliveryStatus struct {
-	ID               int64     `json:"id"`
-	Attempt          int64     `json:"attempt"`
-	State            string    `json:"state"`
-	MessageID        int64     `json:"message_id,omitempty"`
-	Reason           string    `json:"reason,omitempty"`
-	FailureCount     int64     `json:"failure_count"`
-	AvailableAt      time.Time `json:"available_at"`
-	FollowupPending  bool      `json:"followup_pending"`
-	FollowupFailure  string    `json:"followup_failure,omitempty"`
-	FollowupAttempts int64     `json:"followup_attempts"`
+	ID                      int64      `json:"id"`
+	Attempt                 int64      `json:"attempt"`
+	State                   string     `json:"state"`
+	MessageID               int64      `json:"message_id,omitempty"`
+	Reason                  string     `json:"reason,omitempty"`
+	FailureCount            int64      `json:"failure_count"`
+	AvailableAt             time.Time  `json:"available_at"`
+	FollowupPending         bool       `json:"followup_pending"`
+	FollowupFailure         string     `json:"followup_failure,omitempty"`
+	FollowupAttempts        int64      `json:"followup_attempts"`
+	LastUncertainAttempt    int64      `json:"last_uncertain_attempt,omitempty"`
+	LastUncertainReason     string     `json:"last_uncertain_reason,omitempty"`
+	LastUncertainRecordedAt *time.Time `json:"last_uncertain_recorded_at,omitempty"`
+	UncertainResends        int64      `json:"uncertain_resends"`
 }

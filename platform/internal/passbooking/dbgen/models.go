@@ -9,26 +9,30 @@ import (
 )
 
 type CorePassNotification struct {
-	ID                int64
-	EventID           string
-	Owner             string
-	Recipient         string
-	Kind              string
-	Generation        string
-	Payload           []byte
-	CreatedAt         pgtype.Timestamptz
-	AvailableAt       pgtype.Timestamptz
-	DeliveredAt       pgtype.Timestamptz
-	Failure           string
-	BotID             pgtype.Int8
-	DeliveryState     string
-	DeliveryChat      int64
-	DeliveryAttempt   int64
-	LeaseUntil        pgtype.Timestamptz
-	TelegramMessageID int64
-	DeliveryText      string
-	FailureCount      int64
-	FollowupPending   bool
-	FollowupFailure   string
-	FollowupAttempts  int64
+	ID                      int64
+	EventID                 string
+	Owner                   string
+	Recipient               string
+	Kind                    string
+	Generation              string
+	Payload                 []byte
+	CreatedAt               pgtype.Timestamptz
+	AvailableAt             pgtype.Timestamptz
+	DeliveredAt             pgtype.Timestamptz
+	Failure                 string
+	BotID                   pgtype.Int8
+	DeliveryState           string
+	DeliveryChat            int64
+	DeliveryAttempt         int64
+	LeaseUntil              pgtype.Timestamptz
+	TelegramMessageID       int64
+	DeliveryText            string
+	FailureCount            int64
+	FollowupPending         bool
+	FollowupFailure         string
+	FollowupAttempts        int64
+	LastUncertainAttempt    pgtype.Int8
+	LastUncertainReason     pgtype.Text
+	LastUncertainRecordedAt pgtype.Timestamptz
+	UncertainResends        int64
 }

@@ -32,14 +32,17 @@ SELECT *,COALESCE(lease_until>clock_timestamp(),false)::boolean AS lease_live FR
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND delivery_attempt=sqlc.arg(attempt)::bigint FOR UPDATE;
 
 -- name: BeginNotificationSend :execrows
-UPDATE core.pass_notifications SET delivery_state='sending',lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.pass_notifications SET delivery_state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+ uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND delivery_attempt=sqlc.arg(attempt)::bigint
-AND delivery_state='pending' AND lease_until>clock_timestamp();
+AND delivery_state='pending' AND lease_until>clock_timestamp()
+AND (last_uncertain_attempt IS NULL OR uncertain_resends<3);
 
 -- name: FinishNotificationDelivery :execrows
 UPDATE core.pass_notifications SET delivery_state=sqlc.arg(state)::text,
  telegram_message_id=sqlc.arg(message_id)::bigint,delivery_text=sqlc.arg(text)::text,failure=sqlc.arg(failure)::text,
- available_at=sqlc.arg(available_at)::timestamptz,
+ available_at=CASE WHEN last_uncertain_attempt IS NOT NULL AND sqlc.arg(state)::text='pending'
+  THEN GREATEST(available_at,sqlc.arg(available_at)::timestamptz) ELSE sqlc.arg(available_at)::timestamptz END,
  lease_until=CASE WHEN sqlc.arg(state)::text='sent' THEN clock_timestamp()+interval '2 minutes' END,
  followup_pending=(sqlc.arg(state)::text='sent'),
  failure_count=failure_count+sqlc.arg(failure_increment)::bigint,
@@ -70,8 +73,9 @@ SELECT titles FROM core.pass_events WHERE id=sqlc.arg(event)::text;
 
 -- name: ExpiredNotification :one
 SELECT * FROM core.pass_notifications
-WHERE bot_id=sqlc.arg(bot_id)::bigint AND delivery_state='sending' AND lease_until<=clock_timestamp()
-ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED;
+WHERE bot_id=sqlc.arg(bot_id)::bigint
+AND (delivery_state='unknown' OR (delivery_state='sending' AND lease_until<=clock_timestamp()))
+ORDER BY id LIMIT 1;
 
 -- name: PauseUnroutableNotification :exec
 UPDATE core.pass_notifications SET delivery_state='paused',failure='notification_identity_unavailable'
@@ -82,3 +86,42 @@ WHERE n.bot_id=sqlc.arg(bot_id)::bigint AND n.delivery_chat<>0
 AND (n.delivery_state IN ('pending','sending','unknown','parked','paused') OR n.followup_pending)
 AND NOT EXISTS(SELECT 1 FROM core.delivery_queue q WHERE q.bot_id=n.bot_id
  AND q.owner_kind='passes' AND q.owner_key=n.id::text AND q.effect_key='send'))::boolean;
+-- name: RescheduleUncertainNotification :one
+WITH retry AS (
+ SELECT id,clock_timestamp() AS observed_at,
+  GREATEST(available_at,sqlc.arg(provider_deadline)::timestamptz,
+   clock_timestamp()+sqlc.arg(fallback_seconds)::bigint *
+    CASE uncertain_resends WHEN 0 THEN 1 WHEN 1 THEN 2 ELSE 4 END * interval '1 second') AS next_at,
+  uncertain_resends>=3 AS exhausted
+ FROM core.pass_notifications
+ WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
+  AND delivery_attempt=sqlc.arg(attempt)::bigint AND delivery_state IN ('pending','sending','unknown')
+  AND (sqlc.arg(uncertain)::boolean OR last_uncertain_attempt IS NOT NULL)
+)
+UPDATE core.pass_notifications n SET
+ last_uncertain_attempt=CASE WHEN sqlc.arg(uncertain)::boolean THEN n.delivery_attempt ELSE n.last_uncertain_attempt END,
+ last_uncertain_reason=CASE WHEN sqlc.arg(uncertain)::boolean THEN 'telegram_outcome_unknown' ELSE n.last_uncertain_reason END,
+ last_uncertain_recorded_at=CASE WHEN sqlc.arg(uncertain)::boolean
+  AND n.last_uncertain_attempt IS DISTINCT FROM n.delivery_attempt THEN retry.observed_at ELSE n.last_uncertain_recorded_at END,
+ delivery_state=CASE WHEN retry.exhausted THEN 'failed'
+  WHEN retry.next_at>'9999-12-31T23:59:59.999999Z'::timestamptz THEN 'parked' ELSE 'pending' END,
+ failure=CASE WHEN retry.exhausted THEN 'telegram_uncertain_retry_exhausted'
+  WHEN retry.next_at>'9999-12-31T23:59:59.999999Z'::timestamptz THEN 'telegram_invalid_cooldown' ELSE n.failure END,
+ available_at=CASE WHEN retry.exhausted OR retry.next_at>'9999-12-31T23:59:59.999999Z'::timestamptz
+  THEN retry.observed_at ELSE retry.next_at END,
+ lease_until=NULL,
+ sent_at=CASE WHEN retry.exhausted THEN retry.observed_at ELSE n.sent_at END
+FROM retry WHERE n.id=retry.id RETURNING n.delivery_state,n.available_at;
+-- name: RecordNotificationUncertainty :execrows
+UPDATE core.pass_notifications SET
+ last_uncertain_recorded_at=CASE WHEN last_uncertain_attempt IS DISTINCT FROM delivery_attempt
+  THEN clock_timestamp() ELSE last_uncertain_recorded_at END,
+ last_uncertain_attempt=delivery_attempt,last_uncertain_reason='telegram_outcome_unknown'
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
+ AND delivery_attempt=sqlc.arg(attempt)::bigint AND delivery_state IN ('sending','unknown');
+-- name: RecordTerminalNotificationReceipt :execrows
+UPDATE core.pass_notifications SET telegram_message_id=sqlc.arg(message_id)::bigint
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
+ AND delivery_attempt=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=delivery_attempt
+ AND delivery_state IN ('failed','cancelled') AND lease_until IS NULL
+ AND sqlc.arg(message_id)::bigint>0 AND telegram_message_id IN (0,sqlc.arg(message_id)::bigint);

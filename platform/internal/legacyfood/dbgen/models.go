@@ -9,27 +9,31 @@ import (
 )
 
 type CoreFoodNotification struct {
-	ID                int64
-	EventID           string
-	Owner             string
-	Kind              string
-	Subject           string
-	Payload           []byte
-	CreatedAt         pgtype.Timestamptz
-	SentAt            pgtype.Timestamptz
-	LegacySourceKey   pgtype.Text
-	ImportedSent      bool
-	BotID             pgtype.Int8
-	DeliveryState     string
-	DeliveryChat      int64
-	DeliveryAttempt   int64
-	LeaseUntil        pgtype.Timestamptz
-	TelegramMessageID int64
-	DeliveryText      string
-	FailureCount      int64
-	FollowupPending   bool
-	FollowupFailure   string
-	FollowupAttempts  int64
-	AvailableAt       pgtype.Timestamptz
-	Failure           string
+	ID                      int64
+	EventID                 string
+	Owner                   string
+	Kind                    string
+	Subject                 string
+	Payload                 []byte
+	CreatedAt               pgtype.Timestamptz
+	SentAt                  pgtype.Timestamptz
+	LegacySourceKey         pgtype.Text
+	ImportedSent            bool
+	BotID                   pgtype.Int8
+	DeliveryState           string
+	DeliveryChat            int64
+	DeliveryAttempt         int64
+	LeaseUntil              pgtype.Timestamptz
+	TelegramMessageID       int64
+	DeliveryText            string
+	FailureCount            int64
+	FollowupPending         bool
+	FollowupFailure         string
+	FollowupAttempts        int64
+	AvailableAt             pgtype.Timestamptz
+	Failure                 string
+	LastUncertainAttempt    pgtype.Int8
+	LastUncertainReason     pgtype.Text
+	LastUncertainRecordedAt pgtype.Timestamptz
+	UncertainResends        int64
 }

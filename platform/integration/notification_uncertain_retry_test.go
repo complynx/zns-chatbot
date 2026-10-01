@@ -11,6 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/telegram"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -73,14 +76,27 @@ func (l *notificationLostResponse) count() int {
 
 func requireNotificationAccepted(t *testing.T, r *notificationRuntimeFixture, loss *notificationLostResponse) {
 	t.Helper()
+	_ = acceptedNotificationMessage(t, r, loss)
+}
+
+func acceptedNotificationMessage(
+	t *testing.T,
+	r *notificationRuntimeFixture,
+	loss *notificationLostResponse,
+) telegram.Message {
+	t.Helper()
 	loss.mu.Lock()
 	text := loss.text
 	loss.mu.Unlock()
-	seen := false
-	for _, message := range chatMessages(t, r.f, 202) {
-		seen = seen || message.Text == text
+	messages := chatMessages(t, r.f, 202)
+	for index := len(messages) - 1; index >= 0; index-- {
+		message := messages[index]
+		if message.Text == text {
+			return message
+		}
 	}
-	require.True(t, seen, "the real sink accepted the exact notification before response loss")
+	require.FailNow(t, "the real sink must accept the exact notification before response loss")
+	return telegram.Message{}
 }
 
 func TestNotificationUncertainRetrySurvivesRestart(t *testing.T) {
@@ -97,15 +113,22 @@ func TestNotificationUncertainRetrySurvivesRestart(t *testing.T) {
 			first := r.status(t, r.first)
 			require.Equal(t, "pending", first.State)
 			require.Equal(t, 1, loss.count())
-			assert.GreaterOrEqual(t, first.AvailableAt.Sub(time.Now()), 4*time.Second)
+			assert.GreaterOrEqual(t, first.AvailableAt.Sub(time.Now()), r.f.b.Delivery.Fallback-time.Second)
+			assert.Equal(t, first.Attempt, first.LastUncertainAttempt)
+			assert.Equal(t, "telegram_outcome_unknown", first.LastUncertainReason)
+			require.NotNil(t, first.LastUncertainRecordedAt)
+			assert.Zero(t, first.UncertainResends)
 			require.NoError(t, dispatch(t.Context(), r.first))
 			assert.Equal(t, 1, loss.count(), "no wire before durable backoff")
 			r.restartNotificationOwner(t, domain)
+			dispatch = exactNotificationDelivery(r, domain)
 			require.NoError(t, recoverNotificationDelivery(r, domain)(t.Context()))
 			assert.Equal(t, first.AvailableAt, r.status(t, r.first).AvailableAt)
 			r.wake(t)
 			require.NoError(t, dispatch(t.Context(), r.first))
 			assert.Equal(t, "sent", r.status(t, r.first).State)
+			assert.Equal(t, int64(1), r.status(t, r.first).UncertainResends)
+			assert.Equal(t, first.LastUncertainRecordedAt, r.status(t, r.first).LastUncertainRecordedAt)
 			assert.Equal(t, 2, loss.count())
 			require.NoError(t, dispatch(t.Context(), r.first))
 			assert.Equal(t, 2, loss.count(), "known success does not resend")
@@ -127,6 +150,10 @@ func TestNotificationUncertainRetryExhaustionReleasesFollower(t *testing.T) {
 				requireNotificationAccepted(t, r, loss)
 				require.Equal(t, attempt+1, loss.count())
 				state := r.status(t, r.first)
+				assert.Equal(t, int64(attempt), state.UncertainResends)
+				assert.Equal(t, state.Attempt, state.LastUncertainAttempt)
+				assert.Equal(t, "telegram_outcome_unknown", state.LastUncertainReason)
+				require.NotNil(t, state.LastUncertainRecordedAt)
 				if attempt == 3 {
 					assert.Equal(t, "failed", state.State)
 					assert.Equal(t, "telegram_uncertain_retry_exhausted", state.Reason)
@@ -134,10 +161,11 @@ func TestNotificationUncertainRetryExhaustionReleasesFollower(t *testing.T) {
 				}
 				require.Equal(t, "pending", state.State)
 				assert.GreaterOrEqual(t, state.AvailableAt.Sub(time.Now()),
-					time.Duration(5*(1<<attempt))*time.Second-time.Second)
+					r.f.b.Delivery.Fallback*time.Duration(1<<attempt)-time.Second)
 				require.NoError(t, dispatch(t.Context(), r.second))
 				assert.Equal(t, "pending", r.status(t, r.second).State)
 				r.restartNotificationOwner(t, domain)
+				dispatch = exactNotificationDelivery(r, domain)
 				require.NoError(t, recoverNotificationDelivery(r, domain)(t.Context()))
 				r.wake(t)
 			}
@@ -147,6 +175,165 @@ func TestNotificationUncertainRetryExhaustionReleasesFollower(t *testing.T) {
 			assert.Equal(t, 4, loss.count(), "exhaustion never resurrects")
 			require.NoError(t, dispatch(t.Context(), r.second))
 			assert.Equal(t, "sent", r.status(t, r.second).State)
+		})
+	}
+}
+
+func TestNotificationUncertainRetryLateAdmittedSuccess(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			require.NoError(t, exactNotificationDelivery(r, domain)(t.Context(), r.first))
+			message := acceptedNotificationMessage(t, r, loss)
+			before := r.status(t, r.first)
+			require.Contains(t, []string{"unknown", "pending"}, before.State)
+			completion := map[string]any{
+				"id": r.first, "attempt": before.Attempt, "text": message.Text,
+				"outcome": delivery.Outcome{Kind: delivery.Succeeded, MessageID: message.ID},
+			}
+			r.postAttempt(t, "complete", completion, http.StatusOK)
+			assert.Equal(t, "sent", r.status(t, r.first).State)
+			assert.Equal(t, message.ID, r.status(t, r.first).MessageID)
+			r.postAttempt(t, "complete", completion, http.StatusOK)
+			assert.Equal(t, 1, loss.count(), "late receipt resolution does not admit another send")
+		})
+	}
+}
+
+func TestNotificationUncertainRetryLateReceiptFencedByPrepare(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			require.NoError(t, exactNotificationDelivery(r, domain)(t.Context(), r.first))
+			message := acceptedNotificationMessage(t, r, loss)
+			before := r.status(t, r.first)
+			r.wake(t)
+			r.prepare(t)
+			current := r.status(t, r.first)
+			require.Greater(t, current.Attempt, before.Attempt)
+			completion := map[string]any{
+				"id": r.first, "attempt": before.Attempt, "text": message.Text,
+				"outcome": delivery.Outcome{Kind: delivery.Succeeded, MessageID: message.ID},
+			}
+			r.postAttempt(t, "complete", completion, http.StatusConflict)
+			completion["attempt"] = current.Attempt
+			r.postAttempt(t, "complete", completion, http.StatusConflict)
+			assert.Equal(t, "pending", r.status(t, r.first).State)
+			assert.Zero(t, r.status(t, r.first).MessageID)
+			assert.Zero(t, r.status(t, r.first).UncertainResends, "Prepare never admits a resend")
+			assert.Equal(t, 1, loss.count())
+		})
+	}
+}
+
+func TestNotificationUncertainRetryTerminalReceiptOnly(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		for _, policy := range []string{"cancelled", "exhausted"} {
+			t.Run(domain+"/"+policy, func(t *testing.T) {
+				t.Parallel()
+				r := notificationRuntime(t, domain)
+				loss := &notificationLostResponse{drops: 10}
+				r.f.b.TG.HTTP = &http.Client{Transport: loss}
+				dispatch := exactNotificationDelivery(r, domain)
+				require.NoError(t, dispatch(t.Context(), r.first))
+				message := acceptedNotificationMessage(t, r, loss)
+				if policy == "exhausted" {
+					for range 3 {
+						r.wake(t)
+						require.NoError(t, dispatch(t.Context(), r.first))
+					}
+					require.Equal(t, "failed", r.status(t, r.first).State)
+					message = acceptedNotificationMessage(t, r, loss)
+				} else {
+					// Recreate the persisted admitted-wire crash boundary before recovery.
+					_, err := r.f.db.Exec(
+						t.Context(),
+						"UPDATE "+r.table+" SET delivery_state='sending',lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+						r.first,
+					)
+					require.NoError(t, err)
+					_, err = r.f.db.Exec(t.Context(), "UPDATE core.users SET can_book=false WHERE id='bob'")
+					require.NoError(t, err)
+					require.NoError(t, recoverNotificationDelivery(r, domain)(t.Context()))
+					require.Equal(t, "cancelled", r.status(t, r.first).State)
+				}
+				before := notificationReceiptSnapshot(t, r)
+				state := r.status(t, r.first)
+				completion := map[string]any{
+					"id": r.first, "attempt": state.Attempt, "text": "ignored late receipt text",
+					"outcome": delivery.Outcome{Kind: delivery.Succeeded, MessageID: message.ID},
+				}
+				r.postAttempt(t, "complete", completion, http.StatusOK)
+				r.postAttempt(t, "complete", completion, http.StatusOK)
+				after := notificationReceiptSnapshot(t, r)
+				require.Equal(t, float64(message.ID), after["telegram_message_id"])
+				after["telegram_message_id"] = before["telegram_message_id"]
+				assert.Equal(t, before, after, "terminal receipt must change only the known message ID")
+				completion["outcome"] = delivery.Outcome{Kind: delivery.Succeeded, MessageID: message.ID + 100000}
+				r.postAttempt(t, "complete", completion, http.StatusConflict)
+				assert.Equal(t, state.State, r.status(t, r.first).State)
+				assert.False(t, r.status(t, r.first).FollowupPending)
+			})
+		}
+	}
+}
+
+func notificationReceiptSnapshot(t *testing.T, r *notificationRuntimeFixture) map[string]any {
+	t.Helper()
+	var raw []byte
+	require.NoError(
+		t,
+		r.f.db.QueryRow(t.Context(), "SELECT to_jsonb(n) || jsonb_build_object('queue',(SELECT to_jsonb(q) FROM core.delivery_queue q WHERE q.bot_id=n.bot_id AND q.owner_key=n.id::text AND q.owner_kind= AND q.effect_key='send')) FROM "+r.table+" n WHERE n.id=$1", r.first, owner).
+			Scan(&raw),
+	)
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(raw, &result))
+	return result
+}
+func TestNotificationUncertainRetryCountsRateLimitedSends(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			dispatch := exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			message := acceptedNotificationMessage(t, r, loss)
+			original := r.status(t, r.first)
+			spy := attachNotificationWireSpy(t, r.f, "rate")
+			for attempt := range 2 {
+				r.wake(t)
+				require.NoError(t, dispatch(t.Context(), r.first))
+				state := r.status(t, r.first)
+				require.Equal(t, "pending", state.State)
+				assert.Equal(t, int64(attempt+1), state.UncertainResends)
+				assert.Equal(t, original.LastUncertainAttempt, state.LastUncertainAttempt)
+				assert.Equal(t, original.LastUncertainRecordedAt, state.LastUncertainRecordedAt)
+				assert.Zero(t, state.FailureCount)
+				assert.GreaterOrEqual(t, state.AvailableAt.Sub(time.Now()), 59*time.Second)
+				r.postAttempt(t, "complete", map[string]any{
+					"id": r.first, "attempt": state.Attempt, "text": message.Text,
+					"outcome": delivery.Outcome{Kind: delivery.Succeeded, MessageID: message.ID},
+				}, http.StatusConflict)
+				require.NoError(t, dispatch(t.Context(), r.first))
+				assert.Equal(t, attempt+1, spy.calls(202))
+			}
+			r.wake(t)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			assert.Equal(t, "sent", r.status(t, r.first).State)
+			assert.Equal(t, int64(3), r.status(t, r.first).UncertainResends)
+			assert.Equal(t, 3, spy.calls(202))
 		})
 	}
 }
