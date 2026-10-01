@@ -369,6 +369,20 @@ def archive_importer(config, evidence):
     save(evidence / "importer-unavailable.json", {"package_absent": True, "binary_absent": True})
 
 
+def probe_projection(entry, epoch, allocation=None):
+    """Verify the private, reviewed endpoint binding without exposing credentials."""
+    projection = read(checked(entry["projection"], entry["projection_sha256"]))
+    if (projection.get("database") != epoch["database"] or projection.get("marker") != epoch["marker"]
+            or projection.get("transport") != "host-loopback" or projection.get("role") != "zns_app"
+            or projection.get("host") not in ("127.0.0.1", "localhost")
+            or type(projection.get("port")) is not int or not 1024 <= projection["port"] <= 65535):
+        raise RuntimeError("reviewed_probe_endpoint_required")
+    if allocation is not None and any(projection[key] != allocation[key]
+                                      for key in ("host", "port", "database", "marker", "transport")):
+        raise RuntimeError("allocated_probe_endpoint_required")
+    return projection
+
+
 def build_runtime(config, evidence, probes_path, probes_sha, *, retired):
     if retired and ALLOCATION is None:
         raise RuntimeError("reviewed_allocation_required")
@@ -384,18 +398,21 @@ def build_runtime(config, evidence, probes_path, probes_sha, *, retired):
     probes = read(checked(probes_path, probes_sha))
     if set(probes) != {"removal", "coverage"}:
         raise RuntimeError("both_bound_probes_required")
+    epoch = read(checked(evidence / "binding.json", config["binding_sha256"]))
     added = {}
     for name, entry in probes.items():
-        source = checked(entry["source"], entry["sha256"])
-        checked(entry["projection"], entry["projection_sha256"])
-        relative = "platform/cmd/e-" + name + "-probe/main.go"
-        target = safe_path(root, relative)
-        if target.exists():
-            checked(target, entry["sha256"])
-        else:
-            target.parent.mkdir(parents=True)
-            target.write_bytes(source.read_bytes())
-        added[relative] = entry["sha256"]
+        probe_projection(entry, epoch, ALLOCATION if retired else None)
+        for filename, path_key, sha_key in (("main.go", "source", "sha256"),
+                                             ("main_test.go", "test_source", "test_sha256")):
+            source = checked(entry[path_key], entry[sha_key])
+            relative = "platform/cmd/e-" + name + "-probe/" + filename
+            target = safe_path(root, relative)
+            if target.exists():
+                checked(target, entry[sha_key])
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(source.read_bytes())
+            added[relative] = entry[sha_key]
     inventory_file = evidence / "probe-inventory.json"
     if inventory_file.exists():
         if read(inventory_file) != added:
@@ -405,6 +422,9 @@ def build_runtime(config, evidence, probes_path, probes_sha, *, retired):
     phase = "retired" if retired else "offline"
     env = clean_build_env(evidence / (phase + "-build-cache"))
     record = {"importer_absent": retired, "probes_sha256": probes_sha, "programs": {}}
+    tests = ["go", "test", "-mod=readonly", "-count=1", "./cmd/e-removal-probe", "./cmd/e-coverage-probe"]
+    record["preconnection_tests"] = {"command": tests, "exit": 0,
+                                      "output": command(tests, cwd=root / "platform", env=env)}
     for name, target in (("zns", "./cmd/zns"), ("removal", "./cmd/e-removal-probe"),
                          ("coverage", "./cmd/e-coverage-probe")):
         deps = command(["go", "list", "-deps", target], cwd=root / "platform", env=env)

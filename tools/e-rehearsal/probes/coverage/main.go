@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +41,10 @@ const deniedPolicyLimit = 500000000
 const paidState = "paid"
 
 type expected struct {
+	Host        string `json:"host"`
+	Port        uint16 `json:"port"`
+	Role        string `json:"role"`
+	Transport   string `json:"transport"`
 	Database    string `json:"database"`
 	Marker      string `json:"marker"`
 	ModernSHA   string `json:"modern_sha256"`
@@ -49,7 +55,7 @@ type expected struct {
 }
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(os.Args); err != nil {
 		// Output contains no imported text, proofs, identity or database secrets.
 		fmt.Fprintln(os.Stderr, "e_runtime_coverage_failed")
 		os.Exit(1)
@@ -78,17 +84,21 @@ func matchProof(proof orders.Proof, err error, sha string) error {
 	return nil
 }
 
-func run() error {
-	if len(os.Args) != argumentCount {
+func run(arguments []string) error {
+	if len(arguments) != argumentCount {
 		return errors.New("expected_projection_required")
 	}
-	spec, err := loadExpected(os.Args[1], os.Args[2])
+	spec, err := loadExpected(arguments[1], arguments[2])
+	if err != nil {
+		return err
+	}
+	config, err := runtimeConfig(spec.Host, spec.Port, spec.Database, spec.Role, spec.Transport)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
-	db, err := pgxpool.New(ctx, os.Getenv("E_RUNTIME_DATABASE_URL"))
+	db, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return err
 	}
@@ -138,6 +148,51 @@ func loadExpected(path, expectedHash string) (expected, error) {
 		}
 	}
 	return spec, nil
+}
+
+// runtimeConfig binds the supported loopback transport before pool creation.
+func runtimeConfig(host string, port uint16, database, role, transport string) (*pgxpool.Config, error) {
+	rejected := errors.New("allocated_runtime_target_required")
+	if transport != "host-loopback" || (host != "127.0.0.1" && host != "localhost") || port < 1024 ||
+		role != "zns_app" {
+		return nil, rejected
+	}
+	for _, setting := range os.Environ() {
+		key, _, _ := strings.Cut(setting, "=")
+		if strings.HasPrefix(strings.ToUpper(key), "PG") {
+			return nil, rejected
+		}
+	}
+	raw := os.Getenv("E_RUNTIME_DATABASE_URL")
+	if strings.ContainsAny(raw, " \t\r\n") {
+		return nil, rejected
+	}
+	uri, err := url.Parse(raw)
+	if err != nil || (uri.Scheme != "postgres" && uri.Scheme != "postgresql") || uri.User == nil ||
+		uri.Hostname() != host || uri.Port() != strconv.Itoa(int(port)) || uri.Path != "/"+database ||
+		uri.User.Username() != role || uri.Fragment != "" || uri.ForceQuery ||
+		(uri.RawQuery != "" && uri.RawQuery != "sslmode=disable") {
+		return nil, rejected
+	}
+	// This transport has one plaintext loopback endpoint, never SSL fallback.
+	uri.RawQuery = "sslmode=disable"
+	config, err := pgxpool.ParseConfig(uri.String())
+	if err != nil {
+		return nil, rejected
+	}
+	effective := config.ConnConfig
+	if effective.Host != host || effective.Port != port || effective.Database != database || effective.User != role ||
+		effective.TLSConfig != nil || len(effective.Fallbacks) != 0 || len(effective.RuntimeParams) != 0 {
+		return nil, rejected
+	}
+	// localhost is an explicitly supported loopback alias, not ambient DNS authority.
+	effective.LookupFunc = func(_ context.Context, name string) ([]string, error) {
+		if name != host {
+			return nil, rejected
+		}
+		return []string{"127.0.0.1"}, nil
+	}
+	return config, nil
 }
 
 func restrictedDatabase(ctx context.Context, db *pgxpool.Pool, spec expected) error {

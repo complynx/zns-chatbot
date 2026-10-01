@@ -68,7 +68,7 @@ successor. Do not reuse or clean failed evidence to make a command appear green.
 
 Create a reviewed probe manifest and pass its digest. It has exactly `removal`
 and `coverage` entries, each with `source`, `sha256`, `projection` and
-`projection_sha256`. Source files are the two successor main.go files under
+`projection_sha256`, plus `test_source` and `test_sha256` for each adjacent main_test.go. Source files are the two successor main.go files under
 tools/e-rehearsal/probes. Removal projection is the preserved probe-spec.json;
 coverage projection is the preserved e-runtime-coverage expected.json. Bind
 the bytes directly. Do not derive expected values from observed runtime output.
@@ -79,10 +79,10 @@ python tools/e-rehearsal/rehearse.py compile-probes \
   --probes <probes.json> --probes-sha256 <sha256>
 ```
 
-This copies only the two hash-bound probes into new command directories inside
+This copies both hash-bound probes and their focused pre-connection tests into new command directories inside
 the isolated platform module. That is the legitimate context for platform/internal
 imports. It builds the normal zns command and both probes, records dependencies
-and executable hashes, and checks every retained source byte. It has no DB or
+and executable hashes, runs the actual compiled pre-connection tests with private hash-bound inputs, and checks every retained source byte. The probe source inventory includes both main.go and main_test.go files. It has no DB or
 Docker action and explicitly records importer_absent:false. It does not prove
 runtime acceptance or importer removal. Run pinned Go formatting/lint in this
 actual compiled module on the two probe command packages.
@@ -150,12 +150,19 @@ source. Successful build evidence cannot replace execution evidence.
 
 The engineer starts the restricted runtime with no importer credentials/mounts.
 Resolve the actual imported history ID by the preserved probe-spec source key;
-keep the other expected fields unchanged. Add exact allocated database and marker
-to both runtime projection JSON files, review their generated bindings, and pass
+keep the other expected fields unchanged. Add exact allocated database, marker, host, integer port, transport:host-loopback
+and role:zns_app to both runtime projection JSON files. The build harness checks
+these fields against the frozen allocation before copying or building probes.
+Review their generated bindings, and pass
 the SHA256 of each exact JSON file to its executable. The removal probe takes
 `check|delete|tombstone <projection.json> <sha256>`; coverage takes
-`<projection.json> <sha256>`. Both enforce zns_app, matching database/comment and
-absent importer schema before business calls. The assertions preserve history
+`<projection.json> <sha256>`. Both validate the URL and effective pgx host/port/database/role before pool creation.
+Use only a postgres/postgresql URL with no query or exactly sslmode=disable.
+Reject all PG environment settings, service/hostaddr/query target overrides,
+keyword/multihost DSNs, unknown transport and SSL fallbacks. localhost resolves
+only to 127.0.0.1 in this supported transport. A copied synthetic database at any
+other endpoint is rejected before connection, including delete mode.
+Database/comment and absent importer schema checks remain before business calls. The assertions preserve history
 hashes/tombstones, drafts, domain projections, proof bytes/ACL and credit semantics.
 Deletion is a synthetic scenario and occurs only inside the lead's barrier.
 

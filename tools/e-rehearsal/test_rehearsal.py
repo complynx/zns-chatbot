@@ -277,6 +277,21 @@ class GuardTests(unittest.TestCase):
                     database.assert_not_called()
                     executor.assert_not_called()
 
+    def test_runtime_projection_binds_exact_allocation(self):
+        allocation = {"database": "synthetic_qa_zns_guard", "marker": prepare.SCOPE,
+                      "host": "127.0.0.1", "port": 25432, "transport": "host-loopback"}
+        value = dict(allocation, role="zns_app")
+        path = self.write("projection.json", value)
+        entry = {"projection": str(path), "projection_sha256": prepare.digest(path)}
+        self.assertEqual(rehearse.probe_projection(entry, allocation, allocation), value)
+        for key, wrong in (("host", "localhost"), ("port", 25433), ("database", "synthetic_qa_zns_copy"),
+                           ("marker", "other"), ("transport", "network"), ("role", "postgres")):
+            with self.subTest(key=key):
+                path.write_text(json.dumps(dict(value, **{key: wrong})), encoding="utf-8")
+                entry["projection_sha256"] = prepare.digest(path)
+                with self.assertRaises(RuntimeError):
+                    rehearse.probe_projection(entry, allocation, allocation)
+
     def test_save_does_not_overwrite_evidence(self):
         path = self.root / "receipt.json"
         prepare.save(path, {"existing": True})
