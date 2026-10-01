@@ -44,6 +44,20 @@ correction is assigned in codex/identity-live-contract-fix. It retains both
 positive subjects and independently runs every negative case with fresh clients.
 It still needs developer gates, actual wire rerun and fresh independent review.
 
+## Corrected candidate wire run
+
+Root ran frozen one-file candidate903a32d0 on the same qualified local instance.
+Process31025 terminated exit0: both positive subjects and all six named negatives
+completed. Parent0.260s, package1.116s; eight PASS events, no FAIL or SKIP.
+Raw ignored successor stream SHA256:
+BE798B6D5A854C6A9FDACC7DDB48933764A23DBD4C8EEAC2A66C55F8A639477F.
+
+Fresh Code QA276 separately returned one missing test prerequisite: invalid-token
+introspection must first prove successful exchange on that fresh client. The
+same-file two-line successor is being validated. Candidate903 is preserved;
+the successful wire result does not remove the review finding or establish
+current integrated adapter/Functional acceptance.
+
 Root terminal process: 82316, exit1. Ignored raw test stream:
 `qa.local/identity-prerequisites-20261001/root-native-proof/tests.jsonl`, SHA256
 A42DC459937EA73E6C76FC3F621E84F7B9AEE3A913C1716A65B291C84694FCBB.

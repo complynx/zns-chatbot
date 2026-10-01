@@ -201,3 +201,5 @@ observed_utc,task,object,state,owner,commit,base,evidence,limitations,event_utc
 2026-10-01T07:28:51Z,IDP,real_native_tests,partial_fail,root,1669CD2B,7ff6659b,AdapterFAIL invalidsubject classifiedunavailable; SDKPASS2.130s,Remainingadapternegativecasesnotrun; SDKadminnotleastprivilegedproof,
 2026-10-01T07:37:12Z,IDP,oauth_diagnosis,complete,root,E41A1FC1,7ff6659b,Actualfixednegative status400 OAuthcode matchesretryablepolicy,Onefileliveassertions correction assigned; no classifierchange/acceptance,
 2026-10-01T07:37:12Z,IDP,scoped_sdk_proof,developing,fqa_lead,,7ff6659b,Exact3offlineharnessscope approved machinecredentials only,No actualexecution/privateaccess untilfrozenreview/rootwindow,
+2026-10-01T07:54:50Z,EST,readiness_reassessment,complete,root,,7ff6659b,Own35–65 andfreshindependent35–75 engineering8hdays; scopeentiregoal,Lowconfidence; notcalendarorpercentage; no productionacceptance,
+2026-10-01T07:54:50Z,IDP,live_test_review,returned,identity_live_code_qa_276,903a32d0,41d78519,FreshQA276FAIL1; actual31025 eightPASS0FAILSKIP1.116s,Samefilepreconditionfixapproved; counter276next277,
