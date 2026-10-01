@@ -27,7 +27,7 @@ const (
 	registrationFixtureBookingOwner        = "visitor"
 )
 
-// RegistrationFixture is a schema-owner CLI control, never a model or HTTP grant.
+// RegistrationFixture is a private CLI control, never a model or HTTP grant.
 // Only init accepts an opening time. Role controls cannot change any clock.
 type RegistrationFixture struct {
 	Stand   string
@@ -87,8 +87,9 @@ type RegistrationFixtureRow struct {
 	RequeueCount        *int64     `json:"requeue_count,omitempty"`
 }
 
-// ApplyRegistrationFixture requires the dedicated database's owning role and
-// all three original synthetic identities. Repeating init never restores grants.
+// ApplyRegistrationFixture requires the dedicated database's owner or bounded
+// private live operator and all three original synthetic identities. Init is
+// owner-only; repeating init never restores grants.
 // Prepare the ordinary product fixtures first so their later replay is inert.
 func ApplyRegistrationFixture(
 	ctx context.Context,
@@ -104,15 +105,25 @@ func ApplyRegistrationFixture(
 		return state, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = registrationFixtureGuard(ctx, tx); err != nil {
-		return state, err
-	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(918431003)`); err != nil {
 		return state, err
 	}
-	if _, err = tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS public.zns_sandbox_fixtures
- (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+	operator, err := registrationFixtureOperator(ctx, tx)
+	if err != nil {
 		return state, err
+	}
+	if operator {
+		if err = registrationFixtureOperatorGuard(ctx, tx, f); err != nil {
+			return state, err
+		}
+	} else {
+		if err = registrationFixtureGuard(ctx, tx); err != nil {
+			return state, err
+		}
+		if _, err = tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS public.zns_sandbox_fixtures
+ (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+			return state, err
+		}
 	}
 	var initialized bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name=$1)`, registrationFixtureMarker).
