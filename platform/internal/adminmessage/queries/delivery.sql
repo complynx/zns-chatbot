@@ -40,7 +40,7 @@ WHERE d.id=sqlc.arg(id)::bigint AND d.bot_id=sqlc.arg(bot_id)::bigint AND d.atte
  AND (d.state IN ('pending','sending','unknown') OR (d.state='cancelled' AND d.failure='source_revoked'));
 
 -- name: LockAdminAttempt :one
-SELECT d.destination,d.state,d.telegram_message_id,d.available_at,
+SELECT d.destination,d.state,d.telegram_message_id,d.available_at,d.failure,
  d.last_uncertain_attempt,d.uncertain_resends,
  COALESCE(d.lease_until>clock_timestamp(),false)::boolean AS lease_live
 FROM core.admin_message_deliveries d WHERE d.id=sqlc.arg(id)::bigint

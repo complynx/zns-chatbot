@@ -228,42 +228,15 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 		(result.Outcome.Kind == delivery.Succeeded || result.Outcome.Kind == delivery.Uncertain) {
 		return staleAdminAttempt()
 	}
-	if result.Outcome.Kind == delivery.Uncertain {
-		if err = q.RecordAdminUncertainty(ctx, dbgen.RecordAdminUncertaintyParams{
-			ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt, Reason: result.Outcome.Reason,
-		}); err != nil {
-			return err
-		}
-	}
+	if err = s.recordAdminUncertainty(ctx,q,result,row); err != nil { return err }
 	wireOutcome := result.Outcome
 	result.Outcome = adminRetryOutcome(result.Outcome, row.UncertainResends,
-		row.LastUncertainAttempt.Valid || result.Outcome.Kind == delivery.Uncertain, s.Delivery.Fallback)
+		row.LastUncertainAttempt.Valid || row.State == string(delivery.Uncertain) || result.Outcome.Kind == delivery.Uncertain, s.Delivery.Fallback)
 	if !valid && result.Outcome.Kind == delivery.Rejected {
 		result.Outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}
 	}
-	scheduled := result.Outcome
-	limitedAtExhaustion := scheduled.Kind != delivery.Deferred && wireOutcome.Kind == delivery.Deferred &&
-		wireOutcome.Reason == "telegram_rate_limit"
-	if limitedAtExhaustion {
-		scheduled = wireOutcome
-	}
-	outcome, deadline, err := delivery.Finish(ctx, tx, s.Delivery, adminReference(result.ID), scheduled)
-	if err != nil {
-		return err
-	}
-	if limitedAtExhaustion {
-		outcome = result.Outcome
-		if err = delivery.Project(
-			ctx,
-			tx,
-			s.Delivery.BotID,
-			adminReference(result.ID),
-			outcome.Kind,
-			deadline,
-		); err != nil {
-			return err
-		}
-	}
+	outcome,deadline,err:=s.finishAdminOutcome(ctx,tx,result.ID,result.Outcome,wireOutcome)
+	if err!=nil { return err }
 	if !valid && outcome.Kind != delivery.Succeeded && outcome.Kind != delivery.Uncertain {
 		outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}
 		if err = delivery.Project(
@@ -373,4 +346,28 @@ func adminAttemptError(err error) error {
 		return staleAdminAttempt()
 	}
 	return err
+}
+
+func (s Service) recordAdminUncertainty(ctx context.Context,q *dbgen.Queries,result Completion,row dbgen.LockAdminAttemptRow) error {
+ if result.Outcome.Kind!=delivery.Uncertain && row.State!=string(delivery.Uncertain) { return nil }
+ reason:=result.Outcome.Reason
+ if result.Outcome.Kind!=delivery.Uncertain {
+  reason=row.Failure
+  if reason=="" { reason="telegram_outcome_unknown" }
+ }
+ return q.RecordAdminUncertainty(ctx,dbgen.RecordAdminUncertaintyParams{ID:result.ID,BotID:s.Delivery.BotID,Attempt:result.Attempt,Reason:reason})
+}
+
+// Observe a confirmed provider cooldown even when this resend exhausts its budget.
+func (s Service) finishAdminOutcome(ctx context.Context,tx pgx.Tx,id int64,policy,wire delivery.Outcome) (delivery.Outcome,time.Time,error) {
+ scheduled:=policy
+ preserveCooldown:=policy.Kind!=delivery.Deferred && wire.Kind==delivery.Deferred && wire.Reason=="telegram_rate_limit"
+ if preserveCooldown { scheduled=wire }
+ outcome,deadline,err:=delivery.Finish(ctx,tx,s.Delivery,adminReference(id),scheduled)
+ if err!=nil { return delivery.Outcome{},time.Time{},err }
+ if preserveCooldown {
+  outcome=policy
+  err=delivery.Project(ctx,tx,s.Delivery.BotID,adminReference(id),outcome.Kind,deadline)
+ }
+ return outcome,deadline,err
 }

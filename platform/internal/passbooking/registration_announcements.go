@@ -168,42 +168,13 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 		(input.Outcome.Kind == delivery.Succeeded || input.Outcome.Kind == delivery.Uncertain) {
 		return conflict("pass_announcement_stale")
 	}
-	if input.Outcome.Kind == delivery.Uncertain {
-		if err = q.RecordAnnouncementUncertainty(ctx, dbgen.RecordAnnouncementUncertaintyParams{
-			ID: input.ID, BotID: s.Delivery.BotID, Attempt: input.Attempt, Reason: input.Outcome.Reason,
-		}); err != nil {
-			return core.DatabaseOperationError(err)
-		}
-		if !row.Current {
-			return s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
-		}
-	}
+	if err=s.recordAnnouncementUncertainty(ctx,q,input,row); err!=nil { return err }
+	if input.Outcome.Kind==delivery.Uncertain && !row.Current { return s.cancelAnnouncementAdmission(ctx,tx,q,attempt,clockAttempt) }
 	wireOutcome := input.Outcome
 	input.Outcome = announcementRetryOutcome(input.Outcome, row.UncertainResends,
-		row.LastUncertainAttempt.Valid || input.Outcome.Kind == delivery.Uncertain, s.Delivery.Fallback)
-	scheduled := input.Outcome
-	limitedAtExhaustion := scheduled.Kind != delivery.Deferred && wireOutcome.Kind == delivery.Deferred &&
-		wireOutcome.Reason == "telegram_rate_limit"
-	if limitedAtExhaustion {
-		scheduled = wireOutcome
-	}
-	outcome, deadline, err := delivery.Finish(ctx, tx, s.Delivery, announcementReference(input.ID), scheduled)
-	if err != nil {
-		return err
-	}
-	if limitedAtExhaustion {
-		outcome = input.Outcome
-		if err = delivery.Project(
-			ctx,
-			tx,
-			s.Delivery.BotID,
-			announcementReference(input.ID),
-			outcome.Kind,
-			deadline,
-		); err != nil {
-			return err
-		}
-	}
+		row.LastUncertainAttempt.Valid || row.State == string(delivery.Uncertain) || input.Outcome.Kind == delivery.Uncertain, s.Delivery.Fallback)
+	outcome,deadline,err:=s.finishAnnouncementOutcome(ctx,tx,input.ID,input.Outcome,wireOutcome)
+	if err!=nil { return err }
 	if err = s.finishAnnouncement(
 		ctx,
 		q,
@@ -399,4 +370,28 @@ func (s Service) lockAnnouncementAdmission(
 		return dbgen.LockAnnouncementAttemptRow{}, announcementAttemptError(core.DatabaseOperationError(err))
 	}
 	return row, nil
+}
+
+func (s Service) recordAnnouncementUncertainty(ctx context.Context,q *dbgen.Queries,input AnnouncementCompletion,row dbgen.LockAnnouncementAttemptRow) error {
+ if input.Outcome.Kind!=delivery.Uncertain && row.State!=string(delivery.Uncertain) { return nil }
+ reason:=input.Outcome.Reason
+ if input.Outcome.Kind!=delivery.Uncertain {
+  reason=row.Failure
+  if reason=="" { reason="telegram_outcome_unknown" }
+ }
+ return core.DatabaseOperationError(q.RecordAnnouncementUncertainty(ctx,dbgen.RecordAnnouncementUncertaintyParams{ID:input.ID,BotID:s.Delivery.BotID,Attempt:input.Attempt,Reason:reason}))
+}
+
+// Retain the confirmed provider cooldown when the final resend cannot continue.
+func (s Service) finishAnnouncementOutcome(ctx context.Context,tx pgx.Tx,id int64,policy,wire delivery.Outcome) (delivery.Outcome,time.Time,error) {
+ scheduled:=policy
+ preserveCooldown:=policy.Kind!=delivery.Deferred && wire.Kind==delivery.Deferred && wire.Reason=="telegram_rate_limit"
+ if preserveCooldown { scheduled=wire }
+ outcome,deadline,err:=delivery.Finish(ctx,tx,s.Delivery,announcementReference(id),scheduled)
+ if err!=nil { return delivery.Outcome{},time.Time{},err }
+ if preserveCooldown {
+  outcome=policy
+  err=delivery.Project(ctx,tx,s.Delivery.BotID,announcementReference(id),outcome.Kind,deadline)
+ }
+ return outcome,deadline,err
 }

@@ -343,3 +343,49 @@ func TestAnnouncementUnknownResendsAndCrashExhaustsBudget(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, found)
 }
+
+func TestLegacyUnknownLateResultsRetainEvidence(t *testing.T) {
+	t.Parallel()
+	for _,owner:=range []string{"admin","announcement"} {
+		t.Run(owner,func(t *testing.T) {
+			t.Parallel()
+			db,s:=bookingFixture(t)
+			s.Delivery=syntheticDeliverySettings()
+			var state,reason string
+			var attempt,resends int64
+			if owner=="admin" {
+				admin:=adminmessage.Service{DB:db,Delivery:s.Delivery}
+				enqueueSyntheticDelivery(t,admin,"late-result","101")
+				item,found,err:=admin.Claim(t.Context())
+				require.NoError(t,err)
+				require.True(t,found)
+				gate,err:=admin.BeginDelivery(t.Context(),delivery.Attempt{ID:item.ID,Generation:item.Attempt})
+				require.NoError(t,err)
+				require.True(t,gate.Ready)
+				_,err=db.Exec(t.Context(),`UPDATE core.admin_message_deliveries SET state='unknown',failure='telegram_outcome_unknown'; UPDATE core.delivery_queue SET state='unknown' WHERE owner_kind='admin'`)
+				require.NoError(t,err)
+				require.NoError(t,admin.CompleteDelivery(t.Context(),adminmessage.Completion{ID:item.ID,Attempt:item.Attempt,Outcome:delivery.Outcome{Kind:delivery.Succeeded,MessageID:91}}))
+				require.NoError(t,db.QueryRow(t.Context(),`SELECT state,last_uncertain_reason,last_uncertain_attempt,uncertain_resends FROM core.admin_message_deliveries`).Scan(&state,&reason,&attempt,&resends))
+			} else {
+				_,err:=db.Exec(t.Context(),`UPDATE core.pass_events SET thread_channel='-100123'`)
+				require.NoError(t,err)
+				_,err=s.Execute(t.Context(),"alice",bookingCommand("solo","late-result",passbooking.Booking{}))
+				require.NoError(t,err)
+				item,found,err:=s.ClaimRegistrationAnnouncement(t.Context())
+				require.NoError(t,err)
+				require.True(t,found)
+				gate,err:=s.BeginRegistrationAnnouncement(t.Context(),delivery.Attempt{ID:item.ID,Generation:item.Attempts})
+				require.NoError(t,err)
+				require.True(t,gate.Ready)
+				_,err=db.Exec(t.Context(),`UPDATE core.pass_registration_announcements SET state='unknown',failure='telegram_outcome_unknown'; UPDATE core.delivery_queue SET state='unknown' WHERE owner_kind='announcement'`)
+				require.NoError(t,err)
+				require.NoError(t,s.CompleteRegistrationAnnouncement(t.Context(),passbooking.AnnouncementCompletion{ID:item.ID,Attempt:item.Attempts,Outcome:delivery.Outcome{Kind:delivery.Succeeded,MessageID:92}}))
+				require.NoError(t,db.QueryRow(t.Context(),`SELECT state,last_uncertain_reason,last_uncertain_attempt,uncertain_resends FROM core.pass_registration_announcements`).Scan(&state,&reason,&attempt,&resends))
+			}
+			assert.Equal(t,"sent",state)
+			assert.Equal(t,"telegram_outcome_unknown",reason)
+			assert.EqualValues(t,1,attempt)
+			assert.Zero(t,resends,"a late known response is not a resend admission")
+		})
+	}
+}
