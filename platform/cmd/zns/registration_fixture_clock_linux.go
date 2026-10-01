@@ -4,9 +4,14 @@ package main
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
+
+	"github.com/complynx/zns-chatbot/platform/internal/registrationclock"
 )
 
 func registrationClockPlatform() error { return nil }
@@ -43,7 +48,33 @@ func registrationClockReadOnly(file *os.File) error {
 	if stat.Flags&readOnly == 0 {
 		return errors.New("registration clock requires a read-only reader mount")
 	}
-	return nil
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	directory := file.Name()
+	if !info.IsDir() {
+		directory = filepath.Dir(directory)
+	}
+	root := filepath.Dir(registrationclock.Path)
+	if !registrationClockPathWithin(directory, root) {
+		return errors.New("registration clock requires its allocated reader mount")
+	}
+	fdinfo, err := registrationClockMountData("/proc/self/fdinfo/" + strconv.FormatUint(uint64(file.Fd()), 10))
+	if err != nil {
+		return err
+	}
+	var mountID string
+	for line := range strings.SplitSeq(string(fdinfo), "\n") {
+		if value, found := strings.CutPrefix(line, "mnt_id:"); found {
+			mountID = strings.TrimSpace(value)
+		}
+	}
+	raw, err := registrationClockMountData("/proc/self/mountinfo")
+	if err != nil {
+		return err
+	}
+	return registrationClockReaderMount(raw, mountID, root)
 }
 
 func registrationClockOwner(file, directory os.FileInfo) error {
@@ -54,4 +85,22 @@ func registrationClockOwner(file, directory os.FileInfo) error {
 		}
 	}
 	return nil
+}
+
+const registrationClockMountBytes = 4 << 20
+
+func registrationClockMountData(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	raw, err := io.ReadAll(io.LimitReader(file, registrationClockMountBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > registrationClockMountBytes {
+		return nil, errors.New("registration clock mount metadata too large")
+	}
+	return raw, nil
 }

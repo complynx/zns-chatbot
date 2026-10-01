@@ -28,8 +28,12 @@ func (s Service) AdminAssign(ctx context.Context, actor string, c AdminAssignmen
 		return AdminAssignmentResult{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	result, err := s.adminAssignInTx(ctx, tx, actor, c)
 	if err != nil {
+		return AdminAssignmentResult{}, clockAttempt.DecisionError(ctx, err)
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
 		return AdminAssignmentResult{}, err
 	}
 	return result, core.DatabaseOperationError(tx.Commit(ctx))

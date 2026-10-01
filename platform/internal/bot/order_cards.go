@@ -43,7 +43,7 @@ func (b *Bot) deliverOrderCardChecked(
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return core.DatabaseOperationError(err)
 	}
-	if payload.MessageID > 0 && previous == hash {
+	if payload.MessageID > 0 && previous == hash && ref.PaymentOpening == nil {
 		return nil
 	}
 	return b.queueBotCard(

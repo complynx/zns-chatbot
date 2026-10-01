@@ -6,8 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
@@ -16,6 +21,35 @@ import (
 
 const actionInstructions = orders.ActionPaymentInstructions
 const paymentCardPrefix = "payment:"
+
+type paymentOpeningCaptureKey struct{}
+
+// Each authenticated update owns this presentation capture. It grants no authority.
+type paymentOpeningCapture struct {
+	owner string
+	chat  int64
+	mu    sync.Mutex
+	keys  map[string]bool
+}
+
+func withPaymentOpeningCapture(ctx context.Context, owner string, chat int64) context.Context {
+	return context.WithValue(ctx, paymentOpeningCaptureKey{}, &paymentOpeningCapture{
+		owner: owner, chat: chat, keys: make(map[string]bool),
+	})
+}
+
+func paymentOpenedInUpdate(ctx context.Context, owner string, chat int64, key string, mark bool) bool {
+	capture, ok := ctx.Value(paymentOpeningCaptureKey{}).(*paymentOpeningCapture)
+	if !ok || capture.owner != owner || capture.chat != chat {
+		return false
+	}
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	if mark {
+		capture.keys[key] = true
+	}
+	return capture.keys[key]
+}
 
 func (b *Bot) showPaymentInstructions(ctx context.Context, in incoming, id string) (string, error) {
 	return b.showPaymentInstructionsWithSource(ctx, in, id, nil)
@@ -37,6 +71,15 @@ func (b *Bot) paymentInstructionsWithSource(
 	source *readsource.Derivation,
 	opening bool,
 ) (string, error) {
+	if !opening {
+		ref, unavailable, err := b.paymentRetirementReference(ctx, in.owner, paymentCardPrefix+id, id)
+		if err != nil {
+			return "", err
+		}
+		if unavailable {
+			return b.deliverPaymentRetirement(ctx, in, ref)
+		}
+	}
 	if err := b.checkOrderDeliverySource(ctx, in.owner, source); err != nil {
 		return "", err
 	}
@@ -62,15 +105,67 @@ func (b *Bot) paymentInstructionsWithSource(
 		return "", err
 	}
 	if opening {
-		if err = b.bindPaymentSource(ctx, in.owner, id, source); err != nil {
-			return "", err
+		ref, unchanged, retainErr := b.preparePaymentOpening(ctx, in.owner, id, payload, source)
+		if retainErr != nil {
+			return "", retainErr
 		}
+		if unchanged {
+			return i18n.Translate(info.Language, i18n.PaymentShown, nil)
+		}
+		ref.Event = event
+		ctx = withBotCard(ctx, ref)
 	}
-	check := func() error { return b.checkPaymentDelivery(ctx, in.owner, event, info, source) }
+	check := func() error { return b.checkPaymentPayload(ctx, in.owner, event, info, source) }
 	if err = b.deliverOrderCardChecked(ctx, in.owner, paymentCardPrefix+id, payload, check); err != nil {
 		return "", err
 	}
+	paymentOpenedInUpdate(ctx, in.owner, in.chat, paymentCardPrefix+id, opening)
 	return i18n.Translate(info.Language, i18n.PaymentShown, nil)
+}
+
+// A new opening carries authority in its immutable intent, without changing the displayed source.
+func (b *Bot) preparePaymentOpening(ctx context.Context, owner, id string, payload telegram.Send,
+	source *readsource.Derivation,
+) (botdelivery.Reference, bool, error) {
+	hash, err := botCardHash(payload)
+	if err != nil {
+		return botdelivery.Reference{}, false, err
+	}
+	ref := botdelivery.Reference{Kind: botdelivery.CardIntent, Family: registrationPayment,
+		CardKey: paymentCardPrefix + id, Object: id, Event: b.currentOrderEvent(), Source: source,
+		PaymentOpening: &botdelivery.PaymentOpening{}}
+	var operation, effect, previousHash string
+	err = b.DB.QueryRow(ctx, `SELECT i.operation_key,i.effect_key,c.view_hash,c.message_id
+ FROM bot.order_cards c JOIN bot.delivery_intents i
+ ON i.owner=c.owner AND i.chat_id=c.chat_id AND i.message_id=c.message_id
+ WHERE c.owner=$1 AND c.card_key=$2 AND c.chat_id=$3 AND c.message_id>0
+ AND i.bot_id=$4 AND i.state='sent' AND i.continuation_done
+ AND i.reference->>'family'='payment' AND i.reference->>'card_key'=$2
+ ORDER BY i.attempted_at DESC NULLS LAST,i.created_at DESC,i.operation_key DESC,i.effect_key DESC LIMIT 1`,
+		owner, ref.CardKey, payload.ChatID, b.Delivery.BotID).
+		Scan(&operation, &effect, &previousHash, &ref.PaymentOpening.Target)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ref, false, nil
+	}
+	if err != nil {
+		return ref, false, core.DatabaseOperationContextError(ctx, err)
+	}
+	ref.PaymentOpening.Previous = &botdelivery.PaymentRetirement{
+		Operation: operation,
+		Effect:    effect,
+		ViewHash:  previousHash,
+	}
+	if previousHash != hash {
+		return ref, false, nil
+	}
+	prior, err := botdelivery.Read(ctx, b.DB, b.Delivery.BotID,
+		delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}, false)
+	if err != nil {
+		return ref, false, err
+	}
+	service := botdelivery.Service{DB: b.DB, Delivery: b.Delivery}
+	retained, err := service.RetainPaymentCard(ctx, prior, hash, source)
+	return ref, retained, err
 }
 
 func paymentInstructionsPayload(chat int64, info orders.PaymentInstructions) (telegram.Send, error) {
@@ -181,14 +276,98 @@ func (b *Bot) paymentInstructionsUnavailable(ctx context.Context, in incoming, i
 		return "", core.DatabaseOperationError(err)
 	}
 	if opened {
-		err = b.deliverOrderCard(
-			ctx,
-			in.owner,
-			key,
-			telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: [][]telegram.Button{}}},
-		)
+		ref, unavailable, bindingErr := b.paymentRetirementReference(ctx, in.owner, key, id)
+		if bindingErr != nil || !unavailable {
+			return text, bindingErr
+		}
+		return b.deliverPaymentRetirement(ctx, in, ref)
 	}
 	return text, err
+}
+
+func (b *Bot) deliverPaymentRetirement(ctx context.Context, in incoming, ref botdelivery.Reference) (string, error) {
+	preference, err := b.API.Preferences(ctx, in.owner)
+	if err != nil {
+		return "", err
+	}
+	text, err := i18n.Translate(preference.Language, i18n.PaymentUnavailable,
+		map[string]string{orderCodeParameter: "payment_context_unavailable"})
+	if err != nil {
+		return "", err
+	}
+	if ref.PaymentRetirement == nil {
+		return text, nil
+	}
+	ctx = withBotCard(context.WithValue(ctx, botRetiredCardKey{}, true), ref)
+	err = b.deliverOrderCard(ctx, in.owner, ref.CardKey,
+		telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: [][]telegram.Button{}}})
+	return text, err
+}
+
+func (b *Bot) paymentRetirementReference(
+	ctx context.Context,
+	owner, key, id string,
+) (botdelivery.Reference, bool, error) {
+	var event, state string
+	var canBook bool
+	err := b.DB.QueryRow(ctx, `SELECT o.event_id,o.state,u.can_book FROM core.orders o
+ JOIN core.users u ON u.id=o.owner WHERE o.owner=$1 AND o.id=$2`, owner, id).
+		Scan(&event, &state, &canBook)
+	if err != nil {
+		return botdelivery.Reference{}, false, core.DatabaseOperationContextError(ctx, err)
+	}
+	if state != "deleted" && canBook {
+		return botdelivery.Reference{}, false, nil
+	}
+	prior := &botdelivery.PaymentRetirement{}
+	err = b.DB.QueryRow(ctx, `SELECT i.operation_key,i.effect_key,c.view_hash
+ FROM bot.order_cards c JOIN bot.delivery_intents i
+ ON i.owner=c.owner AND i.chat_id=c.chat_id AND i.message_id=c.message_id
+ WHERE c.owner=$1 AND c.card_key=$2 AND c.visible AND c.message_id>0 AND i.bot_id=$3
+ AND i.state='sent' AND i.reference->>'family'='payment' AND i.reference->>'card_key'=$2
+ ORDER BY i.attempted_at DESC NULLS LAST,i.created_at DESC,i.operation_key DESC,i.effect_key DESC LIMIT 1`,
+		owner, key, b.Delivery.BotID).Scan(&prior.Operation, &prior.Effect, &prior.ViewHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		var visible bool
+		if err = b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.order_cards
+ WHERE owner=$1 AND card_key=$2 AND visible)`, owner, key).Scan(&visible); err != nil {
+			return botdelivery.Reference{}, false, core.DatabaseOperationContextError(ctx, err)
+		}
+		if !visible {
+			return botdelivery.Reference{}, true, nil
+		}
+		return botdelivery.Reference{}, false, botdelivery.ErrStale
+	}
+	if err != nil {
+		return botdelivery.Reference{}, false, core.DatabaseOperationContextError(ctx, err)
+	}
+	return botdelivery.Reference{
+		Kind: botdelivery.CardIntent, Family: registrationPayment, CardKey: key,
+		Event: event, Object: id, Notice: i18n.PaymentUnavailable, PaymentRetirement: prior,
+	}, true, nil
+}
+
+// A retirement reconstructs only a fixed notice for the existing payment card.
+func (b *Bot) renderPaymentRetirement(ctx context.Context, i botdelivery.Intent) (botRenderedDelivery, error) {
+	if !i.Reference.Continuation.Retired || i.Target <= 0 || i.Phase != botPhaseEdit {
+		return botRenderedDelivery{}, botdelivery.ErrBinding
+	}
+	preference, err := b.API.Preferences(ctx, i.Owner)
+	if err != nil {
+		return botRenderedDelivery{}, err
+	}
+	text, err := i18n.Translate(preference.Language, i18n.PaymentUnavailable,
+		map[string]string{orderCodeParameter: "payment_context_unavailable"})
+	if err != nil {
+		return botRenderedDelivery{}, err
+	}
+	payload := telegram.Send{
+		ChatID: i.Chat, MessageID: i.Target, Text: text, Markup: telegram.Markup{Rows: [][]telegram.Button{}},
+	}
+	hash, err := botCardHash(payload)
+	receipt := i.Reference.Continuation
+	receipt.ViewHash = hash
+	return botRenderedDelivery{Payload: payload, Receipt: receipt}, err
 }
 
 func (b *Bot) refreshPaymentInstructions(
@@ -208,6 +387,18 @@ func (b *Bot) refreshPaymentInstructions(
 		return nil
 	}
 	active[key] = true
+	if paymentOpenedInUpdate(ctx, owner, chat, key, false) {
+		ref, unavailable, err := b.paymentRetirementReference(ctx, owner, key, order.ID)
+		if err != nil {
+			return err
+		}
+		if unavailable {
+			_, err = b.deliverPaymentRetirement(ctx, incoming{owner: owner, chat: chat}, ref)
+			return err
+		}
+		// The explicit opening already owns this update's presentation; the worker rechecks its source.
+		return nil
+	}
 	if !opened {
 		_, err := b.showPaymentInstructions(ctx, incoming{owner: owner, chat: chat}, order.ID)
 		return err

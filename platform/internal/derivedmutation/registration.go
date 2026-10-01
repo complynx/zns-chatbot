@@ -51,14 +51,15 @@ func (s Service) ExecutePassBooking(
 		return passbooking.Booking{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	registration, clockAttempt := s.Registration.WithClockAttempt()
 	if err = lockRegistrationPrelude(ctx, tx, actor, command.Target, command.Event, source); err != nil {
 		return passbooking.Booking{}, err
 	}
-	prepared, err := s.Registration.PrepareInTx(ctx, tx, actor, command)
+	prepared, err := registration.PrepareInTx(ctx, tx, actor, command)
 	if err != nil {
 		return passbooking.Booking{}, err
 	}
-	return commitPrepared(ctx, tx, actor, source, prepared)
+	return commitRegistrationPrepared(ctx, tx, actor, source, prepared, clockAttempt)
 }
 
 func (s Service) AssignPass(
@@ -79,12 +80,40 @@ func (s Service) AssignPass(
 		return passbooking.AdminAssignmentResult{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	registration, clockAttempt := s.Registration.WithClockAttempt()
 	if err = lockRegistrationPrelude(ctx, tx, actor, command.Target, command.Event, source); err != nil {
 		return passbooking.AdminAssignmentResult{}, err
 	}
-	prepared, err := s.Registration.PrepareAssignmentInTx(ctx, tx, actor, command)
+	prepared, err := registration.PrepareAssignmentInTx(ctx, tx, actor, command)
 	if err != nil {
 		return passbooking.AdminAssignmentResult{}, err
 	}
-	return commitPrepared(ctx, tx, actor, source, prepared)
+	return commitRegistrationPrepared(ctx, tx, actor, source, prepared, clockAttempt)
+}
+
+// Registration effects retain their domain time through the outer source commit.
+// Other domains keep commitPrepared's existing contract.
+func commitRegistrationPrepared[T any](
+	ctx context.Context,
+	tx pgx.Tx,
+	actor string,
+	source readsource.Derivation,
+	prepared preparedMutation[T],
+	clockAttempt *passbooking.RegistrationClockAttempt,
+) (T, error) {
+	if result, found := prepared.Replay(); found {
+		return result, nil
+	}
+	var zero T
+	if err := lockSource(ctx, tx, actor, source); err != nil {
+		return zero, err
+	}
+	result, err := prepared.Apply(ctx)
+	if err != nil {
+		return zero, clockAttempt.DecisionError(ctx, err)
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return zero, err
+	}
+	return result, core.DatabaseOperationError(tx.Commit(ctx))
 }

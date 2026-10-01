@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -92,7 +93,8 @@ func (b *Bot) sendBotIntent(ctx context.Context, i botdelivery.Intent, r botRend
 			return telegram.DeliveryOutcome(i.Target, nil), false
 		}
 		if fallback &&
-			(i.Reference.Family == botFamilyPassRedaction || i.Reference.Family == botdelivery.PassReceiptRedactionFamily) {
+			(i.Reference.Family == botFamilyPassRedaction || i.Reference.Family == botdelivery.PassReceiptRedactionFamily ||
+				(i.Reference.Family == registrationPayment && i.Reference.Notice == i18n.PaymentUnavailable)) {
 			return delivery.Outcome{Kind: delivery.Rejected, Reason: "edit_target_missing"}, false
 		}
 		if fallback {

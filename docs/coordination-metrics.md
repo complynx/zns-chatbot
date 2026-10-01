@@ -1,7 +1,7 @@
 # Coordination metrics
 
-Baseline observation: 2026-09-30T22:04:53Z. Owner and sole CSV writer: kanban_manager.
-Source: [coordination-metrics.csv](coordination-metrics.csv). Human view: [KANBAN.html](../KANBAN.html).
+Baseline observation: 2026-09-30T22:04:53Z. Historical sole CSV writer: kanban_manager. Current ownership: root writes CSV; kanban_manager maintains this description and KANBAN.html only.
+Source: [local coordination-metrics.csv](../management.local/coordination-metrics.csv). Human view: [KANBAN.html](../management.local/KANBAN.html).
 These metrics describe engineering handoffs, not product readiness or a completion percentage.
 
 ## Event record
@@ -10,8 +10,8 @@ Append an event after a verified state/owner/commit change. Fields: observed UTC
 task ID from the existing board, object/scope, state, current owner, exact observed
 commit/base, evidence and limitations. An initial observation is a baseline,
 not proof that the task entered this state at that time. Never invent historical
-start times. Root supplies verified events; the manager appends them and refreshes
-the board. No competing CSV writers. Preserve prior rows.
+start times. Root appends verified events to the ignored local CSV; the manager
+refreshes the local board. No competing CSV writers. Preserve prior rows.
 
 A task's current state is its last event for the same task/object. Commit/base
 fields may be empty when they do not apply or have not been verified. Branch
@@ -661,3 +661,212 @@ Manager paused at150events; follow-up could not start due thread limit. Root rec
 174events; independentreturns24, queue0/0/0. QA269complete40 terminalFAIL3→freshclockdeveloper(payment_card_developer reassigned, clock_final_boundary_developer) newcodex/c-clock-final-boundary-fix from93, full40 originalscope. Oldclockauthorstopped clean, oldpaymentc5 protected/otherauthorowns paymentfix. Parityinventory freshsourceanalysis assignedc_registration_developer exclusiveparity-current.md. Operator5 planpreparedonly; no resource/proof claim. Counter269next270.
 
 176events; queue0/1/0 returns24. Fresh model10 482214b4 rootcompletePG2parents+immediate/later-save-reboot subcases PASS7.952s,0FAILSKIP, identicalDBinventory/raw10hashes;8090 and58441 released. Fresh fullQA270CLI24715active, counter270next271. Currentparityinventory70anchors complete3concreteentrygaps underauthorizedafterC-Ework. Payment15 union preservesoriginal12 andnew3; authorlocalgates pendingfreeze. Freshclock40 developeractualsourcecorrectionactive.
+
+178events; queue0/0/0 returns24. Fullmodel10 QA270PASS merged7ff6659b, allreviewedsourceblobs identical, rootfocused7top14PASSevents0FAILSKIP10.972s; nativefullPG7.952 separate. Payment d4 preserved newprepared0ef011d3 on7ff reruns gates before root15PG/freshQA. Clock40 firstnewalias actualproof underway, latequeue guard/dependency update follows terminalfreeze. GenuineZitadel imagef373 actual4.16.3 acquired; lead setup2newisolatedservices withfreshprivatecredentials assigned, no existingreuse/producttests. Counter270next271.
+
+
+181 events; queue0/0/0 and independent review returns24 unchanged, counter270 next271. Prepared payment15 native FAILED (8 new subcases); developer diagnosis underway, no review dispatch. Clock initial newfixture gate FAILED; three actual writablealiases/race/original6clock passed, default19/manual14 unexecuted. New isolated genuine IdP infrastructure ready, bootstrap blocked by automatic approval review; exact human question in PROGRESS. Root board ownership refreshed, lead remains standowner.
+
+
+183events; queue0/0/0, returns24 and counter270next271 unchanged. Operator5 startedisolatedparallelimplementation with finalC acceptance dependency preserved. Paymentrootnative failure yielded verifiedsamebodyproducerbindinggap; correction staysoriginal7 and retainsmixedmanual/model regressions. Capability lanes: clock/operator/Eexecutionpreparation; paymentfix parallel.
+
+
+185events; queue0/0/0 returns24counter270next271 unchanged. Clocksecondsource40rawmanifestverified; bothwholelinttargets/compilePASS, realLinuxPG running62105. Paymentmixedrouteproducer correction testing locally; full15selector intact. Observerpreparation andexactpostapplyEhistoryID handoff runindependently; blockedIdPbootstrap untouched.
+
+
+187events; queue0/1/0 returns24. FreshengineeringobserverCodeQA271 readonlyCLI55191 confirmedlive; counter271next272. Eexactexecutionplan complete withrootindependentsyntaxchecks/provenanceresolver; no runtime/importexecution. Clockall3realaliasgatessecondsourcePASS; remainingrace/PGmatrix live62105. Paymentfinalcodegates/isolatedracererun inprogress; firsttimingfailurepreserved. No feature/FQA acceptance fromthese partialresults.
+
+
+2026-10-01T07:20:11Z: QA272 terminal FAIL3 completepayment7/41dcc36e; rootfull15/34newsubcases66PASS0FAILSKIP153.340s remains valid but NOT acceptance. QA273 terminal FAIL1 completeclock40/dbddf742: passport BeginNotification postattempt/lane expiry; fullactual40 gates valid but NOT acceptance. QA274 terminal FAIL2 completeobserver6; successor ownedlead. All Codex override, counter274 next275; independentreturns28; confirmedqueue0/0/0. Developers asked read-only minimal correction scopes before edits. Original frozen candidates/artifacts retained. Human explicitly approved localZitadel bootstrap twice; root guarded hash406A39A execution33981 terminalexit0 bootstrap-complete, dedicatedorg repair retainedoldobjects and revokedonlytwo mistakenlyscoped syntheticmembershipgrants. Lead readiness verification pending; no realadapter/SDK/FQA acceptance. Firewall-blocked tests mayrun container/WSL, no firewallpolicy changes.
+
+
+2026-10-01T07:26:31Z: Local IdP readonly readiness92696 terminalexit0 verified dedicatedorg/clientowners/machines/users and removedoldmemberships; first malformed-PAT-header attempt preserved. Rootunchanged actualadapter+SDK tests82316 launched; NOT PASS yet, SDKadmin proof distinct from leastprivilegedprovisioner proof. QA275 freshfullobserver subagent dispatched afterall9 frozenhashes verified; next276. Payment coherentcorrection fullscope10 (original7+3existing receipt/producerseams) approved; clockfullscope41 (original40+notification_delivery.go) approved. Bothpreservepredecessors/gates/no schema changes.
+
+
+2026-10-01T07:28:51Z: QA275 terminal PASS complete8fileobserver staticreview; all9 frozenartifacthashes unchanged, 89rawGit checksums independently verified; operationalinspector/custody/window/C204/F08 remain UNPROVEN. Counter275 next276, reviewreturns28, queue0/0/0. Nativeidentity82316 terminalexit1: TestZitadelLocalAdapter FAIL0.200s at nonexistent-subject negative assertion expectedidentity gotunavailable; positiveAlice/Bob completed but remainingnegativecases NOTRUN. SDKLocalZitadelProvisioning PASS2.130s package2.318 withadminPAT, NOTleastprivilegedprovisioner proof. Read-only diagnosis assigned c_registration_developer, no sourceedits. Inspector exact9offlineimplementation approved; no actualqualification/resourceaccess.
+
+
+2026-10-01T07:37:12Z: Previousgoalturn progress: rootlocalcommits260a77ba/a264515f, actuallocalIdP bootstrap+readiness, actualSDKPASS+adapterFAIL andfreshQA275PASS yieldednew evidence. Currentfixed OAuthdiagnosticE41A terminalexit0 confirmsnegative400responses areintentionallyretryable, liveassertionsstale; sixcaseonefile correction assignedisolatedcodex/identity-live-contract-fix, productionclassifierunchanged. Nativepublicreport ownproofsaved. Capabilitylanes active clock41/inspector9/scopedprovisioner3offlineharness; payment10fixparallel. No newQAallocation; next276. All ownedstand/API writer currentlyreleased; no Functional/productionacceptance.
+
+
+2026-10-01T07:54:50Z: New readiness assessment requestedbyDaniel. Root35–65 engineering8h days; freshindependent Codex35–75, no priornumericalestimategiven. RootPROGRESS rewritten plainsemanticHTML done/current/remaining/questions, historicalscopedacceptance separated, resolvedbootstrap removed; readinesshistory preserved. Independent reportreadiness-codex-2026-10-01-independent.md, no CodeQAcount incrementforassessment. QA276 terminalFAIL1 scoped1 livetest precondition, returns29; rootactual903wire31025 PASSall6negatives+parent/package8events0FAILSKIP1.116s, butno sourceacceptance. Author approved2linecorrectiond9ab prepareslatestbase/gates beforefreshreview. Counter276next277. Actual clock41 finalgates41234 live; no new productmerge/Functional/productionacceptance.
+
+## Current operational snapshot: 2026-10-01T08:58:58Z
+
+Read-only observed CSV208 rows, latest event08:49:51Z. Product6bee9003/HEADfe724ec0;
+no CSV edits by manager. Earlier append-only snapshots and their exact timestamps
+remain historical. Management targets: docs/management-adjustments-2026-10-01.md.
+No new registry or estimated historical wait durations.
+
+C clock owner c_registration_developer, c-clock-transaction-owner-fix:22 correction
+paths/full51 review, actual implementation; prior99/QA277FAIL2 preserved. D04 three
+paths active-admission-loss-fix, authorclock_authority:LinuxPG/racegreen, style/final
+prepare still incomplete/notfrozen. Payment b747 root53737 full15 terminalFAIL
+174.577s/12PASS3FAILparents17failingleaves; before/after inventoryidentical,58451
+released. Successor11 payment-presentation-fix authorownsuniquePG/normalgates,
+noQA281 dispatch. No final ready handoff inferred from these partial gates.
+
+Identity1 QA278 merged6bee+actual wirePASS, scopedSDK actual99658/QA280PASS; full
+Functional still open. E owner e_import verified27entries/23records/12domains,
+not executed cases; final execution blocked acceptedC/operator/job091. Current
+schema090 cannot substitute final091. Lead+engineer actualprepare C-free205/206
+clones58601–04/58611–14 from6bee/rootexport3b72. No READY/FROZEN/current Functional
+execution. Ignored nonsuperclonebootstrap adaptation approved; noCmarkers/source
+edits. Oldce427 scoped reports retained, current40whole-rowPASS0.
+
+Queue: newQA281 unallocated, no verified current final clean/frozen C/D/payment
+handoff. Counter next281 Codex-only. Audit29 independentreturns plus later277/279
+=31 observedreviewreturns in that documented sequence; do not treat native payment
+FAIL as a new CodeQAreturn. Visible scope growth:clock41→full51 with22correction
+paths; payment10→successor11. Record package/repeatedreason and changes to actual
+acceptance work, not green test totals or general readiness percentages.
+
+Management:2–3 product/architecture developers and at most one coordinated stand/
+helper preparation lane, fixes parallel; transfer/reassess aftersecondreturn.
+Last-required-merge→frozen-stand duration remains notstarted/unknown until actual
+final prerequisite source integration. Qualified F08 requires real savedplan/
+effects/subsequentintent and UI beyond backend consumption/staticobserverproof.
+E actual apply/replay/reconcile/removal/restart/UI outcomes remain unexecuted.
+
+No evidence-backed decrease in root35–65/independent35–75 engineering8hday ranges.
+WholeCDE/parity/fullbaseline/productionNO-GO unchanged. Current waitstarts unknown;
+no duration carried forward from an old import-wait snapshot. Manager paused edits
+and returns these twofiles to root for commit; CSV/product/stands unchanged.
+
+### Verified delta: 2026-10-01T09:02:07Z
+
+D04 finalaaffe Linuxintegrationcompile FAILED aftermodernize embeddedliteral:
+modulelanguageversion rejects it. Earlier explicit-sourcePG14.436s retained;
+not finalPASS. Author narrowtest-only correction/repeatfinalgates, noQA281.
+Payment11 ownPG actual39527LIVE uniqueinternalnetwork17.11/threeunprivilegedroles/
+CPU1/ROsourcecache/nohostports/full15original4min. Nativeunit/compile/build terminal
+PASS, lint80751LIVE. No final readyhandoff or nativePGcompletion. Engineer ACK
+actual205/206 export/build/config preparationactive, noREADY/FROZEN/Functional.
+Snapshot includes this delta; all other current constraints unchanged. Writes paused.
+
+## Two reviewed merges and stand handoff: 2026-10-01T09:35:37Z
+
+Read-only rootCSV209 rows/latest09:19:37 D04 event. RootHEADdcd0e25f. D04 frozen
+2f103f4 full3 QA281PASS mergedfdf3ed98; postmerge replacement/runtimeappPASS.
+Payment full11 frozen20e0c18 QA282PASS mergeddcd0e25f. Author actualPG full15parents/
+58newleaves89casePASS+packagePASS0FAILSKIP64.853s; rootpostmerge bot2.124s/
+botdelivery0.512sPASS. Frozen predecessor b747 nativeFAIL preserved, current
+Functional notaccepted. QA282 verdict provided by root; its root report was not
+yet staged at the manager read, so no unresolved report link is added to board.
+
+Current205/206 source6bee/export3b72 engineerRELEASE→lead; actual readiness/UI ENRU
+not FQA. Freeze/controlpreflight pending, not a finalclock/newpayment/D04 source
+qualification. Current40whole-rowPASS0, no new source-blind execution confirmed.
+C final51/22correction gatesinprogress; freshQA283 notassigned. Counter282next283,
+Codex-only,31documentedreviewreturns unchanged. D04/payment owners completed
+handoff; no new developer reassignment invented. Root refills product lanes under
+2–3policy, lead/engineer one stand preparationline. Final C/operator/job091/E/full
+baseline/parity/productionNO-GO stillopen. No stage closure or engineeringday
+estimate decrement, no wait durations invented. Onlyboard/metricsdescription
+changed; CSV/PROGRESS/tracking/usercode-quality/product/resources untouched.
+
+## Confirmed product-gap owner assignments
+
+Root assigns clock_authority_developer read-only StageD checkpoints2–4 runtime
+owner/flush/redacted bounded observations, and menu_retirement_fix read-only
+firstcontact identitylink/cache5min/revoke. Both first return finite path scope
+avoiding C51 overlap. Product edits not assigned yet; no implementation, helper,
+IdP call or readiness credit. These refill product/architecture planning ownership
+alongside C implementation and blocked E execution, not a new helper lane.
+Only current staffing/owner cells and this note changed. Writes paused.
+
+## Frozen subset FQA and bounded D implementation: 2026-10-01T09:46:02Z
+
+Read-only CSV211 rows/latestobserved09:45:40Z; actualleadfreeze09:39:51.9756350Z.
+Root checkedaccess5E97DE6F/requirements6496450F. Freshsourceblind fqa_current_flows_a
+sole205 andfqa_current_recovery_b sole206 fullyACKcodequality, actualbrowserstarted.
+READY2/FROZEN2, active independentreviewers2; seven selectedsubsetsA1–A4/B1–B3,
+not full40 or laterD04/payment. No newPASS verdict inferred. Source6bee/export3b72,
+publicdispatch docs/qa/fqa-current-dispatch-2026-10-01.md. Frozen stands unchanged.
+
+D clockauthor now IMPLEMENTATION exactly2observability/runtime.go+runtime_test.go,
+worktree/branch d-operation-failure-classification; finitecompletionfailure metric/
+span privacy and coarsecontractpreserved. Authorown gates/freshQA beforemerge.
+Identityfirstcontact read-only finitepathscope stillpending. C actualdiff50/full51
+context cleanrebase8947d64dcd finalgatesactive. FreshQA283 unallocated, counter282,
+returns31unchanged. No finalCDEstageclosure/daydecrement. Whole40 stillopen and
+productionNO-GO. Onlymanagerboard/metricsdescription updated; CSV unchanged.
+Writespaused; ownership returnsroot beforecommit.
+
+## First subset FQA report and targeted identity implementation: 2026-10-01T09:55:06Z
+
+Read-only CSV211/latest09:45:40 unchanged. A finite report actual complete/released:
+EN staleprofilecallback12/17 ACKmissing FAIL2UIcells; RU22/27 ACKpresent. A2four
+presentationcellsPASSsubset;32mediaupload/renderPASSsubset, notsemantic/download/
+replykeyboard. Root no-download clarification applies to software; A regranted205
+solewindow for originalown syntheticdownloads, addendumpending. B actualfaults
+running+B2exactfakeRELEASEleadwindow; nofinalverdict. Completed report is not whole
+row/full40 acceptance. Engineer frozen source6bee remains separate from latermerges.
+Profile_callback_ack_developer READONLYevidence/source/minimalpathproposal only,
+noedits or205ownership. This Functional defect does not increment CodeQAreturns.
+
+Identity owner menu_retirement_fix now IMPLEMENTATION exactlyidentity/zitadel.go
+andzitadel_cache_internal_test.go onidentity-exchange-invalidation-fix/basea179f9
+(productdcd). Reproduce inactiveexchange oldpositiveVerify theninvalidateboth
+specificuser caches; genericoutages/Bob retained. No newrevokepolicy/schema/dependency.
+D2observability implementation active; C8947finalgatesactive, freshQA283unallocated.
+Counter282/31reviewreturns unchanged. No stageclosure/daydecrement; writes paused.
+
+## Owner downloads completed and ACK implementation scope: 2026-10-01T10:01:42Z
+
+Read-onlyCSV212/latest09:55:49 functionalA1return; CodeQAreturncount31 unchanged.
+A actualdownloadaddendum terminal/RELEASE205:32browserownfiles exactbyteshashPASS,
+64otheractor404 syntheticadapterfence only. Eight initial locatorfailures retained,
+corrected8PASS. A1ENmissingACKFAIL unchanged; media semantics/replykeyboard/core
+identity/authorization stillblocked. B actualfaultcases running, B2exactfakeengineer
+execution pending, nofinalverdict. Scoped results not whole40/stageclosure.
+
+ProfileACK owner IMPLEMENTATION max4: bot.go ACKONLY +existingack_database_test +
+newack_control_test +telegram/control.go commentonly, branchprofile-callback-ack-fix
+froma179. NohelddomainTx at callsite verified; realownPG58721 approved afterlabel/
+unusedchecks, no205writes. D diagnostics2 ownchecks andidentity2 reprochecks active.
+C8947 rebase nativeunits(shortrepoGOTMPDIR)/PG/build/compile/sqlc/LinuxraceunitsPASS;
+fullpinnedlint timeout +helpergocognit27>20FAIL preserved. Author minimalownedtest
+helperfix/freshgates, noQA283allocated. Counter282next283/returns31 retained;
+no estimate decrement/waitduration invented. Onlytwo assigned docs updated,
+CSV/product/stand/PROGRESS/codequality untouched. Writespaused, ownershiproot.
+
+## Authorized heavy-check coordination: 2026-10-01T10:11:22Z
+
+Full docs/coordination-process.md read/ACK. Danielapproved1NEW Windows slot plus
+1Docker/WSL slot; Linux-targetlint nativeexe countsWindows. Existing cohort finishes
+without quiet-outputrestart: C46519fullWindowslint+C13887nativePG, D22552wholeWindows
+lint, identity38301oldsourcewholeWindowslint. Their historicrequest/grant/start
+unknown; firstcurrentobservedRUNNING10:11:22Z. Sameowner/handle terminal evidence
+required; transientobservationtimeout notprocessfailure. No new scheduler/service.
+
+| Observed UTC | Lane | Owner/source | Action/state | Handle/next |
+| --- | --- | --- | --- | --- |
+| 10:11:22Z | Windows oldcohort | C946c8c | fullWindowslint/nativePG RUNNING grandfathered | 46519/13887 terminalownerreceipt pending |
+| 10:11:22Z | Windows oldcohort | D20e70599 exact2 | fullWindowslint RUNNING grandfathered | 22552 |
+| 10:11:22Z | Windows oldcohort | identity oldsource | fullWindowslint RUNNING grandfathered | 38301 notfinal-byteproof |
+| 10:11:22Z | Windows newslot requests | rootpriority C→identity→D→ACK | QUEUED untiloldcohortdrain | CfullLinux-targetlint;identityfinalwholelint;DnativeLinux-targetlint/crossbuild;ACKwholelint |
+| 10:11:22Z | Docker/WSL | C946c8c | LinuxPG93cases0SKIPPASS/RELEASE | 5463 terminalobservednow historicendunknown |
+| 10:11:22Z | Docker/WSL | D20e70599 | racePASS/cleaned | 3131 terminalobservednow historicendunknown |
+| 10:11:22Z | Docker/WSL rootgrant | identity finalbytes | GRANTED boundednon-network Linuxrace owncache | actualhandle/terminalawaiting; rootgrantfirstobservednow |
+| 10:11:22Z | Docker/WSL request | profileACK | QUEUED afteridentityRELEASE | actualgrant/startunknown |
+
+Identity exact2 finaltests strengthened: native83PASS1liveSKIP; fullformatter
+INTERRUPTED notPASS/focusedfmtPASS. ACKactualownPGpolicy14.002PASS; parallel-lint
+refusalpreserved/nobypass, queuedenvslots. All frozen source/gate mapping retained;
+oldsource result cannot certify changed bytes. Root owns grant/release, no slot
+released by an assumed process outcome or quiet output. Capture actual future
+request/grant/terminal receipts, no waitdurations reconstructed from this snapshot.
+
+B2fakeactual6933ms/reinstall409/providerfence only, notUI/fullbusiness; B3blocked
+missingvisibleedit; ENB1running/nofinalFunctionalverdict. Prepare public exactfault
+setup/credential/permission/toolapproval beforearm, observerready beforeactual
+operation, notify atactualarm/install; originaltimingbound notextended. Root
+batches coherentdocscheckpoint perhandoff/resultgroup. Only KANBAN/metricsMD
+changed; CSV212last09:55:49 read-only/currentobserved earlier unchanged. Counter282
+next283/31reviewreturns, all40/productionNO-GO and engineeringdayestimates unchanged.
+Writespaused andownershiproot; no process/resource/Git actions performed.
+
+## Slot transitions observed 2026-10-01T10:14:29Z
+
+C13887 nativePG terminal PASS; owner released own PG/writer/volume/network after guards. C46519 lint remains active. Identity final Linux race28365 terminal PASS3.326s,83 test events plus package, one explicit liveIdP SKIP; own container removed, source hashes unchanged, Linux slot released. Root granted the next Linux slot to profile_callback_ack_developer for affected bot/telegram race on its frozen four paths and own PG; actual handle pending. Native grandfathered lint cohort still drains. No discarded evidence, default lint lock retained for new serialized invocations.

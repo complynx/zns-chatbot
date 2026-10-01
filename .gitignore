@@ -39,6 +39,10 @@ node_modules/
 .coverage
 .coverage.*
 coverage/
+# This directory contains Go source, not generated coverage output.
+!/tools/e-rehearsal/probes/coverage/
+/tools/e-rehearsal/probes/coverage/*
+!/tools/e-rehearsal/probes/coverage/*.go
 test-results/
 playwright-report/
 blob-report/
@@ -66,3 +70,5 @@ Thumbs.db
 /synthetic-bootstrap-runtime
 /.tmp/
 /.worktrees/
+# Local review packets and raw execution evidence.
+/.qa-cache/

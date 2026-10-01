@@ -3,6 +3,9 @@
 Integration branch: `feature/go-platform-sandbox`. Daniel authorized consolidating
 the current work and switching development to Git on 30 September 2026.
 
+Heavy-check slots, precise Functional QA permissions, prepared fault windows and
+batched progress checkpoints follow [execution coordination](coordination-process.md).
+
 The initial checkpoint preserves applied work, documentation and known failures.
 It is not a release or a new acceptance verdict. Unapplied candidates remain in
 their preserved local evidence directories until moved into task branches.
@@ -30,7 +33,7 @@ their preserved local evidence directories until moved into task branches.
    base advances after review, stop and prepare the updated branch; substantive
    resolution receives fresh affected review before merging. Metadata-only rebases
    must retain exact reviewed source and record their equivalence and base binding.
-6. Run affected integrated checks and update PROGRESS.html. Fresh Functional QA
+6. Run affected integrated checks and update the ignored management.local/PROGRESS.html. Fresh Functional QA
    uses a frozen stand and EN/RU Telegram-like UI. A merged feature is implemented,
    not automatically accepted. Both QA gates remain required for stage acceptance.
 

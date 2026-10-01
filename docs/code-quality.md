@@ -11,10 +11,13 @@ Code written by Opus always receives fresh independent Codex review. This takes
 precedence over routing requests 3, 6, 9, and so on through `claude-opus-5-5` when
 the SSH Claude tunnel and model are available. Keep the counter continuous when
 authorship changes the route. Record the request number, authorship, scope, route and any
-availability limit in the developer tracking record before dispatch; add the
+availability limit in `management.local/developer-tracking-2026-09-30-resume.md` before dispatch; add the
 result afterward. Do not send that record, audit findings or fix hints to the
 reviewer. This routing rule does not replace either independent gate or relax
 freshness, read-only scope, required checks or acceptance conditions.
+The live assignment and review counter is kept in the ignored
+`management.local/developer-tracking-2026-09-30-resume.md`; its tracked document
+is a stable pointer, not an append target.
 The review procedure is in [the migration plan](go-migration.md).
 Implementation agents may be reused across related development tasks so they keep
 project context. Alternate new developer assignments 1:1 between Opus 5.5 medium
@@ -47,7 +50,7 @@ do not publish credentials in Git, shared reports or messages. This permission
 does not authorize production changes or unrelated account access.
 
 Record questions requiring Daniel's decision or participation in the dedicated
-section of `PROGRESS.html`. Name the decision, alternatives and consequences,
+section of `management.local/PROGRESS.html`. Name the decision, alternatives and consequences,
 dependent work, and checks that can proceed independently. Defer only the
 dependent work until the answer arrives. Do not treat unanswered questions as
 approval, and do not stop unrelated development or synthetic tests.
@@ -85,6 +88,48 @@ Prune unused build cache only between builds; retain a bounded working cache.
 Do not use a global volume prune. An unattached volume can still contain needed
 data; establish its purpose before deleting it. Record cleanup in the progress
 history and keep QA reports outside disposable Docker resources.
+
+## Linux checks and historical Windows Firewall setup
+
+Daniel authorized Linux-only checks on 2026-10-01. Run all new quality gates,
+pinned-tool builds and automated browser suites in Linux Docker or WSL; use
+the Linux branch of `scripts/quality.mjs` for `npm run quality:all` with the
+required PostgreSQL and sandbox access. Native Windows execution and Windows
+executables targeting Linux are not acceptance requirements. Follow the two
+heavy-check slots and stand ownership in `docs/coordination-process.md`.
+Already-running Windows checks finish without restart. Root confirms their
+terminal state and worker acknowledgements before Daniel removes Firewall rules.
+The following configuration is historical, not a requirement to retain or
+reinstall the Windows exceptions.
+
+On Daniel's Windows host, an AppID tagging policy was installed on 2026-10-01
+for `C:\Users\ddriz\Projects\zns-chatbot\*`, including subdirectories. Native
+Windows executables launched from this tree receive the `ZnsProject` tag.
+The enabled rules `ZnsProject-AppID-Inbound` and `ZnsProject-AppID-Outbound`
+allow traffic for this tag on the **Private** network profile only. New filenames
+and future builds in this tree do not need separate application rules.
+This is local host configuration; cloning the repository does not install it.
+
+For native Windows QA, build each stand's executables with `go build -o` into
+an owned directory inside this tree, then launch them there. Default `go run`
+and `go test` executables in the system temporary directory are outside scope.
+If those commands need the exception, the stand owner can set `GOTMPDIR` for
+that QA session to an owned directory inside the tree. Worktrees outside this
+path, external Python/Node interpreters, and Docker/WSL networking are not
+covered by this path policy. Restart existing processes to obtain the tag.
+
+Installation checks confirmed both rules in Firewall's ActiveStore. A new
+executable compiled after installation in a nested project directory received
+the tag; the identical executable launched outside the project did not.
+Traffic from another machine was not tested. Before reporting a network defect,
+check the executable path, active network profile, bind address and port, and
+any explicit blocking rules; a blocking rule takes precedence over these allows.
+Do not treat installed Firewall rules as functional acceptance evidence.
+
+Daniel approved `Disabled:Runtime FilePath Rule Protection` for this tagging
+policy because the project directory is user-writable. Any executable placed
+in the matching tree can receive the tag. Keep downloaded or unrelated binaries
+outside it; this exception is for local QA builds.
 
 ## Go
 
@@ -170,9 +215,9 @@ running Compose sandbox. Do not interpret lint success as functional acceptance.
 `npm run quality:all` is the full local gate. It requires `TEST_DATABASE_URL` and
 `SANDBOX_URL`, builds the pinned Go tool, and runs lint, format checks, dependency
 verification, vet, build, race/integration tests, fuzzing, live smoke and browser
-acceptance. Start Compose first and install Playwright Chromium, or set
-`BROWSER_CHANNEL=msedge`. On Windows it uses Docker Desktop's `desktop-linux`
-context and the repository's isolated PostgreSQL container for Linux race tests.
+acceptance. Run it inside Linux Docker/WSL, start Compose first and install
+Playwright Chromium. The retained legacy Windows branch uses Docker Desktop's
+`desktop-linux` context for race tests; do not start that branch for new checks.
 The command fails on the first failure; it never treats a missing stand as success.
 
 Start the full media stand with `compose.yaml`, `compose.qa.yaml`, `compose.av.yaml`

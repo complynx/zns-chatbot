@@ -104,6 +104,7 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 		return 0, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	e, err := readEvent(ctx, tx, id)
 	if err != nil {
 		return 0, err
@@ -152,10 +153,10 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 		}
 	}
 	state.allocate()
-	if err = persist(ctx, tx, state); err != nil {
+	if err = state.persistNotified(ctx, tx, before, "deadline"); err != nil {
 		return 0, err
 	}
-	if err = state.notifyChanges(ctx, tx, before, "deadline"); err != nil {
+	if err = clockAttempt.Check(ctx); err != nil {
 		return 0, err
 	}
 	return count, core.DatabaseOperationError(tx.Commit(ctx))

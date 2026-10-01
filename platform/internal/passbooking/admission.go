@@ -44,8 +44,12 @@ func (s Service) CaptureAdmission(ctx context.Context, actor string, request Adm
 		return Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	result, err := s.CaptureAdmissionInTx(ctx, tx, actor, request)
 	if err != nil {
+		return Admission{}, clockAttempt.DecisionError(ctx, err)
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
 		return Admission{}, err
 	}
 	return result, core.DatabaseOperationError(tx.Commit(ctx))

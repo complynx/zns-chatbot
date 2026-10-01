@@ -20,6 +20,7 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 		return 0, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('pass-passport-reminder',0))`); err != nil {
 		return 0, core.DatabaseOperationError(err)
 	}
@@ -48,7 +49,11 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 			Scan(&passport); err != nil {
 			return 0, core.DatabaseOperationError(err)
 		}
-		if passport != "" {
+		eligible, eligibilityErr := s.passportReminderEligible(ctx, tx, booking, passport)
+		if eligibilityErr != nil {
+			return 0, eligibilityErr
+		}
+		if !eligible {
 			continue
 		}
 		var owner string
@@ -74,7 +79,34 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
 		return 0, err
 	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return 0, err
+	}
 	return count, core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+func (s Service) passportReminderEligible(
+	ctx context.Context,
+	tx pgx.Tx,
+	booking Booking,
+	passport string,
+) (bool, error) {
+	if passport != "" {
+		return false, nil
+	}
+	if s.RegistrationClock == nil {
+		return true, nil
+	}
+	fresh, err := registrationSQLTime(ctx, s.RegistrationClock)
+	if err != nil {
+		return false, err
+	}
+	var current bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.pass_bookings b
+ JOIN core.pass_events e ON e.id=b.event_id WHERE b.owner=$1 AND b.event_id=$2
+ AND b.created_at=$3 AND b.state IN ('assigned','paid') AND e.passport_required AND e.finishes_at>$4)`,
+		booking.Owner, booking.Event, booking.CreatedAt, fresh).Scan(&current)
+	return current, core.DatabaseOperationError(err)
 }
 
 func (s Service) livePassportReminder(

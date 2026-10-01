@@ -150,6 +150,7 @@ func (s Service) PrepareRegistrationAnnouncement(
 		return RegistrationAnnouncement{}, false, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	if err = s.lockAnnouncementSource(ctx, tx, id); errors.Is(err, pgx.ErrNoRows) {
 		return RegistrationAnnouncement{}, false, nil
 	} else if err != nil {
@@ -186,6 +187,9 @@ func (s Service) PrepareRegistrationAnnouncement(
 	)
 	if err != nil {
 		return item, false, core.DatabaseOperationError(err)
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return RegistrationAnnouncement{}, false, err
 	}
 	return item, true, core.DatabaseOperationError(tx.Commit(ctx))
 }
@@ -246,6 +250,7 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	if err = s.lockAnnouncementSource(ctx, tx, id); err != nil {
 		return err
 	}
@@ -301,6 +306,9 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 		); err != nil {
 			return err
 		}
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return err
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
 }

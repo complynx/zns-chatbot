@@ -143,6 +143,7 @@ func (b *Bot) handle(ctx context.Context, u telegram.Update) (resultErr error) {
 	if !accepted {
 		return authErr
 	}
+	ctx = withPaymentOpeningCapture(ctx, in.owner, in.chat)
 	// A user can become inactive after admission. Never replay that user's
 	// rejected action after reactivation; unrelated durable updates can proceed.
 	defer func() {

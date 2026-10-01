@@ -51,6 +51,79 @@ func clockState(t *testing.T, current time.Time, revision uint64) registrationcl
 	return decoded
 }
 
+func TestRegistrationClockMountAliases(t *testing.T) {
+	t.Parallel()
+	reader := `20 1 8:1 /vol/clock /run/registration-clock ro - ext4 /dev/sda rw` + "\n"
+	for name, alias := range map[string]string{
+		"same-root": `21 1 8:1 /vol/clock /alias rw - ext4 /dev/sda rw`,
+		"parent":    `21 1 8:1 /vol /alias rw - ext4 /dev/sda rw`,
+		"child":     `21 1 8:1 /vol/clock/sub /alias rw - ext4 /dev/sda rw`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.ErrorContains(
+				t,
+				registrationClockReaderMount([]byte(reader+alias), "20", "/run/registration-clock"),
+				"writable mount alias",
+			)
+		})
+	}
+	unrelated := `21 1 8:1 /vol/clock-cache /cache rw - ext4 /dev/sda rw`
+	require.NoError(t, registrationClockReaderMount([]byte(reader+unrelated), "20", "/run/registration-clock"))
+	require.Error(t, registrationClockReaderMount([]byte(reader), "99", "/run/registration-clock"))
+	require.Error(t, registrationClockReaderMount([]byte(reader), "20", "/run"))
+	decoded, err := registrationClockMountPath(`/vol/with\040space/with\134slash`)
+	require.NoError(t, err)
+	require.Equal(t, "/vol/with space/with\\slash", decoded)
+	for _, malformed := range []string{`/vol/\777`, `/vol/\04`, `relative`, `/vol/../clock`} {
+		_, decodeErr := registrationClockMountPath(malformed)
+		require.Error(t, decodeErr)
+	}
+}
+
+func TestRegistrationClockLinuxWritableAliasRejected(t *testing.T) {
+	alias := os.Getenv("REGISTRATION_CLOCK_ALIAS_TEST")
+	if runtime.GOOS != "linux" || alias == "" {
+		t.Skip("requires an isolated actual writable publication alias")
+	}
+	settings := clockSettings()
+	t.Setenv("REGISTRATION_CLOCK_FILE", settings.File)
+	for key, value := range map[string]string{
+		"REGISTRATION_CLOCK_FILE": settings.File, "REGISTRATION_CLOCK_INSTALLATION": settings.Installation,
+		"REGISTRATION_CLOCK_CASE": settings.Case, "REGISTRATION_CLOCK_DATABASE_ADDRESS": settings.DatabaseAddress,
+		"REGISTRATION_CLOCK_ANCHOR": settings.Anchor,
+	} {
+		t.Setenv(key, value)
+	}
+	anchor, err := settings.AnchorTime()
+	require.NoError(t, err)
+	raw, err := json.Marshal(clockState(t, anchor, 1))
+	require.NoError(t, err)
+	clockTestOperation(t, "write", settings.File, raw, 0o600)
+	probe := filepath.Join(alias, "alias-write")
+	require.NoError(t, os.WriteFile(probe, []byte("writable"), 0o600))
+	t.Cleanup(func() { require.NoError(t, os.Remove(probe)) })
+	require.Error(t, os.WriteFile(settings.File, raw, 0o600))
+	cfg := config.Config{Env: "sandbox", SyntheticOnly: true, Database: config.Database{
+		URL: config.Secret("postgres://postgres/" + registrationclock.Database + "?sslmode=disable"),
+	}}
+	clockTestRuntime(t, &cfg)
+	telemetry, err := observability.New(t.Context(), observability.Config{})
+	require.NoError(t, err)
+	cfg.Shutdown.TelemetryFlush = time.Second
+	opened := false
+	opener := func(context.Context, config.Config, *observability.Runtime) (*pgxpool.Pool, error) {
+		opened = true
+		return nil, io.ErrUnexpectedEOF
+	}
+	require.ErrorContains(
+		t,
+		runCommandWithDatabase(t.Context(), "app", nil, cfg, telemetry, opener),
+		"writable mount alias",
+	)
+	require.False(t, opened, "writable alias is rejected before any database admission")
+}
+
 func TestRegistrationClockStateBoundsAndReplacement(t *testing.T) {
 	t.Parallel()
 	settings := clockSettings()

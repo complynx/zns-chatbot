@@ -8,8 +8,10 @@ import (
 	"io"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"sync"
 	"time"
@@ -27,6 +29,122 @@ const registrationClockAppMode = "app"
 const registrationClockReadAttempts = 3
 
 var errRegistrationClockPublication = errors.New("registration clock publication changed during read")
+
+const registrationClockMountFields = 10
+
+type registrationClockMount struct {
+	id, device, root, path string
+	readOnly               bool
+}
+
+// Mount roots identify the backing filesystem paths, even when an alias has a
+// different namespace path. A writable ancestor or child exposes publication.
+func registrationClockReaderMount(raw []byte, id, directory string) error {
+	var mounts []registrationClockMount
+	var reader registrationClockMount
+	for line := range strings.SplitSeq(strings.TrimSuffix(string(raw), "\n"), "\n") {
+		mount, err := parseRegistrationClockMount(line)
+		if err != nil {
+			return err
+		}
+		mounts = append(mounts, mount)
+		if mount.id == id {
+			if reader.id != "" {
+				return errors.New("duplicate registration clock mount identity")
+			}
+			reader = mount
+		}
+	}
+	if reader.id == "" || !reader.readOnly || reader.path != directory {
+		return errors.New("registration clock requires a whole-directory read-only mount")
+	}
+	for _, mount := range mounts {
+		if mount.device == reader.device && !mount.readOnly &&
+			(registrationClockPathWithin(mount.root, reader.root) || registrationClockPathWithin(reader.root, mount.root)) {
+			return errors.New("registration clock publication has a writable mount alias")
+		}
+	}
+	return nil
+}
+
+func registrationClockPathWithin(child, parent string) bool {
+	return child == parent || strings.HasPrefix(child, strings.TrimSuffix(parent, "/")+"/")
+}
+
+func parseRegistrationClockMount(line string) (registrationClockMount, error) {
+	var mount registrationClockMount
+	fields := strings.Fields(line)
+	if len(fields) < registrationClockMountFields {
+		return mount, errors.New("invalid registration clock mount metadata")
+	}
+	separator := 6
+	for separator < len(fields) && fields[separator] != "-" {
+		separator++
+	}
+	if separator+4 != len(fields) {
+		return mount, errors.New("invalid registration clock mount metadata")
+	}
+	for _, value := range []string{fields[0], fields[1]} {
+		if _, err := strconv.ParseUint(value, 10, 64); err != nil {
+			return mount, err
+		}
+	}
+	major, minor, validDevice := strings.Cut(fields[2], ":")
+	if !validDevice {
+		return mount, errors.New("invalid registration clock mount device")
+	}
+	for _, value := range []string{major, minor} {
+		if _, err := strconv.ParseUint(value, 10, 64); err != nil {
+			return mount, err
+		}
+	}
+	root, err := registrationClockMountPath(fields[3])
+	if err != nil {
+		return mount, err
+	}
+	path, err := registrationClockMountPath(fields[4])
+	if err != nil {
+		return mount, err
+	}
+	options := "," + fields[5] + ","
+	ro, rw := strings.Contains(options, ",ro,"), strings.Contains(options, ",rw,")
+	if ro == rw {
+		return mount, errors.New("invalid registration clock mount access")
+	}
+	return registrationClockMount{id: fields[0], device: fields[2], root: root, path: path, readOnly: ro}, nil
+}
+
+func registrationClockMountPath(value string) (string, error) {
+	var decoded strings.Builder
+	for position := 0; position < len(value); position++ {
+		if value[position] != '\\' {
+			decoded.WriteByte(value[position])
+			continue
+		}
+		if position+3 >= len(value) {
+			return "", errors.New("invalid registration clock mount path escape")
+		}
+		escape := value[position+1 : position+4]
+		switch escape {
+		case "040":
+			decoded.WriteByte(' ')
+		case "011":
+			decoded.WriteByte('\t')
+		case "012":
+			decoded.WriteByte('\n')
+		case "134":
+			decoded.WriteByte('\\')
+		default:
+			return "", errors.New("invalid registration clock mount path escape")
+		}
+		position += 3
+	}
+	mountPath := decoded.String()
+	if !strings.HasPrefix(mountPath, "/") || path.Clean(mountPath) != mountPath {
+		return "", errors.New("invalid registration clock mount path")
+	}
+	return mountPath, nil
+}
 
 // The operator owns atomic state publication and persistent compare-and-set.
 // The app reads fresh bounded state at each domain observation, never at intake

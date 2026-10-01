@@ -62,8 +62,12 @@ func (s Service) Execute(ctx context.Context, actor string, c Command) (Booking,
 		return Booking{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	result, err := s.executeInTx(ctx, tx, actor, c)
 	if err != nil {
+		return Booking{}, clockAttempt.DecisionError(ctx, err)
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
 		return Booking{}, err
 	}
 	return result, core.DatabaseOperationError(tx.Commit(ctx))
