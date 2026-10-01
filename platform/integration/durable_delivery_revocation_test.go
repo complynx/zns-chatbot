@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -83,16 +84,40 @@ func TestDurableDeliveryRevocationCancelsUncertaintyAndReleasesFollower(t *testi
 	require.NoError(t, restarted.RecoverDeliveries(t.Context()))
 	assertRevokedDelivery(t, f, active, "cancelled")
 	entries := messageRetryCandidates(t, f.db, s.Delivery.BotID)
-	require.Len(t, entries, 1)
-	assert.Equal(t, "101", entries[0].Destination.Chat, "revoked uncertainty must release its same-chat follower")
-	var marker, resends, messageID int64
+	require.Len(t, entries, 2)
+	var followerID int64
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT d.id FROM core.admin_message_deliveries d JOIN core.admin_messages m ON m.id=d.message_id WHERE m.actor='bob' AND m.key='behind-active'`).
+			Scan(&followerID),
+	)
+	heads := make(map[string]string)
+	for _, entry := range entries {
+		heads[entry.Reference.Key] = entry.Destination.Chat
+	}
+	assert.Equal(
+		t,
+		map[string]string{strconv.FormatInt(independent.ID, 10): "202", strconv.FormatInt(followerID, 10): "101"},
+		heads,
+	)
+	var independentAttempt int64
+	var independentLeaseLive bool
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT attempt,lease_until>clock_timestamp() FROM core.admin_message_deliveries WHERE id=$1`, independent.ID).
+			Scan(&independentAttempt, &independentLeaseLive),
+	)
+	assert.Equal(t, independent.Attempt, independentAttempt)
+	assert.True(t, independentLeaseLive, "advisory heads retain the existing independent preparation lease")
+	var marker, resends, messageID, activeID int64
 	var reason, failure, terminalBefore string
 	var recorded time.Time
 	require.NoError(
 		t,
-		f.db.QueryRow(t.Context(), `SELECT last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at,uncertain_resends,telegram_message_id,failure,to_jsonb(d)::text FROM core.admin_message_deliveries d WHERE message_id=$1`, active).
-			Scan(&marker, &reason, &recorded, &resends, &messageID, &failure, &terminalBefore),
+		f.db.QueryRow(t.Context(), `SELECT id,last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at,uncertain_resends,telegram_message_id,failure,to_jsonb(d)::text FROM core.admin_message_deliveries d WHERE message_id=$1`, active).
+			Scan(&activeID, &marker, &reason, &recorded, &resends, &messageID, &failure, &terminalBefore),
 	)
+	assert.NotContains(t, heads, strconv.FormatInt(activeID, 10), "revoked work is no longer an eligible head")
 	assert.EqualValues(t, 1, marker)
 	assert.Equal(t, "telegram_outcome_unknown", reason)
 	assert.WithinDuration(t, time.Now(), recorded, 5*time.Second)
