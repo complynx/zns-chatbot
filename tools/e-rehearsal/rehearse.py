@@ -99,7 +99,7 @@ def allocate(path, sha, config, evidence):
         raise RuntimeError("exclusive_reviewed_operator_allocation_required")
     for name in ("prerequisites_compose", "images_env"):
         checked(value[name], value[name + "_sha256"])
-    checked(evidence / "probe-inventory.json", value["probe_inventory_sha256"])
+    bound_probes(value, evidence, epoch)
     if (not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_./:-]*@sha256:[0-9a-f]{64}", value.get("cli_image", ""))
             or not re.fullmatch(re.escape(value["project"]) + r"-[a-z0-9-]+", value.get("config_volume", ""))):
         raise RuntimeError("allocated_immutable_resources_required")
@@ -123,7 +123,7 @@ def importer_env(allocation):
     if not valid:
         raise RuntimeError("isolated_import_dsn_required")
     env = {key: value for key, value in os.environ.items() if not key.upper().startswith("PG")}
-    env["MIGRATE_DATABASE_URL"] = dsn
+    env["MIGRATE_DATABASE_URL"] = parsed._replace(query="sslmode=disable").geturl()
     return env
 
 
@@ -242,6 +242,9 @@ def archive_binding(config):
 
 def preflight(config, evidence, *, retired=False):
     """Validate all bound local bytes before any database or Docker operation."""
+    if ALLOCATION is not None:
+        epoch = read(checked(evidence / "binding.json", config["binding_sha256"]))
+        bound_probes(ALLOCATION, evidence, epoch)
     provenance(config, evidence, retired=retired)
     archived = archive_binding(config)
     binary = Path(config["importer_binary"]).resolve(strict=not retired)
@@ -383,10 +386,31 @@ def probe_projection(entry, epoch, allocation=None):
     return projection
 
 
+def bound_probes(allocation, evidence, epoch):
+    """Check static reviewed probe inputs; this does not assert runtime acceptance."""
+    if not allocation.get("probes") or not allocation.get("probes_sha256"):
+        raise RuntimeError("allocated_probe_manifest_required")
+    probes = read(checked(allocation["probes"], allocation["probes_sha256"]))
+    if set(probes) != {"removal", "coverage"}:
+        raise RuntimeError("both_bound_probes_required")
+    inventory = {}
+    for name, entry in probes.items():
+        probe_projection(entry, epoch, allocation)
+        for filename, path_key, sha_key in (("main.go", "source", "sha256"),
+                                             ("main_test.go", "test_source", "test_sha256")):
+            checked(entry[path_key], entry[sha_key])
+            inventory["platform/cmd/e-" + name + "-probe/" + filename] = entry[sha_key]
+    actual = read(checked(evidence / "probe-inventory.json", allocation["probe_inventory_sha256"]))
+    if actual != inventory:
+        raise RuntimeError("allocated_probe_source_inventory_required")
+    return probes
+
+
 def build_runtime(config, evidence, probes_path, probes_sha, *, retired):
     if retired and ALLOCATION is None:
         raise RuntimeError("reviewed_allocation_required")
-    if retired and probes_sha != ALLOCATION["probes_sha256"]:
+    if retired and (probes_sha != ALLOCATION["probes_sha256"]
+                    or Path(probes_path).resolve(strict=True) != Path(ALLOCATION["probes"]).resolve(strict=True)):
         raise RuntimeError("allocated_probe_binding_required")
     root = Path(config["runtime_source"]).resolve(strict=True)
     if root == Path(config["repository_root"]).resolve() or not root.is_relative_to(evidence):

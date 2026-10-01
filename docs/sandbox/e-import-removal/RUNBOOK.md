@@ -93,7 +93,7 @@ The final allocation retains the binding fields, changes status to `frozen`, and
 adds reviewed_schema:true, input_reviewed:true, inputs_sha256, writer:e_rehearsal,
 managed_roles:[zns_app,zns_meter], managed_stopped:true, prerequisites_compose and
 its SHA256, images_env and its SHA256, cli_image as a local repo@sha256 digest,
-config_volume below the allocated project prefix, probe_inventory_sha256 and
+config_volume below the allocated project prefix, probe_inventory_sha256, the exact probe manifest path in probes and
 probes_sha256, runtime_source_inventory_sha256 and raw_migration_inventory_sha256
 matching the prepared source. Source/input/probe and actual image provenance
 review must precede these flags.
@@ -102,6 +102,8 @@ This bounded version supports only transport:host-loopback with host127.0.0.1 or
 localhost, an exact port and endpoint_verified:true. MIGRATE_DATABASE_URL must
 match that exact host/port/database and postgres owner role. The engineer must
 use a URL without a query, or with only the exact `sslmode=disable` query.
+The validated queryless form is normalized to explicit sslmode=disable before
+importer execution, binding one plaintext transport with no TLS/fallback.
 All other URI parameters, fragments, target overrides and service indirection
 are rejected. Importer commands receive that validated URL with PG environment
 settings removed, so the checked authority is the effective pgx target.
@@ -129,7 +131,11 @@ Run `import`, then `remove-receipts`, then `archive-importer`. Import runs actua
 seven-domain apply/replay, requires reconciliation and zero new replay mutations,
 proved by food's explicit `reused:true` and each other domain's integer
 `applied:0`. Missing counters never prove replay success. Before any database
-or Docker call, owner actions validate actual source, raw migrations, source
+or Docker call, allocation and the common preflight validate the actual probe
+manifest path/digest, both private projection hashes and allocated endpoint fields,
+and all four bound probe source/test hashes against the probe inventory. These
+are static input checks; they do not claim successful importer-absent runtime
+execution. Owner actions also validate actual source, raw migrations, source
 export, stages, plans, resolutions, permanent resources and importer binary.
 After retirement the archived binary is checked against the same binding.
 Import also runs the five CLI-supported standalone reconciliations. Users/events use their

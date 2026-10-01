@@ -173,7 +173,7 @@ class GuardTests(unittest.TestCase):
                                                   "PGSERVICE": "production", "PGHOST": "remote.invalid",
                                                   "PGDATABASE": "production", "PGUSER": "other"}):
                 actual = rehearse.importer_env(allocation)
-                self.assertEqual(actual["MIGRATE_DATABASE_URL"], url + suffix)
+                self.assertEqual(actual["MIGRATE_DATABASE_URL"], url + "?sslmode=disable")
                 self.assertFalse(any(key.upper().startswith("PG") for key in actual))
 
     def prepared_guard_fixture(self):
@@ -276,6 +276,80 @@ class GuardTests(unittest.TestCase):
                         rehearse.main()
                     database.assert_not_called()
                     executor.assert_not_called()
+
+    def allocated_probe_fixture(self):
+        """Complete local allocation bindings; no real execution receipt is asserted."""
+        config, evidence = self.prepared_guard_fixture()
+        epoch_path = evidence / "binding.json"
+        epoch = prepare.read(epoch_path)
+        epoch.update(last_migration="090_final.sql", status="frozen", reviewed_schema=True)
+        epoch_path.write_text(json.dumps(epoch), encoding="utf-8")
+        config["binding_sha256"] = prepare.digest(epoch_path)
+        inputs = self.write("evidence/inputs.json", config)
+        compose = self.write("compose.json", {"synthetic_fixture": True})
+        images = self.write("images.json", {"synthetic_fixture": True})
+        allocation = {**epoch, "transport": "host-loopback", "host": "127.0.0.1", "port": 58421,
+                      "endpoint_verified": True, "writer": "e_rehearsal", "managed_stopped": True,
+                      "managed_roles": ["zns_app", "zns_meter"], "input_reviewed": True,
+                      "inputs_sha256": prepare.digest(inputs),
+                      "runtime_source_inventory_sha256": config["source_inventory_sha256"],
+                      "raw_migration_inventory_sha256": config["migration_inventory_sha256"],
+                      "prerequisites_compose": str(compose), "prerequisites_compose_sha256": prepare.digest(compose),
+                      "images_env": str(images), "images_env_sha256": prepare.digest(images),
+                      "cli_image": "synthetic.invalid/cli@sha256:" + "a" * 64,
+                      "config_volume": epoch["project"] + "-config"}
+        projections = {}
+        probes = {}
+        inventory = {}
+        for name in ("removal", "coverage"):
+            projection = self.write(name + "-projection.json", {key: allocation[key]
+                                    for key in ("database", "marker", "host", "port", "transport")})
+            value = prepare.read(projection)
+            value["role"] = "zns_app"
+            projection.write_text(json.dumps(value), encoding="utf-8")
+            projections[name] = projection
+            source = Path(__file__).parent / "probes" / name / "main.go"
+            test = source.with_name("main_test.go")
+            probes[name] = {"source": str(source), "sha256": prepare.digest(source),
+                            "test_source": str(test), "test_sha256": prepare.digest(test),
+                            "projection": str(projection), "projection_sha256": prepare.digest(projection)}
+            for filename, original in (("main.go", source), ("main_test.go", test)):
+                relative = "platform/cmd/e-" + name + "-probe/" + filename
+                target = Path(config["runtime_source"]) / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(original.read_bytes())
+                inventory[relative] = prepare.digest(original)
+        manifest = self.write("probes.json", probes)
+        inventory_path = self.write("evidence/probe-inventory.json", inventory)
+        allocation.update(probes=str(manifest), probes_sha256=prepare.digest(manifest),
+                          probe_inventory_sha256=prepare.digest(inventory_path))
+        allocation_path = self.write("allocation.json", allocation)
+        return config, evidence, allocation_path, manifest, projections
+
+    def test_bound_probe_mutation_blocks_every_owner_action(self):
+        config, evidence, allocation, manifest, projections = self.allocated_probe_fixture()
+        url = "postgres://postgres:synthetic@127.0.0.1:58421/" + self.epoch["database"]
+        for changed in (manifest, *projections.values()):
+            original = changed.read_bytes()
+            for action in ("import", "remove-receipts", "archive-importer", "capture", "compare", "build-runtime"):
+                with self.subTest(changed=changed.name, action=action):
+                    changed.write_bytes(original)
+                    with patch.dict(rehearse.os.environ, {"MIGRATE_DATABASE_URL": url}):
+                        rehearse.allocate(allocation, prepare.digest(allocation), config, evidence)
+                    self.assertIsInstance(rehearse.preflight(config, evidence), dict)
+                    changed.write_bytes(original + b" ")
+                    argv = ["rehearse", action, "--inputs", str(evidence / "inputs.json"),
+                            "--inputs-sha256", prepare.digest(evidence / "inputs.json"),
+                            "--evidence", str(evidence), "--allocation", str(allocation),
+                            "--allocation-sha256", prepare.digest(allocation), "--checkpoint", "checkpoint.json",
+                            "--probes", str(manifest), "--probes-sha256", rehearse.ALLOCATION["probes_sha256"]]
+                    with (patch.object(sys, "argv", argv), patch.object(rehearse, "allocate"),
+                          patch.object(rehearse, "sql") as database, patch.object(rehearse, "command") as executor):
+                        with self.assertRaisesRegex(RuntimeError, "reviewed_file_hash_mismatch"):
+                            rehearse.main()
+                        database.assert_not_called()
+                        executor.assert_not_called()
+            changed.write_bytes(original)
 
     def test_runtime_projection_binds_exact_allocation(self):
         allocation = {"database": "synthetic_qa_zns_guard", "marker": prepare.SCOPE,
