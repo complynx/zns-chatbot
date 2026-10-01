@@ -175,8 +175,8 @@ func (b *Bot) sendPreparedPassNotice(
 	gate, err := b.Host.BeginPassNotification(
 		ctx,
 		passbooking.NotificationAttempt{
-			Attempt: {ID: notice.ID, Generation: notice.DeliveryAttempt},
-			Wire:    wire,
+			ID: notice.ID, Generation: notice.DeliveryAttempt,
+			Wire: wire,
 		},
 	)
 	if err != nil || !gate.Ready {

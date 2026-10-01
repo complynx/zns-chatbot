@@ -60,7 +60,7 @@ func (s Service) BeginNotification(ctx context.Context, input NotificationAttemp
 			return NotificationAdmission{}, err
 		}
 		return NotificationAdmission{
-			Admission: {Reason: outcome.Reason},
+			Reason: outcome.Reason,
 		}, core.DatabaseOperationError(
 			tx.Commit(ctx),
 		)

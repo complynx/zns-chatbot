@@ -83,8 +83,8 @@ func TestRemindersQueueOnceUnderConcurrentScansAndClaims(t *testing.T) {
 			gate, claimError := service.BeginNotification(
 				t.Context(),
 				orders.NotificationAttempt{
-					Attempt: {ID: id, Generation: prepared.DeliveryAttempt},
-					Wire:    notificationTestWire(),
+					ID: id, Generation: prepared.DeliveryAttempt,
+					Wire: notificationTestWire(),
 				},
 			)
 			count := 0
@@ -170,8 +170,8 @@ func TestReminderRechecksPaymentAndZeroTotalAtDelivery(t *testing.T) {
 			gate, err := service.BeginNotification(
 				t.Context(),
 				orders.NotificationAttempt{
-					Attempt: {ID: id, Generation: prepared.DeliveryAttempt},
-					Wire:    notificationTestWire(),
+					ID: id, Generation: prepared.DeliveryAttempt,
+					Wire: notificationTestWire(),
 				},
 			)
 			require.NoError(t, err)

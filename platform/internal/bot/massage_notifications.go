@@ -268,8 +268,8 @@ func (b *Bot) sendPreparedMassageNotice(
 		ctx,
 		owner,
 		massage.NotificationAttempt{
-			Attempt: {ID: notice.ID, Generation: notice.DeliveryAttempt},
-			Wire:    wire,
+			ID: notice.ID, Generation: notice.DeliveryAttempt,
+			Wire: wire,
 		},
 	)
 	if err != nil || !gate.Ready {

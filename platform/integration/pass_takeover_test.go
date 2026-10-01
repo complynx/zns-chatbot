@@ -347,8 +347,8 @@ func TestPassTakeoverConcurrentReplayAndNoticeCurrentness(t *testing.T) {
 	gate, err := s.BeginNotification(
 		t.Context(),
 		passbooking.NotificationAttempt{
-			Attempt: {ID: notices[0].ID, Generation: notices[0].DeliveryAttempt},
-			Wire:    notificationTestWire(),
+			ID: notices[0].ID, Generation: notices[0].DeliveryAttempt,
+			Wire: notificationTestWire(),
 		},
 	)
 	require.NoError(t, err)

@@ -242,8 +242,8 @@ func TestOrderRefundRoutingAndDeliveryRecheckAmbassador(t *testing.T) {
 	gate, err := f.service.BeginNotification(
 		t.Context(),
 		orders.NotificationAttempt{
-			Attempt: {ID: id, Generation: notice.DeliveryAttempt},
-			Wire:    notificationTestWire(),
+			ID: id, Generation: notice.DeliveryAttempt,
+			Wire: notificationTestWire(),
 		},
 	)
 	require.NoError(t, err)

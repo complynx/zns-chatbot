@@ -67,7 +67,7 @@ func (s Service) BeginNotification(
 			return NotificationAdmission{}, err
 		}
 		return NotificationAdmission{
-			Admission: {Reason: outcome.Reason},
+			Reason: outcome.Reason,
 		}, core.DatabaseOperationError(
 			tx.Commit(ctx),
 		)

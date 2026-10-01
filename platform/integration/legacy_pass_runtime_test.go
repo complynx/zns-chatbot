@@ -126,9 +126,11 @@ func TestPassportStartupReminderGlobalAtomicMarker(t *testing.T) {
 				require.NoError(t, err)
 				gate, beginErr := service.BeginNotification(
 					t.Context(),
-					passbooking.NotificationAttempt{Attempt: {
-						ID: noticeID, Generation: notices[0].DeliveryAttempt,
-					}, Wire: notificationTestWire()},
+					passbooking.NotificationAttempt{
+						ID:         noticeID,
+						Generation: notices[0].DeliveryAttempt,
+						Wire:       notificationTestWire(),
+					},
 				)
 				require.NoError(t, beginErr)
 				require.False(t, gate.Ready)

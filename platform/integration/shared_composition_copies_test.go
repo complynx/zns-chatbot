@@ -32,7 +32,7 @@ func TestSyntheticCompositionBindsCopiedServicesBeforeConstruction(t *testing.T)
 		// earlier with ErrSettings. An invalid attempt never accesses the nil pool.
 		_, err := services.BotDelivery.Food.BeginNotification(
 			t.Context(),
-			legacyfood.NotificationAttempt{Attempt: {}, Wire: notificationTestWire()},
+			legacyfood.NotificationAttempt{Wire: notificationTestWire()},
 		)
 		var problem *core.ProblemError
 		require.ErrorAs(t, err, &problem)

@@ -256,7 +256,7 @@ func (b *Bot) sendPreparedOrderNotice(
 		return notice, false, b.deferOrderNotification(ctx, notice, err)
 	}
 	gate, err := b.Host.BeginNotification(ctx, orders.NotificationAttempt{
-		Attempt: {ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: wire,
+		ID: notice.ID, Generation: notice.DeliveryAttempt, Wire: wire,
 	})
 	if err != nil || !gate.Ready {
 		return notice, false, err
