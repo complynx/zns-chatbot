@@ -24,6 +24,7 @@ import (
 
 const registrationClockAPIMode = "api"
 const registrationClockBotMode = "bot"
+const registrationClockAppMode = "app"
 const registrationClockReadAttempts = 3
 
 var errRegistrationClockPublication = errors.New("registration clock publication changed during read")
@@ -55,6 +56,25 @@ func rejectRegistrationClockMode(command string) error {
 	return nil
 }
 
+// Preflight runs before runtime database opening or process admission. Live
+// database allocation and publication checks remain in the app factory.
+func preflightRegistrationClock(command string, cfg config.Config) error {
+	if err := rejectRegistrationClockMode(command); err != nil {
+		return err
+	}
+	settings := registrationClockEnvironment()
+	if command != registrationClockAppMode || !settings.Enabled() {
+		return nil
+	}
+	if cfg.Env != "sandbox" || !cfg.SyntheticOnly {
+		return errors.New("registration clock requires synthetic sandbox mode")
+	}
+	if err := settings.Validate(); err != nil {
+		return err
+	}
+	return registrationClockPlatform()
+}
+
 func configuredRegistrationClock(
 	ctx context.Context,
 	db *pgxpool.Pool,
@@ -64,13 +84,7 @@ func configuredRegistrationClock(
 	if !settings.Enabled() {
 		return nil, false, nil
 	}
-	if cfg.Env != "sandbox" || !cfg.SyntheticOnly {
-		return nil, true, errors.New("registration clock requires synthetic sandbox mode")
-	}
-	if err := settings.Validate(); err != nil {
-		return nil, true, err
-	}
-	if err := registrationClockPlatform(); err != nil {
+	if err := preflightRegistrationClock(registrationClockAppMode, cfg); err != nil {
 		return nil, true, err
 	}
 	if err := registrationClockDatabaseGuard(ctx, db, settings); err != nil {

@@ -155,6 +155,16 @@ func (p *PreparedCommand) captureNewAdmission(
 	if err != nil {
 		return Admission{}, err
 	}
+	if p.registrationClock != nil {
+		now, err = registrationTime(ctx, p.tx, p.registrationClock)
+		if err != nil {
+			return Admission{}, err
+		}
+		if !now.Before(p.event.finishes) {
+			return Admission{}, conflict("pass_event_finished")
+		}
+		state = newSnapshot(p.event, p.records, now)
+	}
 	var retired bool
 	if err = p.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.registration_intents WHERE event_id=$1 AND owner=$2 AND state='cancelled' AND closed_through_position >= $3)`, p.command.Event, p.actor, position).
 		Scan(&retired); err != nil {
@@ -168,6 +178,15 @@ func (p *PreparedCommand) captureNewAdmission(
 
 func (p *PreparedCommand) admissionPosition(ctx context.Context, ref *registrationingress.Reference) (int64, error) {
 	if ref == nil {
+		if p.registrationClock != nil {
+			position, received, err := registrationingress.ApplicationObservation(
+				registrationingress.WithClock(ctx, p.registrationClock), p.tx, p.actor, p.command.Event+":"+p.keyHash,
+			)
+			if err == nil {
+				p.nativeReceivedAt = &received
+			}
+			return position, err
+		}
 		return registrationingress.ApplicationPosition(
 			registrationingress.WithClock(ctx, p.registrationClock),
 			p.tx,

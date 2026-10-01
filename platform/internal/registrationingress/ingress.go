@@ -91,20 +91,42 @@ func TelegramPosition(ctx context.Context, tx pgx.Tx, ref Reference, sender int6
 }
 
 func ApplicationPosition(ctx context.Context, tx pgx.Tx, owner, key string) (int64, error) {
+	id, _, err := applicationObservation(ctx, tx, owner, key, false)
+	return id, err
+}
+
+// ApplicationObservation returns the immutable first reception from the same
+// allocator query. A conflict preserves that timestamp, even after clock advance.
+func ApplicationObservation(ctx context.Context, tx pgx.Tx, owner, key string) (int64, time.Time, error) {
+	return applicationObservation(ctx, tx, owner, key, true)
+}
+
+func applicationObservation(
+	ctx context.Context,
+	tx pgx.Tx,
+	owner, key string,
+	reception bool,
+) (int64, time.Time, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(782619)`); err != nil {
-		return 0, core.DatabaseOperationError(err)
+		return 0, time.Time{}, core.DatabaseOperationError(err)
 	}
 	observed, configured, err := observeContext(ctx)
 	if err != nil {
-		return 0, err
+		return 0, time.Time{}, err
 	}
 	var id int64
 	var received *time.Time
 	if configured {
 		received = &observed
 	}
-	err = tx.QueryRow(ctx, `INSERT INTO core.registration_ingress(kind,bot_id,request_key,owner,received_at)
+	query := `INSERT INTO core.registration_ingress(kind,bot_id,request_key,owner,received_at)
  VALUES('application',0,$1,$2,COALESCE($3::timestamptz,clock_timestamp())) ON CONFLICT(kind,bot_id,request_key,owner)
- DO UPDATE SET request_key=EXCLUDED.request_key RETURNING id`, key, owner, received).Scan(&id)
-	return id, core.DatabaseOperationError(err)
+ DO UPDATE SET request_key=EXCLUDED.request_key RETURNING id`
+	var first time.Time
+	if reception {
+		err = tx.QueryRow(ctx, query+",received_at", key, owner, received).Scan(&id, &first)
+	} else {
+		err = tx.QueryRow(ctx, query, key, owner, received).Scan(&id)
+	}
+	return id, first, core.DatabaseOperationError(err)
 }

@@ -81,14 +81,28 @@ func runCommand(
 	logger *slog.Logger,
 	cfg config.Config,
 	runtime *observability.Runtime,
+) error {
+	return runCommandWithDatabase(ctx, os.Args[1], logger, cfg, runtime, openRuntimeDatabase)
+}
+
+func runCommandWithDatabase(
+	ctx context.Context,
+	command string,
+	logger *slog.Logger,
+	cfg config.Config,
+	runtime *observability.Runtime,
+	openDatabase func(context.Context, config.Config, *observability.Runtime) (*pgxpool.Pool, error),
 ) (result error) {
-	if os.Args[1] == "model" {
+	if err := preflightRegistrationClock(command, cfg); err != nil {
+		return err
+	}
+	if command == "model" {
 		return runModel(ctx, logger, cfg, runtime)
 	}
 	var db *pgxpool.Pool
 	defer func() { result = errors.Join(result, closeRuntime(ctx, cfg, runtime, db)) }()
 	var e error
-	db, e = openRuntimeDatabase(ctx, cfg, runtime)
+	db, e = openDatabase(ctx, cfg, runtime)
 	if e != nil {
 		return e
 	}
@@ -98,7 +112,7 @@ func runCommand(
 	work := func(owned context.Context) error {
 		return runDatabaseCommand(owned, logger, cfg, runtime, db)
 	}
-	if role, admitted := commandRole(os.Args[1]); admitted {
+	if role, admitted := commandRole(command); admitted {
 		admission, configErr := admissionConfig(db)
 		if configErr != nil {
 			return configErr

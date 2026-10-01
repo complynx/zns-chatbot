@@ -159,3 +159,80 @@ func TestRegistrationClockPreparedCommandObservesAfterPrepare(t *testing.T) {
 	require.WithinDuration(t, observed, *booking.AssignedAt, 0)
 	require.NoError(t, tx.Commit(t.Context()))
 }
+
+func TestRegistrationClockApplicationAllocatorWait(t *testing.T) {
+	t.Parallel()
+	db, service := bookingFixture(t)
+	clock := &registrationClock{}
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&clock.now))
+	start := clock.now
+	service.RegistrationClock = clock
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	blocker, err := db.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = blocker.Rollback(context.WithoutCancel(t.Context())) })
+	_, err = blocker.Exec(ctx, `SELECT pg_advisory_xact_lock(782619)`)
+	require.NoError(t, err)
+	type captured struct {
+		admission passbooking.Admission
+		err       error
+	}
+	result := make(chan captured, 1)
+	go func() {
+		admission, captureErr := service.CaptureAdmission(ctx, "alice", passbooking.AdmissionRequest{
+			Command: bookingCommand("solo", "clock-allocator-wait", passbooking.Booking{}),
+		})
+		result <- captured{admission: admission, err: captureErr}
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		queryErr := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+ WHERE datname=current_database() AND wait_event='advisory' AND query='SELECT pg_advisory_xact_lock(782619)')`).
+			Scan(&waiting)
+		return queryErr == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond, "real capture waits on the allocator")
+	advanced := start.Add(11 * time.Minute)
+	clock.advance(advanced)
+	require.NoError(t, blocker.Commit(ctx))
+	var outcome captured
+	select {
+	case outcome = <-result:
+	case <-ctx.Done():
+		t.Fatal("capture did not complete after allocator release")
+	}
+	require.NoError(t, outcome.err)
+	var received, checked, deadline time.Time
+	require.NoError(t, db.QueryRow(ctx, `SELECT g.received_at,i.checked_at,i.turn_expires_at
+ FROM core.registration_intents i JOIN core.registration_ingress g ON g.id=i.ingress_id WHERE i.id=$1`, outcome.admission.ID).
+		Scan(&received, &checked, &deadline))
+	require.WithinDuration(t, advanced, received, 0)
+	require.WithinDuration(t, advanced, checked, 0)
+	require.WithinDuration(t, received.Add(10*time.Minute), deadline, 0)
+	clock.advance(advanced.Add(time.Minute))
+	replayed, err := service.CaptureAdmission(ctx, "alice", passbooking.AdmissionRequest{
+		Command: bookingCommand("solo", "clock-allocator-wait", passbooking.Booking{}),
+	})
+	require.NoError(t, err)
+	require.Equal(t, outcome.admission.ID, replayed.ID)
+	var unchanged time.Time
+	require.NoError(t, db.QueryRow(ctx, `SELECT checked_at FROM core.registration_intents WHERE id=$1`, replayed.ID).
+		Scan(&unchanged))
+	require.WithinDuration(t, checked, unchanged, 0, "existing admission is never restamped")
+	var key string
+	require.NoError(
+		t,
+		db.QueryRow(ctx, `SELECT request_key FROM core.registration_ingress WHERE id=$1`, replayed.Position).
+			Scan(&key),
+	)
+	tx, err := db.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
+	position, firstReceived, err := registrationingress.ApplicationObservation(
+		registrationingress.WithClock(ctx, clock), tx, "alice", key,
+	)
+	require.NoError(t, err)
+	require.Equal(t, replayed.Position, position)
+	require.WithinDuration(t, received, firstReceived, 0, "allocator conflict returns immutable first reception")
+	require.NoError(t, tx.Commit(ctx))
+}

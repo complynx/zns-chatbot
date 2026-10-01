@@ -3,15 +3,19 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/config"
+	"github.com/complynx/zns-chatbot/platform/internal/observability"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationclock"
 )
 
@@ -86,6 +90,59 @@ func TestRegistrationClockDecodeIsBoundedAndStrict(t *testing.T) {
 	settings = clockSettings()
 	settings.Anchor = "2026-10-01T12:00:00.000000001Z"
 	require.Error(t, settings.Validate())
+}
+
+func TestRegistrationClockDecodeRequiresExactUniqueFields(t *testing.T) {
+	t.Parallel()
+	settings := clockSettings()
+	anchor, err := settings.AnchorTime()
+	require.NoError(t, err)
+	raw, err := json.Marshal(clockState(t, anchor, 1))
+	require.NoError(t, err)
+	valid := string(raw)
+	for name, malformed := range map[string]string{
+		"duplicate-version": strings.Replace(valid, `"version":1`, `"version":0,"version":1`, 1),
+		"duplicate-current": strings.Replace(valid, `"current":`, `"current":null,"current":`, 1),
+		"wrong-case":        strings.Replace(valid, `"version":`, `"VERSION":`, 1),
+		"missing":           strings.Replace(valid, `"version":1,`, "", 1),
+		"unknown":           strings.Replace(valid, `"version":1`, `"version":1,"extra":true`, 1),
+		"trailing":          valid + `{}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, decodeErr := registrationclock.Decode([]byte(malformed))
+			require.Error(t, decodeErr)
+		})
+	}
+	decoded, err := registrationclock.Decode(raw)
+	require.NoError(t, err)
+	require.NoError(t, decoded.Validate(settings))
+}
+
+func TestRegistrationClockStartupPreflightPrecedesDatabase(t *testing.T) {
+	settings := clockSettings()
+	for key, value := range map[string]string{
+		"REGISTRATION_CLOCK_FILE": settings.File, "REGISTRATION_CLOCK_INSTALLATION": settings.Installation,
+		"REGISTRATION_CLOCK_CASE": settings.Case, "REGISTRATION_CLOCK_DATABASE_ADDRESS": settings.DatabaseAddress,
+		"REGISTRATION_CLOCK_ANCHOR": settings.Anchor,
+	} {
+		t.Setenv(key, value)
+	}
+	opened := false
+	opener := func(context.Context, config.Config, *observability.Runtime) (*pgxpool.Pool, error) {
+		opened = true
+		return nil, io.ErrUnexpectedEOF
+	}
+	cfg := config.Config{Env: "sandbox", SyntheticOnly: true}
+	if runtime.GOOS != "linux" {
+		err := runCommandWithDatabase(t.Context(), registrationClockAppMode, nil, cfg, nil, opener)
+		require.ErrorContains(t, err, "requires Linux UID guards")
+		require.False(t, opened, "actual startup must not open, ping or admit the database")
+	}
+	t.Setenv("REGISTRATION_CLOCK_CASE", "wrong-case")
+	err := runCommandWithDatabase(t.Context(), registrationClockAppMode, nil, cfg, nil, opener)
+	require.Error(t, err)
+	require.False(t, opened)
 }
 
 func TestRegistrationClockConfigurationIsOptIn(t *testing.T) {

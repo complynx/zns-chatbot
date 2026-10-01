@@ -14,6 +14,7 @@ import (
 )
 
 const Bytes = 4096
+const stateFields = 8
 const Horizon = 60 * time.Hour
 const Installation = "010400000204"
 const Case = "c-registration-clock-20261001-v1"
@@ -74,6 +75,9 @@ func Decode(raw []byte) (State, error) {
 	if len(raw) > Bytes {
 		return state, errors.New("registration clock state exceeds bound")
 	}
+	if err := exactStateFields(raw); err != nil {
+		return state, err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&state); err != nil {
@@ -84,6 +88,44 @@ func Decode(raw []byte) (State, error) {
 	}
 	state.digest = sha256.Sum256(raw)
 	return state, nil
+}
+
+// Inspect the token stream before struct decoding, which otherwise accepts
+// duplicate names and case-insensitive field matches.
+func exactStateFields(raw []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return errors.New("registration clock state requires an object")
+	}
+	seen := make(map[string]bool, stateFields)
+	for decoder.More() {
+		token, tokenErr := decoder.Token()
+		if tokenErr != nil {
+			return fmt.Errorf("decode registration clock field: %w", tokenErr)
+		}
+		key, ok := token.(string)
+		if !ok || seen[key] {
+			return errors.New("registration clock state has a duplicate field")
+		}
+		switch key {
+		case "version", "installation", "case", "stand", "database_address", "anchor", "current", "revision":
+			seen[key] = true
+		default:
+			return errors.New("registration clock state has an unknown field")
+		}
+		var value json.RawMessage
+		if err = decoder.Decode(&value); err != nil {
+			return fmt.Errorf("decode registration clock field value: %w", err)
+		}
+	}
+	if _, err = decoder.Token(); err != nil {
+		return fmt.Errorf("decode registration clock object: %w", err)
+	}
+	if len(seen) != stateFields {
+		return errors.New("registration clock state requires all eight fields")
+	}
+	return nil
 }
 
 func (s State) Validate(settings Settings) error {
