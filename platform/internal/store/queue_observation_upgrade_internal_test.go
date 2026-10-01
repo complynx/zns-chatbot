@@ -219,13 +219,13 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	const lastOld = "087_telegram_inbox_retries.sql"
 	const upgrade = "088_delivery_queue_observation.sql"
 	const credit = "089_credit_usage_observation.sql"
-	const current = passDeliveryTargetsUpgrade
+	const current = deliveryResolutionUpgrade
 	foundOld, foundUpgrade := false, false
 	expectedOldLedger := make([]queueUpgradeLedgerEntry, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Name() > current {
 			t.Fatalf(
-				"upgrade proof is pinned to the 090 embedded schema epoch; newer migration %s requires a new scoped fixture",
+				"upgrade proof is pinned to the 092 embedded schema epoch; newer migration %s requires a new scoped fixture",
 				entry.Name(),
 			)
 		}
@@ -276,12 +276,16 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		append([]queueUpgradeLedgerEntry(nil), expectedOldLedger...),
 		queueUpgradeLedgerEntry{Name: upgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(upgradeBody))},
 	)
+	passBody, err := migrations.ReadFile("migrations/" + passDeliveryTargetsUpgrade)
+	require.NoError(t, err)
 	currentBody, err := migrations.ReadFile("migrations/" + current)
 	require.NoError(t, err)
 	creditBody, err := migrations.ReadFile("migrations/" + credit)
 	require.NoError(t, err)
 	expectedUpgradedLedger = append(expectedUpgradedLedger,
 		queueUpgradeLedgerEntry{Name: credit, Checksum: fmt.Sprintf("%x", sha256.Sum256(creditBody))})
+	expectedUpgradedLedger = append(expectedUpgradedLedger,
+		queueUpgradeLedgerEntry{Name: passDeliveryTargetsUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(passBody))})
 	expectedUpgradedLedger = append(expectedUpgradedLedger,
 		queueUpgradeLedgerEntry{Name: current, Checksum: fmt.Sprintf("%x", sha256.Sum256(currentBody))})
 	var hadTimestamp bool
@@ -314,8 +318,14 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		t,
 		expectedUpgradedLedger,
 		queueUpgradeLedger(t, db),
-		"only actual 088, 089 and 090 ledger entries are added; old entries remain exact",
+		"only actual 088, 089, 090 and 092 ledger entries are added; old entries remain exact",
 	)
+	var captures, resolutions int64
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT
+ (SELECT count(*) FROM bot.delivery_attempts),(SELECT count(*) FROM bot.delivery_resolutions)`).
+		Scan(&captures, &resolutions))
+	require.Zero(t, captures, "upgrade must not invent original attempt capture")
+	require.Zero(t, resolutions, "upgrade must not invent operator evidence")
 	require.JSONEq(
 		t,
 		oldLedgerSnapshot,
@@ -379,6 +389,11 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	require.Equal(t, original, retained, "retry projection retains the initial enqueue age")
 	replayState := queueUpgradeState(t, db, true)
 	require.NoError(t, Migrate(t.Context(), db), "restart migration is idempotent")
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT
+ (SELECT count(*) FROM bot.delivery_attempts),(SELECT count(*) FROM bot.delivery_resolutions)`).
+		Scan(&captures, &resolutions))
+	require.Zero(t, captures, "replay must not invent original attempt capture")
+	require.Zero(t, resolutions, "replay must not invent operator evidence")
 	require.JSONEq(t, replayState, queueUpgradeState(t, db, true),
 		"replay preserves every durable scheduling and receipt field")
 	require.Equal(
