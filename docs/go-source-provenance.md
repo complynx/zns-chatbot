@@ -2,7 +2,7 @@
 
 ## Current integration — 2026-10-01
 
-Last integrated source merge is Gitbd150d5b1b6f91977d1597686e889543dab22330. Runtime14 candidate2a9db430 (QA264) merged conflict-free; no source rewrite. Root three fixture top-level tests and subcases passed,12PASS events including two packages,0FAIL/SKIP. Developer actual Linux PG role/inventory/negative/persistence gates passed; managedC204 and clock operator successor remain pending. C clock40, payment7 and model10 are separate unmerged candidates; ce427 images do not certify this source.
+Last integrated source merge is Git7ff6659bcc8095b17cd41bb34f678e486470bf00. Model10 immutable482214b4 (freshQA270PASS) merged without conflicts after author codegates and rootactualPG failure/reboot7.952s. All ten integrated blobs match immutable review; root7unit top-level/14PASSevents0FAILSKIP10.972s. Provider controls do not establish businessF08/Functional acceptance. Previous productmergebd150d5b includes runtime14. Runtime14 candidate2a9db430 (QA264) merged conflict-free; no source rewrite. Root three fixture top-level tests and subcases passed,12PASS events including two packages,0FAIL/SKIP. Developer actual Linux PG role/inventory/negative/persistence gates passed; managedC204 and clock operator successor remain pending. C clock40 and payment7 are separate unmerged candidates; model10 is integrated; ce427 images do not certify this source.
 E rehearsal tool4088372d (QA259,tenpaths) merged without conflicts. Root actual
 22 offline Python guards passed. This adds rehearsal tooling, not runtime product
 dependencies; actual final import/removal and frozen090/091 epoch remain open.
