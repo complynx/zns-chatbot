@@ -480,3 +480,28 @@ sole55432 allocated, tests queued/notPASS. Operator5 three local Linuxlint findi
 fixed without suppressions; final native/Linuxrace rerunning, no immutablehandoff.
 C27 offlineprepare pending. Counter253next254/queue0/0/0/return12 unchanged. All40
 FQA obligations remain. Import observedwait3h30m56s, unknown earlier start. Pause.
+
+## New review batch observation: 2026-10-01T02:18:03Z
+
+Committed81133f9f includes113 old events; root docs head81133, last product5057
+unchanged. Read focused10 report: exact5057 terminal167.516s exit1,9PASS1FAIL0SKIP,
+zero unfinished. Seven role scenarios pass after roles-only bootstrap; Meal7.76s
+and Large59.34s pass. DeletedPayment order_not_found remainsFAIL. Actual run ended
+2026-10-01T01:42:17.6881711Z, recorded separately from observation. No fullbaseline
+or root-cause proof;58441 released after focused and rolecontrol developer.
+
+Roles67206220/base81133 complete fivepaths clean/nativeunits/PG/pinnedlintfmtPASS,
+freshQA255 running. E44058ee7/base5057 tenpaths22offlineguards/builds/lint/12compiled
+negative testsPASS, freshQA256 running, no liveE. Counter256next257 allCodex, queue
+0/2/0. C27 50a1222e QA254FAIL three findings: startupDB before platform rejection,
+postallocator clock capture, strict duplicate/case decoder. Sameauthor narrowfixes
+active, awaiting55432 menu. Returncount13, past failures historical.
+
+Menu ebe2dddd/base5057 exactnative botdelivery3.510/store14.557/integration185.945s
+PASS/fullunits/lint0/fmt/sqlcPASS; realLinuxrace61456 active sole55432, NONTERMINAL.
+Job3c83eafb interim19localgatesPASS/released55432, finalreview waits integratedreviewedC.
+Operator7841e785 fivepaths exactLinuxrace53882PASS, Windows/Linuxunits/lint0/fmtPASS,
+waits reviewed C integration. Neither dependent candidate is finalready handoff.
+Lead nine-template read-only plan complete, templates/resources not started or
+approved. All40/FQA/parity/fullbaseline open, productionNO-GO, TGaccountID only
+userchoice. Import ongoing observedwait4h13m10s, historical start unknown. Pause.

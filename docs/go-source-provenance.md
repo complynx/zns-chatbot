@@ -3,7 +3,7 @@
 ## Current integration — 2026-10-01
 
 Last functional product merge is Git5057ddb0547f5b099459fe3d321c04a7c4490c90.
-Subsequent product-source commitff575042 changes only three Prettier formatting
+Earlier formatting commitff575042 changes only three Prettier formatting
 files (Compose quotes, replacement JSON indentation, documentation blank line);
 there is no Go logic, schema or runtime value change. Whole-source raw hashes
 still differ and final build inventories must include this formatting commit.

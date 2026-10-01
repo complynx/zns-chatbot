@@ -5,29 +5,32 @@ source diagnostics QA243, registration fixture QA245 and HTTP observations
 QA248 and update diagnostics QA253. Root focused integrated checks and full pinned JS gates passed;
 Functional images remain sealedce427 and do not certify the newer source.
 
-Menu090 successor74ab passed scoped actual native PostgreSQL and Linux race;
-fresh whole23-path Code QA251 found an aggregate source-budget regression.
-Author is correcting it; no merge yet. Job
-successor failed QA249; developer owns bounded original ingress proof and
-keyboard correction (19 paths, additive091 reserved). E eight-path rehearsal
-successor failed QA250 before-owner binding and importer SSL-fallback guards;
-successorbc85851d failed QA252 because owner SQL bypasses the bound
-loopback transport. Corrective ownership transferred to D after repeated reviews. No rejected candidate is merged.
+Menu090 predecessor74ab failed independent QA251 on aggregate source budgets.
+Successor ebe2,24 paths, passed exact native PostgreSQL and all offline gates;
+actual Linux PostgreSQL race is running. Menu owns exclusive55432 until release.
+Job19 interim3c83 passed affected native PG and local gates; final source/review
+wait on integrated reviewed C ingress. Neither candidate is merged.
 
-Three capability lanes are active: registration-domain clock (C27 paths),
-incoming-update diagnostics (D3 paths, QA253 PASS and merged), and Linux atomic clock operator
-(engineer5 paths). Separate worktrees preserve ownership; overlapping ingress
-changes require developer merge preparation before review. C owns developer
-PostgreSQL55432 after menu released it. New C installation204 is verified
-unused; E retains203. No C clock stand resources are started.
+C27 clock50a failed fresh QA254 on startup ordering, post-allocator observation
+and strict state decoding. Author corrects same scope, next native window queued.
+Operator5 immutable7841 passed actual offline Linux race and both-platform lint;
+final dependency/base preparation waits reviewed C. Fixed fixture role controls
+67206220,5 paths, passed local/native PG and are under fresh independent QA255.
+E10 native SQL owner successor44058ee7 is under fresh QA256 after offline guards,
+compiled rejection proofs/builds and lint. No live E write/removal is accepted.
+Engineer prepares ten explicit registration stand files in a separate branch,
+using existing private-secret psql bootstrap mechanism. No resources/builds/start
+are authorized by template preparation; installation204 stays unstarted.
 
-Two scoped EN/RU Functional runs on ce427 completed and were released with
-state preserved; all40 original whole-stage obligations remain open. Full
-baseline09 terminal result binds0070 on separate58441; observed missing-role
-prerequisites and payment failure are preserved, with no mid-run repair or
-terminal whole-suite claim. Final E apply/removal and current runtime/UI
-acceptance remain outstanding. Telegram test-account ID is in PROGRESS;
-independent work continues. Production NO-GO. Counter253, next254, all Codex.
+Two scoped EN/RU Functional runs on ce427 completed and were released with state
+preserved; all40 original whole-stage obligations remain open. Full baseline09
+failed on0070; focused10 on5057 completed9PASS1FAIL0SKIP, seven role prerequisites
+and Meal/Large passed, DeletedPayment failed. This does not accept a full suite
+or establish a cause/fix for the earlier Meal failure.58441 was released after
+focused10 and separate role-control developer gates. Final E/runtime/UI/parity
+and broad final-source acceptance remain outstanding. Telegram account ID is in
+PROGRESS; independent work continues. Production NO-GO. Counter256,next257,
+all Codex under override, no Claude probe.
 
 ## Historical integrated snapshot — 2026-10-01, ce427ca5
 

@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through253, next254. All authorship/routes Codex under override;
+Fresh requests through256, next257. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -52,20 +52,23 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 
 | 253 | Incoming update safe failure observation | Codex author, Codex override; PASS808b284c/base91ff00f1,3paths. Independent units/pinnedlintfmt passed; merged5057ddb0, rootfocused2packagesPASS; Functional open |
 
-Current coordination (1 October, source5057ddb0): two scoped source-blind
-Functional runs completed on sealedce427ca5; states preserved and released.
-Whole C–E and agent registration acceptance remain open. Root merged
-QA241/243/245/248/253; current fresh counter253, next254. C owns27-path domain
-clock; native new3 and default22 events passed, window released; final offline
-merge preparation against5057 pending. Engineer owns5-path atomic operator,
-real offline Linux race passed but reviewed integratedC dependency still pending.
-E guard failed QA252 and corrective10-path ownership transferred to D;
-native Go SQL client replaces absent nativepsql, no alternate Docker authority.
-Job19 typed ingress proof owns exclusive developer55432; menu24 correction
-waits that window, original74ab and QA251 failure preserved. Baseline09 terminal:
-platform4108PASS/9FAIL/27SKIP plus1131unfinished, importer366PASS/0FAIL/1SKIP;
-2200source and88migration hashes unchanged,58441 released to lead. Lead
-roles-only prerequisite bootstrap authorized; no fullbaseline10 launched.
+| 254 | Complete registration-domain clock and fixed synthetic reader | Codex author, Codex override; allocated before dispatch50a1222e/base5057ddb0,27paths. Native3clock+22defaultPG PASS; units978PASS92SKIP; Windows/Linux pinnedlintfmt/sqlc/build passed. Independent FAIL: startup DB-before-platform rejection, stale allocator capture and duplicate/wrong-case state keys. Author correcting same27 paths; actual Linux reader/operator/FQA still open |
+
+| 255 | Fixed registration fixture role controls | Codex author, Codex override; allocated before dispatch67206220/base81133f9f,5paths. Fresh independent review pending; Functional open |
+| 256 | Complete E native owner SQL transport and bound rehearsal | Codex author, Codex override; allocated before dispatch44058ee7/base5057ddb0,10paths. Fresh independent review pending; actual E acceptance open |
+
+Current coordination (1 October, product source5057ddb0, docs81133f9f):
+two scoped source-blind Functional runs completed on sealedce427ca5; preserved.
+Whole C–E and all40 complete acceptance rows remain open. Fresh counter256,
+next257, Codex override. QA254 FAIL: same C author correcting27 paths; no merge.
+QA255 roles67206220 fivepaths and QA256 E44058ee7 tenpaths independently running.
+Operator7841 fivepaths passed actual Linux race, awaits reviewed integrated C.
+Menu24ebe2 exact native gates PASS; Linux race running, sole developer55432.
+Job19interim3c83 local gates PASS; final source preparation waits reviewed C.
+Baseline09 full failure remains; focused10 on5057 terminal9PASS1FAIL0SKIP,
+seven role scenarios, Meal and Large PASS; DeletedPayment fails.58441 released.
+Registration role capability finished its own actual PG gate and released58441.
+Engineer prepares separate nine-file registration templates, no resource writes.
 Kanban manager owns board/CSV/metrics; root owns integration/PROGRESS.
 Historical paragraphs below do not describe current ownership or readiness.
 
