@@ -66,13 +66,14 @@ func (e *replacementAdmissionEngine) Remove(context.Context, []replacement.Conta
 }
 
 type replacementAdmissionJournal struct {
-	replacement.FileJournal
-
+	journal replacement.FileJournal
 	running func() error
 }
 
+func (j replacementAdmissionJournal) Load() (replacement.Ledger, error) { return j.journal.Load() }
+
 func (j replacementAdmissionJournal) Save(ledger replacement.Ledger) error {
-	if err := j.FileJournal.Save(ledger); err != nil {
+	if err := j.journal.Save(ledger); err != nil {
 		return err
 	}
 	if ledger.State == replacement.StateRunning {
@@ -143,7 +144,7 @@ func TestRuntimeReplacementActiveAdmissionLoss(t *testing.T) {
 		}
 	}()
 	journal := replacementAdmissionJournal{
-		FileJournal: {Directory: t.TempDir()},
+		journal: replacement.FileJournal{Directory: t.TempDir()},
 		running: func() error {
 			_, terminateErr := db.Exec(
 				ctx,
