@@ -17,6 +17,98 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
+func TestPassCleanupPreservesNewerSameTargetManualPayload(t *testing.T) {
+	t.Parallel()
+	for _, origin := range []string{"manual", "home"} {
+		t.Run(origin, func(t *testing.T) {
+			t.Parallel()
+			runPassCleanupNewerPayload(t, origin)
+		})
+	}
+}
+
+func runPassCleanupNewerPayload(t *testing.T, origin string) {
+	t.Helper()
+	f := passMenuFixture(t)
+	handlePassVisible(t, f, message(73100, 101, "/passes"))
+	target := passMenuCard(t, f, 101).ID
+	run := runPassVM(t, f, 73101, 101, "Show my pass",
+		`return tools.passes.registration.show({event:"dance",view:"home"});`)
+	require.Empty(t, run.Error)
+	_, err := f.db.Exec(t.Context(), `INSERT INTO core.pass_payment_admins(event_id,owner) VALUES('dance','alice');
+ UPDATE bot.pass_views SET state=jsonb_set(state,'{view}','"payment_queue"') WHERE owner='alice'`)
+	require.NoError(t, err)
+	original := pendingPassReceipt(t, f)
+	drainOtherPassFixtureIntents(t, f)
+	f.b.Host.HTTP = &http.Client{Transport: passDeliveryTransport(func(request *http.Request) (*http.Response, error) {
+		if request.URL.Path == "/internal/bot-delivery/receipt" {
+			return nil, io.EOF
+		}
+		return http.DefaultTransport.RoundTrip(request)
+	})}
+	require.Error(t, f.b.DeliverBotIntent(t.Context(), original.QueueReference()))
+	f.b.Host.HTTP = nil
+	sent, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, original.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Succeeded, sent.State)
+	require.False(t, sent.ContinuationDone)
+	require.Equal(t, target, sent.MessageID)
+	require.Equal(t, "proof_accept", sent.Receipt.Pass.Capability)
+	if origin == "manual" {
+		require.NoError(t, f.b.Handle(t.Context(), message(73102, 101, "/passes")))
+	} else {
+		newRun := runPassVM(t, f, 73102, 101, "Show my pass independently",
+			`return tools.passes.registration.show({event:"dance",view:"home"});`)
+		require.Empty(t, newRun.Error)
+	}
+	manual := pendingPassReceipt(t, f)
+	if origin == "manual" {
+		require.Nil(t, manual.Reference.Source)
+	} else {
+		require.NotNil(t, manual.Reference.Source)
+	}
+	require.Equal(t, target, manual.Target)
+	_, err = f.db.Exec(t.Context(), `DELETE FROM core.pass_payment_admins WHERE event_id='dance' AND owner='alice'`)
+	require.NoError(t, err)
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), original.QueueReference()))
+	drainOtherPassFixtureIntents(t, f)
+	var operation, effect string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT operation_key,effect_key FROM bot.delivery_intents
+ WHERE reference->>'family'=$1 AND target_message_id=$2`, botdelivery.PassReceiptRedactionFamily, target).
+		Scan(&operation, &effect))
+	cleanup := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), cleanup))
+	// FIFO admits the queued manual card first; cleanup cannot edit the old parent yet.
+	beforeManual, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, cleanup, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Deferred, beforeManual.State)
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), manual.QueueReference()))
+	actualManual, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, manual.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Succeeded, actualManual.State)
+	newCard := passMenuCard(t, f, 101)
+	require.Equal(t, target, newCard.ID)
+	require.NotEmpty(t, newCard.Markup.Rows)
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), cleanup))
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), cleanup))
+	require.Equal(t, newCard, passMenuCard(t, f, 101))
+	retired, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, cleanup, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Cancelled, retired.State)
+	require.Zero(t, retired.Attempt)
+	var callbacks int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.pass_buttons
+ WHERE owner='alice' AND revision=$1`, manual.Reference.Revision).Scan(&callbacks))
+	require.Positive(t, callbacks)
+	var hash string
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT view_hash FROM bot.pass_views WHERE owner='alice'`).Scan(&hash),
+	)
+	require.Equal(t, actualManual.Receipt.ViewHash, hash)
+	require.NoError(t, f.b.Handle(t.Context(), aliceCallback(73103, target, newCard.Markup.Rows[0][0].Data)))
+}
+
 func pendingPassReceipt(t *testing.T, f *fixture) botdelivery.Intent {
 	t.Helper()
 	var operation, effect string

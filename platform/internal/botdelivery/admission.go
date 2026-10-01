@@ -299,11 +299,17 @@ func (s Service) payloadFamily(ctx context.Context, tx pgx.Tx, i Intent, exportE
 	renderedPass ...*PassCardReceipt,
 ) (familyRead, []readsource.Authority, *PassCardReceipt, bool, error) {
 	f, refs, err := s.prepareFamily(ctx, tx, i, exportEvents)
-	viewStale := i.Reference.Family == familyPasses && i.Reference.Source != nil && errors.Is(err, ErrStale)
+	viewStale := i.Reference.Family == familyPasses &&
+		(i.Reference.Source != nil || validPassReceipt(i)) && errors.Is(err, ErrStale)
 	if err != nil && !viewStale {
 		return f, refs, nil, viewStale, familyMissing(err)
 	}
 	binding := i.Receipt.Pass
+	if binding == nil && validPassReceipt(i) {
+		// Old successful cards retain authority in their immutable Reference.
+		// They never persisted a rendered capability. Do not adopt the new view.
+		binding = &PassCardReceipt{PreviousMessageID: passPreviousTarget(i)}
+	}
 	if len(renderedPass) != 0 {
 		// The payload authority survives a replaced or missing mutable projection.
 		binding = renderedPass[0]

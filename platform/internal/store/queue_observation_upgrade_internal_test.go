@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,8 +16,167 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
+
+func TestPredecessorPassReceiptAuthorityAcross090(t *testing.T) {
+	t.Parallel()
+	for _, upgraded := range []bool{false, true} {
+		for _, denied := range []bool{false, true} {
+			t.Run(fmt.Sprintf("upgraded_%t_denied_%t", upgraded, denied), func(t *testing.T) {
+				t.Parallel()
+				runPredecessorPassReceiptAuthority(t, upgraded, denied, "")
+			})
+		}
+	}
+}
+
+func TestPredecessorPassReceiptRejectsMalformedAndForeignPayload(t *testing.T) {
+	t.Parallel()
+	for _, corruption := range []string{"bad_hash", "foreign_card", "lost_pass"} {
+		t.Run(corruption, func(t *testing.T) {
+			t.Parallel()
+			runPredecessorPassReceiptAuthority(t, true, false, corruption)
+		})
+	}
+}
+
+func runPredecessorPassReceiptAuthority(t *testing.T, upgraded, denied bool, corruption string) {
+	t.Helper()
+	db := creditObservationUpgradeDatabase(t)
+	applyCreditObservationPredecessor(t, db)
+	generation := int64(0)
+	source := &readsource.Derivation{Generation: &generation, Authorities: []readsource.Authority{}}
+	// These are exactly the four fields written by the predecessor pass producer.
+	// Fresh canonical rendering could change its hash and callback tokens.
+	old := botdelivery.Continuation{Kind: "pass_card", Revision: 1,
+		ViewHash: strings.Repeat("a", 64), Tokens: []string{strings.Repeat("b", 32)}}
+	ref := botdelivery.Reference{Kind: botdelivery.CardIntent, Family: "passes", CardKey: "passes",
+		Revision: 1, Generation: &generation, Source: source, Continuation: old}
+	if corruption == "foreign_card" {
+		ref.CardKey = "orders"
+	}
+	if corruption == "lost_pass" {
+		ref.Continuation.Pass = &botdelivery.PassCardReceipt{}
+	}
+	refRaw, err := json.Marshal(ref)
+	require.NoError(t, err)
+	old.ViewHash = strings.Repeat("c", 64)
+	if corruption == "bad_hash" {
+		old.ViewHash = "invalid"
+	}
+	old.Tokens = []string{strings.Repeat("d", 32)}
+	receiptRaw, err := json.Marshal(old)
+	require.NoError(t, err)
+	_, err = db.Exec(
+		t.Context(),
+		`INSERT INTO core.users(id,telegram_id,name) VALUES('old-pass-owner',101,'Synthetic')`,
+	)
+	require.NoError(t, err)
+	_, err = db.Exec(
+		t.Context(),
+		`INSERT INTO bot.delivery_intents(bot_id,operation_key,effect_key,owner,chat_id,reference,state,phase,
+ message_id,target_message_id,attempt,receipt,continuation_done)
+ VALUES(4242,'old-pass','view','old-pass-owner',101,$1,'sent','edit',42,42,1,$2,true)`,
+		refRaw,
+		receiptRaw,
+	)
+	require.NoError(t, err)
+	_, err = db.Exec(t.Context(), `INSERT INTO bot.pass_buttons(owner,token,revision,action)
+ VALUES('old-pass-owner',$1,1,'{}')`, old.Tokens[0])
+	require.NoError(t, err)
+	var savedReference, savedReceipt string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT reference::text,receipt::text FROM bot.delivery_intents
+ WHERE operation_key='old-pass'`).Scan(&savedReference, &savedReceipt))
+	ledger := queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql")
+	if upgraded {
+		require.NoError(t, Migrate(t.Context(), db))
+		checkPassDeliveryTargetsUpgrade(t, db)
+		require.Equal(t, ledger, queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql"))
+	}
+	var actualReference, actualReceipt string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT reference::text,receipt::text FROM bot.delivery_intents
+ WHERE operation_key='old-pass'`).Scan(&actualReference, &actualReceipt))
+	require.Equal(t, savedReference, actualReference)
+	require.Equal(t, savedReceipt, actualReceipt)
+	s := botdelivery.Service{DB: db, Delivery: delivery.Settings{BotID: 4242,
+		BotInterval: time.Millisecond, ChatInterval: time.Millisecond, Fallback: time.Second}}
+	require.NoError(t, s.StorePassMenu(t.Context(), botdelivery.PassMenuRequest{Owner: "old-pass-owner",
+		Chat: 101, Revision: 2, State: interaction.RegistrationMenu{View: "events"}, Source: source}))
+	_, err = db.Exec(t.Context(), `UPDATE bot.pass_views SET message_id=42 WHERE owner='old-pass-owner'`)
+	require.NoError(t, err)
+	fresh := ref
+	fresh.CardKey = "passes"
+	fresh.Revision = 2
+	fresh.Continuation = botdelivery.Continuation{Kind: "pass_card", Revision: 2,
+		ViewHash: strings.Repeat("e", 64), Pass: &botdelivery.PassCardReceipt{PreviousMessageID: 42}}
+	require.NoError(t, s.EnqueueCard(t.Context(), botdelivery.CardRequest{Owner: "old-pass-owner", Chat: 101,
+		Target: 42, Reference: fresh}))
+	var operation string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT operation_key FROM bot.delivery_intents
+ WHERE state='pending' AND reference->>'family'='passes'`).Scan(&operation))
+	pending, err := botdelivery.Read(t.Context(), db, 4242,
+		delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: "view"}, false)
+	require.NoError(t, err)
+	if denied {
+		_, err = db.Exec(
+			t.Context(),
+			`INSERT INTO core.conversation_history_generations(owner,generation) VALUES('old-pass-owner',1)`,
+		)
+		require.NoError(t, err)
+	}
+	result, err := s.Begin(t.Context(), botdelivery.BeginRequest{Observed: pending, Target: 42,
+		Pass: &botdelivery.PassCardReceipt{PreviousMessageID: 42}})
+	if corruption != "" {
+		require.ErrorIs(t, err, botdelivery.ErrBinding)
+		unchanged, readErr := botdelivery.Read(t.Context(), db, 4242, pending.QueueReference(), false)
+		require.NoError(t, readErr)
+		require.Equal(t, delivery.Deferred, unchanged.State)
+		require.Zero(t, unchanged.Attempt)
+		return
+	}
+	require.NoError(t, err)
+	require.Equal(t, !denied, result.Ready)
+	if !denied {
+		require.Equal(t, delivery.Sending, result.Intent.State)
+		require.Equal(t, int64(42), result.Intent.Target)
+		require.NotNil(t, result.Intent.Receipt.Pass)
+	} else {
+		require.Equal(t, delivery.Cancelled, result.Intent.State)
+		require.Zero(t, result.Intent.Attempt)
+		var cleanupOperation string
+		require.NoError(t, db.QueryRow(t.Context(), `SELECT operation_key FROM bot.delivery_intents
+ WHERE reference->>'family'=$1`, botdelivery.PassReceiptRedactionFamily).Scan(&cleanupOperation))
+		cleanup, readErr := botdelivery.Read(t.Context(), db, 4242,
+			delivery.Reference{Owner: delivery.Bot, Key: cleanupOperation, Effect: "view"}, false)
+		require.NoError(t, readErr)
+		admitted, beginErr := s.Begin(t.Context(), botdelivery.BeginRequest{Observed: cleanup, Target: 42})
+		require.NoError(t, beginErr)
+		require.True(t, admitted.Ready)
+		require.Equal(t, "edit", admitted.Intent.Phase)
+		require.Equal(t, int64(42), admitted.Intent.Target)
+		var callbacks int
+		require.NoError(
+			t,
+			db.QueryRow(t.Context(), `SELECT count(*) FROM bot.pass_buttons WHERE owner='old-pass-owner'`).
+				Scan(&callbacks),
+		)
+		require.Zero(t, callbacks)
+	}
+	replay, err := s.Begin(t.Context(), botdelivery.BeginRequest{Observed: pending, Target: 42,
+		Pass: &botdelivery.PassCardReceipt{PreviousMessageID: 42}})
+	require.NoError(t, err)
+	require.False(t, replay.Ready)
+	previous, err := botdelivery.Read(t.Context(), db, 4242,
+		delivery.Reference{Owner: delivery.Bot, Key: "old-pass", Effect: "view"}, false)
+	require.NoError(t, err)
+	require.NoError(t, s.ApplyReceipt(t.Context(), botdelivery.ReceiptRequest{Observed: previous}))
+	require.Nil(t, previous.Receipt.Pass)
+	require.Equal(t, old, previous.Receipt)
+}
 
 func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	t.Parallel()

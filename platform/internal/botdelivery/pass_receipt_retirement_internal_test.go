@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -15,6 +16,47 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
+
+func TestPredecessorPassReceiptRequiresTrustedCanonicalMetadata(t *testing.T) {
+	t.Parallel()
+	generation := int64(0)
+	i := Intent{BotID: 1, Owner: "alice", Chat: 101, MessageID: 42, Attempt: 1,
+		State: delivery.Succeeded, Phase: phaseEdit, Target: 42,
+		Reference: Reference{
+			Kind:       CardIntent,
+			Family:     familyPasses,
+			CardKey:    familyPasses,
+			Revision:   2,
+			Generation: &generation,
+			Source:     &readsource.Derivation{Generation: &generation, Authorities: []readsource.Authority{}},
+			Continuation: Continuation{Kind: passCardReceiptKind, Revision: 2, ViewHash: strings.Repeat("a", 64),
+				Tokens: []string{strings.Repeat("b", 32)}},
+		},
+		Receipt: Continuation{Kind: passCardReceiptKind, Revision: 2, ViewHash: strings.Repeat("c", 64),
+			Tokens: []string{strings.Repeat("d", 32)}}}
+	require.True(t, validPassReceipt(i), "genuine fresh rendering can differ from the original queued hash")
+	for _, mutation := range []struct {
+		name   string
+		change func(*Intent)
+	}{
+		{"foreign_family", func(candidate *Intent) { candidate.Reference.Family = familyStatic }},
+		{"foreign_card", func(candidate *Intent) { candidate.Reference.CardKey = "orders" }},
+		{"wrong_revision", func(candidate *Intent) { candidate.Receipt.Revision++ }},
+		{"missing_generation", func(candidate *Intent) { candidate.Reference.Generation = nil }},
+		{"bad_source", func(candidate *Intent) { candidate.Reference.Source = &readsource.Derivation{} }},
+		{"bad_payload_hash", func(candidate *Intent) { candidate.Receipt.ViewHash = "not-a-hash" }},
+		{"bad_queued_hash", func(candidate *Intent) { candidate.Reference.Continuation.ViewHash = "not-a-hash" }},
+		{"bad_token", func(candidate *Intent) { candidate.Receipt.Tokens = []string{"not-a-token"} }},
+		{"lost_current_metadata", func(candidate *Intent) { candidate.Reference.Continuation.Pass = &PassCardReceipt{} }},
+	} {
+		t.Run(mutation.name, func(t *testing.T) {
+			t.Parallel()
+			candidate := i
+			mutation.change(&candidate)
+			require.False(t, validPassReceipt(candidate))
+		})
+	}
+}
 
 func TestPassReceiptRetirementDatabaseFailure(t *testing.T) {
 	t.Parallel()

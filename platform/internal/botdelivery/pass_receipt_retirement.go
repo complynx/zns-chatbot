@@ -42,7 +42,8 @@ func (e *PassMenuDeniedError) As(target any) bool {
 }
 
 func passMenuDenied(i Intent, cause error) error {
-	if i.Reference.Family != familyPasses || i.Reference.Source == nil || core.IsDatabaseFailure(cause) {
+	if i.Reference.Family != familyPasses ||
+		(i.Reference.Source == nil && !validPassReceipt(i)) || core.IsDatabaseFailure(cause) {
 		return cause
 	}
 	problem, ok := errors.AsType[*core.ProblemError](cause)
@@ -140,10 +141,12 @@ func (s Service) lockPassReceiptRedaction(ctx context.Context, tx pgx.Tx, i Inte
 	}
 	if parent.State != delivery.Succeeded || !parent.ContinuationDone || parent.Owner != i.Owner ||
 		parent.Chat != i.Chat ||
-		parent.Reference.Family != familyPasses ||
-		parent.Reference.Source == nil ||
+		!validPassReceipt(parent) ||
 		!reflect.DeepEqual(i.Reference, passReceiptRedactionReference(parent, i.Target)) {
 		return ErrBinding
+	}
+	if err = s.lockPassRetirementTarget(ctx, tx, i, parent); err != nil {
+		return err
 	}
 	var chat int64
 	if err = tx.QueryRow(ctx, `SELECT telegram_id FROM core.users WHERE id=$1 FOR SHARE`, i.Owner).
@@ -154,6 +157,35 @@ func (s Service) lockPassReceiptRedaction(ctx context.Context, tx pgx.Tx, i Inte
 		return ErrStale
 	}
 	return nil
+}
+
+// A delayed cleanup owns a target only while its actual payload is denied.
+// Discovery stays ahead of intent and delivery-lane locks.
+func (s Service) lockPassRetirementTarget(ctx context.Context, tx pgx.Tx, cleanup, parent Intent) error {
+	actual, err := s.latestPassReceipt(ctx, tx, parent, cleanup.Target)
+	if err != nil {
+		return err
+	}
+	if sameReceipt(*actual, parent) {
+		return nil
+	}
+	denied, err := s.passReceiptDenied(ctx, tx, *actual)
+	if err != nil {
+		return err
+	}
+	latest, err := s.latestPassReceipt(ctx, tx, parent, cleanup.Target)
+	if err != nil {
+		return err
+	}
+	if !sameReceipt(*latest, *actual) {
+		return &core.ProblemError{Status: http.StatusServiceUnavailable, Code: "pass_receipt_changed"}
+	}
+	if !denied {
+		return ErrStale
+	}
+	_, err = tx.Exec(ctx, `DELETE FROM bot.pass_buttons WHERE owner=$1 AND revision=$2 AND token=ANY($3)`,
+		actual.Owner, actual.Receipt.Revision, actual.Receipt.Tokens)
+	return core.DatabaseOperationContextError(ctx, err)
 }
 
 // PassCardBinding describes the menu state that produced the actual payload.
@@ -188,6 +220,10 @@ func (s Service) previousPassReceipt(ctx context.Context, tx pgx.Tx, pending Int
 	if pending.Reference.Family != familyPasses || pending.Reference.Source == nil || target <= 0 {
 		return nil, pgx.ErrNoRows
 	}
+	return s.latestPassReceipt(ctx, tx, pending, target)
+}
+
+func (s Service) latestPassReceipt(ctx context.Context, tx pgx.Tx, pending Intent, target int64) (*Intent, error) {
 	var operation, effect string
 	err := tx.QueryRow(ctx, `SELECT operation_key,effect_key FROM bot.delivery_intents
  WHERE bot_id=$1 AND owner=$2 AND chat_id=$3 AND state='sent' AND message_id=$4
@@ -290,11 +326,16 @@ func validPassReceipt(i Intent) bool {
 	if i.State != delivery.Succeeded || i.MessageID <= 0 || i.BotID <= 0 || i.Chat <= 0 ||
 		i.Reference.Kind != CardIntent || !i.Reference.Valid(i.Owner) ||
 		i.Reference.Family != familyPasses || i.Reference.CardKey != familyPasses ||
-		i.Attempt <= 0 || i.Receipt.Kind != passCardReceiptKind || i.Receipt.Revision != i.Reference.Revision ||
-		i.Receipt.Pass == nil || i.Receipt.Pass.PreviousMessageID < 0 {
+		i.Attempt <= 0 || i.Receipt.Kind != passCardReceiptKind || i.Receipt.Revision != i.Reference.Revision {
 		return false
 	}
 	binding := i.Receipt.Pass
+	if binding == nil {
+		return predecessorPassReceipt(i)
+	}
+	if binding.PreviousMessageID < 0 {
+		return false
+	}
 	switch binding.Capability {
 	case "":
 		return true
@@ -303,6 +344,29 @@ func validPassReceipt(i Intent) bool {
 	default:
 		return false
 	}
+}
+
+// The predecessor producer retained source/history authority in Reference and
+// canonical payload hashes/tokens in both continuations. Rendering could change
+// their hashes, so equality is not required. No mutable menu supplies authority.
+func predecessorPassReceipt(i Intent) bool {
+	r := i.Reference.Continuation
+	return i.Reference.Generation != nil && r.Pass == nil && r.Kind == passCardReceiptKind &&
+		r.Revision == i.Reference.Revision && canonicalPassContinuation(r) && canonicalPassContinuation(i.Receipt)
+}
+
+func canonicalPassContinuation(r Continuation) bool {
+	hash, err := hex.DecodeString(r.ViewHash)
+	if err != nil || len(hash) != sha256.Size || hex.EncodeToString(hash) != r.ViewHash {
+		return false
+	}
+	for _, token := range r.Tokens {
+		decoded, decodeErr := hex.DecodeString(token)
+		if decodeErr != nil || len(decoded) != 16 || hex.EncodeToString(decoded) != token {
+			return false
+		}
+	}
+	return true
 }
 
 // Preparation failure shares admission's canonical receipt and lock owner.
