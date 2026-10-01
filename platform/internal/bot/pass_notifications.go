@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"errors"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"strconv"
 
 	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
@@ -12,6 +13,17 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+func (b *Bot) passNotificationWire(ctx context.Context, notice passbooking.Notification) (*notificationwire.Payload, error) {
+	if notice.Wire != nil {
+		return notice.Wire, nil
+	}
+	text, err := b.passNotificationText(ctx, notice)
+	if err != nil {
+		return nil, err
+	}
+	return notificationWireCandidate(telegram.Send{ChatID: notice.TelegramID, Text: text})
+}
 
 // DeliverPassNotifications preserves each canonical outcome before follow-up work.
 func (b *Bot) DeliverPassNotifications(ctx context.Context) error {
@@ -152,22 +164,26 @@ func (b *Bot) sendPreparedPassNotice(
 	if notice.FollowupPending {
 		return notice, true, nil
 	}
-	text, err := b.passNotificationText(ctx, notice)
+	wire, err := b.passNotificationWire(ctx, notice)
 	if err != nil {
 		return notice, false, b.deferPassNotification(ctx, notice, err)
 	}
 	gate, err := b.Host.BeginPassNotification(
 		ctx,
-		delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+		passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: wire},
 	)
 	if err != nil || !gate.Ready {
 		return notice, false, err
 	}
-	message, sendErr := b.TG.Send(ctx, telegram.Send{ChatID: notice.TelegramID, Text: text})
+	payload, err := notificationWireSend(notice.TelegramID, gate.Wire)
+	if err != nil {
+		return notice, false, err
+	}
+	message, sendErr := b.TG.Send(ctx, payload)
 	outcome := telegram.DeliveryOutcome(message.ID, sendErr)
 	result := passbooking.NotificationCompletion{ID: notice.ID, Attempt: notice.DeliveryAttempt, Outcome: outcome}
 	if outcome.Kind == delivery.Succeeded {
-		result.Text = text
+		result.Text = payload.Text
 	}
 	completionCtx, cancelCompletion := deliveryCompletionContext(ctx)
 	defer cancelCompletion()
@@ -177,7 +193,7 @@ func (b *Bot) sendPreparedPassNotice(
 	if outcome.Kind != delivery.Succeeded {
 		return notice, false, nil
 	}
-	notice.MessageID, notice.DeliveryText = message.ID, text
+	notice.MessageID, notice.DeliveryText = message.ID, payload.Text
 	return notice, true, nil
 }
 

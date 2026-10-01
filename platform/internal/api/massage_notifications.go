@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 )
 
@@ -51,7 +49,7 @@ func massageNotificationRoutes(mux *http.ServeMux, service massage.Service, logg
 		respond(logger, w, value, err)
 	})
 	mux.HandleFunc("POST /internal/massage-notifications/{owner}/begin", func(w http.ResponseWriter, r *http.Request) {
-		var input delivery.Attempt
+		var input massage.NotificationAttempt
 		if Decode(w, r, &input) != nil {
 			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
 			return

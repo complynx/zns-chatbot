@@ -161,7 +161,7 @@ func TestNotificationUncertainRetrySurvivesRestart(t *testing.T) {
 			first := r.status(t, r.first)
 			require.Equal(t, "pending", first.State)
 			require.Equal(t, 1, loss.count())
-			assert.GreaterOrEqual(t, time.Until(first.AvailableAt), r.f.b.Delivery.Fallback-time.Second)
+			assert.GreaterOrEqual(t, time.Until(first.AvailableAt), r.f.b.Delivery.UncertaintyRetryBaseOrDefault()-time.Second)
 			assert.Equal(t, first.Attempt, first.LastUncertainAttempt)
 			assert.Equal(t, "telegram_outcome_unknown", first.LastUncertainReason)
 			require.NotNil(t, first.LastUncertainRecordedAt)
@@ -215,7 +215,7 @@ func TestNotificationUncertainRetryExhaustionReleasesFollower(t *testing.T) {
 				}
 				require.Equal(t, "pending", state.State)
 				assert.GreaterOrEqual(t, time.Until(state.AvailableAt),
-					r.f.b.Delivery.Fallback*time.Duration(1<<attempt)-time.Second)
+					r.f.b.Delivery.UncertaintyRetryBaseOrDefault()*time.Duration(1<<attempt)-time.Second)
 				require.NoError(t, dispatch(t.Context(), r.second))
 				assert.Equal(t, "pending", r.status(t, r.second).State)
 				r.restartNotificationOwner(t, domain)

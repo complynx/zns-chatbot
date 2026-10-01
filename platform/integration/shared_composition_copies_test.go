@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"net/http"
 	"testing"
 
@@ -29,7 +30,7 @@ func TestSyntheticCompositionBindsCopiedServicesBeforeConstruction(t *testing.T)
 		require.Equal(t, syntheticDeliverySettings(), services.BotDelivery.Food.Delivery)
 		// Valid composition reaches request validation; a zero-settings copy fails
 		// earlier with ErrSettings. An invalid attempt never accesses the nil pool.
-		_, err := services.BotDelivery.Food.BeginNotification(t.Context(), delivery.Attempt{})
+		_, err := services.BotDelivery.Food.BeginNotification(t.Context(), legacyfood.NotificationAttempt{Attempt: delivery.Attempt{}, Wire: notificationTestWire()})
 		var problem *core.ProblemError
 		require.ErrorAs(t, err, &problem)
 		require.Equal(t, http.StatusBadRequest, problem.Status)

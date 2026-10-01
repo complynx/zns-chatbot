@@ -2,7 +2,9 @@ package bot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,6 +16,46 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+func notificationWireCandidate(send telegram.Send) (*notificationwire.Payload, error) {
+	prepared, err := telegram.PrepareSend(send)
+	if err != nil {
+		return nil, err
+	}
+	markup, err := json.Marshal(prepared.Markup)
+	if err != nil {
+		return nil, err
+	}
+	wire := &notificationwire.Payload{Text: prepared.Text, Markup: markup}
+	_, err = wire.Encode()
+	return wire, err
+}
+
+func notificationWireSend(chat int64, wire *notificationwire.Payload) (telegram.Send, error) {
+	if wire == nil {
+		return telegram.Send{}, notificationwire.ErrPayload
+	}
+	var markup telegram.Markup
+	if err := json.Unmarshal(wire.Markup, &markup); err != nil {
+		return telegram.Send{}, err
+	}
+	return telegram.PrepareSend(telegram.Send{ChatID: chat, Text: wire.Text, Markup: markup})
+}
+
+func (b *Bot) orderNotificationWire(ctx context.Context, notice orders.Notification) (*notificationwire.Payload, error) {
+	if notice.Wire != nil {
+		return notice.Wire, nil
+	}
+	prefs, err := b.API.Preferences(ctx, notice.Recipient)
+	if err != nil {
+		return nil, err
+	}
+	text, err := notificationText(notice, prefs.Language)
+	if err != nil {
+		return nil, err
+	}
+	return notificationWireCandidate(telegram.Send{ChatID: notice.TelegramID, Text: text})
+}
 
 const reminderKind = "reminder"
 const notificationNoLongerCurrent = "notification_no_longer_current"
@@ -181,23 +223,25 @@ func (b *Bot) sendPreparedOrderNotice(
 	if notice.FollowupPending {
 		return notice, true, nil
 	}
-	prefs, err := b.API.Preferences(ctx, notice.Recipient)
+	wire, err := b.orderNotificationWire(ctx, notice)
 	if err != nil {
 		return notice, false, b.deferOrderNotification(ctx, notice, err)
 	}
-	text, err := notificationText(notice, prefs.Language)
-	if err != nil {
-		return notice, false, b.deferOrderNotification(ctx, notice, err)
-	}
-	gate, err := b.Host.BeginNotification(ctx, delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt})
+	gate, err := b.Host.BeginNotification(ctx, orders.NotificationAttempt{
+		Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: wire,
+	})
 	if err != nil || !gate.Ready {
 		return notice, false, err
 	}
-	message, sendErr := b.TG.Send(ctx, telegram.Send{ChatID: notice.TelegramID, Text: text})
+	payload, err := notificationWireSend(notice.TelegramID, gate.Wire)
+	if err != nil {
+		return notice, false, err
+	}
+	message, sendErr := b.TG.Send(ctx, payload)
 	outcome := telegram.DeliveryOutcome(message.ID, sendErr)
 	result := orders.NotificationCompletion{ID: notice.ID, Attempt: notice.DeliveryAttempt, Outcome: outcome}
 	if outcome.Kind == delivery.Succeeded {
-		result.Text = text
+		result.Text = payload.Text
 	}
 	completionCtx, cancelCompletion := deliveryCompletionContext(ctx)
 	defer cancelCompletion()
@@ -207,7 +251,7 @@ func (b *Bot) sendPreparedOrderNotice(
 	if outcome.Kind != delivery.Succeeded {
 		return notice, false, nil
 	}
-	notice.MessageID, notice.DeliveryText = message.ID, text
+	notice.MessageID, notice.DeliveryText = message.ID, payload.Text
 	return notice, true, nil
 }
 

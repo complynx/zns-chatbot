@@ -3,6 +3,7 @@ package legacyfood
 import (
 	"context"
 	"encoding/json"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
@@ -11,10 +12,11 @@ import (
 )
 
 type Notification struct {
-	DeliveryAttempt int64  `json:"delivery_attempt"`
-	MessageID       int64  `json:"message_id,omitempty"`
-	DeliveryText    string `json:"delivery_text,omitempty"`
-	FollowupPending bool   `json:"followup_pending,omitempty"`
+	DeliveryAttempt int64                     `json:"delivery_attempt"`
+	MessageID       int64                     `json:"message_id,omitempty"`
+	Wire            *notificationwire.Payload `json:"wire,omitempty"`
+	DeliveryText    string                    `json:"delivery_text,omitempty"`
+	FollowupPending bool                      `json:"followup_pending,omitempty"`
 
 	Current    bool            `json:"current"`
 	ID         int64           `json:"id"`

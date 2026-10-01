@@ -721,7 +721,7 @@ func TestRegistrationClockAnnouncementsAndPassportEligibility(t *testing.T) {
 			require.Equal(t, "announcement_superseded", gate.Reason)
 			reminder, err := service.BeginNotification(
 				t.Context(),
-				delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+				passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: notificationTestWire()},
 			)
 			require.NoError(t, err)
 			require.False(t, reminder.Ready)
@@ -1017,7 +1017,7 @@ func testClockPassportAdmission(t *testing.T, scenario string) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.True(t, notice.Current)
-	attempt := delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt}
+	attempt := passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt}, Wire: notificationTestWire()}
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	if scenario == "live" {
@@ -1047,7 +1047,7 @@ func testClockPassportAdmission(t *testing.T, scenario string) {
 	}
 	require.NoError(t, err)
 	type result struct {
-		gate delivery.Admission
+		gate passbooking.NotificationAdmission
 		err  error
 	}
 	done := make(chan result, 1)
@@ -1084,7 +1084,8 @@ func testClockPassportAdmission(t *testing.T, scenario string) {
 	}
 	require.ErrorIs(t, outcome.err, passbooking.ErrRegistrationTimeChanged)
 	require.False(t, outcome.gate.Ready)
-	outcome.gate, outcome.err = service.BeginNotification(ctx, attempt)
+	gate, err := service.BeginNotification(ctx, attempt)
+	outcome.gate, outcome.err = gate, err
 	require.NoError(t, outcome.err)
 	require.False(t, outcome.gate.Ready)
 	require.Equal(t, "notification_no_longer_current", outcome.gate.Reason)

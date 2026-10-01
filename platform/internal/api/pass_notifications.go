@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -45,7 +43,7 @@ func passNotificationRoutes(mux *http.ServeMux, service passbooking.Service, log
 		respond(logger, w, value, err)
 	})
 	mux.HandleFunc("POST /internal/pass-notifications/begin", func(w http.ResponseWriter, r *http.Request) {
-		var input delivery.Attempt
+		var input passbooking.NotificationAttempt
 		if Decode(w, r, &input) != nil {
 			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
 			return

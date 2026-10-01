@@ -240,7 +240,7 @@ func TestOrderRefundRoutingAndDeliveryRecheckAmbassador(t *testing.T) {
 		`UPDATE core.pass_bookings SET payment_admin='bob' WHERE event_id='sandbox-festival'`,
 	)
 	require.NoError(t, err)
-	gate, err := f.service.BeginNotification(t.Context(), delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt})
+	gate, err := f.service.BeginNotification(t.Context(), orders.NotificationAttempt{Attempt: delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt}, Wire: notificationTestWire()})
 	require.NoError(t, err)
 	assert.False(t, gate.Ready)
 	assert.Equal(t, "notification_no_longer_current", gate.Reason)

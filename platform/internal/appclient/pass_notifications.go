@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
@@ -17,12 +15,12 @@ func (c Host) PendingPassNotifications(ctx context.Context) ([]passbooking.Notif
 	return registrationHTTPResult(notices, err)
 }
 
-func (c Host) BeginPassNotification(ctx context.Context, input delivery.Attempt) (delivery.Admission, error) {
+func (c Host) BeginPassNotification(ctx context.Context, input passbooking.NotificationAttempt) (passbooking.NotificationAdmission, error) {
 	body, err := json.Marshal(input)
 	if err != nil {
-		return delivery.Admission{}, err
+		return passbooking.NotificationAdmission{}, err
 	}
-	var out delivery.Admission
+	var out passbooking.NotificationAdmission
 	err = c.requestToken(
 		ctx,
 		c.Signer.DeliveryToken(),
@@ -32,7 +30,7 @@ func (c Host) BeginPassNotification(ctx context.Context, input delivery.Attempt)
 		&out,
 	)
 	if err != nil {
-		return delivery.Admission{}, err
+		return passbooking.NotificationAdmission{}, err
 	}
 	return out, nil
 }

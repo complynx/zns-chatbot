@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"strconv"
 
 	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
@@ -13,6 +14,17 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+func (b *Bot) foodNotificationWire(ctx context.Context, notice legacyfood.Notification, payload foodNotificationPayload) (*notificationwire.Payload, error) {
+	if notice.Wire != nil {
+		return notice.Wire, nil
+	}
+	send, err := b.foodNotificationSend(ctx, notice, payload)
+	if err != nil {
+		return nil, err
+	}
+	return notificationWireCandidate(send)
+}
 
 func (b *Bot) DeliverFoodNotifications(ctx context.Context) error {
 	notices, err := b.Host.FoodNotifications(ctx)
@@ -160,22 +172,26 @@ func (b *Bot) sendPreparedFoodNotice(
 	if notice.FollowupPending {
 		return notice, true, nil
 	}
-	wire, err := b.foodNotificationSend(ctx, notice, payload)
+	wire, err := b.foodNotificationWire(ctx, notice, payload)
 	if err != nil {
 		return notice, false, b.deferFoodNotification(ctx, notice, err)
 	}
 	gate, err := b.Host.BeginFoodNotification(
 		ctx,
-		delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+		legacyfood.NotificationAttempt{Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: wire},
 	)
 	if err != nil || !gate.Ready {
 		return notice, false, err
 	}
-	message, sendErr := b.TG.Send(ctx, wire)
+	send, err := notificationWireSend(notice.TelegramID, gate.Wire)
+	if err != nil {
+		return notice, false, err
+	}
+	message, sendErr := b.TG.Send(ctx, send)
 	outcome := telegram.DeliveryOutcome(message.ID, sendErr)
 	result := legacyfood.NotificationCompletion{ID: notice.ID, Attempt: notice.DeliveryAttempt, Outcome: outcome}
 	if outcome.Kind == delivery.Succeeded {
-		result.Text = wire.Text
+		result.Text = send.Text
 	}
 	completionCtx, cancelCompletion := deliveryCompletionContext(ctx)
 	defer cancelCompletion()

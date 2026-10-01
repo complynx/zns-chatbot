@@ -3,6 +3,7 @@ package massage
 import (
 	"context"
 	"errors"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
@@ -138,10 +139,11 @@ func (s Service) QueueReminders(ctx context.Context, event string) (int64, error
 }
 
 type Notice struct {
-	DeliveryAttempt int64  `json:"delivery_attempt"`
-	MessageID       int64  `json:"message_id,omitempty"`
-	DeliveryText    string `json:"delivery_text,omitempty"`
-	FollowupPending bool   `json:"followup_pending,omitempty"`
+	DeliveryAttempt int64                     `json:"delivery_attempt"`
+	MessageID       int64                     `json:"message_id,omitempty"`
+	Wire            *notificationwire.Payload `json:"wire,omitempty"`
+	DeliveryText    string                    `json:"delivery_text,omitempty"`
+	FollowupPending bool                      `json:"followup_pending,omitempty"`
 
 	ID      int64  `json:"id"`
 	Booking string `json:"booking"`

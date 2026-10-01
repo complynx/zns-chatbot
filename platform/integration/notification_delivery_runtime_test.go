@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -669,6 +670,12 @@ func (r *notificationRuntimeFixture) prepare(t *testing.T) {
 
 func (r *notificationRuntimeFixture) postAttempt(t *testing.T, action string, input any, want int) []byte {
 	t.Helper()
+	if attempt, ok := input.(delivery.Attempt); ok && action == "begin" {
+		input = struct {
+			delivery.Attempt
+			Wire *notificationwire.Payload `json:"wire"`
+		}{attempt, notificationTestWire()}
+	}
 	body, err := json.Marshal(input)
 	require.NoError(t, err)
 	request, err := http.NewRequestWithContext(
@@ -795,4 +802,8 @@ func TestNotificationDeliveryUnboundHeadIsNotAdopted(t *testing.T) {
 			assert.Equal(t, "sent", r.status(t, r.other).State)
 		})
 	}
+}
+
+func notificationTestWire() *notificationwire.Payload {
+	return &notificationwire.Payload{Text: "Synthetic notification", Markup: json.RawMessage(`{"inline_keyboard":[]}`)}
 }

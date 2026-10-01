@@ -346,7 +346,7 @@ func TestPassTakeoverConcurrentReplayAndNoticeCurrentness(t *testing.T) {
 	assert.False(t, notices[0].Current, "superseded contact notice is not delivered")
 	gate, err := s.BeginNotification(
 		t.Context(),
-		delivery.Attempt{ID: notices[0].ID, Generation: notices[0].DeliveryAttempt},
+		passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: notices[0].ID, Generation: notices[0].DeliveryAttempt}, Wire: notificationTestWire()},
 	)
 	require.NoError(t, err)
 	assert.False(t, gate.Ready)

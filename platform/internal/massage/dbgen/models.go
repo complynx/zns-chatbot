@@ -28,6 +28,7 @@ type CoreMassageNotice struct {
 	FollowupAttempts        int64
 	AvailableAt             pgtype.Timestamptz
 	Failure                 string
+	DeliveryWirePayload     []byte
 	LastUncertainAttempt    pgtype.Int8
 	LastUncertainReason     pgtype.Text
 	LastUncertainRecordedAt pgtype.Timestamptz

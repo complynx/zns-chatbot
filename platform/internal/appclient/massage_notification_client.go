@@ -7,8 +7,6 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 )
 
@@ -35,13 +33,13 @@ func (c Host) MassageDeliveryNotices(ctx context.Context, owner string) ([]massa
 func (c Host) BeginMassageNotice(
 	ctx context.Context,
 	owner string,
-	input delivery.Attempt,
-) (delivery.Admission, error) {
+	input massage.NotificationAttempt,
+) (massage.NotificationAdmission, error) {
 	body, err := json.Marshal(input)
 	if err != nil {
-		return delivery.Admission{}, err
+		return massage.NotificationAdmission{}, err
 	}
-	var out delivery.Admission
+	var out massage.NotificationAdmission
 	err = c.requestToken(
 		ctx,
 		c.Signer.DeliveryToken(),
@@ -51,7 +49,7 @@ func (c Host) BeginMassageNotice(
 		&out,
 	)
 	if err != nil {
-		return delivery.Admission{}, err
+		return massage.NotificationAdmission{}, err
 	}
 	return out, nil
 }

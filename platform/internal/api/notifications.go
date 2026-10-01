@@ -7,8 +7,6 @@ import (
 
 	"strings"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
@@ -58,7 +56,7 @@ func notificationRoutes(
 		respond(logger, w, value, err)
 	})
 	queue.HandleFunc("POST /internal/notifications/begin", func(w http.ResponseWriter, r *http.Request) {
-		var input delivery.Attempt
+		var input orders.NotificationAttempt
 		if Decode(w, r, &input) != nil {
 			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
 			return

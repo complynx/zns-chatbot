@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 )
 
 // NotificationCompletion records the exact wire attempt before archive or view work.
@@ -38,4 +39,17 @@ type NotificationDeliveryStatus struct {
 	LastUncertainReason     string     `json:"last_uncertain_reason,omitempty"`
 	LastUncertainRecordedAt *time.Time `json:"last_uncertain_recorded_at,omitempty"`
 	UncertainResends        int64      `json:"uncertain_resends"`
+}
+
+// NotificationAttempt carries a rendered candidate for this exact generation.
+// An existing durable snapshot wins over a later candidate.
+type NotificationAttempt struct {
+	delivery.Attempt
+	Wire *notificationwire.Payload `json:"wire,omitempty"`
+}
+
+// NotificationAdmission returns the canonical committed content for a Ready send.
+type NotificationAdmission struct {
+	delivery.Admission
+	Wire *notificationwire.Payload `json:"wire,omitempty"`
 }

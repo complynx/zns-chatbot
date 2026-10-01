@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 
@@ -21,6 +22,11 @@ func (s Service) notificationProjection(
 	if err := json.Unmarshal(row.Payload, &notice); err != nil {
 		return notice, err
 	}
+	wire, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
+	if wireErr != nil {
+		return notice, wireErr
+	}
+	notice.Wire = wire
 	notice.ID, notice.Recipient, notice.TelegramID = row.ID, row.Recipient, row.DeliveryChat
 	notice.DeliveryAttempt, notice.MessageID = row.DeliveryAttempt, row.TelegramMessageID
 	notice.DeliveryText, notice.FollowupPending = row.DeliveryText, row.FollowupPending

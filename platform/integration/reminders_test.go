@@ -82,7 +82,7 @@ func TestRemindersQueueOnceUnderConcurrentScansAndClaims(t *testing.T) {
 		group.Go(func() {
 			gate, claimError := service.BeginNotification(
 				t.Context(),
-				delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt},
+				passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt}, Wire: notificationTestWire()},
 			)
 			count := 0
 			if gate.Ready {
@@ -166,7 +166,7 @@ func TestReminderRechecksPaymentAndZeroTotalAtDelivery(t *testing.T) {
 			prepared := preparedOrderTestNotice(t, service, id)
 			gate, err := service.BeginNotification(
 				t.Context(),
-				delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt},
+				passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt}, Wire: notificationTestWire()},
 			)
 			require.NoError(t, err)
 			assert.False(t, gate.Ready, "outdated reminder must not be delivered")

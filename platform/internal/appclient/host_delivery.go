@@ -52,12 +52,12 @@ func (c Host) FoodNotifications(ctx context.Context) ([]legacyfood.Notification,
 	err := c.requestToken(ctx, c.Signer.DeliveryToken(), http.MethodGet, "/internal/food/notifications", nil, &out)
 	return out, err
 }
-func (c Host) BeginFoodNotification(ctx context.Context, input delivery.Attempt) (delivery.Admission, error) {
+func (c Host) BeginFoodNotification(ctx context.Context, input legacyfood.NotificationAttempt) (legacyfood.NotificationAdmission, error) {
 	body, err := json.Marshal(input)
 	if err != nil {
-		return delivery.Admission{}, err
+		return legacyfood.NotificationAdmission{}, err
 	}
-	var out delivery.Admission
+	var out legacyfood.NotificationAdmission
 	err = c.requestToken(
 		ctx,
 		c.Signer.DeliveryToken(),
@@ -67,7 +67,7 @@ func (c Host) BeginFoodNotification(ctx context.Context, input delivery.Attempt)
 		&out,
 	)
 	if err != nil {
-		return delivery.Admission{}, err
+		return legacyfood.NotificationAdmission{}, err
 	}
 	return out, nil
 }

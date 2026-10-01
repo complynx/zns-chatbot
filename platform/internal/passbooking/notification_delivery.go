@@ -12,6 +12,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 )
 
@@ -27,22 +28,23 @@ const notificationRetryExhaustedReason = "telegram_uncertain_retry_exhausted"
 // BeginNotification checks current domain eligibility before reserving shared pacing.
 // No domain or ledger lock is held while the adapter contacts Telegram.
 
-func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt) (delivery.Admission, error) {
+func (s Service) BeginNotification(ctx context.Context, input NotificationAttempt) (NotificationAdmission, error) {
+	attempt := input.Attempt
 	if err := s.Delivery.Validate(); err != nil {
-		return delivery.Admission{}, err
+		return NotificationAdmission{}, err
 	}
 	if attempt.ID <= 0 || attempt.Generation <= 0 {
-		return delivery.Admission{}, notificationInvalid()
+		return NotificationAdmission{}, notificationInvalid()
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return delivery.Admission{}, core.DatabaseOperationError(err)
+		return NotificationAdmission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	s, clockAttempt := s.WithClockAttempt()
 	current, err := s.lockNotificationEligibility(ctx, tx, attempt.ID)
 	if err != nil {
-		return delivery.Admission{}, notificationAttemptError(err)
+		return NotificationAdmission{}, notificationAttemptError(err)
 	}
 	q := dbgen.New(tx)
 	row, err := q.LockNotificationAttempt(
@@ -50,47 +52,46 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 		dbgen.LockNotificationAttemptParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
 	)
 	if err != nil {
-		return delivery.Admission{}, notificationAttemptError(core.DatabaseOperationError(err))
+		return NotificationAdmission{}, notificationAttemptError(core.DatabaseOperationError(err))
 	}
 
 	if row.DeliveryState != notificationPending || !row.LeaseLive {
-		return delivery.Admission{}, notificationStale()
+		return NotificationAdmission{}, notificationStale()
 	}
 	current, err = s.currentPassportNotification(ctx, tx, row, current)
 	if err != nil {
-		return delivery.Admission{}, err
+		return NotificationAdmission{}, err
 	}
 	if !current {
-		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		gate, err := s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		return NotificationAdmission{Admission: gate}, err
 	}
 	if row.LastUncertainAttempt.Valid && row.UncertainResends >= notificationUncertainResendLimit {
-		return s.exhaustNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		gate, err := s.exhaustNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		return NotificationAdmission{Admission: gate}, err
 	}
 	gate, current, err := s.beginCurrentNotification(ctx, tx, attempt, row)
 	if err != nil {
-		return delivery.Admission{}, err
+		return NotificationAdmission{}, err
 	}
 	if !current {
-		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		gate, err := s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		return NotificationAdmission{Admission: gate}, err
 	}
 	if !gate.Ready {
 		outcome := delivery.Outcome{Kind: delivery.Deferred, Reason: gate.Reason}
 		if err = s.saveNotificationOutcome(ctx, q, attempt, outcome, "", gate.NotBefore, 0); err != nil {
-			return delivery.Admission{}, err
+			return NotificationAdmission{}, err
 		}
-		return s.commitNotificationAdmission(ctx, tx, gate, clockAttempt)
+		gate, err = s.commitNotificationAdmission(ctx, tx, gate, clockAttempt)
+		return NotificationAdmission{Admission: gate}, err
 	}
-	count, err := q.BeginNotificationSend(
-		ctx,
-		dbgen.BeginNotificationSendParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
-	)
+	wire, err := s.admitNotificationWire(ctx, q, attempt, row.DeliveryWirePayload, input.Wire)
 	if err != nil {
-		return delivery.Admission{}, core.DatabaseOperationError(err)
+		return NotificationAdmission{}, err
 	}
-	if count != 1 {
-		return delivery.Admission{}, notificationStale()
-	}
-	return s.commitNotificationAdmission(ctx, tx, gate, clockAttempt)
+	gate, err = s.commitNotificationAdmission(ctx, tx, gate, clockAttempt)
+	return NotificationAdmission{Admission: gate, Wire: wire}, err
 }
 
 func (s Service) currentPassportNotification(
@@ -351,8 +352,8 @@ func (s Service) rescheduleNotification(
 	uncertain bool,
 	providerDeadline time.Time,
 ) error {
-	seconds := int64(s.Delivery.Fallback / time.Second)
-	if s.Delivery.Fallback%time.Second != 0 {
+	seconds := int64(s.Delivery.UncertaintyRetryBaseOrDefault() / time.Second)
+	if s.Delivery.UncertaintyRetryBaseOrDefault()%time.Second != 0 {
 		seconds++
 	}
 	row, err := dbgen.New(tx).RescheduleUncertainNotification(ctx, dbgen.RescheduleUncertainNotificationParams{
@@ -526,4 +527,34 @@ func (s Service) NotificationStatus(ctx context.Context, id int64) (Notification
 		status.LastUncertainRecordedAt = &value
 	}
 	return status, nil
+}
+
+func (s Service) admitNotificationWire(
+	ctx context.Context,
+	q *dbgen.Queries,
+	attempt delivery.Attempt,
+	existing []byte,
+	candidate *notificationwire.Payload,
+) (*notificationwire.Payload, error) {
+	wire, err := notificationwire.Decode(existing)
+	if err != nil {
+		return nil, err
+	}
+	if wire == nil {
+		wire = candidate
+	}
+	if wire == nil {
+		return nil, notificationInvalid()
+	}
+	encoded, err := wire.Encode()
+	if err != nil {
+		return nil, notificationInvalid()
+	}
+	committed, err := q.BeginNotificationSend(ctx, dbgen.BeginNotificationSendParams{
+		ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation, WirePayload: encoded,
+	})
+	if err != nil {
+		return nil, notificationAttemptError(core.DatabaseOperationError(err))
+	}
+	return notificationwire.Decode(committed)
 }

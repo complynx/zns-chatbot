@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"errors"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,17 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+func (b *Bot) massageNotificationWire(ctx context.Context, owner string, chat int64, value massage.DeliveryNotice) (*notificationwire.Payload, error) {
+	if value.Notice.Wire != nil {
+		return value.Notice.Wire, nil
+	}
+	send, err := b.massageNotificationPayload(ctx, owner, chat, value)
+	if err != nil {
+		return nil, err
+	}
+	return notificationWireCandidate(send)
+}
 
 // DeliverMassageNotifications isolates recipient failures and retains wire uncertainty.
 func (b *Bot) DeliverMassageNotifications(ctx context.Context) error {
@@ -242,16 +254,20 @@ func (b *Bot) sendPreparedMassageNotice(
 	if notice.FollowupPending {
 		return notice, true, nil
 	}
-	payload, err := b.massageNotificationPayload(ctx, owner, chat, value)
+	wire, err := b.massageNotificationWire(ctx, owner, chat, value)
 	if err != nil {
 		return notice, false, b.deferMassageNotification(ctx, owner, notice, err)
 	}
 	gate, err := b.Host.BeginMassageNotice(
 		ctx,
 		owner,
-		delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+		massage.NotificationAttempt{Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: wire},
 	)
 	if err != nil || !gate.Ready {
+		return notice, false, err
+	}
+	payload, err := notificationWireSend(chat, gate.Wire)
+	if err != nil {
 		return notice, false, err
 	}
 	message, sendErr := b.TG.Send(ctx, payload)

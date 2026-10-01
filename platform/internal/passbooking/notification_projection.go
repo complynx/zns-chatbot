@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/jackc/pgx/v5"
 
@@ -19,6 +20,11 @@ func (s Service) notificationProjection(
 	notice := Notification{ID: row.ID, Recipient: row.Recipient, TelegramID: row.DeliveryChat, Event: row.EventID,
 		Owner: row.Owner, Kind: row.Kind, DeliveryAttempt: row.DeliveryAttempt, MessageID: row.TelegramMessageID,
 		DeliveryText: row.DeliveryText, FollowupPending: row.FollowupPending}
+	wire, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
+	if wireErr != nil {
+		return notice, wireErr
+	}
+	notice.Wire = wire
 	var snapshot noticeSnapshot
 	if err := json.Unmarshal(row.Payload, &snapshot); err != nil {
 		return notice, err

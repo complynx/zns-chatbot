@@ -3,6 +3,7 @@ package legacyfood
 import (
 	"context"
 	"errors"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/jackc/pgx/v5"
 
@@ -29,6 +30,11 @@ func (s Service) notificationProjection(
 		DeliveryText:    row.DeliveryText,
 		FollowupPending: row.FollowupPending,
 	}
+	wire, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
+	if wireErr != nil {
+		return notice, wireErr
+	}
+	notice.Wire = wire
 	var err error
 	notice.Current, err = q.NotificationCurrent(
 		ctx,

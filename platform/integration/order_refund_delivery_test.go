@@ -20,7 +20,7 @@ func refundRequestOutcome(t *testing.T, f refundFixture, state delivery.Kind) or
 	notice, ready, err := f.service.PrepareNotification(t.Context(), id)
 	require.NoError(t, err)
 	require.True(t, ready)
-	gate, err := f.service.BeginNotification(t.Context(), delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt})
+	gate, err := f.service.BeginNotification(t.Context(), orders.NotificationAttempt{Attempt: delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt}, Wire: notificationTestWire()})
 	require.NoError(t, err)
 	require.True(t, gate.Ready)
 	if state == delivery.Sending {
@@ -131,7 +131,7 @@ func TestOrderRefundRoutingRecoversOnlyKnownUnsentRequests(t *testing.T) {
 			if state != delivery.Cancelled {
 				gate, beginErr := f.service.BeginNotification(
 					t.Context(),
-					delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt},
+					orders.NotificationAttempt{Attempt: delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt}, Wire: notificationTestWire()},
 				)
 				require.NoError(t, beginErr)
 				require.True(t, gate.Ready)

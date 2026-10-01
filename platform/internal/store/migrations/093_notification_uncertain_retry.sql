@@ -1,6 +1,7 @@
 -- Keep the last unknown wire fact separate from the owner's retry state.
 -- Existing unknown rows record adoption time, not a historical transport time.
 ALTER TABLE core.order_notifications
+ ADD COLUMN delivery_wire_payload jsonb,
  ADD COLUMN last_uncertain_attempt bigint,
  ADD COLUMN last_uncertain_reason text,
  ADD COLUMN last_uncertain_recorded_at timestamptz,
@@ -12,6 +13,7 @@ CREATE INDEX order_notifications_recoverable ON core.order_notifications(bot_id,
  WHERE delivery_state IN ('sending','unknown');
 
 ALTER TABLE core.food_notifications
+ ADD COLUMN delivery_wire_payload jsonb,
  ADD COLUMN last_uncertain_attempt bigint,
  ADD COLUMN last_uncertain_reason text,
  ADD COLUMN last_uncertain_recorded_at timestamptz,
@@ -23,6 +25,7 @@ CREATE INDEX food_notifications_recoverable ON core.food_notifications(bot_id,id
  WHERE delivery_state IN ('sending','unknown');
 
 ALTER TABLE core.massage_notices
+ ADD COLUMN delivery_wire_payload jsonb,
  ADD COLUMN last_uncertain_attempt bigint,
  ADD COLUMN last_uncertain_reason text,
  ADD COLUMN last_uncertain_recorded_at timestamptz,
@@ -34,6 +37,7 @@ CREATE INDEX massage_notices_recoverable ON core.massage_notices(bot_id,id)
  WHERE delivery_state IN ('sending','unknown');
 
 ALTER TABLE core.pass_notifications
+ ADD COLUMN delivery_wire_payload jsonb,
  ADD COLUMN last_uncertain_attempt bigint,
  ADD COLUMN last_uncertain_reason text,
  ADD COLUMN last_uncertain_recorded_at timestamptz,

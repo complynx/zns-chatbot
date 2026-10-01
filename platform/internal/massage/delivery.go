@@ -3,6 +3,7 @@ package massage
 import (
 	"context"
 	"errors"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -98,6 +99,11 @@ func (s Service) notificationProjection(
 		Notice: Notice{ID: row.ID, Booking: row.BookingID, Kind: row.Kind, DeliveryAttempt: row.DeliveryAttempt,
 			MessageID: row.TelegramMessageID, DeliveryText: row.DeliveryText, FollowupPending: row.FollowupPending},
 	}
+	wire, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
+	if wireErr != nil {
+		return value, wireErr
+	}
+	value.Notice.Wire = wire
 	booking, err := q.NotificationBookingProjection(ctx, row.BookingID)
 	if err != nil {
 		return value, core.DatabaseOperationError(err)

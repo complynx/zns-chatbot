@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 )
@@ -139,7 +137,7 @@ func foodDeliveryRoutes(mux *http.ServeMux, service legacyfood.Service, signer i
 		respond(logger, w, value, err)
 	})
 	queue.HandleFunc("POST /internal/food/notifications/begin", func(w http.ResponseWriter, r *http.Request) {
-		var input delivery.Attempt
+		var input legacyfood.NotificationAttempt
 		if Decode(w, r, &input) != nil {
 			JSON(w, http.StatusBadRequest, map[string]string{codeField: invalidJSON})
 			return

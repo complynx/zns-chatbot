@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
-
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 )
 
@@ -17,15 +15,15 @@ func (c Host) PendingNotifications(ctx context.Context) ([]orders.Notification, 
 	return notices, err
 }
 
-func (c Host) BeginNotification(ctx context.Context, input delivery.Attempt) (delivery.Admission, error) {
+func (c Host) BeginNotification(ctx context.Context, input orders.NotificationAttempt) (orders.NotificationAdmission, error) {
 	body, err := json.Marshal(input)
 	if err != nil {
-		return delivery.Admission{}, err
+		return orders.NotificationAdmission{}, err
 	}
-	var out delivery.Admission
+	var out orders.NotificationAdmission
 	err = c.requestToken(ctx, c.Signer.DeliveryToken(), http.MethodPost, "/internal/notifications/begin", body, &out)
 	if err != nil {
-		return delivery.Admission{}, err
+		return orders.NotificationAdmission{}, err
 	}
 	return out, nil
 }
