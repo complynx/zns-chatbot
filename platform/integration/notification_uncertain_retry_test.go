@@ -87,6 +87,11 @@ func TestNotificationUncertainRetryPreservesWireAfterLanguageChange(t *testing.T
 		t.Run(domain, func(t *testing.T) {
 			t.Parallel()
 			r := notificationRuntime(t, domain)
+			_, err := r.f.db.Exec(t.Context(), `UPDATE core.users SET language='en' WHERE id='bob'`)
+			require.NoError(t, err)
+			initial, err := r.f.b.API.Preferences(t.Context(), "bob")
+			require.NoError(t, err)
+			require.Equal(t, "en", initial.Language)
 			loss := &notificationLostResponse{drops: 1}
 			r.f.b.TG.HTTP = &http.Client{Transport: loss}
 			dispatch := exactNotificationDelivery(r, domain)
@@ -95,11 +100,15 @@ func TestNotificationUncertainRetryPreservesWireAfterLanguageChange(t *testing.T
 			require.Equal(t, "pending", r.status(t, r.first).State)
 			before := loss.payloads()
 			require.Len(t, before, 1)
+			require.NotEmpty(t, before[0].Text)
 			if domain == "massage" {
 				require.NotEmpty(t, before[0].Markup.Rows)
 			}
-			_, err := r.f.db.Exec(t.Context(), `UPDATE core.users SET language='ru' WHERE id='bob'`)
+			_, err = r.f.db.Exec(t.Context(), `UPDATE core.users SET language='ru' WHERE id='bob'`)
 			require.NoError(t, err)
+			changed, err := r.f.b.API.Preferences(t.Context(), "bob")
+			require.NoError(t, err)
+			require.Equal(t, "ru", changed.Language)
 			r.restartNotificationOwner(t, domain)
 			r.wake(t)
 			dispatch = exactNotificationDelivery(r, domain)
