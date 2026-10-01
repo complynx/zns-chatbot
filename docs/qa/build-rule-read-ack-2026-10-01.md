@@ -14,6 +14,8 @@ Explicit full-file read acknowledgments received from:
 - kanban_manager
 - d_admission_code_qa_281
 - payment_code_qa_282
+- fqa_current_flows_a (fresh independent reviewer, before execution)
+- fqa_current_recovery_b (fresh independent reviewer, before execution)
 
 e_probe_guard_developer has no initialized assignment. The instruction was queued
 for acknowledgment before any activation; no execution has been assigned to it.
