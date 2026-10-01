@@ -8,6 +8,7 @@ delivery:
   bot_interval: 50ms
   chat_interval: 1s
   cooldown_fallback: 30s
+  uncertainty_retry_base: 5s
 server:
   host: 127.0.0.1
   port: 8080

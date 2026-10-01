@@ -44,3 +44,23 @@ func TestMissingCooldownUsesRoundedConfiguredFallback(t *testing.T) {
 	settings.BotID = 0
 	assert.ErrorIs(t, settings.Validate(), delivery.ErrSettings)
 }
+
+func TestUncertaintyRetryBasePreservesLegacySettingsAndCooldown(t *testing.T) {
+	t.Parallel()
+	settings := delivery.Settings{
+		BotID: 42, BotInterval: time.Second, ChatInterval: time.Second,
+		Fallback: 1500 * time.Millisecond,
+	}
+	require.NoError(t, settings.Validate())
+	assert.Equal(t, 5*time.Second, settings.UncertaintyRetryBaseOrDefault())
+	settings.UncertaintyRetryBase = 7 * time.Second
+	require.NoError(t, settings.Validate())
+	assert.Equal(t, 7*time.Second, settings.UncertaintyRetryBaseOrDefault())
+	now := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	deadline, valid := settings.Cooldown(now,
+		delivery.Outcome{Kind: delivery.Deferred, Reason: "telegram_rate_limit", Missing: true})
+	require.True(t, valid)
+	assert.Equal(t, now.Add(2*time.Second), deadline, "missing 429 cooldown still uses its separate fallback")
+	settings.UncertaintyRetryBase = -time.Second
+	assert.ErrorIs(t, settings.Validate(), delivery.ErrSettings)
+}

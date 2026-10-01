@@ -253,18 +253,19 @@ func (c Config) validateOpenAIModel(command string) error {
 
 func (c Config) validateDurations() error {
 	durations := map[string]time.Duration{
-		"registration.retention":     c.Registration.Retention,
-		"delivery.bot_interval":      c.Delivery.BotInterval,
-		"delivery.chat_interval":     c.Delivery.ChatInterval,
-		"delivery.cooldown_fallback": c.Delivery.CooldownFallback,
-		"server.read_header_timeout": c.Server.ReadHeaderTimeout,
-		"server.read_timeout":        c.Server.ReadTimeout,
-		"server.write_timeout":       c.Server.WriteTimeout,
-		"server.idle_timeout":        c.Server.IdleTimeout,
-		"server.health_timeout":      c.Server.HealthTimeout,
-		"shutdown.drain":             c.Shutdown.Drain,
-		"shutdown.telemetry_flush":   c.Shutdown.TelemetryFlush,
-		"orders.reminder_after":      c.Orders.ReminderAfter,
+		"registration.retention":          c.Registration.Retention,
+		"delivery.bot_interval":           c.Delivery.BotInterval,
+		"delivery.chat_interval":          c.Delivery.ChatInterval,
+		"delivery.cooldown_fallback":      c.Delivery.CooldownFallback,
+		"delivery.uncertainty_retry_base": c.Delivery.UncertaintyRetryBase,
+		"server.read_header_timeout":      c.Server.ReadHeaderTimeout,
+		"server.read_timeout":             c.Server.ReadTimeout,
+		"server.write_timeout":            c.Server.WriteTimeout,
+		"server.idle_timeout":             c.Server.IdleTimeout,
+		"server.health_timeout":           c.Server.HealthTimeout,
+		"shutdown.drain":                  c.Shutdown.Drain,
+		"shutdown.telemetry_flush":        c.Shutdown.TelemetryFlush,
+		"orders.reminder_after":           c.Orders.ReminderAfter,
 	}
 	for name, value := range durations {
 		if value <= 0 {
