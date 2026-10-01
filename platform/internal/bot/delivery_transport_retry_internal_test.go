@@ -831,12 +831,8 @@ func TestBotTransportRetryCancelledLateReceipt(t *testing.T) {
 }
 
 func TestBotTransportRetryRecoveredKnownOutcomeFencesPositive(t *testing.T) {
-	for _, terminal := range []bool{false, true} {
-		name := "pending"
-		if terminal {
-			name = "cancelled"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, state := range []string{"pending", "cancelled_after", "cancelled_before"} {
+		t.Run(state, func(t *testing.T) {
 			db := foodPendingDatabase(t)
 			ctx := t.Context()
 			b := botDeliveryTestBot(db)
@@ -845,12 +841,29 @@ func TestBotTransportRetryRecoveredKnownOutcomeFencesPositive(t *testing.T) {
 			queued, err := b.enqueueBotIntent(ctx, "", 101, "recovered-known", "notice", botdelivery.Reference{
 				Kind: botdelivery.IdentityIntent, Update: 1, Notice: i18n.IdentityUnavailable, Language: "en"}, "send")
 			require.NoError(t, err)
+			snapshot := func(ignored ...string) string {
+				var raw string
+				require.NoError(t, db.QueryRow(ctx, `SELECT jsonb_build_object(
+ 'intent',(SELECT to_jsonb(i)-COALESCE($1::text[],ARRAY[]::text[]) FROM bot.delivery_intents i WHERE bot_id=999 AND operation_key='recovered-known'),
+ 'queue',(SELECT jsonb_agg(to_jsonb(q)) FROM core.delivery_queue q WHERE bot_id=999),
+ 'pacing',(SELECT jsonb_agg(to_jsonb(p)) FROM core.delivery_pacing p WHERE bot_id=999))::text`, ignored).Scan(&raw))
+				return raw
+			}
 			attempts := make(chan botdelivery.Intent, 1)
 			recovery := make(chan error, 1)
+			terminalBefore := make(chan string, 1)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				attempt, readErr := botdelivery.Read(r.Context(), db, 999, queued.Reference, false)
 				if readErr == nil {
 					readErr = b.RecoverBotIntents(r.Context())
+				}
+				if readErr == nil && state == "cancelled_before" {
+					var recovered botdelivery.Intent
+					recovered, readErr = botdelivery.Read(r.Context(), db, 999, queued.Reference, false)
+					if readErr == nil {
+						readErr = b.postponeBotIntent(r.Context(), recovered, true)
+					}
+					terminalBefore <- snapshot("last_confirmed_attempt")
 				}
 				attempts <- attempt
 				recovery <- readErr
@@ -876,20 +889,31 @@ func TestBotTransportRetryRecoveredKnownOutcomeFencesPositive(t *testing.T) {
 			if completionErr != nil {
 				t.Errorf("actual late confirmed429 must be persisted: %v", completionErr)
 			}
+			if state == "cancelled_before" {
+				select {
+				case before := <-terminalBefore:
+					require.JSONEq(t, before, snapshot("last_confirmed_attempt"), "terminal negative writes only the known-outcome fence")
+				default:
+					t.Fatal("actual negative response did not follow cancellation")
+				}
+			}
 			current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
 			require.NoError(t, err)
 			require.Equal(t, attempt.Attempt, current.Attempt, "no new admission occurred")
-			if terminal {
+			if state == "cancelled_after" {
 				require.NoError(t, b.postponeBotIntent(ctx, current, true))
 			}
-			snapshot := func() string {
-				var raw string
-				require.NoError(t, db.QueryRow(ctx, `SELECT jsonb_build_object(
- 'intent',(SELECT to_jsonb(i) FROM bot.delivery_intents i WHERE bot_id=999 AND operation_key='recovered-known'),
- 'queue',(SELECT jsonb_agg(to_jsonb(q)) FROM core.delivery_queue q WHERE bot_id=999),
- 'pacing',(SELECT jsonb_agg(to_jsonb(p)) FROM core.delivery_pacing p WHERE bot_id=999))::text`).Scan(&raw))
-				return raw
+			var confirmed *int64
+			var uncertain int64
+			var resends int
+			require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)->>'last_confirmed_attempt')::bigint,
+ last_uncertain_attempt,uncertain_resends FROM bot.delivery_intents i
+ WHERE bot_id=999 AND operation_key='recovered-known'`).Scan(&confirmed, &uncertain, &resends))
+			if confirmed == nil || *confirmed != attempt.Attempt {
+				t.Error("the actual known response must durably fence its exact attempt")
 			}
+			require.Equal(t, attempt.Attempt, uncertain, "historical uncertainty remains factual")
+			require.Zero(t, resends, "late completion does not admit a resend")
 			before := snapshot()
 			positiveErr := b.finishBotIntent(ctx, attempt,
 				delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}, botdelivery.Continuation{}, false)
