@@ -1513,8 +1513,11 @@ func checkRecoveredNegativeReplay(t *testing.T, f recoveredReplyFixture, outcome
 	t.Helper()
 	var state string
 	var noLease bool
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT state,lease_until IS NULL FROM core.`+f.table+` WHERE id=$1`, f.id).
-		Scan(&state, &noLease))
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT state,lease_until IS NULL FROM core.`+f.table+` WHERE id=$1`, f.id).
+			Scan(&state, &noLease),
+	)
 	require.Equal(t, "pending", state)
 	require.True(t, noLease)
 	before := f.snapshot(t)
