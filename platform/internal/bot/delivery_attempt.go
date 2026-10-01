@@ -9,6 +9,8 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
+const botEditMessageMethod = "editMessageText"
+
 // Hash the normalized logical request, including its method and exact edit target.
 // Documents use their content hash, not a random multipart boundary or retained body.
 func prepareBotAttempt(i botdelivery.Intent, r botRenderedDelivery) (botdelivery.PreparedAttempt, error) {
@@ -19,7 +21,7 @@ func prepareBotAttempt(i botdelivery.Intent, r botRenderedDelivery) (botdelivery
 		method = "sendDocument"
 	}
 	if i.Phase == botPhaseEdit {
-		method = "editMessageText"
+		method = botEditMessageMethod
 	}
 	target := i.Target
 	// Reconstruction supplies the first admission's actual edit target.
@@ -28,10 +30,10 @@ func prepareBotAttempt(i botdelivery.Intent, r botRenderedDelivery) (botdelivery
 			target = originalTarget
 		}
 		if target > 0 {
-			method = "editMessageText"
+			method = botEditMessageMethod
 		}
 	}
-	if method == "editMessageText" {
+	if method == botEditMessageMethod {
 		r.Payload.MessageID = target
 	}
 	wire := struct {

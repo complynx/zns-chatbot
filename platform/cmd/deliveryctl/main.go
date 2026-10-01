@@ -18,7 +18,12 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
-const maxInput = 4096
+const (
+	maxInput           = 4096
+	inspectCommand     = "inspect"
+	operationTimeout   = 30 * time.Second
+	resolutionFallback = 5 * time.Second
+)
 
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout); err != nil {
@@ -44,7 +49,7 @@ func decode(input io.Reader, out any) error {
 }
 
 func run(args []string, input io.Reader, output io.Writer) error {
-	if len(args) == 0 || (args[0] != "inspect" && args[0] != "resolve") {
+	if len(args) == 0 || (args[0] != inspectCommand && args[0] != "resolve") {
 		return botdelivery.ErrBinding
 	}
 	flags := flag.NewFlagSet("deliveryctl", flag.ContinueOnError)
@@ -56,14 +61,14 @@ func run(args []string, input io.Reader, output io.Writer) error {
 	}
 	var key botdelivery.IntentKey
 	var resolution botdelivery.Resolution
-	if args[0] == "inspect" {
+	if args[0] == inspectCommand {
 		if err := decode(input, &key); err != nil {
 			return err
 		}
 	} else if err := decode(input, &resolution); err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), operationTimeout)
 	defer cancel()
 	db, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -76,11 +81,11 @@ func run(args []string, input io.Reader, output io.Writer) error {
 			BotID:        *botID,
 			BotInterval:  time.Second,
 			ChatInterval: time.Second,
-			Fallback:     5 * time.Second,
+			Fallback:     resolutionFallback,
 		},
 	}
 	var result botdelivery.Inspection
-	if args[0] == "inspect" {
+	if args[0] == inspectCommand {
 		result, err = service.Inspect(ctx, *actor, key)
 	} else {
 		result, err = service.Resolve(ctx, *actor, resolution)

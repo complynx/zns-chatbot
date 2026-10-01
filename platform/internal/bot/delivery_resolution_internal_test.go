@@ -40,7 +40,7 @@ func TestBotResolutionLostWireResponseUsesOriginalAttempt(t *testing.T) {
 		}
 		if queryErr != nil {
 			failures <- queryErr
-			http.Error(w, "capture missing", 500)
+			http.Error(w, "capture missing", http.StatusInternalServerError)
 			return
 		}
 		recorder := httptest.NewRecorder()

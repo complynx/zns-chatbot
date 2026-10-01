@@ -26,7 +26,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 		return Observation{}, err
 	}
 	if reference.Family == PassReceiptRedactionFamily || !reference.Valid(owner) || chat <= 0 ||
-		(phase != phaseSend && phase != "document") {
+		(phase != phaseSend && phase != string(DocumentIntent)) {
 		return Observation{}, ErrBinding
 	}
 	i := Intent{

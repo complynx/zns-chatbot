@@ -216,7 +216,7 @@ func TestResolutionPostgresUnsentAndLegacyRemainDistinct(t *testing.T) {
 			),
 		)
 		r := Resolution{
-			IntentKey:      IntentKey{Operation: operation, Effect: "notice"},
+			IntentKey:      {Operation: operation, Effect: "notice"},
 			Key:            operation,
 			Attempt:        1,
 			Disposition:    "confirmed_unsent",

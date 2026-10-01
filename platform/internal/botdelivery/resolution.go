@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,12 +14,14 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
+const resolutionCleanupTimeout = 5 * time.Second
+
 func captureAttempt(ctx context.Context, tx pgx.Tx, i Intent, p PreparedAttempt) error {
 	expected := "sendMessage"
 	if i.Phase == phaseEdit {
 		expected = "editMessageText"
 	}
-	if i.Phase == "document" {
+	if i.Phase == string(DocumentIntent) {
 		expected = "sendDocument"
 	}
 	if !p.valid() || p.Method != expected {
@@ -46,7 +49,7 @@ func operatorAuthority(ctx context.Context, tx pgx.Tx, actor string, lock bool) 
 	var found string
 	err := tx.QueryRow(ctx, query, actor).Scan(&found)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return &core.ProblemError{Status: 403, Code: "forbidden"}
+		return &core.ProblemError{Status: http.StatusForbidden, Code: "forbidden"}
 	}
 	return core.DatabaseOperationError(err)
 }
@@ -132,7 +135,7 @@ func (s Service) Resolve(ctx context.Context, actor string, r Resolution) (Inspe
 		return Inspection{}, ErrBinding
 	}
 	defer func() {
-		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), resolutionCleanupTimeout)
 		defer cancel()
 		var released bool
 		if unlockErr := conn.QueryRow(cleanup, "SELECT pg_advisory_unlock(918273)").
@@ -160,24 +163,14 @@ func (s Service) resolve(ctx context.Context, tx pgx.Tx, actor string, r Resolut
 	if err != nil {
 		return Inspection{}, ErrBinding
 	}
+	prior, err := s.priorResolution(ctx, tx, actor, r)
+	if err != nil {
+		return Inspection{}, err
+	}
+	if prior != nil {
+		return *prior, core.DatabaseOperationError(tx.Commit(ctx))
+	}
 	q := dbgen.New(tx)
-	prior, err := q.GetBotDeliveryResolution(
-		ctx,
-		dbgen.GetBotDeliveryResolutionParams{Actor: actor, OperationKey: r.Key},
-	)
-	if err == nil {
-		var original Resolution
-		var out Inspection
-		if json.Unmarshal(prior.Request, &original) != nil || original != r ||
-			json.Unmarshal(prior.Result, &out) != nil ||
-			out.BotID != s.Delivery.BotID {
-			return Inspection{}, ErrBinding
-		}
-		return out, core.DatabaseOperationError(tx.Commit(ctx))
-	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return Inspection{}, core.DatabaseOperationError(err)
-	}
 	ref := delivery.Reference{Owner: delivery.Bot, Key: r.Operation, Effect: r.Effect}
 	i, err := Read(ctx, tx, s.Delivery.BotID, ref, true)
 	if err != nil {
@@ -227,21 +220,45 @@ func (s Service) resolve(ctx context.Context, tx pgx.Tx, actor string, r Resolut
 		return Inspection{}, err
 	}
 	out.Disposition = r.Disposition
+	if err = recordResolution(ctx, tx, actor, r.Key, raw, out, before); err != nil {
+		return Inspection{}, err
+	}
+	return out, core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+func (s Service) priorResolution(ctx context.Context, tx pgx.Tx, actor string, r Resolution) (*Inspection, error) {
+	prior, err := dbgen.New(tx).GetBotDeliveryResolution(
+		ctx, dbgen.GetBotDeliveryResolutionParams{Actor: actor, OperationKey: r.Key},
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, core.DatabaseOperationError(err)
+	}
+	var original Resolution
+	var out Inspection
+	if json.Unmarshal(prior.Request, &original) != nil || original != r ||
+		json.Unmarshal(prior.Result, &out) != nil || out.BotID != s.Delivery.BotID {
+		return nil, ErrBinding
+	}
+	return &out, nil
+}
+
+func recordResolution(ctx context.Context, tx pgx.Tx, actor, key string, request []byte, out, before Inspection) error {
 	// Preserve original unknown reason and attempt in the audit result.
 	audit := struct {
 		Inspection
+
 		OriginalState  delivery.Kind `json:"original_state"`
 		OriginalReason string        `json:"original_reason"`
 	}{out, before.State, before.Reason}
 	result, err := json.Marshal(audit)
 	if err != nil {
-		return Inspection{}, ErrBinding
+		return ErrBinding
 	}
-	if err = q.InsertBotDeliveryResolution(
-		ctx,
-		dbgen.InsertBotDeliveryResolutionParams{Actor: actor, OperationKey: r.Key, Request: raw, Result: result},
-	); err != nil {
-		return Inspection{}, core.DatabaseOperationError(err)
-	}
-	return out, core.DatabaseOperationError(tx.Commit(ctx))
+	return core.DatabaseOperationError(dbgen.New(tx).InsertBotDeliveryResolution(
+		ctx, dbgen.InsertBotDeliveryResolutionParams{Actor: actor, OperationKey: key, Request: request, Result: result},
+	),
+	)
 }

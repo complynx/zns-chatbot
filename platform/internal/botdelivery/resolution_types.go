@@ -36,6 +36,7 @@ func (k IntentKey) valid() bool {
 // Resolution is a trusted operator attestation, not verification of an external receipt.
 type Resolution struct {
 	IntentKey
+
 	Key            string `json:"key"`
 	Attempt        int64  `json:"attempt"`
 	Disposition    string `json:"disposition"`
@@ -50,6 +51,7 @@ type Resolution struct {
 // Inspection deliberately omits private reference and continuation fields.
 type Inspection struct {
 	IntentKey
+
 	BotID            int64         `json:"bot_id"`
 	Chat             int64         `json:"chat_id"`
 	Method           string        `json:"method"`
