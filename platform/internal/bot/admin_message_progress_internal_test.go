@@ -301,7 +301,16 @@ func assertAdminMessagePersistedReplay(t *testing.T, service adminmessage.Servic
 	b.Host.LocalBotDelivery.Service.AdminMessages = service
 	b.API.Base = server.URL
 	in := incoming{owner: "bob", chat: 202}
-	ctx := withAdminMessageSource(t.Context(), in, telegram.Update{ID: message.ID})
+	update := telegram.Update{ID: message.ID, Callback: &telegram.Callback{
+		From: telegram.User{ID: in.chat}, Data: fmt.Sprintf("adminmsg:page:%d:20", message.ID),
+		Message: telegram.Message{Chat: telegram.Chat{ID: in.chat, Type: "private"}},
+	}}
+	_, captureErr := b.saveBatch(t.Context(), 0, []telegram.Update{update})
+	require.NoError(t, captureErr)
+	// Inbox acknowledgement removes its payload; durable native proof remains.
+	_, captureErr = db.Exec(t.Context(), `DELETE FROM bot.telegram_inbox WHERE update_id=$1`, update.ID)
+	require.NoError(t, captureErr)
+	ctx := withAdminMessageSource(t.Context(), in, update)
 	messages := orderMessages{language: language}
 	require.NoError(t, b.sendAdminMessagePage(ctx, in, message.ID, 20, &messages))
 	readSaved := func() string {
