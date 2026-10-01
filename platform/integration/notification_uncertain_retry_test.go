@@ -764,6 +764,8 @@ func assertNotification429Projection(
 
 func notificationCooldownProvider(t *testing.T, r *notificationRuntimeFixture, text string) *httptest.Server {
 	t.Helper()
+	var mu sync.Mutex
+	var negatives int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		body, err := io.ReadAll(request.Body)
 		if err != nil {
@@ -777,7 +779,13 @@ func notificationCooldownProvider(t *testing.T, r *notificationRuntimeFixture, t
 			http.Error(w, "invalid synthetic request", http.StatusBadRequest)
 			return
 		}
-		if message.ChatID != 202 || message.Text != text {
+		mu.Lock()
+		reject := message.ChatID == 202 && message.Text == text && negatives < 3
+		if reject {
+			negatives++
+		}
+		mu.Unlock()
+		if !reject {
 			r.f.fake.Config.Handler.ServeHTTP(w, request)
 			return
 		}
