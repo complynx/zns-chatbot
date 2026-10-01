@@ -219,7 +219,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	const lastOld = "087_telegram_inbox_retries.sql"
 	const upgrade = "088_delivery_queue_observation.sql"
 	const credit = "089_credit_usage_observation.sql"
-	const current = deliveryResolutionUpgrade
+	const current = deliveryTransportUpgrade
 	foundOld, foundUpgrade := false, false
 	expectedOldLedger := make([]queueUpgradeLedgerEntry, 0, len(entries))
 	for _, entry := range entries {
@@ -320,12 +320,12 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		queueUpgradeLedger(t, db),
 		"only actual 088, 089, 090 and 092 ledger entries are added; old entries remain exact",
 	)
-	var captures, resolutions int64
+	var inventedMetadata, spentBudget int64
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
- (SELECT count(*) FROM bot.delivery_attempts),(SELECT count(*) FROM bot.delivery_resolutions)`).
-		Scan(&captures, &resolutions))
-	require.Zero(t, captures, "upgrade must not invent original attempt capture")
-	require.Zero(t, resolutions, "upgrade must not invent operator evidence")
+ (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
+		Scan(&inventedMetadata, &spentBudget))
+	require.Zero(t, inventedMetadata, "upgrade must not invent historical uncertainty")
+	require.Zero(t, spentBudget, "upgrade must not consume resend budget")
 	require.JSONEq(
 		t,
 		oldLedgerSnapshot,
@@ -390,10 +390,10 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	replayState := queueUpgradeState(t, db, true)
 	require.NoError(t, Migrate(t.Context(), db), "restart migration is idempotent")
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
- (SELECT count(*) FROM bot.delivery_attempts),(SELECT count(*) FROM bot.delivery_resolutions)`).
-		Scan(&captures, &resolutions))
-	require.Zero(t, captures, "replay must not invent original attempt capture")
-	require.Zero(t, resolutions, "replay must not invent operator evidence")
+ (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
+		Scan(&inventedMetadata, &spentBudget))
+	require.Zero(t, inventedMetadata, "replay must not invent historical uncertainty")
+	require.Zero(t, spentBudget, "replay must not consume resend budget")
 	require.JSONEq(t, replayState, queueUpgradeState(t, db, true),
 		"replay preserves every durable scheduling and receipt field")
 	require.Equal(
