@@ -12,7 +12,7 @@
 
 - Synthetic stand data and stands may be changed or deleted when this does not conflict with another test. Assign stand/data ownership before concurrent work; isolate conflicting scenarios. This supersedes the earlier no-deletion pause constraint for synthetic test resources. Production remains separately authorized.
 
-- Working progress and Kanban live only in ignored `management.local/PROGRESS.html` and `management.local/KANBAN.html`. Never stage them or recreate tracked root copies. Keep stable contracts and acceptance reports in Git.
+- Working progress and Kanban live only in ignored `management.local/PROGRESS.html` and `management.local/KANBAN.html`. Never stage them or recreate tracked root copies. Keep operational metrics, assignment/review counters, worker acknowledgments and current estimates in management.local too; tracked documents may contain stable links. Keep stable contracts and final acceptance reports in Git.
 
 # Two QA gates per stage
 

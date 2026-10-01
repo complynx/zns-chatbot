@@ -50,7 +50,7 @@ the reviewer owns observable UI results and the independent verdict.
 ## Documentation and acceptance closure
 
 Update ignored management.local/PROGRESS.html and management.local/KANBAN.html after material results, ownership changes,
-plan changes and blockers. Working HTML stays outside Git. Root batches stable metric and
+plan changes and blockers. Working HTML stays outside Git. Operational journals and current estimates also stay local. Root batches stable rules and
 report changes into one coherent local checkpoint per handoff/result group.
 Do not create separate commits for every minor status sentence. Allocate review
 numbers before dispatch as already required. Preserve user edits separately.
