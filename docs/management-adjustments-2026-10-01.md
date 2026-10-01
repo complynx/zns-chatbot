@@ -1,5 +1,11 @@
 # Management adjustments — 1 October 2026
 
+Daniel explicitly added these management targets to the active migration goal.
+They supplement the full Go/PostgreSQL, architecture, parity, independent QA,
+data preservation and production objective; they do not narrow completion.
+The available Goal API cannot edit objective text, so the instruction is recorded
+here and in PROGRESS while the existing goal remains active.
+
 The independent management audit found 29 review returns in the recorded
 9h50 window, without whole C–E or full Functional closure. Reviewer/merge
 queues were usually 0–2; a temporary queue of four cleared. More reviewer
