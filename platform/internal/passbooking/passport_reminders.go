@@ -20,6 +20,7 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 		return 0, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('pass-passport-reminder',0))`); err != nil {
 		return 0, core.DatabaseOperationError(err)
 	}
@@ -52,6 +53,9 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 		if eligibilityErr != nil {
 			return 0, eligibilityErr
 		}
+		// Before the first marker, profile waits can renew the selection safely.
+		// Later advances must roll back every earlier marker in this transaction.
+		clockAttempt.acceptCurrent(count == 0)
 		if !eligible {
 			continue
 		}
@@ -76,6 +80,9 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 		count++
 	}
 	if err = delivery.RegisterBatch(ctx, tx, s.Delivery.BotID, pending); err != nil {
+		return 0, err
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
 		return 0, err
 	}
 	return count, core.DatabaseOperationError(tx.Commit(ctx))

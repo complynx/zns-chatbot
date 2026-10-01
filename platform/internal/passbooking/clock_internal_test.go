@@ -2,6 +2,7 @@ package passbooking
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
 type registrationTestClock struct {
@@ -193,4 +195,80 @@ func TestRegistrationTurnTimeFencesConfiguredObservation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, start, observed)
 	require.Equal(t, []string{"SELECT clock_timestamp()"}, defaultTx.queries)
+}
+
+func TestRegistrationAttemptClockFencesCommitAndRefusal(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	for _, scenario := range []string{"unchanged", "advanced", "intermediate", "refusal", "clock failure", "canceled", "database"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			clock := &registrationTestClock{now: start}
+			original := Service{RegistrationClock: clock}
+			scoped, attempt := original.WithClockAttempt()
+			require.Same(t, clock, original.RegistrationClock)
+			observed, _, err := registrationingress.Observe(t.Context(), scoped.RegistrationClock)
+			require.NoError(t, err)
+			require.Equal(t, start, observed)
+			if scenario != "unchanged" {
+				clock.now = start.Add(time.Microsecond)
+			}
+			switch scenario {
+			case "clock failure":
+				clock.err = io.EOF
+				require.ErrorIs(t, attempt.Check(t.Context()), io.EOF)
+			case "canceled":
+				ctx, cancel := context.WithCancel(t.Context())
+				cancel()
+				require.ErrorIs(t, attempt.Check(ctx), context.Canceled)
+			case "database":
+				failure := errors.Join(core.ErrDatabase, context.Canceled, ErrRegistrationTimeChanged)
+				require.Same(t, failure, attempt.DecisionError(t.Context(), failure))
+			case "refusal":
+				require.ErrorIs(
+					t,
+					attempt.DecisionError(t.Context(), conflict("pass_sales_closed")),
+					ErrRegistrationTimeChanged,
+				)
+			case "intermediate":
+				_, _, err = registrationingress.Observe(t.Context(), scoped.RegistrationClock)
+				require.NoError(t, err)
+				clock.now = start
+				require.ErrorIs(t, attempt.Check(t.Context()), ErrRegistrationTimeChanged)
+			case "advanced":
+				require.ErrorIs(t, attempt.Check(t.Context()), ErrRegistrationTimeChanged)
+			default:
+				require.NoError(t, attempt.Check(t.Context()))
+				refusal := conflict("pass_sales_closed")
+				require.Same(t, refusal, attempt.DecisionError(t.Context(), refusal))
+			}
+		})
+	}
+}
+
+func TestRegistrationAttemptKeepsNilAndRenewedAdmissionBehavior(t *testing.T) {
+	t.Parallel()
+	original := Service{}
+	scoped, attempt := original.WithClockAttempt()
+	require.Nil(t, scoped.RegistrationClock)
+	require.Nil(t, attempt)
+	require.NoError(t, attempt.Check(t.Context()))
+	failure := conflict("pass_event_finished")
+	require.Same(t, failure, attempt.DecisionError(t.Context(), failure))
+	clock := &registrationTestClock{now: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)}
+	scoped, attempt = (Service{RegistrationClock: clock}).WithClockAttempt()
+	_, _, err := registrationingress.Observe(t.Context(), scoped.RegistrationClock)
+	require.NoError(t, err)
+	clock.now = clock.now.Add(time.Hour)
+	_, _, err = registrationingress.Observe(t.Context(), scoped.RegistrationClock)
+	require.NoError(t, err)
+	attempt.acceptCurrent(true)
+	require.NoError(t, attempt.Check(t.Context()), "renewed admission has no earlier domain writes")
+	clock.now = clock.now.Add(time.Microsecond)
+	require.ErrorIs(
+		t,
+		attempt.Check(t.Context()),
+		ErrRegistrationTimeChanged,
+		"later owner write still needs a final check",
+	)
 }

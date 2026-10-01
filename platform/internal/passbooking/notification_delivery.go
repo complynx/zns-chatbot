@@ -35,6 +35,7 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 		return delivery.Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	current, err := s.lockNotificationEligibility(ctx, tx, attempt.ID)
 	if err != nil {
 		return delivery.Admission{}, notificationAttemptError(err)
@@ -56,18 +57,23 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 		return delivery.Admission{}, err
 	}
 	if !current {
-		return s.cancelNotificationAdmission(ctx, tx, attempt)
+		clockAttempt.acceptCurrent(true)
+		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
 	}
 	gate, current, err := s.beginCurrentNotification(ctx, tx, attempt, row)
 	if err != nil {
 		return delivery.Admission{}, err
 	}
+	clockAttempt.acceptCurrent(true)
 	if !current {
-		return s.cancelNotificationAdmission(ctx, tx, attempt)
+		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
 	}
 	if !gate.Ready {
 		outcome := delivery.Outcome{Kind: delivery.Deferred, Reason: gate.Reason}
 		if err = s.saveNotificationOutcome(ctx, q, attempt, outcome, "", gate.NotBefore, 0); err != nil {
+			return delivery.Admission{}, err
+		}
+		if err = clockAttempt.Check(ctx); err != nil {
 			return delivery.Admission{}, err
 		}
 		return gate, core.DatabaseOperationError(tx.Commit(ctx))
@@ -81,6 +87,9 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 	}
 	if count != 1 {
 		return delivery.Admission{}, notificationStale()
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return delivery.Admission{}, err
 	}
 	return gate, core.DatabaseOperationError(tx.Commit(ctx))
 }
@@ -135,9 +144,13 @@ func (s Service) cancelNotificationAdmission(
 	ctx context.Context,
 	tx pgx.Tx,
 	attempt delivery.Attempt,
+	clockAttempt *RegistrationClockAttempt,
 ) (delivery.Admission, error) {
 	outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "notification_no_longer_current"}
 	if err := s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {
+		return delivery.Admission{}, err
+	}
+	if err := clockAttempt.Check(ctx); err != nil {
 		return delivery.Admission{}, err
 	}
 	return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))

@@ -70,6 +70,8 @@ func (r NativeRegistrationResolver) resolveCandidate(
 		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	registration, clockAttempt := r.Service.Registration.WithClockAttempt()
+	r.Service.Registration = registration
 	var source readsource.Derivation
 	if envelope.Source != nil {
 		source = envelope.Source.Clone()
@@ -101,6 +103,9 @@ func (r NativeRegistrationResolver) resolveCandidate(
 		IntentID: pgtype.Int8{Int64: intentID, Valid: intentID > 0},
 	}); err != nil {
 		return core.DatabaseOperationError(err)
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return err
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
 }

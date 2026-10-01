@@ -74,6 +74,7 @@ func (s Service) BeginRegistrationAnnouncement(
 		return delivery.Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	q := dbgen.New(tx)
 	row, err := s.lockAnnouncementAdmission(ctx, q, attempt)
 	if err != nil {
@@ -83,14 +84,16 @@ func (s Service) BeginRegistrationAnnouncement(
 		return delivery.Admission{}, conflict("pass_announcement_stale")
 	}
 	if !row.Current {
-		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt)
+		clockAttempt.acceptCurrent(true)
+		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
 	}
 	gate, current, err := s.beginCurrentAnnouncement(ctx, tx, q, attempt)
 	if err != nil {
 		return gate, err
 	}
+	clockAttempt.acceptCurrent(true)
 	if !current {
-		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt)
+		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
 	}
 	if !gate.Ready {
 		err = s.finishAnnouncement(
@@ -112,6 +115,9 @@ func (s Service) BeginRegistrationAnnouncement(
 		}
 	}
 	if err != nil {
+		return delivery.Admission{}, err
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
 		return delivery.Admission{}, err
 	}
 	return gate, core.DatabaseOperationError(tx.Commit(ctx))
@@ -191,6 +197,7 @@ func (s Service) cancelAnnouncementAdmission(
 	tx pgx.Tx,
 	q *dbgen.Queries,
 	attempt delivery.Attempt,
+	clockAttempt *RegistrationClockAttempt,
 ) (delivery.Admission, error) {
 	outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "announcement_superseded"}
 	deadline := time.Now()
@@ -205,6 +212,9 @@ func (s Service) cancelAnnouncementAdmission(
 		return delivery.Admission{}, err
 	}
 	if err := s.finishAnnouncement(ctx, q, attempt, outcome, deadline); err != nil {
+		return delivery.Admission{}, err
+	}
+	if err := clockAttempt.Check(ctx); err != nil {
 		return delivery.Admission{}, err
 	}
 	return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))

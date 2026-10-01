@@ -15,7 +15,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/derivedmutation"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationnative"
 )
@@ -35,6 +38,248 @@ func (c *registrationClock) advance(now time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.now = now
+}
+
+func TestRegistrationClockOuterDeliveryWaitRollsBack(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"solo", "invite", "assignment", "passport", "deadline", "runtime-batch", "derived-batch", "cancel", "sql-failure"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			testRegistrationClockOuterDeliveryWait(t, scenario)
+		})
+	}
+}
+
+func testRegistrationClockOuterDeliveryWait(t *testing.T, scenario string) {
+	t.Helper()
+	db, service := bookingFixture(t)
+	var start time.Time
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&start))
+	clock := &registrationClock{now: start}
+	service.RegistrationClock = clock
+	finish := start.Add(59 * time.Hour)
+	_, err := db.Exec(t.Context(), `UPDATE core.pass_events SET finishes_at=$1`, finish)
+	require.NoError(t, err)
+	command := bookingCommand(scenario, "outer-clock-"+scenario, passbooking.Booking{})
+	if scenario == "cancel" || scenario == "sql-failure" {
+		command.Name = "solo"
+	}
+	if scenario == "sql-failure" {
+		_, err = db.Exec(
+			t.Context(),
+			`CREATE FUNCTION core.clock_failed_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+ BEGIN RAISE EXCEPTION 'synthetic receipt failure'; END $$;
+ CREATE TRIGGER clock_failed_receipt BEFORE INSERT ON core.pass_booking_operations FOR EACH ROW EXECUTE FUNCTION core.clock_failed_receipt()`,
+		)
+		require.NoError(t, err)
+	}
+	if scenario == "invite" {
+		command.InviteTelegramID = 202
+	}
+	if scenario == "passport" || scenario == "deadline" {
+		seed := bookingCommand("solo", "outer-seed", passbooking.Booking{})
+		if scenario == "deadline" {
+			seed.Name, seed.InviteTelegramID = "invite", 202
+		}
+		_, err = service.Execute(t.Context(), "alice", seed)
+		require.NoError(t, err)
+		if scenario == "passport" {
+			_, err = db.Exec(t.Context(), `UPDATE core.pass_events SET passport_required=true`)
+			require.NoError(t, err)
+		}
+		if scenario == "deadline" {
+			clock.advance(start.Add(58*time.Hour + time.Microsecond))
+		}
+	}
+	price := 0
+	assignment := passbooking.AdminAssignment{Event: "dance", Key: command.Key, Target: "alice", TotalPrice: &price,
+		Create: &passbooking.AdminCreate{FromProfile: true}}
+	batch := passbooking.RuntimeBatch{
+		Event:      "dance",
+		Key:        command.Key,
+		Action:     "admin_assign",
+		Recipients: []int64{101},
+		Options: passbooking.AdminAssignment{
+			TotalPrice: &price,
+			Create:     &passbooking.AdminCreate{FromProfile: true},
+		},
+	}
+	var items []passbooking.RuntimeBatchItem
+	run := func(ctx context.Context) error {
+		switch scenario {
+		case "runtime-batch":
+			var runErr error
+			items, runErr = service.RunBatch(ctx, "bob", batch)
+			return runErr
+		case "derived-batch":
+			generation := int64(0)
+			var runErr error
+			items, runErr = (derivedmutation.Service{DB: db, Registration: service}).RunPassBatch(ctx, "bob", batch,
+				readsource.Derivation{Generation: &generation, Authorities: []readsource.Authority{}})
+			return runErr
+		case "assignment":
+			_, runErr := service.AdminAssign(ctx, "bob", assignment)
+			return runErr
+		case "passport":
+			_, runErr := service.ProcessPassportReminders(ctx)
+			return runErr
+		case "deadline":
+			_, runErr := service.ProcessDeadlines(ctx)
+			return runErr
+		default:
+			_, runErr := service.Execute(ctx, "alice", command)
+			return runErr
+		}
+	}
+	before := registrationClockTransactionRows(t, db)
+	_, err = db.Exec(
+		t.Context(),
+		`INSERT INTO core.delivery_lanes(bot_id,chat) VALUES($1,'101') ON CONFLICT DO NOTHING`,
+		service.Delivery.BotID,
+	)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	blocker, err := db.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = blocker.Rollback(context.WithoutCancel(t.Context())) })
+	_, err = blocker.Exec(
+		ctx,
+		`SELECT next_sequence FROM core.delivery_lanes WHERE bot_id=$1 AND chat='101' FOR UPDATE`,
+		service.Delivery.BotID,
+	)
+	require.NoError(t, err)
+	done := make(chan error, 1)
+	go func() { done <- run(ctx) }()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		readErr := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
+ AND wait_event_type='Lock' AND query LIKE '%core.delivery_lanes%FOR UPDATE%')`).Scan(&waiting)
+		return readErr == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond, "domain writes reached the late delivery lane lock")
+	if scenario == "cancel" {
+		cancel()
+		require.NoError(t, blocker.Rollback(context.WithoutCancel(t.Context())))
+	} else {
+		clock.advance(finish)
+		require.NoError(t, blocker.Commit(ctx))
+	}
+	select {
+	case err = <-done:
+		switch scenario {
+		case "cancel":
+			require.ErrorIs(t, err, context.Canceled)
+		case "sql-failure":
+			require.ErrorIs(t, err, core.ErrDatabase)
+			require.True(t, core.IsDatabaseFailure(err))
+			require.NotErrorIs(t, err, passbooking.ErrRegistrationTimeChanged)
+		default:
+			require.ErrorIs(t, err, passbooking.ErrRegistrationTimeChanged)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("outer transaction did not finish after lane release")
+	}
+	require.Equal(
+		t,
+		before,
+		registrationClockTransactionRows(t, db),
+		"all domain state, receipts and once markers rolled back",
+	)
+	if scenario == "cancel" {
+		return
+	}
+	if scenario == "runtime-batch" || scenario == "derived-batch" {
+		if scenario == "derived-batch" {
+			require.Len(t, items, 1)
+			require.Equal(t, passbooking.AdminBatchNotAttempted, items[0].Outcome.Status)
+		} else {
+			require.Empty(t, items, "existing runtime wrapper returns only completed earlier items")
+		}
+		stored, readErr := service.ReadRuntimeBatch(ctx, "bob", batch)
+		require.NoError(t, readErr)
+		require.Equal(t, passbooking.AdminBatchNotAttempted, stored.Items()[0].Outcome.Status)
+		require.NoError(t, run(ctx))
+		require.Equal(t, passbooking.AdminBatchRejected, items[0].Outcome.Status)
+		require.Equal(t, "pass_event_finished", items[0].Outcome.Code)
+		return
+	}
+	switch scenario {
+	case "assignment":
+		requireCode(t, run(ctx), "pass_event_finished")
+	case "invite", "solo", "sql-failure":
+		requireCode(t, run(ctx), "pass_sales_closed")
+	default:
+		require.NoError(t, run(ctx), "maintenance retries at current time without retaining stale markers")
+	}
+}
+
+func registrationClockTransactionRows(t *testing.T, db *pgxpool.Pool) string {
+	t.Helper()
+	var rows string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT jsonb_build_array(
+ (SELECT COALESCE(jsonb_agg(to_jsonb(b) ORDER BY event_id,owner),'[]') FROM core.pass_bookings b),
+ (SELECT COALESCE(jsonb_agg(to_jsonb(n) ORDER BY id),'[]') FROM core.pass_notifications n),
+ (SELECT COALESCE(jsonb_agg(to_jsonb(o) ORDER BY event_id,actor,key_hash),'[]') FROM core.pass_booking_operations o),
+ (SELECT COALESCE(jsonb_agg(to_jsonb(r) ORDER BY owner),'[]') FROM core.pass_passport_reminders r),
+ (SELECT COALESCE(jsonb_agg(to_jsonb(m) ORDER BY event_id,owner),'[]') FROM core.pass_deadline_markers m))::text`).Scan(&rows))
+	return rows
+}
+
+func TestRegistrationClockPassportLaterProfileWaitRollsBackEarlierMarker(t *testing.T) {
+	t.Parallel()
+	db, service := bookingFixture(t)
+	var start time.Time
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&start))
+	clock := &registrationClock{now: start}
+	service.RegistrationClock = clock
+	for _, owner := range []string{"alice", "bob"} {
+		_, err := service.Execute(
+			t.Context(),
+			owner,
+			bookingCommand("solo", "clock-passport-seed-"+owner, passbooking.Booking{}),
+		)
+		require.NoError(t, err)
+	}
+	finish := start.Add(time.Hour)
+	_, err := db.Exec(t.Context(), `UPDATE core.pass_events SET passport_required=true,finishes_at=$1`, finish)
+	require.NoError(t, err)
+	before := registrationClockTransactionRows(t, db)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	blocker, err := db.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = blocker.Rollback(context.WithoutCancel(t.Context())) })
+	_, err = blocker.Exec(ctx, `SELECT passport FROM core.pass_profiles WHERE owner='bob' FOR UPDATE`)
+	require.NoError(t, err)
+	type result struct {
+		count int
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		count, runErr := service.ProcessPassportReminders(ctx)
+		done <- result{count: count, err: runErr}
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		readErr := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
+ AND wait_event_type='Lock' AND query='SELECT passport FROM core.pass_profiles WHERE owner=$1 FOR SHARE')`).Scan(&waiting)
+		return readErr == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond)
+	clock.advance(finish)
+	require.NoError(t, blocker.Commit(ctx))
+	outcome := <-done
+	require.ErrorIs(t, outcome.err, passbooking.ErrRegistrationTimeChanged)
+	require.Zero(t, outcome.count)
+	require.Equal(
+		t,
+		before,
+		registrationClockTransactionRows(t, db),
+		"an earlier user's once marker cannot survive a later profile wait",
+	)
+	count, err := service.ProcessPassportReminders(ctx)
+	require.NoError(t, err)
+	require.Zero(t, count)
 }
 
 func TestRegistrationClockInvitationMaintenanceBoundary(t *testing.T) {

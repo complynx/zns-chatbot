@@ -44,8 +44,12 @@ func (s Service) CaptureAdmission(ctx context.Context, actor string, request Adm
 		return Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	result, err := s.CaptureAdmissionInTx(ctx, tx, actor, request)
 	if err != nil {
+		return Admission{}, clockAttempt.DecisionError(ctx, err)
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
 		return Admission{}, err
 	}
 	return result, core.DatabaseOperationError(tx.Commit(ctx))
@@ -164,6 +168,11 @@ func (p *PreparedCommand) captureNewAdmission(
 			return Admission{}, conflict("pass_event_finished")
 		}
 		state = newSnapshot(p.event, p.records, now)
+		// Allocator waiting precedes the retained sales/turn decision. Original
+		// ingress reception is immutable; the decision is rebuilt at this instant.
+		if attempt, scoped := p.registrationClock.(*RegistrationClockAttempt); scoped {
+			attempt.acceptCurrent(true)
+		}
 	}
 	var retired bool
 	if err = p.tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.registration_intents WHERE event_id=$1 AND owner=$2 AND state='cancelled' AND closed_through_position >= $3)`, p.command.Event, p.actor, position).
