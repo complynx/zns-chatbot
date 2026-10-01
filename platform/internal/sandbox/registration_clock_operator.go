@@ -26,6 +26,9 @@ const clockActionInit = "init"
 const clockActionRead = "read"
 const clockActionAdvance = "advance"
 const clockFilePermission = 0o600
+const clockSetupFields = 2
+const clockSetupTiers = 3
+const clockSetupTierStep = 24 * time.Hour
 
 const registrationClockSetupPrefix = "registration-clock-setup:" + registrationclock.Installation + ":" + registrationclock.Case + ":"
 
@@ -87,33 +90,9 @@ func ApplyRegistrationClock(
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(918431003)`); err != nil {
 		return empty, errors.New("registration clock fixture lock unavailable")
 	}
-	if change.Action == clockActionInit {
-		err = registrationClockOwnerGuard(ctx, tx)
-	} else {
-		err = registrationFixtureOperatorGuard(ctx, tx,
-			RegistrationFixture{Stand: RegistrationFixtureStand, Action: clockActionRead})
-	}
-	if err != nil {
-		return empty, errors.New("registration clock database ownership or identities mismatch")
-	}
-	var fixtureReady, markerReady bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name=$1),
- EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name=$2)`, registrationFixtureMarker, registrationclock.Marker).
-		Scan(&fixtureReady, &markerReady)
-	if err != nil || !fixtureReady || (change.Action != clockActionInit && !markerReady) {
-		return empty, errors.New("registration clock fixture or marker unavailable")
-	}
-	anchor, err := settings.AnchorTime()
+	markerReady, err := prepareRegistrationClockPublication(ctx, tx, settings, change.Action)
 	if err != nil {
 		return empty, err
-	}
-	if _, err = registrationClockSetup(ctx, tx, anchor); err != nil {
-		return empty, err
-	}
-	if change.Action == clockActionInit && !markerReady {
-		if err = registrationClockFreshAdmission(ctx, tx); err != nil {
-			return empty, err
-		}
 	}
 	state, err := operateRegistrationClockFile(ctx, settings, settings.File, change, markerReady)
 	if err != nil {
@@ -132,6 +111,42 @@ func ApplyRegistrationClock(
 		return empty, errors.New("clock operation may be published; verify state and marker before retry")
 	}
 	return state, nil
+}
+
+// All database bindings stay locked until publication and marker commit.
+func prepareRegistrationClockPublication(
+	ctx context.Context, tx pgx.Tx, settings registrationclock.Settings, action string,
+) (bool, error) {
+	var err error
+	if action == clockActionInit {
+		err = registrationClockOwnerGuard(ctx, tx)
+	} else {
+		err = registrationFixtureOperatorGuard(ctx, tx,
+			RegistrationFixture{Stand: RegistrationFixtureStand, Action: clockActionRead})
+	}
+	if err != nil {
+		return false, errors.New("registration clock database ownership or identities mismatch")
+	}
+	var fixtureReady, markerReady bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name=$1),
+ EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name=$2)`, registrationFixtureMarker, registrationclock.Marker).
+		Scan(&fixtureReady, &markerReady)
+	if err != nil || !fixtureReady || (action != clockActionInit && !markerReady) {
+		return false, errors.New("registration clock fixture or marker unavailable")
+	}
+	anchor, err := settings.AnchorTime()
+	if err != nil {
+		return false, err
+	}
+	if _, err = registrationClockSetup(ctx, tx, anchor); err != nil {
+		return false, err
+	}
+	if action == clockActionInit && !markerReady {
+		if err = registrationClockFreshAdmission(ctx, tx); err != nil {
+			return false, err
+		}
+	}
+	return markerReady, nil
 }
 
 func registrationClockOperatorAllocation(pool *pgxpool.Config, settings registrationclock.Settings) error {
@@ -174,19 +189,7 @@ func operateRegistrationClockFile(
 	defer openedDirectory.Close()
 	state, err = readOperatorClockPublication(openedDirectory, path, settings)
 	if change.Action == clockActionInit && errors.Is(err, os.ErrNotExist) {
-		if markerCommitted {
-			return state, errors.New("committed registration clock publication is missing")
-		}
-		anchor, anchorErr := settings.AnchorTime()
-		if anchorErr != nil {
-			return state, anchorErr
-		}
-		state = registrationclock.State{
-			Version: 1, Installation: settings.Installation, Case: settings.Case,
-			Stand: registrationclock.Stand, DatabaseAddress: settings.DatabaseAddress,
-			Anchor: anchor, Current: anchor, Revision: 1,
-		}
-		return publishOperatorClock(ctx, openedDirectory, path, settings, state)
+		return initializeOperatorClock(ctx, openedDirectory, path, settings, markerCommitted)
 	}
 	if err != nil {
 		return state, err
@@ -215,6 +218,25 @@ func operateRegistrationClockFile(
 	default:
 		return state, errors.New("unknown registration clock operation")
 	}
+}
+
+func initializeOperatorClock(
+	ctx context.Context, directory *os.File, path string, settings registrationclock.Settings, markerCommitted bool,
+) (registrationclock.State, error) {
+	var state registrationclock.State
+	if markerCommitted {
+		return state, errors.New("committed registration clock publication is missing")
+	}
+	anchor, err := settings.AnchorTime()
+	if err != nil {
+		return state, err
+	}
+	state = registrationclock.State{
+		Version: 1, Installation: settings.Installation, Case: settings.Case,
+		Stand: registrationclock.Stand, DatabaseAddress: settings.DatabaseAddress,
+		Anchor: anchor, Current: anchor, Revision: 1,
+	}
+	return publishOperatorClock(ctx, directory, path, settings, state)
 }
 
 func readOperatorClock(path string, settings registrationclock.Settings) (registrationclock.State, error) {
@@ -416,7 +438,7 @@ func registrationClockSetup(ctx context.Context, tx pgx.Tx, anchor time.Time) (t
 		return opening, errors.New("registration clock requires one committed setup binding")
 	}
 	parts := strings.Split(strings.TrimPrefix(marker, registrationClockSetupPrefix), ":")
-	if len(parts) != 2 {
+	if len(parts) != clockSetupFields {
 		return opening, errors.New("registration clock setup binding is invalid")
 	}
 	storedAnchor, anchorErr := strconv.ParseInt(parts[0], 10, 64)
@@ -465,7 +487,7 @@ func registrationClockTiers(ctx context.Context, tx pgx.Tx, opening time.Time) e
 		}
 		want := opening
 		if event == RegistrationFixtureEventA && position == 1 {
-			want = opening.Add(24 * time.Hour)
+			want = opening.Add(clockSetupTierStep)
 		} else if position != 0 {
 			return errors.New("registration clock tier setup mismatch")
 		}
@@ -477,7 +499,7 @@ func registrationClockTiers(ctx context.Context, tx pgx.Tx, opening time.Time) e
 	if err = rows.Err(); err != nil {
 		return err
 	}
-	if count != 3 {
+	if count != clockSetupTiers {
 		return errors.New("registration clock tier count mismatch")
 	}
 	rows.Close()

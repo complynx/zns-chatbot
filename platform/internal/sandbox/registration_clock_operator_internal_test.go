@@ -416,10 +416,12 @@ func TestRegistrationClockOperatorRejectsMovedDirectory(t *testing.T) {
 // This suite owns a freshly bootstrapped private cluster and clock volume.
 // Its URLs and compiled CLI are supplied only by the assigned local gate.
 func TestRegistrationClockOperatorPrivateDatabaseAndCLI(t *testing.T) {
-	t.Parallel()
-	if runtime.GOOS != "linux" || os.Getenv("REGISTRATION_CLOCK_OPERATOR_TEST_OWNER_URL") == "" {
+	ownerURL := os.Getenv("REGISTRATION_CLOCK_OPERATOR_TEST_OWNER_URL")
+	if runtime.GOOS != "linux" || ownerURL == "" {
 		t.Skip("allocated private Linux/PostgreSQL operator gate required")
 	}
+	// One environment-bound case owns the cluster, roles and publication.
+	t.Setenv("REGISTRATION_CLOCK_OPERATOR_TEST_OWNER_URL", ownerURL)
 	owner := operatorDatabase(t, "OWNER")
 	operator := operatorDatabase(t, "OPERATOR")
 	admin := operatorDatabase(t, "ADMIN")
