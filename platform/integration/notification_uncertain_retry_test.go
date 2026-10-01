@@ -988,34 +988,57 @@ func TestNotificationUncertainRetryKnown429FencesContradictoryReceipt(t *testing
 
 func TestNotificationUncertainRetryRejectsCorruptCapturedKeyboard(t *testing.T) {
 	t.Parallel()
-	for _, domain := range []string{"orders", "registration", "massage", "food"} {
-		t.Run(domain, func(t *testing.T) {
+	for name, markup := range map[string]string{
+		"string":       `{"inline_keyboard":"invalid"}`,
+		"null button":  `{"inline_keyboard":[[null]]}`,
+		"empty button": `{"inline_keyboard":[[{}]]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			r := notificationRuntime(t, domain)
-			loss := &notificationLostResponse{drops: 1}
-			r.f.b.TG.HTTP = &http.Client{Transport: loss}
-			dispatch := exactNotificationDelivery(r, domain)
-			require.NoError(t, dispatch(t.Context(), r.first))
-			requireNotificationAccepted(t, r, loss)
-			original := r.status(t, r.first)
-			_, err := r.f.db.Exec(
-				t.Context(),
-				"UPDATE "+r.table+" SET delivery_wire_payload=jsonb_set(delivery_wire_payload,'{markup}','{\"inline_keyboard\":\"invalid\"}'::jsonb) WHERE id=$1",
-				r.first,
-			)
-			require.NoError(t, err)
-			r.wake(t)
-			require.Error(t, dispatch(t.Context(), r.first))
-			actual := r.status(t, r.first)
-			assert.Equal(t, "pending", actual.State, "invalid captured markup must fail before send admission")
-			assert.Equal(
-				t,
-				original.UncertainResends,
-				actual.UncertainResends,
-				"prewire failure has zero budget charge",
-			)
-			assert.Len(t, loss.payloads(), 1, "only the original real accepted HTTP wire occurred")
-			assert.Equal(t, original.LastUncertainAttempt, actual.LastUncertainAttempt)
+			for _, domain := range []string{"orders", "registration", "massage", "food"} {
+				t.Run(domain, func(t *testing.T) {
+					t.Parallel()
+					r := notificationRuntime(t, domain)
+					loss := &notificationLostResponse{drops: 1}
+					r.f.b.TG.HTTP = &http.Client{Transport: loss}
+					dispatch := exactNotificationDelivery(r, domain)
+					require.NoError(t, dispatch(t.Context(), r.first))
+					requireNotificationAccepted(t, r, loss)
+					original := r.status(t, r.first)
+					_, err := r.f.db.Exec(
+						t.Context(),
+						"UPDATE "+r.table+" SET delivery_wire_payload=jsonb_set(delivery_wire_payload,'{markup}',$2::jsonb) WHERE id=$1",
+						r.first,
+						markup,
+					)
+					require.NoError(t, err)
+					var captured []byte
+					require.NoError(
+						t,
+						r.f.db.QueryRow(t.Context(), "SELECT delivery_wire_payload FROM "+r.table+" WHERE id=$1", r.first).
+							Scan(&captured),
+					)
+					r.wake(t)
+					assert.Error(t, dispatch(t.Context(), r.first))
+					actual := r.status(t, r.first)
+					assert.Equal(t, "pending", actual.State, "invalid captured markup must fail before send admission")
+					assert.Equal(
+						t,
+						original.UncertainResends,
+						actual.UncertainResends,
+						"prewire failure has zero budget charge",
+					)
+					assert.Len(t, loss.payloads(), 1, "only the original real accepted HTTP wire occurred")
+					assert.Equal(t, original.LastUncertainAttempt, actual.LastUncertainAttempt)
+					var after []byte
+					require.NoError(
+						t,
+						r.f.db.QueryRow(t.Context(), "SELECT delivery_wire_payload FROM "+r.table+" WHERE id=$1", r.first).
+							Scan(&after),
+					)
+					assert.Equal(t, captured, after)
+				})
+			}
 		})
 	}
 }
