@@ -6,14 +6,15 @@ QA248. Root focused integrated checks and full pinned JS gates passed;
 Functional images remain sealedce427 and do not certify the newer source.
 
 Menu090 successor74ab passed scoped actual native PostgreSQL and Linux race;
-fresh independent whole23-path Code QA251 is running, no merge yet. Job
+fresh whole23-path Code QA251 found an aggregate source-budget regression.
+Author is correcting it; no merge yet. Job
 successor failed QA249; developer owns bounded original ingress proof and
 keyboard correction (19 paths, additive091 reserved). E eight-path rehearsal
 successor failed QA250 before-owner binding and importer SSL-fallback guards;
-same fresh developer is correcting it. No rejected candidate is merged.
+successorbc85851d passed local gates and is under fresh Code QA252. No rejected candidate is merged.
 
 Three capability lanes are active: registration-domain clock (C27 paths),
-incoming-update diagnostics (D3 paths), and Linux atomic clock operator
+incoming-update diagnostics (D3 paths, fresh QA253 running), and Linux atomic clock operator
 (engineer5 paths). Separate worktrees preserve ownership; overlapping ingress
 changes require developer merge preparation before review. C owns developer
 PostgreSQL55432 after menu released it. New C installation204 is verified
@@ -25,7 +26,7 @@ baseline09 is still frozen0070 on separate58441; observed missing-role
 prerequisites and payment failure are preserved, with no mid-run repair or
 terminal whole-suite claim. Final E apply/removal and current runtime/UI
 acceptance remain outstanding. Telegram test-account ID is in PROGRESS;
-independent work continues. Production NO-GO. Counter251, next252, all Codex.
+independent work continues. Production NO-GO. Counter253, next254, all Codex.
 
 ## Historical integrated snapshot — 2026-10-01, ce427ca5
 

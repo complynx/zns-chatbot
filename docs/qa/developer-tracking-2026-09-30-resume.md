@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through251, next252. All authorship/routes Codex under override;
+Fresh requests through253, next254. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -46,12 +46,16 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 | 248 | Complete HTTP observation successor | Codex author, Codex override; PASS8bc883eb/base5ae35999, same four paths; full affected units/pinned lint/fmt passed; merged91ff00f1, Functional open |
 | 249 | Complete durable job page manifest successor | Codex author, Codex override; FAILe8677a08/baseff575042: durable original ingress/generation binding missing; noncanonical keyboards; authorassessing14pathsuccessor, no merge |
 | 250 | Complete E probe target and rehearsal successor | Codex author, Codex override; FAIL298d1bee/baseff575042, eight paths: bound manifest/projections not checked before owner actions; queryless importer SSL fallback. Same fresh author correcting; no merge or live E execution |
-| 251 | Complete pass target and predecessor compatibility candidate | Codex author, Codex override; allocated before dispatch74ab3378/base91ff00f1,23paths. Final scoped nativePG/Linuxrace/fmt/lint/sqlc passed; fresh whole-candidate read-only Code QA pending. No merge/Functional claim |
+| 251 | Complete pass target and predecessor compatibility candidate | Codex author, Codex override; FAIL74ab3378/base91ff00f1,23paths: independent valid source records incorrectly share aggregate budget during lock discovery. Author correcting; prior scoped developer gates preserved. No merge/Functional claim |
+
+| 252 | Complete E preflight guard successor | Codex author, Codex override; allocated before dispatchbc85851d/base91ff00f1,8paths. Python19/actualGo probe+runtime builds/pinnedlintfmt/parser proofs passed; fresh full-scope independent review pending, no DB/Functional claim |
+
+| 253 | Incoming update safe failure observation | Codex author, Codex override; allocated before dispatch808b284c/base91ff00f1,3paths. Fullbot/appclient/observability units,pinnedlintfmt passed; fresh independent review pending, no PG/Functional claim |
 
 Current coordination (1 October, source91ff00f1): two scoped source-blind
 Functional runs completed on sealedce427ca5; states preserved and released.
 Whole C–E and agent registration acceptance remain open. Root merged
-QA241/243/245/248; current fresh counter251, next252. C owns27-path domain
+QA241/243/245/248; current fresh counter253, next254. C owns27-path domain
 clock capability; D owns3-path update-failure observation capability; E probe
 successor8 paths is correcting QA250; engineer owns three-path clock operator. Job14-path successor failed QA249;
 additional five-path immutable ingress proof is approved for development,

@@ -380,3 +380,63 @@ observedwait3h9m53s; actual previous starts unknown. Pause immediately for check
 Operator-only allocation event2026-10-01T01:16:29Z: two platform helper paths now
 approved, totalfive. Prior requested-only state historical. No templates/resources
 or acceptance. All other current facts unchanged; paused for immediate root commit.
+
+## Final QA251 return observation: 2026-10-01T01:19:01Z
+
+Root checkpoint2c6c151c acknowledged91 previous events. Read final QA251FAIL,
+immutable74ab33782bd3db4ce4fc10d3cbe2c4ec4b779ec5/base91ff. Independent valid
+current/prior persisted-source records incorrectly merged under one record budget
+can permanently block admission/retirement. Final verdict supersedes pending
+preliminary finding; no whole acceptance. Original unmerged, same fresh menu
+ author correcting23scope offline while C owns55432. Return count11, queues0/0/0,
+counter251next252 unchanged. Earlier LinuxPG/race PASS retained but cannot close
+this new finding. Frozen baseline still active until terminal authoritative receipt.
+All40 obligations unchanged; ongoing import observedwait3h14m8s, unknown historical
+start. Pause tracking writes after this final verified report event.
+
+## Platform terminal receipt: 2026-10-01T01:20:22Z
+
+Actual frozen baseline platform terminalFAIL exit1, elapsed3466.295s. Preserve
+integration45m timeout reported03:18:49 onTestModernChoiceLargeCreateEditReplace,
+plus prior three role-prerequisite/payment failures. Do not invent exact counts
+from those observations. Importer now serial-running same66624; report/source
+inventory pending. This is not a complete baseline verdict or resource release;
+no stand release/bootstrap/restart. Keep runner ownership until final receipt.
+
+Menu QA251 correction approved one existingreadsource/registration_mutation_locks.go
+extension,total24. No record-budget weakening, immutable74ab preserved, no PG while
+C soleowns55432. Same correction iteration, returncount11 unchanged. Ready queues
+0/0/0, no whole acceptance; all40 requirements intact. Ongoing import stand wait
+3h15m29s observational lower bound. Three files paused for immediate checkpoint.
+
+## E successor handoff: 2026-10-01T01:21:22Z
+
+Root verifies clean eight-scopebc85851d/base91ff successor with19Python tests,
+actual Go builds/lintfmtPASS. FreshQA252 actually dispatched, counter252next253,
+queue0/1/0. No liveE database or review verdict; QA250 immutable failure remains
+history. Menu correction24 unchanged. C first PG harness failed zone/envelope/
+rollback cleanup, raw preserved; own process stopping/correcting, not acceptance
+or window release. This local failure is not another independent-review return,
+returns11 unchanged. Job19 native proof coding, operator5 actual features ongoing.
+Baseline platformFAIL/importer serial active limitations intact. Files pause now.
+
+## Exact platform counts: 2026-10-01T01:22:13Z
+
+Runner terminal platform receipt:4108PASS/9FAIL/27SKIP test events; package outcomes
+62PASS/1FAIL/22noTests. Nine failures: seven missing-role prerequisites (zns_bot6,
+api1), order_not_found, ModernChoiceMealRuntime condition never satisfied line261.
+Aggregate integration45m expired when LargeCreateEditReplace had only5seconds;
+NOT an individual hang.1131 announced events including472 top-level have no
+terminal outcome; never mark them skipped/passed or infer acceptance. Importer
+still serial active, no stand release. Final whole report/source inventory pending.
+Earlier partial role counts remain historical, exact receipt supersedes them.
+Root PROGRESS mirrors these receipt counts. Review252 remains running, queues0/1/0,
+menu24 correction/Cfailedgate/job19/operator5 limitations unchanged. Import stand
+observedwait3h17m20s, historical start unknown. Files paused for checkpoint.
+
+Final checkpoint handoff2026-10-01T01:23:00Z: D808b284c/base91ff immutable complete
+three-scope units/lintfmtPASS, freshQA253 actually reviewing. E252 still reviewing,
+counter253next254, queue0/2/0. Reports pending, no stage acceptance. D next meal
+investigation not launched due thread limit; C/operator capability development
+and menu/job fixes active. Platform exact counts above unchanged, importer serial
+active/no release, all40 obligations preserved. Files pause immediately.
