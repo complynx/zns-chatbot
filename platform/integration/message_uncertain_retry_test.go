@@ -1515,6 +1515,7 @@ func checkActualCanonicalNegativeReplay(t *testing.T, owner, phase string) {
 			_ = connection.Close()
 			return
 		}
+		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write(
 			[]byte(
 				`{"ok":false,"error_code":429,"description":"actual rate limit","parameters":{"retry_after":120}}`,
