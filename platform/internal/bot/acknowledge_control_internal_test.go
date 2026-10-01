@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -23,6 +24,64 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/store"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+func TestAcknowledgeRequestDeadline(t *testing.T) {
+	t.Parallel()
+	cases := map[string]struct {
+		controlled bool
+		caller     time.Duration
+		http       time.Duration
+		want       time.Duration
+	}{
+		"uncontrolled custom client": {},
+		"uncontrolled caller":        {caller: 20 * time.Second, want: 20 * time.Second},
+		"uncontrolled HTTP timeout":  {http: 15 * time.Second, want: 15 * time.Second},
+		"uncontrolled shorter caller": {
+			caller: time.Second, http: 15 * time.Second, want: time.Second,
+		},
+		"controlled budget": {controlled: true, want: callbackAcknowledgementTimeout},
+		"controlled longer caller": {
+			controlled: true, caller: 20 * time.Second, want: callbackAcknowledgementTimeout,
+		},
+		"controlled shorter caller": {controlled: true, caller: time.Second, want: time.Second},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			start := time.Now()
+			ctx := context.Background()
+			if tc.caller != 0 {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, tc.caller)
+				defer cancel()
+			}
+			var deadline time.Time
+			var hasDeadline bool
+			var calls int
+			b := &Bot{TG: telegram.Client{Base: "http://synthetic.invalid", HTTP: &http.Client{
+				Timeout: tc.http,
+				Transport: r34Transport(func(r *http.Request) (*http.Response, error) {
+					calls++
+					deadline, hasDeadline = r.Context().Deadline()
+					return &http.Response{
+						StatusCode: http.StatusOK, Header: make(http.Header),
+						Body: io.NopCloser(strings.NewReader(r33AckOK)),
+					}, nil
+				}),
+			}}}
+			if tc.controlled {
+				b.TG.Control = r33ControlPolicy{}
+			}
+			require.NoError(t, b.acknowledge(ctx, "synthetic-callback"))
+			assert.Equal(t, 1, calls)
+			assert.Equal(t, tc.want != 0, hasDeadline)
+			if tc.want != 0 {
+				assert.False(t, deadline.Before(start.Add(tc.want)))
+				assert.False(t, deadline.After(time.Now().Add(tc.want)))
+			}
+		})
+	}
+}
 
 func acknowledgementDatabase(t *testing.T) *pgxpool.Pool {
 	t.Helper()

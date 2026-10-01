@@ -379,18 +379,24 @@ func (b *Bot) addProfileContext(ctx context.Context, owner string, input *agent.
 
 const callbackAcknowledgementTimeout = 5 * time.Second
 
-// Retry definite control deferrals within the callback budget. Unknown outcomes
-// stay best-effort; positive SQL provenance survives retry and cancellation.
+// Retry configured control deferrals within the callback budget. Uncontrolled
+// calls retain caller deadlines; unknown outcomes remain best-effort.
 func (b *Bot) acknowledge(ctx context.Context, id string) error {
-	callCtx, cancel := context.WithTimeout(ctx, callbackAcknowledgementTimeout)
-	defer cancel()
-	err := telegram.RetryControl(callCtx, func(attempt context.Context) error {
+	call := func(attempt context.Context) error {
 		callErr := b.TG.Call(attempt, "answerCallbackQuery", map[string]string{"callback_query_id": id}, nil)
 		if core.IsDatabaseFailure(callErr) {
 			return core.ErrDatabase
 		}
 		return callErr
-	})
+	}
+	var err error
+	if b.TG.Control == nil {
+		err = call(ctx)
+	} else {
+		callCtx, cancel := context.WithTimeout(ctx, callbackAcknowledgementTimeout)
+		defer cancel()
+		err = telegram.RetryControl(callCtx, call)
+	}
 	if core.IsDatabaseFailure(err) {
 		return core.ErrDatabase
 	}
