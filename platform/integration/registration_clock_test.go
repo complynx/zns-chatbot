@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/destination"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -333,6 +336,126 @@ func TestRegistrationClockTurnRotationWait(t *testing.T) {
 				require.Positive(t, booking.Version, "sales opened while allocator blocked")
 				require.WithinDuration(t, advanced, booking.CreatedAt, 0)
 			}
+		})
+	}
+}
+
+func TestRegistrationClockAnnouncementsAndPassportEligibility(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"active-before-wall", "finished-before-wall"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			db, service := bookingFixture(t)
+			var wall time.Time
+			require.NoError(t, db.QueryRow(t.Context(), "SELECT clock_timestamp()").Scan(&wall))
+			start := wall
+			if scenario == "active-before-wall" {
+				start = start.Add(-48 * time.Hour)
+			}
+			finish := start.Add(time.Hour)
+			clock := &registrationClock{now: start}
+			service.RegistrationClock = clock
+			service.AnnouncementBindings = &destination.Bindings{}
+			_, err := db.Exec(
+				t.Context(),
+				"UPDATE core.pass_events SET finishes_at=$1,thread_channel='@clock',thread_id=42",
+				finish,
+			)
+			require.NoError(t, err)
+			_, err = db.Exec(t.Context(), "UPDATE core.pass_event_tiers SET starts_at=$1", start.Add(-time.Hour))
+			require.NoError(t, err)
+			resolved := []string{}
+			resolver := publicationResolver(func(_ context.Context, channel string) (int64, error) {
+				resolved = append(resolved, channel)
+				return -100123, nil
+			})
+			require.NoError(t, service.RefreshAnnouncementDestinations(t.Context(), resolver, time.Minute))
+			require.Equal(t, []string{"@clock"}, resolved)
+			_, err = service.Execute(
+				t.Context(),
+				"alice",
+				bookingCommand("solo", "clock-announcement", passbooking.Booking{}),
+			)
+			require.NoError(t, err)
+			item, found, err := service.ClaimRegistrationAnnouncement(t.Context())
+			require.NoError(t, err)
+			require.True(t, found, "domain-live event is enqueued and survives recovery even when wall-expired")
+			var lease time.Time
+			require.NoError(
+				t,
+				db.QueryRow(t.Context(), "SELECT lease_until FROM core.pass_registration_announcements WHERE id=$1", item.ID).
+					Scan(&lease),
+			)
+			require.WithinDuration(t, wall.Add(2*time.Minute), lease, 10*time.Second)
+			_, err = db.Exec(
+				t.Context(),
+				"UPDATE core.pass_bookings SET state='assigned',assigned_at=$1,price=100 WHERE owner='alice'",
+				start,
+			)
+			require.NoError(t, err)
+			_, err = db.Exec(t.Context(), "UPDATE core.pass_events SET passport_required=true")
+			require.NoError(t, err)
+			count, err := service.ProcessPassportReminders(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, 1, count)
+			var noticeID int64
+			require.NoError(
+				t,
+				db.QueryRow(t.Context(), "SELECT id FROM core.pass_notifications WHERE kind='passport_required' AND owner='alice'").
+					Scan(&noticeID),
+			)
+			notice, found, err := service.PrepareNotification(t.Context(), noticeID)
+			require.NoError(t, err)
+			require.True(t, found)
+			require.True(t, notice.Current)
+			if scenario == "active-before-wall" {
+				gate, beginErr := service.BeginRegistrationAnnouncement(
+					t.Context(),
+					delivery.Attempt{ID: item.ID, Generation: item.Attempts},
+				)
+				require.NoError(t, beginErr)
+				require.True(
+					t,
+					gate.Ready,
+					"generated current predicate uses domain time while lease remains wall time",
+				)
+				return
+			}
+			clock.advance(finish.Add(time.Microsecond))
+			resolved = nil
+			require.NoError(t, service.RefreshAnnouncementDestinations(t.Context(), resolver, time.Minute))
+			require.Empty(t, resolved)
+			gate, err := service.BeginRegistrationAnnouncement(
+				t.Context(),
+				delivery.Attempt{ID: item.ID, Generation: item.Attempts},
+			)
+			require.NoError(t, err)
+			require.False(t, gate.Ready)
+			require.Equal(t, "announcement_superseded", gate.Reason)
+			reminder, err := service.BeginNotification(
+				t.Context(),
+				delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+			)
+			require.NoError(t, err)
+			require.False(t, reminder.Ready)
+			require.Equal(t, "notification_no_longer_current", reminder.Reason)
+			// A second assigned owner remains unmarked after domain finish although wall time is still before finish.
+			_, err = db.Exec(
+				t.Context(),
+				"INSERT INTO core.pass_bookings(event_id,owner,version,state,role,kind,created_at,assigned_at,price) VALUES('dance','bob',1,'assigned','follower','solo',$1,$1,100)",
+				start,
+			)
+			require.NoError(t, err)
+			count, err = service.ProcessPassportReminders(t.Context())
+			require.NoError(t, err)
+			require.Zero(t, count)
+			var marked bool
+			require.NoError(
+				t,
+				db.QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM core.pass_passport_reminders WHERE owner='bob')").
+					Scan(&marked),
+			)
+			require.False(t, marked)
 		})
 	}
 }

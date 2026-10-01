@@ -12,3 +12,11 @@ func registrationClockPlatform() error {
 }
 
 func registrationClockOwner(os.FileInfo, os.FileInfo) error { return registrationClockPlatform() }
+
+func registrationClockOpenDirectory(path string) (*os.File, error) { return os.Open(path) }
+
+func registrationClockOpenPublication(_ *os.File, path string) (*os.File, error) {
+	return os.Open(path)
+}
+
+func registrationClockReadOnly(*os.File) error { return registrationClockPlatform() }

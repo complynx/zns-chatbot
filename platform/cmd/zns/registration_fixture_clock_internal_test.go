@@ -1,13 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -183,17 +187,15 @@ func TestRegistrationClockConfigurationIsOptIn(t *testing.T) {
 func TestRegistrationClockFileReadsFreshStateAndFailsVisibly(t *testing.T) {
 	t.Parallel()
 	settings := clockSettings()
-	settings.File = filepath.Join(t.TempDir(), "state.json")
-	if runtime.GOOS == "linux" {
-		require.NoError(t, os.Chmod(filepath.Dir(settings.File), 0o700))
-	}
+	settings.File = clockTestPath(t)
+	clockTestOperation(t, "mkdir", filepath.Dir(settings.File), nil, 0o700)
 	anchor, err := settings.AnchorTime()
 	require.NoError(t, err)
 	write := func(current time.Time, revision uint64) {
 		t.Helper()
 		raw, marshalErr := json.Marshal(clockState(t, current, revision))
 		require.NoError(t, marshalErr)
-		require.NoError(t, os.WriteFile(settings.File, raw, 0o600))
+		clockTestOperation(t, "write", settings.File, raw, 0o600)
 	}
 	write(anchor, 1)
 	clock := &registrationFileClock{config: settings}
@@ -215,7 +217,7 @@ func TestRegistrationClockFileReadsFreshStateAndFailsVisibly(t *testing.T) {
 	write(anchor, 1)
 	_, err = clock.Now(t.Context())
 	require.Error(t, err)
-	require.NoError(t, os.Remove(settings.File))
+	clockTestOperation(t, "remove", settings.File, nil, 0)
 	_, err = clock.Now(t.Context())
 	require.ErrorIs(t, err, os.ErrNotExist)
 	canceled, cancel := context.WithCancel(t.Context())
@@ -297,12 +299,11 @@ func TestRegistrationClockLinuxStartupBoundary(t *testing.T) {
 		t.Setenv(key, value)
 	}
 	directory := filepath.Dir(settings.File)
-	require.NoError(t, os.Mkdir(directory, 0o700), "must start with a private empty /run")
-	require.NoError(t, os.Chmod(directory, 0o700))
+	clockTestOperation(t, "mkdir", directory, nil, 0o700)
+	clockTestOperation(t, "chmod", directory, nil, 0o700)
 	t.Cleanup(func() {
-		require.NoError(t, os.Chmod(directory, 0o700))
-		require.NoError(t, os.Remove(settings.File))
-		require.NoError(t, os.Remove(directory))
+		clockTestOperation(t, "chmod", directory, nil, 0o700)
+		clockTestOperation(t, "remove", settings.File, nil, 0)
 	})
 	anchor, err := settings.AnchorTime()
 	require.NoError(t, err)
@@ -310,8 +311,8 @@ func TestRegistrationClockLinuxStartupBoundary(t *testing.T) {
 	require.NoError(t, err)
 	write := func() {
 		t.Helper()
-		require.NoError(t, os.WriteFile(settings.File, raw, 0o600))
-		require.NoError(t, os.Chmod(settings.File, 0o600))
+		clockTestOperation(t, "write", settings.File, raw, 0o600)
+		clockTestOperation(t, "chmod", settings.File, nil, 0o600)
 	}
 	cfg := config.Config{
 		Env:           "sandbox",
@@ -328,14 +329,25 @@ func TestRegistrationClockLinuxStartupBoundary(t *testing.T) {
 	telemetry, err := observability.New(t.Context(), observability.Config{})
 	require.NoError(t, err)
 	cfg.Shutdown.TelemetryFlush = time.Second
+	clockTestRuntime(t, &cfg)
 	write()
 	require.ErrorIs(t, runCommandWithDatabase(t.Context(), "app", nil, cfg, telemetry, opener), io.ErrUnexpectedEOF)
 	require.True(t, opened, "valid actual UID and private publication reaches database opening")
-	for _, scenario := range []string{"wrong-database", "wrong-effective-host", "missing", "malformed", "insecure-file", "insecure-directory"} {
+	require.Error(t, os.WriteFile(settings.File, raw, 0o600), "runtime cannot rewrite its read-only publication")
+	require.Error(t, os.Rename(settings.File, settings.File+".replacement"), "runtime cannot replace its publication")
+	for _, scenario := range []string{"wrong-database", "wrong-effective-host", "missing", "malformed", "insecure-file", "insecure-directory", "missing-instance", "wrong-installation", "wrong-topology"} {
 		write()
-		require.NoError(t, os.Chmod(directory, 0o700))
+		clockTestOperation(t, "chmod", directory, nil, 0o700)
 		invalid := cfg
+		clockTestRuntime(t, &invalid)
 		switch scenario {
+		case "missing-instance":
+			t.Setenv(runtimeapp.InstallationEnv, "")
+			t.Setenv(runtimeapp.LaunchEnv, "")
+		case "wrong-installation":
+			t.Setenv(runtimeapp.InstallationEnv, "010400000205")
+		case "wrong-topology":
+			invalid.Media.URL = "http://other:8091"
 		case "wrong-database":
 			invalid.Database.URL = "postgres://postgres/unrelated?sslmode=disable"
 		case "wrong-effective-host":
@@ -343,13 +355,13 @@ func TestRegistrationClockLinuxStartupBoundary(t *testing.T) {
 				"postgres://postgres/" + registrationclock.Database + "?host=other&sslmode=disable",
 			)
 		case "missing":
-			require.NoError(t, os.Remove(settings.File))
+			clockTestOperation(t, "remove", settings.File, nil, 0)
 		case "malformed":
-			require.NoError(t, os.WriteFile(settings.File, []byte("{}"), 0o600))
+			clockTestOperation(t, "write", settings.File, []byte("{}"), 0o600)
 		case "insecure-file":
-			require.NoError(t, os.Chmod(settings.File, 0o644))
+			clockTestOperation(t, "chmod", settings.File, nil, 0o644)
 		case "insecure-directory":
-			require.NoError(t, os.Chmod(directory, 0o755))
+			clockTestOperation(t, "chmod", directory, nil, 0o755)
 		}
 		opened = false
 		require.Error(t, runCommandWithDatabase(t.Context(), "app", nil, invalid, telemetry, opener), scenario)
@@ -373,14 +385,14 @@ func TestRegistrationClockLinuxLiveStartupGuard(t *testing.T) {
 		t.Setenv(key, value)
 	}
 	directory := filepath.Dir(settings.File)
-	require.NoError(t, os.Mkdir(directory, 0o700))
-	require.NoError(t, os.Chmod(directory, 0o700))
+	clockTestOperation(t, "mkdir", directory, nil, 0o700)
+	clockTestOperation(t, "chmod", directory, nil, 0o700)
 	anchor, err := settings.AnchorTime()
 	require.NoError(t, err)
 	raw, err := json.Marshal(clockState(t, anchor, 1))
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(settings.File, raw, 0o600))
-	t.Cleanup(func() { require.NoError(t, os.Remove(settings.File)); require.NoError(t, os.Remove(directory)) })
+	clockTestOperation(t, "write", settings.File, raw, 0o600)
+	t.Cleanup(func() { clockTestOperation(t, "remove", settings.File, nil, 0) })
 	db, err := store.Open(t.Context(), dsn)
 	require.NoError(t, err)
 	t.Cleanup(db.Close)
@@ -395,6 +407,7 @@ func TestRegistrationClockLinuxLiveStartupGuard(t *testing.T) {
 	})
 	cfg := config.Config{Env: "sandbox", SyntheticOnly: true, Database: config.Database{URL: config.Secret(dsn)}}
 	cfg.Shutdown.TelemetryFlush = time.Second
+	clockTestRuntime(t, &cfg)
 	startApp := func() error {
 		t.Helper()
 		telemetry, telemetryErr := observability.New(t.Context(), observability.Config{})
@@ -427,4 +440,172 @@ func TestRegistrationClockLinuxLiveStartupGuard(t *testing.T) {
 	_, err = db.Exec(t.Context(), "UPDATE core.users SET telegram_id=101 WHERE id='alice'")
 	require.NoError(t, err)
 	require.ErrorIs(t, startApp(), runtimeapp.ErrBusy, "restored fixture again reaches admission")
+}
+
+// The isolated Linux gate publishes through a separate trusted writer. The
+// reader container has only a read-only mount of the publication volume.
+func clockTestOperation(t *testing.T, action, path string, raw []byte, mode os.FileMode) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		switch action {
+		case "mkdir":
+			require.NoError(t, os.MkdirAll(path, mode))
+		case "write":
+			require.NoError(t, os.WriteFile(path, raw, mode))
+		case "remove":
+			require.NoError(t, os.Remove(path))
+		case "chmod":
+			require.NoError(t, os.Chmod(path, mode))
+		}
+		return
+	}
+	require.NoError(t, clockWriterOperation(context.WithoutCancel(t.Context()), action, path, raw, mode))
+}
+func clockWriterOperation(ctx context.Context, action, path string, raw []byte, mode os.FileMode) error {
+	endpoint := os.Getenv("REGISTRATION_CLOCK_TEST_WRITER")
+	if endpoint == "" {
+		return fmt.Errorf("Linux reader tests require the isolated trusted writer")
+	}
+	payload, err := json.Marshal(struct {
+		Action string `json:"action"`
+		Path   string `json:"path"`
+		Raw    []byte `json:"raw"`
+		Mode   uint32 `json:"mode"`
+	}{action, path, raw, uint32(mode)})
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(response.Body, 4096))
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("clock writer status %d: %s", response.StatusCode, body)
+	}
+	return nil
+}
+
+func clockTestPath(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "linux" {
+		return filepath.Join(filepath.Dir(registrationclock.Path), strings.ReplaceAll(t.Name(), "/", "-"), "state.json")
+	}
+	return filepath.Join(t.TempDir(), "state.json")
+}
+
+func clockTestRuntime(t *testing.T, cfg *config.Config) {
+	t.Helper()
+	t.Setenv(runtimeapp.InstallationEnv, registrationclock.Installation)
+	t.Setenv(runtimeapp.LaunchEnv, "000000000000000000000001")
+	cfg.Model.Provider = openAIProvider
+	cfg.Media.URL = "http://media-broker:8091"
+	cfg.Sticker.Worker.URL = "http://sticker-broker:8098"
+}
+
+func TestRegistrationClockLinuxReadOnlyAndAnchoredMetadata(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "linux" {
+		t.Skip("requires actual Linux owner and mount metadata")
+	}
+	writable := filepath.Join(t.TempDir(), "state.json")
+	require.NoError(t, os.Chmod(filepath.Dir(writable), 0o700))
+	anchor, err := clockSettings().AnchorTime()
+	require.NoError(t, err)
+	raw, err := json.Marshal(clockState(t, anchor, 1))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(writable, raw, 0o600))
+	_, err = readRegistrationClock(writable)
+	require.ErrorContains(t, err, "read-only reader mount")
+	path := clockTestPath(t)
+	parent := filepath.Dir(path)
+	clockTestOperation(t, "mkdir", parent, nil, 0o700)
+	clockTestOperation(t, "write", path, raw, 0o600)
+	directory, err := registrationClockOpenDirectory(parent)
+	require.NoError(t, err)
+	defer directory.Close()
+	file, err := registrationClockOpenPublication(directory, path)
+	require.NoError(t, err)
+	defer file.Close()
+	require.NoError(t, registrationClockReadOnly(directory))
+	require.NoError(t, registrationClockReadOnly(file))
+	initialParent, err := directory.Stat()
+	require.NoError(t, err)
+	clockTestOperation(t, "chmod", path, nil, 0o644)
+	opened, err := file.Stat()
+	require.NoError(t, err)
+	require.Error(t, registrationClockMetadata(opened, initialParent), "same-inode permission changes must be rejected")
+	clockTestOperation(t, "chmod", path, nil, 0o600)
+	clockTestOperation(t, "replace-parent", parent, nil, 0o700)
+	finalParent, err := registrationClockParent(parent)
+	require.NoError(t, err)
+	require.False(t, os.SameFile(initialParent, finalParent), "opened parent remains bound to replaced directory")
+	link := filepath.Join(parent, "linked")
+	clockTestOperation(t, "mkdir", filepath.Join(parent, "real"), nil, 0o700)
+	clockTestOperation(t, "symlink", link, []byte("real"), 0)
+	_, err = registrationClockParent(link)
+	require.ErrorContains(t, err, "symlinks")
+}
+
+func TestRegistrationClockLinuxConcurrentAtomicPublication(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS != "linux" {
+		t.Skip("requires separate Linux writer and read-only reader")
+	}
+	settings := clockSettings()
+	settings.File = clockTestPath(t)
+	clockTestOperation(t, "mkdir", filepath.Dir(settings.File), nil, 0o700)
+	anchor, err := settings.AnchorTime()
+	require.NoError(t, err)
+	var publications [][]byte
+	for revision := uint64(1); revision <= 51; revision++ {
+		raw, marshalErr := json.Marshal(clockState(t, anchor.Add(time.Duration(revision-1)*time.Microsecond), revision))
+		require.NoError(t, marshalErr)
+		publications = append(publications, raw)
+	}
+	clockTestOperation(t, "write", settings.File, publications[0], 0o600)
+	clock := &registrationFileClock{config: settings}
+	_, err = clock.Now(t.Context())
+	require.NoError(t, err)
+	raw, err := json.Marshal(publications[1:])
+	require.NoError(t, err)
+	var wait sync.WaitGroup
+	wait.Add(1)
+	done := make(chan struct{})
+	var writerErr error
+	go func() {
+		defer wait.Done()
+		defer close(done)
+		writerErr = clockWriterOperation(t.Context(), "batch", settings.File, raw, 0o600)
+	}()
+	t.Cleanup(wait.Wait)
+	observations := 0
+	for {
+		select {
+		case <-done:
+			wait.Wait()
+			require.NoError(t, writerErr)
+			current, readErr := clock.Now(t.Context())
+			require.NoError(t, readErr)
+			require.Equal(t, anchor.Add(50*time.Microsecond), current)
+			require.Positive(t, observations)
+			return
+		default:
+			_, readErr := clock.Now(t.Context())
+			if readErr != nil {
+				require.ErrorIs(t, readErr, errRegistrationClockPublication)
+			} else {
+				observations++
+			}
+		}
+	}
 }

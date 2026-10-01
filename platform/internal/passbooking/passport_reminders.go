@@ -23,12 +23,16 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('pass-passport-reminder',0))`); err != nil {
 		return 0, core.DatabaseOperationError(err)
 	}
+	observed, err := registrationSQLTime(ctx, s.RegistrationClock)
+	if err != nil {
+		return 0, err
+	}
 	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (b.owner) `+bookingColumns+` FROM core.pass_bookings b
  JOIN core.users u ON u.id=b.owner JOIN core.pass_profiles p ON p.owner=b.owner
  JOIN core.pass_events e ON e.id=b.event_id
- WHERE e.passport_required AND e.finishes_at>clock_timestamp() AND b.state IN ('assigned','paid')
+ WHERE e.passport_required AND e.finishes_at>COALESCE($1::timestamptz,clock_timestamp()) AND b.state IN ('assigned','paid')
  AND p.passport='' AND NOT EXISTS(SELECT 1 FROM core.pass_passport_reminders r WHERE r.owner=b.owner)
- ORDER BY b.owner,e.display_order,e.id`)
+ ORDER BY b.owner,e.display_order,e.id`, observed)
 	if err != nil {
 		return 0, core.DatabaseOperationError(err)
 	}
@@ -78,9 +82,13 @@ func (s Service) livePassportReminder(
 	reader dbgen.DBTX,
 	notice Notification,
 ) (Notification, error) {
-	err := reader.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.pass_profiles p JOIN core.pass_bookings b ON b.owner=p.owner
+	observed, err := registrationSQLTime(ctx, s.RegistrationClock)
+	if err != nil {
+		return notice, err
+	}
+	err = reader.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.pass_profiles p JOIN core.pass_bookings b ON b.owner=p.owner
  JOIN core.pass_events e ON e.id=b.event_id WHERE p.owner=$1 AND p.passport=''
- AND b.state IN ('assigned','paid') AND e.passport_required AND e.finishes_at>clock_timestamp())`, notice.Owner).
+ AND b.state IN ('assigned','paid') AND e.passport_required AND e.finishes_at>COALESCE($2::timestamptz,clock_timestamp()))`, notice.Owner, observed).
 		Scan(&notice.Current)
 	return notice, core.DatabaseOperationError(err)
 }

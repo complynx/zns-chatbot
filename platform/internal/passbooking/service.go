@@ -198,6 +198,9 @@ func (p *PreparedCommand) Apply(ctx context.Context) (Booking, error) {
 		return Booking{}, err
 	}
 	state := newSnapshot(e, records, now)
+	if p.registrationClock != nil {
+		state.registrationObserved = &now
+	}
 	if err = state.loadRegistrationRanks(ctx, tx); err != nil {
 		return Booking{}, err
 	}

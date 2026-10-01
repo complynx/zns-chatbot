@@ -140,6 +140,9 @@ func (p *PreparedAssignment) Apply(ctx context.Context) (AdminAssignmentResult, 
 		return AdminAssignmentResult{}, err
 	}
 	state := newSnapshot(e, records, now)
+	if p.registrationClock != nil {
+		state.registrationObserved = &now
+	}
 	if err = state.loadRegistrationRanks(ctx, tx); err != nil {
 		return AdminAssignmentResult{}, err
 	}

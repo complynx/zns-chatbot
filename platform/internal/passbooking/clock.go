@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
@@ -23,6 +24,22 @@ func registrationTime(ctx context.Context, tx pgx.Tx, clock registrationingress.
 	var now time.Time
 	err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now)
 	return now, core.DatabaseOperationError(err)
+}
+
+func nullableRegistrationTime(observed *time.Time) pgtype.Timestamptz {
+	if observed == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *observed, Valid: true}
+}
+
+// registrationSQLTime binds only registration eligibility; nil retains SQL wall time.
+func registrationSQLTime(ctx context.Context, clock registrationingress.Clock) (*time.Time, error) {
+	now, configured, err := registrationingress.Observe(ctx, clock)
+	if err != nil || !configured {
+		return nil, err
+	}
+	return &now, nil
 }
 
 // registrationTurnTime observes configured time after the shared turn allocator

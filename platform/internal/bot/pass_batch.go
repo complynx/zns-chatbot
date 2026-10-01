@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -71,7 +73,7 @@ func (b *Bot) handlePassBatch(ctx context.Context, in incoming, update telegram.
 
 func (b *Bot) passBatchInput(ctx context.Context, in incoming, id int64) (passbooking.RuntimeBatch, error) {
 	command, err := (interaction.RegistrationBatchAdmission{
-		Store: registrationBatchInputStore{DB: b.DB}, Events: b.API,
+		Store: registrationBatchInputStore{DB: b.DB}, Events: b.API, Now: b.registrationBatchTime,
 	}).Manual(ctx, in.owner, id, func() (passbooking.RuntimeBatch, error) {
 		return parsePassBatch(in.text)
 	})
@@ -79,6 +81,14 @@ func (b *Bot) passBatchInput(ctx context.Context, in incoming, id int64) (passbo
 		return passbooking.RuntimeBatch{}, errPassBatchSyntax
 	}
 	return command, err
+}
+
+func (b *Bot) registrationBatchTime(ctx context.Context) (time.Time, error) {
+	now, configured, err := registrationingress.Observe(ctx, b.RegistrationClock)
+	if err != nil || configured {
+		return now, err
+	}
+	return time.Now(), nil
 }
 
 func (b *Bot) passBatchError(ctx context.Context, in incoming, language string, err error) error {

@@ -228,9 +228,18 @@ func (s Service) lockAnnouncementAdmission(
 	); err != nil {
 		return dbgen.LockAnnouncementAttemptRow{}, core.DatabaseOperationError(err)
 	}
+	observed, err := registrationSQLTime(ctx, s.RegistrationClock)
+	if err != nil {
+		return dbgen.LockAnnouncementAttemptRow{}, err
+	}
 	row, err := q.LockAnnouncementAttempt(
 		ctx,
-		dbgen.LockAnnouncementAttemptParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
+		dbgen.LockAnnouncementAttemptParams{
+			ID:         attempt.ID,
+			BotID:      s.Delivery.BotID,
+			Attempt:    attempt.Generation,
+			DomainTime: nullableRegistrationTime(observed),
+		},
 	)
 	if err != nil {
 		return dbgen.LockAnnouncementAttemptRow{}, announcementAttemptError(core.DatabaseOperationError(err))

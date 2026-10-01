@@ -90,6 +90,7 @@ type event struct {
 }
 
 type snapshot struct {
+	registrationObserved      *time.Time
 	registrationRanks         map[string]int64
 	unfinishedRegistrations   map[string]bool
 	announcementBindings      *destination.Bindings

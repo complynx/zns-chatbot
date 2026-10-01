@@ -128,6 +128,9 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 		return 0, err
 	}
 	state := newSnapshot(e, bookings, now)
+	if s.RegistrationClock != nil {
+		state.registrationObserved = &now
+	}
 	if err = state.loadRegistrationRanks(ctx, tx); err != nil {
 		return 0, err
 	}

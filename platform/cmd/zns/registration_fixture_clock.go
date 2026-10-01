@@ -20,6 +20,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationclock"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 )
 
 const registrationClockAppMode = "app"
@@ -76,6 +77,13 @@ func preflightRegistrationClock(
 	}
 	if err := registrationClockPlatform(); err != nil {
 		return nil, true, err
+	}
+	instance, err := runtimeapp.EnvironmentInstance(true)
+	if err != nil {
+		return nil, true, err
+	}
+	if instance.Installation != registrationclock.Installation || !managedTopologyAllowed(cfg) {
+		return nil, true, errors.New("registration clock requires the exact managed installation and topology")
 	}
 	connection, err := pgxpool.ParseConfig(cfg.Database.URL.Value())
 	if err != nil {
@@ -183,7 +191,8 @@ func readRegistrationClockPublication(path string) (registrationclock.State, err
 	if !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
 		return state, errors.New("registration clock state must be a regular operator-only file")
 	}
-	parent, err := os.Stat(filepath.Dir(path))
+	parentPath := filepath.Dir(path)
+	parent, err := registrationClockParent(parentPath)
 	if err != nil {
 		return state, fmt.Errorf("stat registration clock directory: %w", err)
 	}
@@ -193,7 +202,22 @@ func readRegistrationClockPublication(path string) (registrationclock.State, err
 	if err = registrationClockOwner(info, parent); err != nil {
 		return state, err
 	}
-	file, err := os.Open(path)
+	directory, err := registrationClockOpenDirectory(parentPath)
+	if err != nil {
+		return state, fmt.Errorf("open registration clock directory: %w", err)
+	}
+	defer directory.Close()
+	openedParent, err := directory.Stat()
+	if err != nil {
+		return state, err
+	}
+	if !os.SameFile(parent, openedParent) {
+		return state, errRegistrationClockPublication
+	}
+	if err = registrationClockReadOnly(directory); err != nil {
+		return state, err
+	}
+	file, err := registrationClockOpenPublication(directory, path)
 	if err != nil {
 		return state, fmt.Errorf("registration clock state unavailable: %w", err)
 	}
@@ -205,11 +229,49 @@ func readRegistrationClockPublication(path string) (registrationclock.State, err
 	if !os.SameFile(info, opened) {
 		return state, errRegistrationClockPublication
 	}
+	if err = registrationClockMetadata(opened, openedParent); err != nil {
+		return state, err
+	}
+	if err = registrationClockReadOnly(file); err != nil {
+		return state, err
+	}
 	raw, err := io.ReadAll(io.LimitReader(file, registrationclock.Bytes+1))
 	if err != nil {
 		return state, fmt.Errorf("read registration clock state: %w", err)
 	}
+	if err = validateRegistrationClockBinding(path, file, openedParent); err != nil {
+		return state, err
+	}
+
 	return registrationclock.Decode(raw)
+}
+
+func registrationClockParent(path string) (os.FileInfo, error) {
+	parent, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	for current := path; ; current = filepath.Dir(current) {
+		info, statErr := os.Lstat(current)
+		if statErr != nil {
+			return nil, statErr
+		}
+		if !info.IsDir() {
+			return nil, errors.New("registration clock path must not contain symlinks")
+		}
+		if filepath.Dir(current) == current {
+			break
+		}
+	}
+	return parent, nil
+}
+
+func registrationClockMetadata(file, directory os.FileInfo) error {
+	if !file.Mode().IsRegular() || file.Mode().Perm() != 0o600 ||
+		!directory.IsDir() || directory.Mode().Perm() != 0o700 {
+		return errors.New("registration clock publication must remain operator-only")
+	}
+	return registrationClockOwner(file, directory)
 }
 
 func validateRegistrationClockState(
@@ -225,6 +287,34 @@ func validateRegistrationClockState(
 		(s.Revision == previous.Revision && s.Digest() != previous.Digest()) ||
 		(s.Revision > previous.Revision && !s.Current.After(previous.Current))) {
 		return errors.New("registration clock state rewound or changed without revision")
+	}
+	return nil
+}
+
+func validateRegistrationClockBinding(path string, file *os.File, openedParent os.FileInfo) error {
+	finalParent, err := registrationClockParent(filepath.Dir(path))
+	if err != nil {
+		return err
+	}
+	finalFile, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	if err = registrationClockMetadata(finalFile, finalParent); err != nil {
+		return err
+	}
+	if !os.SameFile(openedParent, finalParent) {
+		return errRegistrationClockPublication
+	}
+	visible, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if err = registrationClockMetadata(visible, finalParent); err != nil {
+		return err
+	}
+	if !os.SameFile(finalFile, visible) {
+		return errRegistrationClockPublication
 	}
 	return nil
 }
