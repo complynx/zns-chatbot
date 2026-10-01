@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -91,7 +92,9 @@ func (b *Bot) sendBotIntent(ctx context.Context, i botdelivery.Intent, r botRend
 		if editErr == nil && !fallback {
 			return telegram.DeliveryOutcome(i.Target, nil), false
 		}
-		if fallback && i.Reference.Family == botFamilyPassRedaction {
+		if fallback &&
+			(i.Reference.Family == botFamilyPassRedaction || i.Reference.Family == botdelivery.PassReceiptRedactionFamily ||
+				(i.Reference.Family == registrationPayment && i.Reference.Notice == i18n.PaymentUnavailable)) {
 			return delivery.Outcome{Kind: delivery.Rejected, Reason: "edit_target_missing"}, false
 		}
 		if fallback {
@@ -112,7 +115,15 @@ func (b *Bot) botPreparationFailure(ctx context.Context, i botdelivery.Intent, c
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	terminal := errors.Is(cause, botdelivery.ErrBinding) ||
+	// Retire at the shared failure boundary, after reconstruction or admission.
+	// The immutable reference can only retire its exact saved source and revision.
+	retirePass := passCardRetirementRequired(i, cause)
+	if retirePass {
+		if err := b.retireStalePassCard(ctx, i, cause); err != nil {
+			return err
+		}
+	}
+	terminal := retirePass || errors.Is(cause, botdelivery.ErrBinding) ||
 		errors.Is(cause, botdelivery.ErrStale) ||
 		errors.Is(cause, pgx.ErrNoRows) ||
 		errors.Is(cause, identity.ErrZitadelUserInactive) ||
@@ -220,4 +231,19 @@ func (b *Bot) applyBotIntentReceipt(ctx context.Context, observed botdelivery.In
 		ctx = live
 	}
 	return b.Host.ApplyBotDeliveryReceipt(ctx, botdelivery.ReceiptRequest{Observed: observed})
+}
+
+func passCardRetirementRequired(i botdelivery.Intent, cause error) bool {
+	if i.Reference.Family != botFamilyPasses || i.Reference.Source == nil ||
+		core.IsDatabaseFailure(cause) {
+		return false
+	}
+	if _, ok := errors.AsType[*botdelivery.PassMenuDeniedError](cause); ok {
+		return true
+	}
+	if stalePassCardBinding(cause) || stalePassMenuSource(cause) {
+		return true
+	}
+	problem, ok := errors.AsType[*core.ProblemError](cause)
+	return ok && problem.Status == 403
 }

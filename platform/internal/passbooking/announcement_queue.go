@@ -29,6 +29,7 @@ func enqueueRegistrationAnnouncements(
 	eventID string,
 	botID int64,
 	bindings *destination.Bindings,
+	observed *time.Time,
 ) ([]delivery.Registration, error) {
 	rows, err := tx.Query(
 		ctx,
@@ -39,7 +40,7 @@ func enqueueRegistrationAnnouncements(
  LEFT JOIN LATERAL (SELECT candidate.id,candidate.origin,candidate.state,candidate.effective_position FROM core.registration_intents candidate
  WHERE candidate.event_id=b.event_id AND candidate.owner IN (b.owner,NULLIF(b.partner,'')) AND candidate.state<>'cancelled'
  ORDER BY (candidate.owner=b.owner) DESC LIMIT 1) i ON true
- WHERE b.event_id=$1 AND b.state<>'cancelled' AND (e.open_ended OR e.finishes_at>clock_timestamp())
+ WHERE b.event_id=$1 AND b.state<>'cancelled' AND (e.open_ended OR e.finishes_at>COALESCE($3::timestamptz,clock_timestamp()))
  AND (i.id IS NULL OR i.origin='legacy_fallback' OR (i.state='registered' AND NOT EXISTS(
  SELECT 1 FROM core.registration_intents head WHERE head.event_id=b.event_id AND head.state='captured'
  AND head.origin='canonical_ingress' AND head.effective_position<i.effective_position)
@@ -53,6 +54,7 @@ func enqueueRegistrationAnnouncements(
  ON CONFLICT(event_id,owner,created_at) DO NOTHING RETURNING id,channel,thread_id,state`,
 		eventID,
 		botID,
+		observed,
 	)
 	if err != nil {
 		return nil, core.DatabaseOperationError(err)
@@ -117,9 +119,14 @@ func (s Service) RefreshAnnouncementDestinations(
 	resolver destination.Resolver,
 	ttl time.Duration,
 ) error {
+	observed, err := registrationSQLTime(ctx, s.RegistrationClock)
+	if err != nil {
+		return err
+	}
 	rows, err := s.DB.Query(
 		ctx,
-		`SELECT DISTINCT thread_channel FROM core.pass_events WHERE thread_channel<>'' AND (open_ended OR finishes_at>clock_timestamp()) ORDER BY thread_channel`,
+		`SELECT DISTINCT thread_channel FROM core.pass_events WHERE thread_channel<>'' AND (open_ended OR finishes_at>COALESCE($1::timestamptz,clock_timestamp())) ORDER BY thread_channel`,
+		observed,
 	)
 	if err != nil {
 		return core.DatabaseOperationError(err)
@@ -143,6 +150,7 @@ func (s Service) PrepareRegistrationAnnouncement(
 		return RegistrationAnnouncement{}, false, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	if err = s.lockAnnouncementSource(ctx, tx, id); errors.Is(err, pgx.ErrNoRows) {
 		return RegistrationAnnouncement{}, false, nil
 	} else if err != nil {
@@ -180,6 +188,9 @@ func (s Service) PrepareRegistrationAnnouncement(
 	if err != nil {
 		return item, false, core.DatabaseOperationError(err)
 	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return RegistrationAnnouncement{}, false, err
+	}
 	return item, true, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
@@ -209,12 +220,16 @@ func (s Service) RecoverRegistrationAnnouncements(ctx context.Context) error {
 	if err := s.Delivery.Validate(); err != nil {
 		return err
 	}
+	observed, err := registrationSQLTime(ctx, s.RegistrationClock)
+	if err != nil {
+		return err
+	}
 	rows, err := s.DB.Query(ctx, `SELECT a.id FROM core.pass_registration_announcements a WHERE a.bot_id=$1 AND
  ((a.state='sending' AND a.lease_until<=clock_timestamp()) OR
  (a.state='pending' AND NOT EXISTS(SELECT 1 FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
  WHERE e.id=a.event_id AND b.owner=a.owner AND b.created_at=a.created_at AND b.state<>'cancelled'
- AND (e.open_ended OR e.finishes_at>clock_timestamp()) AND e.thread_channel=a.channel
- AND COALESCE(e.thread_id,0)=COALESCE(a.thread_id,0)))) ORDER BY a.id LIMIT 100`, s.Delivery.BotID)
+ AND (e.open_ended OR e.finishes_at>COALESCE($2::timestamptz,clock_timestamp())) AND e.thread_channel=a.channel
+ AND COALESCE(e.thread_id,0)=COALESCE(a.thread_id,0)))) ORDER BY a.id LIMIT 100`, s.Delivery.BotID, observed)
 	if err != nil {
 		return core.DatabaseOperationError(err)
 	}
@@ -235,6 +250,7 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	if err = s.lockAnnouncementSource(ctx, tx, id); err != nil {
 		return err
 	}
@@ -243,10 +259,19 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 		Scan(&attempt); err != nil {
 		return core.DatabaseOperationError(err)
 	}
+	observed, err := registrationSQLTime(ctx, s.RegistrationClock)
+	if err != nil {
+		return err
+	}
 	q := dbgen.New(tx)
 	row, err := q.LockAnnouncementAttempt(
 		ctx,
-		dbgen.LockAnnouncementAttemptParams{ID: id, BotID: s.Delivery.BotID, Attempt: attempt},
+		dbgen.LockAnnouncementAttemptParams{
+			ID:         id,
+			BotID:      s.Delivery.BotID,
+			Attempt:    attempt,
+			DomainTime: nullableRegistrationTime(observed),
+		},
 	)
 	if err != nil {
 		return core.DatabaseOperationError(err)
@@ -281,6 +306,9 @@ func (s Service) recoverAnnouncement(ctx context.Context, id int64) error {
 		); err != nil {
 			return err
 		}
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return err
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
 }

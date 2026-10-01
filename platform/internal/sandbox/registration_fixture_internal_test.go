@@ -11,7 +11,7 @@ import (
 
 func TestRegistrationFixtureControlsAreBounded(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"read", "revoke-payment-a", "revoke-booking-admin"} {
+	for _, action := range []string{"read", "revoke-payment-a", "restore-payment-a", "grant-payment-b", "revoke-payment-b", "revoke-booking-admin", "restore-booking-admin"} {
 		t.Run(action, func(t *testing.T) {
 			t.Parallel()
 			f := RegistrationFixture{Action: action, Stand: RegistrationFixtureStand}

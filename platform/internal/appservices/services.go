@@ -28,6 +28,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
 // Services contains ready domain services. Transports adapt requests without
@@ -55,6 +56,7 @@ type Services struct {
 }
 
 type Options struct {
+	RegistrationClock            registrationingress.Clock
 	NativeRegistrationAuthorizer derivedmutation.NativeRegistrationAuthorizer
 	RegistrationRetention        time.Duration
 	LegacyOrderBotID             int64
@@ -73,6 +75,7 @@ func NewServices(db *pgxpool.Pool, options Options) Services {
 	orderService := orders.Service{DB: db, Delivery: options.Delivery}
 	registration := passbooking.Service{
 		DB: db, Delivery: options.Delivery, RegistrationRetention: options.RegistrationRetention,
+		RegistrationClock:    options.RegistrationClock,
 		AnnouncementBindings: options.AnnouncementBindings,
 	}
 	registration.Intake = &derivedmutation.NativeRegistrationResolver{

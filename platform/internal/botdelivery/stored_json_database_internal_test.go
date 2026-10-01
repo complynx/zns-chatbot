@@ -82,7 +82,7 @@ func TestStoredPassMenuIncompatibleJSONIsNotDatabaseFailure(t *testing.T) {
 
 	missing := Intent{Owner: "bob", Chat: 202, Reference: i.Reference}
 	_, err = readPassMenuFamily(t.Context(), tx, missing)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
+	require.ErrorIs(t, err, ErrStale)
 	require.False(t, core.IsDatabaseFailure(err))
 	err = lockViewBinding(t.Context(), tx, missing, familyRead{})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -132,13 +132,8 @@ func TestStoredJSONSyntheticSQLAndDecodeProvenance(t *testing.T) {
 		_, readErr := readPassMenuFamily(t.Context(), tx, passes)
 		lockErr := lockViewBinding(t.Context(), tx, passes, familyRead{})
 		storeErr := storeBotResult(t.Context(), tx, result, stored)
-		for _, err := range []error{readErr, lockErr, storeErr} {
-			if errors.Is(failure, io.EOF) {
-				require.Equal(t, core.ErrDatabase, err)
-			} else {
-				require.ErrorIs(t, err, failure)
-				require.False(t, core.IsDatabaseFailure(err))
-			}
+		for index, err := range []error{readErr, lockErr, storeErr} {
+			assertStoredJSONFailure(t, index, failure, err)
 		}
 	}
 	// A successful SQL row is decoded only after the scan into raw bytes.
@@ -157,4 +152,23 @@ func TestStoredJSONSyntheticSQLAndDecodeProvenance(t *testing.T) {
 		require.ErrorAs(t, err, &syntax)
 		require.False(t, core.IsDatabaseFailure(err))
 	}
+}
+
+func assertStoredJSONFailure(t *testing.T, boundary int, failure, actual error) {
+	t.Helper()
+	expected := failure
+	if errors.Is(failure, io.EOF) {
+		expected = core.ErrDatabase
+	}
+	if boundary == 0 && errors.Is(failure, pgx.ErrNoRows) {
+		expected = ErrStale
+	}
+	if boundary < 2 && errors.Is(failure, context.Canceled) {
+		expected = core.ErrDatabase
+	}
+	require.ErrorIs(t, actual, expected)
+	if errors.Is(failure, io.EOF) {
+		require.Equal(t, core.ErrDatabase, actual)
+	}
+	require.Equal(t, errors.Is(expected, core.ErrDatabase), core.IsDatabaseFailure(actual))
 }

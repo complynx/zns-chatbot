@@ -2,14 +2,34 @@
 
 ## Current integration — 2026-10-01
 
-Authoritative product source is Git0070f944691050677cd915a215e4ac0beea69fb6.
+Last integrated source merge is Git7ff6659bcc8095b17cd41bb34f678e486470bf00. Model10 immutable482214b4 (freshQA270PASS) merged without conflicts after author codegates and rootactualPG failure/reboot7.952s. All ten integrated blobs match immutable review; root7unit top-level/14PASSevents0FAILSKIP10.972s. Provider controls do not establish businessF08/Functional acceptance. Previous productmergebd150d5b includes runtime14. Runtime14 candidate2a9db430 (QA264) merged conflict-free; no source rewrite. Root three fixture top-level tests and subcases passed,12PASS events including two packages,0FAIL/SKIP. Developer actual Linux PG role/inventory/negative/persistence gates passed; managedC204 and clock operator successor remain pending. C clock40 and payment7 are separate unmerged candidates; model10 is integrated; ce427 images do not certify this source.
+E rehearsal tool4088372d (QA259,tenpaths) merged without conflicts. Root actual
+22 offline Python guards passed. This adds rehearsal tooling, not runtime product
+dependencies; actual final import/removal and frozen090/091 epoch remain open.
+Menu authority ebe2dddd (QA257,24 paths) merged without conflict resolution,
+including additive090. Root scoped delivery tests passed; adjacent packages
+compiled without matched tests. Developer native and real Linux PG race passed.
+Functional runtime and final E schema inventory are not yet frozen.
+Fixed fixture role controls67206220 (QA255, five paths) merged without conflict
+resolution; root focused sandbox/command tests passed. Live stand/FQA still open.
+Earlier formatting commitff575042 changes only three Prettier formatting
+files (Compose quotes, replacement JSON indentation, documentation blank line);
+there is no Go logic, schema or runtime value change. Whole-source raw hashes
+still differ and final build inventories must include this formatting commit.
 Reviewed callback observations62b9eebc were merged6812e359; source diagnostics
 b857b8b9 were mergedf56bebd3; registration fixtures54766266 were merged0070f944.
+Reviewed HTTP observations8bc883eb (QA248) were merged91ff00f1 without
+product conflict resolution. Root focused HTTP/telemetry tests passed both
+affected packages; Functional acceptance remains open. Baseline09 stays frozen
+at0070f944 and does not include this later feature.
 Each merge preserved the independently reviewed candidate; no product conflict
 resolution or additional product edits occurred during these three merges.
+Reviewed update-failure observations808b284c (QA253) were merged5057ddb0
+without conflict resolution. Root focused bot/observability checks passed;
+Functional acceptance remains open. Baseline09 terminal FAIL still binds0070,
+not these later features.
 The working root documentation is updated separately. Functional images remain
-sealedce427ca5, so they do not certify this newer source. Menu090, job summary
-and E rehearsal guard successors remain unmerged.
+sealedce427ca5, so they do not certify this newer source. Menu090 is integrated; job summary and C clock remain unmerged. E guard is integrated, not live E accepted.
 
 Migration checksums bind raw embedded bytes. Equal Git blobs in CRLF and LF
 worktrees do not prove equal embedded migration hashes. Final importer/runtime

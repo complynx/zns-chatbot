@@ -27,6 +27,7 @@ func (s Service) CapturePassAdmission(
 		return passbooking.Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	registration, clockAttempt := s.Registration.WithClockAttempt()
 	if err = lockRegistrationPrelude(
 		ctx,
 		tx,
@@ -38,7 +39,7 @@ func (s Service) CapturePassAdmission(
 		return passbooking.Admission{}, err
 	}
 	// Preserve target authorization and stale-version denial before source capture.
-	prepared, err := s.Registration.PrepareAdmissionInTx(ctx, tx, actor, request.Command)
+	prepared, err := registration.PrepareAdmissionInTx(ctx, tx, actor, request.Command)
 	if err != nil {
 		return passbooking.Admission{}, err
 	}
@@ -50,6 +51,9 @@ func (s Service) CapturePassAdmission(
 	}
 	result, err := prepared.Capture(ctx, request.Ingress)
 	if err != nil {
+		return passbooking.Admission{}, clockAttempt.DecisionError(ctx, err)
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
 		return passbooking.Admission{}, err
 	}
 	return result, core.DatabaseOperationError(tx.Commit(ctx))

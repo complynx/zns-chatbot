@@ -58,3 +58,25 @@ func (b *Bot) renderBotPassRedaction(ctx context.Context, i botdelivery.Intent) 
 		Receipt: botdelivery.Continuation{Kind: botFamilyPassRedaction, Revision: revision},
 	}, nil
 }
+
+// Receipt retirement uses the durable actual target, never the current view row.
+func (b *Bot) renderBotPassReceiptRedaction(ctx context.Context, i botdelivery.Intent) (botRenderedDelivery, error) {
+	if i.Phase != botPhaseEdit || i.Target <= 0 || i.Target != i.Reference.Version {
+		return botRenderedDelivery{}, botdelivery.ErrBinding
+	}
+	if _, err := b.derivedReplyVisible(ctx, i.Owner, i.Reference.Revision); err != nil {
+		return botRenderedDelivery{}, err
+	}
+	pref, err := b.API.Preferences(ctx, i.Owner)
+	if err != nil {
+		return botRenderedDelivery{}, err
+	}
+	text, err := i18n.Translate(pref.Language, i18n.RegistrationUnavailable, nil)
+	if err != nil {
+		return botRenderedDelivery{}, err
+	}
+	return botRenderedDelivery{Payload: telegram.Send{
+		ChatID: i.Chat, MessageID: i.Target, Text: text,
+		Markup: telegram.Markup{Rows: [][]telegram.Button{}},
+	}}, nil
+}

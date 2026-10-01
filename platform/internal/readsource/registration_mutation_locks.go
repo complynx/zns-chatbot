@@ -18,21 +18,28 @@ func LockRegistrationMutationEvents(ctx context.Context, tx pgx.Tx, refs []Autho
 	return lockRegistrationMutationEvents(ctx, tx, refs, targets)
 }
 
-// LockRegistrationMutationPrelude expands individually bounded records for one
-// lock pass. The input budget still bounds the number of opaque records; their
-// combined validation window need not fit a single persisted-record budget.
+// LockRegistrationMutationPrelude expands each bounded persisted record for one
+// lock pass. Their combined window need not fit one persisted-record budget.
 func LockRegistrationMutationPrelude(
 	ctx context.Context, tx pgx.Tx, refs []Authority, targets, actors []string,
+	additional ...[]Authority,
 ) error {
-	if !Valid(refs) {
-		return ErrLimit
+	records := append([][]Authority{refs}, additional...)
+	for _, record := range records {
+		if !Valid(record) {
+			return ErrLimit
+		}
 	}
-	closures, err := proposalClosures(ctx, tx, refs)
-	if err != nil {
-		return err
+	var closures [][]Authority
+	for _, record := range records {
+		expanded, err := proposalClosures(ctx, tx, record)
+		if err != nil {
+			return err
+		}
+		closures = append(closures, expanded...)
 	}
 	expanded := proposalWindowAuthorities(closures)
-	if err = lockRegistrationMutationEvents(ctx, tx, expanded, targets); err != nil {
+	if err := lockRegistrationMutationEvents(ctx, tx, expanded, targets); err != nil {
 		return err
 	}
 	return lockActors(ctx, tx, actors, expanded, true)

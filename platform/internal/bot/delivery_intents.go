@@ -48,6 +48,7 @@ func (b *Bot) beginBotIntent(
 		ctx,
 		botdelivery.BeginRequest{
 			Observed:     observed,
+			Pass:         rendered.Receipt.Pass,
 			Target:       rendered.Payload.MessageID,
 			ExportEvents: rendered.ExportEvents,
 		},
@@ -90,6 +91,10 @@ func (b *Bot) finishBotIntent(
 		if err = tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&deadline); err != nil {
 			return core.DatabaseOperationError(err)
 		}
+	}
+	if current.Reference.Family == botFamilyPasses && current.Receipt.Pass != nil {
+		// Preserve the canonical admission binding across fallback and success.
+		receipt.Pass = current.Receipt.Pass
 	}
 	raw, err := json.Marshal(receipt)
 	if err != nil {

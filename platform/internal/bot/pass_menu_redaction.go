@@ -3,8 +3,10 @@ package bot
 import (
 	"context"
 	"errors"
+	"reflect"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 
 	"github.com/jackc/pgx/v5"
 
@@ -21,7 +23,16 @@ func stalePassMenuSource(err error) bool {
 	}
 	problem, ok := errors.AsType[*core.ProblemError](err)
 	return ok &&
-		(problem.Code == passSourceStale || problem.Code == "pass_source_stale" || problem.Code == historyStale)
+		(problem.Code == passSourceStale || problem.Code == "pass_source_stale" || problem.Code == botdelivery.PassMenuDeniedCode || problem.Code == historyStale)
+}
+
+func stalePassCardBinding(err error) bool {
+	if core.IsDatabaseFailure(err) {
+		return false
+	}
+	problem, ok := errors.AsType[*core.ProblemError](err)
+	return errors.Is(err, botdelivery.ErrStale) ||
+		(ok && problem.Status == botdelivery.ErrStale.Status && problem.Code == botdelivery.ErrStale.Code)
 }
 
 // Revocation retires the original view without turning its inputs into manual data.
@@ -94,4 +105,39 @@ func (b *Bot) renderRedactedPassMenu(
 		botdelivery.Reference{Family: botFamilyPassRedaction, CardKey: botFamilyPasses, Revision: revision},
 		botdelivery.Continuation{Kind: botFamilyPassRedaction, Revision: revision},
 	)
+}
+
+// Retire the exact source-bound menu before cancelling its stale delivery.
+// Run outside card capture so the redaction queues its own edit-only effect.
+func (b *Bot) retireStalePassCard(ctx context.Context, i botdelivery.Intent, cause error) error {
+	result, err := b.Host.BeginBotDelivery(ctx, botdelivery.BeginRequest{Observed: i, PreparationFailure: true})
+	if err != nil {
+		return err
+	}
+	if result.Intent.State == delivery.Cancelled {
+		return nil
+	}
+	// Generic stale bindings also include harmless target/capture changes. Only
+	// retire those when the immutable original source is actually unavailable.
+	_, definitive := errors.AsType[*botdelivery.PassMenuDeniedError](cause)
+	if stalePassCardBinding(cause) && !definitive && !stalePassMenuSource(cause) {
+		if err = b.checkPassDeliverySource(ctx, i.Owner, i.Reference.Source); err != nil {
+			if !stalePassMenuSource(err) {
+				return err
+			}
+		} else {
+			return nil
+		}
+	}
+	saved, revision, err := b.passMenuRecord(ctx, i.Owner)
+	if err != nil {
+		return err
+	}
+	if revision != i.Reference.Revision || !reflect.DeepEqual(saved.Source, i.Reference.Source) {
+		return nil
+	}
+	if saved.Redacted {
+		return b.renderRedactedPassMenu(ctx, i.Owner, i.Chat, revision, saved)
+	}
+	return b.redactPassMenu(ctx, i.Owner, i.Chat, revision, saved)
 }

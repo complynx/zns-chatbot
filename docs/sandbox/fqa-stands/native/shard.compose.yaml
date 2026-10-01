@@ -1,0 +1,35 @@
+# Reserved synthetic shard cluster. Config only; setup/start requires assignment.
+name: synthetic-qa-zns-native-shard-20261001
+services:
+  postgres:
+    image: postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+    container_name: synthetic-qa-zns-native-shard-20261001-postgres-1
+    pull_policy: never
+    restart: "no"
+    cpus: 2
+    mem_limit: 1g
+    shm_size: 256m
+    environment:
+      POSTGRES_DB: synthetic_qa_zns_native_shard
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${NATIVE_SHARD_PASSWORD:?Runtime-only private synthetic credential required}
+    ports: ["127.0.0.1:58451:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    networks: [host]
+    labels:
+      net.complynx.zns.synthetic: "true"
+      net.complynx.zns.purpose: native-shard
+      net.complynx.zns.owner: fqa_lead
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d synthetic_qa_zns_native_shard"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+networks:
+  host:
+    external: true
+    name: synthetic-qa-zns-native-shard-20261001-host
+volumes:
+  pgdata:
+    external: true
+    name: synthetic-qa-zns-native-shard-20261001-pgdata

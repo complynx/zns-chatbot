@@ -27,6 +27,7 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	require.Equal(t, expectedOld, queueUpgradeLedger(t, db))
 	oldLedger := queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql")
 	seedCreditObservationUpgrade(t, db)
+	seedPassDeliveryTargetsUpgrade(t, db)
 	before := creditObservationUpgradeState(t, db)
 	var indexPresent bool
 	require.NoError(t, db.QueryRow(t.Context(),
@@ -38,8 +39,13 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	expected = append(expected, queueUpgradeLedgerEntry{
 		Name: creditObservationUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(body)),
 	})
+	passBody, err := migrations.ReadFile("migrations/" + passDeliveryTargetsUpgrade)
+	require.NoError(t, err)
+	expected = append(expected, queueUpgradeLedgerEntry{
+		Name: passDeliveryTargetsUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(passBody)),
+	})
 	require.NoError(t, Migrate(t.Context(), db))
-	require.Equal(t, expected, queueUpgradeLedger(t, db), "only the exact 089 checksum entry is added")
+	require.Equal(t, expected, queueUpgradeLedger(t, db), "only exact 089 and 090 checksum entries are added")
 	require.JSONEq(t, oldLedger, queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql"),
 		"all predecessor ledger fields including applied_at remain unchanged")
 	require.JSONEq(t, before, creditObservationUpgradeState(t, db),
@@ -59,10 +65,11 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	require.Equal(t, [4]int64{1, 1, 2, 1}, item.States)
 	require.Equal(t, [4]int64{1, 0, 1, 0}, item.Bases)
 	require.Equal(t, credits.UsageTokenObservation{Sum: 17, KnownReceipts: 1, UnknownReceipts: 1}, item.Tokens[0])
-	upgradedLedger := queueUpgradeLedgerSnapshot(t, db, creditObservationUpgrade)
+	checkPassDeliveryTargetsUpgrade(t, db)
+	upgradedLedger := queueUpgradeLedgerSnapshot(t, db, passDeliveryTargetsUpgrade)
 	require.NoError(t, Migrate(t.Context(), db))
 	require.Equal(t, expected, queueUpgradeLedger(t, db))
-	require.JSONEq(t, upgradedLedger, queueUpgradeLedgerSnapshot(t, db, creditObservationUpgrade))
+	require.JSONEq(t, upgradedLedger, queueUpgradeLedgerSnapshot(t, db, passDeliveryTargetsUpgrade))
 	require.JSONEq(t, before, creditObservationUpgradeState(t, db),
 		"scrape and migration replay preserve every accounting field")
 	checkCreditObservationIndexPlan(t, db, item)
@@ -106,8 +113,8 @@ func applyCreditObservationPredecessor(t *testing.T, db *pgxpool.Pool) []queueUp
 	t.Helper()
 	entries, err := migrations.ReadDir("migrations")
 	require.NoError(t, err)
-	require.Equal(t, creditObservationUpgrade, entries[len(entries)-1].Name(),
-		"upgrade proof is pinned to the 089 embedded schema epoch")
+	require.Equal(t, passDeliveryTargetsUpgrade, entries[len(entries)-1].Name(),
+		"upgrade proof is pinned to the 090 embedded schema epoch")
 	tx, err := db.Begin(t.Context())
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
@@ -116,7 +123,7 @@ func applyCreditObservationPredecessor(t *testing.T, db *pgxpool.Pool) []queueUp
 	require.NoError(t, err)
 	expected := make([]queueUpgradeLedgerEntry, 0, len(entries)-1)
 	for _, entry := range entries {
-		if entry.Name() == creditObservationUpgrade {
+		if entry.Name() >= creditObservationUpgrade {
 			continue
 		}
 		body, readErr := migrations.ReadFile("migrations/" + entry.Name())
@@ -177,7 +184,8 @@ func creditObservationUpgradeState(t *testing.T, db *pgxpool.Pool) string {
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT jsonb_build_object(
  'attempts',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM credits.attempts a),
  'accounts',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.payer) FROM credits.accounts a),
- 'policy',(SELECT jsonb_agg(to_jsonb(p)) FROM credits.default_policy p))::text`).Scan(&raw))
+ 'policy',(SELECT jsonb_agg(to_jsonb(p)) FROM credits.default_policy p),
+ 'bot_intents',(SELECT jsonb_agg(to_jsonb(i) ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`).Scan(&raw))
 	return raw
 }
 

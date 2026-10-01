@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -35,23 +36,38 @@ type transport struct {
 	runtime   *Runtime
 	base      http.RoundTripper
 	operation string
+	failures  *prometheus.CounterVec
 }
 
 // HTTPClient wraps a transport without changing the caller's request or response.
 // Only W3C trace context is injected; baggage is never propagated.
+// A nil runtime delegates unchanged to the base transport without observation.
 func (r *Runtime) HTTPClient(operation string, base http.RoundTripper) http.RoundTripper {
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	return &transport{runtime: r, base: base, operation: operationName(operation)}
+	var failures *prometheus.CounterVec
+	if r != nil {
+		failures = registerHTTPFailures(r.Registry)
+	}
+	return &transport{
+		runtime:   r,
+		base:      base,
+		operation: operationName(operation),
+		failures:  failures,
+	}
 }
 
 func (t *transport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if t.runtime == nil {
+		return t.base.RoundTrip(request)
+	}
 	ctx, finish := t.runtime.start(request.Context(), t.operation, trace.SpanKindClient)
 	clone := request.Clone(ctx)
 	clone.Header.Del("Baggage")
 	t.runtime.propagation.Inject(ctx, propagation.HeaderCarrier(clone.Header))
 	response, err := t.base.RoundTrip(clone)
+	observeHTTPFailure(t.failures, t.operation, response, err)
 	failure := err
 	if err == nil && response != nil && response.StatusCode >= http.StatusInternalServerError {
 		failure = errors.New("http client failure")

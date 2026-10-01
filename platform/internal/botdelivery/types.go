@@ -30,7 +30,9 @@ const (
 	phaseSend                = "send"
 	phaseEdit                = "edit"
 	familyPasses             = "passes"
+	passCardReceiptKind      = "pass_card"
 	familyRefund             = "order_refund"
+	familyPayment            = "payment"
 	familyRefundRedaction    = "order_refund_redaction"
 	familyPassRedaction      = "pass_redaction"
 	familyPassExport         = "pass_export"
@@ -54,27 +56,57 @@ const (
 // Reference contains domain/private-result references, never wire
 // text, file bytes, credentials or a serialized callback.
 type Reference struct {
-	Refund       *orders.RefundDeliveryRead `json:"refund,omitempty"`
-	ProofAttempt string                     `json:"proof_attempt,omitempty"`
-	Kind         Kind                       `json:"kind"`
-	Family       string                     `json:"family,omitempty"`
-	CardKey      string                     `json:"card_key,omitempty"`
-	Event        string                     `json:"event,omitempty"`
-	Object       string                     `json:"object,omitempty"`
-	Update       int64                      `json:"update,omitempty"`
-	Revision     int64                      `json:"revision,omitempty"`
-	Version      int64                      `json:"version,omitempty"`
-	Attempt      int64                      `json:"attempt,omitempty"`
-	ResultKind   string                     `json:"result_kind,omitempty"`
-	Notice       i18n.ID                    `json:"notice,omitempty"`
-	Language     string                     `json:"language,omitempty"`
-	Generation   *int64                     `json:"generation,omitempty"`
-	Source       *readsource.Derivation     `json:"source,omitempty"`
-	Continuation Continuation               `json:"continuation"`
-	Authorities  []readsource.Authority     `json:"authorities,omitempty"`
+	PaymentRetirement *PaymentRetirement         `json:"payment_retirement,omitempty"`
+	Refund            *orders.RefundDeliveryRead `json:"refund,omitempty"`
+	ProofAttempt      string                     `json:"proof_attempt,omitempty"`
+	Kind              Kind                       `json:"kind"`
+	Family            string                     `json:"family,omitempty"`
+	CardKey           string                     `json:"card_key,omitempty"`
+	Event             string                     `json:"event,omitempty"`
+	Object            string                     `json:"object,omitempty"`
+	Update            int64                      `json:"update,omitempty"`
+	Revision          int64                      `json:"revision,omitempty"`
+	Version           int64                      `json:"version,omitempty"`
+	Attempt           int64                      `json:"attempt,omitempty"`
+	ResultKind        string                     `json:"result_kind,omitempty"`
+	Notice            i18n.ID                    `json:"notice,omitempty"`
+	Language          string                     `json:"language,omitempty"`
+	Generation        *int64                     `json:"generation,omitempty"`
+	PaymentOpening    *PaymentOpening            `json:"payment_opening,omitempty"`
+	Source            *readsource.Derivation     `json:"source,omitempty"`
+	Continuation      Continuation               `json:"continuation"`
+	Authorities       []readsource.Authority     `json:"authorities,omitempty"`
+}
+
+const orderCardReceiptKind = "order_card"
+const codeHistoryStale = "history_stale"
+
+// PaymentRetirement identifies the successful payload of an unavailable order, without
+// copying its private source or granting authority to render it again.
+type PaymentRetirement struct {
+	Operation string `json:"operation"`
+	Effect    string `json:"effect"`
+	ViewHash  string `json:"view_hash"`
+}
+
+// PaymentOpening holds the displayed receipt that an independent opening may replace.
+type PaymentOpening struct {
+	Previous *PaymentRetirement `json:"previous,omitempty"`
+	Target   int64              `json:"target,omitempty"`
+}
+
+// CanonicalPaymentRetirement identifies only source-free fixed cleanup.
+func (r Reference) CanonicalPaymentRetirement() bool {
+	p := r.PaymentRetirement
+	return r.Kind == CardIntent && r.Family == familyPayment && r.Object != "" && r.CardKey == "payment:"+r.Object &&
+		r.Notice == i18n.PaymentUnavailable && r.Source == nil && r.Generation == nil && len(r.Authorities) == 0 &&
+		r.Update == 0 && r.PaymentOpening == nil && r.Continuation.Retired &&
+		r.Continuation.Kind == orderCardReceiptKind && r.Continuation.Key == r.CardKey &&
+		p != nil && p.Operation != "" && p.Effect != "" && p.ViewHash != ""
 }
 
 type Continuation struct {
+	Pass     *PassCardReceipt `json:"pass,omitempty"`
 	Document *DocumentReceipt `json:"document,omitempty"`
 	Retired  bool             `json:"retired,omitempty"`
 	Kind     string           `json:"kind,omitempty"`
@@ -120,6 +152,11 @@ func (i Intent) Observation() Observation {
 }
 
 func (r Reference) Valid(owner string) bool {
+	if r.PaymentOpening != nil && (r.Kind != CardIntent || r.Family != familyPayment ||
+		r.PaymentRetirement != nil || r.Notice != "" || r.Continuation.Retired) {
+		return false
+	}
+
 	if r.Generation != nil && *r.Generation < 0 {
 		return false
 	}
@@ -191,4 +228,12 @@ type ModernReceipt struct {
 	SHA256    string `json:"sha256"`
 	Bytes     int    `json:"bytes"`
 	MessageID int64  `json:"message_id,omitempty"`
+}
+
+// PassCardReceipt binds the actual rendered payload's authority and its first
+// admitted edit target. It contains no message body or callback data.
+type PassCardReceipt struct {
+	PreviousMessageID int64  `json:"previous_message_id,omitempty"`
+	Event             string `json:"event,omitempty"`
+	Capability        string `json:"capability,omitempty"`
 }

@@ -241,6 +241,26 @@ func (c *Coordinator) observe(ctx context.Context, ledger Ledger) (bool, error) 
 	if err = knownSessions(ledger, names); err != nil {
 		return false, err
 	}
+	admit, err := (runtimeapp.Instance{Installation: ledger.Installation, Launch: ledger.Launch}).
+		ApplicationName("admit")
+	if err != nil {
+		return false, ErrUnknown
+	}
+	admissions := 0
+	for _, name := range names {
+		if name == admit {
+			admissions++
+		}
+	}
+	if admissions > 1 {
+		return false, ErrUnknown
+	}
+	if admissions == 0 {
+		if ledger.State == StateRunning {
+			return false, ErrStopped
+		}
+		return false, nil
+	}
 	return ready, nil
 }
 func (c *Coordinator) block(ledger *Ledger, err error) error {

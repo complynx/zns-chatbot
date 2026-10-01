@@ -49,7 +49,14 @@ func (s *snapshot) notifyChanges(ctx context.Context, tx pgx.Tx, before map[stri
 	if err := s.notifyWaitlist(ctx, tx); err != nil {
 		return err
 	}
-	announcements, err := enqueueRegistrationAnnouncements(ctx, tx, s.event.id, s.deliveryBotID, s.announcementBindings)
+	announcements, err := enqueueRegistrationAnnouncements(
+		ctx,
+		tx,
+		s.event.id,
+		s.deliveryBotID,
+		s.announcementBindings,
+		s.registrationObserved,
+	)
 	if err != nil {
 		return err
 	}

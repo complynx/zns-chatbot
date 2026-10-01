@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 	"unicode/utf16"
 
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,58 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+func TestAdminMessageNativeIntakePreservesRegistrationClock(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	db := foodPendingDatabase(t)
+	b := botDeliveryTestBot(db)
+	first := time.Date(2026, time.October, 1, 12, 0, 0, 0, time.UTC)
+	b.RegistrationClock = passBatchClock{now: first}
+	update := telegram.Update{ID: 601, Callback: &telegram.Callback{
+		From: telegram.User{ID: 202}, Data: "adminmsg:results:42",
+		Message: telegram.Message{Chat: telegram.Chat{ID: 202, Type: "private"}},
+	}}
+	offset, err := b.saveBatch(ctx, 0, []telegram.Update{update})
+	require.NoError(t, err)
+	require.Equal(t, int64(602), offset)
+	readProof := func() {
+		t.Helper()
+		var received time.Time
+		var owner, control string
+		var generation int64
+		require.NoError(t, db.QueryRow(ctx, `SELECT received_at,intake_owner,intake_generation,intake_control
+ FROM core.registration_ingress WHERE bot_id=$1 AND request_key='601'`, b.Delivery.BotID).
+			Scan(&received, &owner, &generation, &control))
+		require.Equal(t, first, received)
+		require.Equal(t, "bob", owner)
+		require.Zero(t, generation)
+		require.Equal(t, "adminmsg:results:42", control)
+	}
+	readProof()
+	_, err = db.Exec(ctx, `INSERT INTO core.conversation_history_generations(owner,generation) VALUES('bob',1)
+ ON CONFLICT(owner) DO UPDATE SET generation=1`)
+	require.NoError(t, err)
+	b.RegistrationClock = passBatchClock{now: first.Add(time.Hour)}
+	update.Callback.Data = "adminmsg:results:43"
+	_, err = b.saveBatch(ctx, 0, []telegram.Update{update})
+	require.NoError(t, err)
+	readProof()
+	// A failed observation rolls back both intake proof and inbox acknowledgement.
+	b.RegistrationClock = passBatchClock{err: context.Canceled}
+	update.ID = 602
+	offset, err = b.saveBatch(ctx, 602, []telegram.Update{update})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, int64(602), offset)
+	var exists bool
+	require.NoError(t, db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.registration_ingress
+ WHERE bot_id=$1 AND request_key='602') OR EXISTS(SELECT 1 FROM bot.telegram_inbox WHERE update_id=602)`,
+		b.Delivery.BotID).Scan(&exists))
+	require.False(t, exists)
+	var savedOffset int64
+	require.NoError(t, db.QueryRow(ctx, `SELECT value FROM bot.cursors WHERE name='telegram_received'`).Scan(&savedOffset))
+	require.Equal(t, int64(602), savedOffset)
+}
 
 func TestAdminMessageProgressEnglishAndRussian(t *testing.T) {
 	t.Parallel()

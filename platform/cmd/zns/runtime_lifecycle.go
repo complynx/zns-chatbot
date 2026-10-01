@@ -56,9 +56,7 @@ func openRuntimeDatabase(
 	if instance == (runtimeapp.Instance{}) {
 		return store.Open(ctx, cfg.Database.URL.Value(), runtime.PGXTracer())
 	}
-	if !managedModelAllowed(cfg) || cfg.Media.URL != "http://media-broker:8091" ||
-		cfg.Sticker.Worker.URL != "http://sticker-broker:8098" ||
-		(cfg.Script.Enabled && cfg.Script.Socket != "/run/script-ipc/evaluate.sock") {
+	if !managedTopologyAllowed(cfg) {
 		return nil, errors.New("runtime topology is outside the managed deployment group")
 	}
 	name, err := instance.ApplicationName("app")
@@ -66,6 +64,12 @@ func openRuntimeDatabase(
 		return nil, err
 	}
 	return store.OpenNamed(ctx, cfg.Database.URL.Value(), name, runtime.PGXTracer())
+}
+
+func managedTopologyAllowed(cfg config.Config) bool {
+	return managedModelAllowed(cfg) && cfg.Media.URL == "http://media-broker:8091" &&
+		cfg.Sticker.Worker.URL == "http://sticker-broker:8098" &&
+		(!cfg.Script.Enabled || cfg.Script.Socket == "/run/script-ipc/evaluate.sock")
 }
 
 // Managed synthetic stands reuse the existing scoped fixture model. Production

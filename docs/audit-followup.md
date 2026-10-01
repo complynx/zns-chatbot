@@ -1,23 +1,54 @@
-## Current integrated source and expanded QA — 2026-10-01, source0070f944
+## Current integrated source and corrective ownership — 2026-10-01
 
-Authoritative product Git source0070f944 includes reviewed ACK observation
-(QA241, merge6812e359), source-status runtime diagnostics (QA243, mergef56bebd3)
-and bounded genuine registration fixtures (QA245, merge0070f944). Developer
-native PostgreSQL/quality gates passed; root integrated focused checks passed
-without PG. Built/source-reviewed is not whole Functional acceptance.
+Integrated product is7ff6659b after freshQA270PASS model10 merge; rootfocused controls7top/14PASSevents0FAILSKIP and all10sourceblobs verified. BusinessF08 remainsopen. Previousbd150d5b includesruntime14; runtime14 role/configuration preparation passed QA264 and root focused fixtures. Rejected clock/payment/oldermodel candidates remain unmerged; reviewed482214b4 model correction is integrated. Documentation checkpoint813efe70 preserves the latest evidence. Imagesce427 remain historical scopes, not current-source acceptance.
 
-Menu090 remains unmerged after QA240 target-retirement/legacy compatibility
-findings; successor developer owns focused/full PG/race. Job summary QA244
-requires stable persisted page manifests and transferred developer ownership.
-E rehearsal QA242 requires effective-target guards, all hashes before DB and
-honest food replay evidence. Neither rejected candidate is merged.
+Fresh full QA267 payment7 FAIL1, QA268 model10 FAIL2, QA269 clock40 FAIL3. Payment unavailability after can_book revocation transferred to menu_retirement_fix; durable model correction passed QA270 and merged7ff6659b; writable clock aliases and post-lock eligibility transferred to fresh clock_final_boundary_developer. All source candidates and failed reports preserved. Next fresh Code QA271; allCodexoverride, Claude disabled/unprobed.
 
-Two independent scoped EN/RU Functional runs completed on sealedce427ca5;
-states preserved, all40 original whole-stage obligations remain incomplete.
-Lead prepares next exact-source epoch and an authorized separate baseline
-PG58441. No new full baseline or finalE apply/removal is claimed. Real Telegram
-test-account ID is missing and listed in PROGRESS Questions; unrelated work
-continues. Production NO-GO. Routing through245, next246, allCodex.
+Operator5 private-role plan prepared read-only, implementation waits reviewed C. Job19/091 likewise waits C ingress. Native58441/58451 are released; new bare58461/58471 prerequisites verified and released without product schema. Lead actual list-only1060integration/2187platform/136importer preliminary exact eight-shard plan prepared; final frozen source and Linux/browser/lifecycle/private-role prerequisites still required. No full baseline or40-row FQA acceptance. Independent actual-source parity inventory refresh completed:70 anchors and3 entry-surface gaps, implementation afterC–E. Human question remains final Telegram numeric testaccountID in PROGRESS. Production NO-GO.
+
+## Historical expanded QA checkpoint — 2026-10-01, source33540321
+
+Authoritative integrated Gitbd150d5b includes reviewed ACK observation QA241,
+source diagnostics QA243, registration fixture QA245 and HTTP observations
+QA248, update diagnostics QA253 and fixed fixture role controls QA255. Root focused integrated checks and full pinned JS gates passed;
+Functional images remain sealedce427 and do not certify the newer source.
+
+Menu090 predecessor74ab failed independent QA251 on aggregate source budgets.
+Successor ebe2,24 paths, passed exact native PostgreSQL and all offline gates;
+actual Linux PostgreSQL race and fresh full QA257 passed; merged56ac8b79
+without conflicts, root focused delivery tests passed. Menu released
+55432 with zero other connections; C completed4clock+22default PG gates and released its window.
+Job19 interim3c83 passed affected native PG and local gates; final source/review
+wait on integrated reviewed C ingress. Neither candidate is merged.
+
+C27 clock50a failed fresh QA254 on startup ordering, post-allocator observation
+and strict state decoding. Successor3345 passed final units/pinned checks and4clock+22default PG;
+fresh independent full27 QA258FAIL3. Correction transferred to a fresh author
+with existingadmission_retention.go added to scope (28 paths); all old candidates
+are immutable. No C integration/Functional acceptance.
+Operator5 immutable7841 passed actual offline Linux race and both-platform lint;
+final dependency/base preparation waits reviewed C. Fixed fixture role controls
+67206220,5 paths, passed local/native PG and passed independent QA255 and merged102072a0; root focused checks passed.
+E10 native SQL owner successor44058ee7 failed fresh QA256 on localhost endpoint contract after offline guards,
+compiled rejection proofs/builds and lint. Successor4088372d passed fresh full QA259, merged33540321; root22guardsPASS.
+No live E write/removal is accepted.
+Engineer prepares ten explicit registration stand files in a separate branch,
+using existing private-secret psql bootstrap mechanism. QA260FAIL2 on tool
+worker configuration and coordinator clock environment; same-scope correction
+is active. Actual58451 second native cluster is prepared and allocated payment
+fix developer; root reproduced current33540321 order_not_found and executes
+affected candidate tests as credential owner. No production secret access. No resources/builds/start
+are authorized by template preparation; installation204 stays unstarted.
+
+Two scoped EN/RU Functional runs on ce427 completed and were released with state
+preserved; all40 original whole-stage obligations remain open. Full baseline09
+failed on0070; focused10 on5057 completed9PASS1FAIL0SKIP, seven role prerequisites
+and Meal/Large passed, DeletedPayment failed. This does not accept a full suite
+or establish a cause/fix for the earlier Meal failure.58441 was released after
+focused10 and separate role-control developer gates. Final E/runtime/UI/parity
+and broad final-source acceptance remain outstanding. Telegram account ID is in
+PROGRESS; independent work continues. Production NO-GO. Counter261,next262,
+all Codex under override, no Claude probe.
 
 ## Historical integrated snapshot — 2026-10-01, ce427ca5
 
@@ -1341,7 +1372,7 @@ Code QA request №23: fresh independent Codex Senior, read-only payment complet
 **Code QA №21 завершён static PASS**: [отчёт](qa/code-qa-2026-09-30-21.md), refund scope. Route: свежий независимый Codex fallback. Claude CLI 2.1.284 доступен, gateway и localhost:8443 не принимали TCP-соединение; exact `claude-opus-5-5` не подтверждён и не заявляется использованным. **Code QA №22 завершён — два P2**: [отчёт](qa/code-qa-2026-09-30-22.md), устаревшие queue authorities в двухшаговом payment flow и отсутствие receipt recovery после lost response. Daniel открыл Claude gateway и запросил одного разработчика Opus 5.5 medium; разработчик запущен для исправления этих двух дефектов. Stream init подтвердил model=claude-opus-5-5 и permissionMode=acceptEdits; effort задан явным CLI-флагом --effort medium (init его не отражает). Фактически доступны Read/Edit, Bash отсутствует; владение ограничено пятью файлами платежного восстановления. Evidence: qa.local/go-resume-20260929/opus-dev-payment-20260930.raw.jsonl. Это development, не новый Code QA. Предыдущие findings и реестр рецензентам не передавались. Следующий запрос №23; №24 снова направляется в Opus при доступности. Functional QA и общий baseline остаются открыты. Нижние записи — история предыдущих состояний, а не текущие запуски.
 ## Пауза перед перезагрузкой 29 сентября 2026
 
-По просьбе Daniel работа остановлена. Агенты прерваны, оба PostgreSQL-контейнера стендов остановлены без удаления контейнеров, volumes или образов. Активных проверок нет. Актуальное распределение задач — в [PROGRESS.html](../PROGRESS.html); нижние записи сохраняют хронологию и не означают, что упомянутые там процессы всё ещё работают.
+По просьбе Daniel работа остановлена. Агенты прерваны, оба PostgreSQL-контейнера стендов остановлены без удаления контейнеров, volumes или образов. Активных проверок нет. Актуальное распределение задач — в [PROGRESS.html](../management.local/PROGRESS.html); нижние записи сохраняют хронологию и не означают, что упомянутые там процессы всё ещё работают.
 
 Последние завершённые проверки: composition compile №4 всех пяти roots — PASS; fixture PG №4 — PASS, 23 test events, 141.817s; food-review PG №2 — PASS, 14.181s. Lint №6 — FAIL, 14 issues. Refund PG №2 — FAIL по одному leaf: тестовый Telegram envelope не содержит `error_code: 400`, поэтому исход классифицирован как unknown. Оба исправления P1 QA №19 внесены, но приёмка не завершена. Некоторые последующие мелкие исправления lint были начаты перед паузой и не перепроверены. Code QA №20 — static PASS; №21 Opus ещё не запускался. Нового handover не создавали.
 
@@ -1505,3 +1536,13 @@ Code QA №17 static PASS, report готов. №18 payment exact Opus выпо�
 ## Current scope update — 1 October
 
 Common integration81a9cf73 now includes QA233 usage and QA235 models/credits/broadcast policy. Full baseline and architecture acceptance remain open. Menu QA234 found one affected SQL-provenance gap; a new developer owns the correction, so migration090 and payment-retirement integration are pending. Two actualce427ca5 stands are frozen for independent manual/UI acceptance; two reviewers are executing, and no fullFunctionalPASS is claimed. The agent locale prerequisite is documented; reviewers establish its capability independently. Final E materialization must include the future reviewed089/090 schema and actual new CLI/image receipts.
+
+## Current execution refresh — 2026-10-01 03:33 UTC
+
+C28 immutable eec24665 is completing full Linux/PostgreSQL clock/default/startup gates in its own ephemeral fixture; native55432 released. D10 immutable df5199ad passed local tests/lint/build and root actual two PostgreSQL cases run on58441 with exclusive8090. Payment6 root repeat failed47.615s only on the missing-edit terminal-status assertion; all other selected cases passed and parent DB readback passed. Author corrects exact Rejected contract and an identified still-live off-page payment boundary within the same scope, retaining original-source locking and no-send retirement assertions. No acceptance yet.
+
+Runtime14 transferred after QA261. First real PG17.11 roles/bootstrap/7operator-actions/fake-persistence and zero-managed-session inventory checks passed; negative/config/lint gates remain. ManagedC204 unstarted. Live clock read/advance also require the private operator guard; operator5 is prepared only after reviewed C integration. Full F08 business-plan/effects/UI observation remains separate. Counter261,next262; all Codex override. Root source33540321, no production release.
+
+## Authoritative refresh after QA262–266
+
+Runtime14 QA264PASS integratedbd150d5b withoutconflicts, rootfocusedfixture testsPASS. Codeonly/preparationacceptance; managedC204 stillblocked reviewedC40/operator5. QA262 model10FAIL2 fixed in80d0; actualrace/nativeunits/pinnedgates+root2PG4.672PASS, freshQA266active. QA263 clock28FAIL5→approved40existingpathscope,1aeprotected. QA265 payment6FAIL2→approved7(existingtypes.goonly),8ffprotected. Rootnative9paymenttestsPASS notindependentacceptance. Counters through266,next267, allCodexoverride. No production release/fullFQA/parity acceptance. Humanquestion remainsTelegramtestaccountID inPROGRESS.

@@ -17,9 +17,18 @@ const RegistrationFixtureEventA = "registration-fixture-a"
 const RegistrationFixtureEventB = "registration-fixture-b"
 
 const registrationFixtureMarker = "registration-fqa-v1"
+const (
+	registrationFixtureInit                = "init"
+	registrationFixtureGrantPaymentB       = "grant-payment-b"
+	registrationFixtureRevokePaymentB      = "revoke-payment-b"
+	registrationFixtureRevokeBookingAdmin  = "revoke-booking-admin"
+	registrationFixtureRestoreBookingAdmin = "restore-booking-admin"
+	registrationFixturePaymentOwner        = "bob"
+	registrationFixtureBookingOwner        = "visitor"
+)
 
-// RegistrationFixture is a schema-owner CLI control, never a model or HTTP grant.
-// Only init accepts an opening time. Read and revoke cannot change any clock.
+// RegistrationFixture is a private CLI control, never a model or HTTP grant.
+// Only init accepts an opening time. Role controls cannot change any clock.
 type RegistrationFixture struct {
 	Stand   string
 	Action  string
@@ -31,11 +40,17 @@ func (f RegistrationFixture) validate() error {
 		return errors.New("registration fixture stand guard failed")
 	}
 	switch f.Action {
-	case "init":
+	case registrationFixtureInit:
 		if f.OpensAt.IsZero() {
 			return errors.New("registration fixture opening is required")
 		}
-	case "read", "revoke-payment-a", "revoke-booking-admin":
+	case "read",
+		"revoke-payment-a",
+		"restore-payment-a",
+		registrationFixtureGrantPaymentB,
+		registrationFixtureRevokePaymentB,
+		registrationFixtureRevokeBookingAdmin,
+		registrationFixtureRestoreBookingAdmin:
 		if !f.OpensAt.IsZero() {
 			return errors.New("registration fixture opening is init-only")
 		}
@@ -72,8 +87,9 @@ type RegistrationFixtureRow struct {
 	RequeueCount        *int64     `json:"requeue_count,omitempty"`
 }
 
-// ApplyRegistrationFixture requires the dedicated database's owning role and
-// all three original synthetic identities. Repeating init never restores grants.
+// ApplyRegistrationFixture requires the dedicated database's owner or bounded
+// private live operator and all three original synthetic identities. Init is
+// owner-only; repeating init never restores grants.
 // Prepare the ordinary product fixtures first so their later replay is inert.
 func ApplyRegistrationFixture(
 	ctx context.Context,
@@ -89,15 +105,25 @@ func ApplyRegistrationFixture(
 		return state, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = registrationFixtureGuard(ctx, tx); err != nil {
-		return state, err
-	}
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(918431003)`); err != nil {
 		return state, err
 	}
-	if _, err = tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS public.zns_sandbox_fixtures
- (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+	operator, err := registrationFixtureOperator(ctx, tx)
+	if err != nil {
 		return state, err
+	}
+	if operator {
+		if err = registrationFixtureOperatorGuard(ctx, tx, f); err != nil {
+			return state, err
+		}
+	} else {
+		if err = registrationFixtureGuard(ctx, tx); err != nil {
+			return state, err
+		}
+		if _, err = tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS public.zns_sandbox_fixtures
+ (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+			return state, err
+		}
 	}
 	var initialized bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name=$1)`, registrationFixtureMarker).
@@ -105,21 +131,12 @@ func ApplyRegistrationFixture(
 		return state, err
 	}
 	switch {
-	case f.Action == "init" && !initialized:
+	case f.Action == registrationFixtureInit && !initialized:
 		err = initializeRegistrationFixture(ctx, tx, f.OpensAt)
 	case !initialized:
 		err = errors.New("registration fixture is not initialized")
 	default:
-		switch f.Action {
-		case "revoke-payment-a":
-			_, err = tx.Exec(
-				ctx,
-				`DELETE FROM core.pass_payment_admins WHERE event_id=$1 AND owner='bob'`,
-				RegistrationFixtureEventA,
-			)
-		case "revoke-booking-admin":
-			_, err = tx.Exec(ctx, `DELETE FROM core.pass_booking_admins WHERE owner='visitor'`)
-		}
+		err = changeRegistrationFixtureRole(ctx, tx, f.Action)
 	}
 	if err != nil {
 		return state, err
@@ -128,6 +145,49 @@ func ApplyRegistrationFixture(
 		return state, err
 	}
 	return readRegistrationFixture(ctx, db)
+}
+
+// Role controls use the domain event-before-actor lock order. The actor lock
+// also serializes restoration of an absent grant with current authority reads.
+func changeRegistrationFixtureRole(ctx context.Context, tx pgx.Tx, action string) error {
+	if action == "read" || action == registrationFixtureInit {
+		return nil
+	}
+	event, owner := RegistrationFixtureEventA, registrationFixturePaymentOwner
+	events := []string{event}
+	switch action {
+	case registrationFixtureGrantPaymentB, registrationFixtureRevokePaymentB:
+		event = RegistrationFixtureEventB
+		events = []string{event}
+	case registrationFixtureRestoreBookingAdmin, registrationFixtureRevokeBookingAdmin:
+		owner = registrationFixtureBookingOwner
+		events = []string{RegistrationFixtureEventA, RegistrationFixtureEventB}
+	}
+	if err := passbooking.LockMutationEvents(ctx, tx, events); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `SELECT id FROM core.users WHERE id=$1 FOR UPDATE`, owner); err != nil {
+		return err
+	}
+	var err error
+	switch action {
+	case "restore-payment-a", registrationFixtureGrantPaymentB:
+		_, err = tx.Exec(
+			ctx,
+			`INSERT INTO core.pass_payment_admins(event_id,owner) VALUES($1,'bob') ON CONFLICT(event_id,owner) DO NOTHING`,
+			event,
+		)
+	case "revoke-payment-a", registrationFixtureRevokePaymentB:
+		_, err = tx.Exec(ctx, `DELETE FROM core.pass_payment_admins WHERE event_id=$1 AND owner='bob'`, event)
+	case registrationFixtureRestoreBookingAdmin:
+		_, err = tx.Exec(
+			ctx,
+			`INSERT INTO core.pass_booking_admins(owner) VALUES('visitor') ON CONFLICT(owner) DO NOTHING`,
+		)
+	case registrationFixtureRevokeBookingAdmin:
+		_, err = tx.Exec(ctx, `DELETE FROM core.pass_booking_admins WHERE owner='visitor'`)
+	}
+	return err
 }
 
 func registrationFixtureGuard(ctx context.Context, tx pgx.Tx) error {

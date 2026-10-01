@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"reflect"
@@ -27,11 +28,12 @@ type modelFixtureStep struct {
 }
 
 type modelFixtureInstall struct {
-	Assessment json.RawMessage    `json:"assessment,omitempty"`
-	Input      *modelFixtureInput `json:"input,omitempty"`
-	Owner      string             `json:"owner"`
-	UpdateID   int64              `json:"update_id"`
-	Steps      []modelFixtureStep `json:"steps"`
+	Hold       *modelFixtureHoldSetup `json:"hold,omitempty"`
+	Assessment json.RawMessage        `json:"assessment,omitempty"`
+	Input      *modelFixtureInput     `json:"input,omitempty"`
+	Owner      string                 `json:"owner"`
+	UpdateID   int64                  `json:"update_id"`
+	Steps      []modelFixtureStep     `json:"steps"`
 }
 
 type modelFixtureInput struct {
@@ -121,6 +123,10 @@ func freezeModelSteps(steps []modelFixtureStep) ([]frozenModelStep, int, error) 
 }
 
 func (m *modelFixtures) install(value modelFixtureInstall) error {
+	return m.installContext(context.Background(), context.Background(), value)
+}
+
+func (m *modelFixtures) installContext(ctx, lifetime context.Context, value modelFixtureInstall) error {
 	if !syntheticFixtureOwner(value.Owner) || value.UpdateID <= 0 {
 		return errors.New(invalidFixtureScope)
 	}
@@ -128,8 +134,13 @@ func (m *modelFixtures) install(value modelFixtureInstall) error {
 	if err != nil {
 		return err
 	}
-	m.mu.Lock()
+	if err = m.modelLock(ctx); err != nil {
+		return err
+	}
 	defer m.mu.Unlock()
+	if ctx.Err() != nil || lifetime.Err() != nil {
+		return errModelFixtureUnavailable
+	}
 	if m.cases == nil {
 		m.cases = map[string]*modelFixtureCase{}
 	}
@@ -153,6 +164,22 @@ func (m *modelFixtures) install(value modelFixtureInstall) error {
 }
 
 func (m *modelFixtures) plan(scope modelFixtureScope, input agent.Input) (agent.Plan, error) {
+	return m.fixturePlan(scope, input, true)
+}
+
+func (m *modelFixtures) fixturePlan(scope modelFixtureScope, input agent.Input, consume bool) (agent.Plan, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.fixturePlanLocked(context.Background(), context.Background(), scope, input, consume)
+}
+
+// The caller owns mu. Check both lifetimes at the actual consumption boundary.
+func (m *modelFixtures) fixturePlanLocked(
+	ctx, lifetime context.Context,
+	scope modelFixtureScope,
+	input agent.Input,
+	consume bool,
+) (agent.Plan, error) {
 	if !syntheticFixtureOwner(scope.Owner) || scope.UpdateID <= 0 || scope.Turn < 0 {
 		return agent.Plan{}, errors.New(invalidFixtureScope)
 	}
@@ -166,8 +193,6 @@ func (m *modelFixtures) plan(scope modelFixtureScope, input agent.Input) (agent.
 	if err = decoder.Decode(&actual); err != nil {
 		return agent.Plan{}, errors.New("invalid fixture input")
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	value, ok := m.cases[modelFixtureKey(scope.Owner, scope.UpdateID)]
 	if !ok {
 		return agent.Plan{}, errors.New("fixture not configured")
@@ -187,9 +212,14 @@ func (m *modelFixtures) plan(scope modelFixtureScope, input agent.Input) (agent.
 	if err = json.Unmarshal(step.plan, &plan); err != nil {
 		return agent.Plan{}, errors.New("invalid stored fixture")
 	}
-	value.next++
-	value.accepted++
-	value.lastStatus = fixtureAccepted
+	if consume {
+		if ctx.Err() != nil || lifetime.Err() != nil {
+			return agent.Plan{}, errModelFixtureUnavailable
+		}
+		value.next++
+		value.accepted++
+		value.lastStatus = fixtureAccepted
+	}
 	return plan, nil
 }
 

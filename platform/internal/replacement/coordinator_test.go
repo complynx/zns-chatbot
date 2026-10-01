@@ -30,6 +30,7 @@ type fixture struct {
 	createCalls  int
 	startCalls   int
 	onStart      func()
+	onRunning    func()
 	saveFailure  string
 }
 
@@ -48,6 +49,9 @@ func (f *fixture) Save(ledger replacement.Ledger) error {
 	}
 	ledger.Containers = slices.Clone(ledger.Containers)
 	f.ledger = ledger
+	if ledger.State == replacement.StateRunning && f.onRunning != nil {
+		f.onRunning()
+	}
 	return nil
 }
 func (f *fixture) Create(_ context.Context, instance runtimeapp.Instance) ([]replacement.Container, error) {
@@ -153,6 +157,90 @@ func TestReplacementWaitsForProcessesAndSessionsBeforeStarting(t *testing.T) {
 	require.Less(t, slices.Index(f.events, "save:stopped"), slices.Index(f.events, "create"))
 	require.Less(t, slices.Index(f.events, "save:starting"), slices.Index(f.events, "start"))
 	require.Empty(t, f.inventory)
+}
+
+func TestReplacementRunningAdmissionLossRetiresGeneration(t *testing.T) {
+	t.Parallel()
+	f, c := newFixture(t)
+	instance := runtimeapp.Instance{Installation: installation, Launch: newLaunch}
+	admit, err := instance.ApplicationName("admit")
+	require.NoError(t, err)
+	app, err := instance.ApplicationName("app")
+	require.NoError(t, err)
+	f.onStart = func() { f.names = []string{admit, app, app} }
+	f.onRunning = func() { f.names = []string{app, app} }
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	require.ErrorIs(t, c.Run(ctx), replacement.ErrStopped)
+	require.Equal(t, 1, f.createCalls)
+	require.Equal(t, replacement.StateStopped, f.ledger.State)
+	require.Empty(t, f.inventory)
+	require.Empty(t, f.names)
+	running := slices.Index(f.events, "save:running")
+	require.GreaterOrEqual(t, running, 0)
+	require.Contains(t, f.events[running+1:], "kill")
+}
+
+func TestReplacementAdmissionReadiness(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"startup-missing", "duplicate", "healthy"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			f, c := newFixture(t)
+			c.ReadyTimeout = 20 * time.Millisecond
+			instance := runtimeapp.Instance{Installation: installation, Launch: newLaunch}
+			admit, err := instance.ApplicationName("admit")
+			require.NoError(t, err)
+			app, err := instance.ApplicationName("app")
+			require.NoError(t, err)
+			media, err := instance.ApplicationName("media")
+			require.NoError(t, err)
+			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			defer cancel()
+			f.onStart = func() {
+				f.names = []string{app, app, media}
+				if scenario != "startup-missing" {
+					f.names = append(f.names, admit)
+				}
+				if scenario == "duplicate" {
+					f.names = append(f.names, admit)
+				}
+			}
+			f.onRunning = cancel
+			err = c.Run(ctx)
+			switch scenario {
+			case "startup-missing":
+				require.ErrorIs(t, err, replacement.ErrDeadline)
+				require.NotContains(t, f.events, "save:running")
+			case "duplicate":
+				require.ErrorIs(t, err, replacement.ErrUnknown)
+				require.NotContains(t, f.events, "save:running")
+			case "healthy":
+				require.NoError(t, err)
+				require.Contains(t, f.events, "save:running")
+			}
+			require.Equal(t, replacement.StateStopped, f.ledger.State)
+		})
+	}
+}
+
+func TestReplacementAdmissionLossKeepsIncompleteBarrierBlocked(t *testing.T) {
+	t.Parallel()
+	f, c := newFixture(t)
+	instance := runtimeapp.Instance{Installation: installation, Launch: newLaunch}
+	admit, err := instance.ApplicationName("admit")
+	require.NoError(t, err)
+	app, err := instance.ApplicationName("app")
+	require.NoError(t, err)
+	f.onStart = func() { f.names = []string{admit, app} }
+	f.onRunning = func() { f.names = []string{app}; f.keepSession = true }
+	err = c.Run(t.Context())
+	require.ErrorIs(t, err, replacement.ErrStopped)
+	require.ErrorIs(t, err, replacement.ErrDeadline)
+	require.Equal(t, replacement.StateBlocked, f.ledger.State)
+	require.Equal(t, 1, f.createCalls)
+	require.ErrorIs(t, c.Run(t.Context()), replacement.ErrDeadline)
+	require.Equal(t, 1, f.createCalls, "remaining old sessions must prevent another launch")
 }
 
 func TestReplacementFailsClosedOnIncompleteBarrier(t *testing.T) {
