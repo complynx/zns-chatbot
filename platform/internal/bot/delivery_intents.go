@@ -14,6 +14,8 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
+const botEditTargetMissing = "edit_target_missing"
+
 // enqueueBotIntent binds one immutable effect to the shared transport lane.
 // Retrying a terminal effect returns its receipt; it never revives that effect.
 func (b *Bot) enqueueBotIntent(
@@ -175,7 +177,7 @@ func knownBotTransportOutcome(outcome delivery.Outcome, fallback bool) bool {
 		return false
 	}
 	if fallback {
-		return outcome.Kind == delivery.Deferred && outcome.Reason == "edit_target_missing"
+		return outcome.Kind == delivery.Deferred && outcome.Reason == botEditTargetMissing
 	}
 	switch outcome.Kind {
 	case delivery.Succeeded:
@@ -188,6 +190,8 @@ func knownBotTransportOutcome(outcome delivery.Outcome, fallback bool) bool {
 		return outcome.Reason == "telegram_service_rejected"
 	case delivery.Parked:
 		return outcome.Reason == "telegram_invalid_cooldown"
+	case delivery.Sending, delivery.Cancelled, delivery.Uncertain:
+		return false
 	default:
 		return false
 	}

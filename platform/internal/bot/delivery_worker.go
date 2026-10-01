@@ -124,10 +124,10 @@ func (b *Bot) sendBotIntent(ctx context.Context, i botdelivery.Intent, r botRend
 		if fallback &&
 			(i.Reference.Family == botFamilyPassRedaction || i.Reference.Family == botdelivery.PassReceiptRedactionFamily ||
 				(i.Reference.Family == registrationPayment && i.Reference.Notice == i18n.PaymentUnavailable)) {
-			return delivery.Outcome{Kind: delivery.Rejected, Reason: "edit_target_missing"}, false
+			return delivery.Outcome{Kind: delivery.Rejected, Reason: botEditTargetMissing}, false
 		}
 		if fallback {
-			return delivery.Outcome{Kind: delivery.Deferred, Reason: "edit_target_missing"}, true
+			return delivery.Outcome{Kind: delivery.Deferred, Reason: botEditTargetMissing}, true
 		}
 		return telegram.DeliveryOutcome(0, err), false
 	default:

@@ -2,6 +2,7 @@ package bot
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -836,8 +837,10 @@ func TestBotTransportRetryCancelledLateReceipt(t *testing.T) {
 }
 
 func TestBotTransportRetryRecoveredKnownOutcomeFencesPositive(t *testing.T) {
+	t.Parallel()
 	for _, state := range []string{"pending", "cancelled_after", "cancelled_before"} {
 		t.Run(state, func(t *testing.T) {
+			t.Parallel()
 			db := foodPendingDatabase(t)
 			ctx := t.Context()
 			b := botDeliveryTestBot(db)
@@ -846,100 +849,119 @@ func TestBotTransportRetryRecoveredKnownOutcomeFencesPositive(t *testing.T) {
 			queued, err := b.enqueueBotIntent(ctx, "", 101, "recovered-known", "notice", botdelivery.Reference{
 				Kind: botdelivery.IdentityIntent, Update: 1, Notice: i18n.IdentityUnavailable, Language: "en"}, "send")
 			require.NoError(t, err)
-			snapshot := func(ignored ...string) string {
-				var raw string
-				require.NoError(t, db.QueryRow(ctx, `SELECT jsonb_build_object(
- 'intent',(SELECT to_jsonb(i)-COALESCE($1::text[],ARRAY[]::text[]) FROM bot.delivery_intents i WHERE bot_id=999 AND operation_key='recovered-known'),
- 'queue',(SELECT jsonb_agg(to_jsonb(q)) FROM core.delivery_queue q WHERE bot_id=999),
- 'pacing',(SELECT jsonb_agg(to_jsonb(p)) FROM core.delivery_pacing p WHERE bot_id=999))::text`, ignored).Scan(&raw))
-				return raw
-			}
-			attempts := make(chan botdelivery.Intent, 1)
-			recovery := make(chan error, 1)
-			terminalBefore := make(chan string, 1)
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				attempt, readErr := botdelivery.Read(r.Context(), db, 999, queued.Reference, false)
-				if readErr == nil {
-					readErr = b.RecoverBotIntents(r.Context())
-				}
-				if readErr == nil && state == "cancelled_before" {
-					var recovered botdelivery.Intent
-					recovered, readErr = botdelivery.Read(r.Context(), db, 999, queued.Reference, false)
-					if readErr == nil {
-						readErr = b.postponeBotIntent(r.Context(), recovered, true)
-					}
-					terminalBefore <- snapshot("last_confirmed_attempt")
-				}
-				attempts <- attempt
-				recovery <- readErr
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusTooManyRequests)
-				_, _ = io.WriteString(
-					w,
-					`{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}`,
-				)
-			}))
-			defer server.Close()
-			b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
-			completionErr := b.DeliverBotIntent(ctx, queued.Reference)
-			select {
-			case recoveryErr := <-recovery:
-				require.NoError(t, recoveryErr)
-			default:
-				t.Fatal("actual HTTP response did not reach recovery")
-			}
-			var attempt botdelivery.Intent
-			select {
-			case attempt = <-attempts:
-			default:
-				t.Fatal("actual HTTP response had no admitted attempt")
-			}
-			if completionErr != nil {
-				t.Errorf("actual late confirmed429 must be persisted: %v", completionErr)
-			}
-			if state == "cancelled_before" {
-				select {
-				case before := <-terminalBefore:
-					require.JSONEq(
-						t,
-						before,
-						snapshot("last_confirmed_attempt"),
-						"terminal negative writes only the known-outcome fence",
-					)
-				default:
-					t.Fatal("actual negative response did not follow cancellation")
-				}
-			}
+			attempt := botRecoveredKnownHTTP(t, b, queued.Reference, state)
 			current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
 			require.NoError(t, err)
 			require.Equal(t, attempt.Attempt, current.Attempt, "no new admission occurred")
 			if state == "cancelled_after" {
 				require.NoError(t, b.postponeBotIntent(ctx, current, true))
 			}
-			var confirmed *int64
-			var uncertain int64
-			var resends int
-			require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)->>'last_confirmed_attempt')::bigint,
- last_uncertain_attempt,uncertain_resends FROM bot.delivery_intents i
- WHERE bot_id=999 AND operation_key='recovered-known'`).Scan(&confirmed, &uncertain, &resends))
-			if confirmed == nil || *confirmed != attempt.Attempt {
-				t.Error("the actual known response must durably fence its exact attempt")
-			}
-			require.Equal(t, attempt.Attempt, uncertain, "historical uncertainty remains factual")
-			require.Zero(t, resends, "late completion does not admit a resend")
-			before := snapshot()
-			positiveErr := b.finishBotIntent(ctx, attempt,
-				delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}, botdelivery.Continuation{}, false)
-			if !errors.Is(positiveErr, botdelivery.ErrBinding) {
-				t.Errorf("confirmed429 must fence contradictory same-attempt positive receipt: %v", positiveErr)
-			}
-			require.JSONEq(t, before, snapshot(), "contradictory receipt cannot mutate owner, queue or pacing")
-			current, err = botdelivery.Read(ctx, db, 999, queued.Reference, false)
-			require.NoError(t, err)
-			require.Zero(t, current.MessageID)
-			require.False(t, current.ContinuationDone)
+			botAssertRecoveredKnownFence(t, b, queued.Reference, attempt)
 		})
 	}
+}
+
+func botRecoveredKnownSnapshot(t *testing.T, b *Bot, ignored ...string) string {
+	t.Helper()
+	var raw string
+	require.NoError(t, b.DB.QueryRow(t.Context(), `SELECT jsonb_build_object(
+ 'intent',(SELECT to_jsonb(i)-COALESCE($1::text[],ARRAY[]::text[]) FROM bot.delivery_intents i WHERE bot_id=999 AND operation_key='recovered-known'),
+ 'queue',(SELECT jsonb_agg(to_jsonb(q)) FROM core.delivery_queue q WHERE bot_id=999),
+ 'pacing',(SELECT jsonb_agg(to_jsonb(p)) FROM core.delivery_pacing p WHERE bot_id=999))::text`, ignored).Scan(&raw))
+	return raw
+}
+
+// Hold the actual HTTP request while recovery and optional cancellation complete.
+func botRecoveredKnownHTTP(t *testing.T, b *Bot, ref delivery.Reference, state string) botdelivery.Intent {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		close(entered)
+		<-release
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = io.WriteString(w,
+			`{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}`)
+	}))
+	defer server.Close()
+	var released bool
+	var completed bool
+	completion := make(chan error, 1)
+	defer func() {
+		if !released {
+			close(release)
+		}
+		cancel()
+		if !completed {
+			<-completion
+		}
+	}()
+	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+	go func() { completion <- b.DeliverBotIntent(ctx, ref) }()
+	select {
+	case <-entered:
+	case err := <-completion:
+		completed = true
+		t.Fatalf("actual HTTP response did not reach recovery: %v", err)
+	case <-t.Context().Done():
+		t.Fatal("actual HTTP request did not arrive before test cancellation")
+	}
+	attempt, err := botdelivery.Read(t.Context(), b.DB, 999, ref, false)
+	require.NoError(t, err, "actual HTTP response must have an admitted attempt")
+	require.NoError(t, b.RecoverBotIntents(t.Context()))
+	var before string
+	if state == "cancelled_before" {
+		recovered, readErr := botdelivery.Read(t.Context(), b.DB, 999, ref, false)
+		require.NoError(t, readErr)
+		require.NoError(t, b.postponeBotIntent(t.Context(), recovered, true))
+		before = botRecoveredKnownSnapshot(t, b, "last_confirmed_attempt")
+	}
+	close(release)
+	released = true
+	completionErr := <-completion
+	completed = true
+	if completionErr != nil {
+		t.Errorf("actual late confirmed429 must be persisted: %v", completionErr)
+	}
+	if state == "cancelled_before" {
+		require.JSONEq(t, before, botRecoveredKnownSnapshot(t, b, "last_confirmed_attempt"),
+			"terminal negative writes only the known-outcome fence")
+	}
+	return attempt
+}
+
+func botAssertRecoveredKnownFence(t *testing.T, b *Bot, ref delivery.Reference, attempt botdelivery.Intent) {
+	t.Helper()
+	var confirmed *int64
+	var uncertain int64
+	var resends int
+	require.NoError(t, b.DB.QueryRow(t.Context(), `SELECT (to_jsonb(i)->>'last_confirmed_attempt')::bigint,
+ last_uncertain_attempt,uncertain_resends FROM bot.delivery_intents i
+ WHERE bot_id=999 AND operation_key='recovered-known'`).Scan(&confirmed, &uncertain, &resends))
+	if confirmed == nil || *confirmed != attempt.Attempt {
+		t.Error("the actual known response must durably fence its exact attempt")
+	}
+	require.Equal(t, attempt.Attempt, uncertain, "historical uncertainty remains factual")
+	require.Zero(t, resends, "late completion does not admit a resend")
+	before := botRecoveredKnownSnapshot(t, b)
+	positiveErr := b.finishBotIntent(t.Context(), attempt,
+		delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}, botdelivery.Continuation{}, false)
+	if !errors.Is(positiveErr, botdelivery.ErrBinding) {
+		t.Errorf("confirmed429 must fence contradictory same-attempt positive receipt: %v", positiveErr)
+	}
+	require.JSONEq(
+		t,
+		before,
+		botRecoveredKnownSnapshot(t, b),
+		"contradictory receipt cannot mutate owner, queue or pacing",
+	)
+	current, err := botdelivery.Read(t.Context(), b.DB, 999, ref, false)
+	require.NoError(t, err)
+	require.Zero(t, current.MessageID)
+	require.False(t, current.ContinuationDone)
 }
 
 func TestBotTransportRetryPendingLateReceipt(t *testing.T) {
