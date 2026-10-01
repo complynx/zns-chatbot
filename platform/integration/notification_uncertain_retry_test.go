@@ -736,7 +736,7 @@ func heldNotification429(t *testing.T) (string, <-chan telegram.Send, func()) {
 func TestNotificationUncertainRetryKnown429FencesContradictoryReceipt(t *testing.T) {
 	t.Parallel()
 	for _, domain := range []string{"orders", "registration", "massage", "food"} {
-		for _, policy := range []string{"pending", "cancelled"} {
+		for _, policy := range []string{"pending", "cancelled", "cancelled_before_response"} {
 			t.Run(domain+"/"+policy, func(t *testing.T) {
 				t.Parallel()
 				r := notificationRuntime(t, domain)
@@ -763,15 +763,27 @@ func TestNotificationUncertainRetryKnown429FencesContradictoryReceipt(t *testing
 				require.Equal(t, "pending", recovered.State)
 				require.Equal(t, admitted.Attempt, recovered.Attempt)
 				require.Equal(t, admitted.Attempt, recovered.LastUncertainAttempt)
+				var terminalBefore map[string]any
+				if policy == "cancelled_before_response" {
+					r.postAttempt(t, "complete", map[string]any{
+						"id": r.first, "attempt": admitted.Attempt,
+						"outcome": delivery.Outcome{Kind: delivery.Cancelled, Reason: "synthetic_policy_cancel"},
+					}, http.StatusOK)
+					terminalBefore = notificationReceiptSnapshot(t, r)
+				}
 				release()
-				require.NoError(t, <-finished)
+				assert.NoError(t, <-finished, "confirmed late negative must be recorded without changing terminal policy")
 				known := r.status(t, r.first)
-				require.Equal(
-					t,
-					"telegram_rate_limit",
-					known.Reason,
-					"the real held HTTP response must be classified and committed",
-				)
+				if policy == "cancelled_before_response" {
+					after := notificationReceiptSnapshot(t, r)
+					delete(terminalBefore, "last_confirmed_attempt")
+					delete(after, "last_confirmed_attempt")
+					assert.Equal(t, terminalBefore, after, "confirmed negative must change only its metadata fence")
+					require.Equal(t, "cancelled", known.State)
+				} else {
+					require.Equal(t, "telegram_rate_limit", known.Reason,
+						"the real held HTTP response must be classified and committed")
+				}
 				require.Equal(t, recovered.LastUncertainAttempt, known.LastUncertainAttempt)
 				if policy == "cancelled" {
 					r.postAttempt(t, "complete", map[string]any{
