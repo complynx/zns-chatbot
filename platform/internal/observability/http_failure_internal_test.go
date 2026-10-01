@@ -122,7 +122,7 @@ func TestHTTPFailureObservationPreservesTransportAndRedaction(t *testing.T) {
 		actual, callErr := wrapped.RoundTrip(request)
 		require.NoError(t, callErr)
 		require.Same(t, response, actual)
-		require.True(t, body == actual.Body, "the original body interface is returned unchanged")
+		require.Equal(t, body, actual.Body, "the original body interface is returned unchanged")
 		data, readErr := io.ReadAll(actual.Body)
 		require.NoError(t, readErr)
 		require.Equal(t, "private-response", string(data))

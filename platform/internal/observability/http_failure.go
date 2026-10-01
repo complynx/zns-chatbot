@@ -34,7 +34,7 @@ func registerHTTPFailures(registry *prometheus.Registry) *prometheus.CounterVec 
 	}, []string{httpFailureOperationLabel, "phase", "code", "retryability", "transport_status"})
 	if err := registry.Register(counter); err != nil {
 		if duplicate, ok := errors.AsType[prometheus.AlreadyRegisteredError](err); ok {
-			if existing, ok := duplicate.ExistingCollector.(*prometheus.CounterVec); ok {
+			if existing, compatible := duplicate.ExistingCollector.(*prometheus.CounterVec); compatible {
 				return existing
 			}
 		}

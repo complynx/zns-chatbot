@@ -53,7 +53,7 @@ func (r *Runtime) HTTPClient(operation string, base http.RoundTripper) http.Roun
 		runtime:   r,
 		base:      base,
 		operation: operationName(operation),
-		failures:  registerHTTPFailures(r.Registry),
+		failures:  failures,
 	}
 }
 

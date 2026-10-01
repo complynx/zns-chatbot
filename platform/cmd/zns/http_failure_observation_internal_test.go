@@ -92,6 +92,7 @@ func TestTelemetryClientFailureObservation(t *testing.T) {
 		`code="canceled",operation="api",phase="roundtrip",retryability="unknown",transport_status="0"} 1`,
 	)
 	require.Contains(t, text, `zns_operations_total{operation="api",result="ok"} 4`)
-	require.Contains(t, text, `zns_operations_total{operation="api",result="error"} 2`)
+	require.Contains(t, text, `zns_operations_total{operation="api",result="error"} 1`)
+	require.Contains(t, text, `zns_operations_total{operation="api",result="canceled"} 1`)
 	require.NotContains(t, text, "private-")
 }
