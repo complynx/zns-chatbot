@@ -93,6 +93,8 @@ func TestZitadelLocalAdapter(t *testing.T) {
 			invalid, createErr := identity.NewZitadel(broken)
 			require.NoError(t, createErr)
 			if test.name == "invalid_token" {
+				_, exchangeErr := invalid.Exchange(t.Context(), state.Alice.UserID)
+				require.NoError(t, exchangeErr, "exchange must succeed before introspection denial")
 				verified, denied := invalid.Verify(t.Context(), "invalid-synthetic")
 				require.ErrorIs(t, denied, test.want)
 				resultLength := len(verified)
