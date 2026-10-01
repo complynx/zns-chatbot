@@ -164,11 +164,10 @@ func (f *Fake) consumeModelPlan(
 	if !f.modelControl.capacity(scope) {
 		return agent.Plan{}, errors.New("fixture control capacity reached")
 	}
-	_, live := f.modelFixtures.cases[modelFixtureKey(scope.Owner, scope.UpdateID)]
-	if f.consumedScope(scope) && !live {
+	if f.consumedScope(scope) {
 		return agent.Plan{}, errors.New("fixture consumed unavailable")
 	}
-	plan, err := f.modelFixtures.fixturePlanLocked(ctx, f.modelControl.lifetime, scope, input, true)
+	plan, err := f.modelFixtures.fixturePlanLocked(ctx, f.modelControl.lifetime, scope, input, false)
 	if err != nil {
 		return plan, err
 	}
@@ -186,10 +185,46 @@ func (f *Fake) consumeModelPlan(
 		f.modelControl.finishSelection(scope, hold, "persistence_unavailable")
 		return agent.Plan{}, errModelFixtureUnavailable
 	}
-	f.modelControl.consumed(row, f.DB != nil)
-	if f.modelControl.cancelled(ctx, scope, hold) {
+	return f.completeModelConsumption(ctx, row, input, hold)
+}
+
+// The caller owns both mutation locks. SQL has succeeded; completion and release
+// share the control lock so an expired completion cannot publish a held barrier.
+func (f *Fake) completeModelConsumption(
+	ctx context.Context, row modelConsumption, input agent.Input, selection modelFixtureSelection,
+) (agent.Plan, error) {
+	c := f.modelControl
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	hold := c.entries[modelScopeKey(row.scope())]
+	if hold == nil || selection.identity == nil || hold.identity != selection.identity {
 		return agent.Plan{}, errModelFixtureUnavailable
 	}
+	phase := ""
+	if c.lifetime.Err() != nil {
+		phase = "provider_stopped"
+	} else if deadline, ok := ctx.Deadline(); ctx.Err() != nil || (ok && !time.Now().Before(deadline)) {
+		phase = "request_cancelled"
+	}
+	if phase != "" {
+		hold.finish(phase)
+		return agent.Plan{}, errModelFixtureUnavailable
+	}
+	plan, err := f.modelFixtures.fixturePlanLocked(ctx, c.lifetime, row.scope(), input, true)
+	if err != nil {
+		hold.finish("unavailable")
+		return agent.Plan{}, err
+	}
+	hold.view.Consumed = true
+	if deadline, ok := ctx.Deadline(); ctx.Err() != nil || (ok && !time.Now().Before(deadline)) {
+		hold.finish("request_cancelled")
+		return agent.Plan{}, errModelFixtureUnavailable
+	}
+	if c.lifetime.Err() != nil {
+		hold.finish("provider_stopped")
+		return agent.Plan{}, errModelFixtureUnavailable
+	}
+	c.consumedLocked(row, f.DB != nil)
 	return plan, nil
 }
 

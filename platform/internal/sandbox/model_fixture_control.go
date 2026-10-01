@@ -112,6 +112,10 @@ func (c *modelFixtureControl) restore(row modelConsumption) {
 func (c *modelFixtureControl) consumed(row modelConsumption, durable bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.consumedLocked(row, durable)
+}
+
+func (c *modelFixtureControl) consumedLocked(row modelConsumption, durable bool) {
 	key := modelScopeKey(row.scope())
 	hold := c.entries[key]
 	if hold == nil {
@@ -152,7 +156,7 @@ func (c *modelFixtureControl) consumptionStarted(row modelConsumption) {
 		c.entries[key] = hold
 	}
 	hold.view = modelFixtureControlState{Owner: row.Owner, UpdateID: row.UpdateID, Turn: row.Turn,
-		Mode: hold.setup.Mode, Phase: "persistence_pending", Consumed: true,
+		Mode: hold.setup.Mode, Phase: "persistence_pending",
 		RequestSHA256: row.RequestSHA256, ResponseSHA256: row.ResponseSHA256}
 }
 

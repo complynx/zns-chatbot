@@ -184,6 +184,21 @@ func TestModelConsumptionDurableRebootAndDeniedReinstallation(t *testing.T) {
 }
 
 func TestModelConsumptionSQLDeadlineDoesNotConfirmOrRewind(t *testing.T) {
+	t.Setenv("R104_CONTROL_KEY", consumptionControlKey)
+	for _, persistFence := range []bool{false, true} {
+		name := "immediate_reboot"
+		if persistFence {
+			name = "later_save_then_reboot"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("R104_CONTROL_KEY", consumptionControlKey)
+			modelConsumptionSQLDeadlineReboot(t, persistFence)
+		})
+	}
+}
+
+func modelConsumptionSQLDeadlineReboot(t *testing.T, persistFence bool) {
+	t.Helper()
 	db := database(t)
 	_, err := db.Exec(t.Context(), `INSERT INTO bot.fake_state(id,data) VALUES(true,'{}')`)
 	require.NoError(t, err)
@@ -194,7 +209,7 @@ func TestModelConsumptionSQLDeadlineDoesNotConfirmOrRewind(t *testing.T) {
 	require.Equal(t, http.StatusCreated, status, body)
 	tx, err := db.Begin(t.Context())
 	require.NoError(t, err)
-	defer func() { require.NoError(t, tx.Rollback(context.WithoutCancel(t.Context()))) }()
+	t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
 	_, err = tx.Exec(t.Context(), `LOCK TABLE bot.fake_state IN ACCESS EXCLUSIVE MODE`)
 	require.NoError(t, err)
 	result := make(chan error, 1)
@@ -210,7 +225,7 @@ func TestModelConsumptionSQLDeadlineDoesNotConfirmOrRewind(t *testing.T) {
 		result <- planErr
 	}()
 	state := waitConsumptionState(t, "persistence_pending")
-	assert.True(t, state.Consumed)
+	assert.False(t, state.Consumed)
 	assert.False(t, state.Durable)
 	status, _ = consumptionHTTP(
 		t,
@@ -227,7 +242,7 @@ func TestModelConsumptionSQLDeadlineDoesNotConfirmOrRewind(t *testing.T) {
 	}
 	assert.Less(t, time.Since(started), 4*time.Second)
 	state = waitConsumptionState(t, "persistence_unavailable")
-	assert.True(t, state.Consumed)
+	assert.False(t, state.Consumed)
 	assert.False(t, state.Durable)
 	status, body = consumptionHTTP(t, http.MethodGet, server.URL+"/lab/model/state?owner=alice&update_id=9", "")
 	require.Equal(t, http.StatusOK, status, body)
@@ -236,9 +251,57 @@ func TestModelConsumptionSQLDeadlineDoesNotConfirmOrRewind(t *testing.T) {
 		NextTurn int `json:"next_turn"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(body), &counts))
-	assert.Equal(t, 1, counts.Accepted)
-	assert.Equal(t, 1, counts.NextTurn)
+	assert.Zero(t, counts.Accepted)
+	assert.Zero(t, counts.NextTurn)
 	status, _ = consumptionHTTP(t, http.MethodPost, server.URL+"/lab/model/fixtures", consumptionInstall)
-	assert.Equal(t, http.StatusConflict, status, "SQL failure must not reinstall an actually consumed turn")
+	assert.Equal(t, http.StatusConflict, status, "an uncertain fence remains rejected in this process")
+	require.NoError(t, tx.Rollback(t.Context()))
+	if persistFence {
+		// A later ordinary successful save retains the uncertain rejection fence.
+		status, body = consumptionHTTP(
+			t,
+			http.MethodPost,
+			server.URL+"/lab/model/fixtures",
+			`{"input":{"user":101,"text":"new intent"},"steps":[{"expect":{"text":"new intent"},"plan":{"view":"workflow","text":"new answer"}}]}`,
+		)
+		require.Equal(t, http.StatusCreated, status, body)
+	}
 	stopConsumptionProvider(t, server, cancel)
+	oldJournal, err := os.ReadFile(os.Getenv("R104_JOURNAL"))
+	require.NoError(t, err)
+	oldSHA := sha256.Sum256(oldJournal)
+	oldPath := os.Getenv("R104_JOURNAL")
+	t.Setenv("R104_JOURNAL", filepath.Join(filepath.Dir(oldPath), "generation-b.jsonl"))
+	reopened, cancel2 := consumptionProvider(t, db)
+	if persistFence {
+		state = waitConsumptionState(t, "consumed_unavailable")
+		assert.True(t, state.Durable)
+		status, body = consumptionHTTP(t, http.MethodPost, reopened.URL+"/lab/model/fixtures", consumptionInstall)
+		assert.Equal(t, http.StatusConflict, status, body)
+	} else {
+		status, _ = consumptionHTTP(t, http.MethodGet,
+			"http://127.0.0.1:8090/control/model/state"+consumptionScope, "")
+		assert.Equal(t, http.StatusNotFound, status, "failed SQL cannot create durable evidence")
+	}
+	_, err = (sandbox.FixtureRemote{URL: reopened.URL + "/lab/model"}).Plan(
+		agent.WithRequestScope(t.Context(), agent.RequestScope{Owner: "alice", UpdateID: 9}),
+		agent.Input{Text: "private consumption marker"})
+	require.Error(t, err)
+	if !persistFence {
+		// No irreversible advance occurred. A new installation is a first consumption,
+		// not replay of a consumed step; no body was restored by the reboot.
+		installation := strings.Replace(consumptionInstall, `"hold":{"turn":0,"mode":"after_consume"},`, "", 1)
+		status, body = consumptionHTTP(t, http.MethodPost, reopened.URL+"/lab/model/fixtures", installation)
+		require.Equal(t, http.StatusCreated, status, body)
+		remote := sandbox.FixtureRemote{URL: reopened.URL + "/lab/model"}
+		ctx := agent.WithRequestScope(t.Context(), agent.RequestScope{Owner: "alice", UpdateID: 9})
+		_, err = remote.Plan(ctx, agent.Input{Text: "private consumption marker"})
+		require.NoError(t, err)
+		_, err = remote.Plan(ctx, agent.Input{Text: "private consumption marker"})
+		require.Error(t, err, "the first actual consumption remains one-shot")
+	}
+	stopConsumptionProvider(t, reopened, cancel2)
+	after, err := os.ReadFile(oldPath)
+	require.NoError(t, err)
+	assert.Equal(t, oldSHA, sha256.Sum256(after))
 }

@@ -726,7 +726,7 @@ func TestModelControlAuthorizationMatchingAndPersistencePending(t *testing.T) {
 	)
 	assert.Equal(t, http.StatusConflict, status, "no release before successful persistence")
 	state := f.state(t, "persistence_pending")
-	assert.True(t, state.Consumed)
+	assert.False(t, state.Consumed)
 	assert.False(t, state.Durable)
 	for _, snapshot := range []*modelConsumptionSnapshot{
 		{Version: 2, Rows: []modelConsumption{row}},
@@ -740,6 +740,78 @@ func TestModelControlAuthorizationMatchingAndPersistencePending(t *testing.T) {
 	response := httptest.NewRecorder()
 	f.fake.Handler().ServeHTTP(response, request)
 	assert.Equal(t, http.StatusForbidden, response.Code, "control key does not replace sandbox admission")
+}
+
+// Exercise the successful-save completion boundary while control admission races
+// the deadline. No DB hook is needed: completion is called only after a nil save.
+type modelCompletionDeadlineContext struct {
+	context.Context
+
+	deadline time.Time
+}
+
+func (c modelCompletionDeadlineContext) Deadline() (time.Time, bool) { return c.deadline, true }
+
+func TestModelConsumptionSuccessfulSaveCompletionExpiresUnderControlLock(t *testing.T) {
+	t.Parallel()
+	for _, ending := range []string{"deadline", "timer_notification_lag", "cancel", "provider_stop"} {
+		t.Run(ending, func(t *testing.T) {
+			t.Parallel()
+			lifetime, stop := context.WithCancel(t.Context())
+			defer stop()
+			f := newModelControlFixtureContext(lifetime, t)
+			f.install(t, "alice", 9, modelHoldAfter)
+			scope := modelFixtureScope{Owner: "alice", UpdateID: 9}
+			selection, err := f.fake.modelControl.claim(scope)
+			require.NoError(t, err)
+			row := modelConsumption{Owner: "alice", UpdateID: 9}
+			f.fake.modelControl.consumptionStarted(row)
+			ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+			defer cancel()
+			completionCtx := ctx
+			if ending == "timer_notification_lag" {
+				completionCtx = modelCompletionDeadlineContext{
+					Context:  t.Context(),
+					deadline: time.Now().Add(-time.Second),
+				}
+				require.NoError(t, completionCtx.Err(), "deadline expiry need not yet be reflected by Err")
+			}
+			f.fake.mu.Lock()
+			f.fake.modelFixtures.mu.Lock()
+			f.fake.modelControl.mu.Lock()
+			result := make(chan error, 1)
+			go func() {
+				_, completeErr := f.fake.completeModelConsumption(
+					completionCtx,
+					row,
+					agent.Input{Text: "private marker"},
+					selection,
+				)
+				result <- completeErr
+			}()
+			switch ending {
+			case "deadline":
+				<-ctx.Done()
+			case "cancel":
+				cancel()
+			case "provider_stop":
+				stop()
+			}
+			f.fake.modelControl.mu.Unlock()
+			require.Error(t, <-result)
+			value := f.fake.modelFixtures.cases[modelFixtureKey("alice", 9)]
+			assert.Zero(t, value.next)
+			assert.Zero(t, value.accepted)
+			f.fake.modelFixtures.mu.Unlock()
+			f.fake.mu.Unlock()
+			state, exists := f.fake.modelControl.view(scope)
+			require.True(t, exists)
+			assert.False(t, state.Consumed)
+			assert.False(t, state.Durable)
+			_, status := f.fake.modelControl.release(scope, "deliver")
+			assert.Equal(t, http.StatusConflict, status)
+		})
+	}
 }
 
 // Environment and the reserved listener are process-wide; this case is serial.

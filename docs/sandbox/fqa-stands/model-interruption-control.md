@@ -43,7 +43,7 @@ model response without returning the generated plan. Neither action reinstalls
 the step. `deliver` permits the original generated response to continue.
 
 Readback contains exact synthetic owner/update/turn, hold mode, phase, consumed
-and durable flags, and SHA256 request/response digests when consumed. It contains
+and durable flags, and SHA256 request/response digests when fenced. It contains
 no model input, plan, script, credential or provider error. The operator keeps
 these exact identities and hashes privately and publishes opaque case tokens
 and status/count evidence to the source-blind reviewer.
@@ -51,8 +51,9 @@ and status/count evidence to the source-blind reviewer.
 ## Phase meaning and limits
 
 `held_before_consume` means the matched request has not consumed its step.
-`persistence_pending` means the step was consumed but the provider-state write
-has not been confirmed; release is forbidden. `consumed_held` with `durable:true`
+`persistence_pending` means the rejection fence is prepared but the step has not
+advanced and the provider-state write has not been confirmed; release is forbidden.
+`consumed_held` with `durable:true`
 means the provider recorded consumption in its existing `bot.fake_state` and
 has not returned the plan. `held_process_local` with `durable:false` is only an
 in-memory hold when no database was supplied; it cannot qualify durable evidence.
@@ -63,9 +64,17 @@ responses copy under the fixture lock and write after unlocking. Model work
 uses both request and provider lifetimes, including while waiting for locks or
 SQL. Observable cancellation takes priority over release success and is checked
 again at consumption, persistence and response delivery. SQL failure produces
-`persistence_unavailable`, `consumed:true`,
-`durable:false`; it never rewinds or acknowledges a durable hold. This is unknown
-persistence, not proof that SQL did not commit. The hold ends on release, request
+`persistence_unavailable`, `consumed:false`,
+`durable:false`; it never advances or acknowledges a durable hold. This is unknown
+persistence, not proof that SQL did not commit. The bounded rejection metadata is
+saved before the irreversible step advance. A failed or expired completion keeps
+the process-local fence and never publishes a confirming barrier. A later ordinary
+successful save may persist that fence. If SQL committed despite an error, reboot
+rejects the identity; if SQL did not commit and no later save succeeded, reboot has
+no fence, but no step was consumed. Restored metadata is conservative rejection
+evidence, not proof that a response was generated. Completion checks the request
+deadline and provider lifetime under the release mutex before advancing and before
+publishing. The hold ends on release, request
 cancellation, provider lifetime cancellation or 10 seconds. The existing model
 client also bounds its request to 10 seconds; expiry can race client cancellation.
 Observe the actual terminal phase instead of assuming one timeout winner.
@@ -75,7 +84,7 @@ Terminal phases include `request_cancelled`, `provider_stopped`, `hold_expired`,
 `consumed_unavailable`. `response_generated` describes only provider response
 generation. It does not prove HTTP receipt, durable business plan save or effect.
 
-At most 32 consumed turns and 32 control identities are retained per provider
+At most 32 fenced turns and 32 control identities are retained per provider
 state. Capacity exhaustion fails visibly before another turn is consumed; it
 does not evict a tombstone. Restart restores only versioned consumption metadata
 and tombstones. It does not restore fixture expectations, plans or holds. Installing
