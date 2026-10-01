@@ -27,3 +27,13 @@ Functional EN/RU Telegram-like acceptance and the final full baseline remain ope
 
 Written by root (gpt-6.1-sol/Codex)
 on behalf of Daniel Drizhuk
+
+## Diagnosis after the failed run
+
+Source inspection confirmed a producer gap: a manual/model same-body transition
+may replace the saved source binding although delivery creates no new provider
+receipt. The cleanup identity guard correctly rejects that mismatch. A bounded
+fix in the original seven-file scope will preserve the genuine successful
+receipt/source binding for identical visible payloads after current authorization
+checks. Meaningful mixed-route regressions and the initially-derived cases are
+retained. This is a diagnosis and assigned correction, not verified acceptance.
