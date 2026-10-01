@@ -13,6 +13,11 @@ Root grants three Linux heavy-check slots across all stands. Full lint,
 whole-module compilation and race/integration suites request a
 slot with owner, exact frozen source, command, environment, resource bounds and
 evidence path. Quick focused checks on independent resources can continue.
+A granted owner slot includes preparation for that same approved check:
+owned formatter scratch work and compile preflight on the same bounded resources.
+Report changed input hashes, actual handles and terminal evidence without another
+grant pause for ordinary preparation. New scope, shared-resource writers or product
+changes still need root coordination; preparation does not accept a gate.
 Use pinned tools and task-owned writable caches; shared module caches and frozen
 source are read-only. Do not run pinned-tool builds outside the slot queue.
 Daniel's 2026-10-01 preference: reuse available caches when this is simple.
@@ -38,6 +43,15 @@ Use separate owned development and Functional QA stands, with independent data,
 networks and evidence paths. Heavy-check concurrency is limited across stands,
 not by requiring a single mutable stand. The final acceptance stand runs the
 frozen integrated composition and remains unchanged while QA owns it.
+
+Database-enabled credit observation upgrade checks require a dedicated
+PostgreSQL cluster through TEST_CREDIT_UPGRADE_DATABASE_URL, alongside the
+ordinary TEST_DATABASE_URL. A separate database in the same cluster does not
+isolate the transaction horizon: concurrent old transactions can temporarily
+exclude a newly created index from planning. The stand owner verifies distinct
+cluster system identifiers before the gate. Keep the original index assertion,
+test parallelism and budgets; do not force planner choices or skip the proof.
+This routing applies to development, CI and final composition checks.
 
 Existing checks are allowed to finish. Do not terminate or restart them because
 their output is quiet or an observation times out. Observe the same tool handle;
