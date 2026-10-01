@@ -204,3 +204,12 @@ Request271 allocated BEFOREdispatch 2026-10-01T06:16:32Z: freshcompleteF08 metad
 
 
 Request271 actualroute: freshCLI v0.159.2 defaultgpt-6.1-sol medium approvalnever sandboxreadonly session55191 confirmedlive. Onlyfourartifactsourcefiles/originalF08observerrequirements + accepted7ffsource; no authorreceipt/history/tracking. NoClaude. Next272.
+
+
+QA271terminalFAIL5 observerartifact; fouroldhashesverifiedunchanged, successorcorrectionisolated. Independentreturns25. Request272 allocatedBEFOREdispatch 2026-10-01T06:38:17Z: completepayment7 immutable41dcc36e/base7ff, authorCodex; allcodegatesPASS androot26635 full15+34newsubcases66PASSevents0FAILSKIP153.340s, identicalDBsnapshots/raw7hashes. Request273 allocatedBEFOREdispatch: completeCclock40 immutabledbddf742/base7ff,39changed+unchangedadmission_retention; allauthoractualLinuxalias3/race/clock7/default19/manual14/wholegatesPASS, DBrolesunchanged/cleanupcomplete, root40rawhashesverified. BothfreshstandalonereadonlyCodexCLIoverride receive originalrequirements/fullsource only, no histories/reports/findings/tracking. Next274.
+
+
+Request274 allocatedBEFOREdispatch 2026-10-01T06:42:14Z: completeF08observer six-source-file successor artifact; authorCodexfqa_lead, freshstandalonereadonlyCodexCLIoverride. Alloffline meaningfultests/build/vet/pinnedfmt/lint terminalPASS, root6SHAfreeze. Acceptedproduct/schema7ff; noDB/standcalls, livequalifiedinspector absentsohardrefuse. Fulloriginalobserver/F08requirements andsixsources only, nooldfindings/history/reports/tracking. Requests272payment7CLI7132 and273clock40CLI37891 confirmedlive. Next275.
+
+
+2026-10-01T07:20:11Z: QA272 terminal FAIL3 completepayment7/41dcc36e; rootfull15/34newsubcases66PASS0FAILSKIP153.340s remains valid but NOT acceptance. QA273 terminal FAIL1 completeclock40/dbddf742: passport BeginNotification postattempt/lane expiry; fullactual40 gates valid but NOT acceptance. QA274 terminal FAIL2 completeobserver6; successor ownedlead. All Codex override, counter274 next275; independentreturns28; confirmedqueue0/0/0. Developers asked read-only minimal correction scopes before edits. Original frozen candidates/artifacts retained. Human explicitly approved localZitadel bootstrap twice; root guarded hash406A39A execution33981 terminalexit0 bootstrap-complete, dedicatedorg repair retainedoldobjects and revokedonlytwo mistakenlyscoped syntheticmembershipgrants. Lead readiness verification pending; no realadapter/SDK/FQA acceptance. Firewall-blocked tests mayrun container/WSL, no firewallpolicy changes.
