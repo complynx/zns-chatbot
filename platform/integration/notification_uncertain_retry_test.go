@@ -790,7 +790,7 @@ func TestNotificationUncertainRetryKnown429FencesContradictoryReceipt(t *testing
 					terminalBefore = notificationReceiptSnapshot(t, r)
 				}
 				release()
-				assert.NoError(
+				require.NoError(
 					t,
 					<-finished,
 					"confirmed late negative must be recorded without changing terminal policy",

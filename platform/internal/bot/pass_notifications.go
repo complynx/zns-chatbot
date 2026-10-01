@@ -186,11 +186,21 @@ func (b *Bot) sendPreparedPassNotice(
 	if err != nil {
 		return notice, false, err
 	}
+	return b.completePassNotice(ctx, notice, outcome, text)
+}
+
+// completePassNotice commits the provider outcome before allowing domain follow-up.
+func (b *Bot) completePassNotice(
+	ctx context.Context,
+	notice passbooking.Notification,
+	outcome delivery.Outcome,
+	text string,
+) (passbooking.Notification, bool, error) {
 	result := passbooking.NotificationCompletion{ID: notice.ID, Attempt: notice.DeliveryAttempt, Outcome: outcome}
 	result.Text = text
 	completionCtx, cancelCompletion := deliveryCompletionContext(ctx)
 	defer cancelCompletion()
-	if err = b.Host.CompletePassNotification(completionCtx, result); err != nil {
+	if err := b.Host.CompletePassNotification(completionCtx, result); err != nil {
 		return notice, false, err
 	}
 	if outcome.Kind != delivery.Succeeded {

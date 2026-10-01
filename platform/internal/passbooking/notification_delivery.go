@@ -586,6 +586,8 @@ func notificationConfirmedOutcome(outcome delivery.Outcome) bool {
 		return outcome.Reason == "telegram_service_rejected"
 	case delivery.Parked:
 		return outcome.Reason == "telegram_invalid_cooldown"
+	case delivery.Sending, delivery.Cancelled, delivery.Uncertain:
+		return false
 	default:
 		return false
 	}
