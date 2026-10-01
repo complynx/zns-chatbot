@@ -27,7 +27,7 @@ FROM next WHERE a.id=next.id RETURNING a.id,a.channel,a.thread_id,a.locale,a.nam
 
 -- name: LockAnnouncementAttempt :one
 SELECT a.channel,a.thread_id,a.state,a.message_id,a.available_at,a.failure,
- a.last_uncertain_attempt,a.uncertain_resends,
+ a.last_uncertain_attempt,a.uncertain_resends,a.lease_until,
  COALESCE(a.lease_until>clock_timestamp(),false)::boolean AS lease_live,
  EXISTS(SELECT 1 FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
   WHERE e.id=a.event_id AND b.owner=a.owner AND b.created_at=a.created_at AND b.state<>'cancelled'
@@ -56,6 +56,14 @@ UPDATE core.pass_registration_announcements SET state=sqlc.arg(state)::text,
  failure_count=failure_count+sqlc.arg(failure_increment)::bigint
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempts=sqlc.arg(attempt)::bigint
  AND state IN ('pending','sending','unknown');
+
+-- name: RecordAnnouncementTerminalReceipt :execrows
+UPDATE core.pass_registration_announcements SET message_id=sqlc.arg(message_id)::bigint
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
+ AND attempts=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=sqlc.arg(attempt)::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL
+ AND sqlc.arg(message_id)::bigint>0
+ AND (message_id=0 OR message_id=sqlc.arg(message_id)::bigint);
 
 -- name: AnnouncementAttemptSource :one
 SELECT event_id,owner FROM core.pass_registration_announcements

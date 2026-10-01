@@ -134,7 +134,7 @@ func (q *Queries) FinishAdminDelivery(ctx context.Context, arg FinishAdminDelive
 
 const lockAdminAttempt = `-- name: LockAdminAttempt :one
 SELECT d.destination,d.state,d.telegram_message_id,d.available_at,d.failure,
- d.last_uncertain_attempt,d.uncertain_resends,
+ d.last_uncertain_attempt,d.uncertain_resends,d.lease_until,
  COALESCE(d.lease_until>clock_timestamp(),false)::boolean AS lease_live
 FROM core.admin_message_deliveries d WHERE d.id=$1::bigint
  AND d.bot_id=$2::bigint AND d.attempt=$3::bigint
@@ -155,6 +155,7 @@ type LockAdminAttemptRow struct {
 	Failure              string
 	LastUncertainAttempt pgtype.Int8
 	UncertainResends     int64
+	LeaseUntil           pgtype.Timestamptz
 	LeaseLive            bool
 }
 
@@ -169,6 +170,7 @@ func (q *Queries) LockAdminAttempt(ctx context.Context, arg LockAdminAttemptPara
 		&i.Failure,
 		&i.LastUncertainAttempt,
 		&i.UncertainResends,
+		&i.LeaseUntil,
 		&i.LeaseLive,
 	)
 	return i, err
@@ -266,6 +268,35 @@ func (q *Queries) PrepareAdminDelivery(ctx context.Context, id int64) (int64, er
 	var attempt int64
 	err := row.Scan(&attempt)
 	return attempt, err
+}
+
+const recordAdminTerminalReceipt = `-- name: RecordAdminTerminalReceipt :execrows
+UPDATE core.admin_message_deliveries SET telegram_message_id=$1::bigint
+WHERE id=$2::bigint AND bot_id=$3::bigint
+ AND attempt=$4::bigint AND last_uncertain_attempt=$4::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL
+ AND $1::bigint>0
+ AND (telegram_message_id=0 OR telegram_message_id=$1::bigint)
+`
+
+type RecordAdminTerminalReceiptParams struct {
+	MessageID int64
+	ID        int64
+	BotID     int64
+	Attempt   int64
+}
+
+func (q *Queries) RecordAdminTerminalReceipt(ctx context.Context, arg RecordAdminTerminalReceiptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAdminTerminalReceipt,
+		arg.MessageID,
+		arg.ID,
+		arg.BotID,
+		arg.Attempt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recordAdminUncertainty = `-- name: RecordAdminUncertainty :exec

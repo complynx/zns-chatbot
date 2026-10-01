@@ -205,18 +205,17 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	valid, err := s.completionSource(ctx, tx, result.ID, result.Attempt)
+	q := dbgen.New(tx)
+	if recorded, receiptErr := s.recordAdminTerminalReceipt(ctx, q, result); recorded || receiptErr != nil {
+		if receiptErr != nil {
+			return receiptErr
+		}
+		return tx.Commit(ctx)
+	}
+	valid, err := s.completionSource(ctx, tx, result.ID, result.Attempt, result.Outcome.Kind == delivery.Uncertain)
 	if err != nil {
 		return err
 	}
-	if result.Outcome.Kind == delivery.Uncertain {
-		current, currentErr := adminPublicationCurrent(ctx, tx, result.ID)
-		if currentErr != nil {
-			return currentErr
-		}
-		valid = valid && current
-	}
-	q := dbgen.New(tx)
 	row, err := q.LockAdminAttempt(
 		ctx,
 		dbgen.LockAdminAttemptParams{ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt},
@@ -224,7 +223,9 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 	if err != nil {
 		return adminAttemptError(err)
 	}
-	if row.State == statePending &&
+	lateSuccess := row.State == statePending && result.Outcome.Kind == delivery.Succeeded &&
+		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == result.Attempt && !row.LeaseUntil.Valid
+	if row.State == statePending && !lateSuccess &&
 		(result.Outcome.Kind == delivery.Succeeded || result.Outcome.Kind == delivery.Uncertain) {
 		return staleAdminAttempt()
 	}
@@ -242,7 +243,7 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 	if !valid && result.Outcome.Kind == delivery.Rejected {
 		result.Outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}
 	}
-	outcome, deadline, err := s.finishAdminOutcome(ctx, tx, result.ID, result.Outcome, wireOutcome)
+	outcome, deadline, err := s.finishAdminOutcome(ctx, tx, result.ID, result.Outcome, wireOutcome, lateSuccess)
 	if err != nil {
 		return err
 	}
@@ -324,7 +325,12 @@ func (s Service) finishDelivery(
 	return err
 }
 
-func (s Service) completionSource(ctx context.Context, tx pgx.Tx, id, attempt int64) (bool, error) {
+func (s Service) completionSource(
+	ctx context.Context,
+	tx pgx.Tx,
+	id, attempt int64,
+	requireCurrent bool,
+) (bool, error) {
 	owner, err := dbgen.New(tx).
 		AdminAttemptOwner(ctx, dbgen.AdminAttemptOwnerParams{ID: id, BotID: s.Delivery.BotID, Attempt: attempt})
 	if err != nil {
@@ -346,7 +352,21 @@ func (s Service) completionSource(ctx context.Context, tx pgx.Tx, id, attempt in
 			return false, err
 		}
 	}
+	if requireCurrent {
+		current, currentErr := adminPublicationCurrent(ctx, tx, owner.ID)
+		return valid && current, currentErr
+	}
 	return valid, nil
+}
+
+func (s Service) recordAdminTerminalReceipt(ctx context.Context, q *dbgen.Queries, result Completion) (bool, error) {
+	if result.Outcome.Kind != delivery.Succeeded {
+		return false, nil
+	}
+	count, err := q.RecordAdminTerminalReceipt(ctx, dbgen.RecordAdminTerminalReceiptParams{
+		ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt, MessageID: result.Outcome.MessageID,
+	})
+	return count == 1, err
 }
 
 func staleAdminAttempt() error { return problem(http.StatusConflict, "admin_message_stale_attempt") }
@@ -384,13 +404,17 @@ func (s Service) recordAdminUncertainty(
 	)
 }
 
-// Observe a confirmed provider cooldown even when this resend exhausts its budget.
+// Close a recovered late success or retain a confirmed cooldown at exhaustion.
 func (s Service) finishAdminOutcome(
 	ctx context.Context,
 	tx pgx.Tx,
 	id int64,
 	policy, wire delivery.Outcome,
+	lateSuccess bool,
 ) (delivery.Outcome, time.Time, error) {
+	if lateSuccess {
+		return delivery.FinishUncertainSuccess(ctx, tx, s.Delivery, adminReference(id), policy)
+	}
 	scheduled := policy
 	preserveCooldown := policy.Kind != delivery.Deferred && wire.Kind == delivery.Deferred &&
 		wire.Reason == "telegram_rate_limit"

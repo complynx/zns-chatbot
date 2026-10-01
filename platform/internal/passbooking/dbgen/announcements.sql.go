@@ -125,7 +125,7 @@ func (q *Queries) FinishAnnouncement(ctx context.Context, arg FinishAnnouncement
 
 const lockAnnouncementAttempt = `-- name: LockAnnouncementAttempt :one
 SELECT a.channel,a.thread_id,a.state,a.message_id,a.available_at,a.failure,
- a.last_uncertain_attempt,a.uncertain_resends,
+ a.last_uncertain_attempt,a.uncertain_resends,a.lease_until,
  COALESCE(a.lease_until>clock_timestamp(),false)::boolean AS lease_live,
  EXISTS(SELECT 1 FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
   WHERE e.id=a.event_id AND b.owner=a.owner AND b.created_at=a.created_at AND b.state<>'cancelled'
@@ -151,6 +151,7 @@ type LockAnnouncementAttemptRow struct {
 	Failure              string
 	LastUncertainAttempt pgtype.Int8
 	UncertainResends     int64
+	LeaseUntil           pgtype.Timestamptz
 	LeaseLive            bool
 	Current              bool
 }
@@ -172,6 +173,7 @@ func (q *Queries) LockAnnouncementAttempt(ctx context.Context, arg LockAnnouncem
 		&i.Failure,
 		&i.LastUncertainAttempt,
 		&i.UncertainResends,
+		&i.LeaseUntil,
 		&i.LeaseLive,
 		&i.Current,
 	)
@@ -245,6 +247,35 @@ func (q *Queries) PrepareAnnouncement(ctx context.Context, botID int64) (Prepare
 		&i.Attempts,
 	)
 	return i, err
+}
+
+const recordAnnouncementTerminalReceipt = `-- name: RecordAnnouncementTerminalReceipt :execrows
+UPDATE core.pass_registration_announcements SET message_id=$1::bigint
+WHERE id=$2::bigint AND bot_id=$3::bigint
+ AND attempts=$4::bigint AND last_uncertain_attempt=$4::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL
+ AND $1::bigint>0
+ AND (message_id=0 OR message_id=$1::bigint)
+`
+
+type RecordAnnouncementTerminalReceiptParams struct {
+	MessageID int64
+	ID        int64
+	BotID     int64
+	Attempt   int64
+}
+
+func (q *Queries) RecordAnnouncementTerminalReceipt(ctx context.Context, arg RecordAnnouncementTerminalReceiptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAnnouncementTerminalReceipt,
+		arg.MessageID,
+		arg.ID,
+		arg.BotID,
+		arg.Attempt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recordAnnouncementUncertainty = `-- name: RecordAnnouncementUncertainty :exec

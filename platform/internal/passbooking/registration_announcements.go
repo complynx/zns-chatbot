@@ -152,6 +152,12 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 	defer func() { _ = tx.Rollback(ctx) }()
 	s, clockAttempt := s.WithClockAttempt()
 	q := dbgen.New(tx)
+	if recorded, receiptErr := s.recordAnnouncementTerminalReceipt(ctx, q, input); recorded || receiptErr != nil {
+		if receiptErr != nil {
+			return receiptErr
+		}
+		return core.DatabaseOperationError(tx.Commit(ctx))
+	}
 	attempt := delivery.Attempt{ID: input.ID, Generation: input.Attempt}
 	var row dbgen.LockAnnouncementAttemptRow
 	if input.Outcome.Kind == delivery.Uncertain {
@@ -164,7 +170,9 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 	if err != nil {
 		return announcementAttemptError(core.DatabaseOperationError(err))
 	}
-	if row.State == operationPending &&
+	lateSuccess := row.State == operationPending && input.Outcome.Kind == delivery.Succeeded &&
+		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == input.Attempt && !row.LeaseUntil.Valid
+	if row.State == operationPending && !lateSuccess &&
 		(input.Outcome.Kind == delivery.Succeeded || input.Outcome.Kind == delivery.Uncertain) {
 		return conflict("pass_announcement_stale")
 	}
@@ -182,7 +190,7 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 			input.Outcome.Kind == delivery.Uncertain,
 		s.Delivery.Fallback,
 	)
-	outcome, deadline, err := s.finishAnnouncementOutcome(ctx, tx, input.ID, input.Outcome, wireOutcome)
+	outcome, deadline, err := s.finishAnnouncementOutcome(ctx, tx, input.ID, input.Outcome, wireOutcome, lateSuccess)
 	if err != nil {
 		return err
 	}
@@ -199,6 +207,20 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 		return err
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+func (s Service) recordAnnouncementTerminalReceipt(
+	ctx context.Context,
+	q *dbgen.Queries,
+	input AnnouncementCompletion,
+) (bool, error) {
+	if input.Outcome.Kind != delivery.Succeeded {
+		return false, nil
+	}
+	count, err := q.RecordAnnouncementTerminalReceipt(ctx, dbgen.RecordAnnouncementTerminalReceiptParams{
+		ID: input.ID, BotID: s.Delivery.BotID, Attempt: input.Attempt, MessageID: input.Outcome.MessageID,
+	})
+	return count == 1, core.DatabaseOperationError(err)
 }
 
 // Resends count admissions, not proven wire requests. A crash after admission
@@ -412,13 +434,17 @@ func (s Service) recordAnnouncementUncertainty(
 	)
 }
 
-// Retain the confirmed provider cooldown when the final resend cannot continue.
+// Close a recovered late success or retain a confirmed cooldown at exhaustion.
 func (s Service) finishAnnouncementOutcome(
 	ctx context.Context,
 	tx pgx.Tx,
 	id int64,
 	policy, wire delivery.Outcome,
+	lateSuccess bool,
 ) (delivery.Outcome, time.Time, error) {
+	if lateSuccess {
+		return delivery.FinishUncertainSuccess(ctx, tx, s.Delivery, announcementReference(id), policy)
+	}
 	scheduled := policy
 	preserveCooldown := policy.Kind != delivery.Deferred && wire.Kind == delivery.Deferred &&
 		wire.Reason == "telegram_rate_limit"
