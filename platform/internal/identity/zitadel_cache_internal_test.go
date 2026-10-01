@@ -13,12 +13,17 @@ import (
 )
 
 type cacheProvider struct {
-	failed        atomic.Bool
-	inactive      atomic.Bool
-	exchanges     atomic.Int32
-	verifications atomic.Int32
-	lifetime      int64
-	issuer        string
+	rejectExchange atomic.Bool
+	rejectionCode  int
+	rejectionBody  string
+	verifyStarted  chan struct{}
+	verifyRelease  chan struct{}
+	failed         atomic.Bool
+	inactive       atomic.Bool
+	exchanges      atomic.Int32
+	verifications  atomic.Int32
+	lifetime       int64
+	issuer         string
 }
 
 func (p *cacheProvider) serve(w http.ResponseWriter, r *http.Request) {
@@ -37,11 +42,24 @@ func (p *cacheProvider) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	var body any
 	if r.URL.Path == "/oauth/v2/token" {
+		if p.rejectExchange.Load() {
+			w.WriteHeader(p.rejectionCode)
+			_, _ = w.Write([]byte(p.rejectionBody))
+			return
+		}
 		body = map[string]any{
 			"access_token": "token-" + r.Form.Get("subject_token"), "token_type": "Bearer",
 			"issued_token_type": "urn:ietf:params:oauth:token-type:jwt", "expires_in": p.lifetime,
 		}
 	} else {
+		if p.verifyStarted != nil {
+			p.verifyStarted <- struct{}{}
+			select {
+			case <-p.verifyRelease:
+			case <-r.Context().Done():
+				return
+			}
+		}
 		body = map[string]any{
 			"active": !p.inactive.Load(), "sub": strings.TrimPrefix(r.Form.Get("token"), "token-"),
 			"iss": p.issuer, "aud": []string{"project"}, "client_id": "bot-client",
@@ -50,6 +68,120 @@ func (p *cacheProvider) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func TestZitadelInactiveExchangeEvictsVerifiedSubject(t *testing.T) {
+	t.Parallel()
+	adapter, provider := cacheAdapter(t, 3600)
+	provider.rejectionCode = http.StatusBadRequest
+	provider.rejectionBody = `{"error":"invalid_request","error_description":"Errors.User.NotActive"}`
+	for _, subject := range []string{"alice", "bob"} {
+		token, err := adapter.Exchange(t.Context(), subject)
+		require.NoError(t, err)
+		_, err = adapter.Verify(t.Context(), token)
+		require.NoError(t, err)
+	}
+	entry := adapter.exchanges.values["alice"]
+	entry.until = time.Now().Add(-time.Second)
+	adapter.exchanges.values["alice"] = entry
+	provider.rejectExchange.Store(true)
+	_, err := adapter.Exchange(t.Context(), "alice")
+	require.ErrorIs(t, err, ErrZitadelUserInactive)
+	provider.failed.Store(true)
+	_, err = adapter.Verify(t.Context(), "token-alice")
+	require.ErrorIs(t, err, ErrZitadelUnavailable, "observed inactivity must retire the still-fresh verdict")
+	_, err = adapter.Exchange(t.Context(), "bob")
+	require.NoError(t, err)
+	_, err = adapter.Verify(t.Context(), "token-bob")
+	require.NoError(t, err)
+	require.Len(t, adapter.exchanges.values, 1)
+	require.Len(t, adapter.verified.values, 1)
+}
+
+func TestZitadelExchangeFailurePreservesVerifiedSubject(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		code int
+		body string
+	}{
+		{"unauthorized", http.StatusUnauthorized, `{"error":"invalid_request","error_description":"Errors.User.NotActive"}`},
+		{"outage", http.StatusServiceUnavailable, `{"error":"invalid_request","error_description":"Errors.User.NotActive"}`},
+		{"actor", http.StatusBadRequest, `{"error":"invalid_client"}`},
+		{"unknown", http.StatusBadRequest, `{"error":"invalid_request","error_description":"unknown"}`},
+		{"malformed", http.StatusBadRequest, `{`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			adapter, provider := cacheAdapter(t, 3600)
+			provider.rejectionCode, provider.rejectionBody = test.code, test.body
+			token, err := adapter.Exchange(t.Context(), "alice")
+			require.NoError(t, err)
+			_, err = adapter.Verify(t.Context(), token)
+			require.NoError(t, err)
+			entry := adapter.exchanges.values["alice"]
+			entry.until = time.Now().Add(-time.Second)
+			adapter.exchanges.values["alice"] = entry
+			provider.rejectExchange.Store(true)
+			_, err = adapter.Exchange(t.Context(), "alice")
+			require.ErrorIs(t, err, ErrZitadelUnavailable)
+			provider.failed.Store(true)
+			subject, err := adapter.Verify(t.Context(), token)
+			require.NoError(t, err)
+			require.Equal(t, "alice", subject)
+			require.EqualValues(t, 1, provider.verifications.Load())
+		})
+	}
+}
+
+func TestZitadelInactiveExchangeRetiresPendingVerification(t *testing.T) {
+	t.Parallel()
+	for _, token := range []string{"token-alice", "token-unresolved"} {
+		t.Run(token, func(t *testing.T) {
+			t.Parallel()
+			adapter, provider := cacheAdapter(t, 3600)
+			provider.rejectionCode = http.StatusBadRequest
+			provider.rejectionBody = `{"error":"invalid_request","error_description":"Errors.User.NotActive"}`
+			_, err := adapter.Verify(t.Context(), "token-bob")
+			require.NoError(t, err)
+			_, err = adapter.Verify(t.Context(), "token-alice")
+			require.NoError(t, err)
+			for key, entry := range adapter.verified.values {
+				if entry.subject == "alice" {
+					entry.until = time.Now().Add(-time.Second)
+					adapter.verified.values[key] = entry
+				}
+			}
+			provider.verifyStarted = make(chan struct{}, 1)
+			provider.verifyRelease = make(chan struct{})
+			t.Cleanup(func() { close(provider.verifyRelease) })
+			result := make(chan error, 1)
+			go func() {
+				_, verifyErr := adapter.Verify(t.Context(), token)
+				result <- verifyErr
+			}()
+			const waitLimit = 2 * time.Second
+			select {
+			case <-provider.verifyStarted:
+			case <-time.After(waitLimit):
+				t.Fatal("introspection did not reach the provider")
+			}
+			provider.rejectExchange.Store(true)
+			_, err = adapter.Exchange(t.Context(), "alice")
+			require.ErrorIs(t, err, ErrZitadelUserInactive)
+			provider.verifyRelease <- struct{}{}
+			select {
+			case err = <-result:
+				require.ErrorIs(t, err, ErrZitadelIdentity)
+			case <-time.After(waitLimit):
+				t.Fatal("retired introspection did not finish")
+			}
+			require.Len(t, adapter.verified.values, 1, "late success must not restore a retired verdict")
+			provider.failed.Store(true)
+			_, err = adapter.Verify(t.Context(), "token-bob")
+			require.NoError(t, err)
+		})
+	}
 }
 
 func cacheAdapter(t *testing.T, lifetime int64) (*Zitadel, *cacheProvider) {

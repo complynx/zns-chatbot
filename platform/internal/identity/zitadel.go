@@ -93,13 +93,17 @@ func (z *Zitadel) Exchange(ctx context.Context, subject string) (string, error) 
 	if subject == "" || len(subject) > 256 || strings.ContainsAny(subject, "\r\n") {
 		return "", ErrZitadelIdentity
 	}
-	return z.exchanges.resolve(ctx, subject, func(ctx context.Context) (cachedIdentity, error) {
+	token, err := z.exchanges.resolve(ctx, subject, func(ctx context.Context) (cachedIdentity, error) {
 		actorToken, err := z.getActorToken(ctx)
 		if err != nil {
 			return cachedIdentity{}, err
 		}
 		return z.exchange(ctx, subject, actorToken)
 	})
+	if errors.Is(err, ErrZitadelUserInactive) {
+		z.InvalidateSubject(subject)
+	}
+	return token, err
 }
 
 func (z *Zitadel) exchange(ctx context.Context, subject, actorToken string) (cachedIdentity, error) {
