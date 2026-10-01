@@ -52,12 +52,15 @@ func observeHTTPFailure(counter *prometheus.CounterVec, operation string, respon
 	if !exists {
 		return
 	}
-	// Registry registration verifies label names; named values also preserve their
-	// meaning if a compatible existing CounterVec declares them in another order.
-	counter.With(prometheus.Labels{
+	// Named labels preserve meaning across declaration orders. A registered
+	// curried collector can reject this lookup; observation must then be skipped.
+	metric, lookupErr := counter.GetMetricWith(prometheus.Labels{
 		httpFailureOperationLabel: operationName(operation), "phase": failure.phase, "code": failure.code,
 		"retryability": diagnosticUnknown, "transport_status": failure.status,
-	}).Inc()
+	})
+	if lookupErr == nil {
+		metric.Inc()
+	}
 }
 
 func classifyHTTPFailure(response *http.Response, err error) (httpFailure, bool) {

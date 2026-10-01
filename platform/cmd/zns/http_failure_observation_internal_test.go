@@ -96,3 +96,32 @@ func TestTelemetryClientFailureObservation(t *testing.T) {
 	require.Contains(t, text, `zns_operations_total{operation="api",result="canceled"} 1`)
 	require.NotContains(t, text, "private-")
 }
+
+func TestTelemetryClientWithoutRuntimeUsesDefaultTransport(t *testing.T) {
+	t.Parallel()
+	seen := make(chan http.Header, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Clone()
+		w.Header().Set("X-Private", "private-header")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = io.WriteString(w, "private-body")
+	}))
+	defer server.Close()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL+"/private-path", nil)
+	require.NoError(t, err)
+	request.Header.Set("Traceparent", "private-existing-trace")
+	request.Header.Set("Authorization", "private-credential")
+	request.Header.Set("Baggage", "private-baggage")
+	response, err := telemetryClient(nil, "api", time.Second).Do(request)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusTooManyRequests, response.StatusCode)
+	data, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+	require.NoError(t, response.Body.Close())
+	require.Equal(t, "private-body", string(data))
+	require.Equal(t, "private-header", response.Header.Get("X-Private"))
+	headers := <-seen
+	for _, name := range []string{"Traceparent", "Authorization", "Baggage"} {
+		require.Equal(t, request.Header.Get(name), headers.Get(name))
+	}
+}

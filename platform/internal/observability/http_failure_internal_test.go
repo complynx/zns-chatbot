@@ -191,3 +191,114 @@ func TestHTTPFailureObservationRegistryIsolationAndBounds(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, empty)
 }
+
+func TestHTTPFailureObservationUnusableCollectorPreservesRoundTrip(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"curried", "conflicting"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			runtime, err := New(t.Context(), Config{})
+			require.NoError(t, err)
+			if kind == "curried" {
+				prototype := registerHTTPFailures(prometheus.NewRegistry())
+				curried, curryErr := prototype.CurryWith(prometheus.Labels{httpFailureOperationLabel: "api"})
+				require.NoError(t, curryErr)
+				require.NoError(t, runtime.Registry.Register(curried))
+			} else {
+				require.NoError(t, runtime.Registry.Register(prometheus.NewGauge(prometheus.GaugeOpts{
+					Name: httpFailureMetricName, Help: "conflicting descriptor",
+				})))
+			}
+			request := httptest.NewRequest(http.MethodGet, "https://private-host/private-path", nil)
+			privateErr := &opaqueTransportError{}
+			for _, result := range []struct {
+				status int
+				err    error
+			}{{http.StatusTooManyRequests, nil}, {http.StatusServiceUnavailable, nil}, {http.StatusForbidden, privateErr}} {
+				body := io.NopCloser(bytes.NewBufferString("private-body"))
+				response := &http.Response{
+					StatusCode: result.status,
+					Body:       body,
+					Header:     http.Header{"X-Private": {"private-header"}},
+				}
+				wrapped := runtime.HTTPClient(
+					"api",
+					failureObservationTransport(func(*http.Request) (*http.Response, error) {
+						return response, result.err
+					}),
+				)
+				actual, callErr := wrapped.RoundTrip(request)
+				require.Same(t, response, actual)
+				if result.err == nil {
+					require.NoError(t, callErr)
+				} else {
+					require.Same(t, privateErr, callErr)
+				}
+				data, readErr := io.ReadAll(actual.Body)
+				require.NoError(t, readErr)
+				require.Equal(t, "private-body", string(data))
+				require.NoError(t, actual.Body.Close())
+				require.Equal(t, "private-header", actual.Header.Get("X-Private"))
+			}
+			metrics := httptest.NewRecorder()
+			runtime.Handler().ServeHTTP(metrics, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+			require.Contains(t, metrics.Body.String(), `zns_operations_total{operation="api",result="ok"} 1`)
+			require.Contains(t, metrics.Body.String(), `zns_operations_total{operation="api",result="error"} 2`)
+			require.NotContains(t, metrics.Body.String(), `retryability="unknown"`)
+			require.NotContains(t, metrics.Body.String(), "private-")
+		})
+	}
+}
+
+func TestHTTPClientNilRuntimePreservesRoundTrip(t *testing.T) {
+	t.Parallel()
+	var runtime *Runtime
+	span := trace.NewSpanContext(trace.SpanContextConfig{TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}})
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"https://private-host/private-path",
+		bytes.NewBufferString("private-request"),
+	)
+	request = request.WithContext(trace.ContextWithSpanContext(t.Context(), span))
+	request.Header.Set("Traceparent", "private-existing-trace")
+	request.Header.Set("Authorization", "private-credential")
+	request.Header.Set("Baggage", "private-baggage")
+	for _, fail := range []bool{false, true} {
+		body := io.NopCloser(bytes.NewBufferString("private-response"))
+		response := &http.Response{
+			StatusCode: http.StatusTooManyRequests,
+			Body:       body,
+			Header:     http.Header{"X-Private": {"private-header"}},
+		}
+		var returnedErr error
+		if fail {
+			returnedErr = &opaqueTransportError{}
+		}
+		called := false
+		wrapped := runtime.HTTPClient(
+			"api",
+			failureObservationTransport(func(received *http.Request) (*http.Response, error) {
+				called = true
+				require.Same(t, request, received)
+				require.Equal(t, span, trace.SpanContextFromContext(received.Context()))
+				return response, returnedErr
+			}),
+		)
+		actual, callErr := wrapped.RoundTrip(request)
+		require.True(t, called)
+		require.Same(t, response, actual)
+		if fail {
+			require.Same(t, returnedErr, callErr)
+		} else {
+			require.NoError(t, callErr)
+		}
+		data, readErr := io.ReadAll(actual.Body)
+		require.NoError(t, readErr)
+		require.Equal(t, "private-response", string(data))
+		require.NoError(t, actual.Body.Close())
+		require.Equal(t, "private-header", actual.Header.Get("X-Private"))
+		require.Equal(t, "private-existing-trace", request.Header.Get("Traceparent"))
+		require.Equal(t, "private-credential", request.Header.Get("Authorization"))
+		require.Equal(t, "private-baggage", request.Header.Get("Baggage"))
+	}
+}
