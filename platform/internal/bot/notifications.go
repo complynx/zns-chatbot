@@ -23,11 +23,18 @@ func notificationWireCandidate(send telegram.Send) (*notificationwire.Payload, e
 	if err != nil {
 		return nil, err
 	}
-	markup, err := json.Marshal(prepared.Markup)
+	encoded, err := json.Marshal(prepared)
 	if err != nil {
 		return nil, err
 	}
-	wire := &notificationwire.Payload{Text: prepared.Text, Markup: markup}
+	var payload struct {
+		Text   string          `json:"text"`
+		Markup json.RawMessage `json:"reply_markup"`
+	}
+	if err = json.Unmarshal(encoded, &payload); err != nil {
+		return nil, err
+	}
+	wire := &notificationwire.Payload{Text: payload.Text, Markup: payload.Markup}
 	_, err = wire.Encode()
 	return wire, err
 }
