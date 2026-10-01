@@ -44,6 +44,15 @@ networks and evidence paths. Heavy-check concurrency is limited across stands,
 not by requiring a single mutable stand. The final acceptance stand runs the
 frozen integrated composition and remains unchanged while QA owns it.
 
+Database-enabled credit observation upgrade checks require a dedicated
+PostgreSQL cluster through TEST_CREDIT_UPGRADE_DATABASE_URL, alongside the
+ordinary TEST_DATABASE_URL. A separate database in the same cluster does not
+isolate the transaction horizon: concurrent old transactions can temporarily
+exclude a newly created index from planning. The stand owner verifies distinct
+cluster system identifiers before the gate. Keep the original index assertion,
+test parallelism and budgets; do not force planner choices or skip the proof.
+This routing applies to development, CI and final composition checks.
+
 Existing checks are allowed to finish. Do not terminate or restart them because
 their output is quiet or an observation times out. Observe the same tool handle;
 if handles are scoped to another agent, that owner reports the actual process and
