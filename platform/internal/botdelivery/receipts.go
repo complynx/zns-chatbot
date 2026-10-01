@@ -2,14 +2,18 @@ package botdelivery
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/i18n"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 )
 
 // ApplyReceipt commits local projections, child notices and the continuation
@@ -84,7 +88,7 @@ func sourceDenied(err error) bool {
 	}
 	p, ok := errors.AsType[*core.ProblemError](err)
 	return ok &&
-		(p.Code == "history_stale" || p.Code == codePassSourceStale || p.Code == PassMenuDeniedCode || p.Code == "source_revoked" || p.Status == 403)
+		(p.Code == codeHistoryStale || p.Code == codePassSourceStale || p.Code == PassMenuDeniedCode || p.Code == "source_revoked" || p.Status == 403)
 }
 func (s Service) projectReceipt(ctx context.Context, tx pgx.Tx, i Intent) error {
 	if i.State != delivery.Succeeded || i.MessageID <= 0 {
@@ -98,7 +102,7 @@ func (s Service) projectReceipt(ctx context.Context, tx pgx.Tx, i Intent) error 
 	case "workflow_card":
 		_, err = tx.Exec(ctx, `INSERT INTO bot.messages(owner,chat_id,message_id,view_hash) VALUES($1,$2,$3,$4)
  ON CONFLICT(owner) DO UPDATE SET chat_id=$2,message_id=$3,view_hash=$4`, i.Owner, i.Chat, i.MessageID, r.ViewHash)
-	case "order_card":
+	case orderCardReceiptKind:
 		_, err = tx.Exec(
 			ctx,
 			`INSERT INTO bot.order_cards(owner,card_key,chat_id,message_id,view_hash,visible) VALUES($1,$2,$3,$4,$5,$6)
@@ -110,6 +114,9 @@ func (s Service) projectReceipt(ctx context.Context, tx pgx.Tx, i Intent) error 
 			r.ViewHash,
 			!r.Retired,
 		)
+		if err == nil && i.Reference.Family == familyPayment && !r.Retired {
+			err = projectPaymentSource(ctx, tx, i)
+		}
 	case passCardReceiptKind, "massage_card":
 		if r.Kind == passCardReceiptKind {
 			_, err = tx.Exec(
@@ -173,9 +180,9 @@ func deniedPreviousTarget(previous *Intent, denied bool) int64 {
 }
 
 type receiptAuthority struct {
-	previous                           *Intent
-	denied, retirePass, retirePrevious bool
-	preserve                           []string
+	previous                                            *Intent
+	denied, retirePass, retirePrevious, paymentObserved bool
+	preserve                                            []string
 }
 
 func (s Service) receiptAuthority(ctx context.Context, tx pgx.Tx, current Intent) (receiptAuthority, error) {
@@ -185,7 +192,15 @@ func (s Service) receiptAuthority(ctx context.Context, tx pgx.Tx, current Intent
 	}
 	denied, retirePass := false, false
 	if err = s.lockPayloadSources(ctx, tx, current, nil, previous); err != nil {
-		if !sourceDenied(err) {
+		unavailable := false
+		if current.Reference.Family == familyPayment && !current.Receipt.Retired && !core.IsDatabaseFailure(err) {
+			var stateErr error
+			unavailable, stateErr = paymentUnavailableInTx(ctx, tx, current)
+			if stateErr != nil {
+				return receiptAuthority{}, stateErr
+			}
+		}
+		if !unavailable && !sourceDenied(err) {
 			return receiptAuthority{}, err
 		}
 		denied = true
@@ -195,7 +210,15 @@ func (s Service) receiptAuthority(ctx context.Context, tx pgx.Tx, current Intent
 	if err != nil {
 		return receiptAuthority{}, err
 	}
-	return receiptAuthority{previous, denied, retirePass, retirePrevious, preserve}, nil
+	observed := false
+	if denied && current.Reference.Family == familyPayment {
+		observed, err = lockObservedPaymentReceipt(ctx, tx, current)
+		if err != nil {
+			return receiptAuthority{}, err
+		}
+	}
+	return receiptAuthority{previous: previous, denied: denied, retirePass: retirePass,
+		retirePrevious: retirePrevious, preserve: preserve, paymentObserved: observed}, nil
 }
 
 func (s Service) priorReceiptAuthority(
@@ -263,6 +286,11 @@ func (s Service) retireReceiptAuthority(
 	authority receiptAuthority,
 ) error {
 	var err error
+	if authority.paymentObserved {
+		if err = s.recordObservedPayment(ctx, tx, current); err != nil {
+			return err
+		}
+	}
 	if authority.retirePass {
 		if err = s.retirePassReceipt(
 			ctx,
@@ -280,4 +308,105 @@ func (s Service) retireReceiptAuthority(
 		}
 	}
 	return nil
+}
+
+// The source records a successful displayed payload, never a pending opening.
+func projectPaymentSource(ctx context.Context, tx pgx.Tx, i Intent) error {
+	binding := struct {
+		Original bool                   `json:"original"`
+		Source   *readsource.Derivation `json:"source"`
+	}{Original: i.Reference.Source == nil, Source: i.Reference.Source}
+	_, err := tx.Exec(ctx, `INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES($1,0,$2,$3)
+ ON CONFLICT(owner,update_id,kind) DO UPDATE SET content=$3`, i.Owner, "payment_source:"+i.Reference.Object, binding)
+	return core.DatabaseOperationContextError(ctx, err)
+}
+
+// A denied receipt still records actual transport when its exact prior is current.
+func lockObservedPaymentReceipt(ctx context.Context, tx pgx.Tx, i Intent) (bool, error) {
+	latest, err := latestPaymentReceipt(ctx, tx, i)
+	if err != nil || !latest {
+		return false, err
+	}
+	switch {
+	case i.Reference.CanonicalPaymentRetirement():
+		err = lockPaymentRetirementProjection(ctx, tx, i)
+	case i.Reference.PaymentOpening != nil:
+		err = lockPaymentOpeningPrevious(ctx, tx, i)
+	default:
+		err = lockPaymentDisplayedSource(ctx, tx, i)
+		if err == nil && i.Target > 0 {
+			err = lockRenderedTarget(ctx, tx, i, i.Target)
+		}
+	}
+	if errors.Is(err, ErrStale) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (s Service) recordObservedPayment(ctx context.Context, tx pgx.Tx, current Intent) error {
+	if current.Receipt.Retired {
+		// Rights restored after the edit: preserve visibility, but record the actual wire hash.
+		_, err := tx.Exec(ctx, `UPDATE bot.order_cards SET view_hash=$1 WHERE owner=$2 AND card_key=$3`,
+			current.Receipt.ViewHash, current.Owner, current.Reference.CardKey)
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	if err := s.projectReceipt(ctx, tx, current); err != nil {
+		return err
+	}
+	unavailable, err := paymentUnavailableInTx(ctx, tx, current)
+	if err != nil {
+		return err
+	}
+	if unavailable {
+		return enqueueObservedPaymentRetirement(ctx, tx, current)
+	}
+	return nil
+}
+
+func enqueueObservedPaymentRetirement(ctx context.Context, tx pgx.Tx, observed Intent) error {
+	ref := Reference{
+		Kind:    CardIntent,
+		Family:  familyPayment,
+		CardKey: observed.Reference.CardKey,
+		Object:  observed.Reference.Object,
+		Event:   observed.Reference.Event,
+		Notice:  i18n.PaymentUnavailable,
+		PaymentRetirement: &PaymentRetirement{
+			Operation: observed.Operation,
+			Effect:    observed.Effect,
+			ViewHash:  observed.Receipt.ViewHash,
+		},
+		Continuation: Continuation{Kind: orderCardReceiptKind, Key: observed.Reference.CardKey, Retired: true},
+	}
+	raw, err := json.Marshal(ref)
+	if err != nil {
+		return err
+	}
+	operation := "payment-retirement:" + observed.Operation
+	effect := observed.Effect
+	_, err = tx.Exec(
+		ctx,
+		`INSERT INTO bot.delivery_intents(bot_id,operation_key,effect_key,owner,chat_id,reference,phase,target_message_id)
+ VALUES($1,$2,$3,$4,$5,$6,'edit',$7) ON CONFLICT DO NOTHING`,
+		observed.BotID,
+		operation,
+		effect,
+		observed.Owner,
+		observed.Chat,
+		raw,
+		observed.MessageID,
+	)
+	if err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	_, err = delivery.Register(
+		ctx,
+		tx,
+		observed.BotID,
+		delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect},
+		delivery.Destination{Chat: strconv.FormatInt(observed.Chat, 10)},
+		delivery.Interactive,
+	)
+	return err
 }

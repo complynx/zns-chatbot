@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
@@ -79,13 +80,14 @@ type paymentSourceBinding struct {
 	Source   *readsource.Derivation `json:"source"`
 }
 
-// A refresh retains the source of the opened card. Only an explicit new open can
-// establish a new source, after reading a fresh payment payload.
+// Persist only a displayed source. Producers keep pending authority in the intent.
 func (b *Bot) bindPaymentSource(ctx context.Context, owner, id string, source *readsource.Derivation) error {
 	_, err := b.DB.Exec(ctx, `INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES($1,0,$2,$3)
 	ON CONFLICT(owner,update_id,kind) DO UPDATE SET content=$3`, owner, "payment_source:"+id, paymentSourceBinding{Original: source == nil, Source: source})
 	return core.DatabaseOperationError(err)
 }
+
+// A refresh reads only the source of the successfully displayed receipt.
 
 func (b *Bot) paymentSource(ctx context.Context, owner, id string) (*readsource.Derivation, error) {
 	var raw []byte
@@ -105,6 +107,34 @@ func (b *Bot) paymentSource(ctx context.Context, owner, id string) (*readsource.
 		return nil, appclient.ErrReadStale
 	}
 	return binding.Source, err
+}
+
+func (b *Bot) checkPaymentPayload(
+	ctx context.Context,
+	owner, event string,
+	info orders.PaymentInstructions,
+	source *readsource.Derivation,
+) error {
+	if ref, ok := ctx.Value(botCardContextKey{}).(botdelivery.Reference); ok && ref.PaymentOpening != nil {
+		return b.checkPaymentOpening(ctx, owner, event, info, source)
+	}
+	return b.checkPaymentDelivery(ctx, owner, event, info, source)
+}
+
+func (b *Bot) checkPaymentOpening(
+	ctx context.Context,
+	owner, event string,
+	info orders.PaymentInstructions,
+	source *readsource.Derivation,
+) error {
+	current, err := b.API.PaymentInstructions(ctx, owner, event, info.OrderID)
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(current, info) {
+		return appclient.ErrReadStale
+	}
+	return b.checkOrderDeliverySource(ctx, owner, source)
 }
 
 func (b *Bot) checkPaymentDelivery(

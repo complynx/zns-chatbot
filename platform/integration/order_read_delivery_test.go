@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -203,8 +204,15 @@ func testPaymentCardSource(t *testing.T, fallback bool) {
 		View:        agent.OrdersView,
 		OrderAction: &agent.OrderProposal{Name: orders.ActionPaymentInstructions, OrderID: order.ID},
 	}
-	handle(t, f.b, message(29803, 101, "Show payment instructions for "+order.ID))
+	handleVisible(t, f.b, message(29803, 101, "Show payment instructions for "+order.ID))
 	before := paymentMessage(t, f)
+	var originalSource []byte
+	require.NoError(t, f.db.QueryRow(
+		ctx,
+		`SELECT content FROM bot.interactions WHERE owner='alice' AND update_id=0 AND kind=$1`,
+		"payment_source:"+order.ID,
+	).
+		Scan(&originalSource))
 	var bound bool
 	require.NoError(
 		t,
@@ -219,27 +227,41 @@ func testPaymentCardSource(t *testing.T, fallback bool) {
 	)
 	require.NoError(t, err)
 	fallbackSeen := false
+	var sends atomic.Int64
 	if fallback {
-		f.b.TG.HTTP = &http.Client{Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
-			if strings.HasSuffix(r.URL.Path, "/editMessageText") {
-				fallbackSeen = true
-				orderDeliveryHistoryDelete(t, f, "alice")
-				return &http.Response{
-					StatusCode: http.StatusBadRequest,
-					Header:     http.Header{},
-					Body: io.NopCloser(
-						strings.NewReader(`{"ok":false,"error_code":400,"description":"message to edit not found"}`),
-					),
-					Request: r,
-				}, nil
-			}
-			return http.DefaultTransport.RoundTrip(r)
-		})}
+		var historyID int64
+		require.NoError(t, f.db.QueryRow(
+			ctx,
+			`SELECT id FROM core.conversation_events WHERE owner='alice' AND origin='original' AND omission_reason<>'deleted' ORDER BY id LIMIT 1`,
+		).
+			Scan(&historyID))
+		f.b.TG.HTTP = &http.Client{Transport: paymentSourceEditRefusal(f, before.ID, historyID, &fallbackSeen, &sends)}
+		require.NoError(t, f.b.RenderOrders(ctx, "alice", 101))
+		var operation, effect string
+		require.NoError(t, f.db.QueryRow(ctx, `SELECT operation_key,effect_key FROM bot.delivery_intents
+			WHERE owner='alice' AND reference->>'family'='payment' AND state='pending'
+			ORDER BY created_at DESC LIMIT 1`).Scan(&operation, &effect))
+		ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+		pumpBotDeliveries(t, f.b)
+		require.True(t, fallbackSeen, "provider must reject the exact payment edit after source revocation")
+		require.NoError(t, f.b.DeliverBotIntent(ctx, ref))
+		cancelled, readErr := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, ref, false)
+		require.NoError(t, readErr)
+		require.Equal(t, delivery.Cancelled, cancelled.State)
+		require.Zero(t, sends.Load(), "revoked payment source must prevent fallback sends")
 	} else {
 		orderDeliveryHistoryDelete(t, f, "alice")
+		require.Error(t, f.b.RenderOrders(ctx, "alice", 101))
 	}
-	require.Error(t, f.b.RenderOrders(ctx, "alice", 101))
 	require.Equal(t, fallback, fallbackSeen)
+	var retainedSource []byte
+	require.NoError(t, f.db.QueryRow(
+		ctx,
+		`SELECT content FROM bot.interactions WHERE owner='alice' AND update_id=0 AND kind=$1`,
+		"payment_source:"+order.ID,
+	).
+		Scan(&retainedSource))
+	require.JSONEq(t, string(originalSource), string(retainedSource))
 	for _, item := range chatMessages(t, f, 101) {
 		require.NotContains(t, item.Text, "new payment canary")
 		if item.ID == before.ID {
@@ -247,7 +269,7 @@ func testPaymentCardSource(t *testing.T, fallback bool) {
 		}
 	}
 	f.b.TG.HTTP = nil
-	handle(t, f.b, orderClick(t, f, 101, 29804, "Payment methods"))
+	handleVisible(t, f.b, orderClick(t, f, 101, 29804, "Payment methods"))
 	require.NoError(
 		t,
 		f.db.QueryRow(ctx, `SELECT content->'source'<>'null'::jsonb FROM bot.interactions WHERE owner='alice' AND update_id=0 AND kind=$1`, "payment_source:"+order.ID).
@@ -259,6 +281,195 @@ func testPaymentCardSource(t *testing.T, fallback bool) {
 		found = found || strings.Contains(item.Text, "new payment canary")
 	}
 	require.True(t, found)
+}
+
+func paymentSourceEditRefusal(
+	f *fixture,
+	target, historyID int64,
+	seen *bool,
+	sends *atomic.Int64,
+) qaArchiveBoundaryTransport {
+	return func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/sendMessage") {
+			sends.Add(1)
+		}
+		if strings.HasSuffix(r.URL.Path, "/editMessageText") {
+			raw, readErr := io.ReadAll(r.Body)
+			if readErr != nil {
+				return nil, readErr
+			}
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+			var payload telegram.Send
+			if readErr = json.Unmarshal(raw, &payload); readErr != nil {
+				return nil, readErr
+			}
+			if payload.MessageID != target {
+				return http.DefaultTransport.RoundTrip(r)
+			}
+			*seen = true
+			if readErr = (conversation.Service{DB: f.db}).DeleteContent(
+				r.Context(),
+				"alice",
+				historyID,
+			); readErr != nil {
+				return nil, readErr
+			}
+			return &http.Response{
+				StatusCode: http.StatusBadRequest,
+				Header:     http.Header{},
+				Body: io.NopCloser(
+					strings.NewReader(`{"ok":false,"error_code":400,"description":"message to edit not found"}`),
+				),
+				Request: r,
+			}, nil
+		}
+		return http.DefaultTransport.RoundTrip(r)
+	}
+}
+
+func TestPaymentUnavailableContextRetiresRevokedSource(t *testing.T) {
+	t.Parallel()
+	for _, opening := range []string{"derived", "manual_model", "model_manual"} {
+		for _, language := range []string{"en", "ru"} {
+			for _, queued := range []bool{false, true} {
+				for _, refusal := range []bool{false, true} {
+					t.Run(
+						fmt.Sprintf("%s/%s/queued_%t/refusal_%t", opening, language, queued, refusal),
+						func(t *testing.T) {
+							t.Parallel()
+							testUnavailablePaymentSource(t, opening, language, queued, refusal)
+						},
+					)
+				}
+			}
+		}
+	}
+
+	runPaymentPendingReopeningCases(t)
+	runPaymentManualAfterHistoryCases(t)
+	runPaymentSupersededOpeningCases(t)
+}
+
+func testUnavailablePaymentSource(t *testing.T, opening, language string, queued, refusal bool) {
+	t.Helper()
+	f, order, opened, originalSource := openedUnavailablePaymentSource(t, opening)
+	var pending botdelivery.Intent
+	if queued {
+		_, err := f.db.Exec(t.Context(), `UPDATE core.order_events
+ SET transfer_instructions_localized='{"en":"late private payment canary"}' WHERE id=$1`, order.EventID)
+		require.NoError(t, err)
+		require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+		pending = queuedLivePayment(t, f)
+	}
+	orderDeliveryHistoryDelete(t, f, "alice")
+	_, err := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+	require.NoError(t, err)
+	if queued {
+		require.NoError(t, f.b.DeliverBotIntent(t.Context(), pending.QueueReference()))
+		current, readErr := botdelivery.Read(t.Context(), f.db, pending.BotID, pending.QueueReference(), false)
+		require.NoError(t, readErr)
+		require.Equal(t, delivery.Cancelled, current.State)
+		require.Zero(t, current.Attempt)
+	} else {
+		require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	}
+	intent := queuedPaymentRetirement(t, f)
+	_, err = f.b.API.SetLanguage(t.Context(), "alice", language, false)
+	require.NoError(t, err)
+	assertUnavailablePaymentDelivery(t, f, order, opened, intent, language, refusal)
+	var retainedSource []byte
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='alice' AND update_id=0 AND kind=$1`, "payment_source:"+order.ID).Scan(&retainedSource))
+	require.JSONEq(t, string(originalSource), string(retainedSource))
+	for _, item := range chatMessages(t, f, 101) {
+		require.NotContains(t, item.Text, "late private payment canary")
+	}
+}
+
+func openedUnavailablePaymentSource(t *testing.T, opening string) (*fixture, orders.Order, telegram.Message, []byte) {
+	t.Helper()
+	var f *fixture
+	var order orders.Order
+	var err error
+	if opening == "manual_model" {
+		f, order, _ = openedPaymentFixture(t)
+	} else {
+		f = setup(t)
+		order, err = f.b.API.ExecuteOrder(t.Context(), "alice", orders.Command{
+			EventID: "sandbox-festival", Name: "create", Origin: "manual", Key: "retire-bound",
+			Choice: orderChoice("preparty"),
+		})
+		require.NoError(t, err)
+		_, err = f.b.API.SetLanguage(t.Context(), "alice", "en", false)
+		require.NoError(t, err)
+	}
+	f.model.plan = agent.Plan{
+		View:        agent.OrdersView,
+		OrderAction: &agent.OrderProposal{Name: orders.ActionPaymentInstructions, OrderID: order.ID},
+	}
+	handleVisible(t, f.b, message(29805, 101, "Show payment instructions for "+order.ID))
+	opened := paymentMessage(t, f)
+	var originalSource, receiptSource []byte
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='alice' AND update_id=0 AND kind=$1`, "payment_source:"+order.ID).Scan(&originalSource))
+	if opening == "manual_model" {
+		require.Contains(t, string(originalSource), `"original": true`)
+	} else {
+		require.Contains(t, string(originalSource), `"original": false`)
+	}
+	if opening == "model_manual" {
+		handleVisible(t, f.b, orderClick(t, f, 101, 29806, "Payment methods"))
+		after := paymentMessage(t, f)
+		require.Equal(t, opened.ID, after.ID)
+		require.Equal(t, opened.Text, after.Text)
+	}
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT jsonb_build_object('original',reference->'source' IS NULL,'source',reference->'source')
+ FROM bot.delivery_intents WHERE owner='alice' AND message_id=$1 AND state='sent' AND continuation_done
+ AND reference->>'family'='payment' ORDER BY attempted_at DESC LIMIT 1`, opened.ID).
+			Scan(&receiptSource),
+	)
+	require.JSONEq(
+		t,
+		string(originalSource),
+		string(receiptSource),
+		"the displayed receipt must carry its actual source",
+	)
+	var retained []byte
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='alice' AND update_id=0 AND kind=$1`, "payment_source:"+order.ID).Scan(&retained))
+	require.JSONEq(t, string(originalSource), string(retained), "a no-op must retain the successful source binding")
+	var intents int
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.delivery_intents
+ WHERE owner='alice' AND reference->>'family'='payment'`).Scan(&intents))
+	require.Equal(t, 1, intents, "same-body opening must not create another payment transport intent")
+	return f, order, opened, originalSource
+}
+
+func queuedLivePayment(t *testing.T, f *fixture) botdelivery.Intent {
+	t.Helper()
+	var operation, effect string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT operation_key,effect_key FROM bot.delivery_intents
+ WHERE owner='alice' AND state='pending' AND reference->>'family'='payment'
+ AND COALESCE(reference->>'notice','')='' ORDER BY created_at DESC LIMIT 1`).Scan(&operation, &effect))
+	intent, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID,
+		delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}, false)
+	require.NoError(t, err)
+	for range 100 {
+		for _, entry := range botDeliveryCandidates(t, f.b) {
+			if entry.Reference == intent.QueueReference() {
+				return intent
+			}
+			if entry.Reference.Owner == delivery.Bot {
+				require.NoError(t, f.b.DeliverBotIntent(t.Context(), entry.Reference))
+				break
+			}
+		}
+		time.Sleep(max(f.b.Delivery.BotInterval, f.b.Delivery.ChatInterval) + time.Millisecond)
+	}
+	t.Fatal("live payment intent did not become the lane head")
+	return botdelivery.Intent{}
 }
 
 func TestModernProofRechecksExactBindingAfterDownload(t *testing.T) {
@@ -705,4 +916,229 @@ func assertSurvivingOrderExportGrant(t *testing.T, f *fixture, mode string) {
 	require.NotEmpty(t, body, "the surviving grant must authorize a real export")
 	_, err = f.b.API.ExportOrders(t.Context(), "bob", "sandbox-festival")
 	requireCode(t, err, "forbidden")
+}
+
+func runPaymentPendingReopeningCases(t *testing.T) {
+	t.Helper()
+	for _, derived := range []bool{false, true} {
+		for _, language := range []string{"en", "ru"} {
+			for _, deleted := range []bool{false, true} {
+				t.Run(
+					fmt.Sprintf("pending_opening/derived_%t/%s/deleted_%t", derived, language, deleted),
+					func(t *testing.T) {
+						t.Parallel()
+						testPaymentPendingReopening(t, derived, language, deleted)
+					},
+				)
+			}
+		}
+	}
+}
+
+func testPaymentPendingReopening(t *testing.T, derived bool, language string, deleted bool) {
+	t.Helper()
+	route := "manual_model"
+	if derived {
+		route = "derived"
+	}
+	f, order, opened, source := openedUnavailablePaymentSource(t, route)
+	_, err := f.db.Exec(t.Context(), `UPDATE core.order_events
+ SET transfer_instructions_localized='{"en":"pending opening private canary","ru":"pending opening private canary"}' WHERE id=$1`, order.EventID)
+	require.NoError(t, err)
+	if derived {
+		handle(t, f.b, orderClick(t, f, 101, 30001, "Payment methods"))
+	} else {
+		handle(t, f.b, message(30001, 101, "Show payment instructions for "+order.ID))
+	}
+	pending := queuedPaymentOpening(t, f)
+	require.NotNil(t, pending.Reference.PaymentOpening)
+	if derived {
+		require.Nil(t, pending.Reference.Source)
+	} else {
+		require.NotNil(t, pending.Reference.Source)
+	}
+	require.JSONEq(
+		t,
+		string(source),
+		string(displayedPaymentSource(t, f, order.ID)),
+		"pending authority cannot replace the displayed source",
+	)
+	orderDeliveryHistoryDelete(t, f, "alice")
+	if deleted {
+		_, err = f.b.API.ExecuteOrder(t.Context(), "alice", orders.Command{EventID: order.EventID, OrderID: order.ID,
+			Version: order.Version, Name: "delete", Origin: "manual", Key: "delete-pending-open"})
+	} else {
+		_, err = f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+	}
+	require.NoError(t, err)
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), pending.QueueReference()))
+	current, err := botdelivery.Read(t.Context(), f.db, pending.BotID, pending.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Cancelled, current.State)
+	require.Zero(t, current.Attempt)
+	retirement := queuedPaymentRetirement(t, f)
+	_, err = f.b.API.SetLanguage(t.Context(), "alice", language, false)
+	require.NoError(t, err)
+	assertUnavailablePaymentDelivery(t, f, order, opened, retirement, language, deleted)
+	require.JSONEq(t, string(source), string(displayedPaymentSource(t, f, order.ID)))
+	for _, item := range chatMessages(t, f, 101) {
+		require.NotContains(t, item.Text, "pending opening private canary")
+	}
+}
+
+func displayedPaymentSource(t *testing.T, f *fixture, id string) []byte {
+	t.Helper()
+	var source []byte
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='alice' AND update_id=0 AND kind=$1`, "payment_source:"+id).Scan(&source))
+	return source
+}
+
+func runPaymentManualAfterHistoryCases(t *testing.T) {
+	t.Helper()
+	for _, language := range []string{"en", "ru"} {
+		for _, notModified := range []bool{false, true} {
+			t.Run(fmt.Sprintf("fresh_manual/%s/not_modified_%t", language, notModified), func(t *testing.T) {
+				t.Parallel()
+				testPaymentManualAfterHistory(t, language, notModified)
+			})
+		}
+	}
+}
+
+func testPaymentManualAfterHistory(t *testing.T, language string, notModified bool) {
+	t.Helper()
+	f, order, _, _ := openedUnavailablePaymentSource(t, "derived")
+	_, err := f.b.API.SetLanguage(t.Context(), "alice", language, false)
+	require.NoError(t, err)
+	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	pumpBotDeliveries(t, f.b)
+	opened := paymentMessage(t, f)
+	source := displayedPaymentSource(t, f, order.ID)
+	orderDeliveryHistoryDelete(t, f, "alice")
+	require.Error(
+		t,
+		f.b.RenderOrders(t.Context(), "alice", 101),
+		"ordinary refresh must still reject the revoked source",
+	)
+	handle(t, f.b, orderClick(t, f, 101, 30002, localizedPaymentMethods(language)))
+	pending := queuedPaymentOpening(t, f)
+	require.NotNil(t, pending.Reference.PaymentOpening)
+	require.Nil(t, pending.Reference.Source)
+	require.JSONEq(t, string(source), string(displayedPaymentSource(t, f, order.ID)))
+	var edits atomic.Int64
+	f.b.TG.HTTP = &http.Client{Transport: paymentManualNoChangeTransport(t, opened, notModified, &edits)}
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), pending.QueueReference()))
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), pending.QueueReference()))
+	require.EqualValues(t, 1, edits.Load())
+	current, err := botdelivery.Read(t.Context(), f.db, pending.BotID, pending.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Succeeded, current.State)
+	require.Equal(t, opened.ID, current.MessageID)
+	require.True(t, current.ContinuationDone)
+	require.JSONEq(t, `{"original":true,"source":null}`, string(displayedPaymentSource(t, f, order.ID)))
+	f.b.TG.HTTP = nil
+	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	_, err = f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+	require.NoError(t, err)
+	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	retirement := queuedPaymentRetirement(t, f)
+	assertUnavailablePaymentDelivery(t, f, order, opened, retirement, language, notModified)
+}
+
+func paymentManualNoChangeTransport(
+	t *testing.T,
+	opened telegram.Message,
+	notModified bool,
+	edits *atomic.Int64,
+) qaArchiveBoundaryTransport {
+	t.Helper()
+	return func(r *http.Request) (*http.Response, error) {
+		if !strings.HasSuffix(r.URL.Path, "/editMessageText") {
+			return http.DefaultTransport.RoundTrip(r)
+		}
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			return nil, err
+		}
+		r.Body = io.NopCloser(bytes.NewReader(raw))
+		var payload telegram.Send
+		if err = json.Unmarshal(raw, &payload); err != nil {
+			return nil, err
+		}
+		if payload.MessageID != opened.ID {
+			return http.DefaultTransport.RoundTrip(r)
+		}
+		edits.Add(1)
+		require.Equal(t, opened.Text, payload.Text)
+		require.Equal(t, opened.Markup, payload.Markup)
+		if notModified {
+			return &http.Response{
+				StatusCode: http.StatusBadRequest,
+				Header:     http.Header{},
+				Request:    r,
+				Body: io.NopCloser(
+					strings.NewReader(`{"ok":false,"error_code":400,"description":"message is not modified"}`),
+				),
+			}, nil
+		}
+		return http.DefaultTransport.RoundTrip(r)
+	}
+}
+
+func localizedPaymentMethods(language string) string {
+	if language == "ru" {
+		return "Способы оплаты"
+	}
+	return "Payment methods"
+}
+
+func runPaymentSupersededOpeningCases(t *testing.T) {
+	t.Helper()
+	for _, language := range []string{"en", "ru"} {
+		t.Run("superseded_opening/"+language, func(t *testing.T) {
+			t.Parallel()
+			f, order, opened, source := openedUnavailablePaymentSource(t, "derived")
+			_, err := f.db.Exec(t.Context(), `UPDATE core.order_events
+ SET transfer_instructions_localized='{"en":"new opening canary","ru":"new opening canary"}' WHERE id=$1`, order.EventID)
+			require.NoError(t, err)
+			handle(t, f.b, orderClick(t, f, 101, 30003, "Payment methods"))
+			older := queuedPaymentOpening(t, f)
+			_, err = f.b.API.SetLanguage(t.Context(), "alice", language, false)
+			require.NoError(t, err)
+			handle(t, f.b, message(30004, 101, "Show payment instructions for "+order.ID))
+			newer := queuedPaymentOpening(t, f)
+			require.NotEqual(t, older.QueueReference(), newer.QueueReference())
+			require.JSONEq(t, string(source), string(displayedPaymentSource(t, f, order.ID)))
+			require.NoError(t, f.b.DeliverBotIntent(t.Context(), newer.QueueReference()))
+			shown := paymentMessage(t, f)
+			require.Equal(t, opened.ID, shown.ID)
+			require.Contains(t, shown.Text, "new opening canary")
+			bound := displayedPaymentSource(t, f, order.ID)
+			require.NoError(t, f.b.DeliverBotIntent(t.Context(), older.QueueReference()))
+			old, err := botdelivery.Read(t.Context(), f.db, older.BotID, older.QueueReference(), false)
+			require.NoError(t, err)
+			require.Equal(t, delivery.Cancelled, old.State)
+			require.Zero(t, old.Attempt)
+			require.Equal(t, shown, paymentMessage(t, f))
+			require.JSONEq(t, string(bound), string(displayedPaymentSource(t, f, order.ID)))
+		})
+	}
+}
+
+func queuedPaymentOpening(t *testing.T, f *fixture) botdelivery.Intent {
+	t.Helper()
+	var operation, effect string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT operation_key,effect_key FROM bot.delivery_intents
+ WHERE owner='alice' AND state='pending' AND reference->>'family'='payment' AND reference ? 'payment_opening'
+ ORDER BY created_at DESC LIMIT 1`).Scan(&operation, &effect))
+	expected := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+	selected := queuedLivePayment(t, f)
+	require.Equal(t, expected, selected.QueueReference(), "the lane head must be the actual explicit opening")
+	current, err := botdelivery.Read(t.Context(), f.db, selected.BotID, expected, false)
+	require.NoError(t, err)
+	require.NotNil(t, current.Reference.PaymentOpening)
+	require.Equal(t, delivery.Deferred, current.State)
+	require.Zero(t, current.Attempt, "the hook and mutation precede any provider attempt")
+	return current
 }
