@@ -1,0 +1,167 @@
+# Synthetic managed runtime. Start only through znsreplace after prerequisites.
+x-instance: &instance
+  ZNS_INSTALLATION_ID: ${ZNS_INSTALLATION_ID:?Coordinator must set installation}
+  ZNS_LAUNCH_ID: ${ZNS_LAUNCH_ID:?Coordinator must set launch}
+  ZNS_ENV: sandbox
+x-labels: &labels
+  net.complynx.zns.installation: ${ZNS_INSTALLATION_ID:?}
+  net.complynx.zns.launch: ${ZNS_LAUNCH_ID:?}
+x-runtime: &runtime
+  pull_policy: never
+  restart: 'no'
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  networks: [sandbox]
+  pids_limit: 128
+  mem_limit: 1g
+  cpus: 2
+x-decoder: &decoder
+  pull_policy: never
+  restart: 'no'
+  network_mode: none
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  environment: *instance
+  cpus: 1
+  pids_limit: 32
+services:
+  app:
+    <<: *runtime
+    image: ${ZNS_APP_IMAGE:?Digest-addressed app image required}
+    user: '${ZNS_APP_UID:?Actual inspected app UID}:${ZNS_APP_GID:?Actual inspected app GID}'
+    env_file:
+      - path: ${ZNS_REGISTRATION_SECRET_DIR:?Private runtime environment directory}/app.env
+        format: raw
+    command: app
+    environment:
+      <<: *instance
+      ZNS_CONFIG_FILE: /etc/zns/runtime.yaml
+      ZNS_SYNTHETIC_ONLY: 'true'
+      REGISTRATION_CLOCK_FILE: /run/registration-clock/state.json
+      REGISTRATION_CLOCK_INSTALLATION: '010400000204'
+      REGISTRATION_CLOCK_CASE: c-registration-clock-20261001-v1
+      REGISTRATION_CLOCK_DATABASE_ADDRESS: postgres:5432/synthetic_qa_zns_registration_fixture
+      REGISTRATION_CLOCK_ANCHOR: ${REGISTRATION_CLOCK_ANCHOR:?Reviewed immutable UTC microsecond setup anchor}
+      MEDIA_WORKER_URL: http://media-broker:8091
+      STICKER_WORKER_URL: http://sticker-broker:8098
+    labels:
+      <<: *labels
+      net.complynx.zns.component: app
+    group_add: ['10002']
+    volumes:
+      [
+        'config:/etc/zns:ro',
+        'script-ipc:/run/script-ipc:ro',
+        'clock:/run/registration-clock:ro',
+      ]
+    ports: ['127.0.0.1:58432:8080']
+    stop_grace_period: 20s
+    healthcheck:
+      test: [CMD, zns, health]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  evaluator:
+    <<: *decoder
+    image: ${ZNS_SCRIPT_IMAGE:?Digest-addressed evaluator image required}
+    labels:
+      <<: *labels
+      net.complynx.zns.component: evaluator
+    volumes: ['script-ipc:/run/script-ipc']
+    mem_limit: 128m
+    memswap_limit: 128m
+    healthcheck:
+      test: [CMD, /usr/local/bin/scriptservice, health]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+  media-decoder:
+    <<: *decoder
+    image: ${ZNS_MEDIA_DECODER_IMAGE:?Digest-addressed media decoder required}
+    labels:
+      <<: *labels
+      net.complynx.zns.component: media-decoder
+    volumes: ['media-ipc:/run/media-ipc']
+    mem_limit: 512m
+    cpus: 2
+    pids_limit: 256
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=64m,uid=10002,gid=10002,mode=0700']
+    healthcheck:
+      test: [CMD, test, -S, /run/media-ipc/decoder.sock]
+      interval: 2s
+      timeout: 1s
+      retries: 30
+  media-broker:
+    <<: *runtime
+    image: ${ZNS_MEDIA_BROKER_IMAGE:?Digest-addressed media broker required}
+    env_file:
+      - path: ${ZNS_REGISTRATION_SECRET_DIR:?}/media.env
+        format: raw
+    labels:
+      <<: *labels
+      net.complynx.zns.component: media-broker
+    environment:
+      <<: *instance
+      OPENAI_TRANSCRIPTION_MODEL: gpt-transcribe
+      OPENAI_TRANSCRIPTION_URL: http://fake:8080/lab/asr
+    volumes: ['media-ipc:/run/media-ipc:ro']
+    mem_limit: 256m
+    pids_limit: 64
+  sticker-decoder:
+    <<: *decoder
+    image: ${ZNS_STICKER_DECODER_IMAGE:?Digest-addressed sticker decoder required}
+    labels:
+      <<: *labels
+      net.complynx.zns.component: sticker-decoder
+    environment:
+      <<: *instance
+      STICKER_WORKER_MODE: decoder
+    volumes: ['sticker-ipc:/run/sticker-ipc']
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=32m,uid=10002,gid=10002,mode=0700']
+    mem_limit: 256m
+  sticker-broker:
+    <<: *runtime
+    image: ${ZNS_STICKER_BROKER_IMAGE:?Digest-addressed sticker broker required}
+    env_file:
+      - path: ${ZNS_REGISTRATION_SECRET_DIR:?}/sticker.env
+        format: raw
+    labels:
+      <<: *labels
+      net.complynx.zns.component: sticker-broker
+    environment:
+      <<: *instance
+      STICKER_WORKER_MODE: broker
+    volumes: ['sticker-ipc:/run/sticker-ipc:ro']
+    mem_limit: 256m
+    pids_limit: 16
+networks:
+  sandbox:
+    external: true
+    name: synthetic-qa-zns-registration-fixture
+volumes:
+  config:
+    external: true
+    name: synthetic-qa-zns-registration-fixture-config
+  clock:
+    external: true
+    name: synthetic-qa-zns-registration-fixture-clock
+  script-ipc:
+    name: zns-${ZNS_INSTALLATION_ID:?}-${ZNS_LAUNCH_ID:?}-script
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0770,nosuid,nodev,noexec
+  media-ipc:
+    name: zns-${ZNS_INSTALLATION_ID:?}-${ZNS_LAUNCH_ID:?}-media
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec
+  sticker-ipc:
+    name: zns-${ZNS_INSTALLATION_ID:?}-${ZNS_LAUNCH_ID:?}-sticker
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec
