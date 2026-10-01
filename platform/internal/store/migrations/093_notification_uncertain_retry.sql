@@ -3,6 +3,7 @@
 ALTER TABLE core.order_notifications
  ADD COLUMN delivery_wire_payload jsonb,
  ADD COLUMN last_uncertain_attempt bigint,
+ ADD COLUMN last_confirmed_attempt bigint,
  ADD COLUMN last_uncertain_reason text,
  ADD COLUMN last_uncertain_recorded_at timestamptz,
  ADD COLUMN uncertain_resends bigint NOT NULL DEFAULT 0 CHECK(uncertain_resends BETWEEN 0 AND 3);
@@ -15,6 +16,7 @@ CREATE INDEX order_notifications_recoverable ON core.order_notifications(bot_id,
 ALTER TABLE core.food_notifications
  ADD COLUMN delivery_wire_payload jsonb,
  ADD COLUMN last_uncertain_attempt bigint,
+ ADD COLUMN last_confirmed_attempt bigint,
  ADD COLUMN last_uncertain_reason text,
  ADD COLUMN last_uncertain_recorded_at timestamptz,
  ADD COLUMN uncertain_resends bigint NOT NULL DEFAULT 0 CHECK(uncertain_resends BETWEEN 0 AND 3);
@@ -27,6 +29,7 @@ CREATE INDEX food_notifications_recoverable ON core.food_notifications(bot_id,id
 ALTER TABLE core.massage_notices
  ADD COLUMN delivery_wire_payload jsonb,
  ADD COLUMN last_uncertain_attempt bigint,
+ ADD COLUMN last_confirmed_attempt bigint,
  ADD COLUMN last_uncertain_reason text,
  ADD COLUMN last_uncertain_recorded_at timestamptz,
  ADD COLUMN uncertain_resends bigint NOT NULL DEFAULT 0 CHECK(uncertain_resends BETWEEN 0 AND 3);
@@ -39,6 +42,7 @@ CREATE INDEX massage_notices_recoverable ON core.massage_notices(bot_id,id)
 ALTER TABLE core.pass_notifications
  ADD COLUMN delivery_wire_payload jsonb,
  ADD COLUMN last_uncertain_attempt bigint,
+ ADD COLUMN last_confirmed_attempt bigint,
  ADD COLUMN last_uncertain_reason text,
  ADD COLUMN last_uncertain_recorded_at timestamptz,
  ADD COLUMN uncertain_resends bigint NOT NULL DEFAULT 0 CHECK(uncertain_resends BETWEEN 0 AND 3);

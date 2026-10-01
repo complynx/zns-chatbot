@@ -41,7 +41,7 @@ func (q *Queries) BeginNotificationSend(ctx context.Context, arg BeginNotificati
 const enqueueNotification = `-- name: EnqueueNotification :one
 INSERT INTO core.food_notifications(event_id,owner,kind,subject,payload,bot_id,delivery_chat)
 VALUES($1::text,$2::text,$3::text,$4::text,
- $5::jsonb,CASE WHEN $6::bigint>0 THEN $6::bigint END,COALESCE((SELECT telegram_id FROM core.users WHERE id=$2::text),0)) ON CONFLICT DO NOTHING RETURNING id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends
+ $5::jsonb,CASE WHEN $6::bigint>0 THEN $6::bigint END,COALESCE((SELECT telegram_id FROM core.users WHERE id=$2::text),0)) ON CONFLICT DO NOTHING RETURNING id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_confirmed_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends
 `
 
 type EnqueueNotificationParams struct {
@@ -89,6 +89,7 @@ func (q *Queries) EnqueueNotification(ctx context.Context, arg EnqueueNotificati
 		&i.Failure,
 		&i.DeliveryWirePayload,
 		&i.LastUncertainAttempt,
+		&i.LastConfirmedAttempt,
 		&i.LastUncertainReason,
 		&i.LastUncertainRecordedAt,
 		&i.UncertainResends,
@@ -97,7 +98,7 @@ func (q *Queries) EnqueueNotification(ctx context.Context, arg EnqueueNotificati
 }
 
 const expiredNotification = `-- name: ExpiredNotification :one
-SELECT id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends FROM core.food_notifications
+SELECT id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_confirmed_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends FROM core.food_notifications
 WHERE bot_id=$1::bigint
 AND (delivery_state='unknown' OR (delivery_state='sending' AND lease_until<=clock_timestamp()))
 ORDER BY id LIMIT 1
@@ -132,6 +133,7 @@ func (q *Queries) ExpiredNotification(ctx context.Context, botID int64) (CoreFoo
 		&i.Failure,
 		&i.DeliveryWirePayload,
 		&i.LastUncertainAttempt,
+		&i.LastConfirmedAttempt,
 		&i.LastUncertainReason,
 		&i.LastUncertainRecordedAt,
 		&i.UncertainResends,
@@ -141,19 +143,21 @@ func (q *Queries) ExpiredNotification(ctx context.Context, botID int64) (CoreFoo
 
 const finishNotificationDelivery = `-- name: FinishNotificationDelivery :execrows
 UPDATE core.food_notifications SET delivery_state=$1::text,
- telegram_message_id=$2::bigint,delivery_text=$3::text,failure=$4::text,
+ last_confirmed_attempt=CASE WHEN $2::boolean THEN delivery_attempt ELSE last_confirmed_attempt END,
+ telegram_message_id=$3::bigint,delivery_text=$4::text,failure=$5::text,
  available_at=CASE WHEN last_uncertain_attempt IS NOT NULL AND $1::text='pending'
-  THEN GREATEST(available_at,$5::timestamptz) ELSE $5::timestamptz END,
+  THEN GREATEST(available_at,$6::timestamptz) ELSE $6::timestamptz END,
  lease_until=CASE WHEN $1::text='sent' THEN clock_timestamp()+interval '2 minutes' END,
  followup_pending=($1::text='sent'),
- failure_count=failure_count+$6::bigint,
+ failure_count=failure_count+$7::bigint,
  sent_at=CASE WHEN $1::text IN ('failed','cancelled') THEN clock_timestamp() END
-WHERE id=$7::bigint AND bot_id=$8::bigint AND delivery_attempt=$9::bigint
+WHERE id=$8::bigint AND bot_id=$9::bigint AND delivery_attempt=$10::bigint
 AND delivery_state IN ('pending','sending','unknown')
 `
 
 type FinishNotificationDeliveryParams struct {
 	State            string
+	Confirmed        bool
 	MessageID        int64
 	Text             string
 	Failure          string
@@ -167,6 +171,7 @@ type FinishNotificationDeliveryParams struct {
 func (q *Queries) FinishNotificationDelivery(ctx context.Context, arg FinishNotificationDeliveryParams) (int64, error) {
 	result, err := q.db.Exec(ctx, finishNotificationDelivery,
 		arg.State,
+		arg.Confirmed,
 		arg.MessageID,
 		arg.Text,
 		arg.Failure,
@@ -216,7 +221,7 @@ func (q *Queries) FinishNotificationFollowup(ctx context.Context, arg FinishNoti
 }
 
 const lockNotificationAttempt = `-- name: LockNotificationAttempt :one
-SELECT id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends,COALESCE(lease_until>clock_timestamp(),false)::boolean AS lease_live FROM core.food_notifications
+SELECT id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_confirmed_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends,COALESCE(lease_until>clock_timestamp(),false)::boolean AS lease_live FROM core.food_notifications
 WHERE id=$1::bigint AND bot_id=$2::bigint AND delivery_attempt=$3::bigint FOR UPDATE
 `
 
@@ -252,6 +257,7 @@ type LockNotificationAttemptRow struct {
 	Failure                 string
 	DeliveryWirePayload     []byte
 	LastUncertainAttempt    pgtype.Int8
+	LastConfirmedAttempt    pgtype.Int8
 	LastUncertainReason     pgtype.Text
 	LastUncertainRecordedAt pgtype.Timestamptz
 	UncertainResends        int64
@@ -287,6 +293,7 @@ func (q *Queries) LockNotificationAttempt(ctx context.Context, arg LockNotificat
 		&i.Failure,
 		&i.DeliveryWirePayload,
 		&i.LastUncertainAttempt,
+		&i.LastConfirmedAttempt,
 		&i.LastUncertainReason,
 		&i.LastUncertainRecordedAt,
 		&i.UncertainResends,
@@ -408,7 +415,7 @@ WITH head AS (
  ORDER BY n.available_at,n.id LIMIT 1 FOR UPDATE OF n SKIP LOCKED
 )
 UPDATE core.food_notifications n SET delivery_attempt=delivery_attempt+1,lease_until=clock_timestamp()+interval '2 minutes'
-FROM head WHERE n.id=head.id RETURNING n.id, n.event_id, n.owner, n.kind, n.subject, n.payload, n.created_at, n.sent_at, n.legacy_source_key, n.imported_sent, n.bot_id, n.delivery_state, n.delivery_chat, n.delivery_attempt, n.lease_until, n.telegram_message_id, n.delivery_text, n.failure_count, n.followup_pending, n.followup_failure, n.followup_attempts, n.available_at, n.failure, n.delivery_wire_payload, n.last_uncertain_attempt, n.last_uncertain_reason, n.last_uncertain_recorded_at, n.uncertain_resends
+FROM head WHERE n.id=head.id RETURNING n.id, n.event_id, n.owner, n.kind, n.subject, n.payload, n.created_at, n.sent_at, n.legacy_source_key, n.imported_sent, n.bot_id, n.delivery_state, n.delivery_chat, n.delivery_attempt, n.lease_until, n.telegram_message_id, n.delivery_text, n.failure_count, n.followup_pending, n.followup_failure, n.followup_attempts, n.available_at, n.failure, n.delivery_wire_payload, n.last_uncertain_attempt, n.last_confirmed_attempt, n.last_uncertain_reason, n.last_uncertain_recorded_at, n.uncertain_resends
 `
 
 type PrepareNotificationParams struct {
@@ -452,6 +459,7 @@ func (q *Queries) PrepareNotification(ctx context.Context, arg PrepareNotificati
 		&i.Failure,
 		&i.DeliveryWirePayload,
 		&i.LastUncertainAttempt,
+		&i.LastConfirmedAttempt,
 		&i.LastUncertainReason,
 		&i.LastUncertainRecordedAt,
 		&i.UncertainResends,
@@ -474,7 +482,7 @@ FROM reminder_window f JOIN core.pass_bookings b ON b.event_id=f.event_id AND b.
 LEFT JOIN core.food_orders o ON o.event_id=b.event_id AND o.owner=b.owner
 LEFT JOIN LATERAL(SELECT status FROM core.food_payments WHERE order_id=o.id AND kind='meals' ORDER BY generation DESC LIMIT 1)p ON true
 WHERE f.phase IS NOT NULL AND (o.id IS NULL OR (o.meals='{}'::jsonb AND COALESCE(p.status,'pending') NOT IN ('paid','proof_submitted')))
-ON CONFLICT DO NOTHING RETURNING id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends
+ON CONFLICT DO NOTHING RETURNING id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_confirmed_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends
 `
 
 type QueueMissingOrderRemindersParams struct {
@@ -517,6 +525,7 @@ func (q *Queries) QueueMissingOrderReminders(ctx context.Context, arg QueueMissi
 			&i.Failure,
 			&i.DeliveryWirePayload,
 			&i.LastUncertainAttempt,
+			&i.LastConfirmedAttempt,
 			&i.LastUncertainReason,
 			&i.LastUncertainRecordedAt,
 			&i.UncertainResends,
@@ -545,7 +554,7 @@ SELECT f.event_id,o.owner,'reminder_'||f.phase,o.id,jsonb_build_object('order_id
 FROM reminder_window f JOIN core.food_orders o ON o.event_id=f.event_id
 LEFT JOIN LATERAL(SELECT status FROM core.food_payments WHERE order_id=o.id AND kind='meals' ORDER BY generation DESC LIMIT 1)p ON true
 WHERE f.phase IS NOT NULL AND o.meal_total>0 AND COALESCE(p.status,'pending') NOT IN ('paid','proof_submitted')
-AND o.last_updated<=clock_timestamp()-f.notify_after ON CONFLICT DO NOTHING RETURNING id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends
+AND o.last_updated<=clock_timestamp()-f.notify_after ON CONFLICT DO NOTHING RETURNING id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_confirmed_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends
 `
 
 type QueueOrderRemindersParams struct {
@@ -588,6 +597,7 @@ func (q *Queries) QueueOrderReminders(ctx context.Context, arg QueueOrderReminde
 			&i.Failure,
 			&i.DeliveryWirePayload,
 			&i.LastUncertainAttempt,
+			&i.LastConfirmedAttempt,
 			&i.LastUncertainReason,
 			&i.LastUncertainRecordedAt,
 			&i.UncertainResends,
@@ -603,7 +613,7 @@ func (q *Queries) QueueOrderReminders(ctx context.Context, arg QueueOrderReminde
 }
 
 const readNotification = `-- name: ReadNotification :one
-SELECT id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends FROM core.food_notifications WHERE id=$1::bigint AND bot_id=$2::bigint
+SELECT id, event_id, owner, kind, subject, payload, created_at, sent_at, legacy_source_key, imported_sent, bot_id, delivery_state, delivery_chat, delivery_attempt, lease_until, telegram_message_id, delivery_text, failure_count, followup_pending, followup_failure, followup_attempts, available_at, failure, delivery_wire_payload, last_uncertain_attempt, last_confirmed_attempt, last_uncertain_reason, last_uncertain_recorded_at, uncertain_resends FROM core.food_notifications WHERE id=$1::bigint AND bot_id=$2::bigint
 `
 
 type ReadNotificationParams struct {
@@ -640,6 +650,7 @@ func (q *Queries) ReadNotification(ctx context.Context, arg ReadNotificationPara
 		&i.Failure,
 		&i.DeliveryWirePayload,
 		&i.LastUncertainAttempt,
+		&i.LastConfirmedAttempt,
 		&i.LastUncertainReason,
 		&i.LastUncertainRecordedAt,
 		&i.UncertainResends,
@@ -670,11 +681,33 @@ func (q *Queries) RecordNotificationUncertainty(ctx context.Context, arg RecordN
 	return result.RowsAffected(), nil
 }
 
+const recordTerminalNotificationConfirmation = `-- name: RecordTerminalNotificationConfirmation :execrows
+UPDATE core.food_notifications SET last_confirmed_attempt=delivery_attempt
+WHERE id=$1::bigint AND bot_id=$2::bigint
+ AND delivery_attempt=$3::bigint AND last_uncertain_attempt=delivery_attempt
+ AND delivery_state IN ('failed','cancelled') AND lease_until IS NULL AND telegram_message_id=0
+`
+
+type RecordTerminalNotificationConfirmationParams struct {
+	ID      int64
+	BotID   int64
+	Attempt int64
+}
+
+func (q *Queries) RecordTerminalNotificationConfirmation(ctx context.Context, arg RecordTerminalNotificationConfirmationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordTerminalNotificationConfirmation, arg.ID, arg.BotID, arg.Attempt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordTerminalNotificationReceipt = `-- name: RecordTerminalNotificationReceipt :execrows
 UPDATE core.food_notifications SET telegram_message_id=$1::bigint
 WHERE id=$2::bigint AND bot_id=$3::bigint
  AND delivery_attempt=$4::bigint AND last_uncertain_attempt=delivery_attempt
  AND delivery_state IN ('failed','cancelled') AND lease_until IS NULL
+ AND last_confirmed_attempt IS DISTINCT FROM delivery_attempt
  AND $1::bigint>0 AND telegram_message_id IN (0,$1::bigint)
 `
 

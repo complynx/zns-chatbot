@@ -31,6 +31,7 @@ type CoreOrderNotification struct {
 	FollowupAttempts        int64
 	DeliveryWirePayload     []byte
 	LastUncertainAttempt    pgtype.Int8
+	LastConfirmedAttempt    pgtype.Int8
 	LastUncertainReason     pgtype.Text
 	LastUncertainRecordedAt pgtype.Timestamptz
 	UncertainResends        int64

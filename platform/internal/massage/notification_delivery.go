@@ -137,6 +137,9 @@ func (s Service) CompleteNotification(ctx context.Context, owner string, result 
 	if row.Owner != owner {
 		return &core.ProblemError{Status: http.StatusNotFound, Code: notificationNotFound}
 	}
+	if notificationTerminalConfirmation(row, result.Outcome) {
+		return s.recordTerminalNotificationConfirmation(ctx, tx, result)
+	}
 	if notificationTerminalReceipt(row, result.Outcome) {
 		return s.recordTerminalNotificationReceipt(ctx, tx, result)
 	}
@@ -187,11 +190,13 @@ func notificationTerminalReceipt(row dbgen.LockNotificationAttemptRow, outcome d
 	return (row.DeliveryState == "failed" || row.DeliveryState == string(delivery.Cancelled)) &&
 		outcome.Kind == delivery.Succeeded && outcome.MessageID > 0 && !row.LeaseUntil.Valid &&
 		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == row.DeliveryAttempt &&
+		(!row.LastConfirmedAttempt.Valid || row.LastConfirmedAttempt.Int64 != row.DeliveryAttempt) &&
 		(row.TelegramMessageID == 0 || row.TelegramMessageID == outcome.MessageID)
 }
 func notificationLateSuccess(row dbgen.LockNotificationAttemptRow, kind delivery.Kind) bool {
 	return row.DeliveryState == notificationPending && kind == delivery.Succeeded && !row.LeaseUntil.Valid &&
-		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == row.DeliveryAttempt
+		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == row.DeliveryAttempt &&
+		(!row.LastConfirmedAttempt.Valid || row.LastConfirmedAttempt.Int64 != row.DeliveryAttempt)
 }
 
 func (s Service) finishLateNotificationSuccess(
@@ -337,6 +342,7 @@ func (s Service) saveNotificationOutcome(
 	count, err := q.FinishNotificationDelivery(ctx, dbgen.FinishNotificationDeliveryParams{
 		ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation, State: string(outcome.Kind),
 		MessageID: outcome.MessageID, Text: text, Failure: outcome.Reason,
+		Confirmed:   notificationConfirmedOutcome(outcome),
 		AvailableAt: pgtype.Timestamptz{Time: deadline, Valid: true}, FailureIncrement: failures})
 	if err == nil && count != 1 {
 		return notificationStale()
@@ -505,4 +511,47 @@ func (s Service) admitNotificationWire(
 		return nil, notificationwire.ErrPayload
 	}
 	return &value, nil
+}
+
+// Confirmed wire responses resolve uncertainty for one generation, without erasing its history.
+func notificationConfirmedOutcome(outcome delivery.Outcome) bool {
+	switch outcome.Kind {
+	case delivery.Succeeded:
+		return true
+	case delivery.Deferred:
+		return outcome.Reason == "telegram_rate_limit"
+	case delivery.Rejected:
+		return outcome.Reason == "telegram_recipient_rejected"
+	case delivery.Paused:
+		return outcome.Reason == "telegram_service_rejected"
+	case delivery.Parked:
+		return outcome.Reason == "telegram_invalid_cooldown"
+	default:
+		return false
+	}
+}
+
+func notificationTerminalConfirmation(row dbgen.LockNotificationAttemptRow, outcome delivery.Outcome) bool {
+	return (row.DeliveryState == "failed" || row.DeliveryState == string(delivery.Cancelled)) &&
+		outcome.Kind != delivery.Succeeded && notificationConfirmedOutcome(outcome) &&
+		!row.LeaseUntil.Valid && row.TelegramMessageID == 0 &&
+		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == row.DeliveryAttempt
+}
+
+func (s Service) recordTerminalNotificationConfirmation(
+	ctx context.Context,
+	tx pgx.Tx,
+	result NotificationCompletion,
+) error {
+	count, err := dbgen.New(tx).
+		RecordTerminalNotificationConfirmation(ctx, dbgen.RecordTerminalNotificationConfirmationParams{
+			ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt,
+		})
+	if err != nil {
+		return core.DatabaseOperationError(err)
+	}
+	if count != 1 {
+		return notificationStale()
+	}
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }

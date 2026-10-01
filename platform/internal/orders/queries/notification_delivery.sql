@@ -40,6 +40,7 @@ AND (last_uncertain_attempt IS NULL OR uncertain_resends<3) RETURNING delivery_w
 
 -- name: FinishNotificationDelivery :execrows
 UPDATE core.order_notifications SET delivery_state=sqlc.arg(state)::text,
+ last_confirmed_attempt=CASE WHEN sqlc.arg(confirmed)::boolean THEN delivery_attempt ELSE last_confirmed_attempt END,
  telegram_message_id=sqlc.arg(message_id)::bigint,delivery_text=sqlc.arg(text)::text,failure=sqlc.arg(failure)::text,
  available_at=CASE WHEN last_uncertain_attempt IS NOT NULL AND sqlc.arg(state)::text='pending'
   THEN GREATEST(available_at,sqlc.arg(available_at)::timestamptz) ELSE sqlc.arg(available_at)::timestamptz END,
@@ -143,4 +144,11 @@ UPDATE core.order_notifications SET telegram_message_id=sqlc.arg(message_id)::bi
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
  AND delivery_attempt=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=delivery_attempt
  AND delivery_state IN ('failed','cancelled') AND lease_until IS NULL
+ AND last_confirmed_attempt IS DISTINCT FROM delivery_attempt
  AND sqlc.arg(message_id)::bigint>0 AND telegram_message_id IN (0,sqlc.arg(message_id)::bigint);
+
+-- name: RecordTerminalNotificationConfirmation :execrows
+UPDATE core.order_notifications SET last_confirmed_attempt=delivery_attempt
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
+ AND delivery_attempt=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=delivery_attempt
+ AND delivery_state IN ('failed','cancelled') AND lease_until IS NULL AND telegram_message_id=0;

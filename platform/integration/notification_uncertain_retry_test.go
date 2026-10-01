@@ -591,6 +591,17 @@ func TestNotificationUncertainRetryTerminalReceiptOnly(t *testing.T) {
 				require.Equal(t, json.Number(strconv.FormatInt(message.ID, 10)), after["telegram_message_id"])
 				after["telegram_message_id"] = before["telegram_message_id"]
 				assert.Equal(t, before, after, "terminal receipt must change only the known message ID")
+				positive := notificationReceiptSnapshot(t, r)
+				r.postAttempt(t, "complete", map[string]any{
+					"id": r.first, "attempt": state.Attempt,
+					"outcome": delivery.Outcome{Kind: delivery.Deferred, Reason: "telegram_rate_limit", RetryAfter: 60},
+				}, http.StatusConflict)
+				assert.Equal(
+					t,
+					positive,
+					notificationReceiptSnapshot(t, r),
+					"confirmed negative cannot contradict a stored positive receipt",
+				)
 				completion["outcome"] = delivery.Outcome{Kind: delivery.Succeeded, MessageID: message.ID + 100000}
 				r.postAttempt(t, "complete", completion, http.StatusConflict)
 				assert.Equal(t, state.State, r.status(t, r.first).State)
@@ -763,6 +774,13 @@ func TestNotificationUncertainRetryKnown429FencesContradictoryReceipt(t *testing
 				require.Equal(t, "pending", recovered.State)
 				require.Equal(t, admitted.Attempt, recovered.Attempt)
 				require.Equal(t, admitted.Attempt, recovered.LastUncertainAttempt)
+				var confirmed *int64
+				require.NoError(
+					t,
+					r.f.db.QueryRow(t.Context(), "SELECT last_confirmed_attempt FROM "+r.table+" WHERE id=$1", r.first).
+						Scan(&confirmed),
+				)
+				require.Nil(t, confirmed, "recovery records uncertainty, not a confirmed provider response")
 				var terminalBefore map[string]any
 				if policy == "cancelled_before_response" {
 					r.postAttempt(t, "complete", map[string]any{
@@ -772,7 +790,11 @@ func TestNotificationUncertainRetryKnown429FencesContradictoryReceipt(t *testing
 					terminalBefore = notificationReceiptSnapshot(t, r)
 				}
 				release()
-				assert.NoError(t, <-finished, "confirmed late negative must be recorded without changing terminal policy")
+				assert.NoError(
+					t,
+					<-finished,
+					"confirmed late negative must be recorded without changing terminal policy",
+				)
 				known := r.status(t, r.first)
 				if policy == "cancelled_before_response" {
 					after := notificationReceiptSnapshot(t, r)
@@ -785,6 +807,13 @@ func TestNotificationUncertainRetryKnown429FencesContradictoryReceipt(t *testing
 						"the real held HTTP response must be classified and committed")
 				}
 				require.Equal(t, recovered.LastUncertainAttempt, known.LastUncertainAttempt)
+				require.NoError(
+					t,
+					r.f.db.QueryRow(t.Context(), "SELECT last_confirmed_attempt FROM "+r.table+" WHERE id=$1", r.first).
+						Scan(&confirmed),
+				)
+				require.NotNil(t, confirmed)
+				require.Equal(t, admitted.Attempt, *confirmed)
 				if policy == "cancelled" {
 					r.postAttempt(t, "complete", map[string]any{
 						"id": r.first, "attempt": admitted.Attempt,
