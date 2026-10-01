@@ -764,3 +764,13 @@ handoff; no new developer reassignment invented. Root refills product lanes unde
 baseline/parity/productionNO-GO stillopen. No stage closure or engineeringday
 estimate decrement, no wait durations invented. Onlyboard/metricsdescription
 changed; CSV/PROGRESS/tracking/usercode-quality/product/resources untouched.
+
+## Confirmed product-gap owner assignments
+
+Root assigns clock_authority_developer read-only StageD checkpoints2–4 runtime
+owner/flush/redacted bounded observations, and menu_retirement_fix read-only
+firstcontact identitylink/cache5min/revoke. Both first return finite path scope
+avoiding C51 overlap. Product edits not assigned yet; no implementation, helper,
+IdP call or readiness credit. These refill product/architecture planning ownership
+alongside C implementation and blocked E execution, not a new helper lane.
+Only current staffing/owner cells and this note changed. Writes paused.
