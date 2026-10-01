@@ -20,6 +20,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/api"
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/appservices"
+	"github.com/complynx/zns-chatbot/platform/internal/conversation"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
@@ -845,6 +846,130 @@ func checkLegacyAdminNullCapture(t *testing.T, refusal string) {
 	f.b.TG = client
 	require.NoError(t, f.b.DeliverAdminMessages(t.Context()))
 	assert.Equal(t, firstWire, <-wires, "publication changes cannot reconstruct the admitted wire")
+}
+
+func TestSourceRevokedTerminalPositiveReceiptPreservesHistory(t *testing.T) {
+	t.Parallel()
+	f := passMenuFixture(t)
+	s := configureDeliveryFixture(t, f)
+	history := conversation.Service{DB: f.db}
+	require.NoError(t, history.AppendOriginal(t.Context(), "bob", "terminal-source", "user", "private delivery canary"))
+	var original int64
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT id FROM core.conversation_events WHERE owner='bob' AND source_key='terminal-source'`).
+			Scan(&original),
+	)
+	enqueueDerivedRevocationDelivery(t, s, "terminal-source", "101")
+	enqueueSyntheticDelivery(t, s, "terminal-source-follower", "101")
+	item, found, err := s.Claim(t.Context())
+	require.NoError(t, err)
+	require.True(t, found)
+	gate, err := s.BeginDelivery(t.Context(), delivery.Attempt{ID: item.ID, Generation: item.Attempt})
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var once sync.Once
+	var calls atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			t.Error(readErr)
+			return
+		}
+		if calls.Add(1) == 1 {
+			entered <- struct{}{}
+			<-release
+			_, _ = w.Write([]byte(`{"ok":`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":91}}`))
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	client := telegram.Client{Base: server.URL, Token: "synthetic"}
+	payload := map[string]any{"chat_id": 101, "text": item.Content.Text}
+	done := make(chan delivery.Outcome, 1)
+	go func() {
+		var reply telegram.Message
+		sendErr := client.Call(t.Context(), "sendMessage", payload, &reply)
+		done <- telegram.DeliveryOutcome(reply.ID, sendErr)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("synthetic transport did not observe dispatch")
+	}
+	require.NoError(t, history.DeleteContent(t.Context(), "bob", original))
+	once.Do(func() { close(release) })
+	var unknown delivery.Outcome
+	select {
+	case unknown = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("synthetic transport did not return uncertainty")
+	}
+	require.Equal(t, delivery.Uncertain, unknown.Kind)
+	finish := func(outcome delivery.Outcome) error {
+		return s.CompleteDelivery(
+			t.Context(),
+			adminmessage.Completion{ID: item.ID, Attempt: item.Attempt, Outcome: outcome},
+		)
+	}
+	require.NoError(t, finish(unknown))
+	var state, failure string
+	var messageID int64
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT state,failure,telegram_message_id FROM core.admin_message_deliveries WHERE id=$1`, item.ID).
+			Scan(&state, &failure, &messageID),
+	)
+	require.Equal(t, "cancelled", state)
+	require.Equal(t, "source_revoked", failure)
+	require.Zero(t, messageID)
+	// Observe a delayed receipt for the same generation without another admission.
+	var reply telegram.Message
+	err = client.Call(t.Context(), "sendMessage", payload, &reply)
+	require.NoError(t, err)
+	positive := telegram.DeliveryOutcome(reply.ID, err)
+	require.EqualValues(t, 91, positive.MessageID)
+	require.NoError(t, finish(positive))
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT state,failure,telegram_message_id FROM core.admin_message_deliveries WHERE id=$1`, item.ID).
+			Scan(&state, &failure, &messageID),
+	)
+	require.Equal(t, "cancelled", state)
+	require.Equal(t, "source_revoked", failure)
+	require.EqualValues(t, 91, messageID)
+	snapshot := terminalReceiptFixture{db: f.db, table: "admin_message_deliveries", id: item.ID}
+	before := snapshot.snapshot(t)
+	for _, negative := range []delivery.Outcome{
+		{Kind: delivery.Rejected, Reason: "telegram_recipient_rejected"},
+		{Kind: delivery.Deferred, Reason: "telegram_rate_limit", RetryAfter: 120},
+		{Kind: delivery.Parked, Reason: "telegram_invalid_cooldown"},
+		{Kind: delivery.Paused, Reason: "telegram_service_rejected"},
+	} {
+		refusal := finish(negative)
+		assert.Equal(
+			t,
+			before,
+			snapshot.snapshot(t),
+			"terminal positive receipt and scheduling must survive contradictory %s",
+			negative.Kind,
+		)
+		requireCode(t, refusal, "admin_message_stale_attempt")
+	}
+	refusal := finish(positive)
+	if refusal != nil {
+		requireCode(t, refusal, "admin_message_stale_attempt")
+	}
+	assert.Equal(
+		t,
+		before,
+		snapshot.snapshot(t),
+		"positive replay must preserve terminal policy and all receipt metadata",
+	)
 }
 
 func TestTerminalPositiveReceiptRejectsContradictoryNegative(t *testing.T) {
