@@ -50,6 +50,7 @@ func russianCatalog() translations {
 			AdminBroadcastInput:                 "Ответьте на это сообщение текстом рассылки в течение 10 минут. Другие сообщения остаются обычным разговором.",
 			AdminBroadcastForward:               "Ответьте на это сообщение сообщением или медиа для пересылки в течение 10 минут. Другие сообщения остаются обычным разговором.",
 			AdminBroadcastPage:                  "Рассылка №{id}: {total} получателей. Показаны {from}–{to}.\n{items}",
+			AdminMessageProgress:                "Вся рассылка: отправлено {succeeded}, в очереди {queued}, отложено {deferred}, отправляется {sending}, отказ {refused}, отменено {cancelled}, результат неизвестен {uncertain}, остановлено {parked}, приостановлено {paused}, не поставлено в очередь {notqueued}. Общая пауза доставки затрагивает {sharedpaused} получателей в очереди или с отложенной попыткой (уже учтены выше).",
 			AdminBroadcastNext:                  "Следующие получатели",
 			AdminBroadcastPrevious:              "Предыдущие получатели",
 			AdminBroadcastExpired:               "Время ввода рассылки №{id} истекло.",
@@ -135,6 +136,9 @@ func russianCatalog() translations {
 			ID("admin_message.state.sent"):      "отправлено",
 			ID("admin_message.state.failed"):    "ошибка",
 			ID("admin_message.state.cancelled"): "отменено",
+			AdminMessageUnknown:                 "результат неизвестен",
+			AdminMessageParked:                  "припарковано",
+			AdminMessagePaused:                  "приостановлено",
 
 			AdminMessagePreview:                     "Черновик №{id}. Получатели: {recipients}. Формат: {format}. Проверьте весь текст перед отправкой.\n\n{text}",
 			AdminMessageSend:                        "Отправить проверенный черновик",

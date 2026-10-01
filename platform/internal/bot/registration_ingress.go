@@ -35,8 +35,8 @@ func (b *Bot) saveRegistrationIngress(ctx context.Context, tx pgx.Tx, update tel
 			}
 		}
 	}
-	return registrationingress.SaveClassifiedTelegram(registrationingress.WithClock(ctx, b.RegistrationClock), tx,
-		registrationingress.Reference{BotID: b.Delivery.BotID, UpdateID: update.ID}, in.chat, binding)
+	return registrationingress.SaveClassifiedNativeTelegram(registrationingress.WithClock(ctx, b.RegistrationClock), tx,
+		registrationingress.Reference{BotID: b.Delivery.BotID, UpdateID: update.ID}, in.chat, binding, update)
 }
 
 // Intake and direct Handle consumers share one durable reference. Missing bot

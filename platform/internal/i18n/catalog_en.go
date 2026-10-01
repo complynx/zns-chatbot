@@ -48,6 +48,7 @@ func englishCatalog() translations {
 			AdminBroadcastInput:                 "Reply to this message with the text to broadcast within 10 minutes. Other messages remain ordinary conversation.",
 			AdminBroadcastForward:               "Reply to this message with the message or media to forward within 10 minutes. Other messages remain ordinary conversation.",
 			AdminBroadcastPage:                  "Broadcast #{id}: {total} recipients. Showing {from}–{to}.\n{items}",
+			AdminMessageProgress:                "Whole broadcast: sent {succeeded}, queued {queued}, deferred {deferred}, sending {sending}, failed {refused}, cancelled {cancelled}, uncertain {uncertain}, parked {parked}, paused {paused}, not queued {notqueued}. Shared service pause affects {sharedpaused} queued/deferred recipients (included above).",
 			AdminBroadcastNext:                  "Next recipients",
 			AdminBroadcastPrevious:              "Previous recipients",
 			AdminBroadcastExpired:               "Broadcast input #{id} expired.",
@@ -133,6 +134,9 @@ func englishCatalog() translations {
 			ID("admin_message.state.sent"):      "sent",
 			ID("admin_message.state.failed"):    "failed",
 			ID("admin_message.state.cancelled"): "cancelled",
+			AdminMessageUnknown:                 "outcome unknown",
+			AdminMessageParked:                  "parked",
+			AdminMessagePaused:                  "paused",
 
 			AdminMessagePreview:                     "Draft #{id}. Recipients: {recipients}. Format: {format}. Review all content before sending.\n\n{text}",
 			AdminMessageSend:                        "Send reviewed draft",

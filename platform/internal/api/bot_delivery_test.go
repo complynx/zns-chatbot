@@ -26,19 +26,21 @@ func TestBotDeliveryRequiresWorkerAndLiveUserCredentials(t *testing.T) {
 		slog.New(slog.DiscardHandler),
 		func(context.Context, string) (string, error) { return "", applicationauth.ErrUnauthorized },
 	)
-	for _, tc := range []struct{ name, host, user string }{{"user cannot call worker route", "", signer.Token("alice")}, {"worker cannot impersonate user", signer.DeliveryToken(), "expired"}, {"ordinary token is not worker credential", signer.Token("alice"), signer.Token("alice")}} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			request := httptest.NewRequest(
-				http.MethodPost,
-				"/internal/bot-delivery/result",
-				bytes.NewBufferString(`{"Owner":"alice","Chat":101}`),
-			)
-			request.Header.Set("Authorization", "Bearer "+tc.user)
-			request.Header.Set("X-Zns-Derivation", tc.host)
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, request)
-			require.Equal(t, http.StatusUnauthorized, response.Code)
-		})
+	for _, route := range []string{"result", "admin-page-results"} {
+		for _, tc := range []struct{ name, host, user string }{{"user cannot call worker route", "", signer.Token("alice")}, {"worker cannot impersonate user", signer.DeliveryToken(), "expired"}, {"ordinary token is not worker credential", signer.Token("alice"), signer.Token("alice")}} {
+			t.Run(route+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				request := httptest.NewRequest(
+					http.MethodPost,
+					"/internal/bot-delivery/"+route,
+					bytes.NewBufferString(`{"Owner":"alice","Chat":101}`),
+				)
+				request.Header.Set("Authorization", "Bearer "+tc.user)
+				request.Header.Set("X-Zns-Derivation", tc.host)
+				response := httptest.NewRecorder()
+				handler.ServeHTTP(response, request)
+				require.Equal(t, http.StatusUnauthorized, response.Code)
+			})
+		}
 	}
 }

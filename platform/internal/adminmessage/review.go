@@ -7,12 +7,13 @@ import (
 )
 
 type Page struct {
-	ID     int64      `json:"id"`
-	State  string     `json:"state"`
-	Total  int64      `json:"total"`
-	Offset int64      `json:"offset"`
-	More   bool       `json:"more"`
-	Items  []Delivery `json:"items"`
+	ID       int64       `json:"id"`
+	State    string      `json:"state"`
+	Total    int64       `json:"total"`
+	Offset   int64       `json:"offset"`
+	More     bool        `json:"more"`
+	Progress JobProgress `json:"progress"`
+	Items    []Delivery  `json:"items"`
 }
 
 // Review pages the complete immutable audience, including unsent draft content.
@@ -32,6 +33,10 @@ func (s Service) Review(ctx context.Context, actor string, id, offset int64) (Pa
 	}
 	result.State = message.State
 	result.Total = int64(len(message.Request.Destinations))
+	result.Progress, err = readJobProgress(ctx, tx, id)
+	if err != nil {
+		return Page{}, err
+	}
 	const pageSize int64 = 20
 	rows, err := tx.Query(
 		ctx,

@@ -17,6 +17,12 @@ func botDeliveryRoutes(
 	signer identity.Signer,
 	logger *slog.Logger,
 ) {
+	botDeliveryRoute(mux, "admin-page-results", auth, signer, logger,
+		func(in botdelivery.AdminPageResultsRequest) string { return in.Owner },
+		func(ctx context.Context, in botdelivery.AdminPageResultsRequest) (struct{}, error) {
+			return struct{}{}, s.EnqueueAdminPageResults(ctx, in)
+		},
+	)
 	botDeliveryRoute(
 		mux,
 		"enqueue",

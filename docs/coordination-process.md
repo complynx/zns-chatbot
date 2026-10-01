@@ -15,6 +15,12 @@ slot with owner, exact frozen source, command, environment, resource bounds and
 evidence path. Quick focused checks on independent resources can continue.
 Use pinned tools and task-owned writable caches; shared module caches and frozen
 source are read-only. Do not run pinned-tool builds outside the slot queue.
+For new Docker runs, keep Go build/lint caches and temporary compiler files in
+task-owned Linux volumes rather than Windows bind mounts. Reuse a completed
+warm cache only after its owner confirms no active writer; copy it once if the
+new task needs separate custody. Record cache volume ownership and mounts.
+Keep receipt exports separate from caches. This changes storage, not tools,
+source, resource limits or test budgets. Do not move caches during a live check.
 Start with at most two CPUs and four GiB per heavy container; request an explicit
 resource adjustment if necessary instead of hiding an OOM or changing gate budgets.
 No build or test may mutate an occupied Functional QA stand.
