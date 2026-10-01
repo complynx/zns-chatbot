@@ -8,19 +8,31 @@ import (
 
 var ErrSettings = errors.New("delivery identity or pacing settings missing")
 
+// DefaultUncertaintyRetryBase is independent of Telegram's missing-cooldown fallback.
+const DefaultUncertaintyRetryBase = 5 * time.Second
+
 type Settings struct {
-	BotID        int64
-	BotInterval  time.Duration
-	ChatInterval time.Duration
-	Fallback     time.Duration
+	BotID                int64
+	BotInterval          time.Duration
+	ChatInterval         time.Duration
+	Fallback             time.Duration
+	UncertaintyRetryBase time.Duration
 }
 
 // Validate rejects missing composition instead of silently inventing a bot scope.
 func (s Settings) Validate() error {
-	if s.BotID <= 0 || s.BotInterval <= 0 || s.ChatInterval <= 0 || s.Fallback <= 0 {
+	if s.BotID <= 0 || s.BotInterval <= 0 || s.ChatInterval <= 0 || s.Fallback <= 0 || s.UncertaintyRetryBase < 0 {
 		return ErrSettings
 	}
 	return nil
+}
+
+// UncertaintyRetryBaseOrDefault preserves callers that construct Settings without the optional base.
+func (s Settings) UncertaintyRetryBaseOrDefault() time.Duration {
+	if s.UncertaintyRetryBase == 0 {
+		return DefaultUncertaintyRetryBase
+	}
+	return s.UncertaintyRetryBase
 }
 
 type Destination struct {
