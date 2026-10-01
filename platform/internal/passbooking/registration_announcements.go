@@ -86,6 +86,26 @@ func (s Service) BeginRegistrationAnnouncement(
 	if !row.Current {
 		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
 	}
+	if row.LastUncertainAttempt.Valid && row.UncertainResends >= 3 {
+		outcome := delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
+		if err = delivery.Project(
+			ctx,
+			tx,
+			s.Delivery.BotID,
+			announcementReference(attempt.ID),
+			outcome.Kind,
+			time.Time{},
+		); err != nil {
+			return delivery.Admission{}, err
+		}
+		if err = s.finishAnnouncement(ctx, q, attempt, outcome, time.Now()); err != nil {
+			return delivery.Admission{}, err
+		}
+		if err = clockAttempt.Check(ctx); err != nil {
+			return delivery.Admission{}, err
+		}
+		return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
+	}
 	gate, current, err := s.beginCurrentAnnouncement(ctx, tx, q, attempt)
 	if err != nil {
 		return gate, err
@@ -130,11 +150,17 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	q := dbgen.New(tx)
-	row, err := q.LockAnnouncementAttempt(
-		ctx,
-		dbgen.LockAnnouncementAttemptParams{ID: input.ID, BotID: s.Delivery.BotID, Attempt: input.Attempt},
-	)
+	attempt := delivery.Attempt{ID: input.ID, Generation: input.Attempt}
+	var row dbgen.LockAnnouncementAttemptRow
+	if input.Outcome.Kind == delivery.Uncertain {
+		row, err = s.lockAnnouncementAdmission(ctx, q, attempt)
+	} else {
+		row, err = q.LockAnnouncementAttempt(ctx, dbgen.LockAnnouncementAttemptParams{
+			ID: input.ID, BotID: s.Delivery.BotID, Attempt: input.Attempt,
+		})
+	}
 	if err != nil {
 		return announcementAttemptError(core.DatabaseOperationError(err))
 	}
@@ -142,9 +168,41 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 		(input.Outcome.Kind == delivery.Succeeded || input.Outcome.Kind == delivery.Uncertain) {
 		return conflict("pass_announcement_stale")
 	}
-	outcome, deadline, err := delivery.Finish(ctx, tx, s.Delivery, announcementReference(input.ID), input.Outcome)
+	if input.Outcome.Kind == delivery.Uncertain {
+		if err = q.RecordAnnouncementUncertainty(ctx, dbgen.RecordAnnouncementUncertaintyParams{
+			ID: input.ID, BotID: s.Delivery.BotID, Attempt: input.Attempt, Reason: input.Outcome.Reason,
+		}); err != nil {
+			return core.DatabaseOperationError(err)
+		}
+		if !row.Current {
+			return s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
+		}
+	}
+	wireOutcome := input.Outcome
+	input.Outcome = announcementRetryOutcome(input.Outcome, row.UncertainResends,
+		row.LastUncertainAttempt.Valid || input.Outcome.Kind == delivery.Uncertain, s.Delivery.Fallback)
+	scheduled := input.Outcome
+	limitedAtExhaustion := scheduled.Kind != delivery.Deferred && wireOutcome.Kind == delivery.Deferred &&
+		wireOutcome.Reason == "telegram_rate_limit"
+	if limitedAtExhaustion {
+		scheduled = wireOutcome
+	}
+	outcome, deadline, err := delivery.Finish(ctx, tx, s.Delivery, announcementReference(input.ID), scheduled)
 	if err != nil {
 		return err
+	}
+	if limitedAtExhaustion {
+		outcome = input.Outcome
+		if err = delivery.Project(
+			ctx,
+			tx,
+			s.Delivery.BotID,
+			announcementReference(input.ID),
+			outcome.Kind,
+			deadline,
+		); err != nil {
+			return err
+		}
 	}
 	if err = s.finishAnnouncement(
 		ctx,
@@ -155,7 +213,36 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 	); err != nil {
 		return err
 	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return err
+	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+// Resends count admissions, not proven wire requests. A crash after admission
+// consumes the same durable budget as an uncertain HTTP result.
+func announcementRetryOutcome(
+	outcome delivery.Outcome,
+	resends int64,
+	active bool,
+	fallback time.Duration,
+) delivery.Outcome {
+	if !active || (outcome.Kind != delivery.Uncertain && outcome.Kind != delivery.Deferred) {
+		return outcome
+	}
+	if resends >= 3 {
+		return delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
+	}
+	seconds := int64(fallback / time.Second)
+	if fallback%time.Second != 0 {
+		seconds++
+	}
+	seconds *= int64(1) << resends
+	return delivery.Outcome{
+		Kind:       delivery.Deferred,
+		Reason:     outcome.Reason,
+		RetryAfter: max(seconds, outcome.RetryAfter),
+	}
 }
 
 func (s Service) finishAnnouncement(

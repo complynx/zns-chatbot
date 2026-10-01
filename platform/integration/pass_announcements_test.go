@@ -114,7 +114,7 @@ func TestRegistrationAnnouncementReplayAndRetry(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
-func TestRegistrationAnnouncementInterruptedClaimBecomesUnknown(t *testing.T) {
+func TestRegistrationAnnouncementInterruptedSendSchedulesResend(t *testing.T) {
 	t.Parallel()
 	db, s := bookingFixture(t)
 	s.Delivery = syntheticDeliverySettings()
@@ -153,7 +153,7 @@ func TestRegistrationAnnouncementInterruptedClaimBecomesUnknown(t *testing.T) {
 		db.QueryRow(t.Context(), `SELECT state FROM core.pass_registration_announcements WHERE id=$1`, item.ID).
 			Scan(&state),
 	)
-	assert.Equal(t, "unknown", state)
+	assert.Equal(t, "pending", state)
 }
 
 func TestRegistrationAnnouncementConcurrentClaims(t *testing.T) {

@@ -36,9 +36,11 @@ func (q *Queries) AdminAttemptOwner(ctx context.Context, arg AdminAttemptOwnerPa
 }
 
 const beginAdminSend = `-- name: BeginAdminSend :execrows
-UPDATE core.admin_message_deliveries SET state='sending',lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.admin_message_deliveries SET state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+ uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=$1::bigint AND bot_id=$2::bigint AND attempt=$3::bigint
  AND state='pending' AND lease_until>clock_timestamp()
+ AND (last_uncertain_attempt IS NULL OR uncertain_resends<3)
 `
 
 type BeginAdminSendParams struct {
@@ -132,6 +134,7 @@ func (q *Queries) FinishAdminDelivery(ctx context.Context, arg FinishAdminDelive
 
 const lockAdminAttempt = `-- name: LockAdminAttempt :one
 SELECT d.destination,d.state,d.telegram_message_id,d.available_at,
+ d.last_uncertain_attempt,d.uncertain_resends,
  COALESCE(d.lease_until>clock_timestamp(),false)::boolean AS lease_live
 FROM core.admin_message_deliveries d WHERE d.id=$1::bigint
  AND d.bot_id=$2::bigint AND d.attempt=$3::bigint
@@ -145,11 +148,13 @@ type LockAdminAttemptParams struct {
 }
 
 type LockAdminAttemptRow struct {
-	Destination       []byte
-	State             string
-	TelegramMessageID int64
-	AvailableAt       pgtype.Timestamptz
-	LeaseLive         bool
+	Destination          []byte
+	State                string
+	TelegramMessageID    int64
+	AvailableAt          pgtype.Timestamptz
+	LastUncertainAttempt pgtype.Int8
+	UncertainResends     int64
+	LeaseLive            bool
 }
 
 func (q *Queries) LockAdminAttempt(ctx context.Context, arg LockAdminAttemptParams) (LockAdminAttemptRow, error) {
@@ -160,6 +165,8 @@ func (q *Queries) LockAdminAttempt(ctx context.Context, arg LockAdminAttemptPara
 		&i.State,
 		&i.TelegramMessageID,
 		&i.AvailableAt,
+		&i.LastUncertainAttempt,
+		&i.UncertainResends,
 		&i.LeaseLive,
 	)
 	return i, err
@@ -257,4 +264,28 @@ func (q *Queries) PrepareAdminDelivery(ctx context.Context, id int64) (int64, er
 	var attempt int64
 	err := row.Scan(&attempt)
 	return attempt, err
+}
+
+const recordAdminUncertainty = `-- name: RecordAdminUncertainty :exec
+UPDATE core.admin_message_deliveries SET last_uncertain_attempt=$1::bigint,
+ last_uncertain_reason=$2::text,last_uncertain_recorded_at=clock_timestamp()
+WHERE id=$3::bigint AND bot_id=$4::bigint AND attempt=$1::bigint
+ AND (last_uncertain_attempt IS NULL OR last_uncertain_attempt<$1::bigint)
+`
+
+type RecordAdminUncertaintyParams struct {
+	Attempt int64
+	Reason  string
+	ID      int64
+	BotID   int64
+}
+
+func (q *Queries) RecordAdminUncertainty(ctx context.Context, arg RecordAdminUncertaintyParams) error {
+	_, err := q.db.Exec(ctx, recordAdminUncertainty,
+		arg.Attempt,
+		arg.Reason,
+		arg.ID,
+		arg.BotID,
+	)
+	return err
 }

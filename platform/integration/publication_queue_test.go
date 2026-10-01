@@ -80,7 +80,7 @@ func TestPublicationQueueAliasesFreezeOneLane(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, s.RecoverDeliveries(t.Context()))
 	require.Empty(t, queueCandidates(t, db))
-	require.NoError(
+	require.Error(
 		t,
 		s.CompleteDelivery(
 			t.Context(),
@@ -88,6 +88,28 @@ func TestPublicationQueueAliasesFreezeOneLane(t *testing.T) {
 				ID:      first.ID,
 				Attempt: first.Attempt,
 				Outcome: delivery.Outcome{Kind: delivery.Succeeded, MessageID: 77},
+			},
+		),
+	)
+	_, err = db.Exec(
+		t.Context(),
+		`UPDATE core.admin_message_deliveries SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'`,
+	)
+	require.NoError(t, err)
+	retried, found, err := s.PrepareDelivery(t.Context(), first.ID)
+	require.NoError(t, err)
+	require.True(t, found)
+	gate, err = s.BeginDelivery(t.Context(), delivery.Attempt{ID: retried.ID, Generation: retried.Attempt})
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
+	require.NoError(
+		t,
+		s.CompleteDelivery(
+			t.Context(),
+			adminmessage.Completion{
+				ID:      retried.ID,
+				Attempt: retried.Attempt,
+				Outcome: delivery.Outcome{Kind: delivery.Succeeded, MessageID: 78},
 			},
 		),
 	)

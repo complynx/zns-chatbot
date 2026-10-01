@@ -14,8 +14,8 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-// DeliverAdminMessages claims one destination per poll. Ambiguous network errors
-// are terminal and visible; retrying them automatically risks duplicate sends.
+// DeliverAdminMessages claims one destination per poll. The owner schedules
+// bounded resends after uncertain outcomes; duplicate messages are possible.
 func (b *Bot) DeliverAdminMessages(ctx context.Context) error {
 	if err := b.deliverAdminInputExpiry(ctx); err != nil {
 		return err

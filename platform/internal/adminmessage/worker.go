@@ -133,6 +133,23 @@ func (s Service) BeginDelivery(ctx context.Context, attempt delivery.Attempt) (d
 	if row.State != statePending || !row.LeaseLive {
 		return delivery.Admission{}, staleAdminAttempt()
 	}
+	if row.LastUncertainAttempt.Valid && row.UncertainResends >= 3 {
+		outcome := delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
+		if err = delivery.Project(
+			ctx,
+			tx,
+			s.Delivery.BotID,
+			adminReference(attempt.ID),
+			outcome.Kind,
+			time.Time{},
+		); err != nil {
+			return delivery.Admission{}, err
+		}
+		if err = s.finishDelivery(ctx, q, attempt.ID, attempt.Generation, outcome, time.Now()); err != nil {
+			return delivery.Admission{}, err
+		}
+		return delivery.Admission{Reason: outcome.Reason}, tx.Commit(ctx)
+	}
 	gate, err := delivery.Begin(ctx, tx, s.Delivery, adminReference(attempt.ID))
 	if err != nil {
 		return gate, err
@@ -177,8 +194,8 @@ func (s Service) Complete(ctx context.Context, id, attempt, messageID int64, fai
 	return s.CompleteDelivery(ctx, Completion{ID: id, Attempt: attempt, Outcome: outcome})
 }
 
-// CompleteDelivery records an exact attempt. An uncertain send is never returned
-// to pending, even if authority was withdrawn while the wire call was active.
+// CompleteDelivery records an exact attempt and retains uncertainty before a
+// bounded resend. Withdrawn authority cancels the resend, not the observed fact.
 func (s Service) CompleteDelivery(ctx context.Context, result Completion) error {
 	if result.ID <= 0 || result.Attempt <= 0 || !result.Outcome.Valid() {
 		return invalid()
@@ -192,6 +209,13 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 	if err != nil {
 		return err
 	}
+	if result.Outcome.Kind == delivery.Uncertain {
+		current, currentErr := adminPublicationCurrent(ctx, tx, result.ID)
+		if currentErr != nil {
+			return currentErr
+		}
+		valid = valid && current
+	}
 	q := dbgen.New(tx)
 	row, err := q.LockAdminAttempt(
 		ctx,
@@ -204,12 +228,41 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 		(result.Outcome.Kind == delivery.Succeeded || result.Outcome.Kind == delivery.Uncertain) {
 		return staleAdminAttempt()
 	}
+	if result.Outcome.Kind == delivery.Uncertain {
+		if err = q.RecordAdminUncertainty(ctx, dbgen.RecordAdminUncertaintyParams{
+			ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt, Reason: result.Outcome.Reason,
+		}); err != nil {
+			return err
+		}
+	}
+	wireOutcome := result.Outcome
+	result.Outcome = adminRetryOutcome(result.Outcome, row.UncertainResends,
+		row.LastUncertainAttempt.Valid || result.Outcome.Kind == delivery.Uncertain, s.Delivery.Fallback)
 	if !valid && result.Outcome.Kind == delivery.Rejected {
 		result.Outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}
 	}
-	outcome, deadline, err := delivery.Finish(ctx, tx, s.Delivery, adminReference(result.ID), result.Outcome)
+	scheduled := result.Outcome
+	limitedAtExhaustion := scheduled.Kind != delivery.Deferred && wireOutcome.Kind == delivery.Deferred &&
+		wireOutcome.Reason == "telegram_rate_limit"
+	if limitedAtExhaustion {
+		scheduled = wireOutcome
+	}
+	outcome, deadline, err := delivery.Finish(ctx, tx, s.Delivery, adminReference(result.ID), scheduled)
 	if err != nil {
 		return err
+	}
+	if limitedAtExhaustion {
+		outcome = result.Outcome
+		if err = delivery.Project(
+			ctx,
+			tx,
+			s.Delivery.BotID,
+			adminReference(result.ID),
+			outcome.Kind,
+			deadline,
+		); err != nil {
+			return err
+		}
 	}
 	if !valid && outcome.Kind != delivery.Succeeded && outcome.Kind != delivery.Uncertain {
 		outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}
@@ -228,6 +281,41 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// The original send is outside this budget. Each admitted resend may cross the
+// wire even if the process dies before the HTTP call can be observed.
+func adminRetryOutcome(outcome delivery.Outcome, resends int64, active bool, fallback time.Duration) delivery.Outcome {
+	if !active || (outcome.Kind != delivery.Uncertain && outcome.Kind != delivery.Deferred) {
+		return outcome
+	}
+	if resends >= 3 {
+		return delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
+	}
+	seconds := int64(fallback / time.Second)
+	if fallback%time.Second != 0 {
+		seconds++
+	}
+	seconds *= int64(1) << resends
+	return delivery.Outcome{
+		Kind:       delivery.Deferred,
+		Reason:     outcome.Reason,
+		RetryAfter: max(seconds, outcome.RetryAfter),
+	}
+}
+
+func adminPublicationCurrent(ctx context.Context, tx pgx.Tx, id int64) (bool, error) {
+	var actor, state string
+	if err := tx.QueryRow(ctx, `SELECT actor,state FROM core.admin_messages WHERE id=$1 FOR UPDATE`, id).
+		Scan(&actor, &state); err != nil {
+		return false, err
+	}
+	var owner string
+	err := tx.QueryRow(ctx, `SELECT owner FROM core.pass_booking_admins WHERE owner=$1 FOR SHARE`, actor).Scan(&owner)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return state == "queued", err
 }
 
 func (s Service) finishDelivery(

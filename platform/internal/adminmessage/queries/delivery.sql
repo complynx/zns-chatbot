@@ -41,15 +41,24 @@ WHERE d.id=sqlc.arg(id)::bigint AND d.bot_id=sqlc.arg(bot_id)::bigint AND d.atte
 
 -- name: LockAdminAttempt :one
 SELECT d.destination,d.state,d.telegram_message_id,d.available_at,
+ d.last_uncertain_attempt,d.uncertain_resends,
  COALESCE(d.lease_until>clock_timestamp(),false)::boolean AS lease_live
 FROM core.admin_message_deliveries d WHERE d.id=sqlc.arg(id)::bigint
  AND d.bot_id=sqlc.arg(bot_id)::bigint AND d.attempt=sqlc.arg(attempt)::bigint
 FOR UPDATE;
 
 -- name: BeginAdminSend :execrows
-UPDATE core.admin_message_deliveries SET state='sending',lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.admin_message_deliveries SET state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+ uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempt=sqlc.arg(attempt)::bigint
- AND state='pending' AND lease_until>clock_timestamp();
+ AND state='pending' AND lease_until>clock_timestamp()
+ AND (last_uncertain_attempt IS NULL OR uncertain_resends<3);
+
+-- name: RecordAdminUncertainty :exec
+UPDATE core.admin_message_deliveries SET last_uncertain_attempt=sqlc.arg(attempt)::bigint,
+ last_uncertain_reason=sqlc.arg(reason)::text,last_uncertain_recorded_at=clock_timestamp()
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempt=sqlc.arg(attempt)::bigint
+ AND (last_uncertain_attempt IS NULL OR last_uncertain_attempt<sqlc.arg(attempt)::bigint);
 
 -- name: FinishAdminDelivery :execrows
 UPDATE core.admin_message_deliveries SET state=sqlc.arg(state)::text,

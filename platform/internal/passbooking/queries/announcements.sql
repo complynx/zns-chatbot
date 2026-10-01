@@ -26,7 +26,8 @@ SET attempts=attempts+1,lease_until=clock_timestamp()+interval '2 minutes'
 FROM next WHERE a.id=next.id RETURNING a.id,a.channel,a.thread_id,a.locale,a.name,a.role,a.attempts;
 
 -- name: LockAnnouncementAttempt :one
-SELECT a.channel,a.thread_id,a.state,a.message_id,a.available_at,
+SELECT a.channel,a.thread_id,a.state,a.message_id,a.available_at,a.failure,
+ a.last_uncertain_attempt,a.uncertain_resends,
  COALESCE(a.lease_until>clock_timestamp(),false)::boolean AS lease_live,
  EXISTS(SELECT 1 FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
   WHERE e.id=a.event_id AND b.owner=a.owner AND b.created_at=a.created_at AND b.state<>'cancelled'
@@ -36,9 +37,17 @@ FROM core.pass_registration_announcements a WHERE a.id=sqlc.arg(id)::bigint
  AND a.bot_id=sqlc.arg(bot_id)::bigint AND a.attempts=sqlc.arg(attempt)::bigint FOR UPDATE;
 
 -- name: BeginAnnouncementSend :execrows
-UPDATE core.pass_registration_announcements SET state='sending',lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.pass_registration_announcements SET state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+ uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempts=sqlc.arg(attempt)::bigint
- AND state='pending' AND lease_until>clock_timestamp();
+ AND state='pending' AND lease_until>clock_timestamp()
+ AND (last_uncertain_attempt IS NULL OR uncertain_resends<3);
+
+-- name: RecordAnnouncementUncertainty :exec
+UPDATE core.pass_registration_announcements SET last_uncertain_attempt=sqlc.arg(attempt)::bigint,
+ last_uncertain_reason=sqlc.arg(reason)::text,last_uncertain_recorded_at=clock_timestamp()
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempts=sqlc.arg(attempt)::bigint
+ AND (last_uncertain_attempt IS NULL OR last_uncertain_attempt<sqlc.arg(attempt)::bigint);
 
 -- name: FinishAnnouncement :execrows
 UPDATE core.pass_registration_announcements SET state=sqlc.arg(state)::text,
