@@ -665,6 +665,145 @@ func TestNotificationUncertainRetryCountsRateLimitedSends(t *testing.T) {
 	}
 }
 
+func TestNotificationUncertainRetryThird429RetainsCooldown(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			business := notificationBusinessSnapshot(t, r)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			dispatch := exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			requireNotificationAccepted(t, r, loss)
+			original := r.status(t, r.first)
+			wire := notificationWireSnapshot(t, r)
+			require.NotNil(t, wire)
+			provider := notificationCooldownProvider(t, r, wire.Text)
+			r.f.b.TG.Base = provider.URL
+			for attempt := range 3 {
+				waitNotificationEligibility(t, r, r.status(t, r.first).AvailableAt)
+				var before time.Time
+				require.NoError(t, r.f.db.QueryRow(t.Context(), "SELECT clock_timestamp()").Scan(&before))
+				require.NoError(t, dispatch(t.Context(), r.first))
+				state := r.status(t, r.first)
+				assert.Equal(t, "pending", state.State, "admitted 429 retains the provider cooldown")
+				assert.Equal(t, "telegram_rate_limit", state.Reason)
+				assert.Equal(t, int64(attempt+1), state.UncertainResends)
+				assert.Equal(t, original.LastUncertainAttempt, state.LastUncertainAttempt)
+				assert.Equal(t, original.LastUncertainReason, state.LastUncertainReason)
+				assert.Equal(t, original.LastUncertainRecordedAt, state.LastUncertainRecordedAt)
+				assert.Zero(t, state.FailureCount)
+				assert.True(t, state.AvailableAt.After(before.Add(21*time.Second)))
+				assertNotificationCooldown(t, r, domain, before.Add(21*time.Second))
+				assertNotification429Projection(t, r, domain, state)
+				assert.Equal(t, attempt+2, loss.count(), "first unknown plus actual admitted 429s")
+				assert.Equal(t, wire, notificationWireSnapshot(t, r))
+				payloads := loss.payloads()
+				assert.Equal(
+					t,
+					payloads[0],
+					payloads[len(payloads)-1],
+					"actual retry wire remains the admitted payload",
+				)
+				require.NoError(t, dispatch(t.Context(), r.first))
+				require.NoError(t, dispatch(t.Context(), r.second))
+				assert.Equal(t, state, r.status(t, r.first), "no attempt or policy mutation before eligibility")
+				assert.Equal(t, "pending", r.status(t, r.second).State)
+			}
+			deferred := r.status(t, r.first)
+			waitNotificationEligibility(t, r, deferred.AvailableAt)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			terminal := r.status(t, r.first)
+			assert.Equal(t, "failed", terminal.State)
+			assert.Equal(t, "telegram_uncertain_retry_exhausted", terminal.Reason)
+			assert.Equal(t, deferred.Attempt, terminal.Attempt, "exhaustion admits no generation")
+			assert.Equal(t, int64(3), terminal.UncertainResends)
+			assert.Equal(t, original.LastUncertainAttempt, terminal.LastUncertainAttempt)
+			assert.Equal(t, original.LastUncertainReason, terminal.LastUncertainReason)
+			assert.Equal(t, original.LastUncertainRecordedAt, terminal.LastUncertainRecordedAt)
+			assert.Equal(t, 4, loss.count(), "no fourth additional wire")
+			assert.Zero(t, terminal.MessageID, "confirmed negative responses cannot fabricate a receipt")
+			require.NoError(t, dispatch(t.Context(), r.second))
+			assert.Equal(t, "sent", r.status(t, r.second).State)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			assert.Equal(t, terminal, r.status(t, r.first), "terminal policy does not revive")
+			assert.JSONEq(t, business, notificationBusinessSnapshot(t, r))
+		})
+	}
+}
+
+func assertNotification429Projection(
+	t *testing.T, r *notificationRuntimeFixture, domain string, state notificationRuntimeStatus,
+) {
+	t.Helper()
+	var queueState string
+	var confirmed int64
+	var deadline time.Time
+	require.NoError(t, r.f.db.QueryRow(t.Context(),
+		`SELECT state,not_before FROM core.delivery_queue
+ WHERE bot_id=$1 AND owner_kind=$2 AND owner_key=$3 AND effect_key='send'`,
+		syntheticDeliverySettings().BotID, string(notificationQueueOwner(domain)), strconv.FormatInt(r.first, 10),
+	).Scan(&queueState, &deadline))
+	assert.Equal(t, "pending", queueState, "the shared lane retains the deferred intent")
+	assert.Equal(t, state.AvailableAt, deadline)
+	require.NoError(t, r.f.db.QueryRow(t.Context(),
+		"SELECT last_confirmed_attempt FROM "+r.table+" WHERE id=$1", r.first,
+	).Scan(&confirmed))
+	assert.Equal(t, state.Attempt, confirmed, "each actual 429 is a confirmed negative wire outcome")
+	assert.Zero(t, state.MessageID)
+}
+
+func notificationCooldownProvider(t *testing.T, r *notificationRuntimeFixture, text string) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			http.Error(w, "invalid synthetic request", http.StatusBadRequest)
+			return
+		}
+		_ = request.Body.Close()
+		request.Body = io.NopCloser(bytes.NewReader(body))
+		var message telegram.Send
+		if json.Unmarshal(body, &message) != nil {
+			http.Error(w, "invalid synthetic request", http.StatusBadRequest)
+			return
+		}
+		if message.ChatID != 202 || message.Text != text {
+			r.f.fake.Config.Handler.ServeHTTP(w, request)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = fmt.Fprint(
+			w,
+			`{"ok":false,"error_code":429,"description":"synthetic confirmed cooldown","parameters":{"retry_after":21}}`,
+		)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+// Wait for the source clock; never shorten the persisted provider deadline.
+func waitNotificationEligibility(t *testing.T, r *notificationRuntimeFixture, deadline time.Time) {
+	t.Helper()
+	for {
+		var now time.Time
+		require.NoError(t, r.f.db.QueryRow(t.Context(), "SELECT clock_timestamp()").Scan(&now))
+		if !now.Before(deadline) {
+			return
+		}
+		timer := time.NewTimer(min(deadline.Sub(now), time.Second))
+		select {
+		case <-timer.C:
+		case <-t.Context().Done():
+			timer.Stop()
+			t.Fatal("notification source clock did not reach eligibility")
+		}
+	}
+}
+
 func TestNotificationUncertainRetryPrewirePacingKeepsBudget(t *testing.T) {
 	t.Parallel()
 	for _, domain := range []string{"orders", "registration", "massage", "food"} {
