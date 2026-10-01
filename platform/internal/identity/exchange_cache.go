@@ -16,7 +16,8 @@ type cachedIdentity struct {
 }
 
 type identityFlight struct {
-	done        chan struct{}
+	done chan struct{}
+	// value retains the prior association while pending; load replaces it before closing done.
 	value       cachedIdentity
 	err         error
 	generation  uint64
@@ -46,6 +47,7 @@ func (c *positiveIdentityCache) resolve(
 		c.mu.Unlock()
 		return entry.value, nil
 	}
+	previous := c.values[key]
 	delete(c.values, key)
 	flight := c.flights[key]
 	if flight == nil {
@@ -56,7 +58,7 @@ func (c *positiveIdentityCache) resolve(
 		if c.flights == nil {
 			c.flights = make(map[string]*identityFlight)
 		}
-		flight = &identityFlight{done: make(chan struct{}), generation: c.generation}
+		flight = &identityFlight{done: make(chan struct{}), value: previous, generation: c.generation}
 		c.flights[key] = flight
 		go c.load(context.WithoutCancel(ctx), key, flight, load)
 	}
@@ -68,14 +70,14 @@ func (c *positiveIdentityCache) resolve(
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
+		if flight.err != nil {
+			return "", flight.err
+		}
 		c.mu.Lock()
 		retired := flight.invalidated || flight.generation != c.generation
 		c.mu.Unlock()
 		if retired {
 			return "", ErrZitadelIdentity
-		}
-		if flight.err != nil {
-			return "", flight.err
 		}
 		if !time.Now().Before(flight.value.until) {
 			return "", ErrZitadelIdentity
@@ -124,7 +126,7 @@ func (c *positiveIdentityCache) load(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.flights, key)
-	if flight.invalidated || flight.generation != c.generation {
+	if err == nil && (flight.invalidated || flight.generation != c.generation) {
 		err = ErrZitadelIdentity
 	}
 	if err == nil {
@@ -158,6 +160,25 @@ func (c *positiveIdentityCache) subject(key string) string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.values[key].subject
+}
+
+// subjectsForValue uses associations established by successful exchanges, never
+// claims from a rejected token. Callers invalidate after this lock is released.
+func (c *positiveIdentityCache) subjectsForValue(value string) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var subjects []string
+	for _, entry := range c.values {
+		if entry.value == value {
+			subjects = append(subjects, entry.subject)
+		}
+	}
+	for _, flight := range c.flights {
+		if flight.value.value == value {
+			subjects = append(subjects, flight.value.subject)
+		}
+	}
+	return subjects
 }
 
 // InvalidateSubject retires both credential caches after a committed local

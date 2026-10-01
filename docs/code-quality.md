@@ -95,7 +95,7 @@ Daniel authorized Linux-only checks on 2026-10-01. Run all new quality gates,
 pinned-tool builds and automated browser suites in Linux Docker or WSL; use
 the Linux branch of `scripts/quality.mjs` for `npm run quality:all` with the
 required PostgreSQL and sandbox access. Native Windows execution and Windows
-executables targeting Linux are not acceptance requirements. Follow the two
+executables targeting Linux are not acceptance requirements. Follow the three
 heavy-check slots and stand ownership in `docs/coordination-process.md`.
 Already-running Windows checks finish without restart. Root confirms their
 terminal state and worker acknowledgements before Daniel removes Firewall rules.
