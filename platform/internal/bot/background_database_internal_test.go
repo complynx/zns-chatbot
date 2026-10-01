@@ -399,7 +399,7 @@ func TestBackgroundDatabaseInboxResultAfterCancellation(t *testing.T) {
 
 func TestBackgroundDatabaseRecoveryTransportPreservesIntent(t *testing.T) {
 	t.Parallel()
-	for _, stage := range []string{"begin", "SELECT operation_key,effect_key FROM bot.delivery_intents", "UPDATE bot.delivery_intents SET state='unknown'", "commit"} {
+	for _, stage := range []string{"begin", "SELECT operation_key,effect_key,CASE WHEN", "UPDATE bot.delivery_intents SET last_uncertain_attempt", "commit"} {
 		t.Run(stage, func(t *testing.T) {
 			t.Parallel()
 			db := foodPendingDatabase(t)
@@ -432,7 +432,7 @@ func TestBackgroundDatabaseRecoveryTransportPreservesIntent(t *testing.T) {
 			require.NoError(t, b.RecoverBotIntents(t.Context()))
 			pending, err = botdelivery.Read(t.Context(), db, b.Delivery.BotID, queued.Reference, false)
 			require.NoError(t, err)
-			require.Equal(t, delivery.Uncertain, pending.State)
+			require.Equal(t, delivery.Deferred, pending.State)
 			require.Equal(t, attempt.Attempt, pending.Attempt)
 			require.NoError(t, b.RecoverBotIntents(t.Context()), "empty recovery is a normal control")
 		})

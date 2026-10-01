@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -232,6 +233,39 @@ func (s Service) beginAttempt(
 	target int64,
 	previous *Intent,
 ) (Intent, bool, error) {
+	var resends int
+	var chain bool
+	if err := tx.QueryRow(ctx, `SELECT last_uncertain_attempt IS NOT NULL,uncertain_resends
+ FROM bot.delivery_intents WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+		current.BotID, current.Operation, current.Effect).Scan(&chain, &resends); err != nil {
+		return current, false, core.DatabaseOperationContextError(ctx, err)
+	}
+	const maxUncertainResends = 3
+	if chain && resends >= maxUncertainResends {
+		if err := delivery.Project(
+			ctx,
+			tx,
+			current.BotID,
+			current.QueueReference(),
+			delivery.Rejected,
+			time.Time{},
+		); err != nil {
+			return current, false, err
+		}
+		_, err := tx.Exec(
+			ctx,
+			`UPDATE bot.delivery_intents SET state='failed',reason='telegram_uncertain_retry_exhausted'
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+			current.BotID,
+			current.Operation,
+			current.Effect,
+		)
+		if err != nil {
+			return current, false, core.DatabaseOperationContextError(ctx, err)
+		}
+		current.State = delivery.Rejected
+		return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
+	}
 	var err error
 	if current.Reference.Kind == CardIntent {
 		var pendingReceipt bool
@@ -269,7 +303,8 @@ func (s Service) beginAttempt(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`UPDATE bot.delivery_intents SET state='sending',attempt=$4,attempted_at=clock_timestamp(),phase=$5,target_message_id=$6,receipt=$7
+		`UPDATE bot.delivery_intents SET state='sending',attempt=$4,attempted_at=clock_timestamp(),phase=$5,target_message_id=$6,receipt=$7,
+ uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
  WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
 		current.BotID,
 		current.Operation,

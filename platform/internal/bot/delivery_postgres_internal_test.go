@@ -28,7 +28,7 @@ func botIntentTestSettings() delivery.Settings {
 	}
 }
 
-func TestBotDeliveryPostgresUnknownRetainsHeadAndLateReceipt(t *testing.T) {
+func TestBotDeliveryPostgresRecoveryRetainsOrderAndAttemptFence(t *testing.T) {
 	t.Parallel()
 	db := foodPendingDatabase(t)
 	b := botDeliveryTestBot(db)
@@ -57,17 +57,34 @@ func TestBotDeliveryPostgresUnknownRetainsHeadAndLateReceipt(t *testing.T) {
 	require.NoError(t, b.RecoverBotIntents(ctx))
 	recovered, err := botdelivery.Read(ctx, db, 77, first.Reference, false)
 	require.NoError(t, err)
-	require.Equal(t, delivery.Uncertain, recovered.State)
+	require.Equal(t, delivery.Deferred, recovered.State)
+	require.NoError(t, b.RecoverBotIntents(ctx))
+	unchanged, err := botdelivery.Read(ctx, db, 77, first.Reference, false)
+	require.NoError(t, err)
+	require.Equal(t, recovered.NotBefore, unchanged.NotBefore, "pending recovery must not postpone its deadline")
 	_, ready, err = b.beginBotIntent(ctx, secondIntent, botRenderedDelivery{})
 	require.NoError(t, err)
 	require.False(t, ready)
-	// The exact admitted attempt may resolve its late known response; it must
-	// never require a new send or a synthesized provider message ID.
+	time.Sleep(time.Until(recovered.NotBefore) + 20*time.Millisecond)
+	retry, ready, err := b.beginBotIntent(ctx, recovered, botRenderedDelivery{})
+	require.NoError(t, err)
+	require.True(t, ready)
+	require.Equal(t, attempt.Attempt+1, retry.Attempt)
+	require.ErrorIs(t, b.finishBotIntent(
+		ctx,
+		attempt,
+		delivery.Outcome{
+			Kind:      delivery.Succeeded,
+			MessageID: 899,
+		},
+		botdelivery.Continuation{},
+		false,
+	), botdelivery.ErrBinding)
 	require.NoError(
 		t,
 		b.finishBotIntent(
 			ctx,
-			attempt,
+			retry,
 			delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900},
 			botdelivery.Continuation{},
 			false,
@@ -79,7 +96,7 @@ func TestBotDeliveryPostgresUnknownRetainsHeadAndLateReceipt(t *testing.T) {
 	_, ready, err = b.beginBotIntent(ctx, secondIntent, botRenderedDelivery{})
 	require.NoError(t, err)
 	require.True(t, ready)
-	stale := attempt
+	stale := retry
 	stale.Attempt++
 	require.Error(
 		t,

@@ -63,6 +63,9 @@ func (b *Bot) finishBotIntent(
 	receipt botdelivery.Continuation,
 	fallback bool,
 ) error {
+	if attempt.BotID != b.Delivery.BotID {
+		return botdelivery.ErrBinding
+	}
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
 		return core.DatabaseOperationError(err)
@@ -80,6 +83,10 @@ func (b *Bot) finishBotIntent(
 		return botdelivery.ErrBinding
 	}
 	outcome, deadline, err := delivery.Finish(ctx, tx, b.Delivery, current.QueueReference(), outcome)
+	if err != nil {
+		return err
+	}
+	outcome, deadline, err = b.retryBotTransport(ctx, tx, current, outcome, deadline)
 	if err != nil {
 		return err
 	}
@@ -163,7 +170,7 @@ func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent
 }
 
 // RecoverBotIntents runs only after runtime proves exclusive replacement
-// ownership. An admitted wire without a known receipt must retain its lane head.
+// ownership. Interrupted wire admissions retain uncertainty and the resend budget.
 func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 	if err := b.Delivery.Validate(); err != nil {
 		return err
@@ -173,9 +180,11 @@ func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 		if err != nil {
 			return core.DatabaseOperationError(err)
 		}
-		var operation, effect string
-		err = tx.QueryRow(ctx, `SELECT operation_key,effect_key FROM bot.delivery_intents
- WHERE bot_id=$1 AND state='sending' ORDER BY operation_key,effect_key FOR UPDATE SKIP LOCKED LIMIT 1`, b.Delivery.BotID).Scan(&operation, &effect)
+		var operation, effect, reason string
+		err = tx.QueryRow(ctx, `SELECT operation_key,effect_key,CASE WHEN state='unknown' THEN reason ELSE 'delivery_interrupted' END FROM bot.delivery_intents
+ WHERE bot_id=$1 AND (state='sending' OR (state='unknown' AND reason IN ('delivery_interrupted','telegram_outcome_unknown')))
+	 ORDER BY operation_key,effect_key FOR UPDATE SKIP LOCKED LIMIT 1`, b.Delivery.BotID).
+			Scan(&operation, &effect, &reason)
 		if errors.Is(err, pgx.ErrNoRows) {
 			_ = tx.Rollback(ctx)
 			return nil
@@ -185,10 +194,21 @@ func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 			return core.DatabaseOperationError(err)
 		}
 		ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+		current, readErr := botdelivery.Read(ctx, tx, b.Delivery.BotID, ref, true)
+		if readErr != nil {
+			_ = tx.Rollback(ctx)
+			return readErr
+		}
 		err = delivery.Project(ctx, tx, b.Delivery.BotID, ref, delivery.Uncertain, time.Time{})
 		if err == nil {
-			_, err = tx.Exec(ctx, `UPDATE bot.delivery_intents SET state='unknown',reason='delivery_interrupted'
- WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`, b.Delivery.BotID, operation, effect)
+			outcome, deadline, retryErr := b.retryBotTransport(ctx, tx, current,
+				delivery.Outcome{Kind: delivery.Uncertain, Reason: reason}, time.Time{})
+			if retryErr != nil {
+				_ = tx.Rollback(ctx)
+				return retryErr
+			}
+			_, err = tx.Exec(ctx, `UPDATE bot.delivery_intents SET state=$4,reason=$5,not_before=$6
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`, b.Delivery.BotID, operation, effect, outcome.Kind, outcome.Reason, deadline)
 			err = core.DatabaseOperationError(err)
 		}
 		if err != nil {
@@ -199,4 +219,58 @@ func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 			return core.DatabaseOperationError(err)
 		}
 	}
+}
+
+// retryBotTransport changes scheduling, never the recorded factual wire outcome.
+// The intent row is already locked by completion or exclusive runtime recovery.
+func (b *Bot) retryBotTransport(ctx context.Context, tx pgx.Tx, current botdelivery.Intent,
+	outcome delivery.Outcome, deadline time.Time,
+) (delivery.Outcome, time.Time, error) {
+	uncertain := outcome.Kind == delivery.Uncertain &&
+		(outcome.Reason == "telegram_outcome_unknown" || outcome.Reason == "delivery_interrupted")
+	if uncertain {
+		_, err := tx.Exec(ctx, `UPDATE bot.delivery_intents SET last_uncertain_attempt=$4,
+ last_uncertain_reason=$5,last_uncertain_recorded_at=clock_timestamp()
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+			current.BotID, current.Operation, current.Effect, current.Attempt, outcome.Reason)
+		if err != nil {
+			return outcome, deadline, core.DatabaseOperationError(err)
+		}
+	}
+	var chain bool
+	var resends int
+	var now time.Time
+	if err := tx.QueryRow(ctx, `SELECT last_uncertain_attempt IS NOT NULL,uncertain_resends,clock_timestamp()
+ FROM bot.delivery_intents WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+		current.BotID, current.Operation, current.Effect).Scan(&chain, &resends, &now); err != nil {
+		return outcome, deadline, core.DatabaseOperationError(err)
+	}
+	if !chain || (!uncertain && outcome.Kind != delivery.Deferred) {
+		return outcome, deadline, nil
+	}
+	const maxUncertainResends = 3
+	if resends >= maxUncertainResends {
+		outcome = delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
+		return outcome, deadline, delivery.Project(
+			ctx,
+			tx,
+			current.BotID,
+			current.QueueReference(),
+			outcome.Kind,
+			deadline,
+		)
+	}
+	seconds := int64(b.Delivery.Fallback / time.Second)
+	if b.Delivery.Fallback%time.Second != 0 {
+		seconds++
+	}
+	backoff, valid := delivery.Deadline(now, seconds<<resends)
+	if !valid {
+		return outcome, deadline, delivery.ErrQueueState
+	}
+	if backoff.After(deadline) {
+		deadline = backoff
+	}
+	outcome.Kind = delivery.Deferred
+	return outcome, deadline, delivery.Project(ctx, tx, current.BotID, current.QueueReference(), outcome.Kind, deadline)
 }

@@ -45,10 +45,10 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	expected = append(expected, queueUpgradeLedgerEntry{
 		Name: passDeliveryTargetsUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(passBody)),
 	})
-	resolutionBody, err := migrations.ReadFile("migrations/" + deliveryTransportUpgrade)
+	transportBody, err := migrations.ReadFile("migrations/" + deliveryTransportUpgrade)
 	require.NoError(t, err)
 	expected = append(expected, queueUpgradeLedgerEntry{
-		Name: deliveryTransportUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(resolutionBody)),
+		Name: deliveryTransportUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(transportBody)),
 	})
 	require.NoError(t, Migrate(t.Context(), db))
 	require.Equal(t, expected, queueUpgradeLedger(t, db), "only exact 089, 090 and 092 checksum entries are added")
