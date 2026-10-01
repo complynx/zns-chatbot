@@ -626,6 +626,28 @@ Database connection role zns_app is separately verified as current database owne
 PostgreSQL container UID is not the app UID or SQL-role identity. No resources,
 private secrets/SQL files, clocks or bootstrap writes exist from this checkpoint.
 
+## F08 consumed-model interruption alignment
+
+Root confirmed original F08 requires bounded termination, no unauthorized or
+duplicate mutation, a visible recoverable outcome, a working subsequent intent,
+and coherent completed/draft state after interruption/replay. It does not require
+fabricated identical replay of an unsaved fake response. Actual consumed-before-
+save and provider reboot remain required, with no reset/reinsert/winner injection;
+consumed/unavailable alone is not F08 or whole-R-row acceptance.
+
+Lead's operator-only proposal qa.local/model-interruption-observer-plan.md binds
+source33540321 and validates actual saved owner/update winner, execution-observation
+and selected registration domain-receipt/projection metadata queries. No payload
+or private body readback, guessed provider-turn correlation or SQL winner writes.
+Sampled zero is exact-key absence at that snapshot, not a global no-effect proof.
+The public reviewer contract uses opaque case/owner/update/turn tokens and bounded
+status/counts, complemented by real UI draft/outcome/subsequent-intent evidence.
+It excludes observer SQL/source details. Different domains and broader recovery
+obligations remain separate. Proposal only; no DB query, observer implementation,
+test or active stand mutation occurred. Root must assign scoped implementation
+and runtime observation windows after review; D barrier/journal controls are
+separately owned. Payment owns58451 and clock work owns55432; neither is touched.
+
 ## Integrated role-control checkpoint
 
 QA255 independently passed the five-path fixed-role candidate67206220. Root

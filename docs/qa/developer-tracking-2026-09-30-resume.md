@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through259, next260. All authorship/routes Codex under override;
+Fresh requests through261, next262. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -59,20 +59,24 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 
 | 257 | Complete menu source authority and predecessor compatibility | Codex author, Codex override; allocated before dispatch ebe2dddd/base5057ddb0,24paths. Exact native and actual Linux PG race PASS; PASS, merged56ac8b79 conflict-free; root focused delivery tests PASS, adjacent two packages compiled only; Functional open |
 
-| 258 | Complete registration clock successor | Codex author, Codex override; allocated before dispatch3345f211/base102072a0,27paths. Units991PASS92existingSKIP; actual4clock+22defaultPG PASS; Windows/Linux lintfmtbuild/sqlcPASS; fresh independent full review pending |
+| 258 | Complete registration clock successor | Codex author, Codex override; allocated before dispatch3345f211/base102072a0,27paths. Units991PASS92existingSKIP; actual4clock+22defaultPG PASS; Windows/Linux lintfmtbuild/sqlcPASS; FAIL3: rotation-wait freshness, clock allocation/publication before runtime admission and unsupported writer commands. Transferred fresh clock_authority_developer with same27 plus existingadmission_retention.go =28 paths |
 
-| 259 | Complete E owner transport successor | Codex author, Codex override; allocated before dispatch4088372d/base5057ddb0,10paths. Full local guards/builds/lint and15compilednegativeproofsPASS; fresh full independent review pending |
+| 259 | Complete E owner transport successor | Codex author, Codex override; allocated before dispatch4088372d/base5057ddb0,10paths. PASS full tenpath scope; reviewer21Python+3Go suites/pinnedlint0, one temporary Git fixture skipped. Merged33540321 conflict-free; root all22Python guardsPASS; live E open |
 
-Current coordination (1 October, product source56ac8b79, docs44dc9dd7):
+| 260 | Registration functional stand templates and private bootstrap | Codex author, Codex override; allocated before dispatch1cb241d4/base33540321,10paths. Compose/Prettier/Bash/realLinuxconfigLoadPASS; FAIL P1 orphan worker secrets in tool config and P2 clock env on coordinator; same10path author correcting, no managed setup/FQA |
+
+| 261 | Complete registration stand template successor | Codex author, Codex override; allocated before dispatch73beb0c2/base33540321,10paths. Compose-derived realLinuxconfig positive/negative, syntax/format/crosscontractsPASS; FAIL P1: persistent fake and live CLI zns_app pools violate managed lifecycle. Transferred fresh runtime author14; no managed setup/FQA |
+
+Current coordination (1 October, product source33540321, docs44dc9dd7):
 two scoped source-blind Functional runs completed on sealedce427ca5; preserved.
-Whole C–E and all40 complete acceptance rows remain open. Fresh counter259,
-next260, Codex override. QA254 FAIL successor3345 final991PASS92existingSKIP/4clock+22defaultPGPASS;
-fresh full QA258 running, no C merge.
+Whole C–E and all40 complete acceptance rows remain open. Fresh counter261,
+next262, Codex override. QA254 FAIL successor3345 final991PASS92existingSKIP/4clock+22defaultPGPASS;
+QA258FAIL3, fresh clock_authority_developer owns separate28-path correction, no C merge.
 QA255 roles67206220 fivepaths PASS merged102072a0; root focused checks PASS. QA256 E44058ee7 failed
-localhost contract; successor4088372d final localgatesPASS, fresh full QA259 running; no live E mutation.
+localhost contract; successor4088372d final localgates and fresh full QA259PASS, merged33540321; no live E mutation.
 Operator7841 fivepaths passed actual Linux race, awaits reviewed integrated C.
 Menu24ebe2 exact native and Linux race PASS; QA257 PASS merged56ac8b79.
-C native window terminal/released. E4088372d final local build receipts PASS, fresh full QA259 running.
+C native window terminal/released. E4088372d full QA259PASS merged33540321, root22guardsPASS.
 Job19interim3c83 local gates PASS; final source preparation waits reviewed C.
 Baseline09 full failure remains; focused10 on5057 terminal9PASS1FAIL0SKIP,
 seven role scenarios, Meal and Large PASS; DeletedPayment fails.58441 released.
@@ -147,3 +151,9 @@ Next fresh request: 212. Same-reviewer formatting-equivalence addenda 179, 186 a
 
 
 Current staffing refresh: three active capability developers: C host capability completion (c_registration_developer), D cache/model observations (d_observability_developer), E shared composition completion (r108_resume). They first identify actual remaining required implementation and do not fabricate features when only acceptance remains. Menu fixes run separately in immutable rev6; payment integration waits on the shared worker base. Three fresh independent reviews 209–211 run concurrently. Root owns actual source integration, stands and shared gates. Eleven slots currently suffice.
+
+## Current execution refresh — 2026-10-01 03:33 UTC
+
+C28 immutable eec24665 is completing full Linux/PostgreSQL clock/default/startup gates in its own ephemeral fixture; native55432 released. D10 immutable df5199ad passed local tests/lint/build and root actual two PostgreSQL cases run on58441 with exclusive8090. Payment6 root repeat failed47.615s only on the missing-edit terminal-status assertion; all other selected cases passed and parent DB readback passed. Author corrects exact Rejected contract and an identified still-live off-page payment boundary within the same scope, retaining original-source locking and no-send retirement assertions. No acceptance yet.
+
+Runtime14 transferred after QA261. First real PG17.11 roles/bootstrap/7operator-actions/fake-persistence and zero-managed-session inventory checks passed; negative/config/lint gates remain. ManagedC204 unstarted. Live clock read/advance also require the private operator guard; operator5 is prepared only after reviewed C integration. Full F08 business-plan/effects/UI observation remains separate. Counter261,next262; all Codex override. Root source33540321, no production release.

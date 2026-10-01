@@ -1,4 +1,4 @@
-# Integrated source checkpoint:56ac8b79
+# Integrated source checkpoint:33540321
 
 Product source0070f944 incorporates reviewed callback observations62b9eebc
 (QA241), source diagnosticsb857b8b9 (QA243) and registration fixtures54766266
@@ -31,6 +31,9 @@ GOFLAGS=-p=2 -mod=readonly, without TEST_DATABASE_URL:
   ./internal/bot -run 'Test(PassPreparation|PredecessorPassReceipt|PassReceipt|PassMenuDefinitiveDenial|PassRetirement|PassFamilyRead)'
   -count=1` exited0. botdelivery tests passed0.219s; readsource0.932s/bot0.175s
   compiled but had no matching tests. No PG environment or Functional claim.
+- After33540321 merged E rehearsal4088372d (QA259,tenpaths) conflict-free:
+  bundled Python `-m unittest test_rehearsal` in tools/e-rehearsal passed
+  all22 tests in8.549s. No live E/DB/stand actions or acceptance.
 - Full pinned installed ESLint: bundled Node invoking
   `node_modules/eslint/bin/eslint.js . --max-warnings 0` exited0.
 - Initial full pinned installed Prettier check exited1. It reported four files:

@@ -182,6 +182,72 @@ unfiltered other-platform/importer coverage, not source-scan estimates.
 Config syntax check returned exit0; runtime readiness is not claimed. Compose
 raw SHA256 `3C86799B628CD21E3B710FD45E10F8D1C7468DE34F868CE476DE21F9B82687BC`.
 
+## Actual second native shard: prepared idle
+
+Root subsequently authorized exact second-cluster setup, with the lead as sole
+infrastructure writer. Fresh port/resource collision checks found no conflicts;
+cached RepoDigest matched. Docker reports32CPUs and63,006,920,704bytes memory;
+observed existing containers left capacity for the bounded2CPU/1GiB cluster.
+Only the following resources were created; no other stand or test/source changed:
+
+| Resource | Actual handle |
+| --- | --- |
+| Project | synthetic-qa-zns-native-shard-20261001 |
+| Container | synthetic-qa-zns-native-shard-20261001-postgres-1 |
+| Container ID | 2516c2ca9430fbe7e72d7706aadb52f9c2a16a6586b59f8dc66d660c6d4dc1ec |
+| Volume | synthetic-qa-zns-native-shard-20261001-pgdata |
+| Network | synthetic-qa-zns-native-shard-20261001-host |
+| Network ID | 1447d75667ca9c56837af340c196dc3666f0fe07ee066ce36c3ffb82a5fa6ab7 |
+| Native endpoint | 127.0.0.1:58451 |
+| Database | synthetic_qa_zns_native_shard |
+
+Config.Image, ImageID and cached RepoDigests all match the existing pinned
+postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24.
+Actual limits2CPU/1GiB/256MiBshm, restart=no, loopback-only58451 confirmed.
+Dedicated labeled network contains only this container. Container is healthy.
+Native Windows pgx authenticated over TCP and read PostgreSQL17.11, exact
+database/ownerpostgres and the required role state. Setup created no extra
+disposable database. No product migrations, fixtures, grants, schemas or tests
+were applied; migration ledger absent and no other client backends at readback.
+
+Only first-three CREATE ROLE definitions from exact assigned product source
+`56ac8b79cee049bb6108fc47af916aa8912af80d` were applied transactionally after
+verifying absence: zns_api/zns_bot/zns_meter, LOGIN/password present, superuser,
+CREATEDB, CREATEROLE, replication and bypassRLS all false. zns_app remains absent.
+Raw roles.sql SHA256 remains
+`859BB43EF1E62A7167F0253DBF0D1A818F77ABD620F04B10AE0491D3744F43DB`.
+Database/schema inventory was unchanged by roles-only bootstrap.
+
+Private owner bundle: qa.local/native-shard-20261001/private-owner.json, SHA256
+`240ED22C24A57EFCC031BFFC3F2F425D67803F8EF7617E87C151E3275A42066A`.
+Ignored by Git; ACL inheritance protected, one owner-only FullControl rule.
+Generated password passed only through runtime environment to Compose; no
+credential argv/log/tracked config. Existing role passwords came directly from
+the exact raw source statements through private psql stdin, not printed.
+
+Evidence in qa.local/native-shard-20261001:
+
+- setup-receipt.json SHA256
+  `3ABF116379F53444A9EFE7868A8C4C0F3E08709BB3C02FCC5307CA47154CF87F`.
+- native-readback.go SHA256
+  `4552249B94D3E627AAE47E65C10AE24F2C057A591B753EBB50F73A2CF8EFC958`;
+  native-readback.json SHA256
+  `D9BD9C4B9E3B6B262874498968ABB121E46B58E2891FDECA6D17CFF5209BB4AF`.
+- source-inventory-56ac.json:2209 raw committed files, SHA256
+  `93624586b3791250c7751a6af8e8bfb8fc62e4d277750d36bd8e164ba3c04ab2`.
+- raw-migration-inventory-56ac.json:89 unnormalized raw migration bodies, SHA256
+  `57e59d9d446fabc936e2187e8d382f787d6172cc795a1b18f584876538027906`.
+
+Assigned source's last migration is090_pass_delivery_targets.sql. Its raw bytes
+are inventoried above; schema090 is not applied to the prepared cluster.
+
+These source/schema inventories identify the setup provenance only; no source
+test or migration execution/final freeze is certified. Final reviewed source,
+migration application and test writers require separate root assignment. Setup
+is terminal; lead releases exclusive preparation ownership to root, preserving
+the healthy idle cluster. No restart/reseed/rebuild or unassigned consumer while
+awaiting that assignment. Developer55432, baseline58441 and ce427 were untouched.
+
 ## Integrated role-control checkpoint
 
 QA255 independently passed the five-path fixed-role candidate67206220. Root

@@ -2,7 +2,10 @@
 
 ## Current integration — 2026-10-01
 
-Last functional product merge is Git56ac8b79cee049bb6108fc47af916aa8912af80d.
+Last integrated source merge is Git33540321d033328742b743f504fd35ffaba8496d.
+E rehearsal tool4088372d (QA259,tenpaths) merged without conflicts. Root actual
+22 offline Python guards passed. This adds rehearsal tooling, not runtime product
+dependencies; actual final import/removal and frozen090/091 epoch remain open.
 Menu authority ebe2dddd (QA257,24 paths) merged without conflict resolution,
 including additive090. Root scoped delivery tests passed; adjacent packages
 compiled without matched tests. Developer native and real Linux PG race passed.
@@ -26,8 +29,7 @@ without conflict resolution. Root focused bot/observability checks passed;
 Functional acceptance remains open. Baseline09 terminal FAIL still binds0070,
 not these later features.
 The working root documentation is updated separately. Functional images remain
-sealedce427ca5, so they do not certify this newer source. Menu090 is integrated; job summary, C clock and E rehearsal guard successors
-remain unmerged.
+sealedce427ca5, so they do not certify this newer source. Menu090 is integrated; job summary and C clock remain unmerged. E guard is integrated, not live E accepted.
 
 Migration checksums bind raw embedded bytes. Equal Git blobs in CRLF and LF
 worktrees do not prove equal embedded migration hashes. Final importer/runtime

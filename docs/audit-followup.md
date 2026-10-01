@@ -1,6 +1,6 @@
-## Current integrated source and expanded QA — 2026-10-01, source56ac8b79
+## Current integrated source and expanded QA — 2026-10-01, source33540321
 
-Authoritative product Git56ac8b79 includes reviewed ACK observation QA241,
+Authoritative integrated Git33540321 includes reviewed ACK observation QA241,
 source diagnostics QA243, registration fixture QA245 and HTTP observations
 QA248, update diagnostics QA253 and fixed fixture role controls QA255. Root focused integrated checks and full pinned JS gates passed;
 Functional images remain sealedce427 and do not certify the newer source.
@@ -15,15 +15,21 @@ wait on integrated reviewed C ingress. Neither candidate is merged.
 
 C27 clock50a failed fresh QA254 on startup ordering, post-allocator observation
 and strict state decoding. Successor3345 passed final units/pinned checks and4clock+22default PG;
-fresh independent full27 QA258 running.
+fresh independent full27 QA258FAIL3. Correction transferred to a fresh author
+with existingadmission_retention.go added to scope (28 paths); all old candidates
+are immutable. No C integration/Functional acceptance.
 Operator5 immutable7841 passed actual offline Linux race and both-platform lint;
 final dependency/base preparation waits reviewed C. Fixed fixture role controls
 67206220,5 paths, passed local/native PG and passed independent QA255 and merged102072a0; root focused checks passed.
 E10 native SQL owner successor44058ee7 failed fresh QA256 on localhost endpoint contract after offline guards,
-compiled rejection proofs/builds and lint. Author corrects same ten paths.
+compiled rejection proofs/builds and lint. Successor4088372d passed fresh full QA259, merged33540321; root22guardsPASS.
 No live E write/removal is accepted.
 Engineer prepares ten explicit registration stand files in a separate branch,
-using existing private-secret psql bootstrap mechanism. No resources/builds/start
+using existing private-secret psql bootstrap mechanism. QA260FAIL2 on tool
+worker configuration and coordinator clock environment; same-scope correction
+is active. Actual58451 second native cluster is prepared and allocated payment
+fix developer; root reproduced current33540321 order_not_found and executes
+affected candidate tests as credential owner. No production secret access. No resources/builds/start
 are authorized by template preparation; installation204 stays unstarted.
 
 Two scoped EN/RU Functional runs on ce427 completed and were released with state
@@ -33,7 +39,7 @@ and Meal/Large passed, DeletedPayment failed. This does not accept a full suite
 or establish a cause/fix for the earlier Meal failure.58441 was released after
 focused10 and separate role-control developer gates. Final E/runtime/UI/parity
 and broad final-source acceptance remain outstanding. Telegram account ID is in
-PROGRESS; independent work continues. Production NO-GO. Counter258,next259,
+PROGRESS; independent work continues. Production NO-GO. Counter261,next262,
 all Codex under override, no Claude probe.
 
 ## Historical integrated snapshot — 2026-10-01, ce427ca5
@@ -1522,3 +1528,9 @@ Code QA №17 static PASS, report готов. №18 payment exact Opus выпо�
 ## Current scope update — 1 October
 
 Common integration81a9cf73 now includes QA233 usage and QA235 models/credits/broadcast policy. Full baseline and architecture acceptance remain open. Menu QA234 found one affected SQL-provenance gap; a new developer owns the correction, so migration090 and payment-retirement integration are pending. Two actualce427ca5 stands are frozen for independent manual/UI acceptance; two reviewers are executing, and no fullFunctionalPASS is claimed. The agent locale prerequisite is documented; reviewers establish its capability independently. Final E materialization must include the future reviewed089/090 schema and actual new CLI/image receipts.
+
+## Current execution refresh — 2026-10-01 03:33 UTC
+
+C28 immutable eec24665 is completing full Linux/PostgreSQL clock/default/startup gates in its own ephemeral fixture; native55432 released. D10 immutable df5199ad passed local tests/lint/build and root actual two PostgreSQL cases run on58441 with exclusive8090. Payment6 root repeat failed47.615s only on the missing-edit terminal-status assertion; all other selected cases passed and parent DB readback passed. Author corrects exact Rejected contract and an identified still-live off-page payment boundary within the same scope, retaining original-source locking and no-send retirement assertions. No acceptance yet.
+
+Runtime14 transferred after QA261. First real PG17.11 roles/bootstrap/7operator-actions/fake-persistence and zero-managed-session inventory checks passed; negative/config/lint gates remain. ManagedC204 unstarted. Live clock read/advance also require the private operator guard; operator5 is prepared only after reviewed C integration. Full F08 business-plan/effects/UI observation remains separate. Counter261,next262; all Codex override. Root source33540321, no production release.

@@ -557,3 +557,73 @@ Root24857 terminalexit0. Actual selected botdelivery testsPASS0.219s. Readsource
 0.932s andbot0.175s compiled but selector matched no tests; these are dependencies
 compiled only, not two additional passing testsuites. NoPG/FQA claim. Queue0/1/0
 remainsC258;133 events. Import ongoing observedwait4h27m11s. Writes paused.
+
+## Clock transfer and second PostgreSQL stand preparation: 2026-10-01T02:37:23Z
+
+Committedf9a290cd snapshot133 retained. Product56ac unchanged. QA258 finalFAIL3:
+stale rotationallocator clock; actual DBallocation/stateguard after admission;
+unsupported writer commands ignoreenv. Return15. Freshclock_authority_developer
+owns new c-clock-authority-fix worktree, rebase56ac,27+existingadmission_retention.go
+=28approved. Immutable3345 checkpoint preserved/oldauthor stopped; exclusive55432
+assigned to newauthor, currently preDBoffline implementation, no ready handoff.
+E408 fulltenpathQA259 reviewing after15compilednegative/all22guards/buildslintPASS;
+no liveE. Queue0/1/0, counter259next260 Codex.
+
+Lead actual second native58451 PG stand PREPARING approved: onecomponent config
+project, dedicatednetwork/volume/privatebundle, pinned17.11, rolesfirst3only.
+Verify conflicts/cachedimage/capacity first. No tests/finalsourcefreeze/otherstands
+or actual READYreceipt. C204 tenregistrationtemplates preparation active, no build
+or resources. All40/fullbaseline/FQA/productionNO-GO retained. Import ongoingwait
+4h32m30s since observedbaseline; historical startunknown.136events. Writes paused.
+
+## E merge and isolated payment investigation: 2026-10-01T02:45:36Z
+
+QA259 finalPASS fullE tenpaths: reviewer21PythonPASS/1SKIP,3Go clientPASS,pinnedlint0.
+Merged conflict-free33540321, root actualall22PythonPASS8.549s. LiveE open. Review
+queue0/0/0, counter259next260 Codex, return15 unchanged. No new Functional images.
+Native58451 actual healthyidle/auth/digest/limits/nonprivileged3roles verified,
+appabsent/no migrations/tests. Lead released setup to root; root assigned exclusive
+58451 to payment_card_developer newworktree/base335 for actual baseline10 failing
+TestDeletedPaymentCardKeepsSelectedLanguage cause/minimalfixproposal. Initial
+ownership onlyexisting testpath; product scope unapproved, not a repair acceptance.
+
+D model interruption READ-ONLY originalF08/consumed-beforeSave/providerreboot design:
+genuine publiccontrols/readback with draft/effect/subsequentintent; nofakewinner or
+reinsert. C28 developer exclusive55432 and approved bounded uniqueephemeralstartupPG
+networkaliaspostgres/nohostport codegate-only; no managedCstand/FQA. Engineer ten
+registrationtemplates local0f4461 clean3Compose/Prettier/BashPASS; ephemeralcached
+Linuxconfigvalidator approved only, finalreview pending/no managedCresources.
+All40/fullCDE/FQA/finalbaseline NO-GO retained. Import observedwait4h40m43s,
+historical startunknown.142events. Three files paused for root checkpoint.
+
+## Template lifecycle transfer and concurrent local gates: 2026-10-01T03:30:30Z
+
+Product335 E259/root22PythonPASS remains latest verified source. Read root PROGRESS
+records earlierQA260FAIL worker secrets/address and coordinatorclockenv, then actual
+QA261 report73beb0c2 FAIL unmanaged fake/operator zns_app pools lifecycle. Two genuine
+review returns now observed, historical eventstarts unknown:15→17. Fresh runtime
+standdeveloper14 originaltemplates10+runtimerolesSQL+registrationfixture+newrolesguard
++rolesPGtest; actual ephemeralPG codegates inprogress, managedC204 NOT started.
+Operator7841 historical preserved; non-init operator needs privateoperatorguard afterC.
+
+C28 final eec2466500ca68f1577fd3d8d762a436640d24df entireLinuxPG clock/default/startup
+matrix RUNNING selfownedfixture. Native55432released; childcredential auto-review
+blocked/no retry. Payment6offlinefmt/unit/lintPASS, root58451 selector15927 active;
+main335 reproduced deletionbug andoldfallback queuedrift, originalcandidateFAIL kept,
+assertions honestly fixed. D new10 df5199ad clean/base335 units/lint/buildPASS; actual
+twoPG58441+8090pending. Genuine qualifiedF08 UI/business observer separate.
+No active freshreview confirmed; queue0/0/0, counter261next262Codex. Import observed
+wait5h25m37s; historical startunknown.147events. Full40/CDE/FQA/baselineNO-GO retained.
+Three-file writes paused for root checkpoint.
+
+## Payment terminal failure and runtime role proof: 2026-10-01T03:32:30Z
+
+Payment root15927 terminalFAIL47.615s onlyMissingEditNeverSends expectedcancelled
+versus actualstatus underdiagnosis. PostreadbackPASS/allotherselectedcasesPASS;
+authorfreeze released. This localgatefailure does not add independentreviewreturns.
+D root70471 actualtwoPG58441+8090 RUNNING, not pending or terminalpassed.
+Runtime14 firstactualPG17.11PASS bootstrap/migrate/seed/init/exactroles/all7live
+operator actions/fakefile-state-cursor-history/restart. Inventory ZERO managedsessions
+withfake/operator connections held; remaining negatives/lint/config and managedC/FQA
+pending. Queue0/0/0 andreturn17/counter261next262 unchanged.150events. Import ongoing
+observedwait5h27m37s; previous startunknown. All40/NO-GO retained; writes paused.
