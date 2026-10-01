@@ -71,7 +71,7 @@ func TestAdminPageResultsAtomicReplayAuthorityAndErasure(t *testing.T) {
 	// A failure during the second enqueue must leave neither an authorized
 	// partial snapshot nor any visible queue result from the first enqueue.
 	_, err = db.Exec(ctx, `CREATE FUNCTION bot.synthetic_page_fail() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
- IF (SELECT count(*) FROM bot.delivery_intents WHERE owner=NEW.owner)>0 THEN RAISE EXCEPTION 'synthetic enqueue failure'; END IF; RETURN NEW; END $$;
+ IF (SELECT count(*) FROM bot.delivery_intents WHERE owner=NEW.owner)>0 THEN RAISE EXCEPTION 'synthetic enqueue failure'; END IF; RETURN NEW; END; $$;
  CREATE TRIGGER synthetic_page_fail BEFORE INSERT ON bot.delivery_intents FOR EACH ROW EXECUTE FUNCTION bot.synthetic_page_fail()`)
 	require.NoError(t, err)
 	require.Error(t, s.EnqueueAdminPageResults(ctx, in))
