@@ -476,7 +476,9 @@ WITH head AS (
    AND previous.state IN ('pending','sending','unknown','parked','paused'))))
  ORDER BY n.available_at,n.id LIMIT 1 FOR UPDATE OF n SKIP LOCKED
 )
-UPDATE core.massage_notices n SET delivery_attempt=delivery_attempt+1,lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.massage_notices n SET delivery_attempt=delivery_attempt+CASE
+ WHEN delivery_state='pending' AND last_uncertain_attempt IS NOT NULL AND uncertain_resends>=3 THEN 0 ELSE 1 END,
+ lease_until=clock_timestamp()+interval '2 minutes'
 FROM head WHERE n.id=head.id RETURNING n.id, n.booking_id, n.owner, n.kind, n.created_at, n.sent_at, n.bot_id, n.delivery_state, n.delivery_chat, n.delivery_attempt, n.lease_until, n.telegram_message_id, n.delivery_text, n.failure_count, n.followup_pending, n.followup_failure, n.followup_attempts, n.available_at, n.failure, n.delivery_wire_payload, n.last_uncertain_attempt, n.last_confirmed_attempt, n.last_uncertain_reason, n.last_uncertain_recorded_at, n.uncertain_resends
 `
 
@@ -724,7 +726,8 @@ WITH retry AS (
   GREATEST(available_at,$2::timestamptz,
    clock_timestamp()+$3::bigint *
     CASE uncertain_resends WHEN 0 THEN 1 WHEN 1 THEN 2 ELSE 4 END * interval '1 second') AS next_at,
-  uncertain_resends>=3 AS exhausted
+  uncertain_resends>=3 AND ($1::boolean
+   OR $2::timestamptz<=clock_timestamp()) AS exhausted
  FROM core.massage_notices
  WHERE id=$4::bigint AND bot_id=$5::bigint
   AND delivery_attempt=$6::bigint AND delivery_state IN ('pending','sending','unknown')

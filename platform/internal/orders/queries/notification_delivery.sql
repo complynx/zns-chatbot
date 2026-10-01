@@ -21,7 +21,9 @@ WITH head AS (
    AND previous.state IN ('pending','sending','unknown','parked','paused'))))
  ORDER BY n.available_at,n.id LIMIT 1 FOR UPDATE OF n SKIP LOCKED
 )
-UPDATE core.order_notifications n SET delivery_attempt=delivery_attempt+1,lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.order_notifications n SET delivery_attempt=delivery_attempt+CASE
+ WHEN delivery_state='pending' AND last_uncertain_attempt IS NOT NULL AND uncertain_resends>=3 THEN 0 ELSE 1 END,
+ lease_until=clock_timestamp()+interval '2 minutes'
 FROM head WHERE n.id=head.id RETURNING n.*;
 
 -- name: ReadNotification :one
@@ -112,7 +114,8 @@ WITH retry AS (
   GREATEST(available_at,sqlc.arg(provider_deadline)::timestamptz,
    clock_timestamp()+sqlc.arg(fallback_seconds)::bigint *
     CASE uncertain_resends WHEN 0 THEN 1 WHEN 1 THEN 2 ELSE 4 END * interval '1 second') AS next_at,
-  uncertain_resends>=3 AS exhausted
+  uncertain_resends>=3 AND (sqlc.arg(uncertain)::boolean
+   OR sqlc.arg(provider_deadline)::timestamptz<=clock_timestamp()) AS exhausted
  FROM core.order_notifications
  WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
   AND delivery_attempt=sqlc.arg(attempt)::bigint AND delivery_state IN ('pending','sending','unknown')
