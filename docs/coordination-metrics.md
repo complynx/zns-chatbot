@@ -774,3 +774,21 @@ avoiding C51 overlap. Product edits not assigned yet; no implementation, helper,
 IdP call or readiness credit. These refill product/architecture planning ownership
 alongside C implementation and blocked E execution, not a new helper lane.
 Only current staffing/owner cells and this note changed. Writes paused.
+
+## Frozen subset FQA and bounded D implementation: 2026-10-01T09:46:02Z
+
+Read-only CSV211 rows/latestobserved09:45:40Z; actualleadfreeze09:39:51.9756350Z.
+Root checkedaccess5E97DE6F/requirements6496450F. Freshsourceblind fqa_current_flows_a
+sole205 andfqa_current_recovery_b sole206 fullyACKcodequality, actualbrowserstarted.
+READY2/FROZEN2, active independentreviewers2; seven selectedsubsetsA1–A4/B1–B3,
+not full40 or laterD04/payment. No newPASS verdict inferred. Source6bee/export3b72,
+publicdispatch docs/qa/fqa-current-dispatch-2026-10-01.md. Frozen stands unchanged.
+
+D clockauthor now IMPLEMENTATION exactly2observability/runtime.go+runtime_test.go,
+worktree/branch d-operation-failure-classification; finitecompletionfailure metric/
+span privacy and coarsecontractpreserved. Authorown gates/freshQA beforemerge.
+Identityfirstcontact read-only finitepathscope stillpending. C actualdiff50/full51
+context cleanrebase8947d64dcd finalgatesactive. FreshQA283 unallocated, counter282,
+returns31unchanged. No finalCDEstageclosure/daydecrement. Whole40 stillopen and
+productionNO-GO. Onlymanagerboard/metricsdescription updated; CSV unchanged.
+Writespaused; ownership returnsroot beforecommit.
