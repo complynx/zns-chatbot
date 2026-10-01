@@ -158,6 +158,7 @@ func TestRegistrationClockConfigurationIsOptIn(t *testing.T) {
 	clock, configured, err := configuredRegistrationClock(t.Context(), nil, config.Config{Env: "production"})
 	require.NoError(t, err)
 	require.Nil(t, clock, "defaults do not touch a database or file")
+	require.True(t, clock == nil, "default startup must return a nil clock interface")
 	require.False(t, configured)
 	require.NoError(t, rejectRegistrationClockMode("api"))
 	t.Setenv("REGISTRATION_CLOCK_FILE", registrationclock.Path)

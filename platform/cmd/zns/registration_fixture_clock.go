@@ -98,7 +98,7 @@ func configuredRegistrationClock(
 ) (registrationingress.Clock, bool, error) {
 	clock, configured, err := preflightRegistrationClock(ctx, registrationClockAppMode, cfg)
 	if err != nil || !configured {
-		return clock, configured, err
+		return nil, configured, err
 	}
 	if err = registrationClockDatabaseGuard(ctx, db, clock.config); err != nil {
 		return nil, true, err
