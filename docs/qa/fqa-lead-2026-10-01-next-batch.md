@@ -365,3 +365,270 @@ setup, DB/address/marker/identity proof, permission and unsupported-entry-point
 negative checks, atomic advance/readback, and persistence across managed replacement.
 Port/resource collision inventory repeats immediately before creation. Existing
 ce427 stands and baseline58441 remain preserved under their current ownership.
+
+## Nine-template C preparation refinement
+
+Read-only refinement requested by root after the five operator source paths were
+assigned. The nine template paths remain unapproved for edits. Registration CLI
+below reflects the current genuine product command; operator CLI syntax reflects
+the developing candidate, requiring immutable review before execution. Baseline10
+has sole58441 ownership; nothing here authorizes role/DB/resource writes there.
+
+Current engineer source ownership supersedes the earlier three-file proposal:
+`platform/cmd/registrationclockctl/main.go` and
+`platform/internal/sandbox/registration_clock_operator.go`,
+`registration_clock_operator_linux.go`,
+`registration_clock_operator_unsupported.go`,
+`registration_clock_operator_internal_test.go`. This report grants no expansion.
+
+| Proposed registration file | Exact preparation delta |
+| --- | --- |
+| `prerequisites.compose.yaml` | New204 namespace/DB/resources; ordered PostgreSQL bootstrap, migrate/seed, ordinary product fixture, registration init, clock init/readback, then fake. Distinct environment blocks; no clock variables on ordinary zns fixture/migrate/fake commands. Tools use the owning zns_app DSN, not the old flows postgres DSN. Operator is a bounded one-shot tool, never a seventh managed runtime component. |
+| `product-roles.sql` | Fresh-cluster-only zns_app/zns_meter role and schema ownership setup; dedicated database owned by zns_app. No copied old-flow literal credentials. Private runtime credential injection through a reviewed bootstrap mechanism; tracked file contains no secrets. Product migration and fixture tables are created by zns_app, including public.zns_sandbox_fixtures. |
+| `inventory-role.sql` | Exact new DB grant to read-only zns_inventory, pg_read_all_stats, read-only defaults and managed-role connection-check settings scoped to this database. No write access to clock/fixture state. |
+| `runtime.compose.yaml` | Exact204 managed labels; original six components; app uses zns_app/postgres5432 and five clock settings. App alone mounts clock volume read-only. Helpers receive no clock settings/mount. Bind actual runtime UID, image digests and config/state volumes. |
+| `owner.compose.yaml` | New204 coordinator and isolated state/config; preserves existing six-role replacement semantics. Coordinator has no writable clock mount. Operator custody is separate from coordinator/admission ownership. |
+| `replacement.json` | Installation204, new runtime Compose project/files, runtime_database_host postgres, managed roles zns_app/zns_meter and new private state directory. Never target import203 or old flows/recovery. |
+| `runtime.yaml` | Sandbox/synthetic app, exact C UI/provider addresses and fixture-model endpoint; reviewed case opening and anchor through explicit setup settings, not wall-clock inference. No control grant through model configuration. |
+| `fake.runtime.yaml` | New UI58433/provider-control58434, own provider journal/case and private key; actual ACK readback. No business clock or registration substitution. Ordinary user/model cannot mutate clock state. |
+| `clock-control.md` | Public sanitized operator requests/readback and private preparation checklist; five fixed settings, atomic CAS/time bounds, permissions, durable marker, restart and unsupported-entry-point evidence. No secret values or implementation findings in reviewer handoff. |
+
+The engineer must select and obtain review of the explicit private bootstrap
+mechanism before templates are approved. Docker-entrypoint SQL does not substitute
+environment passwords automatically. Do not start a template that assumes it
+does, copy old credentials, or make zns_app a superuser through POSTGRES_USER.
+The bootstrap administrative connection creates only the fresh allocated roles,
+database ownership and required initial schemas. It closes before setup tools.
+Prefer all migrations/seed/product fixtures as the actual database-owning zns_app
+so their tables/sequences have correct ownership. If a reviewed migration needs
+an administrative prerequisite, enumerate and isolate that action first; never
+fall back silently to creating all tables as postgres. No database-owner bypass
+or weakened factory check is accepted.
+
+Genuine command sequence, using private config/DSN and only this stand network:
+
+1. Current digest-addressed `zns migrate` (sandbox performs migration then seed),
+   with all REGISTRATION_FIXTURE_* and REGISTRATION_CLOCK_* settings absent.
+2. Same current `zns product-fixture`, with those settings absent, as zns_app.
+   This materializes product-v1/product-passport-v1 using Alice101/Bob202/Visitor303.
+3. Same `zns product-fixture`, now REGISTRATION_FIXTURE_ACTION=init,
+   REGISTRATION_FIXTURE_STAND=synthetic-qa-zns-registration-fixture,
+   REGISTRATION_FIXTURE_OPENS_AT=<reviewed setup opening RFC3339 instant>.
+   Clock settings remain absent. Init requires the fresh genuine product state;
+   no prior booking/intents or altered original role counts are permitted.
+4. Operator `/usr/local/bin/registrationclockctl -action init`, with the five
+   clock settings and owning zns_app DSN. It owns state publication and exact DB
+   clock-marker insertion. Verify complete state and marker after uncertain init
+   rather than deleting/resetting state. Then `-action read` with identical settings.
+5. Registration read uses `zns product-fixture` with action=read and exact stand;
+   opening is absent. Bounded live role changes use only revoke-payment-a or
+   revoke-booking-admin, opening absent, under reviewer-coordinated ownership.
+   No manually fabricated state or unsupported restore/payment-B action.
+6. Subsequent operator advance is `-action advance -expected-revision <observed>
+   -target <strictly later UTC microsecond instant>`; record result plus observed
+   product UI/domain readback. Never treat operator JSON as a passed business case.
+
+Before managed start, owner readback records current_user, current_database,
+pg_get_userbyid(datdba), the exact configured postgres5432 address, and original
+three identity pairs. Require current_user=datdba=zns_app. Read fixture table
+owner/ACL explicitly using pg_class/pg_namespace and has_table_privilege for
+SELECT/INSERT; database ownership alone does not grant access to a postgres-owned
+table. Verify genuine product/registration/clock markers and sanitized fixture
+read. Table/sequence ownership and runtime access must be demonstrated, not
+inferred from default grants on core/bot/interaction. Public fixture markers are
+created and used as zns_app; no broad PUBLIC grant or role impersonation fallback.
+
+Build registrationclockctl from the same final reviewed raw Git export as app,
+fake and current source inventory, record input and executable hashes, install
+at `/usr/local/bin/registrationclockctl` in the approved actual operator image,
+then inspect its bytes through the resolvable repository@sha256 binding. ce427
+artifacts do not contain this CLI. Do not substitute host executable/current
+worktree code for frozen image bytes. The CLI image may be a separately bounded
+operator image or share the current application image only after actual installed
+binary proof. It remains outside the six-component managed runtime inventory.
+
+Inspect approved app image's actual Linux UID and use that same numeric UID for
+the transient operator process and clock directory/file ownership. Operator gets
+only clock RW + config RO on the allocated network; app gets clock RO + config
+RO. Parent0700/file0600 and current euid checks must pass in both real containers.
+No chmod0777, supplementary-reader workaround or root app fallback. Atomic state,
+CAS lock and directory synchronization live on the persistent clock volume,
+outside launch-generation state. Prove equal case/anchor and later revision after
+managed replacement; no anchor reset, volume recreation or provider-fixture
+reinstallation during frozen QA.
+
+The original40 scenarios remain individual acceptance rows. This preparation
+can enable genuine manual registration portions of F01/F02, C role portions of
+F06, rank/time portions of F09-F11 and R15/R16, and a bounded subset of F12/F13
+once execution proves their controls. ACK can enable the missing receipt portion
+of R01/F01. None is a full-row PASS from preparation. F03/F04 language-fallback,
+F05-F07 private knowledge/consent/history, F08 model delay/interruption, F10 ingress
+burst/reversed replay and F12 last-place concurrency still need their exact public
+setup/control proof; event-B completion remains blocked. R02-R14 durable delivery,
+crash/session/SQL/fault/lane controls and R17/R18 diagnostics/resources are separate
+readiness contracts. All nine I rows remain in the isolated E allocation. Retain
+the required nonreplayable consumed-model-before-save/provider-reboot case.
+
+Final freeze needs integrated reviewed C core/operator, menu090 and applicable
+job/source changes, exact raw migration bytes, actual image/binary/config/DB/UID
+bindings, and new source-blind independent FQA ownership. Nine-file approval,
+build authority and resource preparation are distinct from this planning report.
+
+## Conditional role expansion and current acceptance state
+
+Root approved development of four fixed genuine fixture actions: restore-payment-a
+for Bob/event A, grant-payment-b and revoke-payment-b for Bob/event B, and
+restore-booking-admin for Visitor. Same original three identities, fixed explicit
+actions, idempotence, owning DB/identity guards and locks; no generic grant API,
+clock/schema changes or init-replay restoration of grants. Candidate672 is under
+fresh QA255; E10 received QA256 FAIL for a localhost endpoint P2 issue and its
+author is fixing it. These are pending source acceptance, not available
+stand controls. Until gates/review/integration and actual final-image proof,
+current5057 and ce427 retain the earlier event-B negative-only limitation.
+
+Once accepted, registration template contract may expose only those exact action
+names supplied by the reviewed parser, with opening absent and current role
+readback. This enables genuine B payment cases and reversible role trials without
+a fourth identity; it does not itself pass the original40 scenarios. Engineer
+separately owns nine registration templates in a new worktree, without resource
+authority. Lead owns this plan, not those templates or product source.
+
+Focused10 terminal9PASS/1FAIL/0SKIP/0unfinished is narrow reproduction evidence;
+full09 remains failed/incomplete, including its45-minute integration timeout.
+Neither role source review nor focused10 replaces final broad regression/FQA.
+
+## Final broad native coverage schedule
+
+Recommendation: two isolated PostgreSQL clusters, two source-frozen runner
+worktrees/caches, one writer per cluster. The integration package dominated run09
+with2701.086seconds before timeout; longest other package was internal/bot149.64s.
+Current read-only source scan found399 integration test files and1048 top-level
+Test/Fuzz/Example candidates. This is planning evidence only; the final reviewed
+epoch's actual Go test discovery determines the authoritative union. No tests or
+test discovery executable was run during planning.
+
+Retain the original platform scope exactly: ./cmd/... ./internal/...
+./integration/... ./identityprovision/... ./deploy/... and the separate
+tools/migrate module ./.... No -short, assertion/time-limit edits, new exclusions,
+environment tricks to cause skips, or replacement by focused examples. Each
+existing test's internal concurrency remains unchanged. Scheduling -p=1 and
+-parallel=1 matches run09; GOMAXPROCS2, GOWORKoff, local pinned Go and readonly
+module input remain recorded. Fresh final source/raw migration byte inventories
+before/after are mandatory; earlier0070/5057 results are historical evidence.
+
+After exact final-source authority and stand preflight, runner captures sorted
+package union via Go package discovery and complete top-level runnable
+Test/Example/Fuzz discovery for each integration package. Execute discovery only
+inside the assigned writer window: package init/TestMain can touch its database.
+Store raw discovery, command and environment provenance plus hashes. Check the
+AST inventory against discovery; investigate omissions before testing. Benchmarks
+are not added to the original go test gate. Any extra integration package in the
+final epoch must be included rather than silently assuming the current single
+package structure.
+
+For every integration package, sort runnable names by ordinal byte order and
+assign index modulo8 into eight immutable disjoint manifests I0-I7. Current scan
+would place131 candidates each; final count may differ. Each command uses a
+properly escaped anchored ^(name1|name2|...)$ -run expression from its manifest,
+-count=1 -json -timeout=45m -p=1 -parallel=1. Selecting a parent selects all its
+subtests/fuzz seed corpus; do not shard subtests or omit examples/fuzz seeds.
+Pass regex as a direct argument, never through interpolated shell code. If command
+length exceeds native limits, deterministic smaller child manifests replace that
+shard and their union must equal it; coverage is not dropped. Forty-five minutes
+is retained per integration shard, never shortened to hide a slow test.
+
+| Runner/cluster | Serial command schedule |
+| --- | --- |
+| A /58441 | Full unfiltered cmd/internal/identityprovision/deploy package union, then I0,I2,I4,I6 |
+| B /proposed58451 | I1,I3,I5,I7, then full unfiltered tools/migrate ./... |
+
+Other platform packages retain45-minute per-package timeout; importer retains15m
+as run09. No two commands share a cluster concurrently. In a one-cluster fallback,
+run other-platform, I0-I7, importer serially on58441; same exact union and bounds.
+Two clusters can roughly halve the integration critical path if balanced, but
+no speed estimate or PASS is promised. Eight independent package budgets bound
+hangs and permit remaining manifests to complete after a failure; global coverage
+is the complete union, not a shorter aggregate deadline. A timeout remains FAIL
+plus incomplete coverage; preserve unfinished names and finish the other shards.
+
+Cluster separation is necessary because randomized test databases do not isolate
+cluster-wide roles/default role settings and restricted-role migrations. Internal
+package tests, integration tests and importer never write the same cluster at
+once. No runner targets developer55432, C204, ce427, or E resources. Host listeners,
+global process environment, temp paths, file fixtures and CPU/memory contention
+remain independent risks: audit final test bindings and use separate processes,
+worktrees/caches/temp roots. Tests with fixed host ports or shared local resources
+must run in a serialized manifest window across both runners, preserving their
+membership and assertions. Concurrent cluster ownership is not permission to
+alter a shared role in another cluster or weaken wait assertions for machine load.
+
+Minimal additional proposal (no creation/start authority yet): project
+synthetic-qa-zns-native-shard-20261001; container same prefix-postgres-1;
+volume same prefix-pgdata; bridge same prefix-host; initial DB
+synthetic_qa_zns_native_shard; loopback127.0.0.1:58451->5432. Use the same cached
+actual PostgreSQL17 digest as58441, 2CPU/1GiB/256MiBshm, restart=no, no app/fake
+or managed coordinator. Read-only current native/Docker inventory found no58451
+binding or matching container/volume/network/reservation. Repeat immediately
+before authorized setup. One proposed new config path:
+docs/sandbox/fqa-stands/native/shard.compose.yaml, plus a separate owner-only ignored
+qa.local/native-shard-20261001/private-owner.json and receipts. Assigned engineer
+creates only exact resources, verifies native transport/extensions/disposable DB
+create/drop, and privately applies the reviewed native first-three-role prerequisite
+before release. zns_app is not added without a specific reviewed test requirement.
+
+Raw reconciliation keys are module/package/top-level test and full nested test
+name; retain shard ID, process exit, package terminal event and raw JSON SHA.
+Require manifest union equals authoritative discovered union with zero missing or
+duplicate top-level executions; all expected parents terminal. Count PASS/FAIL/
+SKIP and unfinished separately, preserving nested counts and no-test package
+events. A failing parent cannot be erased by child passes or a selected rerun.
+Existing source/platform-dependent skips remain explicit unmet proof; the plan
+adds no skips. Windows/Linux-only or live prerequisites require separately scoped
+supplemental execution, never deletion from reconciliation or claimed success.
+Keep initial failures and any later reproduction distinct. Root assigns fixes
+and fresh affected review, then a newly frozen final complete union as needed.
+
+Before this schedule runs, root supplies final integrated reviewed source
+(including C core/operator/role controls, menu090, E guard and applicable job/source),
+settled native prerequisites and independent runner assignments. This is broad
+native regression only; pinned lint/race/live integrations and source-blind
+Functional QA remain their separate gates. No test, bootstrap or infrastructure
+mutation was performed for this plan.
+
+## Second native cluster configuration checkpoint
+
+Root authorized preparation of the single Compose file above, not resource
+creation/start, role bootstrap, source execution or tests. The config now reserves
+the exact stated cluster/port/digest/limits with external own volume/network,
+pull=never and restart=no. NATIVE_SHARD_PASSWORD is runtime-only; no credential or
+private owner bundle is generated during this config checkpoint. Final immutable
+writer/source/role-bootstrap manifest is assigned separately. The authoritative
+eight-shard union comes from final actual Go discovery, with source scans only a
+cross-check; unfiltered other-platform and complete importer scopes remain intact.
+
+Actual Compose config --quiet returned exit0 with a temporary non-secret parsing
+placeholder, subsequently removed. Docker emitted an inaccessible local config
+warning; this command did not contact/start the engine and is syntax proof only.
+Compose raw SHA256:
+`3C86799B628CD21E3B710FD45E10F8D1C7468DE34F868CE476DE21F9B82687BC`.
+
+Future C204 private bootstrap custody: reserve a separate owner-only ignored
+qa.local/fqa-registration-20261001/private-bootstrap.json and private rendered
+SQL/config files, plus the previously allocated config and clock volumes. Engineer
+preparation writes only after reviewed source and exact resource authority. Windows
+ACL protects host private files; it is not proof of Linux UID/mode. A reviewed
+Linux preparation process on the owned named volume must create clock directory
+0700/file0600 under the actual app/operator numeric UID and prove regular-file,
+owner and non-symlink checks from both real containers. The private control state
+is persistent volume data, never a Windows bind mount assumed to honor chmod.
+App remains RO/operator RW; secrets are neither clock JSON nor reviewer receipts.
+Database connection role zns_app is separately verified as current database owner;
+PostgreSQL container UID is not the app UID or SQL-role identity. No resources,
+private secrets/SQL files, clocks or bootstrap writes exist from this checkpoint.
+
+## Integrated role-control checkpoint
+
+QA255 independently passed the five-path fixed-role candidate67206220. Root
+merged it without conflicts as102072a0; focused sandbox/command tests passed.
+The four fixed actions are now integrated source, still absent from sealedce427
+images. Template preparation and future stand installation do not certify FQA.

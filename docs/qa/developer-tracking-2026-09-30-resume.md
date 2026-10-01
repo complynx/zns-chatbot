@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through256, next257. All authorship/routes Codex under override;
+Fresh requests through259, next260. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -54,16 +54,25 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 
 | 254 | Complete registration-domain clock and fixed synthetic reader | Codex author, Codex override; allocated before dispatch50a1222e/base5057ddb0,27paths. Native3clock+22defaultPG PASS; units978PASS92SKIP; Windows/Linux pinnedlintfmt/sqlc/build passed. Independent FAIL: startup DB-before-platform rejection, stale allocator capture and duplicate/wrong-case state keys. Author correcting same27 paths; actual Linux reader/operator/FQA still open |
 
-| 255 | Fixed registration fixture role controls | Codex author, Codex override; allocated before dispatch67206220/base81133f9f,5paths. Fresh independent review pending; Functional open |
-| 256 | Complete E native owner SQL transport and bound rehearsal | Codex author, Codex override; allocated before dispatch44058ee7/base5057ddb0,10paths. Fresh independent review pending; actual E acceptance open |
+| 255 | Fixed registration fixture role controls | Codex author, Codex override; allocated before dispatch67206220/base81133f9f,5paths. PASS, focused reviewer tests/lint0/fmt clean; merged102072a0, root focused two packages PASS; Functional open |
+| 256 | Complete E native owner SQL transport and bound rehearsal | Codex author, Codex override; allocated before dispatch44058ee7/base5057ddb0,10paths. FAIL one P2: removal/coverage allow localhost against literal127 contract; author correcting same10 paths, no actual E acceptance |
 
-Current coordination (1 October, product source5057ddb0, docs81133f9f):
+| 257 | Complete menu source authority and predecessor compatibility | Codex author, Codex override; allocated before dispatch ebe2dddd/base5057ddb0,24paths. Exact native and actual Linux PG race PASS; PASS, merged56ac8b79 conflict-free; root focused delivery tests PASS, adjacent two packages compiled only; Functional open |
+
+| 258 | Complete registration clock successor | Codex author, Codex override; allocated before dispatch3345f211/base102072a0,27paths. Units991PASS92existingSKIP; actual4clock+22defaultPG PASS; Windows/Linux lintfmtbuild/sqlcPASS; fresh independent full review pending |
+
+| 259 | Complete E owner transport successor | Codex author, Codex override; allocated before dispatch4088372d/base5057ddb0,10paths. Full local guards/builds/lint and15compilednegativeproofsPASS; fresh full independent review pending |
+
+Current coordination (1 October, product source56ac8b79, docs44dc9dd7):
 two scoped source-blind Functional runs completed on sealedce427ca5; preserved.
-Whole C–E and all40 complete acceptance rows remain open. Fresh counter256,
-next257, Codex override. QA254 FAIL: same C author correcting27 paths; no merge.
-QA255 roles67206220 fivepaths and QA256 E44058ee7 tenpaths independently running.
+Whole C–E and all40 complete acceptance rows remain open. Fresh counter259,
+next260, Codex override. QA254 FAIL successor3345 final991PASS92existingSKIP/4clock+22defaultPGPASS;
+fresh full QA258 running, no C merge.
+QA255 roles67206220 fivepaths PASS merged102072a0; root focused checks PASS. QA256 E44058ee7 failed
+localhost contract; successor4088372d final localgatesPASS, fresh full QA259 running; no live E mutation.
 Operator7841 fivepaths passed actual Linux race, awaits reviewed integrated C.
-Menu24ebe2 exact native gates PASS; Linux race running, sole developer55432.
+Menu24ebe2 exact native and Linux race PASS; QA257 PASS merged56ac8b79.
+C native window terminal/released. E4088372d final local build receipts PASS, fresh full QA259 running.
 Job19interim3c83 local gates PASS; final source preparation waits reviewed C.
 Baseline09 full failure remains; focused10 on5057 terminal9PASS1FAIL0SKIP,
 seven role scenarios, Meal and Large PASS; DeletedPayment fails.58441 released.

@@ -153,3 +153,38 @@ Terminal readback receipt:
 The setup writer `/root/fqa_lead` releases exclusive infrastructure ownership
 back to root. Freeze the corrected role prerequisite before root assigns any
 next test writer; do not independently restart/reseed or launch baseline10.
+
+## Subsequent focused10 and planning ownership
+
+Focused10 is terminal and released: nine PASS, one FAIL, zero SKIP and zero
+unfinished across its exact ten tests, at source5057. Seven role cases and both
+modern-choice cases passed; payment card order_not_found reproduced. See
+`docs/qa/composition-baseline-2026-10-01-10-focused.md`. This does not replace
+run09's full-suite failure/incomplete coverage or explain its meal-runtime failure.
+Root also confirmed the role-controls developer's assigned native PG work finished
+and released58441. No new writer is inferred; lead performs planning only until
+root assigns another exact exclusive window. No role/DB/resource changes here.
+
+Final broad suite shard/allocation proposal is in
+`docs/qa/fqa-lead-2026-10-01-next-batch.md`. Proposed extra58451 cluster is only
+reserved pending infrastructure assignment; it has not been created or started.
+
+Root subsequently approved only the concrete config preparation:
+`docs/sandbox/fqa-stands/native/shard.compose.yaml`. It reserves the extra58451
+cluster with the same pinned digest and2CPU/1GiB/256MiBshm, external separate
+volume/network, pull never and restart no. Runtime credential variable is
+NATIVE_SHARD_PASSWORD; private bundle is a future owner-only ignored file, not
+created by config preparation. No resources, bootstrap or tests are started.
+Final immutable source, writer and role prerequisite manifest remain separately
+assigned. Full acceptance still requires actual Go-discovered union and complete
+unfiltered other-platform/importer coverage, not source-scan estimates.
+
+Config syntax check returned exit0; runtime readiness is not claimed. Compose
+raw SHA256 `3C86799B628CD21E3B710FD45E10F8D1C7468DE34F868CE476DE21F9B82687BC`.
+
+## Integrated role-control checkpoint
+
+QA255 independently passed the five-path fixed-role candidate67206220. Root
+merged it without conflicts as102072a0; focused sandbox/command tests passed.
+The four fixed actions are now integrated source, still absent from sealedce427
+images. Template preparation and future stand installation do not certify FQA.

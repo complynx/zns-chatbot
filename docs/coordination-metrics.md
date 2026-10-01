@@ -505,3 +505,55 @@ waits reviewed C integration. Neither dependent candidate is finalready handoff.
 Lead nine-template read-only plan complete, templates/resources not started or
 approved. All40/FQA/parity/fullbaseline open, productionNO-GO, TGaccountID only
 userchoice. Import ongoing observedwait4h13m10s, historical start unknown. Pause.
+
+## Role merge and prepared menu review: 2026-10-01T02:25:24Z
+
+Root product102072a03231f1bce1bf4d78179a1fec280bba41, QA255PASS67206220 fixed fivepaths
+conflict-free merge. Root focused sandbox0.231/cmdzns0.145s passed, no newFQA/images.
+Role developer complete/no extraassignment. Read QA256 finalFAIL ten-path44058ee7:
+literal127 contract versuslocalhost. D author correcting, no liveDB; return14.
+Menu ebe2 realLinuxPG race61456 terminalPASS botdelivery3.760/store15.833/integration
+411.492s,no race. AssignedDB zerootherconnections/containerabsent, explicit55432
+release→Cexclusive. FreshQA257 complete24 reviewing, reportpending; queues0/1/0,
+counter257next258 allCodex.
+
+C27 clean preserved50a/5c2e051 checkpoint, developer rebase102072 then fullgates
+fournewclock+22default next, not accepted. Current worktree3345 observed without
+inventing its gates. Engineer tenregistrationtemplates/private bootstrap approved
+preparation only in separate811base; operator7841 waits reviewedC. Lead prepared
+one native/shard.compose.yaml syntaxonlyPASS, noresources. Eight-shard proposal
+needs finalGo discovery exactunion/unchangedassertions/fullcoverage; not executed.
+Ongoing capability lanes C/E/template preparation, role branch complete. All40
+FQA requirements/productionNO-GO/full09FAIL unchanged. Import observedwait4h20m31s,
+unknown previous starts. Pause three-file tracking until checkpoint ACK.
+
+## Clock native gate receipt: 2026-10-01T02:29:00Z
+
+Observed immutable3345f211ce172a13752422a49c316765a0f8b517/base102072: exact27
+range-equivalent clean/formatPASS. Prior02:27:08 observation recorded native and
+offline gates running. Root now confirms native fourclock8.563s and22default49.710s
+terminalPASS zeroFAIL/SKIP;55432 released. Final offline gates stillRUNNING; fresh
+CodeQA not allocated. Originals50a/5c preserved. Review queue0/1/0 remains menu257;
+return14 and counter257next258 unchanged. Capability preparations C/E/registration
+templates; operator waits reviewedC. All40/FQA/fullbaseline/NO-GO unchanged.
+Import observed wait4h24m07s; historical start unknown.129 observed events.
+Writes paused for root checkpoint.
+
+## Menu merge and clock review: 2026-10-01T02:30:57Z
+
+QA257 whole24 PASS offlineunits/pinnedlint0/diffcheck, conflict-free merge
+56ac8b79cee049bb6108fc47af916aa8912af80d including090. Root focused3pkg24857
+RUNNING: botdelivery0.219s PASS/readsource0.932s no-tests/bot pending. No integrated
+terminal claim. C3345 final offline991PASS92existingSKIP, Windows/Linuxlint0 and
+build/fmt/sqlcPASS; freshwhole27 QA258 running, native4plus22 alreadyPASS/released.
+E corrective4088372d tenpaths local22guards/3clientunits/lintPASS; final build and
+compiled-negative receipts RUNNING, no liveE/QA259. Queues0/1/0 nowC258; counter258
+next259 Codex. Return14 unchanged. Import observedwait4h26m04s, historical start
+unknown.132 events. Oldimagesce427/all40 incomplete/NO-GO unchanged. Writes paused.
+
+## Root scoped menu verification: 2026-10-01T02:32:04Z
+
+Root24857 terminalexit0. Actual selected botdelivery testsPASS0.219s. Readsource
+0.932s andbot0.175s compiled but selector matched no tests; these are dependencies
+compiled only, not two additional passing testsuites. NoPG/FQA claim. Queue0/1/0
+remainsC258;133 events. Import ongoing observedwait4h27m11s. Writes paused.

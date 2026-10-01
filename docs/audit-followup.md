@@ -1,23 +1,27 @@
-## Current integrated source and expanded QA — 2026-10-01, source5057ddb0
+## Current integrated source and expanded QA — 2026-10-01, source56ac8b79
 
-Authoritative product Git5057ddb0 includes reviewed ACK observation QA241,
+Authoritative product Git56ac8b79 includes reviewed ACK observation QA241,
 source diagnostics QA243, registration fixture QA245 and HTTP observations
-QA248 and update diagnostics QA253. Root focused integrated checks and full pinned JS gates passed;
+QA248, update diagnostics QA253 and fixed fixture role controls QA255. Root focused integrated checks and full pinned JS gates passed;
 Functional images remain sealedce427 and do not certify the newer source.
 
 Menu090 predecessor74ab failed independent QA251 on aggregate source budgets.
 Successor ebe2,24 paths, passed exact native PostgreSQL and all offline gates;
-actual Linux PostgreSQL race is running. Menu owns exclusive55432 until release.
+actual Linux PostgreSQL race and fresh full QA257 passed; merged56ac8b79
+without conflicts, root focused delivery tests passed. Menu released
+55432 with zero other connections; C completed4clock+22default PG gates and released its window.
 Job19 interim3c83 passed affected native PG and local gates; final source/review
 wait on integrated reviewed C ingress. Neither candidate is merged.
 
 C27 clock50a failed fresh QA254 on startup ordering, post-allocator observation
-and strict state decoding. Author corrects same scope, next native window queued.
+and strict state decoding. Successor3345 passed final units/pinned checks and4clock+22default PG;
+fresh independent full27 QA258 running.
 Operator5 immutable7841 passed actual offline Linux race and both-platform lint;
 final dependency/base preparation waits reviewed C. Fixed fixture role controls
-67206220,5 paths, passed local/native PG and are under fresh independent QA255.
-E10 native SQL owner successor44058ee7 is under fresh QA256 after offline guards,
-compiled rejection proofs/builds and lint. No live E write/removal is accepted.
+67206220,5 paths, passed local/native PG and passed independent QA255 and merged102072a0; root focused checks passed.
+E10 native SQL owner successor44058ee7 failed fresh QA256 on localhost endpoint contract after offline guards,
+compiled rejection proofs/builds and lint. Author corrects same ten paths.
+No live E write/removal is accepted.
 Engineer prepares ten explicit registration stand files in a separate branch,
 using existing private-secret psql bootstrap mechanism. No resources/builds/start
 are authorized by template preparation; installation204 stays unstarted.
@@ -29,7 +33,7 @@ and Meal/Large passed, DeletedPayment failed. This does not accept a full suite
 or establish a cause/fix for the earlier Meal failure.58441 was released after
 focused10 and separate role-control developer gates. Final E/runtime/UI/parity
 and broad final-source acceptance remain outstanding. Telegram account ID is in
-PROGRESS; independent work continues. Production NO-GO. Counter256,next257,
+PROGRESS; independent work continues. Production NO-GO. Counter258,next259,
 all Codex under override, no Claude probe.
 
 ## Historical integrated snapshot — 2026-10-01, ce427ca5

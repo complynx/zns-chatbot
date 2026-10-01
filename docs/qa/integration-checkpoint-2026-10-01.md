@@ -1,4 +1,4 @@
-# Integrated source checkpoint:5057ddb0
+# Integrated source checkpoint:56ac8b79
 
 Product source0070f944 incorporates reviewed callback observations62b9eebc
 (QA241), source diagnosticsb857b8b9 (QA243) and registration fixtures54766266
@@ -22,6 +22,15 @@ GOFLAGS=-p=2 -mod=readonly, without TEST_DATABASE_URL:
   `go test ./internal/bot ./internal/observability -run
   '^(TestUpdateFailure|TestInbox|TestTrustedPrincipal|TestIdentity)' -count=1`
   passed both packages:0.320s,0.278s. No database environment was supplied.
+- After102072a0 merged fixed registration role controls67206220 (QA255),
+  without conflict resolution: `go test ./internal/sandbox ./cmd/zns -run
+  'Test(RegistrationFixture|ProductionCommands)' -count=1` passed both packages:
+  0.231s,0.145s. Same native/cache/options, no database environment supplied.
+- After56ac8b79 merged menu authority ebe2dddd (QA257,24paths) without
+  conflict resolution: `go test ./internal/botdelivery ./internal/readsource
+  ./internal/bot -run 'Test(PassPreparation|PredecessorPassReceipt|PassReceipt|PassMenuDefinitiveDenial|PassRetirement|PassFamilyRead)'
+  -count=1` exited0. botdelivery tests passed0.219s; readsource0.932s/bot0.175s
+  compiled but had no matching tests. No PG environment or Functional claim.
 - Full pinned installed ESLint: bundled Node invoking
   `node_modules/eslint/bin/eslint.js . --max-warnings 0` exited0.
 - Initial full pinned installed Prettier check exited1. It reported four files:
@@ -36,9 +45,9 @@ GOFLAGS=-p=2 -mod=readonly, without TEST_DATABASE_URL:
   referenced local files exist. Git diff whitespace check passed.
 
 Root focused Go checks do not replace developer PostgreSQL evidence, full
-baseline, Linux race or independent Functional acceptance. The separately
-allocated58441 baseline runner owns immutable0070 inputs; no completed full
-result is claimed here. ce427 Functional images remain older than this source.
+baseline, Linux race or independent Functional acceptance. Full baseline09 on immutable0070 failed; bounded focused10 on5057 completed
+9PASS1FAIL0SKIP, not a full acceptance. Both reports preserve actual source and
+results;58441 is released. ce427 Functional images remain older than this source.
 
 Written by root (gpt-6.1-sol/Codex)
 on behalf of Daniel Drizhuk

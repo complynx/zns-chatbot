@@ -2,7 +2,13 @@
 
 ## Current integration — 2026-10-01
 
-Last functional product merge is Git5057ddb0547f5b099459fe3d321c04a7c4490c90.
+Last functional product merge is Git56ac8b79cee049bb6108fc47af916aa8912af80d.
+Menu authority ebe2dddd (QA257,24 paths) merged without conflict resolution,
+including additive090. Root scoped delivery tests passed; adjacent packages
+compiled without matched tests. Developer native and real Linux PG race passed.
+Functional runtime and final E schema inventory are not yet frozen.
+Fixed fixture role controls67206220 (QA255, five paths) merged without conflict
+resolution; root focused sandbox/command tests passed. Live stand/FQA still open.
 Earlier formatting commitff575042 changes only three Prettier formatting
 files (Compose quotes, replacement JSON indentation, documentation blank line);
 there is no Go logic, schema or runtime value change. Whole-source raw hashes
@@ -20,8 +26,8 @@ without conflict resolution. Root focused bot/observability checks passed;
 Functional acceptance remains open. Baseline09 terminal FAIL still binds0070,
 not these later features.
 The working root documentation is updated separately. Functional images remain
-sealedce427ca5, so they do not certify this newer source. Menu090, job summary
-and E rehearsal guard successors remain unmerged.
+sealedce427ca5, so they do not certify this newer source. Menu090 is integrated; job summary, C clock and E rehearsal guard successors
+remain unmerged.
 
 Migration checksums bind raw embedded bytes. Equal Git blobs in CRLF and LF
 worktrees do not prove equal embedded migration hashes. Final importer/runtime
