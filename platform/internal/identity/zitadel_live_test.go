@@ -14,7 +14,6 @@ import (
 // TestZitadelLocalAdapter uses only the explicitly enabled synthetic loopback
 // stand. Credentials and tokens are never included in assertion output.
 func TestZitadelLocalAdapter(t *testing.T) {
-	t.Parallel()
 	path := os.Getenv("ZITADEL_LOCAL_STATE")
 	if path == "" {
 		t.Skip("ZITADEL_LOCAL_STATE is required for synthetic identity acceptance")
@@ -61,28 +60,57 @@ func TestZitadelLocalAdapter(t *testing.T) {
 		require.NoError(t, verifyErr)
 		assert.Equal(t, subject, verified, "delegated subject must match")
 	}
-	_, err = client.Exchange(t.Context(), "nonexistent-synthetic")
-	require.ErrorIs(t, err, identity.ErrZitadelIdentity)
-	_, err = client.Verify(t.Context(), "invalid-synthetic")
-	require.ErrorIs(t, err, identity.ErrZitadelIdentity)
-	for _, defect := range []string{"actor_credentials", "api_credentials", "audience", "actor_claim"} {
-		broken := config
-		switch defect {
-		case "actor_credentials":
-			broken.ActorClientSecret = "invalid-synthetic"
-		case "api_credentials":
-			broken.APIClientSecret = "invalid-synthetic"
-		case "audience":
-			broken.Audience = "nonexistent-synthetic"
-		case "actor_claim":
-			broken.ActorID = "nonexistent-synthetic"
-		}
-		invalid, createErr := identity.NewZitadel(broken)
-		require.NoError(t, createErr)
-		token, denied := invalid.Exchange(t.Context(), state.Alice.UserID)
-		if denied == nil {
-			_, denied = invalid.Verify(t.Context(), token)
-		}
-		require.ErrorIs(t, denied, identity.ErrZitadelIdentity, defect)
+	// Keep provider cases sequential and independent: one denial must not hide
+	// later cases, and each client must obtain its own actor token and claims.
+	for _, test := range []struct {
+		name string
+		want error
+	}{
+		{"missing_subject", identity.ErrZitadelUnavailable},
+		{"invalid_token", identity.ErrZitadelIdentity},
+		{"actor_credentials", identity.ErrZitadelUnavailable},
+		{"api_credentials", identity.ErrZitadelUnavailable},
+		{"audience", identity.ErrZitadelUnavailable},
+		{"actor_claim", identity.ErrZitadelIdentity},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			// Freeze the provider-state selector for each serial case.
+			t.Setenv("ZITADEL_LOCAL_STATE", path)
+			broken := config
+			subject := state.Alice.UserID
+			switch test.name {
+			case "missing_subject":
+				subject = "nonexistent-synthetic"
+			case "actor_credentials":
+				broken.ActorClientSecret = "invalid-synthetic"
+			case "api_credentials":
+				broken.APIClientSecret = "invalid-synthetic"
+			case "audience":
+				broken.Audience = "nonexistent-synthetic"
+			case "actor_claim":
+				broken.ActorID = "nonexistent-synthetic"
+			}
+			invalid, createErr := identity.NewZitadel(broken)
+			require.NoError(t, createErr)
+			if test.name == "invalid_token" {
+				verified, denied := invalid.Verify(t.Context(), "invalid-synthetic")
+				require.ErrorIs(t, denied, test.want)
+				resultLength := len(verified)
+				require.Zero(t, resultLength, "denied introspection must return no subject")
+				return
+			}
+			token, denied := invalid.Exchange(t.Context(), subject)
+			if test.name == "api_credentials" || test.name == "actor_claim" {
+				require.NoError(t, denied, "exchange must succeed before introspection denial")
+				verified, verifyErr := invalid.Verify(t.Context(), token)
+				require.ErrorIs(t, verifyErr, test.want)
+				resultLength := len(verified)
+				require.Zero(t, resultLength, "denied introspection must return no subject")
+				return
+			}
+			require.ErrorIs(t, denied, test.want)
+			resultLength := len(token)
+			require.Zero(t, resultLength, "denied exchange must return no token")
+		})
 	}
 }
