@@ -98,3 +98,20 @@ func TestLocalRegistrationAuthorizationFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestLocalRegistrationClockChangeRemainsResumable(t *testing.T) {
+	t.Parallel()
+	for _, failure := range []error{
+		passbooking.ErrRegistrationTimeChanged,
+		errors.Join(passbooking.ErrRegistrationTimeChanged, context.Canceled),
+		errors.Join(passbooking.ErrRegistrationTimeChanged, context.DeadlineExceeded),
+	} {
+		_, err := registrationResult(passbooking.Booking{}, failure)
+		require.ErrorIs(t, err, passbooking.ErrRegistrationTimeChanged)
+		var problem *core.ProblemError
+		require.NotErrorAs(t, err, &problem)
+	}
+	failure := errors.Join(passbooking.ErrRegistrationTimeChanged, core.ErrDatabase)
+	_, err := registrationResult(passbooking.Booking{}, failure)
+	require.True(t, core.IsDatabaseFailure(err), "positive SQL failure remains fatal")
+}

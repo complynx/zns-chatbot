@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -172,6 +173,7 @@ func (s Service) runRuntimeBatchItem(
 		return nil, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	var plan runtimeBatchPlan
 	if _, err = readEvent(ctx, tx, c.Event); err != nil {
 		return nil, err
@@ -185,6 +187,7 @@ func (s Service) runRuntimeBatchItem(
 	if len(source) > 0 {
 		return nil, conflict("derived_batch_requires_coordinator")
 	}
+	committedItems := slices.Clone(plan.Items)
 	item := &plan.Items[index]
 	// Mutations check authorization themselves. A terminal replay also checks it.
 	if item.Outcome.Status != AdminBatchNotAttempted {
@@ -207,6 +210,9 @@ func (s Service) runRuntimeBatchItem(
 		if err != nil {
 			return plan.Items, core.DatabaseOperationError(err)
 		}
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return committedItems, err
 	}
 	return plan.Items, core.DatabaseOperationError(tx.Commit(ctx))
 }

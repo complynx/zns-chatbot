@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
 const (
@@ -64,19 +65,28 @@ func (s Service) ProcessDeadlines(ctx context.Context) (int64, error) {
 }
 
 func (s Service) maintenanceEvents(ctx context.Context, after string) ([]string, error) {
+	now, configured, err := registrationingress.Observe(ctx, s.RegistrationClock)
+	if err != nil {
+		return nil, err
+	}
+	var observed *time.Time
+	if configured {
+		observed = &now
+	}
 	rows, err := s.DB.Query(
 		ctx,
 		`SELECT DISTINCT e.id FROM core.pass_events e LEFT JOIN core.pass_bookings b ON b.event_id=e.id
  LEFT JOIN core.pass_deadline_markers m ON m.event_id=b.event_id AND m.owner=b.owner AND m.assigned_at=b.assigned_at
- WHERE e.id>$2 AND e.finishes_at>clock_timestamp() AND (
+ WHERE e.id>$2 AND e.finishes_at>COALESCE($3::timestamptz,clock_timestamp()) AND (
  EXISTS(SELECT 1 FROM core.registration_intents i WHERE i.event_id=e.id AND i.state='captured') OR
  EXISTS(SELECT 1 FROM core.registration_ingress g WHERE g.native_event=e.id AND g.native_payload IS NOT NULL AND g.native_outcome='') OR b.state='waitlist' OR
- (b.state='waiting-for-couple' AND COALESCE(b.invitation_started_at,b.created_at)<clock_timestamp()-interval '58 hours') OR
- (b.state='assigned' AND ((m.first_at IS NULL AND b.assigned_at<clock_timestamp()-interval '6 days') OR
- m.first_at<clock_timestamp()-interval '2 days' OR (m.second_at IS NULL AND m.first_at<clock_timestamp()-interval '1 day'))))
+ (b.state='waiting-for-couple' AND COALESCE(b.invitation_started_at,b.created_at)<COALESCE($3::timestamptz,clock_timestamp())-interval '58 hours') OR
+ (b.state='assigned' AND ((m.first_at IS NULL AND b.assigned_at<COALESCE($3::timestamptz,clock_timestamp())-interval '6 days') OR
+ m.first_at<COALESCE($3::timestamptz,clock_timestamp())-interval '2 days' OR (m.second_at IS NULL AND m.first_at<COALESCE($3::timestamptz,clock_timestamp())-interval '1 day'))))
  ORDER BY e.id LIMIT $1`,
 		deadlineEventBatch,
 		after,
+		observed,
 	)
 	if err != nil {
 		return nil, core.DatabaseOperationError(err)
@@ -94,6 +104,7 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 		return 0, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	e, err := readEvent(ctx, tx, id)
 	if err != nil {
 		return 0, err
@@ -106,9 +117,9 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 	if err != nil {
 		return 0, err
 	}
-	var now time.Time
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return 0, core.DatabaseOperationError(err)
+	now, err := registrationTurnTime(ctx, tx, s.RegistrationClock)
+	if err != nil {
+		return 0, err
 	}
 	if !now.Before(e.finishes) {
 		return 0, core.DatabaseOperationError(tx.Commit(ctx))
@@ -118,6 +129,9 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 		return 0, err
 	}
 	state := newSnapshot(e, bookings, now)
+	if s.RegistrationClock != nil {
+		state.registrationObserved = &now
+	}
 	if err = state.loadRegistrationRanks(ctx, tx); err != nil {
 		return 0, err
 	}
@@ -139,10 +153,10 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 		}
 	}
 	state.allocate()
-	if err = persist(ctx, tx, state); err != nil {
+	if err = state.persistNotified(ctx, tx, before, "deadline"); err != nil {
 		return 0, err
 	}
-	if err = state.notifyChanges(ctx, tx, before, "deadline"); err != nil {
+	if err = clockAttempt.Check(ctx); err != nil {
 		return 0, err
 	}
 	return count, core.DatabaseOperationError(tx.Commit(ctx))

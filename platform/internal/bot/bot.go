@@ -28,11 +28,13 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 	"github.com/complynx/zns-chatbot/platform/internal/workflow"
 )
 
 type Bot struct {
+	RegistrationClock   registrationingress.Clock
 	Delivery            delivery.Settings
 	Onboarding          TelegramOnboarding
 	BrowserAuth         *browserauth.Service

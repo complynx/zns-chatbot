@@ -117,7 +117,13 @@ func TestBotResolutionLostWireResponseUsesOriginalAttempt(t *testing.T) {
 	restarted.Delivery = b.Delivery
 	restarted.Host.LocalBotDelivery.Service.Delivery = b.Delivery
 	require.Equal(t, b.Delivery.BotID, restarted.Delivery.BotID)
-	t.Logf("original_bot_id=%d host_bot_id=%d reconstructed_bot_id=%d provider_bot_id=%d", b.Delivery.BotID, b.Host.LocalBotDelivery.Service.Delivery.BotID, restarted.Delivery.BotID, received.From.ID)
+	t.Logf(
+		"original_bot_id=%d host_bot_id=%d reconstructed_bot_id=%d provider_bot_id=%d",
+		b.Delivery.BotID,
+		b.Host.LocalBotDelivery.Service.Delivery.BotID,
+		restarted.Delivery.BotID,
+		received.From.ID,
+	)
 	require.NoError(t, restarted.ContinueBotIntentReceipts(ctx))
 	var completed bool
 	require.NoError(
@@ -273,7 +279,12 @@ func TestBotResolutionUnsentRestoresOrderedRealDelivery(t *testing.T) {
 	require.Equal(t, int64(2), firstSent.Attempt)
 	require.Equal(t, delivery.Succeeded, followerSent.State)
 	require.Less(t, firstSent.MessageID, followerSent.MessageID)
-	t.Logf("original_bot_id=%d host_bot_id=%d resolved_bot_id=%d", b.Delivery.BotID, b.Host.LocalBotDelivery.Service.Delivery.BotID, before.BotID)
+	t.Logf(
+		"original_bot_id=%d host_bot_id=%d resolved_bot_id=%d",
+		b.Delivery.BotID,
+		b.Host.LocalBotDelivery.Service.Delivery.BotID,
+		before.BotID,
+	)
 	state := httptest.NewRecorder()
 	fake.Handler().ServeHTTP(state, httptest.NewRequest(http.MethodGet, "/lab/state?user=101", nil))
 	require.Equal(t, http.StatusOK, state.Code)

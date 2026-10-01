@@ -12,7 +12,7 @@
 
 - Synthetic stand data and stands may be changed or deleted when this does not conflict with another test. Assign stand/data ownership before concurrent work; isolate conflicting scenarios. This supersedes the earlier no-deletion pause constraint for synthetic test resources. Production remains separately authorized.
 
-- Working progress and Kanban live only in ignored `management.local/PROGRESS.html` and `management.local/KANBAN.html`. Never stage them or recreate tracked root copies. Keep stable contracts and acceptance reports in Git.
+- Working progress and Kanban live only in ignored `management.local/PROGRESS.html` and `management.local/KANBAN.html`. Never stage them or recreate tracked root copies. Keep operational metrics, assignment/review counters, worker acknowledgments and current estimates in management.local too; tracked documents may contain stable links. Keep stable contracts and final acceptance reports in Git.
 
 # Two QA gates per stage
 
@@ -31,6 +31,6 @@
 - Fix verified defects; rerun checks; fresh affected reviews after substantive changes. Repeat until clean. Preserve staged diff.
 - Both QA + required checks green: advance automatically. No extra permission wait. Production/publish/commit/push still need authorization.
 
-- Execution coordination (2026-10-01): read `docs/coordination-process.md`. Root grants one new heavy Windows check and one new heavy Docker/WSL check; existing checks finish without quiet-output restarts. Functional fault windows are prepared before arming, original budgets remain unchanged, owned synthetic downloads are allowed, and progress/board/reports are checkpointed together. Prioritize the finite C–E acceptance chain.
+- Execution coordination (2026-10-01): read `docs/coordination-process.md`. All new checks run on Linux Docker/WSL; no new native Windows checks, including Windows executables targeting Linux. Root grants two Linux heavy-check slots across isolated stands. Already-running Windows checks finish and occupy a transition slot until terminal evidence; no quiet-output restarts. Functional fault windows are prepared before arming, original budgets remain unchanged, owned synthetic downloads are allowed, and progress/board/reports are checkpointed together. Prioritize the finite C–E acceptance chain.
 
 Details: `docs/go-migration.md`, `docs/code-quality.md`, `docs/coordination-process.md`.

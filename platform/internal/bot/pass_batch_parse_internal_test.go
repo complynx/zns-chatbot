@@ -1,7 +1,9 @@
 package bot
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,4 +33,25 @@ func TestPassBatchCommandQuotedOptions(t *testing.T) {
 		_, err = parsePassBatch(input)
 		assert.ErrorIs(t, err, errPassBatchSyntax, input)
 	}
+}
+
+type passBatchClock struct {
+	now time.Time
+	err error
+}
+
+func (c passBatchClock) Now(context.Context) (time.Time, error) { return c.now, c.err }
+func TestPassBatchTrustedClock(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	value, err := (&Bot{RegistrationClock: passBatchClock{now: now}}).registrationBatchTime(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, now, value)
+	value, err = (&Bot{RegistrationClock: passBatchClock{err: context.Canceled}}).registrationBatchTime(t.Context())
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, value)
+	before := time.Now()
+	value, err = (&Bot{}).registrationBatchTime(t.Context())
+	require.NoError(t, err)
+	require.WithinRange(t, value, before, time.Now())
 }

@@ -2,7 +2,6 @@ package passbooking
 
 import (
 	"context"
-	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
@@ -42,9 +41,9 @@ func (s Service) TierStatus(ctx context.Context, actor, eventID string) (TierSta
 	if err != nil {
 		return result, err
 	}
-	var now time.Time
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return result, core.DatabaseOperationError(err)
+	now, err := registrationTime(ctx, tx, s.RegistrationClock)
+	if err != nil {
+		return result, err
 	}
 	result = tierStatus(e, stats, now)
 	if err = checkTierResult(result); err != nil {

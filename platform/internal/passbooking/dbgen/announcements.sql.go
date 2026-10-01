@@ -59,17 +59,18 @@ INSERT INTO core.pass_registration_announcements(event_id,owner,created_at,chann
 SELECT b.event_id,b.owner,b.created_at,e.thread_channel,e.thread_id,e.thread_locale,u.name,b.role,
  CASE WHEN e.thread_channel='' THEN 'suppressed' ELSE 'pending' END,CASE WHEN $1::bigint>0 THEN $1::bigint END
 FROM core.pass_bookings b JOIN core.pass_events e ON e.id=b.event_id JOIN core.users u ON u.id=b.owner
-WHERE b.event_id=$2::text AND (e.open_ended OR e.finishes_at>clock_timestamp())
+WHERE b.event_id=$2::text AND (e.open_ended OR e.finishes_at>COALESCE($3::timestamptz,clock_timestamp()))
 ON CONFLICT(event_id,owner,created_at) DO NOTHING
 `
 
 type EnqueueRegistrationAnnouncementsParams struct {
-	BotID   int64
-	EventID string
+	BotID      int64
+	EventID    string
+	DomainTime pgtype.Timestamptz
 }
 
 func (q *Queries) EnqueueRegistrationAnnouncements(ctx context.Context, arg EnqueueRegistrationAnnouncementsParams) error {
-	_, err := q.db.Exec(ctx, enqueueRegistrationAnnouncements, arg.BotID, arg.EventID)
+	_, err := q.db.Exec(ctx, enqueueRegistrationAnnouncements, arg.BotID, arg.EventID, arg.DomainTime)
 	return err
 }
 
@@ -125,16 +126,17 @@ SELECT a.channel,a.thread_id,a.state,a.message_id,a.available_at,
  COALESCE(a.lease_until>clock_timestamp(),false)::boolean AS lease_live,
  EXISTS(SELECT 1 FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
   WHERE e.id=a.event_id AND b.owner=a.owner AND b.created_at=a.created_at AND b.state<>'cancelled'
-   AND (e.open_ended OR e.finishes_at>clock_timestamp())
+   AND (e.open_ended OR e.finishes_at>COALESCE($1::timestamptz,clock_timestamp()))
    AND e.thread_channel=a.channel AND COALESCE(e.thread_id,0)=COALESCE(a.thread_id,0))::boolean AS current
-FROM core.pass_registration_announcements a WHERE a.id=$1::bigint
- AND a.bot_id=$2::bigint AND a.attempts=$3::bigint FOR UPDATE
+FROM core.pass_registration_announcements a WHERE a.id=$2::bigint
+ AND a.bot_id=$3::bigint AND a.attempts=$4::bigint FOR UPDATE
 `
 
 type LockAnnouncementAttemptParams struct {
-	ID      int64
-	BotID   int64
-	Attempt int64
+	DomainTime pgtype.Timestamptz
+	ID         int64
+	BotID      int64
+	Attempt    int64
 }
 
 type LockAnnouncementAttemptRow struct {
@@ -148,7 +150,12 @@ type LockAnnouncementAttemptRow struct {
 }
 
 func (q *Queries) LockAnnouncementAttempt(ctx context.Context, arg LockAnnouncementAttemptParams) (LockAnnouncementAttemptRow, error) {
-	row := q.db.QueryRow(ctx, lockAnnouncementAttempt, arg.ID, arg.BotID, arg.Attempt)
+	row := q.db.QueryRow(ctx, lockAnnouncementAttempt,
+		arg.DomainTime,
+		arg.ID,
+		arg.BotID,
+		arg.Attempt,
+	)
 	var i LockAnnouncementAttemptRow
 	err := row.Scan(
 		&i.Channel,

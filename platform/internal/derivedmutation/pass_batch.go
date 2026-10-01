@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -161,6 +162,8 @@ func (s Service) runPassBatchItem(
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	registration, clockAttempt := s.Registration.WithClockAttempt()
+	s.Registration = registration
 	if err = lockBatchPrelude(ctx, tx, c.Event, batch.Actors(), source); err != nil {
 		return nil, err
 	}
@@ -170,9 +173,13 @@ func (s Service) runPassBatchItem(
 	if !batch.Pending(index) {
 		return batch.Items(), tx.Commit(ctx)
 	}
+	committedItems := slices.Clone(batch.Items())
 	err = s.applyPassBatchItem(ctx, tx, actor, batch, index, source)
 	if saveErr := batch.SaveOutcome(ctx, tx, index, err); saveErr != nil {
 		return batch.Items(), saveErr
+	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return committedItems, err
 	}
 	return batch.Items(), tx.Commit(ctx)
 }
