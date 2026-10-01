@@ -15,6 +15,12 @@ slot with owner, exact frozen source, command, environment, resource bounds and
 evidence path. Quick focused checks on independent resources can continue.
 Use pinned tools and task-owned writable caches; shared module caches and frozen
 source are read-only. Do not run pinned-tool builds outside the slot queue.
+Daniel's 2026-10-01 preference: reuse available caches when this is simple.
+If cache access or setup delays a check, use a clean Linux build and standard
+Go dependency download/verification from the committed go.mod/go.sum instead
+of creating another cache-management task. Keep unrelated home-cache contents
+outside containers. Go's test timeout applies to test execution; give cold
+compilation a separate explicit build budget. Keep pinned tools and test gates.
 For new Docker runs, keep Go build/lint caches and temporary compiler files in
 task-owned Linux volumes rather than Windows bind mounts. Reuse a completed
 warm cache only after its owner confirms no active writer; copy it once if the
