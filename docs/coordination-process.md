@@ -13,6 +13,11 @@ Root grants three Linux heavy-check slots across all stands. Full lint,
 whole-module compilation and race/integration suites request a
 slot with owner, exact frozen source, command, environment, resource bounds and
 evidence path. Quick focused checks on independent resources can continue.
+A granted owner slot includes preparation for that same approved check:
+owned formatter scratch work and compile preflight on the same bounded resources.
+Report changed input hashes, actual handles and terminal evidence without another
+grant pause for ordinary preparation. New scope, shared-resource writers or product
+changes still need root coordination; preparation does not accept a gate.
 Use pinned tools and task-owned writable caches; shared module caches and frozen
 source are read-only. Do not run pinned-tool builds outside the slot queue.
 Daniel's 2026-10-01 preference: reuse available caches when this is simple.
