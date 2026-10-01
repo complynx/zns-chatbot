@@ -36,9 +36,12 @@ func (q *Queries) AdminAttemptOwner(ctx context.Context, arg AdminAttemptOwnerPa
 }
 
 const beginAdminSend = `-- name: BeginAdminSend :execrows
-UPDATE core.admin_message_deliveries SET state='sending',lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.admin_message_deliveries SET state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+ content_captured=true,
+ uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=$1::bigint AND bot_id=$2::bigint AND attempt=$3::bigint
  AND state='pending' AND lease_until>clock_timestamp()
+ AND (last_uncertain_attempt IS NULL OR uncertain_resends<3)
 `
 
 type BeginAdminSendParams struct {
@@ -131,7 +134,8 @@ func (q *Queries) FinishAdminDelivery(ctx context.Context, arg FinishAdminDelive
 }
 
 const lockAdminAttempt = `-- name: LockAdminAttempt :one
-SELECT d.destination,d.state,d.telegram_message_id,d.available_at,
+SELECT d.destination,d.state,d.telegram_message_id,d.available_at,d.failure,
+ d.last_uncertain_attempt,d.last_confirmed_attempt,d.uncertain_resends,d.lease_until,
  COALESCE(d.lease_until>clock_timestamp(),false)::boolean AS lease_live
 FROM core.admin_message_deliveries d WHERE d.id=$1::bigint
  AND d.bot_id=$2::bigint AND d.attempt=$3::bigint
@@ -145,11 +149,16 @@ type LockAdminAttemptParams struct {
 }
 
 type LockAdminAttemptRow struct {
-	Destination       []byte
-	State             string
-	TelegramMessageID int64
-	AvailableAt       pgtype.Timestamptz
-	LeaseLive         bool
+	Destination          []byte
+	State                string
+	TelegramMessageID    int64
+	AvailableAt          pgtype.Timestamptz
+	Failure              string
+	LastUncertainAttempt pgtype.Int8
+	LastConfirmedAttempt pgtype.Int8
+	UncertainResends     int64
+	LeaseUntil           pgtype.Timestamptz
+	LeaseLive            bool
 }
 
 func (q *Queries) LockAdminAttempt(ctx context.Context, arg LockAdminAttemptParams) (LockAdminAttemptRow, error) {
@@ -160,13 +169,19 @@ func (q *Queries) LockAdminAttempt(ctx context.Context, arg LockAdminAttemptPara
 		&i.State,
 		&i.TelegramMessageID,
 		&i.AvailableAt,
+		&i.Failure,
+		&i.LastUncertainAttempt,
+		&i.LastConfirmedAttempt,
+		&i.UncertainResends,
+		&i.LeaseUntil,
 		&i.LeaseLive,
 	)
 	return i, err
 }
 
 const lockAdminDelivery = `-- name: LockAdminDelivery :one
-SELECT d.id,d.message_id,d.destination,COALESCE(d.content,m.request->'content')::jsonb AS content,
+SELECT d.id,d.message_id,d.destination,
+ CASE WHEN d.content_captured THEN d.content ELSE m.request->'content' END::jsonb AS content,
  d.state,d.attempt,m.actor,u.telegram_id
 FROM core.admin_message_deliveries d JOIN core.admin_messages m ON m.id=d.message_id
 JOIN core.pass_booking_admins a ON a.owner=m.actor JOIN core.users u ON u.id=m.actor
@@ -248,13 +263,110 @@ func (q *Queries) NextAdminDeliveries(ctx context.Context, botID int64) ([]NextA
 }
 
 const prepareAdminDelivery = `-- name: PrepareAdminDelivery :one
-UPDATE core.admin_message_deliveries SET attempt=attempt+1,lease_until=clock_timestamp()+interval '2 minutes'
-WHERE id=$1::bigint RETURNING attempt
+UPDATE core.admin_message_deliveries SET attempt=attempt+1,lease_until=clock_timestamp()+interval '2 minutes',
+ content=CASE WHEN content_captured THEN content ELSE $1::jsonb END
+WHERE id=$2::bigint RETURNING attempt
 `
 
-func (q *Queries) PrepareAdminDelivery(ctx context.Context, id int64) (int64, error) {
-	row := q.db.QueryRow(ctx, prepareAdminDelivery, id)
+type PrepareAdminDeliveryParams struct {
+	Content []byte
+	ID      int64
+}
+
+func (q *Queries) PrepareAdminDelivery(ctx context.Context, arg PrepareAdminDeliveryParams) (int64, error) {
+	row := q.db.QueryRow(ctx, prepareAdminDelivery, arg.Content, arg.ID)
 	var attempt int64
 	err := row.Scan(&attempt)
 	return attempt, err
+}
+
+const recordAdminConfirmation = `-- name: RecordAdminConfirmation :exec
+UPDATE core.admin_message_deliveries SET last_confirmed_attempt=$1::bigint
+WHERE id=$2::bigint AND bot_id=$3::bigint AND attempt=$1::bigint
+`
+
+type RecordAdminConfirmationParams struct {
+	Attempt int64
+	ID      int64
+	BotID   int64
+}
+
+func (q *Queries) RecordAdminConfirmation(ctx context.Context, arg RecordAdminConfirmationParams) error {
+	_, err := q.db.Exec(ctx, recordAdminConfirmation, arg.Attempt, arg.ID, arg.BotID)
+	return err
+}
+
+const recordAdminTerminalConfirmation = `-- name: RecordAdminTerminalConfirmation :execrows
+UPDATE core.admin_message_deliveries SET last_confirmed_attempt=$1::bigint
+WHERE id=$2::bigint AND bot_id=$3::bigint
+ AND attempt=$1::bigint AND last_uncertain_attempt=$1::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL AND telegram_message_id=0
+`
+
+type RecordAdminTerminalConfirmationParams struct {
+	Attempt int64
+	ID      int64
+	BotID   int64
+}
+
+func (q *Queries) RecordAdminTerminalConfirmation(ctx context.Context, arg RecordAdminTerminalConfirmationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAdminTerminalConfirmation, arg.Attempt, arg.ID, arg.BotID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordAdminTerminalReceipt = `-- name: RecordAdminTerminalReceipt :execrows
+UPDATE core.admin_message_deliveries SET telegram_message_id=$1::bigint
+WHERE id=$2::bigint AND bot_id=$3::bigint
+ AND attempt=$4::bigint AND last_uncertain_attempt=$4::bigint
+ AND COALESCE(last_confirmed_attempt,0)<$4::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL
+ AND $1::bigint>0
+ AND (telegram_message_id=0 OR telegram_message_id=$1::bigint)
+`
+
+type RecordAdminTerminalReceiptParams struct {
+	MessageID int64
+	ID        int64
+	BotID     int64
+	Attempt   int64
+}
+
+func (q *Queries) RecordAdminTerminalReceipt(ctx context.Context, arg RecordAdminTerminalReceiptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAdminTerminalReceipt,
+		arg.MessageID,
+		arg.ID,
+		arg.BotID,
+		arg.Attempt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordAdminUncertainty = `-- name: RecordAdminUncertainty :exec
+UPDATE core.admin_message_deliveries SET last_uncertain_attempt=$1::bigint,
+ last_uncertain_reason=$2::text,last_uncertain_recorded_at=clock_timestamp()
+WHERE id=$3::bigint AND bot_id=$4::bigint AND attempt=$1::bigint
+ AND (last_uncertain_attempt IS NULL OR last_uncertain_attempt<$1::bigint)
+`
+
+type RecordAdminUncertaintyParams struct {
+	Attempt int64
+	Reason  string
+	ID      int64
+	BotID   int64
+}
+
+func (q *Queries) RecordAdminUncertainty(ctx context.Context, arg RecordAdminUncertaintyParams) error {
+	_, err := q.db.Exec(ctx, recordAdminUncertainty,
+		arg.Attempt,
+		arg.Reason,
+		arg.ID,
+		arg.BotID,
+	)
+	return err
 }

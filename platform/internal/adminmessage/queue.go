@@ -187,67 +187,150 @@ func projectAdminCancellation(ctx context.Context, tx pgx.Tx, items []adminQueue
 	return nil
 }
 
-// RecoverDeliveries changes owner and shared projections in one transaction.
+// RecoverDeliveries records expired or historical uncertainty before bounded
+// resends. Source authority is locked before each owner and its shared lane.
 func (s Service) RecoverDeliveries(ctx context.Context) error {
 	if err := s.Delivery.Validate(); err != nil {
 		return err
 	}
+	rows, err := s.DB.Query(
+		ctx,
+		`SELECT d.id FROM core.admin_message_deliveries d JOIN core.admin_messages m ON m.id=d.message_id
+ WHERE d.bot_id=$1 AND (d.state='unknown' OR (d.state='sending' AND d.lease_until<=clock_timestamp()) OR
+ (d.state='pending' AND (m.state='cancelled' OR NOT EXISTS(SELECT 1 FROM core.pass_booking_admins a WHERE a.owner=m.actor))))
+ ORDER BY d.id LIMIT 100`,
+		s.Delivery.BotID,
+	)
+	if err != nil {
+		return err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err = s.recoverDelivery(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type adminRecovery struct {
+	state, failure   string
+	attempt, resends int64
+	leaseLive        bool
+	available        time.Time
+}
+
+func (s Service) recoverDelivery(ctx context.Context, id int64) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	rows, err := tx.Query(ctx, `SELECT d.id,CASE WHEN d.state='sending' THEN 'unknown' ELSE 'cancelled' END
- FROM core.admin_message_deliveries d JOIN core.admin_messages m ON m.id=d.message_id
- WHERE d.bot_id=$1 AND ((d.state='sending' AND d.lease_until<=clock_timestamp()) OR
- (d.state='pending' AND (m.state='cancelled' OR NOT EXISTS(SELECT 1 FROM core.pass_booking_admins a WHERE a.owner=m.actor))))
- ORDER BY d.id LIMIT 100 FOR UPDATE OF d SKIP LOCKED`, s.Delivery.BotID)
+	eligible, err := s.lockRecoveryPublication(ctx, tx, id)
 	if err != nil {
 		return err
 	}
-	type change struct {
-		id    int64
-		state string
+	var row adminRecovery
+	err = tx.QueryRow(ctx, `SELECT state,failure,attempt,uncertain_resends,COALESCE(lease_until>clock_timestamp(),false),available_at
+ FROM core.admin_message_deliveries WHERE id=$1 AND bot_id=$2 FOR UPDATE SKIP LOCKED`, id, s.Delivery.BotID).
+		Scan(&row.state, &row.failure, &row.attempt, &row.resends, &row.leaseLive, &row.available)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
 	}
-	changes, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (change, error) {
-		var item change
-		scanErr := row.Scan(&item.id, &item.state)
-		return item, scanErr
-	})
 	if err != nil {
 		return err
 	}
-	refs := make([]delivery.Reference, 0, len(changes))
-	for _, item := range changes {
-		refs = append(refs, adminReference(item.id))
+	uncertain := row.state == string(delivery.Uncertain) || (row.state == string(delivery.Sending) && !row.leaseLive)
+	if !uncertain && (row.state != statePending || eligible) {
+		return tx.Commit(ctx)
 	}
-	if err = delivery.LockReferences(ctx, tx, s.Delivery.BotID, refs); err != nil {
+	q := dbgen.New(tx)
+	outcome, deadline, err := s.adminRecoveryOutcome(ctx, q, id, row, eligible)
+	if err != nil {
 		return err
 	}
-	for _, item := range changes {
-		reason := "publication_cancelled"
-		if item.state == "unknown" {
-			reason = "telegram_outcome_unknown"
-		}
-		if _, err = tx.Exec(
-			ctx,
-			`UPDATE core.admin_message_deliveries SET state=$2,failure=$3 WHERE id=$1`,
-			item.id,
-			item.state,
-			reason,
-		); err != nil {
-			return err
-		}
-		if err = delivery.Project(
-			ctx,
-			tx,
-			s.Delivery.BotID,
-			adminReference(item.id),
-			delivery.Kind(item.state),
-			time.Time{},
-		); err != nil {
-			return err
-		}
+	if err = delivery.Project(ctx, tx, s.Delivery.BotID, adminReference(id), outcome.Kind, deadline); err != nil {
+		return err
+	}
+	if err = s.finishDelivery(ctx, q, id, row.attempt, outcome, deadline); err != nil {
+		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func (s Service) lockRecoveryPublication(ctx context.Context, tx pgx.Tx, id int64) (bool, error) {
+	var actor string
+	var messageID int64
+	if err := tx.QueryRow(ctx, `SELECT m.actor,m.id FROM core.admin_message_deliveries d JOIN core.admin_messages m ON m.id=d.message_id WHERE d.id=$1 AND d.bot_id=$2`, id, s.Delivery.BotID).
+		Scan(&actor, &messageID); err != nil {
+		return false, err
+	}
+	source, err := messageSource(ctx, tx, actor, messageID)
+	if err != nil {
+		return false, err
+	}
+	if err = source.prelock(ctx, tx, actor); err != nil {
+		return false, err
+	}
+	valid, err := source.validity(ctx, tx, actor)
+	if err != nil {
+		return false, err
+	}
+	current, err := adminPublicationCurrent(ctx, tx, messageID)
+	if err != nil {
+		return false, err
+	}
+	if !valid {
+		if err = retireMessage(ctx, tx, messageID); err != nil {
+			return false, err
+		}
+	}
+	return valid && current, nil
+}
+
+func (s Service) adminRecoveryOutcome(
+	ctx context.Context,
+	q *dbgen.Queries,
+	id int64,
+	row adminRecovery,
+	eligible bool,
+) (delivery.Outcome, time.Time, error) {
+	deadline := time.Now()
+	cancelled := delivery.Outcome{Kind: delivery.Cancelled, Reason: "publication_cancelled"}
+	if row.state == statePending {
+		return cancelled, deadline, nil
+	}
+	reason := "telegram_outcome_unknown"
+	if row.state == string(delivery.Uncertain) && row.failure != "" {
+		reason = row.failure
+	}
+	if err := q.RecordAdminUncertainty(
+		ctx,
+		dbgen.RecordAdminUncertaintyParams{ID: id, BotID: s.Delivery.BotID, Attempt: row.attempt, Reason: reason},
+	); err != nil {
+		return delivery.Outcome{}, time.Time{}, err
+	}
+	if !eligible {
+		return cancelled, deadline, nil
+	}
+	outcome := adminRetryOutcome(
+		delivery.Outcome{Kind: delivery.Uncertain, Reason: reason},
+		row.resends,
+		true,
+		s.Delivery,
+	)
+	if outcome.Kind != delivery.Deferred {
+		return outcome, deadline, nil
+	}
+	deadline, representable := delivery.Deadline(deadline, outcome.RetryAfter)
+	if !representable {
+		return delivery.Outcome{Kind: delivery.Parked, Reason: "telegram_invalid_cooldown"}, time.Now(), nil
+	}
+	if row.available.After(deadline) {
+		deadline = row.available
+	}
+	return outcome, deadline, nil
 }

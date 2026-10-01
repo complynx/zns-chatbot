@@ -35,9 +35,11 @@ func (q *Queries) AnnouncementAttemptSource(ctx context.Context, arg Announcemen
 }
 
 const beginAnnouncementSend = `-- name: BeginAnnouncementSend :execrows
-UPDATE core.pass_registration_announcements SET state='sending',lease_until=clock_timestamp()+interval '2 minutes'
+UPDATE core.pass_registration_announcements SET state='sending',rendered_admitted=true,lease_until=clock_timestamp()+interval '2 minutes',
+ uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=$1::bigint AND bot_id=$2::bigint AND attempts=$3::bigint
  AND state='pending' AND lease_until>clock_timestamp()
+ AND (last_uncertain_attempt IS NULL OR uncertain_resends<3)
 `
 
 type BeginAnnouncementSendParams struct {
@@ -122,7 +124,8 @@ func (q *Queries) FinishAnnouncement(ctx context.Context, arg FinishAnnouncement
 }
 
 const lockAnnouncementAttempt = `-- name: LockAnnouncementAttempt :one
-SELECT a.channel,a.thread_id,a.state,a.message_id,a.available_at,
+SELECT a.channel,a.thread_id,a.state,a.message_id,a.available_at,a.failure,
+ a.last_uncertain_attempt,a.last_confirmed_attempt,a.uncertain_resends,a.lease_until,
  COALESCE(a.lease_until>clock_timestamp(),false)::boolean AS lease_live,
  EXISTS(SELECT 1 FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
   WHERE e.id=a.event_id AND b.owner=a.owner AND b.created_at=a.created_at AND b.state<>'cancelled'
@@ -140,13 +143,18 @@ type LockAnnouncementAttemptParams struct {
 }
 
 type LockAnnouncementAttemptRow struct {
-	Channel     string
-	ThreadID    pgtype.Int8
-	State       string
-	MessageID   int64
-	AvailableAt pgtype.Timestamptz
-	LeaseLive   bool
-	Current     bool
+	Channel              string
+	ThreadID             pgtype.Int8
+	State                string
+	MessageID            int64
+	AvailableAt          pgtype.Timestamptz
+	Failure              string
+	LastUncertainAttempt pgtype.Int8
+	LastConfirmedAttempt pgtype.Int8
+	UncertainResends     int64
+	LeaseUntil           pgtype.Timestamptz
+	LeaseLive            bool
+	Current              bool
 }
 
 func (q *Queries) LockAnnouncementAttempt(ctx context.Context, arg LockAnnouncementAttemptParams) (LockAnnouncementAttemptRow, error) {
@@ -163,6 +171,11 @@ func (q *Queries) LockAnnouncementAttempt(ctx context.Context, arg LockAnnouncem
 		&i.State,
 		&i.MessageID,
 		&i.AvailableAt,
+		&i.Failure,
+		&i.LastUncertainAttempt,
+		&i.LastConfirmedAttempt,
+		&i.UncertainResends,
+		&i.LeaseUntil,
 		&i.LeaseLive,
 		&i.Current,
 	)
@@ -236,4 +249,95 @@ func (q *Queries) PrepareAnnouncement(ctx context.Context, botID int64) (Prepare
 		&i.Attempts,
 	)
 	return i, err
+}
+
+const recordAnnouncementConfirmation = `-- name: RecordAnnouncementConfirmation :exec
+UPDATE core.pass_registration_announcements SET last_confirmed_attempt=$1::bigint
+WHERE id=$2::bigint AND bot_id=$3::bigint AND attempts=$1::bigint
+`
+
+type RecordAnnouncementConfirmationParams struct {
+	Attempt int64
+	ID      int64
+	BotID   int64
+}
+
+func (q *Queries) RecordAnnouncementConfirmation(ctx context.Context, arg RecordAnnouncementConfirmationParams) error {
+	_, err := q.db.Exec(ctx, recordAnnouncementConfirmation, arg.Attempt, arg.ID, arg.BotID)
+	return err
+}
+
+const recordAnnouncementTerminalConfirmation = `-- name: RecordAnnouncementTerminalConfirmation :execrows
+UPDATE core.pass_registration_announcements SET last_confirmed_attempt=$1::bigint
+WHERE id=$2::bigint AND bot_id=$3::bigint
+ AND attempts=$1::bigint AND last_uncertain_attempt=$1::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL AND message_id=0
+`
+
+type RecordAnnouncementTerminalConfirmationParams struct {
+	Attempt int64
+	ID      int64
+	BotID   int64
+}
+
+func (q *Queries) RecordAnnouncementTerminalConfirmation(ctx context.Context, arg RecordAnnouncementTerminalConfirmationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAnnouncementTerminalConfirmation, arg.Attempt, arg.ID, arg.BotID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordAnnouncementTerminalReceipt = `-- name: RecordAnnouncementTerminalReceipt :execrows
+UPDATE core.pass_registration_announcements SET message_id=$1::bigint
+WHERE id=$2::bigint AND bot_id=$3::bigint
+ AND attempts=$4::bigint AND last_uncertain_attempt=$4::bigint
+ AND COALESCE(last_confirmed_attempt,0)<$4::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL
+ AND $1::bigint>0
+ AND (message_id=0 OR message_id=$1::bigint)
+`
+
+type RecordAnnouncementTerminalReceiptParams struct {
+	MessageID int64
+	ID        int64
+	BotID     int64
+	Attempt   int64
+}
+
+func (q *Queries) RecordAnnouncementTerminalReceipt(ctx context.Context, arg RecordAnnouncementTerminalReceiptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAnnouncementTerminalReceipt,
+		arg.MessageID,
+		arg.ID,
+		arg.BotID,
+		arg.Attempt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recordAnnouncementUncertainty = `-- name: RecordAnnouncementUncertainty :exec
+UPDATE core.pass_registration_announcements SET last_uncertain_attempt=$1::bigint,
+ last_uncertain_reason=$2::text,last_uncertain_recorded_at=clock_timestamp()
+WHERE id=$3::bigint AND bot_id=$4::bigint AND attempts=$1::bigint
+ AND (last_uncertain_attempt IS NULL OR last_uncertain_attempt<$1::bigint)
+`
+
+type RecordAnnouncementUncertaintyParams struct {
+	Attempt int64
+	Reason  string
+	ID      int64
+	BotID   int64
+}
+
+func (q *Queries) RecordAnnouncementUncertainty(ctx context.Context, arg RecordAnnouncementUncertaintyParams) error {
+	_, err := q.db.Exec(ctx, recordAnnouncementUncertainty,
+		arg.Attempt,
+		arg.Reason,
+		arg.ID,
+		arg.BotID,
+	)
+	return err
 }
