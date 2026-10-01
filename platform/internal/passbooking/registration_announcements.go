@@ -180,7 +180,8 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 		return err
 	}
 	if input.Outcome.Kind == delivery.Uncertain && !row.Current {
-		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
+		_, err = s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
+		return err
 	}
 	wireOutcome := input.Outcome
 	input.Outcome = announcementRetryOutcome(
