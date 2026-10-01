@@ -5,12 +5,14 @@
 - JS: ESLint, Prettier, Playwright. Real PostgreSQL integration tests.
 - UI i18n: en + ru minimum. Catalog keys. Both locales in Functional QA.
 - Free text/media: agent interprets intent. Pending form = hint, never trap next message.
-- Update `PROGRESS.html` after stage gates, plan changes, blockers. Built != accepted.
-- Keep PROGRESS.html plain semantic HTML without CSS or JavaScript. Use sections "Готово", "Сейчас", "Что ещё предстоит", "Вопросы для решения" with short task descriptions; distinguish historical scoped acceptance from current proof. Keep detailed evidence in reports/history. PROGRESS.md is a link only.
-- Add unresolved choices that require Daniel to "Вопросы для решения" in PROGRESS.html, with known options and dependencies. Pending is not approved. Wait only on dependent work; continue independent work. Do not turn ordinary engineering decisions or unverified findings into approval requirements.
+- Update `management.local/PROGRESS.html` after stage gates, plan changes, blockers. Built != accepted.
+- Keep management.local/PROGRESS.html plain semantic HTML without CSS or JavaScript. Use sections "Готово", "Сейчас", "Что ещё предстоит", "Вопросы для решения" with short task descriptions; distinguish historical scoped acceptance from current proof. Keep detailed evidence in reports/history. PROGRESS.md is a link only.
+- Add unresolved choices that require Daniel to "Вопросы для решения" in management.local/PROGRESS.html, with known options and dependencies. Pending is not approved. Wait only on dependent work; continue independent work. Do not turn ordinary engineering decisions or unverified findings into approval requirements.
 - `noqa`, `nolint`, `eslint-disable`, `@ts-ignore`, exclusions: very rare. Fix code first. Exception: smallest scope, concrete reason, Code QA review. Never weaken gates for green results.
 
 - Synthetic stand data and stands may be changed or deleted when this does not conflict with another test. Assign stand/data ownership before concurrent work; isolate conflicting scenarios. This supersedes the earlier no-deletion pause constraint for synthetic test resources. Production remains separately authorized.
+
+- Working progress and Kanban live only in ignored `management.local/PROGRESS.html` and `management.local/KANBAN.html`. Never stage them or recreate tracked root copies. Keep stable contracts and acceptance reports in Git.
 
 # Two QA gates per stage
 

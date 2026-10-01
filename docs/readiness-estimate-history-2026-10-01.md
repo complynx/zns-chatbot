@@ -37,7 +37,7 @@
 - Архитектура C–E не принята целиком. Нужны свежие финальные Code/Functional QA, полная EN/RU ручная/агентская матрица, lifecycle/crash/restart, реальные Telegram/Zitadel/model/ASR.
 - Итоговый перенос всех доменов, удаление импортера с сохранением постоянных ссылок, rebase, backup/rollback и production cutover требуют выполнения и доказательств.
 
-Две следующие контрольные точки для сужения оценки: завершённый свежий baseline на зафиксированном составе; полная E-репетиция apply → replay/reconcile → removal → restart/UI. [Текущие проверки](qa/registration-queue-host-validation-2026-09-30.md). [PROGRESS](../PROGRESS.html).
+Две следующие контрольные точки для сужения оценки: завершённый свежий baseline на зафиксированном составе; полная E-репетиция apply → replay/reconcile → removal → restart/UI. [Текущие проверки](qa/registration-queue-host-validation-2026-09-30.md). [PROGRESS](../management.local/PROGRESS.html).
 
 ## Предыдущий подробный срез
 
@@ -86,7 +86,7 @@ R56 ожидает решения Daniel о чтении текущего сос
 
 Доказательства: [Functional QA](qa/functional-qa-supervisor-2026-09-30-01.md), [QA108](qa/code-qa-2026-09-30-108.md), [QA109](qa/code-qa-2026-09-30-109.md), [реестр аудита](audit-followup.md). Обновление учитывает целевые проверки R51–R53, QA113/114 и сборку синтетического образа; production-операций не было.
 
-[Текущие задачи](../PROGRESS.html) · [История оценок](readiness-estimate-history-2026-09-30.md).
+[Текущие задачи](../management.local/PROGRESS.html) · [История оценок](readiness-estimate-history-2026-09-30.md).
 
 Written by Codex (gpt-6-astra/Codex)
 on behalf of Daniel Drizhuk

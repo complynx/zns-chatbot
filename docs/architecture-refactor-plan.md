@@ -273,7 +273,7 @@ The helper lifecycle slice has passed scoped source review and is present in the
 
 ## Confirmed product requirements — status reconciled 2026-09-30
 
-These decisions remain requirements. Implementation, scoped verification and full acceptance are distinct. See [PROGRESS.html](../PROGRESS.html) and dated reports for current evidence; do not infer missing implementation from pending Functional QA.
+These decisions remain requirements. Implementation, scoped verification and full acceptance are distinct. See [PROGRESS.html](../management.local/PROGRESS.html) and dated reports for current evidence; do not infer missing implementation from pending Functional QA.
 
 - Paid extra displacement (AUD-16): remove the paid extra, create a durable refund task and request a refund from the current ambassador. No automatic money transfer. Preserve one refund obligation on retry/replay and use the actual ambassador relationship. Implemented; focused refund PG №3 and independent Code QA №21 PASS. Functional acceptance remains open.
 - Invitation deadline (AUD-24): calculate from actual invitation start after queue waiting; replay never extends the deadline. Implemented with migration 085 and legacy fallback; focused PostgreSQL/mutation proof and Code QA №17 PASS. Functional acceptance remains open.

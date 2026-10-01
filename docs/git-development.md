@@ -33,7 +33,7 @@ their preserved local evidence directories until moved into task branches.
    base advances after review, stop and prepare the updated branch; substantive
    resolution receives fresh affected review before merging. Metadata-only rebases
    must retain exact reviewed source and record their equivalence and base binding.
-6. Run affected integrated checks and update PROGRESS.html. Fresh Functional QA
+6. Run affected integrated checks and update the ignored management.local/PROGRESS.html. Fresh Functional QA
    uses a frozen stand and EN/RU Telegram-like UI. A merged feature is implemented,
    not automatically accepted. Both QA gates remain required for stage acceptance.
 

@@ -1,7 +1,7 @@
 # Coordination metrics
 
 Baseline observation: 2026-09-30T22:04:53Z. Historical sole CSV writer: kanban_manager. Current ownership: root writes CSV; kanban_manager maintains this description and KANBAN.html only.
-Source: [coordination-metrics.csv](coordination-metrics.csv). Human view: [KANBAN.html](../KANBAN.html).
+Source: [coordination-metrics.csv](coordination-metrics.csv). Human view: [KANBAN.html](../management.local/KANBAN.html).
 These metrics describe engineering handoffs, not product readiness or a completion percentage.
 
 ## Event record
