@@ -1,6 +1,6 @@
 ## Current integrated source and expanded QA — 2026-10-01, source33540321
 
-Authoritative integrated Git33540321 includes reviewed ACK observation QA241,
+Authoritative integrated Gitbd150d5b includes reviewed ACK observation QA241,
 source diagnostics QA243, registration fixture QA245 and HTTP observations
 QA248, update diagnostics QA253 and fixed fixture role controls QA255. Root focused integrated checks and full pinned JS gates passed;
 Functional images remain sealedce427 and do not certify the newer source.
@@ -1534,3 +1534,7 @@ Common integration81a9cf73 now includes QA233 usage and QA235 models/credits/bro
 C28 immutable eec24665 is completing full Linux/PostgreSQL clock/default/startup gates in its own ephemeral fixture; native55432 released. D10 immutable df5199ad passed local tests/lint/build and root actual two PostgreSQL cases run on58441 with exclusive8090. Payment6 root repeat failed47.615s only on the missing-edit terminal-status assertion; all other selected cases passed and parent DB readback passed. Author corrects exact Rejected contract and an identified still-live off-page payment boundary within the same scope, retaining original-source locking and no-send retirement assertions. No acceptance yet.
 
 Runtime14 transferred after QA261. First real PG17.11 roles/bootstrap/7operator-actions/fake-persistence and zero-managed-session inventory checks passed; negative/config/lint gates remain. ManagedC204 unstarted. Live clock read/advance also require the private operator guard; operator5 is prepared only after reviewed C integration. Full F08 business-plan/effects/UI observation remains separate. Counter261,next262; all Codex override. Root source33540321, no production release.
+
+## Authoritative refresh after QA262–266
+
+Runtime14 QA264PASS integratedbd150d5b withoutconflicts, rootfocusedfixture testsPASS. Codeonly/preparationacceptance; managedC204 stillblocked reviewedC40/operator5. QA262 model10FAIL2 fixed in80d0; actualrace/nativeunits/pinnedgates+root2PG4.672PASS, freshQA266active. QA263 clock28FAIL5→approved40existingpathscope,1aeprotected. QA265 payment6FAIL2→approved7(existingtypes.goonly),8ffprotected. Rootnative9paymenttestsPASS notindependentacceptance. Counters through266,next267, allCodexoverride. No production release/fullFQA/parity acceptance. Humanquestion remainsTelegramtestaccountID inPROGRESS.

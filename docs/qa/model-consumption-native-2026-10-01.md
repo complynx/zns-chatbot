@@ -8,3 +8,8 @@ Raw evidence: .worktrees/model-interruption-controls/qa.local/root-pg/tests.json
 
 Written by root (gpt-6/Codex)
 on behalf of Daniel Drizhuk
+## Corrective successor80d0 gate
+
+Immutable80d0ec727702898352eb5ba0cec241520391426a/base460ab86b, originaldf519 and priorlogs preserved. Root24906 terminalPASS: exactunchanged2PG selector1.18s/3.21s/package4.672s,0FAIL/SKIP, parentDBnames identicalbefore/after. Rawroot-pg-successor/tests.jsonl SHA256 0E9361A352291178041828B3C7691217CAE4237EFC704AA68CD63D04DC6F9959. Native8090released. Authorwhole sandboxunits10.237s, actualLinuxrace11.889s/pinnedlint0/fmt/build passed; freshfullQA266 ongoing. F08business/UI separate.
+
+QA266 completed FAIL2 despite the above scoped native PASS. Candidate80d0 is not accepted or integrated. A fresh developer owns a separate ten-path successor basedbd150; original candidates and failed review evidence remain unchanged. Business F08 acceptance remains open.

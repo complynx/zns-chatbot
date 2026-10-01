@@ -654,3 +654,102 @@ QA255 independently passed the five-path fixed-role candidate67206220. Root
 merged it without conflicts as102072a0; focused sandbox/command tests passed.
 The four fixed actions are now integrated source, still absent from sealedce427
 images. Template preparation and future stand installation do not certify FQA.
+
+## bd150 private-role prerequisite correction
+
+Root integrated runtime14 at bd150d5b1b6f91977d1597686e889543dab22330 after
+QA264 PASS. Raw migrations remain unchanged. Source/template acceptance is not
+a running C stand. C reader/operator still block final managed preparation;
+D10 successor80d0 awaits full QA266 CLI review and qualified F08 observer;
+payment7 is under construction after QA265. Its nine PG passes and D focused PG
+passes do not confer acceptance. Telegram recipient choice and ce427 stay unchanged.
+
+Inspected TestRegistrationPrivateRoleComposition requires five private variables:
+REGISTRATION_ROLE_TEST_ADMIN_URL, REGISTRATION_ROLE_TEST_OWNER_URL,
+REGISTRATION_ROLE_TEST_OPERATOR_URL, REGISTRATION_ROLE_TEST_FAKE_URL and
+REGISTRATION_ROLE_TEST_INVENTORY_URL. Missing ADMIN causes an explicit test skip.
+ADMIN is bootstrap administrator; OWNER is nonprivileged zns_app owning the exact
+synthetic_qa_zns_registration_fixture database; OPERATOR is private nonprivileged
+zns_registration_operator without memberships; FAKE is private zns_fake;
+INVENTORY is read-only zns_inventory with pg_read_all_stats. Only app/meter count
+as managed session roles. The test intentionally changes role privileges,
+memberships, database/table ownership, identities and markers then restores them.
+It must never target native58441/58451, retained fixture data or active C204.
+
+Fresh bootstrap supplies roles/schema ownership only. The test migrates/seeds as
+zns_app, installs genuine product/registration fixtures, then applies reviewed
+runtime-roles.sql itself. Do not pre-install fixture data. Its relative file
+../../../docs/sandbox/fqa-stands/registration/runtime-roles.sql requires the exact
+checkout layout; include raw ACL/bootstrap files in final provenance alongside
+module/migration inventories. Fake persistence here uses actual PostgreSQL plus
+httptest; it is not live browser/provider acceptance and requires no clock volume.
+
+Separate TestRegistrationFixtureRealStateAndRevocation requires private
+REGISTRATION_FIXTURE_TEST_DATABASE_URL with exact127.0.0.1 host, fixed DB name and
+actual owner. It explicitly DROPs core/bot/interaction/credits schemas and public
+migration/fixture tables at start. Do not share its target with the private-role
+test, retained fixture state or managed stand. Original package/shard membership
+is preserved; prerequisites route each test to its own synthetic allocation.
+
+Concrete proposed next allocations, no resource/template grant:
+
+| Purpose | Proposed project / port / database |
+| --- | --- |
+| Private-role composition | synthetic-qa-zns-registration-role-test-20261001 /127.0.0.1:58461 /synthetic_qa_zns_registration_fixture |
+| Original destructive fixture | synthetic-qa-zns-registration-fixture-test-20261001 /127.0.0.1:58471 /synthetic_qa_zns_registration_fixture |
+
+Each has one pinned PostgreSQL17 container, separate -pgdata/-host and private
+bootstrap-secret volume/bundle; no installation204 label/coordinator/clock/app
+runtime. Proposed config paths: docs/sandbox/fqa-stands/native/
+registration-role-test.compose.yaml and registration-fixture-test.compose.yaml.
+Role-test receives exact reviewed private role bootstrap; fixture-test receives
+owning nonprivileged zns_app and only its reviewed schema prerequisites. Never
+add private fixture roles to native parents. Read-only native/reservation check
+found58461 unused;58471 requires full collision/capacity inventory at assignment.
+No resource was created. Host bundles use protected Windows ACL; Linux secret
+volume uses actual PostgreSQL UID,0700 directory/0400 regular files, proven by
+stat/readability. Windows chmod or SQL role identity is not OS-owner evidence.
+
+Runner A owns58441 plus fresh58461 for its unfiltered internal/sandbox package;
+enable private-role URL variables only for that package. Original destructive
+integration test retains its I0-I7 membership; its runner receives fresh58471
+URL only in that manifest's explicit exclusive window. Transfer special-cluster
+ownership only after terminal process release. No simultaneous writers or silent
+reset after failure; re-execution needs reviewed fresh-state allocation. Two
+normal native clusters alone cannot supply these prerequisites safely.
+
+Every final Go-discovered test receives a prerequisite classification before
+commands freeze; no silent missing-env skip/exclusion. Preserve unfiltered
+nonintegration, complete eight-shard test union and full importer. Supplemental
+receipts reconcile actual skipped native names to genuine required stand types:
+
+| Requirement | Qualified execution prerequisite |
+| --- | --- |
+| Ordinary native PG | TEST_DATABASE_URL58441/58451, reviewed first-three roles; randomized test DBs |
+| Private/destructive fixture | Exact five role URLs on58461 and original fixture URL58471, owner/ACL/raw-file proof |
+| Linux ownership, RO/RW, lock/reaping/symlink | Same final source in owned Linux runner/volumes; real UID/mount/proc/lock checks |
+| Physical replacement | ZNS_REPLACEMENT_DOCKER_TEST=1 plus ZNS_REPLACEMENT_TEST_IMAGE@sha256, ZNS_REPLACEMENT_TEST_NETWORK and ZNS_REPLACEMENT_TEST_PG_HOST on isolated Linux lifecycle stand |
+| Native media/sticker | Linux ffmpeg/ffprobe/tgs-render and decoder image provenance; STICKER_NATIVE_TEST=1 |
+| Script worker | SCRIPT_TEST_SOCKET on an owned actual IPC service/socket |
+| Browser/live UI | MARKDOWN_BROWSER/TIMETABLE_BROWSER/CONTACT_BROWSER with NODE_BINARY; BROWSER_AUTH_STAND_FILE/lifetime and Playwright; SANDBOX_URL to a newly frozen owned stand |
+| Identity | ZITADEL_LOCAL_STATE and ZITADEL_PROVISIONING_PROOF_STATE from a synthetic current Zitadel API stand |
+| Real model | ZNS_LIVE_CODEX_EXECUTABLE under scoped real-provider access; fixtures do not prove reasoning |
+
+Reinspect exact settings/test requirements at final epoch; no guessed environment
+toggles. Missing endpoint/OS/mount/image/provider/human recipient produces BLOCKED
+names. Source-declared native skips stay in raw counts and require supplemental
+proof before whole coverage; no assertion/deadline changes or added -short.
+Qualified F08 sampled saved-result/effect observer and real UI/draft/next-intent
+evidence remain separately needed; provider consumed state alone is insufficient.
+This correction made no test/DB/bootstrap/resource writes. Root assigns each
+future preparation and exclusive runner window.
+
+Root subsequently authorized and lead completed only bare special PG setup:
+58461 private-role composition and58471 destructive fixture clusters, separate
+exact projects/networks/pgdata and unique private bundles, same cached digest,
+1CPU/768MiB/256MiB each. Native ADMIN/OWNER authentication, DBowner zns_app,
+nonprivileged role flags and zero product schemas/public tables are actual proof.
+See native-baseline-allocation report for all handles/hashes/origin and safe
+root-owned runtime invocation. Both released to root healthy/idle; no migrations,
+fixtures/runtime ACL/test runs occurred. Original manifests and final discovery
+requirements remain unchanged; root assigns all future codegate writers.

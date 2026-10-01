@@ -1,4 +1,4 @@
-# Integrated source checkpoint:33540321
+# Integrated source checkpoint:bd150d5b
 
 Product source0070f944 incorporates reviewed callback observations62b9eebc
 (QA241), source diagnosticsb857b8b9 (QA243) and registration fixtures54766266
@@ -54,3 +54,9 @@ results;58441 is released. ce427 Functional images remain older than this source
 
 Written by root (gpt-6.1-sol/Codex)
 on behalf of Daniel Drizhuk
+
+## Runtime roles integrated — bd150d5b
+
+Exactreviewed14candidate2a9db430 mergedwithoutconflicts afterQA264PASS. Rootactualfixture selector3top-level+subcases12PASSevents/0FAILSKIP; sandbox0.181s/cmdzns0.154s, rawqa.local/runtime-role-root-integrated.jsonl. AuthorrealPGnegative/role/persistence/inventory/configgates separate. No managedstand/FQAclaim. RootDsuccessor80d0 actual2PG PASS1.18/3.21/package4.672s unchangedparentDBnames; freshQA266 active. Payment8ff native9top-level passed121.698s butQA265returned2P2, successor7scope approved. C1ae native/Linuxgatespassed butQA263returned5; successor40scope approved. Originalfailedreceipts retained.
+
+Current correction: QA266 completed FAIL2; model10 transferred to new developer CLI37303, not merged. Payment7 full root52182 native selector12 top-level28PASS events/0FAILSKIP92.881s, identical database inventory; signed immutable handoff and fresh review pending. C40 final20e936 gates active. Native58461/58471 actual bare setup authenticated and released; product migrations and final full run still pending.
