@@ -262,7 +262,7 @@ func bindDefaultNotificationPacing(t *testing.T, r *notificationRuntimeFixture) 
 	cfg, err := config.Load("health", []byte("env: sandbox\n"), nil)
 	require.NoError(t, err)
 	cfg.Auth.Zitadel.BotID = strconv.FormatInt(syntheticDeliverySettings().BotID, 10)
-	cfg.Telegram.Token = cfg.Auth.Zitadel.BotID + ":synthetic"
+	cfg.Telegram.Token = config.Secret(cfg.Auth.Zitadel.BotID + ":synthetic")
 	settings, err := cfg.DeliverySettings()
 	require.NoError(t, err)
 	require.Equal(t, 5*time.Second, settings.UncertaintyRetryBaseOrDefault())

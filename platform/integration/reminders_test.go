@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -84,7 +82,7 @@ func TestRemindersQueueOnceUnderConcurrentScansAndClaims(t *testing.T) {
 		group.Go(func() {
 			gate, claimError := service.BeginNotification(
 				t.Context(),
-				passbooking.NotificationAttempt{
+				orders.NotificationAttempt{
 					Attempt: delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt},
 					Wire:    notificationTestWire(),
 				},
@@ -171,7 +169,7 @@ func TestReminderRechecksPaymentAndZeroTotalAtDelivery(t *testing.T) {
 			prepared := preparedOrderTestNotice(t, service, id)
 			gate, err := service.BeginNotification(
 				t.Context(),
-				passbooking.NotificationAttempt{
+				orders.NotificationAttempt{
 					Attempt: delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt},
 					Wire:    notificationTestWire(),
 				},
