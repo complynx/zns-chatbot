@@ -132,6 +132,10 @@ func ownerURL(spec projection) (string, error) {
 		uri.Fragment != "" || uri.ForceQuery || (uri.RawQuery != "" && uri.RawQuery != "sslmode=disable") {
 		return "", errors.New(targetError)
 	}
+	password, supplied := uri.User.Password()
+	if !supplied || password == "" {
+		return "", errors.New(targetError)
+	}
 	uri.RawQuery = "sslmode=disable"
 	return uri.String(), nil
 }

@@ -33,6 +33,7 @@ func TestOwnerConfigExactAuthority(t *testing.T) {
 		require.Equal(t, spec.Port, config.Port)
 		require.Equal(t, spec.Database, config.Database)
 		require.Equal(t, spec.Role, config.User)
+		require.Equal(t, "private", config.Password)
 		require.Empty(t, config.Fallbacks)
 		require.Nil(t, config.TLSConfig)
 		require.Empty(t, config.RuntimeParams)
@@ -47,6 +48,8 @@ func TestOwnerConfigExactAuthority(t *testing.T) {
 func TestOwnerConfigRejectsOtherTargetsBeforeConnection(t *testing.T) {
 	for _, dsn := range []string{
 		strings.Replace(allocatedURL, "25432", "25433", 1),
+		strings.Replace(allocatedURL, ":private", "", 1),
+		strings.Replace(allocatedURL, ":private", ":", 1),
 		strings.Replace(allocatedURL, "127.0.0.1", "localhost", 1),
 		strings.Replace(allocatedURL, "postgres:private", "zns_app:private", 1),
 		strings.Replace(allocatedURL, "_guard", "_copy", 1),
@@ -86,6 +89,12 @@ func TestOwnerRunGuardsBeforeReadingOrConnecting(t *testing.T) {
 	output, err := run(args, nil)
 	require.Nil(t, output)
 	require.EqualError(t, err, targetError)
+	for _, dsn := range []string{strings.Replace(allocatedURL, ":private", "", 1), strings.Replace(allocatedURL, ":private", ":", 1)} {
+		t.Setenv("MIGRATE_DATABASE_URL", dsn)
+		output, err = run(args, nil)
+		require.Nil(t, output)
+		require.EqualError(t, err, targetError)
+	}
 	t.Setenv("MIGRATE_DATABASE_URL", allocatedURL)
 	for _, query := range []string{"", strings.Repeat("q", inputLimit+1), "SELECT '\x00';", "\xff"} {
 		output, err = run(args, strings.NewReader(query))

@@ -32,6 +32,8 @@ func TestRuntimeConfig(t *testing.T) {
 		{"multihost", strings.Replace(allocatedURL, "127.0.0.1:25432", "127.0.0.1:25432,127.0.0.2:25433", 1)},
 		{"keyword", "host=127.0.0.1 port=25432 dbname=synthetic_qa_zns_guard user=zns_app"},
 		{"service", "service=other"},
+		{"missing password", strings.Replace(allocatedURL, ":private", "", 1)},
+		{"empty password", strings.Replace(allocatedURL, ":private", ":", 1)},
 		{"socket", "postgres://zns_app@/synthetic_qa_zns_guard?host=/tmp"},
 		{"fragment", allocatedURL + "#other"},
 		{"empty", ""},
@@ -48,6 +50,7 @@ func TestRuntimeConfig(t *testing.T) {
 		t.Setenv("E_RUNTIME_DATABASE_URL", dsn)
 		config, err := runtimeConfig("127.0.0.1", 25432, "synthetic_qa_zns_guard", "zns_app", "host-loopback")
 		require.NoError(t, err)
+		require.Equal(t, "private", config.ConnConfig.Password)
 		require.Empty(t, config.ConnConfig.Fallbacks)
 		require.Nil(t, config.ConnConfig.TLSConfig)
 	}
@@ -106,6 +109,10 @@ func TestRunRejectsTargetBeforePool(t *testing.T) {
 	t.Setenv("E_RUNTIME_DATABASE_URL", strings.Replace(allocatedURL, "25432", "25433", 1))
 	// The exact guard error is returned before NewWithConfig or any SQL/mutation.
 	require.EqualError(t, run(arguments), "allocated_runtime_target_required")
+	for _, dsn := range []string{strings.Replace(allocatedURL, ":private", "", 1), strings.Replace(allocatedURL, ":private", ":", 1)} {
+		t.Setenv("E_RUNTIME_DATABASE_URL", dsn)
+		require.EqualError(t, run(arguments), "allocated_runtime_target_required")
+	}
 	arguments[len(arguments)-1] = strings.Repeat("0", 64)
 	require.EqualError(t, run(arguments), "reviewed_probe_input_hash_required")
 }

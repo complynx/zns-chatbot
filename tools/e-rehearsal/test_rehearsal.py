@@ -165,7 +165,8 @@ class GuardTests(unittest.TestCase):
         for target in (*[url + suffix for suffix in suffixes],
                        url.replace("127.0.0.1", "localhost"), url.replace(":58421", ":5432"),
                        url.replace("postgres:synthetic@", "other:synthetic@"),
-                       url.replace(allocation["database"], "production"), url + "\n", "service=production"):
+                       url.replace(allocation["database"], "production"), url.replace(":synthetic@", "@"),
+                       url.replace(":synthetic@", ":@"), url + "\n", "service=production"):
             with self.subTest(target=target), patch.dict(rehearse.os.environ, {"MIGRATE_DATABASE_URL": target}):
                 with self.assertRaisesRegex(RuntimeError, "isolated_import_dsn"):
                     rehearse.importer_env(allocation)

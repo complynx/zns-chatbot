@@ -154,26 +154,18 @@ func runtimeConfig(host string, port uint16, database, role, transport string) (
 			return nil, rejected
 		}
 	}
-	raw := os.Getenv("E_RUNTIME_DATABASE_URL")
-	if strings.ContainsAny(raw, " \t\r\n") {
-		return nil, rejected
+	uri, err := runtimeURL(host, port, database, role)
+	if err != nil {
+		return nil, err
 	}
-	uri, err := url.Parse(raw)
-	if err != nil || (uri.Scheme != "postgres" && uri.Scheme != "postgresql") || uri.User == nil ||
-		uri.Hostname() != host || uri.Port() != strconv.Itoa(int(port)) || uri.Path != "/"+database ||
-		uri.User.Username() != role || uri.Fragment != "" || uri.ForceQuery ||
-		(uri.RawQuery != "" && uri.RawQuery != "sslmode=disable") {
-		return nil, rejected
-	}
-	// This transport has one plaintext loopback endpoint, never SSL fallback.
-	uri.RawQuery = "sslmode=disable"
+	password, _ := uri.User.Password()
 	config, err := pgxpool.ParseConfig(uri.String())
 	if err != nil {
 		return nil, rejected
 	}
 	effective := config.ConnConfig
 	if effective.Host != host || effective.Port != port || effective.Database != database || effective.User != role ||
-		effective.TLSConfig != nil || len(effective.Fallbacks) != 0 || len(effective.RuntimeParams) != 0 {
+		effective.Password != password || effective.TLSConfig != nil || len(effective.Fallbacks) != 0 || len(effective.RuntimeParams) != 0 {
 		return nil, rejected
 	}
 	// localhost is an explicitly supported loopback alias, not ambient DNS authority.
@@ -184,6 +176,27 @@ func runtimeConfig(host string, port uint16, database, role, transport string) (
 		return []string{"127.0.0.1"}, nil
 	}
 	return config, nil
+}
+
+func runtimeURL(host string, port uint16, database, role string) (*url.URL, error) {
+	raw := os.Getenv("E_RUNTIME_DATABASE_URL")
+	if strings.ContainsAny(raw, " \t\r\n") {
+		return nil, errors.New("allocated_runtime_target_required")
+	}
+	uri, err := url.Parse(raw)
+	if err != nil || (uri.Scheme != "postgres" && uri.Scheme != "postgresql") || uri.User == nil ||
+		uri.Hostname() != host || uri.Port() != strconv.Itoa(int(port)) || uri.Path != "/"+database ||
+		uri.User.Username() != role || uri.Fragment != "" || uri.ForceQuery ||
+		(uri.RawQuery != "" && uri.RawQuery != "sslmode=disable") {
+		return nil, errors.New("allocated_runtime_target_required")
+	}
+	password, supplied := uri.User.Password()
+	if !supplied || password == "" {
+		return nil, errors.New("allocated_runtime_target_required")
+	}
+	// This transport has one plaintext loopback endpoint, never SSL fallback.
+	uri.RawQuery = "sslmode=disable"
+	return uri, nil
 }
 
 func restrictedDatabase(ctx context.Context, db *pgxpool.Pool, spec input) error {

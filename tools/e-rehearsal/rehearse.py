@@ -145,6 +145,7 @@ def importer_env(allocation):
                  and parsed.scheme in ("postgres", "postgresql")
                  and parsed.hostname == allocation["host"] and parsed.port == allocation["port"]
                  and parsed.path == "/" + allocation["database"] and parsed.username == "postgres"
+                 and bool(parsed.password)
                  and not parsed.fragment and not parsed.params
                  and parsed.query in ("", "sslmode=disable"))
     except ValueError:

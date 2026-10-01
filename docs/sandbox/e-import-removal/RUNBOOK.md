@@ -90,7 +90,9 @@ actual compiled module on the three command packages.
 Owner SQL uses the native `offline-sql[.exe]` built by this exact preparation,
 never container psql or a socket. Its private projection contains the same
 host, port, database, marker and transport plus role:postgres. The credential
-URL stays in MIGRATE_DATABASE_URL. Every owner action checks the actual build
+URL stays in MIGRATE_DATABASE_URL. An explicit nonempty URL password is required
+before pgx parsing in every client and the importer guard, so ambient password
+files cannot supply a missing credential. Every owner action checks the actual build
 receipt, source/test/projection hashes and selected binary hash before any DB
 or Docker call; each SQL execution rechecks the binary. The client rejects PG
 settings, localhost, alternate endpoints, DNS, TLS and fallback configuration.
@@ -115,7 +117,8 @@ matching the prepared source. Source/input/probe and actual image provenance
 review must precede these flags.
 
 This bounded version supports only transport:host-loopback with host:127.0.0.1, an exact port and endpoint_verified:true. MIGRATE_DATABASE_URL must
-match that exact host/port/database and postgres owner role. The engineer must
+match that exact host/port/database and postgres owner role with an explicit
+nonempty password; restricted-runtime URLs require their explicit role password too. The engineer must
 use a URL without a query, or with only the exact `sslmode=disable` query.
 The validated queryless form is normalized to explicit sslmode=disable before
 importer execution, binding one plaintext transport with no TLS/fallback.
