@@ -1,6 +1,6 @@
 # Coordination metrics
 
-Baseline observation: 2026-09-30T22:04:53Z. Owner and sole CSV writer: kanban_manager.
+Baseline observation: 2026-09-30T22:04:53Z. Historical sole CSV writer: kanban_manager. Current ownership: root writes CSV; kanban_manager maintains this description and KANBAN.html only.
 Source: [coordination-metrics.csv](coordination-metrics.csv). Human view: [KANBAN.html](../KANBAN.html).
 These metrics describe engineering handoffs, not product readiness or a completion percentage.
 
@@ -690,3 +690,56 @@ Manager paused at150events; follow-up could not start due thread limit. Root rec
 
 
 2026-10-01T07:54:50Z: New readiness assessment requestedbyDaniel. Root35–65 engineering8h days; freshindependent Codex35–75, no priornumericalestimategiven. RootPROGRESS rewritten plainsemanticHTML done/current/remaining/questions, historicalscopedacceptance separated, resolvedbootstrap removed; readinesshistory preserved. Independent reportreadiness-codex-2026-10-01-independent.md, no CodeQAcount incrementforassessment. QA276 terminalFAIL1 scoped1 livetest precondition, returns29; rootactual903wire31025 PASSall6negatives+parent/package8events0FAILSKIP1.116s, butno sourceacceptance. Author approved2linecorrectiond9ab prepareslatestbase/gates beforefreshreview. Counter276next277. Actual clock41 finalgates41234 live; no new productmerge/Functional/productionacceptance.
+
+## Current operational snapshot: 2026-10-01T08:58:58Z
+
+Read-only observed CSV208 rows, latest event08:49:51Z. Product6bee9003/HEADfe724ec0;
+no CSV edits by manager. Earlier append-only snapshots and their exact timestamps
+remain historical. Management targets: docs/management-adjustments-2026-10-01.md.
+No new registry or estimated historical wait durations.
+
+C clock owner c_registration_developer, c-clock-transaction-owner-fix:22 correction
+paths/full51 review, actual implementation; prior99/QA277FAIL2 preserved. D04 three
+paths active-admission-loss-fix, authorclock_authority:LinuxPG/racegreen, style/final
+prepare still incomplete/notfrozen. Payment b747 root53737 full15 terminalFAIL
+174.577s/12PASS3FAILparents17failingleaves; before/after inventoryidentical,58451
+released. Successor11 payment-presentation-fix authorownsuniquePG/normalgates,
+noQA281 dispatch. No final ready handoff inferred from these partial gates.
+
+Identity1 QA278 merged6bee+actual wirePASS, scopedSDK actual99658/QA280PASS; full
+Functional still open. E owner e_import verified27entries/23records/12domains,
+not executed cases; final execution blocked acceptedC/operator/job091. Current
+schema090 cannot substitute final091. Lead+engineer actualprepare C-free205/206
+clones58601–04/58611–14 from6bee/rootexport3b72. No READY/FROZEN/current Functional
+execution. Ignored nonsuperclonebootstrap adaptation approved; noCmarkers/source
+edits. Oldce427 scoped reports retained, current40whole-rowPASS0.
+
+Queue: newQA281 unallocated, no verified current final clean/frozen C/D/payment
+handoff. Counter next281 Codex-only. Audit29 independentreturns plus later277/279
+=31 observedreviewreturns in that documented sequence; do not treat native payment
+FAIL as a new CodeQAreturn. Visible scope growth:clock41→full51 with22correction
+paths; payment10→successor11. Record package/repeatedreason and changes to actual
+acceptance work, not green test totals or general readiness percentages.
+
+Management:2–3 product/architecture developers and at most one coordinated stand/
+helper preparation lane, fixes parallel; transfer/reassess aftersecondreturn.
+Last-required-merge→frozen-stand duration remains notstarted/unknown until actual
+final prerequisite source integration. Qualified F08 requires real savedplan/
+effects/subsequentintent and UI beyond backend consumption/staticobserverproof.
+E actual apply/replay/reconcile/removal/restart/UI outcomes remain unexecuted.
+
+No evidence-backed decrease in root35–65/independent35–75 engineering8hday ranges.
+WholeCDE/parity/fullbaseline/productionNO-GO unchanged. Current waitstarts unknown;
+no duration carried forward from an old import-wait snapshot. Manager paused edits
+and returns these twofiles to root for commit; CSV/product/stands unchanged.
+
+### Verified delta: 2026-10-01T09:02:07Z
+
+D04 finalaaffe Linuxintegrationcompile FAILED aftermodernize embeddedliteral:
+modulelanguageversion rejects it. Earlier explicit-sourcePG14.436s retained;
+not finalPASS. Author narrowtest-only correction/repeatfinalgates, noQA281.
+Payment11 ownPG actual39527LIVE uniqueinternalnetwork17.11/threeunprivilegedroles/
+CPU1/ROsourcecache/nohostports/full15original4min. Nativeunit/compile/build terminal
+PASS, lint80751LIVE. No final readyhandoff or nativePGcompletion. Engineer ACK
+actual205/206 export/build/config preparationactive, noREADY/FROZEN/Functional.
+Snapshot includes this delta; all other current constraints unchanged. Writes paused.
