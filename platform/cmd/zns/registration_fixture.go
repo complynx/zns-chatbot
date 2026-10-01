@@ -37,7 +37,13 @@ func parseRegistrationFixture(action, stand, opens string) (sandbox.Registration
 		if err != nil {
 			return sandbox.RegistrationFixture{}, false, errors.New("registration fixture opening must be RFC3339")
 		}
-	case "read", "revoke-payment-a", "revoke-booking-admin":
+	case "read",
+		"revoke-payment-a",
+		"restore-payment-a",
+		"grant-payment-b",
+		"revoke-payment-b",
+		"revoke-booking-admin",
+		"restore-booking-admin":
 		if opens != "" {
 			return sandbox.RegistrationFixture{}, false, errors.New("registration fixture opening is init-only")
 		}

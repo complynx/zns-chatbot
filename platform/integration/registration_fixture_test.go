@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/passes"
 	"github.com/complynx/zns-chatbot/platform/internal/sandbox"
@@ -32,6 +34,14 @@ func TestRegistrationFixtureRealStateAndRevocation(t *testing.T) {
 	read := sandbox.RegistrationFixture{Stand: sandbox.RegistrationFixtureStand, Action: "read"}
 	_, err = sandbox.ApplyRegistrationFixture(ctx, db, read)
 	require.ErrorContains(t, err, "not initialized")
+	for _, action := range []string{"restore-payment-a", "grant-payment-b", "revoke-payment-b", "restore-booking-admin"} {
+		_, err = sandbox.ApplyRegistrationFixture(
+			ctx,
+			db,
+			sandbox.RegistrationFixture{Stand: read.Stand, Action: action},
+		)
+		require.ErrorContains(t, err, "not initialized")
+	}
 	_, err = db.Exec(ctx, `UPDATE core.users SET telegram_id=909 WHERE id='alice'`)
 	require.NoError(t, err)
 	_, err = sandbox.ApplyRegistrationFixture(ctx, db, read)
@@ -61,6 +71,7 @@ func TestRegistrationFixtureRealStateAndRevocation(t *testing.T) {
 	require.Len(t, state.Rows, 6)
 	service := passbooking.Service{DB: db}
 	assertRegistrationFixtureRights(t, service)
+	assertRegistrationFixtureRoleGuards(t, db)
 	for _, row := range state.Rows {
 		assert.Nil(t, row.Version)
 		assert.Nil(t, row.IntentID)
@@ -120,6 +131,7 @@ func TestRegistrationFixtureRealStateAndRevocation(t *testing.T) {
 		)
 		require.NoError(t, profileErr)
 	}
+	assertRegistrationFixturePaymentB(t, db, service)
 	invite := passbooking.Command{
 		Name:             "invite",
 		Event:            sandbox.RegistrationFixtureEventA,
@@ -218,11 +230,157 @@ func TestRegistrationFixtureRealStateAndRevocation(t *testing.T) {
 			Scan(&unchanged),
 	)
 	assert.True(t, unchanged)
+	f.Action, f.OpensAt = "restore-payment-a", time.Time{}
+	for range 2 {
+		_, err = sandbox.ApplyRegistrationFixture(ctx, db, f)
+		require.NoError(t, err)
+	}
+	f.Action = "restore-booking-admin"
+	for range 2 {
+		_, err = sandbox.ApplyRegistrationFixture(ctx, db, f)
+		require.NoError(t, err)
+	}
+	assertRegistrationFixtureRights(t, service)
+	_, err = service.Queue(ctx, "visitor", sandbox.RegistrationFixtureEventA, "")
+	require.NoError(t, err)
+	_, err = service.PaymentQueue(ctx, "bob", sandbox.RegistrationFixtureEventA, "")
+	require.NoError(t, err)
 	cancelled, cancelContext := context.WithCancel(ctx)
 	cancelContext()
 	f.Action, f.OpensAt = "read", time.Time{}
 	_, err = sandbox.ApplyRegistrationFixture(cancelled, db, f)
 	require.ErrorIs(t, err, context.Canceled)
+	for _, action := range []string{"restore-payment-a", "grant-payment-b", "revoke-payment-b", "restore-booking-admin"} {
+		f.Action = action
+		_, err = sandbox.ApplyRegistrationFixture(cancelled, db, f)
+		require.ErrorIs(t, err, context.Canceled)
+	}
+}
+
+func assertRegistrationFixtureRoleGuards(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	f := sandbox.RegistrationFixture{Stand: sandbox.RegistrationFixtureStand, Action: "grant-payment-b"}
+	config := db.Config()
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `SET ROLE zns_api`)
+		return err
+	}
+	nonowner, err := pgxpool.NewWithConfig(t.Context(), config)
+	require.NoError(t, err)
+	defer nonowner.Close()
+	_, err = sandbox.ApplyRegistrationFixture(t.Context(), nonowner, f)
+	require.Error(t, err)
+	config = db.Config()
+	config.ConnConfig.Database = "postgres"
+	foreign, err := pgxpool.NewWithConfig(t.Context(), config)
+	require.NoError(t, err)
+	defer foreign.Close()
+	_, err = sandbox.ApplyRegistrationFixture(t.Context(), foreign, f)
+	require.Error(t, err)
+	f.Action = "grant-payment-c"
+	_, err = sandbox.ApplyRegistrationFixture(t.Context(), db, f)
+	require.ErrorContains(t, err, "unknown")
+	var grants int
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT count(*) FROM core.pass_payment_admins WHERE event_id=$1`, sandbox.RegistrationFixtureEventB).
+			Scan(&grants),
+	)
+	assert.Zero(t, grants)
+}
+
+func assertRegistrationFixturePaymentB(t *testing.T, db *pgxpool.Pool, service passbooking.Service) {
+	t.Helper()
+	ctx := t.Context()
+	f := sandbox.RegistrationFixture{Stand: sandbox.RegistrationFixtureStand, Action: "grant-payment-b"}
+	a, err := service.Capabilities(ctx, "bob", sandbox.RegistrationFixtureEventA)
+	require.NoError(t, err)
+	for range 2 {
+		state, applyErr := sandbox.ApplyRegistrationFixture(ctx, db, f)
+		require.NoError(t, applyErr)
+		for _, row := range state.Rows {
+			if row.Event == sandbox.RegistrationFixtureEventB && row.Owner == "bob" {
+				assert.Contains(t, row.Actions, "proof_accept")
+			}
+		}
+	}
+	contacts, err := service.PaymentAdmins(ctx, "alice", sandbox.RegistrationFixtureEventB)
+	require.NoError(t, err)
+	require.Len(t, contacts, 1)
+	assert.Equal(t, "bob", contacts[0].Owner)
+	booking, err := service.Execute(
+		ctx,
+		"alice",
+		passbooking.Command{
+			Name:         "solo",
+			Event:        sandbox.RegistrationFixtureEventB,
+			PaymentAdmin: "bob",
+			Key:          "fixture-b-solo",
+		},
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "assigned", booking.State)
+	proof, err := (orders.Service{DB: db}).UploadProof(ctx, "alice", "receipt.txt", []byte("synthetic payment"))
+	require.NoError(t, err)
+	booking, err = service.Execute(
+		ctx,
+		"alice",
+		passbooking.Command{
+			Name:    "proof",
+			Event:   sandbox.RegistrationFixtureEventB,
+			Version: booking.Version,
+			ProofID: proof.ID,
+			Key:     "fixture-b-proof",
+		},
+	)
+	require.NoError(t, err)
+	page, err := service.PaymentQueue(ctx, "bob", sandbox.RegistrationFixtureEventB, "")
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	_, err = service.PaymentQueue(ctx, "visitor", sandbox.RegistrationFixtureEventB, "")
+	requireCode(t, err, "forbidden")
+	f.Action = "revoke-payment-b"
+	for range 2 {
+		_, err = sandbox.ApplyRegistrationFixture(ctx, db, f)
+		require.NoError(t, err)
+	}
+	b, err := service.Capabilities(ctx, "bob", sandbox.RegistrationFixtureEventB)
+	require.NoError(t, err)
+	assert.NotContains(t, b.Actions, "proof_accept")
+	_, err = service.PaymentQueue(ctx, "bob", sandbox.RegistrationFixtureEventB, "")
+	requireCode(t, err, "forbidden")
+	review := passbooking.Command{
+		Name:           "proof_accept",
+		Event:          sandbox.RegistrationFixtureEventB,
+		Target:         "alice",
+		TargetVersion:  booking.Version,
+		PaymentAttempt: page.Items[0].Payment.Attempt,
+		Key:            "fixture-b-review",
+	}
+	_, err = service.Execute(ctx, "bob", review)
+	requireCode(t, err, "forbidden")
+	f.Action, f.OpensAt = "init", time.Now().Add(24*time.Hour)
+	_, err = sandbox.ApplyRegistrationFixture(ctx, db, f)
+	require.NoError(t, err)
+	b, err = service.Capabilities(ctx, "bob", sandbox.RegistrationFixtureEventB)
+	require.NoError(t, err)
+	assert.NotContains(t, b.Actions, "proof_accept")
+	f.Action, f.OpensAt = "grant-payment-b", time.Time{}
+	_, err = sandbox.ApplyRegistrationFixture(ctx, db, f)
+	require.NoError(t, err)
+	_, err = service.Execute(ctx, "bob", review)
+	require.NoError(t, err)
+	payment, err := service.Payment(ctx, "alice", sandbox.RegistrationFixtureEventB, "alice")
+	require.NoError(t, err)
+	assert.Equal(t, "accepted", payment.Decision)
+	require.NotNil(t, payment.ReviewedBy)
+	assert.Equal(t, "bob", *payment.ReviewedBy)
+	f.Action = "revoke-payment-b"
+	_, err = sandbox.ApplyRegistrationFixture(ctx, db, f)
+	require.NoError(t, err)
+	after, err := service.Capabilities(ctx, "bob", sandbox.RegistrationFixtureEventA)
+	require.NoError(t, err)
+	assert.Equal(t, a, after)
 }
 
 func registrationFixtureDatabase(t *testing.T) *pgxpool.Pool {
