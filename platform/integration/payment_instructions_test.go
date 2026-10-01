@@ -571,6 +571,8 @@ func TestPaymentUnavailableContextKeepsExactTarget(t *testing.T) {
 			})
 		}
 	}
+
+	runPaymentRetirementHistoryCases(t)
 }
 
 func assertUnavailablePaymentDelivery(
@@ -682,6 +684,8 @@ func TestPaymentUnavailableContextRestorationKeepsProjection(t *testing.T) {
 			})
 		}
 	}
+
+	runPaymentOpeningReceiptLossCases(t)
 }
 
 func assertRestoredPaymentProjection(
@@ -726,4 +730,137 @@ func assertRestoredPaymentProjection(
  WHERE owner='alice' AND card_key=$1`, "payment:"+order.ID).Scan(&message, &visible))
 	require.Equal(t, opened.ID, message)
 	require.True(t, visible)
+}
+
+func runPaymentRetirementHistoryCases(t *testing.T) {
+	t.Helper()
+	for _, route := range []string{"derived", "manual_model"} {
+		for _, language := range []string{"en", "ru"} {
+			for _, retry := range []bool{false, true} {
+				t.Run(fmt.Sprintf("history_after_enqueue/%s/%s/retry_%t", route, language, retry), func(t *testing.T) {
+					t.Parallel()
+					testPaymentRetirementHistory(t, route, language, retry)
+				})
+			}
+		}
+	}
+}
+
+func testPaymentRetirementHistory(t *testing.T, route, language string, retry bool) {
+	t.Helper()
+	f, order, opened, source := openedUnavailablePaymentSource(t, route)
+	_, err := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+	require.NoError(t, err)
+	require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	intent := queuedPaymentRetirement(t, f)
+	require.Nil(t, intent.Reference.Generation, "fixed cleanup must have no history fence")
+	require.True(t, intent.Reference.CanonicalPaymentRetirement())
+	if retry {
+		f.b.TG.HTTP = &http.Client{Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusTooManyRequests,
+				Header:     http.Header{},
+				Request:    r,
+				Body: io.NopCloser(
+					strings.NewReader(`{"ok":false,"error_code":429,"parameters":{"retry_after":1}}`),
+				),
+			}, nil
+		})}
+		require.NoError(t, f.b.DeliverBotIntent(t.Context(), intent.QueueReference()))
+		deferred, readErr := botdelivery.Read(t.Context(), f.db, intent.BotID, intent.QueueReference(), false)
+		require.NoError(t, readErr)
+		require.Equal(t, delivery.Deferred, deferred.State)
+		require.EqualValues(t, 1, deferred.Attempt)
+		require.Equal(t, opened, paymentMessage(t, f))
+		f.b.TG.HTTP = nil
+	}
+	orderDeliveryHistoryDelete(t, f, "alice")
+	_, err = f.b.API.SetLanguage(t.Context(), "alice", language, false)
+	require.NoError(t, err)
+	if retry {
+		waitExportBoundaryCandidate(t, f, intent.QueueReference(), 2*time.Second)
+	}
+	var edits, sends atomic.Int64
+	f.b.TG.HTTP = &http.Client{Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/sendMessage") {
+			sends.Add(1)
+		}
+		if strings.HasSuffix(r.URL.Path, "/editMessageText") {
+			edits.Add(1)
+		}
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), intent.QueueReference()))
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), intent.QueueReference()))
+	require.EqualValues(t, 1, edits.Load())
+	require.Zero(t, sends.Load())
+	current, err := botdelivery.Read(t.Context(), f.db, intent.BotID, intent.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Succeeded, current.State)
+	require.Equal(t, opened.ID, current.MessageID)
+	require.True(t, current.ContinuationDone)
+	wantAttempts := int64(1)
+	if retry {
+		wantAttempts = 2
+	}
+	require.Equal(t, wantAttempts, current.Attempt)
+	want, err := i18n.Translate(
+		language,
+		i18n.PaymentUnavailable,
+		map[string]string{"code": "payment_context_unavailable"},
+	)
+	require.NoError(t, err)
+	for _, item := range chatMessages(t, f, 101) {
+		if item.ID == opened.ID {
+			require.Equal(t, want, item.Text)
+			require.Empty(t, item.Markup.Rows)
+		}
+	}
+	require.JSONEq(t, string(source), string(displayedPaymentSource(t, f, order.ID)))
+	assertPaymentRetirementQueue(t, f, current, string(delivery.Succeeded))
+}
+
+func runPaymentOpeningReceiptLossCases(t *testing.T) {
+	t.Helper()
+	for _, language := range []string{"en", "ru"} {
+		t.Run("opening_receipt_rights_loss/"+language, func(t *testing.T) {
+			t.Parallel()
+			testPaymentOpeningReceiptLoss(t, language)
+		})
+	}
+}
+
+func testPaymentOpeningReceiptLoss(t *testing.T, language string) {
+	t.Helper()
+	f, order, opened, _ := openedUnavailablePaymentSource(t, "derived")
+	_, err := f.db.Exec(t.Context(), `UPDATE core.order_events
+ SET transfer_instructions_localized='{"en":"observed opening private canary","ru":"observed opening private canary"}' WHERE id=$1`, order.EventID)
+	require.NoError(t, err)
+	handle(t, f.b, orderClick(t, f, 101, 30005, "Payment methods"))
+	pending := queuedLivePayment(t, f)
+	var changed atomic.Bool
+	f.b.Host.HTTP = &http.Client{Transport: &boundaryTransport{before: func(r *http.Request) error {
+		if r.URL.Path == "/internal/bot-delivery/receipt" && !changed.Swap(true) {
+			_, updateErr := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+			return updateErr
+		}
+		return nil
+	}}}
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), pending.QueueReference()))
+	require.True(t, changed.Load())
+	sent, err := botdelivery.Read(t.Context(), f.db, pending.BotID, pending.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Succeeded, sent.State)
+	require.Equal(t, opened.ID, sent.MessageID)
+	require.True(t, sent.ContinuationDone)
+	require.JSONEq(t, `{"original":true,"source":null}`, string(displayedPaymentSource(t, f, order.ID)))
+	retirement := queuedPaymentRetirement(t, f)
+	require.Equal(t, pending.Operation, retirement.Reference.PaymentRetirement.Operation)
+	require.Equal(t, pending.Effect, retirement.Reference.PaymentRetirement.Effect)
+	_, err = f.b.API.SetLanguage(t.Context(), "alice", language, false)
+	require.NoError(t, err)
+	assertUnavailablePaymentDelivery(t, f, order, opened, retirement, language, false)
+	for _, item := range chatMessages(t, f, 101) {
+		require.NotContains(t, item.Text, "observed opening private canary")
+	}
 }

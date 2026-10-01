@@ -72,10 +72,14 @@ type Reference struct {
 	Notice            i18n.ID                    `json:"notice,omitempty"`
 	Language          string                     `json:"language,omitempty"`
 	Generation        *int64                     `json:"generation,omitempty"`
+	PaymentOpening    *PaymentOpening            `json:"payment_opening,omitempty"`
 	Source            *readsource.Derivation     `json:"source,omitempty"`
 	Continuation      Continuation               `json:"continuation"`
 	Authorities       []readsource.Authority     `json:"authorities,omitempty"`
 }
+
+const orderCardReceiptKind = "order_card"
+const codeHistoryStale = "history_stale"
 
 // PaymentRetirement identifies the successful payload of an unavailable order, without
 // copying its private source or granting authority to render it again.
@@ -83,6 +87,22 @@ type PaymentRetirement struct {
 	Operation string `json:"operation"`
 	Effect    string `json:"effect"`
 	ViewHash  string `json:"view_hash"`
+}
+
+// PaymentOpening holds the displayed receipt that an independent opening may replace.
+type PaymentOpening struct {
+	Previous *PaymentRetirement `json:"previous,omitempty"`
+	Target   int64              `json:"target,omitempty"`
+}
+
+// CanonicalPaymentRetirement identifies only source-free fixed cleanup.
+func (r Reference) CanonicalPaymentRetirement() bool {
+	p := r.PaymentRetirement
+	return r.Kind == CardIntent && r.Family == familyPayment && r.Object != "" && r.CardKey == "payment:"+r.Object &&
+		r.Notice == i18n.PaymentUnavailable && r.Source == nil && r.Generation == nil && len(r.Authorities) == 0 &&
+		r.Update == 0 && r.PaymentOpening == nil && r.Continuation.Retired &&
+		r.Continuation.Kind == orderCardReceiptKind && r.Continuation.Key == r.CardKey &&
+		p != nil && p.Operation != "" && p.Effect != "" && p.ViewHash != ""
 }
 
 type Continuation struct {
@@ -132,6 +152,11 @@ func (i Intent) Observation() Observation {
 }
 
 func (r Reference) Valid(owner string) bool {
+	if r.PaymentOpening != nil && (r.Kind != CardIntent || r.Family != familyPayment ||
+		r.PaymentRetirement != nil || r.Notice != "" || r.Continuation.Retired) {
+		return false
+	}
+
 	if r.Generation != nil && *r.Generation < 0 {
 		return false
 	}

@@ -93,6 +93,9 @@ func (b *Bot) queueBotCard(
 	if err := b.Delivery.Validate(); err != nil {
 		return err
 	}
+	if ref.Family == registrationPayment && ref.Notice == i18n.PaymentUnavailable {
+		ref.Continuation = receipt
+	}
 	if err := b.bindBotCardSource(ctx, owner, &ref); err != nil {
 		return err
 	}
@@ -208,7 +211,7 @@ func botCardReplyKinds(ref botdelivery.Reference) []string {
 }
 
 func (b *Bot) bindBotCardSource(ctx context.Context, owner string, ref *botdelivery.Reference) error {
-	if ref.Family == botFamilyPassRedaction {
+	if ref.Family == botFamilyPassRedaction || ref.CanonicalPaymentRetirement() {
 		return nil
 	}
 	generation, err := b.API.HistoryGeneration(ctx, owner)
@@ -258,6 +261,10 @@ func (b *Bot) bindBotCardSource(ctx context.Context, owner string, ref *botdeliv
 
 // prepareBotCard keeps fixed payment cleanup independent of private reconstruction.
 func (b *Bot) prepareBotCard(ctx context.Context, i botdelivery.Intent) error {
+	if i.Reference.CanonicalPaymentRetirement() {
+		return nil
+	}
+
 	if i.Reference.Family == registrationPayment && i.Reference.Notice != i18n.PaymentUnavailable {
 		ref, unavailable, err := b.paymentRetirementReference(ctx, i.Owner, i.Reference.CardKey, i.Reference.Object)
 		if err != nil {
@@ -333,6 +340,9 @@ func (b *Bot) renderBotCard(ctx context.Context, i botdelivery.Intent) (botRende
 	case registrationPayment:
 		if i.Reference.Notice == i18n.PaymentUnavailable {
 			return scoped.renderPaymentRetirement(ctx, i)
+		}
+		if i.Reference.PaymentOpening != nil {
+			ctx = withBotCard(ctx, i.Reference)
 		}
 		_, err = scoped.paymentInstructionsWithSource(
 			ctx,
