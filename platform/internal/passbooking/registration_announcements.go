@@ -283,7 +283,7 @@ func announcementConfirmedWireOutcome(outcome delivery.Outcome) bool {
 	case delivery.Rejected:
 		return outcome.Reason == "telegram_recipient_rejected"
 	case delivery.Parked:
-		return outcome.Reason == "telegram_invalid_cooldown"
+		return outcome.Reason == telegramInvalidCooldownReason
 	case delivery.Paused:
 		return outcome.Reason == "telegram_service_rejected"
 	case delivery.Sending, delivery.Cancelled, delivery.Uncertain:

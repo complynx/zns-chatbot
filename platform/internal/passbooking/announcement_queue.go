@@ -366,7 +366,7 @@ func (s Service) announcementRecoveryOutcome(
 	}
 	deadline, representable := delivery.Deadline(deadline, outcome.RetryAfter)
 	if !representable {
-		return delivery.Outcome{Kind: delivery.Parked, Reason: "telegram_invalid_cooldown"}, time.Now(), nil
+		return delivery.Outcome{Kind: delivery.Parked, Reason: telegramInvalidCooldownReason}, time.Now(), nil
 	}
 	if row.AvailableAt.Time.After(deadline) {
 		deadline = row.AvailableAt.Time

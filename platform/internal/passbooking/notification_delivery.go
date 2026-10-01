@@ -21,6 +21,8 @@ const (
 	passportNotificationKind = "passport_required"
 )
 
+const telegramInvalidCooldownReason = "telegram_invalid_cooldown"
+
 const notificationUncertainResendLimit int64 = 3
 const notificationNotCurrentReason = "notification_no_longer_current"
 const notificationRetryExhaustedReason = "telegram_uncertain_retry_exhausted"
@@ -613,7 +615,7 @@ func notificationConfirmedOutcome(row dbgen.LockNotificationAttemptRow, outcome 
 	case delivery.Paused:
 		return outcome.Reason == "telegram_service_rejected"
 	case delivery.Parked:
-		return outcome.Reason == "telegram_invalid_cooldown"
+		return outcome.Reason == telegramInvalidCooldownReason
 	case delivery.Sending, delivery.Cancelled, delivery.Uncertain:
 		return false
 	default:
