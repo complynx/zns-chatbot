@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
@@ -133,7 +134,9 @@ func TestAdminPageResultsAtomicReplayAuthorityAndErasure(t *testing.T) {
  INSERT INTO core.conversation_history_generations(owner,generation) VALUES('bob',1) ON CONFLICT(owner) DO UPDATE SET generation=core.conversation_history_generations.generation+1`)
 	require.NoError(t, err)
 	require.Equal(t, []int64{2, 0, 2}, counts())
-	require.ErrorIs(t, s.EnqueueAdminPageResults(ctx, changed), ErrStale)
+	var stale *core.ProblemError
+	require.ErrorAs(t, s.EnqueueAdminPageResults(ctx, changed), &stale)
+	require.Equal(t, "history_stale", stale.Code)
 	require.Equal(t, []int64{2, 0, 2}, counts())
 }
 
@@ -217,7 +220,9 @@ func TestAdminPageResultsRequireOriginalNativeIntake(t *testing.T) {
 	require.NoError(t, err)
 	// A native re-delivery after deletion cannot replace the original generation.
 	adminPageCaptureNative(t, db, 77, update)
-	require.ErrorIs(t, s.EnqueueAdminPageResults(ctx, in), ErrStale)
+	var stale *core.ProblemError
+	require.ErrorAs(t, s.EnqueueAdminPageResults(ctx, in), &stale)
+	require.Equal(t, "history_stale", stale.Code)
 	var generation, count int64
 	require.NoError(
 		t,
