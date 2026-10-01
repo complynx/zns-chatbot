@@ -320,7 +320,7 @@ func (s Service) adminRecoveryOutcome(
 		delivery.Outcome{Kind: delivery.Uncertain, Reason: reason},
 		row.resends,
 		true,
-		s.Delivery.UncertaintyRetryBaseOrDefault(),
+		s.Delivery,
 	)
 	if outcome.Kind != delivery.Deferred {
 		return outcome, deadline, nil

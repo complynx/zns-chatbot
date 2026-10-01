@@ -356,7 +356,7 @@ func (s Service) announcementRecoveryOutcome(
 		delivery.Outcome{Kind: delivery.Uncertain, Reason: reason},
 		row.UncertainResends,
 		true,
-		s.Delivery.UncertaintyRetryBaseOrDefault(),
+		s.Delivery,
 	)
 	if outcome.Kind != delivery.Deferred {
 		return outcome, deadline, nil

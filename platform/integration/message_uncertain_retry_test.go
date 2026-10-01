@@ -61,15 +61,29 @@ func TestUncertainMissingRateLimitRetainsProviderFallback(t *testing.T) {
 				fmt.Sprintf(`SELECT EXTRACT(EPOCH FROM available_at-clock_timestamp()) FROM core.%s`, f.table)).
 				Scan(&originalDelay))
 			assert.InDelta(t, 5, originalDelay, 2, "uncertainty must use its independent default base")
-			_, err := f.db.Exec(t.Context(), fmt.Sprintf(`UPDATE core.%s SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'`, f.table))
+			_, err := f.db.Exec(
+				t.Context(),
+				fmt.Sprintf(
+					`UPDATE core.%s SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'`,
+					f.table,
+				),
+			)
 			require.NoError(t, err)
 			require.NoError(t, f.send())
-			require.EqualValues(t, 2, calls.Load(), "the first admitted resend received the confirmed missing-delay 429")
+			require.EqualValues(
+				t,
+				2,
+				calls.Load(),
+				"the first admitted resend received the confirmed missing-delay 429",
+			)
 			var state, reason string
 			var resends, marker int64
 			var delay float64
-			require.NoError(t, f.db.QueryRow(t.Context(), fmt.Sprintf(`SELECT state,failure,uncertain_resends,last_uncertain_attempt,EXTRACT(EPOCH FROM available_at-clock_timestamp()) FROM core.%s`, f.table)).
-				Scan(&state, &reason, &resends, &marker, &delay))
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), fmt.Sprintf(`SELECT state,failure,uncertain_resends,last_uncertain_attempt,EXTRACT(EPOCH FROM available_at-clock_timestamp()) FROM core.%s`, f.table)).
+					Scan(&state, &reason, &resends, &marker, &delay),
+			)
 			assert.Equal(t, "pending", state)
 			assert.Equal(t, "telegram_rate_limit", reason)
 			assert.EqualValues(t, 1, resends)
@@ -77,13 +91,20 @@ func TestUncertainMissingRateLimitRetainsProviderFallback(t *testing.T) {
 			assert.InDelta(t, 30, delay, 2, "the provider fallback must dominate the ten-second resend backoff")
 			for _, chat := range []string{"", f.chat} {
 				var cooldown float64
-				require.NoError(t, f.db.QueryRow(t.Context(),
+				require.NoError(t, f.db.QueryRow(
+					t.Context(),
 					`SELECT EXTRACT(EPOCH FROM not_before-clock_timestamp()) FROM core.delivery_pacing WHERE bot_id=$1 AND chat=$2`,
-					f.settings.BotID, chat).Scan(&cooldown))
+					f.settings.BotID,
+					chat,
+				).Scan(&cooldown))
 				assert.InDelta(t, 30, cooldown, 2, "bot-wide and chat cooldowns must retain the provider fallback")
 			}
 			f.follower()
-			require.Empty(t, messageRetryCandidates(t, f.db, f.settings.BotID), "provider cooldown must block early followers")
+			require.Empty(
+				t,
+				messageRetryCandidates(t, f.db, f.settings.BotID),
+				"provider cooldown must block early followers",
+			)
 			require.NoError(t, f.send())
 			assert.EqualValues(t, 2, calls.Load(), "polling must not send before the retained provider cooldown")
 		})
@@ -98,7 +119,7 @@ func setupUncertainRateLimit(t *testing.T, owner string, client telegram.Client)
 		enqueueSyntheticDelivery(t, s, "missing-cooldown", "101")
 		f.b.TG = client
 		return uncertainRateLimitFixture{db: f.db, settings: s.Delivery, table: "admin_message_deliveries", chat: "101",
-			send: func() error { return f.b.DeliverAdminMessages(t.Context()) },
+			send:     func() error { return f.b.DeliverAdminMessages(t.Context()) },
 			follower: func() { enqueueSyntheticDelivery(t, s, "cooldown-follower", "202") }}
 	}
 	db, s := bookingFixture(t)
@@ -106,13 +127,20 @@ func setupUncertainRateLimit(t *testing.T, owner string, client telegram.Client)
 	require.NoError(t, err)
 	_, err = s.Execute(t.Context(), "alice", bookingCommand("solo", "missing-cooldown", passbooking.Booking{}))
 	require.NoError(t, err)
-	return uncertainRateLimitFixture{db: db, settings: s.Delivery, table: "pass_registration_announcements", chat: "-100123",
+	return uncertainRateLimitFixture{
+		db:       db,
+		settings: s.Delivery,
+		table:    "pass_registration_announcements",
+		chat:     "-100123",
 		send: func() error {
 			item, found, claimErr := s.ClaimRegistrationAnnouncement(t.Context())
 			if claimErr != nil || !found {
 				return claimErr
 			}
-			gate, beginErr := s.BeginRegistrationAnnouncement(t.Context(), delivery.Attempt{ID: item.ID, Generation: item.Attempts})
+			gate, beginErr := s.BeginRegistrationAnnouncement(
+				t.Context(),
+				delivery.Attempt{ID: item.ID, Generation: item.Attempts},
+			)
 			if beginErr != nil || !gate.Ready {
 				return beginErr
 			}
@@ -129,9 +157,14 @@ func setupUncertainRateLimit(t *testing.T, owner string, client telegram.Client)
 			})
 		},
 		follower: func() {
-			_, executeErr := s.Execute(t.Context(), "bob", bookingCommand("solo", "cooldown-follower", passbooking.Booking{}))
+			_, executeErr := s.Execute(
+				t.Context(),
+				"bob",
+				bookingCommand("solo", "cooldown-follower", passbooking.Booking{}),
+			)
 			require.NoError(t, executeErr)
-		}}
+		},
+	}
 }
 
 func TestAnnouncementLostResponseRetainsCapturedWireText(t *testing.T) {

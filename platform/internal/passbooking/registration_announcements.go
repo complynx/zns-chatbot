@@ -202,7 +202,7 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 		row.UncertainResends,
 		row.LastUncertainAttempt.Valid || row.State == string(delivery.Uncertain) ||
 			input.Outcome.Kind == delivery.Uncertain,
-		s.Delivery.UncertaintyRetryBaseOrDefault(),
+		s.Delivery,
 	)
 	outcome, deadline, err := s.finishAnnouncementOutcome(ctx, tx, input.ID, input.Outcome, wireOutcome, lateSuccess)
 	if err != nil {
@@ -270,7 +270,7 @@ func announcementRetryOutcome(
 	outcome delivery.Outcome,
 	resends int64,
 	active bool,
-	fallback time.Duration,
+	settings delivery.Settings,
 ) delivery.Outcome {
 	if !active || (outcome.Kind != delivery.Uncertain && outcome.Kind != delivery.Deferred) {
 		return outcome
@@ -278,15 +278,23 @@ func announcementRetryOutcome(
 	if resends >= announcementUncertainResendLimit {
 		return delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
 	}
-	seconds := int64(fallback / time.Second)
-	if fallback%time.Second != 0 {
+	base := settings.UncertaintyRetryBaseOrDefault()
+	seconds := int64(base / time.Second)
+	if base%time.Second != 0 {
 		seconds++
 	}
 	seconds *= int64(1) << resends
+	providerSeconds := outcome.RetryAfter
+	if outcome.Missing {
+		providerSeconds = int64(settings.Fallback / time.Second)
+		if settings.Fallback%time.Second != 0 {
+			providerSeconds++
+		}
+	}
 	return delivery.Outcome{
 		Kind:       delivery.Deferred,
 		Reason:     outcome.Reason,
-		RetryAfter: max(seconds, outcome.RetryAfter),
+		RetryAfter: max(seconds, providerSeconds),
 	}
 }
 
