@@ -92,7 +92,8 @@ func TestBotTransportRetryCapturedLanguageCard(t *testing.T) {
 	require.NoError(t, restarted.bindBotCardSource(ctx, "alice", &ref))
 	_, err = restarted.enqueueBotIntent(ctx, "alice", 101, "fresh-language", "view", ref, "send")
 	require.NoError(t, err)
-	testBotCaptureDeliverReady(t, &restarted, delivery.Reference{Owner: delivery.Bot, Key: "fresh-language", Effect: "view"})
+	testBotCaptureDeliverReady(t, &restarted,
+		delivery.Reference{Owner: delivery.Bot, Key: "fresh-language", Effect: "view"})
 	fresh := testBotCaptureRequest(t, requests)
 	require.NotEqual(t, string(original), string(fresh), "new intents render current Russian preferences")
 	var originalPayload, freshPayload telegram.Send
@@ -198,7 +199,9 @@ func TestBotTransportRetryCapturedDocument(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, wire.Body, len(original))
 	require.Equal(t, sha256.Sum256(original), sha256.Sum256(wire.Body))
-	envelope, err := json.Marshal(botdelivery.BeginRequest{Observed: current, Wire: ref})
+	envelope, err := json.Marshal(map[string]any{
+		"Observed": current, "Target": int64(0), "ExportEvents": []string(nil), "wire": ref,
+	})
 	require.NoError(t, err)
 	require.Less(t, len(envelope), botdelivery.MaxRequestBytes, "20MiB body stays outside host JSON")
 	_, err = db.Exec(

@@ -179,7 +179,7 @@ func (s Service) StageWire(ctx context.Context, observed Intent, wire Wire) (*Wi
 }
 
 func validateWire(i Intent, wire Wire) error {
-	if i.Phase == "document" {
+	if i.Phase == string(DocumentIntent) {
 		if len(wire.Body) == 0 || len(wire.Body) > telegram.MaxDocumentBytes {
 			return ErrWireUnavailable
 		}

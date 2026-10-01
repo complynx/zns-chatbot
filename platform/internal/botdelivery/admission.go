@@ -27,7 +27,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 		return Observation{}, err
 	}
 	if reference.Family == PassReceiptRedactionFamily || !reference.Valid(owner) || chat <= 0 ||
-		(phase != phaseSend && phase != "document") {
+		(phase != phaseSend && phase != string(DocumentIntent)) {
 		return Observation{}, ErrBinding
 	}
 	i := Intent{
@@ -275,18 +275,12 @@ func (s Service) beginAttempt(
 		current.State = delivery.Rejected
 		return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 	}
-	var err error
-	if current.Reference.Kind == CardIntent {
-		var pendingReceipt bool
-		err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.delivery_intents
-   WHERE bot_id=$1 AND owner=$2 AND state='sent' AND NOT continuation_done
-   AND reference->>'kind'='card' AND reference->>'card_key'=$3)`, current.BotID, current.Owner, current.Reference.CardKey).Scan(&pendingReceipt)
-		if err != nil {
-			return current, false, core.DatabaseOperationContextError(ctx, err)
-		}
-		if pendingReceipt {
-			return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
-		}
+	pendingReceipt, err := pendingBotCardReceipt(ctx, tx, current)
+	if err != nil {
+		return current, false, err
+	}
+	if pendingReceipt {
+		return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 	}
 	admission, err := delivery.Begin(ctx, tx, s.Delivery, current.QueueReference())
 	if err != nil {
@@ -331,6 +325,19 @@ func (s Service) beginAttempt(
 	}
 	return current, true, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 }
+
+func pendingBotCardReceipt(ctx context.Context, tx pgx.Tx, current Intent) (bool, error) {
+	if current.Reference.Kind != CardIntent {
+		return false, nil
+	}
+	var pending bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.delivery_intents
+   WHERE bot_id=$1 AND owner=$2 AND state='sent' AND NOT continuation_done
+   AND reference->>'kind'='card' AND reference->>'card_key'=$3)`,
+		current.BotID, current.Owner, current.Reference.CardKey).Scan(&pending)
+	return pending, core.DatabaseOperationContextError(ctx, err)
+}
+
 func (s Service) Begin(ctx context.Context, in BeginRequest) (BeginResult, error) {
 	if in.PreparationFailure {
 		return s.failPassPreparation(ctx, in.Observed)
