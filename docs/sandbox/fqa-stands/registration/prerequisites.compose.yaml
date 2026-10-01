@@ -68,6 +68,7 @@ services:
       REGISTRATION_FIXTURE_ACTION: init
       REGISTRATION_FIXTURE_STAND: synthetic-qa-zns-registration-fixture
       REGISTRATION_FIXTURE_OPENS_AT: ${REGISTRATION_FIXTURE_OPENS_AT:?Reviewed domain opening instant}
+      REGISTRATION_FIXTURE_CLOCK_ANCHOR: ${FQA_REGISTRATION_SETUP_ANCHOR:?Reviewed immutable UTC microsecond setup anchor}
     depends_on:
       fixtures: { condition: service_completed_successfully }
   clock-init:

@@ -31,6 +31,6 @@
 - Fix verified defects; rerun checks; fresh affected reviews after substantive changes. Repeat until clean. Preserve staged diff.
 - Both QA + required checks green: advance automatically. No extra permission wait. Production/publish/commit/push still need authorization.
 
-- Execution coordination (2026-10-01): read `docs/coordination-process.md`. All new checks run on Linux Docker/WSL; no new native Windows checks, including Windows executables targeting Linux. Root grants two Linux heavy-check slots across isolated stands. Already-running Windows checks finish and occupy a transition slot until terminal evidence; no quiet-output restarts. Functional fault windows are prepared before arming, original budgets remain unchanged, owned synthetic downloads are allowed, and progress/board/reports are checkpointed together. Prioritize the finite C–E acceptance chain.
+- Execution coordination (2026-10-01): read `docs/coordination-process.md`. All new checks run on Linux Docker/WSL; no new native Windows checks, including Windows executables targeting Linux. Root grants three Linux heavy-check slots across isolated stands. Already-running Windows checks finish and occupy a transition slot until terminal evidence; no quiet-output restarts. Functional fault windows are prepared before arming, original budgets remain unchanged, owned synthetic downloads are allowed, and progress/board/reports are checkpointed together. Prioritize the finite C–E acceptance chain.
 
 Details: `docs/go-migration.md`, `docs/code-quality.md`, `docs/coordination-process.md`.

@@ -166,6 +166,26 @@ func TestR33AcknowledgeSQLSurvivesCallerCancellation(t *testing.T) {
 	require.Equal(t, int32(1), calls.Load())
 }
 
+func TestR33AcknowledgeSQLControlCauseSurvivesRetryCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	b := &Bot{}
+	calls, _ := r33WithTelegram(t, b, http.StatusTooManyRequests, r33AckRateLimited, r33ControlPolicy{})
+	controlErr := b.TG.Call(ctx, "answerCallbackQuery", map[string]string{"callback_query_id": "callback-1"}, nil)
+	_, deferred := errors.AsType[*telegram.ControlError](controlErr)
+	require.True(t, deferred)
+	b.TG.Control = r33ControlPolicy{admit: func(context.Context) (delivery.Admission, error) {
+		cancel()
+		return delivery.Admission{}, errors.Join(controlErr, core.DatabaseOperationError(io.EOF), ctx.Err())
+	}}
+	// The actual client admission can join SQL with a retryable ControlError.
+	// Retry must not replace it with the cancellation observed after this call.
+	requireR33NoDomainMarker(t, b.acknowledge(ctx, "callback-1"))
+	require.ErrorIs(t, ctx.Err(), context.Canceled)
+	require.Equal(t, int32(1), calls.Load())
+}
+
 func TestR33AcknowledgeOrdinaryFailuresStayBestEffort(t *testing.T) {
 	t.Parallel()
 	cases := map[string]struct {
@@ -188,12 +208,6 @@ func TestR33AcknowledgeOrdinaryFailuresStayBestEffort(t *testing.T) {
 		"observe plain eof": {
 			policy: r33ObserveFailure(io.EOF),
 			status: http.StatusTooManyRequests, body: r33AckRateLimited, calls: 1, warn: true,
-		},
-		"control cooldown": {
-			policy: r33ControlPolicy{admit: func(context.Context) (delivery.Admission, error) {
-				return delivery.Admission{Reason: "delivery_cooldown", NotBefore: time.Now().Add(time.Hour)}, nil
-			}},
-			status: http.StatusOK, body: r33AckOK, calls: 0, warn: true,
 		},
 		"pure cancellation": {
 			policy: r33ControlPolicy{admit: func(ctx context.Context) (delivery.Admission, error) {

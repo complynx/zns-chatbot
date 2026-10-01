@@ -28,6 +28,7 @@ GRANT USAGE ON SCHEMA public, core TO zns_registration_operator;
 GRANT SELECT ON public.zns_sandbox_fixtures, core.users, core.pass_events,
  core.pass_bookings, core.registration_intents, core.registration_ingress,
  core.pass_payment_admins, core.pass_booking_admins TO zns_registration_operator;
+GRANT SELECT(event_id, position, starts_at) ON core.pass_event_tiers TO zns_registration_operator;
 GRANT INSERT, DELETE ON core.pass_payment_admins, core.pass_booking_admins TO zns_registration_operator;
 -- PostgreSQL row locks require UPDATE permission on at least one column.
 GRANT UPDATE(id) ON core.users, core.pass_events TO zns_registration_operator;
