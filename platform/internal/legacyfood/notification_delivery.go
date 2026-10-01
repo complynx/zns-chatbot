@@ -156,9 +156,7 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 		return notificationStale()
 	}
 	attempt := delivery.Attempt{ID: result.ID, Generation: result.Attempt}
-	confirmed := notificationConfirmedOutcome(result.Outcome) &&
-		(row.DeliveryState == string(delivery.Sending) || row.DeliveryState == string(delivery.Uncertain) ||
-			(row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == result.Attempt))
+	confirmed := notificationConfirmedOutcome(row, result.Outcome)
 	if notificationLateSuccess(row, result.Outcome.Kind) {
 		if err = s.finishLateNotificationSuccess(ctx, tx, attempt, result.Outcome, result.Text); err != nil {
 			return err
@@ -526,7 +524,11 @@ func (s Service) admitNotificationWire(
 }
 
 // Confirmed wire responses resolve uncertainty for one generation, without erasing its history.
-func notificationConfirmedOutcome(outcome delivery.Outcome) bool {
+func notificationConfirmedOutcome(row dbgen.LockNotificationAttemptRow, outcome delivery.Outcome) bool {
+	if row.DeliveryState != string(delivery.Sending) && row.DeliveryState != string(delivery.Uncertain) &&
+		(!row.LastUncertainAttempt.Valid || row.LastUncertainAttempt.Int64 != row.DeliveryAttempt) {
+		return false
+	}
 	switch outcome.Kind {
 	case delivery.Succeeded:
 		return true
@@ -547,7 +549,7 @@ func notificationConfirmedOutcome(outcome delivery.Outcome) bool {
 
 func notificationTerminalConfirmation(row dbgen.LockNotificationAttemptRow, outcome delivery.Outcome) bool {
 	return (row.DeliveryState == "failed" || row.DeliveryState == string(delivery.Cancelled)) &&
-		outcome.Kind != delivery.Succeeded && notificationConfirmedOutcome(outcome) &&
+		outcome.Kind != delivery.Succeeded && notificationConfirmedOutcome(row, outcome) &&
 		!row.LeaseUntil.Valid && row.TelegramMessageID == 0 &&
 		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == row.DeliveryAttempt
 }
