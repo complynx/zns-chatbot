@@ -236,3 +236,99 @@ func TestRegistrationClockApplicationAllocatorWait(t *testing.T) {
 	require.WithinDuration(t, received, firstReceived, 0, "allocator conflict returns immutable first reception")
 	require.NoError(t, tx.Commit(ctx))
 }
+
+func TestRegistrationClockTurnRotationWait(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"second-expiry-sales", "event-finish", "admin-finish", "maintenance-finish"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			db, service := bookingFixture(t)
+			clock := &registrationClock{}
+			require.NoError(t, db.QueryRow(t.Context(), "SELECT clock_timestamp()").Scan(&clock.now))
+			start := clock.now
+			service.RegistrationClock = clock
+			if scenario == "second-expiry-sales" {
+				_, err := db.Exec(t.Context(), "UPDATE core.pass_event_tiers SET starts_at=$1", start.Add(11*time.Minute))
+				require.NoError(t, err)
+			} else {
+				_, err := db.Exec(t.Context(), "UPDATE core.pass_events SET finishes_at=$1", start.Add(11*time.Minute))
+				require.NoError(t, err)
+			}
+			first, err := service.CaptureAdmission(t.Context(), "alice", passbooking.AdmissionRequest{
+				Command: bookingCommand("solo", "clock-rotate-alice", passbooking.Booking{}),
+			})
+			require.NoError(t, err)
+			clock.advance(start.Add(time.Minute))
+			command := bookingCommand("solo", "clock-rotate-bob", passbooking.Booking{})
+			second, err := service.CaptureAdmission(t.Context(), "bob", passbooking.AdmissionRequest{Command: command})
+			require.NoError(t, err)
+			clock.advance(start.Add(10 * time.Minute))
+			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			defer cancel()
+			tx, err := db.Begin(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = tx.Rollback(context.WithoutCancel(t.Context())) })
+			var apply func(context.Context) error
+			switch scenario {
+			case "admin-finish":
+				prepared, prepareErr := service.PrepareAssignmentInTx(ctx, tx, "bob", passbooking.AdminAssignment{
+					Event: "dance", Key: "clock-rotation-admin", Target: "alice",
+				})
+				require.NoError(t, prepareErr)
+				apply = func(ctx context.Context) error { _, applyErr := prepared.Apply(ctx); return applyErr }
+			case "maintenance-finish":
+				require.NoError(t, tx.Rollback(ctx))
+				apply = func(ctx context.Context) error { _, applyErr := service.ProcessDeadlines(ctx); return applyErr }
+			default:
+				prepared, prepareErr := service.PrepareInTx(ctx, tx, "bob", command)
+				require.NoError(t, prepareErr)
+				apply = func(ctx context.Context) error { _, applyErr := prepared.Apply(ctx); return applyErr }
+			}
+			blocker, err := db.Begin(ctx)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = blocker.Rollback(context.WithoutCancel(t.Context())) })
+			_, err = blocker.Exec(ctx, "SELECT pg_advisory_xact_lock(782619)")
+			require.NoError(t, err)
+			result := make(chan error, 1)
+			go func() { result <- apply(ctx) }()
+			require.Eventually(t, func() bool {
+				var waiting bool
+				queryErr := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+ WHERE datname=current_database() AND wait_event='advisory' AND query='SELECT pg_advisory_xact_lock(782619)')`).Scan(&waiting)
+				return queryErr == nil && waiting
+			}, 5*time.Second, 10*time.Millisecond, "prepared effect waits on turn rotation, not application admission")
+			advanced := start.Add(12 * time.Minute)
+			clock.advance(advanced)
+			require.NoError(t, blocker.Commit(ctx))
+			select {
+			case err = <-result:
+			case <-ctx.Done():
+				t.Fatal("rotation did not complete after allocator release")
+			}
+			switch scenario {
+			case "event-finish":
+				requireCode(t, err, "pass_sales_closed")
+			case "admin-finish":
+				requireCode(t, err, "pass_event_finished")
+			case "maintenance-finish":
+				require.NoError(t, err)
+			default:
+				require.NoError(t, err)
+				require.NoError(t, tx.Commit(ctx))
+				for _, admission := range []passbooking.Admission{first, second} {
+					var position, rotations int64
+					var deadline time.Time
+					require.NoError(t, db.QueryRow(ctx, `SELECT effective_position,requeue_count,turn_expires_at
+ FROM core.registration_intents WHERE id=$1`, admission.ID).Scan(&position, &rotations, &deadline))
+					require.Greater(t, position, second.Position)
+					require.EqualValues(t, 1, rotations, "both expired turns were selected after wait")
+					require.WithinDuration(t, advanced.Add(10*time.Minute), deadline, 0)
+				}
+				booking, getErr := service.Get(ctx, "bob", "dance")
+				require.NoError(t, getErr)
+				require.Positive(t, booking.Version, "sales opened while allocator blocked")
+				require.WithinDuration(t, advanced, booking.CreatedAt, 0)
+			}
+		})
+	}
+}

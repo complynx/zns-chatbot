@@ -24,3 +24,14 @@ func registrationTime(ctx context.Context, tx pgx.Tx, clock registrationingress.
 	err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now)
 	return now, core.DatabaseOperationError(err)
 }
+
+// registrationTurnTime observes configured time after the shared turn allocator
+// is held. Subsequent rotation cannot wait past this observation.
+func registrationTurnTime(ctx context.Context, tx pgx.Tx, clock registrationingress.Clock) (time.Time, error) {
+	if clock != nil {
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(782619)"); err != nil {
+			return time.Time{}, core.DatabaseOperationError(err)
+		}
+	}
+	return registrationTime(ctx, tx, clock)
+}

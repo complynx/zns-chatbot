@@ -71,7 +71,7 @@ func (s Service) RefreshAdmissionTurnsInTx(ctx context.Context, tx pgx.Tx, event
 	if _, err := readEvent(ctx, tx, eventID); err != nil {
 		return err
 	}
-	now, err := registrationTime(ctx, tx, s.RegistrationClock)
+	now, err := registrationTurnTime(ctx, tx, s.RegistrationClock)
 	if err != nil {
 		return err
 	}

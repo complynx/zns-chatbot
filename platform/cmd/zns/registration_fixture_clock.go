@@ -49,30 +49,44 @@ func registrationClockEnvironment() registrationclock.Settings {
 }
 
 func rejectRegistrationClockMode(command string) error {
-	if (command == registrationClockAPIMode || command == registrationClockBotMode) &&
+	if command != registrationClockAppMode &&
 		registrationClockEnvironment().Enabled() {
 		return errors.New("registration clock is supported only by the combined app")
 	}
 	return nil
 }
 
-// Preflight runs before runtime database opening or process admission. Live
-// database allocation and publication checks remain in the app factory.
-func preflightRegistrationClock(command string, cfg config.Config) error {
+// Preflight validates the effective connection and private initial publication
+// before opening the database. Live fixture validation precedes admission.
+func preflightRegistrationClock(ctx context.Context, command string, cfg config.Config) (*registrationFileClock, error) {
 	if err := rejectRegistrationClockMode(command); err != nil {
-		return err
+		return nil, err
 	}
 	settings := registrationClockEnvironment()
-	if command != registrationClockAppMode || !settings.Enabled() {
-		return nil
+	if !settings.Enabled() {
+		return nil, nil
 	}
 	if cfg.Env != "sandbox" || !cfg.SyntheticOnly {
-		return errors.New("registration clock requires synthetic sandbox mode")
+		return nil, errors.New("registration clock requires synthetic sandbox mode")
 	}
 	if err := settings.Validate(); err != nil {
-		return err
+		return nil, err
 	}
-	return registrationClockPlatform()
+	if err := registrationClockPlatform(); err != nil {
+		return nil, err
+	}
+	connection, err := pgxpool.ParseConfig(cfg.Database.URL.Value())
+	if err != nil {
+		return nil, errors.New("invalid database configuration")
+	}
+	if err = registrationClockAllocation(connection, settings); err != nil {
+		return nil, err
+	}
+	clock := &registrationFileClock{config: settings}
+	if _, err = clock.Now(ctx); err != nil {
+		return nil, err
+	}
+	return clock, nil
 }
 
 func configuredRegistrationClock(
@@ -84,24 +98,33 @@ func configuredRegistrationClock(
 	if !settings.Enabled() {
 		return nil, false, nil
 	}
-	if err := preflightRegistrationClock(registrationClockAppMode, cfg); err != nil {
+	clock, err := preflightRegistrationClock(ctx, registrationClockAppMode, cfg)
+	if err != nil {
 		return nil, true, err
 	}
-	if err := registrationClockDatabaseGuard(ctx, db, settings); err != nil {
-		return nil, true, err
-	}
-	clock := &registrationFileClock{config: settings}
-	if _, err := clock.Now(ctx); err != nil {
+	if err = registrationClockDatabaseGuard(ctx, db, settings); err != nil {
 		return nil, true, err
 	}
 	return clock, true, nil
 }
 
-func registrationClockDatabaseGuard(ctx context.Context, db *pgxpool.Pool, settings registrationclock.Settings) error {
-	connection := db.Config().ConnConfig
+func registrationClockAllocation(pool *pgxpool.Config, settings registrationclock.Settings) error {
+	connection := pool.ConnConfig
 	actual := net.JoinHostPort(connection.Host, strconv.Itoa(int(connection.Port))) + "/" + connection.Database
 	if actual != settings.DatabaseAddress {
 		return errors.New("registration clock database allocation mismatch")
+	}
+	for _, fallback := range connection.Fallbacks {
+		if fallback.Host != connection.Host || fallback.Port != connection.Port {
+			return errors.New("registration clock database allocation mismatch")
+		}
+	}
+	return nil
+}
+
+func registrationClockDatabaseGuard(ctx context.Context, db *pgxpool.Pool, settings registrationclock.Settings) error {
+	if err := registrationClockAllocation(db.Config(), settings); err != nil {
+		return err
 	}
 	var allowed bool
 	err := db.QueryRow(ctx, `SELECT current_database()=$1 AND current_user=pg_get_userbyid(datdba)

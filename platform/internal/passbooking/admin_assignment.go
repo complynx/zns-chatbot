@@ -128,7 +128,7 @@ func (p *PreparedAssignment) Apply(ctx context.Context) (AdminAssignmentResult, 
 	if err != nil {
 		return AdminAssignmentResult{}, err
 	}
-	now, err := registrationTime(ctx, tx, p.registrationClock)
+	now, err := registrationTurnTime(ctx, tx, p.registrationClock)
 	if err != nil {
 		return AdminAssignmentResult{}, err
 	}

@@ -190,7 +190,7 @@ func (p *PreparedCommand) Apply(ctx context.Context) (Booking, error) {
 	}
 	// Transaction start can precede a long lock wait. All decisions use the clock
 	// after event, permission and required profile locks have been acquired.
-	now, err := registrationTime(ctx, tx, p.registrationClock)
+	now, err := registrationTurnTime(ctx, tx, p.registrationClock)
 	if err != nil {
 		return Booking{}, err
 	}

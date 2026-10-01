@@ -116,7 +116,7 @@ func (s Service) processEventDeadlines(ctx context.Context, id string) (int64, e
 	if err != nil {
 		return 0, err
 	}
-	now, err := registrationTime(ctx, tx, s.RegistrationClock)
+	now, err := registrationTurnTime(ctx, tx, s.RegistrationClock)
 	if err != nil {
 		return 0, err
 	}

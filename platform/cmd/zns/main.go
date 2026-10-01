@@ -93,8 +93,9 @@ func runCommandWithDatabase(
 	runtime *observability.Runtime,
 	openDatabase func(context.Context, config.Config, *observability.Runtime) (*pgxpool.Pool, error),
 ) (result error) {
-	if err := preflightRegistrationClock(command, cfg); err != nil {
-		return err
+	registrationClock, clockErr := preflightRegistrationClock(ctx, command, cfg)
+	if clockErr != nil {
+		return clockErr
 	}
 	if command == "model" {
 		return runModel(ctx, logger, cfg, runtime)
@@ -109,7 +110,16 @@ func runCommandWithDatabase(
 	if e = runtime.RegisterPool(db); e != nil {
 		return e
 	}
+	if registrationClock != nil {
+		if e = registrationClockDatabaseGuard(ctx, db, registrationClock.config); e != nil {
+			return e
+		}
+	}
 	work := func(owned context.Context) error {
+		if registrationClock != nil {
+			signer := identity.Signer{Key: []byte(cfg.Auth.SigningKey.Value())}
+			return runAppWithClock(owned, db, signer, logger, cfg, runtime, registrationClock)
+		}
 		return runDatabaseCommand(owned, logger, cfg, runtime, db)
 	}
 	if role, admitted := commandRole(command); admitted {

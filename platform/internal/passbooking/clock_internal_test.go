@@ -178,3 +178,19 @@ func TestRegistrationTimeObservesBindingAtEachCall(t *testing.T) {
 	_, err = registrationTime(canceled, tx, clock)
 	require.ErrorIs(t, err, context.Canceled)
 }
+
+func TestRegistrationTurnTimeFencesConfiguredObservation(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	clock := &registrationTestClock{now: start}
+	tx := &admissionClockTx{clock: clock, after: start.Add(11 * time.Minute)}
+	observed, err := registrationTurnTime(t.Context(), tx, clock)
+	require.NoError(t, err)
+	require.Equal(t, tx.after, observed)
+	require.Empty(t, tx.queries)
+	defaultTx := &clockTx{row: clockRow{now: start}}
+	observed, err = registrationTurnTime(t.Context(), defaultTx, nil)
+	require.NoError(t, err)
+	require.Equal(t, start, observed)
+	require.Equal(t, []string{"SELECT clock_timestamp()"}, defaultTx.queries)
+}
