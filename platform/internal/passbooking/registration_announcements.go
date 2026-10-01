@@ -294,10 +294,9 @@ func announcementConfirmedWireOutcome(outcome delivery.Outcome) bool {
 }
 
 func announcementLateCompletion(input AnnouncementCompletion, row dbgen.LockAnnouncementAttemptRow) (bool, error) {
-	// A confirmed recovered reply cannot schedule the same generation again.
+	// A confirmed reply cannot schedule the same actual generation again.
 	if input.Outcome.Kind != delivery.Succeeded && announcementConfirmedWireOutcome(input.Outcome) &&
 		row.State == operationPending && !row.LeaseUntil.Valid &&
-		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == input.Attempt &&
 		row.LastConfirmedAttempt.Valid && row.LastConfirmedAttempt.Int64 >= input.Attempt {
 		return false, conflict("pass_announcement_stale")
 	}
