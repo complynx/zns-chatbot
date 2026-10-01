@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -551,4 +552,176 @@ func queuedPaymentRetirement(t *testing.T, f *fixture) botdelivery.Intent {
 	}
 	t.Fatal("payment retirement did not become the lane head")
 	return botdelivery.Intent{}
+}
+
+func TestPaymentUnavailableContextKeepsExactTarget(t *testing.T) {
+	t.Parallel()
+	for _, language := range []string{"en", "ru"} {
+		for _, refusal := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/refusal_%t", language, refusal), func(t *testing.T) {
+				t.Parallel()
+				f, order, opened := openedPaymentFixture(t)
+				_, err := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+				require.NoError(t, err)
+				require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+				intent := queuedPaymentRetirement(t, f)
+				_, err = f.b.API.SetLanguage(t.Context(), "alice", language, false)
+				require.NoError(t, err)
+				assertUnavailablePaymentDelivery(t, f, order, opened, intent, language, refusal)
+			})
+		}
+	}
+}
+
+func assertUnavailablePaymentDelivery(
+	t *testing.T, f *fixture, order orders.Order, opened telegram.Message,
+	intent botdelivery.Intent, language string, refusal bool,
+) {
+	t.Helper()
+	var edits, sends atomic.Int64
+	observed := make(chan telegram.Send, 1)
+	f.b.TG.HTTP = &http.Client{Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/sendMessage") {
+			sends.Add(1)
+		}
+		if strings.HasSuffix(r.URL.Path, "/editMessageText") {
+			edits.Add(1)
+			var payload telegram.Send
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				return nil, err
+			}
+			select {
+			case observed <- payload:
+			default:
+				return nil, fmt.Errorf("duplicate payment edit")
+			}
+			if refusal {
+				return paymentEditRefused(r), nil
+			}
+			raw, err := json.Marshal(payload)
+			if err != nil {
+				return nil, err
+			}
+			r.Body = io.NopCloser(strings.NewReader(string(raw)))
+		}
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), intent.QueueReference()))
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), intent.QueueReference()))
+	require.EqualValues(t, 1, edits.Load())
+	require.Zero(t, sends.Load())
+	payload := <-observed
+	want, err := i18n.Translate(language, i18n.PaymentUnavailable,
+		map[string]string{"code": "payment_context_unavailable"})
+	require.NoError(t, err)
+	require.Equal(t, opened.ID, payload.MessageID)
+	require.EqualValues(t, 101, payload.ChatID)
+	require.Equal(t, want, payload.Text)
+	require.Empty(t, payload.Markup.Rows)
+	assertUnavailablePaymentReceipt(t, f, order, opened, intent, refusal)
+	if !refusal {
+		require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+		var count int
+		require.NoError(t, f.db.QueryRow(t.Context(), `SELECT count(*) FROM bot.delivery_intents
+ WHERE owner='alice' AND reference->>'card_key'=$1 AND reference->>'notice'=$2`,
+			"payment:"+order.ID, string(i18n.PaymentUnavailable)).Scan(&count))
+		require.Equal(t, 1, count, "repeated refresh cannot recreate a retired payment card")
+	}
+}
+
+func paymentEditRefused(r *http.Request) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusBadRequest, Header: make(http.Header), Request: r,
+		Body: io.NopCloser(strings.NewReader(
+			`{"ok":false,"error_code":400,"description":"Bad Request: message to edit not found"}`)),
+	}
+}
+
+func assertUnavailablePaymentReceipt(
+	t *testing.T, f *fixture, order orders.Order, opened telegram.Message, intent botdelivery.Intent, refusal bool,
+) {
+	t.Helper()
+	current, err := botdelivery.Read(t.Context(), f.db, intent.BotID, intent.QueueReference(), false)
+	require.NoError(t, err)
+	require.Nil(t, current.Reference.Source)
+	require.Empty(t, current.Reference.Authorities)
+	require.NotNil(t, current.Reference.PaymentRetirement)
+	require.Equal(t, "edit", current.Phase)
+	require.Equal(t, opened.ID, current.Target)
+	require.EqualValues(t, 1, current.Attempt)
+	var message int64
+	var visible bool
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT message_id,visible FROM bot.order_cards
+ WHERE owner='alice' AND card_key=$1`, "payment:"+order.ID).Scan(&message, &visible))
+	require.Equal(t, opened.ID, message)
+	require.Equal(t, refusal, visible)
+	if refusal {
+		require.Equal(t, delivery.Rejected, current.State)
+		require.Zero(t, current.MessageID)
+		require.False(t, current.ContinuationDone)
+	} else {
+		require.Equal(t, delivery.Succeeded, current.State)
+		require.Equal(t, opened.ID, current.MessageID)
+		require.True(t, current.ContinuationDone)
+	}
+	assertPaymentRetirementQueue(t, f, current, string(current.State))
+}
+
+func TestPaymentUnavailableContextRestorationKeepsProjection(t *testing.T) {
+	t.Parallel()
+	for _, afterSend := range []bool{false, true} {
+		t.Run(fmt.Sprintf("after_send_%t", afterSend), func(t *testing.T) {
+			t.Parallel()
+			f, order, opened := openedPaymentFixture(t)
+			_, err := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+			require.NoError(t, err)
+			require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+			intent := queuedPaymentRetirement(t, f)
+			assertRestoredPaymentProjection(t, f, order, opened, intent, afterSend)
+		})
+	}
+}
+
+func assertRestoredPaymentProjection(
+	t *testing.T, f *fixture, order orders.Order, opened telegram.Message, intent botdelivery.Intent, afterSend bool,
+) {
+	t.Helper()
+	restore := func() error {
+		_, err := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=true WHERE id='alice'`)
+		return err
+	}
+	if afterSend {
+		f.b.Host.HTTP = &http.Client{Transport: &boundaryTransport{before: func(r *http.Request) error {
+			if r.URL.Path == "/internal/bot-delivery/receipt" {
+				return restore()
+			}
+			return nil
+		}}}
+	} else {
+		require.NoError(t, restore())
+	}
+	var wire atomic.Int64
+	f.b.TG.HTTP = &http.Client{Transport: qaArchiveBoundaryTransport(func(r *http.Request) (*http.Response, error) {
+		wire.Add(1)
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	require.NoError(t, f.b.DeliverBotIntent(t.Context(), intent.QueueReference()))
+	current, err := botdelivery.Read(t.Context(), f.db, intent.BotID, intent.QueueReference(), false)
+	require.NoError(t, err)
+	if afterSend {
+		require.EqualValues(t, 1, wire.Load())
+		require.Equal(t, delivery.Succeeded, current.State)
+		require.Equal(t, opened.ID, current.MessageID)
+		require.True(t, current.ContinuationDone)
+	} else {
+		require.Zero(t, wire.Load())
+		require.Equal(t, delivery.Cancelled, current.State)
+		require.Zero(t, current.Attempt)
+	}
+	var message int64
+	var visible bool
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT message_id,visible FROM bot.order_cards
+ WHERE owner='alice' AND card_key=$1`, "payment:"+order.ID).Scan(&message, &visible))
+	require.Equal(t, opened.ID, message)
+	require.True(t, visible)
 }

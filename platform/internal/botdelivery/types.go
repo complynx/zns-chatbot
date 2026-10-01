@@ -77,7 +77,7 @@ type Reference struct {
 	Authorities       []readsource.Authority     `json:"authorities,omitempty"`
 }
 
-// PaymentRetirement identifies the successful payload being removed, without
+// PaymentRetirement identifies the successful payload of an unavailable order, without
 // copying its private source or granting authority to render it again.
 type PaymentRetirement struct {
 	Operation string `json:"operation"`

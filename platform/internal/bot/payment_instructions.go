@@ -40,6 +40,15 @@ func (b *Bot) paymentInstructionsWithSource(
 	source *readsource.Derivation,
 	opening bool,
 ) (string, error) {
+	if !opening {
+		ref, unavailable, err := b.paymentRetirementReference(ctx, in.owner, paymentCardPrefix+id, id)
+		if err != nil {
+			return "", err
+		}
+		if unavailable {
+			return b.deliverPaymentRetirement(ctx, in, ref)
+		}
+	}
 	if err := b.checkOrderDeliverySource(ctx, in.owner, source); err != nil {
 		return "", err
 	}
@@ -184,20 +193,31 @@ func (b *Bot) paymentInstructionsUnavailable(ctx context.Context, in incoming, i
 		return "", core.DatabaseOperationError(err)
 	}
 	if opened {
-		if retired, _ := ctx.Value(botRetiredCardKey{}).(bool); retired {
-			ref, unavailable, bindingErr := b.paymentRetirementReference(ctx, in.owner, key, id)
-			if bindingErr != nil || !unavailable {
-				return text, bindingErr
-			}
-			ctx = withBotCard(ctx, ref)
+		ref, unavailable, bindingErr := b.paymentRetirementReference(ctx, in.owner, key, id)
+		if bindingErr != nil || !unavailable {
+			return text, bindingErr
 		}
-		err = b.deliverOrderCard(
-			ctx,
-			in.owner,
-			key,
-			telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: [][]telegram.Button{}}},
-		)
+		return b.deliverPaymentRetirement(ctx, in, ref)
 	}
+	return text, err
+}
+
+func (b *Bot) deliverPaymentRetirement(ctx context.Context, in incoming, ref botdelivery.Reference) (string, error) {
+	preference, err := b.API.Preferences(ctx, in.owner)
+	if err != nil {
+		return "", err
+	}
+	text, err := i18n.Translate(preference.Language, i18n.PaymentUnavailable,
+		map[string]string{orderCodeParameter: "payment_context_unavailable"})
+	if err != nil {
+		return "", err
+	}
+	if ref.PaymentRetirement == nil {
+		return text, nil
+	}
+	ctx = withBotCard(context.WithValue(ctx, botRetiredCardKey{}, true), ref)
+	err = b.deliverOrderCard(ctx, in.owner, ref.CardKey,
+		telegram.Send{ChatID: in.chat, Text: text, Markup: telegram.Markup{Rows: [][]telegram.Button{}}})
 	return text, err
 }
 
@@ -206,12 +226,14 @@ func (b *Bot) paymentRetirementReference(
 	owner, key, id string,
 ) (botdelivery.Reference, bool, error) {
 	var event, state string
-	err := b.DB.QueryRow(ctx, `SELECT event_id,state FROM core.orders WHERE owner=$1 AND id=$2`, owner, id).
-		Scan(&event, &state)
+	var canBook bool
+	err := b.DB.QueryRow(ctx, `SELECT o.event_id,o.state,u.can_book FROM core.orders o
+ JOIN core.users u ON u.id=o.owner WHERE o.owner=$1 AND o.id=$2`, owner, id).
+		Scan(&event, &state, &canBook)
 	if err != nil {
 		return botdelivery.Reference{}, false, core.DatabaseOperationContextError(ctx, err)
 	}
-	if state != "deleted" {
+	if state != "deleted" && canBook {
 		return botdelivery.Reference{}, false, nil
 	}
 	prior := &botdelivery.PaymentRetirement{}
@@ -223,6 +245,14 @@ func (b *Bot) paymentRetirementReference(
  ORDER BY i.attempted_at DESC NULLS LAST,i.created_at DESC,i.operation_key DESC,i.effect_key DESC LIMIT 1`,
 		owner, key, b.Delivery.BotID).Scan(&prior.Operation, &prior.Effect, &prior.ViewHash)
 	if errors.Is(err, pgx.ErrNoRows) {
+		var visible bool
+		if err = b.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.order_cards
+ WHERE owner=$1 AND card_key=$2 AND visible)`, owner, key).Scan(&visible); err != nil {
+			return botdelivery.Reference{}, false, core.DatabaseOperationContextError(ctx, err)
+		}
+		if !visible {
+			return botdelivery.Reference{}, true, nil
+		}
 		return botdelivery.Reference{}, false, botdelivery.ErrStale
 	}
 	if err != nil {

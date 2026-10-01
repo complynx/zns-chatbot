@@ -327,6 +327,91 @@ func paymentSourceEditRefusal(
 	}
 }
 
+func TestPaymentUnavailableContextRetiresRevokedSource(t *testing.T) {
+	t.Parallel()
+	for _, language := range []string{"en", "ru"} {
+		for _, queued := range []bool{false, true} {
+			for _, refusal := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/queued_%t/refusal_%t", language, queued, refusal), func(t *testing.T) {
+					t.Parallel()
+					testUnavailablePaymentSource(t, language, queued, refusal)
+				})
+			}
+		}
+	}
+}
+
+func testUnavailablePaymentSource(t *testing.T, language string, queued, refusal bool) {
+	t.Helper()
+	f, order, _ := openedPaymentFixture(t)
+	f.model.plan = agent.Plan{
+		View:        agent.OrdersView,
+		OrderAction: &agent.OrderProposal{Name: orders.ActionPaymentInstructions, OrderID: order.ID},
+	}
+	handleVisible(t, f.b, message(29805, 101, "Show payment instructions for "+order.ID))
+	opened := paymentMessage(t, f)
+	var originalSource []byte
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='alice' AND update_id=0 AND kind=$1`, "payment_source:"+order.ID).Scan(&originalSource))
+	require.Contains(t, string(originalSource), `"original": false`)
+	var pending botdelivery.Intent
+	if queued {
+		_, err := f.db.Exec(t.Context(), `UPDATE core.order_events
+ SET transfer_instructions_localized='{"en":"late private payment canary"}' WHERE id=$1`, order.EventID)
+		require.NoError(t, err)
+		require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+		pending = queuedLivePayment(t, f)
+	}
+	orderDeliveryHistoryDelete(t, f, "alice")
+	_, err := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+	require.NoError(t, err)
+	if queued {
+		require.NoError(t, f.b.DeliverBotIntent(t.Context(), pending.QueueReference()))
+		current, readErr := botdelivery.Read(t.Context(), f.db, pending.BotID, pending.QueueReference(), false)
+		require.NoError(t, readErr)
+		require.Equal(t, delivery.Cancelled, current.State)
+		require.Zero(t, current.Attempt)
+	} else {
+		require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+	}
+	intent := queuedPaymentRetirement(t, f)
+	_, err = f.b.API.SetLanguage(t.Context(), "alice", language, false)
+	require.NoError(t, err)
+	assertUnavailablePaymentDelivery(t, f, order, opened, intent, language, refusal)
+	var retainedSource []byte
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT content FROM bot.interactions
+ WHERE owner='alice' AND update_id=0 AND kind=$1`, "payment_source:"+order.ID).Scan(&retainedSource))
+	require.JSONEq(t, string(originalSource), string(retainedSource))
+	for _, item := range chatMessages(t, f, 101) {
+		require.NotContains(t, item.Text, "late private payment canary")
+	}
+}
+
+func queuedLivePayment(t *testing.T, f *fixture) botdelivery.Intent {
+	t.Helper()
+	var operation, effect string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT operation_key,effect_key FROM bot.delivery_intents
+ WHERE owner='alice' AND state='pending' AND reference->>'family'='payment'
+ AND COALESCE(reference->>'notice','')='' ORDER BY created_at DESC LIMIT 1`).Scan(&operation, &effect))
+	intent, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID,
+		delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}, false)
+	require.NoError(t, err)
+	for range 100 {
+		for _, entry := range botDeliveryCandidates(t, f.b) {
+			if entry.Reference == intent.QueueReference() {
+				return intent
+			}
+			if entry.Reference.Owner == delivery.Bot {
+				require.NoError(t, f.b.DeliverBotIntent(t.Context(), entry.Reference))
+				break
+			}
+		}
+		time.Sleep(max(f.b.Delivery.BotInterval, f.b.Delivery.ChatInterval) + time.Millisecond)
+	}
+	t.Fatal("live payment intent did not become the lane head")
+	return botdelivery.Intent{}
+}
+
 func TestModernProofRechecksExactBindingAfterDownload(t *testing.T) {
 	t.Parallel()
 	for _, revoke := range []string{"version", "attempt", "proof_file", "history", "unchanged"} {

@@ -176,15 +176,17 @@ func lockPaymentCard(ctx context.Context, tx pgx.Tx, i Intent) error {
 		return ErrBinding
 	}
 	var event, state string
-	err := tx.QueryRow(ctx, `SELECT event_id,state FROM core.orders WHERE owner=$1 AND id=$2 FOR SHARE`, i.Owner, r.Object).
-		Scan(&event, &state)
+	var canBook bool
+	err := tx.QueryRow(ctx, `SELECT o.event_id,o.state,u.can_book FROM core.orders o
+ JOIN core.users u ON u.id=o.owner WHERE o.owner=$1 AND o.id=$2 FOR SHARE OF o,u`, i.Owner, r.Object).
+		Scan(&event, &state, &canBook)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrStale
 	}
 	if err != nil {
 		return core.DatabaseOperationContextError(ctx, err)
 	}
-	if event != r.Event || state != "deleted" {
+	if event != r.Event || (state != "deleted" && canBook) {
 		return ErrStale
 	}
 	return lockPaymentRetirementProjection(ctx, tx, i)
