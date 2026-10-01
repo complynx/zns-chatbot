@@ -74,29 +74,17 @@ func TestAdminLostResponseResendsWithDurableBudget(t *testing.T) {
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT failure FROM core.admin_message_deliveries`).Scan(&failure))
 	assert.Equal(t, "telegram_uncertain_retry_exhausted", failure)
 	enqueueSyntheticDelivery(t, s, "follower", "101")
-	logMessageRetryFollower(t, f.db, s.Delivery.BotID)
-	require.Len(t, queueCandidates(t, f.db), 1, "exhaustion must release the next message")
+	require.Len(t, messageRetryCandidates(t, f.db, s.Delivery.BotID), 1, "exhaustion must release the next message")
 }
 
-func logMessageRetryFollower(t *testing.T, db *pgxpool.Pool, botID int64) {
+func messageRetryCandidates(t *testing.T, db *pgxpool.Pool, botID int64) []delivery.Entry {
 	t.Helper()
-	var snapshot string
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT jsonb_build_object(
- 'helper_bot',$1::bigint,'actual_bot',$2::bigint,'now',clock_timestamp(),
- 'queue',(SELECT jsonb_agg(to_jsonb(q) ORDER BY lane_sequence) FROM core.delivery_queue q WHERE bot_id=$2),
- 'pacing',(SELECT jsonb_agg(to_jsonb(p) ORDER BY chat) FROM core.delivery_pacing p WHERE bot_id=$2),
- 'earliest',(SELECT GREATEST(clock_timestamp(),q.not_before,
-  COALESCE((SELECT not_before FROM core.delivery_pacing WHERE bot_id=$2 AND chat=''),'-infinity'),
-  COALESCE((SELECT not_before FROM core.delivery_pacing WHERE bot_id=$2 AND chat=q.chat),'-infinity'))
-  FROM core.delivery_queue q WHERE bot_id=$2 AND state='pending' ORDER BY lane_sequence LIMIT 1))::text`,
-		queueSettings().BotID, botID).Scan(&snapshot))
-	t.Logf("follower diagnostic: %s", snapshot)
 	tx, err := db.Begin(t.Context())
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
 	entries, err := delivery.Candidates(t.Context(), tx, botID, 20)
 	require.NoError(t, err)
-	t.Logf("actual bot %d candidates: %+v", botID, entries)
+	return entries
 }
 
 func TestAdminUncertainRetryUsesPublicationIdentity(t *testing.T) {
@@ -266,7 +254,7 @@ func TestLegacyAdminUnknownIsObservedAndCancelledWithoutResend(t *testing.T) {
 	assert.Zero(t, attempt, "legacy zero generation must not become invented history")
 	assert.Zero(t, resends)
 	require.NoError(t, s.RecoverDeliveries(t.Context()))
-	require.Empty(t, queueCandidates(t, db))
+	require.Empty(t, messageRetryCandidates(t, db, s.Delivery.BotID))
 }
 
 func TestAdminLastUncertainResendRateLimitStillPacesOtherMessages(t *testing.T) {
@@ -318,7 +306,7 @@ func TestAdminLastUncertainResendRateLimitStillPacesOtherMessages(t *testing.T) 
 	)
 	assert.Greater(t, cooldown, 118.0, "exhaustion must retain the observed provider cooldown")
 	enqueueSyntheticDelivery(t, s, "other-chat", "202")
-	require.Empty(t, queueCandidates(t, db))
+	require.Empty(t, messageRetryCandidates(t, db, s.Delivery.BotID))
 }
 
 func TestAnnouncementUnknownResendsAndCrashExhaustsBudget(t *testing.T) {
