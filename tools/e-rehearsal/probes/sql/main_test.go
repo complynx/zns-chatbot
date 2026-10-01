@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgproto3"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,6 +23,7 @@ func ownerProjection() projection {
 }
 
 func TestOwnerConfigExactAuthority(t *testing.T) {
+	t.Setenv("MIGRATE_DATABASE_URL", allocatedURL)
 	spec := ownerProjection()
 	for _, dsn := range []string{allocatedURL, strings.TrimSuffix(allocatedURL, "?sslmode=disable")} {
 		t.Setenv("MIGRATE_DATABASE_URL", dsn)
@@ -96,6 +99,7 @@ func TestOwnerRunGuardsBeforeReadingOrConnecting(t *testing.T) {
 }
 
 func TestOwnerRowsStayBoundedAndSingleColumn(t *testing.T) {
+	t.Parallel()
 	var output bytes.Buffer
 	require.NoError(t, appendRow(&output, [][]byte{[]byte("safe")}))
 	require.Equal(t, "safe\n", output.String())
@@ -109,4 +113,37 @@ func TestOwnerRowsStayBoundedAndSingleColumn(t *testing.T) {
 	require.Equal(t, outputLimit, output.Len())
 	require.Error(t, appendRow(&output, [][]byte{nil}))
 	require.Equal(t, outputLimit, output.Len())
+}
+
+func TestOwnerBackendBodyLimitBeforePayloadRead(t *testing.T) {
+	t.Setenv("MIGRATE_DATABASE_URL", allocatedURL)
+	config, err := ownerConfig(ownerProjection())
+	require.NoError(t, err)
+	header := make([]byte, 5)
+	header[0] = 'D'
+	binary.BigEndian.PutUint32(header[1:], outputLimit+5)
+	frontend := config.BuildFrontend(bytes.NewReader(header), nil)
+	message, err := frontend.Receive()
+	require.Nil(t, message)
+	var exceeded *pgproto3.ExceededMaxBodyLenErr
+	require.ErrorAs(t, err, &exceeded)
+}
+
+func TestOwnerProjectionRejectsUnallocatedAuthority(t *testing.T) {
+	t.Setenv("MIGRATE_DATABASE_URL", allocatedURL)
+	for _, change := range []func(*projection){
+		func(spec *projection) { spec.Host = "localhost" },
+		func(spec *projection) { spec.Port = 25433 },
+		func(spec *projection) { spec.Port = 0 },
+		func(spec *projection) { spec.Role = "zns_app" },
+		func(spec *projection) { spec.Database = "production" },
+		func(spec *projection) { spec.Transport = "container-socket" },
+		func(spec *projection) { spec.Marker = "other" },
+	} {
+		spec := ownerProjection()
+		change(&spec)
+		config, err := ownerConfig(spec)
+		require.Nil(t, config)
+		require.EqualError(t, err, targetError)
+	}
 }

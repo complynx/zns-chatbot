@@ -12,10 +12,12 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -54,7 +56,12 @@ func main() {
 }
 
 func loadProjection(path, hash string) (projection, error) {
-	file, err := os.Open(path)
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return projection{}, err
+	}
+	defer root.Close()
+	file, err := root.Open(filepath.Base(path))
 	if err != nil {
 		return projection{}, err
 	}
@@ -87,19 +94,11 @@ func ownerConfig(spec projection) (*pgx.ConnConfig, error) {
 			return nil, rejected
 		}
 	}
-	raw := os.Getenv("MIGRATE_DATABASE_URL")
-	if strings.ContainsAny(raw, " \t\r\n") {
-		return nil, rejected
+	raw, err := ownerURL(spec)
+	if err != nil {
+		return nil, err
 	}
-	uri, err := url.Parse(raw)
-	if err != nil || (uri.Scheme != "postgres" && uri.Scheme != "postgresql") || uri.User == nil ||
-		uri.Hostname() != spec.Host || uri.Port() != strconv.Itoa(int(spec.Port)) ||
-		uri.Path != "/"+spec.Database || uri.User.Username() != spec.Role ||
-		uri.Fragment != "" || uri.ForceQuery || (uri.RawQuery != "" && uri.RawQuery != "sslmode=disable") {
-		return nil, rejected
-	}
-	uri.RawQuery = "sslmode=disable"
-	config, err := pgx.ParseConfig(uri.String())
+	config, err := pgx.ParseConfig(raw)
 	if err != nil || config.Host != spec.Host || config.Port != spec.Port || config.Database != spec.Database ||
 		config.User != spec.Role || config.TLSConfig != nil || len(config.Fallbacks) != 0 || len(config.RuntimeParams) != 0 {
 		return nil, rejected
@@ -116,6 +115,25 @@ func ownerConfig(spec projection) (*pgx.ConnConfig, error) {
 		return frontend
 	}
 	return config, nil
+}
+
+func ownerURL(spec projection) (string, error) {
+	raw := os.Getenv("MIGRATE_DATABASE_URL")
+	if strings.IndexFunc(
+		raw,
+		func(value rune) bool { return unicode.IsSpace(value) || unicode.IsControl(value) },
+	) >= 0 {
+		return "", errors.New(targetError)
+	}
+	uri, err := url.Parse(raw)
+	if err != nil || (uri.Scheme != "postgres" && uri.Scheme != "postgresql") || uri.User == nil ||
+		uri.Hostname() != spec.Host || uri.Port() != strconv.Itoa(int(spec.Port)) ||
+		uri.Path != "/"+spec.Database || uri.User.Username() != spec.Role ||
+		uri.Fragment != "" || uri.ForceQuery || (uri.RawQuery != "" && uri.RawQuery != "sslmode=disable") {
+		return "", errors.New(targetError)
+	}
+	uri.RawQuery = "sslmode=disable"
+	return uri.String(), nil
 }
 
 func run(arguments []string, input io.Reader) ([]byte, error) {

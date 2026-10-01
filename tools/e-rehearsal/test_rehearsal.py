@@ -343,7 +343,8 @@ class GuardTests(unittest.TestCase):
     def test_bound_probe_mutation_blocks_every_owner_action(self):
         config, evidence, allocation, manifest, projections = self.allocated_probe_fixture()
         url = "postgres://postgres:synthetic@127.0.0.1:58421/" + self.epoch["database"]
-        for changed in (manifest, *projections.values()):
+        binary = Path(config["runtime_source"]) / "dist" / ("offline-sql.exe" if rehearse.os.name == "nt" else "offline-sql")
+        for changed in (manifest, *projections.values(), binary, evidence / "offline-runtime-build.json"):
             original = changed.read_bytes()
             for action in ("import", "remove-receipts", "archive-importer", "capture", "compare", "build-runtime"):
                 with self.subTest(changed=changed.name, action=action):
@@ -357,7 +358,8 @@ class GuardTests(unittest.TestCase):
                             "--evidence", str(evidence), "--allocation", str(allocation),
                             "--allocation-sha256", prepare.digest(allocation), "--checkpoint", "checkpoint.json",
                             "--probes", str(manifest), "--probes-sha256", rehearse.ALLOCATION["probes_sha256"]]
-                    with (patch.object(sys, "argv", argv), patch.object(rehearse, "allocate"),
+                    with (patch.dict(rehearse.os.environ, {"MIGRATE_DATABASE_URL": url}),
+                          patch.object(sys, "argv", argv), patch.object(rehearse, "allocate"),
                           patch.object(rehearse, "sql") as database, patch.object(rehearse, "command") as executor):
                         with self.assertRaisesRegex(RuntimeError, "reviewed_file_hash_mismatch"):
                             rehearse.main()
