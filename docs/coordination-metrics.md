@@ -651,3 +651,9 @@ Manager paused at150events; follow-up could not start due thread limit. Root rec
 ## Fresh review dispatch 2026-10-01T04:54:34Z
 
 168 events; confirmed queue0/2/0. Payment7 c5e770e7 clean unchanged from native12PASS, fresh QA267 CLI70176 active. Model10 freshauthor f2720ebb clean complete gates PASS, root70273 exact2PG2.24s3.82s/package6.282s0FAILSKIP, identical parent DBnames;8090/58441 released. Fresh fullQA268 CLI44874 active. Counter268 next269. Corrected payment total is29PASS events, not28;12 top-level unchanged. Independent returns21, no new verdicts/FQA.
+
+## Review correction dispatch 2026-10-01T05:00:42Z
+
+171events; queue0/0/0, reviewreturns23. QA267FAIL1 transferred newpaymentdeveloper menu_retirement_fix isolated7. QA268FAIL2 originalf272preserved; correctivecodex/model-consumption-durable-fix CLI54485 owns original10/native8090. Counter268next269. C93cab989 mainLinuxPG matrix terminalgreen; nilclockmanual compatibility gates on sameimmutable source pending. Lead listonly1060 integration/2187platform/136importer discovered, exact8shards preliminary, not execution/FQA.
+
+172 events; queue0/1/0, returns23. Fresh full40 QA269 CLI86645 actually active immutable93cab989/basebd150. AuthorLinuxclock6/default19/manual14top-level plus startupROrace and pinned gates terminal0; WindowsDB/OSskips explicit. Thirdcapability developer registration_stand_runtime_developer prepares operator5 read-only until acceptedC, owns ownqa.local only. No source changes duringreview. Counter269next270.

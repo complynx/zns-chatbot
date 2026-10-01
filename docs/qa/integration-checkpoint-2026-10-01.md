@@ -62,3 +62,7 @@ Exactreviewed14candidate2a9db430 mergedwithoutconflicts afterQA264PASS. Rootactu
 Current correction: QA266 completed FAIL2; model10 transferred to new developer CLI37303, not merged. Payment7 full root52182 native selector12 top-level29PASS events/0FAILSKIP92.881s, identical database inventory; signed immutable handoff and fresh review pending. C40 final20e936 gates active. Native58461/58471 actual bare setup authenticated and released; product migrations and final full run still pending.
 
 Latest immutable handoffs: payment c5e770e7 complete7/root12PGPASS92.881s nowfreshQA267; model f2720ebb complete10/developerallcodegates+root2PGPASS6.282s nowfreshQA268. Both snapshots/DBinventories unchanged; native resources released. Sourcebd150 plus docs187319ce remains actual root composition. Payment PASS-record count corrected29,12top-levelunchanged. Next269.
+
+Fresh reviews267/268 are terminalFAIL, not pending or acceptance. Payment7 transferred new developer, model10 durable correction in separate branch CLI54485. Root still productbd150/docs57118257, no failed source merged. C93cab989 mainactualLinuxPG matrix clean, final compatibility gate pending. Lead listonly exact1060integration preliminary8shard manifests prepared, finalsource required.
+
+Full40 Cclock candidate93cab989 terminal authorLinux/PG/race/default/manual compatibility gates passed, resourcecleanupconfirmed. FreshQA269actuallyreadonlyCLI86645; no source/FQA acceptance yet. Operator5 successor planning transferred runtime developer afteracceptedC, no concurrentoldworktreewrites.

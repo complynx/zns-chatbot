@@ -353,3 +353,21 @@ or fixture/test writes. Lifecycle remains lead-managed: no unassigned restart,
 rebuild, bootstrap or consumer.58441/58451, retained fixture DB, C204, developer
 55432 and ce427 were untouched. This is readiness of bare prerequisites only,
 not private-role test PASS, Functional QA or final acceptance.
+
+Final shard orchestration is now specified in the next-batch plan: actual
+per-package Go-listed runnable names, ordinal sorting/index modulo8, complete
+module/package/OS unions and pairwise disjoint manifests. Native A owns58441/even
+shards/full other-platform plus role61; B owns58451/odd shards/full importer.
+Original fixture71 ownership goes to its actual discovered shard owner only in
+an explicit window. Provider native8090 is a single lead-controlled reservation;
+Linux/RO-RW/provider/lifecycle qualifications need separate scoped runner and
+stand contracts. No final manifests/source/writers are certified from the current
+checkpoint. No tests or database/credential/resource changes were performed for
+this orchestration note.
+
+Actual checkpoint187319ce Go list-only metadata found platform2187 runnable
+parents/63 test-bearing packages, integration1060 and importer136/2. Current
+ordinal modulo8 preliminary shard hashes and exact special selectors are recorded
+in next-batch plan. No test functions, database/credentials or resource lifecycle
+actions were invoked; only metadata compilation used the lead's existing cache.
+Final source remains unfrozen and requires new full discovery before assignments.

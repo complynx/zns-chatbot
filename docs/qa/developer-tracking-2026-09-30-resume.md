@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through268, next269. All authorship/routes Codex under override;
+Fresh requests through269, next270. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -179,3 +179,7 @@ QA266 terminal readonly CLI79746 FAIL2 (claim ownership and cancellable control 
 Request267 allocated before dispatch: complete payment7 immutablec5e770e7f4a7a2cdbf333a1c23f80726270ef37a/basebd150d5b1b6f91977d1597686e889543dab22330. Codex author and fresh standalone readonly Codex CLI route under override; full original requirements and immutable diff only, no previous findings or tracking. Root full12 native PASS92.881s, source unchanged and clean. Next268.
 
 Request268 allocated BEFORE dispatch: fresh developer complete10 immutablef2720ebb2e7f497042817ef8454ccea1bd56c69c/basebd150d5b1b6f91977d1597686e889543dab22330. Full author unit/race/pinnedlintfmt/build gates PASS, root70273 exact2PG2.24s3.82s/package6.282s0FAILSKIP and identical DBnames. Codex authorship/fresh readonly standalone Codex CLI override; original full scope only, no findings/tracking/authorreports. Next269.
+
+QA267 terminal CLI70176 FAIL1 revoked can_book unavailable-card fallback Send; after repeated returns transferred fresh menu_retirement_fix isolated payment-unavailable-context-fix scope7. QA268 terminal CLI44874 FAIL2 durable consumption ordering and expired completion barrier; f272 preserved originalbranch, corrective codex/model-consumption-durable-fix freshCLI54485 owns same10, no credentials/PG. Next269 not allocated; allCodexoverride.
+
+Request269 allocated BEFORE dispatch: fresh full40 Cclock immutable93cab98916ae3e49e1b90be20320d3786a15dde5/basebd150d5b1b6f91977d1597686e889543dab22330,39changed plus existing unchangedadmission_retention.go. All final authoractualLinux startup/RO/race/clock6/default19/supplementalnilclock14PG gates terminal0 no LinuxFAILSKIP; Windowsunitfmtlintbothtargets/build/sqlc clean withexistingWindowsDB/OSskips explicit. Fresh standalone readonly CodexCLIoverride, originalscope only no authorreports/findings/tracking/history. Next270.
