@@ -1,11 +1,11 @@
 {
- "installation": "000000000001",
- "state_directory": "/var/lib/zns-replacement",
- "compose_project": "zns-go",
- "compose_files": [
-  "/opt/zns/platform/deploy/compose.yaml",
-  "/opt/zns/platform/deploy/compose.replacement.yaml"
- ],
- "runtime_database_host": "postgres",
- "managed_roles": ["zns_runtime", "zns_meter"]
+  "installation": "000000000001",
+  "state_directory": "/var/lib/zns-replacement",
+  "compose_project": "zns-go",
+  "compose_files": [
+    "/opt/zns/platform/deploy/compose.yaml",
+    "/opt/zns/platform/deploy/compose.replacement.yaml"
+  ],
+  "runtime_database_host": "postgres",
+  "managed_roles": ["zns_runtime", "zns_meter"]
 }
