@@ -1,0 +1,21 @@
+env: sandbox
+synthetic_only: true
+server:
+  host: 0.0.0.0
+  port: 8080
+model:
+  provider: fixture
+  url: http://fake:8080/lab/model
+telegram:
+  base_url: http://fake:8080
+  web_app_url: http://127.0.0.1:58433/miniapp/
+sandbox:
+  mini_app_url: http://app:8080
+script:
+  enabled: true
+  socket: /run/script-ipc/evaluate.sock
+shutdown:
+  drain: 5s
+  telemetry_flush: 5s
+log:
+  level: info
