@@ -721,7 +721,10 @@ func TestRegistrationClockAnnouncementsAndPassportEligibility(t *testing.T) {
 			require.Equal(t, "announcement_superseded", gate.Reason)
 			reminder, err := service.BeginNotification(
 				t.Context(),
-				passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: notificationTestWire()},
+				passbooking.NotificationAttempt{
+					Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+					Wire:    notificationTestWire(),
+				},
 			)
 			require.NoError(t, err)
 			require.False(t, reminder.Ready)
@@ -1017,7 +1020,10 @@ func testClockPassportAdmission(t *testing.T, scenario string) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.True(t, notice.Current)
-	attempt := passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt}, Wire: notificationTestWire()}
+	attempt := passbooking.NotificationAttempt{
+		Attempt: delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt},
+		Wire:    notificationTestWire(),
+	}
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
 	defer cancel()
 	if scenario == "live" {

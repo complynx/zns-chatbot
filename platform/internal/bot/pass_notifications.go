@@ -3,8 +3,9 @@ package bot
 import (
 	"context"
 	"errors"
-	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"strconv"
+
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -14,7 +15,10 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-func (b *Bot) passNotificationWire(ctx context.Context, notice passbooking.Notification) (*notificationwire.Payload, error) {
+func (b *Bot) passNotificationWire(
+	ctx context.Context,
+	notice passbooking.Notification,
+) (*notificationwire.Payload, error) {
 	if notice.Wire != nil {
 		return notice.Wire, nil
 	}
@@ -170,7 +174,10 @@ func (b *Bot) sendPreparedPassNotice(
 	}
 	gate, err := b.Host.BeginPassNotification(
 		ctx,
-		passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: wire},
+		passbooking.NotificationAttempt{
+			Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+			Wire:    wire,
+		},
 	)
 	if err != nil || !gate.Ready {
 		return notice, false, err

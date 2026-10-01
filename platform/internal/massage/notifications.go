@@ -3,8 +3,9 @@ package massage
 import (
 	"context"
 	"errors"
-	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"net/http"
+
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"

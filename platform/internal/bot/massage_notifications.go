@@ -3,8 +3,9 @@ package bot
 import (
 	"context"
 	"errors"
-	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"strconv"
+
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/jackc/pgx/v5"
 
@@ -16,7 +17,12 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-func (b *Bot) massageNotificationWire(ctx context.Context, owner string, chat int64, value massage.DeliveryNotice) (*notificationwire.Payload, error) {
+func (b *Bot) massageNotificationWire(
+	ctx context.Context,
+	owner string,
+	chat int64,
+	value massage.DeliveryNotice,
+) (*notificationwire.Payload, error) {
 	if value.Notice.Wire != nil {
 		return value.Notice.Wire, nil
 	}
@@ -261,7 +267,10 @@ func (b *Bot) sendPreparedMassageNotice(
 	gate, err := b.Host.BeginMassageNotice(
 		ctx,
 		owner,
-		massage.NotificationAttempt{Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: wire},
+		massage.NotificationAttempt{
+			Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+			Wire:    wire,
+		},
 	)
 	if err != nil || !gate.Ready {
 		return notice, false, err

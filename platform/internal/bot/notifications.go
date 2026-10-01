@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -42,7 +43,10 @@ func notificationWireSend(chat int64, wire *notificationwire.Payload) (telegram.
 	return telegram.PrepareSend(telegram.Send{ChatID: chat, Text: wire.Text, Markup: markup})
 }
 
-func (b *Bot) orderNotificationWire(ctx context.Context, notice orders.Notification) (*notificationwire.Payload, error) {
+func (b *Bot) orderNotificationWire(
+	ctx context.Context,
+	notice orders.Notification,
+) (*notificationwire.Payload, error) {
 	if notice.Wire != nil {
 		return notice.Wire, nil
 	}

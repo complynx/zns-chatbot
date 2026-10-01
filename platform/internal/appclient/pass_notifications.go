@@ -15,7 +15,10 @@ func (c Host) PendingPassNotifications(ctx context.Context) ([]passbooking.Notif
 	return registrationHTTPResult(notices, err)
 }
 
-func (c Host) BeginPassNotification(ctx context.Context, input passbooking.NotificationAttempt) (passbooking.NotificationAdmission, error) {
+func (c Host) BeginPassNotification(
+	ctx context.Context,
+	input passbooking.NotificationAttempt,
+) (passbooking.NotificationAdmission, error) {
 	body, err := json.Marshal(input)
 	if err != nil {
 		return passbooking.NotificationAdmission{}, err

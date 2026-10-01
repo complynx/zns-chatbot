@@ -125,9 +125,12 @@ func TestPassportStartupReminderGlobalAtomicMarker(t *testing.T) {
 					`UPDATE core.pass_profiles SET passport='synthetic' WHERE owner='alice'`,
 				)
 				require.NoError(t, err)
-				gate, beginErr := service.BeginNotification(t.Context(), passbooking.NotificationAttempt{Attempt: delivery.Attempt{
-					ID: noticeID, Generation: notices[0].DeliveryAttempt,
-				}, Wire: notificationTestWire()})
+				gate, beginErr := service.BeginNotification(
+					t.Context(),
+					passbooking.NotificationAttempt{Attempt: delivery.Attempt{
+						ID: noticeID, Generation: notices[0].DeliveryAttempt,
+					}, Wire: notificationTestWire()},
+				)
 				require.NoError(t, beginErr)
 				require.False(t, gate.Ready)
 				require.Equal(t, "notification_no_longer_current", gate.Reason)

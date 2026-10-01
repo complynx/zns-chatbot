@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -82,7 +84,10 @@ func TestRemindersQueueOnceUnderConcurrentScansAndClaims(t *testing.T) {
 		group.Go(func() {
 			gate, claimError := service.BeginNotification(
 				t.Context(),
-				passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt}, Wire: notificationTestWire()},
+				passbooking.NotificationAttempt{
+					Attempt: delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt},
+					Wire:    notificationTestWire(),
+				},
 			)
 			count := 0
 			if gate.Ready {
@@ -166,7 +171,10 @@ func TestReminderRechecksPaymentAndZeroTotalAtDelivery(t *testing.T) {
 			prepared := preparedOrderTestNotice(t, service, id)
 			gate, err := service.BeginNotification(
 				t.Context(),
-				passbooking.NotificationAttempt{Attempt: delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt}, Wire: notificationTestWire()},
+				passbooking.NotificationAttempt{
+					Attempt: delivery.Attempt{ID: id, Generation: prepared.DeliveryAttempt},
+					Wire:    notificationTestWire(),
+				},
 			)
 			require.NoError(t, err)
 			assert.False(t, gate.Ready, "outdated reminder must not be delivered")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
 	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/jackc/pgx/v5"

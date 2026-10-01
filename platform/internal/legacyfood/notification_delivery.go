@@ -59,7 +59,11 @@ func (s Service) BeginNotification(ctx context.Context, input NotificationAttemp
 		if err = s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {
 			return NotificationAdmission{}, err
 		}
-		return NotificationAdmission{Admission: delivery.Admission{Reason: outcome.Reason}}, core.DatabaseOperationError(tx.Commit(ctx))
+		return NotificationAdmission{
+			Admission: delivery.Admission{Reason: outcome.Reason},
+		}, core.DatabaseOperationError(
+			tx.Commit(ctx),
+		)
 	}
 	if row.LastUncertainAttempt.Valid && row.UncertainResends >= notificationUncertainResendLimit {
 		gate, err := s.exhaustNotificationAdmission(ctx, tx, attempt)

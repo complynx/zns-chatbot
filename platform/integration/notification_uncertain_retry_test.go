@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 
 	"github.com/stretchr/testify/assert"
@@ -22,11 +24,12 @@ import (
 
 // The sink receives the real message before the adapter loses its response.
 type notificationLostResponse struct {
-	mu    sync.Mutex
-	text  string
-	calls int
-	drops int
-	wires []telegram.Send
+	mu      sync.Mutex
+	text    string
+	calls   int
+	drops   int
+	wires   []telegram.Send
+	observe func(*http.Request, telegram.Send) error
 }
 
 func (l *notificationLostResponse) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -42,6 +45,11 @@ func (l *notificationLostResponse) RoundTrip(request *http.Request) (*http.Respo
 	var message telegram.Send
 	if err = json.Unmarshal(body, &message); err != nil {
 		return nil, err
+	}
+	if l.observe != nil {
+		if err = l.observe(request, message); err != nil {
+			return nil, err
+		}
 	}
 	response, err := http.DefaultTransport.RoundTrip(request)
 	if err != nil || message.ChatID != 202 {
@@ -81,17 +89,32 @@ func (l *notificationLostResponse) payloads() []telegram.Send {
 	return slices.Clone(l.wires)
 }
 
+func setNotificationLanguage(t *testing.T, r *notificationRuntimeFixture, language string) {
+	t.Helper()
+	_, err := r.f.db.Exec(t.Context(), `UPDATE core.users SET language=$1 WHERE id='bob'`, language)
+	require.NoError(t, err)
+	pref, err := r.f.b.API.Preferences(t.Context(), "bob")
+	require.NoError(t, err)
+	require.Equal(t, language, pref.Language)
+}
+
+func notificationWireSnapshot(t *testing.T, r *notificationRuntimeFixture) *notificationwire.Payload {
+	t.Helper()
+	var raw []byte
+	err := r.f.db.QueryRow(t.Context(), "SELECT delivery_wire_payload FROM "+r.table+" WHERE id=$1", r.first).Scan(&raw)
+	require.NoError(t, err)
+	wire, err := notificationwire.Decode(raw)
+	require.NoError(t, err)
+	return wire
+}
+
 func TestNotificationUncertainRetryPreservesWireAfterLanguageChange(t *testing.T) {
 	t.Parallel()
 	for _, domain := range []string{"orders", "registration", "massage", "food"} {
 		t.Run(domain, func(t *testing.T) {
 			t.Parallel()
 			r := notificationRuntime(t, domain)
-			_, err := r.f.db.Exec(t.Context(), `UPDATE core.users SET language='en' WHERE id='bob'`)
-			require.NoError(t, err)
-			initial, err := r.f.b.API.Preferences(t.Context(), "bob")
-			require.NoError(t, err)
-			require.Equal(t, "en", initial.Language)
+			setNotificationLanguage(t, r, "en")
 			loss := &notificationLostResponse{drops: 1}
 			r.f.b.TG.HTTP = &http.Client{Transport: loss}
 			dispatch := exactNotificationDelivery(r, domain)
@@ -104,11 +127,7 @@ func TestNotificationUncertainRetryPreservesWireAfterLanguageChange(t *testing.T
 			if domain == "massage" {
 				require.NotEmpty(t, before[0].Markup.Rows)
 			}
-			_, err = r.f.db.Exec(t.Context(), `UPDATE core.users SET language='ru' WHERE id='bob'`)
-			require.NoError(t, err)
-			changed, err := r.f.b.API.Preferences(t.Context(), "bob")
-			require.NoError(t, err)
-			require.Equal(t, "ru", changed.Language)
+			setNotificationLanguage(t, r, "ru")
 			r.restartNotificationOwner(t, domain)
 			r.wake(t)
 			dispatch = exactNotificationDelivery(r, domain)
@@ -120,6 +139,225 @@ func TestNotificationUncertainRetryPreservesWireAfterLanguageChange(t *testing.T
 			assert.Equal(t, "sent", r.status(t, r.first).State)
 		})
 	}
+}
+
+func TestNotificationUncertainRetryCapturesLegacyNextWire(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			setNotificationLanguage(t, r, "en")
+			original := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: original}
+			require.NoError(t, exactNotificationDelivery(r, domain)(t.Context(), r.first))
+			requireNotificationAccepted(t, r, original)
+			unknown := r.status(t, r.first)
+			require.Equal(t, "pending", unknown.State)
+			// A pre-upgrade unknown has a real lost response but no recorded wire.
+			seedLegacyUnknownWithoutWire(t, r, domain)
+			require.Nil(t, notificationWireSnapshot(t, r))
+			assert.Equal(t, unknown.LastUncertainAttempt, r.status(t, r.first).LastUncertainAttempt)
+			setNotificationLanguage(t, r, "ru")
+			next := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: next}
+			r.restartNotificationOwner(t, domain)
+			require.NoError(t, recoverNotificationDelivery(r, domain)(t.Context()))
+			r.wake(t)
+			require.NoError(t, exactNotificationDelivery(r, domain)(t.Context(), r.first))
+			requireNotificationAccepted(t, r, next)
+			wire := notificationWireSnapshot(t, r)
+			require.NotNil(t, wire)
+			assert.NotEqual(
+				t,
+				original.payloads()[0].Text,
+				wire.Text,
+				"legacy capture describes next wire, not lost historical content",
+			)
+			assert.Equal(t, int64(1), r.status(t, r.first).UncertainResends)
+			setNotificationLanguage(t, r, "en")
+			r.restartNotificationOwner(t, domain)
+			r.wake(t)
+			require.NoError(t, exactNotificationDelivery(r, domain)(t.Context(), r.first))
+			actual := next.payloads()
+			require.GreaterOrEqual(t, len(actual), 2)
+			assert.Equal(t, actual[0].Text, actual[1].Text)
+			assert.Equal(t, actual[0].Markup, actual[1].Markup)
+			assert.Equal(t, int64(2), r.status(t, r.first).UncertainResends)
+			assert.Equal(t, "sent", r.status(t, r.first).State)
+		})
+	}
+}
+
+func seedLegacyUnknownWithoutWire(t *testing.T, r *notificationRuntimeFixture, domain string) {
+	t.Helper()
+	tx, err := r.f.db.Begin(t.Context())
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(t.Context()) }()
+	_, err = tx.Exec(
+		t.Context(),
+		"UPDATE "+r.table+" SET delivery_wire_payload=NULL,delivery_state='unknown',lease_until=NULL WHERE id=$1",
+		r.first,
+	)
+	require.NoError(t, err)
+	_, err = tx.Exec(
+		t.Context(),
+		`UPDATE core.delivery_queue SET state='unknown',lease_until=NULL WHERE bot_id=$1 AND owner_kind=$2 AND owner_key=$3 AND effect_key='send'`,
+		syntheticDeliverySettings().BotID,
+		string(notificationQueueOwner(domain)),
+		strconv.FormatInt(r.first, 10),
+	)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+}
+
+func TestNotificationUncertainRetryPreservesFoodReviewButtons(t *testing.T) {
+	t.Parallel()
+	r := foodReviewNotificationRuntime(t)
+	setNotificationLanguage(t, r, "en")
+	business := notificationBusinessSnapshot(t, r)
+	loss := &notificationLostResponse{drops: 1}
+	r.f.b.TG.HTTP = &http.Client{Transport: loss}
+	require.NoError(t, r.f.b.DeliverFoodNotification(t.Context(), r.first))
+	requireNotificationAccepted(t, r, loss)
+	before := loss.payloads()
+	require.Len(t, before, 1)
+	require.NotEmpty(t, before[0].Markup.Rows)
+	setNotificationLanguage(t, r, "ru")
+	r.restartNotificationOwner(t, "food")
+	r.wake(t)
+	require.NoError(t, r.f.b.DeliverFoodNotification(t.Context(), r.first))
+	after := loss.payloads()
+	require.GreaterOrEqual(t, len(after), 2)
+	assert.Equal(t, before[0].Text, after[1].Text)
+	assert.Equal(t, before[0].Markup, after[1].Markup, "captions and exact callback tokens remain the admitted buttons")
+	assert.Equal(t, "sent", r.status(t, r.first).State)
+	assert.JSONEq(t, business, notificationBusinessSnapshot(t, r))
+}
+
+func notificationWireObserver(r *notificationRuntimeFixture) func(*http.Request, telegram.Send) error {
+	return func(request *http.Request, send telegram.Send) error {
+		if send.ChatID != 202 {
+			return nil
+		}
+		var state string
+		var raw []byte
+		err := r.f.db.QueryRow(request.Context(), "SELECT delivery_state,delivery_wire_payload FROM "+r.table+" WHERE id=$1", r.first).
+			Scan(&state, &raw)
+		if err != nil {
+			return err
+		}
+		wire, err := notificationwire.Decode(raw)
+		if err != nil {
+			return err
+		}
+		if state != "sending" || wire == nil || wire.Text != send.Text {
+			return errors.New("notification wire was not committed before transport")
+		}
+		var markup telegram.Markup
+		if json.Unmarshal(wire.Markup, &markup) != nil || !reflect.DeepEqual(markup, send.Markup) {
+			return errors.New("notification markup was not committed before transport")
+		}
+		return nil
+	}
+}
+
+func TestNotificationUncertainRetryWireCommittedBeforeTransport(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			loss := &notificationLostResponse{drops: 1, observe: notificationWireObserver(r)}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			require.NoError(t, exactNotificationDelivery(r, domain)(t.Context(), r.first))
+			requireNotificationAccepted(t, r, loss)
+			require.NotNil(t, notificationWireSnapshot(t, r))
+			assert.Equal(t, "pending", r.status(t, r.first).State)
+		})
+	}
+}
+
+func TestNotificationUncertainRetryPrewireDoesNotCapture(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			_, err := r.f.db.Exec(
+				t.Context(),
+				`INSERT INTO core.delivery_pacing(bot_id,chat,not_before) VALUES($1,'',clock_timestamp()+interval '1 minute') ON CONFLICT(bot_id,chat) DO UPDATE SET not_before=EXCLUDED.not_before`,
+				syntheticDeliverySettings().BotID,
+			)
+			require.NoError(t, err)
+			loss := &notificationLostResponse{}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			require.NoError(t, exactNotificationDelivery(r, domain)(t.Context(), r.first))
+			assert.Empty(t, loss.payloads())
+			assert.Nil(t, notificationWireSnapshot(t, r))
+			current := r.status(t, r.first)
+			assert.Equal(t, "pending", current.State)
+			assert.Zero(t, current.UncertainResends)
+		})
+	}
+}
+
+func TestNotificationUncertainRetryMissing429KeepsConfiguredCooldown(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			bindDefaultNotificationPacing(t, r)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			dispatch := exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			requireNotificationAccepted(t, r, loss)
+			original := r.status(t, r.first)
+			spy := attachNotificationWireSpy(t, r.f, "missing_rate")
+			r.f.b.TG.HTTP = nil
+			r.wake(t)
+			before := time.Now()
+			require.NoError(t, dispatch(t.Context(), r.first))
+			current := r.status(t, r.first)
+			require.Equal(t, "pending", current.State)
+			assert.Equal(t, int64(1), current.UncertainResends)
+			assert.Equal(t, original.LastUncertainAttempt, current.LastUncertainAttempt)
+			assert.Equal(t, original.LastUncertainRecordedAt, current.LastUncertainRecordedAt)
+			assert.Zero(t, current.FailureCount)
+			assert.True(t, current.AvailableAt.After(before.Add(29*time.Second)))
+			assertNotificationCooldown(t, r, domain, before.Add(29*time.Second))
+			require.NoError(t, dispatch(t.Context(), r.first))
+			assert.Equal(
+				t,
+				1,
+				spy.calls(202),
+				"missing provider cooldown cannot fall back to only the uncertainty base",
+			)
+			assert.Equal(t, int64(1), r.status(t, r.first).UncertainResends)
+		})
+	}
+}
+
+func assertNotificationCooldown(t *testing.T, r *notificationRuntimeFixture, domain string, earliest time.Time) {
+	t.Helper()
+	var global, chat, queue time.Time
+	require.NoError(t, r.f.db.QueryRow(
+		t.Context(),
+		`SELECT max(not_before) FILTER(WHERE chat=''),max(not_before) FILTER(WHERE chat='202') FROM core.delivery_pacing WHERE bot_id=$1`,
+		syntheticDeliverySettings().BotID,
+	).Scan(&global, &chat))
+	require.NoError(t, r.f.db.QueryRow(
+		t.Context(),
+		`SELECT not_before FROM core.delivery_queue WHERE bot_id=$1 AND owner_kind=$2 AND owner_key=$3 AND effect_key='send'`,
+		syntheticDeliverySettings().BotID,
+		string(notificationQueueOwner(domain)),
+		strconv.FormatInt(r.first, 10),
+	).Scan(&queue))
+	assert.True(t, global.After(earliest))
+	assert.True(t, chat.After(earliest))
+	assert.True(t, queue.After(earliest))
 }
 
 func requireNotificationAccepted(t *testing.T, r *notificationRuntimeFixture, loss *notificationLostResponse) {
@@ -161,7 +399,11 @@ func TestNotificationUncertainRetrySurvivesRestart(t *testing.T) {
 			first := r.status(t, r.first)
 			require.Equal(t, "pending", first.State)
 			require.Equal(t, 1, loss.count())
-			assert.GreaterOrEqual(t, time.Until(first.AvailableAt), r.f.b.Delivery.UncertaintyRetryBaseOrDefault()-time.Second)
+			assert.GreaterOrEqual(
+				t,
+				time.Until(first.AvailableAt),
+				r.f.b.Delivery.UncertaintyRetryBaseOrDefault()-time.Second,
+			)
 			assert.Equal(t, first.Attempt, first.LastUncertainAttempt)
 			assert.Equal(t, "telegram_outcome_unknown", first.LastUncertainReason)
 			require.NotNil(t, first.LastUncertainRecordedAt)

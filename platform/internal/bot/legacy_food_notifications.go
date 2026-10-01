@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"strconv"
+
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 
 	"github.com/complynx/zns-chatbot/platform/internal/bot/dbgen"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
@@ -15,7 +16,11 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
-func (b *Bot) foodNotificationWire(ctx context.Context, notice legacyfood.Notification, payload foodNotificationPayload) (*notificationwire.Payload, error) {
+func (b *Bot) foodNotificationWire(
+	ctx context.Context,
+	notice legacyfood.Notification,
+	payload foodNotificationPayload,
+) (*notificationwire.Payload, error) {
 	if notice.Wire != nil {
 		return notice.Wire, nil
 	}
@@ -178,7 +183,10 @@ func (b *Bot) sendPreparedFoodNotice(
 	}
 	gate, err := b.Host.BeginFoodNotification(
 		ctx,
-		legacyfood.NotificationAttempt{Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt}, Wire: wire},
+		legacyfood.NotificationAttempt{
+			Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+			Wire:    wire,
+		},
 	)
 	if err != nil || !gate.Ready {
 		return notice, false, err

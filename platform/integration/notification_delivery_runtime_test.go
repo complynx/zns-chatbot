@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -19,6 +19,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/complynx/zns-chatbot/platform/internal/notificationwire"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,10 +28,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
+	"github.com/complynx/zns-chatbot/platform/internal/legacyfood"
 	"github.com/complynx/zns-chatbot/platform/internal/massage"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -215,6 +221,62 @@ func foodNotificationRuntime(t *testing.T) *notificationRuntimeFixture {
 	return r
 }
 
+func foodReviewNotificationRuntime(t *testing.T) *notificationRuntimeFixture {
+	t.Helper()
+	f, service := foodBotFixture(t)
+	order, err := service.Execute(t.Context(), "alice", legacyfood.Command{
+		EventID: "food-bot", Name: "toggle_activity", Activity: "open", Key: "wire-party",
+	})
+	require.NoError(t, err)
+	order, err = service.Execute(t.Context(), "alice", legacyfood.Command{
+		EventID: order.EventID, OrderID: order.ID, Version: order.Version,
+		Name: "begin_payment", Kind: legacyfood.Activity, Key: "wire-pay",
+	})
+	require.NoError(t, err)
+	proof, err := f.b.API.UploadProof(
+		t.Context(),
+		"alice",
+		"receipt.txt",
+		[]byte("synthetic notification review proof"),
+	)
+	require.NoError(t, err)
+	order, err = service.Execute(t.Context(), "alice", legacyfood.Command{
+		EventID: order.EventID, OrderID: order.ID, Version: order.Version,
+		Name: "submit_proof", Kind: legacyfood.Activity, Key: "wire-proof",
+		Generation: order.ActivityPayment.Generation, ProofID: proof.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, legacyfood.Submitted, order.ActivityPayment.Status)
+	r := &notificationRuntimeFixture{
+		f: f, table: "core.food_notifications", endpoint: "/internal/food/notifications/",
+		receiptTable: "bot.order_cards", deliver: f.b.DeliverFoodNotifications,
+	}
+	require.NoError(t, f.db.QueryRow(t.Context(),
+		`SELECT id FROM core.food_notifications WHERE owner='bob' AND kind=$1 AND payload->>'order_id'=$2`,
+		legacyfood.Submitted, order.ID).Scan(&r.first))
+	return r
+}
+
+func bindDefaultNotificationPacing(t *testing.T, r *notificationRuntimeFixture) {
+	t.Helper()
+	cfg, err := config.Load("health", []byte("env: sandbox\n"), nil)
+	require.NoError(t, err)
+	cfg.Auth.Zitadel.BotID = strconv.FormatInt(syntheticDeliverySettings().BotID, 10)
+	cfg.Telegram.Token = cfg.Auth.Zitadel.BotID + ":synthetic"
+	settings, err := cfg.DeliverySettings()
+	require.NoError(t, err)
+	require.Equal(t, 5*time.Second, settings.UncertaintyRetryBaseOrDefault())
+	require.Equal(t, 30*time.Second, settings.Fallback)
+	services := appservices.NewServices(r.f.db, appservices.Options{
+		LegacyOrderBotID: 77, Delivery: settings,
+		NativeRegistrationAuthorizer: fixtureNativeRegistrationAuthorizer(r.f.db),
+	})
+	server := httptest.NewServer(api.Handler(services, r.f.b.Host.Signer, slog.New(slog.DiscardHandler)))
+	t.Cleanup(server.Close)
+	r.f.b.API.Base, r.f.b.Host.Base = server.URL, server.URL
+	r.f.b.Delivery = settings
+}
+
 func (r *notificationRuntimeFixture) status(t *testing.T, id int64) notificationRuntimeStatus {
 	t.Helper()
 	endpoint := r.endpoint
@@ -327,6 +389,9 @@ func (s *notificationWireSpy) reject(w http.ResponseWriter, chat int64, text str
 	}
 	w.Header().Set("Content-Type", "application/json")
 	switch {
+	case s.mode == "missing_rate" && s.counts[chat] <= 2:
+		_, _ = fmt.Fprint(w, `{"ok":false,"error_code":429,"description":"synthetic missing cooldown"}`)
+		return true
 	case s.mode == "rate" && s.counts[chat] <= 2:
 		_, _ = fmt.Fprint(
 			w,

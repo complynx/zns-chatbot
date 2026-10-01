@@ -11,7 +11,10 @@ import (
 
 func TestPayloadRoundTrip(t *testing.T) {
 	t.Parallel()
-	p := Payload{Text: "Synthetic text", Markup: json.RawMessage(`{"inline_keyboard":[[{"text":"Open","callback_data":"open:1"}]]}`)}
+	p := Payload{
+		Text:   "Synthetic text",
+		Markup: json.RawMessage(`{"inline_keyboard":[[{"text":"Open","callback_data":"open:1"}]]}`),
+	}
 	encoded, err := p.Encode()
 	require.NoError(t, err)
 	actual, err := Decode(encoded)

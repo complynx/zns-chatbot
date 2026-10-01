@@ -15,7 +15,10 @@ func (c Host) PendingNotifications(ctx context.Context) ([]orders.Notification, 
 	return notices, err
 }
 
-func (c Host) BeginNotification(ctx context.Context, input orders.NotificationAttempt) (orders.NotificationAdmission, error) {
+func (c Host) BeginNotification(
+	ctx context.Context,
+	input orders.NotificationAttempt,
+) (orders.NotificationAdmission, error) {
 	body, err := json.Marshal(input)
 	if err != nil {
 		return orders.NotificationAdmission{}, err
