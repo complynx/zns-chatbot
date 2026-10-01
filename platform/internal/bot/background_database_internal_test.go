@@ -287,8 +287,15 @@ func testContinuationBatchSQLFailure(t *testing.T, stage string) {
 		attempt, ready, err := b.beginBotIntent(t.Context(), intent, botRenderedDelivery{})
 		require.NoError(t, err)
 		require.True(t, ready)
-		require.NoError(t, b.finishBotIntent(t.Context(), attempt,
-			delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}, botdelivery.Continuation{}, false))
+		require.NoError(
+			t,
+			b.finishBotIntent(
+				t.Context(),
+				attempt,
+				botTestTransportResult(delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}, false),
+				botdelivery.Continuation{},
+			),
+		)
 	}
 	fault := &receiptDatabaseFault{prefix: stage}
 	config := db.Config()
@@ -359,7 +366,12 @@ func TestBackgroundDatabaseReceiptPersistenceTransport(t *testing.T) {
 			t.Cleanup(broken.Close)
 			b.DB = broken
 			outcome := delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}
-			err = b.finishBotIntent(t.Context(), attempt, outcome, botdelivery.Continuation{}, false)
+			err = b.finishBotIntent(
+				t.Context(),
+				attempt,
+				botTestTransportResult(outcome, false),
+				botdelivery.Continuation{},
+			)
 			require.True(t, fault.fired, "transport fault must reach the selected receipt SQL boundary")
 			require.NoError(t, fault.closeError)
 			require.ErrorIs(t, err, core.ErrDatabase)
@@ -369,7 +381,15 @@ func TestBackgroundDatabaseReceiptPersistenceTransport(t *testing.T) {
 			require.Equal(t, delivery.Sending, pending.State)
 			require.Zero(t, pending.MessageID)
 			b.DB = db
-			require.NoError(t, b.finishBotIntent(t.Context(), attempt, outcome, botdelivery.Continuation{}, false))
+			require.NoError(
+				t,
+				b.finishBotIntent(
+					t.Context(),
+					attempt,
+					botTestTransportResult(outcome, false),
+					botdelivery.Continuation{},
+				),
+			)
 			finished, err := botdelivery.Read(t.Context(), db, b.Delivery.BotID, queued.Reference, false)
 			require.NoError(t, err)
 			require.Equal(t, delivery.Succeeded, finished.State)
@@ -399,7 +419,7 @@ func TestBackgroundDatabaseInboxResultAfterCancellation(t *testing.T) {
 
 func TestBackgroundDatabaseRecoveryTransportPreservesIntent(t *testing.T) {
 	t.Parallel()
-	for _, stage := range []string{"begin", "SELECT operation_key,effect_key FROM bot.delivery_intents", "UPDATE bot.delivery_intents SET state='unknown'", "commit"} {
+	for _, stage := range []string{"begin", "SELECT operation_key,effect_key,CASE WHEN", "UPDATE bot.delivery_intents SET last_uncertain_attempt", "commit"} {
 		t.Run(stage, func(t *testing.T) {
 			t.Parallel()
 			db := foodPendingDatabase(t)
@@ -432,7 +452,7 @@ func TestBackgroundDatabaseRecoveryTransportPreservesIntent(t *testing.T) {
 			require.NoError(t, b.RecoverBotIntents(t.Context()))
 			pending, err = botdelivery.Read(t.Context(), db, b.Delivery.BotID, queued.Reference, false)
 			require.NoError(t, err)
-			require.Equal(t, delivery.Uncertain, pending.State)
+			require.Equal(t, delivery.Deferred, pending.State)
 			require.Equal(t, attempt.Attempt, pending.Attempt)
 			require.NoError(t, b.RecoverBotIntents(t.Context()), "empty recovery is a normal control")
 		})

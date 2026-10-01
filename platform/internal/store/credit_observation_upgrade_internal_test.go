@@ -19,10 +19,12 @@ import (
 )
 
 const creditObservationUpgrade = "089_credit_usage_observation.sql"
+const deliveryTransportUpgrade = "092_bot_delivery_transport_uncertainty.sql"
+const adminPageIngressUpgrade = "091_admin_page_ingress_proof.sql"
 
 func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	t.Parallel()
-	db := creditObservationUpgradeDatabase(t)
+	db := isolatedCreditObservationUpgradeDatabase(t)
 	expectedOld := applyCreditObservationPredecessor(t, db)
 	require.Equal(t, expectedOld, queueUpgradeLedger(t, db))
 	oldLedger := queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql")
@@ -44,8 +46,24 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	expected = append(expected, queueUpgradeLedgerEntry{
 		Name: passDeliveryTargetsUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(passBody)),
 	})
+	ingressBody, err := migrations.ReadFile("migrations/" + adminPageIngressUpgrade)
+	require.NoError(t, err)
+	expected = append(expected, queueUpgradeLedgerEntry{
+		Name: adminPageIngressUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(ingressBody)),
+	})
+	transportBody, err := migrations.ReadFile("migrations/" + deliveryTransportUpgrade)
+	require.NoError(t, err)
+	expected = append(expected, queueUpgradeLedgerEntry{
+		Name: deliveryTransportUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(transportBody)),
+	})
 	require.NoError(t, Migrate(t.Context(), db))
-	require.Equal(t, expected, queueUpgradeLedger(t, db), "only exact 089 and 090 checksum entries are added")
+	require.Equal(t, expected, queueUpgradeLedger(t, db), "only exact 089, 090, 091 and 092 checksum entries are added")
+	var inventedMetadata, spentBudget int64
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT
+ (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL OR last_confirmed_attempt IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
+		Scan(&inventedMetadata, &spentBudget))
+	require.Zero(t, inventedMetadata, "upgrade must not invent historical uncertainty")
+	require.Zero(t, spentBudget, "upgrade must not consume resend budget")
 	require.JSONEq(t, oldLedger, queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql"),
 		"all predecessor ledger fields including applied_at remain unchanged")
 	require.JSONEq(t, before, creditObservationUpgradeState(t, db),
@@ -66,18 +84,42 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	require.Equal(t, [4]int64{1, 0, 1, 0}, item.Bases)
 	require.Equal(t, credits.UsageTokenObservation{Sum: 17, KnownReceipts: 1, UnknownReceipts: 1}, item.Tokens[0])
 	checkPassDeliveryTargetsUpgrade(t, db)
-	upgradedLedger := queueUpgradeLedgerSnapshot(t, db, passDeliveryTargetsUpgrade)
+	upgradedLedger := queueUpgradeLedgerSnapshot(t, db, deliveryTransportUpgrade)
 	require.NoError(t, Migrate(t.Context(), db))
 	require.Equal(t, expected, queueUpgradeLedger(t, db))
-	require.JSONEq(t, upgradedLedger, queueUpgradeLedgerSnapshot(t, db, passDeliveryTargetsUpgrade))
+	require.JSONEq(t, upgradedLedger, queueUpgradeLedgerSnapshot(t, db, deliveryTransportUpgrade))
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT
+ (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL OR last_confirmed_attempt IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
+		Scan(&inventedMetadata, &spentBudget))
+	require.Zero(t, inventedMetadata, "replay must not invent historical uncertainty")
+	require.Zero(t, spentBudget, "replay must not consume resend budget")
 	require.JSONEq(t, before, creditObservationUpgradeState(t, db),
 		"scrape and migration replay preserve every accounting field")
 	checkCreditObservationIndexPlan(t, db, item)
 }
 
-func creditObservationUpgradeDatabase(t *testing.T) *pgxpool.Pool {
+func isolatedCreditObservationUpgradeDatabase(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	address := os.Getenv("TEST_DATABASE_URL")
+	if address != "" {
+		// Only this fixture needs a separate cluster for the index safety horizon.
+		address = os.Getenv("TEST_CREDIT_UPGRADE_DATABASE_URL")
+		if address == "" {
+			t.Fatal(
+				"TEST_CREDIT_UPGRADE_DATABASE_URL required: use a separate PostgreSQL cluster for the credit upgrade proof",
+			)
+		}
+	}
+	return creditObservationUpgradeDatabaseAt(t, address)
+}
+
+func creditObservationUpgradeDatabase(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	return creditObservationUpgradeDatabaseAt(t, os.Getenv("TEST_DATABASE_URL"))
+}
+
+func creditObservationUpgradeDatabaseAt(t *testing.T, address string) *pgxpool.Pool {
+	t.Helper()
 	if address == "" {
 		if os.Getenv("CI") != "" {
 			t.Fatal("TEST_DATABASE_URL required in CI")
@@ -113,8 +155,8 @@ func applyCreditObservationPredecessor(t *testing.T, db *pgxpool.Pool) []queueUp
 	t.Helper()
 	entries, err := migrations.ReadDir("migrations")
 	require.NoError(t, err)
-	require.Equal(t, passDeliveryTargetsUpgrade, entries[len(entries)-1].Name(),
-		"upgrade proof is pinned to the 090 embedded schema epoch")
+	require.Equal(t, deliveryTransportUpgrade, entries[len(entries)-1].Name(),
+		"upgrade proof is pinned to the 092 embedded schema epoch")
 	tx, err := db.Begin(t.Context())
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
@@ -185,7 +227,7 @@ func creditObservationUpgradeState(t *testing.T, db *pgxpool.Pool) string {
  'attempts',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM credits.attempts a),
  'accounts',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.payer) FROM credits.accounts a),
  'policy',(SELECT jsonb_agg(to_jsonb(p)) FROM credits.default_policy p),
- 'bot_intents',(SELECT jsonb_agg(to_jsonb(i) ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`).Scan(&raw))
+ 'bot_intents',(SELECT jsonb_agg(to_jsonb(i)-ARRAY['last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends','wire_capture_key','wire_capture_hash','last_confirmed_attempt'] ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`).Scan(&raw))
 	return raw
 }
 

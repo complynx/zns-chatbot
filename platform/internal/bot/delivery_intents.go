@@ -14,6 +14,8 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
+const botEditTargetMissing = "edit_target_missing"
+
 // enqueueBotIntent binds one immutable effect to the shared transport lane.
 // Retrying a terminal effect returns its receipt; it never revives that effect.
 func (b *Bot) enqueueBotIntent(
@@ -47,6 +49,7 @@ func (b *Bot) beginBotIntent(
 	result, err := b.Host.BeginBotDelivery(
 		ctx,
 		botdelivery.BeginRequest{
+			Wire:         rendered.Wire,
 			Observed:     observed,
 			Pass:         rendered.Receipt.Pass,
 			Target:       rendered.Payload.MessageID,
@@ -59,10 +62,13 @@ func (b *Bot) beginBotIntent(
 func (b *Bot) finishBotIntent(
 	ctx context.Context,
 	attempt botdelivery.Intent,
-	outcome delivery.Outcome,
+	result botTransportResult,
 	receipt botdelivery.Continuation,
-	fallback bool,
 ) error {
+	fallback := result.Fallback
+	if attempt.BotID != b.Delivery.BotID {
+		return botdelivery.ErrBinding
+	}
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
 		return core.DatabaseOperationError(err)
@@ -72,14 +78,13 @@ func (b *Bot) finishBotIntent(
 	if err != nil {
 		return err
 	}
-	if current.Attempt != attempt.Attempt ||
-		(current.State != delivery.Sending && current.State != delivery.Uncertain) {
+	if current.Attempt != attempt.Attempt {
 		return botdelivery.ErrBinding
 	}
-	if fallback && (current.Phase != botPhaseEdit || outcome.Kind != delivery.Deferred) {
-		return botdelivery.ErrBinding
+	if current.State == delivery.Rejected || current.State == delivery.Cancelled {
+		return recordBotTerminalReceipt(ctx, tx, current, result)
 	}
-	outcome, deadline, err := delivery.Finish(ctx, tx, b.Delivery, current.QueueReference(), outcome)
+	outcome, deadline, err := b.finishBotTransportOutcome(ctx, tx, current, result)
 	if err != nil {
 		return err
 	}
@@ -121,7 +126,122 @@ func (b *Bot) finishBotIntent(
 	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
-func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent, terminal bool) error {
+// The caller holds the owner row lock and has checked the exact admitted attempt.
+func (b *Bot) finishBotTransportOutcome(
+	ctx context.Context,
+	tx pgx.Tx,
+	current botdelivery.Intent,
+	result botTransportResult,
+) (delivery.Outcome, time.Time, error) {
+	outcome, fallback := result.Outcome, result.Fallback
+	known := knownBotTransportOutcome(result.ProviderOutcome)
+	lateKnown := false
+	if current.State == delivery.Deferred && known {
+		err := tx.QueryRow(ctx, `SELECT COALESCE(last_uncertain_attempt=$4,false)
+ AND last_confirmed_attempt IS DISTINCT FROM $4 FROM bot.delivery_intents
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+			current.BotID, current.Operation, current.Effect, current.Attempt).Scan(&lateKnown)
+		if err != nil {
+			return delivery.Outcome{}, time.Time{}, core.DatabaseOperationError(err)
+		}
+	}
+	if !lateKnown && current.State != delivery.Sending && current.State != delivery.Uncertain {
+		return delivery.Outcome{}, time.Time{}, botdelivery.ErrBinding
+	}
+	if fallback && (current.Phase != botPhaseEdit || outcome.Kind != delivery.Deferred) {
+		return delivery.Outcome{}, time.Time{}, botdelivery.ErrBinding
+	}
+	var deadline time.Time
+	var err error
+	if lateKnown && outcome.Kind == delivery.Succeeded {
+		outcome, deadline, err = delivery.FinishUncertainSuccess(ctx, tx, b.Delivery, current.QueueReference(), outcome)
+	} else {
+		outcome, deadline, err = delivery.Finish(ctx, tx, b.Delivery, current.QueueReference(), outcome)
+	}
+	if err != nil {
+		return delivery.Outcome{}, time.Time{}, err
+	}
+	if known {
+		_, err = tx.Exec(ctx, `UPDATE bot.delivery_intents SET last_confirmed_attempt=$4
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3 AND attempt=$4`,
+			current.BotID, current.Operation, current.Effect, current.Attempt)
+		if err != nil {
+			return delivery.Outcome{}, time.Time{}, core.DatabaseOperationError(err)
+		}
+	}
+	return b.retryBotTransport(ctx, tx, current, outcome, deadline)
+}
+
+func knownBotTransportOutcome(outcome delivery.Outcome) bool {
+	if !outcome.Valid() {
+		return false
+	}
+	switch outcome.Kind {
+	case delivery.Succeeded:
+		return true
+	case delivery.Deferred:
+		return outcome.Reason == "telegram_rate_limit"
+	case delivery.Rejected:
+		return outcome.Reason == "telegram_recipient_rejected"
+	case delivery.Paused:
+		return outcome.Reason == "telegram_service_rejected"
+	case delivery.Parked:
+		return outcome.Reason == "telegram_invalid_cooldown"
+	case delivery.Sending, delivery.Cancelled, delivery.Uncertain:
+		return false
+	default:
+		return false
+	}
+}
+
+// Late confirmed responses preserve evidence without reviving terminal work.
+func recordBotTerminalReceipt(
+	ctx context.Context,
+	tx pgx.Tx,
+	current botdelivery.Intent,
+	result botTransportResult,
+) error {
+	outcome, fallback := result.Outcome, result.Fallback
+	if outcome.Kind != delivery.Succeeded && knownBotTransportOutcome(result.ProviderOutcome) {
+		if fallback && current.Phase != botPhaseEdit {
+			return botdelivery.ErrBinding
+		}
+		updated, err := tx.Exec(ctx, `UPDATE bot.delivery_intents SET last_confirmed_attempt=$4
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3 AND attempt=$4
+ AND last_uncertain_attempt=$4 AND state IN ('failed','cancelled') AND message_id=0`,
+			current.BotID, current.Operation, current.Effect, current.Attempt)
+		if err != nil {
+			return core.DatabaseOperationError(err)
+		}
+		if updated.RowsAffected() != 1 {
+			return botdelivery.ErrBinding
+		}
+		return core.DatabaseOperationError(tx.Commit(ctx))
+	}
+	if fallback || outcome.Kind != delivery.Succeeded || outcome.MessageID <= 0 {
+		return botdelivery.ErrBinding
+	}
+	updated, err := tx.Exec(ctx, `UPDATE bot.delivery_intents SET message_id=$5
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3 AND attempt=$4
+ AND last_uncertain_attempt=$4 AND state IN ('failed','cancelled')
+ AND last_confirmed_attempt IS DISTINCT FROM $4
+ AND (message_id=0 OR message_id=$5)`,
+		current.BotID, current.Operation, current.Effect, current.Attempt, outcome.MessageID)
+	if err != nil {
+		return core.DatabaseOperationError(err)
+	}
+	if updated.RowsAffected() != 1 {
+		return botdelivery.ErrBinding
+	}
+	return core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+func (b *Bot) postponeBotIntent(
+	ctx context.Context,
+	observed botdelivery.Intent,
+	terminal bool,
+	failureReason ...string,
+) error {
 	tx, err := b.DB.Begin(ctx)
 	if err != nil {
 		return core.DatabaseOperationError(err)
@@ -143,6 +263,9 @@ func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent
 	if terminal {
 		state, reason = delivery.Cancelled, "source_unavailable"
 	}
+	if len(failureReason) != 0 {
+		state, reason = delivery.Rejected, failureReason[0]
+	}
 	if err = delivery.Project(ctx, tx, current.BotID, current.QueueReference(), state, deadline); err != nil {
 		return err
 	}
@@ -163,7 +286,7 @@ func (b *Bot) postponeBotIntent(ctx context.Context, observed botdelivery.Intent
 }
 
 // RecoverBotIntents runs only after runtime proves exclusive replacement
-// ownership. An admitted wire without a known receipt must retain its lane head.
+// ownership. Interrupted wire admissions retain uncertainty and the resend budget.
 func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 	if err := b.Delivery.Validate(); err != nil {
 		return err
@@ -173,9 +296,11 @@ func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 		if err != nil {
 			return core.DatabaseOperationError(err)
 		}
-		var operation, effect string
-		err = tx.QueryRow(ctx, `SELECT operation_key,effect_key FROM bot.delivery_intents
- WHERE bot_id=$1 AND state='sending' ORDER BY operation_key,effect_key FOR UPDATE SKIP LOCKED LIMIT 1`, b.Delivery.BotID).Scan(&operation, &effect)
+		var operation, effect, reason string
+		err = tx.QueryRow(ctx, `SELECT operation_key,effect_key,CASE WHEN state='unknown' THEN reason ELSE 'delivery_interrupted' END FROM bot.delivery_intents
+ WHERE bot_id=$1 AND (state='sending' OR (state='unknown' AND reason IN ('delivery_interrupted','telegram_outcome_unknown')))
+	 ORDER BY operation_key,effect_key FOR UPDATE SKIP LOCKED LIMIT 1`, b.Delivery.BotID).
+			Scan(&operation, &effect, &reason)
 		if errors.Is(err, pgx.ErrNoRows) {
 			_ = tx.Rollback(ctx)
 			return nil
@@ -185,10 +310,21 @@ func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 			return core.DatabaseOperationError(err)
 		}
 		ref := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+		current, readErr := botdelivery.Read(ctx, tx, b.Delivery.BotID, ref, true)
+		if readErr != nil {
+			_ = tx.Rollback(ctx)
+			return readErr
+		}
 		err = delivery.Project(ctx, tx, b.Delivery.BotID, ref, delivery.Uncertain, time.Time{})
 		if err == nil {
-			_, err = tx.Exec(ctx, `UPDATE bot.delivery_intents SET state='unknown',reason='delivery_interrupted'
- WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`, b.Delivery.BotID, operation, effect)
+			outcome, deadline, retryErr := b.retryBotTransport(ctx, tx, current,
+				delivery.Outcome{Kind: delivery.Uncertain, Reason: reason}, time.Time{})
+			if retryErr != nil {
+				_ = tx.Rollback(ctx)
+				return retryErr
+			}
+			_, err = tx.Exec(ctx, `UPDATE bot.delivery_intents SET state=$4,reason=$5,not_before=$6
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`, b.Delivery.BotID, operation, effect, outcome.Kind, outcome.Reason, deadline)
 			err = core.DatabaseOperationError(err)
 		}
 		if err != nil {
@@ -199,4 +335,59 @@ func (b *Bot) RecoverBotIntents(ctx context.Context) error {
 			return core.DatabaseOperationError(err)
 		}
 	}
+}
+
+// retryBotTransport changes scheduling, never the recorded factual wire outcome.
+// The intent row is already locked by completion or exclusive runtime recovery.
+func (b *Bot) retryBotTransport(ctx context.Context, tx pgx.Tx, current botdelivery.Intent,
+	outcome delivery.Outcome, deadline time.Time,
+) (delivery.Outcome, time.Time, error) {
+	uncertain := outcome.Kind == delivery.Uncertain &&
+		(outcome.Reason == "telegram_outcome_unknown" || outcome.Reason == "delivery_interrupted")
+	if uncertain {
+		_, err := tx.Exec(ctx, `UPDATE bot.delivery_intents SET last_uncertain_attempt=$4,
+ last_uncertain_reason=$5,last_uncertain_recorded_at=clock_timestamp()
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+			current.BotID, current.Operation, current.Effect, current.Attempt, outcome.Reason)
+		if err != nil {
+			return outcome, deadline, core.DatabaseOperationError(err)
+		}
+	}
+	var chain bool
+	var resends int
+	var now time.Time
+	if err := tx.QueryRow(ctx, `SELECT last_uncertain_attempt IS NOT NULL,uncertain_resends,clock_timestamp()
+ FROM bot.delivery_intents WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+		current.BotID, current.Operation, current.Effect).Scan(&chain, &resends, &now); err != nil {
+		return outcome, deadline, core.DatabaseOperationError(err)
+	}
+	if !chain || (!uncertain && outcome.Kind != delivery.Deferred) {
+		return outcome, deadline, nil
+	}
+	const maxUncertainResends = 3
+	if resends >= maxUncertainResends {
+		outcome = delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
+		return outcome, deadline, delivery.Project(
+			ctx,
+			tx,
+			current.BotID,
+			current.QueueReference(),
+			outcome.Kind,
+			deadline,
+		)
+	}
+	base := b.Delivery.UncertaintyRetryBaseOrDefault()
+	seconds := int64(base / time.Second)
+	if base%time.Second != 0 {
+		seconds++
+	}
+	backoff, valid := delivery.Deadline(now, seconds<<resends)
+	if !valid {
+		return outcome, deadline, delivery.ErrQueueState
+	}
+	if backoff.After(deadline) {
+		deadline = backoff
+	}
+	outcome.Kind = delivery.Deferred
+	return outcome, deadline, delivery.Project(ctx, tx, current.BotID, current.QueueReference(), outcome.Kind, deadline)
 }
