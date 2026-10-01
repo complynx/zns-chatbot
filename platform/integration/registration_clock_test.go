@@ -471,6 +471,14 @@ func TestRegistrationClockApplicationAllocatorWait(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("capture did not complete after allocator release")
 	}
+	require.ErrorIs(t, outcome.err, passbooking.ErrRegistrationTimeChanged)
+	require.Zero(t, outcome.admission.ID)
+	var rolledBack int
+	require.NoError(t, db.QueryRow(ctx, `SELECT count(*) FROM core.registration_intents`).Scan(&rolledBack))
+	require.Zero(t, rolledBack)
+	outcome.admission, outcome.err = service.CaptureAdmission(ctx, "alice", passbooking.AdmissionRequest{
+		Command: bookingCommand("solo", "clock-allocator-wait", passbooking.Booking{}),
+	})
 	require.NoError(t, outcome.err)
 	var received, checked, deadline time.Time
 	require.NoError(t, db.QueryRow(ctx, `SELECT g.received_at,i.checked_at,i.turn_expires_at
@@ -851,6 +859,15 @@ func testRegistrationNotificationLockWait(t *testing.T, scenario string) {
 	case <-ctx.Done():
 		t.Fatal("notification did not finish after lock release")
 	}
+	if scenario != "announcement-attempt" {
+		require.ErrorIs(t, outcome.err, passbooking.ErrRegistrationTimeChanged)
+		if scenario == "passport-profile" {
+			outcome.count, outcome.err = service.ProcessPassportReminders(ctx)
+		} else {
+			outcome.gate, outcome.err = service.BeginRegistrationAnnouncement(ctx,
+				delivery.Attempt{ID: item.ID, Generation: item.Attempts})
+		}
+	}
 	require.NoError(t, outcome.err)
 	if scenario == "passport-profile" {
 		require.Zero(t, outcome.count)
@@ -1065,6 +1082,9 @@ func testClockPassportAdmission(t *testing.T, scenario string) {
 	case <-ctx.Done():
 		t.Fatal("passport admission did not finish after lock release")
 	}
+	require.ErrorIs(t, outcome.err, passbooking.ErrRegistrationTimeChanged)
+	require.False(t, outcome.gate.Ready)
+	outcome.gate, outcome.err = service.BeginNotification(ctx, attempt)
 	require.NoError(t, outcome.err)
 	require.False(t, outcome.gate.Ready)
 	require.Equal(t, "notification_no_longer_current", outcome.gate.Reason)
@@ -1090,4 +1110,177 @@ func testClockPassportAdmission(t *testing.T, scenario string) {
 	require.Zero(t, grants, "expired passport admission consumes no fairness grant")
 	require.Zero(t, pacing, "expired passport admission retains no pacing reservations")
 	require.EqualValues(t, 1, markers, "admission does not change the committed once marker")
+}
+
+func TestRegistrationClockTwoCapturesRetainFirstDependency(t *testing.T) {
+	t.Parallel()
+	for _, advance := range []bool{false, true} {
+		t.Run(strconv.FormatBool(advance), func(t *testing.T) {
+			t.Parallel()
+			db, service := bookingFixture(t)
+			var start time.Time
+			require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&start))
+			seedRegistrationClockSecondEvent(t, db, start)
+			clock := &registrationClock{now: start}
+			service.RegistrationClock = clock
+			err := captureRegistrationClockPair(t.Context(), db, service, clock, start, advance)
+			if advance {
+				require.ErrorIs(t, err, passbooking.ErrRegistrationTimeChanged)
+				var intents, requests, ingress int
+				require.NoError(t, db.QueryRow(t.Context(), `SELECT
+ (SELECT count(*) FROM core.registration_intents),
+ (SELECT count(*) FROM core.registration_intent_requests),
+ (SELECT count(*) FROM core.registration_ingress)`).Scan(&intents, &requests, &ingress))
+				require.Zero(t, intents)
+				require.Zero(t, requests)
+				require.Zero(t, ingress)
+				err = captureRegistrationClockPair(t.Context(), db, service, clock, start, false)
+			}
+			require.NoError(t, err)
+			var count, current int
+			now, clockErr := clock.Now(t.Context())
+			require.NoError(t, clockErr)
+			require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*),count(*) FILTER(WHERE checked_at=$1)
+ FROM core.registration_intents WHERE owner='alice'`, now).Scan(&count, &current))
+			require.Equal(t, 2, count)
+			require.Equal(t, 2, current, "both same-key captures commit only the current attempt's decisions")
+		})
+	}
+}
+
+func captureRegistrationClockPair(
+	ctx context.Context, db *pgxpool.Pool, service passbooking.Service,
+	clock *registrationClock, start time.Time, move bool,
+) error {
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	scoped, attempt := service.WithClockAttempt()
+	for _, event := range []string{"dance", "dance-b"} {
+		if move && event == "dance-b" {
+			clock.advance(start.Add(time.Microsecond))
+		}
+		command := bookingCommand("solo", "two-capture-"+event, passbooking.Booking{})
+		command.Event = event
+		if _, err = scoped.CaptureAdmissionInTx(
+			ctx,
+			tx,
+			"alice",
+			passbooking.AdmissionRequest{Command: command},
+		); err != nil {
+			return err
+		}
+	}
+	if err = attempt.Check(ctx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func seedRegistrationClockSecondEvent(t *testing.T, db *pgxpool.Pool, start time.Time) {
+	t.Helper()
+	_, err := db.Exec(
+		t.Context(),
+		`UPDATE core.pass_events SET finishes_at=$1,display_order=0 WHERE id='dance'`,
+		start.Add(time.Hour),
+	)
+	require.NoError(t, err)
+	_, err = db.Exec(
+		t.Context(),
+		`INSERT INTO core.pass_events(id,finishes_at,display_order) VALUES('dance-b',$1,1)`,
+		start.Add(2*time.Hour),
+	)
+	require.NoError(t, err)
+	_, err = db.Exec(t.Context(), `INSERT INTO core.pass_event_tiers(event_id,position,amount,price,starts_at)
+ VALUES('dance-b',0,20,100,$1)`, start.Add(-time.Hour))
+	require.NoError(t, err)
+}
+
+func TestRegistrationClockPassportRetriesWholeEventSelection(t *testing.T) {
+	t.Parallel()
+	for _, advance := range []bool{false, true} {
+		t.Run(strconv.FormatBool(advance), func(t *testing.T) {
+			t.Parallel()
+			testClockPassportEventSelection(t, advance)
+		})
+	}
+}
+
+func testClockPassportEventSelection(t *testing.T, advance bool) {
+	t.Helper()
+	db, service := bookingFixture(t)
+	var start time.Time
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&start))
+	seedRegistrationClockSecondEvent(t, db, start)
+	clock := &registrationClock{now: start}
+	service.RegistrationClock = clock
+	price := 0
+	for _, event := range []string{"dance", "dance-b"} {
+		_, err := service.AdminAssign(t.Context(), "bob", passbooking.AdminAssignment{
+			Event: event, Key: "passport-selection-" + event, Target: "alice", TotalPrice: &price,
+			Create: &passbooking.AdminCreate{FromProfile: true},
+		})
+		require.NoError(t, err)
+	}
+	_, err := db.Exec(t.Context(), `UPDATE core.pass_events SET passport_required=true`)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	blocker, err := db.Begin(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = blocker.Rollback(context.WithoutCancel(t.Context())) })
+	_, err = blocker.Exec(ctx, `SELECT passport FROM core.pass_profiles WHERE owner='alice' FOR UPDATE`)
+	require.NoError(t, err)
+	type result struct {
+		count int
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		count, scanErr := service.ProcessPassportReminders(ctx)
+		done <- result{count: count, err: scanErr}
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		readErr := db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+ WHERE datname=current_database() AND wait_event_type='Lock'
+ AND query='SELECT passport FROM core.pass_profiles WHERE owner=$1 FOR SHARE')`).Scan(&waiting)
+		return readErr == nil && waiting
+	}, 5*time.Second, 10*time.Millisecond, "the DISTINCT ON selection completed before the real profile wait")
+	if advance {
+		clock.advance(start.Add(time.Hour + time.Microsecond))
+	}
+	require.NoError(t, blocker.Commit(ctx))
+	var outcome result
+	select {
+	case outcome = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("passport scan did not finish after profile release")
+	}
+	event := "dance"
+	if advance {
+		require.ErrorIs(t, outcome.err, passbooking.ErrRegistrationTimeChanged)
+		require.Zero(t, outcome.count)
+		requireClockPassportSelection(t, db, "", 0)
+		outcome.count, outcome.err = service.ProcessPassportReminders(ctx)
+		event = "dance-b"
+	}
+	require.NoError(t, outcome.err)
+	require.Equal(t, 1, outcome.count)
+	requireClockPassportSelection(t, db, event, 1)
+}
+
+func requireClockPassportSelection(t *testing.T, db *pgxpool.Pool, event string, expected int) {
+	t.Helper()
+	var markers, notices int
+	var selected string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT
+ (SELECT count(*) FROM core.pass_passport_reminders WHERE owner='alice'),
+ count(*),COALESCE(min(event_id),'') FROM core.pass_notifications
+ WHERE owner='alice' AND kind='passport_required'`).Scan(&markers, &notices, &selected))
+	require.Equal(t, expected, markers)
+	require.Equal(t, expected, notices)
+	require.Equal(t, event, selected)
 }

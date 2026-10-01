@@ -84,14 +84,12 @@ func (s Service) BeginRegistrationAnnouncement(
 		return delivery.Admission{}, conflict("pass_announcement_stale")
 	}
 	if !row.Current {
-		clockAttempt.acceptCurrent(true)
 		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
 	}
 	gate, current, err := s.beginCurrentAnnouncement(ctx, tx, q, attempt)
 	if err != nil {
 		return gate, err
 	}
-	clockAttempt.acceptCurrent(true)
 	if !current {
 		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
 	}

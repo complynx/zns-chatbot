@@ -53,9 +53,6 @@ func (s Service) ProcessPassportReminders(ctx context.Context) (int, error) {
 		if eligibilityErr != nil {
 			return 0, eligibilityErr
 		}
-		// Before the first marker, profile waits can renew the selection safely.
-		// Later advances must roll back every earlier marker in this transaction.
-		clockAttempt.acceptCurrent(count == 0)
 		if !eligible {
 			continue
 		}

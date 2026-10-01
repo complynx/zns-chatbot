@@ -57,14 +57,12 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 		return delivery.Admission{}, err
 	}
 	if !current {
-		clockAttempt.acceptCurrent(true)
 		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
 	}
 	gate, current, err := s.beginCurrentNotification(ctx, tx, attempt, row)
 	if err != nil {
 		return delivery.Admission{}, err
 	}
-	clockAttempt.acceptCurrent(true)
 	if !current {
 		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
 	}

@@ -22,7 +22,6 @@ var ErrRegistrationTimeChanged = errors.New("registration time changed before co
 type RegistrationClockAttempt struct {
 	clock    registrationingress.Clock
 	first    time.Time
-	last     time.Time
 	observed bool
 	changed  bool
 }
@@ -48,7 +47,6 @@ func (a *RegistrationClockAttempt) Now(ctx context.Context) (time.Time, error) {
 	} else if !now.Equal(a.first) {
 		a.changed = true
 	}
-	a.last = now
 	return now, nil
 }
 
@@ -85,14 +83,6 @@ func (a *RegistrationClockAttempt) DecisionError(ctx context.Context, err error)
 		return changed
 	}
 	return err
-}
-
-// acceptCurrent renews a fully rebuilt decision before any retained domain
-// effect. Immutable ingress reception is not a sales, expiry or assignment decision.
-func (a *RegistrationClockAttempt) acceptCurrent(noEffects bool) {
-	if noEffects && a != nil && a.observed {
-		a.first, a.changed = a.last, false
-	}
 }
 
 // registrationTime is called at the original SQL observation point, after

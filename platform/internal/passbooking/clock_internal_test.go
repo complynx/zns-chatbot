@@ -246,7 +246,7 @@ func TestRegistrationAttemptClockFencesCommitAndRefusal(t *testing.T) {
 	}
 }
 
-func TestRegistrationAttemptKeepsNilAndRenewedAdmissionBehavior(t *testing.T) {
+func TestRegistrationAttemptKeepsNilAndFirstObservation(t *testing.T) {
 	t.Parallel()
 	original := Service{}
 	scoped, attempt := original.WithClockAttempt()
@@ -262,8 +262,8 @@ func TestRegistrationAttemptKeepsNilAndRenewedAdmissionBehavior(t *testing.T) {
 	clock.now = clock.now.Add(time.Hour)
 	_, _, err = registrationingress.Observe(t.Context(), scoped.RegistrationClock)
 	require.NoError(t, err)
-	attempt.acceptCurrent(true)
-	require.NoError(t, attempt.Check(t.Context()), "renewed admission has no earlier domain writes")
+	require.ErrorIs(t, attempt.Check(t.Context()), ErrRegistrationTimeChanged,
+		"a later capture cannot erase an earlier transaction dependency")
 	clock.now = clock.now.Add(time.Microsecond)
 	require.ErrorIs(
 		t,
