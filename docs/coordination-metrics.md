@@ -669,3 +669,9 @@ Manager paused at150events; follow-up could not start due thread limit. Root rec
 
 
 183events; queue0/0/0, returns24 and counter270next271 unchanged. Operator5 startedisolatedparallelimplementation with finalC acceptance dependency preserved. Paymentrootnative failure yielded verifiedsamebodyproducerbindinggap; correction staysoriginal7 and retainsmixedmanual/model regressions. Capability lanes: clock/operator/Eexecutionpreparation; paymentfix parallel.
+
+
+185events; queue0/0/0 returns24counter270next271 unchanged. Clocksecondsource40rawmanifestverified; bothwholelinttargets/compilePASS, realLinuxPG running62105. Paymentmixedrouteproducer correction testing locally; full15selector intact. Observerpreparation andexactpostapplyEhistoryID handoff runindependently; blockedIdPbootstrap untouched.
+
+
+187events; queue0/1/0 returns24. FreshengineeringobserverCodeQA271 readonlyCLI55191 confirmedlive; counter271next272. Eexactexecutionplan complete withrootindependentsyntaxchecks/provenanceresolver; no runtime/importexecution. Clockall3realaliasgatessecondsourcePASS; remainingrace/PGmatrix live62105. Paymentfinalcodegates/isolatedracererun inprogress; firsttimingfailurepreserved. No feature/FQA acceptance fromthese partialresults.
