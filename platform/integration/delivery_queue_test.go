@@ -374,9 +374,9 @@ func TestDeliveryQueueKnownSuccessDuringUncertainRetry(t *testing.T) {
 	require.Equal(t, delivery.Deferred, queueRegister(t, db, ref, destination, delivery.Background).State)
 	require.False(t, queueBegin(t, db, follower).Ready, "rolled-back receipt must keep the lane blocked")
 	queueTransaction(t, db, func(tx pgx.Tx) {
-		actual, _, err := queueKnownUncertainSuccess(t.Context(), tx, ref, known)
-		require.NoError(t, err)
-		require.Equal(t, known, actual)
+		resolved, _, finishErr := queueKnownUncertainSuccess(t.Context(), tx, ref, known)
+		require.NoError(t, finishErr)
+		require.Equal(t, known, resolved)
 	})
 	stored := queueRegister(t, db, ref, destination, delivery.Background)
 	require.Equal(t, delivery.Succeeded, stored.State)
@@ -449,7 +449,7 @@ func TestDeliveryQueueUncertainSuccessRequiresPending(t *testing.T) {
 			case delivery.Succeeded:
 				queueFinish(t, db, ref, delivery.Outcome{Kind: state, MessageID: 77})
 			case delivery.Sending:
-			default:
+			case delivery.Deferred, delivery.Rejected, delivery.Cancelled, delivery.Parked, delivery.Paused:
 				queueTransaction(t, db, func(tx pgx.Tx) {
 					require.NoError(
 						t,
