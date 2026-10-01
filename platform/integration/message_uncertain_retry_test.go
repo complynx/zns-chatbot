@@ -1029,6 +1029,10 @@ func checkRecoveredConfirmedReply(t *testing.T, owner, phase string) {
 		}
 		entered <- body
 		<-release
+		if phase == "prewire-rejection" {
+			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":91}}`))
+			return
+		}
 		_, _ = w.Write(
 			[]byte(
 				`{"ok":false,"error_code":429,"description":"late confirmed rate limit","parameters":{"retry_after":120}}`,
@@ -1073,7 +1077,15 @@ func checkRecoveredConfirmedReply(t *testing.T, owner, phase string) {
 			f.finish(delivery.Outcome{Kind: delivery.Rejected, Reason: "announcement_original_wire_unavailable"}),
 		)
 		before := f.snapshot(t)
-		require.NoError(t, f.finish(delivery.Outcome{Kind: delivery.Succeeded, MessageID: 91}))
+		once.Do(func() { close(release) })
+		select {
+		case positive := <-done:
+			require.Equal(t, delivery.Succeeded, positive.Kind)
+			require.EqualValues(t, 91, positive.MessageID)
+			require.NoError(t, f.finish(positive))
+		case <-time.After(10 * time.Second):
+			t.Fatal("synthetic positive reply did not complete")
+		}
 		assert.Equal(t, before, f.snapshot(t))
 		return
 	}
