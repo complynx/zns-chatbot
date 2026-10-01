@@ -71,6 +71,18 @@ func (l *notificationLostResponse) count() int {
 	return l.calls
 }
 
+func requireNotificationAccepted(t *testing.T, r *notificationRuntimeFixture, loss *notificationLostResponse) {
+	t.Helper()
+	loss.mu.Lock()
+	text := loss.text
+	loss.mu.Unlock()
+	seen := false
+	for _, message := range chatMessages(t, r.f, 202) {
+		seen = seen || message.Text == text
+	}
+	require.True(t, seen, "the real sink accepted the exact notification before response loss")
+}
+
 func TestNotificationUncertainRetrySurvivesRestart(t *testing.T) {
 	t.Parallel()
 	for _, domain := range []string{"orders", "registration", "massage", "food"} {
@@ -81,6 +93,7 @@ func TestNotificationUncertainRetrySurvivesRestart(t *testing.T) {
 			r.f.b.TG.HTTP = &http.Client{Transport: loss}
 			dispatch := exactNotificationDelivery(r, domain)
 			require.NoError(t, dispatch(t.Context(), r.first))
+			requireNotificationAccepted(t, r, loss)
 			first := r.status(t, r.first)
 			require.Equal(t, "pending", first.State)
 			require.Equal(t, 1, loss.count())
@@ -111,6 +124,7 @@ func TestNotificationUncertainRetryExhaustionReleasesFollower(t *testing.T) {
 			dispatch := exactNotificationDelivery(r, domain)
 			for attempt := range 4 {
 				require.NoError(t, dispatch(t.Context(), r.first))
+				requireNotificationAccepted(t, r, loss)
 				require.Equal(t, attempt+1, loss.count())
 				state := r.status(t, r.first)
 				if attempt == 3 {
