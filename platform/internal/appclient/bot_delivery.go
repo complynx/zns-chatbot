@@ -48,6 +48,12 @@ func (c Host) EnqueueBotResult(ctx context.Context, in botdelivery.ResultRequest
 	)
 	return err
 }
+func (c Host) EnqueueAdminPageResults(ctx context.Context, in botdelivery.AdminPageResultsRequest) error {
+	_, err := botDeliveryCall(ctx, c, in.Owner, "admin-page-results", in,
+		func(s botdelivery.Service) (struct{}, error) { return struct{}{}, s.EnqueueAdminPageResults(ctx, in) },
+	)
+	return err
+}
 func (c Host) BeginBotDelivery(ctx context.Context, in botdelivery.BeginRequest) (botdelivery.BeginResult, error) {
 	return botDeliveryCall(
 		ctx,
