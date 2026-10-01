@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/config"
+	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationclock"
 	"github.com/complynx/zns-chatbot/platform/internal/replacement"
 	"github.com/complynx/zns-chatbot/platform/internal/store"
@@ -51,16 +53,28 @@ func operatorTestFile(t *testing.T) (string, registrationclock.Settings) {
 func TestRegistrationClockOperatorPersistentCAS(t *testing.T) {
 	t.Parallel()
 	path, settings := operatorTestFile(t)
-	initial, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+	initial, err := operateRegistrationClockFile(
+		t.Context(),
+		settings,
+		path,
+		RegistrationClockChange{Action: "init"},
+		false,
+	)
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), initial.Revision)
 	require.Equal(t, initial.Anchor, initial.Current)
-	repeated, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+	repeated, err := operateRegistrationClockFile(
+		t.Context(),
+		settings,
+		path,
+		RegistrationClockChange{Action: "init"},
+		false,
+	)
 	require.NoError(t, err)
 	require.Equal(t, initial.Digest(), repeated.Digest())
 	target := initial.Anchor.Add(registrationclock.Horizon)
 	advanced, err := operateRegistrationClockFile(t.Context(), settings, path,
-		RegistrationClockChange{Action: "advance", ExpectedRevision: 1, Target: target})
+		RegistrationClockChange{Action: "advance", ExpectedRevision: 1, Target: target}, false)
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), advanced.Revision)
 	require.Equal(t, target, advanced.Current)
@@ -71,10 +85,16 @@ func TestRegistrationClockOperatorPersistentCAS(t *testing.T) {
 		{Action: "advance", ExpectedRevision: 2, Target: target.Add(-time.Microsecond)},
 		{Action: "init"},
 	} {
-		_, err = operateRegistrationClockFile(t.Context(), settings, path, change)
+		_, err = operateRegistrationClockFile(t.Context(), settings, path, change, false)
 		require.Error(t, err)
 	}
-	read, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"})
+	read, err := operateRegistrationClockFile(
+		t.Context(),
+		settings,
+		path,
+		RegistrationClockChange{Action: "read"},
+		false,
+	)
 	require.NoError(t, err)
 	require.Equal(t, advanced.Digest(), read.Digest(), "fresh operator reads persisted state, not a process cache")
 	info, err := os.Stat(path)
@@ -85,7 +105,13 @@ func TestRegistrationClockOperatorPersistentCAS(t *testing.T) {
 func TestRegistrationClockOperatorConcurrentRevision(t *testing.T) {
 	t.Parallel()
 	path, settings := operatorTestFile(t)
-	initial, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+	initial, err := operateRegistrationClockFile(
+		t.Context(),
+		settings,
+		path,
+		RegistrationClockChange{Action: "init"},
+		false,
+	)
 	require.NoError(t, err)
 	var workers sync.WaitGroup
 	errorsReceived := make(chan error, 2)
@@ -100,6 +126,7 @@ func TestRegistrationClockOperatorConcurrentRevision(t *testing.T) {
 					ExpectedRevision: 1,
 					Target:           initial.Anchor.Add(time.Minute),
 				},
+				false,
 			)
 			errorsReceived <- updateErr
 		})
@@ -107,7 +134,13 @@ func TestRegistrationClockOperatorConcurrentRevision(t *testing.T) {
 	workers.Wait()
 	first, second := <-errorsReceived, <-errorsReceived
 	require.NotEqual(t, first == nil, second == nil, "exactly one old-revision advance succeeds")
-	read, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"})
+	read, err := operateRegistrationClockFile(
+		t.Context(),
+		settings,
+		path,
+		RegistrationClockChange{Action: "read"},
+		false,
+	)
 	require.NoError(t, err)
 	require.Equal(t, uint64(2), read.Revision)
 }
@@ -118,13 +151,25 @@ func TestRegistrationClockOperatorRejectsHardLinks(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			path, settings := operatorTestFile(t)
-			_, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+			_, err := operateRegistrationClockFile(
+				t.Context(),
+				settings,
+				path,
+				RegistrationClockChange{Action: "init"},
+				false,
+			)
 			require.NoError(t, err)
 			require.NoError(
 				t,
 				os.Link(filepath.Join(filepath.Dir(path), name), filepath.Join(filepath.Dir(path), "alias")),
 			)
-			_, err = operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"})
+			_, err = operateRegistrationClockFile(
+				t.Context(),
+				settings,
+				path,
+				RegistrationClockChange{Action: "read"},
+				false,
+			)
 			require.Error(t, err, "multiply linked state and lock files are not private publications")
 		})
 	}
@@ -136,7 +181,7 @@ func TestRegistrationClockOperatorRejectsRootOwner(t *testing.T) {
 	if os.Geteuid() != 0 {
 		t.Skip("isolated actual root process required for the root-fallback negative")
 	}
-	_, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+	_, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"}, false)
 	require.Error(t, err, "root-owned private metadata is not a nonroot app allocation")
 	_, err = os.Stat(path)
 	require.ErrorIs(t, err, os.ErrNotExist)
@@ -145,34 +190,40 @@ func TestRegistrationClockOperatorRejectsRootOwner(t *testing.T) {
 func TestRegistrationClockOperatorRejectsBindingsPermissionsAndLinks(t *testing.T) {
 	t.Parallel()
 	path, settings := operatorTestFile(t)
-	_, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+	_, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"}, false)
 	require.NoError(t, err)
 	wrong := settings
 	wrong.Installation = "010400000203"
-	_, err = operateRegistrationClockFile(t.Context(), wrong, path, RegistrationClockChange{Action: "read"})
+	_, err = operateRegistrationClockFile(t.Context(), wrong, path, RegistrationClockChange{Action: "read"}, false)
 	require.Error(t, err)
 	require.NoError(t, os.Chmod(path, 0o644))
-	_, err = operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"})
+	_, err = operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"}, false)
 	require.Error(t, err)
 	require.NoError(t, os.Chmod(path, 0o600))
 	link := filepath.Join(filepath.Dir(path), "state-link.json")
 	require.NoError(t, os.Symlink(path, link))
-	_, err = operateRegistrationClockFile(t.Context(), settings, link, RegistrationClockChange{Action: "read"})
+	_, err = operateRegistrationClockFile(t.Context(), settings, link, RegistrationClockChange{Action: "read"}, false)
 	require.Error(t, err)
 	require.NoError(t, os.Chmod(filepath.Dir(path), 0o755))
-	_, err = operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"})
+	_, err = operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"}, false)
 	require.Error(t, err)
 }
 
 func TestRegistrationClockOperatorCanceledPublication(t *testing.T) {
 	t.Parallel()
 	path, settings := operatorTestFile(t)
-	initial, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+	initial, err := operateRegistrationClockFile(
+		t.Context(),
+		settings,
+		path,
+		RegistrationClockChange{Action: "init"},
+		false,
+	)
 	require.NoError(t, err)
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, err = operateRegistrationClockFile(canceled, settings, path,
-		RegistrationClockChange{Action: "advance", ExpectedRevision: 1, Target: initial.Anchor.Add(time.Minute)})
+		RegistrationClockChange{Action: "advance", ExpectedRevision: 1, Target: initial.Anchor.Add(time.Minute)}, false)
 	require.ErrorIs(t, err, context.Canceled)
 	current, err := readOperatorClock(path, settings)
 	require.NoError(t, err)
@@ -181,14 +232,13 @@ func TestRegistrationClockOperatorCanceledPublication(t *testing.T) {
 
 func TestRegistrationClockOperatorRejectsDifferentUID(t *testing.T) {
 	t.Parallel()
-	path, settings := operatorTestFile(t)
-	if os.Geteuid() != 0 {
-		t.Skip("different-UID negative requires the isolated Linux test container root")
+	wrongUID := os.Getenv("REGISTRATION_CLOCK_OPERATOR_TEST_WRONG_UID_FILE")
+	if wrongUID == "" {
+		t.Skip("isolated root-owned state file required for the different-UID probe")
 	}
-	_, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+	info, err := os.Stat(wrongUID)
 	require.NoError(t, err)
-	require.NoError(t, os.Chown(path, os.Geteuid()+1, -1))
-	_, err = operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"})
+	err = privateClockOwner(info, false)
 	require.ErrorContains(t, err, "owned by the app UID")
 }
 
@@ -198,7 +248,13 @@ func TestRegistrationClockOperatorCrashBoundaries(t *testing.T) {
 		t.Run(boundary, func(t *testing.T) {
 			t.Parallel()
 			path, settings := operatorTestFile(t)
-			_, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+			_, err := operateRegistrationClockFile(
+				t.Context(),
+				settings,
+				path,
+				RegistrationClockChange{Action: "init"},
+				false,
+			)
 			require.NoError(t, err)
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
@@ -217,7 +273,13 @@ func TestRegistrationClockOperatorCrashBoundaries(t *testing.T) {
 			ready, err := bufio.NewReader(stdout).ReadString('\n')
 			require.NoError(t, err)
 			require.Equal(t, "published-boundary\n", ready)
-			_, err = operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"})
+			_, err = operateRegistrationClockFile(
+				t.Context(),
+				settings,
+				path,
+				RegistrationClockChange{Action: "read"},
+				false,
+			)
 			require.Error(t, err, "another process retains the operator lock")
 			require.NoError(t, child.Process.Kill())
 			require.Error(t, child.Wait())
@@ -226,6 +288,7 @@ func TestRegistrationClockOperatorCrashBoundaries(t *testing.T) {
 				settings,
 				path,
 				RegistrationClockChange{Action: "read"},
+				false,
 			)
 			require.NoError(t, err, "kernel releases the dead writer's lock")
 			expected := uint64(1)
@@ -242,6 +305,7 @@ func TestRegistrationClockOperatorCrashBoundaries(t *testing.T) {
 					ExpectedRevision: expected,
 					Target:           state.Current.Add(time.Minute),
 				},
+				false,
 			)
 			require.NoError(t, err)
 		})
@@ -293,6 +357,7 @@ func TestRegistrationClockOperatorUnsupported(t *testing.T) {
 		operatorTestSettings(),
 		filepath.Join(t.TempDir(), "state.json"),
 		RegistrationClockChange{Action: "init"},
+		false,
 	)
 	require.ErrorContains(t, err, "requires Linux")
 }
@@ -321,7 +386,13 @@ func TestRegistrationClockOperatorAllocationFallbacks(t *testing.T) {
 func TestRegistrationClockOperatorRejectsMovedDirectory(t *testing.T) {
 	t.Parallel()
 	path, settings := operatorTestFile(t)
-	initial, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+	initial, err := operateRegistrationClockFile(
+		t.Context(),
+		settings,
+		path,
+		RegistrationClockChange{Action: "init"},
+		false,
+	)
 	require.NoError(t, err)
 	directory, lock, err := lockRegistrationClockDirectory(filepath.Dir(path))
 	require.NoError(t, err)
@@ -360,18 +431,33 @@ func TestRegistrationClockOperatorPrivateDatabaseAndCLI(t *testing.T) {
 	anchor, err := settings.AnchorTime()
 	require.NoError(t, err)
 	_, err = ApplyRegistrationFixture(ctx, owner, RegistrationFixture{
-		Stand: RegistrationFixtureStand, Action: "init", OpensAt: anchor.Add(time.Minute),
+		Stand:       RegistrationFixtureStand,
+		Action:      "init",
+		OpensAt:     anchor.Add(3*time.Hour + 17*time.Minute),
+		ClockAnchor: anchor,
 	})
 	require.NoError(t, err)
 	acl, err := os.ReadFile("../../../docs/sandbox/fqa-stands/registration/runtime-roles.sql")
 	require.NoError(t, err)
 	_, err = owner.Exec(ctx, string(acl))
 	require.NoError(t, err)
+	operatorSetupBinding(t, owner, settings, anchor)
+	operatorUnclockedAdmission(t, owner, settings, anchor)
+	publication, err := operateRegistrationClockFile(
+		ctx,
+		settings,
+		settings.File,
+		RegistrationClockChange{Action: "init"},
+		false,
+	)
+	require.NoError(t, err, "simulate interrupted publication before the marker commit")
 	initial, err := operatorCLI(t, "OWNER", settings, "-action", "init")
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), initial.Revision)
+	assert.Equal(t, publication.Digest(), initial.Digest(), "retry commits marker without replacing initial state")
 	operatorOriginalContractNegatives(t, admin, owner, operator, settings, initial)
 	operatorPrivateDenials(t, admin, owner, operator, settings, initial)
+	operatorCommittedAdmissionReplay(t, owner, settings, anchor, initial)
 	read, err := operatorCLI(t, "OPERATOR", settings, "-action", "read")
 	require.NoError(t, err)
 	assert.Equal(t, initial.Digest(), read.Digest())
@@ -382,6 +468,117 @@ func TestRegistrationClockOperatorPrivateDatabaseAndCLI(t *testing.T) {
 	operatorCLIInvalidTargets(t, settings, advanced)
 	operatorFixtureSerialization(t, owner, operator, settings)
 	operatorManagedInventory(t, owner, operator)
+}
+
+func operatorSetupBinding(t *testing.T, owner *pgxpool.Pool, settings registrationclock.Settings, anchor time.Time) {
+	t.Helper()
+	f := RegistrationFixture{Stand: RegistrationFixtureStand, Action: "init",
+		OpensAt: anchor.Add(3*time.Hour + 17*time.Minute), ClockAnchor: anchor}
+	_, err := ApplyRegistrationFixture(t.Context(), owner, f)
+	require.NoError(t, err, "identical setup replay preserves the established binding")
+	for _, changed := range []RegistrationFixture{
+		{Stand: f.Stand, Action: f.Action, OpensAt: f.OpensAt, ClockAnchor: anchor.Add(time.Microsecond)},
+		{Stand: f.Stand, Action: f.Action, OpensAt: f.OpensAt.Add(time.Minute), ClockAnchor: anchor},
+	} {
+		_, err = ApplyRegistrationFixture(t.Context(), owner, changed)
+		require.Error(t, err)
+	}
+	changed := settings
+	changed.Anchor = anchor.Add(time.Microsecond).Format(time.RFC3339Nano)
+	_, err = ApplyRegistrationClock(t.Context(), owner, config.Config{Env: "sandbox", SyntheticOnly: true}, changed,
+		RegistrationClockChange{Action: "init"})
+	require.Error(t, err, "later operator input is not the setup authority")
+	marker := registrationClockSetupMarker(anchor, f.OpensAt)
+	_, err = owner.Exec(t.Context(), `DELETE FROM public.zns_sandbox_fixtures WHERE name=$1`, marker)
+	require.NoError(t, err)
+	_, err = ApplyRegistrationFixture(t.Context(), owner, f)
+	require.Error(t, err, "old unbound setup cannot acquire a retrospective binding")
+	f.ClockAnchor = time.Time{}
+	_, err = ApplyRegistrationFixture(t.Context(), owner, f)
+	require.NoError(t, err, "ordinary unclocked replay stays unchanged")
+	_, err = owner.Exec(t.Context(), `INSERT INTO public.zns_sandbox_fixtures(name) VALUES($1)`, marker)
+	require.NoError(t, err)
+	conflict := registrationClockSetupMarker(anchor.Add(time.Microsecond), f.OpensAt)
+	_, err = owner.Exec(t.Context(), `INSERT INTO public.zns_sandbox_fixtures(name) VALUES($1)`, conflict)
+	require.NoError(t, err)
+	_, err = ApplyRegistrationClock(t.Context(), owner, config.Config{Env: "sandbox", SyntheticOnly: true}, settings,
+		RegistrationClockChange{Action: "init"})
+	require.Error(t, err, "conflicting durable bindings cannot select one arbitrary anchor")
+	_, err = owner.Exec(t.Context(), `DELETE FROM public.zns_sandbox_fixtures WHERE name=$1`, conflict)
+	require.NoError(t, err)
+}
+
+type operatorAdmissionClock struct{ now time.Time }
+
+func (c operatorAdmissionClock) Now(context.Context) (time.Time, error) { return c.now, nil }
+
+func operatorUnclockedAdmission(
+	t *testing.T,
+	owner *pgxpool.Pool,
+	settings registrationclock.Settings,
+	anchor time.Time,
+) {
+	t.Helper()
+	service := passbooking.Service{DB: owner, RegistrationClock: operatorAdmissionClock{now: anchor}}
+	for _, event := range []string{RegistrationFixtureEventA, RegistrationFixtureEventB} {
+		admission, err := service.CaptureAdmission(t.Context(), "alice", passbooking.AdmissionRequest{
+			Command: passbooking.Command{Name: "solo", Event: event, Key: "operator-prior-admission"},
+		})
+		require.NoError(t, err)
+		require.Positive(t, admission.ID, "genuine domain admission was committed before publication")
+		_, err = ApplyRegistrationClock(
+			t.Context(),
+			owner,
+			config.Config{Env: "sandbox", SyntheticOnly: true},
+			settings,
+			RegistrationClockChange{Action: "init"},
+		)
+		require.ErrorContains(t, err, "untouched A/B admission")
+		_, err = os.Stat(settings.File)
+		require.ErrorIs(t, err, os.ErrNotExist)
+		var untouched bool
+		require.NoError(t, owner.QueryRow(t.Context(), `SELECT
+ EXISTS(SELECT 1 FROM core.registration_intents WHERE id=$1)
+ AND NOT EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name=$2)`, admission.ID, registrationclock.Marker).Scan(&untouched))
+		assert.True(t, untouched, "failure preserves domain admission and does not activate the clock")
+		_, err = owner.Exec(
+			t.Context(),
+			`DELETE FROM core.registration_intent_requests WHERE intent_id=$1`,
+			admission.ID,
+		)
+		require.NoError(t, err)
+		_, err = owner.Exec(t.Context(), `DELETE FROM core.registration_intents WHERE id=$1`, admission.ID)
+		require.NoError(t, err)
+	}
+}
+
+func operatorCommittedAdmissionReplay(
+	t *testing.T,
+	owner *pgxpool.Pool,
+	settings registrationclock.Settings,
+	anchor time.Time,
+	initial registrationclock.State,
+) {
+	t.Helper()
+	service := passbooking.Service{DB: owner, RegistrationClock: operatorAdmissionClock{now: anchor}}
+	admission, err := service.CaptureAdmission(t.Context(), "alice", passbooking.AdmissionRequest{
+		Command: passbooking.Command{Name: "solo", Event: RegistrationFixtureEventA, Key: "operator-committed-replay"},
+	})
+	require.NoError(t, err)
+	require.Positive(t, admission.ID)
+	state, err := ApplyRegistrationClock(
+		t.Context(),
+		owner,
+		config.Config{Env: "sandbox", SyntheticOnly: true},
+		settings,
+		RegistrationClockChange{Action: "init"},
+	)
+	require.NoError(t, err, "committed publication replay does not reject existing domain data")
+	assert.Equal(t, initial.Digest(), state.Digest())
+	var retained bool
+	require.NoError(t, owner.QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM core.registration_intents WHERE id=$1)`,
+		admission.ID).Scan(&retained))
+	assert.True(t, retained)
 }
 
 func operatorOriginalContractNegatives(
@@ -397,9 +594,17 @@ func operatorOriginalContractNegatives(
 	for _, scenario := range []struct{ name, change, restore string }{
 		{"opening-a", `UPDATE core.pass_event_tiers SET starts_at=starts_at+interval '1 hour' WHERE event_id='registration-fixture-a' AND position=0`, `UPDATE core.pass_event_tiers SET starts_at=starts_at-interval '1 hour' WHERE event_id='registration-fixture-a' AND position=0`},
 		{"opening-b", `UPDATE core.pass_event_tiers SET starts_at=starts_at+interval '1 hour' WHERE event_id='registration-fixture-b' AND position=0`, `UPDATE core.pass_event_tiers SET starts_at=starts_at-interval '1 hour' WHERE event_id='registration-fixture-b' AND position=0`},
+		{"second-tier-a", `UPDATE core.pass_event_tiers SET starts_at=starts_at+interval '1 hour' WHERE event_id='registration-fixture-a' AND position=1`, `UPDATE core.pass_event_tiers SET starts_at=starts_at-interval '1 hour' WHERE event_id='registration-fixture-a' AND position=1`},
 		{"finish-a", `UPDATE core.pass_events SET finishes_at=finishes_at+interval '1 hour' WHERE id='registration-fixture-a'`, `UPDATE core.pass_events SET finishes_at=finishes_at-interval '1 hour' WHERE id='registration-fixture-a'`},
+		{"finish-b", `UPDATE core.pass_events SET finishes_at=finishes_at+interval '1 hour' WHERE id='registration-fixture-b'`, `UPDATE core.pass_events SET finishes_at=finishes_at-interval '1 hour' WHERE id='registration-fixture-b'`},
+		{"tier-owner", `ALTER TABLE core.pass_event_tiers OWNER TO postgres`, `ALTER TABLE core.pass_event_tiers OWNER TO zns_app; GRANT SELECT(event_id,position,starts_at) ON core.pass_event_tiers TO zns_registration_operator`},
 		{"owner-init", `ALTER DATABASE synthetic_qa_zns_registration_fixture OWNER TO postgres`, `ALTER DATABASE synthetic_qa_zns_registration_fixture OWNER TO zns_app`},
 		{"owner-powers", `ALTER ROLE zns_app SUPERUSER`, `ALTER ROLE zns_app NOSUPERUSER`},
+		{"owner-createdb", `ALTER ROLE zns_app CREATEDB`, `ALTER ROLE zns_app NOCREATEDB`},
+		{"owner-createrole", `ALTER ROLE zns_app CREATEROLE`, `ALTER ROLE zns_app NOCREATEROLE`},
+		{"owner-replication", `ALTER ROLE zns_app REPLICATION`, `ALTER ROLE zns_app NOREPLICATION`},
+		{"owner-bypassrls", `ALTER ROLE zns_app BYPASSRLS`, `ALTER ROLE zns_app NOBYPASSRLS`},
+		{"owner-membership", `GRANT zns_registration_operator TO zns_app`, `REVOKE zns_registration_operator FROM zns_app`},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			_, changeErr := admin.Exec(t.Context(), scenario.change)
@@ -411,7 +616,7 @@ func operatorOriginalContractNegatives(
 			client, action := operator, "read"
 			if scenario.name == "owner-init" {
 				client, action = admin, "init"
-			} else if scenario.name == "owner-powers" {
+			} else if strings.HasPrefix(scenario.name, "owner-") {
 				client, action = owner, "init"
 			}
 			_, rejected := ApplyRegistrationClock(

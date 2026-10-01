@@ -12,15 +12,23 @@ import (
 
 const clockDirectoryPermission = 0o700
 
-func registrationClockOperatorPlatform() error { return nil }
+func registrationClockOperatorPlatform() error {
+	if os.Geteuid() == 0 {
+		return errors.New("registration clock operator requires the nonroot app UID")
+	}
+	return nil
+}
 
 func privateClockOwner(info os.FileInfo, directory bool) error {
+	if err := registrationClockOperatorPlatform(); err != nil {
+		return err
+	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	mode := os.FileMode(clockFilePermission)
 	if directory {
 		mode = clockDirectoryPermission
 	}
-	if !ok || int64(stat.Uid) != int64(os.Geteuid()) || info.Mode().Perm() != mode ||
+	if !ok || stat.Nlink != 1 && !directory || int64(stat.Uid) != int64(os.Geteuid()) || info.Mode().Perm() != mode ||
 		(directory && !info.IsDir()) || (!directory && !info.Mode().IsRegular()) {
 		return errors.New("clock directory and files must be private and owned by the app UID")
 	}

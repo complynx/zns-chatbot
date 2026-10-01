@@ -11,6 +11,10 @@ func registrationClockOperatorPlatform() error {
 	return errors.New("registration clock operator requires Linux UID and file-lock guards")
 }
 
+func privateClockOwner(os.FileInfo, bool) error {
+	return registrationClockOperatorPlatform()
+}
+
 func openRegistrationClockState(*os.File, string) (*os.File, error) {
 	return nil, errors.New("registration clock operator requires Linux UID and file-lock guards")
 }
