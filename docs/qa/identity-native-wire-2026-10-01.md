@@ -73,7 +73,11 @@ AB4B24A745F633F48583E9C1DA9795D358181307FCA1EE6F1FDC270C12E5A7AC.
 Integrated as 6bee90039ee7ce34ffa3ec0208bfe32cec4d1994; exact tested file retained.
 See code-qa-2026-10-01-278.md. Earlier failed candidates remain historical evidence.
 
-Still open: scoped provisioner proof, current runtime
+Scoped provisioner proof subsequently passed fresh static QA280 and actual
+root run99658 with creation/readback/duplicate conflict/foreign denial/cleanup.
+See identity-scoped-sdk-2026-10-01.md for exact source and limitations.
+
+Still open: current runtime
 identity mapping and first-contact convergence, real browser authorization,
 availability/cache/revocation behavior and independent Functional QA.
 
