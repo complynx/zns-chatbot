@@ -112,6 +112,36 @@ func TestRegistrationClockOperatorConcurrentRevision(t *testing.T) {
 	require.Equal(t, uint64(2), read.Revision)
 }
 
+func TestRegistrationClockOperatorRejectsHardLinks(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"state.json", "operator.lock"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			path, settings := operatorTestFile(t)
+			_, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+			require.NoError(t, err)
+			require.NoError(
+				t,
+				os.Link(filepath.Join(filepath.Dir(path), name), filepath.Join(filepath.Dir(path), "alias")),
+			)
+			_, err = operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "read"})
+			require.Error(t, err, "multiply linked state and lock files are not private publications")
+		})
+	}
+}
+
+func TestRegistrationClockOperatorRejectsRootOwner(t *testing.T) {
+	t.Parallel()
+	path, settings := operatorTestFile(t)
+	if os.Geteuid() != 0 {
+		t.Skip("isolated actual root process required for the root-fallback negative")
+	}
+	_, err := operateRegistrationClockFile(t.Context(), settings, path, RegistrationClockChange{Action: "init"})
+	require.Error(t, err, "root-owned private metadata is not a nonroot app allocation")
+	_, err = os.Stat(path)
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
 func TestRegistrationClockOperatorRejectsBindingsPermissionsAndLinks(t *testing.T) {
 	t.Parallel()
 	path, settings := operatorTestFile(t)
@@ -340,6 +370,7 @@ func TestRegistrationClockOperatorPrivateDatabaseAndCLI(t *testing.T) {
 	initial, err := operatorCLI(t, "OWNER", settings, "-action", "init")
 	require.NoError(t, err)
 	assert.Equal(t, uint64(1), initial.Revision)
+	operatorOriginalContractNegatives(t, admin, owner, operator, settings, initial)
 	operatorPrivateDenials(t, admin, owner, operator, settings, initial)
 	read, err := operatorCLI(t, "OPERATOR", settings, "-action", "read")
 	require.NoError(t, err)
@@ -351,6 +382,62 @@ func TestRegistrationClockOperatorPrivateDatabaseAndCLI(t *testing.T) {
 	operatorCLIInvalidTargets(t, settings, advanced)
 	operatorFixtureSerialization(t, owner, operator, settings)
 	operatorManagedInventory(t, owner, operator)
+}
+
+func operatorOriginalContractNegatives(
+	t *testing.T,
+	admin, owner, operator *pgxpool.Pool,
+	settings registrationclock.Settings,
+	initial registrationclock.State,
+) {
+	t.Helper()
+	before, err := os.ReadFile(settings.File)
+	require.NoError(t, err)
+	cfg := config.Config{Env: "sandbox", SyntheticOnly: true}
+	for _, scenario := range []struct{ name, change, restore string }{
+		{"opening-a", `UPDATE core.pass_event_tiers SET starts_at=starts_at+interval '1 hour' WHERE event_id='registration-fixture-a' AND position=0`, `UPDATE core.pass_event_tiers SET starts_at=starts_at-interval '1 hour' WHERE event_id='registration-fixture-a' AND position=0`},
+		{"opening-b", `UPDATE core.pass_event_tiers SET starts_at=starts_at+interval '1 hour' WHERE event_id='registration-fixture-b' AND position=0`, `UPDATE core.pass_event_tiers SET starts_at=starts_at-interval '1 hour' WHERE event_id='registration-fixture-b' AND position=0`},
+		{"finish-a", `UPDATE core.pass_events SET finishes_at=finishes_at+interval '1 hour' WHERE id='registration-fixture-a'`, `UPDATE core.pass_events SET finishes_at=finishes_at-interval '1 hour' WHERE id='registration-fixture-a'`},
+		{"owner-init", `ALTER DATABASE synthetic_qa_zns_registration_fixture OWNER TO postgres`, `ALTER DATABASE synthetic_qa_zns_registration_fixture OWNER TO zns_app`},
+		{"owner-powers", `ALTER ROLE zns_app SUPERUSER`, `ALTER ROLE zns_app NOSUPERUSER`},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			_, changeErr := admin.Exec(t.Context(), scenario.change)
+			require.NoError(t, changeErr)
+			t.Cleanup(func() {
+				_, restoreErr := admin.Exec(context.WithoutCancel(t.Context()), scenario.restore)
+				require.NoError(t, restoreErr)
+			})
+			client, action := operator, "read"
+			if scenario.name == "owner-init" {
+				client, action = admin, "init"
+			} else if scenario.name == "owner-powers" {
+				client, action = owner, "init"
+			}
+			_, rejected := ApplyRegistrationClock(
+				t.Context(),
+				client,
+				cfg,
+				settings,
+				RegistrationClockChange{Action: action},
+			)
+			require.Error(t, rejected)
+			after, readErr := os.ReadFile(settings.File)
+			require.NoError(t, readErr)
+			assert.Equal(t, before, after)
+		})
+	}
+	t.Run("committed-marker-missing-file", func(t *testing.T) {
+		t.Cleanup(func() { require.NoError(t, os.WriteFile(settings.File, before, 0o600)) })
+		_, advanceErr := ApplyRegistrationClock(t.Context(), operator, cfg, settings,
+			RegistrationClockChange{Action: "advance", ExpectedRevision: 1, Target: initial.Current.Add(time.Minute)})
+		require.NoError(t, advanceErr)
+		require.NoError(t, os.Remove(settings.File))
+		_, initErr := ApplyRegistrationClock(t.Context(), owner, cfg, settings, RegistrationClockChange{Action: "init"})
+		require.Error(t, initErr, "a committed publication cannot be recreated or reset")
+		_, statErr := os.Stat(settings.File)
+		require.ErrorIs(t, statErr, os.ErrNotExist)
+	})
 }
 
 func operatorDatabase(t *testing.T, role string) *pgxpool.Pool {
