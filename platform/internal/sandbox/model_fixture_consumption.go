@@ -117,6 +117,28 @@ func (f *Fake) modelMutationLock(ctx context.Context) error {
 	}
 }
 
+func (m *modelFixtures) modelLock(ctx context.Context) error {
+	ticker := time.NewTicker(delayLockPoll)
+	defer ticker.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if m.mu.TryLock() {
+			if err := ctx.Err(); err != nil {
+				m.mu.Unlock()
+				return err
+			}
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 func (f *Fake) consumeModelPlan(ctx context.Context, scope modelFixtureScope, input agent.Input) (agent.Plan, error) {
 	ctx, cancel := context.WithTimeout(ctx, modelPersistenceTimeout)
 	defer cancel()
@@ -124,16 +146,24 @@ func (f *Fake) consumeModelPlan(ctx context.Context, scope modelFixtureScope, in
 		return agent.Plan{}, errModelFixtureUnavailable
 	}
 	defer f.mu.Unlock()
+	if err := f.modelFixtures.modelLock(ctx); err != nil {
+		return agent.Plan{}, errModelFixtureUnavailable
+	}
+	defer f.modelFixtures.mu.Unlock()
+	if f.modelControl.cancelled(ctx, scope) {
+		return agent.Plan{}, errModelFixtureUnavailable
+	}
 	if len(f.modelConsumed) >= maxModelFixtureSteps && !f.consumedScope(scope) {
 		return agent.Plan{}, errors.New("fixture consumption capacity reached")
 	}
 	if !f.modelControl.capacity(scope) {
 		return agent.Plan{}, errors.New("fixture control capacity reached")
 	}
-	if f.consumedScope(scope) && !f.liveModelCase(scope) {
+	_, live := f.modelFixtures.cases[modelFixtureKey(scope.Owner, scope.UpdateID)]
+	if f.consumedScope(scope) && !live {
 		return agent.Plan{}, errors.New("fixture consumed unavailable")
 	}
-	plan, err := f.modelFixtures.plan(scope, input)
+	plan, err := f.modelFixtures.fixturePlanLocked(ctx, f.modelControl.lifetime, scope, input, true)
 	if err != nil {
 		return plan, err
 	}
@@ -144,11 +174,17 @@ func (f *Fake) consumeModelPlan(ctx context.Context, scope modelFixtureScope, in
 		RequestSHA256: hex.EncodeToString(requestSHA[:]), ResponseSHA256: hex.EncodeToString(responseSHA[:])}
 	f.modelConsumed = append(f.modelConsumed, row)
 	f.modelControl.consumptionStarted(row)
+	if f.modelControl.cancelled(ctx, scope) {
+		return agent.Plan{}, errModelFixtureUnavailable
+	}
 	if err = f.save(ctx); err != nil {
 		f.modelControl.finish(scope, "persistence_unavailable")
 		return agent.Plan{}, errModelFixtureUnavailable
 	}
 	f.modelControl.consumed(row, f.DB != nil)
+	if f.modelControl.cancelled(ctx, scope) {
+		return agent.Plan{}, errModelFixtureUnavailable
+	}
 	return plan, nil
 }
 
@@ -159,13 +195,6 @@ func (f *Fake) consumedScope(scope modelFixtureScope) bool {
 		}
 	}
 	return false
-}
-
-func (f *Fake) liveModelCase(scope modelFixtureScope) bool {
-	f.modelFixtures.mu.Lock()
-	defer f.modelFixtures.mu.Unlock()
-	_, exists := f.modelFixtures.cases[modelFixtureKey(scope.Owner, scope.UpdateID)]
-	return exists
 }
 
 // Selection shares installation's lock so a matched request cannot miss its hold.
@@ -181,7 +210,14 @@ func (f *Fake) selectModelHold(
 		return modelFixtureSelection{}, errModelFixtureUnavailable
 	}
 	defer f.mu.Unlock()
-	if _, err := f.modelFixtures.fixturePlan(scope, input, false); err != nil {
+	if err := f.modelFixtures.modelLock(ctx); err != nil {
+		return modelFixtureSelection{}, errModelFixtureUnavailable
+	}
+	defer f.modelFixtures.mu.Unlock()
+	if f.modelControl.cancelled(ctx, scope) {
+		return modelFixtureSelection{}, errModelFixtureUnavailable
+	}
+	if _, err := f.modelFixtures.fixturePlanLocked(ctx, f.modelControl.lifetime, scope, input, false); err != nil {
 		if f.modelControl.hasConsumed(scope) {
 			return modelFixtureSelection{}, errors.New("fixture consumed unavailable")
 		}
@@ -191,8 +227,15 @@ func (f *Fake) selectModelHold(
 }
 
 func (f *Fake) fixtureModelPlan(ctx context.Context, scope modelFixtureScope, input agent.Input) (agent.Plan, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(f.modelControl.lifetime, cancel)
+	defer func() { stop(); cancel() }()
+	if f.modelControl.cancelled(ctx, scope) {
+		return agent.Plan{}, errModelFixtureUnavailable
+	}
 	hold, err := f.selectModelHold(ctx, scope, input)
 	if err != nil {
+		f.modelControl.cancelled(ctx, scope)
 		return agent.Plan{}, err
 	}
 	if hold.mode == modelHoldBefore {
@@ -202,13 +245,18 @@ func (f *Fake) fixtureModelPlan(ctx context.Context, scope modelFixtureScope, in
 	}
 	plan, err := f.consumeModelPlan(ctx, scope, input)
 	if err != nil {
-		f.modelControl.finish(scope, "unavailable")
+		if !f.modelControl.cancelled(ctx, scope) {
+			f.modelControl.finish(scope, "unavailable")
+		}
 		return plan, err
 	}
 	if hold.mode == modelHoldAfter {
 		if err = f.modelControl.wait(ctx, scope, hold); err != nil {
 			return agent.Plan{}, err
 		}
+	}
+	if f.modelControl.cancelled(ctx, scope) {
+		return agent.Plan{}, errModelFixtureUnavailable
 	}
 	return plan, nil
 }

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -29,8 +30,12 @@ type modelControlFixture struct {
 }
 
 func newModelControlFixture(t *testing.T) modelControlFixture {
+	return newModelControlFixtureContext(t.Context(), t)
+}
+
+func newModelControlFixtureContext(ctx context.Context, t *testing.T) modelControlFixture {
 	t.Helper()
-	f, err := New(t.Context(), nil, "synthetic-token")
+	f, err := New(ctx, nil, "synthetic-token")
 	require.NoError(t, err)
 	key := strings.Repeat("s", delayMinimumKeyBytes)
 	f.delay = &editDelay{
@@ -44,6 +49,239 @@ func newModelControlFixture(t *testing.T) modelControlFixture {
 	t.Cleanup(data.Close)
 	t.Cleanup(control.Close)
 	return modelControlFixture{f, data, control, key}
+}
+
+type blockedModelStateWriter struct {
+	header  http.Header
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (w *blockedModelStateWriter) Header() http.Header { return w.header }
+func (w *blockedModelStateWriter) WriteHeader(_ int) {
+	w.once.Do(func() { close(w.entered) })
+	<-w.release
+}
+func (w *blockedModelStateWriter) Write(value []byte) (int, error) {
+	w.WriteHeader(http.StatusOK)
+	return len(value), nil
+}
+
+func TestModelStateBlockedHTTPWriterDoesNotOwnFixtureLock(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"/lab/model/state?owner=alice&update_id=9", "/lab/model/state?owner=alice&update_id=99"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			f := newModelControlFixture(t)
+			f.install(t, "alice", 9, "")
+			f.install(t, "bob", 10, "")
+			writer := &blockedModelStateWriter{
+				header:  make(http.Header),
+				entered: make(chan struct{}),
+				release: make(chan struct{}),
+			}
+			done := make(chan struct{})
+			t.Cleanup(func() {
+				close(writer.release)
+				select {
+				case <-done:
+				case <-time.After(time.Second):
+					t.Error("state writer did not terminate")
+				}
+			})
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+			request.Header.Set("X-Sandbox", "1")
+			go func() { f.fake.Handler().ServeHTTP(writer, request); close(done) }()
+			select {
+			case <-writer.entered:
+			case <-time.After(time.Second):
+				t.Fatal("state writer did not start")
+			}
+			ctx, cancel := context.WithTimeout(
+				agent.WithRequestScope(t.Context(), agent.RequestScope{Owner: "bob", UpdateID: 10}),
+				time.Second,
+			)
+			defer cancel()
+			plan, err := (FixtureRemote{URL: f.data.URL + "/lab/model"}).Plan(ctx, agent.Input{Text: "private marker"})
+			require.NoError(t, err, "a blocked success/error response cannot block unrelated selection")
+			assert.Equal(t, "Synthetic answer", plan.Text)
+		})
+	}
+}
+
+func TestModelSelectionAndConsumptionBoundNestedMutexAdmission(t *testing.T) {
+	t.Parallel()
+	for _, consume := range []bool{false, true} {
+		t.Run(map[bool]string{false: "selection", true: "consumption"}[consume], func(t *testing.T) {
+			t.Parallel()
+			f := newModelControlFixture(t)
+			f.install(t, "alice", 9, "")
+			f.fake.modelFixtures.mu.Lock()
+			defer f.fake.modelFixtures.mu.Unlock()
+			ctx, cancel := context.WithTimeout(t.Context(), 40*time.Millisecond)
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				scope := modelFixtureScope{Owner: "alice", UpdateID: 9}
+				if consume {
+					_, err := f.fake.consumeModelPlan(ctx, scope, agent.Input{Text: "private marker"})
+					done <- err
+				} else {
+					_, err := f.fake.selectModelHold(ctx, scope, agent.Input{Text: "private marker"})
+					done <- err
+				}
+			}()
+			select {
+			case err := <-done:
+				require.Error(t, err)
+			case <-time.After(time.Second):
+				t.Fatal("nested mutex ignored cancellation")
+			}
+			require.True(
+				t,
+				f.fake.mu.TryLock(),
+				"mutation lock must be released before the nested mutex becomes available",
+			)
+			f.fake.mu.Unlock()
+		})
+	}
+}
+
+func TestModelReleaseReadyAndCancellationReadyCannotWinDelivery(t *testing.T) {
+	t.Parallel()
+	for _, providerStop := range []bool{false, true} {
+		t.Run(map[bool]string{false: "request", true: "provider"}[providerStop], func(t *testing.T) {
+			t.Parallel()
+			for index := range 64 {
+				mode := modelHoldBefore
+				if index%2 == 0 {
+					mode = modelHoldAfter
+				}
+				lifetime, stop := context.WithCancel(t.Context())
+				request, cancel := context.WithCancel(t.Context())
+				c := newModelFixtureControl(lifetime)
+				scope := modelFixtureScope{Owner: "alice", UpdateID: 9}
+				c.install(
+					modelFixtureInstall{
+						Owner:    "alice",
+						UpdateID: 9,
+						Hold:     &modelFixtureHoldSetup{Mode: mode},
+					},
+				)
+				hold, err := c.claim(scope)
+				require.NoError(t, err)
+				if mode == modelHoldAfter {
+					c.consumed(modelConsumption{Owner: "alice", UpdateID: 9}, false)
+				}
+				_, status := c.release(scope, "deliver")
+				require.Equal(t, http.StatusOK, status)
+				if providerStop {
+					stop()
+				} else {
+					cancel()
+				}
+				require.Error(t, c.wait(request, scope, hold), "both ready: cancellation must precede release success")
+				state, exists := c.view(scope)
+				require.True(t, exists)
+				assert.Equal(t, mode == modelHoldAfter, state.Consumed)
+				assert.Equal(
+					t,
+					map[bool]string{false: "request_cancelled", true: "provider_stopped"}[providerStop],
+					state.Phase,
+				)
+				stop()
+				cancel()
+			}
+		})
+	}
+}
+
+func TestModelProviderStopRejectsReleaseInActualDrainingHTTP(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{modelHoldBefore, modelHoldAfter} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			lifetime, stop := context.WithCancel(t.Context())
+			defer stop()
+			f := newModelControlFixtureContext(lifetime, t)
+			f.install(t, "alice", 9, mode)
+			result := make(chan error, 1)
+			go func() {
+				_, err := (FixtureRemote{URL: f.data.URL + "/lab/model"}).Plan(
+					agent.WithRequestScope(t.Context(), agent.RequestScope{Owner: "alice", UpdateID: 9}),
+					agent.Input{Text: "private marker"},
+				)
+				result <- err
+			}()
+			phase := "held_before_consume"
+			if mode == modelHoldAfter {
+				phase = "held_process_local"
+			}
+			f.state(t, phase)
+			stop()
+			status, _ := f.request(
+				t,
+				http.MethodPost,
+				"/control/model/release"+modelControlScope,
+				`{"action":"deliver"}`,
+				f.key,
+				true,
+			)
+			assert.Equal(t, http.StatusConflict, status)
+			select {
+			case err := <-result:
+				require.Error(t, err)
+			case <-time.After(time.Second):
+				t.Fatal("provider stop did not end draining request")
+			}
+			state := f.state(t, "provider_stopped")
+			assert.Equal(t, mode == modelHoldAfter, state.Consumed)
+			f.fake.modelFixtures.mu.Lock()
+			assert.Equal(
+				t,
+				map[bool]int{false: 0, true: 1}[mode == modelHoldAfter],
+				f.fake.modelFixtures.cases[modelFixtureKey("alice", 9)].accepted,
+			)
+			f.fake.modelFixtures.mu.Unlock()
+		})
+	}
+}
+
+func TestModelProviderStopCancelsActualSelectionLockWait(t *testing.T) {
+	t.Parallel()
+	lifetime, stop := context.WithCancel(t.Context())
+	defer stop()
+	f := newModelControlFixtureContext(lifetime, t)
+	f.install(t, "alice", 9, modelHoldBefore)
+	f.fake.modelFixtures.mu.Lock()
+	defer f.fake.modelFixtures.mu.Unlock()
+	result := make(chan error, 1)
+	go func() {
+		_, err := (FixtureRemote{URL: f.data.URL + "/lab/model"}).Plan(
+			agent.WithRequestScope(t.Context(), agent.RequestScope{Owner: "alice", UpdateID: 9}),
+			agent.Input{Text: "private marker"},
+		)
+		result <- err
+	}()
+	require.Eventually(t, func() bool {
+		if f.fake.mu.TryLock() {
+			f.fake.mu.Unlock()
+			return false
+		}
+		return true
+	}, time.Second, time.Millisecond)
+	stop()
+	select {
+	case err := <-result:
+		require.Error(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("provider stop did not cancel nested admission")
+	}
+	require.True(t, f.fake.mu.TryLock())
+	f.fake.mu.Unlock()
+	f.state(t, "provider_stopped")
+	assert.Zero(t, f.fake.modelFixtures.cases[modelFixtureKey("alice", 9)].accepted)
 }
 
 func (f modelControlFixture) request(t *testing.T, method, path, body, key string, control bool) (int, string) {

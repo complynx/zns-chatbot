@@ -72,6 +72,10 @@ func (f *Fake) modelFixturePlan(w http.ResponseWriter, r *http.Request) {
 		api.JSON(w, http.StatusConflict, map[string]string{errorField: err.Error()})
 		return
 	}
+	if f.modelControl.cancelled(r.Context(), scope) {
+		api.JSON(w, http.StatusServiceUnavailable, map[string]string{errorField: "fixture provider unavailable"})
+		return
+	}
 	f.modelControl.finish(scope, "response_generated")
 	api.JSON(w, http.StatusOK, plan)
 }
@@ -87,8 +91,13 @@ func (f *Fake) modelFixtureState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.modelFixtures.mu.Lock()
-	defer f.modelFixtures.mu.Unlock()
 	value, ok := f.modelFixtures.cases[modelFixtureKey(owner, update)]
+	var state modelFixtureState
+	if ok {
+		state = modelFixtureState{Assessment: value.assessmentState, UpdateID: update, NextTurn: value.next,
+			Total: len(value.steps), Accepted: value.accepted, Rejected: value.rejected, LastStatus: value.lastStatus}
+	}
+	f.modelFixtures.mu.Unlock()
 	if !ok {
 		api.JSON(w, http.StatusNotFound, map[string]string{errorField: "fixture not configured"})
 		return
@@ -96,15 +105,7 @@ func (f *Fake) modelFixtureState(w http.ResponseWriter, r *http.Request) {
 	api.JSON(
 		w,
 		http.StatusOK,
-		modelFixtureState{
-			Assessment: value.assessmentState,
-			UpdateID:   update,
-			NextTurn:   value.next,
-			Total:      len(value.steps),
-			Accepted:   value.accepted,
-			Rejected:   value.rejected,
-			LastStatus: value.lastStatus,
-		},
+		state,
 	)
 }
 

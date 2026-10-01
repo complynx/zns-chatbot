@@ -57,8 +57,13 @@ means the provider recorded consumption in its existing `bot.fake_state` and
 has not returned the plan. `held_process_local` with `durable:false` is only an
 in-memory hold when no database was supplied; it cannot qualify durable evidence.
 
-The consumption write and provider mutation-lock acquisition share a 2-second
-deadline. SQL failure produces `persistence_unavailable`, `consumed:true`,
+The consumption write and both provider/fixture lock acquisitions share a
+2-second deadline. Selection has its own 2-second admission bound. HTTP state
+responses copy under the fixture lock and write after unlocking. Model work
+uses both request and provider lifetimes, including while waiting for locks or
+SQL. Observable cancellation takes priority over release success and is checked
+again at consumption, persistence and response delivery. SQL failure produces
+`persistence_unavailable`, `consumed:true`,
 `durable:false`; it never rewinds or acknowledges a durable hold. This is unknown
 persistence, not proof that SQL did not commit. The hold ends on release, request
 cancellation, provider lifetime cancellation or 10 seconds. The existing model

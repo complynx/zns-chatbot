@@ -193,10 +193,16 @@ func (c *modelFixtureControl) finish(scope modelFixtureScope, phase string) {
 }
 
 func (c *modelFixtureControl) wait(ctx context.Context, scope modelFixtureScope, hold modelFixtureSelection) error {
+	if c.cancelled(ctx, scope) {
+		return errModelFixtureUnavailable
+	}
 	timer := time.NewTimer(modelHoldTimeout)
 	defer timer.Stop()
 	select {
 	case action := <-hold.release:
+		if c.cancelled(ctx, scope) {
+			return errModelFixtureUnavailable
+		}
 		c.finish(scope, "released")
 		err := modelReleaseError(action)
 		if err != nil {
@@ -204,13 +210,27 @@ func (c *modelFixtureControl) wait(ctx context.Context, scope modelFixtureScope,
 		}
 		return err
 	case <-ctx.Done():
-		c.finish(scope, "request_cancelled")
+		c.cancelled(ctx, scope)
 	case <-c.lifetime.Done():
 		c.finish(scope, "provider_stopped")
 	case <-timer.C:
-		c.finish(scope, "hold_expired")
+		if !c.cancelled(ctx, scope) {
+			c.finish(scope, "hold_expired")
+		}
 	}
 	return errModelFixtureUnavailable
+}
+
+func (c *modelFixtureControl) cancelled(ctx context.Context, scope modelFixtureScope) bool {
+	if c.lifetime.Err() != nil {
+		c.finish(scope, "provider_stopped")
+		return true
+	}
+	if ctx.Err() != nil {
+		c.finish(scope, "request_cancelled")
+		return true
+	}
+	return false
 }
 
 func (c *modelFixtureControl) control(w http.ResponseWriter, r *http.Request, body []byte) {
@@ -266,6 +286,11 @@ func (c *modelFixtureControl) release(scope modelFixtureScope, action string) (m
 	hold := c.entries[modelScopeKey(scope)]
 	if hold == nil {
 		return modelFixtureControlState{}, http.StatusNotFound
+	}
+	if c.lifetime.Err() != nil {
+		hold.view.Phase = "provider_stopped"
+		hold.claimed = false
+		return hold.view, http.StatusConflict
 	}
 	if hold.view.Phase != "held_before_consume" && hold.view.Phase != "consumed_held" &&
 		hold.view.Phase != "held_process_local" {
