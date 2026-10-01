@@ -2,24 +2,24 @@
 name: synthetic-qa-zns-registration-fixture-prerequisites
 x-tool: &tool
   image: ${ZNS_APP_IMAGE:?Reviewed current application repository@sha256 required}
-  user: '${ZNS_APP_UID:?Actual inspected app UID}:${ZNS_APP_GID:?Actual inspected app GID}'
+  user: "${ZNS_APP_UID:?Actual inspected app UID}:${ZNS_APP_GID:?Actual inspected app GID}"
   pull_policy: never
   read_only: true
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
   networks: [sandbox]
-  volumes: ['config:/etc/zns:ro']
+  volumes: ["config:/etc/zns:ro"]
   env_file:
     - path: ${ZNS_REGISTRATION_SECRET_DIR:?Protected private environment directory}/tool.env
       format: raw
 x-environment: &environment
   ZNS_CONFIG_FILE: /etc/zns/runtime.yaml
   ZNS_ENV: sandbox
-  ZNS_SYNTHETIC_ONLY: 'true'
+  ZNS_SYNTHETIC_ONLY: "true"
 x-clock-environment: &clock-environment
   <<: *environment
   REGISTRATION_CLOCK_FILE: /run/registration-clock/state.json
-  REGISTRATION_CLOCK_INSTALLATION: '010400000204'
+  REGISTRATION_CLOCK_INSTALLATION: "010400000204"
   REGISTRATION_CLOCK_CASE: c-registration-clock-20261001-v1
   REGISTRATION_CLOCK_DATABASE_ADDRESS: postgres:5432/synthetic_qa_zns_registration_fixture
   REGISTRATION_CLOCK_ANCHOR: ${FQA_REGISTRATION_SETUP_ANCHOR:?Reviewed immutable UTC microsecond setup anchor}
@@ -31,7 +31,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_DB: synthetic_qa_zns_registration_fixture
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-    ports: ['127.0.0.1:58431:5432']
+    ports: ["127.0.0.1:58431:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - bootstrap-secrets:/run/secrets:ro
@@ -43,7 +43,7 @@ services:
       test:
         [
           CMD-SHELL,
-          'pg_isready -U zns_app -d synthetic_qa_zns_registration_fixture',
+          "pg_isready -U zns_app -d synthetic_qa_zns_registration_fixture",
         ]
       interval: 2s
       timeout: 3s
@@ -76,7 +76,33 @@ services:
     entrypoint: [/usr/local/bin/registrationclockctl]
     command: [-action, init]
     environment: *clock-environment
-    volumes: ['config:/etc/zns:ro', 'clock:/run/registration-clock']
+    volumes: ["config:/etc/zns:ro", "clock:/run/registration-clock"]
+    depends_on:
+      registration-init: { condition: service_completed_successfully }
+  runtime-roles:
+    image: ${ZNS_POSTGRES_IMAGE:?Reviewed cached PostgreSQL17 repository@sha256 required}
+    pull_policy: never
+    user: "${ZNS_APP_UID:?Actual inspected app UID}:${ZNS_APP_GID:?Actual inspected app GID}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    entrypoint: [psql]
+    command:
+      [
+        --no-psqlrc,
+        --single-transaction,
+        -v,
+        ON_ERROR_STOP=1,
+        -v,
+        ECHO=none,
+        -f,
+        /bootstrap/runtime-roles.sql,
+      ]
+    env_file:
+      - path: ${ZNS_REGISTRATION_SECRET_DIR:?}/runtime-roles.env
+        format: raw
+    networks: [sandbox]
+    volumes: ["./runtime-roles.sql:/bootstrap/runtime-roles.sql:ro"]
     depends_on:
       registration-init: { condition: service_completed_successfully }
   clock-read:
@@ -84,22 +110,32 @@ services:
     image: ${ZNS_CLOCK_OPERATOR_IMAGE:?}
     entrypoint: [/usr/local/bin/registrationclockctl]
     command: [-action, read]
+    env_file:
+      - path: ${ZNS_REGISTRATION_SECRET_DIR:?}/registration-operator.env
+        format: raw
     environment: *clock-environment
-    volumes: ['config:/etc/zns:ro', 'clock:/run/registration-clock']
+    volumes: ["config:/etc/zns:ro", "clock:/run/registration-clock"]
     depends_on:
       clock-init: { condition: service_completed_successfully }
+      runtime-roles: { condition: service_completed_successfully }
   clock-operator:
     <<: *tool
     profiles: [operator]
     image: ${ZNS_CLOCK_OPERATOR_IMAGE:?}
     entrypoint: [/usr/local/bin/registrationclockctl]
     command: [-action, read]
+    env_file:
+      - path: ${ZNS_REGISTRATION_SECRET_DIR:?}/registration-operator.env
+        format: raw
     environment: *clock-environment
-    volumes: ['config:/etc/zns:ro', 'clock:/run/registration-clock']
+    volumes: ["config:/etc/zns:ro", "clock:/run/registration-clock"]
   registration-read:
     <<: *tool
     profiles: [operator]
     command: product-fixture
+    env_file:
+      - path: ${ZNS_REGISTRATION_SECRET_DIR:?}/registration-operator.env
+        format: raw
     environment:
       <<: *environment
       REGISTRATION_FIXTURE_ACTION: read
@@ -111,7 +147,7 @@ services:
       - path: ${ZNS_REGISTRATION_SECRET_DIR:?}/fake.env
         format: raw
     command: fake
-    restart: 'no'
+    restart: "no"
     pids_limit: 64
     mem_limit: 128m
     cpus: 1
@@ -125,12 +161,13 @@ services:
         source: ${R104_EVIDENCE_DIR:?Absolute private fresh provider evidence directory}
         target: /evidence
         bind: { create_host_path: false }
-    ports: ['127.0.0.1:58433:8080', '127.0.0.1:58434:8090']
+    ports: ["127.0.0.1:58433:8080", "127.0.0.1:58434:8090"]
     networks:
       sandbox: {}
       front: { gw_priority: 1 }
     depends_on:
       clock-read: { condition: service_completed_successfully }
+      runtime-roles: { condition: service_completed_successfully }
     healthcheck:
       test: [CMD, zns, health]
       interval: 2s

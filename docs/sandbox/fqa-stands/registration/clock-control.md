@@ -4,6 +4,9 @@ Reviewable templates, not a started or accepted stand. Prepared integration base
 the next reviewed composition must include current registration fixtures/role
 actions, accepted C clock core, accepted operator, menu 090 and applicable source
 changes. Operator `7841e785` and the clock core are separate pending dependencies.
+The reviewed operator successor must retain owner-only init and support the
+private registration operator guard for live read/advance. The old owner-only
+operator cannot safely run against an active managed generation.
 No copied development state file or old image satisfies this requirement.
 
 ## Allocation and ownership
@@ -49,6 +52,7 @@ Record Linux stat evidence; Windows bind-file chmod is not permission proof.
 
 Lead must allocate the extra -bootstrap-secrets volume before preparation. It
 contains postgres_password, app_password, meter_password, inventory_password,
+fake_password and operator_password,
 each separately generated private credential. Actual PostgreSQL UID owns the
 directory mode 0700 and regular files mode 0400. PostgreSQL mounts it read-only; product,
 fake, helpers, operator and coordinator do not mount it. No credential bytes,
@@ -72,19 +76,21 @@ inspection of the new allocated cluster before continuation.
 
 Private environment files are not tracked. Their exact key allowlists are:
 
-| File          | Private settings                                                                                                                                              |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| tool.env      | ZNS_DATABASE__URL for owning zns_app at postgres port 5432/new DB; matching synthetic TELEGRAM_TOKEN for the fixture bot namespace                            |
-| app.env       | ZNS_DATABASE__URL for zns_app at postgres port 5432/new DB; ZNS_AUTH__SIGNING_KEY; TELEGRAM_TOKEN; OPENAI_API_KEY; MEDIA_WORKER_SECRET; STICKER_WORKER_SECRET |
-| fake.env      | ZNS_DATABASE__URL for the same owning zns_app; matching synthetic TELEGRAM_TOKEN; ZNS_AUTH__SIGNING_KEY; OPENAI_API_KEY; R104_CONTROL_KEY                     |
-| media.env     | DATABASE_URL for zns_meter/new DB; MEDIA_WORKER_SECRET; synthetic OPENAI_API_KEY                                                                              |
-| sticker.env   | STICKER_WORKER_SECRET                                                                                                                                         |
-| inventory.env | ZNS_INVENTORY_DATABASE_URL for read-only zns_inventory/new DB                                                                                                 |
+| File                      | Private settings                                                                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tool.env                  | ZNS_DATABASE__URL for owning zns_app at postgres port 5432/new DB; matching synthetic TELEGRAM_TOKEN for the fixture bot namespace                            |
+| app.env                   | ZNS_DATABASE__URL for zns_app at postgres port 5432/new DB; ZNS_AUTH__SIGNING_KEY; TELEGRAM_TOKEN; OPENAI_API_KEY; MEDIA_WORKER_SECRET; STICKER_WORKER_SECRET |
+| fake.env                  | ZNS_DATABASE__URL for zns_fake/new DB; matching synthetic TELEGRAM_TOKEN; ZNS_AUTH__SIGNING_KEY; OPENAI_API_KEY; R104_CONTROL_KEY                             |
+| registration-operator.env | ZNS_DATABASE__URL for zns_registration_operator/new DB; matching synthetic TELEGRAM_TOKEN                                                                     |
+| runtime-roles.env         | PGHOST=postgres; PGPORT=5432; PGDATABASE=synthetic_qa_zns_registration_fixture; PGUSER=zns_app; PGPASSWORD for actual zns_app                                 |
+| media.env                 | DATABASE_URL for zns_meter/new DB; MEDIA_WORKER_SECRET; synthetic OPENAI_API_KEY                                                                              |
+| sticker.env               | STICKER_WORKER_SECRET                                                                                                                                         |
+| inventory.env             | ZNS_INVENTORY_DATABASE_URL for read-only zns_inventory/new DB                                                                                                 |
 
 Host preparation selects ZNS_REGISTRATION_SECRET_DIR as its protected staging
 directory. Copy required raw environment files into the private config volume at
 /private before coordinator start. Owner receives inventory.env only and sets
-its nested Compose directory to /config/private; app receives app.env. Preparation and read tools receive tool.env only; it must contain no worker secrets/URLs, signing key or model key. Keep the owning-role DSN and synthetic bot token identical to app.env. Runtime
+its nested Compose directory to /config/private; app receives app.env. Owner preparation and clock-init receive tool.env only; it must contain no worker secrets/URLs, signing key or model key. Keep the owning-role DSN and synthetic bot token identical to app.env. Registration-read and all live clock read/advance tools receive registration-operator.env only, with the separate private operator DSN and the same synthetic bot token. The one-shot runtime-roles phase receives runtime-roles.env only; it runs psql as the actual owner after init and before admission, without a URL/password argument. Runtime
 Compose reads those files inside the coordinator, not from a guessed host path.
 Use no extra `REGISTRATION_FIXTURE_*`, `REGISTRATION_CLOCK_*` or lifecycle identity
 keys in private envfiles. Approved Compose 2.40 supports `env_file` with `format: raw`; values
@@ -113,6 +119,7 @@ docker compose -f prerequisites.compose.yaml up -d postgres
 docker compose -f prerequisites.compose.yaml run --rm --no-deps migrate
 docker compose -f prerequisites.compose.yaml run --rm --no-deps fixtures
 docker compose -f prerequisites.compose.yaml run --rm --no-deps registration-init
+docker compose -f prerequisites.compose.yaml run --rm --no-deps runtime-roles
 docker compose -f prerequisites.compose.yaml run --rm --no-deps clock-init
 docker compose -f prerequisites.compose.yaml run --rm --no-deps clock-read
 docker compose -f prerequisites.compose.yaml run --rm --no-deps registration-read
@@ -129,14 +136,35 @@ All those sessions are the actual owning nonsuperuser zns_app, not `SET ROLE` or
 an administrative bypass. Clock init publishes initial state then its marker;
 after uncertain completion read state and marker before a bounded retry.
 
+Runtime-roles verifies the exact allocation and existing fixture table owner,
+separate owner SELECT and INSERT privileges and all three product/registration
+markers before granting explicit table permissions. Fake connects as zns_fake:
+bot schema USAGE; SELECT/INSERT/UPDATE on fake_state; SELECT/INSERT on fake_files;
+SELECT on cursors/interactions. It has no core/public writes, DDL or membership.
+The private operator has SELECT on the marker and seven required core tables,
+INSERT/DELETE on pass_payment_admins/pass_booking_admins, UPDATE(id) on users and
+pass_events and UPDATE(owner) on the two admin tables for genuine PostgreSQL
+row locking. No default/PUBLIC grants, table ownership or owner membership are
+given. These credentials are trusted private SQL access within those exact
+grants; they are not database-enforced action capabilities. The CLI permits
+only read and the existing fixed role actions. Never expose this role to the
+model or an untrusted user. Init and marker creation remain actual owner-only.
+All genuine fixture controls share the existing transaction advisory lock;
+operator checks actual marker ownership/owner ACL, original three identities
+and all product/registration markers before mutation, retaining domain lock order.
+Fake and live operator sessions are distinct from managed_roles, which remain
+exactly zns_app/zns_meter. Their ordinary pool names are not disguised. Verify
+held operator and persistent fake sessions across genuine startup/replacement;
+permission/static checks alone do not prove coordinator or clock acceptance.
+
 Before any app start, execute sanitized owner checks on the exact allocated
 PostgreSQL container using `psql -U zns_app -d synthetic_qa_zns_registration_fixture`:
 
 ```sql
 SELECT current_user,current_database(),pg_get_userbyid(datdba) AS database_owner
 FROM pg_database WHERE datname=current_database();
-SELECT rolname,rolsuper,rolcreatedb,rolcreaterole,rolreplication
-FROM pg_roles WHERE rolname IN ('zns_app','zns_meter','zns_inventory');
+SELECT rolname,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls
+FROM pg_roles WHERE rolname IN ('zns_app','zns_meter','zns_inventory','zns_fake','zns_registration_operator');
 SELECT id,telegram_id FROM core.users ORDER BY id;
 SELECT n.nspname,c.relname,pg_get_userbyid(c.relowner) AS table_owner,
  has_table_privilege('zns_app',c.oid,'SELECT') AS app_select,

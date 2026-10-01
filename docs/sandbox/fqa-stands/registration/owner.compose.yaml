@@ -3,7 +3,7 @@ name: synthetic-qa-zns-registration-fixture-owner
 services:
   coordinator:
     image: ${ZNS_COORDINATOR_IMAGE:?Supply the reviewed local coordinator image}
-    user: '0:0'
+    user: "0:0"
     entrypoint: [/usr/local/bin/znsreplace]
     command: [/config/replacement.json]
     pull_policy: never
@@ -39,7 +39,7 @@ services:
       - state:/state
       - config:/config:ro
     networks: [sandbox]
-    tmpfs: ['/tmp:rw,noexec,nosuid,size=16m,mode=1777']
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=16m,mode=1777"]
 networks:
   sandbox:
     external: true

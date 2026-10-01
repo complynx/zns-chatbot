@@ -8,7 +8,7 @@ x-labels: &labels
   net.complynx.zns.launch: ${ZNS_LAUNCH_ID:?}
 x-runtime: &runtime
   pull_policy: never
-  restart: 'no'
+  restart: "no"
   read_only: true
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
@@ -18,7 +18,7 @@ x-runtime: &runtime
   cpus: 2
 x-decoder: &decoder
   pull_policy: never
-  restart: 'no'
+  restart: "no"
   network_mode: none
   read_only: true
   cap_drop: [ALL]
@@ -30,7 +30,7 @@ services:
   app:
     <<: *runtime
     image: ${ZNS_APP_IMAGE:?Digest-addressed app image required}
-    user: '${ZNS_APP_UID:?Actual inspected app UID}:${ZNS_APP_GID:?Actual inspected app GID}'
+    user: "${ZNS_APP_UID:?Actual inspected app UID}:${ZNS_APP_GID:?Actual inspected app GID}"
     env_file:
       - path: ${ZNS_REGISTRATION_SECRET_DIR:?Private runtime environment directory}/app.env
         format: raw
@@ -38,9 +38,9 @@ services:
     environment:
       <<: *instance
       ZNS_CONFIG_FILE: /etc/zns/runtime.yaml
-      ZNS_SYNTHETIC_ONLY: 'true'
+      ZNS_SYNTHETIC_ONLY: "true"
       REGISTRATION_CLOCK_FILE: /run/registration-clock/state.json
-      REGISTRATION_CLOCK_INSTALLATION: '010400000204'
+      REGISTRATION_CLOCK_INSTALLATION: "010400000204"
       REGISTRATION_CLOCK_CASE: c-registration-clock-20261001-v1
       REGISTRATION_CLOCK_DATABASE_ADDRESS: postgres:5432/synthetic_qa_zns_registration_fixture
       REGISTRATION_CLOCK_ANCHOR: ${FQA_REGISTRATION_SETUP_ANCHOR:?Reviewed immutable UTC microsecond setup anchor}
@@ -49,14 +49,14 @@ services:
     labels:
       <<: *labels
       net.complynx.zns.component: app
-    group_add: ['10002']
+    group_add: ["10002"]
     volumes:
       [
-        'config:/etc/zns:ro',
-        'script-ipc:/run/script-ipc:ro',
-        'clock:/run/registration-clock:ro',
+        "config:/etc/zns:ro",
+        "script-ipc:/run/script-ipc:ro",
+        "clock:/run/registration-clock:ro",
       ]
-    ports: ['127.0.0.1:58432:8080']
+    ports: ["127.0.0.1:58432:8080"]
     stop_grace_period: 20s
     healthcheck:
       test: [CMD, zns, health]
@@ -69,7 +69,7 @@ services:
     labels:
       <<: *labels
       net.complynx.zns.component: evaluator
-    volumes: ['script-ipc:/run/script-ipc']
+    volumes: ["script-ipc:/run/script-ipc"]
     mem_limit: 128m
     memswap_limit: 128m
     healthcheck:
@@ -83,11 +83,11 @@ services:
     labels:
       <<: *labels
       net.complynx.zns.component: media-decoder
-    volumes: ['media-ipc:/run/media-ipc']
+    volumes: ["media-ipc:/run/media-ipc"]
     mem_limit: 512m
     cpus: 2
     pids_limit: 256
-    tmpfs: ['/tmp:rw,noexec,nosuid,size=64m,uid=10002,gid=10002,mode=0700']
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,uid=10002,gid=10002,mode=0700"]
     healthcheck:
       test: [CMD, test, -S, /run/media-ipc/decoder.sock]
       interval: 2s
@@ -106,7 +106,7 @@ services:
       <<: *instance
       OPENAI_TRANSCRIPTION_MODEL: gpt-transcribe
       OPENAI_TRANSCRIPTION_URL: http://fake:8080/lab/asr
-    volumes: ['media-ipc:/run/media-ipc:ro']
+    volumes: ["media-ipc:/run/media-ipc:ro"]
     mem_limit: 256m
     pids_limit: 64
   sticker-decoder:
@@ -118,8 +118,8 @@ services:
     environment:
       <<: *instance
       STICKER_WORKER_MODE: decoder
-    volumes: ['sticker-ipc:/run/sticker-ipc']
-    tmpfs: ['/tmp:rw,noexec,nosuid,size=32m,uid=10002,gid=10002,mode=0700']
+    volumes: ["sticker-ipc:/run/sticker-ipc"]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m,uid=10002,gid=10002,mode=0700"]
     mem_limit: 256m
   sticker-broker:
     <<: *runtime
@@ -133,7 +133,7 @@ services:
     environment:
       <<: *instance
       STICKER_WORKER_MODE: broker
-    volumes: ['sticker-ipc:/run/sticker-ipc:ro']
+    volumes: ["sticker-ipc:/run/sticker-ipc:ro"]
     mem_limit: 256m
     pids_limit: 16
 networks:
