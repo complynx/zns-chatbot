@@ -221,7 +221,8 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 		row.LastUncertainAttempt.Int64 == result.Attempt && row.DeliveryState != string(delivery.Sending) {
 		return nil
 	}
-	if (row.DeliveryState != notificationPending || !row.LeaseLive) &&
+	if (row.DeliveryState != notificationPending || !row.LeaseLive ||
+		(row.LastConfirmedAttempt.Valid && row.LastConfirmedAttempt.Int64 == result.Attempt)) &&
 		row.DeliveryState == string(result.Outcome.Kind) &&
 		row.TelegramMessageID == result.Outcome.MessageID &&
 		row.Failure == result.Outcome.Reason &&

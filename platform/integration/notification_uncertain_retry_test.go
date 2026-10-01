@@ -626,6 +626,17 @@ func notificationReceiptSnapshot(t *testing.T, r *notificationRuntimeFixture) ma
 	require.NoError(t, decoder.Decode(&result))
 	return result
 }
+
+// Capture complete delivery rows, including the follower and both pacing lanes.
+func notificationDeliverySnapshot(t *testing.T, r *notificationRuntimeFixture) string {
+	t.Helper()
+	var raw []byte
+	require.NoError(t, r.f.db.QueryRow(t.Context(),
+		"SELECT jsonb_build_object('owners',(SELECT jsonb_agg(to_jsonb(n) ORDER BY n.id) FROM "+r.table+" n),"+
+			"'queue',(SELECT jsonb_agg(to_jsonb(q) ORDER BY q.bot_id,q.owner_kind,q.owner_key,q.effect_key) FROM core.delivery_queue q),"+
+			"'pacing',(SELECT jsonb_agg(to_jsonb(p) ORDER BY p.bot_id,p.chat) FROM core.delivery_pacing p))").Scan(&raw))
+	return string(raw)
+}
 func TestNotificationUncertainRetryCountsRateLimitedSends(t *testing.T) {
 	t.Parallel()
 	for _, domain := range []string{"orders", "registration", "massage", "food"} {
@@ -721,7 +732,39 @@ func TestNotificationUncertainRetryThird429RetainsCooldown(t *testing.T) {
 				cooldown = deferred.AvailableAt
 			}
 			waitNotificationEligibility(t, r, cooldown)
-			require.NoError(t, dispatch(t.Context(), r.first))
+			r.prepare(t)
+			prepared := r.status(t, r.first)
+			require.Equal(
+				t,
+				deferred.Attempt,
+				prepared.Attempt,
+				"policy-only preparation retains the confirmed generation",
+			)
+			var leaseLive bool
+			require.NoError(t, r.f.db.QueryRow(t.Context(),
+				"SELECT lease_until>clock_timestamp() FROM "+r.table+" WHERE id=$1", r.first).Scan(&leaseLive))
+			require.True(t, leaseLive)
+			beforeReplay := notificationDeliverySnapshot(t, r)
+			r.postAttempt(t, "complete", map[string]any{
+				"id": r.first, "attempt": deferred.Attempt,
+				"outcome": delivery.Outcome{Kind: delivery.Deferred, Reason: "telegram_rate_limit", RetryAfter: 21},
+			}, http.StatusOK)
+			afterReplay := notificationDeliverySnapshot(t, r)
+			assert.Equal(
+				t,
+				beforeReplay,
+				afterReplay,
+				"confirmed negative replay preserves owner, all queue rows and pacing",
+			)
+			t.Logf(
+				"expired original cooldown=%s; replay before=%s after=%s actual primary wires=%d",
+				cooldown,
+				beforeReplay,
+				afterReplay,
+				loss.count(),
+			)
+			assert.Equal(t, 4, loss.count(), "completion replay makes no provider call")
+			r.postAttempt(t, "begin", delivery.Attempt{ID: r.first, Generation: prepared.Attempt}, http.StatusOK)
 			terminal := r.status(t, r.first)
 			assert.Equal(t, "failed", terminal.State)
 			assert.Equal(t, "telegram_uncertain_retry_exhausted", terminal.Reason)
@@ -784,6 +827,7 @@ func notificationCooldownProvider(t *testing.T, r *notificationRuntimeFixture, t
 		if reject {
 			negatives++
 		}
+		negative := negatives
 		mu.Unlock()
 		if !reject {
 			r.f.fake.Config.Handler.ServeHTTP(w, request)
@@ -791,6 +835,7 @@ func notificationCooldownProvider(t *testing.T, r *notificationRuntimeFixture, t
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
+		t.Logf("actual provider HTTP 429 retry_after=21; primary negative=%d", negative)
 		_, _ = fmt.Fprint(
 			w,
 			`{"ok":false,"error_code":429,"description":"synthetic confirmed cooldown","parameters":{"retry_after":21}}`,
