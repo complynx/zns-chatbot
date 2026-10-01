@@ -142,7 +142,7 @@ func TestNotificationSQLOriginErrors(t *testing.T) {
 		}},
 		{"save_notification_outcome", 1, func(ctx context.Context, tx pgx.Tx) error {
 			outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "notification_no_longer_current"}
-			return Service{}.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, outcome, "", time.Time{}, 0)
+			return Service{}.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, outcome, "", time.Time{}, 0, false)
 		}},
 		{"finish_announcement", 1, func(ctx context.Context, tx pgx.Tx) error {
 			outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "announcement_superseded"}
@@ -273,12 +273,21 @@ func TestNotificationExpectedOutcomesSurviveTagging(t *testing.T) {
 		t.Parallel()
 		tx := &notificationSQLTx{tag: "UPDATE 0"}
 		outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "notification_no_longer_current"}
-		err := Service{}.saveNotificationOutcome(t.Context(), dbgen.New(tx), attempt, outcome, "", time.Time{}, 0)
+		err := Service{}.saveNotificationOutcome(
+			t.Context(),
+			dbgen.New(tx),
+			attempt,
+			outcome,
+			"",
+			time.Time{},
+			0,
+			false,
+		)
 		requireProblemCode(t, err, "notification_stale_attempt")
 		require.Equal(t, 1, tx.calls)
 		tx = &notificationSQLTx{}
 		require.NoError(t, Service{}.saveNotificationOutcome(
-			t.Context(), dbgen.New(tx), attempt, outcome, "", time.Time{}, 0))
+			t.Context(), dbgen.New(tx), attempt, outcome, "", time.Time{}, 0, false))
 		require.Equal(t, 1, tx.calls)
 	})
 

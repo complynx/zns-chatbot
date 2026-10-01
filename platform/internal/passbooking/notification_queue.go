@@ -149,7 +149,7 @@ func (s Service) recoverNotificationSend(ctx context.Context) (bool, error) {
 		outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: notificationNotCurrentReason}
 	}
 	attempt := delivery.Attempt{ID: row.ID, Generation: row.DeliveryAttempt}
-	if err = s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {
+	if err = s.finishNotification(ctx, tx, attempt, outcome, "", false); err != nil {
 		return false, err
 	}
 	if err = clockAttempt.Check(ctx); err != nil {

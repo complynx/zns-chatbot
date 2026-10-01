@@ -225,7 +225,7 @@ func TestR31FoodStatementFaultsKeepDomainMappings(t *testing.T) {
 	attempt := delivery.Attempt{ID: 1, Generation: 1}
 	outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "synthetic_domain_notice_consumed"}
 	failing := dbgen.New(failingTx{err: r31Transport()})
-	r31RequireSafeDatabase(t, s.saveNotificationOutcome(ctx, failing, attempt, outcome, "", time.Time{}, 0))
+	r31RequireSafeDatabase(t, s.saveNotificationOutcome(ctx, failing, attempt, outcome, "", time.Time{}, 0, false))
 
 	legacy := Payment{Kind: Meals, Status: Paid, LegacySourceKey: "legacy"}
 	_, err = aggregatePayment(ctx, failingTx{err: r31Transport()}, legacy)

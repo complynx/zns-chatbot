@@ -1062,10 +1062,13 @@ func TestNotificationUncertainRetryKnown429RendersCurrentUntilUnknown(t *testing
 			t.Parallel()
 			r := notificationRuntime(t, domain)
 			setNotificationLanguage(t, r, "en")
-			spy := attachNotificationWireSpy(t, r.f, "rate")
+			provider, arrived, release := heldNotification429(t)
+			release()
+			r.f.b.TG.Base = provider
 			dispatch := exactNotificationDelivery(r, domain)
 			require.NoError(t, dispatch(t.Context(), r.first))
-			require.Equal(t, 1, spy.calls(202))
+			request := <-arrived
+			require.NotEmpty(t, request.Text)
 			known := r.status(t, r.first)
 			require.Equal(t, "telegram_rate_limit", known.Reason)
 			require.Zero(t, known.LastUncertainAttempt)
