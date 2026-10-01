@@ -196,7 +196,7 @@ func testBotTransportRetryBudgetAndFollower(t *testing.T, rateLimited bool) {
 		expectedVisible,
 		"the UI retains real deliveries and the released follower",
 	)
-	assertBotTransportRetryTerminalReceipt(t, b, first.Reference, rateLimited, visible.Messages, &calls)
+	assertBotTransportRetryTerminalReceipt(t, &b, first.Reference, rateLimited, visible.Messages, &calls)
 }
 
 func assertBotTransportRetryTerminalReceipt(
