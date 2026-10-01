@@ -1,4 +1,25 @@
-## Current integrated source and expanded QA — 2026-10-01
+## Current integrated source and expanded QA — 2026-10-01, source0070f944
+
+Authoritative product Git source0070f944 includes reviewed ACK observation
+(QA241, merge6812e359), source-status runtime diagnostics (QA243, mergef56bebd3)
+and bounded genuine registration fixtures (QA245, merge0070f944). Developer
+native PostgreSQL/quality gates passed; root integrated focused checks passed
+without PG. Built/source-reviewed is not whole Functional acceptance.
+
+Menu090 remains unmerged after QA240 target-retirement/legacy compatibility
+findings; successor developer owns focused/full PG/race. Job summary QA244
+requires stable persisted page manifests and transferred developer ownership.
+E rehearsal QA242 requires effective-target guards, all hashes before DB and
+honest food replay evidence. Neither rejected candidate is merged.
+
+Two independent scoped EN/RU Functional runs completed on sealedce427ca5;
+states preserved, all40 original whole-stage obligations remain incomplete.
+Lead prepares next exact-source epoch and an authorized separate baseline
+PG58441. No new full baseline or finalE apply/removal is claimed. Real Telegram
+test-account ID is missing and listed in PROGRESS Questions; unrelated work
+continues. Production NO-GO. Routing through245, next246, allCodex.
+
+## Historical integrated snapshot — 2026-10-01, ce427ca5
 
 Reviewed developer branches integrated throughce427ca5:knowledge SQL precedence
 (QA228+baseaddendum), managed fixtureagent(QA229+baseaddendum), privileged-read

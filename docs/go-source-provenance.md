@@ -1,5 +1,24 @@
 # Go source provenance — 2026-09-29 resumption
 
+## Current integration — 2026-10-01
+
+Authoritative product source is Git0070f944691050677cd915a215e4ac0beea69fb6.
+Reviewed callback observations62b9eebc were merged6812e359; source diagnostics
+b857b8b9 were mergedf56bebd3; registration fixtures54766266 were merged0070f944.
+Each merge preserved the independently reviewed candidate; no product conflict
+resolution or additional product edits occurred during these three merges.
+The working root documentation is updated separately. Functional images remain
+sealedce427ca5, so they do not certify this newer source. Menu090, job summary
+and E rehearsal guard successors remain unmerged.
+
+Migration checksums bind raw embedded bytes. Equal Git blobs in CRLF and LF
+worktrees do not prove equal embedded migration hashes. Final importer/runtime
+images must share a verified raw Git export and actual migration inventory;
+existing ledger checksums and applied_at are never rewritten for convenience.
+
+The composition and inputs below are historical provenance, not a fresh
+acceptance of current source or a reason to restart development from old trees.
+
 The authoritative working source is `platform/`, with the importer in `tools/migrate`. Preservation commit: `1ed6f8fb07698f29314536d98ba44f04f026a7ab`. Composed commit: `b99c4822ba9110dde5009e0aac738797cbb5ae66`; all current `platform/` source is tracked. `git diff --check` and a credential-pattern scan of 1104 files reported no findings. Historical QA trees were intentionally not copied into Git; required evidence portability remains separate. No new source snapshot trees were created; subsequent evidence binds to Git commits and exact reviewed files.
 
 The paths below identify original local handover inputs. `qa.local` is ignored by Git; these bindings preserve provenance, not a promise that the local trees exist in a fresh checkout. New development must not restart from those older trees. Previous source-specific checks do not accept the composed source.

@@ -230,3 +230,79 @@ and E6 harness actual development continue. D next source-observations scope is
 planning only/unapproved, not another active development assignment.
 Ready review/reviewing/merge=0/1/0; ongoing import observedwait1h17m32s, historical
 start unknown. No other queue duration inferred. Files paused for root commit.
+
+## Meaningful handoff observation: 2026-10-01T00:04:17Z
+
+Root source6812e359, callback evidence62b9eebc QA241PASS merged. Images remain
+ce427ca5; both old scoped FQA reports/releases preserved, no upgraded epoch proof.
+QA238 result-page failure transferred to job_result_fix; successorb581dd2d fullPG
+PASS243.682s released, freshQA244 actually reviewing. Source observationsb857b8b9
+realPG3.317s and7.458s passed, freshQA243 actually reviewing. E fde2b749 native/
+offline/lint passed, freshQA242 actually reviewing. C54766266 four realPG cases
+passed8.187s and released; QA245 allocated but fresh agent dispatch temporarily
+thread-capped, NOT running. Do not treat preliminary reviewer signals as a verdict;
+only the immutable report can close the gate.
+
+Ready review/reviewing/merge=1/3/0: four finished branches at limit2–3, explicit
+temporary overflow. Root prioritizes backlog; not WIP-compliant yet. C ready wait
+starts at this first observation, older actual start unknown. No invented historical
+review starts or wait durations. Local measured PG durations are evidence, not queue
+waits. Job/C PG released, menu PG awaits allocation. QA240 on28cb6df4 latest-target/
+predecessor receipt findings transferred menu_target_developer;090 unmerged.
+
+Observed return cycles now4: existingQA234 plusQA238 job,QA239 callback andQA240 menu.
+Callback successor PASS/merge closes its return but does not erase iteration.
+Historical unobserved cycles remain unknown. C/D/E capability preparations continue;
+next FQA batch/baseline planning under lead. Actual real Telegram test account ID
+is a Daniel question; only dependent real gate waits. All40 original obligations
+and partial/blocked scope remain. Ongoing import observed wait1h59m24s from baseline;
+full-stage acceptance still NO-GO. No next images or stand changes inferred.
+
+## Resolved backlog observation: 2026-10-01T00:08:35Z
+
+Root merged source observationb857b8b9 after QA243PASS intof56bebd3. Git HEAD/parents
+verified despite a nonblocking Codex checkpoint path-length hook error. Focused
+three callback/source packages passed0.492/0.383/0.639s, without PG. Source QA241/
+QA243 do not prove unchangedce427ca5 image Functional behavior.
+
+QA242 returned E six paths for effectiveDSN overrides, preDBhash preflight and
+food reuse guards; original immutablefde2b749 unmerged. QA244 replay-manifest
+finding transferred to new job_replay_developer, original nine paths/owned worktree,
+no PG yet. Returns since baseline6 including those new two cycles. Prior overflow4
+now resolved: QA245 actually dispatched reviewing54766266, ready review0/reviewing1/
+merge0. Earlier cap remains history. No verdict until final report.
+
+C next clock planning, D approved four-path HTTP capability and E correction/
+rehearsal preparation continue. Menu exclusive zns_menu_target_qa verified, focused
+nativePG55432: P2 predecessor four cases passed, P1 latest-target failed cleanup
+investigation, not accepted.090 unmerged. Lead authorized exact baseline setup58441,
+not yet created. Both scoped FQA releases and all40 partial/blocked obligations
+preserved. No new images/freeze/readiness inferred. Ongoing import observedwait
+2h3m42s; historical wait starts remain unknown. No sampled processes restarted.
+
+## Final source handoff observation: 2026-10-01T00:10:48Z
+
+QA245 genuine six-path54766266 PASS merged0070f944691050677cd915a215e4ac0beea69fb6.
+Root focused two registration packages passed0.267/0.243s, no PG. This continuation's
+three source merges are6812 callback ACK, f56 source metrics,0070 registration fixture.
+Functional/whole C/D/E remain open and imagesce427 unchanged. Counter through245,
+next246 not dispatched; no fresh review currently active, ready queues0/0/0.
+
+C clock plan, D approved HTTP four paths and E six-path guard correction continue.
+Job replay developer approved originalnine plusfive exact manifest paths; QA244
+still open. Menu short P1 now passed5.324s, P2fourcases passed7.121s, lint0; fullPG/
+race now actual developer window, not a completed handoff or fresh acceptance.
+QA242/244 correction ownership retained. Returns since baseline6, no additional
+return for local investigation. Baseline loopback58441 setup authorized/planned,
+not ready. All40 FQA obligations and prior scoped reports remain preserved.
+Observed import wait2h5m55s; earlier starts unknown. Files paused for commit.
+
+## Baseline allocation observation: 2026-10-01T00:12:15Z
+
+Lead actually created the exact loopback58441 baseline cluster with pinned
+PostgreSQL17. Preflight in progress, full tests not running, no READY/stage
+acceptance inferred. This supersedes earlier authorized-only baseline state.
+QA245/0070f944 and source-only focused two-package PASS already recorded above;
+current Code QA queues still0/0/0, fixes not ready. Menu short P1/P2 PASS and full
+PG/race in-progress limits unchanged. No fabricated run duration. Ongoing import
+observedwait2h7m22s; all40 obligations/whole acceptance limitations preserved.

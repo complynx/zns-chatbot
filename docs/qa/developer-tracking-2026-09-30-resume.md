@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through238, next239. All authorship/routes Codex under override;
+Fresh requests through245, next246. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -33,17 +33,29 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 | 235 | Complete models/credits/broadcast host policy | Codex author, Codex override; PASS90d84e14; merged81a9cf73; actual2KiB/32KiB live limits preserved, wholeC/Functional open |
 | 236 | Shared synthetic runtime composition | Codex author, Codex override; PASS382b778b on00ad10e3; mergedf2bcbc5c; developer regression/PG65PASS/lint0; fullE remains pending |
 | 237 | Host registration context revalidation and redaction | Codex author, Codex override; PASS4f071bb1 on00ad10e3; merged1b729672; developer983PASS/84PGSKIP/lint0, root985PASS/84SKIP including2package events; fullC remains pending |
-| 238 | Whole-job durable delivery summary | Codex author, Codex override; fresh reviewe297bbdc/base1b729672 running; developer full affected PG135.951sPASS, units/lint/fmt clean; Functional/D open |
+| 238 | Whole-job durable delivery summary | Codex author, Codex override; changes required: Telegram page bound and three missing item translations; transferred job_result_fix; originale297bbdc preserved, not merged |
+| 239 | Actual callback response observations | Codex author, Codex override; changes required: oversized malformed observation body and response-publication/ACK ordering; originalacd6c12a retained |
+| 240 | Complete canonical-card authority and SQL/migration successor | Codex authors, Codex override; FAIL28cb6df4/base075e5dd7: obsolete cleanup overwrites newer authorized card; predecessor receipt compatibility missing. Transferred menu_target_developer; not merged |
+| 241 | Whole callback observation successor | Codex author, Codex override; PASS62b9eebc/base075e5dd7,4files; merged6812e359; local gates/race passed, no image/stand mutation |
+| 242 | Complete E rehearsal harness and public runbook | Codex author, Codex override; FAIL fde2b749/base075e5dd7: target DSN overrides, late preflight, absent food replay counter; author correcting immutable successor |
+| 243 | Source-status observations and existing runtime binding | Codex author, Codex override; PASS b857b8b9/base075e5dd7, seven paths; merged f56bebd3; focused integrated three packages PASS, no PG/Functional claim |
+| 244 | Complete durable job-result delivery summary | Codex author, Codex override; FAIL b581dd2d/base075e5dd7: changing-page replay adds new effects; transferred job_replay_developer, original candidate preserved |
+| 245 | Genuine registration fixture and CLI initialization | Codex author, Codex override; PASS54766266/base075e5dd7, six paths; four native PG cases PASS; merged0070f944, integrated two focused packages PASS, Functional open |
 
-Current coordination (1 October): two real flows/recovery stands run sealed
-ce427ca5 images. Lead verified manual callbacks/edits/uploads; deterministic agent
-recipe remains a preparation defect, not accepted agent readiness. The two source-blind
-FQA reviewers now execute their separate scoped manual/UI subsets after lead freeze.
-The e72338e1 usage merge belongs to the next batch. Dedicated capability lanes:
-C remaining host-policy scope/assessment, D whole-job delivery observations, and E
-full-import/removal capability planning. Menu correction is a parallel fix lane.
-Kanban manager owns board plus CSV/Markdown metrics; root owns integration and
-PROGRESS. Historical assignment paragraphs below do not describe current ownership.
+Current coordination (1 October, source0070f944): two scoped source-blind
+Functional runs completed on sealedce427ca5; states preserved and released.
+Both proved one bounded deterministic profile agent recipe, not whole agent
+registration or C–E acceptance. Root merged QA241/243/245; all40 whole-stage
+obligations remain open. C plans real invitation clock acceptance, D develops
+approved four-path HTTP classification, E corrects six-path harness guards.
+Menu latest-target/legacy compatibility and job replay manifests have separate
+fix developers. Lead prepares next source epoch and exclusive baseline PG58441;
+developer PG55432 remains assigned to menu. Kanban manager owns board/CSV/metrics;
+root owns serialized integration/PROGRESS. No active fresh review after245;
+next246 waits a fully gated immutable candidate. Historical paragraphs below
+do not describe current ownership or readiness.
+
+## Historical Git coordination snapshot
 
 Daniel authorized Git consolidation and developer worktrees. Root creates a
 checkpoint of applied state and serializes integration merges. C developer owns
