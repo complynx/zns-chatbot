@@ -12,7 +12,7 @@ import (
 )
 
 const beginNotificationSend = `-- name: BeginNotificationSend :one
-UPDATE core.massage_notices SET delivery_wire_payload=COALESCE(delivery_wire_payload,$1::jsonb),delivery_state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+UPDATE core.massage_notices SET delivery_wire_payload=CASE WHEN last_uncertain_attempt IS NULL THEN $1::jsonb ELSE COALESCE(delivery_wire_payload,$1::jsonb) END,delivery_state='sending',lease_until=clock_timestamp()+interval '2 minutes',
  uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=$2::bigint AND bot_id=$3::bigint AND delivery_attempt=$4::bigint
 AND delivery_state='pending' AND lease_until>clock_timestamp()

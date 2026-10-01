@@ -56,7 +56,7 @@ func (s Service) BeginNotification(ctx context.Context, input NotificationAttemp
 	}
 	if !current {
 		outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: notificationNotCurrentReason}
-		if err = s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {
+		if err = s.finishNotification(ctx, tx, attempt, outcome, "", false); err != nil {
 			return NotificationAdmission{}, err
 		}
 		return NotificationAdmission{
@@ -80,12 +80,19 @@ func (s Service) BeginNotification(ctx context.Context, input NotificationAttemp
 	}
 	if !gate.Ready {
 		outcome := delivery.Outcome{Kind: delivery.Deferred, Reason: gate.Reason}
-		if err = s.saveNotificationOutcome(ctx, q, attempt, outcome, "", gate.NotBefore, 0); err != nil {
+		if err = s.saveNotificationOutcome(ctx, q, attempt, outcome, "", gate.NotBefore, 0, false); err != nil {
 			return NotificationAdmission{}, err
 		}
 		return NotificationAdmission{Admission: gate}, core.DatabaseOperationError(tx.Commit(ctx))
 	}
-	wire, err := s.admitNotificationWire(ctx, q, attempt, row.DeliveryWirePayload, input.Wire)
+	wire, err := s.admitNotificationWire(
+		ctx,
+		q,
+		attempt,
+		row.DeliveryWirePayload,
+		row.LastUncertainAttempt.Valid,
+		input.Wire,
+	)
 	if err != nil {
 		return NotificationAdmission{}, err
 	}
@@ -149,11 +156,14 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 		return notificationStale()
 	}
 	attempt := delivery.Attempt{ID: result.ID, Generation: result.Attempt}
+	confirmed := notificationConfirmedOutcome(result.Outcome) &&
+		(row.DeliveryState == string(delivery.Sending) || row.DeliveryState == string(delivery.Uncertain) ||
+			(row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == result.Attempt))
 	if notificationLateSuccess(row, result.Outcome.Kind) {
 		if err = s.finishLateNotificationSuccess(ctx, tx, attempt, result.Outcome, result.Text); err != nil {
 			return err
 		}
-	} else if err = s.finishNotification(ctx, tx, attempt, result.Outcome, result.Text); err != nil {
+	} else if err = s.finishNotification(ctx, tx, attempt, result.Outcome, result.Text, confirmed); err != nil {
 		return err
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
@@ -207,7 +217,7 @@ func (s Service) finishLateNotificationSuccess(
 	if err != nil {
 		return err
 	}
-	return s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, result, text, deadline, 0)
+	return s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, result, text, deadline, 0, true)
 }
 func notificationOutcomeAllowed(row dbgen.LockNotificationAttemptRow, kind delivery.Kind) bool {
 	state := row.DeliveryState
@@ -229,6 +239,7 @@ func (s Service) finishNotification(
 	attempt delivery.Attempt,
 	outcome delivery.Outcome,
 	text string,
+	confirmed bool,
 ) error {
 	if outcome.Kind == delivery.Cancelled {
 		if err := delivery.Project(
@@ -241,7 +252,7 @@ func (s Service) finishNotification(
 		); err != nil {
 			return err
 		}
-		return s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, outcome, text, time.Time{}, 0)
+		return s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, outcome, text, time.Time{}, 0, false)
 	}
 	result, deadline, err := delivery.Finish(
 		ctx,
@@ -258,7 +269,16 @@ func (s Service) finishNotification(
 		(result.Kind == delivery.Deferred && result.Reason != "telegram_rate_limit") {
 		failures = 1
 	}
-	if err = s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt, result, text, deadline, failures); err != nil {
+	if err = s.saveNotificationOutcome(
+		ctx,
+		dbgen.New(tx),
+		attempt,
+		result,
+		text,
+		deadline,
+		failures,
+		confirmed,
+	); err != nil {
 		return err
 	}
 	if result.Kind == delivery.Uncertain || result.Kind == delivery.Deferred {
@@ -319,7 +339,7 @@ func (s Service) exhaustNotificationRetry(ctx context.Context, tx pgx.Tx, attemp
 		return err
 	}
 	return s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt,
-		delivery.Outcome{Kind: delivery.Rejected, Reason: notificationRetryExhaustedReason}, "", time.Time{}, 0)
+		delivery.Outcome{Kind: delivery.Rejected, Reason: notificationRetryExhaustedReason}, "", time.Time{}, 0, false)
 }
 func (s Service) saveNotificationOutcome(
 	ctx context.Context,
@@ -329,11 +349,12 @@ func (s Service) saveNotificationOutcome(
 	text string,
 	deadline time.Time,
 	failures int64,
+	confirmed bool,
 ) error {
 	count, err := q.FinishNotificationDelivery(ctx, dbgen.FinishNotificationDeliveryParams{
 		ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation, State: string(outcome.Kind),
 		MessageID: outcome.MessageID, Text: text, Failure: outcome.Reason,
-		Confirmed:   notificationConfirmedOutcome(outcome),
+		Confirmed:   confirmed,
 		AvailableAt: pgtype.Timestamptz{Time: deadline, Valid: true}, FailureIncrement: failures})
 	if err == nil && count != 1 {
 		return notificationStale()
@@ -464,8 +485,12 @@ func (s Service) admitNotificationWire(
 	q *dbgen.Queries,
 	attempt delivery.Attempt,
 	existing []byte,
+	uncertain bool,
 	candidate *notificationwire.Payload,
 ) (*notificationwire.Payload, error) {
+	if !uncertain {
+		existing = nil
+	}
 	stored, present, err := notificationwire.Decode(existing)
 	if err != nil {
 		return nil, err

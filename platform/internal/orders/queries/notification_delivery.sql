@@ -34,7 +34,7 @@ SELECT *,COALESCE(lease_until>clock_timestamp(),false)::boolean AS lease_live FR
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND delivery_attempt=sqlc.arg(attempt)::bigint FOR UPDATE;
 
 -- name: BeginNotificationSend :one
-UPDATE core.order_notifications SET delivery_wire_payload=COALESCE(delivery_wire_payload,sqlc.arg(wire_payload)::jsonb),delivery_state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+UPDATE core.order_notifications SET delivery_wire_payload=CASE WHEN last_uncertain_attempt IS NULL THEN sqlc.arg(wire_payload)::jsonb ELSE COALESCE(delivery_wire_payload,sqlc.arg(wire_payload)::jsonb) END,delivery_state='sending',lease_until=clock_timestamp()+interval '2 minutes',
  uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND delivery_attempt=sqlc.arg(attempt)::bigint
 AND delivery_state='pending' AND lease_until>clock_timestamp()

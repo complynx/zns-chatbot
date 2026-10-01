@@ -7,6 +7,8 @@ import (
 	"errors"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
 const maxPayloadBytes = 64 << 10
@@ -14,7 +16,7 @@ const maxPayloadBytes = 64 << 10
 var ErrPayload = errors.New("invalid notification wire payload")
 
 // Payload preserves the rendered text and actual inline markup. Domains treat
-// the markup as opaque JSON; the Telegram adapter owns its interpretation.
+// the markup as JSON that must decode with the Telegram transport schema.
 type Payload struct {
 	Text   string          `json:"text"`
 	Markup json.RawMessage `json:"markup"`
@@ -24,6 +26,10 @@ func (p Payload) Encode() ([]byte, error) {
 	units := len(utf16.Encode([]rune(p.Text)))
 	if !utf8.ValidString(p.Text) || units == 0 || units > 4096 ||
 		len(p.Markup) == 0 || p.Markup[0] != '{' || !json.Valid(p.Markup) {
+		return nil, ErrPayload
+	}
+	var markup telegram.Markup
+	if json.Unmarshal(p.Markup, &markup) != nil {
 		return nil, ErrPayload
 	}
 	encoded, err := json.Marshal(p)

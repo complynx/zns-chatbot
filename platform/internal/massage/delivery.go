@@ -100,7 +100,11 @@ func (s Service) notificationProjection(
 		Notice: Notice{ID: row.ID, Booking: row.BookingID, Kind: row.Kind, DeliveryAttempt: row.DeliveryAttempt,
 			MessageID: row.TelegramMessageID, DeliveryText: row.DeliveryText, FollowupPending: row.FollowupPending},
 	}
-	wire, present, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
+	var captured []byte
+	if row.LastUncertainAttempt.Valid || row.DeliveryState == "sent" {
+		captured = row.DeliveryWirePayload
+	}
+	wire, present, wireErr := notificationwire.Decode(captured)
 	if wireErr != nil {
 		return value, wireErr
 	}

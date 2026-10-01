@@ -23,7 +23,11 @@ func (s Service) notificationProjection(
 	if err := json.Unmarshal(row.Payload, &notice); err != nil {
 		return notice, err
 	}
-	wire, present, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
+	var captured []byte
+	if row.LastUncertainAttempt.Valid || row.DeliveryState == "sent" {
+		captured = row.DeliveryWirePayload
+	}
+	wire, present, wireErr := notificationwire.Decode(captured)
 	if wireErr != nil {
 		return notice, wireErr
 	}

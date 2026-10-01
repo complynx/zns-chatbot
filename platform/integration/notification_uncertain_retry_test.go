@@ -985,3 +985,112 @@ func TestNotificationUncertainRetryKnown429FencesContradictoryReceipt(t *testing
 		}
 	}
 }
+
+func TestNotificationUncertainRetryRejectsCorruptCapturedKeyboard(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			dispatch := exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			requireNotificationAccepted(t, r, loss)
+			original := r.status(t, r.first)
+			_, err := r.f.db.Exec(
+				t.Context(),
+				"UPDATE "+r.table+" SET delivery_wire_payload=jsonb_set(delivery_wire_payload,'{markup}','{\"inline_keyboard\":\"invalid\"}'::jsonb) WHERE id=$1",
+				r.first,
+			)
+			require.NoError(t, err)
+			r.wake(t)
+			require.Error(t, dispatch(t.Context(), r.first))
+			actual := r.status(t, r.first)
+			assert.Equal(t, "pending", actual.State, "invalid captured markup must fail before send admission")
+			assert.Equal(
+				t,
+				original.UncertainResends,
+				actual.UncertainResends,
+				"prewire failure has zero budget charge",
+			)
+			assert.Len(t, loss.payloads(), 1, "only the original real accepted HTTP wire occurred")
+			assert.Equal(t, original.LastUncertainAttempt, actual.LastUncertainAttempt)
+		})
+	}
+}
+
+func TestNotificationUncertainRetryCustomNormalizationCannotConfirm(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			r.prepare(t)
+			prepared := r.status(t, r.first)
+			r.postAttempt(t, "begin", delivery.Attempt{ID: r.first, Generation: prepared.Attempt}, http.StatusOK)
+			admitted := r.status(t, r.first)
+			require.Equal(t, "sending", admitted.State)
+			outcome := delivery.Outcome{
+				Kind:       delivery.Deferred,
+				Reason:     "synthetic_custom_deferred",
+				RetryAfter: 1 << 62,
+			}
+			require.True(t, outcome.Valid())
+			r.postAttempt(
+				t,
+				"complete",
+				map[string]any{"id": r.first, "attempt": admitted.Attempt, "outcome": outcome},
+				http.StatusOK,
+			)
+			require.Equal(t, "parked", r.status(t, r.first).State)
+			var confirmed *int64
+			require.NoError(
+				t,
+				r.f.db.QueryRow(t.Context(), "SELECT last_confirmed_attempt FROM "+r.table+" WHERE id=$1", r.first).
+					Scan(&confirmed),
+			)
+			assert.Nil(t, confirmed, "normalized custom scheduling is not canonical wire proof")
+		})
+	}
+}
+
+func TestNotificationUncertainRetryKnown429RendersCurrentUntilUnknown(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			setNotificationLanguage(t, r, "en")
+			spy := attachNotificationWireSpy(t, r.f, "rate")
+			dispatch := exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			require.Equal(t, 1, spy.calls(202))
+			known := r.status(t, r.first)
+			require.Equal(t, "telegram_rate_limit", known.Reason)
+			require.Zero(t, known.LastUncertainAttempt)
+			initial := notificationWireSnapshot(t, r)
+			require.NotNil(t, initial)
+			setNotificationLanguage(t, r, "ru")
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.Base = r.f.fake.URL
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			r.wake(t)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			requireNotificationAccepted(t, r, loss)
+			current := loss.payloads()
+			require.Len(t, current, 1)
+			assert.NotEqual(t, initial.Text, current[0].Text, "ordinary known 429 must render current locale")
+			captured := notificationWireSnapshot(t, r)
+			require.NotNil(t, captured)
+			assert.Equal(t, current[0].Text, captured.Text, "unknown freezes the newly admitted wire")
+			setNotificationLanguage(t, r, "en")
+			r.wake(t)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			after := loss.payloads()
+			require.Len(t, after, 2)
+			assert.Equal(t, current[0], after[1], "retry after unknown preserves exact latest admitted wire")
+			assert.Equal(t, int64(1), r.status(t, r.first).UncertainResends)
+		})
+	}
+}

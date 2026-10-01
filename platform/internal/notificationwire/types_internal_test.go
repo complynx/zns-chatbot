@@ -32,6 +32,9 @@ func TestInvalidPayload(t *testing.T) {
 	t.Parallel()
 	for _, encoded := range []string{
 		`null`, `{}`, `{"text":"Text","markup":null}`, `{"text":"Text","markup":[]}`,
+		`{"text":"Text","markup":{"inline_keyboard":"invalid"}}`,
+		`{"text":"Text","markup":{"inline_keyboard":[[{"text":42}]]}}`,
+		`{"text":"Text","markup":{"inline_keyboard":[[{"web_app":"invalid"}]]}}`,
 		`{"text":"Text","markup":`, `{"text":"","markup":{}}`,
 		`{"text":"` + strings.Repeat("😀", 2049) + `","markup":{}}`,
 	} {
