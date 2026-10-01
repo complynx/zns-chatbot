@@ -70,24 +70,17 @@ func TestBotDeliveryPostgresRecoveryRetainsOrderAndAttemptFence(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ready)
 	require.Equal(t, attempt.Attempt+1, retry.Attempt)
-	require.ErrorIs(t, b.finishBotIntent(
-		ctx,
-		attempt,
-		delivery.Outcome{
-			Kind:      delivery.Succeeded,
-			MessageID: 899,
-		},
-		botdelivery.Continuation{},
-		false,
-	), botdelivery.ErrBinding)
+	require.ErrorIs(t, b.finishBotIntent(ctx, attempt, botTestTransportResult(delivery.Outcome{
+		Kind:      delivery.Succeeded,
+		MessageID: 899,
+	}, false), botdelivery.Continuation{}), botdelivery.ErrBinding)
 	require.NoError(
 		t,
 		b.finishBotIntent(
 			ctx,
 			retry,
-			delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900},
+			botTestTransportResult(delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}, false),
 			botdelivery.Continuation{},
-			false,
 		),
 	)
 	finished, err := botdelivery.Read(ctx, db, 77, first.Reference, false)
@@ -103,9 +96,8 @@ func TestBotDeliveryPostgresRecoveryRetainsOrderAndAttemptFence(t *testing.T) {
 		b.finishBotIntent(
 			ctx,
 			stale,
-			delivery.Outcome{Kind: delivery.Succeeded, MessageID: 901},
+			botTestTransportResult(delivery.Outcome{Kind: delivery.Succeeded, MessageID: 901}, false),
 			botdelivery.Continuation{},
-			false,
 		),
 	)
 }

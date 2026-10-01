@@ -100,8 +100,9 @@ jobs:
       - name: Unit and PostgreSQL integration tests
         run: |
           docker build --target test -t synthetic-qa-zns-tests .
-          docker run --rm --network host -e TEST_DATABASE_URL -e TEST_CREDIT_UPGRADE_DATABASE_URL -v "$PWD:/results" synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverpkg=./cmd/...,./internal/...,./identityprovision/... -coverprofile=/results/coverage.out ./cmd/... ./internal/... ./integration/... ./identityprovision/... ./deploy/...
-          docker run --rm --network host -e TEST_DATABASE_URL -v "$PWD:/workspace/platform:ro" -v "$PWD/../tools/migrate:/workspace/tools/migrate:ro" -v "$PWD:/results" -w /workspace/tools/migrate synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverprofile=/results/migrate-coverage.out ./...
+          mkdir -p "$RUNNER_TEMP/go-coverage"
+          docker run --rm --network host -e TEST_DATABASE_URL -e TEST_CREDIT_UPGRADE_DATABASE_URL -v "$PWD:/workspace/platform:ro" -v "$RUNNER_TEMP/go-coverage:/results" synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverpkg=./cmd/...,./internal/...,./identityprovision/... -coverprofile=/results/coverage.out ./cmd/... ./internal/... ./integration/... ./identityprovision/... ./deploy/...
+          docker run --rm --network host -e TEST_DATABASE_URL -v "$PWD:/workspace/platform:ro" -v "$PWD/../tools/migrate:/workspace/tools/migrate:ro" -v "$RUNNER_TEMP/go-coverage:/results" -w /workspace/tools/migrate synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverprofile=/results/migrate-coverage.out ./...
       - name: Fuzz identity boundary
         run: go test ./internal/identity -run '^$' -fuzz FuzzVerify -fuzztime 10s
       - name: Build
@@ -112,8 +113,8 @@ jobs:
         with:
           name: go-coverage
           path: |
-            platform/coverage.out
-            platform/migrate-coverage.out
+            ${{ runner.temp }}/go-coverage/coverage.out
+            ${{ runner.temp }}/go-coverage/migrate-coverage.out
   sandbox:
     runs-on: ubuntu-latest
     defaults:

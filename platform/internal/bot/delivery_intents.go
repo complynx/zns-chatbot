@@ -62,10 +62,10 @@ func (b *Bot) beginBotIntent(
 func (b *Bot) finishBotIntent(
 	ctx context.Context,
 	attempt botdelivery.Intent,
-	outcome delivery.Outcome,
+	result botTransportResult,
 	receipt botdelivery.Continuation,
-	fallback bool,
 ) error {
+	outcome, fallback := result.Outcome, result.Fallback
 	if attempt.BotID != b.Delivery.BotID {
 		return botdelivery.ErrBinding
 	}
@@ -82,9 +82,9 @@ func (b *Bot) finishBotIntent(
 		return botdelivery.ErrBinding
 	}
 	if current.State == delivery.Rejected || current.State == delivery.Cancelled {
-		return recordBotTerminalReceipt(ctx, tx, current, outcome, fallback)
+		return recordBotTerminalReceipt(ctx, tx, current, result)
 	}
-	outcome, deadline, err := b.finishBotTransportOutcome(ctx, tx, current, outcome, fallback)
+	outcome, deadline, err := b.finishBotTransportOutcome(ctx, tx, current, result)
 	if err != nil {
 		return err
 	}
@@ -131,10 +131,10 @@ func (b *Bot) finishBotTransportOutcome(
 	ctx context.Context,
 	tx pgx.Tx,
 	current botdelivery.Intent,
-	outcome delivery.Outcome,
-	fallback bool,
+	result botTransportResult,
 ) (delivery.Outcome, time.Time, error) {
-	known := knownBotTransportOutcome(outcome, fallback)
+	outcome, fallback := result.Outcome, result.Fallback
+	known := knownBotTransportOutcome(result.ProviderOutcome)
 	lateKnown := false
 	if current.State == delivery.Deferred && known {
 		err := tx.QueryRow(ctx, `SELECT COALESCE(last_uncertain_attempt=$4,false)
@@ -172,12 +172,9 @@ func (b *Bot) finishBotTransportOutcome(
 	return b.retryBotTransport(ctx, tx, current, outcome, deadline)
 }
 
-func knownBotTransportOutcome(outcome delivery.Outcome, fallback bool) bool {
+func knownBotTransportOutcome(outcome delivery.Outcome) bool {
 	if !outcome.Valid() {
 		return false
-	}
-	if fallback {
-		return outcome.Kind == delivery.Deferred && outcome.Reason == botEditTargetMissing
 	}
 	switch outcome.Kind {
 	case delivery.Succeeded:
@@ -202,10 +199,10 @@ func recordBotTerminalReceipt(
 	ctx context.Context,
 	tx pgx.Tx,
 	current botdelivery.Intent,
-	outcome delivery.Outcome,
-	fallback bool,
+	result botTransportResult,
 ) error {
-	if outcome.Kind != delivery.Succeeded && knownBotTransportOutcome(outcome, fallback) {
+	outcome, fallback := result.Outcome, result.Fallback
+	if outcome.Kind != delivery.Succeeded && knownBotTransportOutcome(result.ProviderOutcome) {
 		if fallback && current.Phase != botPhaseEdit {
 			return botdelivery.ErrBinding
 		}

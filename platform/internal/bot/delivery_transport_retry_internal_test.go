@@ -292,9 +292,9 @@ func testBotCapturePrivateFault(t *testing.T, fault string) {
 	}))
 	defer server.Close()
 	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
-	outcome, fallback := b.sendBotIntent(ctx, admitted, rendered)
+	outcome := b.sendBotIntent(ctx, admitted, rendered)
 	require.Equal(t, delivery.Uncertain, outcome.Kind)
-	require.NoError(t, b.finishBotIntent(ctx, admitted, outcome, rendered.Receipt, fallback))
+	require.NoError(t, b.finishBotIntent(ctx, admitted, outcome, rendered.Receipt))
 	window, err := b.API.ConversationWindow(ctx, "alice", 10)
 	require.NoError(t, err)
 	visibleHistory, err := json.Marshal(window)
@@ -464,8 +464,18 @@ func TestBotTransportRetryCaptureBindingAndStaging(t *testing.T) {
 	actualWire, err := json.Marshal(wire.Payload)
 	require.NoError(t, err)
 	require.JSONEq(t, string(expectedWire), string(actualWire))
-	require.NoError(t, b.finishBotIntent(ctx, admitted,
-		delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"}, wire.Receipt, false))
+	require.NoError(
+		t,
+		b.finishBotIntent(
+			ctx,
+			admitted,
+			botTestTransportResult(
+				delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"},
+				false,
+			),
+			wire.Receipt,
+		),
+	)
 	current, err = botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
 	require.NoError(t, err)
 	payload.Text = "must not replace original"
@@ -496,16 +506,10 @@ func TestBotTransportRetryLegacyUnknownCapturesNextWire(t *testing.T) {
 	admitted, ready, err := b.beginBotIntent(ctx, current, botRenderedDelivery{})
 	require.NoError(t, err)
 	require.True(t, ready)
-	require.NoError(t, b.finishBotIntent(
-		ctx,
-		admitted,
-		delivery.Outcome{
-			Kind:   delivery.Uncertain,
-			Reason: "telegram_outcome_unknown",
-		},
-		botdelivery.Continuation{},
-		false,
-	))
+	require.NoError(t, b.finishBotIntent(ctx, admitted, botTestTransportResult(delivery.Outcome{
+		Kind:   delivery.Uncertain,
+		Reason: "telegram_outcome_unknown",
+	}, false), botdelivery.Continuation{}))
 	current, err = botdelivery.Read(ctx, db, 999, queued.Reference, false)
 	require.NoError(t, err)
 	_, capture, err := botdelivery.RetryWire(ctx, db, current)
@@ -733,18 +737,28 @@ func assertBotTransportRetryTerminalReceipt(
 	require.NoError(t, readErr)
 	late := delivery.Outcome{Kind: delivery.Succeeded, MessageID: messages[0].ID}
 	if rateLimited {
-		require.ErrorIs(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false),
-			botdelivery.ErrBinding, "older uncertain attempt cannot resolve the newer exhausted generation")
+		require.ErrorIs(
+			t,
+			b.finishBotIntent(ctx, terminal, botTestTransportResult(late, false), botdelivery.Continuation{}),
+			botdelivery.ErrBinding,
+			"older uncertain attempt cannot resolve the newer exhausted generation",
+		)
 	} else {
 		late.MessageID = messages[3].ID
 		var before, after string
 		require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)-'message_id')::text
  FROM bot.delivery_intents i WHERE operation_key='budget'`).Scan(&before))
-		require.NoError(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false))
+		require.NoError(
+			t,
+			b.finishBotIntent(ctx, terminal, botTestTransportResult(late, false), botdelivery.Continuation{}),
+		)
 		require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)-'message_id')::text
  FROM bot.delivery_intents i WHERE operation_key='budget'`).Scan(&after))
 		require.JSONEq(t, before, after, "terminal receipt changes only the message ID")
-		require.NoError(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false))
+		require.NoError(
+			t,
+			b.finishBotIntent(ctx, terminal, botTestTransportResult(late, false), botdelivery.Continuation{}),
+		)
 	}
 	require.NoError(t, b.RecoverBotIntents(ctx))
 	require.NoError(t, b.DeliverBotIntent(ctx, reference))
@@ -805,26 +819,49 @@ func TestBotTransportRetryCancelledLateReceipt(t *testing.T) {
 	}
 	before := snapshot()
 	late := delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}
-	require.NoError(t, b.finishBotIntent(ctx, attempt, late, botdelivery.Continuation{Kind: "ignored"}, false))
+	require.NoError(
+		t,
+		b.finishBotIntent(ctx, attempt, botTestTransportResult(late, false), botdelivery.Continuation{Kind: "ignored"}),
+	)
 	require.JSONEq(t, before, snapshot())
-	require.NoError(t, b.finishBotIntent(ctx, attempt, late, botdelivery.Continuation{}, false))
-	require.ErrorIs(t, b.finishBotIntent(ctx, attempt,
-		telegram.DeliveryOutcome(0, &telegram.APIError{Code: http.StatusForbidden}), botdelivery.Continuation{}, false),
-		botdelivery.ErrBinding, "a known positive receipt cannot be contradicted by a negative input")
+	require.NoError(t, b.finishBotIntent(ctx, attempt, botTestTransportResult(late, false), botdelivery.Continuation{}))
+	require.ErrorIs(
+		t,
+		b.finishBotIntent(
+			ctx,
+			attempt,
+			botTestTransportResult(telegram.DeliveryOutcome(0, &telegram.APIError{Code: http.StatusForbidden}), false),
+			botdelivery.Continuation{},
+		),
+		botdelivery.ErrBinding,
+		"a known positive receipt cannot be contradicted by a negative input",
+	)
 	conflicting := late
 	conflicting.MessageID++
 	require.ErrorIs(
 		t,
-		b.finishBotIntent(ctx, attempt, conflicting, botdelivery.Continuation{}, false),
+		b.finishBotIntent(ctx, attempt, botTestTransportResult(conflicting, false), botdelivery.Continuation{}),
 		botdelivery.ErrBinding,
 	)
 	wrong := attempt
 	wrong.BotID++
-	require.ErrorIs(t, b.finishBotIntent(ctx, wrong, late, botdelivery.Continuation{}, false), botdelivery.ErrBinding)
+	require.ErrorIs(
+		t,
+		b.finishBotIntent(ctx, wrong, botTestTransportResult(late, false), botdelivery.Continuation{}),
+		botdelivery.ErrBinding,
+	)
 	wrong = attempt
 	wrong.Attempt++
-	require.ErrorIs(t, b.finishBotIntent(ctx, wrong, late, botdelivery.Continuation{}, false), botdelivery.ErrBinding)
-	require.ErrorIs(t, b.finishBotIntent(ctx, attempt, late, botdelivery.Continuation{}, true), botdelivery.ErrBinding)
+	require.ErrorIs(
+		t,
+		b.finishBotIntent(ctx, wrong, botTestTransportResult(late, false), botdelivery.Continuation{}),
+		botdelivery.ErrBinding,
+	)
+	require.ErrorIs(
+		t,
+		b.finishBotIntent(ctx, attempt, botTestTransportResult(late, true), botdelivery.Continuation{}),
+		botdelivery.ErrBinding,
+	)
 	require.NoError(t, b.RecoverBotIntents(ctx))
 	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
 	require.NoError(t, b.ContinueBotIntentReceipts(ctx))
@@ -869,6 +906,144 @@ func botRecoveredKnownSnapshot(t *testing.T, b *Bot, ignored ...string) string {
  'queue',(SELECT jsonb_agg(to_jsonb(q)) FROM core.delivery_queue q WHERE bot_id=999),
  'pacing',(SELECT jsonb_agg(to_jsonb(p)) FROM core.delivery_pacing p WHERE bot_id=999))::text`, ignored).Scan(&raw))
 	return raw
+}
+
+func TestBotTransportRetryRecoveredEditRefusal(t *testing.T) {
+	t.Parallel()
+	policies := []botdelivery.Reference{
+		{Kind: botdelivery.CardIntent, Family: botFamilyPassRedaction, CardKey: "passes"},
+		{Kind: botdelivery.CardIntent, Family: botdelivery.PassReceiptRedactionFamily, CardKey: "receipt"},
+		{
+			Kind:    botdelivery.CardIntent,
+			Family:  registrationPayment,
+			CardKey: "payment",
+			Notice:  i18n.PaymentUnavailable,
+		},
+	}
+	for _, policy := range policies {
+		for _, description := range []string{"message to edit not found", "message can't be edited"} {
+			for _, state := range []string{"pending", "cancelled_before"} {
+				t.Run(policy.Family+"/"+description+"/"+state, func(t *testing.T) {
+					t.Parallel()
+					b := botDeliveryTestBot(foodPendingDatabase(t))
+					b.Delivery.BotID = 999
+					b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+					attempt := botEditRefusalAdmission(t, &b, policy)
+					botEditRefusalHTTP(t, &b, attempt, description, state)
+					current, err := botdelivery.Read(t.Context(), b.DB, 999, attempt.QueueReference(), false)
+					require.NoError(t, err)
+					if state == "pending" {
+						require.Equal(t, delivery.Rejected, current.State)
+						var reason string
+						require.NoError(t, b.DB.QueryRow(t.Context(), `SELECT reason FROM bot.delivery_intents
+ WHERE bot_id=999 AND operation_key='recovered-known'`).Scan(&reason))
+						require.Equal(t, botEditTargetMissing, reason)
+					} else {
+						require.Equal(t, delivery.Cancelled, current.State)
+					}
+					require.Equal(t, botPhaseEdit, current.Phase)
+					require.EqualValues(t, 7, current.Target)
+					botAssertRecoveredKnownFence(t, &b, attempt.QueueReference(), attempt)
+				})
+			}
+		}
+	}
+}
+
+// Seed the transport boundary before admission. Domain render/source acceptance
+// is separate; this fixture tests the saved edit policy and actual provider reply.
+func botEditRefusalAdmission(t *testing.T, b *Bot, policy botdelivery.Reference) botdelivery.Intent {
+	t.Helper()
+	ctx := t.Context()
+	queued, err := b.enqueueBotIntent(ctx, "", 101, "recovered-known", "notice", botdelivery.Reference{
+		Kind: botdelivery.IdentityIntent, Notice: i18n.IdentityUnavailable, Language: "en"}, botPhaseSend)
+	require.NoError(t, err)
+	raw, err := json.Marshal(policy)
+	require.NoError(t, err)
+	_, err = b.DB.Exec(ctx, `UPDATE bot.delivery_intents SET owner='alice',reference=$1,phase='edit',target_message_id=7
+ WHERE bot_id=999 AND operation_key='recovered-known'`, raw)
+	require.NoError(t, err)
+	tx, err := b.DB.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	admission, err := delivery.Begin(ctx, tx, b.Delivery, queued.Reference)
+	require.NoError(t, err)
+	require.True(t, admission.Ready)
+	_, err = tx.Exec(ctx, `UPDATE bot.delivery_intents SET state='sending',attempt=1,attempted_at=clock_timestamp()
+ WHERE bot_id=999 AND operation_key='recovered-known'`)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
+	attempt, err := botdelivery.Read(ctx, b.DB, 999, queued.Reference, false)
+	require.NoError(t, err)
+	return attempt
+}
+
+func botEditRefusalHTTP(t *testing.T, b *Bot, attempt botdelivery.Intent, description, state string) {
+	t.Helper()
+	entered, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	var wrongMethod atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if calls.Add(1) == 1 {
+			close(entered)
+		}
+		wrongMethod.Store(!strings.HasSuffix(r.URL.Path, "/editMessageText"))
+		<-release
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error_code": 400, "description": description})
+	}))
+	defer server.Close()
+	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+	completion := make(chan error, 1)
+	var released, completed bool
+	defer func() {
+		if !released {
+			close(release)
+		}
+		if !completed {
+			<-completion
+		}
+	}()
+	go func() {
+		outcome := b.sendBotIntent(t.Context(), attempt,
+			botRenderedDelivery{Payload: telegram.Send{Text: "unavailable"}})
+		completion <- b.finishBotIntent(t.Context(), attempt, outcome, botdelivery.Continuation{})
+	}()
+	select {
+	case <-entered:
+	case err := <-completion:
+		completed = true
+		t.Fatalf("edit request did not arrive: %v", err)
+	case <-t.Context().Done():
+		t.Fatal("edit request exceeded the test deadline")
+	}
+	require.NoError(t, b.RecoverBotIntents(t.Context()))
+	recovered, err := botdelivery.Read(t.Context(), b.DB, 999, attempt.QueueReference(), false)
+	require.NoError(t, err)
+	require.Equal(t, attempt.Attempt, recovered.Attempt)
+	custom := delivery.Outcome{Kind: delivery.Rejected, Reason: botEditTargetMissing}
+	before := botRecoveredKnownSnapshot(t, b)
+	require.ErrorIs(
+		t,
+		b.finishBotIntent(t.Context(), attempt, botTestTransportResult(custom, false), botdelivery.Continuation{}),
+		botdelivery.ErrBinding,
+		"a custom policy result alone is not provider evidence",
+	)
+	require.JSONEq(t, before, botRecoveredKnownSnapshot(t, b))
+	if state == "cancelled_before" {
+		require.NoError(t, b.postponeBotIntent(t.Context(), recovered, true))
+		before = botRecoveredKnownSnapshot(t, b, "last_confirmed_attempt")
+	}
+	close(release)
+	released = true
+	completionErr := <-completion
+	completed = true
+	require.NoError(t, completionErr, "actual late HTTP400 must preserve canonical negative evidence")
+	require.EqualValues(t, 1, calls.Load(), "edit refusal must not send a replacement message")
+	require.False(t, wrongMethod.Load())
+	if state == "cancelled_before" {
+		require.JSONEq(t, before, botRecoveredKnownSnapshot(t, b, "last_confirmed_attempt"))
+	}
 }
 
 // Hold the actual HTTP request while recovery and optional cancellation complete.
@@ -947,8 +1122,12 @@ func botAssertRecoveredKnownFence(t *testing.T, b *Bot, ref delivery.Reference, 
 	require.Equal(t, attempt.Attempt, uncertain, "historical uncertainty remains factual")
 	require.Zero(t, resends, "late completion does not admit a resend")
 	before := botRecoveredKnownSnapshot(t, b)
-	positiveErr := b.finishBotIntent(t.Context(), attempt,
-		delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}, botdelivery.Continuation{}, false)
+	positiveErr := b.finishBotIntent(
+		t.Context(),
+		attempt,
+		botTestTransportResult(delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}, false),
+		botdelivery.Continuation{},
+	)
 	if !errors.Is(positiveErr, botdelivery.ErrBinding) {
 		t.Errorf("confirmed429 must fence contradictory same-attempt positive receipt: %v", positiveErr)
 	}
@@ -981,14 +1160,17 @@ func TestBotTransportRetryPendingLateReceipt(t *testing.T) {
 	known := delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}
 	require.ErrorIs(
 		t,
-		b.finishBotIntent(ctx, current, known, botdelivery.Continuation{}, false),
+		b.finishBotIntent(ctx, current, botTestTransportResult(known, false), botdelivery.Continuation{}),
 		botdelivery.ErrBinding,
 	)
 	attempt, ready, err := b.beginBotIntent(ctx, current, botRenderedDelivery{})
 	require.NoError(t, err)
 	require.True(t, ready)
 	require.NoError(t, b.RecoverBotIntents(ctx))
-	require.NoError(t, b.finishBotIntent(ctx, attempt, known, botdelivery.Continuation{}, false))
+	require.NoError(
+		t,
+		b.finishBotIntent(ctx, attempt, botTestTransportResult(known, false), botdelivery.Continuation{}),
+	)
 	require.NoError(t, b.ContinueBotIntentReceipts(ctx))
 	require.NoError(t, b.ContinueBotIntentReceipts(ctx))
 	current, err = botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
@@ -1029,9 +1211,15 @@ func TestBotTransportRetryTerminalResponseWorker(t *testing.T) {
 		// and cancellation. The response then reaches the original worker.
 		admitted, readErr := botdelivery.Read(ctx, db, 999, queued.Reference, false)
 		if readErr == nil {
-			readErr = b.finishBotIntent(ctx, admitted,
-				delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"},
-				botdelivery.Continuation{}, false)
+			readErr = b.finishBotIntent(
+				ctx,
+				admitted,
+				botTestTransportResult(
+					delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"},
+					false,
+				),
+				botdelivery.Continuation{},
+			)
 		}
 		if readErr == nil {
 			admitted, readErr = botdelivery.Read(ctx, db, 999, queued.Reference, false)
@@ -1071,8 +1259,8 @@ func TestBotTransportRetryAdmissionAndRecoveryBudget(t *testing.T) {
 	first, ready, err := b.beginBotIntent(ctx, current, botRenderedDelivery{})
 	require.NoError(t, err)
 	require.True(t, ready)
-	require.NoError(t, b.finishBotIntent(ctx, first, delivery.Outcome{Kind: delivery.Deferred,
-		Reason: "telegram_rate_limit", RetryAfter: 1}, botdelivery.Continuation{}, false))
+	require.NoError(t, b.finishBotIntent(ctx, first, botTestTransportResult(delivery.Outcome{Kind: delivery.Deferred,
+		Reason: "telegram_rate_limit", RetryAfter: 1}, false), botdelivery.Continuation{}))
 	var resends int
 	require.NoError(t, db.QueryRow(ctx, `SELECT uncertain_resends FROM bot.delivery_intents
  WHERE operation_key='recover-budget'`).Scan(&resends))
@@ -1129,4 +1317,9 @@ func TestBotTransportRetryAdmissionAndRecoveryBudget(t *testing.T) {
  WHERE operation_key='recover-budget'`).Scan(&resends, &unknownAttempt))
 	require.Equal(t, 1, resends)
 	require.Equal(t, admitted.Attempt, unknownAttempt)
+}
+
+// Direct completion fixtures supply their own canonical classification.
+func botTestTransportResult(outcome delivery.Outcome, fallback bool) botTransportResult {
+	return botTransportResult{Outcome: outcome, ProviderOutcome: outcome, Fallback: fallback}
 }

@@ -58,16 +58,22 @@ func (b *Bot) DeliverBotIntent(ctx context.Context, ref delivery.Reference) erro
 		if !errors.Is(err, botdelivery.ErrWireUnavailable) {
 			return err
 		}
-		return b.finishBotIntent(live, attempt,
-			delivery.Outcome{Kind: delivery.Rejected, Reason: "original_wire_unavailable"}, rendered.Receipt, false)
+		return b.finishBotIntent(
+			live,
+			attempt,
+			botTransportResult{
+				Outcome: delivery.Outcome{Kind: delivery.Rejected, Reason: "original_wire_unavailable"},
+			},
+			rendered.Receipt,
+		)
 	}
 	rendered = renderedBotWire(wire, rendered.Wire)
-	outcome, fallback := b.sendBotIntent(live, attempt, rendered)
+	outcome := b.sendBotIntent(live, attempt, rendered)
 	// A known provider response must be persisted even when shutdown cancelled
 	// the caller while the response was being read.
 	cleanup, cancel := deliveryCompletionContext(live)
 	defer cancel()
-	if err = b.finishBotIntent(cleanup, attempt, outcome, rendered.Receipt, fallback); err != nil {
+	if err = b.finishBotIntent(cleanup, attempt, outcome, rendered.Receipt); err != nil {
 		return err
 	}
 	if outcome.Kind != delivery.Succeeded {
@@ -106,34 +112,39 @@ func (b *Bot) prepareBotWire(ctx context.Context, i botdelivery.Intent) (botRend
 	return rendered, err
 }
 
-func (b *Bot) sendBotIntent(ctx context.Context, i botdelivery.Intent, r botRenderedDelivery) (delivery.Outcome, bool) {
+func (b *Bot) sendBotIntent(ctx context.Context, i botdelivery.Intent, r botRenderedDelivery) botTransportResult {
 	switch i.Phase {
 	case botDocumentKind:
 		message, err := b.TG.SendDocument(ctx, i.Chat, r.Filename, r.Body)
-		return telegram.DeliveryOutcome(message.ID, err), false
+		outcome := telegram.DeliveryOutcome(message.ID, err)
+		return botTransportResult{Outcome: outcome, ProviderOutcome: outcome}
 	case botPhaseEdit:
 		r.Payload.ChatID, r.Payload.MessageID = i.Chat, i.Target
 		err := b.TG.Edit(ctx, r.Payload)
+		provider := telegram.DeliveryOutcome(i.Target, err)
 		if err == nil {
-			return telegram.DeliveryOutcome(i.Target, nil), false
+			return botTransportResult{Outcome: provider, ProviderOutcome: provider}
 		}
 		fallback, editErr := passMenuEditFallback(err)
 		if editErr == nil && !fallback {
-			return telegram.DeliveryOutcome(i.Target, nil), false
+			return botTransportResult{Outcome: telegram.DeliveryOutcome(i.Target, nil), ProviderOutcome: provider}
 		}
 		if fallback &&
 			(i.Reference.Family == botFamilyPassRedaction || i.Reference.Family == botdelivery.PassReceiptRedactionFamily ||
 				(i.Reference.Family == registrationPayment && i.Reference.Notice == i18n.PaymentUnavailable)) {
-			return delivery.Outcome{Kind: delivery.Rejected, Reason: botEditTargetMissing}, false
+			return botTransportResult{Outcome: delivery.Outcome{Kind: delivery.Rejected, Reason: botEditTargetMissing},
+				ProviderOutcome: provider}
 		}
 		if fallback {
-			return delivery.Outcome{Kind: delivery.Deferred, Reason: botEditTargetMissing}, true
+			return botTransportResult{Outcome: delivery.Outcome{Kind: delivery.Deferred, Reason: botEditTargetMissing},
+				ProviderOutcome: provider, Fallback: true}
 		}
-		return telegram.DeliveryOutcome(0, err), false
+		return botTransportResult{Outcome: provider, ProviderOutcome: provider}
 	default:
 		r.Payload.ChatID, r.Payload.MessageID = i.Chat, 0
 		message, err := b.TG.Send(ctx, r.Payload)
-		return telegram.DeliveryOutcome(message.ID, err), false
+		outcome := telegram.DeliveryOutcome(message.ID, err)
+		return botTransportResult{Outcome: outcome, ProviderOutcome: outcome}
 	}
 }
 

@@ -2,8 +2,16 @@ package bot
 
 import (
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+// Provider evidence is retained before edit policy changes the delivery result.
+type botTransportResult struct {
+	delivery.Outcome
+	ProviderOutcome delivery.Outcome
+	Fallback        bool
+}
 
 type botRenderedDelivery struct {
 	Wire         *botdelivery.WireReference
