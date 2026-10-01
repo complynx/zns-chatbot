@@ -26,6 +26,7 @@ type notificationLostResponse struct {
 	text  string
 	calls int
 	drops int
+	wires []telegram.Send
 }
 
 func (l *notificationLostResponse) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -38,10 +39,7 @@ func (l *notificationLostResponse) RoundTrip(request *http.Request) (*http.Respo
 	}
 	_ = request.Body.Close()
 	request.Body = io.NopCloser(bytes.NewReader(body))
-	var message struct {
-		ChatID int64  `json:"chat_id"`
-		Text   string `json:"text"`
-	}
+	var message telegram.Send
 	if err = json.Unmarshal(body, &message); err != nil {
 		return nil, err
 	}
@@ -50,6 +48,7 @@ func (l *notificationLostResponse) RoundTrip(request *http.Request) (*http.Respo
 		return response, err
 	}
 	l.mu.Lock()
+	l.wires = append(l.wires, message)
 	if l.text == "" {
 		l.text = message.Text
 	}
@@ -74,6 +73,44 @@ func (l *notificationLostResponse) count() int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.calls
+}
+
+func (l *notificationLostResponse) payloads() []telegram.Send {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.Clone(l.wires)
+}
+
+func TestNotificationUncertainRetryPreservesWireAfterLanguageChange(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			dispatch := exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			requireNotificationAccepted(t, r, loss)
+			require.Equal(t, "pending", r.status(t, r.first).State)
+			before := loss.payloads()
+			require.Len(t, before, 1)
+			if domain == "massage" {
+				require.NotEmpty(t, before[0].Markup.Rows)
+			}
+			_, err := r.f.db.Exec(t.Context(), `UPDATE core.users SET language='ru' WHERE id='bob'`)
+			require.NoError(t, err)
+			r.restartNotificationOwner(t, domain)
+			r.wake(t)
+			dispatch = exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			after := loss.payloads()
+			require.GreaterOrEqual(t, len(after), 2)
+			assert.Equal(t, before[0].Text, after[1].Text, "retry must preserve admitted wire text")
+			assert.Equal(t, before[0].Markup, after[1].Markup, "retry must preserve actual buttons")
+			assert.Equal(t, "sent", r.status(t, r.first).State)
+		})
+	}
 }
 
 func requireNotificationAccepted(t *testing.T, r *notificationRuntimeFixture, loss *notificationLostResponse) {
