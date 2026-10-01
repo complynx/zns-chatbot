@@ -33,7 +33,7 @@ func TestReadDatabaseFailureAndControls(t *testing.T) {
 		for _, failure := range []error{io.EOF, pgx.ErrNoRows, context.Canceled, context.DeadlineExceeded} {
 			db := readDatabase{row: readDatabaseRow(func(...any) error { return failure })}
 			_, err := Read(t.Context(), db, 1, delivery.Reference{}, lock)
-			if errors.Is(failure, io.EOF) {
+			if !errors.Is(failure, pgx.ErrNoRows) {
 				require.ErrorIs(t, err, core.ErrDatabase)
 			} else {
 				require.ErrorIs(t, err, failure)

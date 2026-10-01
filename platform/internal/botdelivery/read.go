@@ -32,7 +32,7 @@ func Read(
 		)
 	}
 	if err != nil {
-		return Intent{}, core.DatabaseOperationError(err)
+		return Intent{}, core.DatabaseOperationContextError(ctx, err)
 	}
 	i := Intent{
 		BotID:            row.BotID,

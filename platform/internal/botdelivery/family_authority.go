@@ -70,7 +70,7 @@ func (s Service) prepareFamily(
 		var revision int64
 		err = tx.QueryRow(ctx, `SELECT COALESCE(state->>'event',''),COALESCE(state->>'view',''),revision FROM bot.massage_views WHERE owner=$1`, i.Owner).
 			Scan(&f.massageEvent, &f.massageView, &revision)
-		err = core.DatabaseOperationError(err)
+		err = core.DatabaseOperationContextError(ctx, err)
 		if err == nil && revision != i.Reference.Revision {
 			err = ErrStale
 		}
@@ -84,7 +84,11 @@ func readPassMenuFamily(ctx context.Context, tx pgx.Tx, i Intent) (PassMenu, err
 	var revision int64
 	if err := tx.QueryRow(ctx, `SELECT state,revision FROM bot.pass_views WHERE owner=$1`, i.Owner).
 		Scan(&state, &revision); err != nil {
-		return menu, core.DatabaseOperationError(err)
+		if i.Reference.Family == familyPasses && errors.Is(err, pgx.ErrNoRows) {
+			// Missing projection cannot skip immutable receipt/source authority.
+			return menu, ErrStale
+		}
+		return menu, core.DatabaseOperationContextError(ctx, err)
 	}
 	// Incompatible stored state keeps its decode provenance.
 	if err := json.Unmarshal(state, &menu); err != nil {
@@ -179,17 +183,13 @@ func lockPassMenu(ctx context.Context, tx pgx.Tx, i Intent, f familyRead) error 
 	if current.Redacted {
 		return ErrStale
 	}
-	action := ""
-	switch current.View {
-	case "queue", "admin_target":
-		action = "admin_assign"
-	case "payment_queue":
-		action = "proof_accept"
-	case "takeover_target":
-		action = "takeover"
-	}
+	action := PassCardBinding(current.RegistrationMenu, 0).Capability
 	if action != "" {
-		return lockRegistrationCapability(ctx, tx, i.Owner, current.Event, action)
+		err := lockRegistrationCapability(ctx, tx, i.Owner, current.Event, action)
+		if errors.Is(err, ErrStale) {
+			return passMenuDenied(i, err)
+		}
+		return err
 	}
 	return nil
 }
@@ -247,7 +247,7 @@ func lockViewBinding(ctx context.Context, tx pgx.Tx, i Intent, f familyRead) err
 		var revision int64
 		if err := tx.QueryRow(ctx, `SELECT state,revision FROM bot.pass_views WHERE owner=$1 FOR SHARE`, i.Owner).
 			Scan(&state, &revision); err != nil {
-			return core.DatabaseOperationError(err)
+			return core.DatabaseOperationContextError(ctx, err)
 		}
 		if err := json.Unmarshal(state, &current); err != nil {
 			return err
@@ -264,7 +264,7 @@ func lockViewBinding(ctx context.Context, tx pgx.Tx, i Intent, f familyRead) err
 		err := tx.QueryRow(ctx, `SELECT COALESCE(state->>'event',''),COALESCE(state->>'view',''),revision FROM bot.massage_views WHERE owner=$1 FOR SHARE`, i.Owner).
 			Scan(&event, &view, &revision)
 		if err != nil {
-			return core.DatabaseOperationError(err)
+			return core.DatabaseOperationContextError(ctx, err)
 		}
 		if revision != i.Reference.Revision || event != f.massageEvent || view != f.massageView {
 			return ErrStale
@@ -331,7 +331,7 @@ func lockRenderedTarget(ctx context.Context, tx pgx.Tx, i Intent, target int64) 
 		return nil
 	}
 	if err != nil {
-		return core.DatabaseOperationError(err)
+		return core.DatabaseOperationContextError(ctx, err)
 	}
 	if chat != i.Chat || message != target {
 		return ErrStale

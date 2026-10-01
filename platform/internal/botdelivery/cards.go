@@ -17,7 +17,9 @@ func (s Service) EnqueueCard(ctx context.Context, in CardRequest) error {
 	if err := s.Delivery.Validate(); err != nil {
 		return err
 	}
-	if !in.Reference.Valid(in.Owner) || in.Reference.Kind != CardIntent || in.Chat <= 0 {
+	if in.Reference.Family == PassReceiptRedactionFamily || !in.Reference.Valid(in.Owner) ||
+		in.Reference.Kind != CardIntent ||
+		in.Chat <= 0 {
 		return ErrBinding
 	}
 	owner, ref, operation, effect, child := in.Owner, in.Reference, in.Operation, in.Effect, in.Child

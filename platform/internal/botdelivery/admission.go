@@ -3,6 +3,7 @@ package botdelivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"reflect"
 	"slices"
@@ -24,7 +25,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 	if err := s.Delivery.Validate(); err != nil {
 		return Observation{}, err
 	}
-	if !reference.Valid(owner) || chat <= 0 ||
+	if reference.Family == PassReceiptRedactionFamily || !reference.Valid(owner) || chat <= 0 ||
 		(phase != phaseSend && phase != "document") {
 		return Observation{}, ErrBinding
 	}
@@ -39,7 +40,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return Observation{}, core.DatabaseOperationError(err)
+		return Observation{}, core.DatabaseOperationContextError(ctx, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	if err = s.lockSource(ctx, tx, i); err != nil {
@@ -63,7 +64,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 		i.Target,
 	)
 	if err != nil {
-		return Observation{}, core.DatabaseOperationError(err)
+		return Observation{}, core.DatabaseOperationContextError(ctx, err)
 	}
 	current, err := Read(ctx, tx, i.BotID, i.QueueReference(), true)
 	if err != nil {
@@ -83,73 +84,85 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 	if err != nil {
 		return Observation{}, err
 	}
-	return current.Observation(), core.DatabaseOperationError(tx.Commit(ctx))
+	return current.Observation(), core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 }
 func (s Service) lockSource(ctx context.Context, tx pgx.Tx, i Intent) error {
 	return s.lockRenderedSource(ctx, tx, i, nil)
 }
-func (s Service) lockRenderedSource(ctx context.Context, tx pgx.Tx, i Intent, exportEvents []string) error {
+
+func (s Service) lockRenderedSource(
+	ctx context.Context,
+	tx pgx.Tx,
+	i Intent,
+	exportEvents []string,
+	renderedPass ...*PassCardReceipt,
+) error {
+	return s.lockPayloadSources(ctx, tx, i, exportEvents, nil, renderedPass...)
+}
+
+func (s Service) lockPayloadSources(
+	ctx context.Context,
+	tx pgx.Tx,
+	i Intent,
+	exportEvents []string,
+	retained *Intent,
+	renderedPass ...*PassCardReceipt,
+) error {
 	if !i.Reference.Valid(i.Owner) {
 		return ErrBinding
 	}
 	if i.Reference.Kind == IdentityIntent {
 		return nil
 	}
-	f, refs, err := s.prepareFamily(ctx, tx, i, exportEvents)
-	if err != nil {
-		return familyMissing(err)
+	if i.Reference.Family == PassReceiptRedactionFamily {
+		return s.lockPassReceiptRedaction(ctx, tx, i, retained)
 	}
-	expanded, err := readsource.ExpandProposalSources(ctx, tx, refs)
+	f, refs, binding, viewStale, err := s.payloadFamily(ctx, tx, i, exportEvents, renderedPass...)
 	if err != nil {
 		return err
 	}
-	if err = readsource.LockRegistrationMutationEvents(ctx, tx, expanded, f.events); err != nil {
+	expanded, err := lockPayloadPrelude(ctx, tx, i.Owner, refs, f.events, retained)
+	if err != nil {
 		return err
 	}
 	if err = s.lockFamilyEvent(ctx, tx, i); err != nil {
 		return familyMissing(err)
 	}
-	actors := []string{i.Owner}
-	if i.Reference.Family == familyPassProof {
-		actors = append(actors, i.Reference.Object)
-	}
-	f.refundAmbassador, err = refundDeliveryActor(ctx, tx, i)
-	if err != nil {
-		return familyMissing(err)
-	}
-	if f.refundAmbassador != "" {
-		actors = append(actors, f.refundAmbassador)
-	}
-	if err = readsource.LockActors(ctx, tx, actors, expanded); err != nil {
+	if err = s.lockPayloadActors(ctx, tx, i, expanded, &f); err != nil {
 		return err
 	}
-	var chat int64
-	if err = tx.QueryRow(ctx, `SELECT telegram_id FROM core.users WHERE id=$1 FOR SHARE`, i.Owner).
-		Scan(&chat); err != nil {
-		return core.DatabaseOperationError(err)
-	}
-	if chat != i.Chat {
-		return ErrStale
-	}
-	if err = s.lockFamily(ctx, tx, i, f); err != nil {
-		return familyMissing(err)
-	}
-	valid, err := readsource.Lock(ctx, tx, i.Owner, refs)
-	if err != nil {
+	if err = s.lockPayloadCapability(ctx, tx, i, binding); err != nil {
 		return err
 	}
-	if slices.Contains(valid, false) {
-		return &core.ProblemError{Status: http.StatusConflict, Code: codePassSourceStale}
-	}
-	if i.Reference.Source != nil {
-		if err = fence.LockGeneration(ctx, tx, i.Owner, i.Reference.Source.Generation); err != nil {
-			return err
+	if !viewStale && (i.Reference.Family != familyPasses || binding == nil) {
+		if err = s.lockFamily(ctx, tx, i, f); err != nil {
+			return familyMissing(err)
 		}
 	}
-	if err = fence.LockGeneration(ctx, tx, i.Owner, i.Reference.Generation); err != nil {
-		return err
+	return s.validatePayloadSource(ctx, tx, i, refs, f, viewStale)
+}
+
+func lockPayloadPrelude(ctx context.Context, tx pgx.Tx, owner string, refs []readsource.Authority,
+	events []string, retained *Intent,
+) ([]readsource.Authority, error) {
+	if retained == nil {
+		expanded, err := readsource.ExpandProposalSources(ctx, tx, refs)
+		if err != nil {
+			return nil, err
+		}
+		return expanded, readsource.LockRegistrationMutationEvents(ctx, tx, expanded, events)
 	}
-	return lockViewBinding(ctx, tx, i, f)
+	records, err := passPreparationLocks(refs, *retained)
+	if err != nil {
+		return nil, err
+	}
+	if retained.Receipt.Pass != nil && retained.Receipt.Pass.Event != "" {
+		events = append(events, retained.Receipt.Pass.Event)
+	}
+	// Prior targets occur only for pass cards. Lock their events/actors together;
+	// later payload validation still uses each independent persisted record.
+	return nil, readsource.LockRegistrationMutationPrelude(ctx, tx, records[0], events,
+		[]string{owner}, records[1:]...)
 }
 
 func refundDeliveryActor(ctx context.Context, tx pgx.Tx, i Intent) (string, error) {
@@ -167,35 +180,33 @@ func (s Service) begin(
 	observed Intent,
 	target int64,
 	exportEvents []string,
+	pass *PassCardReceipt,
 ) (Intent, bool, error) {
-	if err := s.Delivery.Validate(); err != nil {
-		return observed, false, err
-	}
-	if observed.BotID != s.Delivery.BotID || observed.QueueReference().Owner != delivery.Bot {
-		return observed, false, ErrBinding
-	}
-	if observed.Reference.Family == familyPassExport && !passbooking.ValidExportEvents(exportEvents) {
-		return observed, false, ErrBinding
-	}
-	stored, err := Read(ctx, s.DB, observed.BotID, observed.QueueReference(), false)
+	stored, err := s.readBeginObservation(ctx, observed, exportEvents)
 	if err != nil {
 		return observed, false, err
-	}
-	if !sameBinding(stored, observed) {
-		return observed, false, ErrBinding
 	}
 	if stored.Attempt != observed.Attempt {
 		return stored, false, nil
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return observed, false, core.DatabaseOperationError(err)
+		return observed, false, core.DatabaseOperationContextError(ctx, err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = s.lockRenderedSource(ctx, tx, observed, exportEvents); err != nil {
+	if observed.Reference.Family == familyPasses && observed.Reference.Source != nil &&
+		(pass == nil || pass.PreviousMessageID != target) {
+		return observed, false, ErrBinding
+	}
+	previous, err := s.previousPassReceipt(ctx, tx, stored)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return observed, false, err
 	}
-	if observed.Reference.Kind == CardIntent && observed.Attempt == 0 {
+	if err = s.lockPayloadSources(ctx, tx, stored, exportEvents, previous, pass); err != nil {
+		return s.failPassAdmission(ctx, tx, stored, previous, err)
+	}
+	if observed.Reference.Kind == CardIntent && observed.Attempt == 0 &&
+		observed.Reference.Family != PassReceiptRedactionFamily {
 		if err = lockRenderedTarget(ctx, tx, observed, target); err != nil {
 			return observed, false, err
 		}
@@ -210,10 +221,17 @@ func (s Service) begin(
 	if current.State != delivery.Deferred || current.Attempt != observed.Attempt {
 		return current, false, nil
 	}
-	return s.beginAttempt(ctx, tx, current, target)
+	current = bindAdmittedPass(current, pass)
+	return s.beginAttempt(ctx, tx, current, target, previous)
 }
 
-func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, target int64) (Intent, bool, error) {
+func (s Service) beginAttempt(
+	ctx context.Context,
+	tx pgx.Tx,
+	current Intent,
+	target int64,
+	previous *Intent,
+) (Intent, bool, error) {
 	var err error
 	if current.Reference.Kind == CardIntent {
 		var pendingReceipt bool
@@ -221,10 +239,10 @@ func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, ta
    WHERE bot_id=$1 AND owner=$2 AND state='sent' AND NOT continuation_done
    AND reference->>'kind'='card' AND reference->>'card_key'=$3)`, current.BotID, current.Owner, current.Reference.CardKey).Scan(&pendingReceipt)
 		if err != nil {
-			return current, false, core.DatabaseOperationError(err)
+			return current, false, core.DatabaseOperationContextError(ctx, err)
 		}
 		if pendingReceipt {
-			return current, false, core.DatabaseOperationError(tx.Commit(ctx))
+			return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 		}
 	}
 	admission, err := delivery.Begin(ctx, tx, s.Delivery, current.QueueReference())
@@ -232,7 +250,10 @@ func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, ta
 		return current, false, err
 	}
 	if !admission.Ready {
-		return current, false, core.DatabaseOperationError(tx.Commit(ctx))
+		return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
+	}
+	if err = s.validatePassRetirementTarget(ctx, tx, current, previous); err != nil {
+		return current, false, err
 	}
 	current.Attempt++
 	current.State = delivery.Sending
@@ -242,9 +263,13 @@ func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, ta
 		current.Phase = phaseEdit
 		current.Target = target
 	}
+	receipt, err := json.Marshal(current.Receipt)
+	if err != nil {
+		return current, false, err
+	}
 	_, err = tx.Exec(
 		ctx,
-		`UPDATE bot.delivery_intents SET state='sending',attempt=$4,attempted_at=clock_timestamp(),phase=$5,target_message_id=$6
+		`UPDATE bot.delivery_intents SET state='sending',attempt=$4,attempted_at=clock_timestamp(),phase=$5,target_message_id=$6,receipt=$7
  WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
 		current.BotID,
 		current.Operation,
@@ -252,14 +277,18 @@ func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, ta
 		current.Attempt,
 		current.Phase,
 		current.Target,
+		receipt,
 	)
 	if err != nil {
-		return current, false, core.DatabaseOperationError(err)
+		return current, false, core.DatabaseOperationContextError(ctx, err)
 	}
-	return current, true, core.DatabaseOperationError(tx.Commit(ctx))
+	return current, true, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 }
 func (s Service) Begin(ctx context.Context, in BeginRequest) (BeginResult, error) {
-	i, ready, err := s.begin(ctx, in.Observed, in.Target, in.ExportEvents)
+	if in.PreparationFailure {
+		return s.failPassPreparation(ctx, in.Observed)
+	}
+	i, ready, err := s.begin(ctx, in.Observed, in.Target, in.ExportEvents, in.Pass)
 	if err != nil {
 		return BeginResult{}, err
 	}
@@ -282,4 +311,161 @@ func lockDerivation(ctx context.Context, tx pgx.Tx, owner string, source readsou
 		return &core.ProblemError{Status: http.StatusConflict, Code: codePassSourceStale}
 	}
 	return fence.LockGeneration(ctx, tx, owner, source.Generation)
+}
+
+// Mutable projection staleness is decided only after the payload authority.
+func (s Service) payloadFamily(ctx context.Context, tx pgx.Tx, i Intent, exportEvents []string,
+	renderedPass ...*PassCardReceipt,
+) (familyRead, []readsource.Authority, *PassCardReceipt, bool, error) {
+	f, refs, err := s.prepareFamily(ctx, tx, i, exportEvents)
+	viewStale := i.Reference.Family == familyPasses &&
+		(i.Reference.Source != nil || validPassReceipt(i)) && errors.Is(err, ErrStale)
+	if err != nil && !viewStale {
+		return f, refs, nil, viewStale, familyMissing(err)
+	}
+	binding := i.Receipt.Pass
+	if binding == nil && validPassReceipt(i) {
+		// Old successful cards retain authority in their immutable Reference.
+		// They never persisted a rendered capability. Do not adopt the new view.
+		binding = &PassCardReceipt{PreviousMessageID: passPreviousTarget(i)}
+	}
+	if len(renderedPass) != 0 {
+		// The payload authority survives a replaced or missing mutable projection.
+		binding = renderedPass[0]
+		if i.Reference.Family == familyPasses && binding != nil && !viewStale {
+			expected := PassCardBinding(f.menu.RegistrationMenu, binding.PreviousMessageID)
+			if !reflect.DeepEqual(binding, expected) {
+				viewStale = true
+			}
+		}
+	}
+	if i.Reference.Family == familyPasses && binding != nil && binding.Event != "" {
+		f.events = append(f.events, binding.Event)
+	}
+	return f, refs, binding, viewStale, nil
+}
+
+func (s Service) validatePayloadSource(
+	ctx context.Context,
+	tx pgx.Tx,
+	i Intent,
+	refs []readsource.Authority,
+	f familyRead,
+	viewStale bool,
+) error {
+	valid, err := readsource.Lock(ctx, tx, i.Owner, refs)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(valid, false) {
+		return passMenuDenied(i, &core.ProblemError{Status: http.StatusConflict, Code: codePassSourceStale})
+	}
+	if i.Reference.Source != nil {
+		if err = fence.LockGeneration(ctx, tx, i.Owner, i.Reference.Source.Generation); err != nil {
+			return passMenuDenied(i, err)
+		}
+	}
+	// A successful manual card has current domain authority. Its render generation
+	// does not bind that materialization to unrelated conversation history.
+	if i.Reference.Source != nil || !validPassReceipt(i) {
+		if err = fence.LockGeneration(ctx, tx, i.Owner, i.Reference.Generation); err != nil {
+			return passMenuDenied(i, err)
+		}
+	}
+	if viewStale || (i.Reference.Family == familyPasses && f.menu.Redacted) {
+		return ErrStale
+	}
+	return lockViewBinding(ctx, tx, i, f)
+}
+
+func (s Service) lockPayloadActors(
+	ctx context.Context,
+	tx pgx.Tx,
+	i Intent,
+	expanded []readsource.Authority,
+	f *familyRead,
+) error {
+	var err error
+	actors := []string{i.Owner}
+	if i.Reference.Family == familyPassProof {
+		actors = append(actors, i.Reference.Object)
+	}
+	f.refundAmbassador, err = refundDeliveryActor(ctx, tx, i)
+	if err != nil {
+		return familyMissing(err)
+	}
+	if f.refundAmbassador != "" {
+		actors = append(actors, f.refundAmbassador)
+	}
+	if err = readsource.LockActors(ctx, tx, actors, expanded); err != nil {
+		return err
+	}
+	var chat int64
+	if err = tx.QueryRow(ctx, `SELECT telegram_id FROM core.users WHERE id=$1 FOR SHARE`, i.Owner).
+		Scan(&chat); err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	if chat != i.Chat {
+		return ErrStale
+	}
+
+	return nil
+}
+func (s Service) readBeginObservation(ctx context.Context, observed Intent, exportEvents []string) (Intent, error) {
+	if err := s.Delivery.Validate(); err != nil {
+		return Intent{}, err
+	}
+	if observed.BotID != s.Delivery.BotID || observed.QueueReference().Owner != delivery.Bot {
+		return Intent{}, ErrBinding
+	}
+	if observed.Reference.Family == familyPassExport && !passbooking.ValidExportEvents(exportEvents) {
+		return Intent{}, ErrBinding
+	}
+	stored, err := Read(ctx, s.DB, observed.BotID, observed.QueueReference(), false)
+	if err != nil {
+		return Intent{}, err
+	}
+	if !sameBinding(stored, observed) {
+		return Intent{}, ErrBinding
+	}
+
+	return stored, nil
+}
+
+func (s Service) lockPayloadCapability(ctx context.Context, tx pgx.Tx, i Intent, binding *PassCardReceipt) error {
+	var err error
+	if i.Reference.Family == familyPasses && binding != nil && binding.Capability != "" {
+		if err = lockRegistrationCapability(ctx, tx, i.Owner, binding.Event, binding.Capability); err != nil {
+			return passMenuDenied(i, err)
+		}
+	}
+	return nil
+}
+
+func (s Service) failPassAdmission(
+	ctx context.Context,
+	tx pgx.Tx,
+	stored Intent,
+	previous *Intent,
+	cause error,
+) (Intent, bool, error) {
+	if _, denied := errors.AsType[*PassMenuDeniedError](cause); !denied || previous == nil {
+		return stored, false, cause
+	}
+	retired, handled, err := s.retirePassPreparation(ctx, tx, stored, *previous)
+	if handled || err != nil {
+		return retired, false, err
+	}
+	return stored, false, cause
+}
+
+func bindAdmittedPass(current Intent, pass *PassCardReceipt) Intent {
+	if current.Reference.Family == familyPasses && pass != nil {
+		canonical := *pass
+		if current.Attempt > 0 && current.Receipt.Pass != nil {
+			canonical.PreviousMessageID = current.Receipt.Pass.PreviousMessageID
+		}
+		current.Receipt.Pass = &canonical
+	}
+	return current
 }
