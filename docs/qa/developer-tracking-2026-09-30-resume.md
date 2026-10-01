@@ -48,7 +48,7 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 | 250 | Complete E probe target and rehearsal successor | Codex author, Codex override; FAIL298d1bee/baseff575042, eight paths: bound manifest/projections not checked before owner actions; queryless importer SSL fallback. Same fresh author correcting; no merge or live E execution |
 | 251 | Complete pass target and predecessor compatibility candidate | Codex author, Codex override; FAIL74ab3378/base91ff00f1,23paths: independent valid source records incorrectly share aggregate budget during lock discovery. Author correcting; prior scoped developer gates preserved. No merge/Functional claim |
 
-| 252 | Complete E preflight guard successor | Codex author, Codex override; allocated before dispatchbc85851d/base91ff00f1,8paths. Python19/actualGo probe+runtime builds/pinnedlintfmt/parser proofs passed; fresh full-scope independent review pending, no DB/Functional claim |
+| 252 | Complete E preflight guard successor | Codex author, Codex override; FAILbc85851d/base91ff00f1,8paths: owner SQL container transport bypasses allocated loopback endpoint. Transferred D developer after repeated reviews; no DB/Functional claim |
 
 | 253 | Incoming update safe failure observation | Codex author, Codex override; allocated before dispatch808b284c/base91ff00f1,3paths. Fullbot/appclient/observability units,pinnedlintfmt passed; fresh independent review pending, no PG/Functional claim |
 

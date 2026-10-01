@@ -11,7 +11,8 @@ Author is correcting it; no merge yet. Job
 successor failed QA249; developer owns bounded original ingress proof and
 keyboard correction (19 paths, additive091 reserved). E eight-path rehearsal
 successor failed QA250 before-owner binding and importer SSL-fallback guards;
-successorbc85851d passed local gates and is under fresh Code QA252. No rejected candidate is merged.
+successorbc85851d failed QA252 because owner SQL bypasses the bound
+loopback transport. Corrective ownership transferred to D after repeated reviews. No rejected candidate is merged.
 
 Three capability lanes are active: registration-domain clock (C27 paths),
 incoming-update diagnostics (D3 paths, fresh QA253 running), and Linux atomic clock operator
