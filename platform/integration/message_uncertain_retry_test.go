@@ -530,10 +530,12 @@ func (f terminalReceiptFixture) snapshot(t *testing.T) string {
 	var snapshot string
 	err := f.db.QueryRow(t.Context(), `SELECT jsonb_build_object(
  'owner',(SELECT to_jsonb(d)-$1::text FROM core.`+f.table+` d WHERE id=$2),
- 'queue',(SELECT jsonb_agg(to_jsonb(q) ORDER BY id) FROM core.delivery_queue q),
+ 'queue',(SELECT jsonb_agg(to_jsonb(q) ORDER BY bot_id,owner_kind,owner_key,effect_key) FROM core.delivery_queue q),
+ 'lanes',(SELECT jsonb_agg(to_jsonb(l) ORDER BY bot_id,chat) FROM core.delivery_lanes l),
+ 'fairness',(SELECT jsonb_agg(to_jsonb(f) ORDER BY bot_id) FROM core.delivery_fairness f),
  'pacing',(SELECT jsonb_agg(to_jsonb(p) ORDER BY bot_id,chat) FROM core.delivery_pacing p),
  'messages',(SELECT jsonb_agg(to_jsonb(m) ORDER BY id) FROM core.admin_messages m),
- 'bookings',(SELECT jsonb_agg(to_jsonb(b) ORDER BY event_id,owner) FROM core.pass_bookings b),
+ 'bookings',(SELECT jsonb_agg(to_jsonb(b) ORDER BY event_id,owner,created_at) FROM core.pass_bookings b),
  'events',(SELECT jsonb_agg(to_jsonb(e) ORDER BY id) FROM core.pass_events e))::text`, f.messageColumn, f.id).
 		Scan(&snapshot)
 	require.NoError(t, err)
