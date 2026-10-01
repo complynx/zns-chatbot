@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationclock"
 )
 
 const RegistrationFixtureStand = "synthetic-qa-zns-registration-fixture"
@@ -30,9 +31,10 @@ const (
 // RegistrationFixture is a private CLI control, never a model or HTTP grant.
 // Only init accepts an opening time. Role controls cannot change any clock.
 type RegistrationFixture struct {
-	Stand   string
-	Action  string
-	OpensAt time.Time
+	Stand       string
+	Action      string
+	OpensAt     time.Time
+	ClockAnchor time.Time
 }
 
 func (f RegistrationFixture) validate() error {
@@ -44,6 +46,13 @@ func (f RegistrationFixture) validate() error {
 		if f.OpensAt.IsZero() {
 			return errors.New("registration fixture opening is required")
 		}
+		if !f.ClockAnchor.IsZero() {
+			_, offset := f.OpensAt.Zone()
+			_, err := (registrationclock.Settings{Anchor: f.ClockAnchor.Format(time.RFC3339Nano)}).AnchorTime()
+			if err != nil || offset != 0 || f.OpensAt.Nanosecond()%1000 != 0 {
+				return errors.New("clock setup requires UTC microsecond anchor and opening")
+			}
+		}
 	case "read",
 		"revoke-payment-a",
 		"restore-payment-a",
@@ -51,7 +60,7 @@ func (f RegistrationFixture) validate() error {
 		registrationFixtureRevokePaymentB,
 		registrationFixtureRevokeBookingAdmin,
 		registrationFixtureRestoreBookingAdmin:
-		if !f.OpensAt.IsZero() {
+		if !f.OpensAt.IsZero() || !f.ClockAnchor.IsZero() {
 			return errors.New("registration fixture opening is init-only")
 		}
 	default:
@@ -130,9 +139,16 @@ func ApplyRegistrationFixture(
 		Scan(&initialized); err != nil {
 		return state, err
 	}
+	if err = prepareRegistrationFixtureClock(ctx, tx, f, initialized); err != nil {
+		return state, err
+	}
 	switch {
 	case f.Action == registrationFixtureInit && !initialized:
 		err = initializeRegistrationFixture(ctx, tx, f.OpensAt)
+		if err == nil && !f.ClockAnchor.IsZero() {
+			_, err = tx.Exec(ctx, `INSERT INTO public.zns_sandbox_fixtures(name) VALUES($1)`,
+				registrationClockSetupMarker(f.ClockAnchor, f.OpensAt))
+		}
 	case !initialized:
 		err = errors.New("registration fixture is not initialized")
 	default:
@@ -145,6 +161,35 @@ func ApplyRegistrationFixture(
 		return state, err
 	}
 	return readRegistrationFixture(ctx, db)
+}
+
+func prepareRegistrationFixtureClock(ctx context.Context, tx pgx.Tx, f RegistrationFixture, initialized bool) error {
+	if f.ClockAnchor.IsZero() {
+		return nil
+	}
+	if err := registrationClockOwnerGuard(ctx, tx); err != nil {
+		return err
+	}
+	if initialized {
+		opening, err := registrationClockSetup(ctx, tx, f.ClockAnchor)
+		if err != nil {
+			return err
+		}
+		if !opening.Equal(f.OpensAt) {
+			return errors.New("established registration clock setup cannot change")
+		}
+		return nil
+	}
+	var clean bool
+	err := tx.QueryRow(ctx, `SELECT NOT EXISTS(SELECT 1 FROM public.zns_sandbox_fixtures WHERE name LIKE $1)`,
+		registrationClockSetupPrefix+"%").Scan(&clean)
+	if err != nil {
+		return err
+	}
+	if !clean {
+		return errors.New("registration clock setup requires a fresh binding")
+	}
+	return nil
 }
 
 // Role controls use the domain event-before-actor lock order. The actor lock

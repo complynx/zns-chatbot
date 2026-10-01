@@ -244,3 +244,102 @@ func TestDeliveryQueueConcurrentEnqueueWaitsForCommit(t *testing.T) {
 	}
 	require.Equal(t, []delivery.Reference{first}, queueReferences(queueCandidates(t, db)))
 }
+
+func TestDeliveryQueueOwnerRejectionReleasesFollower(t *testing.T) {
+	t.Parallel()
+	for _, state := range []delivery.Kind{delivery.Deferred, delivery.Paused, delivery.Parked, delivery.Sending, delivery.Uncertain} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			db := database(t)
+			first := delivery.Reference{Owner: delivery.Bot, Key: "exhausted", Effect: "reply"}
+			follower := delivery.Reference{Owner: delivery.Passes, Key: "next", Effect: "notice"}
+			destination := delivery.Destination{Chat: "101"}
+			entry := queueRegister(t, db, first, destination, delivery.Interactive)
+			queueRegister(t, db, follower, destination, delivery.Background)
+			if state == delivery.Sending || state == delivery.Uncertain {
+				require.True(t, queueBegin(t, db, first).Ready)
+			}
+			if state != delivery.Sending {
+				queueTransaction(t, db, func(tx pgx.Tx) {
+					require.NoError(
+						t,
+						delivery.Project(t.Context(), tx, queueSettings().BotID, first, state, time.Time{}),
+					)
+				})
+			}
+			require.False(t, queueBegin(t, db, follower).Ready)
+			pacing := queueSchedulingSnapshot(t, db)
+			tx, err := db.Begin(t.Context())
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(t.Context()) }()
+			require.NoError(
+				t,
+				delivery.Project(t.Context(), tx, queueSettings().BotID, first, delivery.Rejected, time.Time{}),
+			)
+			require.NoError(t, tx.Rollback(t.Context()))
+			require.Equal(t, state, queueRegister(t, db, first, destination, delivery.Interactive).State)
+			require.False(t, queueBegin(t, db, follower).Ready, "rollback keeps the original head")
+			queueTransaction(t, db, func(tx pgx.Tx) {
+				require.NoError(
+					t,
+					delivery.Project(t.Context(), tx, queueSettings().BotID, first, delivery.Rejected, time.Time{}),
+				)
+			})
+			replayed := queueRegister(t, db, first, destination, delivery.Interactive)
+			require.Equal(t, delivery.Rejected, replayed.State)
+			require.Equal(t, entry.Sequence, replayed.Sequence)
+			queueTransaction(t, db, func(tx pgx.Tx) {
+				require.NoError(
+					t,
+					delivery.Project(t.Context(), tx, queueSettings().BotID, first, delivery.Rejected, time.Time{}),
+				)
+			})
+			require.Equal(
+				t,
+				pacing,
+				queueSchedulingSnapshot(t, db),
+				"owner rejection does not reserve or extend pacing",
+			)
+			require.Equal(t, []delivery.Reference{follower}, queueReferences(queueCandidates(t, db)))
+			queueRejectedGuards(t, db, first)
+			require.True(t, queueBegin(t, db, follower).Ready, "committed owner rejection releases its lane")
+		})
+	}
+}
+
+func queueSchedulingSnapshot(t *testing.T, db *pgxpool.Pool) string {
+	t.Helper()
+	var snapshot string
+	err := db.QueryRow(t.Context(), `SELECT jsonb_build_object(
+		'pacing', (SELECT jsonb_agg(to_jsonb(p) ORDER BY p.chat) FROM core.delivery_pacing p WHERE bot_id=$1),
+		'fairness', (SELECT to_jsonb(f) FROM core.delivery_fairness f WHERE bot_id=$1),
+		'lanes', (SELECT jsonb_agg(to_jsonb(l) ORDER BY l.chat) FROM core.delivery_lanes l WHERE bot_id=$1)
+	)::text`, queueSettings().BotID).Scan(&snapshot)
+	require.NoError(t, err)
+	return snapshot
+}
+
+func queueRejectedGuards(t *testing.T, db *pgxpool.Pool, ref delivery.Reference) {
+	t.Helper()
+	for _, state := range []delivery.Kind{delivery.Deferred, delivery.Cancelled, delivery.Sending, delivery.Succeeded} {
+		tx, err := db.Begin(t.Context())
+		require.NoError(t, err)
+		require.ErrorIs(
+			t,
+			delivery.Project(t.Context(), tx, queueSettings().BotID, ref, state, time.Time{}),
+			delivery.ErrQueueState,
+		)
+		require.NoError(t, tx.Rollback(t.Context()))
+	}
+	tx, err := db.Begin(t.Context())
+	require.NoError(t, err)
+	_, _, err = delivery.Finish(
+		t.Context(),
+		tx,
+		queueSettings(),
+		ref,
+		delivery.Outcome{Kind: delivery.Succeeded, MessageID: 55},
+	)
+	require.ErrorIs(t, err, delivery.ErrQueueState, "a late receipt cannot resurrect a definitively rejected attempt")
+	require.NoError(t, tx.Rollback(t.Context()))
+}

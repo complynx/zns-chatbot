@@ -170,13 +170,13 @@ func Finish(
 	return result, deadline, err
 }
 
-// Project mirrors non-wire recovery/cancellation in the owner's transaction.
+// Project mirrors non-wire recovery, cancellation or owner-policy rejection in the owner's transaction.
 // It never creates a reference or acquires pacing locks. Wire completions use
 // Finish; attempt fencing and allowed recovery decisions remain owner policy.
 func Project(ctx context.Context, tx pgx.Tx, botID int64, ref Reference, state Kind, notBefore time.Time) error {
 	switch state {
-	case Deferred, Cancelled, Uncertain, Parked, Paused:
-	case Sending, Succeeded, Rejected:
+	case Deferred, Cancelled, Uncertain, Parked, Paused, Rejected:
+	case Sending, Succeeded:
 		return ErrQueueState
 	default:
 		return ErrQueueState

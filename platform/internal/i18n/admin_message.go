@@ -5,6 +5,7 @@ const (
 	AdminMessageSend      ID = "admin_message.send"
 	AdminMessageCancel    ID = "admin_message.cancel"
 	AdminMessageResults   ID = "admin_message.results"
+	AdminMessageProgress  ID = "admin_message.progress"
 	AdminMessageQueued    ID = "admin_message.queued"
 	AdminMessageCancelled ID = "admin_message.cancelled"
 	AdminMessageHelp      ID = "admin_message.help"
@@ -12,4 +13,7 @@ const (
 	AdminMessageResult    ID = "admin_message.result"
 	AdminMessageEmpty     ID = "admin_message.empty"
 	AdminMessagePlain     ID = "admin_message.plain"
+	AdminMessageUnknown   ID = "admin_message.state.unknown"
+	AdminMessageParked    ID = "admin_message.state.parked"
+	AdminMessagePaused    ID = "admin_message.state.paused"
 )
