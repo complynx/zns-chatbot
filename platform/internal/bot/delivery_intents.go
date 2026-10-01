@@ -81,31 +81,7 @@ func (b *Bot) finishBotIntent(
 	if current.State == delivery.Rejected || current.State == delivery.Cancelled {
 		return recordBotTerminalReceipt(ctx, tx, current, outcome, fallback)
 	}
-	lateSuccess := false
-	if current.State == delivery.Deferred && !fallback && outcome.Kind == delivery.Succeeded && outcome.MessageID > 0 {
-		err = tx.QueryRow(ctx, `SELECT COALESCE(last_uncertain_attempt=$4,false) FROM bot.delivery_intents
- WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
-			current.BotID, current.Operation, current.Effect, current.Attempt).Scan(&lateSuccess)
-		if err != nil {
-			return core.DatabaseOperationError(err)
-		}
-	}
-	if !lateSuccess && current.State != delivery.Sending && current.State != delivery.Uncertain {
-		return botdelivery.ErrBinding
-	}
-	if fallback && (current.Phase != botPhaseEdit || outcome.Kind != delivery.Deferred) {
-		return botdelivery.ErrBinding
-	}
-	var deadline time.Time
-	if lateSuccess {
-		outcome, deadline, err = delivery.FinishUncertainSuccess(ctx, tx, b.Delivery, current.QueueReference(), outcome)
-	} else {
-		outcome, deadline, err = delivery.Finish(ctx, tx, b.Delivery, current.QueueReference(), outcome)
-	}
-	if err != nil {
-		return err
-	}
-	outcome, deadline, err = b.retryBotTransport(ctx, tx, current, outcome, deadline)
+	outcome, deadline, err := b.finishBotTransportOutcome(ctx, tx, current, outcome, fallback)
 	if err != nil {
 		return err
 	}
@@ -145,6 +121,42 @@ func (b *Bot) finishBotIntent(
 		return core.DatabaseOperationError(err)
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+// The caller holds the owner row lock and has checked the exact admitted attempt.
+func (b *Bot) finishBotTransportOutcome(
+	ctx context.Context,
+	tx pgx.Tx,
+	current botdelivery.Intent,
+	outcome delivery.Outcome,
+	fallback bool,
+) (delivery.Outcome, time.Time, error) {
+	lateSuccess := false
+	if current.State == delivery.Deferred && !fallback && outcome.Kind == delivery.Succeeded && outcome.MessageID > 0 {
+		err := tx.QueryRow(ctx, `SELECT COALESCE(last_uncertain_attempt=$4,false) FROM bot.delivery_intents
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+			current.BotID, current.Operation, current.Effect, current.Attempt).Scan(&lateSuccess)
+		if err != nil {
+			return delivery.Outcome{}, time.Time{}, core.DatabaseOperationError(err)
+		}
+	}
+	if !lateSuccess && current.State != delivery.Sending && current.State != delivery.Uncertain {
+		return delivery.Outcome{}, time.Time{}, botdelivery.ErrBinding
+	}
+	if fallback && (current.Phase != botPhaseEdit || outcome.Kind != delivery.Deferred) {
+		return delivery.Outcome{}, time.Time{}, botdelivery.ErrBinding
+	}
+	var deadline time.Time
+	var err error
+	if lateSuccess {
+		outcome, deadline, err = delivery.FinishUncertainSuccess(ctx, tx, b.Delivery, current.QueueReference(), outcome)
+	} else {
+		outcome, deadline, err = delivery.Finish(ctx, tx, b.Delivery, current.QueueReference(), outcome)
+	}
+	if err != nil {
+		return delivery.Outcome{}, time.Time{}, err
+	}
+	return b.retryBotTransport(ctx, tx, current, outcome, deadline)
 }
 
 // A late positive receipt records transport evidence without reviving terminal work.

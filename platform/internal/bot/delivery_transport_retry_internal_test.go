@@ -98,141 +98,163 @@ func TestBotTransportRetryBudgetAndFollower(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			db := foodPendingDatabase(t)
-			ctx := t.Context()
-			b := botDeliveryTestBot(db)
-			b.Delivery.BotID = 999
-			b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
-			fake, err := sandbox.New(ctx, db, "synthetic")
-			require.NoError(t, err)
-			var calls atomic.Int32
-			handler := fake.Handler()
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				count := calls.Add(1)
-				if count > 4 {
-					handler.ServeHTTP(w, r)
-					return
-				}
-				if rateLimited && count > 1 {
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusTooManyRequests)
-					retryAfter := 1
-					if count == 2 {
-						retryAfter = 3
-					}
-					_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error_code": http.StatusTooManyRequests,
-						"description": "retry later", "parameters": map[string]int{"retry_after": retryAfter}})
-					return
-				}
-				handler.ServeHTTP(httptest.NewRecorder(), r)
-				connection, _, hijackErr := http.NewResponseController(w).Hijack()
-				if hijackErr == nil {
-					_ = connection.Close()
-				}
-			}))
-			defer server.Close()
-			b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
-			reference := botdelivery.Reference{Kind: botdelivery.IdentityIntent, Update: 1,
-				Notice: i18n.IdentityUnavailable, Language: "en"}
-			first, err := b.enqueueBotIntent(ctx, "", 101, "budget", "notice", reference, "send")
-			require.NoError(t, err)
-			reference.Update = 2
-			follower, err := b.enqueueBotIntent(ctx, "", 101, "follower", "notice", reference, "send")
-			require.NoError(t, err)
-			for wire := 1; wire <= 4; wire++ {
-				started := time.Now()
-				require.NoError(t, b.DeliverBotIntent(ctx, first.Reference))
-				intent, readErr := botdelivery.Read(ctx, db, 999, first.Reference, false)
-				require.NoError(t, readErr)
-				var resends int
-				require.NoError(t, db.QueryRow(ctx, `SELECT uncertain_resends FROM bot.delivery_intents
- WHERE operation_key='budget'`).Scan(&resends))
-				require.Equal(t, wire-1, resends)
-				require.EqualValues(t, wire, calls.Load())
-				if wire == 4 {
-					require.Equal(t, delivery.Rejected, intent.State)
-					var reason string
-					require.NoError(
-						t,
-						db.QueryRow(ctx, `SELECT reason FROM bot.delivery_intents WHERE operation_key='budget'`).
-							Scan(&reason),
-					)
-					require.Equal(t, "telegram_uncertain_retry_exhausted", reason)
-					time.Sleep(time.Until(intent.NotBefore) + 20*time.Millisecond)
-					break
-				}
-				require.Equal(t, delivery.Deferred, intent.State)
-				minimum := time.Second * time.Duration(1<<(wire-1))
-				require.GreaterOrEqual(t, intent.NotBefore.Sub(started), minimum)
-				if rateLimited && wire == 2 {
-					require.GreaterOrEqual(
-						t,
-						intent.NotBefore.Sub(started),
-						3*time.Second,
-						"later provider deadline wins",
-					)
-				}
-				require.NoError(t, b.DeliverBotIntent(ctx, first.Reference))
-				require.NoError(t, b.DeliverBotIntent(ctx, follower.Reference))
-				require.EqualValues(t, wire, calls.Load(), "cooldown and FIFO do not consume wire attempts")
-				restarted := botDeliveryTestBot(db)
-				restarted.Delivery, restarted.TG = b.Delivery, b.TG
-				restarted.Host.LocalBotDelivery.Service.Delivery = b.Delivery
-				require.NoError(t, restarted.RecoverBotIntents(ctx))
-				b = restarted
-				time.Sleep(time.Until(intent.NotBefore) + 20*time.Millisecond)
-			}
-			require.NoError(t, b.RecoverBotIntents(ctx))
-			require.NoError(t, b.DeliverBotIntent(ctx, first.Reference))
-			require.EqualValues(t, 4, calls.Load(), "exhausted delivery never revives")
-			require.NoError(t, b.DeliverBotIntent(ctx, follower.Reference))
-			require.EqualValues(t, 5, calls.Load(), "terminal head releases its follower")
-			var lastAttempt int
-			require.NoError(t, db.QueryRow(ctx, `SELECT last_uncertain_attempt FROM bot.delivery_intents
- WHERE operation_key='budget'`).Scan(&lastAttempt))
-			expectedLast := 4
-			if rateLimited {
-				expectedLast = 1
-			}
-			require.Equal(t, expectedLast, lastAttempt, "confirmed rate limits must not overwrite factual uncertainty")
-			state := httptest.NewRecorder()
-			handler.ServeHTTP(state, httptest.NewRequest(http.MethodGet, "/lab/state?user=101", nil))
-			var visible struct {
-				Messages []telegram.Message `json:"messages"`
-			}
-			require.NoError(t, json.Unmarshal(state.Body.Bytes(), &visible))
-			expectedVisible := 5
-			if rateLimited {
-				expectedVisible = 2
-			}
-			require.Len(
-				t,
-				visible.Messages,
-				expectedVisible,
-				"the UI retains real deliveries and the released follower",
-			)
-			terminal, readErr := botdelivery.Read(ctx, db, 999, first.Reference, false)
-			require.NoError(t, readErr)
-			late := delivery.Outcome{Kind: delivery.Succeeded, MessageID: visible.Messages[0].ID}
-			if rateLimited {
-				require.ErrorIs(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false),
-					botdelivery.ErrBinding, "older uncertain attempt cannot resolve the newer exhausted generation")
-			} else {
-				late.MessageID = visible.Messages[3].ID
-				var before, after string
-				require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)-'message_id')::text
- FROM bot.delivery_intents i WHERE operation_key='budget'`).Scan(&before))
-				require.NoError(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false))
-				require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)-'message_id')::text
- FROM bot.delivery_intents i WHERE operation_key='budget'`).Scan(&after))
-				require.JSONEq(t, before, after, "terminal receipt changes only the message ID")
-				require.NoError(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false))
-			}
-			require.NoError(t, b.RecoverBotIntents(ctx))
-			require.NoError(t, b.DeliverBotIntent(ctx, first.Reference))
-			require.EqualValues(t, 5, calls.Load(), "late receipt cannot revive transport")
+			testBotTransportRetryBudgetAndFollower(t, rateLimited)
 		})
 	}
+}
+
+func testBotTransportRetryBudgetAndFollower(t *testing.T, rateLimited bool) {
+	t.Helper()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	b.Delivery.BotID = 999
+	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	fake, err := sandbox.New(ctx, db, "synthetic")
+	require.NoError(t, err)
+	var calls atomic.Int32
+	handler := fake.Handler()
+	server := httptest.NewServer(botTransportRetryBudgetHandler(handler, rateLimited, &calls))
+	defer server.Close()
+	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+	reference := botdelivery.Reference{Kind: botdelivery.IdentityIntent, Update: 1,
+		Notice: i18n.IdentityUnavailable, Language: "en"}
+	first, err := b.enqueueBotIntent(ctx, "", 101, "budget", "notice", reference, "send")
+	require.NoError(t, err)
+	reference.Update = 2
+	follower, err := b.enqueueBotIntent(ctx, "", 101, "follower", "notice", reference, "send")
+	require.NoError(t, err)
+	for wire := 1; wire <= 4; wire++ {
+		started := time.Now()
+		require.NoError(t, b.DeliverBotIntent(ctx, first.Reference))
+		intent, readErr := botdelivery.Read(ctx, db, 999, first.Reference, false)
+		require.NoError(t, readErr)
+		var resends int
+		require.NoError(t, db.QueryRow(ctx, `SELECT uncertain_resends FROM bot.delivery_intents
+ WHERE operation_key='budget'`).Scan(&resends))
+		require.Equal(t, wire-1, resends)
+		require.EqualValues(t, wire, calls.Load())
+		if wire == 4 {
+			require.Equal(t, delivery.Rejected, intent.State)
+			var reason string
+			require.NoError(
+				t,
+				db.QueryRow(ctx, `SELECT reason FROM bot.delivery_intents WHERE operation_key='budget'`).
+					Scan(&reason),
+			)
+			require.Equal(t, "telegram_uncertain_retry_exhausted", reason)
+			time.Sleep(time.Until(intent.NotBefore) + 20*time.Millisecond)
+			break
+		}
+		require.Equal(t, delivery.Deferred, intent.State)
+		minimum := time.Second * time.Duration(1<<(wire-1))
+		require.GreaterOrEqual(t, intent.NotBefore.Sub(started), minimum)
+		if rateLimited && wire == 2 {
+			require.GreaterOrEqual(
+				t,
+				intent.NotBefore.Sub(started),
+				3*time.Second,
+				"later provider deadline wins",
+			)
+		}
+		require.NoError(t, b.DeliverBotIntent(ctx, first.Reference))
+		require.NoError(t, b.DeliverBotIntent(ctx, follower.Reference))
+		require.EqualValues(t, wire, calls.Load(), "cooldown and FIFO do not consume wire attempts")
+		restarted := botDeliveryTestBot(db)
+		restarted.Delivery, restarted.TG = b.Delivery, b.TG
+		restarted.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+		require.NoError(t, restarted.RecoverBotIntents(ctx))
+		b = restarted
+		time.Sleep(time.Until(intent.NotBefore) + 20*time.Millisecond)
+	}
+	require.NoError(t, b.RecoverBotIntents(ctx))
+	require.NoError(t, b.DeliverBotIntent(ctx, first.Reference))
+	require.EqualValues(t, 4, calls.Load(), "exhausted delivery never revives")
+	require.NoError(t, b.DeliverBotIntent(ctx, follower.Reference))
+	require.EqualValues(t, 5, calls.Load(), "terminal head releases its follower")
+	var lastAttempt int
+	require.NoError(t, db.QueryRow(ctx, `SELECT last_uncertain_attempt FROM bot.delivery_intents
+ WHERE operation_key='budget'`).Scan(&lastAttempt))
+	expectedLast := 4
+	if rateLimited {
+		expectedLast = 1
+	}
+	require.Equal(t, expectedLast, lastAttempt, "confirmed rate limits must not overwrite factual uncertainty")
+	state := httptest.NewRecorder()
+	handler.ServeHTTP(state, httptest.NewRequest(http.MethodGet, "/lab/state?user=101", nil))
+	var visible struct {
+		Messages []telegram.Message `json:"messages"`
+	}
+	require.NoError(t, json.Unmarshal(state.Body.Bytes(), &visible))
+	expectedVisible := 5
+	if rateLimited {
+		expectedVisible = 2
+	}
+	require.Len(
+		t,
+		visible.Messages,
+		expectedVisible,
+		"the UI retains real deliveries and the released follower",
+	)
+	assertBotTransportRetryTerminalReceipt(t, b, first.Reference, rateLimited, visible.Messages, &calls)
+}
+
+func assertBotTransportRetryTerminalReceipt(
+	t *testing.T,
+	b *Bot,
+	reference delivery.Reference,
+	rateLimited bool,
+	messages []telegram.Message,
+	calls *atomic.Int32,
+) {
+	t.Helper()
+	ctx, db := t.Context(), b.DB
+	terminal, readErr := botdelivery.Read(ctx, db, 999, reference, false)
+	require.NoError(t, readErr)
+	late := delivery.Outcome{Kind: delivery.Succeeded, MessageID: messages[0].ID}
+	if rateLimited {
+		require.ErrorIs(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false),
+			botdelivery.ErrBinding, "older uncertain attempt cannot resolve the newer exhausted generation")
+	} else {
+		late.MessageID = messages[3].ID
+		var before, after string
+		require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)-'message_id')::text
+ FROM bot.delivery_intents i WHERE operation_key='budget'`).Scan(&before))
+		require.NoError(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false))
+		require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)-'message_id')::text
+ FROM bot.delivery_intents i WHERE operation_key='budget'`).Scan(&after))
+		require.JSONEq(t, before, after, "terminal receipt changes only the message ID")
+		require.NoError(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false))
+	}
+	require.NoError(t, b.RecoverBotIntents(ctx))
+	require.NoError(t, b.DeliverBotIntent(ctx, reference))
+	require.EqualValues(t, 5, calls.Load(), "late receipt cannot revive transport")
+}
+
+func botTransportRetryBudgetHandler(handler http.Handler, rateLimited bool, calls *atomic.Int32) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := calls.Add(1)
+		if count > 4 {
+			handler.ServeHTTP(w, r)
+			return
+		}
+		if rateLimited && count > 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			retryAfter := 1
+			if count == 2 {
+				retryAfter = 3
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": false, "error_code": http.StatusTooManyRequests,
+				"description": "retry later", "parameters": map[string]int{"retry_after": retryAfter}})
+			return
+		}
+		handler.ServeHTTP(httptest.NewRecorder(), r)
+		connection, _, hijackErr := http.NewResponseController(w).Hijack()
+		if hijackErr == nil {
+			_ = connection.Close()
+		}
+	})
 }
 
 func TestBotTransportRetryCancelledLateReceipt(t *testing.T) {
