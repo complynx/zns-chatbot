@@ -107,7 +107,7 @@ func testBotCaptureDeliverReady(t *testing.T, b *Bot, key delivery.Reference) {
 	var notBefore time.Time
 	require.NoError(t, b.DB.QueryRow(t.Context(), `SELECT GREATEST(i.not_before,
  (SELECT not_before FROM core.delivery_pacing WHERE bot_id=i.bot_id AND chat=''),
- (SELECT not_before FROM core.delivery_pacing WHERE bot_id=i.bot_id AND chat=i.chat::text))
+ (SELECT not_before FROM core.delivery_pacing WHERE bot_id=i.bot_id AND chat=i.chat_id::text))
  FROM bot.delivery_intents i WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
 		b.Delivery.BotID, key.Key, key.Effect).Scan(&notBefore))
 	wait := time.NewTimer(max(time.Until(notBefore), 0) + 20*time.Millisecond)
