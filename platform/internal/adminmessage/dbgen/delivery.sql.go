@@ -133,7 +133,7 @@ func (q *Queries) FinishAdminDelivery(ctx context.Context, arg FinishAdminDelive
 }
 
 const lockAdminAttempt = `-- name: LockAdminAttempt :one
-SELECT d.destination,d.state,d.telegram_message_id,d.available_at,
+SELECT d.destination,d.state,d.telegram_message_id,d.available_at,d.failure,
  d.last_uncertain_attempt,d.uncertain_resends,
  COALESCE(d.lease_until>clock_timestamp(),false)::boolean AS lease_live
 FROM core.admin_message_deliveries d WHERE d.id=$1::bigint
@@ -152,6 +152,7 @@ type LockAdminAttemptRow struct {
 	State                string
 	TelegramMessageID    int64
 	AvailableAt          pgtype.Timestamptz
+	Failure              string
 	LastUncertainAttempt pgtype.Int8
 	UncertainResends     int64
 	LeaseLive            bool
@@ -165,6 +166,7 @@ func (q *Queries) LockAdminAttempt(ctx context.Context, arg LockAdminAttemptPara
 		&i.State,
 		&i.TelegramMessageID,
 		&i.AvailableAt,
+		&i.Failure,
 		&i.LastUncertainAttempt,
 		&i.UncertainResends,
 		&i.LeaseLive,
