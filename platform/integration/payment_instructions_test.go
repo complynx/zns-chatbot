@@ -669,16 +669,18 @@ func assertUnavailablePaymentReceipt(
 
 func TestPaymentUnavailableContextRestorationKeepsProjection(t *testing.T) {
 	t.Parallel()
-	for _, afterSend := range []bool{false, true} {
-		t.Run(fmt.Sprintf("after_send_%t", afterSend), func(t *testing.T) {
-			t.Parallel()
-			f, order, opened := openedPaymentFixture(t)
-			_, err := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
-			require.NoError(t, err)
-			require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
-			intent := queuedPaymentRetirement(t, f)
-			assertRestoredPaymentProjection(t, f, order, opened, intent, afterSend)
-		})
+	for _, opening := range []string{"derived", "manual_model", "model_manual"} {
+		for _, afterSend := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/after_send_%t", opening, afterSend), func(t *testing.T) {
+				t.Parallel()
+				f, order, opened, _ := openedUnavailablePaymentSource(t, opening)
+				_, err := f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+				require.NoError(t, err)
+				require.NoError(t, f.b.RenderOrders(t.Context(), "alice", 101))
+				intent := queuedPaymentRetirement(t, f)
+				assertRestoredPaymentProjection(t, f, order, opened, intent, afterSend)
+			})
+		}
 	}
 }
 

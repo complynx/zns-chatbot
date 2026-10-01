@@ -263,6 +263,75 @@ func lockPaymentRetirementSource(ctx context.Context, tx pgx.Tx, i Intent) error
 	return nil
 }
 
+// RetainPaymentCard validates a payment no-op without rebinding its private source.
+func (s Service) RetainPaymentCard(
+	ctx context.Context,
+	prior Intent,
+	hash string,
+	proposed *readsource.Derivation,
+) error {
+	if prior.BotID != s.Delivery.BotID || prior.State != delivery.Succeeded || !prior.ContinuationDone ||
+		prior.Reference.Kind != CardIntent || prior.Reference.Family != familyPayment ||
+		prior.Reference.PaymentRetirement != nil || prior.Reference.Continuation.Retired || prior.Receipt.ViewHash != hash {
+		return ErrStale
+	}
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	current := prior
+	// The completed render generation grants no new authority. Private Source remains fenced.
+	current.Reference.Generation = nil
+	if proposed != nil {
+		current.Reference.Authorities, err = readsource.Merge(current.Reference.Authorities, proposed.Authorities)
+		if err != nil {
+			return err
+		}
+	}
+	if err = s.lockSource(ctx, tx, current); err != nil {
+		return err
+	}
+	var canBook bool
+	if err = tx.QueryRow(ctx, `SELECT can_book FROM core.users WHERE id=$1 FOR SHARE`, prior.Owner).
+		Scan(&canBook); err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	if !canBook {
+		return ErrStale
+	}
+	if proposed != nil {
+		if err = lockDerivation(ctx, tx, prior.Owner, *proposed); err != nil {
+			return err
+		}
+	}
+	var visible bool
+	var currentHash string
+	err = tx.QueryRow(ctx, `SELECT visible,view_hash FROM bot.order_cards
+ WHERE owner=$1 AND card_key=$2 AND chat_id=$3 AND message_id=$4 FOR SHARE`,
+		prior.Owner, prior.Reference.CardKey, prior.Chat, prior.MessageID).Scan(&visible, &currentHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrStale
+	}
+	if err != nil {
+		return core.DatabaseOperationContextError(ctx, err)
+	}
+	if !visible || currentHash != hash {
+		return ErrStale
+	}
+	retained := prior
+	retained.Target = prior.MessageID
+	retained.Reference.PaymentRetirement = &PaymentRetirement{
+		Operation: prior.Operation,
+		Effect:    prior.Effect,
+		ViewHash:  hash,
+	}
+	if err = lockPaymentRetirementSource(ctx, tx, retained); err != nil {
+		return err
+	}
+	return core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
+}
+
 func lockRegistrationCapability(ctx context.Context, tx pgx.Tx, owner, event, action string) error {
 	valid, err := passbooking.LockReadAuthorities(
 		ctx,

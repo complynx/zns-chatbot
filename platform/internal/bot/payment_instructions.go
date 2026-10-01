@@ -11,6 +11,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/readsource"
@@ -74,8 +75,12 @@ func (b *Bot) paymentInstructionsWithSource(
 		return "", err
 	}
 	if opening {
-		if err = b.bindPaymentSource(ctx, in.owner, id, source); err != nil {
-			return "", err
+		unchanged, retainErr := b.preparePaymentOpening(ctx, in.owner, id, payload, source)
+		if retainErr != nil {
+			return "", retainErr
+		}
+		if unchanged {
+			return i18n.Translate(info.Language, i18n.PaymentShown, nil)
 		}
 	}
 	check := func() error { return b.checkPaymentDelivery(ctx, in.owner, event, info, source) }
@@ -83,6 +88,38 @@ func (b *Bot) paymentInstructionsWithSource(
 		return "", err
 	}
 	return i18n.Translate(info.Language, i18n.PaymentShown, nil)
+}
+
+// An unchanged visible card keeps its receipt source; a new payload binds the current source.
+func (b *Bot) preparePaymentOpening(ctx context.Context, owner, id string, payload telegram.Send,
+	source *readsource.Derivation,
+) (bool, error) {
+	hash, err := botCardHash(payload)
+	if err != nil {
+		return false, err
+	}
+	var operation, effect string
+	err = b.DB.QueryRow(ctx, `SELECT i.operation_key,i.effect_key
+ FROM bot.order_cards c JOIN bot.delivery_intents i
+ ON i.owner=c.owner AND i.chat_id=c.chat_id AND i.message_id=c.message_id
+ WHERE c.owner=$1 AND c.card_key=$2 AND c.chat_id=$3 AND c.visible AND c.message_id>0 AND c.view_hash=$4
+ AND i.bot_id=$5 AND i.state='sent' AND i.continuation_done
+ AND i.reference->>'family'='payment' AND i.reference->>'card_key'=$2
+ ORDER BY i.attempted_at DESC NULLS LAST,i.created_at DESC,i.operation_key DESC,i.effect_key DESC LIMIT 1`,
+		owner, paymentCardPrefix+id, payload.ChatID, hash, b.Delivery.BotID).Scan(&operation, &effect)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, b.bindPaymentSource(ctx, owner, id, source)
+	}
+	if err != nil {
+		return false, core.DatabaseOperationContextError(ctx, err)
+	}
+	prior, err := botdelivery.Read(ctx, b.DB, b.Delivery.BotID,
+		delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}, false)
+	if err != nil {
+		return false, err
+	}
+	service := botdelivery.Service{DB: b.DB, Delivery: b.Delivery}
+	return true, service.RetainPaymentCard(ctx, prior, hash, source)
 }
 
 func paymentInstructionsPayload(chat int64, info orders.PaymentInstructions) (telegram.Send, error) {
