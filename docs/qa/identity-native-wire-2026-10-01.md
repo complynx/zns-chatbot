@@ -66,7 +66,14 @@ Readiness receipt SHA256:
 Private credentials were injected only into process-local paths/environment;
 the test stream and public report contain no credential export.
 
-Still open: full adapter negatives, scoped provisioner proof, current runtime
+Final successor 1c3bab626f821e416ff46bdb10595c8a8fa5bcf6 passed fresh independent
+Code QA278 and the real root adapter run: six negatives plus positive exchanges,
+eight PASS events, zero FAIL/SKIP, package0.38s. Raw final stream SHA256
+AB4B24A745F633F48583E9C1DA9795D358181307FCA1EE6F1FDC270C12E5A7AC.
+Integrated as 6bee90039ee7ce34ffa3ec0208bfe32cec4d1994; exact tested file retained.
+See code-qa-2026-10-01-278.md. Earlier failed candidates remain historical evidence.
+
+Still open: scoped provisioner proof, current runtime
 identity mapping and first-contact convergence, real browser authorization,
 availability/cache/revocation behavior and independent Functional QA.
 
