@@ -80,7 +80,8 @@ func (c Client) observeControl(ctx context.Context, method string, wireErr error
 	}
 }
 
-// RetryControl is for startup reads or idempotent configuration replacement.
+// RetryControl is for startup reads, idempotent configuration replacement, or
+// bounded callback acknowledgements after a definite admission/provider refusal.
 // Only durable finite admission deferrals and definite429 responses are retried.
 // The callback and waiting run without a database transaction. Unknown outcomes,
 // paused scopes and storage errors return immediately.
