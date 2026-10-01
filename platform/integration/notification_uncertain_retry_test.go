@@ -1019,7 +1019,7 @@ func TestNotificationUncertainRetryRejectsCorruptCapturedKeyboard(t *testing.T) 
 							Scan(&captured),
 					)
 					r.wake(t)
-					assert.Error(t, dispatch(t.Context(), r.first))
+					require.Error(t, dispatch(t.Context(), r.first))
 					actual := r.status(t, r.first)
 					assert.Equal(t, "pending", actual.State, "invalid captured markup must fail before send admission")
 					assert.Equal(
