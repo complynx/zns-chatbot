@@ -68,14 +68,14 @@ func (c *positiveIdentityCache) resolve(
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
+		if flight.err != nil {
+			return "", flight.err
+		}
 		c.mu.Lock()
 		retired := flight.invalidated || flight.generation != c.generation
 		c.mu.Unlock()
 		if retired {
 			return "", ErrZitadelIdentity
-		}
-		if flight.err != nil {
-			return "", flight.err
 		}
 		if !time.Now().Before(flight.value.until) {
 			return "", ErrZitadelIdentity
@@ -124,7 +124,7 @@ func (c *positiveIdentityCache) load(
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.flights, key)
-	if flight.invalidated || flight.generation != c.generation {
+	if err == nil && (flight.invalidated || flight.generation != c.generation) {
 		err = ErrZitadelIdentity
 	}
 	if err == nil {

@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,17 +14,20 @@ import (
 )
 
 type cacheProvider struct {
-	rejectExchange atomic.Bool
-	rejectionCode  int
-	rejectionBody  string
-	verifyStarted  chan struct{}
-	verifyRelease  chan struct{}
-	failed         atomic.Bool
-	inactive       atomic.Bool
-	exchanges      atomic.Int32
-	verifications  atomic.Int32
-	lifetime       int64
-	issuer         string
+	rejectExchange  atomic.Bool
+	rejectionCode   int
+	rejectionBody   string
+	verifyStarted   chan struct{}
+	verifyRelease   chan struct{}
+	exchangeStarted chan struct{}
+	exchangeRelease chan struct{}
+	verifyStatus    atomic.Int32
+	failed          atomic.Bool
+	inactive        atomic.Bool
+	exchanges       atomic.Int32
+	verifications   atomic.Int32
+	lifetime        int64
+	issuer          string
 }
 
 func (p *cacheProvider) serve(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +46,14 @@ func (p *cacheProvider) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	var body any
 	if r.URL.Path == "/oauth/v2/token" {
+		if p.exchangeStarted != nil && r.Form.Get("subject_token") == "alice" {
+			p.exchangeStarted <- struct{}{}
+			select {
+			case <-p.exchangeRelease:
+			case <-r.Context().Done():
+				return
+			}
+		}
 		if p.rejectExchange.Load() {
 			w.WriteHeader(p.rejectionCode)
 			_, _ = w.Write([]byte(p.rejectionBody))
@@ -60,6 +72,10 @@ func (p *cacheProvider) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		if status := p.verifyStatus.Load(); status != 0 {
+			w.WriteHeader(int(status))
+			return
+		}
 		body = map[string]any{
 			"active": !p.inactive.Load(), "sub": strings.TrimPrefix(r.Form.Get("token"), "token-"),
 			"iss": p.issuer, "aud": []string{"project"}, "client_id": "bot-client",
@@ -68,6 +84,92 @@ func (p *cacheProvider) serve(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func TestZitadelCancelledExchangeStillProcessesInactivity(t *testing.T) {
+	t.Parallel()
+	adapter, provider := cacheAdapter(t, 3600)
+	provider.rejectionCode = http.StatusBadRequest
+	provider.rejectionBody = `{"error":"invalid_request","error_description":"Errors.User.NotActive"}`
+	_, err := adapter.Verify(t.Context(), "token-alice")
+	require.NoError(t, err)
+	provider.exchangeStarted = make(chan struct{}, 1)
+	provider.exchangeRelease = make(chan struct{})
+	t.Cleanup(func() { close(provider.exchangeRelease) })
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, callErr := adapter.Exchange(ctx, "alice"); result <- callErr }()
+	awaitCacheSignal(t, provider.exchangeStarted)
+	adapter.exchanges.mu.Lock()
+	flight := adapter.exchanges.flights["alice"]
+	adapter.exchanges.mu.Unlock()
+	require.NotNil(t, flight)
+	cancel()
+	require.ErrorIs(t, awaitCacheError(t, result), context.Canceled)
+	provider.rejectExchange.Store(true)
+	provider.exchangeRelease <- struct{}{}
+	awaitCacheSignal(t, flight.done)
+	provider.failed.Store(true)
+	_, err = adapter.Verify(t.Context(), "token-alice")
+	require.ErrorIs(t, err, ErrZitadelUnavailable, "detached provider denial must retire the cached verdict")
+	require.Empty(t, adapter.verified.values)
+}
+
+func TestZitadelRetiredExchangePreservesProviderInactivity(t *testing.T) {
+	t.Parallel()
+	adapter, provider := cacheAdapter(t, 3600)
+	provider.rejectionCode = http.StatusBadRequest
+	provider.rejectionBody = `{"error":"invalid_request","error_description":"Errors.User.NotActive"}`
+	provider.exchangeStarted = make(chan struct{}, 1)
+	provider.exchangeRelease = make(chan struct{})
+	t.Cleanup(func() { close(provider.exchangeRelease) })
+	provider.rejectExchange.Store(true)
+	result := make(chan error, 1)
+	go func() { _, err := adapter.Exchange(t.Context(), "alice"); result <- err }()
+	awaitCacheSignal(t, provider.exchangeStarted)
+	adapter.InvalidateSubject("alice")
+	provider.exchangeRelease <- struct{}{}
+	require.ErrorIs(t, awaitCacheError(t, result), ErrZitadelUserInactive)
+	require.Empty(t, adapter.exchanges.values)
+}
+
+func TestZitadelRetiredVerificationPreservesProviderOutage(t *testing.T) {
+	t.Parallel()
+	adapter, provider := cacheAdapter(t, 3600)
+	provider.verifyStarted = make(chan struct{}, 1)
+	provider.verifyRelease = make(chan struct{})
+	t.Cleanup(func() { close(provider.verifyRelease) })
+	provider.verifyStatus.Store(http.StatusServiceUnavailable)
+	result := make(chan error, 1)
+	go func() { _, err := adapter.Verify(t.Context(), "token-bob"); result <- err }()
+	awaitCacheSignal(t, provider.verifyStarted)
+	adapter.InvalidateSubject("alice")
+	provider.verifyRelease <- struct{}{}
+	require.ErrorIs(t, awaitCacheError(t, result), ErrZitadelUnavailable)
+	require.Empty(t, adapter.verified.values)
+}
+
+func awaitCacheSignal(t *testing.T, signal <-chan struct{}) {
+	t.Helper()
+	const waitLimit = 2 * time.Second
+	select {
+	case <-signal:
+	case <-time.After(waitLimit):
+		t.Fatal("cache operation did not reach the expected boundary")
+	}
+}
+
+func awaitCacheError(t *testing.T, result <-chan error) error {
+	t.Helper()
+	const waitLimit = 2 * time.Second
+	select {
+	case err := <-result:
+		return err
+	case <-time.After(waitLimit):
+		t.Fatal("cache operation did not finish")
+		return nil
+	}
 }
 
 func TestZitadelInactiveExchangeEvictsVerifiedSubject(t *testing.T) {
