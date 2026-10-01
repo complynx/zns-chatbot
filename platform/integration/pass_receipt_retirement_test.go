@@ -45,7 +45,8 @@ func runPassIndependentSourceBudgets(t *testing.T, scenario string) {
 	pumpBotDeliveries(t, f.b)
 	prior, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, prior.QueueReference(), false)
 	require.NoError(t, err)
-	require.Equal(t, delivery.Succeeded, prior.State)
+	require.Equal(t, delivery.Succeeded, prior.State, "phase=%s object=%s update=%d reason=%s",
+		prior.Phase, prior.Reference.Object, prior.Reference.Update, prior.Reason)
 	require.True(t, prior.ContinuationDone)
 	require.NotEmpty(t, prior.Receipt.Tokens)
 	if scenario != "admission_valid" {
