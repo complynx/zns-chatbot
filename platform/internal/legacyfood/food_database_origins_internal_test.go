@@ -140,11 +140,11 @@ func TestR31FoodDroppedConnectionKeepsSQLProvenance(t *testing.T) {
 			return err
 		}},
 		"begin notification": {0, func(ctx context.Context, s Service) error {
-			_, err := s.BeginNotification(ctx, NotificationAttempt{Attempt: delivery.Attempt{ID: 1, Generation: 1}})
+			_, err := s.BeginNotification(ctx, NotificationAttempt{Attempt: {ID: 1, Generation: 1}})
 			return err
 		}},
 		"begin notification eligibility": {1, func(ctx context.Context, s Service) error {
-			_, err := s.BeginNotification(ctx, NotificationAttempt{Attempt: delivery.Attempt{ID: 1, Generation: 1}})
+			_, err := s.BeginNotification(ctx, NotificationAttempt{Attempt: {ID: 1, Generation: 1}})
 			return err
 		}},
 		"complete notification": {0, func(ctx context.Context, s Service) error {

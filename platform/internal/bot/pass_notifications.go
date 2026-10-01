@@ -175,23 +175,19 @@ func (b *Bot) sendPreparedPassNotice(
 	gate, err := b.Host.BeginPassNotification(
 		ctx,
 		passbooking.NotificationAttempt{
-			Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+			Attempt: {ID: notice.ID, Generation: notice.DeliveryAttempt},
 			Wire:    wire,
 		},
 	)
 	if err != nil || !gate.Ready {
 		return notice, false, err
 	}
-	payload, err := notificationWireSend(notice.TelegramID, gate.Wire)
+	outcome, text, err := b.sendNotificationWire(ctx, notice.TelegramID, gate.Wire)
 	if err != nil {
 		return notice, false, err
 	}
-	message, sendErr := b.TG.Send(ctx, payload)
-	outcome := telegram.DeliveryOutcome(message.ID, sendErr)
 	result := passbooking.NotificationCompletion{ID: notice.ID, Attempt: notice.DeliveryAttempt, Outcome: outcome}
-	if outcome.Kind == delivery.Succeeded {
-		result.Text = payload.Text
-	}
+	result.Text = text
 	completionCtx, cancelCompletion := deliveryCompletionContext(ctx)
 	defer cancelCompletion()
 	if err = b.Host.CompletePassNotification(completionCtx, result); err != nil {
@@ -200,7 +196,7 @@ func (b *Bot) sendPreparedPassNotice(
 	if outcome.Kind != delivery.Succeeded {
 		return notice, false, nil
 	}
-	notice.MessageID, notice.DeliveryText = message.ID, payload.Text
+	notice.MessageID, notice.DeliveryText = outcome.MessageID, text
 	return notice, true, nil
 }
 

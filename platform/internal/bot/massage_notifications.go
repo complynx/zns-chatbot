@@ -268,7 +268,7 @@ func (b *Bot) sendPreparedMassageNotice(
 		ctx,
 		owner,
 		massage.NotificationAttempt{
-			Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+			Attempt: {ID: notice.ID, Generation: notice.DeliveryAttempt},
 			Wire:    wire,
 		},
 	)

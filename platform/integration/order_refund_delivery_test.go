@@ -23,7 +23,7 @@ func refundRequestOutcome(t *testing.T, f refundFixture, state delivery.Kind) or
 	gate, err := f.service.BeginNotification(
 		t.Context(),
 		orders.NotificationAttempt{
-			Attempt: delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt},
+			Attempt: {ID: id, Generation: notice.DeliveryAttempt},
 			Wire:    notificationTestWire(),
 		},
 	)
@@ -138,7 +138,7 @@ func TestOrderRefundRoutingRecoversOnlyKnownUnsentRequests(t *testing.T) {
 				gate, beginErr := f.service.BeginNotification(
 					t.Context(),
 					orders.NotificationAttempt{
-						Attempt: delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt},
+						Attempt: {ID: id, Generation: notice.DeliveryAttempt},
 						Wire:    notificationTestWire(),
 					},
 				)

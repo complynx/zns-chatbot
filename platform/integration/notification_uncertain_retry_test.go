@@ -108,9 +108,12 @@ func notificationWireSnapshot(t *testing.T, r *notificationRuntimeFixture) *noti
 	var raw []byte
 	err := r.f.db.QueryRow(t.Context(), "SELECT delivery_wire_payload FROM "+r.table+" WHERE id=$1", r.first).Scan(&raw)
 	require.NoError(t, err)
-	wire, err := notificationwire.Decode(raw)
+	wire, present, err := notificationwire.Decode(raw)
 	require.NoError(t, err)
-	return wire
+	if !present {
+		return nil
+	}
+	return &wire
 }
 
 func TestNotificationUncertainRetryPreservesWireAfterLanguageChange(t *testing.T) {
@@ -252,11 +255,11 @@ func notificationWireObserver(r *notificationRuntimeFixture) func(*http.Request,
 		if err != nil {
 			return err
 		}
-		wire, err := notificationwire.Decode(raw)
+		wire, present, err := notificationwire.Decode(raw)
 		if err != nil {
 			return err
 		}
-		if state != "sending" || wire == nil || wire.Text != send.Text {
+		if state != "sending" || !present || wire.Text != send.Text {
 			return errors.New("notification wire was not committed before transport")
 		}
 		var markup telegram.Markup

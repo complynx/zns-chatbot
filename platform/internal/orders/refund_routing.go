@@ -114,7 +114,8 @@ func refundRequestEvidence(ctx context.Context, tx pgx.Tx, id int64, ambassador 
 	var notification int64
 	err := tx.QueryRow(ctx, `SELECT id FROM core.order_notifications
  WHERE payload->>'kind'='refund_request' AND payload->>'refund_id'=$1 AND recipient=$2
- AND delivery_state IN ('sent','sending','unknown') ORDER BY id LIMIT 1`, strconv.FormatInt(id, 10), ambassador).Scan(&notification)
+ AND (delivery_state IN ('sent','sending','unknown') OR last_uncertain_attempt IS NOT NULL)
+ ORDER BY id LIMIT 1`, strconv.FormatInt(id, 10), ambassador).Scan(&notification)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
 	}

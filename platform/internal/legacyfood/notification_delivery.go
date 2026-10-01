@@ -60,14 +60,14 @@ func (s Service) BeginNotification(ctx context.Context, input NotificationAttemp
 			return NotificationAdmission{}, err
 		}
 		return NotificationAdmission{
-			Admission: delivery.Admission{Reason: outcome.Reason},
+			Admission: {Reason: outcome.Reason},
 		}, core.DatabaseOperationError(
 			tx.Commit(ctx),
 		)
 	}
 	if row.LastUncertainAttempt.Valid && row.UncertainResends >= notificationUncertainResendLimit {
-		gate, err := s.exhaustNotificationAdmission(ctx, tx, attempt)
-		return NotificationAdmission{Admission: gate}, err
+		exhausted, exhaustErr := s.exhaustNotificationAdmission(ctx, tx, attempt)
+		return NotificationAdmission{Admission: exhausted}, exhaustErr
 	}
 	gate, err := delivery.Begin(
 		ctx,
@@ -463,12 +463,13 @@ func (s Service) admitNotificationWire(
 	existing []byte,
 	candidate *notificationwire.Payload,
 ) (*notificationwire.Payload, error) {
-	wire, err := notificationwire.Decode(existing)
+	stored, present, err := notificationwire.Decode(existing)
 	if err != nil {
 		return nil, err
 	}
-	if wire == nil {
-		wire = candidate
+	wire := candidate
+	if present {
+		wire = &stored
 	}
 	if wire == nil {
 		return nil, notificationInvalid()
@@ -483,5 +484,12 @@ func (s Service) admitNotificationWire(
 	if err != nil {
 		return nil, notificationAttemptError(core.DatabaseOperationError(err))
 	}
-	return notificationwire.Decode(committed)
+	value, present, err := notificationwire.Decode(committed)
+	if err != nil {
+		return nil, err
+	}
+	if !present {
+		return nil, notificationwire.ErrPayload
+	}
+	return &value, nil
 }

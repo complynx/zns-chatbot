@@ -45,11 +45,13 @@ type NotificationDeliveryStatus struct {
 // An existing durable snapshot wins over a later candidate.
 type NotificationAttempt struct {
 	delivery.Attempt
+
 	Wire *notificationwire.Payload `json:"wire,omitempty"`
 }
 
 // NotificationAdmission returns the canonical committed content for a Ready send.
 type NotificationAdmission struct {
 	delivery.Admission
+
 	Wire *notificationwire.Payload `json:"wire,omitempty"`
 }

@@ -63,20 +63,20 @@ func (s Service) BeginNotification(ctx context.Context, input NotificationAttemp
 		return NotificationAdmission{}, err
 	}
 	if !current {
-		gate, err := s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
-		return NotificationAdmission{Admission: gate}, err
+		cancelled, cancelErr := s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		return NotificationAdmission{Admission: cancelled}, cancelErr
 	}
 	if row.LastUncertainAttempt.Valid && row.UncertainResends >= notificationUncertainResendLimit {
-		gate, err := s.exhaustNotificationAdmission(ctx, tx, attempt, clockAttempt)
-		return NotificationAdmission{Admission: gate}, err
+		exhausted, exhaustErr := s.exhaustNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		return NotificationAdmission{Admission: exhausted}, exhaustErr
 	}
 	gate, current, err := s.beginCurrentNotification(ctx, tx, attempt, row)
 	if err != nil {
 		return NotificationAdmission{}, err
 	}
 	if !current {
-		gate, err := s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
-		return NotificationAdmission{Admission: gate}, err
+		cancelled, cancelErr := s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		return NotificationAdmission{Admission: cancelled}, cancelErr
 	}
 	if !gate.Ready {
 		outcome := delivery.Outcome{Kind: delivery.Deferred, Reason: gate.Reason}
@@ -536,12 +536,13 @@ func (s Service) admitNotificationWire(
 	existing []byte,
 	candidate *notificationwire.Payload,
 ) (*notificationwire.Payload, error) {
-	wire, err := notificationwire.Decode(existing)
+	stored, present, err := notificationwire.Decode(existing)
 	if err != nil {
 		return nil, err
 	}
-	if wire == nil {
-		wire = candidate
+	wire := candidate
+	if present {
+		wire = &stored
 	}
 	if wire == nil {
 		return nil, notificationInvalid()
@@ -556,5 +557,12 @@ func (s Service) admitNotificationWire(
 	if err != nil {
 		return nil, notificationAttemptError(core.DatabaseOperationError(err))
 	}
-	return notificationwire.Decode(committed)
+	value, present, err := notificationwire.Decode(committed)
+	if err != nil {
+		return nil, err
+	}
+	if !present {
+		return nil, notificationwire.ErrPayload
+	}
+	return &value, nil
 }

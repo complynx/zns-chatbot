@@ -184,7 +184,7 @@ func (b *Bot) sendPreparedFoodNotice(
 	gate, err := b.Host.BeginFoodNotification(
 		ctx,
 		legacyfood.NotificationAttempt{
-			Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+			Attempt: {ID: notice.ID, Generation: notice.DeliveryAttempt},
 			Wire:    wire,
 		},
 	)

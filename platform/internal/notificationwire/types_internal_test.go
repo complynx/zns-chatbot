@@ -17,14 +17,15 @@ func TestPayloadRoundTrip(t *testing.T) {
 	}
 	encoded, err := p.Encode()
 	require.NoError(t, err)
-	actual, err := Decode(encoded)
+	actual, present, err := Decode(encoded)
 	require.NoError(t, err)
-	require.NotNil(t, actual)
+	require.True(t, present)
 	assert.Equal(t, p.Text, actual.Text)
 	assert.JSONEq(t, string(p.Markup), string(actual.Markup))
-	missing, err := Decode(nil)
+	missing, present, err := Decode(nil)
 	require.NoError(t, err)
-	assert.Nil(t, missing)
+	assert.False(t, present)
+	assert.Equal(t, Payload{}, missing)
 }
 
 func TestInvalidPayload(t *testing.T) {
@@ -36,9 +37,10 @@ func TestInvalidPayload(t *testing.T) {
 	} {
 		t.Run(encoded[:min(len(encoded), 24)], func(t *testing.T) {
 			t.Parallel()
-			p, err := Decode([]byte(encoded))
+			p, present, err := Decode([]byte(encoded))
 			require.ErrorIs(t, err, ErrPayload)
-			assert.Nil(t, p)
+			assert.False(t, present)
+			assert.Equal(t, Payload{}, p)
 		})
 	}
 }

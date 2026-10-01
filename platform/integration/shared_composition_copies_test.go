@@ -10,7 +10,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/derivedmutation"
 )
 
@@ -33,7 +32,7 @@ func TestSyntheticCompositionBindsCopiedServicesBeforeConstruction(t *testing.T)
 		// earlier with ErrSettings. An invalid attempt never accesses the nil pool.
 		_, err := services.BotDelivery.Food.BeginNotification(
 			t.Context(),
-			legacyfood.NotificationAttempt{Attempt: delivery.Attempt{}, Wire: notificationTestWire()},
+			legacyfood.NotificationAttempt{Attempt: {}, Wire: notificationTestWire()},
 		)
 		var problem *core.ProblemError
 		require.ErrorAs(t, err, &problem)

@@ -33,18 +33,18 @@ func (p Payload) Encode() ([]byte, error) {
 	return encoded, nil
 }
 
-// Decode returns nil only for an absent snapshot. Invalid stored content fails
+// Decode reports presence separately for an absent snapshot. Invalid stored content fails
 // closed instead of allowing a new rendering to replace it.
-func Decode(encoded []byte) (*Payload, error) {
+func Decode(encoded []byte) (Payload, bool, error) {
 	if len(encoded) == 0 {
-		return nil, nil
+		return Payload{}, false, nil
 	}
 	var p Payload
 	if len(encoded) > maxPayloadBytes || json.Unmarshal(encoded, &p) != nil {
-		return nil, ErrPayload
+		return Payload{}, false, ErrPayload
 	}
 	if _, err := p.Encode(); err != nil {
-		return nil, err
+		return Payload{}, false, err
 	}
-	return &p, nil
+	return p, true, nil
 }

@@ -100,11 +100,13 @@ func (s Service) notificationProjection(
 		Notice: Notice{ID: row.ID, Booking: row.BookingID, Kind: row.Kind, DeliveryAttempt: row.DeliveryAttempt,
 			MessageID: row.TelegramMessageID, DeliveryText: row.DeliveryText, FollowupPending: row.FollowupPending},
 	}
-	wire, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
+	wire, present, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
 	if wireErr != nil {
 		return value, wireErr
 	}
-	value.Notice.Wire = wire
+	if present {
+		value.Notice.Wire = &wire
+	}
 	booking, err := q.NotificationBookingProjection(ctx, row.BookingID)
 	if err != nil {
 		return value, core.DatabaseOperationError(err)

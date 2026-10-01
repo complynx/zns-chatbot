@@ -738,6 +738,7 @@ func (r *notificationRuntimeFixture) postAttempt(t *testing.T, action string, in
 	if attempt, ok := input.(delivery.Attempt); ok && action == "begin" {
 		input = struct {
 			delivery.Attempt
+
 			Wire *notificationwire.Payload `json:"wire"`
 		}{attempt, notificationTestWire()}
 	}

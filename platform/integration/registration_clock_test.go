@@ -722,7 +722,7 @@ func TestRegistrationClockAnnouncementsAndPassportEligibility(t *testing.T) {
 			reminder, err := service.BeginNotification(
 				t.Context(),
 				passbooking.NotificationAttempt{
-					Attempt: delivery.Attempt{ID: notice.ID, Generation: notice.DeliveryAttempt},
+					Attempt: {ID: notice.ID, Generation: notice.DeliveryAttempt},
 					Wire:    notificationTestWire(),
 				},
 			)
@@ -1021,7 +1021,7 @@ func testClockPassportAdmission(t *testing.T, scenario string) {
 	require.True(t, found)
 	require.True(t, notice.Current)
 	attempt := passbooking.NotificationAttempt{
-		Attempt: delivery.Attempt{ID: id, Generation: notice.DeliveryAttempt},
+		Attempt: {ID: id, Generation: notice.DeliveryAttempt},
 		Wire:    notificationTestWire(),
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)

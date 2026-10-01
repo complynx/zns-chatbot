@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -127,7 +126,7 @@ func TestPassportStartupReminderGlobalAtomicMarker(t *testing.T) {
 				require.NoError(t, err)
 				gate, beginErr := service.BeginNotification(
 					t.Context(),
-					passbooking.NotificationAttempt{Attempt: delivery.Attempt{
+					passbooking.NotificationAttempt{Attempt: {
 						ID: noticeID, Generation: notices[0].DeliveryAttempt,
 					}, Wire: notificationTestWire()},
 				)

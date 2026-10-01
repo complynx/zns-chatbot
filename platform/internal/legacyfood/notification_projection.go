@@ -31,11 +31,13 @@ func (s Service) notificationProjection(
 		DeliveryText:    row.DeliveryText,
 		FollowupPending: row.FollowupPending,
 	}
-	wire, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
+	wire, present, wireErr := notificationwire.Decode(row.DeliveryWirePayload)
 	if wireErr != nil {
 		return notice, wireErr
 	}
-	notice.Wire = wire
+	if present {
+		notice.Wire = &wire
+	}
 	var err error
 	notice.Current, err = q.NotificationCurrent(
 		ctx,
