@@ -212,6 +212,10 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 	if err != nil {
 		return adminAttemptError(err)
 	}
+	if result.Outcome.Kind == delivery.Succeeded && row.LastConfirmedAttempt.Valid &&
+		row.LastConfirmedAttempt.Int64 >= result.Attempt {
+		return staleAdminAttempt()
+	}
 	lateSuccess := row.State == statePending && result.Outcome.Kind == delivery.Succeeded &&
 		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == result.Attempt && !row.LeaseUntil.Valid
 	if row.State == statePending && !lateSuccess &&
@@ -219,6 +223,9 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 		return staleAdminAttempt()
 	}
 	if err = s.recordAdminUncertainty(ctx, q, result, row); err != nil {
+		return err
+	}
+	if err = s.recordAdminConfirmation(ctx, q, result, row); err != nil {
 		return err
 	}
 	wireOutcome := result.Outcome
@@ -392,12 +399,55 @@ func (s Service) projectAdminSource(
 
 func (s Service) recordAdminTerminalReceipt(ctx context.Context, q *dbgen.Queries, result Completion) (bool, error) {
 	if result.Outcome.Kind != delivery.Succeeded {
-		return false, nil
+		if !adminConfirmedWireOutcome(result.Outcome) {
+			return false, nil
+		}
+		count, err := q.RecordAdminTerminalConfirmation(ctx, dbgen.RecordAdminTerminalConfirmationParams{
+			ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt,
+		})
+		return count == 1, err
 	}
 	count, err := q.RecordAdminTerminalReceipt(ctx, dbgen.RecordAdminTerminalReceiptParams{
 		ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt, MessageID: result.Outcome.MessageID,
 	})
 	return count == 1, err
+}
+
+// Only canonical provider observations fence an unresolved wire. Local preflight
+// and policy failures use the same outcome kinds but are not provider replies.
+func adminConfirmedWireOutcome(outcome delivery.Outcome) bool {
+	switch outcome.Kind {
+	case delivery.Succeeded:
+		return true
+	case delivery.Deferred:
+		return outcome.Reason == "telegram_rate_limit"
+	case delivery.Rejected:
+		return outcome.Reason == "telegram_recipient_rejected"
+	case delivery.Parked:
+		return outcome.Reason == "telegram_invalid_cooldown"
+	case delivery.Paused:
+		return outcome.Reason == "telegram_service_rejected"
+	default:
+		return false
+	}
+}
+
+func (s Service) recordAdminConfirmation(
+	ctx context.Context,
+	q *dbgen.Queries,
+	result Completion,
+	row dbgen.LockAdminAttemptRow,
+) error {
+	if !adminConfirmedWireOutcome(result.Outcome) {
+		return nil
+	}
+	if row.State != string(delivery.Sending) && row.State != string(delivery.Uncertain) &&
+		(!row.LastUncertainAttempt.Valid || row.LastUncertainAttempt.Int64 != result.Attempt || row.LeaseUntil.Valid) {
+		return nil
+	}
+	return q.RecordAdminConfirmation(ctx, dbgen.RecordAdminConfirmationParams{
+		ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt,
+	})
 }
 
 func staleAdminAttempt() error { return problem(http.StatusConflict, "admin_message_stale_attempt") }

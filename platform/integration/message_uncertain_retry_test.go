@@ -865,6 +865,10 @@ func TestTerminalUncertainReceiptsPreservePolicy(t *testing.T) {
 
 func checkTerminalReceipt(t *testing.T, owner, scenario string) {
 	t.Helper()
+	if scenario == "later-429" {
+		checkRecoveredConfirmedReply(t, owner, "cancelled-after-reply")
+		return
+	}
 	f := newTerminalReceiptFixture(t, owner)
 	state := "failed"
 	if scenario == "cancelled" {
@@ -885,8 +889,6 @@ func checkTerminalReceipt(t *testing.T, owner, scenario string) {
 		mutation = f.messageColumn + "=92"
 	case "stale":
 		mutation = f.attemptColumn + "=" + f.attemptColumn + "+1"
-	case "later-429":
-		mutation = "last_uncertain_attempt=last_uncertain_attempt-1,failure='telegram_uncertain_retry_exhausted'"
 	case "no-marker":
 		mutation = "last_uncertain_attempt=NULL,last_uncertain_reason=NULL,last_uncertain_recorded_at=NULL"
 	case "live-lease":
@@ -1077,6 +1079,13 @@ func checkRecoveredConfirmedReply(t *testing.T, owner, phase string) {
 			f.finish(delivery.Outcome{Kind: delivery.Rejected, Reason: "announcement_original_wire_unavailable"}),
 		)
 		before := f.snapshot(t)
+		var noConfirmedWire bool
+		require.NoError(
+			t,
+			f.db.QueryRow(t.Context(), `SELECT last_confirmed_attempt IS NULL FROM core.`+f.table+` WHERE id=$1`, f.id).
+				Scan(&noConfirmedWire),
+		)
+		require.True(t, noConfirmedWire, "a local rejection must not manufacture a provider observation")
 		once.Do(func() { close(release) })
 		select {
 		case positive := <-done:
@@ -1100,6 +1109,13 @@ func checkRecoveredConfirmedReply(t *testing.T, owner, phase string) {
 	require.Equal(t, "telegram_rate_limit", outcome.Reason)
 	require.EqualValues(t, 120, outcome.RetryAfter)
 	assert.NoError(t, f.finish(outcome), "a matching terminal negative must be retained as a wire fact")
+	var confirmedAttempt int64
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT last_confirmed_attempt FROM core.`+f.table+` WHERE id=$1`, f.id).
+			Scan(&confirmedAttempt),
+	)
+	assert.Equal(t, f.attempt, confirmedAttempt)
 	if phase == "cancelled-after-reply" {
 		require.NoError(t, f.cancel())
 	}
@@ -1213,12 +1229,14 @@ func checkLegacyAnnouncementCapture(t *testing.T, refusal string) {
 		}
 	}
 	var resends int64
+	var renderedAdmitted bool
 	require.NoError(
 		t,
-		db.QueryRow(t.Context(), `SELECT uncertain_resends FROM core.pass_registration_announcements WHERE id=$1`, first.ID).
-			Scan(&resends),
+		db.QueryRow(t.Context(), `SELECT uncertain_resends,rendered_admitted FROM core.pass_registration_announcements WHERE id=$1`, first.ID).
+			Scan(&resends, &renderedAdmitted),
 	)
 	assert.Zero(t, resends, "no refused preparation is an admitted wire")
+	assert.False(t, renderedAdmitted)
 	_, err = db.Exec(
 		t.Context(),
 		`UPDATE core.pass_registration_announcements SET name='New eligible rendering',locale='en',role='leader',available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET pause_reason='',not_before=clock_timestamp()-interval '1 second'`,
@@ -1238,6 +1256,14 @@ func checkLegacyAnnouncementCapture(t *testing.T, refusal string) {
 	)
 	require.NoError(t, err)
 	require.True(t, gate.Ready)
+	var admittedText string
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT rendered_admitted,rendered_text FROM core.pass_registration_announcements WHERE id=$1`, item.ID).
+			Scan(&renderedAdmitted, &admittedText),
+	)
+	assert.True(t, renderedAdmitted)
+	assert.Equal(t, item.Text, admittedText, "capture and admission are durable before the HTTP request")
 	wires := make(chan []byte, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, readErr := io.ReadAll(r.Body)

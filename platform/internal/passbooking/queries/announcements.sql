@@ -27,7 +27,7 @@ FROM next WHERE a.id=next.id RETURNING a.id,a.channel,a.thread_id,a.locale,a.nam
 
 -- name: LockAnnouncementAttempt :one
 SELECT a.channel,a.thread_id,a.state,a.message_id,a.available_at,a.failure,
- a.last_uncertain_attempt,a.uncertain_resends,a.lease_until,
+ a.last_uncertain_attempt,a.last_confirmed_attempt,a.uncertain_resends,a.lease_until,
  COALESCE(a.lease_until>clock_timestamp(),false)::boolean AS lease_live,
  EXISTS(SELECT 1 FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
   WHERE e.id=a.event_id AND b.owner=a.owner AND b.created_at=a.created_at AND b.state<>'cancelled'
@@ -37,7 +37,7 @@ FROM core.pass_registration_announcements a WHERE a.id=sqlc.arg(id)::bigint
  AND a.bot_id=sqlc.arg(bot_id)::bigint AND a.attempts=sqlc.arg(attempt)::bigint FOR UPDATE;
 
 -- name: BeginAnnouncementSend :execrows
-UPDATE core.pass_registration_announcements SET state='sending',lease_until=clock_timestamp()+interval '2 minutes',
+UPDATE core.pass_registration_announcements SET state='sending',rendered_admitted=true,lease_until=clock_timestamp()+interval '2 minutes',
  uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempts=sqlc.arg(attempt)::bigint
  AND state='pending' AND lease_until>clock_timestamp()
@@ -61,9 +61,20 @@ WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempts=s
 UPDATE core.pass_registration_announcements SET message_id=sqlc.arg(message_id)::bigint
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
  AND attempts=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=sqlc.arg(attempt)::bigint
+ AND COALESCE(last_confirmed_attempt,0)<sqlc.arg(attempt)::bigint
  AND state IN ('failed','cancelled') AND lease_until IS NULL
  AND sqlc.arg(message_id)::bigint>0
  AND (message_id=0 OR message_id=sqlc.arg(message_id)::bigint);
+
+-- name: RecordAnnouncementConfirmation :exec
+UPDATE core.pass_registration_announcements SET last_confirmed_attempt=sqlc.arg(attempt)::bigint
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempts=sqlc.arg(attempt)::bigint;
+
+-- name: RecordAnnouncementTerminalConfirmation :execrows
+UPDATE core.pass_registration_announcements SET last_confirmed_attempt=sqlc.arg(attempt)::bigint
+WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
+ AND attempts=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=sqlc.arg(attempt)::bigint
+ AND state IN ('failed','cancelled') AND lease_until IS NULL;
 
 -- name: AnnouncementAttemptSource :one
 SELECT event_id,owner FROM core.pass_registration_announcements

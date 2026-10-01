@@ -160,10 +160,11 @@ func (s Service) PrepareRegistrationAnnouncement(
 	var thread pgtype.Int8
 	var rendered pgtype.Text
 	var uncertain pgtype.Int8
-	err = tx.QueryRow(ctx, `SELECT id,channel,thread_id,locale,name,role,attempts+1,rendered_text,last_uncertain_attempt FROM core.pass_registration_announcements
+	var admitted bool
+	err = tx.QueryRow(ctx, `SELECT id,channel,thread_id,locale,name,role,attempts+1,rendered_text,last_uncertain_attempt,rendered_admitted FROM core.pass_registration_announcements
  WHERE id=$1 AND bot_id=$2 AND state='pending' AND available_at<=clock_timestamp()
  AND (lease_until IS NULL OR lease_until<=clock_timestamp()) FOR UPDATE SKIP LOCKED`, id, s.Delivery.BotID).
-		Scan(&item.ID, &item.Channel, &thread, &item.Locale, &item.Name, &item.Role, &item.Attempts, &rendered, &uncertain)
+		Scan(&item.ID, &item.Channel, &thread, &item.Locale, &item.Name, &item.Role, &item.Attempts, &rendered, &uncertain, &admitted)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return item, false, nil
 	}
@@ -171,7 +172,8 @@ func (s Service) PrepareRegistrationAnnouncement(
 		return item, false, core.DatabaseOperationError(err)
 	}
 	item.Text = rendered.String
-	if !uncertain.Valid || !rendered.Valid {
+	admitted = uncertain.Valid && admitted
+	if !admitted || !rendered.Valid {
 		item.Text, err = RegistrationAnnouncementText(item)
 		if err != nil {
 			return item, false, err
@@ -190,10 +192,11 @@ func (s Service) PrepareRegistrationAnnouncement(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`UPDATE core.pass_registration_announcements SET attempts=$2,rendered_text=$3,lease_until=clock_timestamp()+interval '2 minutes' WHERE id=$1`,
+		`UPDATE core.pass_registration_announcements SET attempts=$2,rendered_text=$3,rendered_admitted=$4,lease_until=clock_timestamp()+interval '2 minutes' WHERE id=$1`,
 		id,
 		item.Attempts,
 		item.Text,
+		admitted,
 	)
 	if err != nil {
 		return item, false, core.DatabaseOperationError(err)

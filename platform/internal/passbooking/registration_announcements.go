@@ -183,6 +183,10 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 	if err != nil {
 		return announcementAttemptError(core.DatabaseOperationError(err))
 	}
+	if input.Outcome.Kind == delivery.Succeeded && row.LastConfirmedAttempt.Valid &&
+		row.LastConfirmedAttempt.Int64 >= input.Attempt {
+		return conflict("pass_announcement_stale")
+	}
 	lateSuccess := row.State == operationPending && input.Outcome.Kind == delivery.Succeeded &&
 		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == input.Attempt && !row.LeaseUntil.Valid
 	if row.State == operationPending && !lateSuccess &&
@@ -190,6 +194,9 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 		return conflict("pass_announcement_stale")
 	}
 	if err = s.recordAnnouncementUncertainty(ctx, q, input, row); err != nil {
+		return err
+	}
+	if err = s.recordAnnouncementConfirmation(ctx, q, input, row); err != nil {
 		return err
 	}
 	if input.Outcome.Kind == delivery.Uncertain && !row.Current {
@@ -256,12 +263,55 @@ func (s Service) recordAnnouncementTerminalReceipt(
 	input AnnouncementCompletion,
 ) (bool, error) {
 	if input.Outcome.Kind != delivery.Succeeded {
-		return false, nil
+		if !announcementConfirmedWireOutcome(input.Outcome) {
+			return false, nil
+		}
+		count, err := q.RecordAnnouncementTerminalConfirmation(ctx, dbgen.RecordAnnouncementTerminalConfirmationParams{
+			ID: input.ID, BotID: s.Delivery.BotID, Attempt: input.Attempt,
+		})
+		return count == 1, core.DatabaseOperationError(err)
 	}
 	count, err := q.RecordAnnouncementTerminalReceipt(ctx, dbgen.RecordAnnouncementTerminalReceiptParams{
 		ID: input.ID, BotID: s.Delivery.BotID, Attempt: input.Attempt, MessageID: input.Outcome.MessageID,
 	})
 	return count == 1, core.DatabaseOperationError(err)
+}
+
+// Only canonical provider observations fence an unresolved wire. Local preflight
+// and policy failures use the same outcome kinds but are not provider replies.
+func announcementConfirmedWireOutcome(outcome delivery.Outcome) bool {
+	switch outcome.Kind {
+	case delivery.Succeeded:
+		return true
+	case delivery.Deferred:
+		return outcome.Reason == "telegram_rate_limit"
+	case delivery.Rejected:
+		return outcome.Reason == "telegram_recipient_rejected"
+	case delivery.Parked:
+		return outcome.Reason == "telegram_invalid_cooldown"
+	case delivery.Paused:
+		return outcome.Reason == "telegram_service_rejected"
+	default:
+		return false
+	}
+}
+
+func (s Service) recordAnnouncementConfirmation(
+	ctx context.Context,
+	q *dbgen.Queries,
+	input AnnouncementCompletion,
+	row dbgen.LockAnnouncementAttemptRow,
+) error {
+	if !announcementConfirmedWireOutcome(input.Outcome) {
+		return nil
+	}
+	if row.State != string(delivery.Sending) && row.State != string(delivery.Uncertain) &&
+		(!row.LastUncertainAttempt.Valid || row.LastUncertainAttempt.Int64 != input.Attempt || row.LeaseUntil.Valid) {
+		return nil
+	}
+	return core.DatabaseOperationError(q.RecordAnnouncementConfirmation(ctx, dbgen.RecordAnnouncementConfirmationParams{
+		ID: input.ID, BotID: s.Delivery.BotID, Attempt: input.Attempt,
+	}))
 }
 
 // Resends count admissions, not proven wire requests. A crash after admission
