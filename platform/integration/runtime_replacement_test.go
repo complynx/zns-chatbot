@@ -13,12 +13,175 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/replacement"
 	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 	"github.com/complynx/zns-chatbot/platform/internal/store"
 )
+
+// This engine controls process observations only. PostgreSQL sessions are real;
+// the test does not claim physical Docker shutdown from these observations.
+type replacementAdmissionEngine struct {
+	inventory []replacement.Container
+	created   int
+	start     func() error
+}
+
+func (e *replacementAdmissionEngine) Identity(context.Context) (string, error) {
+	return "test-daemon", nil
+}
+func (e *replacementAdmissionEngine) Inventory(context.Context) ([]replacement.Container, error) {
+	return e.inventory, nil
+}
+
+func (e *replacementAdmissionEngine) Create(
+	_ context.Context,
+	instance runtimeapp.Instance,
+) ([]replacement.Container, error) {
+	e.created++
+	for _, component := range replacement.Components() {
+		e.inventory = append(e.inventory, replacement.Container{ID: component, Component: component,
+			Launch: instance.Launch, Image: "test-image", Created: instance.Launch})
+	}
+	return e.inventory, nil
+}
+func (e *replacementAdmissionEngine) Start(context.Context, []replacement.Container) error {
+	for i := range e.inventory {
+		e.inventory[i].Running, e.inventory[i].PID, e.inventory[i].Health = true, 1, "healthy"
+	}
+	return e.start()
+}
+func (e *replacementAdmissionEngine) Stop(context.Context, []replacement.Container) error { return nil }
+func (e *replacementAdmissionEngine) Kill(context.Context, []replacement.Container) error {
+	for i := range e.inventory {
+		e.inventory[i].Running, e.inventory[i].PID = false, 0
+	}
+	return nil
+}
+func (e *replacementAdmissionEngine) Remove(context.Context, []replacement.Container) error {
+	e.inventory = nil
+	return nil
+}
+
+type replacementAdmissionJournal struct {
+	replacement.FileJournal
+
+	running func() error
+}
+
+func (j replacementAdmissionJournal) Save(ledger replacement.Ledger) error {
+	if err := j.FileJournal.Save(ledger); err != nil {
+		return err
+	}
+	if ledger.State == replacement.StateRunning {
+		return j.running()
+	}
+	return nil
+}
+
+func TestRuntimeReplacementActiveAdmissionLoss(t *testing.T) {
+	t.Parallel()
+	db := database(t)
+	role := "synthetic_qa_replacement_" + strings.TrimPrefix(db.Config().ConnConfig.Database, "synthetic_qa_zns_")
+	quoted := pgx.Identifier{role}.Sanitize()
+	_, err := db.Exec(t.Context(), "CREATE ROLE "+quoted+" LOGIN PASSWORD 'synthetic-only-replacement'")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_, dropErr := db.Exec(context.WithoutCancel(t.Context()), "DROP ROLE "+quoted)
+		require.NoError(t, dropErr)
+	})
+	config := db.Config().ConnConfig.Copy()
+	config.User, config.Password = role, "synthetic-only-replacement"
+	instance := runtimeapp.Instance{Installation: "abcdef012345", Launch: "123456789012345678901234"}
+	app, err := instance.ApplicationName("app")
+	require.NoError(t, err)
+	admit, err := instance.ApplicationName("admit")
+	require.NoError(t, err)
+	dsn := (&url.URL{Scheme: "postgres", User: url.UserPassword(config.User, config.Password),
+		Host: net.JoinHostPort(config.Host, strconv.Itoa(int(config.Port))), Path: config.Database, RawQuery: "sslmode=disable"}).String()
+	inventory, err := pgx.ConnectConfig(t.Context(), db.Config().ConnConfig.Copy())
+	require.NoError(t, err)
+	defer inventory.Close(context.WithoutCancel(t.Context()))
+	sessions := replacement.PostgresSessions{Conn: inventory, Roles: []string{role}}
+	ctx, cancel := context.WithTimeout(t.Context(), admissionTestWait)
+	defer cancel()
+	engine := &replacementAdmissionEngine{}
+	var oldPool *pgxpool.Pool
+	var transaction pgx.Tx
+	var admission *runtimeapp.Admission
+	engine.start = func() error {
+		if engine.created > 1 {
+			cancel()
+			return nil
+		}
+		oldPool, err = store.OpenNamed(ctx, dsn, app)
+		if err != nil {
+			return err
+		}
+		transaction, err = oldPool.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		if _, err = transaction.Exec(ctx, "SELECT 1"); err != nil {
+			return err
+		}
+		config.RuntimeParams["application_name"] = admit
+		admission, err = runtimeapp.Acquire(ctx, config, runtimeapp.App)
+		return err
+	}
+	defer func() {
+		if transaction != nil {
+			_ = transaction.Rollback(context.WithoutCancel(t.Context()))
+		}
+		if oldPool != nil {
+			oldPool.Close()
+		}
+		if admission != nil {
+			_ = admission.Close(context.WithoutCancel(t.Context()))
+		}
+	}()
+	journal := replacementAdmissionJournal{
+		FileJournal: {Directory: t.TempDir()},
+		running: func() error {
+			_, terminateErr := db.Exec(
+				ctx,
+				"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=current_database() AND application_name=$1",
+				admit,
+			)
+			return terminateErr
+		},
+	}
+	coordinator := replacement.Coordinator{Engine: engine, Sessions: sessions, Journal: journal,
+		Installation: instance.Installation, Host: "test-host", StopTimeout: time.Second,
+		VerifyTimeout: 50 * time.Millisecond, PollInterval: time.Millisecond, ReadyTimeout: time.Second,
+		NewLaunch: func() (string, error) { return instance.Launch, nil }}
+	err = coordinator.Run(ctx)
+	require.ErrorIs(t, err, replacement.ErrStopped)
+	require.ErrorIs(t, err, replacement.ErrDeadline)
+	require.NoError(t, ctx.Err(), "the active monitor must detect loss before the enclosing test deadline")
+	ledger, err := journal.Load()
+	require.NoError(t, err)
+	require.Equal(t, replacement.StateBlocked, ledger.State)
+	names, err := sessions.Names(ctx)
+	require.NoError(t, err)
+	require.Contains(t, names, app)
+	require.NotContains(t, names, admit)
+	require.Equal(t, 1, engine.created)
+	require.ErrorIs(t, coordinator.Run(ctx), replacement.ErrDeadline)
+	require.Equal(t, 1, engine.created, "live old pool must block replacement creation")
+	require.NoError(t, transaction.Rollback(ctx))
+	transaction = nil
+	oldPool.Close()
+	oldPool = nil
+	instance.Launch = "223456789012345678901234"
+	require.NoError(t, coordinator.Run(ctx))
+	require.Equal(t, 2, engine.created)
+	names, err = sessions.Names(context.WithoutCancel(t.Context()))
+	require.NoError(t, err)
+	require.Empty(t, names)
+}
 
 func TestRuntimeReplacementSessionInventoryIncludesOldTransaction(t *testing.T) {
 	t.Parallel()
