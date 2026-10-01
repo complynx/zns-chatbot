@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,6 +23,115 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+type uncertainRateLimitFixture struct {
+	db       *pgxpool.Pool
+	settings delivery.Settings
+	table    string
+	send     func() error
+	follower func()
+}
+
+func TestUncertainMissingRateLimitRetainsProviderFallback(t *testing.T) {
+	t.Parallel()
+	for _, owner := range []string{"admin", "announcement"} {
+		t.Run(owner, func(t *testing.T) {
+			t.Parallel()
+			var calls atomic.Int64
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if calls.Add(1) == 1 {
+					connection, _, err := http.NewResponseController(w).Hijack()
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					_ = connection.Close()
+					return
+				}
+				_, _ = w.Write([]byte(`{"ok":false,"error_code":429,"description":"retry without deadline"}`))
+			}))
+			t.Cleanup(server.Close)
+			client := telegram.Client{Base: server.URL, Token: "synthetic"}
+			f := setupUncertainRateLimit(t, owner, client)
+			require.NoError(t, f.send())
+			require.EqualValues(t, 1, calls.Load(), "the original request really crossed the wire")
+			var originalDelay float64
+			require.NoError(t, f.db.QueryRow(t.Context(),
+				fmt.Sprintf(`SELECT EXTRACT(EPOCH FROM available_at-clock_timestamp()) FROM core.%s`, f.table)).
+				Scan(&originalDelay))
+			assert.InDelta(t, 5, originalDelay, 2, "uncertainty must use its independent default base")
+			_, err := f.db.Exec(t.Context(), fmt.Sprintf(`UPDATE core.%s SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'`, f.table))
+			require.NoError(t, err)
+			require.NoError(t, f.send())
+			require.EqualValues(t, 2, calls.Load(), "the first admitted resend received the confirmed missing-delay 429")
+			var state, reason string
+			var resends, marker int64
+			var delay float64
+			require.NoError(t, f.db.QueryRow(t.Context(), fmt.Sprintf(`SELECT state,failure,uncertain_resends,last_uncertain_attempt,EXTRACT(EPOCH FROM available_at-clock_timestamp()) FROM core.%s`, f.table)).
+				Scan(&state, &reason, &resends, &marker, &delay))
+			assert.Equal(t, "pending", state)
+			assert.Equal(t, "telegram_rate_limit", reason)
+			assert.EqualValues(t, 1, resends)
+			assert.EqualValues(t, 1, marker, "confirmed 429 must not manufacture another uncertainty")
+			assert.InDelta(t, 30, delay, 2, "the provider fallback must dominate the ten-second resend backoff")
+			for _, chat := range []string{"", "101"} {
+				var cooldown float64
+				require.NoError(t, f.db.QueryRow(t.Context(),
+					`SELECT EXTRACT(EPOCH FROM not_before-clock_timestamp()) FROM core.delivery_pacing WHERE bot_id=$1 AND chat=$2`,
+					f.settings.BotID, chat).Scan(&cooldown))
+				assert.InDelta(t, 30, cooldown, 2, "bot-wide and chat cooldowns must retain the provider fallback")
+			}
+			f.follower()
+			require.Empty(t, messageRetryCandidates(t, f.db, f.settings.BotID), "provider cooldown must block early followers")
+			require.NoError(t, f.send())
+			assert.EqualValues(t, 2, calls.Load(), "polling must not send before the retained provider cooldown")
+		})
+	}
+}
+
+func setupUncertainRateLimit(t *testing.T, owner string, client telegram.Client) uncertainRateLimitFixture {
+	t.Helper()
+	if owner == "admin" {
+		f := passMenuFixture(t)
+		s := configureDeliveryFixture(t, f)
+		enqueueSyntheticDelivery(t, s, "missing-cooldown", "101")
+		f.b.TG = client
+		return uncertainRateLimitFixture{db: f.db, settings: s.Delivery, table: "admin_message_deliveries",
+			send: func() error { return f.b.DeliverAdminMessages(t.Context()) },
+			follower: func() { enqueueSyntheticDelivery(t, s, "cooldown-follower", "202") }}
+	}
+	db, s := bookingFixture(t)
+	_, err := db.Exec(t.Context(), `UPDATE core.pass_events SET thread_channel='101'`)
+	require.NoError(t, err)
+	_, err = s.Execute(t.Context(), "alice", bookingCommand("solo", "missing-cooldown", passbooking.Booking{}))
+	require.NoError(t, err)
+	return uncertainRateLimitFixture{db: db, settings: s.Delivery, table: "pass_registration_announcements",
+		send: func() error {
+			item, found, claimErr := s.ClaimRegistrationAnnouncement(t.Context())
+			if claimErr != nil || !found {
+				return claimErr
+			}
+			gate, beginErr := s.BeginRegistrationAnnouncement(t.Context(), delivery.Attempt{ID: item.ID, Generation: item.Attempts})
+			if beginErr != nil || !gate.Ready {
+				return beginErr
+			}
+			var reply telegram.Message
+			sendErr := client.Call(t.Context(), "sendMessage", map[string]any{
+				"chat_id": int64(101), "text": item.Text, "parse_mode": "HTML",
+			}, &reply)
+			outcome := telegram.DeliveryOutcome(reply.ID, sendErr)
+			if outcome.Kind == delivery.Deferred {
+				assert.True(t, outcome.Missing, "the confirmed HTTP 429 supplied no retry deadline")
+			}
+			return s.CompleteRegistrationAnnouncement(t.Context(), passbooking.AnnouncementCompletion{
+				ID: item.ID, Attempt: item.Attempts, Outcome: outcome,
+			})
+		},
+		follower: func() {
+			_, executeErr := s.Execute(t.Context(), "bob", bookingCommand("solo", "cooldown-follower", passbooking.Booking{}))
+			require.NoError(t, executeErr)
+		}}
+}
 
 func TestAnnouncementLostResponseRetainsCapturedWireText(t *testing.T) {
 	t.Parallel()
