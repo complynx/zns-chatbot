@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through266, next267. All authorship/routes Codex under override;
+Fresh requests through268, next269. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -174,4 +174,8 @@ QA263 terminalreadonlyCLI4770 exit0 verdictFAIL5 (runtimeidentity/nonwritablefil
 
 QA264 PASSfull14 mergedbd150d5b conflictfree, root3top-level fixtures+subcases12PASSevents/0FAILSKIP packages. QA265NOTPASS2 P2 cross-event live card deletion and same-message supersession; exactscope7 approved existingtypes.go added, no schema/receiptedit. Cscope40 approved9existingproduct+3tests beyondoriginal28, newworktree c-clock-boundary-fix. Request266 allocatedBEFOREdispatch complete10model successor80d0ec727702898352eb5ba0cec241520391426a/base460ab86b. Units/race/pinnedfmtlint/build passed, rootactual2PG1.18s3.21s/package4.672 and unchangedDBinventoryPASS; sourceclean. Codexauthor/freshreadonlyCodexCLIoverride, fulloriginalrequirements no priorfindings/history. Next267.
 
-QA266 terminal readonly CLI79746 FAIL2 (claim ownership and cancellable control installation). Old80d0/df519 immutable; repeated failures transferred to fresh Codex CLI developer37303, isolated model-interruption-owner-fix full10 only, basedbd150. No Claude probing. Payment7 actual root52182 full12 top-level28PASS events/0FAILSKIP92.881s identical parentDBnames; final commit pending. C40 final20e936 gates underway. Next267 remains unallocated.
+QA266 terminal readonly CLI79746 FAIL2 (claim ownership and cancellable control installation). Old80d0/df519 immutable; repeated failures transferred to fresh Codex CLI developer37303, isolated model-interruption-owner-fix full10 only, basedbd150. No Claude probing. Payment7 actual root52182 full12 top-level29PASS events/0FAILSKIP92.881s identical parentDBnames; final commit pending. C40 final20e936 gates underway. Next267 remains unallocated.
+
+Request267 allocated before dispatch: complete payment7 immutablec5e770e7f4a7a2cdbf333a1c23f80726270ef37a/basebd150d5b1b6f91977d1597686e889543dab22330. Codex author and fresh standalone readonly Codex CLI route under override; full original requirements and immutable diff only, no previous findings or tracking. Root full12 native PASS92.881s, source unchanged and clean. Next268.
+
+Request268 allocated BEFORE dispatch: fresh developer complete10 immutablef2720ebb2e7f497042817ef8454ccea1bd56c69c/basebd150d5b1b6f91977d1597686e889543dab22330. Full author unit/race/pinnedlintfmt/build gates PASS, root70273 exact2PG2.24s3.82s/package6.282s0FAILSKIP and identical DBnames. Codex authorship/fresh readonly standalone Codex CLI override; original full scope only, no findings/tracking/authorreports. Next269.

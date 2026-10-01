@@ -646,4 +646,8 @@ Manager paused at150events; follow-up could not start due thread limit. Root rec
 
 ## Verified continuation 2026-10-01T04:47:42Z
 
-166 events. Review returns21 after QA266 FAIL2. New model developer CLI37303 owns isolated10-path successor; native8090 reserved until release. Payment7 root52182 full12 top-level/28PASS events/0FAILSKIP92.881s, unchanged parent inventory; awaiting clean immutable commit, ready review1/reviewing0/ready merge0. Counter266 next267. C40 checkpoint20e936 final Linux/PG gates underway. Lead58461/58471 actual authenticated bare setup PASS, releasedroot; no source schema/FQA acceptance.
+166 events. Review returns21 after QA266 FAIL2. New model developer CLI37303 owns isolated10-path successor; native8090 reserved until release. Payment7 root52182 full12 top-level/29PASS events/0FAILSKIP92.881s, unchanged parent inventory; awaiting clean immutable commit, ready review1/reviewing0/ready merge0. Counter266 next267. C40 checkpoint20e936 final Linux/PG gates underway. Lead58461/58471 actual authenticated bare setup PASS, releasedroot; no source schema/FQA acceptance.
+
+## Fresh review dispatch 2026-10-01T04:54:34Z
+
+168 events; confirmed queue0/2/0. Payment7 c5e770e7 clean unchanged from native12PASS, fresh QA267 CLI70176 active. Model10 freshauthor f2720ebb clean complete gates PASS, root70273 exact2PG2.24s3.82s/package6.282s0FAILSKIP, identical parent DBnames;8090/58441 released. Fresh fullQA268 CLI44874 active. Counter268 next269. Corrected payment total is29PASS events, not28;12 top-level unchanged. Independent returns21, no new verdicts/FQA.

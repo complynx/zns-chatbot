@@ -13,3 +13,7 @@ on behalf of Daniel Drizhuk
 Immutable80d0ec727702898352eb5ba0cec241520391426a/base460ab86b, originaldf519 and priorlogs preserved. Root24906 terminalPASS: exactunchanged2PG selector1.18s/3.21s/package4.672s,0FAIL/SKIP, parentDBnames identicalbefore/after. Rawroot-pg-successor/tests.jsonl SHA256 0E9361A352291178041828B3C7691217CAE4237EFC704AA68CD63D04DC6F9959. Native8090released. Authorwhole sandboxunits10.237s, actualLinuxrace11.889s/pinnedlint0/fmt/build passed; freshfullQA266 ongoing. F08business/UI separate.
 
 QA266 completed FAIL2 despite the above scoped native PASS. Candidate80d0 is not accepted or integrated. A fresh developer owns a separate ten-path successor basedbd150; original candidates and failed review evidence remain unchanged. Business F08 acceptance remains open.
+
+## Fresh developer successor f2720ebb
+
+New developer owns clean immutable f2720ebb2e7f497042817ef8454ccea1bd56c69c/basebd150d5b, complete original10 paths. Actual developer units, full pinned lint, format, native build, integration compile-only and Linux race PASS; DB-dependent unit skips remain limitations. Root70273 ran exact original2 PostgreSQL cases on exclusive58441/native8090:2.24s/3.82s, package6.282s,0FAILSKIP. Authenticated before/after snapshots and sorted parent database names identical.8090 and58441 released. Raw .worktrees/model-interruption-owner-fix/qa.local/root-pg/tests.jsonl SHA256 CD305E5C1CF9677387AE01F0061A95742B34FFA8B10CC0F21A36D114A9BCCE1B. Fresh full readonly QA268 launched; no merge, business recovery or Functional acceptance inferred.
