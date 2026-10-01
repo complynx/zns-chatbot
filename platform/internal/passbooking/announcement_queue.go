@@ -324,7 +324,7 @@ func (s Service) announcementRecoveryOutcome(
 	if row.State == operationPending {
 		return cancelled, deadline, nil
 	}
-	reason := "telegram_outcome_unknown"
+	reason := announcementOutcomeUnknown
 	if row.State == string(delivery.Uncertain) && row.Failure != "" {
 		reason = row.Failure
 	}

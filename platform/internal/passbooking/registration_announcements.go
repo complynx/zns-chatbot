@@ -14,6 +14,11 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 )
 
+const (
+	announcementUncertainResendLimit = 3
+	announcementOutcomeUnknown       = "telegram_outcome_unknown"
+)
+
 type RegistrationAnnouncement struct {
 	ID       int64  `json:"id"`
 	Channel  string `json:"channel"`
@@ -86,25 +91,8 @@ func (s Service) BeginRegistrationAnnouncement(
 	if !row.Current {
 		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt, clockAttempt)
 	}
-	if row.LastUncertainAttempt.Valid && row.UncertainResends >= 3 {
-		outcome := delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
-		if err = delivery.Project(
-			ctx,
-			tx,
-			s.Delivery.BotID,
-			announcementReference(attempt.ID),
-			outcome.Kind,
-			time.Time{},
-		); err != nil {
-			return delivery.Admission{}, err
-		}
-		if err = s.finishAnnouncement(ctx, q, attempt, outcome, time.Now()); err != nil {
-			return delivery.Admission{}, err
-		}
-		if err = clockAttempt.Check(ctx); err != nil {
-			return delivery.Admission{}, err
-		}
-		return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
+	if row.LastUncertainAttempt.Valid && row.UncertainResends >= announcementUncertainResendLimit {
+		return s.exhaustAnnouncementRetry(ctx, tx, q, attempt, clockAttempt)
 	}
 	gate, current, err := s.beginCurrentAnnouncement(ctx, tx, q, attempt)
 	if err != nil {
@@ -152,10 +140,11 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 	defer func() { _ = tx.Rollback(ctx) }()
 	s, clockAttempt := s.WithClockAttempt()
 	q := dbgen.New(tx)
-	if recorded, receiptErr := s.recordAnnouncementTerminalReceipt(ctx, q, input); recorded || receiptErr != nil {
-		if receiptErr != nil {
-			return receiptErr
-		}
+	recorded, err := s.recordAnnouncementTerminalReceipt(ctx, q, input)
+	if err != nil {
+		return err
+	}
+	if recorded {
 		return core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	attempt := delivery.Attempt{ID: input.ID, Generation: input.Attempt}
@@ -210,6 +199,33 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
+func (s Service) exhaustAnnouncementRetry(
+	ctx context.Context,
+	tx pgx.Tx,
+	q *dbgen.Queries,
+	attempt delivery.Attempt,
+	clockAttempt *RegistrationClockAttempt,
+) (delivery.Admission, error) {
+	outcome := delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
+	if err := delivery.Project(
+		ctx,
+		tx,
+		s.Delivery.BotID,
+		announcementReference(attempt.ID),
+		outcome.Kind,
+		time.Time{},
+	); err != nil {
+		return delivery.Admission{}, err
+	}
+	if err := s.finishAnnouncement(ctx, q, attempt, outcome, time.Now()); err != nil {
+		return delivery.Admission{}, err
+	}
+	if err := clockAttempt.Check(ctx); err != nil {
+		return delivery.Admission{}, err
+	}
+	return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
+}
+
 func (s Service) recordAnnouncementTerminalReceipt(
 	ctx context.Context,
 	q *dbgen.Queries,
@@ -235,7 +251,7 @@ func announcementRetryOutcome(
 	if !active || (outcome.Kind != delivery.Uncertain && outcome.Kind != delivery.Deferred) {
 		return outcome
 	}
-	if resends >= 3 {
+	if resends >= announcementUncertainResendLimit {
 		return delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
 	}
 	seconds := int64(fallback / time.Second)
@@ -419,7 +435,7 @@ func (s Service) recordAnnouncementUncertainty(
 	if input.Outcome.Kind != delivery.Uncertain {
 		reason = row.Failure
 		if reason == "" {
-			reason = "telegram_outcome_unknown"
+			reason = announcementOutcomeUnknown
 		}
 	}
 	return core.DatabaseOperationError(

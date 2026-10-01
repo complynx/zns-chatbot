@@ -15,6 +15,8 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
+const adminUncertainResendLimit = 3
+
 // Claim retains the legacy entry point while selecting only shared queue heads.
 func (s Service) Claim(ctx context.Context) (Delivery, bool, error) {
 	if err := s.RecoverDeliveries(ctx); err != nil {
@@ -133,22 +135,8 @@ func (s Service) BeginDelivery(ctx context.Context, attempt delivery.Attempt) (d
 	if row.State != statePending || !row.LeaseLive {
 		return delivery.Admission{}, staleAdminAttempt()
 	}
-	if row.LastUncertainAttempt.Valid && row.UncertainResends >= 3 {
-		outcome := delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
-		if err = delivery.Project(
-			ctx,
-			tx,
-			s.Delivery.BotID,
-			adminReference(attempt.ID),
-			outcome.Kind,
-			time.Time{},
-		); err != nil {
-			return delivery.Admission{}, err
-		}
-		if err = s.finishDelivery(ctx, q, attempt.ID, attempt.Generation, outcome, time.Now()); err != nil {
-			return delivery.Admission{}, err
-		}
-		return delivery.Admission{Reason: outcome.Reason}, tx.Commit(ctx)
+	if row.LastUncertainAttempt.Valid && row.UncertainResends >= adminUncertainResendLimit {
+		return s.exhaustAdminRetry(ctx, tx, q, attempt)
 	}
 	gate, err := delivery.Begin(ctx, tx, s.Delivery, adminReference(attempt.ID))
 	if err != nil {
@@ -206,10 +194,11 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := dbgen.New(tx)
-	if recorded, receiptErr := s.recordAdminTerminalReceipt(ctx, q, result); recorded || receiptErr != nil {
-		if receiptErr != nil {
-			return receiptErr
-		}
+	recorded, err := s.recordAdminTerminalReceipt(ctx, q, result)
+	if err != nil {
+		return err
+	}
+	if recorded {
 		return tx.Commit(ctx)
 	}
 	valid, err := s.completionSource(ctx, tx, result.ID, result.Attempt, result.Outcome.Kind == delivery.Uncertain)
@@ -247,18 +236,9 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 	if err != nil {
 		return err
 	}
-	if !valid && outcome.Kind != delivery.Succeeded && outcome.Kind != delivery.Uncertain {
-		outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}
-		if err = delivery.Project(
-			ctx,
-			tx,
-			s.Delivery.BotID,
-			adminReference(result.ID),
-			delivery.Cancelled,
-			deadline,
-		); err != nil {
-			return err
-		}
+	outcome, err = s.projectAdminSource(ctx, tx, result.ID, outcome, deadline, valid)
+	if err != nil {
+		return err
 	}
 	if err = s.finishDelivery(ctx, q, result.ID, result.Attempt, outcome, deadline); err != nil {
 		return err
@@ -272,7 +252,7 @@ func adminRetryOutcome(outcome delivery.Outcome, resends int64, active bool, fal
 	if !active || (outcome.Kind != delivery.Uncertain && outcome.Kind != delivery.Deferred) {
 		return outcome
 	}
-	if resends >= 3 {
+	if resends >= adminUncertainResendLimit {
 		return delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
 	}
 	seconds := int64(fallback / time.Second)
@@ -357,6 +337,44 @@ func (s Service) completionSource(
 		return valid && current, currentErr
 	}
 	return valid, nil
+}
+
+func (s Service) exhaustAdminRetry(
+	ctx context.Context,
+	tx pgx.Tx,
+	q *dbgen.Queries,
+	attempt delivery.Attempt,
+) (delivery.Admission, error) {
+	outcome := delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}
+	if err := delivery.Project(
+		ctx,
+		tx,
+		s.Delivery.BotID,
+		adminReference(attempt.ID),
+		outcome.Kind,
+		time.Time{},
+	); err != nil {
+		return delivery.Admission{}, err
+	}
+	if err := s.finishDelivery(ctx, q, attempt.ID, attempt.Generation, outcome, time.Now()); err != nil {
+		return delivery.Admission{}, err
+	}
+	return delivery.Admission{Reason: outcome.Reason}, tx.Commit(ctx)
+}
+
+func (s Service) projectAdminSource(
+	ctx context.Context,
+	tx pgx.Tx,
+	id int64,
+	outcome delivery.Outcome,
+	deadline time.Time,
+	valid bool,
+) (delivery.Outcome, error) {
+	if valid || outcome.Kind == delivery.Succeeded || outcome.Kind == delivery.Uncertain {
+		return outcome, nil
+	}
+	outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}
+	return outcome, delivery.Project(ctx, tx, s.Delivery.BotID, adminReference(id), outcome.Kind, deadline)
 }
 
 func (s Service) recordAdminTerminalReceipt(ctx context.Context, q *dbgen.Queries, result Completion) (bool, error) {

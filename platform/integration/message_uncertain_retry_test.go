@@ -558,65 +558,71 @@ func TestTerminalUncertainReceiptsPreservePolicy(t *testing.T) {
 		for _, scenario := range []string{"failed", "cancelled", "contradictory", "stale", "later-429", "no-marker", "live-lease"} {
 			t.Run(owner+"/"+scenario, func(t *testing.T) {
 				t.Parallel()
-				f := newTerminalReceiptFixture(t, owner)
-				state := "failed"
-				if scenario == "cancelled" {
-					state = "cancelled"
-				}
-				_, err := f.db.Exec(
-					t.Context(),
-					`UPDATE core.`+f.table+` SET state=$1,lease_until=NULL WHERE id=$2`,
-					state,
-					f.id,
-				)
-				require.NoError(t, err)
-				_, err = f.db.Exec(t.Context(), `UPDATE core.delivery_queue SET state=$1`, state)
-				require.NoError(t, err)
-				mutation := ""
-				switch scenario {
-				case "contradictory":
-					mutation = f.messageColumn + "=92"
-				case "stale":
-					mutation = f.attemptColumn + "=" + f.attemptColumn + "+1"
-				case "later-429":
-					mutation = "last_uncertain_attempt=last_uncertain_attempt-1,failure='telegram_uncertain_retry_exhausted'"
-				case "no-marker":
-					mutation = "last_uncertain_attempt=NULL,last_uncertain_reason=NULL,last_uncertain_recorded_at=NULL"
-				case "live-lease":
-					mutation = "lease_until=clock_timestamp()+interval '1 minute'"
-				}
-				if mutation != "" {
-					_, err = f.db.Exec(t.Context(), `UPDATE core.`+f.table+` SET `+mutation+` WHERE id=$1`, f.id)
-					require.NoError(t, err)
-				}
-				before := f.snapshot(t)
-				if scenario == "failed" || scenario == "cancelled" {
-					require.NoError(t, f.complete(91))
-					require.NoError(t, f.complete(91), "the same factual receipt is idempotent")
-					require.Error(t, f.complete(92), "a contradictory receipt must be rejected")
-				} else {
-					require.Error(t, f.complete(91))
-				}
-				assert.Equal(
-					t,
-					before,
-					f.snapshot(t),
-					"receipt must preserve policy, queue, pacing and source payloads",
-				)
-				var messageID int64
-				require.NoError(
-					t,
-					f.db.QueryRow(t.Context(), `SELECT `+f.messageColumn+` FROM core.`+f.table+` WHERE id=$1`, f.id).
-						Scan(&messageID),
-				)
-				if scenario == "failed" || scenario == "cancelled" {
-					assert.EqualValues(t, 91, messageID)
-				} else if scenario == "contradictory" {
-					assert.EqualValues(t, 92, messageID)
-				} else {
-					assert.Zero(t, messageID)
-				}
+				checkTerminalReceipt(t, owner, scenario)
 			})
 		}
+	}
+}
+
+func checkTerminalReceipt(t *testing.T, owner, scenario string) {
+	t.Helper()
+	f := newTerminalReceiptFixture(t, owner)
+	state := "failed"
+	if scenario == "cancelled" {
+		state = "cancelled"
+	}
+	_, err := f.db.Exec(
+		t.Context(),
+		`UPDATE core.`+f.table+` SET state=$1,lease_until=NULL WHERE id=$2`,
+		state,
+		f.id,
+	)
+	require.NoError(t, err)
+	_, err = f.db.Exec(t.Context(), `UPDATE core.delivery_queue SET state=$1`, state)
+	require.NoError(t, err)
+	mutation := ""
+	switch scenario {
+	case "contradictory":
+		mutation = f.messageColumn + "=92"
+	case "stale":
+		mutation = f.attemptColumn + "=" + f.attemptColumn + "+1"
+	case "later-429":
+		mutation = "last_uncertain_attempt=last_uncertain_attempt-1,failure='telegram_uncertain_retry_exhausted'"
+	case "no-marker":
+		mutation = "last_uncertain_attempt=NULL,last_uncertain_reason=NULL,last_uncertain_recorded_at=NULL"
+	case "live-lease":
+		mutation = "lease_until=clock_timestamp()+interval '1 minute'"
+	}
+	if mutation != "" {
+		_, err = f.db.Exec(t.Context(), `UPDATE core.`+f.table+` SET `+mutation+` WHERE id=$1`, f.id)
+		require.NoError(t, err)
+	}
+	before := f.snapshot(t)
+	if scenario == "failed" || scenario == "cancelled" {
+		require.NoError(t, f.complete(91))
+		require.NoError(t, f.complete(91), "the same factual receipt is idempotent")
+		require.Error(t, f.complete(92), "a contradictory receipt must be rejected")
+	} else {
+		require.Error(t, f.complete(91))
+	}
+	assert.Equal(
+		t,
+		before,
+		f.snapshot(t),
+		"receipt must preserve policy, queue, pacing and source payloads",
+	)
+	var messageID int64
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT `+f.messageColumn+` FROM core.`+f.table+` WHERE id=$1`, f.id).
+			Scan(&messageID),
+	)
+	switch scenario {
+	case "failed", "cancelled":
+		assert.EqualValues(t, 91, messageID)
+	case "contradictory":
+		assert.EqualValues(t, 92, messageID)
+	default:
+		assert.Zero(t, messageID)
 	}
 }
