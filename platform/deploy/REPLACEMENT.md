@@ -32,7 +32,6 @@ Generation IPC volumes are never reused. Container removal does not delete volum
 
 Already accepted Telegram/OpenAI requests may continue remotely after local death. This fences owned processes and DB writers, not provider computation. Preserve durable uncertain-delivery/accounting outcomes and avoid blind retries.
 
-
 ## PostgreSQL disconnect detection prerequisite
 
 A dead client does not prove its PostgreSQL backend has ended. A long server query can retain an old transaction after its container is killed. The coordinator must remain blocked while that backend exists.
