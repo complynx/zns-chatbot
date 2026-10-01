@@ -150,7 +150,7 @@ func TestNotificationSQLOriginErrors(t *testing.T) {
 			return Service{}.lockAnnouncementSource(ctx, tx, 1)
 		}},
 		{"enqueue_announcements", 1, func(ctx context.Context, tx pgx.Tx) error {
-			_, err := enqueueRegistrationAnnouncements(ctx, tx, "event", 1, nil)
+			_, err := enqueueRegistrationAnnouncements(ctx, tx, "event", 1, nil, nil)
 			return err
 		}},
 		{"deadline_markers", 1, func(ctx context.Context, tx pgx.Tx) error {

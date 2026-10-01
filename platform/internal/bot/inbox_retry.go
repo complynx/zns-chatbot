@@ -11,6 +11,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -75,6 +76,9 @@ func classifyInboxResult(parent context.Context, err error, failures int) (inbox
 	}
 	now := time.Now()
 	backoff := pgtype.Timestamptz{Time: now.Add(inboxBackoff(failures)), Valid: true}
+	if errors.Is(err, passbooking.ErrRegistrationTimeChanged) {
+		return inboxDefer, backoff
+	}
 	if deadline, deferred := inboxServiceDeadline(now, err); deferred {
 		if deadline.InfinityModifier == pgtype.Finite && deadline.Time.Before(backoff.Time) {
 			deadline = backoff

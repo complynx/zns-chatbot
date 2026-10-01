@@ -29,7 +29,7 @@ var ErrRegistrationBatchInputMissing = errors.New("saved registration batch miss
 type RegistrationBatchAdmission struct {
 	Store  RegistrationBatchInputStore
 	Events RegistrationBatchEvents
-	Now    func() time.Time
+	Now    func(context.Context) (time.Time, error)
 }
 
 // Manual resolves saved identity before interpreting a retry. Decode adapts the
@@ -52,19 +52,12 @@ func (c RegistrationBatchAdmission) Manual(ctx context.Context, owner string, up
 	}
 	command.Key = "telegram-pass-batch-" + strconv.FormatInt(updateID, 10)
 	if command.Event == "" {
-		events, readErr := c.Events.PassEvents(ctx, owner)
-		if readErr != nil {
-			return passbooking.RuntimeBatch{}, readErr
+		command.Event, err = c.closestEvent(ctx, owner)
+		if err != nil {
+			return passbooking.RuntimeBatch{}, err
 		}
-		if len(events) == 0 {
-			return passbooking.RuntimeBatch{}, ErrRegistrationBatchEvent
-		}
-		now := time.Now
-		if c.Now != nil {
-			now = c.Now
-		}
-		command.Event = passbooking.ClosestEvent(events, now())
 	}
+
 	if err = c.Store.SaveBatchInput(ctx, owner, updateID, command); err != nil {
 		return passbooking.RuntimeBatch{}, err
 	}
@@ -121,4 +114,24 @@ func BindGroundedRegistrationBatch(evidence string, input agent.Input, action, e
 			Role: passallocation.Role(options.Role), LegalName: options.LegalName}
 	}
 	return command, nil
+}
+
+func (c RegistrationBatchAdmission) closestEvent(ctx context.Context, owner string) (string, error) {
+	events, err := c.Events.PassEvents(ctx, owner)
+	if err != nil {
+		return "", err
+	}
+	if len(events) == 0 {
+		return "", ErrRegistrationBatchEvent
+	}
+	var now time.Time
+	if c.Now != nil {
+		now, err = c.Now(ctx)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		now = time.Now()
+	}
+	return passbooking.ClosestEvent(events, now), nil
 }

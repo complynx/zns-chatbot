@@ -15,7 +15,10 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 )
 
-const notificationPending = "pending"
+const (
+	notificationPending      = "pending"
+	passportNotificationKind = "passport_required"
+)
 
 // BeginNotification checks current domain eligibility before reserving shared pacing.
 // No domain or ledger lock is held while the adapter contacts Telegram.
@@ -32,6 +35,7 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 		return delivery.Admission{}, core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
+	s, clockAttempt := s.WithClockAttempt()
 	current, err := s.lockNotificationEligibility(ctx, tx, attempt.ID)
 	if err != nil {
 		return delivery.Admission{}, notificationAttemptError(err)
@@ -48,25 +52,26 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 	if row.DeliveryState != notificationPending || !row.LeaseLive {
 		return delivery.Admission{}, notificationStale()
 	}
-	if !current {
-		outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "notification_no_longer_current"}
-		if err = s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {
-			return delivery.Admission{}, err
-		}
-		return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
-	}
-	gate, err := delivery.Begin(
-		ctx,
-		tx,
-		s.Delivery,
-		notificationReference(attempt.ID),
-	)
+	current, err = s.currentPassportNotification(ctx, tx, row, current)
 	if err != nil {
 		return delivery.Admission{}, err
+	}
+	if !current {
+		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
+	}
+	gate, current, err := s.beginCurrentNotification(ctx, tx, attempt, row)
+	if err != nil {
+		return delivery.Admission{}, err
+	}
+	if !current {
+		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
 	}
 	if !gate.Ready {
 		outcome := delivery.Outcome{Kind: delivery.Deferred, Reason: gate.Reason}
 		if err = s.saveNotificationOutcome(ctx, q, attempt, outcome, "", gate.NotBefore, 0); err != nil {
+			return delivery.Admission{}, err
+		}
+		if err = clockAttempt.Check(ctx); err != nil {
 			return delivery.Admission{}, err
 		}
 		return gate, core.DatabaseOperationError(tx.Commit(ctx))
@@ -81,7 +86,72 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 	if count != 1 {
 		return delivery.Admission{}, notificationStale()
 	}
+	if err = clockAttempt.Check(ctx); err != nil {
+		return delivery.Admission{}, err
+	}
 	return gate, core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+func (s Service) currentPassportNotification(
+	ctx context.Context,
+	tx pgx.Tx,
+	row dbgen.LockNotificationAttemptRow,
+	current bool,
+) (bool, error) {
+	if !current || s.RegistrationClock == nil || row.Kind != passportNotificationKind {
+		return current, nil
+	}
+	// Event, recipient and exact attempt authority are already locked. Only the
+	// domain observation is renewed; no authority lock follows transport locks.
+	notice, err := s.livePassportReminder(ctx, tx, Notification{Owner: row.Owner})
+	return notice.Current, err
+}
+
+func (s Service) beginCurrentNotification(
+	ctx context.Context,
+	tx pgx.Tx,
+	attempt delivery.Attempt,
+	row dbgen.LockNotificationAttemptRow,
+) (delivery.Admission, bool, error) {
+	if s.RegistrationClock == nil || row.Kind != passportNotificationKind {
+		gate, err := delivery.Begin(ctx, tx, s.Delivery, notificationReference(attempt.ID))
+		return gate, true, err
+	}
+	// Expiry after a queue/pacing/fairness wait must discard reservations without
+	// releasing the event, recipient and attempt locks held by the outer tx.
+	reservation, err := tx.Begin(ctx)
+	if err != nil {
+		return delivery.Admission{}, false, core.DatabaseOperationError(err)
+	}
+	defer func() { _ = reservation.Rollback(ctx) }()
+	gate, err := delivery.Begin(ctx, reservation, s.Delivery, notificationReference(attempt.ID))
+	if err != nil {
+		return gate, false, err
+	}
+	current, err := s.currentPassportNotification(ctx, tx, row, true)
+	if err != nil {
+		return gate, false, err
+	}
+	if !current {
+		return gate, false, core.DatabaseOperationError(reservation.Rollback(ctx))
+	}
+	return gate, true, core.DatabaseOperationError(reservation.Commit(ctx))
+}
+
+func (s Service) cancelNotificationAdmission(
+	ctx context.Context,
+	tx pgx.Tx,
+	attempt delivery.Attempt,
+	clockAttempt *RegistrationClockAttempt,
+) (delivery.Admission, error) {
+	outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "notification_no_longer_current"}
+	if err := s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {
+		return delivery.Admission{}, err
+	}
+	if err := clockAttempt.Check(ctx); err != nil {
+		return delivery.Admission{}, err
+	}
+	return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 // CompleteNotification retains known wire outcomes even after eligibility changes.

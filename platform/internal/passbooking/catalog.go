@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
 type Event struct {
@@ -36,12 +37,20 @@ func (s Service) Events(ctx context.Context, actor string) ([]Event, error) {
 	if err := s.requireActor(ctx, actor); err != nil {
 		return nil, err
 	}
+	now, configured, err := registrationingress.Observe(ctx, s.RegistrationClock)
+	if err != nil {
+		return nil, err
+	}
+	var observed *time.Time
+	if configured {
+		observed = &now
+	}
 	rows, err := s.DB.Query(ctx, `WITH selected AS MATERIALIZED (
  SELECT e.id,e.finishes_at,e.passport_required,e.open_ended,e.display_order,
  (SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id) AS sales_start,
  octet_length(e.id)::bigint+octet_length(e.titles::text)+octet_length(e.short_titles::text)
  +octet_length(e.country_emoji) AS payload_bytes
- FROM core.pass_events e WHERE e.finishes_at>clock_timestamp()
+ FROM core.pass_events e WHERE e.finishes_at>COALESCE($3::timestamptz,clock_timestamp())
  ORDER BY COALESCE((SELECT min(starts_at) FROM core.pass_event_tiers WHERE event_id=e.id),
  '9999-12-31 23:59:59.999999+00'::timestamptz),display_order,e.id LIMIT $1
  ), bounded AS (
@@ -53,7 +62,7 @@ func (s Service) Events(ctx context.Context, actor string) ([]Event, error) {
  CASE WHEN b.oversized THEN '' ELSE e.country_emoji END,b.open_ended,b.oversized
  FROM bounded b JOIN core.pass_events e ON e.id=b.id
  ORDER BY COALESCE(b.sales_start,'9999-12-31 23:59:59.999999+00'::timestamptz),b.display_order,b.id`,
-		maxCatalogEvents+1, core.ReadResourceBytes)
+		maxCatalogEvents+1, core.ReadResourceBytes, observed)
 	if err != nil {
 		return nil, core.DatabaseOperationError(err)
 	}

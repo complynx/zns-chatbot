@@ -3,7 +3,6 @@ package passbooking
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -72,9 +71,9 @@ func (s Service) RefreshAdmissionTurnsInTx(ctx context.Context, tx pgx.Tx, event
 	if _, err := readEvent(ctx, tx, eventID); err != nil {
 		return err
 	}
-	var now time.Time
-	if err := tx.QueryRow(ctx, "SELECT clock_timestamp()").Scan(&now); err != nil {
-		return core.DatabaseOperationError(err)
+	now, err := registrationTurnTime(ctx, tx, s.RegistrationClock)
+	if err != nil {
+		return err
 	}
 	return refreshRegistrationTurns(ctx, tx, eventID, s.registrationRetention(), now)
 }

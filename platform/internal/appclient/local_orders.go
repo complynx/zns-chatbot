@@ -8,6 +8,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/applicationauth"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
+	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
 
 // LocalOrders is the typed boundary used when the order service shares the process.
@@ -41,6 +42,9 @@ func directOrder[T any](
 
 func orderApplicationError(err error) error {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if !core.IsDatabaseFailure(err) && errors.Is(err, passbooking.ErrRegistrationTimeChanged) {
 		return err
 	}
 	if _, known := errors.AsType[*core.ProblemError](err); known {

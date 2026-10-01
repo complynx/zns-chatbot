@@ -46,6 +46,9 @@ func run() error {
 	if len(os.Args) != commandArgCount {
 		return fmt.Errorf("usage: zns app|api|bot|fake|model|migrate|fixture|product-fixture|export-fixture|health")
 	}
+	if err := rejectRegistrationClockMode(os.Args[1]); err != nil {
+		return err
+	}
 	cfg, err := loadConfig(os.Args[1])
 	if err != nil {
 		return err
@@ -78,24 +81,48 @@ func runCommand(
 	logger *slog.Logger,
 	cfg config.Config,
 	runtime *observability.Runtime,
+) error {
+	return runCommandWithDatabase(ctx, os.Args[1], logger, cfg, runtime, openRuntimeDatabase)
+}
+
+func runCommandWithDatabase(
+	ctx context.Context,
+	command string,
+	logger *slog.Logger,
+	cfg config.Config,
+	runtime *observability.Runtime,
+	openDatabase func(context.Context, config.Config, *observability.Runtime) (*pgxpool.Pool, error),
 ) (result error) {
-	if os.Args[1] == "model" {
+	registrationClock, clockConfigured, clockErr := preflightRegistrationClock(ctx, command, cfg)
+	if clockErr != nil {
+		return clockErr
+	}
+	if command == "model" {
 		return runModel(ctx, logger, cfg, runtime)
 	}
 	var db *pgxpool.Pool
 	defer func() { result = errors.Join(result, closeRuntime(ctx, cfg, runtime, db)) }()
 	var e error
-	db, e = openRuntimeDatabase(ctx, cfg, runtime)
+	db, e = openDatabase(ctx, cfg, runtime)
 	if e != nil {
 		return e
 	}
 	if e = runtime.RegisterPool(db); e != nil {
 		return e
 	}
+	if clockConfigured {
+		if e = registrationClockDatabaseGuard(ctx, db, registrationClock.config); e != nil {
+			return e
+		}
+	}
 	work := func(owned context.Context) error {
+		if clockConfigured {
+			signer := identity.Signer{Key: []byte(cfg.Auth.SigningKey.Value())}
+			return runAppWithClock(owned, db, signer, logger, cfg, runtime, registrationClock)
+		}
 		return runDatabaseCommand(owned, logger, cfg, runtime, db)
 	}
-	if role, admitted := commandRole(os.Args[1]); admitted {
+	if role, admitted := commandRole(command); admitted {
 		admission, configErr := admissionConfig(db)
 		if configErr != nil {
 			return configErr
