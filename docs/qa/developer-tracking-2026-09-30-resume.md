@@ -2,7 +2,7 @@
 
 ## Current routing and Git transition
 
-Fresh requests through262, next263. All authorship/routes Codex under override;
+Fresh requests through270, next271. All authorship/routes Codex under override;
 Claude remains unavailable and unprobed. Historical snapshots below are superseded.
 
 | Request | Scope | Result |
@@ -163,3 +163,27 @@ Runtime14 transferred after QA261. First real PG17.11 roles/bootstrap/7operator-
 Codex authored complete model-interruption controls df5199ada7eb192b5f613270b392b24d86ca4b16 based33540321, exact10 paths. Route Codex under user override, Claude unprobed. Developer local gates passed; root native58441 two PG cases passed with unchanged parent DB inventory. Fresh independent read-only review receives original requirements and complete immutable base/final scope only; not this tracking record or author findings. Full F08/UI acceptance separate. Next263.
 
 Request262 actual route: builtin fresh spawn rejected at thread limit; standalone fresh read-only Codex CLI v0.159.2 defaultgpt-6.1-sol medium started03:39UTC, session60022, session UUID01a0f58b-5a01-7a61-9911-ac96eba50ce1. Original scope/full immutable diff only, no implementer gate history; reviewer sandboxreadonly/approvalnever. Own local final output copied to report only after terminal; no Claude. Native2PG PASS3.83s+5.78s/package10.16s with unchanged parent DBnames.
+
+QA262 terminalCLIexit0 with verdictFAIL2 P2: nested HTTP-write lock and provider-lifetime/release race. New same10 correction assigned author; no merge. Request263 allocated BEFORE dispatch: complete C clock scope28 (27changedplusunchanged admission_retention.go), immutable1ae917ea0d26fd1433591e6149391e6ff7053d64/base33540321; all final developercodegates terminalPASS, external child observer receipt still finalizing withoutsourcechanges. Route standalone fresh read-only CodexCLI under override; no history/findings/tracking to reviewer. Next264.
+
+Request264 allocatedbeforedispatch: fresh complete stand/runtime scope14 immutable2a9db43076f4cce3e2c5edfb9f1a87420efdc0b8/base460ab86b. Codexauthored, CodexreadonlyCLI underoverride. FinalactualLinuxPGroles/persistence/inventory/negativeguard+configlintfmtComposeallPASS, ownedresourcesclean. No managedC204/FQA; operator5successor stillrequired. Reviewerreceivesoriginalfullscopeonly. Next265.
+
+Request265 allocatedbeforedispatch: fresh complete paymentretirement6 immutable8ff0a709de6ac9b865c632950e434192cb65bbb6/base460ab86b. AuthorCodex/routefreshreadonlyCodexCLIoverride. AllofflinegatesPASS; rootnative88377 fullunion9top-level/22PASSevents/0FAILSKIP/package121.698 and unchangedparentDBinventory. No editsafterPGPASS. Originalrequirements/fullimmutable6 only, no author report/history. Runtime14 is QA264; next266.
+
+QA263 terminalreadonlyCLI4770 exit0 verdictFAIL5 (runtimeidentity/nonwritablefilesystem/parentmetadataguard/manualselection/allregistrationeligibility). Currentauthorassignedread-onlyexactscopeproposalbeforeproductchanges; immutable1ae preserved and previous scopedPGPASS notfeatureacceptance. Requests264runtime14 and265payment6 areactualreadonlyCLI44434/44748 running; next266. AllCodexoverride.
+
+QA264 PASSfull14 mergedbd150d5b conflictfree, root3top-level fixtures+subcases12PASSevents/0FAILSKIP packages. QA265NOTPASS2 P2 cross-event live card deletion and same-message supersession; exactscope7 approved existingtypes.go added, no schema/receiptedit. Cscope40 approved9existingproduct+3tests beyondoriginal28, newworktree c-clock-boundary-fix. Request266 allocatedBEFOREdispatch complete10model successor80d0ec727702898352eb5ba0cec241520391426a/base460ab86b. Units/race/pinnedfmtlint/build passed, rootactual2PG1.18s3.21s/package4.672 and unchangedDBinventoryPASS; sourceclean. Codexauthor/freshreadonlyCodexCLIoverride, fulloriginalrequirements no priorfindings/history. Next267.
+
+QA266 terminal readonly CLI79746 FAIL2 (claim ownership and cancellable control installation). Old80d0/df519 immutable; repeated failures transferred to fresh Codex CLI developer37303, isolated model-interruption-owner-fix full10 only, basedbd150. No Claude probing. Payment7 actual root52182 full12 top-level29PASS events/0FAILSKIP92.881s identical parentDBnames; final commit pending. C40 final20e936 gates underway. Next267 remains unallocated.
+
+Request267 allocated before dispatch: complete payment7 immutablec5e770e7f4a7a2cdbf333a1c23f80726270ef37a/basebd150d5b1b6f91977d1597686e889543dab22330. Codex author and fresh standalone readonly Codex CLI route under override; full original requirements and immutable diff only, no previous findings or tracking. Root full12 native PASS92.881s, source unchanged and clean. Next268.
+
+Request268 allocated BEFORE dispatch: fresh developer complete10 immutablef2720ebb2e7f497042817ef8454ccea1bd56c69c/basebd150d5b1b6f91977d1597686e889543dab22330. Full author unit/race/pinnedlintfmt/build gates PASS, root70273 exact2PG2.24s3.82s/package6.282s0FAILSKIP and identical DBnames. Codex authorship/fresh readonly standalone Codex CLI override; original full scope only, no findings/tracking/authorreports. Next269.
+
+QA267 terminal CLI70176 FAIL1 revoked can_book unavailable-card fallback Send; after repeated returns transferred fresh menu_retirement_fix isolated payment-unavailable-context-fix scope7. QA268 terminal CLI44874 FAIL2 durable consumption ordering and expired completion barrier; f272 preserved originalbranch, corrective codex/model-consumption-durable-fix freshCLI54485 owns same10, no credentials/PG. Next269 not allocated; allCodexoverride.
+
+Request269 allocated BEFORE dispatch: fresh full40 Cclock immutable93cab98916ae3e49e1b90be20320d3786a15dde5/basebd150d5b1b6f91977d1597686e889543dab22330,39changed plus existing unchangedadmission_retention.go. All final authoractualLinux startup/RO/race/clock6/default19/supplementalnilclock14PG gates terminal0 no LinuxFAILSKIP; Windowsunitfmtlintbothtargets/build/sqlc clean withexistingWindowsDB/OSskips explicit. Fresh standalone readonly CodexCLIoverride, originalscope only no authorreports/findings/tracking/history. Next270.
+
+QA269terminal CLI86645 FAIL3: writable mountalias boundary, passport postprofilelock time, announcement postattemptlock time. After repeated263/269 returns transferred fresh clock_final_boundary_developer (existing payment_card_developer nownewclockassignment) isolated newworktree full40 scope, original93/1ae/3345 protected. No Claude or reviewerhintleak; next270 unallocated. Operatorpreparation5 completed read-only. Parity inventory assigned separate sourceanalysis, not formalQA.
+
+Request270 allocatedBEFOREdispatch: complete10 immutable482214b48161b368246dbcc8abf673f130da5668/basebd150d5b1b6f91977d1597686e889543dab22330. Codex author freshreadonly standalone CodexCLIoverride, allauthorunits/race/pinnedfmtlint/build terminalPASS, root68525 actualoriginal2PG plus immediate_reboot/later_save_then_reboot bothPASS/package7.952s0FAILSKIP;10rawhashes and identicalparentDBsnapshots verified, sourceclean. Originalscopeonly no priorfindings/tracking/authorreports. Next271.

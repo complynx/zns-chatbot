@@ -40,6 +40,8 @@ type Fake struct {
 	menu             telegramMenuState
 	menuFailure      *menuFault
 	modelFixtures    modelFixtures
+	modelControl     *modelFixtureControl
+	modelConsumed    []modelConsumption
 	MiniAppURL       string
 	mu               sync.Mutex
 	next             int64
@@ -55,17 +57,18 @@ type Fake struct {
 }
 
 type snapshot struct {
-	Menu     telegramMenuState           `json:"Menu"`
-	Stickers map[string]telegram.Sticker `json:"Stickers,omitempty"`
-	Blocked  map[int64]bool              `json:"Blocked,omitempty"`
-	Next     int64                       `json:"Next"`
-	Updates  []telegram.Update           `json:"Updates"`
-	Messages []telegram.Message          `json:"Messages"`
-	Edits    int                         `json:"Edits"`
+	ModelConsumed *modelConsumptionSnapshot   `json:"ModelConsumed,omitempty"`
+	Menu          telegramMenuState           `json:"Menu"`
+	Stickers      map[string]telegram.Sticker `json:"Stickers,omitempty"`
+	Blocked       map[int64]bool              `json:"Blocked,omitempty"`
+	Next          int64                       `json:"Next"`
+	Updates       []telegram.Update           `json:"Updates"`
+	Messages      []telegram.Message          `json:"Messages"`
+	Edits         int                         `json:"Edits"`
 }
 
 func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
-	f := &Fake{DB: db, Token: token}
+	f := &Fake{DB: db, Token: token, modelControl: newModelFixtureControl(ctx)}
 	var raw []byte
 	if db == nil {
 		return f, f.enableEditDelay(ctx)
@@ -79,6 +82,9 @@ func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
 	}
 	var s snapshot
 	if e = json.Unmarshal(raw, &s); e != nil {
+		return nil, e
+	}
+	if e = f.restoreModelConsumption(s.ModelConsumed); e != nil {
 		return nil, e
 	}
 	f.next = s.Next
@@ -98,13 +104,14 @@ func (f *Fake) save(ctx context.Context) error {
 	}
 	raw, e := json.Marshal(
 		snapshot{
-			Menu:     f.menu,
-			Next:     f.next,
-			Updates:  f.updates,
-			Messages: f.messages,
-			Edits:    f.edits,
-			Blocked:  f.blocked,
-			Stickers: f.stickers,
+			ModelConsumed: f.modelConsumptionSnapshot(),
+			Menu:          f.menu,
+			Next:          f.next,
+			Updates:       f.updates,
+			Messages:      f.messages,
+			Edits:         f.edits,
+			Blocked:       f.blocked,
+			Stickers:      f.stickers,
 		},
 	)
 	if e != nil {
@@ -119,6 +126,11 @@ func (f *Fake) save(ctx context.Context) error {
 }
 
 func (f *Fake) Handler() http.Handler {
+	f.mu.Lock()
+	if f.modelControl == nil {
+		f.modelControl = newModelFixtureControl(context.Background())
+	}
+	f.mu.Unlock()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

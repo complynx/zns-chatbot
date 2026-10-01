@@ -254,3 +254,120 @@ QA255 independently passed the five-path fixed-role candidate67206220. Root
 merged it without conflicts as102072a0; focused sandbox/command tests passed.
 The four fixed actions are now integrated source, still absent from sealedce427
 images. Template preparation and future stand installation do not certify FQA.
+
+## Private-role suite remains separately allocated
+
+Reviewed bd150 runtime14 adds TestRegistrationPrivateRoleComposition requiring
+five private REGISTRATION_ROLE_TEST_*_URL endpoints: ADMIN/OWNER/OPERATOR/FAKE/
+INVENTORY. It changes cluster role memberships/privileges and DB/table ownership
+to prove guard rejection. Native58441/58451 receive neither private roles nor
+fixture data. Proposed fresh58461 cluster owns this suite; separate proposed58471
+owns the original registration integration case that DROPs schemas/fixture/
+migration tables. No preparation or resource action was taken by this note.
+
+Next-batch plan records exact environment/owner/ACL/raw runtime-roles file/layout
+requirements, original package/shard membership and Linux/mount/provider/live
+stand prerequisites. Full unfiltered other-platform, eight integration manifest
+union and importer remain covered through final Go discovery plus qualified
+supplemental receipts; no silent skips or source-scan-only acceptance. All future
+special-cluster creation/role bootstrap and writers require explicit assignment.
+Prepared native parents, developer55432 and ce427 remain preserved. This is
+planning, not role composition execution or FQA acceptance.
+
+## Actual bare special clusters58461 and58471
+
+Root explicitly authorized both separate clusters; lead was sole setup writer.
+Fresh native ports and full Docker name/network/volume inventory had no conflicts;
+cached RepoDigest matched. Only these projects/resources were created through
+their ignored local Compose files, with no other stand or shared role mutation.
+
+| Handle | Role composition58461 | Destructive fixture58471 |
+| --- | --- | --- |
+| Project prefix | synthetic-qa-zns-registration-role-test-20261001 | synthetic-qa-zns-registration-fixture-test-20261001 |
+| Container suffix | -postgres-1 | -postgres-1 |
+| Container ID | f39280bdf0010a672baeed1e89ec8cadf6114f129206648873fd67723d5f25de | 5fb9ae2d49552c1a31a17084e180fb2963dc5b5d791aa638b3de135a348bb892 |
+| Network suffix | -host | -host |
+| Network ID | 01d972ed842967ef97e10e6eb1c106a84b1e9837c04cd90c1e20a597768f2321 | f0a5a88e7ed5a53b628a24c17ef90dae17298c8c61bab3bfaceb0a9b4645a0a4 |
+| Volume suffix | -pgdata | -pgdata |
+| Native endpoint | 127.0.0.1:58461 | 127.0.0.1:58471 |
+
+Each prefix+suffix is its actual full resource name. Each network contains only
+its own container; pgdata is the sole RW mount at /var/lib/postgresql/data.
+Labels: synthetic=true, owner=fqa_lead and registration-role-test or
+registration-fixture-test purpose. Each actual Config.Image/ImageID/RepoDigests
+matches postgres@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24;
+limits1CPU/768MiB/256MiBshm, restart=no, loopback-only publication. Both healthy.
+Database name on both distinct servers: synthetic_qa_zns_registration_fixture,
+owned by nonprivileged zns_app. Native authenticated pgx ADMIN and OWNER reads
+verified PostgreSQL17.11, current_user postgres/zns_app respectively, exact
+endpoint and DB owner. Product schema count and public table count both zero.
+
+58461 bare roles: zns_app, zns_meter, zns_fake, zns_registration_operator,
+zns_inventory. All LOGIN; superuser/CREATEDB/CREATEROLE/replication/bypassRLS false.
+Inventory alone has pg_read_all_stats membership and default read-only; app/fake/
+operator have no memberships.58471 bare roles: zns_app,zns_api,zns_bot,zns_meter,
+same unprivileged LOGIN flags. Database CONNECT grants and owning app role were
+bootstrapped only. No product migrations, schemas, data, fixture/clock markers,
+runtime ACL SQL or tests were applied. No other clients at final readback.
+
+Private bundles (each ignored, protected ACL, exactly one owner FullControl rule):
+
+- qa.local/registration-role-test-20261001/private-owner.json, SHA256
+  `3CDAC901F4921316D4E42D0C11B61C7E6D2ECCE9F8A6648B5E7CE713A3EE92BA`.
+- qa.local/registration-fixture-test-20261001/private-owner.json, SHA256
+  `9106E9935F7E15BB5C8EE2195E98728CF630058AD0CA869462D9DBC697541C37`.
+
+Format KEYS ONLY: origin,host,port,database,credentials,urls. Credentials keys
+include postgres plus the exact respective bare roles above. Role URL keys:
+ADMIN,OWNER,OPERATOR,FAKE,INVENTORY; fixture URL keys: ADMIN,OWNER,API,BOT,METER.
+All credentials newly generated independently by the lead this setup with local
+cryptographic randomness, synthetic only; no external credential source. Admin
+secret enters Compose runtime environment, role definitions private psql stdin;
+no password argv/output/Git. Setup approved command was
+qa.local/registration-prerequisites-20261001/setup.ps1, require_escalated,
+terminal session78410. Bootstrap/source inspection epoch is bd150d5b; this is
+bare-role preparation, not final product source/migration execution authority.
+
+Public receipts: respective qa.local/registration-*-test-20261001/setup-receipt.json,
+SHA256 role `4823ACAEA1975D88870B44B1A063F271C009E1A0118120CD88CA16F829D65480`,
+fixture `011100D081FD187BDB0743D3DB3A7CD76037521A057368F1307C24A40052A884`.
+Complete sanitized precreation inventory and native JSONL readback are under
+qa.local/registration-prerequisites-20261001. Helper raw SHA256
+`02520DCE8F427AB71999EBC8FE6D7E31C7309E4D6D98B28E5A28CF4F4841538D`;
+setup script raw SHA256
+`220B9297CFD0780E20EF2504B9562EF6BBAABD5E7F9541CC0FD2194F77FCF936`.
+
+Safe root-owned runtime readback invocation, from platform directory, after
+coordination with the assigned writer: set REGISTRATION_PRIVATE_ROOT to the
+absolute repository qa.local directory; own GOCACHE/GOWORKoff/local Go/readonly
+modules; `go run ../qa.local/registration-prerequisites-20261001/native-readback.go`;
+remove the private-root setting afterward. This previously approved helper reads
+only its own two newly generated synthetic bundles, validates exact endpoints,
+and outputs ownership/count/version metadata, never credentials. It is not a
+secret-printing probe or permission to target another cluster. Test assignment
+will map private URL keys into the exact environment settings separately.
+
+Setup terminal; lead releases both clusters to root, preserving healthy idle
+bare state. Root assigns final immutable codegate/test windows before migrations
+or fixture/test writes. Lifecycle remains lead-managed: no unassigned restart,
+rebuild, bootstrap or consumer.58441/58451, retained fixture DB, C204, developer
+55432 and ce427 were untouched. This is readiness of bare prerequisites only,
+not private-role test PASS, Functional QA or final acceptance.
+
+Final shard orchestration is now specified in the next-batch plan: actual
+per-package Go-listed runnable names, ordinal sorting/index modulo8, complete
+module/package/OS unions and pairwise disjoint manifests. Native A owns58441/even
+shards/full other-platform plus role61; B owns58451/odd shards/full importer.
+Original fixture71 ownership goes to its actual discovered shard owner only in
+an explicit window. Provider native8090 is a single lead-controlled reservation;
+Linux/RO-RW/provider/lifecycle qualifications need separate scoped runner and
+stand contracts. No final manifests/source/writers are certified from the current
+checkpoint. No tests or database/credential/resource changes were performed for
+this orchestration note.
+
+Actual checkpoint187319ce Go list-only metadata found platform2187 runnable
+parents/63 test-bearing packages, integration1060 and importer136/2. Current
+ordinal modulo8 preliminary shard hashes and exact special selectors are recorded
+in next-batch plan. No test functions, database/credentials or resource lifecycle
+actions were invoked; only metadata compilation used the lead's existing cache.
+Final source remains unfrozen and requires new full discovery before assignments.
