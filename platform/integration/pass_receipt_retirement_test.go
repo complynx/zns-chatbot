@@ -2,13 +2,16 @@ package integration_test
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
@@ -25,6 +28,16 @@ func TestPassCleanupPreservesNewerSameTargetManualPayload(t *testing.T) {
 			runPassCleanupNewerPayload(t, origin)
 		})
 	}
+}
+
+func TestPassCleanupRechecksConcurrentManualFinishAfterLaneLock(t *testing.T) {
+	t.Parallel()
+	runPassCleanupNewerPayload(t, "concurrent_manual")
+}
+
+func TestPassCleanupPreservesParentAfterCapabilityRegrant(t *testing.T) {
+	t.Parallel()
+	runPassCleanupNewerPayload(t, "regrant")
 }
 
 func runPassCleanupNewerPayload(t *testing.T, origin string) {
@@ -54,20 +67,23 @@ func runPassCleanupNewerPayload(t *testing.T, origin string) {
 	require.False(t, sent.ContinuationDone)
 	require.Equal(t, target, sent.MessageID)
 	require.Equal(t, "proof_accept", sent.Receipt.Pass.Capability)
-	if origin == "manual" {
-		require.NoError(t, f.b.Handle(t.Context(), message(73102, 101, "/passes")))
-	} else {
+	if origin == "home" {
 		newRun := runPassVM(t, f, 73102, 101, "Show my pass independently",
 			`return tools.passes.registration.show({event:"dance",view:"home"});`)
 		require.Empty(t, newRun.Error)
+	} else if origin != "regrant" {
+		require.NoError(t, f.b.Handle(t.Context(), message(73102, 101, "/passes")))
 	}
-	manual := pendingPassReceipt(t, f)
-	if origin == "manual" {
-		require.Nil(t, manual.Reference.Source)
-	} else {
-		require.NotNil(t, manual.Reference.Source)
+	var manual botdelivery.Intent
+	if origin != "regrant" {
+		manual = pendingPassReceipt(t, f)
+		if origin != "home" {
+			require.Nil(t, manual.Reference.Source)
+		} else {
+			require.NotNil(t, manual.Reference.Source)
+		}
+		require.Equal(t, target, manual.Target)
 	}
-	require.Equal(t, target, manual.Target)
 	_, err = f.db.Exec(t.Context(), `DELETE FROM core.pass_payment_admins WHERE event_id='dance' AND owner='alice'`)
 	require.NoError(t, err)
 	require.NoError(t, f.b.DeliverBotIntent(t.Context(), original.QueueReference()))
@@ -77,6 +93,28 @@ func runPassCleanupNewerPayload(t *testing.T, origin string) {
  WHERE reference->>'family'=$1 AND target_message_id=$2`, botdelivery.PassReceiptRedactionFamily, target).
 		Scan(&operation, &effect))
 	cleanup := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+	if origin == "regrant" {
+		_, err = f.db.Exec(t.Context(), `INSERT INTO core.pass_payment_admins(event_id,owner) VALUES('dance','alice')`)
+		require.NoError(t, err)
+		card := passMenuCard(t, f, 101)
+		var before, after string
+		callbacks := `SELECT COALESCE(string_agg(to_jsonb(b)::text,'|' ORDER BY token),'') FROM bot.pass_buttons b WHERE owner='alice'`
+		require.NoError(t, f.db.QueryRow(t.Context(), callbacks).Scan(&before))
+		require.NoError(t, f.b.DeliverBotIntent(t.Context(), cleanup))
+		require.NoError(t, f.b.DeliverBotIntent(t.Context(), cleanup))
+		require.Equal(t, card, passMenuCard(t, f, 101))
+		require.NoError(t, f.db.QueryRow(t.Context(), callbacks).Scan(&after))
+		require.Equal(t, before, after)
+		current, readErr := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, cleanup, false)
+		require.NoError(t, readErr)
+		require.Equal(t, delivery.Cancelled, current.State)
+		require.Zero(t, current.Attempt)
+		return
+	}
+	if origin == "concurrent_manual" {
+		assertPassCleanupConcurrentFinish(t, f, manual, cleanup, target)
+		return
+	}
 	require.NoError(t, f.b.DeliverBotIntent(t.Context(), cleanup))
 	// FIFO admits the queued manual card first; cleanup cannot edit the old parent yet.
 	beforeManual, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, cleanup, false)
@@ -107,6 +145,132 @@ func runPassCleanupNewerPayload(t *testing.T, origin string) {
 	)
 	require.Equal(t, actualManual.Receipt.ViewHash, hash)
 	require.NoError(t, f.b.Handle(t.Context(), aliceCallback(73103, target, newCard.Markup.Rows[0][0].Data)))
+}
+
+func assertPassCleanupConcurrentFinish(t *testing.T, f *fixture, manual botdelivery.Intent,
+	cleanup delivery.Reference, target int64,
+) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	wire, allowFinish, lane, allowLane := make(
+		chan struct{},
+	), make(
+		chan struct{},
+	), make(
+		chan struct{},
+	), make(
+		chan struct{},
+	)
+	var finishOnce, laneOnce sync.Once
+	releaseFinish := func() { finishOnce.Do(func() { close(allowFinish) }) }
+	releaseLane := func() { laneOnce.Do(func() { close(allowLane) }) }
+	defer releaseFinish()
+	defer releaseLane()
+	f.b.TG.HTTP = &http.Client{Transport: passDeliveryTransport(func(request *http.Request) (*http.Response, error) {
+		response, err := http.DefaultTransport.RoundTrip(request)
+		if err == nil && strings.HasSuffix(request.URL.Path, "/editMessageText") {
+			close(wire)
+			select {
+			case <-allowFinish:
+			case <-ctx.Done():
+				return response, ctx.Err()
+			}
+		}
+		return response, err
+	})}
+	manualDone := make(chan error, 1)
+	go func() { manualDone <- f.b.DeliverBotIntent(ctx, manual.QueueReference()) }()
+	select {
+	case <-wire:
+	case <-ctx.Done():
+		t.Fatal("manual transport did not reach completion barrier")
+	}
+	observed, err := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, cleanup, false)
+	require.NoError(t, err)
+	config := f.db.Config()
+	var traceOnce sync.Once
+	config.ConnConfig.Tracer = retirementCompletionTracer{before: func(query pgx.TraceQueryStartData) {
+		if strings.Contains(query.SQL, "SELECT next_sequence FROM core.delivery_lanes") {
+			traceOnce.Do(func() {
+				close(lane)
+				select {
+				case <-allowLane:
+				case <-ctx.Done():
+				}
+			})
+		}
+	}}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	defer func() {
+		releaseLane()
+		releaseFinish()
+		cancel()
+		pool.Close()
+	}()
+	service := botdelivery.Service{DB: pool, Delivery: f.b.Delivery}
+	cleanupDone := make(chan error, 1)
+	go func() {
+		_, beginErr := service.Begin(ctx, botdelivery.BeginRequest{Observed: observed, Target: target})
+		cleanupDone <- beginErr
+	}()
+	select {
+	case <-lane:
+	case <-ctx.Done():
+		t.Fatal("cleanup did not reach lane barrier")
+	}
+	// Finish uses the real intent/lane transaction while cleanup has only its
+	// earlier domain locks. Receipt continuation may wait until cleanup rolls back.
+	releaseFinish()
+	require.Eventually(t, func() bool {
+		current, readErr := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, manual.QueueReference(), false)
+		return readErr == nil && current.State == delivery.Succeeded
+	}, 10*time.Second, 10*time.Millisecond)
+	before := passAdmissionSnapshot(t, f)
+	card := passMenuCard(t, f, 101)
+	releaseLane()
+	select {
+	case err = <-cleanupDone:
+		require.ErrorContains(t, err, "pass_receipt_changed")
+	case <-ctx.Done():
+		t.Fatal("cleanup did not release its transaction")
+	}
+	require.Equal(t, before, passAdmissionSnapshot(t, f), "lane, pacing, fairness and queue admission rolled back")
+	select {
+	case err = <-manualDone:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		t.Fatal("manual continuation did not complete")
+	}
+	f.b.TG.HTTP = nil
+	current, err := botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, cleanup, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Deferred, current.State)
+	require.Zero(t, current.Attempt)
+	require.NoError(t, f.b.DeliverBotIntent(ctx, cleanup))
+	require.NoError(t, f.b.DeliverBotIntent(ctx, cleanup))
+	current, err = botdelivery.Read(ctx, f.db, f.b.Delivery.BotID, cleanup, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Cancelled, current.State)
+	require.Zero(t, current.Attempt)
+	require.Equal(t, card, passMenuCard(t, f, 101))
+	var callbacks int
+	require.NoError(t, f.db.QueryRow(ctx, `SELECT count(*) FROM bot.pass_buttons WHERE owner='alice' AND revision=$1`,
+		manual.Reference.Revision).Scan(&callbacks))
+	require.Positive(t, callbacks)
+}
+
+func passAdmissionSnapshot(t *testing.T, f *fixture) string {
+	t.Helper()
+	var snapshot string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT COALESCE(string_agg(value,'|' ORDER BY value),'') FROM (
+ SELECT 'lane:'||to_jsonb(l)::text AS value FROM core.delivery_lanes l WHERE bot_id=$1
+ UNION ALL SELECT 'pacing:'||to_jsonb(p)::text FROM core.delivery_pacing p WHERE bot_id=$1
+ UNION ALL SELECT 'fairness:'||to_jsonb(f)::text FROM core.delivery_fairness f WHERE bot_id=$1
+ UNION ALL SELECT 'queue:'||to_jsonb(q)::text FROM core.delivery_queue q WHERE bot_id=$1
+) snapshots`, f.b.Delivery.BotID).Scan(&snapshot))
+	return snapshot
 }
 
 func pendingPassReceipt(t *testing.T, f *fixture) botdelivery.Intent {

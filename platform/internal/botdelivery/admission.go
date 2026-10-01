@@ -115,7 +115,7 @@ func (s Service) lockPayloadSources(
 		return nil
 	}
 	if i.Reference.Family == PassReceiptRedactionFamily {
-		return s.lockPassReceiptRedaction(ctx, tx, i)
+		return s.lockPassReceiptRedaction(ctx, tx, i, retained)
 	}
 	f, refs, binding, viewStale, err := s.payloadFamily(ctx, tx, i, exportEvents, renderedPass...)
 	if err != nil {
@@ -212,10 +212,16 @@ func (s Service) begin(
 		return current, false, nil
 	}
 	current = bindAdmittedPass(current, pass)
-	return s.beginAttempt(ctx, tx, current, target)
+	return s.beginAttempt(ctx, tx, current, target, previous)
 }
 
-func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, target int64) (Intent, bool, error) {
+func (s Service) beginAttempt(
+	ctx context.Context,
+	tx pgx.Tx,
+	current Intent,
+	target int64,
+	previous *Intent,
+) (Intent, bool, error) {
 	var err error
 	if current.Reference.Kind == CardIntent {
 		var pendingReceipt bool
@@ -235,6 +241,9 @@ func (s Service) beginAttempt(ctx context.Context, tx pgx.Tx, current Intent, ta
 	}
 	if !admission.Ready {
 		return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
+	}
+	if err = s.validatePassRetirementTarget(ctx, tx, current, previous); err != nil {
+		return current, false, err
 	}
 	current.Attempt++
 	current.State = delivery.Sending
@@ -346,8 +355,12 @@ func (s Service) validatePayloadSource(
 			return passMenuDenied(i, err)
 		}
 	}
-	if err = fence.LockGeneration(ctx, tx, i.Owner, i.Reference.Generation); err != nil {
-		return passMenuDenied(i, err)
+	// A successful manual card has current domain authority. Its render generation
+	// does not bind that materialization to unrelated conversation history.
+	if i.Reference.Source != nil || !validPassReceipt(i) {
+		if err = fence.LockGeneration(ctx, tx, i.Owner, i.Reference.Generation); err != nil {
+			return passMenuDenied(i, err)
+		}
 	}
 	if viewStale || (i.Reference.Family == familyPasses && f.menu.Redacted) {
 		return ErrStale

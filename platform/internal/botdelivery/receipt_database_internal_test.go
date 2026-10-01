@@ -114,12 +114,12 @@ func TestAdmissionSQLBoundariesPreserveProvenance(t *testing.T) {
 			return (Service{}).lockPayloadActors(ctx, tx, Intent{Owner: "alice"}, nil, &familyRead{})
 		}},
 		{"pending_receipt", func(ctx context.Context, tx admissionSQLFailure) error {
-			_, _, err := (Service{}).beginAttempt(ctx, tx, Intent{Reference: Reference{Kind: CardIntent}}, 0)
+			_, _, err := (Service{}).beginAttempt(ctx, tx, Intent{Reference: Reference{Kind: CardIntent}}, 0, nil)
 			return err
 		}},
 		{"pending_commit", func(ctx context.Context, tx admissionSQLFailure) error {
 			tx.pending = true
-			_, _, err := (Service{}).beginAttempt(ctx, tx, Intent{Reference: Reference{Kind: CardIntent}}, 0)
+			_, _, err := (Service{}).beginAttempt(ctx, tx, Intent{Reference: Reference{Kind: CardIntent}}, 0, nil)
 			return err
 		}},
 		{"pass_view", func(ctx context.Context, tx admissionSQLFailure) error {

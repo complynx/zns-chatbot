@@ -123,7 +123,7 @@ func (s Service) enqueuePassReceiptRedaction(ctx context.Context, tx pgx.Tx, par
 
 // Only a receipt-created immutable row can authorize this source-free notice.
 // The original receipt supplies owner, chat, revision and retained source identity.
-func (s Service) lockPassReceiptRedaction(ctx context.Context, tx pgx.Tx, i Intent) error {
+func (s Service) lockPassReceiptRedaction(ctx context.Context, tx pgx.Tx, i Intent, actual *Intent) error {
 	if i.Phase != phaseEdit || i.Target <= 0 || i.Target != i.Reference.Version {
 		return ErrBinding
 	}
@@ -145,7 +145,7 @@ func (s Service) lockPassReceiptRedaction(ctx context.Context, tx pgx.Tx, i Inte
 		!reflect.DeepEqual(i.Reference, passReceiptRedactionReference(parent, i.Target)) {
 		return ErrBinding
 	}
-	if err = s.lockPassRetirementTarget(ctx, tx, i, parent); err != nil {
+	if err = s.lockPassRetirementTarget(ctx, tx, i, parent, actual); err != nil {
 		return err
 	}
 	var chat int64
@@ -161,24 +161,32 @@ func (s Service) lockPassReceiptRedaction(ctx context.Context, tx pgx.Tx, i Inte
 
 // A delayed cleanup owns a target only while its actual payload is denied.
 // Discovery stays ahead of intent and delivery-lane locks.
-func (s Service) lockPassRetirementTarget(ctx context.Context, tx pgx.Tx, cleanup, parent Intent) error {
-	actual, err := s.latestPassReceipt(ctx, tx, parent, cleanup.Target)
-	if err != nil {
-		return err
-	}
-	if sameReceipt(*actual, parent) {
-		return nil
-	}
-	denied, err := s.passReceiptDenied(ctx, tx, *actual)
-	if err != nil {
-		return err
+func (s Service) lockPassRetirementTarget(
+	ctx context.Context,
+	tx pgx.Tx,
+	cleanup, parent Intent,
+	actual *Intent,
+) error {
+	if actual == nil {
+		return ErrBinding
 	}
 	latest, err := s.latestPassReceipt(ctx, tx, parent, cleanup.Target)
 	if err != nil {
 		return err
 	}
 	if !sameReceipt(*latest, *actual) {
-		return &core.ProblemError{Status: http.StatusServiceUnavailable, Code: "pass_receipt_changed"}
+		return passReceiptChanged()
+	}
+	denied, err := s.passReceiptDenied(ctx, tx, *actual)
+	if err != nil {
+		return err
+	}
+	latest, err = s.latestPassReceipt(ctx, tx, parent, cleanup.Target)
+	if err != nil {
+		return err
+	}
+	if !sameReceipt(*latest, *actual) {
+		return passReceiptChanged()
 	}
 	if !denied {
 		return ErrStale
@@ -186,6 +194,29 @@ func (s Service) lockPassRetirementTarget(ctx context.Context, tx pgx.Tx, cleanu
 	_, err = tx.Exec(ctx, `DELETE FROM bot.pass_buttons WHERE owner=$1 AND revision=$2 AND token=ANY($3)`,
 		actual.Owner, actual.Receipt.Revision, actual.Receipt.Tokens)
 	return core.DatabaseOperationContextError(ctx, err)
+}
+
+func passReceiptChanged() error {
+	return &core.ProblemError{Status: http.StatusServiceUnavailable, Code: "pass_receipt_changed"}
+}
+
+// The lane lock excludes an earlier transport finish after this final check.
+// Only compare the discovered receipt here; domain locks must remain earlier.
+func (s Service) validatePassRetirementTarget(ctx context.Context, tx pgx.Tx, current Intent, actual *Intent) error {
+	if current.Reference.Family != PassReceiptRedactionFamily {
+		return nil
+	}
+	if actual == nil {
+		return ErrBinding
+	}
+	latest, err := s.latestPassReceipt(ctx, tx, current, current.Target)
+	if err != nil {
+		return err
+	}
+	if !sameReceipt(*latest, *actual) {
+		return passReceiptChanged()
+	}
+	return nil
 }
 
 // PassCardBinding describes the menu state that produced the actual payload.
@@ -216,6 +247,9 @@ func passPreviousTarget(i Intent) int64 {
 // A mutable view cannot identify the old visible payload. Only an exact saved
 // successful receipt can authorize preparation-time cleanup of that target.
 func (s Service) previousPassReceipt(ctx context.Context, tx pgx.Tx, pending Intent) (*Intent, error) {
+	if pending.Reference.Family == PassReceiptRedactionFamily {
+		return s.latestPassReceipt(ctx, tx, pending, pending.Target)
+	}
 	target := passPreviousTarget(pending)
 	if pending.Reference.Family != familyPasses || pending.Reference.Source == nil || target <= 0 {
 		return nil, pgx.ErrNoRows
