@@ -96,15 +96,11 @@ func configuredRegistrationClock(
 	db *pgxpool.Pool,
 	cfg config.Config,
 ) (registrationingress.Clock, bool, error) {
-	settings := registrationClockEnvironment()
-	if !settings.Enabled() {
-		return nil, false, nil
+	clock, configured, err := preflightRegistrationClock(ctx, registrationClockAppMode, cfg)
+	if err != nil || !configured {
+		return clock, configured, err
 	}
-	clock, _, err := preflightRegistrationClock(ctx, registrationClockAppMode, cfg)
-	if err != nil {
-		return nil, true, err
-	}
-	if err = registrationClockDatabaseGuard(ctx, db, settings); err != nil {
+	if err = registrationClockDatabaseGuard(ctx, db, clock.config); err != nil {
 		return nil, true, err
 	}
 	return clock, true, nil

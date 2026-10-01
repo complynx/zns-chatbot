@@ -93,7 +93,7 @@ func runCommandWithDatabase(
 	runtime *observability.Runtime,
 	openDatabase func(context.Context, config.Config, *observability.Runtime) (*pgxpool.Pool, error),
 ) (result error) {
-	registrationClock, _, clockErr := preflightRegistrationClock(ctx, command, cfg)
+	registrationClock, clockConfigured, clockErr := preflightRegistrationClock(ctx, command, cfg)
 	if clockErr != nil {
 		return clockErr
 	}
@@ -110,13 +110,13 @@ func runCommandWithDatabase(
 	if e = runtime.RegisterPool(db); e != nil {
 		return e
 	}
-	if registrationClock != nil {
+	if clockConfigured {
 		if e = registrationClockDatabaseGuard(ctx, db, registrationClock.config); e != nil {
 			return e
 		}
 	}
 	work := func(owned context.Context) error {
-		if registrationClock != nil {
+		if clockConfigured {
 			signer := identity.Signer{Key: []byte(cfg.Auth.SigningKey.Value())}
 			return runAppWithClock(owned, db, signer, logger, cfg, runtime, registrationClock)
 		}
