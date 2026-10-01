@@ -19,11 +19,13 @@ func TestRegistrationFixtureOptInParsing(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, enabled)
 	assert.Equal(t, 2026, f.OpensAt.Year())
-	for _, action := range []string{"read", "revoke-payment-a", "revoke-booking-admin"} {
+	for _, action := range []string{"read", "revoke-payment-a", "restore-payment-a", "grant-payment-b", "revoke-payment-b", "revoke-booking-admin", "restore-booking-admin"} {
 		f, enabled, err = parseRegistrationFixture(action, sandbox.RegistrationFixtureStand, "")
 		require.NoError(t, err)
 		assert.True(t, enabled)
 		assert.Equal(t, action, f.Action)
+		_, _, err = parseRegistrationFixture(action, sandbox.RegistrationFixtureStand, "2026-10-10T12:00:00Z")
+		require.ErrorContains(t, err, "init-only")
 	}
 	for _, input := range [][3]string{
 		{"", sandbox.RegistrationFixtureStand, ""},
