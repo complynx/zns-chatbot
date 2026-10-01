@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -43,6 +44,8 @@ const (
 type adminPageManifest struct {
 	Generation int64                   `json:"generation"`
 	Request    AdminPageResultsRequest `json:"request"`
+	Source     *readsource.Derivation  `json:"source,omitempty"`
+	Native     bool                    `json:"native,omitempty"`
 }
 
 // EnqueueAdminPageResults freezes the complete page and action card before any
@@ -64,6 +67,10 @@ func (s Service) EnqueueAdminPageResults(ctx context.Context, in AdminPageResult
 	if err != nil {
 		return err
 	}
+	manifest, err := s.savedAdminPageManifest(ctx, tx, in, proof)
+	if err != nil {
+		return err
+	}
 	generation := proof.Generation
 	ref := Reference{
 		Kind:       ResultIntent,
@@ -71,6 +78,7 @@ func (s Service) EnqueueAdminPageResults(ctx context.Context, in AdminPageResult
 		Version:    in.ID,
 		Generation: &generation,
 		ResultKind: "admin_page_manifest",
+		Source:     manifest.Source,
 	}
 	// Follow the same actor/source/generation lock order as individual results.
 	if err = s.lockSource(
@@ -80,18 +88,24 @@ func (s Service) EnqueueAdminPageResults(ctx context.Context, in AdminPageResult
 	); err != nil {
 		return err
 	}
-	manifest, err := s.savedAdminPageManifest(ctx, tx, in, proof)
+	locked, err := s.savedAdminPageManifest(ctx, tx, in, proof)
 	if err != nil {
 		return err
 	}
+	if !reflect.DeepEqual(manifest, locked) {
+		return ErrBinding
+	}
 	if err = fence.LockGeneration(ctx, tx, in.Owner, &manifest.Generation); err != nil {
+		return err
+	}
+	if err = s.storeAdminPageManifest(ctx, tx, manifest); err != nil {
 		return err
 	}
 	for _, effect := range manifest.Request.Effects {
 		if err = s.enqueueResultTx(ctx, tx, ResultRequest{
 			Owner: in.Owner, Chat: in.Chat, Update: in.Update, Effect: adminPageResultEffect(in, effect.Effect),
 			Reference: Reference{Family: adminPageFamily, Version: in.ID, Generation: &manifest.Generation},
-			Result:    StoredResult{Generation: manifest.Generation, Payload: effect.Payload},
+			Result:    StoredResult{Generation: manifest.Generation, Source: manifest.Source, Payload: effect.Payload},
 		}); err != nil {
 			return err
 		}
@@ -124,21 +138,14 @@ func (s Service) adminPageIntake(
 	return proof, core.DatabaseOperationError(err)
 }
 
-func (s Service) authorizeAdminPageIntake(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
+func authorizeAdminPageNative(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
 	proof adminPageIntakeProof,
-) error {
+) (bool, error) {
 	if proof.Kind == "callback" && (proof.Control == fmt.Sprintf("adminmsg:page:%d:%d", in.ID, in.Offset) ||
 		(in.Offset == 0 && proof.Control == fmt.Sprintf("adminmsg:results:%d", in.ID))) {
-		return nil
+		return true, nil
 	}
-	ok, err := adminPageManualMatches(ctx, tx, in, proof)
-	if err != nil {
-		return err
-	}
-	if ok {
-		return nil
-	}
-	return s.authorizeAdminPageScript(ctx, tx, in, proof)
+	return adminPageManualMatches(ctx, tx, in, proof)
 }
 
 func adminPageManualMatches(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
@@ -209,53 +216,60 @@ type adminPageScriptCall struct {
 
 func (s Service) authorizeAdminPageScript(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
 	proof adminPageIntakeProof,
-) error {
+) (*readsource.Derivation, error) {
 	var raw []byte
-	err := tx.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind='script_runs' FOR SHARE`, in.Owner, in.Update).
+	// Observe before source locks, then read again under the actor lock. Taking
+	// a receipt row lock first would invert the history-erasure lock order.
+	err := tx.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind='script_runs'`, in.Owner, in.Update).
 		Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrBinding
+		return nil, ErrBinding
 	}
 	if err != nil {
-		return core.DatabaseOperationError(err)
+		return nil, core.DatabaseOperationError(err)
 	}
 	var records []adminPageScriptRecord
 	if err = json.Unmarshal(raw, &records); err != nil {
-		return err
+		return nil, err
 	}
 	for _, record := range records {
 		if record.HistoryGeneration != proof.Generation || record.HistoryRedacted || record.PassRedacted ||
 			record.MemoryRedacted {
 			continue
 		}
-		ok, matchErr := adminPageScriptRecordMatches(ctx, tx, in, proof, record)
+		source, matchErr := adminPageScriptRecordMatches(ctx, tx, in, proof, record)
 		if matchErr != nil {
-			return matchErr
+			return nil, matchErr
 		}
-		if ok {
-			return nil
+		if source != nil {
+			return source, nil
 		}
 	}
-	return ErrBinding
+	return nil, ErrBinding
 }
 
 func adminPageScriptRecordMatches(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
 	proof adminPageIntakeProof, record adminPageScriptRecord,
-) (bool, error) {
+) (*readsource.Derivation, error) {
 	for _, call := range record.Calls {
 		if call.Source == nil || !call.Source.Valid() || *call.Source.Generation != proof.Generation {
 			continue
 		}
 		if review := call.BroadcastReview; call.Outcome.Name == "broadcasts.show" && review != nil &&
 			review.Owner == in.Owner && review.Chat == in.Chat && review.Arguments.ID == in.ID && review.Arguments.Offset == in.Offset {
-			return true, nil
+			source := call.Source.Clone()
+			return &source, nil
 		}
 		ok, err := adminPageScriptPreviewMatches(ctx, tx, in, proof, call)
-		if err != nil || ok {
-			return ok, err
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			source := call.Source.Clone()
+			return &source, nil
 		}
 	}
-	return false, nil
+	return nil, nil
 }
 
 func adminPageScriptPreviewMatches(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
@@ -286,16 +300,24 @@ func (s Service) savedAdminPageManifest(
 	proof adminPageIntakeProof,
 ) (adminPageManifest, error) {
 	final := fmt.Sprintf("admin_page:%d:%d", in.ID, in.Offset)
-	operation, effect := ResultOperation(in.Owner, in.Update, final)
+	_, effect := ResultOperation(in.Owner, in.Update, final)
 	kind := fmt.Sprintf("delivery_result:admin_page_manifest:%d:%s", s.Delivery.BotID, effect)
 	var raw []byte
 	err := tx.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3`, in.Owner, in.Update, kind).
 		Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
-		if err = s.authorizeAdminPageIntake(ctx, tx, in, proof); err != nil {
-			return adminPageManifest{}, err
+		native, nativeErr := authorizeAdminPageNative(ctx, tx, in, proof)
+		if nativeErr != nil {
+			return adminPageManifest{}, nativeErr
 		}
-		return s.createAdminPageManifest(ctx, tx, in, proof.Generation, operation, kind)
+		manifest := adminPageManifest{Generation: proof.Generation, Request: in, Native: native}
+		if !native {
+			manifest.Source, err = s.authorizeAdminPageScript(ctx, tx, in, proof)
+			if err != nil {
+				return adminPageManifest{}, err
+			}
+		}
+		return manifest, nil
 	}
 	if err != nil {
 		return adminPageManifest{}, core.DatabaseOperationError(err)
@@ -309,40 +331,71 @@ func (s Service) savedAdminPageManifest(
 		saved.Offset != in.Offset || manifest.Generation != proof.Generation {
 		return manifest, ErrBinding
 	}
+	if manifest.Source != nil {
+		if manifest.Native || !manifest.Source.Valid() || *manifest.Source.Generation != manifest.Generation {
+			return manifest, ErrBinding
+		}
+	} else if !manifest.Native {
+		// Legacy script manifests discarded provenance and cannot be upgraded
+		// from a current receipt. Legacy native proofs retain their own authority.
+		native, nativeErr := authorizeAdminPageNative(ctx, tx, in, proof)
+		if nativeErr != nil {
+			return manifest, nativeErr
+		}
+		if !native {
+			return manifest, ErrBinding
+		}
+		manifest.Native = true
+	}
 	return manifest, validateAdminPageResults(saved)
 }
 
-func (s Service) createAdminPageManifest(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
-	generation int64, operation, kind string,
-) (adminPageManifest, error) {
+func (s Service) guardAdminPageOrphans(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest) error {
 	// Erased manifests and partial page results cannot authorize a new snapshot
 	// of that page. Other independently admitted pages may share this update.
 	var exists bool
+	operation, _ := ResultOperation(in.Owner, in.Update, "")
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.delivery_intents
  WHERE bot_id=$1 AND operation_key=$2 AND effect_key=ANY($3::text[]))`, s.Delivery.BotID, operation, adminPageResultKeys(in)).
 		Scan(&exists); err != nil {
-		return adminPageManifest{}, core.DatabaseOperationError(err)
+		return core.DatabaseOperationError(err)
 	}
 	if exists {
-		return adminPageManifest{}, ErrStale
+		return ErrStale
 	}
-	manifest := adminPageManifest{Generation: generation, Request: in}
+	return nil
+}
+
+func (s Service) storeAdminPageManifest(ctx context.Context, tx pgx.Tx, manifest adminPageManifest) error {
+	in := manifest.Request
+	_, effect := ResultOperation(in.Owner, in.Update, fmt.Sprintf("admin_page:%d:%d", in.ID, in.Offset))
+	kind := fmt.Sprintf("delivery_result:admin_page_manifest:%d:%s", s.Delivery.BotID, effect)
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3)`,
+		in.Owner, in.Update, kind).Scan(&exists); err != nil {
+		return core.DatabaseOperationError(err)
+	}
+	if !exists {
+		if err := s.guardAdminPageOrphans(ctx, tx, in); err != nil {
+			return err
+		}
+	}
 	raw, err := json.Marshal(manifest)
 	if err != nil {
-		return adminPageManifest{}, err
+		return err
 	}
 	if len(raw) > 1<<20 {
-		return adminPageManifest{}, ErrBinding
+		return ErrBinding
 	}
 	_, err = tx.Exec(
 		ctx,
-		`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES($1,$2,$3,$4)`,
+		`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
 		in.Owner,
 		in.Update,
 		kind,
 		raw,
 	)
-	return manifest, core.DatabaseOperationError(err)
+	return core.DatabaseOperationError(err)
 }
 
 // Finals and chunks already identify their page. Action-card chunks also need
