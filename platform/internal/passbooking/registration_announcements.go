@@ -20,6 +20,7 @@ import (
 const (
 	announcementUncertainResendLimit = 3
 	announcementOutcomeUnknown       = "telegram_outcome_unknown"
+	announcementRateLimitReason      = "telegram_rate_limit"
 )
 
 type RegistrationAnnouncement struct {
@@ -183,15 +184,9 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 	if err != nil {
 		return announcementAttemptError(core.DatabaseOperationError(err))
 	}
-	if input.Outcome.Kind == delivery.Succeeded && row.LastConfirmedAttempt.Valid &&
-		row.LastConfirmedAttempt.Int64 >= input.Attempt {
-		return conflict("pass_announcement_stale")
-	}
-	lateSuccess := row.State == operationPending && input.Outcome.Kind == delivery.Succeeded &&
-		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == input.Attempt && !row.LeaseUntil.Valid
-	if row.State == operationPending && !lateSuccess &&
-		(input.Outcome.Kind == delivery.Succeeded || input.Outcome.Kind == delivery.Uncertain) {
-		return conflict("pass_announcement_stale")
+	lateSuccess, err := announcementLateCompletion(input, row)
+	if err != nil {
+		return err
 	}
 	if err = s.recordAnnouncementUncertainty(ctx, q, input, row); err != nil {
 		return err
@@ -284,16 +279,32 @@ func announcementConfirmedWireOutcome(outcome delivery.Outcome) bool {
 	case delivery.Succeeded:
 		return true
 	case delivery.Deferred:
-		return outcome.Reason == "telegram_rate_limit"
+		return outcome.Reason == announcementRateLimitReason
 	case delivery.Rejected:
 		return outcome.Reason == "telegram_recipient_rejected"
 	case delivery.Parked:
 		return outcome.Reason == "telegram_invalid_cooldown"
 	case delivery.Paused:
 		return outcome.Reason == "telegram_service_rejected"
+	case delivery.Sending, delivery.Cancelled, delivery.Uncertain:
+		return false
 	default:
 		return false
 	}
+}
+
+func announcementLateCompletion(input AnnouncementCompletion, row dbgen.LockAnnouncementAttemptRow) (bool, error) {
+	if input.Outcome.Kind == delivery.Succeeded && row.LastConfirmedAttempt.Valid &&
+		row.LastConfirmedAttempt.Int64 >= input.Attempt {
+		return false, conflict("pass_announcement_stale")
+	}
+	lateSuccess := row.State == operationPending && input.Outcome.Kind == delivery.Succeeded &&
+		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == input.Attempt && !row.LeaseUntil.Valid
+	if row.State == operationPending && !lateSuccess &&
+		(input.Outcome.Kind == delivery.Succeeded || input.Outcome.Kind == delivery.Uncertain) {
+		return false, conflict("pass_announcement_stale")
+	}
+	return lateSuccess, nil
 }
 
 func (s Service) recordAnnouncementConfirmation(
@@ -546,7 +557,7 @@ func (s Service) finishAnnouncementOutcome(
 	}
 	scheduled := policy
 	preserveCooldown := policy.Kind != delivery.Deferred && wire.Kind == delivery.Deferred &&
-		wire.Reason == "telegram_rate_limit"
+		wire.Reason == announcementRateLimitReason
 	if preserveCooldown {
 		scheduled = wire
 	}

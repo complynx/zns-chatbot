@@ -930,6 +930,7 @@ func checkTerminalReceipt(t *testing.T, owner, scenario string) {
 
 type recoveredReplyFixture struct {
 	terminalReceiptFixture
+
 	attempt int64
 	payload map[string]any
 	finish  func(delivery.Outcome) error
@@ -941,7 +942,7 @@ func prepareRecoveredReply(t *testing.T, owner string) recoveredReplyFixture {
 	t.Helper()
 	db, registration := bookingFixture(t)
 	registration.Delivery = syntheticDeliverySettings()
-	f := recoveredReplyFixture{terminalReceiptFixture: terminalReceiptFixture{db: db}}
+	f := recoveredReplyFixture{db: db}
 	if owner == "admin" {
 		s := adminmessage.Service{DB: db, Delivery: registration.Delivery}
 		enqueueSyntheticDelivery(t, s, "confirmed-late-reply", "101")
@@ -1120,7 +1121,7 @@ func checkRecoveredConfirmedReply(t *testing.T, owner, phase string) {
 		require.NoError(t, f.cancel())
 	}
 	before := f.snapshot(t)
-	assert.Error(
+	require.Error(
 		t,
 		f.finish(delivery.Outcome{Kind: delivery.Succeeded, MessageID: 91}),
 		"confirmed rejection fences a contradictory positive completion",
@@ -1189,45 +1190,7 @@ func checkLegacyAnnouncementCapture(t *testing.T, refusal string) {
 	first, found, err := s.ClaimRegistrationAnnouncement(t.Context())
 	require.NoError(t, err)
 	require.True(t, found)
-	if refusal == "expired-preparation" {
-		_, err = db.Exec(
-			t.Context(),
-			`UPDATE core.pass_registration_announcements SET lease_until=clock_timestamp()-interval '1 second'`,
-		)
-		require.NoError(t, err)
-	} else {
-		_, err = db.Exec(
-			t.Context(),
-			`INSERT INTO core.delivery_pacing(bot_id,chat) VALUES($1,'') ON CONFLICT DO NOTHING`,
-			s.Delivery.BotID,
-		)
-		require.NoError(t, err)
-		if refusal == "pause" {
-			_, err = db.Exec(
-				t.Context(),
-				`UPDATE core.delivery_pacing SET pause_reason='synthetic_operator_pause' WHERE bot_id=$1 AND chat=''`,
-				s.Delivery.BotID,
-			)
-		} else {
-			_, err = db.Exec(
-				t.Context(),
-				`UPDATE core.delivery_pacing SET not_before=clock_timestamp()+interval '120 seconds' WHERE bot_id=$1 AND chat=''`,
-				s.Delivery.BotID,
-			)
-		}
-		require.NoError(t, err)
-		gate, beginErr := s.BeginRegistrationAnnouncement(
-			t.Context(),
-			delivery.Attempt{ID: first.ID, Generation: first.Attempts},
-		)
-		require.NoError(t, beginErr)
-		require.False(t, gate.Ready)
-		if refusal == "pause" {
-			assert.Equal(t, "synthetic_operator_pause", gate.Reason)
-		} else {
-			assert.Equal(t, "delivery_cooldown", gate.Reason)
-		}
-	}
+	refuseLegacyAnnouncement(t, db, s, first, refusal)
 	var resends int64
 	var renderedAdmitted bool
 	require.NoError(
@@ -1248,7 +1211,7 @@ func checkLegacyAnnouncementCapture(t *testing.T, refusal string) {
 	require.True(t, found)
 	expected, err := passbooking.RegistrationAnnouncementText(item)
 	require.NoError(t, err)
-	require.NotEqual(t, first.Text, expected)
+	require.NotEqual(t, expected, first.Text)
 	assert.Equal(t, expected, item.Text, "the next eligible legacy wire captures its current candidate")
 	gate, err := restarted.BeginRegistrationAnnouncement(
 		t.Context(),
@@ -1348,4 +1311,43 @@ func checkLegacyAnnouncementCapture(t *testing.T, refusal string) {
 	)
 	assert.Equal(t, item.Text, captured)
 	assert.EqualValues(t, 2, resends)
+}
+
+func refuseLegacyAnnouncement(
+	t *testing.T,
+	db *pgxpool.Pool,
+	s passbooking.Service,
+	first passbooking.RegistrationAnnouncement,
+	refusal string,
+) {
+	t.Helper()
+	if refusal == "expired-preparation" {
+		_, err := db.Exec(
+			t.Context(),
+			`UPDATE core.pass_registration_announcements SET lease_until=clock_timestamp()-interval '1 second'`,
+		)
+		require.NoError(t, err)
+		return
+	}
+	_, err := db.Exec(
+		t.Context(),
+		`INSERT INTO core.delivery_pacing(bot_id,chat) VALUES($1,'') ON CONFLICT DO NOTHING`,
+		s.Delivery.BotID,
+	)
+	require.NoError(t, err)
+	query := `UPDATE core.delivery_pacing SET not_before=clock_timestamp()+interval '120 seconds' WHERE bot_id=$1 AND chat=''`
+	expectedReason := "delivery_cooldown"
+	if refusal == "pause" {
+		query = `UPDATE core.delivery_pacing SET pause_reason='synthetic_operator_pause' WHERE bot_id=$1 AND chat=''`
+		expectedReason = "synthetic_operator_pause"
+	}
+	_, err = db.Exec(t.Context(), query, s.Delivery.BotID)
+	require.NoError(t, err)
+	gate, err := s.BeginRegistrationAnnouncement(
+		t.Context(),
+		delivery.Attempt{ID: first.ID, Generation: first.Attempts},
+	)
+	require.NoError(t, err)
+	require.False(t, gate.Ready)
+	assert.Equal(t, expectedReason, gate.Reason)
 }

@@ -15,7 +15,10 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 )
 
-const adminUncertainResendLimit = 3
+const (
+	adminUncertainResendLimit = 3
+	adminRateLimitReason      = "telegram_rate_limit"
+)
 
 // Claim retains the legacy entry point while selecting only shared queue heads.
 func (s Service) Claim(ctx context.Context) (Delivery, bool, error) {
@@ -212,15 +215,9 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 	if err != nil {
 		return adminAttemptError(err)
 	}
-	if result.Outcome.Kind == delivery.Succeeded && row.LastConfirmedAttempt.Valid &&
-		row.LastConfirmedAttempt.Int64 >= result.Attempt {
-		return staleAdminAttempt()
-	}
-	lateSuccess := row.State == statePending && result.Outcome.Kind == delivery.Succeeded &&
-		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == result.Attempt && !row.LeaseUntil.Valid
-	if row.State == statePending && !lateSuccess &&
-		(result.Outcome.Kind == delivery.Succeeded || result.Outcome.Kind == delivery.Uncertain) {
-		return staleAdminAttempt()
+	lateSuccess, err := adminLateCompletion(result, row)
+	if err != nil {
+		return err
 	}
 	if err = s.recordAdminUncertainty(ctx, q, result, row); err != nil {
 		return err
@@ -310,7 +307,7 @@ func (s Service) finishDelivery(
 ) error {
 	var failures int64
 	if outcome.Kind == delivery.Rejected ||
-		(outcome.Kind == delivery.Deferred && outcome.Reason != "telegram_rate_limit") {
+		(outcome.Kind == delivery.Deferred && outcome.Reason != adminRateLimitReason) {
 		failures = 1
 	}
 	count, err := q.FinishAdminDelivery(
@@ -420,16 +417,32 @@ func adminConfirmedWireOutcome(outcome delivery.Outcome) bool {
 	case delivery.Succeeded:
 		return true
 	case delivery.Deferred:
-		return outcome.Reason == "telegram_rate_limit"
+		return outcome.Reason == adminRateLimitReason
 	case delivery.Rejected:
 		return outcome.Reason == "telegram_recipient_rejected"
 	case delivery.Parked:
 		return outcome.Reason == "telegram_invalid_cooldown"
 	case delivery.Paused:
 		return outcome.Reason == "telegram_service_rejected"
+	case delivery.Sending, delivery.Cancelled, delivery.Uncertain:
+		return false
 	default:
 		return false
 	}
+}
+
+func adminLateCompletion(result Completion, row dbgen.LockAdminAttemptRow) (bool, error) {
+	if result.Outcome.Kind == delivery.Succeeded && row.LastConfirmedAttempt.Valid &&
+		row.LastConfirmedAttempt.Int64 >= result.Attempt {
+		return false, staleAdminAttempt()
+	}
+	lateSuccess := row.State == statePending && result.Outcome.Kind == delivery.Succeeded &&
+		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == result.Attempt && !row.LeaseUntil.Valid
+	if row.State == statePending && !lateSuccess &&
+		(result.Outcome.Kind == delivery.Succeeded || result.Outcome.Kind == delivery.Uncertain) {
+		return false, staleAdminAttempt()
+	}
+	return lateSuccess, nil
 }
 
 func (s Service) recordAdminConfirmation(
@@ -498,7 +511,7 @@ func (s Service) finishAdminOutcome(
 	}
 	scheduled := policy
 	preserveCooldown := policy.Kind != delivery.Deferred && wire.Kind == delivery.Deferred &&
-		wire.Reason == "telegram_rate_limit"
+		wire.Reason == adminRateLimitReason
 	if preserveCooldown {
 		scheduled = wire
 	}
