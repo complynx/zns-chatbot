@@ -1507,7 +1507,11 @@ func TestActualCanonicalNegativeGenerationReplayPreservesSchedule(t *testing.T) 
 						_ = connection.Close()
 						return
 					}
-					_, _ = w.Write([]byte(`{"ok":false,"error_code":429,"description":"actual rate limit","parameters":{"retry_after":120}}`))
+					_, _ = w.Write(
+						[]byte(
+							`{"ok":false,"error_code":429,"description":"actual rate limit","parameters":{"retry_after":120}}`,
+						),
+					)
 				}))
 				t.Cleanup(server.Close)
 				client := telegram.Client{Base: server.URL, Token: "synthetic"}
@@ -1522,10 +1526,18 @@ func TestActualCanonicalNegativeGenerationReplayPreservesSchedule(t *testing.T) 
 					require.Equal(t, delivery.Uncertain, unknown.Kind)
 					require.EqualValues(t, 1, calls.Load(), "generation 1 crossed the actual HTTP boundary")
 					require.NoError(t, f.finish(unknown))
-					require.NoError(t, f.db.QueryRow(t.Context(), `SELECT jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text FROM core.`+f.table+` WHERE id=$1`, f.id).Scan(&markerBefore))
+					require.NoError(
+						t,
+						f.db.QueryRow(t.Context(), `SELECT jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text FROM core.`+f.table+` WHERE id=$1`, f.id).
+							Scan(&markerBefore),
+					)
 					// Wait for the real uncertainty deadline; do not rewrite clocks or schedules.
 					var readyAt time.Time
-					require.NoError(t, f.db.QueryRow(t.Context(), `SELECT available_at FROM core.`+f.table+` WHERE id=$1`, f.id).Scan(&readyAt))
+					require.NoError(
+						t,
+						f.db.QueryRow(t.Context(), `SELECT available_at FROM core.`+f.table+` WHERE id=$1`, f.id).
+							Scan(&readyAt),
+					)
 					time.Sleep(max(time.Until(readyAt)+50*time.Millisecond, time.Duration(0)))
 					f = admitCanonicalResend(t, f, owner)
 					require.EqualValues(t, 2, f.attempt)
@@ -1537,12 +1549,21 @@ func TestActualCanonicalNegativeGenerationReplayPreservesSchedule(t *testing.T) 
 				require.NoError(t, f.finish(outcome))
 				var confirmed, resends int64
 				var marker string
-				require.NoError(t, f.db.QueryRow(t.Context(), `SELECT last_confirmed_attempt,uncertain_resends,jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text FROM core.`+f.table+` WHERE id=$1`, f.id).Scan(&confirmed, &resends, &marker))
+				require.NoError(
+					t,
+					f.db.QueryRow(t.Context(), `SELECT last_confirmed_attempt,uncertain_resends,jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text FROM core.`+f.table+` WHERE id=$1`, f.id).
+						Scan(&confirmed, &resends, &marker),
+				)
 				require.Equal(t, f.attempt, confirmed)
 				if phase == "admitted-resend" {
 					require.EqualValues(t, 2, calls.Load())
 					require.EqualValues(t, 1, resends)
-					require.Equal(t, markerBefore, marker, "generation 2 confirmation preserves generation 1 uncertainty")
+					require.Equal(
+						t,
+						markerBefore,
+						marker,
+						"generation 2 confirmation preserves generation 1 uncertainty",
+					)
 				} else {
 					require.EqualValues(t, 1, calls.Load())
 					require.Zero(t, resends)
@@ -1552,7 +1573,12 @@ func TestActualCanonicalNegativeGenerationReplayPreservesSchedule(t *testing.T) 
 				if owner == "announcement" {
 					chat = "-100123"
 				}
-				enqueueSyntheticDelivery(t, adminmessage.Service{DB: f.db, Delivery: syntheticDeliverySettings()}, "negative-replay-follower", chat)
+				enqueueSyntheticDelivery(
+					t,
+					adminmessage.Service{DB: f.db, Delivery: syntheticDeliverySettings()},
+					"negative-replay-follower",
+					chat,
+				)
 				checkRecoveredNegativeReplay(t, f, outcome)
 				assert.Equal(t, confirmed, calls.Load(), "callback replay issues no further HTTP request")
 			})
@@ -1574,7 +1600,10 @@ func admitCanonicalResend(t *testing.T, f recoveredReplyFixture, owner string) r
 		f.attempt = item.Attempt
 		f.payload = map[string]any{"chat_id": 101, "text": item.Content.Text}
 		f.finish = func(outcome delivery.Outcome) error {
-			return s.CompleteDelivery(t.Context(), adminmessage.Completion{ID: item.ID, Attempt: item.Attempt, Outcome: outcome})
+			return s.CompleteDelivery(
+				t.Context(),
+				adminmessage.Completion{ID: item.ID, Attempt: item.Attempt, Outcome: outcome},
+			)
 		}
 		return f
 	}
@@ -1589,7 +1618,10 @@ func admitCanonicalResend(t *testing.T, f recoveredReplyFixture, owner string) r
 	f.attempt = item.Attempts
 	f.payload = map[string]any{"chat_id": -100123, "text": item.Text, "parse_mode": "HTML"}
 	f.finish = func(outcome delivery.Outcome) error {
-		return s.CompleteRegistrationAnnouncement(t.Context(), passbooking.AnnouncementCompletion{ID: item.ID, Attempt: item.Attempts, Outcome: outcome})
+		return s.CompleteRegistrationAnnouncement(
+			t.Context(),
+			passbooking.AnnouncementCompletion{ID: item.ID, Attempt: item.Attempts, Outcome: outcome},
+		)
 	}
 	return f
 }
