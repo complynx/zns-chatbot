@@ -837,7 +837,7 @@ func testPaymentOpeningReceiptLoss(t *testing.T, language string) {
  SET transfer_instructions_localized='{"en":"observed opening private canary","ru":"observed opening private canary"}' WHERE id=$1`, order.EventID)
 	require.NoError(t, err)
 	handle(t, f.b, orderClick(t, f, 101, 30005, "Payment methods"))
-	pending := queuedLivePayment(t, f)
+	pending := queuedPaymentOpening(t, f)
 	var changed atomic.Bool
 	f.b.Host.HTTP = &http.Client{Transport: &boundaryTransport{before: func(r *http.Request) error {
 		if r.URL.Path == "/internal/bot-delivery/receipt" && !changed.Swap(true) {

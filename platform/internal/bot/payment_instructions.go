@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/jackc/pgx/v5"
 
@@ -20,6 +21,35 @@ import (
 
 const actionInstructions = orders.ActionPaymentInstructions
 const paymentCardPrefix = "payment:"
+
+type paymentOpeningCaptureKey struct{}
+
+// Each authenticated update owns this presentation capture. It grants no authority.
+type paymentOpeningCapture struct {
+	owner string
+	chat  int64
+	mu    sync.Mutex
+	keys  map[string]bool
+}
+
+func withPaymentOpeningCapture(ctx context.Context, owner string, chat int64) context.Context {
+	return context.WithValue(ctx, paymentOpeningCaptureKey{}, &paymentOpeningCapture{
+		owner: owner, chat: chat, keys: make(map[string]bool),
+	})
+}
+
+func paymentOpenedInUpdate(ctx context.Context, owner string, chat int64, key string, mark bool) bool {
+	capture, ok := ctx.Value(paymentOpeningCaptureKey{}).(*paymentOpeningCapture)
+	if !ok || capture.owner != owner || capture.chat != chat {
+		return false
+	}
+	capture.mu.Lock()
+	defer capture.mu.Unlock()
+	if mark {
+		capture.keys[key] = true
+	}
+	return capture.keys[key]
+}
 
 func (b *Bot) showPaymentInstructions(ctx context.Context, in incoming, id string) (string, error) {
 	return b.showPaymentInstructionsWithSource(ctx, in, id, nil)
@@ -89,6 +119,7 @@ func (b *Bot) paymentInstructionsWithSource(
 	if err = b.deliverOrderCardChecked(ctx, in.owner, paymentCardPrefix+id, payload, check); err != nil {
 		return "", err
 	}
+	paymentOpenedInUpdate(ctx, in.owner, in.chat, paymentCardPrefix+id, opening)
 	return i18n.Translate(info.Language, i18n.PaymentShown, nil)
 }
 
@@ -356,6 +387,18 @@ func (b *Bot) refreshPaymentInstructions(
 		return nil
 	}
 	active[key] = true
+	if paymentOpenedInUpdate(ctx, owner, chat, key, false) {
+		ref, unavailable, err := b.paymentRetirementReference(ctx, owner, key, order.ID)
+		if err != nil {
+			return err
+		}
+		if unavailable {
+			_, err = b.deliverPaymentRetirement(ctx, incoming{owner: owner, chat: chat}, ref)
+			return err
+		}
+		// The explicit opening already owns this update's presentation; the worker rechecks its source.
+		return nil
+	}
 	if !opened {
 		_, err := b.showPaymentInstructions(ctx, incoming{owner: owner, chat: chat}, order.ID)
 		return err

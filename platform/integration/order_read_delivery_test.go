@@ -950,7 +950,7 @@ func testPaymentPendingReopening(t *testing.T, derived bool, language string, de
 	} else {
 		handle(t, f.b, message(30001, 101, "Show payment instructions for "+order.ID))
 	}
-	pending := queuedLivePayment(t, f)
+	pending := queuedPaymentOpening(t, f)
 	require.NotNil(t, pending.Reference.PaymentOpening)
 	if derived {
 		require.Nil(t, pending.Reference.Source)
@@ -1022,7 +1022,7 @@ func testPaymentManualAfterHistory(t *testing.T, language string, notModified bo
 		"ordinary refresh must still reject the revoked source",
 	)
 	handle(t, f.b, orderClick(t, f, 101, 30002, localizedPaymentMethods(language)))
-	pending := queuedLivePayment(t, f)
+	pending := queuedPaymentOpening(t, f)
 	require.NotNil(t, pending.Reference.PaymentOpening)
 	require.Nil(t, pending.Reference.Source)
 	require.JSONEq(t, string(source), string(displayedPaymentSource(t, f, order.ID)))
@@ -1103,11 +1103,11 @@ func runPaymentSupersededOpeningCases(t *testing.T) {
  SET transfer_instructions_localized='{"en":"new opening canary","ru":"new opening canary"}' WHERE id=$1`, order.EventID)
 			require.NoError(t, err)
 			handle(t, f.b, orderClick(t, f, 101, 30003, "Payment methods"))
-			older := queuedLivePayment(t, f)
+			older := queuedPaymentOpening(t, f)
 			_, err = f.b.API.SetLanguage(t.Context(), "alice", language, false)
 			require.NoError(t, err)
 			handle(t, f.b, message(30004, 101, "Show payment instructions for "+order.ID))
-			newer := queuedLivePayment(t, f)
+			newer := queuedPaymentOpening(t, f)
 			require.NotEqual(t, older.QueueReference(), newer.QueueReference())
 			require.JSONEq(t, string(source), string(displayedPaymentSource(t, f, order.ID)))
 			require.NoError(t, f.b.DeliverBotIntent(t.Context(), newer.QueueReference()))
@@ -1124,4 +1124,21 @@ func runPaymentSupersededOpeningCases(t *testing.T) {
 			require.JSONEq(t, string(bound), string(displayedPaymentSource(t, f, order.ID)))
 		})
 	}
+}
+
+func queuedPaymentOpening(t *testing.T, f *fixture) botdelivery.Intent {
+	t.Helper()
+	var operation, effect string
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT operation_key,effect_key FROM bot.delivery_intents
+ WHERE owner='alice' AND state='pending' AND reference->>'family'='payment' AND reference ? 'payment_opening'
+ ORDER BY created_at DESC LIMIT 1`).Scan(&operation, &effect))
+	expected := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+	selected := queuedLivePayment(t, f)
+	require.Equal(t, expected, selected.QueueReference(), "the lane head must be the actual explicit opening")
+	current, err := botdelivery.Read(t.Context(), f.db, selected.BotID, expected, false)
+	require.NoError(t, err)
+	require.NotNil(t, current.Reference.PaymentOpening)
+	require.Equal(t, delivery.Deferred, current.State)
+	require.Zero(t, current.Attempt, "the hook and mutation precede any provider attempt")
+	return current
 }
