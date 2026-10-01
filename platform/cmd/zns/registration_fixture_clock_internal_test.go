@@ -108,6 +108,15 @@ func TestRegistrationClockConfigurationIsOptIn(t *testing.T) {
 	require.Error(t, err)
 	_, _, err = configuredRegistrationClock(t.Context(), nil, config.Config{Env: "sandbox", SyntheticOnly: true})
 	require.Error(t, err, "partial configuration fails before database access")
+	if runtime.GOOS != "linux" {
+		settings := clockSettings()
+		t.Setenv("REGISTRATION_CLOCK_INSTALLATION", settings.Installation)
+		t.Setenv("REGISTRATION_CLOCK_CASE", settings.Case)
+		t.Setenv("REGISTRATION_CLOCK_DATABASE_ADDRESS", settings.DatabaseAddress)
+		t.Setenv("REGISTRATION_CLOCK_ANCHOR", settings.Anchor)
+		_, _, err = configuredRegistrationClock(t.Context(), nil, config.Config{Env: "sandbox", SyntheticOnly: true})
+		require.ErrorContains(t, err, "requires Linux UID guards", "reject before any database access")
+	}
 }
 
 func TestRegistrationClockFileReadsFreshStateAndFailsVisibly(t *testing.T) {

@@ -145,14 +145,14 @@ func readRegistrationClockPublication(path string) (registrationclock.State, err
 	if err != nil {
 		return state, fmt.Errorf("registration clock state unavailable: %w", err)
 	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+	if !info.Mode().IsRegular() || info.Mode().Perm() != 0o600 {
 		return state, errors.New("registration clock state must be a regular operator-only file")
 	}
 	parent, err := os.Stat(filepath.Dir(path))
 	if err != nil {
 		return state, fmt.Errorf("stat registration clock directory: %w", err)
 	}
-	if !parent.IsDir() || parent.Mode().Perm()&0o077 != 0 {
+	if !parent.IsDir() || parent.Mode().Perm() != 0o700 {
 		return state, errors.New("registration clock directory must be operator-only")
 	}
 	if err = registrationClockOwner(info, parent); err != nil {

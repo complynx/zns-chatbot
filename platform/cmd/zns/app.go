@@ -177,7 +177,6 @@ func appRegistrationBot(cfg config.Config, services appservices.Services, author
 		),
 		TG: tg,
 	}
-
 }
 
 // runAppServers joins the bot worker before caller-owned resources are closed.
