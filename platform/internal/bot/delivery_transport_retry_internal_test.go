@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -827,6 +828,81 @@ func TestBotTransportRetryCancelledLateReceipt(t *testing.T) {
 	require.Equal(t, delivery.Cancelled, current.State)
 	require.EqualValues(t, 900, current.MessageID)
 	require.False(t, current.ContinuationDone)
+}
+
+func TestBotTransportRetryRecoveredKnownOutcomeFencesPositive(t *testing.T) {
+	for _, terminal := range []bool{false, true} {
+		name := "pending"
+		if terminal {
+			name = "cancelled"
+		}
+		t.Run(name, func(t *testing.T) {
+			db := foodPendingDatabase(t)
+			ctx := t.Context()
+			b := botDeliveryTestBot(db)
+			b.Delivery.BotID = 999
+			b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+			queued, err := b.enqueueBotIntent(ctx, "", 101, "recovered-known", "notice", botdelivery.Reference{
+				Kind: botdelivery.IdentityIntent, Update: 1, Notice: i18n.IdentityUnavailable, Language: "en"}, "send")
+			require.NoError(t, err)
+			attempts := make(chan botdelivery.Intent, 1)
+			recovery := make(chan error, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				attempt, readErr := botdelivery.Read(r.Context(), db, 999, queued.Reference, false)
+				if readErr == nil {
+					readErr = b.RecoverBotIntents(r.Context())
+				}
+				attempts <- attempt
+				recovery <- readErr
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_, _ = io.WriteString(w, `{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":7}}`)
+			}))
+			defer server.Close()
+			b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+			completionErr := b.DeliverBotIntent(ctx, queued.Reference)
+			select {
+			case recoveryErr := <-recovery:
+				require.NoError(t, recoveryErr)
+			default:
+				t.Fatal("actual HTTP response did not reach recovery")
+			}
+			var attempt botdelivery.Intent
+			select {
+			case attempt = <-attempts:
+			default:
+				t.Fatal("actual HTTP response had no admitted attempt")
+			}
+			if completionErr != nil {
+				t.Errorf("actual late confirmed429 must be persisted: %v", completionErr)
+			}
+			current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
+			require.NoError(t, err)
+			require.Equal(t, attempt.Attempt, current.Attempt, "no new admission occurred")
+			if terminal {
+				require.NoError(t, b.postponeBotIntent(ctx, current, true))
+			}
+			snapshot := func() string {
+				var raw string
+				require.NoError(t, db.QueryRow(ctx, `SELECT jsonb_build_object(
+ 'intent',(SELECT to_jsonb(i) FROM bot.delivery_intents i WHERE bot_id=999 AND operation_key='recovered-known'),
+ 'queue',(SELECT jsonb_agg(to_jsonb(q)) FROM core.delivery_queue q WHERE bot_id=999),
+ 'pacing',(SELECT jsonb_agg(to_jsonb(p)) FROM core.delivery_pacing p WHERE bot_id=999))::text`).Scan(&raw))
+				return raw
+			}
+			before := snapshot()
+			positiveErr := b.finishBotIntent(ctx, attempt,
+				delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}, botdelivery.Continuation{}, false)
+			if !errors.Is(positiveErr, botdelivery.ErrBinding) {
+				t.Errorf("confirmed429 must fence contradictory same-attempt positive receipt: %v", positiveErr)
+			}
+			require.JSONEq(t, before, snapshot(), "contradictory receipt cannot mutate owner, queue or pacing")
+			current, err = botdelivery.Read(ctx, db, 999, queued.Reference, false)
+			require.NoError(t, err)
+			require.Zero(t, current.MessageID)
+			require.False(t, current.ContinuationDone)
+		})
+	}
 }
 
 func TestBotTransportRetryPendingLateReceipt(t *testing.T) {
