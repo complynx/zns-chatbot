@@ -162,6 +162,43 @@ func Finish(
 	if !queueTransition(Kind(row.State), outcome.Kind) {
 		return Outcome{}, time.Time{}, ErrQueueState
 	}
+	return finishLockedQueue(ctx, tx, settings, row, outcome)
+}
+
+// FinishUncertainSuccess resolves a known receipt while its uncertain retry is pending.
+// The owner must first lock its pending attempt, prove the receipt generation is
+// its last uncertain attempt, and reject a live lease. Save the returned outcome
+// and deadline in the same transaction. This does not admit another send.
+func FinishUncertainSuccess(
+	ctx context.Context,
+	tx pgx.Tx,
+	settings Settings,
+	ref Reference,
+	outcome Outcome,
+) (Outcome, time.Time, error) {
+	if err := settings.Validate(); err != nil {
+		return Outcome{}, time.Time{}, err
+	}
+	if outcome.Kind != Succeeded || !outcome.Valid() {
+		return Outcome{}, time.Time{}, ErrQueueState
+	}
+	row, err := lockQueue(ctx, tx, settings.BotID, ref)
+	if err != nil {
+		return Outcome{}, time.Time{}, err
+	}
+	if Kind(row.State) != Deferred {
+		return Outcome{}, time.Time{}, ErrQueueState
+	}
+	return finishLockedQueue(ctx, tx, settings, row, outcome)
+}
+
+func finishLockedQueue(
+	ctx context.Context,
+	tx pgx.Tx,
+	settings Settings,
+	row dbgen.ReadDeliveryEntryRow,
+	outcome Outcome,
+) (Outcome, time.Time, error) {
 	result, deadline, err := Schedule(ctx, tx, settings, Destination{Chat: row.Chat, Thread: row.ThreadID}, outcome)
 	if err != nil {
 		return Outcome{}, time.Time{}, err
