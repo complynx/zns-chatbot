@@ -18,6 +18,8 @@ import (
 const notificationPending = "pending"
 
 const notificationUncertainResendLimit int64 = 3
+const notificationNotCurrentReason = "notification_no_longer_current"
+const notificationRetryExhaustedReason = "telegram_uncertain_retry_exhausted"
 
 // BeginNotification checks current domain eligibility before reserving shared pacing.
 // No domain or ledger lock is held while the adapter contacts Telegram.
@@ -51,22 +53,14 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 		return delivery.Admission{}, notificationStale()
 	}
 	if !current {
-		outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "notification_no_longer_current"}
+		outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: notificationNotCurrentReason}
 		if err = s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {
 			return delivery.Admission{}, err
 		}
 		return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
 	}
 	if row.LastUncertainAttempt.Valid && row.UncertainResends >= notificationUncertainResendLimit {
-		if err = s.exhaustNotificationRetry(ctx, tx, attempt); err != nil {
-			return delivery.Admission{}, err
-		}
-
-		return delivery.Admission{
-			Reason: "telegram_uncertain_retry_exhausted",
-		}, core.DatabaseOperationError(
-			tx.Commit(ctx),
-		)
+		return s.exhaustNotificationAdmission(ctx, tx, attempt)
 	}
 	gate, err := delivery.Begin(
 		ctx,
@@ -97,6 +91,18 @@ func (s Service) BeginNotification(ctx context.Context, attempt delivery.Attempt
 	return gate, core.DatabaseOperationError(tx.Commit(ctx))
 }
 
+func (s Service) exhaustNotificationAdmission(
+	ctx context.Context,
+	tx pgx.Tx,
+	attempt delivery.Attempt,
+) (delivery.Admission, error) {
+	if err := s.exhaustNotificationRetry(ctx, tx, attempt); err != nil {
+		return delivery.Admission{}, err
+	}
+	gate := delivery.Admission{Reason: notificationRetryExhaustedReason}
+	return gate, core.DatabaseOperationError(tx.Commit(ctx))
+}
+
 // CompleteNotification retains known wire outcomes even after eligibility changes.
 // A late result can resolve the same admitted generation before a new retry begins.
 func (s Service) CompleteNotification(ctx context.Context, result NotificationCompletion) error {
@@ -121,20 +127,10 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 	}
 
 	if notificationTerminalReceipt(row, result.Outcome) {
-		count, receiptErr := dbgen.New(tx).
-			RecordTerminalNotificationReceipt(ctx, dbgen.RecordTerminalNotificationReceiptParams{
-				ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt, MessageID: result.Outcome.MessageID,
-			})
-		if receiptErr != nil {
-			return core.DatabaseOperationError(receiptErr)
-		}
-		if count != 1 {
-			return notificationStale()
-		}
-		return core.DatabaseOperationError(tx.Commit(ctx))
+		return s.recordTerminalNotificationReceipt(ctx, tx, result)
 	}
 	if result.Outcome.Kind == delivery.Uncertain && row.LastUncertainAttempt.Valid &&
-		row.LastUncertainAttempt.Int64 == result.Attempt && row.DeliveryState != "sending" {
+		row.LastUncertainAttempt.Int64 == result.Attempt && row.DeliveryState != string(delivery.Sending) {
 		return nil
 	}
 	if (row.DeliveryState != notificationPending || !row.LeaseLive) &&
@@ -158,9 +154,26 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
+func (s Service) recordTerminalNotificationReceipt(
+	ctx context.Context,
+	tx pgx.Tx,
+	result NotificationCompletion,
+) error {
+	count, err := dbgen.New(tx).RecordTerminalNotificationReceipt(ctx, dbgen.RecordTerminalNotificationReceiptParams{
+		ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt, MessageID: result.Outcome.MessageID,
+	})
+	if err != nil {
+		return core.DatabaseOperationError(err)
+	}
+	if count != 1 {
+		return notificationStale()
+	}
+	return core.DatabaseOperationError(tx.Commit(ctx))
+}
+
 // A terminal policy stays terminal; a late receipt records only the known wire ID.
 func notificationTerminalReceipt(row dbgen.LockNotificationAttemptRow, outcome delivery.Outcome) bool {
-	return (row.DeliveryState == "failed" || row.DeliveryState == "cancelled") &&
+	return (row.DeliveryState == "failed" || row.DeliveryState == string(delivery.Cancelled)) &&
 		outcome.Kind == delivery.Succeeded && outcome.MessageID > 0 && !row.LeaseUntil.Valid &&
 		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == row.DeliveryAttempt &&
 		(row.TelegramMessageID == 0 || row.TelegramMessageID == outcome.MessageID)
@@ -194,7 +207,7 @@ func notificationOutcomeAllowed(row dbgen.LockNotificationAttemptRow, kind deliv
 	if notificationLateSuccess(row, kind) {
 		return true
 	}
-	if state != notificationPending && state != "sending" && state != "unknown" {
+	if state != notificationPending && state != string(delivery.Sending) && state != "unknown" {
 		return false
 	}
 	if state == notificationPending && (kind == delivery.Succeeded || kind == delivery.Uncertain) {
@@ -299,7 +312,7 @@ func (s Service) exhaustNotificationRetry(ctx context.Context, tx pgx.Tx, attemp
 		return err
 	}
 	return s.saveNotificationOutcome(ctx, dbgen.New(tx), attempt,
-		delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_uncertain_retry_exhausted"}, "", time.Time{}, 0)
+		delivery.Outcome{Kind: delivery.Rejected, Reason: notificationRetryExhaustedReason}, "", time.Time{}, 0)
 }
 func (s Service) saveNotificationOutcome(
 	ctx context.Context,
@@ -380,7 +393,7 @@ func (s Service) CompleteNotificationFollowup(ctx context.Context, result Notifi
 func validNotificationFollowup(result NotificationFollowup) bool {
 	if result.Done {
 		return result.Failure == "" || result.Failure == "notification_recipient_unavailable" ||
-			result.Failure == "notification_no_longer_current"
+			result.Failure == notificationNotCurrentReason
 	}
 	return result.Failure == "notification_followup_unavailable"
 }

@@ -129,7 +129,7 @@ func (s Service) recoverNotificationSend(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, core.DatabaseOperationError(err)
 	}
-	if row.DeliveryState != "unknown" && (row.DeliveryState != "sending" || row.LeaseLive) {
+	if row.DeliveryState != "unknown" && (row.DeliveryState != string(delivery.Sending) || row.LeaseLive) {
 		return true, nil
 	}
 
@@ -144,7 +144,7 @@ func (s Service) recoverNotificationSend(ctx context.Context) (bool, error) {
 		if count != 1 {
 			return false, notificationStale()
 		}
-		outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: "notification_no_longer_current"}
+		outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: notificationNotCurrentReason}
 	}
 	attempt := delivery.Attempt{ID: row.ID, Generation: row.DeliveryAttempt}
 	if err = s.finishNotification(ctx, tx, attempt, outcome, ""); err != nil {

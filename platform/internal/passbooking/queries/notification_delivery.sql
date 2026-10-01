@@ -110,7 +110,7 @@ UPDATE core.pass_notifications n SET
  available_at=CASE WHEN retry.exhausted OR retry.next_at>'9999-12-31T23:59:59.999999Z'::timestamptz
   THEN retry.observed_at ELSE retry.next_at END,
  lease_until=NULL,
- sent_at=CASE WHEN retry.exhausted THEN retry.observed_at ELSE n.sent_at END
+ delivered_at=CASE WHEN retry.exhausted THEN retry.observed_at ELSE n.delivered_at END
 FROM retry WHERE n.id=retry.id RETURNING n.delivery_state,n.available_at;
 -- name: RecordNotificationUncertainty :execrows
 UPDATE core.pass_notifications SET

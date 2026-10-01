@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -89,8 +91,7 @@ func acceptedNotificationMessage(
 	text := loss.text
 	loss.mu.Unlock()
 	messages := chatMessages(t, r.f, 202)
-	for index := len(messages) - 1; index >= 0; index-- {
-		message := messages[index]
+	for _, message := range slices.Backward(messages) {
 		if message.Text == text {
 			return message
 		}
@@ -114,7 +115,7 @@ func TestNotificationUncertainRetrySurvivesRestart(t *testing.T) {
 			first := r.status(t, r.first)
 			require.Equal(t, "pending", first.State)
 			require.Equal(t, 1, loss.count())
-			assert.GreaterOrEqual(t, first.AvailableAt.Sub(time.Now()), r.f.b.Delivery.Fallback-time.Second)
+			assert.GreaterOrEqual(t, time.Until(first.AvailableAt), r.f.b.Delivery.Fallback-time.Second)
 			assert.Equal(t, first.Attempt, first.LastUncertainAttempt)
 			assert.Equal(t, "telegram_outcome_unknown", first.LastUncertainReason)
 			require.NotNil(t, first.LastUncertainRecordedAt)
@@ -149,7 +150,7 @@ func TestNotificationUncertainRetryExhaustionReleasesFollower(t *testing.T) {
 		t.Run(domain, func(t *testing.T) {
 			t.Parallel()
 			r := notificationRuntime(t, domain)
-			loss := &notificationLostResponse{drops: 10}
+			loss := &notificationLostResponse{drops: 4}
 			r.f.b.TG.HTTP = &http.Client{Transport: loss}
 			dispatch := exactNotificationDelivery(r, domain)
 			for attempt := range 4 {
@@ -167,7 +168,7 @@ func TestNotificationUncertainRetryExhaustionReleasesFollower(t *testing.T) {
 					break
 				}
 				require.Equal(t, "pending", state.State)
-				assert.GreaterOrEqual(t, state.AvailableAt.Sub(time.Now()),
+				assert.GreaterOrEqual(t, time.Until(state.AvailableAt),
 					r.f.b.Delivery.Fallback*time.Duration(1<<attempt)-time.Second)
 				require.NoError(t, dispatch(t.Context(), r.second))
 				assert.Equal(t, "pending", r.status(t, r.second).State)
@@ -282,7 +283,7 @@ func TestNotificationUncertainRetryTerminalReceiptOnly(t *testing.T) {
 				r.postAttempt(t, "complete", completion, http.StatusOK)
 				r.postAttempt(t, "complete", completion, http.StatusOK)
 				after := notificationReceiptSnapshot(t, r)
-				require.Equal(t, float64(message.ID), after["telegram_message_id"])
+				require.Equal(t, json.Number(strconv.FormatInt(message.ID, 10)), after["telegram_message_id"])
 				after["telegram_message_id"] = before["telegram_message_id"]
 				assert.Equal(t, before, after, "terminal receipt must change only the known message ID")
 				completion["outcome"] = delivery.Outcome{Kind: delivery.Succeeded, MessageID: message.ID + 100000}
@@ -304,7 +305,9 @@ func notificationReceiptSnapshot(t *testing.T, r *notificationRuntimeFixture) ma
 			Scan(&raw),
 	)
 	var result map[string]any
-	require.NoError(t, json.Unmarshal(raw, &result))
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	require.NoError(t, decoder.Decode(&result))
 	return result
 }
 func TestNotificationUncertainRetryCountsRateLimitedSends(t *testing.T) {
@@ -329,7 +332,7 @@ func TestNotificationUncertainRetryCountsRateLimitedSends(t *testing.T) {
 				assert.Equal(t, original.LastUncertainAttempt, state.LastUncertainAttempt)
 				assert.Equal(t, original.LastUncertainRecordedAt, state.LastUncertainRecordedAt)
 				assert.Zero(t, state.FailureCount)
-				assert.GreaterOrEqual(t, state.AvailableAt.Sub(time.Now()), 59*time.Second)
+				assert.GreaterOrEqual(t, time.Until(state.AvailableAt), 59*time.Second)
 				r.postAttempt(t, "complete", map[string]any{
 					"id": r.first, "attempt": state.Attempt, "text": message.Text,
 					"outcome": delivery.Outcome{Kind: delivery.Succeeded, MessageID: message.ID},
