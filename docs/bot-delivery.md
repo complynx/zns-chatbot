@@ -15,6 +15,12 @@ the delivery with `telegram_uncertain_retry_exhausted` and releases followers.
 The last uncertain attempt, reason and observation time remain factual metadata;
 they do not prove the message was absent. Duplicates are allowed.
 
+A late confirmed response can complete the same uncertain attempt before another
+admission. After a new admission, the previous response is stale. A positive
+receipt for a failed or cancelled attempt records only its message ID when it
+matches the last uncertain attempt. Terminal status, queue position and business
+continuation remain unchanged.
+
 TODO: assess MTProto after migration and production launch. The current transport
 remains HTTP Bot API.
 

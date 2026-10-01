@@ -74,6 +74,9 @@ func (b *Bot) DeliverBotIntent(ctx context.Context, ref delivery.Reference) erro
 	if err != nil {
 		return err
 	}
+	if completed.State != delivery.Succeeded {
+		return nil
+	}
 	return b.continueBotIntent(cleanup, completed)
 }
 

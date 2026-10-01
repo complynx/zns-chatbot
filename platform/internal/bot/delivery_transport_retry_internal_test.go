@@ -211,8 +211,176 @@ func TestBotTransportRetryBudgetAndFollower(t *testing.T) {
 				expectedVisible,
 				"the UI retains real deliveries and the released follower",
 			)
+			terminal, readErr := botdelivery.Read(ctx, db, 999, first.Reference, false)
+			require.NoError(t, readErr)
+			late := delivery.Outcome{Kind: delivery.Succeeded, MessageID: visible.Messages[0].ID}
+			if rateLimited {
+				require.ErrorIs(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false),
+					botdelivery.ErrBinding, "older uncertain attempt cannot resolve the newer exhausted generation")
+			} else {
+				late.MessageID = visible.Messages[3].ID
+				var before, after string
+				require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)-'message_id')::text
+ FROM bot.delivery_intents i WHERE operation_key='budget'`).Scan(&before))
+				require.NoError(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false))
+				require.NoError(t, db.QueryRow(ctx, `SELECT (to_jsonb(i)-'message_id')::text
+ FROM bot.delivery_intents i WHERE operation_key='budget'`).Scan(&after))
+				require.JSONEq(t, before, after, "terminal receipt changes only the message ID")
+				require.NoError(t, b.finishBotIntent(ctx, terminal, late, botdelivery.Continuation{}, false))
+			}
+			require.NoError(t, b.RecoverBotIntents(ctx))
+			require.NoError(t, b.DeliverBotIntent(ctx, first.Reference))
+			require.EqualValues(t, 5, calls.Load(), "late receipt cannot revive transport")
 		})
 	}
+}
+
+func TestBotTransportRetryCancelledLateReceipt(t *testing.T) {
+	t.Parallel()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	ref := botdelivery.Reference{Kind: botdelivery.IdentityIntent, Update: 1,
+		Notice: i18n.IdentityUnavailable, Language: "en"}
+	queued, err := b.enqueueBotIntent(ctx, "", 101, "cancelled-late", "notice", ref, "send")
+	require.NoError(t, err)
+	current, err := botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
+	require.NoError(t, err)
+	attempt, ready, err := b.beginBotIntent(ctx, current, botRenderedDelivery{})
+	require.NoError(t, err)
+	require.True(t, ready)
+	require.NoError(t, b.RecoverBotIntents(ctx))
+	current, err = botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
+	require.NoError(t, err)
+	require.NoError(t, b.postponeBotIntent(ctx, current, true))
+	snapshot := func() string {
+		var saved string
+		require.NoError(t, db.QueryRow(ctx, `SELECT jsonb_build_object(
+ 'intent',(SELECT to_jsonb(i)-'message_id' FROM bot.delivery_intents i WHERE operation_key='cancelled-late'),
+ 'queue',(SELECT jsonb_agg(to_jsonb(q)) FROM core.delivery_queue q),
+ 'pacing',(SELECT jsonb_agg(to_jsonb(p)) FROM core.delivery_pacing p))::text`).Scan(&saved))
+		return saved
+	}
+	before := snapshot()
+	late := delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}
+	require.NoError(t, b.finishBotIntent(ctx, attempt, late, botdelivery.Continuation{Kind: "ignored"}, false))
+	require.JSONEq(t, before, snapshot())
+	require.NoError(t, b.finishBotIntent(ctx, attempt, late, botdelivery.Continuation{}, false))
+	conflicting := late
+	conflicting.MessageID++
+	require.ErrorIs(
+		t,
+		b.finishBotIntent(ctx, attempt, conflicting, botdelivery.Continuation{}, false),
+		botdelivery.ErrBinding,
+	)
+	wrong := attempt
+	wrong.BotID++
+	require.ErrorIs(t, b.finishBotIntent(ctx, wrong, late, botdelivery.Continuation{}, false), botdelivery.ErrBinding)
+	wrong = attempt
+	wrong.Attempt++
+	require.ErrorIs(t, b.finishBotIntent(ctx, wrong, late, botdelivery.Continuation{}, false), botdelivery.ErrBinding)
+	require.ErrorIs(t, b.finishBotIntent(ctx, attempt, late, botdelivery.Continuation{}, true), botdelivery.ErrBinding)
+	require.NoError(t, b.RecoverBotIntents(ctx))
+	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
+	require.NoError(t, b.ContinueBotIntentReceipts(ctx))
+	require.JSONEq(t, before, snapshot(), "terminal receipt never resumes continuation or changes queue/pacing")
+	current, err = botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Cancelled, current.State)
+	require.EqualValues(t, 900, current.MessageID)
+	require.False(t, current.ContinuationDone)
+}
+
+func TestBotTransportRetryPendingLateReceipt(t *testing.T) {
+	t.Parallel()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	ref := botdelivery.Reference{Kind: botdelivery.IdentityIntent, Update: 1,
+		Notice: i18n.IdentityUnavailable, Language: "en"}
+	queued, err := b.enqueueBotIntent(ctx, "", 101, "pending-late", "notice", ref, "send")
+	require.NoError(t, err)
+	ref.Update++
+	follower, err := b.enqueueBotIntent(ctx, "", 101, "pending-follower", "notice", ref, "send")
+	require.NoError(t, err)
+	current, err := botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
+	require.NoError(t, err)
+	known := delivery.Outcome{Kind: delivery.Succeeded, MessageID: 900}
+	require.ErrorIs(
+		t,
+		b.finishBotIntent(ctx, current, known, botdelivery.Continuation{}, false),
+		botdelivery.ErrBinding,
+	)
+	attempt, ready, err := b.beginBotIntent(ctx, current, botRenderedDelivery{})
+	require.NoError(t, err)
+	require.True(t, ready)
+	require.NoError(t, b.RecoverBotIntents(ctx))
+	require.NoError(t, b.finishBotIntent(ctx, attempt, known, botdelivery.Continuation{}, false))
+	require.NoError(t, b.ContinueBotIntentReceipts(ctx))
+	require.NoError(t, b.ContinueBotIntentReceipts(ctx))
+	current, err = botdelivery.Read(ctx, db, b.Delivery.BotID, queued.Reference, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Succeeded, current.State)
+	require.True(t, current.ContinuationDone)
+	require.Equal(t, attempt.Attempt, current.Attempt, "late receipt needs no new wire admission")
+	var resends int
+	require.NoError(t, db.QueryRow(ctx, `SELECT uncertain_resends FROM bot.delivery_intents
+ WHERE operation_key='pending-late'`).Scan(&resends))
+	require.Zero(t, resends)
+	next, err := botdelivery.Read(ctx, db, b.Delivery.BotID, follower.Reference, false)
+	require.NoError(t, err)
+	_, ready, err = b.beginBotIntent(ctx, next, botRenderedDelivery{})
+	require.NoError(t, err)
+	require.True(t, ready, "late success releases the follower")
+}
+
+func TestBotTransportRetryTerminalResponseWorker(t *testing.T) {
+	t.Parallel()
+	db := foodPendingDatabase(t)
+	ctx := t.Context()
+	b := botDeliveryTestBot(db)
+	b.Delivery.BotID = 999
+	b.Host.LocalBotDelivery.Service.Delivery = b.Delivery
+	fake, err := sandbox.New(ctx, db, "synthetic")
+	require.NoError(t, err)
+	ref := botdelivery.Reference{Kind: botdelivery.IdentityIntent, Update: 1,
+		Notice: i18n.IdentityUnavailable, Language: "en"}
+	queued, err := b.enqueueBotIntent(ctx, "", 101, "worker-terminal", "notice", ref, "send")
+	require.NoError(t, err)
+	completion := make(chan error, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recorder := httptest.NewRecorder()
+		fake.Handler().ServeHTTP(recorder, r)
+		// Hold the actual provider receipt while the owner records interruption
+		// and cancellation. The response then reaches the original worker.
+		admitted, readErr := botdelivery.Read(ctx, db, 999, queued.Reference, false)
+		if readErr == nil {
+			readErr = b.finishBotIntent(ctx, admitted,
+				delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"},
+				botdelivery.Continuation{}, false)
+		}
+		if readErr == nil {
+			admitted, readErr = botdelivery.Read(ctx, db, 999, queued.Reference, false)
+		}
+		if readErr == nil {
+			readErr = b.postponeBotIntent(ctx, admitted, true)
+		}
+		completion <- readErr
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(recorder.Code)
+		_, _ = w.Write(recorder.Body.Bytes())
+	}))
+	defer server.Close()
+	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
+	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference), "terminal receipt must not invoke sent continuation")
+	require.NoError(t, <-completion)
+	current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Cancelled, current.State)
+	require.Positive(t, current.MessageID)
+	require.False(t, current.ContinuationDone)
+	require.NoError(t, b.RecoverBotIntents(ctx))
+	require.NoError(t, b.DeliverBotIntent(ctx, queued.Reference))
 }
 
 func TestBotTransportRetryAdmissionAndRecoveryBudget(t *testing.T) {

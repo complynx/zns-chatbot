@@ -75,14 +75,33 @@ func (b *Bot) finishBotIntent(
 	if err != nil {
 		return err
 	}
-	if current.Attempt != attempt.Attempt ||
-		(current.State != delivery.Sending && current.State != delivery.Uncertain) {
+	if current.Attempt != attempt.Attempt {
+		return botdelivery.ErrBinding
+	}
+	if current.State == delivery.Rejected || current.State == delivery.Cancelled {
+		return recordBotTerminalReceipt(ctx, tx, current, outcome, fallback)
+	}
+	lateSuccess := false
+	if current.State == delivery.Deferred && !fallback && outcome.Kind == delivery.Succeeded && outcome.MessageID > 0 {
+		err = tx.QueryRow(ctx, `SELECT COALESCE(last_uncertain_attempt=$4,false) FROM bot.delivery_intents
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+			current.BotID, current.Operation, current.Effect, current.Attempt).Scan(&lateSuccess)
+		if err != nil {
+			return core.DatabaseOperationError(err)
+		}
+	}
+	if !lateSuccess && current.State != delivery.Sending && current.State != delivery.Uncertain {
 		return botdelivery.ErrBinding
 	}
 	if fallback && (current.Phase != botPhaseEdit || outcome.Kind != delivery.Deferred) {
 		return botdelivery.ErrBinding
 	}
-	outcome, deadline, err := delivery.Finish(ctx, tx, b.Delivery, current.QueueReference(), outcome)
+	var deadline time.Time
+	if lateSuccess {
+		outcome, deadline, err = delivery.FinishUncertainSuccess(ctx, tx, b.Delivery, current.QueueReference(), outcome)
+	} else {
+		outcome, deadline, err = delivery.Finish(ctx, tx, b.Delivery, current.QueueReference(), outcome)
+	}
 	if err != nil {
 		return err
 	}
@@ -124,6 +143,31 @@ func (b *Bot) finishBotIntent(
 	)
 	if err != nil {
 		return core.DatabaseOperationError(err)
+	}
+	return core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+// A late positive receipt records transport evidence without reviving terminal work.
+func recordBotTerminalReceipt(
+	ctx context.Context,
+	tx pgx.Tx,
+	current botdelivery.Intent,
+	outcome delivery.Outcome,
+	fallback bool,
+) error {
+	if fallback || outcome.Kind != delivery.Succeeded || outcome.MessageID <= 0 {
+		return botdelivery.ErrBinding
+	}
+	updated, err := tx.Exec(ctx, `UPDATE bot.delivery_intents SET message_id=$5
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3 AND attempt=$4
+ AND last_uncertain_attempt=$4 AND state IN ('failed','cancelled')
+ AND (message_id=0 OR message_id=$5)`,
+		current.BotID, current.Operation, current.Effect, current.Attempt, outcome.MessageID)
+	if err != nil {
+		return core.DatabaseOperationError(err)
+	}
+	if updated.RowsAffected() != 1 {
+		return botdelivery.ErrBinding
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
 }
