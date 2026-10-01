@@ -26,6 +26,7 @@ type cacheProvider struct {
 	inactive        atomic.Bool
 	exchanges       atomic.Int32
 	verifications   atomic.Int32
+	exchangeToken   string
 	lifetime        int64
 	issuer          string
 }
@@ -65,8 +66,12 @@ func (p *cacheProvider) serveExchange(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(p.rejectionBody))
 		return
 	}
+	token := p.exchangeToken
+	if token == "" {
+		token = "token-" + r.Form.Get("subject_token")
+	}
 	body := map[string]any{
-		"access_token": "token-" + r.Form.Get("subject_token"), "token_type": "Bearer",
+		"access_token": token, "token_type": "Bearer",
 		"issued_token_type": "urn:ietf:params:oauth:token-type:jwt", "expires_in": p.lifetime,
 	}
 	_ = json.NewEncoder(w).Encode(body)
@@ -392,4 +397,58 @@ func TestZitadelObservedDenialEvictsTrustedSubject(t *testing.T) {
 	provider.failed.Store(true)
 	_, err = adapter.Verify(t.Context(), token)
 	require.ErrorIs(t, err, ErrZitadelUnavailable, "denial must not be cached as a positive verdict")
+}
+
+func TestZitadelFirstDenialUsesTrustedExchangeAssociation(t *testing.T) {
+	t.Parallel()
+	for _, token := range []string{"token-alice", "token-never-exchanged"} {
+		t.Run(token, func(t *testing.T) {
+			t.Parallel()
+			adapter, provider := cacheAdapter(t, 3600)
+			for _, subject := range []string{"alice", "bob"} {
+				_, err := adapter.Exchange(t.Context(), subject)
+				require.NoError(t, err)
+			}
+			provider.inactive.Store(true)
+			_, err := adapter.Verify(t.Context(), token)
+			require.ErrorIs(t, err, ErrZitadelIdentity)
+			require.Empty(t, adapter.verified.values, "the first introspection never established a trusted subject")
+			provider.failed.Store(true)
+			aliceToken, err := adapter.Exchange(t.Context(), "alice")
+			if token == "token-alice" {
+				require.ErrorIs(t, err, ErrZitadelUnavailable, "a rejected exchanged token must not remain reusable")
+				require.Empty(t, aliceToken)
+				require.EqualValues(t, 3, provider.exchanges.Load(), "Alice must reach the provider after denial")
+			} else {
+				require.NoError(t, err, "an unassociated rejected token must not evict Alice")
+				require.Equal(t, "token-alice", aliceToken)
+				require.EqualValues(t, 2, provider.exchanges.Load())
+			}
+			bobToken, err := adapter.Exchange(t.Context(), "bob")
+			require.NoError(t, err, "unrelated Bob retains his cached exchange during the outage")
+			require.Equal(t, "token-bob", bobToken)
+			require.EqualValues(t, 1, provider.verifications.Load())
+		})
+	}
+}
+
+func TestZitadelFirstDenialInvalidatesEveryMatchingExchange(t *testing.T) {
+	t.Parallel()
+	adapter, provider := cacheAdapter(t, 3600)
+	provider.exchangeToken = "shared-exchanged-token"
+	for _, subject := range []string{"alice", "bob"} {
+		token, err := adapter.Exchange(t.Context(), subject)
+		require.NoError(t, err)
+		require.Equal(t, provider.exchangeToken, token)
+	}
+	provider.inactive.Store(true)
+	_, err := adapter.Verify(t.Context(), provider.exchangeToken)
+	require.ErrorIs(t, err, ErrZitadelIdentity)
+	require.Empty(t, adapter.exchanges.values, "every trusted association of the rejected token is retired")
+	provider.failed.Store(true)
+	for _, subject := range []string{"alice", "bob"} {
+		_, err = adapter.Exchange(t.Context(), subject)
+		require.ErrorIs(t, err, ErrZitadelUnavailable)
+	}
+	require.EqualValues(t, 4, provider.exchanges.Load())
 }

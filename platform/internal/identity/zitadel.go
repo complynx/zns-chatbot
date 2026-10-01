@@ -199,8 +199,13 @@ func (z *Zitadel) Verify(ctx context.Context, token string) (string, error) {
 	previousSubject := z.verified.subject(key)
 	return z.verified.resolve(ctx, key, func(ctx context.Context) (cachedIdentity, error) {
 		entry, err := z.verify(ctx, token)
-		if errors.Is(err, ErrZitadelIdentity) && previousSubject != "" {
+		if errors.Is(err, ErrZitadelIdentity) {
 			z.InvalidateSubject(previousSubject)
+			for _, subject := range z.exchanges.subjectsForValue(token) {
+				if subject != previousSubject {
+					z.InvalidateSubject(subject)
+				}
+			}
 		}
 		return entry, err
 	})

@@ -160,6 +160,20 @@ func (c *positiveIdentityCache) subject(key string) string {
 	return c.values[key].subject
 }
 
+// subjectsForValue uses associations established by successful exchanges, never
+// claims from a rejected token. Callers invalidate after this lock is released.
+func (c *positiveIdentityCache) subjectsForValue(value string) []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var subjects []string
+	for _, entry := range c.values {
+		if entry.value == value {
+			subjects = append(subjects, entry.subject)
+		}
+	}
+	return subjects
+}
+
 // InvalidateSubject retires both credential caches after a committed local
 // identity or permission change. Callers must supply the stored Zitadel subject.
 func (z *Zitadel) InvalidateSubject(subject string) {
