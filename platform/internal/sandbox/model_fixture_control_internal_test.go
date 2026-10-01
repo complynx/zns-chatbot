@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
 type modelControlFixture struct {
@@ -125,7 +126,12 @@ func TestModelSelectionAndConsumptionBoundNestedMutexAdmission(t *testing.T) {
 			go func() {
 				scope := modelFixtureScope{Owner: "alice", UpdateID: 9}
 				if consume {
-					_, err := f.fake.consumeModelPlan(ctx, scope, agent.Input{Text: "private marker"})
+					_, err := f.fake.consumeModelPlan(
+						ctx,
+						scope,
+						agent.Input{Text: "private marker"},
+						modelFixtureSelection{},
+					)
 					done <- err
 				} else {
 					_, err := f.fake.selectModelHold(ctx, scope, agent.Input{Text: "private marker"})
@@ -280,7 +286,7 @@ func TestModelProviderStopCancelsActualSelectionLockWait(t *testing.T) {
 	}
 	require.True(t, f.fake.mu.TryLock())
 	f.fake.mu.Unlock()
-	f.state(t, "provider_stopped")
+	f.state(t, "armed")
 	assert.Zero(t, f.fake.modelFixtures.cases[modelFixtureKey("alice", 9)].accepted)
 }
 
@@ -319,6 +325,179 @@ func (f modelControlFixture) install(t *testing.T, owner string, update int64, m
 }
 
 const modelControlScope = "?owner=alice&update_id=9&turn=0"
+
+func TestModelCancelledDuplicateCannotFinishClaimedRequest(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{modelHoldBefore, modelHoldAfter} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			f := newModelControlFixture(t)
+			f.install(t, "alice", 9, mode)
+			f.install(t, "bob", 10, "")
+			remote := FixtureRemote{URL: f.data.URL + "/lab/model"}
+			ctx := agent.WithRequestScope(t.Context(), agent.RequestScope{Owner: "alice", UpdateID: 9})
+			result := make(chan error, 1)
+			go func() { _, err := remote.Plan(ctx, agent.Input{Text: "private marker"}); result <- err }()
+			phase := "held_before_consume"
+			if mode == modelHoldAfter {
+				phase = "held_process_local"
+			}
+			before := f.state(t, phase)
+			duplicate, cancel := context.WithCancel(t.Context())
+			cancel()
+			_, err := f.fake.fixtureModelPlan(duplicate, modelFixtureScope{Owner: "alice", UpdateID: 9},
+				agent.Input{Text: "private marker"})
+			require.Error(t, err)
+			testModelDuplicateAdmissionCancellation(t, f.fake)
+			after, exists := f.fake.modelControl.view(modelFixtureScope{Owner: "alice", UpdateID: 9})
+			require.True(t, exists)
+			assert.Equal(t, before, after, "a nonowner must preserve the active claim and consumption evidence")
+			_, err = remote.Plan(ctx, agent.Input{Text: "private marker"})
+			require.Error(t, err, "the original claim must still exclude another request")
+			_, err = remote.Plan(agent.WithRequestScope(t.Context(), agent.RequestScope{Owner: "bob", UpdateID: 10}),
+				agent.Input{Text: "private marker"})
+			require.NoError(t, err)
+			status, _ := f.request(t, http.MethodPost, "/control/model/release"+modelControlScope,
+				`{"action":"deliver"}`, f.key, true)
+			require.Equal(t, http.StatusOK, status)
+			select {
+			case err = <-result:
+				require.NoError(t, err)
+			case <-time.After(time.Second):
+				t.Fatal("original request did not finish after release")
+			}
+			state := f.state(t, "response_generated")
+			assert.True(t, state.Consumed)
+			assert.False(t, state.Durable, "nil DB must remain process local")
+		})
+	}
+}
+
+func testModelDuplicateAdmissionCancellation(t *testing.T, f *Fake) {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.fixtureModelPlan(ctx, modelFixtureScope{Owner: "alice", UpdateID: 9},
+			agent.Input{Text: "private marker"})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("duplicate admission ended before cancellation: %v", err)
+	case <-time.After(10 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case err := <-done:
+		require.Error(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("cancelled duplicate did not leave admission")
+	}
+}
+
+func TestModelSelectionIdentityPreservesDurableClaimAndRejectsStaleCleanup(t *testing.T) {
+	t.Parallel()
+	c := newModelFixtureControl(t.Context())
+	scope := modelFixtureScope{Owner: "alice", UpdateID: 9}
+	c.install(modelFixtureInstall{Owner: scope.Owner, UpdateID: scope.UpdateID,
+		Hold: &modelFixtureHoldSetup{Mode: modelHoldAfter}})
+	first, err := c.claim(scope)
+	require.NoError(t, err)
+	c.consumed(modelConsumption{Owner: scope.Owner, UpdateID: scope.UpdateID,
+		RequestSHA256: strings.Repeat("a", 64), ResponseSHA256: strings.Repeat("b", 64)}, true)
+	before, exists := c.view(scope)
+	require.True(t, exists)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.True(t, c.cancelled(ctx, scope, modelFixtureSelection{}))
+	after, exists := c.view(scope)
+	require.True(t, exists)
+	assert.Equal(t, before, after)
+	_, status := c.release(scope, "deliver")
+	require.Equal(t, http.StatusOK, status)
+	require.NoError(t, c.wait(t.Context(), scope, first))
+	c.finishSelection(scope, first, "response_generated")
+	second, err := c.claim(scope)
+	require.NoError(t, err)
+	c.finishSelection(scope, first, "request_cancelled")
+	_, err = c.claim(scope)
+	require.Error(t, err, "stale cleanup cannot clear the new selection")
+	c.finishSelection(scope, second, "unavailable")
+	after, exists = c.view(scope)
+	require.True(t, exists)
+	assert.True(t, after.Durable)
+	assert.True(t, after.Consumed)
+}
+
+func TestModelInstallAdmissionEndsBeforeBlockedMutation(t *testing.T) {
+	t.Parallel()
+	for _, nested := range []bool{false, true} {
+		for _, enqueue := range []bool{false, true} {
+			for _, ending := range []string{"request_cancelled", "provider_stopped", "deadline"} {
+				t.Run(stringTurn(map[bool]int{false: 0, true: 1}[nested])+"/"+
+					stringTurn(map[bool]int{false: 0, true: 1}[enqueue])+"/"+ending, func(t *testing.T) {
+					t.Parallel()
+					testModelInstallAdmission(t, nested, enqueue, ending)
+				})
+			}
+		}
+	}
+}
+
+func testModelInstallAdmission(t *testing.T, nested, enqueue bool, ending string) {
+	t.Helper()
+	lifetime, stop := context.WithCancel(t.Context())
+	defer stop()
+	f := newModelControlFixtureContext(lifetime, t)
+	value := modelFixtureInstall{Owner: "alice", UpdateID: 9,
+		Steps: []modelFixtureStep{fixtureStep("private marker")}, Hold: &modelFixtureHoldSetup{Mode: modelHoldBefore}}
+	if enqueue {
+		value.Owner, value.UpdateID = "", 0
+		value.Input = &modelFixtureInput{User: identity.AliceTelegramID, Text: "private marker"}
+	}
+	mutex := &f.fake.mu
+	if nested {
+		mutex = &f.fake.modelFixtures.mu
+	}
+	mutex.Lock()
+	ctx, cancel := context.WithTimeout(t.Context(), 40*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := f.fake.installAndEnqueueFixture(ctx, value); done <- err }()
+	select {
+	case err := <-done:
+		mutex.Unlock()
+		t.Fatalf("installation ended before cancellation: %v", err)
+	case <-time.After(10 * time.Millisecond):
+	}
+	switch ending {
+	case "request_cancelled":
+		cancel()
+	case "provider_stopped":
+		stop()
+	}
+	select {
+	case err := <-done:
+		mutex.Unlock()
+		require.Error(t, err)
+	case <-time.After(time.Second):
+		mutex.Unlock()
+		t.Fatal("installation admission outlived cancellation while the mutex remained held")
+	}
+	assert.Empty(t, f.fake.modelFixtures.cases)
+	assert.Empty(t, f.fake.modelControl.entries)
+	assert.Empty(t, f.fake.messages)
+	assert.Empty(t, f.fake.updates)
+	assert.Zero(t, f.fake.next)
+	assert.Empty(t, f.fake.modelConsumed)
+	if ending != "provider_stopped" {
+		f.install(t, "bob", 10, "")
+	}
+}
 
 func TestModelControlHoldExpiresWithoutDetachedWaiter(t *testing.T) {
 	t.Parallel()
@@ -486,6 +665,7 @@ func TestModelControlFailuresNeverReinsertConsumedResponse(t *testing.T) {
 			require.Error(
 				t,
 				reopened.installModelCase(
+					t.Context(),
 					modelFixtureInstall{
 						Owner:    "alice",
 						UpdateID: 9,

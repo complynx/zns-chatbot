@@ -133,3 +133,5 @@ outcome, a working subsequent intent and coherent durable completed state/draft.
 
 Written by d_observability_developer (gpt-6/Codex)
 on behalf of Daniel Drizhuk
+
+Request terminal transitions require the private selection identity. A cancelled duplicate cannot release or finish the selected request. Installation shares a two-second admission/persistence budget and ends on either request cancellation or provider shutdown, including nested fixture-lock admission. Neither cancelled installation nor shutdown may install a fixture after admission ends.

@@ -20,15 +20,17 @@ type modelFixtureHoldSetup struct {
 }
 
 type modelFixtureHold struct {
-	setup   modelFixtureHoldSetup
-	release chan string
-	claimed bool
-	view    modelFixtureControlState
+	setup    modelFixtureHoldSetup
+	release  chan string
+	claimed  bool
+	identity chan struct{}
+	view     modelFixtureControlState
 }
 
 type modelFixtureSelection struct {
-	mode    string
-	release <-chan string
+	identity chan struct{}
+	mode     string
+	release  <-chan string
 }
 
 type modelFixtureControlState struct {
@@ -158,76 +160,97 @@ func (c *modelFixtureControl) claim(scope modelFixtureScope) (modelFixtureSelect
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	hold := c.entries[modelScopeKey(scope)]
-	if hold == nil || hold.setup.Mode == "" {
-		return modelFixtureSelection{}, nil
+	if hold == nil {
+		if len(c.entries) >= maxModelFixtureSteps {
+			return modelFixtureSelection{}, errors.New("fixture control capacity reached")
+		}
+		hold = &modelFixtureHold{}
+		c.entries[modelScopeKey(scope)] = hold
 	}
 	if hold.claimed {
 		return modelFixtureSelection{}, errors.New("fixture request already selected")
 	}
-	if hold.view.Phase != "armed" {
-		return modelFixtureSelection{}, nil
-	}
 	hold.claimed = true
-	hold.view.Phase = "matched"
-	if hold.setup.Mode == modelHoldBefore {
-		hold.view.Phase = "held_before_consume"
+	hold.identity = make(chan struct{})
+	selection := modelFixtureSelection{identity: hold.identity}
+	if hold.view.Phase == "armed" {
+		selection.mode, selection.release = hold.setup.Mode, hold.release
+		hold.view.Phase = "matched"
+		if hold.setup.Mode == modelHoldBefore {
+			hold.view.Phase = "held_before_consume"
+		}
 	}
-	return modelFixtureSelection{mode: hold.setup.Mode, release: hold.release}, nil
+	return selection, nil
 }
 
+// Administrative transitions occur only during installation or state restoration.
 func (c *modelFixtureControl) finish(scope modelFixtureScope, phase string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if hold := c.entries[modelScopeKey(scope)]; hold != nil {
-		if hold.view.Phase == "persistence_unavailable" && phase == "unavailable" {
-			return
-		}
-		hold.view.Phase = phase
-		if phase == "persistence_unavailable" {
-			hold.view.Durable = false
-		}
-		if phase != "released" && phase != "persistence_pending" {
-			hold.claimed = false
-		}
+		hold.finish(phase)
+	}
+}
+
+// A request may finish only its own selection, including after cancellation.
+func (c *modelFixtureControl) finishSelection(scope modelFixtureScope, selection modelFixtureSelection, phase string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if hold := c.entries[modelScopeKey(scope)]; hold != nil && selection.identity != nil &&
+		hold.identity == selection.identity {
+		hold.finish(phase)
+	}
+}
+
+func (hold *modelFixtureHold) finish(phase string) {
+	if hold.view.Phase == "persistence_unavailable" && phase == "unavailable" {
+		return
+	}
+	hold.view.Phase = phase
+	if phase == "persistence_unavailable" {
+		hold.view.Durable = false
+	}
+	if phase != "released" && phase != "persistence_pending" {
+		hold.claimed = false
 	}
 }
 
 func (c *modelFixtureControl) wait(ctx context.Context, scope modelFixtureScope, hold modelFixtureSelection) error {
-	if c.cancelled(ctx, scope) {
+	if c.cancelled(ctx, scope, hold) {
 		return errModelFixtureUnavailable
 	}
 	timer := time.NewTimer(modelHoldTimeout)
 	defer timer.Stop()
 	select {
 	case action := <-hold.release:
-		if c.cancelled(ctx, scope) {
+		if c.cancelled(ctx, scope, hold) {
 			return errModelFixtureUnavailable
 		}
-		c.finish(scope, "released")
+		c.finishSelection(scope, hold, "released")
 		err := modelReleaseError(action)
 		if err != nil {
-			c.finish(scope, "provider_failure")
+			c.finishSelection(scope, hold, "provider_failure")
 		}
 		return err
 	case <-ctx.Done():
-		c.cancelled(ctx, scope)
+		c.cancelled(ctx, scope, hold)
 	case <-c.lifetime.Done():
-		c.finish(scope, "provider_stopped")
+		c.finishSelection(scope, hold, "provider_stopped")
 	case <-timer.C:
-		if !c.cancelled(ctx, scope) {
-			c.finish(scope, "hold_expired")
+		if !c.cancelled(ctx, scope, hold) {
+			c.finishSelection(scope, hold, "hold_expired")
 		}
 	}
 	return errModelFixtureUnavailable
 }
 
-func (c *modelFixtureControl) cancelled(ctx context.Context, scope modelFixtureScope) bool {
+func (c *modelFixtureControl) cancelled(ctx context.Context, scope modelFixtureScope, hold modelFixtureSelection) bool {
 	if c.lifetime.Err() != nil {
-		c.finish(scope, "provider_stopped")
+		c.finishSelection(scope, hold, "provider_stopped")
 		return true
 	}
 	if ctx.Err() != nil {
-		c.finish(scope, "request_cancelled")
+		c.finishSelection(scope, hold, "request_cancelled")
 		return true
 	}
 	return false

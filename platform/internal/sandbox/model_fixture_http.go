@@ -72,11 +72,10 @@ func (f *Fake) modelFixturePlan(w http.ResponseWriter, r *http.Request) {
 		api.JSON(w, http.StatusConflict, map[string]string{errorField: err.Error()})
 		return
 	}
-	if f.modelControl.cancelled(r.Context(), scope) {
+	if f.modelControl.cancelled(r.Context(), scope, modelFixtureSelection{}) {
 		api.JSON(w, http.StatusServiceUnavailable, map[string]string{errorField: "fixture provider unavailable"})
 		return
 	}
-	f.modelControl.finish(scope, "response_generated")
 	api.JSON(w, http.StatusOK, plan)
 }
 

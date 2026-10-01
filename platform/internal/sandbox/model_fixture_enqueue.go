@@ -11,10 +11,15 @@ import (
 
 // Publish the update only after its fixture exists, under the polling lock.
 func (f *Fake) installAndEnqueueFixture(ctx context.Context, value modelFixtureInstall) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, modelPersistenceTimeout)
+	stop := context.AfterFunc(f.modelControl.lifetime, cancel)
+	defer func() { stop(); cancel() }()
+	if err := f.modelMutationLock(ctx); err != nil {
+		return 0, errModelFixtureUnavailable
+	}
+	defer f.mu.Unlock()
 	if value.Input == nil {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		return value.UpdateID, f.installModelCase(value)
+		return value.UpdateID, f.installModelCase(ctx, value)
 	}
 	input := value.Input
 	owner, ok := identity.Subject(input.User)
@@ -22,14 +27,12 @@ func (f *Fake) installAndEnqueueFixture(ctx context.Context, value modelFixtureI
 		len(input.LanguageCode) > 64 {
 		return 0, errors.New("invalid fixture input scope")
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
 	if len(f.updates) >= maxPendingUpdates {
 		return 0, errors.New("pending update capacity exceeded")
 	}
 	value.Owner = owner
 	value.UpdateID = f.next + 1
-	if err := f.installModelCase(value); err != nil {
+	if err := f.installModelCase(ctx, value); err != nil {
 		return 0, err
 	}
 	f.next = value.UpdateID

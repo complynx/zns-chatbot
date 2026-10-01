@@ -123,6 +123,10 @@ func freezeModelSteps(steps []modelFixtureStep) ([]frozenModelStep, int, error) 
 }
 
 func (m *modelFixtures) install(value modelFixtureInstall) error {
+	return m.installContext(context.Background(), context.Background(), value)
+}
+
+func (m *modelFixtures) installContext(ctx, lifetime context.Context, value modelFixtureInstall) error {
 	if !syntheticFixtureOwner(value.Owner) || value.UpdateID <= 0 {
 		return errors.New(invalidFixtureScope)
 	}
@@ -130,8 +134,13 @@ func (m *modelFixtures) install(value modelFixtureInstall) error {
 	if err != nil {
 		return err
 	}
-	m.mu.Lock()
+	if err = m.modelLock(ctx); err != nil {
+		return err
+	}
 	defer m.mu.Unlock()
+	if ctx.Err() != nil || lifetime.Err() != nil {
+		return errModelFixtureUnavailable
+	}
 	if m.cases == nil {
 		m.cases = map[string]*modelFixtureCase{}
 	}
