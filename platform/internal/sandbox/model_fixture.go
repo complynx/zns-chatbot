@@ -27,11 +27,12 @@ type modelFixtureStep struct {
 }
 
 type modelFixtureInstall struct {
-	Assessment json.RawMessage    `json:"assessment,omitempty"`
-	Input      *modelFixtureInput `json:"input,omitempty"`
-	Owner      string             `json:"owner"`
-	UpdateID   int64              `json:"update_id"`
-	Steps      []modelFixtureStep `json:"steps"`
+	Hold       *modelFixtureHoldSetup `json:"hold,omitempty"`
+	Assessment json.RawMessage        `json:"assessment,omitempty"`
+	Input      *modelFixtureInput     `json:"input,omitempty"`
+	Owner      string                 `json:"owner"`
+	UpdateID   int64                  `json:"update_id"`
+	Steps      []modelFixtureStep     `json:"steps"`
 }
 
 type modelFixtureInput struct {
@@ -153,6 +154,10 @@ func (m *modelFixtures) install(value modelFixtureInstall) error {
 }
 
 func (m *modelFixtures) plan(scope modelFixtureScope, input agent.Input) (agent.Plan, error) {
+	return m.fixturePlan(scope, input, true)
+}
+
+func (m *modelFixtures) fixturePlan(scope modelFixtureScope, input agent.Input, consume bool) (agent.Plan, error) {
 	if !syntheticFixtureOwner(scope.Owner) || scope.UpdateID <= 0 || scope.Turn < 0 {
 		return agent.Plan{}, errors.New(invalidFixtureScope)
 	}
@@ -187,9 +192,11 @@ func (m *modelFixtures) plan(scope modelFixtureScope, input agent.Input) (agent.
 	if err = json.Unmarshal(step.plan, &plan); err != nil {
 		return agent.Plan{}, errors.New("invalid stored fixture")
 	}
-	value.next++
-	value.accepted++
-	value.lastStatus = fixtureAccepted
+	if consume {
+		value.next++
+		value.accepted++
+		value.lastStatus = fixtureAccepted
+	}
 	return plan, nil
 }
 

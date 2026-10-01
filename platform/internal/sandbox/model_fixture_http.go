@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"io"
@@ -29,6 +30,11 @@ func (f *Fake) installModelFixture(w http.ResponseWriter, r *http.Request) {
 		api.JSON(w, http.StatusBadRequest, map[string]string{errorField: "invalid fixture"})
 		return
 	}
+	if value.Hold != nil && (f.delay == nil || subtle.ConstantTimeCompare(
+		[]byte(r.Header.Get("X-R104-Control")), []byte(f.delay.key)) != 1) {
+		api.JSON(w, http.StatusForbidden, map[string]string{errorField: "model control authorization required"})
+		return
+	}
 	update, err := f.installAndEnqueueFixture(r.Context(), value)
 	if err != nil {
 		api.JSON(w, http.StatusConflict, map[string]string{errorField: err.Error()})
@@ -53,11 +59,20 @@ func (f *Fake) modelFixturePlan(w http.ResponseWriter, r *http.Request) {
 		api.JSON(w, http.StatusBadRequest, map[string]string{errorField: "invalid fixture input"})
 		return
 	}
-	plan, err := f.modelFixtures.plan(modelFixtureScope{Owner: owner, UpdateID: update, Turn: turn}, input)
+	scope := modelFixtureScope{Owner: owner, UpdateID: update, Turn: turn}
+	plan, err := f.fixtureModelPlan(r.Context(), scope, input)
 	if err != nil {
+		if errors.Is(err, http.ErrAbortHandler) {
+			panic(http.ErrAbortHandler)
+		}
+		if errors.Is(err, errModelFixtureUnavailable) {
+			api.JSON(w, http.StatusServiceUnavailable, map[string]string{errorField: "fixture provider unavailable"})
+			return
+		}
 		api.JSON(w, http.StatusConflict, map[string]string{errorField: err.Error()})
 		return
 	}
+	f.modelControl.finish(scope, "response_generated")
 	api.JSON(w, http.StatusOK, plan)
 }
 

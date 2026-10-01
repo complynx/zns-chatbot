@@ -12,7 +12,9 @@ import (
 // Publish the update only after its fixture exists, under the polling lock.
 func (f *Fake) installAndEnqueueFixture(ctx context.Context, value modelFixtureInstall) (int64, error) {
 	if value.Input == nil {
-		return value.UpdateID, f.modelFixtures.install(value)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return value.UpdateID, f.installModelCase(value)
 	}
 	input := value.Input
 	owner, ok := identity.Subject(input.User)
@@ -27,7 +29,7 @@ func (f *Fake) installAndEnqueueFixture(ctx context.Context, value modelFixtureI
 	}
 	value.Owner = owner
 	value.UpdateID = f.next + 1
-	if err := f.modelFixtures.install(value); err != nil {
+	if err := f.installModelCase(value); err != nil {
 		return 0, err
 	}
 	f.next = value.UpdateID
@@ -44,6 +46,7 @@ func (f *Fake) installAndEnqueueFixture(ctx context.Context, value modelFixtureI
 	f.messages = append(f.messages, message)
 	f.updates = append(f.updates, telegram.Update{ID: f.next, Message: &message})
 	if err := f.save(ctx); err != nil {
+		f.modelControl.invalidateInstall(value)
 		f.messages = f.messages[:len(f.messages)-1]
 		f.updates = f.updates[:len(f.updates)-1]
 		return 0, errors.New("fixture update persistence failed")
