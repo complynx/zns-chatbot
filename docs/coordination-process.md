@@ -41,7 +41,8 @@ Root releases a slot after terminal evidence or an explicit owner interruption,
 preserving interrupted evidence as interrupted. New checks wait for the slot.
 
 Priority: the accepted registration-clock dependency and its operator/background
-result closure, followed by final-byte checks needed for a ready review. Other
+result closure and bounded Telegram resends, followed by final-byte checks
+needed for a ready review. Other
 independent product development continues. Never edit source during a gate and
 present that gate as proof of the new bytes; freeze a successor and refresh the
 affected checks. Do not relax linter configuration or scenario budgets.
@@ -78,7 +79,8 @@ the reviewer owns observable UI results and the independent verdict.
 Root maintains one finite C–E cohort in the existing local Kanban: accepted
 registration clock, callback ACK, identity revocation cache, diagnostics, clock
 operator plus setup/role consumers, background results/schema091, and delivery
-resolution/schema092 when included. Record exact reviewed commits and the final
+retries/schemas092–094, shared queue completion and late confirmed receipts.
+Record exact reviewed commits and the final
 integration commit. Unrelated work stays on separate branches until this cohort
 has a frozen stand and actual acceptance results. Necessary defects remain in
 scope; a substantive correction requires affected fresh review and a new freeze.

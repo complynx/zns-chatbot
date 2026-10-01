@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"context"
 	"strconv"
 	"testing"
 	"time"
@@ -342,4 +343,128 @@ func queueRejectedGuards(t *testing.T, db *pgxpool.Pool, ref delivery.Reference)
 	)
 	require.ErrorIs(t, err, delivery.ErrQueueState, "a late receipt cannot resurrect a definitively rejected attempt")
 	require.NoError(t, tx.Rollback(t.Context()))
+}
+
+func TestDeliveryQueueKnownSuccessDuringUncertainRetry(t *testing.T) {
+	t.Parallel()
+	db := database(t)
+	ref := delivery.Reference{Owner: delivery.Orders, Key: "uncertain", Effect: "notice"}
+	follower := delivery.Reference{Owner: delivery.Passes, Key: "follower", Effect: "notice"}
+	destination := delivery.Destination{Chat: "101"}
+	initial := queueRegister(t, db, ref, destination, delivery.Background)
+	queueRegister(t, db, follower, destination, delivery.Background)
+	require.True(t, queueBegin(t, db, ref).Ready)
+	queueFinish(t, db, ref, delivery.Outcome{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"})
+	queueTransaction(t, db, func(tx pgx.Tx) {
+		require.NoError(t, delivery.Project(t.Context(), tx, queueSettings().BotID, ref,
+			delivery.Deferred, time.Now().Add(time.Hour)))
+	})
+	require.Empty(t, queueCandidates(t, db))
+	require.False(t, queueBegin(t, db, follower).Ready)
+	scheduling := queueSchedulingSnapshot(t, db)
+	known := delivery.Outcome{Kind: delivery.Succeeded, MessageID: 8123}
+	tx, err := db.Begin(t.Context())
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(t.Context()) }()
+	actual, deadline, err := queueKnownUncertainSuccess(t.Context(), tx, ref, known)
+	require.NoError(t, err)
+	require.Equal(t, known, actual)
+	require.False(t, deadline.IsZero())
+	require.NoError(t, tx.Rollback(t.Context()))
+	require.Equal(t, delivery.Deferred, queueRegister(t, db, ref, destination, delivery.Background).State)
+	require.False(t, queueBegin(t, db, follower).Ready, "rolled-back receipt must keep the lane blocked")
+	queueTransaction(t, db, func(tx pgx.Tx) {
+		resolved, _, finishErr := queueKnownUncertainSuccess(t.Context(), tx, ref, known)
+		require.NoError(t, finishErr)
+		require.Equal(t, known, resolved)
+	})
+	stored := queueRegister(t, db, ref, destination, delivery.Background)
+	require.Equal(t, delivery.Succeeded, stored.State)
+	require.Equal(t, initial.Sequence, stored.Sequence)
+	require.Equal(t, scheduling, queueSchedulingSnapshot(t, db), "late success is not a new send admission")
+	require.Equal(t, []delivery.Reference{follower}, queueReferences(queueCandidates(t, db)))
+	require.True(t, queueBegin(t, db, follower).Ready)
+}
+
+func queueKnownUncertainSuccess(
+	ctx context.Context, tx pgx.Tx, ref delivery.Reference, outcome delivery.Outcome,
+) (delivery.Outcome, time.Time, error) {
+	return delivery.FinishUncertainSuccess(ctx, tx, queueSettings(), ref, outcome)
+}
+
+func TestDeliveryQueueUncertainSuccessRejectsInvalidOutcomes(t *testing.T) {
+	t.Parallel()
+	db := database(t)
+	ref := delivery.Reference{Owner: delivery.Orders, Key: "pending", Effect: "notice"}
+	destination := delivery.Destination{Chat: "101"}
+	queueRegister(t, db, ref, destination, delivery.Background)
+	scheduling := queueSchedulingSnapshot(t, db)
+	for _, outcome := range []delivery.Outcome{
+		{},
+		{Kind: delivery.Succeeded},
+		{Kind: delivery.Succeeded, MessageID: -1},
+		{Kind: delivery.Succeeded, MessageID: 1, Reason: "not_a_receipt"},
+		{Kind: delivery.Succeeded, MessageID: 1, RetryAfter: 1},
+		{Kind: delivery.Succeeded, MessageID: 1, Missing: true},
+		{Kind: delivery.Deferred, Reason: "telegram_rate_limit", RetryAfter: 5},
+		{Kind: delivery.Uncertain, Reason: "telegram_outcome_unknown"},
+		{Kind: delivery.Rejected, Reason: "telegram_recipient_rejected"},
+	} {
+		queueTransaction(t, db, func(tx pgx.Tx) {
+			_, _, err := delivery.FinishUncertainSuccess(t.Context(), tx, queueSettings(), ref, outcome)
+			require.ErrorIs(t, err, delivery.ErrQueueState)
+		})
+	}
+	queueTransaction(t, db, func(tx pgx.Tx) {
+		_, _, err := delivery.Finish(t.Context(), tx, queueSettings(), ref,
+			delivery.Outcome{Kind: delivery.Succeeded, MessageID: 44})
+		require.ErrorIs(t, err, delivery.ErrQueueState, "ordinary pending completion is still forbidden")
+		for _, state := range []delivery.Kind{delivery.Sending, delivery.Succeeded} {
+			require.ErrorIs(t, delivery.Project(t.Context(), tx, queueSettings().BotID, ref, state, time.Time{}),
+				delivery.ErrQueueState)
+		}
+	})
+	require.Equal(t, delivery.Deferred, queueRegister(t, db, ref, destination, delivery.Background).State)
+	require.Equal(t, scheduling, queueSchedulingSnapshot(t, db))
+}
+
+func TestDeliveryQueueUncertainSuccessRequiresPending(t *testing.T) {
+	t.Parallel()
+	for _, state := range []delivery.Kind{
+		delivery.Sending, delivery.Uncertain, delivery.Succeeded, delivery.Rejected,
+		delivery.Cancelled, delivery.Parked, delivery.Paused,
+	} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			db := database(t)
+			ref := delivery.Reference{Owner: delivery.Orders, Key: "receipt", Effect: "notice"}
+			destination := delivery.Destination{Chat: "101"}
+			queueRegister(t, db, ref, destination, delivery.Background)
+			if state == delivery.Sending || state == delivery.Uncertain || state == delivery.Succeeded {
+				require.True(t, queueBegin(t, db, ref).Ready)
+			}
+			switch state {
+			case delivery.Uncertain:
+				queueFinish(t, db, ref, delivery.Outcome{Kind: state, Reason: "telegram_outcome_unknown"})
+			case delivery.Succeeded:
+				queueFinish(t, db, ref, delivery.Outcome{Kind: state, MessageID: 77})
+			case delivery.Sending:
+			case delivery.Deferred, delivery.Rejected, delivery.Cancelled, delivery.Parked, delivery.Paused:
+				queueTransaction(t, db, func(tx pgx.Tx) {
+					require.NoError(
+						t,
+						delivery.Project(t.Context(), tx, queueSettings().BotID, ref, state, time.Time{}),
+					)
+				})
+			}
+			scheduling := queueSchedulingSnapshot(t, db)
+			queueTransaction(t, db, func(tx pgx.Tx) {
+				_, _, err := delivery.FinishUncertainSuccess(t.Context(), tx, queueSettings(), ref,
+					delivery.Outcome{Kind: delivery.Succeeded, MessageID: 8123})
+				require.ErrorIs(t, err, delivery.ErrQueueState)
+			})
+			require.Equal(t, state, queueRegister(t, db, ref, destination, delivery.Background).State)
+			require.Equal(t, scheduling, queueSchedulingSnapshot(t, db))
+		})
+	}
 }
