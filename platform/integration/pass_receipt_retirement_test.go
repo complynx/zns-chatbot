@@ -45,11 +45,7 @@ func runPassIndependentSourceBudgets(t *testing.T, scenario string) {
 	pumpBotDeliveries(t, f.b)
 	prior, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, prior.QueueReference(), false)
 	require.NoError(t, err)
-	var projectedSourceCount int
-	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT jsonb_array_length(state->'source'->'authorities')
- FROM bot.pass_views WHERE owner='alice'`).Scan(&projectedSourceCount))
-	require.Equal(t, delivery.Succeeded, prior.State, "phase=%s object=%s update=%d projected_sources=%d",
-		prior.Phase, prior.Reference.Object, prior.Reference.Update, projectedSourceCount)
+	require.Equal(t, delivery.Succeeded, prior.State)
 	require.True(t, prior.ContinuationDone)
 	require.NotEmpty(t, prior.Receipt.Tokens)
 	if scenario != "admission_valid" {
@@ -157,7 +153,7 @@ func widenPendingPassSource(t *testing.T, f *fixture, prefix string) botdelivery
 	}
 	require.True(t, readsource.Valid(refs))
 	_, err := f.db.Exec(t.Context(), `INSERT INTO core.pass_events(id,finishes_at)
- SELECT unnest($1::text[]),clock_timestamp()+interval '1 year'`, events)
+ SELECT unnest($1::text[]),clock_timestamp()-interval '1 year'`, events)
 	require.NoError(t, err)
 	i.Reference.Source.Authorities = refs
 	require.True(t, i.Reference.Valid(i.Owner))
