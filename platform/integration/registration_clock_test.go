@@ -426,7 +426,11 @@ func TestRegistrationClockAnnouncementsAndPassportEligibility(t *testing.T) {
 			if scenario == "recovery-before-wall" {
 				require.NoError(t, service.RecoverRegistrationAnnouncements(t.Context()))
 				var state string
-				require.NoError(t, db.QueryRow(t.Context(), "SELECT state FROM core.pass_registration_announcements WHERE id=$1", item.ID).Scan(&state))
+				require.NoError(
+					t,
+					db.QueryRow(t.Context(), "SELECT state FROM core.pass_registration_announcements WHERE id=$1", item.ID).
+						Scan(&state),
+				)
 				require.Equal(t, "cancelled", state)
 				return
 			}
