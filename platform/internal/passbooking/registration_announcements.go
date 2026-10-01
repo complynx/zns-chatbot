@@ -83,27 +83,14 @@ func (s Service) BeginRegistrationAnnouncement(
 		return delivery.Admission{}, conflict("pass_announcement_stale")
 	}
 	if !row.Current {
-		outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "announcement_superseded"}
-		deadline := time.Now()
-		scheduleErr := delivery.Project(
-			ctx,
-			tx,
-			s.Delivery.BotID,
-			announcementReference(attempt.ID),
-			delivery.Cancelled,
-			deadline,
-		)
-		if scheduleErr != nil {
-			return delivery.Admission{}, scheduleErr
-		}
-		if err = s.finishAnnouncement(ctx, q, attempt, outcome, deadline); err != nil {
-			return delivery.Admission{}, err
-		}
-		return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
+		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt)
 	}
-	gate, err := delivery.Begin(ctx, tx, s.Delivery, announcementReference(attempt.ID))
+	gate, current, err := s.beginCurrentAnnouncement(ctx, tx, q, attempt)
 	if err != nil {
 		return gate, err
+	}
+	if !current {
+		return s.cancelAnnouncementAdmission(ctx, tx, q, attempt)
 	}
 	if !gate.Ready {
 		err = s.finishAnnouncement(
@@ -199,6 +186,71 @@ func (s Service) finishAnnouncement(
 	return core.DatabaseOperationError(err)
 }
 
+func (s Service) cancelAnnouncementAdmission(
+	ctx context.Context,
+	tx pgx.Tx,
+	q *dbgen.Queries,
+	attempt delivery.Attempt,
+) (delivery.Admission, error) {
+	outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: "announcement_superseded"}
+	deadline := time.Now()
+	if err := delivery.Project(
+		ctx,
+		tx,
+		s.Delivery.BotID,
+		announcementReference(attempt.ID),
+		delivery.Cancelled,
+		deadline,
+	); err != nil {
+		return delivery.Admission{}, err
+	}
+	if err := s.finishAnnouncement(ctx, q, attempt, outcome, deadline); err != nil {
+		return delivery.Admission{}, err
+	}
+	return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+// Only configured domain time needs another observation after transport locks.
+// A savepoint removes transport reservations on expiry while retaining the
+// event, booking and exact attempt locks acquired in the outer transaction.
+func (s Service) beginCurrentAnnouncement(
+	ctx context.Context,
+	tx pgx.Tx,
+	q *dbgen.Queries,
+	attempt delivery.Attempt,
+) (delivery.Admission, bool, error) {
+	if s.RegistrationClock == nil {
+		gate, err := delivery.Begin(ctx, tx, s.Delivery, announcementReference(attempt.ID))
+		return gate, true, err
+	}
+	reservation, err := tx.Begin(ctx)
+	if err != nil {
+		return delivery.Admission{}, false, core.DatabaseOperationError(err)
+	}
+	defer func() { _ = reservation.Rollback(ctx) }()
+	gate, err := delivery.Begin(ctx, reservation, s.Delivery, announcementReference(attempt.ID))
+	if err != nil {
+		return gate, false, err
+	}
+	observed, err := registrationSQLTime(ctx, s.RegistrationClock)
+	if err != nil {
+		return gate, false, err
+	}
+	row, err := q.LockAnnouncementAttempt(ctx, dbgen.LockAnnouncementAttemptParams{
+		ID:         attempt.ID,
+		BotID:      s.Delivery.BotID,
+		Attempt:    attempt.Generation,
+		DomainTime: nullableRegistrationTime(observed),
+	})
+	if err != nil {
+		return gate, false, announcementAttemptError(core.DatabaseOperationError(err))
+	}
+	if !row.Current {
+		return gate, false, core.DatabaseOperationError(reservation.Rollback(ctx))
+	}
+	return gate, true, core.DatabaseOperationError(reservation.Commit(ctx))
+}
+
 func announcementAttemptError(err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return conflict("pass_announcement_stale")
@@ -228,9 +280,25 @@ func (s Service) lockAnnouncementAdmission(
 	); err != nil {
 		return dbgen.LockAnnouncementAttemptRow{}, core.DatabaseOperationError(err)
 	}
+	if s.RegistrationClock != nil {
+		if _, err = q.LockAnnouncementAttempt(ctx, dbgen.LockAnnouncementAttemptParams{
+			ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation,
+		}); err != nil {
+			return dbgen.LockAnnouncementAttemptRow{}, announcementAttemptError(core.DatabaseOperationError(err))
+		}
+	}
+	observed, err := registrationSQLTime(ctx, s.RegistrationClock)
+	if err != nil {
+		return dbgen.LockAnnouncementAttemptRow{}, err
+	}
 	row, err := q.LockAnnouncementAttempt(
 		ctx,
-		dbgen.LockAnnouncementAttemptParams{ID: attempt.ID, BotID: s.Delivery.BotID, Attempt: attempt.Generation},
+		dbgen.LockAnnouncementAttemptParams{
+			ID:         attempt.ID,
+			BotID:      s.Delivery.BotID,
+			Attempt:    attempt.Generation,
+			DomainTime: nullableRegistrationTime(observed),
+		},
 	)
 	if err != nil {
 		return dbgen.LockAnnouncementAttemptRow{}, announcementAttemptError(core.DatabaseOperationError(err))

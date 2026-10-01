@@ -67,7 +67,10 @@ func TestRegistrationBatchSavedInputResumesBeforeInterpretation(t *testing.T) {
 	stored := passbooking.RuntimeBatch{Key: "original-key", Event: "old-event", Action: "admin_cancel",
 		Recipients: []int64{11, 23}}
 	store := &registrationBatchInputMemory{saved: &stored}
-	result, err := (interaction.RegistrationBatchAdmission{Store: store}).
+	result, err := (interaction.RegistrationBatchAdmission{Store: store, Now: func(context.Context) (time.Time, error) {
+		t.Fatal("durable retry must not observe time")
+		return time.Time{}, context.Canceled
+	}}).
 		Manual(t.Context(), "actor", 37, func() (passbooking.RuntimeBatch, error) {
 			t.Fatal("saved input must not be parsed or rebound")
 			return passbooking.RuntimeBatch{}, nil
@@ -91,7 +94,7 @@ func TestRegistrationBatchAdmissionReloadsConcurrentWinner(t *testing.T) {
 		{ID: "default-event", SalesStart: &started, OpenEnded: true},
 	}}
 	result, err := (interaction.RegistrationBatchAdmission{Store: store, Events: events,
-		Now: func() time.Time { return now }}).Manual(t.Context(), "actor", 37,
+		Now: func(context.Context) (time.Time, error) { return now, nil }}).Manual(t.Context(), "actor", 37,
 		func() (passbooking.RuntimeBatch, error) {
 			return passbooking.RuntimeBatch{Action: "admin_cancel", Recipients: []int64{11}}, nil
 		})
@@ -199,4 +202,50 @@ func TestRegistrationGroundedBatchRejectsUnsupportedEvidence(t *testing.T) {
 			require.Zero(t, command)
 		})
 	}
+}
+
+func TestRegistrationBatchClockSelectsAfterSalesBoundary(t *testing.T) {
+	t.Parallel()
+	start := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	later := start.Add(time.Hour)
+	events := &registrationBatchEvents{
+		items: []passbooking.Event{
+			{ID: "first", SalesStart: &start, OpenEnded: true},
+			{ID: "second", SalesStart: &later, OpenEnded: true},
+		},
+	}
+	for _, action := range []string{"admin_assign", "admin_cancel", "admin_uncouple", "tier"} {
+		t.Run(action, func(t *testing.T) {
+			t.Parallel()
+			store := &registrationBatchInputMemory{}
+			observed := later.Add(time.Microsecond)
+			coordinator := interaction.RegistrationBatchAdmission{
+				Store:  store,
+				Events: &registrationBatchEvents{items: events.items},
+				Now:    func(context.Context) (time.Time, error) { return observed, nil },
+			}
+			result, err := coordinator.Manual(t.Context(), "actor", 37, func() (passbooking.RuntimeBatch, error) {
+				return passbooking.RuntimeBatch{Action: action, Recipients: []int64{11}}, nil
+			})
+			require.NoError(t, err)
+			require.Equal(t, "second", result.Event)
+			require.Equal(t, "second", store.attempted.Event)
+		})
+	}
+}
+func TestRegistrationBatchClockFailureDoesNotSave(t *testing.T) {
+	t.Parallel()
+	store := &registrationBatchInputMemory{}
+	events := &registrationBatchEvents{items: []passbooking.Event{{ID: "event", OpenEnded: true}}}
+	result, err := (interaction.RegistrationBatchAdmission{Store: store, Events: events, Now: func(context.Context) (time.Time, error) { return time.Time{}, context.Canceled }}).Manual(
+		t.Context(),
+		"actor",
+		37,
+		func() (passbooking.RuntimeBatch, error) {
+			return passbooking.RuntimeBatch{Action: "admin_cancel", Recipients: []int64{11}}, nil
+		},
+	)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, result)
+	require.Zero(t, store.saves)
 }

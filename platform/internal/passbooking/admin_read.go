@@ -3,7 +3,6 @@ package passbooking
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -70,9 +69,9 @@ FROM core.users u LEFT JOIN core.pass_profiles p ON p.owner=u.id WHERE u.telegra
 			return result, core.DatabaseOperationError(err)
 		}
 	}
-	var now time.Time
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return result, core.DatabaseOperationError(err)
+	now, err := registrationTime(ctx, tx, s.RegistrationClock)
+	if err != nil {
+		return result, err
 	}
 	result.CurrentTier = newSnapshot(e, records, now).currentAdminTier()
 	result.CanAssign = now.Before(e.finishes) && result.Booking.State != pending

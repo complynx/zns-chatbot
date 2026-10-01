@@ -3,7 +3,7 @@ INSERT INTO core.pass_registration_announcements(event_id,owner,created_at,chann
 SELECT b.event_id,b.owner,b.created_at,e.thread_channel,e.thread_id,e.thread_locale,u.name,b.role,
  CASE WHEN e.thread_channel='' THEN 'suppressed' ELSE 'pending' END,CASE WHEN sqlc.arg(bot_id)::bigint>0 THEN sqlc.arg(bot_id)::bigint END
 FROM core.pass_bookings b JOIN core.pass_events e ON e.id=b.event_id JOIN core.users u ON u.id=b.owner
-WHERE b.event_id=sqlc.arg(event_id)::text AND (e.open_ended OR e.finishes_at>clock_timestamp())
+WHERE b.event_id=sqlc.arg(event_id)::text AND (e.open_ended OR e.finishes_at>COALESCE(sqlc.narg(domain_time)::timestamptz,clock_timestamp()))
 ON CONFLICT(event_id,owner,created_at) DO NOTHING;
 
 -- name: ExpireAnnouncementSends :exec
@@ -30,7 +30,7 @@ SELECT a.channel,a.thread_id,a.state,a.message_id,a.available_at,
  COALESCE(a.lease_until>clock_timestamp(),false)::boolean AS lease_live,
  EXISTS(SELECT 1 FROM core.pass_events e JOIN core.pass_bookings b ON b.event_id=e.id
   WHERE e.id=a.event_id AND b.owner=a.owner AND b.created_at=a.created_at AND b.state<>'cancelled'
-   AND (e.open_ended OR e.finishes_at>clock_timestamp())
+   AND (e.open_ended OR e.finishes_at>COALESCE(sqlc.narg(domain_time)::timestamptz,clock_timestamp()))
    AND e.thread_channel=a.channel AND COALESCE(e.thread_id,0)=COALESCE(a.thread_id,0))::boolean AS current
 FROM core.pass_registration_announcements a WHERE a.id=sqlc.arg(id)::bigint
  AND a.bot_id=sqlc.arg(bot_id)::bigint AND a.attempts=sqlc.arg(attempt)::bigint FOR UPDATE;

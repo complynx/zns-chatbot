@@ -12,9 +12,10 @@ import (
 )
 
 const insertIngress = `-- name: InsertIngress :exec
-INSERT INTO core.registration_ingress(kind,bot_id,request_key,telegram_id,native_event,native_owner,native_payload)
+INSERT INTO core.registration_ingress(kind,bot_id,request_key,telegram_id,native_event,native_owner,native_payload,received_at)
 VALUES('telegram',$1::bigint,$2::text,$3::bigint,
- $4::text,$5::text,$6::jsonb)
+ $4::text,$5::text,$6::jsonb,
+ COALESCE($7::timestamptz,clock_timestamp()))
 ON CONFLICT DO NOTHING
 `
 
@@ -25,6 +26,7 @@ type InsertIngressParams struct {
 	NativeEvent   pgtype.Text
 	NativeOwner   pgtype.Text
 	NativePayload []byte
+	ReceivedAt    pgtype.Timestamptz
 }
 
 func (q *Queries) InsertIngress(ctx context.Context, arg InsertIngressParams) error {
@@ -35,6 +37,7 @@ func (q *Queries) InsertIngress(ctx context.Context, arg InsertIngressParams) er
 		arg.NativeEvent,
 		arg.NativeOwner,
 		arg.NativePayload,
+		arg.ReceivedAt,
 	)
 	return err
 }

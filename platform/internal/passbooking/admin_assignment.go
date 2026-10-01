@@ -11,6 +11,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/destination"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
 // AdminAssign serializes forced assignments with normal event registration.
@@ -49,6 +50,7 @@ func (s Service) adminAssignInTx(
 }
 
 type PreparedAssignment struct {
+	registrationClock     registrationingress.Clock
 	registrationRetention time.Duration
 	deliveryBotID         int64
 	announcementBindings  *destination.Bindings
@@ -97,6 +99,7 @@ func (s Service) PrepareAssignmentInTx(
 	}
 	return &PreparedAssignment{
 		registrationRetention: s.registrationRetention(),
+		registrationClock:     s.RegistrationClock,
 		deliveryBotID:         s.Delivery.BotID,
 		announcementBindings:  s.AnnouncementBindings,
 		tx:                    tx,
@@ -125,9 +128,9 @@ func (p *PreparedAssignment) Apply(ctx context.Context) (AdminAssignmentResult, 
 	if err != nil {
 		return AdminAssignmentResult{}, err
 	}
-	var now time.Time
-	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return AdminAssignmentResult{}, core.DatabaseOperationError(err)
+	now, err := registrationTurnTime(ctx, tx, p.registrationClock)
+	if err != nil {
+		return AdminAssignmentResult{}, err
 	}
 	if !now.Before(e.finishes) {
 		return AdminAssignmentResult{}, conflict("pass_event_finished")
@@ -137,6 +140,9 @@ func (p *PreparedAssignment) Apply(ctx context.Context) (AdminAssignmentResult, 
 		return AdminAssignmentResult{}, err
 	}
 	state := newSnapshot(e, records, now)
+	if p.registrationClock != nil {
+		state.registrationObserved = &now
+	}
 	if err = state.loadRegistrationRanks(ctx, tx); err != nil {
 		return AdminAssignmentResult{}, err
 	}
