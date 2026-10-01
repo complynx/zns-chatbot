@@ -133,16 +133,16 @@ func (p *PreparedCommand) captureNewAdmission(
 	ctx context.Context,
 	ref *registrationingress.Reference,
 ) (Admission, error) {
-	var now time.Time
-	if err := p.tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return Admission{}, core.DatabaseOperationError(err)
+	now, err := registrationTime(ctx, p.tx, p.registrationClock)
+	if err != nil {
+		return Admission{}, err
 	}
 	if !now.Before(p.event.finishes) {
 		return Admission{}, conflict("pass_event_finished")
 	}
 	state := newSnapshot(p.event, p.records, now)
 	var active Admission
-	err := p.tx.QueryRow(ctx, `SELECT id,generation,COALESCE(ingress_id,0),state,sales_open,origin
+	err = p.tx.QueryRow(ctx, `SELECT id,generation,COALESCE(ingress_id,0),state,sales_open,origin
  FROM core.registration_intents WHERE event_id=$1 AND owner=$2 AND state<>'cancelled'`, p.command.Event, p.actor).
 		Scan(&active.ID, &active.Generation, &active.Position, &active.State, &active.SalesOpen, &active.Origin)
 	if err == nil {
@@ -163,12 +163,17 @@ func (p *PreparedCommand) captureNewAdmission(
 	if retired {
 		return Admission{}, conflict("pass_admission_cancelled")
 	}
-	return p.insertAdmission(ctx, position, state.open())
+	return p.insertAdmission(ctx, position, state.open(), now)
 }
 
 func (p *PreparedCommand) admissionPosition(ctx context.Context, ref *registrationingress.Reference) (int64, error) {
 	if ref == nil {
-		return registrationingress.ApplicationPosition(ctx, p.tx, p.actor, p.command.Event+":"+p.keyHash)
+		return registrationingress.ApplicationPosition(
+			registrationingress.WithClock(ctx, p.registrationClock),
+			p.tx,
+			p.actor,
+			p.command.Event+":"+p.keyHash,
+		)
 	}
 	position, err := registrationingress.TelegramPosition(ctx, p.tx, *ref, p.current.TelegramID)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -177,7 +182,12 @@ func (p *PreparedCommand) admissionPosition(ctx context.Context, ref *registrati
 	return position, err
 }
 
-func (p *PreparedCommand) insertAdmission(ctx context.Context, position int64, open bool) (Admission, error) {
+func (p *PreparedCommand) insertAdmission(
+	ctx context.Context,
+	position int64,
+	open bool,
+	now time.Time,
+) (Admission, error) {
 	origin, state := admissionCanonical, "captured"
 	var bookingTime *time.Time
 	ingress := &position
@@ -191,12 +201,19 @@ func (p *PreparedCommand) insertAdmission(ctx context.Context, position int64, o
 		observedOpen = nil
 	}
 	var result Admission
-	err := p.tx.QueryRow(ctx, `INSERT INTO core.registration_intents(event_id,owner,generation,ingress_id,origin,state,sales_open,booking_created_at,effective_position,turn_expires_at)
+	// Preserve production insertion-time defaults. A configured clock stamps the
+	// actual locked capture observation without changing historical evidence.
+	var observed *time.Time
+	if p.registrationClock != nil {
+		observed = &now
+	}
+	err := p.tx.QueryRow(ctx, `INSERT INTO core.registration_intents(event_id,owner,generation,ingress_id,origin,state,sales_open,booking_created_at,effective_position,turn_expires_at,checked_at)
  SELECT $1,$2,COALESCE(MAX(generation),0)+1,$3,$4,$5,$6,$7,$3,
- CASE WHEN $4='canonical_ingress' THEN COALESCE($9::timestamptz,clock_timestamp())+$8::bigint*interval '1 microsecond' ELSE NULL END
+ CASE WHEN $4='canonical_ingress' THEN COALESCE($9::timestamptz,$10::timestamptz,clock_timestamp())+$8::bigint*interval '1 microsecond' ELSE NULL END,
+ COALESCE($10::timestamptz,clock_timestamp())
  FROM core.registration_intents WHERE event_id=$1 AND owner=$2
  RETURNING id,generation,COALESCE(ingress_id,0),state,sales_open,origin`,
-		p.command.Event, p.actor, ingress, origin, state, observedOpen, bookingTime, p.registrationRetention.Microseconds(), p.nativeReceivedAt).
+		p.command.Event, p.actor, ingress, origin, state, observedOpen, bookingTime, p.registrationRetention.Microseconds(), p.nativeReceivedAt, observed).
 		Scan(&result.ID, &result.Generation, &result.Position, &result.State, &result.SalesOpen, &result.Origin)
 	return result, core.DatabaseOperationError(err)
 }

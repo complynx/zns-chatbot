@@ -11,9 +11,11 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/destination"
 	"github.com/complynx/zns-chatbot/platform/internal/passallocation"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
 type Service struct {
+	RegistrationClock     registrationingress.Clock
 	Intake                RegistrationIntakeResolver
 	RegistrationRetention time.Duration
 	AnnouncementBindings  *destination.Bindings

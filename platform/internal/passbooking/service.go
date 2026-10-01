@@ -13,6 +13,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/destination"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
 )
 
 func hash(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
@@ -80,6 +81,7 @@ func (s Service) executeInTx(ctx context.Context, tx pgx.Tx, actor string, c Com
 // PreparedCommand retains target authorization and exact replay identity in a
 // caller-owned transaction. New derived effects can be fenced before Apply.
 type PreparedCommand struct {
+	registrationClock     registrationingress.Clock
 	nativeReceivedAt      *time.Time
 	registrationRetention time.Duration
 	announcementBindings  *destination.Bindings
@@ -139,6 +141,7 @@ func (s Service) prepareCommand(
 	keyHash, requestHash := hash([]byte(c.Key)), hash(encoded)
 	p := &PreparedCommand{
 		registrationRetention: s.registrationRetention(),
+		registrationClock:     s.RegistrationClock,
 		deliveryBotID:         s.Delivery.BotID,
 		announcementBindings:  s.AnnouncementBindings,
 		tx:                    tx,
@@ -185,32 +188,32 @@ func (p *PreparedCommand) Apply(ctx context.Context) (Booking, error) {
 	if err := lockRegistrationProfile(ctx, tx, actor, c.Name, e.passport); err != nil {
 		return Booking{}, err
 	}
-	var now time.Time
 	// Transaction start can precede a long lock wait. All decisions use the clock
 	// after event, permission and required profile locks have been acquired.
-	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return Booking{}, core.DatabaseOperationError(err)
+	now, err := registrationTime(ctx, tx, p.registrationClock)
+	if err != nil {
+		return Booking{}, err
 	}
-	if err := refreshRegistrationTurns(ctx, tx, c.Event, p.registrationRetention, now); err != nil {
+	if err = refreshRegistrationTurns(ctx, tx, c.Event, p.registrationRetention, now); err != nil {
 		return Booking{}, err
 	}
 	state := newSnapshot(e, records, now)
-	if err := state.loadRegistrationRanks(ctx, tx); err != nil {
+	if err = state.loadRegistrationRanks(ctx, tx); err != nil {
 		return Booking{}, err
 	}
 	state.deliveryBotID = p.deliveryBotID
 	state.announcementBindings = p.announcementBindings
 	before := copyBookings(records)
-	if err := state.mutate(ctx, tx, current, c); err != nil {
+	if err = state.mutate(ctx, tx, current, c); err != nil {
 		return Booking{}, err
 	}
 	if now.Before(e.finishes) && c.Name != CommandTakeover && c.Name != CommandReceivedOnly {
 		state.allocate()
 	}
-	if err := state.persistNotified(ctx, tx, before, c.Name); err != nil {
+	if err = state.persistNotified(ctx, tx, before, c.Name); err != nil {
 		return Booking{}, err
 	}
-	_, err := tx.Exec(
+	_, err = tx.Exec(
 		ctx,
 		`INSERT INTO core.pass_booking_operations(event_id,actor,key_hash,request_hash) VALUES($1,$2,$3,$4)`,
 		c.Event,

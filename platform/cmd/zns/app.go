@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/api"
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/applicationauth"
@@ -18,9 +19,13 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/browserauth"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/credits"
+	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/derivedmutation"
 	"github.com/complynx/zns-chatbot/platform/internal/destination"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/observability"
+	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
+	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 	"github.com/complynx/zns-chatbot/platform/internal/webappurl"
 )
 
@@ -28,7 +33,23 @@ import (
 // Local order, registration, history and knowledge calls share the HTTP authorizer and services without a
 // loopback request. Other adapters retain their current transport boundaries.
 func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
-	logger *slog.Logger, cfg config.Config, runtime *observability.Runtime) (runErr error) {
+	logger *slog.Logger, cfg config.Config, runtime *observability.Runtime) error {
+	registrationClock, _, err := configuredRegistrationClock(ctx, db, cfg)
+	if err != nil {
+		return err
+	}
+	return runAppWithClock(ctx, db, signer, logger, cfg, runtime, registrationClock)
+}
+
+func runAppWithClock(
+	ctx context.Context,
+	db *pgxpool.Pool,
+	signer identity.Signer,
+	logger *slog.Logger,
+	cfg config.Config,
+	runtime *observability.Runtime,
+	registrationClock registrationingress.Clock,
+) (runErr error) {
 	verify, identityAdapter, identityLinks, err := observedRuntimeAuth(db, cfg, signer, runtime)
 	if err != nil {
 		return err
@@ -54,37 +75,24 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	if err != nil {
 		return err
 	}
-	services := appservices.NewServices(db, appservices.Options{
-		RegistrationRetention: cfg.Registration.Retention,
-		NativeRegistrationAuthorizer: nativeRegistrationAuthorizer(
-			db, deliverySettings.BotID, verify, identityAdapter, identityLinks, signer,
+	services := appRegistrationServices(
+		db,
+		cfg,
+		deliverySettings,
+		model,
+		tg,
+		nativeRegistrationAuthorizer(
+			db,
+			deliverySettings.BotID,
+			verify,
+			identityAdapter,
+			identityLinks,
+			signer,
 		),
-		LegacyOrderBotID:     deliverySettings.BotID,
-		InformalName:         broadcastOptions(model).InformalName,
-		Delivery:             deliverySettings,
-		AnnouncementBindings: &destination.Bindings{},
-		DestinationResolver:  tg,
-	})
+		registrationClock,
+	)
 	authorizer := applicationauth.Authorizer{DB: db, Verify: applicationauth.VerifyOwner(verify)}
-	b := &bot.Bot{
-		Delivery:            deliverySettings,
-		OrderEventID:        cfg.Orders.ActiveEvent,
-		DB:                  db,
-		Logger:              logger,
-		Observer:            runtime,
-		Model:               model,
-		AssistantDailyLimit: cfg.Model.AssistantDailyLimit,
-		CreditsEnforce:      cfg.Credits.Enforce,
-		HistoryLimit:        cfg.History.Recent,
-		WebAppURL:           cfg.Telegram.WebAppURL,
-		API: combinedClient(
-			base,
-			telemetryClient(runtime, "api", apiClientTimeout),
-			services,
-			authorizer,
-		),
-		TG: tg,
-	}
+	b := appRegistrationBot(cfg, services, authorizer, tg, model, runtime, base, logger)
 	configureBotLineup(b, cfg)
 	if err = configureBotAuth(ctx, b, cfg, signer); err != nil {
 		return err
@@ -129,6 +137,47 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	return runAppServers(ctx, cancel, b, func(live context.Context) error {
 		return serveListener(live, listener, telemetryHandler(runtime, publicHandler(mux, cfg)), logger, cfg)
 	})
+}
+
+// appRegistrationServices binds the clock before native resolver and host copies.
+func appRegistrationServices(db *pgxpool.Pool, cfg config.Config, settings delivery.Settings,
+	model agent.Model, tg telegram.Client, authorizer derivedmutation.NativeRegistrationAuthorizer,
+	clock registrationingress.Clock) appservices.Services {
+	return appservices.NewServices(db, appservices.Options{
+		RegistrationClock:            clock,
+		RegistrationRetention:        cfg.Registration.Retention,
+		NativeRegistrationAuthorizer: authorizer,
+		LegacyOrderBotID:             settings.BotID,
+		InformalName:                 broadcastOptions(model).InformalName,
+		Delivery:                     settings,
+		AnnouncementBindings:         &destination.Bindings{},
+		DestinationResolver:          tg,
+	})
+}
+
+func appRegistrationBot(cfg config.Config, services appservices.Services, authorizer applicationauth.Authorizer,
+	tg telegram.Client, model agent.Model, runtime *observability.Runtime, base string, logger *slog.Logger) *bot.Bot {
+	return &bot.Bot{
+		RegistrationClock:   services.Registration.RegistrationClock,
+		Delivery:            services.Registration.Delivery,
+		OrderEventID:        cfg.Orders.ActiveEvent,
+		DB:                  services.Registration.DB,
+		Logger:              logger,
+		Observer:            runtime,
+		Model:               model,
+		AssistantDailyLimit: cfg.Model.AssistantDailyLimit,
+		CreditsEnforce:      cfg.Credits.Enforce,
+		HistoryLimit:        cfg.History.Recent,
+		WebAppURL:           cfg.Telegram.WebAppURL,
+		API: combinedClient(
+			base,
+			telemetryClient(runtime, "api", apiClientTimeout),
+			services,
+			authorizer,
+		),
+		TG: tg,
+	}
+
 }
 
 // runAppServers joins the bot worker before caller-owned resources are closed.

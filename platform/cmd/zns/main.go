@@ -46,6 +46,9 @@ func run() error {
 	if len(os.Args) != commandArgCount {
 		return fmt.Errorf("usage: zns app|api|bot|fake|model|migrate|fixture|product-fixture|export-fixture|health")
 	}
+	if err := rejectRegistrationClockMode(os.Args[1]); err != nil {
+		return err
+	}
 	cfg, err := loadConfig(os.Args[1])
 	if err != nil {
 		return err

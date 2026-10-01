@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -68,6 +69,13 @@ func SaveClassifiedTelegram(ctx context.Context, tx pgx.Tx, ref Reference, sende
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(782619)`); err != nil {
 		return core.DatabaseOperationError(err)
 	}
+	observed, configured, err := observeContext(ctx)
+	if err != nil {
+		return err
+	}
+	if configured {
+		params.ReceivedAt = pgtype.Timestamptz{Time: observed, Valid: true}
+	}
 	return core.DatabaseOperationError(dbgen.New(tx).InsertIngress(ctx, params))
 }
 
@@ -86,9 +94,17 @@ func ApplicationPosition(ctx context.Context, tx pgx.Tx, owner, key string) (int
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(782619)`); err != nil {
 		return 0, core.DatabaseOperationError(err)
 	}
+	observed, configured, err := observeContext(ctx)
+	if err != nil {
+		return 0, err
+	}
 	var id int64
-	err := tx.QueryRow(ctx, `INSERT INTO core.registration_ingress(kind,bot_id,request_key,owner)
- VALUES('application',0,$1,$2) ON CONFLICT(kind,bot_id,request_key,owner)
- DO UPDATE SET request_key=EXCLUDED.request_key RETURNING id`, key, owner).Scan(&id)
+	var received *time.Time
+	if configured {
+		received = &observed
+	}
+	err = tx.QueryRow(ctx, `INSERT INTO core.registration_ingress(kind,bot_id,request_key,owner,received_at)
+ VALUES('application',0,$1,$2,COALESCE($3::timestamptz,clock_timestamp())) ON CONFLICT(kind,bot_id,request_key,owner)
+ DO UPDATE SET request_key=EXCLUDED.request_key RETURNING id`, key, owner, received).Scan(&id)
 	return id, core.DatabaseOperationError(err)
 }
