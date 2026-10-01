@@ -17,6 +17,13 @@ import (
 func runFixture(ctx context.Context, db *pgxpool.Pool, command string) error {
 	switch command {
 	case "product-fixture":
+		fixture, enabled, err := registrationFixtureConfig()
+		if err != nil {
+			return err
+		}
+		if enabled {
+			return runRegistrationFixture(ctx, db, fixture)
+		}
 		return sandbox.ApplyProductFixture(ctx, db)
 	case "migrate":
 		if err := store.Migrate(ctx, db); err != nil {
