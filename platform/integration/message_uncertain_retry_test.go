@@ -1,11 +1,13 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -922,4 +924,390 @@ func checkTerminalReceipt(t *testing.T, owner, scenario string) {
 	default:
 		assert.Zero(t, messageID)
 	}
+}
+
+type recoveredReplyFixture struct {
+	terminalReceiptFixture
+	attempt int64
+	payload map[string]any
+	finish  func(delivery.Outcome) error
+	recover func() error
+	cancel  func() error
+}
+
+func prepareRecoveredReply(t *testing.T, owner string) recoveredReplyFixture {
+	t.Helper()
+	db, registration := bookingFixture(t)
+	registration.Delivery = syntheticDeliverySettings()
+	f := recoveredReplyFixture{terminalReceiptFixture: terminalReceiptFixture{db: db}}
+	if owner == "admin" {
+		s := adminmessage.Service{DB: db, Delivery: registration.Delivery}
+		enqueueSyntheticDelivery(t, s, "confirmed-late-reply", "101")
+		item, found, err := s.Claim(t.Context())
+		require.NoError(t, err)
+		require.True(t, found)
+		gate, err := s.BeginDelivery(t.Context(), delivery.Attempt{ID: item.ID, Generation: item.Attempt})
+		require.NoError(t, err)
+		require.True(t, gate.Ready)
+		f.table, f.messageColumn, f.attemptColumn = "admin_message_deliveries", "telegram_message_id", "attempt"
+		f.id, f.attempt = item.ID, item.Attempt
+		f.payload = map[string]any{"chat_id": 101, "text": item.Content.Text}
+		f.finish = func(outcome delivery.Outcome) error {
+			return s.CompleteDelivery(
+				t.Context(),
+				adminmessage.Completion{ID: item.ID, Attempt: item.Attempt, Outcome: outcome},
+			)
+		}
+		f.recover = func() error { return s.RecoverDeliveries(t.Context()) }
+		f.cancel = func() error { return s.Cancel(t.Context(), item.Actor, item.MessageID) }
+		return f
+	}
+	_, err := db.Exec(t.Context(), `UPDATE core.pass_events SET thread_channel='-100123'`)
+	require.NoError(t, err)
+	booking, err := registration.Execute(
+		t.Context(),
+		"alice",
+		bookingCommand("solo", "confirmed-late-reply", passbooking.Booking{}),
+	)
+	require.NoError(t, err)
+	item, found, err := registration.ClaimRegistrationAnnouncement(t.Context())
+	require.NoError(t, err)
+	require.True(t, found)
+	gate, err := registration.BeginRegistrationAnnouncement(
+		t.Context(),
+		delivery.Attempt{ID: item.ID, Generation: item.Attempts},
+	)
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
+	f.table, f.messageColumn, f.attemptColumn = "pass_registration_announcements", "message_id", "attempts"
+	f.id, f.attempt = item.ID, item.Attempts
+	f.payload = map[string]any{"chat_id": -100123, "text": item.Text, "parse_mode": "HTML"}
+	f.finish = func(outcome delivery.Outcome) error {
+		return registration.CompleteRegistrationAnnouncement(
+			t.Context(),
+			passbooking.AnnouncementCompletion{ID: item.ID, Attempt: item.Attempts, Outcome: outcome},
+		)
+	}
+	f.recover = func() error { return registration.RecoverRegistrationAnnouncements(t.Context()) }
+	f.cancel = func() error {
+		_, cancelErr := registration.Execute(
+			t.Context(),
+			"alice",
+			bookingCommand("cancel", "cancel-late-reply", booking),
+		)
+		if cancelErr != nil {
+			return cancelErr
+		}
+		return f.recover()
+	}
+	return f
+}
+
+func TestRecoveredConfirmedReplyFencesContradictorySuccess(t *testing.T) {
+	t.Parallel()
+	for _, owner := range []string{"admin", "announcement"} {
+		for _, phase := range []string{"pending", "cancelled-before-reply", "cancelled-after-reply", "prewire-rejection"} {
+			t.Run(owner+"/"+phase, func(t *testing.T) {
+				t.Parallel()
+				checkRecoveredConfirmedReply(t, owner, phase)
+			})
+		}
+	}
+}
+
+func checkRecoveredConfirmedReply(t *testing.T, owner, phase string) {
+	t.Helper()
+	f := prepareRecoveredReply(t, owner)
+	entered := make(chan []byte, 1)
+	release := make(chan struct{})
+	var once sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		entered <- body
+		<-release
+		_, _ = w.Write(
+			[]byte(
+				`{"ok":false,"error_code":429,"description":"late confirmed rate limit","parameters":{"retry_after":120}}`,
+			),
+		)
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	client := telegram.Client{Base: server.URL, Token: "synthetic"}
+	done := make(chan delivery.Outcome, 1)
+	go func() {
+		var reply telegram.Message
+		err := client.Call(t.Context(), "sendMessage", f.payload, &reply)
+		done <- telegram.DeliveryOutcome(reply.ID, err)
+	}()
+	select {
+	case body := <-entered:
+		require.NotEmpty(t, body, "the exact admitted generation crossed the real HTTP boundary")
+	case <-time.After(10 * time.Second):
+		t.Fatal("synthetic transport did not observe the admitted request")
+	}
+	_, err := f.db.Exec(
+		t.Context(),
+		`UPDATE core.`+f.table+` SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1`,
+		f.id,
+	)
+	require.NoError(t, err)
+	require.NoError(t, f.recover())
+	var originalMarker string
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text FROM core.`+f.table+` WHERE id=$1`, f.id).
+			Scan(&originalMarker),
+	)
+	if phase == "cancelled-before-reply" {
+		require.NoError(t, f.cancel())
+	}
+	if phase == "prewire-rejection" {
+		// A local rejection is not a provider observation for the unresolved call.
+		require.NoError(
+			t,
+			f.finish(delivery.Outcome{Kind: delivery.Rejected, Reason: "announcement_original_wire_unavailable"}),
+		)
+		before := f.snapshot(t)
+		require.NoError(t, f.finish(delivery.Outcome{Kind: delivery.Succeeded, MessageID: 91}))
+		assert.Equal(t, before, f.snapshot(t))
+		return
+	}
+	once.Do(func() { close(release) })
+	var outcome delivery.Outcome
+	select {
+	case outcome = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("synthetic confirmed reply did not complete")
+	}
+	require.Equal(t, delivery.Deferred, outcome.Kind)
+	require.Equal(t, "telegram_rate_limit", outcome.Reason)
+	require.EqualValues(t, 120, outcome.RetryAfter)
+	assert.NoError(t, f.finish(outcome), "a matching terminal negative must be retained as a wire fact")
+	if phase == "cancelled-after-reply" {
+		require.NoError(t, f.cancel())
+	}
+	before := f.snapshot(t)
+	assert.Error(
+		t,
+		f.finish(delivery.Outcome{Kind: delivery.Succeeded, MessageID: 91}),
+		"confirmed rejection fences a contradictory positive completion",
+	)
+	assert.Equal(
+		t,
+		before,
+		f.snapshot(t),
+		"rejected success preserves owner, payload, pacing, queue and business sources",
+	)
+	var marker, state string
+	var attempt, resends, messageID int64
+	require.NoError(
+		t,
+		f.db.QueryRow(t.Context(), `SELECT jsonb_build_array(last_uncertain_attempt,last_uncertain_reason,last_uncertain_recorded_at)::text,state,`+f.attemptColumn+`,uncertain_resends,`+f.messageColumn+` FROM core.`+f.table+` WHERE id=$1`, f.id).
+			Scan(&marker, &state, &attempt, &resends, &messageID),
+	)
+	assert.Equal(t, originalMarker, marker, "confirmed reply does not rewrite the prior uncertainty evidence")
+	assert.Equal(t, f.attempt, attempt)
+	assert.Zero(t, resends)
+	assert.Zero(t, messageID)
+	if phase == "pending" {
+		assert.Equal(t, "pending", state)
+	} else {
+		assert.Equal(t, "cancelled", state)
+	}
+}
+
+func TestLegacyAnnouncementPrewireRefusalRecapturesCandidate(t *testing.T) {
+	t.Parallel()
+	for _, refusal := range []string{"pause", "pacing", "expired-preparation"} {
+		t.Run(refusal, func(t *testing.T) {
+			t.Parallel()
+			checkLegacyAnnouncementCapture(t, refusal)
+		})
+	}
+}
+
+func checkLegacyAnnouncementCapture(t *testing.T, refusal string) {
+	t.Helper()
+	db, s := bookingFixture(t)
+	_, err := db.Exec(t.Context(), `UPDATE core.pass_events SET thread_channel='-100123'`)
+	require.NoError(t, err)
+	_, err = s.Execute(t.Context(), "alice", bookingCommand("solo", "legacy-prewire", passbooking.Booking{}))
+	require.NoError(t, err)
+	_, err = db.Exec(
+		t.Context(),
+		`UPDATE core.pass_registration_announcements SET state='unknown',failure='telegram_outcome_unknown'; UPDATE core.delivery_queue SET state='unknown' WHERE owner_kind='announcement'`,
+	)
+	require.NoError(t, err)
+	require.NoError(t, s.RecoverRegistrationAnnouncements(t.Context()))
+	var captureMissing bool
+	var historicalMarker int64
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT rendered_text IS NULL,last_uncertain_attempt FROM core.pass_registration_announcements`).
+			Scan(&captureMissing, &historicalMarker),
+	)
+	require.True(t, captureMissing)
+	require.Zero(t, historicalMarker)
+	_, err = db.Exec(
+		t.Context(),
+		`UPDATE core.pass_registration_announcements SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'`,
+	)
+	require.NoError(t, err)
+	first, found, err := s.ClaimRegistrationAnnouncement(t.Context())
+	require.NoError(t, err)
+	require.True(t, found)
+	if refusal == "expired-preparation" {
+		_, err = db.Exec(
+			t.Context(),
+			`UPDATE core.pass_registration_announcements SET lease_until=clock_timestamp()-interval '1 second'`,
+		)
+		require.NoError(t, err)
+	} else {
+		_, err = db.Exec(
+			t.Context(),
+			`INSERT INTO core.delivery_pacing(bot_id,chat) VALUES($1,'') ON CONFLICT DO NOTHING`,
+			s.Delivery.BotID,
+		)
+		require.NoError(t, err)
+		if refusal == "pause" {
+			_, err = db.Exec(
+				t.Context(),
+				`UPDATE core.delivery_pacing SET pause_reason='synthetic_operator_pause' WHERE bot_id=$1 AND chat=''`,
+				s.Delivery.BotID,
+			)
+		} else {
+			_, err = db.Exec(
+				t.Context(),
+				`UPDATE core.delivery_pacing SET not_before=clock_timestamp()+interval '120 seconds' WHERE bot_id=$1 AND chat=''`,
+				s.Delivery.BotID,
+			)
+		}
+		require.NoError(t, err)
+		gate, beginErr := s.BeginRegistrationAnnouncement(
+			t.Context(),
+			delivery.Attempt{ID: first.ID, Generation: first.Attempts},
+		)
+		require.NoError(t, beginErr)
+		require.False(t, gate.Ready)
+		if refusal == "pause" {
+			assert.Equal(t, "synthetic_operator_pause", gate.Reason)
+		} else {
+			assert.Equal(t, "delivery_cooldown", gate.Reason)
+		}
+	}
+	var resends int64
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT uncertain_resends FROM core.pass_registration_announcements WHERE id=$1`, first.ID).
+			Scan(&resends),
+	)
+	assert.Zero(t, resends, "no refused preparation is an admitted wire")
+	_, err = db.Exec(
+		t.Context(),
+		`UPDATE core.pass_registration_announcements SET name='New eligible rendering',locale='en',role='leader',available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET pause_reason='',not_before=clock_timestamp()-interval '1 second'`,
+	)
+	require.NoError(t, err)
+	restarted := passbooking.Service{DB: db, Delivery: s.Delivery}
+	item, found, err := restarted.ClaimRegistrationAnnouncement(t.Context())
+	require.NoError(t, err)
+	require.True(t, found)
+	expected, err := passbooking.RegistrationAnnouncementText(item)
+	require.NoError(t, err)
+	require.NotEqual(t, first.Text, expected)
+	assert.Equal(t, expected, item.Text, "the next eligible legacy wire captures its current candidate")
+	gate, err := restarted.BeginRegistrationAnnouncement(
+		t.Context(),
+		delivery.Attempt{ID: item.ID, Generation: item.Attempts},
+	)
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
+	wires := make(chan []byte, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			t.Error(readErr)
+			return
+		}
+		wires <- body
+		connection, _, hijackErr := http.NewResponseController(w).Hijack()
+		if hijackErr != nil {
+			t.Error(hijackErr)
+			return
+		}
+		_ = connection.Close()
+	}))
+	t.Cleanup(server.Close)
+	client := telegram.Client{Base: server.URL, Token: "synthetic"}
+	var reply telegram.Message
+	sendErr := client.Call(
+		t.Context(),
+		"sendMessage",
+		map[string]any{"chat_id": -100123, "text": item.Text, "parse_mode": "HTML"},
+		&reply,
+	)
+	require.Error(t, sendErr)
+	firstWire := <-wires
+	var wirePayload struct {
+		Text string `json:"text"`
+	}
+	require.NoError(t, json.Unmarshal(firstWire, &wirePayload))
+	assert.Equal(t, expected, wirePayload.Text)
+	require.NoError(
+		t,
+		restarted.CompleteRegistrationAnnouncement(
+			t.Context(),
+			passbooking.AnnouncementCompletion{
+				ID:      item.ID,
+				Attempt: item.Attempts,
+				Outcome: telegram.DeliveryOutcome(reply.ID, sendErr),
+			},
+		),
+	)
+	_, err = db.Exec(
+		t.Context(),
+		`UPDATE core.pass_registration_announcements SET name='Later render input',available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'`,
+	)
+	require.NoError(t, err)
+	again, found, err := restarted.ClaimRegistrationAnnouncement(t.Context())
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, item.Text, again.Text, "after the first admission uncertainty preserves its captured text")
+	gate, err = restarted.BeginRegistrationAnnouncement(
+		t.Context(),
+		delivery.Attempt{ID: again.ID, Generation: again.Attempts},
+	)
+	require.NoError(t, err)
+	require.True(t, gate.Ready)
+	sendErr = client.Call(
+		t.Context(),
+		"sendMessage",
+		map[string]any{"chat_id": -100123, "text": again.Text, "parse_mode": "HTML"},
+		&reply,
+	)
+	require.Error(t, sendErr)
+	assert.Equal(t, firstWire, <-wires)
+	require.NoError(
+		t,
+		restarted.CompleteRegistrationAnnouncement(
+			t.Context(),
+			passbooking.AnnouncementCompletion{
+				ID:      again.ID,
+				Attempt: again.Attempts,
+				Outcome: telegram.DeliveryOutcome(reply.ID, sendErr),
+			},
+		),
+	)
+	var captured string
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT rendered_text,uncertain_resends FROM core.pass_registration_announcements WHERE id=$1`, item.ID).
+			Scan(&captured, &resends),
+	)
+	assert.Equal(t, item.Text, captured)
+	assert.EqualValues(t, 2, resends)
 }
