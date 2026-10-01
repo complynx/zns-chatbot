@@ -103,11 +103,28 @@ def allocate(path, sha, config, evidence):
     if (not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_./:-]*@sha256:[0-9a-f]{64}", value.get("cli_image", ""))
             or not re.fullmatch(re.escape(value["project"]) + r"-[a-z0-9-]+", value.get("config_volume", ""))):
         raise RuntimeError("allocated_immutable_resources_required")
-    parsed = urlparse(os.environ.get("MIGRATE_DATABASE_URL", ""))
-    if (parsed.scheme not in ("postgres", "postgresql") or parsed.hostname != value["host"] or parsed.port != value["port"]
-            or parsed.path != "/" + value["database"] or parsed.username != "postgres"):
-        raise RuntimeError("isolated_import_dsn_required")
+    importer_env(value)
     DATABASE, PROJECT, ALLOCATION = value["database"], value["project"], value
+
+
+def importer_env(allocation):
+    """Use only the allocated URL target; reject pgx URI and environment indirection."""
+    dsn = os.environ.get("MIGRATE_DATABASE_URL", "")
+    try:
+        parsed = urlparse(dsn)
+        valid = (not any(character.isspace() or ord(character) < 32 for character in dsn)
+                 and parsed.scheme in ("postgres", "postgresql")
+                 and parsed.hostname == allocation["host"] and parsed.port == allocation["port"]
+                 and parsed.path == "/" + allocation["database"] and parsed.username == "postgres"
+                 and not parsed.fragment and not parsed.params
+                 and parsed.query in ("", "sslmode=disable"))
+    except ValueError:
+        valid = False
+    if not valid:
+        raise RuntimeError("isolated_import_dsn_required")
+    env = {key: value for key, value in os.environ.items() if not key.upper().startswith("PG")}
+    env["MIGRATE_DATABASE_URL"] = dsn
+    return env
 
 
 def provenance(config, evidence, *, retired=False):
@@ -184,15 +201,16 @@ def archive_binding(config):
     evidence = Path(config["runtime_source"]).resolve(strict=True).parent
     prepared = read(checked(evidence / "prepared-import-bindings.json", config["prepared_import_bindings_sha256"]))
     source = Path(config["source_export"]).resolve(strict=True)
+    source_hashes = tree(source)
+    if source_hashes != prepared["source"]:
+        raise RuntimeError("prepared_source_export_changed")
     manifest = json.loads((source / "manifest.json").read_text(encoding="utf-8"))
     if manifest["bot_id"] != 999 or not manifest["snapshot_id"].startswith("synthetic-e-"):
         raise RuntimeError("synthetic_selected_bot_export_required")
     included = {row["domain"] for row in manifest["coverage"] if row["status"] == "included"}
     if not {"users", "events", "orders", "passes", "massage", "messages", "knowledge", "schedule"} <= included:
         raise RuntimeError("cross_domain_source_coverage_missing")
-    binding = {"source": tree(source), "stages": {}, "inputs": {}, "resources": {}}
-    if binding["source"] != prepared["source"]:
-        raise RuntimeError("prepared_source_export_changed")
+    binding = {"source": source_hashes, "stages": {}, "inputs": {}, "resources": {}}
     for domain in DOMAINS:
         entry = config["imports"][domain]
         binding["stages"][domain] = tree(entry["stage"])
@@ -222,6 +240,34 @@ def archive_binding(config):
     return binding
 
 
+def preflight(config, evidence, *, retired=False):
+    """Validate all bound local bytes before any database or Docker operation."""
+    provenance(config, evidence, retired=retired)
+    archived = archive_binding(config)
+    binary = Path(config["importer_binary"]).resolve(strict=not retired)
+    if retired:
+        if read(evidence / "importer-unavailable.json") != {"package_absent": True, "binary_absent": True}:
+            raise RuntimeError("importer_retirement_required")
+        if binary.exists() or (Path(config["runtime_source"]) / "tools/migrate").exists():
+            raise RuntimeError("importer_retirement_required")
+        binary = evidence / "retired-importer" / ("zns-migrate-retired" + binary.suffix)
+    if digest(binary) != config["importer_sha256"]:
+        raise RuntimeError("importer_binary_hash_mismatch")
+    return archived
+
+
+def validate_summary(domain, summary, *, replay=False):
+    if summary.get("reconciled") is not True:
+        raise RuntimeError("import_reconciliation_incomplete")
+    if replay:
+        if domain == "food":
+            unchanged = summary.get("reused") is True
+        else:
+            unchanged = type(summary.get("applied")) is int and summary["applied"] == 0
+        if not unchanged:
+            raise RuntimeError("import_replay_added_rows_or_missing_evidence")
+
+
 def mounted_resources(config):
     image = ALLOCATION["cli_image"]
     if not re.fullmatch(r"[^\s]+@sha256:[0-9a-f]{64}", image):
@@ -238,35 +284,30 @@ def mounted_resources(config):
 
 
 def import_all(config, evidence):
+    binding = preflight(config, evidence)
+    env = importer_env(ALLOCATION)
     guard()
     ledger_check(config, evidence)
     if sql("SELECT to_regnamespace('migrate_import') IS NULL AND "
            "NOT EXISTS(SELECT 1 FROM core.users);\n").strip() != "t":
         raise RuntimeError("empty_new_import_database_required")
-    binding = archive_binding(config)
     save(evidence / "archive-binding.json", binding)
     executable = Path(config["importer_binary"]).resolve(strict=True)
-    if digest(executable) != config["importer_sha256"]:
-        raise RuntimeError("importer_binary_hash_mismatch")
     for domain in DOMAINS:
         entry = config["imports"][domain]
         args = [str(executable), "apply", domain, "--stage", entry["stage"],
                 "--plan", entry["plan"], "--resolutions", entry["resolutions"]]
         for phase in ("first", "replay"):
-            response = json.loads(command(args))
+            response = json.loads(command(args, env=env))
             summary = response["apply_" + domain]
-            if not summary["reconciled"]:
-                raise RuntimeError("import_reconciliation_incomplete")
-            if phase == "replay" and summary.get("applied", 0) != 0:
-                raise RuntimeError("import_replay_added_rows")
+            validate_summary(domain, summary, replay=phase == "replay")
             save(evidence / (domain + "-" + phase + ".json"), response)
     for domain in ("orders", "passes", "food", "massage", "messages"):
         entry = config["imports"][domain]
         response = json.loads(command([str(executable), "reconcile", domain,
                                        "--stage", entry["stage"], "--plan", entry["plan"],
-                                       "--resolutions", entry["resolutions"]]))
-        if not response["apply_" + domain]["reconciled"]:
-            raise RuntimeError("final_import_reconciliation_incomplete")
+                                       "--resolutions", entry["resolutions"]], env=env))
+        validate_summary(domain, response["apply_" + domain])
         save(evidence / (domain + "-reconcile.json"), response)
     if archive_binding(config) != binding:
         raise RuntimeError("source_export_or_import_inputs_changed")
@@ -275,13 +316,13 @@ def import_all(config, evidence):
 
 
 def remove_receipts(config, evidence):
-    provenance(config, evidence)
+    current_binding = preflight(config, evidence)
     baseline = json.loads((evidence / "before-removal.json").read_text())
+    binding = json.loads((evidence / "archive-binding.json").read_text())
+    if current_binding != binding:
+        raise RuntimeError("archive_binding_changed")
     if snapshot(config) != baseline:
         raise RuntimeError("permanent_state_changed_before_removal")
-    binding = json.loads((evidence / "archive-binding.json").read_text())
-    if archive_binding(config) != binding:
-        raise RuntimeError("archive_binding_changed")
     mounted_resources(config)
     inventory = json.loads(sql("SELECT coalesce(json_agg(c.relname ORDER BY c.relname),'[]') "
                                "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
@@ -302,10 +343,7 @@ def remove_receipts(config, evidence):
 
 
 def archive_importer(config, evidence):
-    guard()
-    provenance(config, evidence)
-    if snapshot(config) != read(evidence / "after-removal.json"):
-        raise RuntimeError("permanent_state_changed_before_archive")
+    preflight(config, evidence)
     root = Path(config["runtime_source"]).resolve(strict=True)
     marker = json.loads((root / ".e-removal-owned.json").read_text())
     if marker != {"scope": SCOPE, "database": DATABASE}:
@@ -318,6 +356,8 @@ def archive_importer(config, evidence):
         raise RuntimeError("importer_binary_must_be_in_owned_source_copy")
     if binary.is_relative_to(package):
         raise RuntimeError("binary_must_be_separate_from_package")
+    if snapshot(config) != read(evidence / "after-removal.json"):
+        raise RuntimeError("permanent_state_changed_before_archive")
     saved = evidence / "retired-importer"
     saved.mkdir()
     save(saved / "source-hashes.json", tree(package))
@@ -337,7 +377,7 @@ def build_runtime(config, evidence, probes_path, probes_sha, *, retired):
     root = Path(config["runtime_source"]).resolve(strict=True)
     if root == Path(config["repository_root"]).resolve() or not root.is_relative_to(evidence):
         raise RuntimeError("isolated_build_source_required")
-    provenance(config, evidence, retired=retired)
+    preflight(config, evidence, retired=retired)
     if retired and ((root / "tools/migrate").exists() or Path(config["importer_binary"]).exists()
                     or not (evidence / "importer-unavailable.json").is_file()):
         raise RuntimeError("importer_retirement_required")
@@ -415,6 +455,7 @@ def main():
     else:
         if not args.checkpoint or Path(args.checkpoint).name != args.checkpoint:
             raise RuntimeError("simple_checkpoint_filename_required")
+        preflight(config, evidence, retired=(evidence / "importer-unavailable.json").exists())
         mounted_resources(config)
         current = snapshot(config, check_counts=False)
         if args.action == "capture":

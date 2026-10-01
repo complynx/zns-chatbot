@@ -101,7 +101,11 @@ review must precede these flags.
 This bounded version supports only transport:host-loopback with host127.0.0.1 or
 localhost, an exact port and endpoint_verified:true. MIGRATE_DATABASE_URL must
 match that exact host/port/database and postgres owner role. The engineer must
-prove actual access through its reviewed operator topology; Docker PortBindings
+use a URL without a query, or with only the exact `sslmode=disable` query.
+All other URI parameters, fragments, target overrides and service indirection
+are rejected. Importer commands receive that validated URL with PG environment
+settings removed, so the checked authority is the effective pgx target.
+The engineer must prove actual access through its reviewed operator topology; Docker PortBindings
 alone is insufficient. A Linux CLI in the owned network needs a separately
 reviewed transport successor. No automatic port, network or alternate-DB fallback
 exists. The credentials stay in the process environment, never the allocation,
@@ -123,7 +127,12 @@ For each owner action add:
 
 Run `import`, then `remove-receipts`, then `archive-importer`. Import runs actual
 seven-domain apply/replay, requires reconciliation and zero new replay mutations,
-and runs the five CLI-supported standalone reconciliations. Users/events use their
+proved by food's explicit `reused:true` and each other domain's integer
+`applied:0`. Missing counters never prove replay success. Before any database
+or Docker call, owner actions validate actual source, raw migrations, source
+export, stages, plans, resolutions, permanent resources and importer binary.
+After retirement the archived binary is checked against the same binding.
+Import also runs the five CLI-supported standalone reconciliations. Users/events use their
 real apply/replay reconciliation summaries; standalone commands do not exist.
 Owner/history/draft linkage, exact counts and every permanent table/sequence are
 fingerprinted. Receipt removal archives exactly seven tables and uses one

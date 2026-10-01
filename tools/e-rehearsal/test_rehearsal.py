@@ -155,6 +155,128 @@ class GuardTests(unittest.TestCase):
             prepare.command([sys.executable, "-c",
                              "import sys; sys.stderr.write('private-token'); sys.exit(1)"])
 
+    def test_pg_target_overrides_and_environment_indirection_rejected(self):
+        allocation = {"host": "127.0.0.1", "port": 58421, "database": self.epoch["database"]}
+        url = "postgres://postgres:synthetic@127.0.0.1:58421/" + allocation["database"]
+        suffixes = ("?host=remote.invalid", "?port=5432", "?dbname=production", "?user=other",
+                    "?service=production", "?hostaddr=192.0.2.1", "?sslmode=disable&host=remote.invalid",
+                    "?sslmode=disable&sslmode=disable", "?%68ost=remote.invalid", "#host=remote.invalid")
+        for target in (*[url + suffix for suffix in suffixes],
+                       url.replace("127.0.0.1", "localhost"), url.replace(":58421", ":5432"),
+                       url.replace("postgres:synthetic@", "other:synthetic@"),
+                       url.replace(allocation["database"], "production"), url + "\n", "service=production"):
+            with self.subTest(target=target), patch.dict(rehearse.os.environ, {"MIGRATE_DATABASE_URL": target}):
+                with self.assertRaisesRegex(RuntimeError, "isolated_import_dsn"):
+                    rehearse.importer_env(allocation)
+        for suffix in ("", "?sslmode=disable"):
+            with patch.dict(rehearse.os.environ, {"MIGRATE_DATABASE_URL": url + suffix,
+                                                  "PGSERVICE": "production", "PGHOST": "remote.invalid",
+                                                  "PGDATABASE": "production", "PGUSER": "other"}):
+                actual = rehearse.importer_env(allocation)
+                self.assertEqual(actual["MIGRATE_DATABASE_URL"], url + suffix)
+                self.assertFalse(any(key.upper().startswith("PG") for key in actual))
+
+    def prepared_guard_fixture(self):
+        """Local hash fixtures only; these files do not assert successful CLI execution."""
+        evidence = self.root / "evidence"
+        runtime = evidence / "runtime"
+        migration = self.write("evidence/runtime/platform/internal/store/migrations/090_final.sql", {"sql_fixture": True})
+        self.write("evidence/runtime/tools/migrate/fixture.json", {})
+        inventory = self.write("evidence/source-inventory.json", prepare.tree(runtime))
+        ledger = self.write("evidence/migration-inventory.json", prepare.migration_inventory(runtime, migration.name))
+        epoch = self.write("evidence/binding.json", {**self.epoch, "last_migration": migration.name})
+        binary = self.write("evidence/runtime/dist/zns-migrate.exe", {"binary_hash_fixture": True})
+        source = evidence / "source"
+        for name in ("knowledge.yaml", "lineup.csv"):
+            self.write("evidence/source/" + name, {"resource_hash_fixture": name})
+            self.write("evidence/permanent/" + name, {"resource_hash_fixture": name})
+        manifest = self.write("evidence/source/manifest.json", {
+            "bot_id": 999, "snapshot_id": "synthetic-e-guard-fixture",
+            "coverage": [{"domain": domain, "status": "included"} for domain in
+                         ("users", "events", "orders", "passes", "massage", "messages", "knowledge", "schedule")],
+            "files": [{"path": name, "kind": "resource", "source": domain,
+                       "sha256": prepare.digest(source / name)} for name, domain in
+                      (("knowledge.yaml", "knowledge"), ("lineup.csv", "schedule"))]})
+        stage = evidence / "stage"
+        self.write("evidence/stage/snapshot/manifest.json", prepare.read(manifest))
+        prepared = self.write("evidence/prepared-import-bindings.json", {"source": prepare.tree(source),
+                                                                        "stage": prepare.tree(stage)})
+        config = {"runtime_source": str(runtime), "repository_root": str(self.root), "source_export": str(source),
+                  "importer_binary": str(binary), "importer_sha256": prepare.digest(binary),
+                  "source_inventory_sha256": prepare.digest(inventory), "migration_inventory_sha256": prepare.digest(ledger),
+                  "binding_sha256": prepare.digest(epoch), "prepared_import_bindings_sha256": prepare.digest(prepared),
+                  "imports": {}, "resources": {}}
+        build = self.write("evidence/importer-build.json", {"commit": self.epoch["commit"],
+                           "binary_sha256": config["importer_sha256"],
+                           "source_inventory_sha256": config["source_inventory_sha256"],
+                           "migration_inventory_sha256": config["migration_inventory_sha256"]})
+        config["importer_build_sha256"] = prepare.digest(build)
+        for domain in rehearse.DOMAINS:
+            plan = self.write("evidence/" + domain + "-plan.json", {"plan_hash_fixture": domain})
+            resolution = self.write("evidence/" + domain + "-resolutions.json", {"resolution_hash_fixture": domain})
+            config["imports"][domain] = {"stage": str(stage), "plan": str(plan), "resolutions": str(resolution),
+                                         "plan_sha256": prepare.digest(plan), "resolutions_sha256": prepare.digest(resolution)}
+        for name in ("knowledge.yaml", "lineup.csv"):
+            config["resources"][name] = {"source_path": name, "sha256": prepare.digest(source / name),
+                                         "permanent_copy": str(evidence / "permanent" / name)}
+        return config, evidence
+
+    def test_actual_bound_bytes_rejected_before_any_database_or_executor(self):
+        config, evidence = self.prepared_guard_fixture()
+        rehearse.preflight(config, evidence)
+        targets = [evidence / name for name in ("source-inventory.json", "migration-inventory.json", "binding.json",
+                   "importer-build.json", "prepared-import-bindings.json", "source/manifest.json",
+                   "source/knowledge.yaml", "source/lineup.csv", "stage/snapshot/manifest.json",
+                   "permanent/knowledge.yaml", "permanent/lineup.csv")]
+        targets += [Path(config["runtime_source"]) / "platform/internal/store/migrations/090_final.sql",
+                    Path(config["importer_binary"])]
+        targets += [Path(entry[key]) for entry in config["imports"].values() for key in ("plan", "resolutions")]
+        for target in targets:
+            original = target.read_bytes()
+            target.write_bytes(original + b"changed")
+            try:
+                for action in (rehearse.import_all, rehearse.remove_receipts, rehearse.archive_importer):
+                    with self.subTest(path=target.relative_to(evidence), action=action.__name__):
+                        with patch.object(rehearse, "sql") as database, patch.object(rehearse, "command") as executor:
+                            with self.assertRaises(RuntimeError):
+                                action(config, evidence)
+                            database.assert_not_called()
+                            executor.assert_not_called()
+            finally:
+                target.write_bytes(original)
+
+    def test_replay_requires_actual_food_reuse_and_other_counters(self):
+        for summary in ({"reconciled": True}, {"reconciled": True, "reused": False},
+                        {"reconciled": True, "applied": 0}, {"reconciled": True, "reused": 1}):
+            with self.subTest(summary=summary), self.assertRaisesRegex(RuntimeError, "replay"):
+                rehearse.validate_summary("food", summary, replay=True)
+        rehearse.validate_summary("food", {"reconciled": True, "reused": True}, replay=True)
+        for domain in set(rehearse.DOMAINS) - {"food"}:
+            for applied in (None, False, 1, "0"):
+                summary = {"reconciled": True}
+                if applied is not None:
+                    summary["applied"] = applied
+                with self.subTest(domain=domain, summary=summary), self.assertRaisesRegex(RuntimeError, "replay"):
+                    rehearse.validate_summary(domain, summary, replay=True)
+            rehearse.validate_summary(domain, {"reconciled": True, "applied": 0}, replay=True)
+
+    def test_checkpoint_and_offline_build_preflight_precedes_executor(self):
+        config, evidence = self.prepared_guard_fixture()
+        path = self.write("evidence/inputs.json", config)
+        target = Path(config["imports"]["food"]["resolutions"])
+        target.write_bytes(b"changed")
+        for action in ("capture", "compare", "compile-probes"):
+            argv = ["rehearse.py", action, "--inputs", str(path), "--inputs-sha256", prepare.digest(path),
+                    "--evidence", str(evidence), "--allocation", "unused", "--allocation-sha256", "unused",
+                    "--checkpoint", "checkpoint.json", "--probes", "unused", "--probes-sha256", "unused"]
+            with self.subTest(action=action), patch.object(sys, "argv", argv):
+                with (patch.object(rehearse, "allocate"), patch.object(rehearse, "sql") as database,
+                      patch.object(rehearse, "command") as executor):
+                    with self.assertRaisesRegex(RuntimeError, "reviewed_import_input_hash"):
+                        rehearse.main()
+                    database.assert_not_called()
+                    executor.assert_not_called()
+
     def test_save_does_not_overwrite_evidence(self):
         path = self.root / "receipt.json"
         prepare.save(path, {"existing": True})
