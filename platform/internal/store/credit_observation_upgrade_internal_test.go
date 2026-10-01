@@ -20,6 +20,7 @@ import (
 
 const creditObservationUpgrade = "089_credit_usage_observation.sql"
 const deliveryTransportUpgrade = "092_bot_delivery_transport_uncertainty.sql"
+const adminPageIngressUpgrade = "091_admin_page_ingress_proof.sql"
 
 func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	t.Parallel()
@@ -45,13 +46,18 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	expected = append(expected, queueUpgradeLedgerEntry{
 		Name: passDeliveryTargetsUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(passBody)),
 	})
+	ingressBody, err := migrations.ReadFile("migrations/" + adminPageIngressUpgrade)
+	require.NoError(t, err)
+	expected = append(expected, queueUpgradeLedgerEntry{
+		Name: adminPageIngressUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(ingressBody)),
+	})
 	transportBody, err := migrations.ReadFile("migrations/" + deliveryTransportUpgrade)
 	require.NoError(t, err)
 	expected = append(expected, queueUpgradeLedgerEntry{
 		Name: deliveryTransportUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(transportBody)),
 	})
 	require.NoError(t, Migrate(t.Context(), db))
-	require.Equal(t, expected, queueUpgradeLedger(t, db), "only exact 089, 090 and 092 checksum entries are added")
+	require.Equal(t, expected, queueUpgradeLedger(t, db), "only exact 089, 090, 091 and 092 checksum entries are added")
 	var inventedMetadata, spentBudget int64
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
  (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
@@ -202,7 +208,7 @@ func creditObservationUpgradeState(t *testing.T, db *pgxpool.Pool) string {
  'attempts',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM credits.attempts a),
  'accounts',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.payer) FROM credits.accounts a),
  'policy',(SELECT jsonb_agg(to_jsonb(p)) FROM credits.default_policy p),
- 'bot_intents',(SELECT jsonb_agg(to_jsonb(i) ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`).Scan(&raw))
+ 'bot_intents',(SELECT jsonb_agg(to_jsonb(i)-ARRAY['last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends'] ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`).Scan(&raw))
 	return raw
 }
 

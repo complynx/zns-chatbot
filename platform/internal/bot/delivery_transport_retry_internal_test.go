@@ -195,6 +195,22 @@ func TestBotTransportRetryBudgetAndFollower(t *testing.T) {
 				expectedLast = 1
 			}
 			require.Equal(t, expectedLast, lastAttempt, "confirmed rate limits must not overwrite factual uncertainty")
+			state := httptest.NewRecorder()
+			handler.ServeHTTP(state, httptest.NewRequest(http.MethodGet, "/lab/state?user=101", nil))
+			var visible struct {
+				Messages []telegram.Message `json:"messages"`
+			}
+			require.NoError(t, json.Unmarshal(state.Body.Bytes(), &visible))
+			expectedVisible := 5
+			if rateLimited {
+				expectedVisible = 2
+			}
+			require.Len(
+				t,
+				visible.Messages,
+				expectedVisible,
+				"the UI retains real deliveries and the released follower",
+			)
 		})
 	}
 }

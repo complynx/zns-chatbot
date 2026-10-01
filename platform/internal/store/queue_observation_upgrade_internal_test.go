@@ -24,12 +24,15 @@ import (
 
 func TestPredecessorPassReceiptAuthorityAcross090(t *testing.T) {
 	t.Parallel()
-	for _, upgraded := range []bool{false, true} {
+	for _, migrateBeforeEnqueue := range []bool{false, true} {
 		for _, denied := range []bool{false, true} {
-			t.Run(fmt.Sprintf("upgraded_%t_denied_%t", upgraded, denied), func(t *testing.T) {
-				t.Parallel()
-				runPredecessorPassReceiptAuthority(t, upgraded, denied, "")
-			})
+			t.Run(
+				fmt.Sprintf("migration_before_enqueue_%t_denied_%t", migrateBeforeEnqueue, denied),
+				func(t *testing.T) {
+					t.Parallel()
+					runPredecessorPassReceiptAuthority(t, migrateBeforeEnqueue, denied, "")
+				},
+			)
 		}
 	}
 }
@@ -44,7 +47,7 @@ func TestPredecessorPassReceiptRejectsMalformedAndForeignPayload(t *testing.T) {
 	}
 }
 
-func runPredecessorPassReceiptAuthority(t *testing.T, upgraded, denied bool, corruption string) {
+func runPredecessorPassReceiptAuthority(t *testing.T, migrateBeforeEnqueue, denied bool, corruption string) {
 	t.Helper()
 	db := creditObservationUpgradeDatabase(t)
 	applyCreditObservationPredecessor(t, db)
@@ -92,7 +95,7 @@ func runPredecessorPassReceiptAuthority(t *testing.T, upgraded, denied bool, cor
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT reference::text,receipt::text FROM bot.delivery_intents
  WHERE operation_key='old-pass'`).Scan(&savedReference, &savedReceipt))
 	ledger := queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql")
-	if upgraded {
+	if migrateBeforeEnqueue {
 		require.NoError(t, Migrate(t.Context(), db))
 		checkPassDeliveryTargetsUpgrade(t, db)
 		require.Equal(t, ledger, queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql"))
@@ -121,6 +124,23 @@ func runPredecessorPassReceiptAuthority(t *testing.T, upgraded, denied bool, cor
 	pending, err := botdelivery.Read(t.Context(), db, 4242,
 		delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: "view"}, false)
 	require.NoError(t, err)
+	if !migrateBeforeEnqueue {
+		// The new runtime starts after migration, with both old receipt and old
+		// pending work retained. It does not run against an unmigrated schema.
+		require.NoError(t, Migrate(t.Context(), db))
+		checkPassDeliveryTargetsUpgrade(t, db)
+		require.Equal(t, ledger, queueUpgradeLedgerSnapshot(t, db, "088_delivery_queue_observation.sql"))
+		require.NoError(t, db.QueryRow(t.Context(), `SELECT reference::text,receipt::text FROM bot.delivery_intents
+ WHERE operation_key='old-pass'`).Scan(&actualReference, &actualReceipt))
+		require.Equal(t, savedReference, actualReference)
+		require.Equal(t, savedReceipt, actualReceipt)
+		retained, readErr := botdelivery.Read(t.Context(), db, 4242, pending.QueueReference(), false)
+		require.NoError(t, readErr)
+		require.Equal(t, pending.Reference, retained.Reference)
+		require.Equal(t, pending.Receipt, retained.Receipt)
+		require.Equal(t, pending.State, retained.State)
+		require.Equal(t, pending.Attempt, retained.Attempt)
+	}
 	if denied {
 		_, err = db.Exec(
 			t.Context(),
@@ -286,6 +306,10 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		queueUpgradeLedgerEntry{Name: credit, Checksum: fmt.Sprintf("%x", sha256.Sum256(creditBody))})
 	expectedUpgradedLedger = append(expectedUpgradedLedger,
 		queueUpgradeLedgerEntry{Name: passDeliveryTargetsUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(passBody))})
+	ingressBody, err := migrations.ReadFile("migrations/" + adminPageIngressUpgrade)
+	require.NoError(t, err)
+	expectedUpgradedLedger = append(expectedUpgradedLedger,
+		queueUpgradeLedgerEntry{Name: adminPageIngressUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(ingressBody))})
 	expectedUpgradedLedger = append(expectedUpgradedLedger,
 		queueUpgradeLedgerEntry{Name: current, Checksum: fmt.Sprintf("%x", sha256.Sum256(currentBody))})
 	var hadTimestamp bool
@@ -318,7 +342,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		t,
 		expectedUpgradedLedger,
 		queueUpgradeLedger(t, db),
-		"only actual 088, 089, 090 and 092 ledger entries are added; old entries remain exact",
+		"only actual 088, 089, 090, 091 and 092 ledger entries are added; old entries remain exact",
 	)
 	var inventedMetadata, spentBudget int64
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
@@ -450,7 +474,7 @@ func queueUpgradeState(t *testing.T, db *pgxpool.Pool, after bool) string {
  'fairness',(SELECT jsonb_agg(to_jsonb(f) ORDER BY f.bot_id) FROM core.delivery_fairness f),
  'jobs',(SELECT jsonb_agg(to_jsonb(m) ORDER BY m.id) FROM core.admin_messages m),
  'attempts',(SELECT jsonb_agg(to_jsonb(d) ORDER BY d.id) FROM core.admin_message_deliveries d),
- 'bot_intents',(SELECT jsonb_agg(to_jsonb(i) ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`
+ 'bot_intents',(SELECT jsonb_agg(to_jsonb(i)-ARRAY['last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends'] ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`
 	var value string
 	require.NoError(t, db.QueryRow(t.Context(), query).Scan(&value))
 	return value
