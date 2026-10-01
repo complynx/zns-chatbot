@@ -93,7 +93,8 @@ func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset 
 		return messages.err
 	}
 	origin, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
-	if !ok || origin.owner == "" || origin.owner != origin.in.owner || origin.owner != in.owner || origin.in.chat != in.chat {
+	if !ok || origin.owner == "" || origin.owner != origin.in.owner || origin.owner != in.owner ||
+		origin.in.chat != in.chat {
 		return botdelivery.ErrBinding
 	}
 	return b.Host.EnqueueAdminPageResults(ctx, botdelivery.AdminPageResultsRequest{
