@@ -24,12 +24,13 @@ import (
 
 // The sink receives the real message before the adapter loses its response.
 type notificationLostResponse struct {
-	mu      sync.Mutex
-	text    string
-	calls   int
-	drops   int
-	wires   []telegram.Send
-	observe func(*http.Request, telegram.Send) error
+	mu            sync.Mutex
+	text          string
+	calls         int
+	drops         int
+	wires         []telegram.Send
+	observe       func(*http.Request, telegram.Send) error
+	observerError error
 }
 
 func (l *notificationLostResponse) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -48,6 +49,9 @@ func (l *notificationLostResponse) RoundTrip(request *http.Request) (*http.Respo
 	}
 	if l.observe != nil {
 		if err = l.observe(request, message); err != nil {
+			l.mu.Lock()
+			l.observerError = err
+			l.mu.Unlock()
 			return nil, err
 		}
 	}
@@ -202,7 +206,7 @@ func seedLegacyUnknownWithoutWire(t *testing.T, r *notificationRuntimeFixture, d
 	require.NoError(t, err)
 	_, err = tx.Exec(
 		t.Context(),
-		`UPDATE core.delivery_queue SET state='unknown',lease_until=NULL WHERE bot_id=$1 AND owner_kind=$2 AND owner_key=$3 AND effect_key='send'`,
+		`UPDATE core.delivery_queue SET state='unknown' WHERE bot_id=$1 AND owner_kind=$2 AND owner_key=$3 AND effect_key='send'`,
 		syntheticDeliverySettings().BotID,
 		string(notificationQueueOwner(domain)),
 		strconv.FormatInt(r.first, 10),
@@ -271,6 +275,10 @@ func TestNotificationUncertainRetryWireCommittedBeforeTransport(t *testing.T) {
 			loss := &notificationLostResponse{drops: 1, observe: notificationWireObserver(r)}
 			r.f.b.TG.HTTP = &http.Client{Transport: loss}
 			require.NoError(t, exactNotificationDelivery(r, domain)(t.Context(), r.first))
+			loss.mu.Lock()
+			observerError := loss.observerError
+			loss.mu.Unlock()
+			require.NoError(t, observerError)
 			requireNotificationAccepted(t, r, loss)
 			require.NotNil(t, notificationWireSnapshot(t, r))
 			assert.Equal(t, "pending", r.status(t, r.first).State)

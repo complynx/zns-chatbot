@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"reflect"
 	"testing"
 	"time"
 
@@ -70,7 +71,12 @@ func (row notificationSQLRow) Scan(dest ...any) error {
 	if row.err != nil {
 		return row.err
 	}
-	for _, value := range dest {
+	wireField, _ := reflect.TypeFor[dbgen.CorePassNotification]().FieldByName("DeliveryWirePayload")
+	for index, value := range dest {
+		// The whole-row scanner includes the nullable pre-wire snapshot.
+		if len(dest) == reflect.TypeFor[dbgen.CorePassNotification]().NumField() && index == wireField.Index[0] {
+			continue
+		}
 		if target, ok := value.(*[]byte); ok {
 			*target = []byte(row.bytes)
 		}
