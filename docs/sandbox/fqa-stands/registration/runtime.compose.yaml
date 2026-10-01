@@ -43,7 +43,7 @@ services:
       REGISTRATION_CLOCK_INSTALLATION: '010400000204'
       REGISTRATION_CLOCK_CASE: c-registration-clock-20261001-v1
       REGISTRATION_CLOCK_DATABASE_ADDRESS: postgres:5432/synthetic_qa_zns_registration_fixture
-      REGISTRATION_CLOCK_ANCHOR: ${REGISTRATION_CLOCK_ANCHOR:?Reviewed immutable UTC microsecond setup anchor}
+      REGISTRATION_CLOCK_ANCHOR: ${FQA_REGISTRATION_SETUP_ANCHOR:?Reviewed immutable UTC microsecond setup anchor}
       MEDIA_WORKER_URL: http://media-broker:8091
       STICKER_WORKER_URL: http://sticker-broker:8098
     labels:

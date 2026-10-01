@@ -19,7 +19,7 @@ services:
       ZNS_REGISTRATION_SECRET_DIR: /config/private
       ZNS_APP_UID: ${ZNS_APP_UID:?Actual inspected app UID}
       ZNS_APP_GID: ${ZNS_APP_GID:?Actual inspected app GID}
-      REGISTRATION_CLOCK_ANCHOR: ${REGISTRATION_CLOCK_ANCHOR:?Reviewed immutable setup anchor}
+      FQA_REGISTRATION_SETUP_ANCHOR: ${FQA_REGISTRATION_SETUP_ANCHOR:?Reviewed immutable setup anchor}
       ZNS_APP_IMAGE: ${ZNS_APP_IMAGE:?}
       ZNS_SCRIPT_IMAGE: ${ZNS_SCRIPT_IMAGE:?}
       ZNS_MEDIA_DECODER_IMAGE: ${ZNS_MEDIA_DECODER_IMAGE:?}

@@ -10,7 +10,7 @@ x-tool: &tool
   networks: [sandbox]
   volumes: ['config:/etc/zns:ro']
   env_file:
-    - path: ${ZNS_REGISTRATION_SECRET_DIR:?Protected private environment directory}/app.env
+    - path: ${ZNS_REGISTRATION_SECRET_DIR:?Protected private environment directory}/tool.env
       format: raw
 x-environment: &environment
   ZNS_CONFIG_FILE: /etc/zns/runtime.yaml
@@ -22,7 +22,7 @@ x-clock-environment: &clock-environment
   REGISTRATION_CLOCK_INSTALLATION: '010400000204'
   REGISTRATION_CLOCK_CASE: c-registration-clock-20261001-v1
   REGISTRATION_CLOCK_DATABASE_ADDRESS: postgres:5432/synthetic_qa_zns_registration_fixture
-  REGISTRATION_CLOCK_ANCHOR: ${REGISTRATION_CLOCK_ANCHOR:?Reviewed immutable UTC microsecond setup anchor}
+  REGISTRATION_CLOCK_ANCHOR: ${FQA_REGISTRATION_SETUP_ANCHOR:?Reviewed immutable UTC microsecond setup anchor}
 services:
   postgres:
     image: ${ZNS_POSTGRES_IMAGE:?Reviewed cached PostgreSQL17 repository@sha256 required}

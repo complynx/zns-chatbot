@@ -74,6 +74,7 @@ Private environment files are not tracked. Their exact key allowlists are:
 
 | File          | Private settings                                                                                                                                              |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| tool.env      | ZNS_DATABASE__URL for owning zns_app at postgres port 5432/new DB; matching synthetic TELEGRAM_TOKEN for the fixture bot namespace                            |
 | app.env       | ZNS_DATABASE__URL for zns_app at postgres port 5432/new DB; ZNS_AUTH__SIGNING_KEY; TELEGRAM_TOKEN; OPENAI_API_KEY; MEDIA_WORKER_SECRET; STICKER_WORKER_SECRET |
 | fake.env      | ZNS_DATABASE__URL for the same owning zns_app; matching synthetic TELEGRAM_TOKEN; ZNS_AUTH__SIGNING_KEY; OPENAI_API_KEY; R104_CONTROL_KEY                     |
 | media.env     | DATABASE_URL for zns_meter/new DB; MEDIA_WORKER_SECRET; synthetic OPENAI_API_KEY                                                                              |
@@ -83,15 +84,15 @@ Private environment files are not tracked. Their exact key allowlists are:
 Host preparation selects ZNS_REGISTRATION_SECRET_DIR as its protected staging
 directory. Copy required raw environment files into the private config volume at
 /private before coordinator start. Owner receives inventory.env only and sets
-its nested Compose directory to /config/private; app receives app.env. Runtime
+its nested Compose directory to /config/private; app receives app.env. Preparation and read tools receive tool.env only; it must contain no worker secrets/URLs, signing key or model key. Keep the owning-role DSN and synthetic bot token identical to app.env. Runtime
 Compose reads those files inside the coordinator, not from a guessed host path.
 Use no extra `REGISTRATION_FIXTURE_*`, `REGISTRATION_CLOCK_*` or lifecycle identity
 keys in private envfiles. Approved Compose 2.40 supports `env_file` with `format: raw`; values
 must be generated and URI-encoded correctly, not pasted into shell commands.
 
-Frozen setup supplies REGISTRATION_CLOCK_ANCHOR and REGISTRATION_FIXTURE_OPENS_AT
+Frozen setup supplies FQA_REGISTRATION_SETUP_ANCHOR and REGISTRATION_FIXTURE_OPENS_AT
 with their explicit domain relation. No date is selected by these templates.
-Keep both immutable throughout this case. The five clock settings are exactly:
+Keep both immutable throughout this case. FQA_REGISTRATION_SETUP_ANCHOR is only nested Compose interpolation input; the coordinator receives it without any REGISTRATION_CLOCK_* activation keys or clock mount. Compose maps that immutable input to REGISTRATION_CLOCK_ANCHOR only for app and operator processes. The five clock settings are exactly:
 
 ```text
 REGISTRATION_CLOCK_FILE=/run/registration-clock/state.json
