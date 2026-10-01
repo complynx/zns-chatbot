@@ -313,14 +313,16 @@ func testBotCapturePrivateFault(t *testing.T, fault string) {
 	require.EqualValues(t, 1, calls.Load(), "unavailable private source must not reconstruct or resend")
 	var lastAttempt, resends int
 	var reason string
+	var confirmed *int64
 	require.NoError(
 		t,
-		db.QueryRow(ctx, `SELECT last_uncertain_attempt,uncertain_resends,reason FROM bot.delivery_intents
+		db.QueryRow(ctx, `SELECT last_uncertain_attempt,uncertain_resends,reason,last_confirmed_attempt FROM bot.delivery_intents
  WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`, b.Delivery.BotID, operation, effect).
-			Scan(&lastAttempt, &resends, &reason),
+			Scan(&lastAttempt, &resends, &reason, &confirmed),
 	)
 	require.Equal(t, 1, lastAttempt)
 	require.Zero(t, resends)
+	require.Nil(t, confirmed, "source and capture rejection are not a confirmed transport outcome")
 	if expected == delivery.Rejected {
 		require.Equal(t, "original_wire_unavailable", reason)
 	}
@@ -805,6 +807,9 @@ func TestBotTransportRetryCancelledLateReceipt(t *testing.T) {
 	require.NoError(t, b.finishBotIntent(ctx, attempt, late, botdelivery.Continuation{Kind: "ignored"}, false))
 	require.JSONEq(t, before, snapshot())
 	require.NoError(t, b.finishBotIntent(ctx, attempt, late, botdelivery.Continuation{}, false))
+	require.ErrorIs(t, b.finishBotIntent(ctx, attempt,
+		telegram.DeliveryOutcome(0, &telegram.APIError{Code: http.StatusForbidden}), botdelivery.Continuation{}, false),
+		botdelivery.ErrBinding, "a known positive receipt cannot be contradicted by a negative input")
 	conflicting := late
 	conflicting.MessageID++
 	require.ErrorIs(

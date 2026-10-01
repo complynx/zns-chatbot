@@ -60,7 +60,7 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	require.Equal(t, expected, queueUpgradeLedger(t, db), "only exact 089, 090, 091 and 092 checksum entries are added")
 	var inventedMetadata, spentBudget int64
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
- (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
+ (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL OR last_confirmed_attempt IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
 		Scan(&inventedMetadata, &spentBudget))
 	require.Zero(t, inventedMetadata, "upgrade must not invent historical uncertainty")
 	require.Zero(t, spentBudget, "upgrade must not consume resend budget")
@@ -89,7 +89,7 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	require.Equal(t, expected, queueUpgradeLedger(t, db))
 	require.JSONEq(t, upgradedLedger, queueUpgradeLedgerSnapshot(t, db, deliveryTransportUpgrade))
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
- (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
+ (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL OR last_confirmed_attempt IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
 		Scan(&inventedMetadata, &spentBudget))
 	require.Zero(t, inventedMetadata, "replay must not invent historical uncertainty")
 	require.Zero(t, spentBudget, "replay must not consume resend budget")
@@ -208,7 +208,7 @@ func creditObservationUpgradeState(t *testing.T, db *pgxpool.Pool) string {
  'attempts',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id) FROM credits.attempts a),
  'accounts',(SELECT jsonb_agg(to_jsonb(a) ORDER BY a.payer) FROM credits.accounts a),
  'policy',(SELECT jsonb_agg(to_jsonb(p)) FROM credits.default_policy p),
- 'bot_intents',(SELECT jsonb_agg(to_jsonb(i)-ARRAY['last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends','wire_capture_key','wire_capture_hash'] ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`).Scan(&raw))
+ 'bot_intents',(SELECT jsonb_agg(to_jsonb(i)-ARRAY['last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends','wire_capture_key','wire_capture_hash','last_confirmed_attempt'] ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`).Scan(&raw))
 	return raw
 }
 

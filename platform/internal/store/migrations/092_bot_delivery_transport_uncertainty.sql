@@ -4,7 +4,8 @@ ALTER TABLE bot.delivery_intents
     ADD COLUMN last_uncertain_recorded_at timestamptz,
     ADD COLUMN uncertain_resends smallint NOT NULL DEFAULT 0 CHECK (uncertain_resends BETWEEN 0 AND 3),
     ADD COLUMN wire_capture_key text,
-    ADD COLUMN wire_capture_hash text;
+    ADD COLUMN wire_capture_hash text,
+    ADD COLUMN last_confirmed_attempt bigint CHECK (last_confirmed_attempt > 0 AND last_confirmed_attempt <= attempt);
 
 -- Historical rows keep unknown metadata absent until an actual recovery observation.
 ALTER TABLE bot.delivery_intents ADD CONSTRAINT bot_delivery_uncertain_metadata_complete CHECK (

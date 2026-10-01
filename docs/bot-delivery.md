@@ -36,8 +36,12 @@ cooldown fallback (normally 30 seconds), including inside an uncertainty chain.
 A late confirmed response can complete the same uncertain attempt before another
 admission. After a new admission, the previous response is stale. A positive
 receipt for a failed or cancelled attempt records only its message ID when it
-matches the last uncertain attempt. Terminal status, queue position and business
-continuation remain unchanged.
+matches the last uncertain attempt and no later confirmed outcome fences that
+attempt. Historical uncertainty remains recorded after a confirmed response.
+A known negative response after cancellation or failure records only the exact
+confirmed-attempt fence. Terminal status, queue position, pacing and business
+continuation remain unchanged; an existing positive receipt cannot be replaced
+by a contradictory negative response.
 
 TODO: assess MTProto after migration and production launch. The current transport
 remains HTTP Bot API.
