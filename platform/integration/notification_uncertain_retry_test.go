@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -260,7 +261,11 @@ func notificationWireObserver(r *notificationRuntimeFixture) func(*http.Request,
 		}
 		var markup telegram.Markup
 		if json.Unmarshal(wire.Markup, &markup) != nil || !reflect.DeepEqual(markup, send.Markup) {
-			return errors.New("notification markup was not committed before transport")
+			return fmt.Errorf(
+				"notification markup was not committed before transport: stored=%#v actual=%#v",
+				markup,
+				send.Markup,
+			)
 		}
 		return nil
 	}
