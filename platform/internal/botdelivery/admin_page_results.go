@@ -41,6 +41,8 @@ const (
 	adminPageMaxEffects        = 64
 )
 
+var errAdminPageScriptNoMatch = errors.New("admin page script call does not match")
+
 type adminPageManifest struct {
 	Generation int64                   `json:"generation"`
 	Request    AdminPageResultsRequest `json:"request"`
@@ -238,6 +240,9 @@ func (s Service) authorizeAdminPageScript(ctx context.Context, tx pgx.Tx, in Adm
 			continue
 		}
 		source, matchErr := adminPageScriptRecordMatches(ctx, tx, in, proof, record)
+		if errors.Is(matchErr, errAdminPageScriptNoMatch) {
+			continue
+		}
 		if matchErr != nil {
 			return nil, matchErr
 		}
@@ -269,7 +274,7 @@ func adminPageScriptRecordMatches(ctx context.Context, tx pgx.Tx, in AdminPageRe
 			return &source, nil
 		}
 	}
-	return nil, nil
+	return nil, errAdminPageScriptNoMatch
 }
 
 func adminPageScriptPreviewMatches(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
@@ -331,23 +336,31 @@ func (s Service) savedAdminPageManifest(
 		saved.Offset != in.Offset || manifest.Generation != proof.Generation {
 		return manifest, ErrBinding
 	}
+	if err = authorizeStoredAdminPageManifest(ctx, tx, in, proof, manifest); err != nil {
+		return manifest, err
+	}
+	return manifest, validateAdminPageResults(saved)
+}
+
+func authorizeStoredAdminPageManifest(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest,
+	proof adminPageIntakeProof, manifest adminPageManifest,
+) error {
 	if manifest.Source != nil {
 		if manifest.Native || !manifest.Source.Valid() || *manifest.Source.Generation != manifest.Generation {
-			return manifest, ErrBinding
+			return ErrBinding
 		}
 	} else if !manifest.Native {
 		// Legacy script manifests discarded provenance and cannot be upgraded
 		// from a current receipt. Legacy native proofs retain their own authority.
 		native, nativeErr := authorizeAdminPageNative(ctx, tx, in, proof)
 		if nativeErr != nil {
-			return manifest, nativeErr
+			return nativeErr
 		}
 		if !native {
-			return manifest, ErrBinding
+			return ErrBinding
 		}
-		manifest.Native = true
 	}
-	return manifest, validateAdminPageResults(saved)
+	return nil
 }
 
 func (s Service) guardAdminPageOrphans(ctx context.Context, tx pgx.Tx, in AdminPageResultsRequest) error {
