@@ -152,10 +152,24 @@ must not terminate an independent-recipient broadcast or unrelated batch items.
   ends that item, not the whole job. An opt-out cancels eligible pending items;
   recheck current consent/authorization before deferred work resumes.
 - Separate definite rejection from a lost response after a possible send. Do
-  not claim exactly-once Telegram delivery or blindly resend an uncertain send.
-  Preserve its visible outcome and recovery policy. Shared credential/config
-  failures pause the affected service rather than being misreported as a batch
-  of bad recipients.
+  not claim exactly-once Telegram delivery. Daniel's 2026-10-01 decision permits
+  duplicate messages: automatically resend after connection loss or a lost
+  response, at most three additional admitted sends after the original attempt.
+  Use a separate configurable uncertainty base of 5 seconds, with delays 1x,
+  2x and 4x (5/10/20 seconds by default), never earlier than provider cooldown.
+  Persist the admitted resend count through restart. Prewire pacing, pauses,
+  preparation and recovery do not consume it; an admitted resend returning 429
+  does. Preserve that cooldown even when the last resend exhausts the budget.
+  This uncertainty budget does not change ordinary pre-uncertainty 429 policy.
+  Preserve the factual unknown outcome and observation time; retry scheduling
+  does not prove non-delivery. Reuse the original admitted wire contents while
+  checking current source eligibility, recipient binding and authorization.
+  For older uncertain rows without a payload snapshot, capture the next admitted
+  wire contents once; do not claim that historical contents were recovered.
+  Do not rerun business mutations or payments. Exhaustion becomes a visible
+  durable terminal outcome before the ordered lane advances. Shared credential/
+  config failures pause the affected service rather than becoming recipient
+  failures. A late positive same-attempt receipt must not revive terminal work.
 - Independent batch actions retain per-item progress and stable operation keys,
   resume only remaining/retryable items and return an aggregate partial result.
   Preserve explicit transactional/all-or-nothing domain operations: this rule
@@ -225,8 +239,9 @@ uses the same boundary. Do not backdate priority to an earlier generic request.
   registration is confirmed. Do not announce incomplete/failed registrations.
   Within each ordered destination lane (bot, chat and topic as applicable), only
   the head may send. A cooldown, in-flight send or uncertain result must not let
-  a later announcement overtake it. Resolve uncertain delivery explicitly before
-  advancing that lane. Other independent lanes may continue.
+  a later announcement overtake it. Resolve uncertain delivery through a real
+  receipt or the bounded resend policy above before advancing that lane.
+  Other independent lanes may continue.
 - Permanent failures advance an ordered lane only after a durable terminal
   outcome. A skipped head and the reason remain visible. SQL `ORDER BY id` with
   `SKIP LOCKED` or filtering only currently due rows is not sufficient: locked,
