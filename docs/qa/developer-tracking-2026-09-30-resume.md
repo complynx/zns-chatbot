@@ -50,19 +50,22 @@ Claude remains unavailable and unprobed. Historical snapshots below are supersed
 
 | 252 | Complete E preflight guard successor | Codex author, Codex override; FAILbc85851d/base91ff00f1,8paths: owner SQL container transport bypasses allocated loopback endpoint. Transferred D developer after repeated reviews; no DB/Functional claim |
 
-| 253 | Incoming update safe failure observation | Codex author, Codex override; allocated before dispatch808b284c/base91ff00f1,3paths. Fullbot/appclient/observability units,pinnedlintfmt passed; fresh independent review pending, no PG/Functional claim |
+| 253 | Incoming update safe failure observation | Codex author, Codex override; PASS808b284c/base91ff00f1,3paths. Independent units/pinnedlintfmt passed; merged5057ddb0, rootfocused2packagesPASS; Functional open |
 
-Current coordination (1 October, source91ff00f1): two scoped source-blind
+Current coordination (1 October, source5057ddb0): two scoped source-blind
 Functional runs completed on sealedce427ca5; states preserved and released.
 Whole C–E and agent registration acceptance remain open. Root merged
-QA241/243/245/248; current fresh counter253, next254. C owns27-path domain
-clock capability; D owns3-path update-failure observation capability; E probe
-successor8 paths is correcting QA250; engineer owns three-path clock operator. Job14-path successor failed QA249;
-additional five-path immutable ingress proof is approved for development,
-with091 reserved after menu090. Menu74ab final native selected PG scope passed;
-actual Linux race passed; C now owns exclusive developer55432. Baseline09
-continues frozen0070 on separate58441; observed role prerequisite and payment
-failures are preserved without repairs. No terminal full result yet.
+QA241/243/245/248/253; current fresh counter253, next254. C owns27-path domain
+clock; native new3 and default22 events passed, window released; final offline
+merge preparation against5057 pending. Engineer owns5-path atomic operator,
+real offline Linux race passed but reviewed integratedC dependency still pending.
+E guard failed QA252 and corrective10-path ownership transferred to D;
+native Go SQL client replaces absent nativepsql, no alternate Docker authority.
+Job19 typed ingress proof owns exclusive developer55432; menu24 correction
+waits that window, original74ab and QA251 failure preserved. Baseline09 terminal:
+platform4108PASS/9FAIL/27SKIP plus1131unfinished, importer366PASS/0FAIL/1SKIP;
+2200source and88migration hashes unchanged,58441 released to lead. Lead
+roles-only prerequisite bootstrap authorized; no fullbaseline10 launched.
 Kanban manager owns board/CSV/metrics; root owns integration/PROGRESS.
 Historical paragraphs below do not describe current ownership or readiness.
 

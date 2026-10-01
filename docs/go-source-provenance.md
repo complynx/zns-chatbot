@@ -2,7 +2,7 @@
 
 ## Current integration — 2026-10-01
 
-Last functional product merge is Git91ff00f19c40e1ab709ba160a73ef804f9133cff.
+Last functional product merge is Git5057ddb0547f5b099459fe3d321c04a7c4490c90.
 Subsequent product-source commitff575042 changes only three Prettier formatting
 files (Compose quotes, replacement JSON indentation, documentation blank line);
 there is no Go logic, schema or runtime value change. Whole-source raw hashes
@@ -15,6 +15,10 @@ affected packages; Functional acceptance remains open. Baseline09 stays frozen
 at0070f944 and does not include this later feature.
 Each merge preserved the independently reviewed candidate; no product conflict
 resolution or additional product edits occurred during these three merges.
+Reviewed update-failure observations808b284c (QA253) were merged5057ddb0
+without conflict resolution. Root focused bot/observability checks passed;
+Functional acceptance remains open. Baseline09 terminal FAIL still binds0070,
+not these later features.
 The working root documentation is updated separately. Functional images remain
 sealedce427ca5, so they do not certify this newer source. Menu090, job summary
 and E rehearsal guard successors remain unmerged.

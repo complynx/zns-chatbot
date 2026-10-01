@@ -440,3 +440,43 @@ counter253next254, queue0/2/0. Reports pending, no stage acceptance. D next meal
 investigation not launched due thread limit; C/operator capability development
 and menu/job fixes active. Platform exact counts above unchanged, importer serial
 active/no release, all40 obligations preserved. Files pause immediately.
+
+## Completed baseline and ownership transfer: 2026-10-01T01:31:40Z
+
+Read final baseline09 report: exact0070/schema089 platformFAIL4108PASS9FAIL27SKIP,
+sevenrole/payment/meal failures, aggregate45mtimeout and1131unfinished/472top-level.
+Importer terminal exit0,366PASS1SKIP, ended2026-10-01T01:22:54.9585878Z. Actual
+2200source files and88raw SQL bodies unchanged before/after. Both commands and
+inventory terminal, sole58441 releasedlead. Roles-only first3existingroles.sql
+bootstrap authorized after release; no fullbaseline10 started. Completed FAIL is
+not wholeacceptance and does not erase incomplete coverage.
+
+Git root5057ddb0 QA253PASS808 merged, root targeted session31968 running, not a
+terminal integrated claim. Docs f98199event snapshot and2186 review/transfer records
+retained. QA252FAIL ownerSQL bypasses loopback endpoint; repeated correction
+transferred D developer eightplus two nativeGoSQLclient paths total10, oldE author
+paused. No clientpsql installation and no Docker transport. Returncount12, queues
+0/0/0, counter253next254, no active fresh QA.
+
+C27 three-new plus22default realPGPASS released; offline gates/preparing against
+5057 not finalhandoff. JobPG allocated next, no green gate. Operator5 ownLinuxrace/
+unit/lintPASS with temporaryCdependency, not finalhandoff. Menu24 correction noPG.
+Question only realTelegram testaccountID; all40 FQA obligations unchanged. Import
+stand ongoing observedwait3h26m47s since baseline, historical start unknown. Files
+paused for checkpoint.
+
+## Focused follow-up setup: 2026-10-01T01:35:49Z
+
+Root31968 targeted bot/observability terminalPASS0.320/0.278s. Setup lead58441
+roles-only bootstrap terminal: api/bot/meter LOGIN nonprivileged, app absent,
+DB schema unchanged, allocation report updated/released. Root assigns fresh
+baseline10-focused exact5057/schema089: seven role tests plusMeal/Large/
+DeletedPayment serial10m timeout. Runner preparing, no test START or fullbaseline10
+claim. Baseline09 failing report/provenance preserved.
+
+Job proof3c83 actual PG terminalPASS/released55432; earlier6102 expected-conflict
+assertion failure preserved. Final againstC pending, not readyhandoff. Menu24 now
+sole55432 allocated, tests queued/notPASS. Operator5 three local Linuxlint findings
+fixed without suppressions; final native/Linuxrace rerunning, no immutablehandoff.
+C27 offlineprepare pending. Counter253next254/queue0/0/0/return12 unchanged. All40
+FQA obligations remain. Import observedwait3h30m56s, unknown earlier start. Pause.

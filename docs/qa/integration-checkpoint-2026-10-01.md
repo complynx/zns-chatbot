@@ -1,4 +1,4 @@
-# Integrated source checkpoint:91ff00f1
+# Integrated source checkpoint:5057ddb0
 
 Product source0070f944 incorporates reviewed callback observations62b9eebc
 (QA241), source diagnosticsb857b8b9 (QA243) and registration fixtures54766266
@@ -18,6 +18,10 @@ GOFLAGS=-p=2 -mod=readonly, without TEST_DATABASE_URL:
 - After91ff00f1 merged HTTP observations8bc883eb (QA248):
   `go test ./internal/observability ./cmd/zns -run 'TestHTTP|TestTelemetry'
   -count=1` passed both packages:0.485s,0.220s.
+- After5057ddb0 merged update observations808b284c (QA253):
+  `go test ./internal/bot ./internal/observability -run
+  '^(TestUpdateFailure|TestInbox|TestTrustedPrincipal|TestIdentity)' -count=1`
+  passed both packages:0.320s,0.278s. No database environment was supplied.
 - Full pinned installed ESLint: bundled Node invoking
   `node_modules/eslint/bin/eslint.js . --max-warnings 0` exited0.
 - Initial full pinned installed Prettier check exited1. It reported four files:

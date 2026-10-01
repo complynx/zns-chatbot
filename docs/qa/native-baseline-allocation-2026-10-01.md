@@ -119,3 +119,37 @@ adding a narrowly reviewed prerequisite; do not import a managed installation
 or app credentials into the baseline. Product payment `order_not_found` is a
 separate reported failure requiring isolated reproduction; missing-role bootstrap
 does not establish its cause or resolution.
+
+## Released run09: roles-only bootstrap completed
+
+Root confirmed run09 fully terminal and released the cluster to the lead. The
+lead verified the exact container/digest/loopback58441 binding and zero other
+client backends. All four queried roles (zns_api, zns_bot, zns_meter, zns_app)
+were absent. Root authorized only the first three CREATE ROLE definitions from
+immutable `5057ddb0547f5b099459fe3d321c04a7c4490c90`:
+`platform/sandbox/roles.sql`, raw blob SHA256
+`859BB43EF1E62A7167F0253DBF0D1A818F77ABD620F04B10AE0491D3744F43DB`.
+
+Those three definitions were applied transactionally through psql stdin on the
+exact owned container. Readback: zns_api, zns_bot and zns_meter have LOGIN and a
+stored password; all have superuser, CREATEDB, CREATEROLE, replication and bypass
+RLS false. zns_app remains absent. No schema/default-grant section was applied.
+Before/after database names and the baseline database's schema/owner inventory
+are identical. Surviving run09 databases, failure/timeout logs and ledgers were
+preserved. No full baseline10, affected-case tests or meal reproduction launched.
+Developer55432 and ce427 were not accessed or changed.
+
+Actual endpoint remains `127.0.0.1:58441`; native TCP connection succeeded.
+The mutation transport was owned-container `docker exec` PostgreSQL psql stdin.
+Private owner bundle/hash remain unchanged as documented above. The exact three
+synthetic role definitions are in owner-only ignored
+`qa.local/native-baseline-20261001/roles-bootstrap-5057/private-role-definitions.sql`,
+SHA256 `4CC309D557F0526E7599FC332ECFC8C4D6D2E1FF3E5F7FED4344905E8EDE4265`.
+No credentials are included in this report.
+
+Terminal readback receipt:
+`qa.local/native-baseline-20261001/roles-bootstrap-5057/receipt.json`, SHA256
+`C689D3BBFE39F6F11A40CBE54C384EA5F420D12DF6F8ACF3D473199667F48F0C`.
+The setup writer `/root/fqa_lead` releases exclusive infrastructure ownership
+back to root. Freeze the corrected role prerequisite before root assigns any
+next test writer; do not independently restart/reseed or launch baseline10.

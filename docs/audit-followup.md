@@ -1,8 +1,8 @@
-## Current integrated source and expanded QA — 2026-10-01, source91ff00f1
+## Current integrated source and expanded QA — 2026-10-01, source5057ddb0
 
-Authoritative product Git91ff00f1 includes reviewed ACK observation QA241,
+Authoritative product Git5057ddb0 includes reviewed ACK observation QA241,
 source diagnostics QA243, registration fixture QA245 and HTTP observations
-QA248. Root focused integrated checks and full pinned JS gates passed;
+QA248 and update diagnostics QA253. Root focused integrated checks and full pinned JS gates passed;
 Functional images remain sealedce427 and do not certify the newer source.
 
 Menu090 successor74ab passed scoped actual native PostgreSQL and Linux race;
@@ -15,7 +15,7 @@ successorbc85851d failed QA252 because owner SQL bypasses the bound
 loopback transport. Corrective ownership transferred to D after repeated reviews. No rejected candidate is merged.
 
 Three capability lanes are active: registration-domain clock (C27 paths),
-incoming-update diagnostics (D3 paths, fresh QA253 running), and Linux atomic clock operator
+incoming-update diagnostics (D3 paths, QA253 PASS and merged), and Linux atomic clock operator
 (engineer5 paths). Separate worktrees preserve ownership; overlapping ingress
 changes require developer merge preparation before review. C owns developer
 PostgreSQL55432 after menu released it. New C installation204 is verified
@@ -23,7 +23,7 @@ unused; E retains203. No C clock stand resources are started.
 
 Two scoped EN/RU Functional runs on ce427 completed and were released with
 state preserved; all40 original whole-stage obligations remain open. Full
-baseline09 is still frozen0070 on separate58441; observed missing-role
+baseline09 terminal result binds0070 on separate58441; observed missing-role
 prerequisites and payment failure are preserved, with no mid-run repair or
 terminal whole-suite claim. Final E apply/removal and current runtime/UI
 acceptance remain outstanding. Telegram test-account ID is in PROGRESS;
