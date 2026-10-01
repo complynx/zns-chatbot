@@ -194,3 +194,8 @@ observed_utc,task,object,state,owner,commit,base,evidence,limitations,event_utc
 2026-10-01T07:20:11Z,C01,clock_boundary,returned,payment_card_developer,dbddf742,7ff6659b,QA273FAIL1; actualclock40gatesPASS notacceptance,Configured passportpostwait expiry correction scopeproposal,
 2026-10-01T07:20:11Z,F08,observer_code_review,returned,fqa_lead,,7ff6659b,QA274FAIL2; immutable6 retained; successorisolated,No livequalifiedobserver/DB/FQA,
 2026-10-01T07:20:11Z,IDP,local_bootstrap,returned,root,406A39A2,7ff6659b,Explicit humanapproval; guarded33981 bootstrapcomplete exit0,Dedicatedorg readiness pending; no runtime/SDK/FQA,
+2026-10-01T07:26:52Z,F08,observer_code_review,reviewing,observer_code_qa_275,,7ff6659b,Full8sourceartifactscope frozen9hashesverified; freshreadonlyCodex,No livequalifiedinspector/FQA; next276,
+2026-10-01T07:26:52Z,IDP,readiness,complete,root,1669CD2B,7ff6659b,Read-only92696 successful exactdedicatedorg scopedroles clients users,ActualadapterSDK82316 running; no runtime acceptance,
+2026-10-01T07:26:52Z,PAY,correction_scope,approved,menu_retirement_fix,41dcc36e,7ff6659b,Original7 plus3existingreceiptproducerseams full10; clockscope41alsoapproved,No schemachanges; preservedpredecessors; gatesfreshreviewrequired,
+2026-10-01T07:28:51Z,F08,observer_code_review,static_pass,observer_code_qa_275,,7ff6659b,Complete8files all89rawchecksums verified nineartifacthashesunchanged,No inspectorqualification/liveDB/F08 or Functionalacceptance; next276,
+2026-10-01T07:28:51Z,IDP,real_native_tests,partial_fail,root,1669CD2B,7ff6659b,AdapterFAIL invalidsubject classifiedunavailable; SDKPASS2.130s,Remainingadapternegativecasesnotrun; SDKadminnotleastprivilegedproof,

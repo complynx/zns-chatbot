@@ -224,11 +224,57 @@ confirmed cached. Full real Telegram login waits on the designated recipient ID.
    Provider datastore never becomes TEST_DATABASE_URL for broad Go tests.
 
 Image acquisition, issuer routing, private file custody and synthetic setup are
-engineering dependencies. The new local instance's scoped identity creation and
-impersonation policy are now a concrete automatic-review block: root will request
-exact human authorization before bootstrap proceeds. This supersedes the
-original plan's assumption that broader QA authorization was sufficient for that
-phase. The designated real Telegram account ID remains a separate human dependency
+engineering dependencies. The scoped local bootstrap was explicitly authorized by Daniel's affirmative
+reply to the exact local-instance impersonation/actor/provisioner question, then
+separately 'Разрешаю'. Earlier automatic-review rejection receipts remain
+preserved. Root executed the guarded dedicated-organization repair and bootstrap
+successfully; the authorization covers this local synthetic instance only. The designated real Telegram account ID remains a separate human dependency
 for actual external messaging/login. No production cutover, token rotation or
 external authorizer change follows from local stand authorization. No FQA PASS,
 adapter acceptance, final integration or complete runtime readiness is claimed.
+
+
+## Actual bootstrap handoff, 2026-10-01
+
+Root's exact script SHA406A39A2CC78778CEBE3985D097C9DE1613094619F05A470AE0886CE09D91ADC
+execution33981 terminated exit0, bootstrap-complete, without credential output.
+Public receipts: qa.local/identity-prerequisites-20261001/publicreceipts/bootstrap.json
+and dedicated-org-repair.json. Dedicated organization393159437780549635 retains
+exact name `Synthetic qualification 20261001`; new project393162460263120899.
+Actor393162470832766979 has singleton ORG_END_USER_IMPERSONATOR; provisioner
+393162481704402947 has singleton ORG_USER_MANAGER. Alice393162492475375619 and
+Bob393162500310335491 are ACTIVE; all four users' ResourceOwner matches this
+organization. Instance impersonation readback is true. The bootstrap identity
+retains its existing owner role; it is not a runtime actor or substitute token.
+
+Wrong-organization project393159441320542211 and its users/credentials remain
+preserved. The guarded repair verified and removed only memberships for old
+actor393160186614808579/provisioner393160197134123011 in organization
+393153539565780995. Protected byte archive SHA
+7537A803915F17FAB723C2B1D45AF398FCF235681A586FAD56FD7CD6C4113E14.
+No admin identity edit, organization transfer or broad reset occurred.
+
+Private runtime bundle path is qa.local/identity-prerequisites-20261001/private/state.json,
+SHA1669CD2B665F59C2A3D11C95BC18759C25B4F4FF4159F0AEB2F9E432C18EC87E;
+separate sibling admin.pat SHA6CAFA1B79A5A3DDDA5FAFF6045D020FC715359B970B82702C95D612C1039F382.
+These are newly generated local synthetic credentials under owner-only custody;
+no values belong in reports, logs or arguments. Format keys, without values:
+org.org.id; project.id; bot_app/appId,clientId,clientSecret;
+api_app/appId,clientId,clientSecret; actor/userId;
+actor_secret/clientId,clientSecret; provisioner/userId;
+provisioner_secret/clientId,clientSecret; alice/userId; bob/userId.
+Root must inject the private path into the unchanged test's runtime environment,
+never use the provider database as a product TEST_DATABASE_URL.
+
+Policy preservation is supported by the reviewed script copying existing
+iframe/origin fields before PUT. No separate pre-mutation live policy snapshot
+was recorded, so before/after field equality is not independently claimed.
+Receipt emailVerified is null: it supplies no verified-email assertion.
+
+Additional metadata-only current readback script readiness.ps1 is prepared with
+SHAC5F3015192AB481696AF7BF325EB93C8E58E99AF1A4DFF38F572A0B1039EC376,
+PowerShell parser PASS; corrected root execution pending. The first readback terminated at the initial org GET; its block receipt is preserved. PAT trailing newline is now trimmed like the successful bootstrap script. No readback PASS is inferred from that attempt. It verifies client configuration,
+exact dedicated owners, singleton machine roles, old membership absence and
+archive integrity, exposing presence booleans/hashes only. Setup remains retained;
+no native SDK/product/Functional QA run or runtime role-negative acceptance has
+occurred. Freeze and exclusive runner handoff follow qualified current readback.
