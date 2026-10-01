@@ -43,6 +43,7 @@ type ResultRequest struct {
 	Target       int64
 }
 type BeginRequest struct {
+	Wire               *WireReference   `json:"wire,omitempty"`
 	PreparationFailure bool             `json:"preparation_failure,omitempty"`
 	Pass               *PassCardReceipt `json:"pass,omitempty"`
 	Observed           Intent

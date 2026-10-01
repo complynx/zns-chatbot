@@ -31,11 +31,22 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres -d test"
           --health-interval 2s --health-timeout 3s --health-retries 30
+      credit-upgrade-postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports: ["5433:5432"]
+        options: >-
+          --cpus 1 --memory 1g --memory-swap 1g
+          --health-cmd "pg_isready -U postgres -d test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
     defaults:
       run:
         working-directory: platform
     env:
       TEST_DATABASE_URL: postgres://postgres:test@localhost:5432/test?sslmode=disable
+      TEST_CREDIT_UPGRADE_DATABASE_URL: postgres://postgres:test@localhost:5433/test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -89,8 +100,9 @@ jobs:
       - name: Unit and PostgreSQL integration tests
         run: |
           docker build --target test -t synthetic-qa-zns-tests .
-          docker run --rm --network host -e TEST_DATABASE_URL -v "$PWD:/results" synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverpkg=./cmd/...,./internal/...,./identityprovision/... -coverprofile=/results/coverage.out ./cmd/... ./internal/... ./integration/... ./identityprovision/... ./deploy/...
-          docker run --rm --network host -e TEST_DATABASE_URL -v "$PWD:/workspace/platform:ro" -v "$PWD/../tools/migrate:/workspace/tools/migrate:ro" -v "$PWD:/results" -w /workspace/tools/migrate synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverprofile=/results/migrate-coverage.out ./...
+          mkdir -p "$RUNNER_TEMP/go-coverage"
+          docker run --rm --network host -e TEST_DATABASE_URL -e TEST_CREDIT_UPGRADE_DATABASE_URL -v "$PWD:/src:ro" -v "$RUNNER_TEMP/go-coverage:/results" synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverpkg=./cmd/...,./internal/...,./identityprovision/... -coverprofile=/results/coverage.out ./cmd/... ./internal/... ./integration/... ./identityprovision/... ./deploy/...
+          docker run --rm --network host -e TEST_DATABASE_URL -v "$PWD:/src:ro" -v "$PWD:/workspace/platform:ro" -v "$PWD/../tools/migrate:/workspace/tools/migrate:ro" -v "$RUNNER_TEMP/go-coverage:/results" -w /workspace/tools/migrate synthetic-qa-zns-tests go test -race -count=1 -p 2 -parallel 4 -coverprofile=/results/migrate-coverage.out ./...
       - name: Fuzz identity boundary
         run: go test ./internal/identity -run '^$' -fuzz FuzzVerify -fuzztime 10s
       - name: Build
@@ -101,8 +113,8 @@ jobs:
         with:
           name: go-coverage
           path: |
-            platform/coverage.out
-            platform/migrate-coverage.out
+            ${{ runner.temp }}/go-coverage/coverage.out
+            ${{ runner.temp }}/go-coverage/migrate-coverage.out
   sandbox:
     runs-on: ubuntu-latest
     defaults:
