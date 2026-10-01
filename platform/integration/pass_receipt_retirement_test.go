@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -87,12 +88,16 @@ func runPassCleanupNewerPayload(t *testing.T, origin string) {
 	_, err = f.db.Exec(t.Context(), `DELETE FROM core.pass_payment_admins WHERE event_id='dance' AND owner='alice'`)
 	require.NoError(t, err)
 	require.NoError(t, f.b.DeliverBotIntent(t.Context(), original.QueueReference()))
-	drainOtherPassFixtureIntents(t, f)
 	var operation, effect string
 	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT operation_key,effect_key FROM bot.delivery_intents
  WHERE reference->>'family'=$1 AND target_message_id=$2`, botdelivery.PassReceiptRedactionFamily, target).
 		Scan(&operation, &effect))
 	cleanup := delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}
+	drainOtherPassFixtureIntents(t, f, cleanup)
+	queued, err := botdelivery.Read(t.Context(), f.db, f.b.Delivery.BotID, cleanup, false)
+	require.NoError(t, err)
+	require.Equal(t, delivery.Deferred, queued.State)
+	require.Zero(t, queued.Attempt)
 	if origin == "regrant" {
 		_, err = f.db.Exec(t.Context(), `INSERT INTO core.pass_payment_admins(event_id,owner) VALUES('dance','alice')`)
 		require.NoError(t, err)
@@ -711,7 +716,7 @@ func TestPassReconstructionFailureUsesOriginalSuccessfulReceipt(t *testing.T) {
 	}
 }
 
-func drainOtherPassFixtureIntents(t *testing.T, f *fixture) {
+func drainOtherPassFixtureIntents(t *testing.T, f *fixture, keep ...delivery.Reference) {
 	t.Helper()
 	rows, err := f.db.Query(
 		t.Context(),
@@ -728,6 +733,9 @@ func drainOtherPassFixtureIntents(t *testing.T, f *fixture) {
 	require.NoError(t, rows.Err())
 	rows.Close()
 	for _, ref := range refs {
+		if slices.Contains(keep, ref) {
+			continue
+		}
 		require.NoError(t, f.b.DeliverBotIntent(t.Context(), ref))
 	}
 }
