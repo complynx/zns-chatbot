@@ -3,6 +3,9 @@
 Integration branch: `feature/go-platform-sandbox`. Daniel authorized consolidating
 the current work and switching development to Git on 30 September 2026.
 
+Heavy-check slots, precise Functional QA permissions, prepared fault windows and
+batched progress checkpoints follow [execution coordination](coordination-process.md).
+
 The initial checkpoint preserves applied work, documentation and known failures.
 It is not a release or a new acceptance verdict. Unapplied candidates remain in
 their preserved local evidence directories until moved into task branches.

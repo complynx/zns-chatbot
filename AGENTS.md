@@ -29,4 +29,6 @@
 - Fix verified defects; rerun checks; fresh affected reviews after substantive changes. Repeat until clean. Preserve staged diff.
 - Both QA + required checks green: advance automatically. No extra permission wait. Production/publish/commit/push still need authorization.
 
-Details: `docs/go-migration.md`, `docs/code-quality.md`.
+- Execution coordination (2026-10-01): read `docs/coordination-process.md`. Root grants one new heavy Windows check and one new heavy Docker/WSL check; existing checks finish without quiet-output restarts. Functional fault windows are prepared before arming, original budgets remain unchanged, owned synthetic downloads are allowed, and progress/board/reports are checkpointed together. Prioritize the finite C–E acceptance chain.
+
+Details: `docs/go-migration.md`, `docs/code-quality.md`, `docs/coordination-process.md`.

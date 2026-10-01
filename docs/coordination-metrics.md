@@ -830,3 +830,43 @@ fullpinnedlint timeout +helpergocognit27>20FAIL preserved. Author minimalownedte
 helperfix/freshgates, noQA283allocated. Counter282next283/returns31 retained;
 no estimate decrement/waitduration invented. Onlytwo assigned docs updated,
 CSV/product/stand/PROGRESS/codequality untouched. Writespaused, ownershiproot.
+
+## Authorized heavy-check coordination: 2026-10-01T10:11:22Z
+
+Full docs/coordination-process.md read/ACK. Danielapproved1NEW Windows slot plus
+1Docker/WSL slot; Linux-targetlint nativeexe countsWindows. Existing cohort finishes
+without quiet-outputrestart: C46519fullWindowslint+C13887nativePG, D22552wholeWindows
+lint, identity38301oldsourcewholeWindowslint. Their historicrequest/grant/start
+unknown; firstcurrentobservedRUNNING10:11:22Z. Sameowner/handle terminal evidence
+required; transientobservationtimeout notprocessfailure. No new scheduler/service.
+
+| Observed UTC | Lane | Owner/source | Action/state | Handle/next |
+| --- | --- | --- | --- | --- |
+| 10:11:22Z | Windows oldcohort | C946c8c | fullWindowslint/nativePG RUNNING grandfathered | 46519/13887 terminalownerreceipt pending |
+| 10:11:22Z | Windows oldcohort | D20e70599 exact2 | fullWindowslint RUNNING grandfathered | 22552 |
+| 10:11:22Z | Windows oldcohort | identity oldsource | fullWindowslint RUNNING grandfathered | 38301 notfinal-byteproof |
+| 10:11:22Z | Windows newslot requests | rootpriority C→identity→D→ACK | QUEUED untiloldcohortdrain | CfullLinux-targetlint;identityfinalwholelint;DnativeLinux-targetlint/crossbuild;ACKwholelint |
+| 10:11:22Z | Docker/WSL | C946c8c | LinuxPG93cases0SKIPPASS/RELEASE | 5463 terminalobservednow historicendunknown |
+| 10:11:22Z | Docker/WSL | D20e70599 | racePASS/cleaned | 3131 terminalobservednow historicendunknown |
+| 10:11:22Z | Docker/WSL rootgrant | identity finalbytes | GRANTED boundednon-network Linuxrace owncache | actualhandle/terminalawaiting; rootgrantfirstobservednow |
+| 10:11:22Z | Docker/WSL request | profileACK | QUEUED afteridentityRELEASE | actualgrant/startunknown |
+
+Identity exact2 finaltests strengthened: native83PASS1liveSKIP; fullformatter
+INTERRUPTED notPASS/focusedfmtPASS. ACKactualownPGpolicy14.002PASS; parallel-lint
+refusalpreserved/nobypass, queuedenvslots. All frozen source/gate mapping retained;
+oldsource result cannot certify changed bytes. Root owns grant/release, no slot
+released by an assumed process outcome or quiet output. Capture actual future
+request/grant/terminal receipts, no waitdurations reconstructed from this snapshot.
+
+B2fakeactual6933ms/reinstall409/providerfence only, notUI/fullbusiness; B3blocked
+missingvisibleedit; ENB1running/nofinalFunctionalverdict. Prepare public exactfault
+setup/credential/permission/toolapproval beforearm, observerready beforeactual
+operation, notify atactualarm/install; originaltimingbound notextended. Root
+batches coherentdocscheckpoint perhandoff/resultgroup. Only KANBAN/metricsMD
+changed; CSV212last09:55:49 read-only/currentobserved earlier unchanged. Counter282
+next283/31reviewreturns, all40/productionNO-GO and engineeringdayestimates unchanged.
+Writespaused andownershiproot; no process/resource/Git actions performed.
+
+## Slot transitions observed 2026-10-01T10:14:29Z
+
+C13887 nativePG terminal PASS; owner released own PG/writer/volume/network after guards. C46519 lint remains active. Identity final Linux race28365 terminal PASS3.326s,83 test events plus package, one explicit liveIdP SKIP; own container removed, source hashes unchanged, Linux slot released. Root granted the next Linux slot to profile_callback_ack_developer for affected bot/telegram race on its frozen four paths and own PG; actual handle pending. Native grandfathered lint cohort still drains. No discarded evidence, default lint lock retained for new serialized invocations.
