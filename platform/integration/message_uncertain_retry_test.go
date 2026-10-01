@@ -28,6 +28,7 @@ type uncertainRateLimitFixture struct {
 	db       *pgxpool.Pool
 	settings delivery.Settings
 	table    string
+	chat     string
 	send     func() error
 	follower func()
 }
@@ -74,7 +75,7 @@ func TestUncertainMissingRateLimitRetainsProviderFallback(t *testing.T) {
 			assert.EqualValues(t, 1, resends)
 			assert.EqualValues(t, 1, marker, "confirmed 429 must not manufacture another uncertainty")
 			assert.InDelta(t, 30, delay, 2, "the provider fallback must dominate the ten-second resend backoff")
-			for _, chat := range []string{"", "101"} {
+			for _, chat := range []string{"", f.chat} {
 				var cooldown float64
 				require.NoError(t, f.db.QueryRow(t.Context(),
 					`SELECT EXTRACT(EPOCH FROM not_before-clock_timestamp()) FROM core.delivery_pacing WHERE bot_id=$1 AND chat=$2`,
@@ -96,16 +97,16 @@ func setupUncertainRateLimit(t *testing.T, owner string, client telegram.Client)
 		s := configureDeliveryFixture(t, f)
 		enqueueSyntheticDelivery(t, s, "missing-cooldown", "101")
 		f.b.TG = client
-		return uncertainRateLimitFixture{db: f.db, settings: s.Delivery, table: "admin_message_deliveries",
+		return uncertainRateLimitFixture{db: f.db, settings: s.Delivery, table: "admin_message_deliveries", chat: "101",
 			send: func() error { return f.b.DeliverAdminMessages(t.Context()) },
 			follower: func() { enqueueSyntheticDelivery(t, s, "cooldown-follower", "202") }}
 	}
 	db, s := bookingFixture(t)
-	_, err := db.Exec(t.Context(), `UPDATE core.pass_events SET thread_channel='101'`)
+	_, err := db.Exec(t.Context(), `UPDATE core.pass_events SET thread_channel='-100123'`)
 	require.NoError(t, err)
 	_, err = s.Execute(t.Context(), "alice", bookingCommand("solo", "missing-cooldown", passbooking.Booking{}))
 	require.NoError(t, err)
-	return uncertainRateLimitFixture{db: db, settings: s.Delivery, table: "pass_registration_announcements",
+	return uncertainRateLimitFixture{db: db, settings: s.Delivery, table: "pass_registration_announcements", chat: "-100123",
 		send: func() error {
 			item, found, claimErr := s.ClaimRegistrationAnnouncement(t.Context())
 			if claimErr != nil || !found {
@@ -117,7 +118,7 @@ func setupUncertainRateLimit(t *testing.T, owner string, client telegram.Client)
 			}
 			var reply telegram.Message
 			sendErr := client.Call(t.Context(), "sendMessage", map[string]any{
-				"chat_id": int64(101), "text": item.Text, "parse_mode": "HTML",
+				"chat_id": int64(-100123), "text": item.Text, "parse_mode": "HTML",
 			}, &reply)
 			outcome := telegram.DeliveryOutcome(reply.ID, sendErr)
 			if outcome.Kind == delivery.Deferred {
