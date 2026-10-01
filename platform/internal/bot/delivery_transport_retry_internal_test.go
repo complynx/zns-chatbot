@@ -293,7 +293,7 @@ func testBotCapturePrivateFault(t *testing.T, fault string) {
 	defer server.Close()
 	b.TG = telegram.Client{Base: server.URL, Token: "synthetic", HTTP: server.Client()}
 	outcome := b.sendBotIntent(ctx, admitted, rendered)
-	require.Equal(t, delivery.Uncertain, outcome.Kind)
+	require.Equal(t, delivery.Uncertain, outcome.Outcome.Kind)
 	require.NoError(t, b.finishBotIntent(ctx, admitted, outcome, rendered.Receipt))
 	window, err := b.API.ConversationWindow(ctx, "alice", 10)
 	require.NoError(t, err)

@@ -65,7 +65,7 @@ func (b *Bot) finishBotIntent(
 	result botTransportResult,
 	receipt botdelivery.Continuation,
 ) error {
-	outcome, fallback := result.Outcome, result.Fallback
+	fallback := result.Fallback
 	if attempt.BotID != b.Delivery.BotID {
 		return botdelivery.ErrBinding
 	}

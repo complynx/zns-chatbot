@@ -8,7 +8,7 @@ import (
 
 // Provider evidence is retained before edit policy changes the delivery result.
 type botTransportResult struct {
-	delivery.Outcome
+	Outcome         delivery.Outcome
 	ProviderOutcome delivery.Outcome
 	Fallback        bool
 }

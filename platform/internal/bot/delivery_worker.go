@@ -76,7 +76,7 @@ func (b *Bot) DeliverBotIntent(ctx context.Context, ref delivery.Reference) erro
 	if err = b.finishBotIntent(cleanup, attempt, outcome, rendered.Receipt); err != nil {
 		return err
 	}
-	if outcome.Kind != delivery.Succeeded {
+	if outcome.Outcome.Kind != delivery.Succeeded {
 		return nil
 	}
 	completed, err := botdelivery.Read(cleanup, b.DB, attempt.BotID, ref, false)

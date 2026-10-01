@@ -94,11 +94,11 @@ func TestBotEditFallbackRequiresDefiniteMissingTarget(t *testing.T) {
 				botdelivery.Intent{Phase: "edit", Chat: 1, Target: 7},
 				botRenderedDelivery{Payload: telegram.Send{Text: "current"}},
 			)
-			require.Equal(t, tt.kind, result.Kind)
+			require.Equal(t, tt.kind, result.Outcome.Kind)
 			require.Equal(t, tt.fallback, result.Fallback)
 			require.Equal(t, 1, requests, "an edit result must never issue its own fallback send")
 			if tt.kind == delivery.Succeeded {
-				require.Equal(t, int64(7), result.MessageID)
+				require.Equal(t, int64(7), result.Outcome.MessageID)
 			}
 		})
 	}
@@ -122,7 +122,7 @@ func TestBotRedactionNeverFallsBackToNewMessage(t *testing.T) {
 		},
 		botRenderedDelivery{Payload: telegram.Send{Text: "unavailable"}},
 	)
-	require.Equal(t, delivery.Rejected, result.Kind)
+	require.Equal(t, delivery.Rejected, result.Outcome.Kind)
 	require.False(t, result.Fallback)
 }
 
