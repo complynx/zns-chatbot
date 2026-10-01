@@ -342,7 +342,7 @@ func TestRegistrationClockTurnRotationWait(t *testing.T) {
 
 func TestRegistrationClockAnnouncementsAndPassportEligibility(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"active-before-wall", "finished-before-wall"} {
+	for _, scenario := range []string{"active-before-wall", "finished-before-wall", "recovery-before-wall"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			db, service := bookingFixture(t)
@@ -395,6 +395,7 @@ func TestRegistrationClockAnnouncementsAndPassportEligibility(t *testing.T) {
 			require.NoError(t, err)
 			_, err = db.Exec(t.Context(), "UPDATE core.pass_events SET passport_required=true")
 			require.NoError(t, err)
+			drainPassDomainNotices(t, service)
 			count, err := service.ProcessPassportReminders(t.Context())
 			require.NoError(t, err)
 			require.Equal(t, 1, count)
@@ -422,6 +423,13 @@ func TestRegistrationClockAnnouncementsAndPassportEligibility(t *testing.T) {
 				return
 			}
 			clock.advance(finish.Add(time.Microsecond))
+			if scenario == "recovery-before-wall" {
+				require.NoError(t, service.RecoverRegistrationAnnouncements(t.Context()))
+				var state string
+				require.NoError(t, db.QueryRow(t.Context(), "SELECT state FROM core.pass_registration_announcements WHERE id=$1", item.ID).Scan(&state))
+				require.Equal(t, "cancelled", state)
+				return
+			}
 			resolved = nil
 			require.NoError(t, service.RefreshAnnouncementDestinations(t.Context(), resolver, time.Minute))
 			require.Empty(t, resolved)
