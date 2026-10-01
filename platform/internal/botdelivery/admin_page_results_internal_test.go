@@ -424,27 +424,51 @@ func TestAdminPageResultsScriptDependencyRevocation(t *testing.T) {
 			t.Parallel()
 			s, first, second := adminPageMultiCallFixture(t, false)
 			ctx := t.Context()
-			_, err := s.DB.Exec(ctx, `INSERT INTO core.knowledge_permissions(scope,actor,permission) VALUES('','bob','review');
+			_, err := s.DB.Exec(
+				ctx,
+				`INSERT INTO core.knowledge_permissions(scope,actor,permission) VALUES('','bob','review');
  UPDATE bot.interactions SET content=jsonb_set(content,'{0,calls,0,source,authorities}',
  '[{"knowledge":{"kind":"review","scope":"","generation":0}}]'::jsonb)
- WHERE owner='bob' AND update_id=602 AND kind='script_runs'`)
+ WHERE owner='bob' AND update_id=602 AND kind='script_runs'`,
+			)
 			require.NoError(t, err)
 			if afterEnqueue {
 				require.NoError(t, s.EnqueueAdminPageResults(ctx, first))
 				require.NoError(t, s.EnqueueAdminPageResults(ctx, first), "valid exact replay")
 			}
-			_, err = s.DB.Exec(ctx, `DELETE FROM core.knowledge_permissions WHERE scope='' AND actor='bob' AND permission='review'`)
+			_, err = s.DB.Exec(
+				ctx,
+				`DELETE FROM core.knowledge_permissions WHERE scope='' AND actor='bob' AND permission='review'`,
+			)
 			require.NoError(t, err)
 			var generation int64
-			require.NoError(t, s.DB.QueryRow(ctx, `SELECT COALESCE((SELECT generation FROM core.conversation_history_generations WHERE owner='bob'),0)`).Scan(&generation))
+			require.NoError(
+				t,
+				s.DB.QueryRow(ctx, `SELECT COALESCE((SELECT generation FROM core.conversation_history_generations WHERE owner='bob'),0)`).
+					Scan(&generation),
+			)
 			require.Zero(t, generation, "dependency revocation does not erase history")
-			require.NoError(t, s.EnqueueAdminPageResults(ctx, second), "saved broadcast and independent script call remain authorized")
+			require.NoError(
+				t,
+				s.EnqueueAdminPageResults(ctx, second),
+				"saved broadcast and independent script call remain authorized",
+			)
 			if !afterEnqueue {
 				require.Error(t, s.EnqueueAdminPageResults(ctx, first), "revoked dependency must reject admission")
 				return
 			}
-			operation, effect := ResultOperation(first.Owner, first.Update, adminPageResultEffect(first, first.Effects[0].Effect))
-			intent, readErr := Read(ctx, s.DB, s.Delivery.BotID, delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}, false)
+			operation, effect := ResultOperation(
+				first.Owner,
+				first.Update,
+				adminPageResultEffect(first, first.Effects[0].Effect),
+			)
+			intent, readErr := Read(
+				ctx,
+				s.DB,
+				s.Delivery.BotID,
+				delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect},
+				false,
+			)
 			require.NoError(t, readErr)
 			_, err = s.Begin(ctx, BeginRequest{Observed: intent})
 			require.Error(t, err, "revoked dependency must reject delivery")
@@ -457,17 +481,30 @@ func TestAdminPageResultsRegistrationDependencyRevocation(t *testing.T) {
 	t.Parallel()
 	s, first, second := adminPageMultiCallFixture(t, false)
 	ctx := t.Context()
-	_, err := s.DB.Exec(ctx, `INSERT INTO core.pass_events(id,finishes_at) VALUES('page-source',clock_timestamp()+interval '1 day');
+	_, err := s.DB.Exec(
+		ctx,
+		`INSERT INTO core.pass_events(id,finishes_at) VALUES('page-source',clock_timestamp()+interval '1 day');
  UPDATE bot.interactions SET content=jsonb_set(content,'{0,calls,0,source,authorities}',
  '[{"registration":{"kind":"owner_menu","event":"page-source"}}]'::jsonb)
- WHERE owner='bob' AND update_id=602 AND kind='script_runs'`)
+ WHERE owner='bob' AND update_id=602 AND kind='script_runs'`,
+	)
 	require.NoError(t, err)
 	require.NoError(t, s.EnqueueAdminPageResults(ctx, first))
 	require.NoError(t, s.EnqueueAdminPageResults(ctx, first))
 	_, err = s.DB.Exec(ctx, `DELETE FROM core.pass_events WHERE id='page-source'`)
 	require.NoError(t, err)
-	operation, effect := ResultOperation(first.Owner, first.Update, adminPageResultEffect(first, first.Effects[0].Effect))
-	intent, err := Read(ctx, s.DB, s.Delivery.BotID, delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect}, false)
+	operation, effect := ResultOperation(
+		first.Owner,
+		first.Update,
+		adminPageResultEffect(first, first.Effects[0].Effect),
+	)
+	intent, err := Read(
+		ctx,
+		s.DB,
+		s.Delivery.BotID,
+		delivery.Reference{Owner: delivery.Bot, Key: operation, Effect: effect},
+		false,
+	)
 	require.NoError(t, err)
 	require.NotNil(t, intent.Reference.Source)
 	_, err = s.Begin(ctx, BeginRequest{Observed: intent})

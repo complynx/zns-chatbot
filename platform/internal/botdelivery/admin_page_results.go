@@ -372,7 +372,8 @@ func (s Service) storeAdminPageManifest(ctx context.Context, tx pgx.Tx, manifest
 	kind := fmt.Sprintf("delivery_result:admin_page_manifest:%d:%s", s.Delivery.BotID, effect)
 	var exists bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3)`,
-		in.Owner, in.Update, kind).Scan(&exists); err != nil {
+		in.Owner, in.Update, kind).
+		Scan(&exists); err != nil {
 		return core.DatabaseOperationError(err)
 	}
 	if !exists {
