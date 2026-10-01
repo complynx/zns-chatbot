@@ -48,3 +48,9 @@ Pending: final C–E source closure, stand freeze and actual acceptance executio
 
 Written by root (gpt-6.1-sol/Codex)
 on behalf of Daniel Drizhuk
+
+Daniel approved the next throughput changes on 1 October: three bounded Linux
+heavy slots, one finite final C–E cohort, isolated stands with proven preflight,
+and measured queue time/returns/actual acceptance outcomes. The third slot first
+serves the ready diagnostics candidate; extra programmers are not the primary
+remedy. See coordination-process.md for execution and resource controls.
