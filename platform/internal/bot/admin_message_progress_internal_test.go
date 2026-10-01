@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"unicode/utf16"
 
@@ -82,7 +83,7 @@ func TestAdminMessageComposedPageDelivery(t *testing.T) {
 				require.NoError(t, b.sendAdminMessagePage(ctx, in, page.ID, page.Offset, &messages))
 				require.NoError(t, messages.err)
 				firstCount := len(requests)
-				// Replaying the ingress uses the same immutable effect keys and bodies.
+				// An unchanged response produces the same candidate effect keys and bodies.
 				require.NoError(t, b.sendAdminMessagePage(ctx, in, page.ID, page.Offset, &messages))
 				require.Len(t, requests, 2*firstCount)
 				close(requests)
@@ -97,6 +98,24 @@ func TestAdminMessageComposedPageDelivery(t *testing.T) {
 				require.Equal(t, saved[:firstCount], saved[firstCount:])
 				assertAdminMessageTestPage(t, page, saved[:firstCount], &messages)
 			})
+		}
+	}
+}
+
+func TestAdminMessagePagePersistedReplayWithChangingLivePage(t *testing.T) {
+	t.Parallel()
+	db := foodPendingDatabase(t)
+	_, err := db.Exec(t.Context(), `INSERT INTO core.pass_booking_admins(owner) VALUES('bob') ON CONFLICT DO NOTHING`)
+	require.NoError(t, err)
+	service := adminmessage.Service{DB: db, Delivery: botIntentTestSettings()}
+	for _, language := range []string{"en", "ru"} {
+		for _, state := range []string{"cancelled", broadcastPreparing} {
+			for _, grow := range []bool{true, false} {
+				t.Run(fmt.Sprintf("%s/%s/grow=%t", language, state, grow), func(t *testing.T) {
+					t.Parallel()
+					assertAdminMessagePersistedReplay(t, service, language, state, grow)
+				})
+			}
 		}
 	}
 }
@@ -160,20 +179,25 @@ func adminMessagePageTestHandler(
 			errors <- json.NewEncoder(w).Encode(page)
 		case "/v1/admin-messages/42/resume", "/v1/admin-messages/42/publication":
 			errors <- json.NewEncoder(w).Encode(map[string]bool{"ok": true})
-		case "/internal/bot-delivery/result":
-			var request adminPageTestResult
-			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		case "/internal/bot-delivery/admin-page-results":
+			var batch botdelivery.AdminPageResultsRequest
+			if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
 				errors <- err
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			// The real storage boundary validates this composed outbound payload.
-			if _, err := telegram.PrepareSend(request.Result.Payload); err != nil {
-				errors <- err
-				w.WriteHeader(http.StatusBadRequest)
-				return
+			for _, effect := range batch.Effects {
+				if _, err := telegram.PrepareSend(effect.Payload); err != nil {
+					errors <- err
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				requests <- adminPageTestResult{
+					Owner: batch.Owner, Chat: batch.Chat, Update: batch.Update, Effect: effect.Effect,
+					Reference: botdelivery.Reference{Family: botFamilyAdminPage, Version: batch.ID},
+					Result:    botdelivery.StoredResult{Payload: effect.Payload},
+				}
 			}
-			requests <- request
 			errors <- json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 		default:
 			errors <- fmt.Errorf("unexpected path %s", r.URL.Path)
@@ -227,5 +251,107 @@ func assertAdminMessageTestPage(
 		require.Equal(t, "adminmsg:cancel:42", navigation.Rows[22][1].Data)
 	} else {
 		require.Equal(t, pageText.String()+"\n\n"+page.Items[0].Content.Text, viewText.String())
+	}
+}
+func assertAdminMessagePersistedReplay(t *testing.T, service adminmessage.Service, language, state string, grow bool) {
+	t.Helper()
+	db := service.DB
+	message, previewErr := service.Preview(t.Context(), "bob", t.Name(), adminmessage.Request{
+		Destinations: []adminmessage.Destination{
+			{Chat: "101"},
+		},
+		Content: adminmessage.Content{Text: "private content"},
+	})
+	require.NoError(t, previewErr)
+	short := adminmessage.Page{
+		ID:       message.ID,
+		State:    state,
+		Total:    60,
+		Offset:   20,
+		More:     true,
+		Progress: adminmessage.JobProgress{Total: 60, Cancelled: 60},
+		Items: []adminmessage.Delivery{
+			{Destination: adminmessage.Destination{Chat: "101"}, State: "cancelled",
+				Content: adminmessage.Content{Text: "original content"}},
+			{Destination: adminmessage.Destination{Chat: "102"}, State: "cancelled",
+				Content: adminmessage.Content{Text: "original content"}},
+		},
+	}
+	long := short
+	long.Items = append([]adminmessage.Delivery(nil), short.Items...)
+	long.Items[0].Failure = strings.Repeat("x", 1000)
+	long.Items[1].Failure = strings.Repeat("y", 1000)
+	long.Items[0].Content.Text = "changed content"
+	first, second := short, long
+	if !grow {
+		first, second = long, short
+	}
+	var live atomic.Value
+	live.Store(first)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/admin-messages/review" {
+			_ = json.NewEncoder(w).Encode(live.Load().(adminmessage.Page))
+		} else {
+			_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		}
+	}))
+	defer server.Close()
+	b := botDeliveryTestBot(db)
+	b.Host.LocalBotDelivery.Service.AdminMessages = service
+	b.API.Base = server.URL
+	in := incoming{owner: "bob", chat: 202}
+	ctx := withAdminMessageSource(t.Context(), in, telegram.Update{ID: message.ID})
+	messages := orderMessages{language: language}
+	require.NoError(t, b.sendAdminMessagePage(ctx, in, message.ID, 20, &messages))
+	readSaved := func() string {
+		var saved string
+		queryErr := db.QueryRow(t.Context(), `SELECT COALESCE(jsonb_agg(jsonb_build_object('body',r.content,'effect',i.effect_key,'sequence',q.lane_sequence) ORDER BY q.lane_sequence),'[]'::jsonb)::text
+ FROM bot.delivery_intents i JOIN core.delivery_queue q ON q.bot_id=i.bot_id AND q.owner_key=i.operation_key AND q.effect_key=i.effect_key AND q.owner_kind='bot'
+ JOIN bot.interactions r ON r.owner=i.owner AND r.update_id=$1 AND r.kind=i.reference->>'result_kind'
+ WHERE i.owner='bob' AND i.reference->>'update'=($1::bigint)::text`, message.ID).
+			Scan(&saved)
+		require.NoError(t, queryErr)
+		return saved
+	}
+	original := readSaved()
+	require.NotEqual(t, "[]", original)
+	live.Store(second)
+	// Reconstruct the caller as after a worker restart. The real host
+	// boundary must retain bodies, complete effect set and lane order.
+	restarted := b
+	require.NoError(t, restarted.sendAdminMessagePage(ctx, in, message.ID, 20, &messages))
+	require.JSONEq(t, original, readSaved())
+	assertAdminMessageSavedNavigation(t, original, first, &messages, grow)
+}
+
+func assertAdminMessageSavedNavigation(
+	t *testing.T,
+	original string,
+	first adminmessage.Page,
+	messages *orderMessages,
+	grow bool,
+) {
+	t.Helper()
+	var results []struct {
+		Body botdelivery.StoredResult `json:"body"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(original), &results))
+	navigation := 0
+	var all strings.Builder
+	for _, result := range results {
+		all.WriteString(result.Body.Payload.Text)
+		for _, row := range result.Body.Payload.Markup.Rows {
+			for _, button := range row {
+				if strings.HasPrefix(button.Data, "adminmsg:inspect:") {
+					navigation++
+				}
+			}
+		}
+	}
+	require.Equal(t, len(first.Items), navigation)
+	require.Contains(t, all.String(), adminMessageProgressText(first.Progress, messages))
+	if !grow {
+		require.Greater(t, len(results), 1)
 	}
 }

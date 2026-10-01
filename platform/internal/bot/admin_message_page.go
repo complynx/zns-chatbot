@@ -75,13 +75,6 @@ func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset 
 				{Text: messages.text(i18n.AdminMessageCancel, nil), Data: fmt.Sprintf("adminmsg:cancel:%d", id)},
 			},
 		)
-		if messages.err != nil {
-			return messages.err
-		}
-		if err = b.API.CheckAdminMessagePublication(ctx, in.owner, id); err != nil {
-			return err
-		}
-		return b.queueAdminMessagePage(ctx, in.chat, id, offset, text, rows)
 	}
 	if messages.err != nil {
 		return messages.err
@@ -89,39 +82,76 @@ func (b *Bot) sendAdminMessagePage(ctx context.Context, in incoming, id, offset 
 	if err = b.API.CheckAdminMessagePublication(ctx, in.owner, id); err != nil {
 		return err
 	}
-	if err = b.queueAdminMessagePage(ctx, in.chat, id, offset, text, rows); err != nil {
-		return err
-	}
-	if len(page.Items) > 0 {
-		text += "\n\n" + page.Items[0].Content.Text
-	}
-	if err = b.API.CheckAdminMessagePublication(ctx, in.owner, id); err != nil {
-		return err
-	}
-	return b.sendAdminMessageView(ctx, in.chat, text, id, messages)
-}
-
-// Split before outbound validation. Navigation remains on the final page chunk.
-func (b *Bot) queueAdminMessagePage(
-	ctx context.Context, chat, id, offset int64, text string, rows [][]telegram.Button,
-) error {
-	const chunkRunes = 1800
-	runes := []rune(text)
-	effect := fmt.Sprintf("admin_page:%d:%d", id, offset)
-	ref := botdelivery.Reference{Family: botFamilyAdminPage, Version: id}
-	for index := 0; len(runes) > chunkRunes; index++ {
-		if err := b.queueBotUpdateResult(ctx, chat, fmt.Sprintf("%s:chunk:%d", effect, index), ref,
-			botdelivery.StoredResult{Payload: telegram.Send{ChatID: chat, Text: string(runes[:chunkRunes])}},
-		); err != nil {
-			return err
+	effects := adminMessagePageEffects(in.chat, id, offset, text, rows)
+	if page.State != broadcastPreparing {
+		if len(page.Items) > 0 {
+			text += "\n\n" + page.Items[0].Content.Text
 		}
-		runes = runes[chunkRunes:]
+		effects = append(effects, adminMessagePageViewEffects(in.chat, id, text, messages)...)
 	}
-	return b.queueBotUpdateResult(ctx, chat, effect, ref, botdelivery.StoredResult{
-		Payload: telegram.Send{ChatID: chat, Text: string(runes), Markup: telegram.Markup{Rows: rows}},
+	if messages.err != nil {
+		return messages.err
+	}
+	origin, ok := ctx.Value(broadcastSourceKey{}).(broadcastSource)
+	if !ok || origin.owner != in.owner || origin.in.chat != in.chat {
+		return botdelivery.ErrBinding
+	}
+	return b.Host.EnqueueAdminPageResults(ctx, botdelivery.AdminPageResultsRequest{
+		Owner: in.owner, Chat: in.chat, Update: origin.update.ID, ID: id, Offset: offset, Effects: effects,
 	})
 }
 
+// Navigation keeps the original final effect identity. The host freezes all
+// chunks and the action card together before registering any queue effects.
+func adminMessagePageEffects(
+	chat, id, offset int64,
+	text string,
+	rows [][]telegram.Button,
+) []botdelivery.AdminPageEffect {
+	const chunkRunes = 1800
+	runes := []rune(text)
+	final := fmt.Sprintf("admin_page:%d:%d", id, offset)
+	var effects []botdelivery.AdminPageEffect
+	for index := 0; len(runes) > chunkRunes; index++ {
+		effects = append(effects, botdelivery.AdminPageEffect{
+			Effect:  fmt.Sprintf("%s:chunk:%d", final, index),
+			Payload: telegram.Send{ChatID: chat, Text: string(runes[:chunkRunes])},
+		})
+		runes = runes[chunkRunes:]
+	}
+	return append(effects, botdelivery.AdminPageEffect{
+		Effect: final, Payload: telegram.Send{ChatID: chat, Text: string(runes), Markup: telegram.Markup{Rows: rows}},
+	})
+}
+
+const adminMessageResultsAction = "results"
+
+func adminMessagePageViewEffects(chat, id int64, text string, messages *orderMessages) []botdelivery.AdminPageEffect {
+	const chunkRunes = 1800
+	runes := []rune(text)
+	var effects []botdelivery.AdminPageEffect
+	for index := 0; len(runes) > chunkRunes; index++ {
+		effects = append(effects, botdelivery.AdminPageEffect{
+			Effect:  fmt.Sprintf("admin_view:%d:%d", id, index),
+			Payload: telegram.Send{ChatID: chat, Text: string(runes[:chunkRunes])},
+		})
+		runes = runes[chunkRunes:]
+	}
+	payload := telegram.Send{ChatID: chat, Text: string(runes)}
+	for _, action := range []struct {
+		name  string
+		label i18n.ID
+	}{
+		{botPhaseSend, i18n.AdminMessageSend}, {adminMessageResultsAction, i18n.AdminMessageResults}, {mediaCancel, i18n.AdminMessageCancel},
+	} {
+		payload.Markup.Rows = append(payload.Markup.Rows, []telegram.Button{{
+			Text: messages.text(action.label, nil), Data: fmt.Sprintf("%s%s:%d", adminMessagePrefix, action.name, id),
+		}})
+	}
+	return append(effects, botdelivery.AdminPageEffect{
+		Effect: fmt.Sprintf("admin_view:%d:%d", id, len(effects)), Payload: payload,
+	})
+}
 func adminMessageProgressText(progress adminmessage.JobProgress, messages *orderMessages) string {
 	return messages.text(i18n.AdminMessageProgress, map[string]string{
 		"succeeded":    strconv.FormatInt(progress.Succeeded, 10),
