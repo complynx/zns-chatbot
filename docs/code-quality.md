@@ -89,7 +89,18 @@ Do not use a global volume prune. An unattached volume can still contain needed
 data; establish its purpose before deleting it. Record cleanup in the progress
 history and keep QA reports outside disposable Docker resources.
 
-## Windows Firewall: local QA builds
+## Linux checks and historical Windows Firewall setup
+
+Daniel authorized Linux-only checks on 2026-10-01. Run all new quality gates,
+pinned-tool builds and automated browser suites in Linux Docker or WSL; use
+the Linux branch of `scripts/quality.mjs` for `npm run quality:all` with the
+required PostgreSQL and sandbox access. Native Windows execution and Windows
+executables targeting Linux are not acceptance requirements. Follow the two
+heavy-check slots and stand ownership in `docs/coordination-process.md`.
+Already-running Windows checks finish without restart. Root confirms their
+terminal state and worker acknowledgements before Daniel removes Firewall rules.
+The following configuration is historical, not a requirement to retain or
+reinstall the Windows exceptions.
 
 On Daniel's Windows host, an AppID tagging policy was installed on 2026-10-01
 for `C:\Users\ddriz\Projects\zns-chatbot\*`, including subdirectories. Native
@@ -204,9 +215,9 @@ running Compose sandbox. Do not interpret lint success as functional acceptance.
 `npm run quality:all` is the full local gate. It requires `TEST_DATABASE_URL` and
 `SANDBOX_URL`, builds the pinned Go tool, and runs lint, format checks, dependency
 verification, vet, build, race/integration tests, fuzzing, live smoke and browser
-acceptance. Start Compose first and install Playwright Chromium, or set
-`BROWSER_CHANNEL=msedge`. On Windows it uses Docker Desktop's `desktop-linux`
-context and the repository's isolated PostgreSQL container for Linux race tests.
+acceptance. Run it inside Linux Docker/WSL, start Compose first and install
+Playwright Chromium. The retained legacy Windows branch uses Docker Desktop's
+`desktop-linux` context for race tests; do not start that branch for new checks.
 The command fails on the first failure; it never treats a missing stand as success.
 
 Start the full media stand with `compose.yaml`, `compose.qa.yaml`, `compose.av.yaml`

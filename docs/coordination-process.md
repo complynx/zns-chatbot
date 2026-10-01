@@ -5,12 +5,30 @@ existing Git and independent QA workflow; no quality or acceptance gate is remov
 
 ## Heavy checks
 
-Root grants one native Windows heavy-check slot and one Docker/WSL heavy-check
-slot. Full lint, whole-module compilation and race/integration suites request a
+Daniel authorized Linux-only checks on 1 October 2026. New builds, linters,
+SQL generation, unit/race/integration suites and automated browser checks run
+in Linux Docker or WSL. Native Windows checks are not required and must not be
+started. A Windows executable targeting GOOS=linux is still a Windows check.
+Root grants two Linux heavy-check slots across all stands. Full lint,
+whole-module compilation and race/integration suites request a
 slot with owner, exact frozen source, command, environment, resource bounds and
 evidence path. Quick focused checks on independent resources can continue.
-Linux-target lint running as a Windows executable consumes the Windows slot.
+Use pinned tools and task-owned writable caches; shared module caches and frozen
+source are read-only. Do not run pinned-tool builds outside the slot queue.
+Start with at most two CPUs and four GiB per heavy container; request an explicit
+resource adjustment if necessary instead of hiding an OOM or changing gate budgets.
 No build or test may mutate an occupied Functional QA stand.
+
+During the transition, an already-running Windows check occupies one of these
+two slots until its actual terminal result. Do not restart it on Linux solely
+to change hosts. Retain its evidence; it does not prove Linux runtime behavior.
+Root tells Daniel when all owners acknowledge this rule and no Windows checks
+remain, so he can remove the local Firewall exceptions.
+
+Use separate owned development and Functional QA stands, with independent data,
+networks and evidence paths. Heavy-check concurrency is limited across stands,
+not by requiring a single mutable stand. The final acceptance stand runs the
+frozen integrated composition and remains unchanged while QA owns it.
 
 Existing checks are allowed to finish. Do not terminate or restart them because
 their output is quiet or an observation times out. Observe the same tool handle;
