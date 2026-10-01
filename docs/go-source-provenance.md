@@ -2,7 +2,7 @@
 
 ## Current integration — 2026-10-01
 
-Last integrated source merge is Git33540321d033328742b743f504fd35ffaba8496d.
+Last integrated source merge is Gitbd150d5b1b6f91977d1597686e889543dab22330. Runtime14 candidate2a9db430 (QA264) merged conflict-free; no source rewrite. Root three fixture top-level tests and subcases passed,12PASS events including two packages,0FAIL/SKIP. Developer actual Linux PG role/inventory/negative/persistence gates passed; managedC204 and clock operator successor remain pending. C clock40, payment7 and model10 are separate unmerged candidates; ce427 images do not certify this source.
 E rehearsal tool4088372d (QA259,tenpaths) merged without conflicts. Root actual
 22 offline Python guards passed. This adds rehearsal tooling, not runtime product
 dependencies; actual final import/removal and frozen090/091 epoch remain open.

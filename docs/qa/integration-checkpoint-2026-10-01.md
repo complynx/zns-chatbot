@@ -1,4 +1,4 @@
-# Integrated source checkpoint:33540321
+# Integrated source checkpoint:bd150d5b
 
 Product source0070f944 incorporates reviewed callback observations62b9eebc
 (QA241), source diagnosticsb857b8b9 (QA243) and registration fixtures54766266
@@ -54,3 +54,19 @@ results;58441 is released. ce427 Functional images remain older than this source
 
 Written by root (gpt-6.1-sol/Codex)
 on behalf of Daniel Drizhuk
+
+## Runtime roles integrated — bd150d5b
+
+Exactreviewed14candidate2a9db430 mergedwithoutconflicts afterQA264PASS. Rootactualfixture selector3top-level+subcases12PASSevents/0FAILSKIP; sandbox0.181s/cmdzns0.154s, rawqa.local/runtime-role-root-integrated.jsonl. AuthorrealPGnegative/role/persistence/inventory/configgates separate. No managedstand/FQAclaim. RootDsuccessor80d0 actual2PG PASS1.18/3.21/package4.672s unchangedparentDBnames; freshQA266 active. Payment8ff native9top-level passed121.698s butQA265returned2P2, successor7scope approved. C1ae native/Linuxgatespassed butQA263returned5; successor40scope approved. Originalfailedreceipts retained.
+
+Current correction: QA266 completed FAIL2; model10 transferred to new developer CLI37303, not merged. Payment7 full root52182 native selector12 top-level29PASS events/0FAILSKIP92.881s, identical database inventory; signed immutable handoff and fresh review pending. C40 final20e936 gates active. Native58461/58471 actual bare setup authenticated and released; product migrations and final full run still pending.
+
+Latest immutable handoffs: payment c5e770e7 complete7/root12PGPASS92.881s nowfreshQA267; model f2720ebb complete10/developerallcodegates+root2PGPASS6.282s nowfreshQA268. Both snapshots/DBinventories unchanged; native resources released. Sourcebd150 plus docs187319ce remains actual root composition. Payment PASS-record count corrected29,12top-levelunchanged. Next269.
+
+Fresh reviews267/268 are terminalFAIL, not pending or acceptance. Payment7 transferred new developer, model10 durable correction in separate branch CLI54485. Root still productbd150/docs57118257, no failed source merged. C93cab989 mainactualLinuxPG matrix clean, final compatibility gate pending. Lead listonly exact1060integration preliminary8shard manifests prepared, finalsource required.
+
+Full40 Cclock candidate93cab989 terminal authorLinux/PG/race/default/manual compatibility gates passed, resourcecleanupconfirmed. FreshQA269actuallyreadonlyCLI86645; no source/FQA acceptance yet. Operator5 successor planning transferred runtime developer afteracceptedC, no concurrentoldworktreewrites.
+
+QA269terminalFAIL3 overrides any pending-review statement: actualfull40 scopedgatesPASS not acceptance. Clockcorrection transferred freshdeveloper isolatedsame40. Rootproduct stillbd150, no rejectedcandidateintegrated. Payment andmodel correctionsparallel; operator5 readonlyplanprepared. Finalcomposition/FQA40/fullbaseline/production remainopen.
+
+Newmodel10 immutable482214b4 actualroot68525 fullPG failure/reboot selectorPASS7.952s, noFAILSKIP, exactrawhashmanifest/currentsourceclean/identicalDBinventory. FreshQA270CLI24715active. Parity-current inventory refreshed70verifiedsourceanchors,3actualentrygaps; architecture/parity acceptance unchanged. Rootproductbd150, documents e1ad9c17. Next271.

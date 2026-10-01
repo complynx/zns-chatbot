@@ -654,3 +654,219 @@ QA255 independently passed the five-path fixed-role candidate67206220. Root
 merged it without conflicts as102072a0; focused sandbox/command tests passed.
 The four fixed actions are now integrated source, still absent from sealedce427
 images. Template preparation and future stand installation do not certify FQA.
+
+## bd150 private-role prerequisite correction
+
+Root integrated runtime14 at bd150d5b1b6f91977d1597686e889543dab22330 after
+QA264 PASS. Raw migrations remain unchanged. Source/template acceptance is not
+a running C stand. C reader/operator still block final managed preparation;
+D10 successor80d0 awaits full QA266 CLI review and qualified F08 observer;
+payment7 is under construction after QA265. Its nine PG passes and D focused PG
+passes do not confer acceptance. Telegram recipient choice and ce427 stay unchanged.
+
+Inspected TestRegistrationPrivateRoleComposition requires five private variables:
+REGISTRATION_ROLE_TEST_ADMIN_URL, REGISTRATION_ROLE_TEST_OWNER_URL,
+REGISTRATION_ROLE_TEST_OPERATOR_URL, REGISTRATION_ROLE_TEST_FAKE_URL and
+REGISTRATION_ROLE_TEST_INVENTORY_URL. Missing ADMIN causes an explicit test skip.
+ADMIN is bootstrap administrator; OWNER is nonprivileged zns_app owning the exact
+synthetic_qa_zns_registration_fixture database; OPERATOR is private nonprivileged
+zns_registration_operator without memberships; FAKE is private zns_fake;
+INVENTORY is read-only zns_inventory with pg_read_all_stats. Only app/meter count
+as managed session roles. The test intentionally changes role privileges,
+memberships, database/table ownership, identities and markers then restores them.
+It must never target native58441/58451, retained fixture data or active C204.
+
+Fresh bootstrap supplies roles/schema ownership only. The test migrates/seeds as
+zns_app, installs genuine product/registration fixtures, then applies reviewed
+runtime-roles.sql itself. Do not pre-install fixture data. Its relative file
+../../../docs/sandbox/fqa-stands/registration/runtime-roles.sql requires the exact
+checkout layout; include raw ACL/bootstrap files in final provenance alongside
+module/migration inventories. Fake persistence here uses actual PostgreSQL plus
+httptest; it is not live browser/provider acceptance and requires no clock volume.
+
+Separate TestRegistrationFixtureRealStateAndRevocation requires private
+REGISTRATION_FIXTURE_TEST_DATABASE_URL with exact127.0.0.1 host, fixed DB name and
+actual owner. It explicitly DROPs core/bot/interaction/credits schemas and public
+migration/fixture tables at start. Do not share its target with the private-role
+test, retained fixture state or managed stand. Original package/shard membership
+is preserved; prerequisites route each test to its own synthetic allocation.
+
+Concrete proposed next allocations, no resource/template grant:
+
+| Purpose | Proposed project / port / database |
+| --- | --- |
+| Private-role composition | synthetic-qa-zns-registration-role-test-20261001 /127.0.0.1:58461 /synthetic_qa_zns_registration_fixture |
+| Original destructive fixture | synthetic-qa-zns-registration-fixture-test-20261001 /127.0.0.1:58471 /synthetic_qa_zns_registration_fixture |
+
+Each has one pinned PostgreSQL17 container, separate -pgdata/-host and private
+bootstrap-secret volume/bundle; no installation204 label/coordinator/clock/app
+runtime. Proposed config paths: docs/sandbox/fqa-stands/native/
+registration-role-test.compose.yaml and registration-fixture-test.compose.yaml.
+Role-test receives exact reviewed private role bootstrap; fixture-test receives
+owning nonprivileged zns_app and only its reviewed schema prerequisites. Never
+add private fixture roles to native parents. Read-only native/reservation check
+found58461 unused;58471 requires full collision/capacity inventory at assignment.
+No resource was created. Host bundles use protected Windows ACL; Linux secret
+volume uses actual PostgreSQL UID,0700 directory/0400 regular files, proven by
+stat/readability. Windows chmod or SQL role identity is not OS-owner evidence.
+
+Runner A owns58441 plus fresh58461 for its unfiltered internal/sandbox package;
+enable private-role URL variables only for that package. Original destructive
+integration test retains its I0-I7 membership; its runner receives fresh58471
+URL only in that manifest's explicit exclusive window. Transfer special-cluster
+ownership only after terminal process release. No simultaneous writers or silent
+reset after failure; re-execution needs reviewed fresh-state allocation. Two
+normal native clusters alone cannot supply these prerequisites safely.
+
+Every final Go-discovered test receives a prerequisite classification before
+commands freeze; no silent missing-env skip/exclusion. Preserve unfiltered
+nonintegration, complete eight-shard test union and full importer. Supplemental
+receipts reconcile actual skipped native names to genuine required stand types:
+
+| Requirement | Qualified execution prerequisite |
+| --- | --- |
+| Ordinary native PG | TEST_DATABASE_URL58441/58451, reviewed first-three roles; randomized test DBs |
+| Private/destructive fixture | Exact five role URLs on58461 and original fixture URL58471, owner/ACL/raw-file proof |
+| Linux ownership, RO/RW, lock/reaping/symlink | Same final source in owned Linux runner/volumes; real UID/mount/proc/lock checks |
+| Physical replacement | ZNS_REPLACEMENT_DOCKER_TEST=1 plus ZNS_REPLACEMENT_TEST_IMAGE@sha256, ZNS_REPLACEMENT_TEST_NETWORK and ZNS_REPLACEMENT_TEST_PG_HOST on isolated Linux lifecycle stand |
+| Native media/sticker | Linux ffmpeg/ffprobe/tgs-render and decoder image provenance; STICKER_NATIVE_TEST=1 |
+| Script worker | SCRIPT_TEST_SOCKET on an owned actual IPC service/socket |
+| Browser/live UI | MARKDOWN_BROWSER/TIMETABLE_BROWSER/CONTACT_BROWSER with NODE_BINARY; BROWSER_AUTH_STAND_FILE/lifetime and Playwright; SANDBOX_URL to a newly frozen owned stand |
+| Identity | ZITADEL_LOCAL_STATE and ZITADEL_PROVISIONING_PROOF_STATE from a synthetic current Zitadel API stand |
+| Real model | ZNS_LIVE_CODEX_EXECUTABLE under scoped real-provider access; fixtures do not prove reasoning |
+
+Reinspect exact settings/test requirements at final epoch; no guessed environment
+toggles. Missing endpoint/OS/mount/image/provider/human recipient produces BLOCKED
+names. Source-declared native skips stay in raw counts and require supplemental
+proof before whole coverage; no assertion/deadline changes or added -short.
+Qualified F08 sampled saved-result/effect observer and real UI/draft/next-intent
+evidence remain separately needed; provider consumed state alone is insufficient.
+This correction made no test/DB/bootstrap/resource writes. Root assigns each
+future preparation and exclusive runner window.
+
+Root subsequently authorized and lead completed only bare special PG setup:
+58461 private-role composition and58471 destructive fixture clusters, separate
+exact projects/networks/pgdata and unique private bundles, same cached digest,
+1CPU/768MiB/256MiB each. Native ADMIN/OWNER authentication, DBowner zns_app,
+nonprivileged role flags and zero product schemas/public tables are actual proof.
+See native-baseline-allocation report for all handles/hashes/origin and safe
+root-owned runtime invocation. Both released to root healthy/idle; no migrations,
+fixtures/runtime ACL/test runs occurred. Original manifests and final discovery
+requirements remain unchanged; root assigns all future codegate writers.
+
+## Exact final discovery and ownership algorithm
+
+Final source is not frozen. Checkpoint187319ce is planning input; C40 gates,
+new model10 CLI37303 and payment7 review remain dependencies. No current checkpoint
+selector is called a final manifest. Metadata listing uses -list only, never test
+execution; current TestMain hooks were inspected to route ordinary list mode to
+m.Run, not their special offline-helper exec branch. Final runner rechecks init/
+TestMain before discovery and retains immutable source/Go/binary/build-tag inputs.
+
+For each module and execution OS, capture actual Go package discovery for the full
+original scope. Capture `go test -mod=readonly -list . -run ^$ -p=1 <package>`
+stdout/exit for each package separately; zero runnable names is valid only with
+successful package discovery/listing. Parse only Go-listed Test/Fuzz/Example names,
+not diagnostics or package result text. Packages without tests remain in the
+package union. Do not infer names from text scans or invent Example functions
+that Go does not list. Save raw discovery and SHA, and hash raw source/migrations/
+required docs ACL/bootstrap inputs. Native list metadata is not a test PASS.
+
+Integration assignment is fully deterministic: each package's actual listed
+names, deduplicated only after rejecting duplicate discovery records, are sorted
+with byte/ordinal comparison (e.g. StringComparer.Ordinal, not culture-sensitive
+Sort-Object). Zero-based index modulo8 assigns I0-I7. Prefix identity includes
+module/package; the same name in different packages is not collapsed. Stable
+selectors are ^(regex-escaped-name|...)$, supplied as direct arguments. Parent
+selection retains every nested subtest/example/fuzz seed; benchmarks are outside
+the original gate. Empty shard is explicitly recorded, not fabricated execution.
+Recompute at final source and store all eight manifests before scheduling.
+
+Exact owner resolution: runner A owns native58441 and I0/I2/I4/I6; runner B owns
+native58451 and I1/I3/I5/I7. A runs full unfiltered cmd/internal/identityprovision/
+deploy; B runs full unfiltered tools/migrate. All original45m platform per-package/
+integration-shard and15m importer bounds remain. Each final selector is annotated
+with the dependency rules below; assignment is determined from its generated
+manifest, never moved out or excluded to make green results.
+
+| Exact selector/dependency | Owner and reservation |
+| --- | --- |
+| internal/sandbox TestRegistrationPrivateRoleComposition | A owns bare58461 during unfiltered sandbox package; five private role URLs, raw current runtime-roles.sql/full checkout |
+| integration TestRegistrationFixtureRealStateAndRevocation | Whoever owns its generated Ix gets bare58471 after explicit transfer; fixed owner URL and destructive schema/reset scope only on that allocation |
+| integration TestRuntimeReplacementPhysicalBarrier | Generated Ix owner requests dedicated reviewed Linux lifecycle image/network/PG host and session inventory; no ce427 or C204 reuse |
+| integration TestLiveSandbox | Generated Ix owner requests frozen isolated live UI SANDBOX_URL; no implicit historical endpoint |
+| integration TestMarkdownBrowser | Generated Ix owner enables MARKDOWN_BROWSER/NODE_BINARY and existing test's ephemeral fake/Playwright; independent browser process/context |
+| integration TestMassageTimetableBrowser | Generated Ix owner enables TIMETABLE_BROWSER/NODE_BINARY with owned ephemeral UI |
+| integration TestRegistrationContactBrowser | Generated Ix owner enables CONTACT_BROWSER/NODE_BINARY with owned ephemeral UI |
+| integration TestBrowserAuthUIStand | Generated Ix owner reserves BROWSER_AUTH_STAND_FILE/lifetime, ephemeral listener/state file and terminal cleanup window |
+| internal/sandbox TestModelConsumptionDurableRebootAndDeniedReinstallation and TestModelConsumptionSQLDeadlineDoesNotConfirmOrRewind, if final Go-listed | A reserves native host8090 exclusively for the unfiltered sandbox command; private parent58441, new case journal, no retained fixture DB/control state |
+| New model10/clock listed names | A owns nonintegration package scope; classify every actual final listed name for Linux/volume/provider prerequisites before command freeze, not from pending candidate names |
+
+Native8090 is one global lead reservation, not one per PG cluster. Source-confirmed
+current provider gates use it and previously released it; read-only current socket
+inspection found no listener. Future final runs still require fresh collision
+check and root-assigned reservation. No root/developer provider gate or other
+runner may bind it while A's package process is active. Container internal8090
+published on58434 is a distinct endpoint, not authority to steal native8090.
+Private-role61 and fixture71 remain separate from both parent clusters; no URL
+export spills into other packages. Their sole writers transfer only after process
+terminal release, preserving failed state. No reset/rebuild of a retained DB.
+
+Linux qualification is a separate runner C assigned by root: same final source,
+own cache/temp roots and actual Linux RO app/RW operator mount/UID0700/0600,
+replacement lock/proc/child-reaping, decoder/socket and provider stand contracts.
+Native/OS discovery keyed by OS/build tags is reconciled explicitly; a Windows
+skipped Linux assertion is not a PASS, and a Linux result does not erase a native
+failure. C cannot query/reset58461/58471 or use native8090 without an explicit
+cross-runner window. Identity/real-model/browser dependencies need their genuine
+owned endpoints, not skip toggles. Missing prerequisite names are BLOCKED until
+qualified supplemental execution; no silently reduced union.
+
+Before start, generate per-command records: immutable manifest SHA, module/package,
+OS/tags, full selector or unfiltered scope, primary PG owner, special cluster owner,
+global port/socket/path reservations, image/source/ACL hashes, timeout and private
+configuration provenance (keys/hash only). Check set union(I0..I7)=actual integration
+Go discovery, pairwise intersections empty, and other-platform/importer package
+unions unchanged. Run no command with unresolved ownership or prerequisite.
+Afterward reconcile raw JSON by OS/module/package/test, preserve package exits,
+nested PASS/FAIL/SKIP, every discovered top-level terminal or unfinished outcome,
+and explicit special-gate/supplemental receipts. Failed or missing scope stays
+open; focused passes do not overwrite full09 evidence or original40 FQA rows.
+
+### Actual checkpoint list-only discovery
+
+At187319ce, actual native Go -list discovery (test functions not executed) listed
+2187 runnable parent names across63 test-bearing platform packages; integration
+has1060. Separate importer discovery lists136 names across2 test packages. The
+first attempt could not access default Go cache and exited before discovery;
+the successful list-only calls used the lead's existing isolated cache with
+scoped escalation. No credential/DB/resource access or test execution occurred.
+All final inputs require fresh listing after source freeze; these are metadata,
+not PASS counts. Source-text1048 estimate is superseded by actual Go1060.
+
+Ordinal UTF8 name-list hashes below serialize each ordered shard as name+LF,
+including trailing LF. Current I0-I3 each133; I4-I7 each132, union1060. No manifest
+files or final test commands were created during this read-only planning step.
+
+HEAD was187319ce before discovery and57118257f7fb7a28c4695b28e0489d75be85e8b9
+afterward. The intervening commit is docs-only: git diff reports no platform or
+tools/migrate changes, and their worktree status is clean. Thus the listed module
+inputs match both checkpoints; this still does not establish a final source freeze.
+
+| Shard / owner | Current name-list SHA256 | Special prerequisite selectors |
+| --- | --- | --- |
+| I0 /A | BA9A631E1A8ECD60CEC108EB32684A2D93172F936B0D1660B890EB62B32C0368 | TestLiveSandbox: frozen live stand |
+| I1 /B | 3914228AC8B62F9DF2D5BCBC08B707A05ECCD75A3ACECEA8F726DF558EDB7CFD | TestRegistrationContactBrowser: actual browser; TestRuntimeReplacementPhysicalBarrier: isolated Linux lifecycle |
+| I2 /A | 861F7FBABA28EF844746F7454E44A589FB2227E8D1A32D053E93930131F6D638 | TestRegistrationFixtureRealStateAndRevocation:58471; TestBrowserAuthUIStand and TestMarkdownBrowser: browser/ephemeral state |
+| I3 /B | 43F7C8F392C38686E6B200E6A45E291F7018E80F07C11D6090CB86210FD58B0A | Normal PG plus any final classified prerequisites |
+| I4 /A | 19DA95F990F961C73746B5CDE5006E02D4839EFCD6734C4B8C608E884D1CA664 | Normal PG plus any final classified prerequisites |
+| I5 /B | 2699B656D8BA77554799CD0ACFFAC8D747F00E30F3467BEC96359FB33C3A040F | Normal PG plus any final classified prerequisites |
+| I6 /A | 6A392DCEC5A768332B7D417C79C9B6CE8D0D91E3FA9702CDD51B4ACBA07ED60C | Normal PG plus any final classified prerequisites |
+| I7 /B | F9396DB9D6C3D62CDCF1BEEF64C1D7FAC997B245B328207E066A15C6978144C5 | TestMassageTimetableBrowser: actual browser |
+
+Go confirms TestRegistrationPrivateRoleComposition in internal/sandbox: it remains
+in A's unfiltered package with58461; no special test is removed. Pending model/C
+source will add or change names and their indexes, invalidating these preliminary
+hashes/assignments; final all-name manifest is recomputed exactly, not patched
+from this table. No named human runner is appointed by labels A/B/C; root assigns
+fresh actual agents/exclusive windows when dependencies are ready.

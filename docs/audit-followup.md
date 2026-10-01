@@ -1,6 +1,14 @@
-## Current integrated source and expanded QA — 2026-10-01, source33540321
+## Current integrated source and corrective ownership — 2026-10-01
 
-Authoritative integrated Git33540321 includes reviewed ACK observation QA241,
+Integrated product remains bd150d5b; runtime14 role/configuration preparation passed QA264 and root focused fixtures. No rejected clock/payment/model candidate is integrated. Documentation checkpoint813efe70 preserves the latest evidence. Imagesce427 remain historical scopes, not current-source acceptance.
+
+Fresh full QA267 payment7 FAIL1, QA268 model10 FAIL2, QA269 clock40 FAIL3. Payment unavailability after can_book revocation transferred to menu_retirement_fix; durable model ordering/expiry correction owns CLI54485; writable clock aliases and post-lock eligibility transferred to fresh clock_final_boundary_developer. All source candidates and failed reports preserved. Next fresh Code QA270; allCodexoverride, Claude disabled/unprobed.
+
+Operator5 private-role plan prepared read-only, implementation waits reviewed C. Job19/091 likewise waits C ingress. Native58441/58451 are released; new bare58461/58471 prerequisites verified and released without product schema. Lead actual list-only1060integration/2187platform/136importer preliminary exact eight-shard plan prepared; final frozen source and Linux/browser/lifecycle/private-role prerequisites still required. No full baseline or40-row FQA acceptance. Independent actual-source parity inventory refresh is active, owner only parity-current.md. Human question remains final Telegram numeric testaccountID in PROGRESS. Production NO-GO.
+
+## Historical expanded QA checkpoint — 2026-10-01, source33540321
+
+Authoritative integrated Gitbd150d5b includes reviewed ACK observation QA241,
 source diagnostics QA243, registration fixture QA245 and HTTP observations
 QA248, update diagnostics QA253 and fixed fixture role controls QA255. Root focused integrated checks and full pinned JS gates passed;
 Functional images remain sealedce427 and do not certify the newer source.
@@ -1534,3 +1542,7 @@ Common integration81a9cf73 now includes QA233 usage and QA235 models/credits/bro
 C28 immutable eec24665 is completing full Linux/PostgreSQL clock/default/startup gates in its own ephemeral fixture; native55432 released. D10 immutable df5199ad passed local tests/lint/build and root actual two PostgreSQL cases run on58441 with exclusive8090. Payment6 root repeat failed47.615s only on the missing-edit terminal-status assertion; all other selected cases passed and parent DB readback passed. Author corrects exact Rejected contract and an identified still-live off-page payment boundary within the same scope, retaining original-source locking and no-send retirement assertions. No acceptance yet.
 
 Runtime14 transferred after QA261. First real PG17.11 roles/bootstrap/7operator-actions/fake-persistence and zero-managed-session inventory checks passed; negative/config/lint gates remain. ManagedC204 unstarted. Live clock read/advance also require the private operator guard; operator5 is prepared only after reviewed C integration. Full F08 business-plan/effects/UI observation remains separate. Counter261,next262; all Codex override. Root source33540321, no production release.
+
+## Authoritative refresh after QA262–266
+
+Runtime14 QA264PASS integratedbd150d5b withoutconflicts, rootfocusedfixture testsPASS. Codeonly/preparationacceptance; managedC204 stillblocked reviewedC40/operator5. QA262 model10FAIL2 fixed in80d0; actualrace/nativeunits/pinnedgates+root2PG4.672PASS, freshQA266active. QA263 clock28FAIL5→approved40existingpathscope,1aeprotected. QA265 payment6FAIL2→approved7(existingtypes.goonly),8ffprotected. Rootnative9paymenttestsPASS notindependentacceptance. Counters through266,next267, allCodexoverride. No production release/fullFQA/parity acceptance. Humanquestion remainsTelegramtestaccountID inPROGRESS.
