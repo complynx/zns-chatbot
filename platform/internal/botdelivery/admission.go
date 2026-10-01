@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -26,7 +27,7 @@ func (s Service) Enqueue(ctx context.Context, in EnqueueRequest) (Observation, e
 		return Observation{}, err
 	}
 	if reference.Family == PassReceiptRedactionFamily || !reference.Valid(owner) || chat <= 0 ||
-		(phase != phaseSend && phase != "document") {
+		(phase != phaseSend && phase != string(DocumentIntent)) {
 		return Observation{}, ErrBinding
 	}
 	i := Intent{
@@ -181,6 +182,7 @@ func (s Service) begin(
 	target int64,
 	exportEvents []string,
 	pass *PassCardReceipt,
+	wire *WireReference,
 ) (Intent, bool, error) {
 	stored, err := s.readBeginObservation(ctx, observed, exportEvents)
 	if err != nil {
@@ -205,6 +207,9 @@ func (s Service) begin(
 	if err = s.lockPayloadSources(ctx, tx, stored, exportEvents, previous, pass); err != nil {
 		return s.failPassAdmission(ctx, tx, stored, previous, err)
 	}
+	if err = lockWireGeneration(ctx, tx, stored, wire); err != nil {
+		return observed, false, err
+	}
 	if observed.Reference.Kind == CardIntent && observed.Attempt == 0 &&
 		observed.Reference.Family != PassReceiptRedactionFamily {
 		if err = lockRenderedTarget(ctx, tx, observed, target); err != nil {
@@ -222,7 +227,7 @@ func (s Service) begin(
 		return current, false, nil
 	}
 	current = bindAdmittedPass(current, pass)
-	return s.beginAttempt(ctx, tx, current, target, previous)
+	return s.beginAttempt(ctx, tx, current, target, previous, wire)
 }
 
 func (s Service) beginAttempt(
@@ -231,19 +236,51 @@ func (s Service) beginAttempt(
 	current Intent,
 	target int64,
 	previous *Intent,
+	capture ...*WireReference,
 ) (Intent, bool, error) {
-	var err error
-	if current.Reference.Kind == CardIntent {
-		var pendingReceipt bool
-		err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.delivery_intents
-   WHERE bot_id=$1 AND owner=$2 AND state='sent' AND NOT continuation_done
-   AND reference->>'kind'='card' AND reference->>'card_key'=$3)`, current.BotID, current.Owner, current.Reference.CardKey).Scan(&pendingReceipt)
+	var wire *WireReference
+	if len(capture) != 0 {
+		wire = capture[0]
+	}
+	var resends int
+	var chain bool
+	if err := tx.QueryRow(ctx, `SELECT last_uncertain_attempt IS NOT NULL,uncertain_resends
+ FROM bot.delivery_intents WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+		current.BotID, current.Operation, current.Effect).Scan(&chain, &resends); err != nil {
+		return current, false, core.DatabaseOperationContextError(ctx, err)
+	}
+	const maxUncertainResends = 3
+	if chain && resends >= maxUncertainResends {
+		if err := delivery.Project(
+			ctx,
+			tx,
+			current.BotID,
+			current.QueueReference(),
+			delivery.Rejected,
+			time.Time{},
+		); err != nil {
+			return current, false, err
+		}
+		_, err := tx.Exec(
+			ctx,
+			`UPDATE bot.delivery_intents SET state='failed',reason='telegram_uncertain_retry_exhausted'
+ WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
+			current.BotID,
+			current.Operation,
+			current.Effect,
+		)
 		if err != nil {
 			return current, false, core.DatabaseOperationContextError(ctx, err)
 		}
-		if pendingReceipt {
-			return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
-		}
+		current.State = delivery.Rejected
+		return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
+	}
+	pendingReceipt, err := pendingBotCardReceipt(ctx, tx, current)
+	if err != nil {
+		return current, false, err
+	}
+	if pendingReceipt {
+		return current, false, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 	}
 	admission, err := delivery.Begin(ctx, tx, s.Delivery, current.QueueReference())
 	if err != nil {
@@ -263,13 +300,17 @@ func (s Service) beginAttempt(
 		current.Phase = phaseEdit
 		current.Target = target
 	}
+	if err = bindWireAttempt(ctx, tx, current, wire); err != nil {
+		return current, false, err
+	}
 	receipt, err := json.Marshal(current.Receipt)
 	if err != nil {
 		return current, false, err
 	}
 	_, err = tx.Exec(
 		ctx,
-		`UPDATE bot.delivery_intents SET state='sending',attempt=$4,attempted_at=clock_timestamp(),phase=$5,target_message_id=$6,receipt=$7
+		`UPDATE bot.delivery_intents SET state='sending',attempt=$4,attempted_at=clock_timestamp(),phase=$5,target_message_id=$6,receipt=$7,
+ uncertain_resends=uncertain_resends+CASE WHEN last_uncertain_attempt IS NOT NULL THEN 1 ELSE 0 END
  WHERE bot_id=$1 AND operation_key=$2 AND effect_key=$3`,
 		current.BotID,
 		current.Operation,
@@ -284,11 +325,24 @@ func (s Service) beginAttempt(
 	}
 	return current, true, core.DatabaseOperationContextError(ctx, tx.Commit(ctx))
 }
+
+func pendingBotCardReceipt(ctx context.Context, tx pgx.Tx, current Intent) (bool, error) {
+	if current.Reference.Kind != CardIntent {
+		return false, nil
+	}
+	var pending bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM bot.delivery_intents
+   WHERE bot_id=$1 AND owner=$2 AND state='sent' AND NOT continuation_done
+   AND reference->>'kind'='card' AND reference->>'card_key'=$3)`,
+		current.BotID, current.Owner, current.Reference.CardKey).Scan(&pending)
+	return pending, core.DatabaseOperationContextError(ctx, err)
+}
+
 func (s Service) Begin(ctx context.Context, in BeginRequest) (BeginResult, error) {
 	if in.PreparationFailure {
 		return s.failPassPreparation(ctx, in.Observed)
 	}
-	i, ready, err := s.begin(ctx, in.Observed, in.Target, in.ExportEvents, in.Pass)
+	i, ready, err := s.begin(ctx, in.Observed, in.Target, in.ExportEvents, in.Pass, in.Wire)
 	if err != nil {
 		return BeginResult{}, err
 	}
