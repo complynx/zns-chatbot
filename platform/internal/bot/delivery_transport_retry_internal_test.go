@@ -849,14 +849,14 @@ func TestBotTransportRetryRecoveredKnownOutcomeFencesPositive(t *testing.T) {
 			queued, err := b.enqueueBotIntent(ctx, "", 101, "recovered-known", "notice", botdelivery.Reference{
 				Kind: botdelivery.IdentityIntent, Update: 1, Notice: i18n.IdentityUnavailable, Language: "en"}, "send")
 			require.NoError(t, err)
-			attempt := botRecoveredKnownHTTP(t, b, queued.Reference, state)
+			attempt := botRecoveredKnownHTTP(t, &b, queued.Reference, state)
 			current, err := botdelivery.Read(ctx, db, 999, queued.Reference, false)
 			require.NoError(t, err)
 			require.Equal(t, attempt.Attempt, current.Attempt, "no new admission occurred")
 			if state == "cancelled_after" {
 				require.NoError(t, b.postponeBotIntent(ctx, current, true))
 			}
-			botAssertRecoveredKnownFence(t, b, queued.Reference, attempt)
+			botAssertRecoveredKnownFence(t, &b, queued.Reference, attempt)
 		})
 	}
 }
