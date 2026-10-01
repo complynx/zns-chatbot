@@ -74,7 +74,7 @@ WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempts=s
 UPDATE core.pass_registration_announcements SET last_confirmed_attempt=sqlc.arg(attempt)::bigint
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
  AND attempts=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=sqlc.arg(attempt)::bigint
- AND state IN ('failed','cancelled') AND lease_until IS NULL;
+ AND state IN ('failed','cancelled') AND lease_until IS NULL AND message_id=0;
 
 -- name: AnnouncementAttemptSource :one
 SELECT event_id,owner FROM core.pass_registration_announcements

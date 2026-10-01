@@ -292,7 +292,7 @@ const recordAdminTerminalConfirmation = `-- name: RecordAdminTerminalConfirmatio
 UPDATE core.admin_message_deliveries SET last_confirmed_attempt=$1::bigint
 WHERE id=$2::bigint AND bot_id=$3::bigint
  AND attempt=$1::bigint AND last_uncertain_attempt=$1::bigint
- AND state IN ('failed','cancelled') AND lease_until IS NULL
+ AND state IN ('failed','cancelled') AND lease_until IS NULL AND telegram_message_id=0
 `
 
 type RecordAdminTerminalConfirmationParams struct {

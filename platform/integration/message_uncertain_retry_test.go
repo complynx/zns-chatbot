@@ -556,6 +556,122 @@ func TestLegacyAdminUnknownIsObservedAndCancelledWithoutResend(t *testing.T) {
 	require.Empty(t, messageRetryCandidates(t, db, s.Delivery.BotID))
 }
 
+func TestLegacyAdminInvalidCaptureNeverReachesTransport(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []struct {
+		capture string
+		retry   bool
+	}{{"{}", false}, {"null", false}, {"{}", true}, {"null", true}} {
+		t.Run(fmt.Sprintf("%s/retry=%t", scenario.capture, scenario.retry), func(t *testing.T) {
+			t.Parallel()
+			f := passMenuFixture(t)
+			s := configureDeliveryFixture(t, f)
+			enqueueSyntheticDelivery(t, s, "legacy-invalid-capture", "101")
+			var calls atomic.Int64
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if calls.Add(1) == 1 && scenario.retry {
+					connection, _, err := http.NewResponseController(w).Hijack()
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					_ = connection.Close()
+					return
+				}
+				_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":91}}`))
+			}))
+			t.Cleanup(server.Close)
+			f.b.TG = telegram.Client{Base: server.URL, Token: "synthetic"}
+			if scenario.retry {
+				require.NoError(t, f.b.DeliverAdminMessages(t.Context()))
+				require.EqualValues(t, 1, calls.Load(), "original admitted request crossed HTTP and lost its reply")
+			}
+			transportBefore := calls.Load()
+			_, err := f.db.Exec(
+				t.Context(),
+				`UPDATE core.admin_message_deliveries SET state='unknown',content=$1::jsonb,failure='telegram_outcome_unknown'`,
+				scenario.capture,
+			)
+			require.NoError(t, err)
+			_, err = f.db.Exec(t.Context(), `UPDATE core.delivery_queue SET state='unknown'`)
+			require.NoError(t, err)
+			require.NoError(t, s.RecoverDeliveries(t.Context()))
+			_, err = f.db.Exec(
+				t.Context(),
+				`UPDATE core.admin_message_deliveries SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'`,
+			)
+			require.NoError(t, err)
+			var before string
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), `SELECT to_jsonb(d)::text FROM core.admin_message_deliveries d`).
+					Scan(&before),
+			)
+			err = f.b.DeliverAdminMessages(t.Context())
+			require.ErrorContains(t, err, "admin_message_original_wire_unavailable")
+			assert.Equal(
+				t,
+				transportBefore,
+				calls.Load(),
+				"invalid durable capture cannot admit an empty transport request",
+			)
+			var after string
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), `SELECT to_jsonb(d)::text FROM core.admin_message_deliveries d`).
+					Scan(&after),
+			)
+			assert.Equal(t, before, after, "capture refusal cannot mutate lease, attempt, receipt or retry budget")
+		})
+	}
+}
+
+func TestTerminalPositiveReceiptRejectsContradictoryNegative(t *testing.T) {
+	t.Parallel()
+	for _, owner := range []string{"admin", "announcement"} {
+		t.Run(owner, func(t *testing.T) {
+			t.Parallel()
+			f := prepareRecoveredReply(t, owner)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":91}}`))
+			}))
+			t.Cleanup(server.Close)
+			client := telegram.Client{Base: server.URL, Token: "synthetic"}
+			var reply telegram.Message
+			err := client.Call(t.Context(), "sendMessage", f.payload, &reply)
+			require.NoError(t, err)
+			positive := telegram.DeliveryOutcome(reply.ID, err)
+			require.EqualValues(t, 91, positive.MessageID)
+			_, err = f.db.Exec(
+				t.Context(),
+				`UPDATE core.`+f.table+` SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1`,
+				f.id,
+			)
+			require.NoError(t, err)
+			require.NoError(t, f.recover())
+			require.NoError(t, f.finish(delivery.Outcome{Kind: delivery.Rejected, Reason: "original_wire_unavailable"}))
+			require.NoError(
+				t,
+				f.finish(positive),
+				"the real HTTP positive receipt is retained after local terminal policy",
+			)
+			before := f.snapshot(t)
+			// Inject a contradictory callback; the HTTP request above returned only the positive reply.
+			require.Error(t, f.finish(delivery.Outcome{Kind: delivery.Rejected, Reason: "telegram_recipient_rejected"}))
+			assert.Equal(t, before, f.snapshot(t), "contradictory negative cannot overwrite confirmation history")
+			require.NoError(t, f.finish(positive), "identical positive receipt replay remains idempotent")
+			assert.Equal(t, before, f.snapshot(t))
+			var messageID int64
+			require.NoError(
+				t,
+				f.db.QueryRow(t.Context(), `SELECT `+f.messageColumn+` FROM core.`+f.table+` WHERE id=$1`, f.id).
+					Scan(&messageID),
+			)
+			assert.EqualValues(t, 91, messageID)
+		})
+	}
+}
+
 func TestAdminLastUncertainResendRateLimitStillPacesOtherMessages(t *testing.T) {
 	t.Parallel()
 	db, _ := bookingFixture(t)

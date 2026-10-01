@@ -271,7 +271,7 @@ const recordAnnouncementTerminalConfirmation = `-- name: RecordAnnouncementTermi
 UPDATE core.pass_registration_announcements SET last_confirmed_attempt=$1::bigint
 WHERE id=$2::bigint AND bot_id=$3::bigint
  AND attempts=$1::bigint AND last_uncertain_attempt=$1::bigint
- AND state IN ('failed','cancelled') AND lease_until IS NULL
+ AND state IN ('failed','cancelled') AND lease_until IS NULL AND message_id=0
 `
 
 type RecordAnnouncementTerminalConfirmationParams struct {

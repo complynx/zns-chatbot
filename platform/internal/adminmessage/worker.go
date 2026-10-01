@@ -80,7 +80,10 @@ func (s Service) prepareDelivery(ctx context.Context, candidate dbgen.NextAdminD
 		return Delivery{}, false, err
 	}
 	if err = json.Unmarshal(row.Content, &item.Content); err != nil {
-		return Delivery{}, false, err
+		return Delivery{}, false, problem(http.StatusConflict, "admin_message_original_wire_unavailable")
+	}
+	if err = validateContent(item.Content); err != nil {
+		return Delivery{}, false, problem(http.StatusConflict, "admin_message_original_wire_unavailable")
 	}
 	entry, bindingErr := delivery.ReadReference(ctx, tx, s.Delivery.BotID, adminReference(item.ID))
 	if bindingErr != nil {

@@ -76,7 +76,7 @@ WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint AND attempt=sq
 UPDATE core.admin_message_deliveries SET last_confirmed_attempt=sqlc.arg(attempt)::bigint
 WHERE id=sqlc.arg(id)::bigint AND bot_id=sqlc.arg(bot_id)::bigint
  AND attempt=sqlc.arg(attempt)::bigint AND last_uncertain_attempt=sqlc.arg(attempt)::bigint
- AND state IN ('failed','cancelled') AND lease_until IS NULL;
+ AND state IN ('failed','cancelled') AND lease_until IS NULL AND telegram_message_id=0;
 
 -- name: RecordAdminTerminalReceipt :execrows
 UPDATE core.admin_message_deliveries SET telegram_message_id=sqlc.arg(message_id)::bigint
