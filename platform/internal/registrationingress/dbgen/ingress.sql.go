@@ -12,13 +12,13 @@ import (
 )
 
 const insertIngress = `-- name: InsertIngress :exec
-INSERT INTO core.registration_ingress(kind,bot_id,request_key,telegram_id,native_event,native_owner,native_payload,
- intake_owner,intake_generation,intake_kind,intake_control,intake_digest,intake_message_id,received_at)
+INSERT INTO core.registration_ingress(kind,bot_id,request_key,telegram_id,native_event,native_owner,native_payload,received_at,
+ intake_owner,intake_generation,intake_kind,intake_control,intake_digest,intake_message_id)
 VALUES('telegram',$1::bigint,$2::text,$3::bigint,
  $4::text,$5::text,$6::jsonb,
- $7::text,$8::bigint,$9::text,
- $10::text,$11::text,$12::bigint,
- COALESCE($13::timestamptz,clock_timestamp()))
+ COALESCE($7::timestamptz,clock_timestamp()),
+ $8::text,$9::bigint,$10::text,
+ $11::text,$12::text,$13::bigint)
 ON CONFLICT DO NOTHING
 `
 
@@ -29,13 +29,13 @@ type InsertIngressParams struct {
 	NativeEvent      pgtype.Text
 	NativeOwner      pgtype.Text
 	NativePayload    []byte
+	ReceivedAt       pgtype.Timestamptz
 	IntakeOwner      pgtype.Text
 	IntakeGeneration pgtype.Int8
 	IntakeKind       pgtype.Text
 	IntakeControl    pgtype.Text
 	IntakeDigest     pgtype.Text
 	IntakeMessageID  pgtype.Int8
-	ReceivedAt       pgtype.Timestamptz
 }
 
 func (q *Queries) InsertIngress(ctx context.Context, arg InsertIngressParams) error {
@@ -46,13 +46,13 @@ func (q *Queries) InsertIngress(ctx context.Context, arg InsertIngressParams) er
 		arg.NativeEvent,
 		arg.NativeOwner,
 		arg.NativePayload,
+		arg.ReceivedAt,
 		arg.IntakeOwner,
 		arg.IntakeGeneration,
 		arg.IntakeKind,
 		arg.IntakeControl,
 		arg.IntakeDigest,
 		arg.IntakeMessageID,
-		arg.ReceivedAt,
 	)
 	return err
 }

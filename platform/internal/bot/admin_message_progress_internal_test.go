@@ -43,7 +43,7 @@ func TestAdminMessageNativeIntakePreservesRegistrationClock(t *testing.T) {
 		require.NoError(t, db.QueryRow(ctx, `SELECT received_at,intake_owner,intake_generation,intake_control
  FROM core.registration_ingress WHERE bot_id=$1 AND request_key='601'`, b.Delivery.BotID).
 			Scan(&received, &owner, &generation, &control))
-		require.Equal(t, first, received)
+		require.Equal(t, first, received.UTC())
 		require.Equal(t, "bob", owner)
 		require.Zero(t, generation)
 		require.Equal(t, "adminmsg:results:42", control)
