@@ -15,6 +15,7 @@ func (b *Bot) Handle(ctx context.Context, update telegram.Update) error {
 	var ingressErr error
 	ctx, ingressErr = b.registrationIngressContext(ctx, update)
 	if ingressErr != nil {
+		b.observeUpdateFailure(ctx, updateFailureIngress, ingressErr)
 		return ingressErr
 	}
 	if b.Observer == nil {
@@ -24,7 +25,7 @@ func (b *Bot) Handle(ctx context.Context, update telegram.Update) error {
 	err := b.handle(ctx, update)
 	finish(err)
 	if err != nil {
-		b.logger().WarnContext(ctx, "telegram update failed", "error", err)
+		b.observeUpdateFailure(ctx, updateFailureHandler, err)
 	} else {
 		b.logger().DebugContext(ctx, "telegram update complete")
 	}
