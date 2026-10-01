@@ -101,7 +101,7 @@ func runApp(ctx context.Context, db *pgxpool.Pool, signer identity.Signer,
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	fatal := newFatalLatch(cancel)
-	stopMaintenance, err := startProductMaintenance(ctx, db, logger, cfg, services, fatal.report)
+	stopMaintenance, err := startProductMaintenance(ctx, db, logger, cfg, services, runtime, fatal.report)
 	if err != nil {
 		return fatal.result(err)
 	}
