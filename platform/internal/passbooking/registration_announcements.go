@@ -3,7 +3,9 @@ package passbooking
 import (
 	"context"
 	"errors"
+	"html"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking/dbgen"
 )
 
@@ -26,7 +29,28 @@ type RegistrationAnnouncement struct {
 	Locale   string `json:"locale"`
 	Name     string `json:"name"`
 	Role     string `json:"role"`
+	Text     string `json:"text"`
 	Attempts int64  `json:"attempts"`
+}
+
+// RegistrationAnnouncementText renders the frozen announcement inputs before sending.
+func RegistrationAnnouncementText(item RegistrationAnnouncement) (string, error) {
+	// Source thread locales use exact/base then English, not user-locale aliases.
+	base, _, _ := strings.Cut(strings.ToLower(item.Locale), "-")
+	locale := "en"
+	if base == "ru" {
+		locale = "ru"
+	}
+	roleID := i18n.RegistrationAnnouncementFollower
+	if item.Role == "leader" {
+		roleID = i18n.RegistrationAnnouncementLeader
+	}
+	role, err := i18n.Translate(locale, roleID, nil)
+	if err != nil {
+		return "", err
+	}
+	return i18n.Translate(locale, i18n.RegistrationAnnouncement,
+		map[string]string{"name": html.EscapeString(item.Name), "role": role})
 }
 
 type AnnouncementCompletion struct {
@@ -178,7 +202,7 @@ func (s Service) CompleteRegistrationAnnouncement(ctx context.Context, input Ann
 		row.UncertainResends,
 		row.LastUncertainAttempt.Valid || row.State == string(delivery.Uncertain) ||
 			input.Outcome.Kind == delivery.Uncertain,
-		s.Delivery.Fallback,
+		s.Delivery.UncertaintyRetryBaseOrDefault(),
 	)
 	outcome, deadline, err := s.finishAnnouncementOutcome(ctx, tx, input.ID, input.Outcome, wireOutcome, lateSuccess)
 	if err != nil {

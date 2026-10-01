@@ -227,7 +227,7 @@ func (s Service) CompleteDelivery(ctx context.Context, result Completion) error 
 		row.UncertainResends,
 		row.LastUncertainAttempt.Valid || row.State == string(delivery.Uncertain) ||
 			result.Outcome.Kind == delivery.Uncertain,
-		s.Delivery.Fallback,
+		s.Delivery.UncertaintyRetryBaseOrDefault(),
 	)
 	if !valid && result.Outcome.Kind == delivery.Rejected {
 		result.Outcome = delivery.Outcome{Kind: delivery.Cancelled, Reason: sourceRevoked}

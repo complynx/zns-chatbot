@@ -70,11 +70,14 @@ func TestRegistrationAnnouncementReplayAndRetry(t *testing.T) {
 		`UPDATE core.pass_registration_announcements SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'`,
 	)
 	require.NoError(t, err)
+	_, err = db.Exec(t.Context(), `UPDATE core.pass_registration_announcements SET name='Confirmed retry render input'`)
+	require.NoError(t, err)
 	retried, found, err := s.ClaimRegistrationAnnouncement(t.Context())
 	require.NoError(t, err)
 	require.True(t, found)
 	assert.Equal(t, item.ID, retried.ID)
 	assert.EqualValues(t, 2, retried.Attempts)
+	assert.NotEqual(t, item.Text, retried.Text, "confirmed retry keeps its existing render policy")
 	require.Error(
 		t,
 		s.CompleteRegistrationAnnouncement(

@@ -158,15 +158,24 @@ func (s Service) PrepareRegistrationAnnouncement(
 	}
 	var item RegistrationAnnouncement
 	var thread pgtype.Int8
-	err = tx.QueryRow(ctx, `SELECT id,channel,thread_id,locale,name,role,attempts+1 FROM core.pass_registration_announcements
+	var rendered pgtype.Text
+	var uncertain pgtype.Int8
+	err = tx.QueryRow(ctx, `SELECT id,channel,thread_id,locale,name,role,attempts+1,rendered_text,last_uncertain_attempt FROM core.pass_registration_announcements
  WHERE id=$1 AND bot_id=$2 AND state='pending' AND available_at<=clock_timestamp()
  AND (lease_until IS NULL OR lease_until<=clock_timestamp()) FOR UPDATE SKIP LOCKED`, id, s.Delivery.BotID).
-		Scan(&item.ID, &item.Channel, &thread, &item.Locale, &item.Name, &item.Role, &item.Attempts)
+		Scan(&item.ID, &item.Channel, &thread, &item.Locale, &item.Name, &item.Role, &item.Attempts, &rendered, &uncertain)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return item, false, nil
 	}
 	if err != nil {
 		return item, false, core.DatabaseOperationError(err)
+	}
+	item.Text = rendered.String
+	if !uncertain.Valid || !rendered.Valid {
+		item.Text, err = RegistrationAnnouncementText(item)
+		if err != nil {
+			return item, false, err
+		}
 	}
 	entry, err := delivery.ReadReference(ctx, tx, s.Delivery.BotID, announcementReference(id))
 	if err != nil {
@@ -181,9 +190,10 @@ func (s Service) PrepareRegistrationAnnouncement(
 	}
 	_, err = tx.Exec(
 		ctx,
-		`UPDATE core.pass_registration_announcements SET attempts=$2,lease_until=clock_timestamp()+interval '2 minutes' WHERE id=$1`,
+		`UPDATE core.pass_registration_announcements SET attempts=$2,rendered_text=$3,lease_until=clock_timestamp()+interval '2 minutes' WHERE id=$1`,
 		id,
 		item.Attempts,
+		item.Text,
 	)
 	if err != nil {
 		return item, false, core.DatabaseOperationError(err)
@@ -346,7 +356,7 @@ func (s Service) announcementRecoveryOutcome(
 		delivery.Outcome{Kind: delivery.Uncertain, Reason: reason},
 		row.UncertainResends,
 		true,
-		s.Delivery.Fallback,
+		s.Delivery.UncertaintyRetryBaseOrDefault(),
 	)
 	if outcome.Kind != delivery.Deferred {
 		return outcome, deadline, nil

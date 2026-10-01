@@ -1,6 +1,8 @@
 package integration_test
 
 import (
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -12,10 +14,161 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/adminmessage"
+	"github.com/complynx/zns-chatbot/platform/internal/api"
+	"github.com/complynx/zns-chatbot/platform/internal/appclient"
+	"github.com/complynx/zns-chatbot/platform/internal/appservices"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
+	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+func TestAnnouncementLostResponseRetainsCapturedWireText(t *testing.T) {
+	t.Parallel()
+	db, s := bookingFixture(t)
+	s.Delivery = syntheticDeliverySettings()
+	_, err := db.Exec(
+		t.Context(),
+		`UPDATE core.pass_events SET thread_channel='-100123',thread_id=42,thread_locale='ru'`,
+	)
+	require.NoError(t, err)
+	_, err = s.Execute(t.Context(), "alice", bookingCommand("solo", "captured-wire", passbooking.Booking{}))
+	require.NoError(t, err)
+	requests := make(chan []byte, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			t.Error(readErr)
+			return
+		}
+		requests <- body
+		connection, _, hijackErr := http.NewResponseController(w).Hijack()
+		if hijackErr != nil {
+			t.Error(hijackErr)
+			return
+		}
+		_ = connection.Close()
+	}))
+	t.Cleanup(server.Close)
+	client := telegram.Client{Base: server.URL, Token: "synthetic"}
+	var firstWire []byte
+	var originalText string
+	for sent := range 4 {
+		restarted := passbooking.Service{DB: db, Delivery: s.Delivery}
+		services := notificationFixtureServices(db, appservices.Options{})
+		services.Registration = restarted
+		signer := identity.Signer{Key: []byte("synthetic-announcement-capture-key-32")}
+		hostServer := httptest.NewServer(api.Handler(services, signer, slog.New(slog.DiscardHandler)))
+		t.Cleanup(hostServer.Close)
+		host := appclient.Host{Base: hostServer.URL, Signer: signer}
+		item, found, claimErr := host.ClaimRegistrationAnnouncement(t.Context())
+		require.NoError(t, claimErr)
+		require.True(t, found)
+		var captured string
+		require.NoError(
+			t,
+			db.QueryRow(t.Context(), `SELECT rendered_text FROM core.pass_registration_announcements WHERE id=$1`, item.ID).
+				Scan(&captured),
+		)
+		require.Equal(t, captured, item.Text, "wire text must be durable before Begin")
+		if sent == 0 {
+			originalText = captured
+		} else {
+			require.Equal(t, originalText, captured)
+			rerendered, renderErr := passbooking.RegistrationAnnouncementText(item)
+			require.NoError(t, renderErr)
+			require.NotEqual(t, captured, rerendered, "changed render inputs must not replace the captured wire text")
+		}
+		gate, beginErr := host.BeginRegistrationAnnouncement(
+			t.Context(),
+			delivery.Attempt{ID: item.ID, Generation: item.Attempts},
+		)
+		require.NoError(t, beginErr)
+		require.True(t, gate.Ready)
+		var reply telegram.Message
+		sendErr := client.Call(t.Context(), "sendMessage", map[string]any{
+			"chat_id": int64(-100123), "message_thread_id": *item.ThreadID, "text": item.Text, "parse_mode": "HTML",
+		}, &reply)
+		require.Error(t, sendErr)
+		wire := <-requests
+		if sent == 0 {
+			firstWire = wire
+		} else {
+			assert.Equal(t, firstWire, wire, "uncertain resends must retain the complete original request")
+		}
+		require.NoError(t, host.CompleteRegistrationAnnouncement(t.Context(), passbooking.AnnouncementCompletion{
+			ID: item.ID, Attempt: item.Attempts, Outcome: telegram.DeliveryOutcome(reply.ID, sendErr),
+		}))
+		var state string
+		var resends int64
+		require.NoError(
+			t,
+			db.QueryRow(t.Context(), `SELECT state,uncertain_resends,rendered_text FROM core.pass_registration_announcements WHERE id=$1`, item.ID).
+				Scan(&state, &resends, &captured),
+		)
+		assert.EqualValues(t, sent, resends)
+		assert.Equal(t, originalText, captured)
+		if sent == 3 {
+			require.Equal(t, "failed", state)
+		} else {
+			require.Equal(t, "pending", state)
+		}
+		_, found, claimErr = host.ClaimRegistrationAnnouncement(t.Context())
+		require.NoError(t, claimErr)
+		require.False(t, found, "backoff or terminal state must prevent another wire attempt")
+		_, err = db.Exec(
+			t.Context(),
+			`UPDATE core.users SET name='Changed source'; UPDATE core.pass_events SET thread_locale='en'; UPDATE core.pass_bookings SET role='leader';
+ UPDATE core.pass_registration_announcements SET name='Changed render input',locale='en',role='leader',available_at=clock_timestamp()-interval '1 second';
+ UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'; UPDATE core.delivery_pacing SET not_before=clock_timestamp()-interval '1 second'`,
+		)
+		require.NoError(t, err)
+	}
+	require.Empty(t, requests)
+}
+
+func TestAnnouncementHistoricalUnknownCapturesNextCandidate(t *testing.T) {
+	t.Parallel()
+	db, s := bookingFixture(t)
+	_, err := db.Exec(t.Context(), `UPDATE core.pass_events SET thread_channel='-100123'`)
+	require.NoError(t, err)
+	_, err = s.Execute(t.Context(), "alice", bookingCommand("solo", "historical-wire", passbooking.Booking{}))
+	require.NoError(t, err)
+	_, err = db.Exec(
+		t.Context(),
+		`UPDATE core.pass_registration_announcements SET state='unknown',failure='telegram_outcome_unknown'; UPDATE core.delivery_queue SET state='unknown' WHERE owner_kind='announcement'`,
+	)
+	require.NoError(t, err)
+	require.NoError(t, s.RecoverRegistrationAnnouncements(t.Context()))
+	var missing bool
+	var marker int64
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT rendered_text IS NULL,last_uncertain_attempt FROM core.pass_registration_announcements`).
+			Scan(&missing, &marker),
+	)
+	require.True(t, missing, "recovery cannot reconstruct historical wire text")
+	require.Zero(t, marker)
+	_, err = db.Exec(
+		t.Context(),
+		`UPDATE core.pass_registration_announcements SET available_at=clock_timestamp()-interval '1 second'; UPDATE core.delivery_queue SET not_before=clock_timestamp()-interval '1 second'`,
+	)
+	require.NoError(t, err)
+	item, found, err := s.ClaimRegistrationAnnouncement(t.Context())
+	require.NoError(t, err)
+	require.True(t, found)
+	expected, err := passbooking.RegistrationAnnouncementText(item)
+	require.NoError(t, err)
+	assert.Equal(t, expected, item.Text)
+	var captured string
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT rendered_text,last_uncertain_attempt FROM core.pass_registration_announcements`).
+			Scan(&captured, &marker),
+	)
+	assert.Equal(t, item.Text, captured, "capture describes the next candidate, not the old unknown wire")
+	assert.Zero(t, marker)
+}
 
 func TestAdminLostResponseResendsWithDurableBudget(t *testing.T) {
 	t.Parallel()
@@ -55,7 +208,7 @@ func TestAdminLostResponseResendsWithDurableBudget(t *testing.T) {
 		assert.EqualValues(t, sent+1, uncertainAttempt)
 		assert.Equal(t, "telegram_outcome_unknown", reason)
 		if sent < 3 {
-			assert.InDelta(t, 30*(1<<sent), delay, 2)
+			assert.InDelta(t, 5*(1<<sent), delay, 2)
 		}
 		restarted := adminmessage.Service{DB: f.db, Delivery: s.Delivery}
 		require.NoError(t, restarted.RecoverDeliveries(t.Context()))
