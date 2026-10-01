@@ -1,6 +1,6 @@
 # Registration stand preparation and public clock controls
 
-Reviewable templates, not a started or accepted stand. Prepared integration base `102072a0`;
+Reviewable templates, not a started or accepted stand. Prepared integration base `33540321`;
 the next reviewed composition must include current registration fixtures/role
 actions, accepted C clock core, accepted operator, menu 090 and applicable source
 changes. Operator `7841e785` and the clock core are separate pending dependencies.
