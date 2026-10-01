@@ -713,7 +713,14 @@ func TestNotificationUncertainRetryThird429RetainsCooldown(t *testing.T) {
 				assert.Equal(t, "pending", r.status(t, r.second).State)
 			}
 			deferred := r.status(t, r.first)
-			waitNotificationEligibility(t, r, deferred.AvailableAt)
+			var cooldown time.Time
+			require.NoError(t, r.f.db.QueryRow(t.Context(),
+				"SELECT max(not_before) FROM core.delivery_pacing WHERE bot_id=$1", syntheticDeliverySettings().BotID,
+			).Scan(&cooldown))
+			if deferred.AvailableAt.After(cooldown) {
+				cooldown = deferred.AvailableAt
+			}
+			waitNotificationEligibility(t, r, cooldown)
 			require.NoError(t, dispatch(t.Context(), r.first))
 			terminal := r.status(t, r.first)
 			assert.Equal(t, "failed", terminal.State)
@@ -747,7 +754,7 @@ func assertNotification429Projection(
 		syntheticDeliverySettings().BotID, string(notificationQueueOwner(domain)), strconv.FormatInt(r.first, 10),
 	).Scan(&queueState, &deadline))
 	assert.Equal(t, "pending", queueState, "the shared lane retains the deferred intent")
-	assert.Equal(t, state.AvailableAt, deadline)
+	assert.WithinDuration(t, state.AvailableAt, deadline, 0)
 	require.NoError(t, r.f.db.QueryRow(t.Context(),
 		"SELECT last_confirmed_attempt FROM "+r.table+" WHERE id=$1", r.first,
 	).Scan(&confirmed))
