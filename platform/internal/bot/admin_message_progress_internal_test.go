@@ -69,7 +69,10 @@ func TestAdminMessageNativeIntakePreservesRegistrationClock(t *testing.T) {
 		b.Delivery.BotID).Scan(&exists))
 	require.False(t, exists)
 	var savedOffset int64
-	require.NoError(t, db.QueryRow(ctx, `SELECT value FROM bot.cursors WHERE name='telegram_received'`).Scan(&savedOffset))
+	require.NoError(
+		t,
+		db.QueryRow(ctx, `SELECT value FROM bot.cursors WHERE name='telegram_received'`).Scan(&savedOffset),
+	)
 	require.Equal(t, int64(602), savedOffset)
 }
 
