@@ -9,7 +9,7 @@ Daniel authorized Linux-only checks on 1 October 2026. New builds, linters,
 SQL generation, unit/race/integration suites and automated browser checks run
 in Linux Docker or WSL. Native Windows checks are not required and must not be
 started. A Windows executable targeting GOOS=linux is still a Windows check.
-Root grants two Linux heavy-check slots across all stands. Full lint,
+Root grants three Linux heavy-check slots across all stands. Full lint,
 whole-module compilation and race/integration suites request a
 slot with owner, exact frozen source, command, environment, resource bounds and
 evidence path. Quick focused checks on independent resources can continue.
@@ -19,11 +19,8 @@ Start with at most two CPUs and four GiB per heavy container; request an explici
 resource adjustment if necessary instead of hiding an OOM or changing gate budgets.
 No build or test may mutate an occupied Functional QA stand.
 
-During the transition, an already-running Windows check occupies one of these
-two slots until its actual terminal result. Do not restart it on Linux solely
-to change hosts. Retain its evidence; it does not prove Linux runtime behavior.
-Root tells Daniel when all owners acknowledge this rule and no Windows checks
-remain, so he can remove the local Firewall exceptions.
+The Windows transition is complete; no Windows checks remain queued. Historical
+receipts remain valid only for their recorded scope.
 
 Use separate owned development and Functional QA stands, with independent data,
 networks and evidence paths. Heavy-check concurrency is limited across stands,
@@ -42,6 +39,11 @@ result closure, followed by final-byte checks needed for a ready review. Other
 independent product development continues. Never edit source during a gate and
 present that gate as proof of the new bytes; freeze a successor and refresh the
 affected checks. Do not relax linter configuration or scenario budgets.
+Measure request-to-grant waiting and actual gate duration separately. Record
+container CPU/memory and OOM/exit state when a slot completes. Start with three
+slots; retain the extra capacity only while it reduces queue time without
+increasing gate duration or starving Functional QA. Reduce concurrent checks if
+resource contention is observed, never weaken a gate to fit concurrency.
 Current owners/handles and requests are recorded in the existing coordination
 metrics; no new scheduler or helper service is needed.
 
@@ -64,6 +66,30 @@ The reviewer releases only the necessary resource to the operator and resumes
 after explicit operator RELEASE. Preserve old journals and durable metadata;
 no reset/reinsertion is allowed to manufacture the scenario. Lead owns lifecycle,
 the reviewer owns observable UI results and the independent verdict.
+
+## Final acceptance cohort and preflight
+
+Root maintains one finite C–E cohort in the existing local Kanban: accepted
+registration clock, callback ACK, identity revocation cache, diagnostics, clock
+operator plus setup/role consumers, background results/schema091, and delivery
+resolution/schema092 when included. Record exact reviewed commits and the final
+integration commit. Unrelated work stays on separate branches until this cohort
+has a frozen stand and actual acceptance results. Necessary defects remain in
+scope; a substantive correction requires affected fresh review and a new freeze.
+
+The FQA lead prepares isolated stands against that exact composition. Before
+handoff, prove migrations and required roles, real bot/actor identity, immutable
+fixture/setup anchor, operator permissions, EN/RU Telegram-like UI, provider
+fault/restart controls, source/image hashes, evidence paths and sole writers.
+Prepare credentials and observers before arming short fault windows. Readiness
+must be demonstrated by preflight, not inferred from successful compilation.
+
+After final merge and integrated checks, freeze the stands and dispatch the
+original Functional matrix and actual E apply/replay/reconcile/removal/restart/UI
+blocks. Root records last required merge, freeze, QA start and terminal result;
+lead records executed/pass/fail/blocked/skipped original scenarios. Keep E
+execution ownership explicit; helper preparation does not close E. Use the
+existing local board and CSV, with no new scheduler or metrics service.
 
 ## Documentation and acceptance closure
 
