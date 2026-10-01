@@ -76,21 +76,7 @@ func testRegistrationClockOuterDeliveryWait(t *testing.T, scenario string) {
 	if scenario == "invite" {
 		command.InviteTelegramID = 202
 	}
-	if scenario == "passport" || scenario == "deadline" {
-		seed := bookingCommand("solo", "outer-seed", passbooking.Booking{})
-		if scenario == "deadline" {
-			seed.Name, seed.InviteTelegramID = "invite", 202
-		}
-		_, err = service.Execute(t.Context(), "alice", seed)
-		require.NoError(t, err)
-		if scenario == "passport" {
-			_, err = db.Exec(t.Context(), `UPDATE core.pass_events SET passport_required=true`)
-			require.NoError(t, err)
-		}
-		if scenario == "deadline" {
-			clock.advance(start.Add(58*time.Hour + time.Microsecond))
-		}
-	}
+	seedRegistrationClockMaintenance(t, db, service, clock, start, scenario)
 	price := 0
 	assignment := passbooking.AdminAssignment{Event: "dance", Key: command.Key, Target: "alice", TotalPrice: &price,
 		Create: &passbooking.AdminCreate{FromProfile: true}}
@@ -166,16 +152,7 @@ func testRegistrationClockOuterDeliveryWait(t *testing.T, scenario string) {
 	}
 	select {
 	case err = <-done:
-		switch scenario {
-		case "cancel":
-			require.ErrorIs(t, err, context.Canceled)
-		case "sql-failure":
-			require.ErrorIs(t, err, core.ErrDatabase)
-			require.True(t, core.IsDatabaseFailure(err))
-			require.NotErrorIs(t, err, passbooking.ErrRegistrationTimeChanged)
-		default:
-			require.ErrorIs(t, err, passbooking.ErrRegistrationTimeChanged)
-		}
+		requireRegistrationClockWaitError(t, scenario, err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("outer transaction did not finish after lane release")
 	}
@@ -210,6 +187,47 @@ func testRegistrationClockOuterDeliveryWait(t *testing.T, scenario string) {
 		requireCode(t, run(ctx), "pass_sales_closed")
 	default:
 		require.NoError(t, run(ctx), "maintenance retries at current time without retaining stale markers")
+	}
+}
+
+func seedRegistrationClockMaintenance(
+	t *testing.T,
+	db *pgxpool.Pool,
+	service passbooking.Service,
+	clock *registrationClock,
+	start time.Time,
+	scenario string,
+) {
+	t.Helper()
+	var err error
+	if scenario == "passport" || scenario == "deadline" {
+		seed := bookingCommand("solo", "outer-seed", passbooking.Booking{})
+		if scenario == "deadline" {
+			seed.Name, seed.InviteTelegramID = "invite", 202
+		}
+		_, err = service.Execute(t.Context(), "alice", seed)
+		require.NoError(t, err)
+		if scenario == "passport" {
+			_, err = db.Exec(t.Context(), `UPDATE core.pass_events SET passport_required=true`)
+			require.NoError(t, err)
+		}
+		if scenario == "deadline" {
+			clock.advance(start.Add(58*time.Hour + time.Microsecond))
+		}
+	}
+}
+
+func requireRegistrationClockWaitError(t *testing.T, scenario string, err error) {
+	t.Helper()
+	switch scenario {
+	case "cancel":
+		require.ErrorIs(t, err, context.Canceled)
+	case "sql-failure":
+		require.ErrorIs(t, err, core.ErrDatabase)
+		require.True(t, core.IsDatabaseFailure(err))
+		require.NotErrorIs(t, err, passbooking.ErrRegistrationTimeChanged)
+	default:
+		require.ErrorIs(t, err, passbooking.ErrRegistrationTimeChanged)
 	}
 }
 
