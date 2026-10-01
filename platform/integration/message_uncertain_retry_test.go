@@ -20,6 +20,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/api"
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/appservices"
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/delivery"
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
@@ -1354,9 +1355,27 @@ func TestRecoveredConfirmedReplyFencesContradictorySuccess(t *testing.T) {
 	}
 }
 
+func TestRecoveredCanonicalNegativeReplayPreservesSchedule(t *testing.T) {
+	t.Parallel()
+	for _, owner := range []string{"admin", "announcement"} {
+		t.Run(owner, func(t *testing.T) {
+			t.Parallel()
+			checkRecoveredConfirmedReply(t, owner, "negative-replay")
+		})
+	}
+}
+
 func checkRecoveredConfirmedReply(t *testing.T, owner, phase string) {
 	t.Helper()
 	f := prepareRecoveredReply(t, owner)
+	if phase == "negative-replay" {
+		chat := "101"
+		if owner == "announcement" {
+			chat = "-100123"
+		}
+		enqueueSyntheticDelivery(t, adminmessage.Service{DB: f.db, Delivery: syntheticDeliverySettings()},
+			"negative-replay-follower", chat)
+	}
 	entered := make(chan []byte, 1)
 	release := make(chan struct{})
 	var once sync.Once
@@ -1453,6 +1472,10 @@ func checkRecoveredConfirmedReply(t *testing.T, owner, phase string) {
 			Scan(&confirmedAttempt),
 	)
 	assert.Equal(t, f.attempt, confirmedAttempt)
+	if phase == "negative-replay" {
+		checkRecoveredNegativeReplay(t, f, outcome)
+		return
+	}
 	if phase == "cancelled-after-reply" {
 		require.NoError(t, f.cancel())
 	}
@@ -1484,6 +1507,54 @@ func checkRecoveredConfirmedReply(t *testing.T, owner, phase string) {
 	} else {
 		assert.Equal(t, "cancelled", state)
 	}
+}
+
+func checkRecoveredNegativeReplay(t *testing.T, f recoveredReplyFixture, outcome delivery.Outcome) {
+	t.Helper()
+	var state string
+	var noLease bool
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT state,lease_until IS NULL FROM core.`+f.table+` WHERE id=$1`, f.id).
+		Scan(&state, &noLease))
+	require.Equal(t, "pending", state)
+	require.True(t, noLease)
+	before := f.snapshot(t)
+	ownerBefore, followerBefore := recoveredReplaySchedule(t, f)
+	var started, elapsed time.Time
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&started))
+	time.Sleep(150 * time.Millisecond)
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&elapsed))
+	require.GreaterOrEqual(t, elapsed.Sub(started), 100*time.Millisecond,
+		"the actual database clock must advance before testing deadline rebasing")
+	// Replay the observed receipt defensively; the HTTP server returned it once.
+	replayErr := f.finish(outcome)
+	ownerAfter, followerAfter := recoveredReplaySchedule(t, f)
+	assert.Equal(t, before, f.snapshot(t), "receipt replay preserves owner, queue, pacing, lanes, fairness and sources")
+	assert.Equal(t, ownerBefore, ownerAfter, "every owner field, including message ID and deadline, remains unchanged")
+	assert.Equal(t, followerBefore, followerAfter, "receipt replay cannot postpone the same-chat follower")
+	var problem *core.ProblemError
+	if assert.ErrorAs(t, replayErr, &problem, "an already confirmed recovered negative is refused as stale") {
+		code := "admin_message_stale_attempt"
+		if f.table == "pass_registration_announcements" {
+			code = "pass_announcement_stale"
+		}
+		assert.Equal(t, http.StatusConflict, problem.Status)
+		assert.Equal(t, code, problem.Code)
+	}
+}
+
+func recoveredReplaySchedule(t *testing.T, f recoveredReplyFixture) (string, time.Time) {
+	t.Helper()
+	var owner string
+	var follower time.Time
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT to_jsonb(d)::text FROM core.`+f.table+` d WHERE id=$1`, f.id).
+		Scan(&owner))
+	require.NoError(t, f.db.QueryRow(t.Context(), `SELECT GREATEST(q.not_before,b.not_before,c.not_before)
+FROM core.delivery_queue q
+LEFT JOIN core.delivery_pacing b ON b.bot_id=q.bot_id AND b.chat=''
+LEFT JOIN core.delivery_pacing c ON c.bot_id=q.bot_id AND c.chat=q.chat
+JOIN core.admin_message_deliveries d ON q.owner_kind='admin' AND q.owner_key=d.id::text
+JOIN core.admin_messages m ON m.id=d.message_id WHERE m.key='negative-replay-follower'`).Scan(&follower))
+	return owner, follower
 }
 
 func TestLegacyAnnouncementPrewireRefusalRecapturesCandidate(t *testing.T) {

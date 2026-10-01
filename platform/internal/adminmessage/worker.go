@@ -435,6 +435,13 @@ func adminConfirmedWireOutcome(outcome delivery.Outcome) bool {
 }
 
 func adminLateCompletion(result Completion, row dbgen.LockAdminAttemptRow) (bool, error) {
+	// A confirmed recovered reply cannot schedule the same generation again.
+	if result.Outcome.Kind != delivery.Succeeded && adminConfirmedWireOutcome(result.Outcome) &&
+		row.State == statePending && !row.LeaseUntil.Valid &&
+		row.LastUncertainAttempt.Valid && row.LastUncertainAttempt.Int64 == result.Attempt &&
+		row.LastConfirmedAttempt.Valid && row.LastConfirmedAttempt.Int64 >= result.Attempt {
+		return false, staleAdminAttempt()
+	}
 	if result.Outcome.Kind == delivery.Succeeded && row.LastConfirmedAttempt.Valid &&
 		row.LastConfirmedAttempt.Int64 >= result.Attempt {
 		return false, staleAdminAttempt()
