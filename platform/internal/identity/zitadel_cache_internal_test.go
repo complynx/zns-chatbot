@@ -44,44 +44,52 @@ func (p *cacheProvider) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	var body any
 	if r.URL.Path == "/oauth/v2/token" {
-		if p.exchangeStarted != nil && r.Form.Get("subject_token") == "alice" {
-			p.exchangeStarted <- struct{}{}
-			select {
-			case <-p.exchangeRelease:
-			case <-r.Context().Done():
-				return
-			}
-		}
-		if p.rejectExchange.Load() {
-			w.WriteHeader(p.rejectionCode)
-			_, _ = w.Write([]byte(p.rejectionBody))
-			return
-		}
-		body = map[string]any{
-			"access_token": "token-" + r.Form.Get("subject_token"), "token_type": "Bearer",
-			"issued_token_type": "urn:ietf:params:oauth:token-type:jwt", "expires_in": p.lifetime,
-		}
+		p.serveExchange(w, r)
 	} else {
-		if p.verifyStarted != nil {
-			p.verifyStarted <- struct{}{}
-			select {
-			case <-p.verifyRelease:
-			case <-r.Context().Done():
-				return
-			}
-		}
-		if status := p.verifyStatus.Load(); status != 0 {
-			w.WriteHeader(int(status))
+		p.serveVerification(w, r)
+	}
+}
+
+func (p *cacheProvider) serveExchange(w http.ResponseWriter, r *http.Request) {
+	if p.exchangeStarted != nil && r.Form.Get("subject_token") == "alice" {
+		p.exchangeStarted <- struct{}{}
+		select {
+		case <-p.exchangeRelease:
+		case <-r.Context().Done():
 			return
 		}
-		body = map[string]any{
-			"active": !p.inactive.Load(), "sub": strings.TrimPrefix(r.Form.Get("token"), "token-"),
-			"iss": p.issuer, "aud": []string{"project"}, "client_id": "bot-client",
-			"exp": time.Now().Add(time.Duration(p.lifetime) * time.Second).Unix(),
-			"act": map[string]string{"sub": "actor", "iss": p.issuer},
+	}
+	if p.rejectExchange.Load() {
+		w.WriteHeader(p.rejectionCode)
+		_, _ = w.Write([]byte(p.rejectionBody))
+		return
+	}
+	body := map[string]any{
+		"access_token": "token-" + r.Form.Get("subject_token"), "token_type": "Bearer",
+		"issued_token_type": "urn:ietf:params:oauth:token-type:jwt", "expires_in": p.lifetime,
+	}
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func (p *cacheProvider) serveVerification(w http.ResponseWriter, r *http.Request) {
+	if p.verifyStarted != nil {
+		p.verifyStarted <- struct{}{}
+		select {
+		case <-p.verifyRelease:
+		case <-r.Context().Done():
+			return
 		}
+	}
+	if status := p.verifyStatus.Load(); status != 0 {
+		w.WriteHeader(int(status))
+		return
+	}
+	body := map[string]any{
+		"active": !p.inactive.Load(), "sub": strings.TrimPrefix(r.Form.Get("token"), "token-"),
+		"iss": p.issuer, "aud": []string{"project"}, "client_id": "bot-client",
+		"exp": time.Now().Add(time.Duration(p.lifetime) * time.Second).Unix(),
+		"act": map[string]string{"sub": "actor", "iss": p.issuer},
 	}
 	_ = json.NewEncoder(w).Encode(body)
 }
