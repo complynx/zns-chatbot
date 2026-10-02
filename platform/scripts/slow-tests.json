@@ -55,6 +55,7 @@
     "affected": [
       "platform/internal/adminmessage/",
       "platform/internal/legacyfood/",
+      "platform/internal/orders/",
       "platform/internal/passbooking/",
       "platform/internal/identity/"
     ],
@@ -115,6 +116,16 @@
       "platform/internal/workflow/"
     ],
     "reason": "Pass-notice lease recovery and presentation retry deadlines."
+  },
+  {
+    "package": "integration",
+    "selectors": [
+      "^TestPassBookingRechecksFinishAfterLock$",
+      "^TestRegistrationFixtureRealStateAndRevocation$",
+      "^TestKnowledgePriorityAndDynamicEventEnd$"
+    ],
+    "affected": ["platform/internal/passbooking/"],
+    "reason": "Actual sales finish after a profile lock, persisted tier opening and knowledge event-end transition."
   },
   {
     "package": "integration",

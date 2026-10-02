@@ -36,7 +36,7 @@ const discovered = new Map([
   ['module/internal/b', new Set(['TestRetryOne', 'TestQuick'])],
 ]);
 
-test('persisted presentation, authority and receipt retry waits stay in the slow tier', () => {
+test('intentional eligibility, event and receipt waits stay in the slow tier', () => {
   const waits = new Map([
     ['TestPassRedactionRetriesAfterActualDeadline', 'passbooking'],
     ['TestRuntimeAuthorityTerminalNoticeDeliveryRecovery', 'passbooking'],
@@ -46,6 +46,9 @@ test('persisted presentation, authority and receipt retry waits stay in the slow
     ['TestBotDeliveryReceiptAuthenticatedRecovery', 'identity'],
     ['TestBotDeliveryReceiptDeniedBatchCannotStarveHealthyOwner', 'identity'],
     ['TestRecoveredCanonicalNegativeReplayPreservesSchedule', 'passbooking'],
+    ['TestPassBookingRechecksFinishAfterLock', 'passbooking'],
+    ['TestRegistrationFixtureRealStateAndRevocation', 'passbooking'],
+    ['TestKnowledgePriorityAndDynamicEventEnd', 'knowledge'],
   ]);
   for (const [name, domain] of waits) {
     const selected = affectedGroups([`platform/internal/${domain}/changed.go`]);
@@ -331,7 +334,11 @@ test('CLI failures exit nonzero and stop remaining subprocesses', async (t) => {
 });
 
 test('cross-domain changes select notification retry and source recovery scenarios', () => {
-  for (const domain of ['legacyfood', 'passbooking']) {
+  for (const [domain, sourceTest] of [
+    ['legacyfood', '^TestFoodCSVPartialRetryAndRevokedGrant$'],
+    ['passbooking', '^TestPassPlanCommittedStatusRetry$'],
+    ['orders', '^TestModernExportRetriesAuthorityOutageBeforeTransport$'],
+  ]) {
     const selected = affectedGroups([`platform/internal/${domain}/changed.go`]);
     assert.equal(
       selected.some((group) =>
@@ -339,10 +346,6 @@ test('cross-domain changes select notification retry and source recovery scenari
       ),
       true,
     );
-    const sourceTest =
-      domain === 'legacyfood'
-        ? '^TestFoodCSVPartialRetryAndRevokedGrant$'
-        : '^TestPassPlanCommittedStatusRetry$';
     assert.equal(
       selected.some((group) => group.selectors.includes(sourceTest)),
       true,

@@ -26,8 +26,8 @@ package parallelism and test parallelism match `quality:all`.
 domain. Changes include the merge-base diff against the supplied commit, staged
 and unstaged edits independently, and repository-wide untracked files with
 repository-relative paths. The manifest records domain dependencies, including
-notification generation from food and pass registration. Identity, conversation
-and scripting runtime paths serve multiple domains and select all slow scenarios.
+notification generation from food, orders and pass registration. Identity,
+conversation and scripting runtime paths serve multiple domains and select all slow scenarios.
 Any unknown path selects all slow tests. This includes shared database, delivery,
 query, configuration, clock, schema, build and test-runner changes. Missing
 manifest selectors and discovery failures stop the run.
@@ -64,6 +64,8 @@ The manifest covers these waits on the current integration source:
   pass-redaction cooldown, terminal refusal recovery, language/workflow notice
   and Telegram metadata retries.
 - Orders: payment retirement cooldown and modern export authority recovery.
+- Event boundaries: sales finish after a profile lock, persisted registration
+  tier opening and knowledge classification after the actual event end.
 - Admin messages: provider recovery after the configured retry deadline.
 - Bot receipts: authenticated recovery and denied-owner batch fairness after
   persisted continuation retry deadlines.
@@ -79,12 +81,14 @@ already use mocked timers where appropriate; browser/FQA polling remains in the
 existing full gate. A slow compilation or database setup receipt alone does not
 make a scenario slow. Retain separate cold build and test execution budgets.
 
-Persisted retry/cooldown and lease-expiry waits belong to the slow tier regardless
-of duration, including one-second provider cooldowns and short configured receipt
-retries. Ordinary fixture pacing only orders successful deliveries and remains fast.
+Persisted retry/cooldown, lease-expiry and event-boundary waits belong to the slow
+tier regardless of duration, including one-second provider cooldowns and short
+configured receipt retries. Ordinary fixture pacing only orders successful
+deliveries and remains fast.
 
-When adding a scenario that deliberately waits for retry eligibility or expiry, add its
-top-level selector and domain dependencies to the manifest. Keep the original
+When adding a scenario that deliberately waits for eligibility, expiry, sales
+opening or event finish, add its top-level selector and domain dependencies to
+the manifest. Keep the original
 test and its budgets intact. Review the inventory when shared helpers change.
 
 Written by slow_test_categories (gpt-6.1-sol/Codex)
