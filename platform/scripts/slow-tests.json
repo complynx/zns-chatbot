@@ -49,7 +49,8 @@
     "package": "integration",
     "selectors": [
       "^TestNotificationUncertainRetry",
-      "^TestActualCanonicalNegativeGenerationReplayPreservesSchedule$"
+      "^TestActualCanonicalNegativeGenerationReplayPreservesSchedule$",
+      "^TestRecoveredCanonicalNegativeReplayPreservesSchedule$"
     ],
     "affected": [
       "platform/internal/adminmessage/",
@@ -102,6 +103,8 @@
       "^TestPassNoticeDeliveryHistoryIsAtomic$",
       "^TestPassPlanDeliveryRetryAndRender$",
       "^TestPassPlanCommittedStatusRetry$",
+      "^TestPassRedactionRetriesAfterActualDeadline$",
+      "^TestRuntimeAuthorityTerminalNoticeDeliveryRecovery$",
       "^TestLanguageInterruptedDeliveryReplayRefreshesCurrentCards$",
       "^TestTelegramFailureAndPersistence$",
       "^TestWorkflowUnavailableNoticeLocaleAndReplay$",
@@ -112,5 +115,32 @@
       "platform/internal/workflow/"
     ],
     "reason": "Pass-notice lease recovery and presentation retry deadlines."
+  },
+  {
+    "package": "integration",
+    "selectors": [
+      "^TestPaymentUnavailableContextKeepsExactTarget$",
+      "^TestModernExportRetriesAuthorityOutageBeforeTransport$"
+    ],
+    "affected": ["platform/internal/orders/"],
+    "reason": "Payment retirement provider cooldown and modern order-export authority retry eligibility."
+  },
+  {
+    "package": "integration",
+    "selectors": ["^TestAdminMessageProviderDeliveryBoundary$"],
+    "affected": [
+      "platform/internal/adminmessage/",
+      "platform/internal/identity/"
+    ],
+    "reason": "Admin-message provider recovery preserves the actual configured retry deadline."
+  },
+  {
+    "package": "integration",
+    "selectors": [
+      "^TestBotDeliveryReceiptAuthenticatedRecovery$",
+      "^TestBotDeliveryReceiptDeniedBatchCannotStarveHealthyOwner$"
+    ],
+    "affected": ["platform/internal/identity/"],
+    "reason": "Authenticated continuation retries wait for persisted receipt deadlines, including short configured fallback."
   }
 ]

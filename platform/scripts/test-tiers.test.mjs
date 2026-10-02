@@ -36,6 +36,31 @@ const discovered = new Map([
   ['module/internal/b', new Set(['TestRetryOne', 'TestQuick'])],
 ]);
 
+test('persisted presentation, authority and receipt retry waits stay in the slow tier', () => {
+  const waits = new Map([
+    ['TestPassRedactionRetriesAfterActualDeadline', 'passbooking'],
+    ['TestRuntimeAuthorityTerminalNoticeDeliveryRecovery', 'passbooking'],
+    ['TestPaymentUnavailableContextKeepsExactTarget', 'orders'],
+    ['TestModernExportRetriesAuthorityOutageBeforeTransport', 'orders'],
+    ['TestAdminMessageProviderDeliveryBoundary', 'adminmessage'],
+    ['TestBotDeliveryReceiptAuthenticatedRecovery', 'identity'],
+    ['TestBotDeliveryReceiptDeniedBatchCannotStarveHealthyOwner', 'identity'],
+    ['TestRecoveredCanonicalNegativeReplayPreservesSchedule', 'passbooking'],
+  ]);
+  for (const [name, domain] of waits) {
+    const selected = affectedGroups([`platform/internal/${domain}/changed.go`]);
+    assert.equal(
+      selected.some(
+        (group) =>
+          group.package === 'integration' &&
+          group.selectors.includes(`^${name}$`),
+      ),
+      true,
+      `${name} must run after ${domain} changes`,
+    );
+  }
+});
+
 test('fast and slow form an exact partition and preserve examples, fuzz seeds and subtests', () => {
   const fast = plan(discovered, 'module', 'fast', groups);
   const slow = plan(discovered, 'module', 'slow', groups);
@@ -403,10 +428,15 @@ test('real Git preserves canceled index edits and root-scoped untracked paths', 
     await fs.writeFile('platform/internal/adminmessage/new.go', 'untracked\n');
     const domainPaths = changedPaths('HEAD', platformDirectory);
     assert.deepEqual(domainPaths, ['platform/internal/adminmessage/new.go']);
-    assert.equal(affectedGroups(domainPaths).length, 1);
     assert.equal(
-      affectedGroups(domainPaths)[0].selectors.includes(
-        '^TestNotificationUncertainRetry',
+      affectedGroups(domainPaths).some((group) =>
+        group.selectors.includes('^TestNotificationUncertainRetry'),
+      ),
+      true,
+    );
+    assert.equal(
+      affectedGroups(domainPaths).some((group) =>
+        group.selectors.includes('^TestAdminMessageProviderDeliveryBoundary$'),
       ),
       true,
     );

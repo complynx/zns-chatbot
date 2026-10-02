@@ -61,10 +61,16 @@ The manifest covers these waits on the current integration source:
   onboarding and provider recovery after a committed deadline.
 - Food and exports: CSV, derived export continuation, XLSX and reminder retries.
 - Pass and presentation: atomic notice lease recovery, pass-plan retry,
-  language/workflow notice and Telegram metadata retries.
+  pass-redaction cooldown, terminal refusal recovery, language/workflow notice
+  and Telegram metadata retries.
+- Orders: payment retirement cooldown and modern export authority recovery.
+- Admin messages: provider recovery after the configured retry deadline.
+- Bot receipts: authenticated recovery and denied-owner batch fairness after
+  persisted continuation retry deadlines.
 - Notifications: actual provider cooldown, transport eligibility and independent
   exhaustion deadlines. The notification retry family is kept together.
-- Message delivery: canonical negative replay after its persisted deadline.
+- Message delivery: canonical negative replay after its persisted deadline and
+  actual database-clock advancement before recovered replay.
 
 Some fast siblings remain in a slow family to keep shared recovery scenarios
 together. Ordinary assertion watchdogs, short polling, cancelled fixture sleeps
@@ -73,7 +79,11 @@ already use mocked timers where appropriate; browser/FQA polling remains in the
 existing full gate. A slow compilation or database setup receipt alone does not
 make a scenario slow. Retain separate cold build and test execution budgets.
 
-When adding a scenario that deliberately waits multiple seconds, add its
+Persisted retry/cooldown and lease-expiry waits belong to the slow tier regardless
+of duration, including one-second provider cooldowns and short configured receipt
+retries. Ordinary fixture pacing only orders successful deliveries and remains fast.
+
+When adding a scenario that deliberately waits for retry eligibility or expiry, add its
 top-level selector and domain dependencies to the manifest. Keep the original
 test and its budgets intact. Review the inventory when shared helpers change.
 
