@@ -116,36 +116,23 @@ func applyOrderEvent(
 		return err
 	}
 	if verifyOnly {
-		var matched bool
-		err = tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 FROM migrate_import.order_receipts WHERE source_key=$1`, key, p.PlanHash, p.ResolutionHash).
-			Scan(&matched)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return errors.New("apply_receipt_missing")
-		}
-		if err != nil {
-			return errors.New("apply_receipt_unavailable")
-		}
-		if !matched {
-			return errors.New("apply_receipt_conflict")
-		}
-		return reconcileImportedOrderEvent(ctx, tx, event, owners)
-	} else {
-		if err = insertOrderEvent(ctx, tx, p, event, owners); err != nil {
-			return err
-		}
-		_, err = tx.Exec(
-			ctx,
-			`INSERT INTO migrate_import.order_receipts(source_key,plan_sha256,resolution_sha256,owners,snapshot)
-		SELECT $2,$3,$4,$5,(`+orderSnapshotSQL+`)`,
-			event.Catalog.Catalog.EventID,
-			key,
-			p.PlanHash,
-			p.ResolutionHash,
-			owners,
-		)
-		if err != nil {
-			return errors.New("apply_receipt_conflict")
-		}
+		return reconcileImportedOrderEvent(ctx, tx, p, event, owners)
+	}
+	if err = insertOrderEvent(ctx, tx, p, event, owners); err != nil {
+		return err
+	}
+	_, err = tx.Exec(
+		ctx,
+		`INSERT INTO migrate_import.order_receipts(source_key,plan_sha256,resolution_sha256,owners,snapshot)
+	SELECT $2,$3,$4,$5,(`+orderSnapshotSQL+`)`,
+		event.Catalog.Catalog.EventID,
+		key,
+		p.PlanHash,
+		p.ResolutionHash,
+		owners,
+	)
+	if err != nil {
+		return errors.New("apply_receipt_conflict")
 	}
 	return nil
 }
@@ -153,13 +140,23 @@ func applyOrderEvent(
 func reconcileImportedOrderEvent(
 	ctx context.Context,
 	tx pgx.Tx,
+	p preparedOrders,
 	event preparedOrderEvent,
 	owners map[string]string,
 ) error {
-	var matched bool
-	err := tx.QueryRow(ctx, `SELECT owners=$2::jsonb AND snapshot=(`+orderSnapshotSQL+`) FROM migrate_import.order_receipts WHERE source_key=$3`, event.Catalog.Catalog.EventID, owners, event.Catalog.Legacy.Key).
-		Scan(&matched)
-	if err != nil || !matched {
+	var bound, matched bool
+	err := tx.QueryRow(ctx, `SELECT plan_sha256=$4 AND resolution_sha256=$5,owners=$2::jsonb AND snapshot=(`+orderSnapshotSQL+`) FROM migrate_import.order_receipts WHERE source_key=$3`, event.Catalog.Catalog.EventID, owners, event.Catalog.Legacy.Key, p.PlanHash, p.ResolutionHash).
+		Scan(&bound, &matched)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.New("apply_receipt_missing")
+	}
+	if err != nil {
+		return errors.New("apply_receipt_unavailable")
+	}
+	if !bound {
+		return errors.New("apply_receipt_conflict")
+	}
+	if !matched {
 		return errors.New("apply_reconciliation_failed")
 	}
 	return nil

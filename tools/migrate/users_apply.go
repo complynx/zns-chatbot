@@ -68,11 +68,8 @@ func runUserImport(
 	}
 	for _, user := range prepared.users {
 		if verify {
-			var matched bool
-			if err = tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 FROM migrate_import.user_receipts WHERE source_key=$1`, user.record.Legacy.Key, prepared.planHash, prepared.resolutionHash).
-				Scan(&matched); err != nil ||
-				!matched {
-				return summary, errors.New("apply_receipt_conflict")
+			if err = verifyUserReceipt(ctx, tx, prepared, user); err != nil {
+				return summary, err
 			}
 		} else {
 			if err = insertUser(ctx, tx, prepared, user); err != nil {
@@ -97,6 +94,16 @@ func runUserImport(
 	}
 	summary.Reconciled = true
 	return summary, nil
+}
+
+func verifyUserReceipt(ctx context.Context, tx pgx.Tx, prepared preparedUsers, user preparedUser) error {
+	var matched bool
+	if err := tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 FROM migrate_import.user_receipts WHERE source_key=$1`, user.record.Legacy.Key, prepared.planHash, prepared.resolutionHash).
+		Scan(&matched); err != nil ||
+		!matched {
+		return errors.New("apply_receipt_conflict")
+	}
+	return nil
 }
 
 func pendingUserDomains(ctx context.Context, tx pgx.Tx, users []preparedUser) (int, error) {
