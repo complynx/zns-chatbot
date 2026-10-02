@@ -350,8 +350,9 @@ func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
 		item.ArmedAt.Format(time.RFC3339Nano),
 	)
 	require.NoError(t, err)
-	_, err = sandbox.New(t.Context(), db, nativeIngressToken)
-	require.NoError(t, err, "capture at the arm boundary is valid")
+	validBoundary, stopBoundary := startNativeIngress(t, db)
+	require.True(t, nativeIngressReceipt(t, validBoundary).CapturedAt.Equal(item.ArmedAt))
+	stopBoundary()
 	_, err = db.Exec(
 		t.Context(),
 		`UPDATE bot.fake_state SET data=jsonb_set(data,'{RegistrationIngress,cases,case-a,sha256}',to_jsonb('changed'::text))`,
