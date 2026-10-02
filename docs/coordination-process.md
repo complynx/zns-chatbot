@@ -23,6 +23,9 @@ source are read-only. Do not run pinned-tool builds outside the slot queue.
 Mount only a receipts output directory as writable. A read-only source mount
 does not protect the same files exposed through a writable parent mount. Keep
 frozen sources outside that output tree and record every source alias.
+Write Linux checksum manifests and owned Bash scripts as UTF-8 without a BOM
+and with LF newlines. Preserve the raw source bytes; do not normalize product
+inputs to repair a manifest.
 Daniel's 2026-10-01 preference: reuse available caches when this is simple.
 If cache access or setup delays a check, use a clean Linux build and standard
 Go dependency download/verification from the committed go.mod/go.sum instead
