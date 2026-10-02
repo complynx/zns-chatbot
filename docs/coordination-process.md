@@ -100,10 +100,23 @@ required health checks and runtime admission; created containers, compilation
 or a journal alone are insufficient. After readiness, observe stability until
 freeze. Do not rebuild a stand while Functional QA owns it.
 
+For a read-only Linux check profile, verify the actual module-cache layout,
+tool paths and entrypoint before compilation. Bind both GOTMPDIR and TMPDIR
+to owned Linux scratch space; CGO can use TMPDIR independently. Verify required
+child mountpoint directories exist before freezing a read-only parent volume.
+Compare every required control mount with the last qualified recipe, including
+Docker inventory access when the existing guard requires it. A read-only socket
+mount does not restrict Docker API operations: the granted script may use only
+the explicitly authorized operations. Keep failed setup evidence distinct from
+tests or SQL that never ran; repair the profile, not the product or gate budget.
+
 Prepare bounded diagnostic capture before reproducing a runtime failure. Retain
 events, timestamped health/exit snapshots and relevant read-only session state;
 capture logs and resource/OOM state at the first failure before retirement
 removes the objects. Preserve the original scenario and readiness budgets.
+Keep capture active through the complete runtime and QA window, not only the
+initial stability probe. A past healthy window does not prove current readiness;
+retirement invalidates READY, freeze and dependent reviewer dispatch.
 Missing failure evidence calls for an observed reproduction, not blind retries,
 an assumed product defect or a longer timeout. Reuse existing capture tools;
 do not create a general framework for one blocked scenario.
