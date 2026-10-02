@@ -35,36 +35,38 @@ const editMessageTextMethod = "editMessageText"
 const errorField = "error"
 
 type Fake struct {
-	callbackEvidence callbackEvidence
-	delay            *editDelay
-	menu             telegramMenuState
-	menuFailure      *menuFault
-	modelFixtures    modelFixtures
-	modelControl     *modelFixtureControl
-	modelConsumed    []modelConsumption
-	MiniAppURL       string
-	mu               sync.Mutex
-	next             int64
-	updates          []telegram.Update
-	messages         []telegram.Message
-	edits            int
-	asrCalls         int
-	fault            string
-	blocked          map[int64]bool
-	stickers         map[string]telegram.Sticker
-	DB               *pgxpool.Pool
-	Token            string
+	registrationIngress *registrationIngressControl
+	callbackEvidence    callbackEvidence
+	delay               *editDelay
+	menu                telegramMenuState
+	menuFailure         *menuFault
+	modelFixtures       modelFixtures
+	modelControl        *modelFixtureControl
+	modelConsumed       []modelConsumption
+	MiniAppURL          string
+	mu                  sync.Mutex
+	next                int64
+	updates             []telegram.Update
+	messages            []telegram.Message
+	edits               int
+	asrCalls            int
+	fault               string
+	blocked             map[int64]bool
+	stickers            map[string]telegram.Sticker
+	DB                  *pgxpool.Pool
+	Token               string
 }
 
 type snapshot struct {
-	ModelConsumed *modelConsumptionSnapshot   `json:"ModelConsumed,omitempty"`
-	Menu          telegramMenuState           `json:"Menu"`
-	Stickers      map[string]telegram.Sticker `json:"Stickers,omitempty"`
-	Blocked       map[int64]bool              `json:"Blocked,omitempty"`
-	Next          int64                       `json:"Next"`
-	Updates       []telegram.Update           `json:"Updates"`
-	Messages      []telegram.Message          `json:"Messages"`
-	Edits         int                         `json:"Edits"`
+	RegistrationIngress *registrationIngressControl `json:"RegistrationIngress,omitempty"`
+	ModelConsumed       *modelConsumptionSnapshot   `json:"ModelConsumed,omitempty"`
+	Menu                telegramMenuState           `json:"Menu"`
+	Stickers            map[string]telegram.Sticker `json:"Stickers,omitempty"`
+	Blocked             map[int64]bool              `json:"Blocked,omitempty"`
+	Next                int64                       `json:"Next"`
+	Updates             []telegram.Update           `json:"Updates"`
+	Messages            []telegram.Message          `json:"Messages"`
+	Edits               int                         `json:"Edits"`
 }
 
 func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
@@ -87,6 +89,10 @@ func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
 	if e = f.restoreModelConsumption(s.ModelConsumed); e != nil {
 		return nil, e
 	}
+	if e = validateRegistrationIngress(s.RegistrationIngress); e != nil {
+		return nil, e
+	}
+	f.registrationIngress = s.RegistrationIngress
 	f.next = s.Next
 	f.updates = s.Updates
 	f.messages = s.Messages
@@ -104,14 +110,15 @@ func (f *Fake) save(ctx context.Context) error {
 	}
 	raw, e := json.Marshal(
 		snapshot{
-			ModelConsumed: f.modelConsumptionSnapshot(),
-			Menu:          f.menu,
-			Next:          f.next,
-			Updates:       f.updates,
-			Messages:      f.messages,
-			Edits:         f.edits,
-			Blocked:       f.blocked,
-			Stickers:      f.stickers,
+			RegistrationIngress: f.registrationIngress,
+			ModelConsumed:       f.modelConsumptionSnapshot(),
+			Menu:                f.menu,
+			Next:                f.next,
+			Updates:             f.updates,
+			Messages:            f.messages,
+			Edits:               f.edits,
+			Blocked:             f.blocked,
+			Stickers:            f.stickers,
 		},
 	)
 	if e != nil {
@@ -150,6 +157,8 @@ func (f *Fake) Handler() http.Handler {
 	mux.HandleFunc("GET /lab/state", f.labState)
 	mux.HandleFunc("GET /lab/callback-receipts", f.callbackReceiptState)
 	mux.HandleFunc("POST /lab/input", f.labInput)
+	mux.HandleFunc("POST /lab/registration-ingress", f.registrationIngressCommand)
+	mux.HandleFunc("GET /lab/registration-ingress", f.registrationIngressRead)
 	mux.HandleFunc("POST /lab/fault", f.labFault)
 	mux.HandleFunc("POST /lab/blocked", f.labBlocked)
 	mux.HandleFunc("POST /lab/asr", f.fixtureTranscribe)
@@ -222,6 +231,7 @@ func (f *Fake) getUpdates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.mu.Lock()
+	previousIngress := f.registrationIngress
 	kept := []telegram.Update{}
 	for _, u := range f.updates {
 		if u.ID >= in.Offset {
@@ -240,10 +250,37 @@ func (f *Fake) getUpdates(w http.ResponseWriter, r *http.Request) {
 		batch = append(batch, u)
 		encodedSize += len(raw) + 1
 	}
-	err := f.save(r.Context())
+	response, err := f.registrationIngressResponse(batch)
+	if err == nil {
+		err = f.save(r.Context())
+	}
+	if err != nil {
+		f.registrationIngress = previousIngress
+	}
 	f.mu.Unlock()
 	if err != nil {
 		tgError(w, http.StatusServiceUnavailable, "state unavailable")
+		return
+	}
+	if response != nil {
+		var envelope struct {
+			Result []telegram.Update `json:"result"`
+		}
+		if json.Unmarshal(response, &envelope) != nil {
+			tgError(w, http.StatusServiceUnavailable, "state unavailable")
+			return
+		}
+		if len(envelope.Result) == 0 {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-time.After(emptyPollDelay):
+			}
+		}
+		f.observeDeliveredCallbacks(envelope.Result)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(response)
 		return
 	}
 	if len(batch) == 0 {
