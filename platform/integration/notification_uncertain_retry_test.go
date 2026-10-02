@@ -1540,3 +1540,180 @@ func TestNotificationUncertainRetryKnown429RendersCurrentUntilUnknown(t *testing
 		})
 	}
 }
+
+func TestNotificationUncertainRetryConfirmedNegativeAfterPreflight(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			dispatch := exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			requireNotificationAccepted(t, r, loss)
+			wire := notificationWireSnapshot(t, r)
+			require.NotNil(t, wire)
+			provider := notificationCooldownProviderWithRetryAfter(t, r, wire.Text, 1)
+			r.f.b.TG.Base = provider.URL
+			// Advance only this isolated fixture's clocks; every retry still crosses Begin and Telegram.
+			for range 3 {
+				r.wake(t)
+				require.NoError(t, dispatch(t.Context(), r.first))
+			}
+			confirmed := r.status(t, r.first)
+			require.EqualValues(t, 3, confirmed.UncertainResends)
+			require.Equal(t, "telegram_rate_limit", confirmed.Reason)
+			r.wake(t)
+			original := r.f.b.API
+			preflight := &notificationFollowupProvider{token: original.SandboxToken}
+			r.f.b.API.Links, r.f.b.API.Exchange = preflight, preflight
+			require.NoError(t, dispatch(t.Context(), r.first))
+			require.Positive(t, preflight.calls, "actual identity lookup fails before Begin")
+			deferred := r.status(t, r.first)
+			require.Equal(t, confirmed.Attempt, deferred.Attempt)
+			require.Equal(t, "notification_preflight_unavailable", deferred.Reason)
+			require.Equal(t, 4, loss.count(), "preflight does not create a wire")
+			before := notificationDeliverySnapshot(t, r)
+			r.postAttempt(t, "complete", map[string]any{
+				"id": r.first, "attempt": confirmed.Attempt,
+				"outcome": delivery.Outcome{Kind: delivery.Deferred, Reason: "telegram_rate_limit", RetryAfter: 1},
+			}, http.StatusOK)
+			assert.Equal(
+				t,
+				before,
+				notificationDeliverySnapshot(t, r),
+				"confirmed replay preserves owners, followers, queue and pacing after preflight",
+			)
+			assert.Equal(t, 4, loss.count())
+		})
+	}
+}
+
+func TestNotificationUncertainRetryHeldSuccessAfterRecoveryRevocation(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		for _, revoke := range []string{"rights", "source"} {
+			t.Run(domain+"/"+revoke, func(t *testing.T) {
+				t.Parallel()
+				notificationHeldSuccessRevocation(t, domain, revoke)
+			})
+		}
+	}
+}
+
+func notificationHeldSuccessRevocation(t *testing.T, domain, revoke string) {
+	t.Helper()
+	r := notificationRuntime(t, domain)
+	if domain == "food" && revoke == "source" {
+		r = foodReviewNotificationRuntime(t)
+	}
+	accepted := make(chan telegram.Message, 1)
+	release := make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	defer unblock()
+	r.f.b.TG.HTTP = notificationHeldSuccessClient(accepted, release)
+	done := make(chan error, 1)
+	go func() { done <- exactNotificationDelivery(r, domain)(t.Context(), r.first) }()
+	var message telegram.Message
+	select {
+	case message = <-accepted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("real provider did not accept the held notification")
+	}
+	require.Positive(t, message.ID)
+	sending := r.status(t, r.first)
+	require.Equal(t, "sending", sending.State)
+	_, err := r.f.db.Exec(
+		t.Context(),
+		"UPDATE "+r.table+" SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",
+		r.first,
+	)
+	require.NoError(t, err)
+	require.NoError(t, recoverNotificationDelivery(r, domain)(t.Context()))
+	recovered := r.status(t, r.first)
+	require.Equal(t, "pending", recovered.State)
+	require.Equal(t, sending.Attempt, recovered.LastUncertainAttempt)
+	err = revokeRecoveredNotification(t, r, domain, revoke)
+	require.NoError(t, err)
+	pacing := notificationPacingAndFairness(t, r)
+	unblock()
+	select {
+	case err = <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("held notification completion did not return")
+	}
+	require.Error(t, err, "revoked completion conflicts before adapter follow-up")
+	after := r.status(t, r.first)
+	assert.Equal(t, "cancelled", after.State)
+	assert.Equal(t, message.ID, after.MessageID, "retain the genuine accepted receipt")
+	assert.False(t, after.FollowupPending)
+	assert.Equal(t, sending.Attempt, after.Attempt)
+	assert.Equal(t, recovered.UncertainResends, after.UncertainResends)
+	assert.JSONEq(t, pacing, notificationPacingAndFairness(t, r))
+	r.postAttempt(t, "complete", map[string]any{
+		"id": r.first, "attempt": sending.Attempt, "text": message.Text,
+		"outcome": delivery.Outcome{Kind: delivery.Succeeded, MessageID: message.ID},
+	}, http.StatusOK)
+	assert.Equal(t, after, r.status(t, r.first), "terminal receipt replay remains metadata only")
+}
+
+func notificationHeldSuccessClient(accepted chan<- telegram.Message, release <-chan struct{}) *http.Client {
+	return &http.Client{
+		Transport: passDeliveryTransport(func(request *http.Request) (*http.Response, error) {
+			response, err := http.DefaultTransport.RoundTrip(request)
+			if err != nil || !strings.HasSuffix(request.URL.Path, "/sendMessage") {
+				return response, err
+			}
+			raw, err := io.ReadAll(response.Body)
+			_ = response.Body.Close()
+			if err != nil {
+				return nil, err
+			}
+			response.Body = io.NopCloser(bytes.NewReader(raw))
+			var result struct {
+				Result telegram.Message `json:"result"`
+			}
+			if err = json.Unmarshal(raw, &result); err != nil {
+				return nil, err
+			}
+			accepted <- result.Result
+			select {
+			case <-release:
+				return response, nil
+			case <-request.Context().Done():
+				return nil, request.Context().Err()
+			}
+		}),
+	}
+}
+
+func revokeRecoveredNotification(t *testing.T, r *notificationRuntimeFixture, domain, revoke string) error {
+	t.Helper()
+	var err error
+	if revoke == "rights" {
+		_, err = r.f.db.Exec(t.Context(), "UPDATE core.users SET can_book=false WHERE id='bob'")
+	} else {
+		switch domain {
+		case "orders":
+			_, err = r.f.db.Exec(t.Context(), "DELETE FROM core.order_admins WHERE owner='bob'")
+		case "registration":
+			_, err = r.f.db.Exec(
+				t.Context(),
+				"UPDATE core.pass_bookings SET created_at=created_at+interval '1 second',assigned_at=assigned_at+interval '1 second' WHERE event_id='dance' AND owner='bob'",
+			)
+		case "massage":
+			_, err = r.f.db.Exec(
+				t.Context(),
+				"UPDATE core.massage_specialists SET notify_bookings=false WHERE owner='bob'",
+			)
+		case "food":
+			_, err = r.f.db.Exec(
+				t.Context(),
+				"UPDATE core.food_admins SET can_review=false WHERE owner='bob'",
+			)
+		}
+	}
+	return err
+}

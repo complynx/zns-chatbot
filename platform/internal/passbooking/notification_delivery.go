@@ -235,28 +235,21 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 		return core.DatabaseOperationError(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	row, err := dbgen.New(tx).
-		LockNotificationAttempt(ctx, dbgen.LockNotificationAttemptParams{ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt})
+	row, current, err := s.lockNotificationCompletion(ctx, tx, result)
 	if err != nil {
 		return notificationAttemptError(core.DatabaseOperationError(err))
 	}
 
+	if replay, replayErr := notificationConfirmedReplay(row, result.Outcome); replay {
+		return replayErr
+	}
 	if notificationTerminalConfirmation(row, result.Outcome) {
 		return s.recordTerminalNotificationConfirmation(ctx, tx, result)
 	}
 	if notificationTerminalReceipt(row, result.Outcome) {
 		return s.recordTerminalNotificationReceipt(ctx, tx, result)
 	}
-	if result.Outcome.Kind == delivery.Uncertain && row.LastUncertainAttempt.Valid &&
-		row.LastUncertainAttempt.Int64 == result.Attempt && row.DeliveryState != string(delivery.Sending) {
-		return nil
-	}
-	if (row.DeliveryState != notificationPending || !row.LeaseLive ||
-		(row.LastConfirmedAttempt.Valid && row.LastConfirmedAttempt.Int64 == result.Attempt)) &&
-		row.DeliveryState == string(result.Outcome.Kind) &&
-		row.TelegramMessageID == result.Outcome.MessageID &&
-		row.Failure == result.Outcome.Reason &&
-		row.DeliveryText == result.Text {
+	if notificationReplay(row, result) {
 		return nil
 	}
 	if !notificationOutcomeAllowed(row, result.Outcome.Kind) {
@@ -265,6 +258,9 @@ func (s Service) CompleteNotification(ctx context.Context, result NotificationCo
 	attempt := delivery.Attempt{ID: result.ID, Generation: result.Attempt}
 	confirmed := notificationConfirmedOutcome(row, result.Outcome)
 	if notificationLateSuccess(row, result.Outcome.Kind) {
+		if !current {
+			return s.cancelLateNotificationSuccess(ctx, tx, result)
+		}
 		if err = s.finishLateNotificationSuccess(ctx, tx, attempt, result.Outcome, result.Text); err != nil {
 			return err
 		}
@@ -633,22 +629,7 @@ func notificationConfirmedOutcome(row dbgen.LockNotificationAttemptRow, outcome 
 		(!row.LastUncertainAttempt.Valid || row.LastUncertainAttempt.Int64 != row.DeliveryAttempt) {
 		return false
 	}
-	switch outcome.Kind {
-	case delivery.Succeeded:
-		return true
-	case delivery.Deferred:
-		return outcome.Reason == "telegram_rate_limit"
-	case delivery.Rejected:
-		return outcome.Reason == "telegram_recipient_rejected"
-	case delivery.Paused:
-		return outcome.Reason == "telegram_service_rejected"
-	case delivery.Parked:
-		return outcome.Reason == telegramInvalidCooldownReason
-	case delivery.Sending, delivery.Cancelled, delivery.Uncertain:
-		return false
-	default:
-		return false
-	}
+	return outcome.Kind == delivery.Succeeded || notificationCanonicalNegative(outcome)
 }
 
 func notificationTerminalConfirmation(row dbgen.LockNotificationAttemptRow, outcome delivery.Outcome) bool {
@@ -674,4 +655,84 @@ func (s Service) recordTerminalNotificationConfirmation(
 		return notificationStale()
 	}
 	return core.DatabaseOperationError(tx.Commit(ctx))
+}
+
+// Source and recipient locks precede the owner lock, as at admission and recovery.
+func (s Service) lockNotificationCompletion(
+	ctx context.Context,
+	tx pgx.Tx,
+	result NotificationCompletion,
+) (dbgen.LockNotificationAttemptRow, bool, error) {
+	current := true
+	var err error
+	if result.Outcome.Kind == delivery.Succeeded {
+		current, err = s.lockNotificationEligibility(ctx, tx, result.ID)
+		if err != nil && !notificationRetryMissing(ctx, err) {
+			return dbgen.LockNotificationAttemptRow{}, false, err
+		}
+	}
+	row, err := dbgen.New(tx).LockNotificationAttempt(ctx, dbgen.LockNotificationAttemptParams{
+		ID: result.ID, BotID: s.Delivery.BotID, Attempt: result.Attempt,
+	})
+	if err == nil && current && notificationLateSuccess(row, result.Outcome.Kind) {
+		current, err = s.currentPassportNotification(ctx, tx, row, true)
+	}
+	return row, current, err
+}
+
+// Retain the actual receipt but stop the adapter before it archives or refreshes.
+func (s Service) cancelLateNotificationSuccess(ctx context.Context, tx pgx.Tx, result NotificationCompletion) error {
+	attempt := delivery.Attempt{ID: result.ID, Generation: result.Attempt}
+	if err := s.finishNotification(ctx, tx, attempt,
+		delivery.Outcome{Kind: delivery.Cancelled, Reason: notificationNotCurrentReason}, "", false); err != nil {
+		return err
+	}
+	if err := s.recordTerminalNotificationReceipt(ctx, tx, result); err != nil {
+		return err
+	}
+	return notificationStale()
+}
+
+func notificationCanonicalNegative(outcome delivery.Outcome) bool {
+	switch outcome.Kind {
+	case delivery.Deferred:
+		return outcome.Reason == "telegram_rate_limit"
+	case delivery.Rejected:
+		return outcome.Reason == "telegram_recipient_rejected"
+	case delivery.Paused:
+		return outcome.Reason == "telegram_service_rejected"
+	case delivery.Parked:
+		return outcome.Reason == "telegram_invalid_cooldown"
+	case delivery.Sending, delivery.Cancelled, delivery.Uncertain, delivery.Succeeded:
+		return false
+	default:
+		return false
+	}
+}
+
+func notificationConfirmedReplay(row dbgen.LockNotificationAttemptRow, outcome delivery.Outcome) (bool, error) {
+	if !row.LastConfirmedAttempt.Valid || row.LastConfirmedAttempt.Int64 != row.DeliveryAttempt ||
+		!notificationCanonicalNegative(outcome) {
+		return false, nil
+	}
+	if row.TelegramMessageID > 0 {
+		return true, notificationStale()
+	}
+	return true, nil
+}
+
+func notificationReplay(row dbgen.LockNotificationAttemptRow, result NotificationCompletion) bool {
+	if result.Outcome.Kind == delivery.Uncertain && row.LastUncertainAttempt.Valid &&
+		row.LastUncertainAttempt.Int64 == result.Attempt && row.DeliveryState != string(delivery.Sending) {
+		return true
+	}
+	if (row.DeliveryState != notificationPending || !row.LeaseLive ||
+		(row.LastConfirmedAttempt.Valid && row.LastConfirmedAttempt.Int64 == result.Attempt)) &&
+		row.DeliveryState == string(result.Outcome.Kind) &&
+		row.TelegramMessageID == result.Outcome.MessageID &&
+		row.Failure == result.Outcome.Reason &&
+		row.DeliveryText == result.Text {
+		return true
+	}
+	return false
 }
