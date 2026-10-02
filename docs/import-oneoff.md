@@ -2,7 +2,8 @@
 
 The importer is a temporary offline tool. Prepare immutable, verified snapshot,
 stage, plan and attested resolution files. Apply once in dependency order:
-users, events, orders, passes, food, massage, messages. Preserve all original
+users, messages, events, orders, passes, food, massage. Import original messages
+before bookings can append generated history. Preserve all original
 input hashes and the compiled tool identity in the private execution record.
 
 Stop all managed target writers and verify the exact target, roles and sessions

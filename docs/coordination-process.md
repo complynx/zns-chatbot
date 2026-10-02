@@ -209,6 +209,19 @@ lead records executed/pass/fail/blocked/skipped original scenarios. Keep E
 execution ownership explicit; helper preparation does not close E. Use the
 existing local board and CSV, with no new scheduler or metrics service.
 
+## One-off import recovery
+
+Daniel approved whole-target database rollback or recreation followed by a complete
+reapply for the one-off migration. Do not build per-record crash recovery, partial
+resume or an exhaustive importer interruption matrix. Keep atomic domain writes,
+explicit identity mapping, owned history/proof bytes, domain order, reconcile and
+exclusive-writer checks. The importer must not automatically erase a database.
+
+QA validates the changed source independently and performs one isolated whole-DB
+reset/reapply rehearsal with the same input and important-state comparison.
+Superseded partial-recovery scenarios are not passed scenarios. This scope change
+does not weaken runtime reliability gates or authorize production changes.
+
 ## Documentation and acceptance closure
 
 Update ignored management.local/PROGRESS.html and management.local/KANBAN.html after material results, ownership changes,
