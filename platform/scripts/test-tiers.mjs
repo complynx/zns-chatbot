@@ -3,20 +3,25 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import manifest from './slow-tests.json' with { type: 'json' };
 
-export const packages = [
-  './cmd/...',
-  './internal/...',
-  './integration/...',
-  './identityprovision/...',
-  './deploy/...',
-];
+export const packages = ['./...'];
 export const testArguments = ['-race', '-count=1', '-p', '2', '-parallel', '4'];
 const root = fileURLToPath(new URL('..', import.meta.url));
+const sharedDomains = [
+  'platform/internal/identity/',
+  'platform/identityprovision/',
+  'platform/internal/conversation/',
+  'platform/cmd/scriptworker/',
+  'platform/internal/scriptclient/',
+  'platform/internal/scriptworker/',
+  'platform/internal/scriptprotocol/',
+];
 
 // Unknown paths include shared dependencies and select every slow scenario.
 export function affectedGroups(paths, groups = manifest) {
   const selected = new Set();
   for (const changedPath of paths) {
+    if (sharedDomains.some((prefix) => changedPath.startsWith(prefix)))
+      return groups;
     const matches = groups.filter((group) =>
       group.affected.some((prefix) => changedPath.startsWith(prefix)),
     );
@@ -99,9 +104,9 @@ export function plan(
   });
 }
 
-function capture(command, arguments_) {
+function capture(command, arguments_, cwd = root) {
   const result = spawnSync(command, arguments_, {
-    cwd: root,
+    cwd,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
   });
@@ -111,29 +116,28 @@ function capture(command, arguments_) {
   return result.stdout;
 }
 
-function changedPaths(base) {
-  const baseCommit = capture('git', [
+export function changedPaths(base, cwd = root) {
+  const repoRoot = capture('git', ['rev-parse', '--show-toplevel'], cwd).trim();
+  const git = (arguments_) => capture('git', arguments_, repoRoot);
+  const baseCommit = git([
     'rev-parse',
     '--verify',
     '--end-of-options',
     base + '^{commit}',
   ]).trim();
-  const committed = capture('git', [
+  const committed = git([
     'diff',
+    '--no-renames',
     '--name-only',
     '-z',
     `${baseCommit}...HEAD`,
   ]);
-  const working = capture('git', ['diff', '--name-only', '-z', 'HEAD']);
-  const untracked = capture('git', [
-    'ls-files',
-    '--others',
-    '--exclude-standard',
-    '-z',
-  ]);
+  const staged = git(['diff', '--no-renames', '--cached', '--name-only', '-z']);
+  const working = git(['diff', '--no-renames', '--name-only', '-z']);
+  const untracked = git(['ls-files', '--others', '--exclude-standard', '-z']);
   return [
     ...new Set(
-      `${committed}${working}${untracked}`.split('\0').filter(Boolean),
+      `${committed}${staged}${working}${untracked}`.split('\0').filter(Boolean),
     ),
   ];
 }
@@ -163,8 +167,25 @@ export function main(arguments_ = process.argv.slice(2)) {
   const selected =
     mode === 'changed' ? affectedGroups(changedPaths(parameters[0])) : manifest;
   const moduleName = capture('go', ['list', '-m']).trim();
+  const modulePackages = capture('go', ['list', ...packages])
+    .trim()
+    .split('\n')
+    .filter(
+      (packageName) =>
+        packageName && !packageName.startsWith(`${moduleName}/node_modules/`),
+    );
+  if (modulePackages.length === 0)
+    throw new Error('Go package discovery returned no authored packages');
   const tests = discover(
-    capture('go', ['test', '-list', '.', '-json', '-p', '2', ...packages]),
+    capture('go', [
+      'test',
+      '-list',
+      '.',
+      '-json',
+      '-p',
+      '2',
+      ...modulePackages,
+    ]),
   );
   const commands = plan(tests, moduleName, mode, manifest, selected);
   console.log(JSON.stringify({ mode, commands }, undefined, 2));

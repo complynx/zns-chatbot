@@ -52,10 +52,10 @@
       "^TestActualCanonicalNegativeGenerationReplayPreservesSchedule$"
     ],
     "affected": [
-      "platform/internal/notification/",
-      "platform/internal/notifications/",
       "platform/internal/adminmessage/",
-      "platform/internal/announcement/"
+      "platform/internal/legacyfood/",
+      "platform/internal/passbooking/",
+      "platform/internal/identity/"
     ],
     "reason": "Actual notification eligibility, provider cooldown and independent exhaustion deadlines; include the notification family conservatively."
   },
@@ -90,7 +90,7 @@
     ],
     "affected": [
       "platform/internal/legacyfood/",
-      "platform/internal/export/",
+      "platform/internal/scriptclient/",
       "platform/internal/identity/",
       "platform/identityprovision/"
     ],
@@ -109,8 +109,7 @@
     ],
     "affected": [
       "platform/internal/passbooking/",
-      "platform/internal/workflow/",
-      "platform/internal/preferences/"
+      "platform/internal/workflow/"
     ],
     "reason": "Pass-notice lease recovery and presentation retry deadlines."
   }

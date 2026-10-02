@@ -14,13 +14,20 @@ npm run test:tiers
 `test:fast` excludes only the explicit slow scenarios in
 `platform/scripts/slow-tests.json`. `test:slow` runs those scenarios with all
 their subtests. Examples and fuzz seed cases remain in the fast tier.
-Both tiers together cover the platform's default Go test executions.
+Both tiers together cover every package in the platform Go module through
+`go list ./...`, including `importdelivery`. The runner excludes packages under
+`node_modules` from test discovery; some Node dependencies bundle Go source.
+Go excludes nested modules from the package pattern. The legacy `quality:all`
+runner keeps its existing package selection and required checks.
 The migration tool module runs in every tier. Race detection, uncached execution,
 package parallelism and test parallelism match `quality:all`.
 
 `test:changed` always runs the fast tier. It adds slow scenarios for the affected
 domain. Changes include the merge-base diff against the supplied commit, staged
-and unstaged edits, and untracked files. The manifest records domain dependencies.
+and unstaged edits independently, and repository-wide untracked files with
+repository-relative paths. The manifest records domain dependencies, including
+notification generation from food and pass registration. Identity, conversation
+and scripting runtime paths serve multiple domains and select all slow scenarios.
 Any unknown path selects all slow tests. This includes shared database, delivery,
 query, configuration, clock, schema, build and test-runner changes. Missing
 manifest selectors and discovery failures stop the run.

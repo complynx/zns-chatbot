@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url';
 import manifest from './slow-tests.json' with { type: 'json' };
 import {
   affectedGroups,
+  changedPaths,
   discover,
+  packages,
   plan,
   testArguments,
 } from './test-tiers.mjs';
@@ -141,12 +143,22 @@ const args = process.argv.slice(2);
 const command = path.basename(process.argv[1]);
 fs.appendFileSync(process.env.FIXTURE_LOG, JSON.stringify({command,args})+'\n');
 if(command==='git') {
-  if(args[0]==='rev-parse') console.log('0123456789abcdef');
+  if(args.includes('--show-toplevel')) console.log(process.cwd());
+  else if(args[0]==='rev-parse') console.log('0123456789abcdef');
   else if(args[0]==='diff' && args.includes('0123456789abcdef...HEAD')) process.stdout.write((process.env.FIXTURE_CHANGED || '')+'\0');
+  else if(args.includes('--cached')) process.stdout.write((process.env.FIXTURE_STAGED || '')+'\0');
+  else if(args[0]==='diff') process.stdout.write((process.env.FIXTURE_WORKING || '')+'\0');
+  else if(args[0]==='ls-files') process.stdout.write((process.env.FIXTURE_UNTRACKED || '')+'\0');
   process.exit(0);
 }
-if(args[0]==='list') { console.log('module'); process.exit(0); }
+if(args[0]==='list') {
+  if(args.includes('-m')) console.log('module');
+  else if(args.includes('./...')) process.stdout.write(process.env.FIXTURE_PACKAGES);
+  else process.exit(6);
+  process.exit(0);
+}
 if(args.includes('-list')) {
+  if(!args.includes('module/importdelivery') || args.some(arg=>arg.startsWith('module/node_modules/'))) process.exit(6);
   if(process.env.FIXTURE_FAIL==='discovery') process.exit(9);
   process.stdout.write(process.env.FIXTURE_EVENTS); process.exit(0);
 }
@@ -179,6 +191,10 @@ async function cliFixture(t, mode, overrides = {}) {
             : selector.slice(1) + 'Synthetic',
         );
   }
+  fixtures.set(
+    'module/importdelivery',
+    new Set(['TestMassageRegistrationValidatesBeforeWriting']),
+  );
   const events = [...fixtures].flatMap(([packageName, names]) =>
     [...names].map((name) =>
       JSON.stringify({
@@ -205,6 +221,10 @@ async function cliFixture(t, mode, overrides = {}) {
         TEST_CREDIT_UPGRADE_DATABASE_URL: 'postgres://synthetic/unused-credit',
         FIXTURE_LOG: log,
         FIXTURE_EVENTS: events.join('\n'),
+        FIXTURE_PACKAGES: [
+          ...fixtures.keys(),
+          'module/node_modules/flatted/golang/pkg/flatted',
+        ].join('\n'),
         ...overrides,
       },
     },
@@ -230,6 +250,16 @@ test('CLI forwards every tier to Go and always executes the migrate module', asy
     });
     assert.equal(result.status, 0, result.stderr);
     const receipt = JSON.parse(result.stdout);
+    assert.deepEqual(packages, ['./...']);
+    const importTests = receipt.commands.find(
+      (command) => command.package === 'module/importdelivery',
+    );
+    assert.deepEqual(
+      importTests?.names,
+      mode === 'slow'
+        ? undefined
+        : ['TestMassageRegistrationValidatesBeforeWriting'],
+    );
     const selected =
       mode === 'changed'
         ? affectedGroups(['platform/internal/identity/changed.go'])
@@ -272,5 +302,140 @@ test('CLI failures exit nonzero and stop remaining subprocesses', async (t) => {
         calls.some((call) => call.args[0] === '-C'),
         false,
       );
+  }
+});
+
+test('cross-domain changes select notification retry and source recovery scenarios', () => {
+  for (const domain of ['legacyfood', 'passbooking']) {
+    const selected = affectedGroups([`platform/internal/${domain}/changed.go`]);
+    assert.equal(
+      selected.some((group) =>
+        group.selectors.includes('^TestNotificationUncertainRetry'),
+      ),
+      true,
+    );
+    const sourceTest =
+      domain === 'legacyfood'
+        ? '^TestFoodCSVPartialRetryAndRevokedGrant$'
+        : '^TestPassPlanCommittedStatusRetry$';
+    assert.equal(
+      selected.some((group) => group.selectors.includes(sourceTest)),
+      true,
+    );
+  }
+  for (const domain of [
+    'identity',
+    'conversation',
+    'scriptclient',
+    'scriptprotocol',
+    'scriptworker',
+  ])
+    assert.deepEqual(
+      affectedGroups([`platform/internal/${domain}/changed.go`]),
+      manifest,
+    );
+});
+
+test('CLI independently includes staged, unstaged and untracked inventories', async (t) => {
+  for (const field of [
+    'FIXTURE_STAGED',
+    'FIXTURE_WORKING',
+    'FIXTURE_UNTRACKED',
+  ]) {
+    const { result } = await cliFixture(t, 'changed', {
+      [field]: 'tools/migrate/new.go',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(result.stdout);
+    assert.equal(
+      receipt.commands
+        .find((command) => command.package === 'module/internal/bot')
+        .names.some((name) => name.startsWith('TestBotTransportRetry')),
+      true,
+    );
+  }
+});
+
+test('real Git preserves canceled index edits and root-scoped untracked paths', async (t) => {
+  const directory = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'zns-test-tier-git-'),
+  );
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const previousDirectory = process.cwd();
+  process.chdir(directory);
+  const git = (arguments_) => {
+    const result = spawnSync('git', arguments_, {
+      cwd: directory,
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout;
+  };
+  try {
+    await fs.mkdir('platform/internal/identity', { recursive: true });
+    await fs.mkdir('platform/internal/adminmessage', { recursive: true });
+    await fs.mkdir('tools/migrate', { recursive: true });
+    await fs.writeFile('platform/internal/identity/actor.go', 'original\n');
+    git(['init', '--quiet']);
+    git(['add', '.']);
+    git([
+      '-c',
+      'user.name=Synthetic fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      '-c',
+      'commit.gpgsign=false',
+      'commit',
+      '--quiet',
+      '-m',
+      'fixture',
+    ]);
+    const platformDirectory = path.join(directory, 'platform');
+    assert.deepEqual(changedPaths('HEAD', platformDirectory), []);
+    await fs.writeFile('platform/internal/identity/actor.go', 'staged\n');
+    git(['add', '.']);
+    await fs.writeFile('platform/internal/identity/actor.go', 'original\n');
+    assert.equal(git(['diff', '--name-only', 'HEAD']), '');
+    assert.deepEqual(changedPaths('HEAD', platformDirectory), [
+      'platform/internal/identity/actor.go',
+    ]);
+    git(['add', '.']);
+    await fs.writeFile('platform/internal/adminmessage/new.go', 'untracked\n');
+    const domainPaths = changedPaths('HEAD', platformDirectory);
+    assert.deepEqual(domainPaths, ['platform/internal/adminmessage/new.go']);
+    assert.equal(affectedGroups(domainPaths).length, 1);
+    assert.equal(
+      affectedGroups(domainPaths)[0].selectors.includes(
+        '^TestNotificationUncertainRetry',
+      ),
+      true,
+    );
+    await fs.writeFile('tools/migrate/new.go', 'untracked shared\n');
+    const sharedPaths = changedPaths('HEAD', platformDirectory);
+    assert.deepEqual(sharedPaths, [
+      'platform/internal/adminmessage/new.go',
+      'tools/migrate/new.go',
+    ]);
+    assert.deepEqual(affectedGroups(sharedPaths), manifest);
+    await fs.rename(
+      'platform/internal/identity/actor.go',
+      'platform/internal/adminmessage/moved.go',
+    );
+    git([
+      'add',
+      'platform/internal/identity/actor.go',
+      'platform/internal/adminmessage/moved.go',
+    ]);
+    const renamedPaths = changedPaths('HEAD', platformDirectory);
+    assert.equal(
+      renamedPaths.includes('platform/internal/identity/actor.go'),
+      true,
+    );
+    assert.equal(
+      renamedPaths.includes('platform/internal/adminmessage/moved.go'),
+      true,
+    );
+  } finally {
+    process.chdir(previousDirectory);
   }
 });
