@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +75,24 @@ func TestRegistrationIngressControlGuards(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code)
 	fixture := newModelControlFixture(t)
 	f = fixture.fake
+	for _, raw := range []string{
+		`{"case":"invalid","action":"arm","user":101,"hold_seconds":10,"unknown":true}`,
+		`{"case":"invalid","action":"arm","user":101,"hold_seconds":10}{}`,
+		strings.Repeat(" ", delayControlBodyLimit) + `{}`,
+	} {
+		r := httptest.NewRequestWithContext(
+			t.Context(),
+			http.MethodPost,
+			"/lab/registration-ingress",
+			strings.NewReader(raw),
+		)
+		r.Header.Set("X-Sandbox", "1")
+		r.Header.Set("X-R104-Control", f.delay.key)
+		w = httptest.NewRecorder()
+		f.Handler().ServeHTTP(w, r)
+		require.Equal(t, http.StatusBadRequest, w.Code)
+		require.Nil(t, f.registrationIngress)
+	}
 	w = ingressRequest(t, f, http.MethodPost, "/lab/registration-ingress", map[string]any{}, false)
 	require.Equal(t, http.StatusForbidden, w.Code)
 	for _, request := range []registrationIngressRequest{

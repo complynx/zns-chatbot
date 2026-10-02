@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"maps"
 	"net/http"
 	"time"
@@ -23,6 +22,8 @@ const ingressHoldLimit = 10 * time.Second
 const ingressReleased = "original_released"
 const ingressReplayPending = "pending"
 const ingressReplayConsumed = "replay_consumed"
+const ingressHeld = "held"
+const ingressDelivered = "delivered"
 
 // These receipts belong to the external provider, not product intake or ranks.
 // A replay is one exact duplicate response, never a new Telegram update.
@@ -62,7 +63,7 @@ func validateRegistrationIngress(value *registrationIngressControl) error {
 		if err := validateIngressCase(key, item); err != nil {
 			return err
 		}
-		if item.State != "delivered" && item.State != "expired" {
+		if item.State != ingressDelivered && item.State != "expired" {
 			active++
 		}
 		if item.Replay == ingressReplayPending {
@@ -83,12 +84,12 @@ func validateIngressCase(key string, item registrationIngressCase) error {
 		return errors.New("invalid registration provider receipt binding")
 	}
 	switch item.State {
-	case delayStateArmed, "expired", "held", ingressReleased, "delivered":
+	case delayStateArmed, "expired", ingressHeld, ingressReleased, ingressDelivered:
 	default:
 		return errors.New("invalid registration provider receipt state")
 	}
 	if item.Replay != "" && item.Replay != ingressReplayPending && item.Replay != ingressReplayConsumed ||
-		item.Replay != "" && item.State != "delivered" {
+		item.Replay != "" && item.State != ingressDelivered {
 		return errors.New("invalid registration provider replay state")
 	}
 	if item.State == delayStateArmed || item.State == "expired" {
@@ -164,10 +165,8 @@ func (f *Fake) registrationIngressCommand(w http.ResponseWriter, r *http.Request
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, delayControlBodyLimit)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
 	var request registrationIngressRequest
-	if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF || request.Case == "" ||
+	if api.Decode(w, r, &request) != nil || request.Case == "" ||
 		len(request.Case) > 64 {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
@@ -213,13 +212,13 @@ func applyIngressRequest(
 		}
 	case "release":
 		valid = exists && request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
-			(item.State == "held" || item.State == ingressReleased || item.State == "delivered") && request.HoldSeconds == 0
-		if valid && item.State == "held" {
+			(item.State == ingressHeld || item.State == ingressReleased || item.State == ingressDelivered) && request.HoldSeconds == 0
+		if valid && item.State == ingressHeld {
 			item.State = ingressReleased
 		}
 	case "replay":
 		valid = exists && request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
-			item.State == "delivered" && request.HoldSeconds == 0
+			item.State == ingressDelivered && request.HoldSeconds == 0
 		if valid && item.Replay == "" {
 			item.Replay = ingressReplayPending
 		}
@@ -285,16 +284,16 @@ func ingressOriginalResponse(
 		digest := sha256.Sum256(item.Response)
 		item.SHA256 = hex.EncodeToString(digest[:])
 		item.CapturedAt = now
-		item.State = "held"
+		item.State = ingressHeld
 	}
-	if item.State == "held" && !now.Before(item.Deadline) {
+	if item.State == ingressHeld && !now.Before(item.Deadline) {
 		item.State = ingressReleased
 	}
 	switch item.State {
-	case "held":
+	case ingressHeld:
 		return item, []byte("{\"ok\":true,\"result\":[]}\n"), nil
 	case ingressReleased:
-		item.State = "delivered"
+		item.State = ingressDelivered
 		return item, item.Response, nil
 	default:
 		return item, nil, nil
