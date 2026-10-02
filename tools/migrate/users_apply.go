@@ -68,13 +68,12 @@ func runUserImport(
 	}
 	for _, user := range prepared.users {
 		if verify {
-			if err = verifyUserReceipt(ctx, tx, prepared, user); err != nil {
-				return summary, err
-			}
+			err = verifyUserReceipt(ctx, tx, prepared, user)
 		} else {
-			if err = insertUser(ctx, tx, prepared, user); err != nil {
-				return summary, err
-			}
+			err = insertUser(ctx, tx, prepared, user)
+		}
+		if err != nil {
+			return summary, err
 		}
 		if err = reconcileUser(ctx, tx, prepared, user); err != nil {
 			return summary, err

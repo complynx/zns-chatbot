@@ -27,7 +27,7 @@ func executePassPlan(arguments []string) (result, error) {
 	return result{Passes: &summary, Reused: summary.Reused}, err
 }
 func executePassImport(arguments []string, verifyOnly bool) (result, error) {
-	input, err := parseOrderImportFlags(arguments)
+	input, err := parseImportFlags(arguments)
 	if err != nil {
 		return result{}, err
 	}
