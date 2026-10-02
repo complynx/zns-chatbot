@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -35,6 +36,7 @@ const inventoryConnectTimeout = 10 * time.Second
 const launchHexLength = 24
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	if err := run(); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "replacement blocked or runtime stopped")
 		os.Exit(1)

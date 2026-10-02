@@ -61,9 +61,23 @@ type Docker struct {
 }
 
 func (d Docker) call(ctx context.Context, args, environment []string) ([]byte, error) {
+	start := time.Now()
 	limited, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
-	return d.Command.Run(limited, args, environment)
+	data, err := d.Command.Run(limited, args, environment)
+	if err != nil {
+		stage := observationStage("docker_command")
+		if len(args) != 0 {
+			switch args[0] {
+			case "ps":
+				stage = "docker_list"
+			case "inspect":
+				stage = "docker_inspect"
+			}
+		}
+		return nil, observationError(limited, start, stage, "operation", err)
+	}
+	return data, nil
 }
 
 // Identity binds the ledger to the Docker daemon.
@@ -127,14 +141,15 @@ type dockerContainer struct {
 }
 
 func (d Docker) decodeInventory(data []byte) ([]Container, error) {
+	start := time.Now()
 	var raw []dockerContainer
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, ErrUnknown
+		return nil, observationError(context.Background(), start, "docker_decode", "invalid_json", ErrUnknown)
 	}
 	result := make([]Container, 0, len(raw))
 	for _, item := range raw {
 		if err := d.validateContainer(item); err != nil {
-			return nil, err
+			return nil, observationError(context.Background(), start, "docker_validation", "invalid_container", err)
 		}
 		health := ""
 		if item.State.Health != nil {
