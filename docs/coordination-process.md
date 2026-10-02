@@ -24,6 +24,10 @@ qualified image name does not prove that Node, Git, Go and the dependency closur
 are all available in that container. Verify actual paths, pinned hashes and
 versions together. Reuse qualified binaries read-only; do not rebuild unchanged
 product images to correct a tool-only profile.
+For CLI fixtures, prove that temporary executables can run from the actual
+temporary mount and that PATH selects those fixtures before starting the suite.
+Isolate GIT_DIR/GIT_WORK_TREE only for synthetic Git fixtures; retain the real
+repository bindings for source guards and changed-test discovery.
 A granted owner slot includes preparation for that same approved check:
 owned formatter scratch work and compile preflight on the same bounded resources.
 Report changed input hashes, actual handles and terminal evidence without another
@@ -34,6 +38,12 @@ source are read-only. Do not run pinned-tool builds outside the slot queue.
 Mount only a receipts output directory as writable. A read-only source mount
 does not protect the same files exposed through a writable parent mount. Keep
 frozen sources outside that output tree and record every source alias.
+Bind execution hashes to the frozen reviewed manifest, not a new inventory of
+whichever files happen to occupy the input paths. Check physical source/output
+containment and the actual tmpfs options as part of CREATE-before-START guards.
+An elapsed-time assertion after a command returns does not enforce a deadline.
+Use an owned Linux supervisor or qualified timeout with bounded child cleanup
+inside the original total budget; retain nonzero terminal evidence on timeout.
 Write Linux checksum manifests and owned Bash scripts as UTF-8 without a BOM
 and with LF newlines. Preserve the raw source bytes; do not normalize product
 inputs to repair a manifest.
@@ -49,6 +59,12 @@ warm cache only after its owner confirms no active writer; copy it once if the
 new task needs separate custody. Record cache volume ownership and mounts.
 Keep receipt exports separate from caches. This changes storage, not tools,
 source, resource limits or test budgets. Do not move caches during a live check.
+When Windows source I/O blocks an unchanged Linux gate, an owned native Linux
+source copy is allowed. Verify every raw source byte original-to-copy before
+and after the complete gate, plus exact HEAD/base/status/binary diff and all
+declared user deltas. Keep source and Git inputs read-only. Do not normalize
+line endings, call the copy a new canonical source, or combine partial failed
+gates into a PASS. Preserve commands, pins, acceptance scope and budgets.
 Start with at most two CPUs and four GiB per heavy container; request an explicit
 resource adjustment if necessary instead of hiding an OOM or changing gate budgets.
 No build or test may mutate an occupied Functional QA stand.
