@@ -113,7 +113,8 @@ func validateIngressOriginal(item registrationIngressCase) error {
 		!ingressBatchOwner(
 			envelope.Result,
 			item.User,
-		) || item.SHA256 != hex.EncodeToString(digest[:]) || item.CapturedAt.IsZero() {
+		) || item.SHA256 != hex.EncodeToString(digest[:]) || item.CapturedAt.IsZero() ||
+		item.CapturedAt.Before(item.ArmedAt) || !item.CapturedAt.Before(item.Deadline) {
 		return errors.New("invalid registration provider original response")
 	}
 	return nil

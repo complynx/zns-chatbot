@@ -333,12 +333,30 @@ func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
 	stopAgain()
 	restarted, stopRestarted := startNativeIngress(t, db)
 	require.JSONEq(t, `{"ok":true,"result":[]}`, string(nativeIngressPoll(t, restarted, update.ID+1)))
+	stopRestarted()
+	for _, captured := range []time.Time{item.ArmedAt.Add(-time.Nanosecond), item.Deadline, item.Deadline.Add(time.Nanosecond)} {
+		_, err = db.Exec(
+			t.Context(),
+			`UPDATE bot.fake_state SET data=jsonb_set(data,'{RegistrationIngress,cases,case-a,captured_at}',to_jsonb($1::text))`,
+			captured.Format(time.RFC3339Nano),
+		)
+		require.NoError(t, err)
+		_, err = sandbox.New(t.Context(), db, nativeIngressToken)
+		require.ErrorContains(t, err, "original response")
+	}
+	_, err = db.Exec(
+		t.Context(),
+		`UPDATE bot.fake_state SET data=jsonb_set(data,'{RegistrationIngress,cases,case-a,captured_at}',to_jsonb($1::text))`,
+		item.ArmedAt.Format(time.RFC3339Nano),
+	)
+	require.NoError(t, err)
+	_, err = sandbox.New(t.Context(), db, nativeIngressToken)
+	require.NoError(t, err, "capture at the arm boundary is valid")
 	_, err = db.Exec(
 		t.Context(),
 		`UPDATE bot.fake_state SET data=jsonb_set(data,'{RegistrationIngress,cases,case-a,sha256}',to_jsonb('changed'::text))`,
 	)
 	require.NoError(t, err)
-	stopRestarted()
 	_, err = sandbox.New(t.Context(), db, nativeIngressToken)
 	require.ErrorContains(t, err, "original response")
 }

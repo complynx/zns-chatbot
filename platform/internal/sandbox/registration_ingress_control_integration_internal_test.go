@@ -184,6 +184,7 @@ func TestRegistrationIngressReceiptValidationAndBounds(t *testing.T) {
 	item = original.Cases["case-a"]
 	item.ArmedAt = time.Now().Add(-2 * time.Second)
 	item.Deadline = item.ArmedAt.Add(time.Second)
+	item.CapturedAt = item.ArmedAt
 	original.Cases["case-a"] = item
 	require.Equal(t, item.Response, ingressPoll(t, f, 0), "finite provider hold expires without changing business time")
 }
