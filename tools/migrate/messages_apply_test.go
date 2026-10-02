@@ -113,6 +113,29 @@ func TestMessagesPreexistingHistoryBlocks(t *testing.T) {
 	require.Zero(t, count)
 }
 
+func TestMessagesOwnerConflictRollsBackWholeHistory(t *testing.T) {
+	t.Parallel()
+	dsn, db := applyDatabase(t)
+	us, up, ur := applyInputs(t, `{"_id":"one","bot_id":77,"user_id":101,"print_name":"One"}`)
+	_, err := migrate.ApplyUsers(t.Context(), dsn, us, up, ur, migrate.DefaultLimits())
+	require.NoError(t, err)
+	var owner string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT id FROM core.users WHERE telegram_id=101`).Scan(&owner))
+	second := strings.Replace(syntheticMessage, "message-one", "message-two", 1)
+	second = strings.Replace(second, `"user_id":101`, `"user_id":102`, 1)
+	stage, plan, resolutions, _, r := messageInputs(t, syntheticMessage, second)
+	r.Messages[0].Owner = owner
+	r.Messages[1].Owner = "unknown-owner"
+	writeMessageResolutions(t, resolutions, r)
+	summary, err := migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	require.EqualError(t, err, "message_owner_mismatch")
+	require.Zero(t, summary.Applied)
+	require.False(t, summary.Reconciled)
+	var count int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM core.conversation_events)+(SELECT count(*) FROM core.legacy_message_references)+(SELECT count(*) FROM core.conversation_message_bodies)`).Scan(&count))
+	require.Zero(t, count)
+}
+
 func runMessageCLI(t *testing.T, dsn string, arguments ...string) []byte {
 	t.Helper()
 	args := append([]string{"run", "./cmd/zns-migrate"}, arguments...)

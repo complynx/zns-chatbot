@@ -114,6 +114,8 @@ func TestApplyUsersPreservesMetadataReplayAndDetectsDrift(t *testing.T) {
 	assert.EqualValues(t, 1, summary.Applied)
 	assert.EqualValues(t, 1, summary.Excluded)
 	assert.True(t, summary.Reconciled)
+	_, err = migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
+	require.EqualError(t, err, "apply_target_conflict")
 	var language, username, lastName, name, legal string
 	var frozen, canBook bool
 	var metadataUpdate int64
