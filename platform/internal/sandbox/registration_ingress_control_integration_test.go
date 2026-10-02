@@ -173,7 +173,10 @@ func assertNativeIngressProductDedup(t *testing.T, db *pgxpool.Pool, f *sandbox.
 		}
 	}))
 	t.Cleanup(server.Close)
-	settings := delivery.Settings{BotID: 999}
+	settings := delivery.Settings{BotID: 999, BotInterval: 50 * time.Millisecond,
+		ChatInterval: time.Second, Fallback: 30 * time.Second,
+		UncertaintyRetryBase: delivery.DefaultUncertaintyRetryBase}
+	require.NoError(t, settings.Validate())
 	services := appservices.NewServices(db, appservices.Options{Delivery: settings})
 	signer := identity.Signer{Key: []byte(strings.Repeat("k", 32))}
 	application := httptest.NewServer(api.Handler(services, signer, slog.New(slog.DiscardHandler)))
