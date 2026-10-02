@@ -11,6 +11,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
@@ -346,11 +347,12 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update, offset int64
 		var updated registrationIngressCase
 		var response []byte
 		var err error
-		if item.Replay == ingressReplayPending {
+		switch {
+		case item.Replay == ingressReplayPending:
 			updated, response, err = ingressReplayResponse(item, offset, now)
-		} else if item.State != delayStateArmed || ingressPreviousAcknowledged(value, offset) {
+		case item.State != delayStateArmed || ingressPreviousAcknowledged(value, offset):
 			updated, response, err = ingressOriginalResponse(item, batch)
-		} else {
+		default:
 			updated = item
 		}
 		if err != nil {
@@ -386,7 +388,7 @@ func ingressDeliveryOrder(value *registrationIngressControl) []string {
 		if order := a.CapturedAt.Compare(b.CapturedAt); order != 0 {
 			return order
 		}
-		return bytes.Compare([]byte(left), []byte(right))
+		return strings.Compare(left, right)
 	})
 	return keys
 }
