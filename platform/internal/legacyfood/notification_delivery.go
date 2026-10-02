@@ -55,28 +55,20 @@ func (s Service) BeginNotification(ctx context.Context, input NotificationAttemp
 		return NotificationAdmission{}, notificationStale()
 	}
 	if !current {
-		outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: notificationNotCurrentReason}
-		if err = s.finishNotification(ctx, tx, attempt, outcome, "", false); err != nil {
-			return NotificationAdmission{}, err
-		}
-		return NotificationAdmission{
-			Reason: outcome.Reason,
-		}, core.DatabaseOperationError(
-			tx.Commit(ctx),
-		)
+		cancelled, cancelErr := s.cancelNotificationAdmission(ctx, tx, attempt)
+		return NotificationAdmission{Admission: cancelled}, cancelErr
 	}
 	if row.LastUncertainAttempt.Valid && row.UncertainResends >= notificationUncertainResendLimit {
 		exhausted, exhaustErr := s.exhaustNotificationAdmission(ctx, tx, attempt, row.Failure)
 		return NotificationAdmission{Admission: exhausted}, exhaustErr
 	}
-	gate, err := delivery.Begin(
-		ctx,
-		tx,
-		s.Delivery,
-		notificationReference(attempt.ID),
-	)
+	gate, current, err := s.beginCurrentNotification(ctx, tx, attempt)
 	if err != nil {
 		return NotificationAdmission{}, err
+	}
+	if !current {
+		cancelled, cancelErr := s.cancelNotificationAdmission(ctx, tx, attempt)
+		return NotificationAdmission{Admission: cancelled}, cancelErr
 	}
 	if !gate.Ready {
 		outcome := delivery.Outcome{Kind: delivery.Deferred, Reason: gate.Reason}
@@ -100,6 +92,49 @@ func (s Service) BeginNotification(ctx context.Context, input NotificationAttemp
 	return NotificationAdmission{Admission: gate, Wire: wire}, err
 }
 
+func (s Service) currentNotification(ctx context.Context, tx pgx.Tx, id int64) (bool, error) {
+	// Source and recipient authority are already locked. Renew the clock-based
+	// observation without taking authority locks after transport locks.
+	current, err := dbgen.New(tx).NotificationCurrent(
+		ctx,
+		dbgen.NotificationCurrentParams{EventBotID: s.BotID, ID: id, BotID: s.Delivery.BotID},
+	)
+	return current, core.DatabaseOperationError(err)
+}
+
+func (s Service) beginCurrentNotification(
+	ctx context.Context, tx pgx.Tx, attempt delivery.Attempt,
+) (delivery.Admission, bool, error) {
+	// Roll back transport reservations on expiry while retaining source locks.
+	reservation, err := tx.Begin(ctx)
+	if err != nil {
+		return delivery.Admission{}, false, core.DatabaseOperationError(err)
+	}
+	defer func() { _ = reservation.Rollback(ctx) }()
+	gate, err := delivery.Begin(ctx, reservation, s.Delivery, notificationReference(attempt.ID))
+	if err != nil {
+		return gate, false, err
+	}
+	current, err := s.currentNotification(ctx, tx, attempt.ID)
+	if err != nil {
+		return gate, false, err
+	}
+	if !current {
+		return gate, false, core.DatabaseOperationError(reservation.Rollback(ctx))
+	}
+	return gate, true, core.DatabaseOperationError(reservation.Commit(ctx))
+}
+
+func (s Service) cancelNotificationAdmission(
+	ctx context.Context, tx pgx.Tx, attempt delivery.Attempt,
+) (delivery.Admission, error) {
+	outcome := delivery.Outcome{Kind: delivery.Cancelled, Reason: notificationNotCurrentReason}
+	if err := s.finishNotification(ctx, tx, attempt, outcome, "", false); err != nil {
+		return delivery.Admission{}, err
+	}
+	return delivery.Admission{Reason: outcome.Reason}, core.DatabaseOperationError(tx.Commit(ctx))
+}
+
 func (s Service) exhaustNotificationAdmission(
 	ctx context.Context,
 	tx pgx.Tx,
@@ -109,6 +144,13 @@ func (s Service) exhaustNotificationAdmission(
 	gate, err := delivery.ObservePending(ctx, tx, s.Delivery, notificationReference(attempt.ID))
 	if err != nil {
 		return delivery.Admission{}, err
+	}
+	current, err := s.currentNotification(ctx, tx, attempt.ID)
+	if err != nil {
+		return delivery.Admission{}, err
+	}
+	if !current {
+		return s.cancelNotificationAdmission(ctx, tx, attempt)
 	}
 	if !gate.Ready {
 		outcome := delivery.Outcome{Kind: delivery.Deferred, Reason: failure}

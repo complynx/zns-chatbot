@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,150 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestNotificationUncertainRetrySourceExpiresDuringTransportWait(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"food", "massage"} {
+		for _, lock := range []string{"lane", "pacing"} {
+			for _, phase := range []string{"initial", "retry", "exhausted"} {
+				t.Run(domain+"/"+lock+"/"+phase, func(t *testing.T) {
+					t.Parallel()
+					notificationSourceExpiresDuringTransportWait(t, domain, lock, phase)
+				})
+			}
+		}
+	}
+}
+
+func notificationSourceExpiresDuringTransportWait(t *testing.T, domain, lock, phase string) {
+	t.Helper()
+	r := notificationRuntime(t, domain)
+	_, pacingErr := r.f.db.Exec(
+		t.Context(),
+		`INSERT INTO core.delivery_pacing(bot_id,chat,not_before) VALUES($1,'','-infinity'),($1,'202','-infinity') ON CONFLICT DO NOTHING`,
+		syntheticDeliverySettings().BotID,
+	)
+	require.NoError(t, pacingErr)
+	if phase != "initial" {
+		loss := &notificationLostResponse{drops: 1}
+		r.f.b.TG.HTTP = &http.Client{Transport: loss}
+		require.NoError(t, exactNotificationDelivery(r, domain)(t.Context(), r.first))
+		requireNotificationAccepted(t, r, loss)
+		r.wake(t)
+	}
+	if phase == "exhausted" {
+		_, err := r.f.db.Exec(
+			t.Context(),
+			"UPDATE "+r.table+" SET uncertain_resends=3 WHERE id=$1",
+			r.first,
+		)
+		require.NoError(t, err)
+	}
+	var deadline time.Time
+	if domain == "food" {
+		_, err := r.f.db.Exec(
+			t.Context(),
+			`INSERT INTO core.pass_bookings(event_id,owner,version,state,role,kind,payment_admin,created_at,assigned_at,price)
+ VALUES('food-bot','bob',1,'assigned','follower','solo','bob',clock_timestamp(),clock_timestamp(),100);
+ UPDATE core.food_notifications SET kind='no_order_last' WHERE subject='first'`,
+		)
+		require.NoError(t, err)
+		require.NoError(
+			t,
+			r.f.db.QueryRow(t.Context(), `UPDATE core.food_events SET deadline=clock_timestamp()+interval '1 second' WHERE event_id='food-bot' RETURNING deadline`).
+				Scan(&deadline),
+		)
+	} else {
+		_, err := r.f.db.Exec(
+			t.Context(),
+			"UPDATE core.massage_notices SET kind='additional' WHERE id=$1",
+			r.first,
+		)
+		require.NoError(t, err)
+		require.NoError(
+			t,
+			r.f.db.QueryRow(t.Context(), `UPDATE core.massage_bookings SET starts_at=clock_timestamp()+interval '1 second' WHERE id=(SELECT booking_id FROM core.massage_notices WHERE id=$1) RETURNING starts_at`, r.first).
+				Scan(&deadline),
+		)
+	}
+	r.prepare(t)
+	before := r.status(t, r.first)
+	pacing := notificationPacingAndFairness(t, r)
+	blocker, err := r.f.db.Begin(t.Context())
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback(context.Background()) }()
+	var pid int
+	require.NoError(t, blocker.QueryRow(t.Context(), "SELECT pg_backend_pid()").Scan(&pid))
+	if lock == "lane" {
+		_, err = blocker.Exec(
+			t.Context(),
+			"SELECT 1 FROM core.delivery_lanes WHERE bot_id=$1 AND chat='202' FOR UPDATE",
+			syntheticDeliverySettings().BotID,
+		)
+	} else {
+		_, err = blocker.Exec(
+			t.Context(),
+			"SELECT 1 FROM core.delivery_pacing WHERE bot_id=$1 AND chat='' FOR UPDATE",
+			syntheticDeliverySettings().BotID,
+		)
+	}
+	require.NoError(t, err)
+	body, err := json.Marshal(struct {
+		delivery.Attempt
+
+		Wire *notificationwire.Payload `json:"wire"`
+	}{delivery.Attempt{ID: r.first, Generation: before.Attempt}, notificationTestWire()})
+	require.NoError(t, err)
+	request, err := http.NewRequestWithContext(
+		t.Context(),
+		http.MethodPost,
+		r.f.b.Host.Base+r.endpoint+"begin",
+		bytes.NewReader(body),
+	)
+	require.NoError(t, err)
+	request.Header.Set("Authorization", "Bearer "+r.f.b.Host.Signer.DeliveryToken())
+	responses := make(chan *http.Response, 1)
+	failures := make(chan error, 1)
+	go func() {
+		response, callErr := http.DefaultClient.Do(request)
+		if callErr != nil {
+			failures <- callErr
+			return
+		}
+		responses <- response
+	}()
+	require.Eventually(t, func() bool {
+		var waiting bool
+		queryErr := r.f.db.QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND $1=ANY(pg_blocking_pids(pid)))", pid).
+			Scan(&waiting)
+		return queryErr == nil && waiting
+	}, 2*time.Second, 10*time.Millisecond, "admission actually waits behind the transport lock")
+	waitNotificationEligibility(t, r, deadline.Add(time.Millisecond))
+	require.NoError(t, blocker.Commit(t.Context()))
+	select {
+	case response := <-responses:
+		defer response.Body.Close()
+		require.Equal(t, http.StatusOK, response.StatusCode)
+		var admission delivery.Admission
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&admission))
+		assert.False(t, admission.Ready, "expired source cannot authorize a wire")
+	case callErr := <-failures:
+		require.NoError(t, callErr)
+	case <-t.Context().Done():
+		t.Fatal(t.Context().Err())
+	}
+	after := r.status(t, r.first)
+	assert.Equal(t, "cancelled", after.State)
+	assert.Equal(t, "notification_no_longer_current", after.Reason)
+	assert.Equal(t, before.UncertainResends, after.UncertainResends)
+	assert.Equal(t, before.Attempt, after.Attempt)
+	assert.JSONEq(
+		t,
+		pacing,
+		notificationPacingAndFairness(t, r),
+		"cancelled source discards every transport reservation",
+	)
+}
 
 // The sink receives the real message before the adapter loses its response.
 type notificationLostResponse struct {
