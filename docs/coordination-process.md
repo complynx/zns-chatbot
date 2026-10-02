@@ -66,10 +66,11 @@ terminal outcome. A transient observation failure is not a process failure.
 Root releases a slot after terminal evidence or an explicit owner interruption,
 preserving interrupted evidence as interrupted. New checks wait for the slot.
 
-Priority: the accepted registration-clock dependency and its operator/background
-result closure and bounded Telegram resends, followed by final-byte checks
-needed for a ready review. Other
-independent product development continues. Never edit source during a gate and
+Priority: the next unmet dependency on the finite C–E acceptance path, followed
+by final-byte checks needed for a ready review. Advance independent C and E
+operations in parallel. Helper tooling must not delay an executable acceptance
+or import operation. Other independent product development continues within
+the approved sequence. Never edit source during a gate and
 present that gate as proof of the new bytes; freeze a successor and refresh the
 affected checks. Do not relax linter configuration or scenario budgets.
 Measure request-to-grant waiting and actual gate duration separately. Record
@@ -79,6 +80,56 @@ increasing gate duration or starving Functional QA. Reduce concurrent checks if
 resource contention is observed, never weaken a gate to fit concurrency.
 Current owners/handles and requests are recorded in the existing coordination
 metrics; no new scheduler or helper service is needed.
+
+## AI-owned execution windows
+
+Daniel authorized these process updates on 2 October 2026. Assign a complete,
+bounded outcome with exact source/base, owned paths and synthetic resources,
+permitted operations, command/environment, resource bounds, evidence paths,
+success criteria and stop conditions. The owner handles ordinary preparation
+within that window without requesting each formatter, fixture permission or
+known configuration action separately. Stop for changed source/scope, shared
+writers, unexpected data or a failed prerequisite. Product fixes still follow
+separate branches and fresh review. Production and security changes retain
+their authorization boundaries.
+
+Before constructing or handing off a runtime, use the existing tools to prove
+actual volume UID/modes, command/environment compatibility, roles/DSN, image
+binding and observability. Readiness requires all required processes Running,
+required health checks and runtime admission; created containers, compilation
+or a journal alone are insufficient. After readiness, observe stability until
+freeze. Do not rebuild a stand while Functional QA owns it.
+
+Prepare bounded diagnostic capture before reproducing a runtime failure. Retain
+events, timestamped health/exit snapshots and relevant read-only session state;
+capture logs and resource/OOM state at the first failure before retirement
+removes the objects. Preserve the original scenario and readiness budgets.
+Missing failure evidence calls for an observed reproduction, not blind retries,
+an assumed product defect or a longer timeout. Reuse existing capture tools;
+do not create a general framework for one blocked scenario.
+
+Keep handoffs small: exact commit/base and ownership, terminal gates and evidence
+links, acceptance boundaries and next operation. Root consumes ready independent
+work promptly rather than serializing it behind unrelated preparation. Reuse
+immutable images and released warm Linux caches when input equality is proved.
+Focused developer feedback does not replace full acceptance or final CI gates.
+
+## Test classification ownership
+
+QA owns the slow/medium-long inventory and conservative affected-domain mapping.
+Developers own runner mechanics and provide scenario intent. Classification uses
+actual eligibility/deadline waits and dependency families, not names or one noisy
+duration receipt. Short bounded timer assertions are not automatically slow.
+Unknown/shared changes select conservatively; they must not omit affected slow
+scenarios. Review the whole family when a shared helper or domain changes.
+
+The classifier authors the manifest, focused classification assertions and
+documentation on an owned branch. This audit is not independent acceptance:
+different fresh Code and Functional reviewers inspect the final immutable
+candidate within their respective scope. Existing full/default/final gates,
+tests, budgets and required acceptance remain unchanged. Run the slow tier for
+affected areas, critical acceptance, final refactoring and final PR CI; do not
+claim execution speed gains from discovery alone.
 
 ## Functional QA access and fault windows
 
