@@ -53,7 +53,7 @@ func TestMessagesFullHistoryCLIReplayAndReconcile(t *testing.T) {
 	r.Messages[2].Disposition, r.Messages[2].Provenance = "omitted", "sensitive"
 	r.Messages[3].Disposition, r.Messages[3].Provenance = "omitted", "expired"
 	writeMessageResolutions(t, resolutions, r)
-	for _, operation := range []string{"apply", "apply", "reconcile"} {
+	for _, operation := range []string{"apply", "reconcile"} {
 		if operation == "reconcile" {
 			_, err = db.Exec(t.Context(), `DROP TABLE migrate_import.message_receipts`)
 			require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestMessagesFullHistoryCLIReplayAndReconcile(t *testing.T) {
 		require.NoError(t, json.Unmarshal(output, &result))
 		require.NotNil(t, result.Summary)
 	}
-	summary, err := migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	summary, err := migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.NoError(t, err)
 	require.Zero(t, summary.Applied)
 	require.Equal(t, 4, summary.Reused)

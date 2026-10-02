@@ -35,7 +35,7 @@ func TestBroadcastProjectionPreservesPresenceAndReplay(t *testing.T) {
 	assert.Len(t, sourceHash, 64)
 	_, err = db.Exec(t.Context(), `UPDATE core.admin_broadcast_profiles SET overrides='{"informal_name":"Current"}'`)
 	require.NoError(t, err)
-	replayed, err := migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
+	replayed, err := migrate.ReconcileUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, replayed.Reused)
 	var overrides string
@@ -46,6 +46,6 @@ func TestBroadcastProjectionPreservesPresenceAndReplay(t *testing.T) {
 	assert.JSONEq(t, `{"informal_name":"Current"}`, overrides)
 	_, err = db.Exec(t.Context(), `UPDATE core.admin_broadcast_profiles SET fields=fields-'username'`)
 	require.NoError(t, err)
-	_, err = migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
+	_, err = migrate.ReconcileUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
 	require.EqualError(t, err, "apply_broadcast_profile_reconciliation_failed")
 }

@@ -74,6 +74,12 @@ func parseOrderImportFlags(arguments []string) (orderImportFlags, error) {
 }
 
 func executeReconcile(arguments []string) (result, error) {
+	if len(arguments) > 0 && arguments[0] == "users" {
+		return executeUserImport(arguments, true)
+	}
+	if len(arguments) > 0 && arguments[0] == "events" {
+		return executeEventImport(arguments[1:], true)
+	}
 	if len(arguments) > 0 && arguments[0] == massageDomainName {
 		return executeMassageImport(arguments[1:], true)
 	}

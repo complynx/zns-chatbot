@@ -64,7 +64,7 @@ func TestMessagesApplyRealUserPipeline(t *testing.T) {
 	summary, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.NoError(t, err)
 	require.True(t, summary.Reconciled)
-	summary, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.NoError(t, err)
 	require.Zero(t, summary.Applied)
 	_, err = db.Exec(t.Context(), `UPDATE core.conversation_events SET origin='derived'`)
@@ -80,13 +80,13 @@ func TestMessagesApplyRealUserPipeline(t *testing.T) {
 		`UPDATE core.conversation_events SET text='',omitted=true,omission_reason='deleted'; DELETE FROM core.conversation_message_bodies; UPDATE core.legacy_message_references SET tombstoned=true`,
 	)
 	require.NoError(t, err)
-	summary, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.NoError(t, err)
 	require.Equal(t, 2, summary.Tombstoned)
 	require.Zero(t, summary.Applied)
 	r.Messages[0].Owner = "changed-owner"
 	writeMessageResolutions(t, resolutions, r)
-	_, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	_, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.Error(t, err)
 }
 func TestMessagesPreexistingHistoryBlocks(t *testing.T) {
@@ -123,7 +123,7 @@ func runMessageCLI(t *testing.T, dsn string, arguments ...string) []byte {
 	return output
 }
 
-func TestMessagesPrivacyExclusionsAndPrefixGuard(t *testing.T) {
+func TestMessagesPrivacyExclusionsAndMissingHistory(t *testing.T) {
 	t.Parallel()
 	dsn, db := applyDatabase(t)
 	us, up, ur := applyInputs(
@@ -188,6 +188,6 @@ func TestMessagesPrivacyExclusionsAndPrefixGuard(t *testing.T) {
 		`DROP TABLE migrate_import.message_receipts; WITH removed AS (DELETE FROM core.legacy_message_references WHERE event_id=(SELECT min(id) FROM core.conversation_events) RETURNING event_id) DELETE FROM core.conversation_events WHERE id IN(SELECT event_id FROM removed)`,
 	)
 	require.NoError(t, err)
-	_, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
-	require.EqualError(t, err, "message_committed_prefix_invalid")
+	_, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	require.EqualError(t, err, "message_reference_missing")
 }

@@ -12,6 +12,10 @@ import (
 )
 
 func executeUserApply(arguments []string) (result, error) {
+	return executeUserImport(arguments, false)
+}
+
+func executeUserImport(arguments []string, verify bool) (result, error) {
 	if len(arguments) == 0 || arguments[0] != "users" {
 		return result{}, errors.New("expected_apply_users")
 	}
@@ -31,6 +35,12 @@ func executeUserApply(arguments []string) (result, error) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	summary, err := migrate.ApplyUsers(ctx, dsn, *stage, *plan, *resolutions, limits)
+	var summary migrate.UserApplySummary
+	var err error
+	if verify {
+		summary, err = migrate.ReconcileUsers(ctx, dsn, *stage, *plan, *resolutions, limits)
+	} else {
+		summary, err = migrate.ApplyUsers(ctx, dsn, *stage, *plan, *resolutions, limits)
+	}
 	return result{ApplyUsers: &summary}, err
 }

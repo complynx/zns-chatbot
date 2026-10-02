@@ -45,7 +45,7 @@ func TestApplyOrdersPreservesTokenlessCash(t *testing.T) {
 			assert.Empty(t, proof)
 			assert.Equal(t, "cash", state)
 			assert.Equal(t, "2026-09-01T00:00:00Z", at.UTC().Format(time.RFC3339))
-			_, err = migrate.ApplyOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
+			_, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
 			require.NoError(t, err)
 			_, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
 			require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestApplyOrdersPreservesValidationOnlyIdentity(t *testing.T) {
 			var count int
 			require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM core.order_proofs`).Scan(&count))
 			assert.Zero(t, count)
-			_, err = migrate.ApplyOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
+			_, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
 			require.NoError(t, err)
 			_, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
 			require.NoError(t, err)

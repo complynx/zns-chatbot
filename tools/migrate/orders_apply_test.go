@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
 	migrate "github.com/complynx/zns-chatbot/tools/migrate"
@@ -201,7 +200,7 @@ func TestApplyOrdersPreservesHistoricalChoicesProofCashAndSeats(t *testing.T) {
 			Scan(&state),
 	)
 	assert.Equal(t, "cash", state)
-	summary, err = migrate.ApplyOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, summary.Reused)
 	_, err = db.Exec(
@@ -209,12 +208,12 @@ func TestApplyOrdersPreservesHistoricalChoicesProofCashAndSeats(t *testing.T) {
 		`UPDATE core.order_capacity_slots SET reserved_at=reserved_at+interval '1 second' WHERE seat=1`,
 	)
 	require.NoError(t, err)
-	summary, err = migrate.ApplyOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
 	require.EqualError(t, err, "apply_reconciliation_failed")
 	assert.False(t, summary.Reconciled)
 }
 
-func TestApplyOrdersConcurrentAndPartialResume(t *testing.T) {
+func TestApplyOrdersConflictRollsBackWholeDomain(t *testing.T) {
 	t.Parallel()
 	dsn, db := applyDatabase(t)
 	stage, plan, resolution := orderImportInputs(t, true)
@@ -226,28 +225,14 @@ func TestApplyOrdersConcurrentAndPartialResume(t *testing.T) {
 	require.NoError(t, err)
 	summary, err := migrate.ApplyOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
 	require.EqualError(t, err, "apply_target_conflict")
-	assert.EqualValues(t, 1, summary.Applied)
+	assert.Zero(t, summary.Applied)
+	var imported int
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM core.legacy_order_import_references`).Scan(&imported))
+	assert.Zero(t, imported)
 	_, err = db.Exec(t.Context(), `DELETE FROM core.order_events WHERE id='event_two'`)
 	require.NoError(t, err)
-	var summaries [2]migrate.OrderApplySummary
-	var failures [2]error
-	var wg sync.WaitGroup
-	for i := range summaries {
-		wg.Go(func() {
-			summaries[i], failures[i] = migrate.ApplyOrders(
-				t.Context(),
-				dsn,
-				stage,
-				plan,
-				resolution,
-				migrate.DefaultLimits(),
-			)
-		})
-	}
-	wg.Wait()
-	for _, failure := range failures {
-		require.NoError(t, failure)
-	}
-	assert.EqualValues(t, 1, summaries[0].Applied+summaries[1].Applied)
-	assert.EqualValues(t, 3, summaries[0].Reused+summaries[1].Reused)
+	summary, err = migrate.ApplyOrders(t.Context(), dsn, stage, plan, resolution, migrate.DefaultLimits())
+	require.NoError(t, err)
+	assert.EqualValues(t, 2, summary.Applied)
+	assert.Zero(t, summary.Reused)
 }

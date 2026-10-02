@@ -26,6 +26,10 @@ func executeEventPlan(arguments []string) (result, error) {
 }
 
 func executeEventApply(arguments []string) (result, error) {
+	return executeEventImport(arguments, false)
+}
+
+func executeEventImport(arguments []string, verify bool) (result, error) {
 	flags := flag.NewFlagSet("apply events", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	stage := flags.String("stage", "", "verified staging directory")
@@ -42,6 +46,12 @@ func executeEventApply(arguments []string) (result, error) {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	summary, err := migrate.ApplyEvents(ctx, dsn, *stage, *plan, *resolutions, limits)
+	var summary migrate.EventApplySummary
+	var err error
+	if verify {
+		summary, err = migrate.ReconcileEvents(ctx, dsn, *stage, *plan, *resolutions, limits)
+	} else {
+		summary, err = migrate.ApplyEvents(ctx, dsn, *stage, *plan, *resolutions, limits)
+	}
 	return result{ApplyEvents: &summary}, err
 }
