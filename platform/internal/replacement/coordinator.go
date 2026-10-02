@@ -13,6 +13,14 @@ import (
 type observationStage string
 type observationPredicate string
 
+type incompleteObservation struct {
+	stage      observationStage
+	predicate  observationPredicate
+	containers int
+	sessions   int
+	admissions int
+}
+
 type monitorObservationError struct {
 	stage      observationStage
 	predicate  observationPredicate
@@ -278,7 +286,7 @@ func (c *Coordinator) launch(ctx context.Context, ledger *Ledger) error {
 func (c *Coordinator) monitor(ctx context.Context, ledger Ledger) error {
 	start := time.Now()
 	readyDeadline := time.Now().Add(c.ReadyTimeout)
-	var incomplete *monitorObservationError
+	var incomplete *incompleteObservation
 	for {
 		if err := ctx.Err(); err != nil {
 			return observationError(ctx, start, "monitor", "context", err)
@@ -295,8 +303,9 @@ func (c *Coordinator) monitor(ctx context.Context, ledger Ledger) error {
 		}
 		if !ready && time.Now().After(readyDeadline) {
 			if incomplete != nil {
-				incomplete.elapsed = time.Since(start)
-				return incomplete
+				failure := observationError(ctx, start, incomplete.stage, incomplete.predicate, ErrDeadline)
+				failure.containers, failure.sessions, failure.admissions = incomplete.containers, incomplete.sessions, incomplete.admissions
+				return failure
 			}
 			return observationError(ctx, start, "readiness", "not_ready", ErrDeadline)
 		}
@@ -307,7 +316,7 @@ func (c *Coordinator) monitor(ctx context.Context, ledger Ledger) error {
 }
 
 // observe checks one complete process and session snapshot without changing ownership.
-func (c *Coordinator) observe(ctx context.Context, ledger Ledger, incomplete **monitorObservationError) (bool, error) {
+func (c *Coordinator) observe(ctx context.Context, ledger Ledger, incomplete **incompleteObservation) (bool, error) {
 	start := time.Now()
 	*incomplete = nil
 	fail := func(stage observationStage, predicate observationPredicate, err error, containers, sessions, admissions int) (bool, error) {
@@ -359,15 +368,14 @@ func (c *Coordinator) observe(ctx context.Context, ledger Ledger, incomplete **m
 	if admissions == 0 && ledger.State == StateRunning {
 		return fail("admission", "missing_running", ErrStopped, len(inventory), len(names), admissions)
 	}
-	*incomplete = readinessObservation(ctx, start, ready, len(inventory), len(names), admissions)
+	*incomplete = readinessObservation(ready, len(inventory), len(names), admissions)
 	if *incomplete != nil {
 		return false, nil
 	}
 	return ready, nil
 }
 
-func readinessObservation(ctx context.Context, start time.Time, healthReady bool,
-	containers, sessions, admissions int) *monitorObservationError {
+func readinessObservation(healthReady bool, containers, sessions, admissions int) *incompleteObservation {
 	if healthReady && admissions != 0 {
 		return nil
 	}
@@ -375,9 +383,8 @@ func readinessObservation(ctx context.Context, start time.Time, healthReady bool
 	if !healthReady {
 		stage, predicate = "process", "app_health_not_ready"
 	}
-	incomplete := observationError(ctx, start, stage, predicate, ErrDeadline)
-	incomplete.containers, incomplete.sessions, incomplete.admissions = containers, sessions, admissions
-	return incomplete
+	return &incompleteObservation{stage: stage, predicate: predicate,
+		containers: containers, sessions: sessions, admissions: admissions}
 }
 
 func failedProcess(item Container) observationPredicate {

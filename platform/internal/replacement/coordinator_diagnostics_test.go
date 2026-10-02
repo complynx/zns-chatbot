@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strconv"
 	"testing"
 	"time"
 
@@ -40,36 +41,45 @@ func TestReplacementReadinessDiagnosticRetainsIncompletePredicate(t *testing.T) 
 			c.Logger = slog.New(slog.NewJSONHandler(&output, nil))
 			c.ReadyTimeout = 20 * time.Millisecond
 			f.onStart = func() {
-				f.names = nil
-				if test.admissionReady {
-					f.names = []string{"zns:" + installation + ":" + newLaunch + ":admit"}
-				}
-				if !test.healthReady {
-					for i := range f.inventory {
-						if f.inventory[i].Component == "app" {
-							f.inventory[i].Health = "starting"
-						}
-					}
-				}
+				configureReadiness(f, test.healthReady, test.admissionReady)
 			}
 			require.ErrorIs(t, c.Run(t.Context()), replacement.ErrDeadline)
 			require.Equal(t, replacement.StateStopped, f.ledger.State)
 			require.NotContains(t, f.events, "save:running")
 			var record map[string]any
-			require.NoError(t, json.NewDecoder(bytes.NewReader(output.Bytes())).Decode(&record))
+			decoder := json.NewDecoder(bytes.NewReader(output.Bytes()))
+			decoder.UseNumber()
+			require.NoError(t, decoder.Decode(&record))
 			require.Equal(t, test.stage, record["stage"])
 			require.Equal(t, test.predicate, record["predicate"])
 			require.Equal(t, "readiness", record["deadline_class"])
 			require.Equal(t, "readiness_deadline", record["error_category"])
-			require.Equal(t, float64(len(replacement.Components())), record["containers"])
-			count := float64(0)
+			require.Equal(t, json.Number(strconv.Itoa(len(replacement.Components()))), record["containers"])
+			count := json.Number("0")
 			if test.admissionReady {
-				count = 1
+				count = "1"
 			}
 			require.Equal(t, count, record["sessions"])
 			require.Equal(t, count, record["admissions"])
-			require.GreaterOrEqual(t, record["elapsed_ms"].(float64), float64(20))
+			elapsed, err := record["elapsed_ms"].(json.Number).Int64()
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, elapsed, int64(20))
 		})
+	}
+}
+
+func configureReadiness(f *fixture, healthReady, admissionReady bool) {
+	f.names = nil
+	if admissionReady {
+		f.names = []string{"zns:" + installation + ":" + newLaunch + ":admit"}
+	}
+	if healthReady {
+		return
+	}
+	for i := range f.inventory {
+		if f.inventory[i].Component == "app" {
+			f.inventory[i].Health = "starting"
+		}
 	}
 }
 
