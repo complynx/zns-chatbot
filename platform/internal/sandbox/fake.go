@@ -250,7 +250,7 @@ func (f *Fake) getUpdates(w http.ResponseWriter, r *http.Request) {
 		batch = append(batch, u)
 		encodedSize += len(raw) + 1
 	}
-	response, err := f.registrationIngressResponse(batch)
+	response, err := f.registrationIngressResponse(batch, in.Offset)
 	if err == nil {
 		err = f.save(r.Context())
 	}

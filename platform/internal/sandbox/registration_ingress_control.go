@@ -273,13 +273,20 @@ func ingressBatchOwner(batch []telegram.Update, user int64) bool {
 
 // The full original batch is held to preserve getUpdates ordering. New inputs
 // may enqueue while held, but the global Telegram poll is not actor-parallel.
-func (f *Fake) registrationIngressResponse(batch []telegram.Update) ([]byte, error) {
+func (f *Fake) registrationIngressResponse(batch []telegram.Update, offset int64) ([]byte, error) {
 	if f.delay == nil || f.registrationIngress == nil {
 		return nil, nil
 	}
 	value := f.cloneIngressControl()
 	for key, item := range value.Cases {
 		if item.Replay == ingressReplayPending {
+			acknowledged, err := ingressBatchAcknowledged(item.Response, offset)
+			if err != nil {
+				return nil, err
+			}
+			if !acknowledged {
+				continue
+			}
 			item.Replay = ingressReplayConsumed
 			value.Cases[key] = item
 			f.registrationIngress = value
@@ -300,6 +307,21 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update) ([]byte, err
 	}
 	f.registrationIngress = value
 	return nil, nil
+}
+
+func ingressBatchAcknowledged(response []byte, offset int64) (bool, error) {
+	var envelope struct {
+		Result []telegram.Update `json:"result"`
+	}
+	if err := json.Unmarshal(response, &envelope); err != nil {
+		return false, err
+	}
+	for _, update := range envelope.Result {
+		if update.ID >= offset {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func ingressOriginalResponse(

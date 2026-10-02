@@ -144,12 +144,15 @@ func TestRegistrationIngressExactBatchAndOneShotReplay(t *testing.T) {
 	ingressCommand(t, f, release, http.StatusOK)
 	require.Equal(t, expected.Bytes(), ingressPoll(t, f, 0))
 	ingressCommand(t, f, release, http.StatusOK)
-	require.JSONEq(t, `{"ok":true,"result":[]}`, string(ingressPoll(t, f, second.ID+1)))
 	beforeNext, beforeMessages := f.next, len(f.messages)
 	replay := release
 	replay.Action = "replay"
 	ingressCommand(t, f, replay, http.StatusOK)
 	ingressCommand(t, f, replay, http.StatusOK)
+	require.Equal(t, expected.Bytes(), ingressPoll(t, f, 0))
+	require.Equal(t, ingressReplayPending, f.registrationIngress.Cases["case-a"].Replay)
+	ingressPoll(t, f, second.ID)
+	require.Equal(t, ingressReplayPending, f.registrationIngress.Cases["case-a"].Replay)
 	require.Equal(t, expected.Bytes(), ingressPoll(t, f, second.ID+1))
 	ingressCommand(t, f, replay, http.StatusOK)
 	require.JSONEq(t, `{"ok":true,"result":[]}`, string(ingressPoll(t, f, second.ID+1)))
