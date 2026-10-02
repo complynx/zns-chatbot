@@ -23,7 +23,7 @@ func TestRegistrationAdmissionLegacyMigrationPreservesUnknownIngress(t *testing.
 	_, err = db.Exec(t.Context(), `DROP TABLE core.registration_intent_requests;
  DROP TABLE core.registration_intents;
  DROP TABLE core.registration_ingress; DROP FUNCTION core.registration_native_immutable();
- DELETE FROM public.zns_schema_migrations WHERE name IN ('078_registration_admission.sql','082_registration_retention.sql','083_registration_native_intake.sql')`)
+ DELETE FROM public.zns_schema_migrations WHERE name IN ('078_registration_admission.sql','082_registration_retention.sql','083_registration_native_intake.sql','091_admin_page_ingress_proof.sql')`)
 	require.NoError(t, err)
 	require.NoError(t, store.Migrate(t.Context(), db))
 	for _, booking := range []passbooking.Booking{alice, bob} {

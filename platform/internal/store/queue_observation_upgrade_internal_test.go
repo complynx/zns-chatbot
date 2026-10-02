@@ -239,13 +239,13 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	const lastOld = "087_telegram_inbox_retries.sql"
 	const upgrade = "088_delivery_queue_observation.sql"
 	const credit = "089_credit_usage_observation.sql"
-	const current = deliveryTransportUpgrade
+	const current = messageUncertaintyUpgrade
 	foundOld, foundUpgrade := false, false
 	expectedOldLedger := make([]queueUpgradeLedgerEntry, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Name() > current {
 			t.Fatalf(
-				"upgrade proof is pinned to the 092 embedded schema epoch; newer migration %s requires a new scoped fixture",
+				"upgrade proof is pinned to the 094 embedded schema epoch; newer migration %s requires a new scoped fixture",
 				entry.Name(),
 			)
 		}
@@ -298,7 +298,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	)
 	passBody, err := migrations.ReadFile("migrations/" + passDeliveryTargetsUpgrade)
 	require.NoError(t, err)
-	currentBody, err := migrations.ReadFile("migrations/" + current)
+	transportBody, err := migrations.ReadFile("migrations/" + deliveryTransportUpgrade)
 	require.NoError(t, err)
 	creditBody, err := migrations.ReadFile("migrations/" + credit)
 	require.NoError(t, err)
@@ -310,6 +310,14 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	require.NoError(t, err)
 	expectedUpgradedLedger = append(expectedUpgradedLedger,
 		queueUpgradeLedgerEntry{Name: adminPageIngressUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(ingressBody))})
+	expectedUpgradedLedger = append(expectedUpgradedLedger,
+		queueUpgradeLedgerEntry{Name: deliveryTransportUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(transportBody))})
+	notificationBody, err := migrations.ReadFile("migrations/" + notificationUncertaintyUpgrade)
+	require.NoError(t, err)
+	expectedUpgradedLedger = append(expectedUpgradedLedger,
+		queueUpgradeLedgerEntry{Name: notificationUncertaintyUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(notificationBody))})
+	currentBody, err := migrations.ReadFile("migrations/" + current)
+	require.NoError(t, err)
 	expectedUpgradedLedger = append(expectedUpgradedLedger,
 		queueUpgradeLedgerEntry{Name: current, Checksum: fmt.Sprintf("%x", sha256.Sum256(currentBody))})
 	var hadTimestamp bool
@@ -342,7 +350,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		t,
 		expectedUpgradedLedger,
 		queueUpgradeLedger(t, db),
-		"only actual 088, 089, 090, 091 and 092 ledger entries are added; old entries remain exact",
+		"only actual 088 through 094 ledger entries are added; old entries remain exact",
 	)
 	var inventedMetadata, spentBudget int64
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
@@ -350,6 +358,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		Scan(&inventedMetadata, &spentBudget))
 	require.Zero(t, inventedMetadata, "upgrade must not invent historical uncertainty")
 	require.Zero(t, spentBudget, "upgrade must not consume resend budget")
+	checkAdminDeliveryUpgradeMetadata(t, db)
 	require.JSONEq(
 		t,
 		oldLedgerSnapshot,
@@ -418,6 +427,7 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 		Scan(&inventedMetadata, &spentBudget))
 	require.Zero(t, inventedMetadata, "replay must not invent historical uncertainty")
 	require.Zero(t, spentBudget, "replay must not consume resend budget")
+	checkAdminDeliveryUpgradeMetadata(t, db)
 	require.JSONEq(t, replayState, queueUpgradeState(t, db, true),
 		"replay preserves every durable scheduling and receipt field")
 	require.Equal(
@@ -464,8 +474,10 @@ func queueUpgradeLedgerSnapshot(t *testing.T, db *pgxpool.Pool, through string) 
 func queueUpgradeState(t *testing.T, db *pgxpool.Pool, after bool) string {
 	t.Helper()
 	queueExpression := "to_jsonb(q)"
+	adminExpression := "to_jsonb(d)"
 	if after {
 		queueExpression = "to_jsonb(q)-'enqueued_at'"
+		adminExpression = "to_jsonb(d)-ARRAY['content_captured','last_confirmed_attempt','last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends']"
 	}
 	query := `SELECT jsonb_build_object(
  'queue',(SELECT jsonb_agg(` + queueExpression + ` ORDER BY q.lane_sequence) FROM core.delivery_queue q),
@@ -473,11 +485,25 @@ func queueUpgradeState(t *testing.T, db *pgxpool.Pool, after bool) string {
  'pacing',(SELECT jsonb_agg(to_jsonb(p) ORDER BY p.chat) FROM core.delivery_pacing p),
  'fairness',(SELECT jsonb_agg(to_jsonb(f) ORDER BY f.bot_id) FROM core.delivery_fairness f),
  'jobs',(SELECT jsonb_agg(to_jsonb(m) ORDER BY m.id) FROM core.admin_messages m),
- 'attempts',(SELECT jsonb_agg(to_jsonb(d) ORDER BY d.id) FROM core.admin_message_deliveries d),
+ 'attempts',(SELECT jsonb_agg(` + adminExpression + ` ORDER BY d.id) FROM core.admin_message_deliveries d),
  'bot_intents',(SELECT jsonb_agg(to_jsonb(i)-ARRAY['last_uncertain_attempt','last_uncertain_reason','last_uncertain_recorded_at','uncertain_resends','wire_capture_key','wire_capture_hash','last_confirmed_attempt'] ORDER BY i.bot_id,i.operation_key,i.effect_key) FROM bot.delivery_intents i))::text`
 	var value string
 	require.NoError(t, db.QueryRow(t.Context(), query).Scan(&value))
 	return value
+}
+
+func checkAdminDeliveryUpgradeMetadata(t *testing.T, db *pgxpool.Pool) {
+	t.Helper()
+	var contentMissing, captured, metadataMissing bool
+	var resends int64
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT content IS NULL,content_captured,
+ last_confirmed_attempt IS NULL AND last_uncertain_attempt IS NULL
+ AND last_uncertain_reason IS NULL AND last_uncertain_recorded_at IS NULL,uncertain_resends
+ FROM core.admin_message_deliveries`).Scan(&contentMissing, &captured, &metadataMissing, &resends))
+	require.True(t, contentMissing, "legacy content remains SQL NULL")
+	require.False(t, captured, "historical SQL NULL has no captured content")
+	require.True(t, metadataMissing, "upgrade and replay must not invent historical wire metadata")
+	require.Zero(t, resends, "upgrade and replay must not consume admin resend budget")
 }
 
 const passDeliveryTargetsUpgrade = "090_pass_delivery_targets.sql"

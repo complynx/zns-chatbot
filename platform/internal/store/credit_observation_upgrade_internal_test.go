@@ -21,6 +21,8 @@ import (
 const creditObservationUpgrade = "089_credit_usage_observation.sql"
 const deliveryTransportUpgrade = "092_bot_delivery_transport_uncertainty.sql"
 const adminPageIngressUpgrade = "091_admin_page_ingress_proof.sql"
+const notificationUncertaintyUpgrade = "093_notification_uncertain_retry.sql"
+const messageUncertaintyUpgrade = "094_message_uncertain_retry.sql"
 
 func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	t.Parallel()
@@ -56,8 +58,18 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	expected = append(expected, queueUpgradeLedgerEntry{
 		Name: deliveryTransportUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(transportBody)),
 	})
+	notificationBody, err := migrations.ReadFile("migrations/" + notificationUncertaintyUpgrade)
+	require.NoError(t, err)
+	expected = append(expected, queueUpgradeLedgerEntry{
+		Name: notificationUncertaintyUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(notificationBody)),
+	})
+	messageBody, err := migrations.ReadFile("migrations/" + messageUncertaintyUpgrade)
+	require.NoError(t, err)
+	expected = append(expected, queueUpgradeLedgerEntry{
+		Name: messageUncertaintyUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(messageBody)),
+	})
 	require.NoError(t, Migrate(t.Context(), db))
-	require.Equal(t, expected, queueUpgradeLedger(t, db), "only exact 089, 090, 091 and 092 checksum entries are added")
+	require.Equal(t, expected, queueUpgradeLedger(t, db), "only exact 089 through 094 checksum entries are added")
 	var inventedMetadata, spentBudget int64
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
  (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL OR last_confirmed_attempt IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
@@ -84,10 +96,10 @@ func TestCreditObservationUpgradeFrom088(t *testing.T) {
 	require.Equal(t, [4]int64{1, 0, 1, 0}, item.Bases)
 	require.Equal(t, credits.UsageTokenObservation{Sum: 17, KnownReceipts: 1, UnknownReceipts: 1}, item.Tokens[0])
 	checkPassDeliveryTargetsUpgrade(t, db)
-	upgradedLedger := queueUpgradeLedgerSnapshot(t, db, deliveryTransportUpgrade)
+	upgradedLedger := queueUpgradeLedgerSnapshot(t, db, messageUncertaintyUpgrade)
 	require.NoError(t, Migrate(t.Context(), db))
 	require.Equal(t, expected, queueUpgradeLedger(t, db))
-	require.JSONEq(t, upgradedLedger, queueUpgradeLedgerSnapshot(t, db, deliveryTransportUpgrade))
+	require.JSONEq(t, upgradedLedger, queueUpgradeLedgerSnapshot(t, db, messageUncertaintyUpgrade))
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT
  (SELECT count(*) FROM bot.delivery_intents WHERE last_uncertain_attempt IS NOT NULL OR last_uncertain_reason IS NOT NULL OR last_uncertain_recorded_at IS NOT NULL OR wire_capture_key IS NOT NULL OR wire_capture_hash IS NOT NULL OR last_confirmed_attempt IS NOT NULL),(SELECT count(*) FROM bot.delivery_intents WHERE uncertain_resends<>0)`).
 		Scan(&inventedMetadata, &spentBudget))
@@ -155,8 +167,8 @@ func applyCreditObservationPredecessor(t *testing.T, db *pgxpool.Pool) []queueUp
 	t.Helper()
 	entries, err := migrations.ReadDir("migrations")
 	require.NoError(t, err)
-	require.Equal(t, deliveryTransportUpgrade, entries[len(entries)-1].Name(),
-		"upgrade proof is pinned to the 092 embedded schema epoch")
+	require.Equal(t, messageUncertaintyUpgrade, entries[len(entries)-1].Name(),
+		"upgrade proof is pinned to the 094 embedded schema epoch")
 	tx, err := db.Begin(t.Context())
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(t.Context()) }()
