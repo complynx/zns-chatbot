@@ -146,20 +146,40 @@ For each owner action add:
 ```
 
 Run `import`, then `remove-receipts`, then `archive-importer`. Import runs actual
-seven-domain apply/replay, requires reconciliation and zero new replay mutations,
+seven-domain apply once, then seven explicit read-only reconciliations. Require
+reconciliation and zero new reconcile mutations,
 proved by food's explicit `reused:true` and each other domain's integer
-`applied:0`. Missing counters never prove replay success. Before any database
-or Docker call, allocation and the common preflight validate the actual probe
+`applied:0`. Missing counters never prove reconcile success. Import users and
+their identity links, then original messages, then
+events, orders, passes, food and massage. Pass and massage booking triggers add
+trusted conversation history. Original messages must precede those writes;
+the message importer's preexisting-history rejection remains unchanged. Run
+the complete sequence on a fresh empty stand; preserve a failed partial stand
+and its receipts instead of deleting its history or resuming past this guard.
+Each domain apply is atomic, but the seven-domain sequence is not one
+transaction. Stop on the first failure; never repeat apply on the populated
+target. The lifecycle operator must stop all writers, restore the WHOLE known
+preimport database snapshot or recreate a complete isolated target with the
+same seed-free bootstrap, roles and permanent config, and verify the empty
+business baseline before reapplying the same immutable inputs in full.
+The importer does not reset the database. Keep the failed target and evidence
+isolated from the restored target; bind the new cluster and allocation before
+running this sequence there. Compare both complete imports through the existing
+permanent-state fingerprints and public history/proof mappings. A restore/reapply
+proof is separate from this caller's focused source checks.
+Before any database or Docker call, allocation and the common preflight validate the actual probe
 manifest path/digest, all three private projection hashes and allocated endpoint fields,
 and all six bound client source/test hashes against the probe inventory. These
 are static input checks; they do not claim successful importer-absent runtime
 execution. Owner actions also validate actual source, raw migrations, source
 export, stages, plans, resolutions, permanent resources and importer binary.
 After retirement the archived binary is checked against the same binding.
-Import also runs the five CLI-supported standalone reconciliations. Users/events use their
-real apply/replay reconciliation summaries; standalone commands do not exist.
+Import runs standalone reconciliation for all seven domains, including users
+and events, with the same stages, plans and resolutions as apply. Retain each
+actual `*-first.json` and `*-reconcile.json` receipt; no replay receipt is expected.
 Owner/history/draft linkage, exact counts and every permanent table/sequence are
-fingerprinted. Receipt removal archives exactly seven tables and uses one
+fingerprinted across core, bot, interaction, credits and public, including
+credit policy, account, attempt and lifecycle state. Receipt removal archives exactly seven tables and uses one
 DROP RESTRICT transaction, without CASCADE. Permanent-state mismatch aborts.
 Importer archive requires the marked evidence-local copy, the post-removal
 fingerprint and unchanged sources; the live checkout is rejected.

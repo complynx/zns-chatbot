@@ -1,4 +1,6 @@
 """Focused offline guard tests. No successful CLI receipt is mocked."""
+import ast
+import inspect
 import json
 from pathlib import Path
 import sys
@@ -247,20 +249,59 @@ class GuardTests(unittest.TestCase):
             finally:
                 target.write_bytes(original)
 
-    def test_replay_requires_actual_food_reuse_and_other_counters(self):
+    def test_reconcile_requires_actual_food_reuse_and_other_counters(self):
         for summary in ({"reconciled": True}, {"reconciled": True, "reused": False},
                         {"reconciled": True, "applied": 0}, {"reconciled": True, "reused": 1}):
-            with self.subTest(summary=summary), self.assertRaisesRegex(RuntimeError, "replay"):
-                rehearse.validate_summary("food", summary, replay=True)
-        rehearse.validate_summary("food", {"reconciled": True, "reused": True}, replay=True)
+            with self.subTest(summary=summary), self.assertRaisesRegex(RuntimeError, "reconcile"):
+                rehearse.validate_summary("food", summary, read_only=True)
+        rehearse.validate_summary("food", {"reconciled": True, "reused": True}, read_only=True)
         for domain in set(rehearse.DOMAINS) - {"food"}:
             for applied in (None, False, 1, "0"):
                 summary = {"reconciled": True}
                 if applied is not None:
                     summary["applied"] = applied
-                with self.subTest(domain=domain, summary=summary), self.assertRaisesRegex(RuntimeError, "replay"):
-                    rehearse.validate_summary(domain, summary, replay=True)
-            rehearse.validate_summary(domain, {"reconciled": True, "applied": 0}, replay=True)
+                with self.subTest(domain=domain, summary=summary), self.assertRaisesRegex(RuntimeError, "reconcile"):
+                    rehearse.validate_summary(domain, summary, read_only=True)
+            rehearse.validate_summary(domain, {"reconciled": True, "applied": 0}, read_only=True)
+
+    def test_caller_has_single_apply_and_explicit_reconcile_for_each_domain(self):
+        """Static caller contract; no successful importer execution is simulated."""
+        function = ast.parse(inspect.getsource(rehearse.import_all)).body[0]
+        loops = [node for node in function.body if isinstance(node, ast.For)]
+        self.assertEqual(len(loops), 2)
+        for loop, action in zip(loops, ("apply", "reconcile")):
+            self.assertEqual(ast.dump(loop.iter), ast.dump(ast.Name(id="DOMAINS", ctx=ast.Load())))
+            self.assertFalse(any(isinstance(node, (ast.For, ast.While))
+                                 for node in ast.walk(loop) if node is not loop))
+            calls = [node for node in ast.walk(loop) if isinstance(node, ast.Call)
+                     and isinstance(node.func, ast.Name) and node.func.id == "command"]
+            self.assertEqual(len(calls), 1)
+            constants = [node.value for node in ast.walk(loop) if isinstance(node, ast.Constant)]
+            self.assertIn(action, constants)
+            self.assertNotIn("replay", constants)
+
+    def test_original_history_precedes_booking_trigger_history(self):
+        self.assertEqual(len(rehearse.DOMAINS), 7)
+        self.assertEqual(set(rehearse.DOMAINS),
+                         {"users", "messages", "events", "orders", "passes", "food", "massage"})
+        source = Path(__file__).resolve().parents[2]
+        audit = (source / "platform/internal/store/migrations/031_conversation_history.sql").read_text()
+        for table in ("pass_bookings", "massage_bookings"):
+            self.assertIn("AFTER INSERT OR UPDATE ON core." + table, audit)
+        self.assertIn("INSERT INTO core.conversation_events(owner,source_key,kind,details)", audit)
+        position = {domain: index for index, domain in enumerate(rehearse.DOMAINS)}
+        self.assertLess(position["users"], position["messages"])
+        for domain in ("passes", "massage"):
+            self.assertLess(position["messages"], position[domain])
+
+    def test_permanent_snapshot_includes_credit_tables_and_sequences(self):
+        with (patch.object(rehearse, "guard"),
+              patch.object(rehearse, "sql", side_effect=RuntimeError("inventory_stop")) as database):
+            with self.assertRaisesRegex(RuntimeError, "inventory_stop"):
+                rehearse.snapshot({})
+        query = database.call_args.args[0]
+        self.assertIn("IN('core','bot','interaction','credits','public')", query)
+        self.assertIn("c.relkind IN('r','p','S')", query)
 
     def test_checkpoint_and_offline_build_preflight_precedes_executor(self):
         config, evidence = self.prepared_guard_fixture()
