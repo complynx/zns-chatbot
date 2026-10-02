@@ -26,7 +26,7 @@ func executeApply(arguments []string) (result, error) {
 	if len(arguments) > 0 && arguments[0] == ordersDomainName {
 		return executeOrderApply(arguments[1:])
 	}
-	if len(arguments) > 0 && arguments[0] == "events" {
+	if len(arguments) > 0 && arguments[0] == eventsDomainName {
 		return executeEventApply(arguments[1:])
 	}
 	return executeUserApply(arguments)
@@ -35,7 +35,7 @@ func executeOrderApply(arguments []string) (result, error) {
 	return executeOrderImport(arguments, false)
 }
 func executeOrderImport(arguments []string, verifyOnly bool) (result, error) {
-	input, err := parseOrderImportFlags(arguments)
+	input, err := parseImportFlags(arguments)
 	if err != nil {
 		return result{}, err
 	}
@@ -50,14 +50,14 @@ func executeOrderImport(arguments []string, verifyOnly bool) (result, error) {
 	return result{ApplyOrders: &summary}, err
 }
 
-type orderImportFlags struct {
+type importFlags struct {
 	dsn, stage, plan, resolutions string
 	limits                        migrate.Limits
 }
 
-func parseOrderImportFlags(arguments []string) (orderImportFlags, error) {
-	input := orderImportFlags{dsn: os.Getenv("MIGRATE_DATABASE_URL"), limits: migrate.DefaultLimits()}
-	flags := flag.NewFlagSet("apply orders", flag.ContinueOnError)
+func parseImportFlags(arguments []string) (importFlags, error) {
+	input := importFlags{dsn: os.Getenv("MIGRATE_DATABASE_URL"), limits: migrate.DefaultLimits()}
+	flags := flag.NewFlagSet("import", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.StringVar(&input.stage, "stage", "", "verified staging directory")
 	flags.StringVar(&input.plan, "plan", "", "private order plan")
@@ -74,6 +74,12 @@ func parseOrderImportFlags(arguments []string) (orderImportFlags, error) {
 }
 
 func executeReconcile(arguments []string) (result, error) {
+	if len(arguments) > 0 && arguments[0] == identityUsersCommand {
+		return executeUserImport(arguments, true)
+	}
+	if len(arguments) > 0 && arguments[0] == eventsDomainName {
+		return executeEventImport(arguments[1:], true)
+	}
 	if len(arguments) > 0 && arguments[0] == massageDomainName {
 		return executeMassageImport(arguments[1:], true)
 	}

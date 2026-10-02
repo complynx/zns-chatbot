@@ -9,7 +9,7 @@ import (
 )
 
 func executeUserPlan(arguments []string) (result, error) {
-	if len(arguments) == 0 || arguments[0] != "users" {
+	if len(arguments) == 0 || arguments[0] != identityUsersCommand {
 		return result{}, errors.New("expected_plan_users")
 	}
 	flags := flag.NewFlagSet("plan users", flag.ContinueOnError)

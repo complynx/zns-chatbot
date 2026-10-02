@@ -120,7 +120,7 @@ func TestIdentityPreparationResumesAndImportsReviewedPolicy(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, summary.Reused)
 	assert.Equal(t, 3, provider.creates)
-	applied, err = migrate.ApplyUsers(t.Context(), dsn, input.Stage, input.Plan, input.Output, input.Limits)
+	applied, err = migrate.ReconcileUsers(t.Context(), dsn, input.Stage, input.Plan, input.Output, input.Limits)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, applied.Reused)
 }
@@ -193,7 +193,7 @@ func TestIdentityPreparationDoesNotBypassAtomicApply(t *testing.T) {
 	require.NoError(t, err)
 	_, err = migrate.ApplyUsers(t.Context(), dsn, input.Stage, input.Plan, input.Output, input.Limits)
 	require.Error(t, err)
-	for _, table := range []string{"core.users", "core.pass_profiles", "core.telegram_identities", "core.zitadel_identities", "migrate_import.user_receipts"} {
+	for _, table := range []string{"core.users", "core.pass_profiles", "core.telegram_identities", "core.zitadel_identities"} {
 		var count int
 		require.NoError(t, db.QueryRow(t.Context(), "SELECT count(*) FROM "+table).Scan(&count))
 		assert.Zero(t, count, table)

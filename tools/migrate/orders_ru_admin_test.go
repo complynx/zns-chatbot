@@ -60,7 +60,7 @@ func TestApplyOrdersResolvesEffectiveRUAdminWithoutChangingSource(t *testing.T) 
 			require.NoError(t, db.QueryRow(t.Context(), `SELECT payment_admin FROM core.orders
 			WHERE id='legacy-order:77:000000000000000000000003'`).Scan(&admin))
 			assert.Equal(t, "owner-101", admin)
-			_, err = migrate.ApplyOrders(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+			_, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 			require.NoError(t, err)
 			_, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 			require.NoError(t, err)

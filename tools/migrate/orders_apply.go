@@ -18,7 +18,7 @@ type OrderApplySummary struct {
 	Reconciled       bool   `json:"reconciled"`
 }
 
-// ApplyOrders commits a complete source event at a time. No runtime capacity
+// ApplyOrders commits the complete domain. No runtime capacity
 // reconciler is invoked and no existing target event is merged or overwritten.
 func ApplyOrders(
 	ctx context.Context,
@@ -59,46 +59,45 @@ func runOrderImport(
 		return summary, errors.New("apply_database_unavailable")
 	}
 	defer func() { _ = conn.Close(context.Background()) }()
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return summary, errors.New("apply_transaction_failed")
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
 	if !verifyOnly {
-		err = prepareOrderReceipts(ctx, conn)
+		err = prepareOrderReceipts(ctx, tx)
 	}
 	if err != nil {
 		return summary, err
 	}
 	for _, event := range prepared.Events {
-		reused, applyErr := applyOrderEvent(ctx, conn, prepared, event, verifyOnly)
-		if applyErr != nil {
-			return summary, applyErr
+		if err = applyOrderEvent(ctx, tx, prepared, event, verifyOnly); err != nil {
+			return summary, err
 		}
-		if reused {
-			summary.Reused++
-		} else {
-			summary.Applied++
-		}
+	}
+	if tx.Commit(ctx) != nil {
+		return summary, errors.New("apply_commit_failed")
+	}
+	if verifyOnly {
+		summary.Reused = summary.Events
+	} else {
+		summary.Applied = summary.Events
 	}
 	summary.Reconciled = true
 	return summary, nil
 }
-func prepareOrderReceipts(ctx context.Context, conn *pgx.Conn) error {
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return errors.New("apply_schema_unavailable")
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	if _, err = tx.Exec(
+func prepareOrderReceipts(ctx context.Context, tx pgx.Tx) error {
+	if _, err := tx.Exec(
 		ctx,
 		`SELECT pg_advisory_xact_lock(hashtextextended('migrate_import.user_receipts',0))`,
 	); err != nil {
 		return errors.New("apply_schema_unavailable")
 	}
-	if _, err = tx.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS migrate_import;
+	if _, err := tx.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS migrate_import;
 CREATE TABLE IF NOT EXISTS migrate_import.order_receipts (
  source_key text PRIMARY KEY REFERENCES core.legacy_order_import_references(source_key),
  plan_sha256 text NOT NULL,resolution_sha256 text NOT NULL,owners jsonb NOT NULL,snapshot jsonb NOT NULL
 )`); err != nil {
-		return errors.New("apply_schema_unavailable")
-	}
-	if tx.Commit(ctx) != nil {
 		return errors.New("apply_schema_unavailable")
 	}
 	return nil
@@ -106,75 +105,58 @@ CREATE TABLE IF NOT EXISTS migrate_import.order_receipts (
 
 func applyOrderEvent(
 	ctx context.Context,
-	conn *pgx.Conn,
+	tx pgx.Tx,
 	p preparedOrders,
 	event preparedOrderEvent,
 	verifyOnly bool,
-) (bool, error) {
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return false, errors.New("apply_transaction_failed")
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+) error {
 	key := event.Catalog.Legacy.Key
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, key); err != nil {
-		return false, errors.New("apply_transaction_failed")
-	}
 	owners, err := resolveOrderDependencies(ctx, tx, p, event)
 	if err != nil {
-		return false, err
+		return err
 	}
-	var planHash, resolutionHash string
-	err = tx.QueryRow(ctx, `SELECT plan_sha256,resolution_sha256 FROM migrate_import.order_receipts WHERE source_key=$1`, key).
-		Scan(&planHash, &resolutionHash)
-	reused := err == nil
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return false, errors.New("apply_receipt_unavailable")
+	if verifyOnly {
+		return reconcileImportedOrderEvent(ctx, tx, p, event, owners)
 	}
-	if reused && (planHash != p.PlanHash || resolutionHash != p.ResolutionHash) {
-		return false, errors.New("apply_receipt_conflict")
+	if err = insertOrderEvent(ctx, tx, p, event, owners); err != nil {
+		return err
 	}
-	if !reused && verifyOnly {
-		return false, errors.New("apply_receipt_missing")
+	_, err = tx.Exec(
+		ctx,
+		`INSERT INTO migrate_import.order_receipts(source_key,plan_sha256,resolution_sha256,owners,snapshot)
+	SELECT $2,$3,$4,$5,(`+orderSnapshotSQL+`)`,
+		event.Catalog.Catalog.EventID,
+		key,
+		p.PlanHash,
+		p.ResolutionHash,
+		owners,
+	)
+	if err != nil {
+		return errors.New("apply_receipt_conflict")
 	}
-	if reused {
-		if err = reconcileImportedOrderEvent(ctx, tx, event, owners); err != nil {
-			return false, err
-		}
-	} else {
-		if err = insertOrderEvent(ctx, tx, p, event, owners); err != nil {
-			return false, err
-		}
-		_, err = tx.Exec(
-			ctx,
-			`INSERT INTO migrate_import.order_receipts(source_key,plan_sha256,resolution_sha256,owners,snapshot)
-		SELECT $2,$3,$4,$5,(`+orderSnapshotSQL+`)`,
-			event.Catalog.Catalog.EventID,
-			key,
-			p.PlanHash,
-			p.ResolutionHash,
-			owners,
-		)
-		if err != nil {
-			return false, errors.New("apply_receipt_conflict")
-		}
-	}
-	if tx.Commit(ctx) != nil {
-		return false, errors.New("apply_commit_failed")
-	}
-	return reused, nil
+	return nil
 }
 
 func reconcileImportedOrderEvent(
 	ctx context.Context,
 	tx pgx.Tx,
+	p preparedOrders,
 	event preparedOrderEvent,
 	owners map[string]string,
 ) error {
-	var matched bool
-	err := tx.QueryRow(ctx, `SELECT owners=$2::jsonb AND snapshot=(`+orderSnapshotSQL+`) FROM migrate_import.order_receipts WHERE source_key=$3`, event.Catalog.Catalog.EventID, owners, event.Catalog.Legacy.Key).
-		Scan(&matched)
-	if err != nil || !matched {
+	var bound, matched bool
+	err := tx.QueryRow(ctx, `SELECT plan_sha256=$4 AND resolution_sha256=$5,owners=$2::jsonb AND snapshot=(`+orderSnapshotSQL+`) FROM migrate_import.order_receipts WHERE source_key=$3`, event.Catalog.Catalog.EventID, owners, event.Catalog.Legacy.Key, p.PlanHash, p.ResolutionHash).
+		Scan(&bound, &matched)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return errors.New("apply_receipt_missing")
+	}
+	if err != nil {
+		return errors.New("apply_receipt_unavailable")
+	}
+	if !bound {
+		return errors.New("apply_receipt_conflict")
+	}
+	if !matched {
 		return errors.New("apply_reconciliation_failed")
 	}
 	return nil

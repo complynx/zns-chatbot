@@ -123,12 +123,12 @@ func TestEventApplyPreservesCatalogReplayAndDrift(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, summary.Applied)
 	assert.True(t, summary.Reconciled)
-	summary, err = migrate.ApplyEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, summary.Reused)
 	_, err = db.Exec(t.Context(), `UPDATE core.pass_event_tiers SET price=777 WHERE position=1`)
 	require.NoError(t, err)
-	summary, err = migrate.ApplyEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
 	require.EqualError(t, err, "apply_reconciliation_failed")
 	assert.False(t, summary.Reconciled)
 	var price int
@@ -139,7 +139,7 @@ func TestEventApplyPreservesCatalogReplayAndDrift(t *testing.T) {
 	assert.Equal(t, 777, price)
 }
 
-func TestEventApplyAdminDependencyRollbackAndResume(t *testing.T) {
+func TestEventApplyAdminDependencyRollsBackWholeDomain(t *testing.T) {
 	t.Parallel()
 	dsn, db := applyDatabase(t)
 	second := strings.ReplaceAll(strings.ReplaceAll(syntheticEvent, "event-one", "event-two"), "event_one", "event_two")
@@ -147,10 +147,10 @@ func TestEventApplyAdminDependencyRollbackAndResume(t *testing.T) {
 	stage, path, links, _ := eventInputs(t, syntheticEvent, second)
 	summary, err := migrate.ApplyEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
 	require.EqualError(t, err, "apply_admin_identity_unresolved")
-	assert.EqualValues(t, 1, summary.Applied)
+	assert.Zero(t, summary.Applied)
 	var count int
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM core.pass_events`).Scan(&count))
-	assert.Equal(t, 1, count)
+	assert.Zero(t, count)
 	userStage, userPath, userLinks := applyInputs(
 		t,
 		`{"_id":"one","bot_id":77,"user_id":101,"print_name":"Admin One"}`,
@@ -160,8 +160,8 @@ func TestEventApplyAdminDependencyRollbackAndResume(t *testing.T) {
 	require.NoError(t, err)
 	summary, err = migrate.ApplyEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
 	require.NoError(t, err)
-	assert.EqualValues(t, 1, summary.Applied)
-	assert.EqualValues(t, 1, summary.Reused)
+	assert.EqualValues(t, 2, summary.Applied)
+	assert.Zero(t, summary.Reused)
 	require.NoError(
 		t,
 		db.QueryRow(t.Context(), `SELECT count(*) FROM core.pass_payment_admins WHERE event_id='event_two' AND hidden`).
@@ -193,8 +193,8 @@ func TestEventApplyAdminDependencyRollbackAndResume(t *testing.T) {
 		`UPDATE core.telegram_identities SET owner='replacement' WHERE bot_id=77 AND telegram_id=101`,
 	)
 	require.NoError(t, err)
-	_, err = migrate.ApplyEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
-	require.EqualError(t, err, "apply_reconciliation_failed")
+	_, err = migrate.ReconcileEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
+	require.EqualError(t, err, "apply_receipt_conflict")
 }
 
 func TestEventApplyRequiresExactAttestedInputs(t *testing.T) {
@@ -244,41 +244,6 @@ func TestEventApplyRequiresExactAttestedInputs(t *testing.T) {
 			require.EqualError(t, err, tc.want)
 		})
 	}
-}
-
-func TestEventApplyConcurrentAndChangedReceipt(t *testing.T) {
-	t.Parallel()
-	dsn, _ := applyDatabase(t)
-	stage, path, links, _ := eventInputs(t, syntheticEvent)
-	type outcome struct {
-		summary migrate.EventApplySummary
-		err     error
-	}
-	results := make(chan outcome, 2)
-	for range 2 {
-		go func() {
-			summary, err := migrate.ApplyEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
-			results <- outcome{summary, err}
-		}()
-	}
-	var applied, reused int64
-	for range 2 {
-		result := <-results
-		require.NoError(t, result.err)
-		assert.True(t, result.summary.Reconciled)
-		applied += result.summary.Applied
-		reused += result.summary.Reused
-	}
-	assert.EqualValues(t, 1, applied)
-	assert.EqualValues(t, 1, reused)
-	raw, err := os.ReadFile(links)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(links, append(raw, '\n'), 0o600))
-	_, err = migrate.ApplyEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
-	require.EqualError(t, err, "apply_receipt_conflict")
-	require.NoError(t, os.WriteFile(path, []byte("{}"), 0o600))
-	_, err = migrate.ApplyEvents(t.Context(), dsn, stage, path, links, migrate.DefaultLimits())
-	require.EqualError(t, err, "apply_plan_mismatch")
 }
 
 func TestEventPlanMaterializesPythonTitleFallback(t *testing.T) {

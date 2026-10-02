@@ -55,7 +55,7 @@ func TestMessagesApplyRealUserPipeline(t *testing.T) {
 		db.QueryRow(t.Context(), `SELECT text FROM core.conversation_events ORDER BY id LIMIT 1`).Scan(&firstText),
 	)
 	require.Equal(t, "ordinary synthetic text", firstText)
-	summary, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.NoError(t, err)
 	require.Zero(t, summary.Applied)
 	require.Equal(t, 2, summary.Reused)
@@ -64,7 +64,7 @@ func TestMessagesApplyRealUserPipeline(t *testing.T) {
 	summary, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.NoError(t, err)
 	require.True(t, summary.Reconciled)
-	summary, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.NoError(t, err)
 	require.Zero(t, summary.Applied)
 	_, err = db.Exec(t.Context(), `UPDATE core.conversation_events SET origin='derived'`)
@@ -80,13 +80,21 @@ func TestMessagesApplyRealUserPipeline(t *testing.T) {
 		`UPDATE core.conversation_events SET text='',omitted=true,omission_reason='deleted'; DELETE FROM core.conversation_message_bodies; UPDATE core.legacy_message_references SET tombstoned=true`,
 	)
 	require.NoError(t, err)
-	summary, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.NoError(t, err)
 	require.Equal(t, 2, summary.Tombstoned)
 	require.Zero(t, summary.Applied)
+	_, err = db.Exec(
+		t.Context(),
+		`INSERT INTO core.conversation_events(owner,source_key,kind,text) VALUES($1,'runtime:later','user','later runtime message')`,
+		owner,
+	)
+	require.NoError(t, err)
+	_, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	require.NoError(t, err)
 	r.Messages[0].Owner = "changed-owner"
 	writeMessageResolutions(t, resolutions, r)
-	_, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	_, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.Error(t, err)
 }
 func TestMessagesPreexistingHistoryBlocks(t *testing.T) {
@@ -113,6 +121,33 @@ func TestMessagesPreexistingHistoryBlocks(t *testing.T) {
 	require.Zero(t, count)
 }
 
+func TestMessagesOwnerConflictRollsBackWholeHistory(t *testing.T) {
+	t.Parallel()
+	dsn, db := applyDatabase(t)
+	us, up, ur := applyInputs(t, `{"_id":"one","bot_id":77,"user_id":101,"print_name":"One"}`)
+	_, err := migrate.ApplyUsers(t.Context(), dsn, us, up, ur, migrate.DefaultLimits())
+	require.NoError(t, err)
+	var owner string
+	require.NoError(t, db.QueryRow(t.Context(), `SELECT id FROM core.users WHERE telegram_id=101`).Scan(&owner))
+	second := strings.Replace(syntheticMessage, "message-one", "message-two", 1)
+	second = strings.Replace(second, `"user_id":101`, `"user_id":102`, 1)
+	stage, plan, resolutions, _, r := messageInputs(t, syntheticMessage, second)
+	r.Messages[0].Owner = owner
+	r.Messages[1].Owner = "unknown-owner"
+	writeMessageResolutions(t, resolutions, r)
+	summary, err := migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	require.EqualError(t, err, "message_owner_mismatch")
+	require.Zero(t, summary.Applied)
+	require.False(t, summary.Reconciled)
+	var count int
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM core.conversation_events)+(SELECT count(*) FROM core.legacy_message_references)+(SELECT count(*) FROM core.conversation_message_bodies)`).
+			Scan(&count),
+	)
+	require.Zero(t, count)
+}
+
 func runMessageCLI(t *testing.T, dsn string, arguments ...string) []byte {
 	t.Helper()
 	args := append([]string{"run", "./cmd/zns-migrate"}, arguments...)
@@ -123,7 +158,7 @@ func runMessageCLI(t *testing.T, dsn string, arguments ...string) []byte {
 	return output
 }
 
-func TestMessagesPrivacyExclusionsAndPrefixGuard(t *testing.T) {
+func TestMessagesPrivacyExclusionsAndMissingHistory(t *testing.T) {
 	t.Parallel()
 	dsn, db := applyDatabase(t)
 	us, up, ur := applyInputs(
@@ -188,6 +223,6 @@ func TestMessagesPrivacyExclusionsAndPrefixGuard(t *testing.T) {
 		`DROP TABLE migrate_import.message_receipts; WITH removed AS (DELETE FROM core.legacy_message_references WHERE event_id=(SELECT min(id) FROM core.conversation_events) RETURNING event_id) DELETE FROM core.conversation_events WHERE id IN(SELECT event_id FROM removed)`,
 	)
 	require.NoError(t, err)
-	_, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
-	require.EqualError(t, err, "message_committed_prefix_invalid")
+	_, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	require.EqualError(t, err, "message_reference_missing")
 }

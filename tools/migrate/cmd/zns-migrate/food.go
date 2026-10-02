@@ -26,7 +26,7 @@ func executeFoodPlan(arguments []string) (result, error) {
 }
 
 func executeFoodImport(arguments []string, verify bool) (result, error) {
-	input, err := parseOrderImportFlags(arguments)
+	input, err := parseImportFlags(arguments)
 	if err != nil {
 		return result{}, err
 	}

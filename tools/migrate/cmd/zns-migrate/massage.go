@@ -22,7 +22,7 @@ func executeMassagePlan(arguments []string) (result, error) {
 	return result{Massage: &summary, Reused: summary.Reused}, err
 }
 func executeMassageImport(arguments []string, verify bool) (result, error) {
-	input, err := parseOrderImportFlags(arguments)
+	input, err := parseImportFlags(arguments)
 	if err != nil {
 		return result{}, err
 	}

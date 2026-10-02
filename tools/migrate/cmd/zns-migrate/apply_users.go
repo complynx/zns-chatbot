@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
-	"io"
 	"os"
 	"os/signal"
 
@@ -12,25 +10,24 @@ import (
 )
 
 func executeUserApply(arguments []string) (result, error) {
-	if len(arguments) == 0 || arguments[0] != "users" {
+	return executeUserImport(arguments, false)
+}
+
+func executeUserImport(arguments []string, verify bool) (result, error) {
+	if len(arguments) == 0 || arguments[0] != identityUsersCommand {
 		return result{}, errors.New("expected_apply_users")
 	}
-	flags := flag.NewFlagSet("apply users", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	stage := flags.String("stage", "", "verified staging directory")
-	plan := flags.String("plan", "", "original private users plan")
-	resolutions := flags.String("resolutions", "", "private operator-attested identity and eligibility resolutions")
-	limits := migrate.DefaultLimits()
-	registerLimits(flags, &limits)
-	if flags.Parse(arguments[1:]) != nil || flags.NArg() != 0 || *stage == "" || *plan == "" || *resolutions == "" {
-		return result{}, errors.New("invalid_arguments")
-	}
-	dsn := os.Getenv("MIGRATE_DATABASE_URL")
-	if dsn == "" {
-		return result{}, errors.New("apply_database_url_required")
+	input, err := parseImportFlags(arguments[1:])
+	if err != nil {
+		return result{}, err
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	summary, err := migrate.ApplyUsers(ctx, dsn, *stage, *plan, *resolutions, limits)
+	var summary migrate.UserApplySummary
+	if verify {
+		summary, err = migrate.ReconcileUsers(ctx, input.dsn, input.stage, input.plan, input.resolutions, input.limits)
+	} else {
+		summary, err = migrate.ApplyUsers(ctx, input.dsn, input.stage, input.plan, input.resolutions, input.limits)
+	}
 	return result{ApplyUsers: &summary}, err
 }

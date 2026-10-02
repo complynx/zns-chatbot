@@ -114,6 +114,8 @@ func TestApplyUsersPreservesMetadataReplayAndDetectsDrift(t *testing.T) {
 	assert.EqualValues(t, 1, summary.Applied)
 	assert.EqualValues(t, 1, summary.Excluded)
 	assert.True(t, summary.Reconciled)
+	_, err = migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
+	require.EqualError(t, err, "apply_target_conflict")
 	var language, username, lastName, name, legal string
 	var frozen, canBook bool
 	var metadataUpdate int64
@@ -130,20 +132,20 @@ func TestApplyUsersPreservesMetadataReplayAndDetectsDrift(t *testing.T) {
 	assert.True(t, frozen)
 	assert.False(t, canBook)
 	assert.EqualValues(t, -1, metadataUpdate)
-	summary, err = migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
 	require.NoError(t, err)
 	assert.EqualValues(t, 0, summary.Applied)
 	assert.EqualValues(t, 1, summary.Reused)
 	_, err = db.Exec(t.Context(), `UPDATE core.users SET name='Later runtime edit'`)
 	require.NoError(t, err)
-	summary, err = migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
 	require.EqualError(t, err, "apply_reconciliation_failed")
 	assert.False(t, summary.Reconciled)
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT name FROM core.users`).Scan(&name))
 	assert.Equal(t, "Later runtime edit", name)
 }
 
-func TestApplyUsersConflictRollbackAndResume(t *testing.T) {
+func TestApplyUsersConflictRollsBackWholeDomain(t *testing.T) {
 	t.Parallel()
 	dsn, db := applyDatabase(t)
 	stage, plan, links := applyInputs(
@@ -162,17 +164,17 @@ func TestApplyUsersConflictRollbackAndResume(t *testing.T) {
 	require.NoError(t, err)
 	summary, err := migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
 	require.EqualError(t, err, "apply_identity_conflict")
-	assert.EqualValues(t, 1, summary.Applied)
+	assert.Zero(t, summary.Applied)
 	assert.False(t, summary.Reconciled)
 	var count int
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM core.pass_profiles`).Scan(&count))
-	assert.Equal(t, 1, count)
+	assert.Zero(t, count)
 	_, err = db.Exec(t.Context(), `DELETE FROM core.zitadel_identities WHERE owner='existing'`)
 	require.NoError(t, err)
 	summary, err = migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
 	require.NoError(t, err)
-	assert.EqualValues(t, 1, summary.Applied)
-	assert.EqualValues(t, 1, summary.Reused)
+	assert.EqualValues(t, 2, summary.Applied)
+	assert.Zero(t, summary.Reused)
 	assert.True(t, summary.Reconciled)
 }
 
@@ -261,36 +263,6 @@ func TestApplyUsersRejectsUnsafeResolutionsBeforeDatabase(t *testing.T) {
 	}
 }
 
-func TestApplyUsersConcurrentReplay(t *testing.T) {
-	t.Parallel()
-	dsn, db := applyDatabase(t)
-	stage, plan, links := applyInputs(t, `{"_id":"one","bot_id":77,"user_id":101,"print_name":"One"}`)
-	type result struct {
-		summary migrate.UserApplySummary
-		err     error
-	}
-	results := make(chan result, 2)
-	for range 2 {
-		go func() {
-			summary, err := migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
-			results <- result{summary, err}
-		}()
-	}
-	var applied, reused int64
-	for range 2 {
-		outcome := <-results
-		require.NoError(t, outcome.err)
-		assert.True(t, outcome.summary.Reconciled)
-		applied += outcome.summary.Applied
-		reused += outcome.summary.Reused
-	}
-	assert.EqualValues(t, 1, applied)
-	assert.EqualValues(t, 1, reused)
-	var count int
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM core.users`).Scan(&count))
-	assert.Equal(t, 1, count)
-}
-
 func TestApplyUsersRejectsDuplicateJSONKeys(t *testing.T) {
 	t.Parallel()
 	stage, plan, links := applyInputs(t, `{"_id":"one","bot_id":77,"user_id":101,"print_name":"One"}`)
@@ -325,7 +297,7 @@ func TestApplyUsersRejectsExistingAccountAndChangedReceipt(t *testing.T) {
 	raw, err := os.ReadFile(links)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(links, append(raw, '\n'), 0o600))
-	summary, err = migrate.ApplyUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileUsers(t.Context(), dsn, stage, plan, links, migrate.DefaultLimits())
 	require.EqualError(t, err, "apply_receipt_conflict")
 	assert.False(t, summary.Reconciled)
 }

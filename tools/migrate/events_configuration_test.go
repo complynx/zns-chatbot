@@ -32,6 +32,6 @@ func TestEventConfigurationImportAndDrift(t *testing.T) {
 	assert.Equal(t, `-1`, string(config["amount_cap_per_role"]))
 	_, err = db.Exec(t.Context(), `UPDATE core.pass_events SET thread_id=43 WHERE id='configured'`)
 	require.NoError(t, err)
-	_, err = migrate.ApplyEvents(t.Context(), dsn, stage, path, resolution, migrate.DefaultLimits())
+	_, err = migrate.ReconcileEvents(t.Context(), dsn, stage, path, resolution, migrate.DefaultLimits())
 	require.EqualError(t, err, "apply_reconciliation_failed")
 }

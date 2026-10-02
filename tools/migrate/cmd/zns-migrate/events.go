@@ -11,6 +11,8 @@ import (
 	migrate "github.com/complynx/zns-chatbot/tools/migrate"
 )
 
+const eventsDomainName = "events"
+
 func executeEventPlan(arguments []string) (result, error) {
 	flags := flag.NewFlagSet("plan events", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -26,22 +28,21 @@ func executeEventPlan(arguments []string) (result, error) {
 }
 
 func executeEventApply(arguments []string) (result, error) {
-	flags := flag.NewFlagSet("apply events", flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	stage := flags.String("stage", "", "verified staging directory")
-	plan := flags.String("plan", "", "original private event plan")
-	resolutions := flags.String("resolutions", "", "private operator policy attestations")
-	limits := migrate.DefaultLimits()
-	registerLimits(flags, &limits)
-	if flags.Parse(arguments) != nil || flags.NArg() != 0 || *stage == "" || *plan == "" || *resolutions == "" {
-		return result{}, errors.New("invalid_arguments")
-	}
-	dsn := os.Getenv("MIGRATE_DATABASE_URL")
-	if dsn == "" {
-		return result{}, errors.New("apply_database_url_required")
+	return executeEventImport(arguments, false)
+}
+
+func executeEventImport(arguments []string, verify bool) (result, error) {
+	input, err := parseImportFlags(arguments)
+	if err != nil {
+		return result{}, err
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
-	summary, err := migrate.ApplyEvents(ctx, dsn, *stage, *plan, *resolutions, limits)
+	var summary migrate.EventApplySummary
+	if verify {
+		summary, err = migrate.ReconcileEvents(ctx, input.dsn, input.stage, input.plan, input.resolutions, input.limits)
+	} else {
+		summary, err = migrate.ApplyEvents(ctx, input.dsn, input.stage, input.plan, input.resolutions, input.limits)
+	}
 	return result{ApplyEvents: &summary}, err
 }

@@ -84,7 +84,7 @@ func TestApplyOrdersPreservesLegacyProofIdentityAndTimeFallback(t *testing.T) {
 			assert.Equal(t, tc.token, hasToken)
 			assert.Equal(t, tc.attemptDate, hasAttemptDate)
 			assert.Equal(t, tc.received, hasProofDate)
-			_, err = migrate.ApplyOrders(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+			_, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 			require.NoError(t, err)
 			_, err = migrate.ReconcileOrders(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 			require.NoError(t, err)

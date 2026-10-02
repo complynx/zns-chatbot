@@ -7,7 +7,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// UserApplySummary contains counts and hashes only, including on partial failure.
+// UserApplySummary contains committed counts and input hashes only.
 type UserApplySummary struct {
 	PendingDomains   int    `json:"pending_domains"`
 	PlanSHA256       string `json:"plan_sha256"`
@@ -19,9 +19,27 @@ type UserApplySummary struct {
 	Reconciled       bool   `json:"reconciled"`
 }
 
-// ApplyUsers validates all input before connecting, then commits one complete
-// user and its receipt per transaction. Replays verify state without updating it.
+// ApplyUsers validates all input before connecting and commits the whole domain.
+// Existing target users are conflicts; recovery restores the whole target.
 func ApplyUsers(ctx context.Context, dsn, stage, plan, resolutions string, limits Limits) (UserApplySummary, error) {
+	return runUserImport(ctx, dsn, stage, plan, resolutions, limits, false)
+}
+
+// ReconcileUsers verifies the original mappings and fields without creating rows.
+func ReconcileUsers(
+	ctx context.Context,
+	dsn, stage, plan, resolutions string,
+	limits Limits,
+) (UserApplySummary, error) {
+	return runUserImport(ctx, dsn, stage, plan, resolutions, limits, true)
+}
+
+func runUserImport(
+	ctx context.Context,
+	dsn, stage, plan, resolutions string,
+	limits Limits,
+	verify bool,
+) (UserApplySummary, error) {
 	var summary UserApplySummary
 	prepared, err := prepareUsers(stage, plan, resolutions, limits)
 	if err != nil {
@@ -38,29 +56,56 @@ func ApplyUsers(ctx context.Context, dsn, stage, plan, resolutions string, limit
 		return summary, errors.New("apply_database_unavailable")
 	}
 	defer func() { _ = conn.Close(context.Background()) }()
-	if err = prepareUserReceipts(ctx, conn); err != nil {
-		return summary, err
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return summary, errors.New("apply_transaction_failed")
+	}
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	if !verify {
+		if err = prepareUserReceipts(ctx, tx); err != nil {
+			return summary, err
+		}
 	}
 	for _, user := range prepared.users {
-		reused, applyErr := applyOneUser(ctx, conn, prepared, user)
-		if applyErr != nil {
-			return summary, applyErr
-		}
-		if reused {
-			summary.Reused++
+		if verify {
+			err = verifyUserReceipt(ctx, tx, prepared, user)
 		} else {
-			summary.Applied++
+			err = insertUser(ctx, tx, prepared, user)
+		}
+		if err != nil {
+			return summary, err
+		}
+		if err = reconcileUser(ctx, tx, prepared, user); err != nil {
+			return summary, err
 		}
 	}
-	summary.PendingDomains, err = pendingUserDomains(ctx, conn, prepared.users)
+	summary.PendingDomains, err = pendingUserDomains(ctx, tx, prepared.users)
 	if err != nil {
 		return summary, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return summary, errors.New("apply_commit_failed")
+	}
+	if verify {
+		summary.Reused = summary.Candidates
+	} else {
+		summary.Applied = summary.Candidates
 	}
 	summary.Reconciled = true
 	return summary, nil
 }
 
-func pendingUserDomains(ctx context.Context, conn *pgx.Conn, users []preparedUser) (int, error) {
+func verifyUserReceipt(ctx context.Context, tx pgx.Tx, prepared preparedUsers, user preparedUser) error {
+	var matched bool
+	if err := tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 FROM migrate_import.user_receipts WHERE source_key=$1`, user.record.Legacy.Key, prepared.planHash, prepared.resolutionHash).
+		Scan(&matched); err != nil ||
+		!matched {
+		return errors.New("apply_receipt_conflict")
+	}
+	return nil
+}
+
+func pendingUserDomains(ctx context.Context, tx pgx.Tx, users []preparedUser) (int, error) {
 	count := 0
 	for _, user := range users {
 		for domain, raw := range map[string][]byte{"food": user.record.DeferredFood, "passes": user.record.DeferredPasses, "massage": user.record.DeferredMassage} {
@@ -68,7 +113,7 @@ func pendingUserDomains(ctx context.Context, conn *pgx.Conn, users []preparedUse
 				continue
 			}
 			var pending bool
-			if err := conn.QueryRow(ctx, `SELECT NOT completed FROM core.legacy_user_deferred_domains WHERE source_key=$1 AND domain=$2`, user.record.Legacy.Key, domain).
+			if err := tx.QueryRow(ctx, `SELECT NOT completed FROM core.legacy_user_deferred_domains WHERE source_key=$1 AND domain=$2`, user.record.Legacy.Key, domain).
 				Scan(&pending); err != nil {
 				return 0, errors.New("apply_deferred_domain_unresolved")
 			}
@@ -80,69 +125,22 @@ func pendingUserDomains(ctx context.Context, conn *pgx.Conn, users []preparedUse
 	return count, nil
 }
 
-func prepareUserReceipts(ctx context.Context, conn *pgx.Conn) error {
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return errors.New("apply_schema_unavailable")
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
+func prepareUserReceipts(ctx context.Context, tx pgx.Tx) error {
 	// Concurrent first runs must serialize PostgreSQL catalog writes as well as rows.
-	if _, err = tx.Exec(
+	if _, err := tx.Exec(
 		ctx,
 		`SELECT pg_advisory_xact_lock(hashtextextended('migrate_import.user_receipts',0))`,
 	); err != nil {
 		return errors.New("apply_schema_unavailable")
 	}
-	if _, err = tx.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS migrate_import;
+	if _, err := tx.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS migrate_import;
  CREATE TABLE IF NOT EXISTS migrate_import.user_receipts (
  source_key text PRIMARY KEY REFERENCES core.legacy_user_references(source_key),
  plan_sha256 text NOT NULL, resolution_sha256 text NOT NULL
  )`); err != nil {
 		return errors.New("apply_schema_unavailable")
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return errors.New("apply_schema_unavailable")
-	}
 	return nil
-}
-
-func applyOneUser(ctx context.Context, conn *pgx.Conn, plan preparedUsers, user preparedUser) (bool, error) {
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return false, errors.New("apply_transaction_failed")
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	// Serialize receipt lookup/create for this source record. Uniqueness also
-	// prevents different source records from claiming one target identity.
-	if _, err = tx.Exec(
-		ctx,
-		`SELECT pg_advisory_xact_lock(hashtextextended($1,0))`,
-		user.record.Legacy.Key,
-	); err != nil {
-		return false, errors.New("apply_transaction_failed")
-	}
-	var planHash, resolutionHash string
-	err = tx.QueryRow(ctx, `SELECT plan_sha256,resolution_sha256 FROM migrate_import.user_receipts WHERE source_key=$1`, user.record.Legacy.Key).
-		Scan(&planHash, &resolutionHash)
-	reused := err == nil
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return false, errors.New("apply_receipt_unavailable")
-	}
-	if reused && (planHash != plan.planHash || resolutionHash != plan.resolutionHash) {
-		return false, errors.New("apply_receipt_conflict")
-	}
-	if !reused {
-		if err = insertUser(ctx, tx, plan, user); err != nil {
-			return false, err
-		}
-	}
-	if err = reconcileUser(ctx, tx, plan, user); err != nil {
-		return false, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return false, errors.New("apply_commit_failed")
-	}
-	return reused, nil
 }
 
 func insertUser(ctx context.Context, tx pgx.Tx, plan preparedUsers, user preparedUser) error {

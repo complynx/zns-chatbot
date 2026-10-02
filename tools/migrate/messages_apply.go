@@ -51,67 +51,74 @@ func importMessages(
 		return result, errors.New("apply_database_unavailable")
 	}
 	defer func() { _ = conn.Close(context.Background()) }()
-	if _, err = conn.Exec(ctx, `SELECT pg_advisory_lock(hashtextextended('migrate_import.messages',0))`); err != nil {
-		return result, errors.New("message_lock_failed")
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return result, errors.New("apply_transaction_failed")
 	}
-	if err = messageCommittedOrder(ctx, conn, p); err != nil {
-		return result, err
+	defer func() { _ = tx.Rollback(context.Background()) }()
+	// The operator stops runtime writers. Lock once for the complete history import.
+	if _, err = tx.Exec(ctx, `LOCK TABLE core.conversation_events IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+		return result, errors.New("message_schema_unavailable")
 	}
+	if !verifyOnly {
+		if err = messagePreexisting(ctx, tx, p); err != nil {
+			return result, err
+		}
+		if _, err = tx.Exec(
+			ctx,
+			`CREATE SCHEMA IF NOT EXISTS migrate_import; CREATE TABLE IF NOT EXISTS migrate_import.message_receipts(source_key text PRIMARY KEY REFERENCES core.legacy_message_references(source_key), plan_sha256 text NOT NULL, resolution_sha256 text NOT NULL)`,
+		); err != nil {
+			return result, errors.New("apply_schema_unavailable")
+		}
+	}
+	var applied, reusedCount, tombstoneCount int
 	for _, row := range p.rows {
-		reused, tombstoned, applyErr := applyOneMessage(ctx, conn, p, row, verifyOnly)
+		reused, tombstoned, applyErr := applyOneMessage(ctx, tx, p, row, verifyOnly)
 		if applyErr != nil {
 			return result, applyErr
 		}
 		if reused {
-			result.Reused++
+			reusedCount++
 		} else {
-			result.Applied++
+			applied++
 		}
 		if tombstoned {
-			result.Tombstoned++
+			tombstoneCount++
 		}
 	}
+	if err = messageOrder(ctx, tx, p); err != nil {
+		return result, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return result, errors.New("apply_commit_failed")
+	}
+	result.Applied, result.Reused, result.Tombstoned = applied, reusedCount, tombstoneCount
 	result.Reconciled = true
 	return result, nil
 }
 
 func applyOneMessage(
 	ctx context.Context,
-	conn *pgx.Conn,
+	tx pgx.Tx,
 	p preparedMessages,
 	row preparedMessage,
 	verifyOnly bool,
 ) (bool, bool, error) {
-	tx, err := conn.Begin(ctx)
-	if err != nil {
-		return false, false, errors.New("apply_transaction_failed")
-	}
-	defer func() { _ = tx.Rollback(context.Background()) }()
-	// The operator stops runtime writers. The table lock closes the check/insert race.
-	if _, err = tx.Exec(ctx, `LOCK TABLE core.conversation_events IN SHARE ROW EXCLUSIVE MODE`); err != nil {
-		return false, false, errors.New("message_schema_unavailable")
-	}
 	exists, tombstone, err := reconcileMessage(ctx, tx, p, row)
 	if err != nil {
 		return false, false, err
 	}
 	if exists {
+		if !verifyOnly {
+			return false, false, errors.New("message_reference_conflict")
+		}
 		return true, tombstone, nil
 	}
 	if verifyOnly {
 		return false, false, errors.New("message_reference_missing")
 	}
-	if err = messagePreexisting(ctx, tx, p); err != nil {
-		return false, false, err
-	}
 	if err = messageOwner(ctx, tx, p, row); err != nil {
 		return false, false, err
-	}
-	if _, err = tx.Exec(
-		ctx,
-		`CREATE SCHEMA IF NOT EXISTS migrate_import; CREATE TABLE IF NOT EXISTS migrate_import.message_receipts(source_key text PRIMARY KEY REFERENCES core.legacy_message_references(source_key), plan_sha256 text NOT NULL, resolution_sha256 text NOT NULL)`,
-	); err != nil {
-		return false, false, errors.New("apply_schema_unavailable")
 	}
 	eventID, err := insertMessageEvent(ctx, tx, row)
 	if err != nil {
@@ -150,9 +157,6 @@ func applyOneMessage(
 	}
 	if _, _, err = reconcileMessage(ctx, tx, p, row); err != nil {
 		return false, false, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return false, false, errors.New("apply_transaction_failed")
 	}
 	return false, false, nil
 }
@@ -195,22 +199,15 @@ func messagePreexisting(ctx context.Context, tx pgx.Tx, p preparedMessages) erro
 	}
 	return nil
 }
-func messageCommittedOrder(ctx context.Context, conn *pgx.Conn, p preparedMessages) error {
-	missing := false
+
+// The whole committed history must retain the prepared chronological order.
+func messageOrder(ctx context.Context, tx pgx.Tx, p preparedMessages) error {
 	var previous int64
 	for _, row := range p.rows {
 		var id *int64
-		err := conn.QueryRow(ctx, `SELECT event_id FROM core.legacy_message_references WHERE source_key=$1`, row.record.Legacy.Key).
-			Scan(&id)
-		if errors.Is(err, pgx.ErrNoRows) {
-			missing = true
-			continue
-		}
-		if err != nil {
+		if err := tx.QueryRow(ctx, `SELECT event_id FROM core.legacy_message_references WHERE source_key=$1`, row.record.Legacy.Key).
+			Scan(&id); err != nil {
 			return errors.New("message_reference_unavailable")
-		}
-		if missing {
-			return errors.New("message_committed_prefix_invalid")
 		}
 		if id != nil {
 			if *id <= previous {
