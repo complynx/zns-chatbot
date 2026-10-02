@@ -2,6 +2,7 @@ package replacement
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -45,5 +46,19 @@ func TestDockerDiagnosticMalformedInventory(t *testing.T) {
 	require.ErrorAs(t, err, &failure)
 	require.Equal(t, observationStage("docker_decode"), failure.stage)
 	require.Equal(t, observationPredicate("invalid_json"), failure.predicate)
+	require.ErrorIs(t, err, ErrUnknown)
+	require.Equal(t, -1, failure.containers)
+}
+
+func TestDockerDiagnosticValidationRetainsDecodedCount(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal([]dockerContainer{{}, {}})
+	require.NoError(t, err)
+	_, err = (Docker{}).decodeInventory(raw)
+	var failure *monitorObservationError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, observationStage("docker_validation"), failure.stage)
+	require.Equal(t, observationPredicate("invalid_container"), failure.predicate)
+	require.Equal(t, 2, failure.containers)
 	require.ErrorIs(t, err, ErrUnknown)
 }

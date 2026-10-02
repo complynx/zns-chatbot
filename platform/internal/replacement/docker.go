@@ -149,7 +149,9 @@ func (d Docker) decodeInventory(data []byte) ([]Container, error) {
 	result := make([]Container, 0, len(raw))
 	for _, item := range raw {
 		if err := d.validateContainer(item); err != nil {
-			return nil, observationError(context.Background(), start, "docker_validation", "invalid_container", err)
+			failure := observationError(context.Background(), start, "docker_validation", "invalid_container", err)
+			failure.containers = len(raw)
+			return nil, failure
 		}
 		health := ""
 		if item.State.Health != nil {

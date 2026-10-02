@@ -101,6 +101,7 @@ func TestReplacementDiagnosticPrecedesCleanupAndDoesNotExposeErrors(t *testing.T
 		{"admission", "admission", "missing_running", func(f *fixture) { f.names = nil }},
 		{"process", "process", "not_running", func(f *fixture) { f.inventory[0].Running = false }},
 		{"sessions", "sessions", "operation", func(f *fixture) { f.sessionErr = errors.New("secret DSN and SQL") }},
+		{"identity", "docker_identity", "unknown_container", func(f *fixture) { f.inventory[0].Image = "unknown" }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -120,6 +121,7 @@ func TestReplacementDiagnosticPrecedesCleanupAndDoesNotExposeErrors(t *testing.T
 			require.NotContains(t, output.String(), "secret DSN and SQL")
 			var records []map[string]any
 			decoder := json.NewDecoder(bytes.NewReader(output.Bytes()))
+			decoder.UseNumber()
 			for decoder.More() {
 				var record map[string]any
 				require.NoError(t, decoder.Decode(&record))
@@ -128,8 +130,30 @@ func TestReplacementDiagnosticPrecedesCleanupAndDoesNotExposeErrors(t *testing.T
 			require.Len(t, records, 3)
 			require.Equal(t, test.stage, records[0]["stage"])
 			require.Equal(t, test.predicate, records[0]["predicate"])
+			require.Equal(t, json.Number(strconv.Itoa(len(replacement.Components()))), records[0]["containers"])
 			require.Equal(t, "replacement cleanup outcome", records[2]["msg"])
-			require.GreaterOrEqual(t, records[0]["elapsed_ms"].(float64), float64(0))
+			elapsed, err := records[0]["elapsed_ms"].(json.Number).Int64()
+			require.NoError(t, err)
+			require.GreaterOrEqual(t, elapsed, int64(0))
 		})
 	}
+}
+
+func TestReplacementJournalDiagnosticRetainsReadyCounts(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	f, c := newFixture(t)
+	c.Logger = slog.New(slog.NewJSONHandler(&output, nil))
+	f.onStart = func() { configureReadiness(f, true, true); f.saveFailure = replacement.StateRunning }
+	require.Error(t, c.Run(t.Context()))
+	var record map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(output.Bytes()))
+	decoder.UseNumber()
+	require.NoError(t, decoder.Decode(&record))
+	require.Equal(t, "journal", record["stage"])
+	require.Equal(t, "save_running", record["predicate"])
+	require.Equal(t, json.Number(strconv.Itoa(len(replacement.Components()))), record["containers"])
+	require.Equal(t, json.Number("1"), record["sessions"])
+	require.Equal(t, json.Number("1"), record["admissions"])
+	require.Equal(t, replacement.StateStopped, f.ledger.State)
 }

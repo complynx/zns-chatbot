@@ -197,7 +197,9 @@ func (c *Coordinator) knownInventory(ctx context.Context, ledger Ledger) ([]Cont
 				item.Image == old.Image && item.Created == old.Created
 		})
 		if index < 0 {
-			return nil, observationError(ctx, start, "docker_identity", "unknown_container", ErrUnknown)
+			failure := observationError(ctx, start, "docker_identity", "unknown_container", ErrUnknown)
+			failure.containers = len(current)
+			return nil, failure
 		}
 	}
 	return current, nil
@@ -298,7 +300,9 @@ func (c *Coordinator) monitor(ctx context.Context, ledger Ledger) error {
 		if ready && ledger.State != StateRunning {
 			ledger.State = StateRunning
 			if err = c.Journal.Save(ledger); err != nil {
-				return observationError(ctx, start, "journal", "save_running", err)
+				failure := observationError(ctx, start, "journal", "save_running", err)
+				failure.containers, failure.sessions, failure.admissions = incomplete.containers, incomplete.sessions, incomplete.admissions
+				return failure
 			}
 		}
 		if !ready && time.Now().After(readyDeadline) {
@@ -369,19 +373,19 @@ func (c *Coordinator) observe(ctx context.Context, ledger Ledger, incomplete **i
 		return fail("admission", "missing_running", ErrStopped, len(inventory), len(names), admissions)
 	}
 	*incomplete = readinessObservation(ready, len(inventory), len(names), admissions)
-	if *incomplete != nil {
+	if (*incomplete).predicate != "" {
 		return false, nil
 	}
 	return ready, nil
 }
 
 func readinessObservation(healthReady bool, containers, sessions, admissions int) *incompleteObservation {
-	if healthReady && admissions != 0 {
-		return nil
-	}
 	stage, predicate := observationStage("admission"), observationPredicate("missing_startup")
-	if !healthReady {
+	switch {
+	case !healthReady:
 		stage, predicate = "process", "app_health_not_ready"
+	case admissions != 0:
+		stage, predicate = "", ""
 	}
 	return &incompleteObservation{stage: stage, predicate: predicate,
 		containers: containers, sessions: sessions, admissions: admissions}
