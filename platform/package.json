@@ -8,6 +8,11 @@
     "format": "prettier --write '**/*.{js,mjs,html,json,yml,yaml,md}'",
     "quality": "npm run lint && npm run format:check",
     "quality:all": "node scripts/quality.mjs",
+    "test:fast": "node scripts/test-tiers.mjs fast",
+    "test:slow": "node scripts/test-tiers.mjs slow",
+    "test:changed": "node scripts/test-tiers.mjs changed",
+    "test:all": "node scripts/test-tiers.mjs full",
+    "test:tiers": "node --test scripts/test-tiers.test.mjs",
     "test:browser": "node tests/entities.mjs && node tests/browser.mjs && node tests/orders.mjs && node tests/meals.mjs && node tests/proofs.mjs && node tests/notifications.mjs && node tests/exports.mjs",
     "fqa": "node scripts/fqa/cli.mjs",
     "test:fqa": "node --test scripts/fqa/client.test.mjs"

@@ -1,0 +1,117 @@
+[
+  {
+    "package": "internal/identity",
+    "selectors": ["^TestZitadelActorRenewal$"],
+    "affected": ["platform/internal/identity/", "platform/identityprovision/"],
+    "reason": "Two real actor-token expiry boundaries."
+  },
+  {
+    "package": "cmd/scriptworker",
+    "selectors": ["^TestProcessDeadlineIncludesBlockedInput$"],
+    "affected": [
+      "platform/cmd/scriptworker/",
+      "platform/internal/scriptworker/",
+      "platform/internal/scriptprotocol/"
+    ],
+    "reason": "The child must reach its real process deadline with blocked input."
+  },
+  {
+    "package": "internal/scriptworker",
+    "selectors": ["^TestExecuteBudgetsAndDataBoundary$"],
+    "affected": [
+      "platform/cmd/scriptworker/",
+      "platform/internal/scriptworker/",
+      "platform/internal/scriptprotocol/"
+    ],
+    "reason": "An unresolved promise consumes the real whole-execution budget."
+  },
+  {
+    "package": "internal/scriptclient",
+    "selectors": ["^TestComposedRPCAllowsBoundedHostWorkBeyondFiveSeconds$"],
+    "affected": [
+      "platform/internal/scriptclient/",
+      "platform/internal/scriptprotocol/",
+      "platform/internal/scriptworker/",
+      "platform/cmd/scriptworker/"
+    ],
+    "reason": "Two 2.7-second host callbacks prove work beyond five seconds."
+  },
+  {
+    "package": "internal/bot",
+    "selectors": [
+      "^TestBotTransportRetry",
+      "^TestBotDeliveryPostgresRecoveryRetainsOrderAndAttemptFence$"
+    ],
+    "affected": [],
+    "reason": "Persisted retry/cooldown deadlines and recovered delivery leases; include the transport-retry family conservatively."
+  },
+  {
+    "package": "integration",
+    "selectors": [
+      "^TestNotificationUncertainRetry",
+      "^TestActualCanonicalNegativeGenerationReplayPreservesSchedule$"
+    ],
+    "affected": [
+      "platform/internal/notification/",
+      "platform/internal/notifications/",
+      "platform/internal/adminmessage/",
+      "platform/internal/announcement/"
+    ],
+    "reason": "Actual notification eligibility, provider cooldown and independent exhaustion deadlines; include the notification family conservatively."
+  },
+  {
+    "package": "integration",
+    "selectors": [
+      "^TestInboxPoisonUpdateRetainsChatOrderWhileOtherChatProgresses$",
+      "^TestInboxFailureCooldownSurvivesRestartAndPreservesFIFO$",
+      "^TestInboxSQLFailureDoesNotConsumeRetryBudget$",
+      "^TestInboxControlCooldownSurvivesRestartWithoutPoisonCharges$",
+      "^TestInboxCrashRecovery$",
+      "^TestHistoryArchiveRejectionSurvivesInboxRestart$",
+      "^TestHistoryTerminalPlanDoesNotPoisonInboxAfterRestart$",
+      "^TestTransientOnboardingFailureRemainsRetryable$",
+      "^TestProviderInfrastructureFailureKeepsDurableUpdate$"
+    ],
+    "affected": [
+      "platform/internal/conversation/",
+      "platform/internal/identity/",
+      "platform/identityprovision/"
+    ],
+    "reason": "Durable inbox cooldown, process recovery, history and identity restart scenarios."
+  },
+  {
+    "package": "integration",
+    "selectors": [
+      "^TestFoodDerivedExportContinuationRetainsSource$",
+      "^TestExportDoesNotMixEventsAndRetriesTelegramFailure$",
+      "^TestScriptFoodExportContinuationReplayAndRevoke$",
+      "^TestFoodCSVPartialRetryAndRevokedGrant$",
+      "^TestZitadelReminderRetriesUnattemptedIdentityFailure$"
+    ],
+    "affected": [
+      "platform/internal/legacyfood/",
+      "platform/internal/export/",
+      "platform/internal/identity/",
+      "platform/identityprovision/"
+    ],
+    "reason": "Food/CSV/XLSX export and reminder retries wait for persisted eligibility."
+  },
+  {
+    "package": "integration",
+    "selectors": [
+      "^TestPassNoticeDeliveryHistoryIsAtomic$",
+      "^TestPassPlanDeliveryRetryAndRender$",
+      "^TestPassPlanCommittedStatusRetry$",
+      "^TestLanguageInterruptedDeliveryReplayRefreshesCurrentCards$",
+      "^TestTelegramFailureAndPersistence$",
+      "^TestWorkflowUnavailableNoticeLocaleAndReplay$",
+      "^TestTelegramMetadataCallbackRetryAndOptionalClear$"
+    ],
+    "affected": [
+      "platform/internal/passbooking/",
+      "platform/internal/workflow/",
+      "platform/internal/preferences/"
+    ],
+    "reason": "Pass-notice lease recovery and presentation retry deadlines."
+  }
+]
