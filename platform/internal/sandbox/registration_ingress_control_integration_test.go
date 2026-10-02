@@ -47,17 +47,18 @@ type ingressPublicCommand struct {
 }
 
 type ingressPublicReceipt struct {
-	User             int64     `json:"user"`
-	State            string    `json:"state"`
-	Deadline         time.Time `json:"deadline"`
-	ArmedAt          time.Time `json:"armed_at"`
-	CapturedAt       time.Time `json:"captured_at"`
-	Response         []byte    `json:"response"`
-	SHA256           string    `json:"sha256"`
-	Replay           string    `json:"replay"`
-	ReplayArmedAt    time.Time `json:"replay_armed_at"`
-	ReplayDeadline   time.Time `json:"replay_deadline"`
-	ReplayFinishedAt time.Time `json:"replay_finished_at"`
+	User              int64     `json:"user"`
+	State             string    `json:"state"`
+	Deadline          time.Time `json:"deadline"`
+	ArmedAt           time.Time `json:"armed_at"`
+	CapturedAt        time.Time `json:"captured_at"`
+	CustodyFinishedAt time.Time `json:"custody_finished_at"`
+	Response          []byte    `json:"response"`
+	SHA256            string    `json:"sha256"`
+	Replay            string    `json:"replay"`
+	ReplayArmedAt     time.Time `json:"replay_armed_at"`
+	ReplayDeadline    time.Time `json:"replay_deadline"`
+	ReplayFinishedAt  time.Time `json:"replay_finished_at"`
 }
 
 func nativeIngressRequest(t *testing.T, f *sandbox.Fake, method, path string, body any) *httptest.ResponseRecorder {
@@ -99,11 +100,11 @@ func assertNativeReplayExpiry(t *testing.T, db *pgxpool.Pool) {
 	)
 	var update telegram.Update
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &update))
-	nativeIngressPoll(t, f, 0)
+	nativeIngressPoll(t, f, update.ID)
 	item := nativeIngressReceiptFor(t, f, "bounded")
 	command := ingressPublicCommand{Case: "bounded", Action: "release", User: 202, SHA256: item.SHA256}
 	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress", command)
-	require.Equal(t, item.Response, nativeIngressPoll(t, f, 0))
+	require.Equal(t, item.Response, nativeIngressPoll(t, f, update.ID))
 	command.Action = "replay"
 	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress", command)
 	pending := nativeIngressReceiptFor(t, f, "bounded")
@@ -111,8 +112,8 @@ func assertNativeReplayExpiry(t *testing.T, db *pgxpool.Pool) {
 	require.Equal(t, 10*time.Second, pending.ReplayDeadline.Sub(pending.ReplayArmedAt))
 	require.True(t, pending.ReplayFinishedAt.IsZero())
 	stop()
-	time.Sleep(time.Until(pending.ReplayDeadline) + 20*time.Millisecond)
 	restarted, stopRestarted := startNativeIngress(t, db)
+	time.Sleep(time.Until(pending.ReplayDeadline) + 20*time.Millisecond)
 	expired := assertReplayExpiryReadback(t, db, restarted, pending)
 	nativeIngressRequest(t, restarted, http.MethodPost, "/lab/registration-ingress", command)
 	require.Equal(t, "replay_expired", nativeIngressReceiptFor(t, restarted, "bounded").Replay)
@@ -371,7 +372,8 @@ func assertNativeIngressExpiry(t *testing.T, db *pgxpool.Pool, f *sandbox.Fake) 
 }
 
 // The opt-in environment and native control listener are process-wide, so this test is serial.
-func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
+func newNativeIngressDB(t *testing.T) *pgxpool.Pool {
+	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required for owned PostgreSQL integration")
@@ -394,6 +396,12 @@ func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
 	t.Cleanup(db.Close)
 	require.NoError(t, store.Migrate(t.Context(), db))
 	require.NoError(t, store.Seed(t.Context(), db))
+	return db
+}
+
+func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
+	db := newNativeIngressDB(t)
+	var err error
 	t.Setenv("R104_CONTROL_KEY", strings.Repeat("s", 32))
 	f, stop := startNativeIngress(t, db)
 	assertNativeIngressExpiry(t, db, f)
@@ -486,4 +494,86 @@ func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
 	require.NoError(t, err)
 	_, err = sandbox.New(t.Context(), db, nativeIngressToken)
 	require.ErrorContains(t, err, "original response")
+}
+
+func TestRegistrationIngressCapturedCustodyExpiresWithoutPoll(t *testing.T) {
+	for _, release := range []bool{false, true} {
+		t.Run(strconv.FormatBool(release), func(t *testing.T) {
+			db := newNativeIngressDB(t)
+			t.Setenv("R104_CONTROL_KEY", strings.Repeat("s", 32))
+			f, stop := startNativeIngress(t, db)
+			nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress",
+				ingressPublicCommand{Case: "old", Action: "arm", User: 101, HoldSeconds: 1})
+			w := nativeIngressRequest(t, f, http.MethodPost, "/lab/input", map[string]any{"user": 101, "text": "older"})
+			var old telegram.Update
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &old))
+			nativeIngressPoll(t, f, 0)
+			original := nativeIngressReceiptFor(t, f, "old")
+			if release {
+				nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress",
+					ingressPublicCommand{Case: "old", Action: "release", User: 101, SHA256: original.SHA256})
+			}
+			time.Sleep(time.Until(original.Deadline) + 20*time.Millisecond)
+			assertCapturedExpiryRollback(t, db, f, release)
+			stop()
+			restarted, stopRestarted := startNativeIngress(t, db)
+			defer stopRestarted()
+			pending := nativeIngressReceiptFor(t, restarted, "old")
+			require.Equal(t, "original_pending", pending.State)
+			require.Equal(t, original.Response, pending.Response)
+			require.Equal(t, original.SHA256, pending.SHA256)
+			require.False(t, pending.CustodyFinishedAt.Before(original.Deadline))
+			assertCapturedSuccessorOrder(t, restarted, old, original.Response)
+		})
+	}
+}
+
+func assertCapturedExpiryRollback(t *testing.T, db *pgxpool.Pool, f *sandbox.Fake, released bool) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/lab/registration-ingress?case=old", nil)
+	r.Header.Set("X-Sandbox", "1")
+	r.Header.Set("X-R104-Control", os.Getenv("R104_CONTROL_KEY"))
+	w := httptest.NewRecorder()
+	f.Handler().ServeHTTP(w, r)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
+	var state string
+	require.NoError(t, db.QueryRow(t.Context(),
+		`SELECT data #>> '{RegistrationIngress,cases,old,state}' FROM bot.fake_state`).Scan(&state))
+	expected := "held"
+	if released {
+		expected = "original_released"
+	}
+	require.Equal(t, expected, state)
+}
+
+func assertCapturedSuccessorOrder(t *testing.T, f *sandbox.Fake, old telegram.Update, original []byte) {
+	t.Helper()
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress",
+		ingressPublicCommand{Case: "new", Action: "arm", User: 202, HoldSeconds: 10})
+	w := nativeIngressRequest(t, f, http.MethodPost, "/lab/input", map[string]any{"user": 202, "text": "newer"})
+	var newer telegram.Update
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &newer))
+	require.Greater(t, newer.ID, old.ID)
+	require.Equal(t, original, nativeIngressPoll(t, f, 0))
+	require.Equal(t, "armed", nativeIngressReceiptFor(t, f, "new").State)
+	var unacknowledged struct {
+		Result []telegram.Update `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(nativeIngressPoll(t, f, 0), &unacknowledged))
+	require.Equal(t, []telegram.Update{old, newer}, unacknowledged.Result)
+	require.Equal(t, "armed", nativeIngressReceiptFor(t, f, "new").State)
+	require.JSONEq(t, `{"ok":true,"result":[]}`, string(nativeIngressPoll(t, f, old.ID+1)))
+	item := nativeIngressReceiptFor(t, f, "new")
+	var canonical bytes.Buffer
+	require.NoError(
+		t,
+		json.NewEncoder(&canonical).Encode(map[string]any{"ok": true, "result": []telegram.Update{newer}}),
+	)
+	require.Equal(t, canonical.Bytes(), item.Response)
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress",
+		ingressPublicCommand{Case: "new", Action: "release", User: 202, SHA256: item.SHA256})
+	require.Equal(t, item.Response, nativeIngressPoll(t, f, old.ID+1))
+	require.JSONEq(t, `{"ok":true,"result":[]}`, string(nativeIngressPoll(t, f, newer.ID+1)))
 }

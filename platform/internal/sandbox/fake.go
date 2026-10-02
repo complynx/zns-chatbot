@@ -100,6 +100,9 @@ func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
 	f.blocked = s.Blocked
 	f.stickers = s.Stickers
 	f.menu = s.Menu
+	if e = f.retireIngressCustody(ctx); e != nil {
+		return nil, e
+	}
 	return f, f.enableEditDelay(ctx)
 }
 

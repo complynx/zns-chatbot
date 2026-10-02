@@ -320,3 +320,40 @@ func TestRegistrationIngressReplayTimelineAndTerminalExpiry(t *testing.T) {
 		http.StatusOK,
 	)
 }
+
+func TestRegistrationIngressCapturedCustodyTimelineAndActiveBound(t *testing.T) {
+	t.Parallel()
+	f := newModelControlFixture(t).fake
+	ingressCommand(t, f, registrationIngressRequest{
+		Case: "old", Action: "arm", User: 101, HoldSeconds: 10,
+	}, http.StatusOK)
+	ingressInput(t, f, 101, "original")
+	ingressPoll(t, f, 0)
+	item := f.registrationIngress.Cases["old"]
+	for _, state := range []string{ingressHeld, ingressReleased} {
+		original := item
+		original.State = state
+		pending := expireIngressCustody(original, original.Deadline)
+		require.Equal(t, ingressOriginalPending, pending.State)
+		require.Equal(t, original.Response, pending.Response)
+		require.Equal(t, original.SHA256, pending.SHA256)
+		require.True(t, pending.CustodyFinishedAt.Equal(original.Deadline))
+		require.NoError(t, validateIngressCase("old", pending))
+		corrupt := pending
+		corrupt.CustodyFinishedAt = original.Deadline.Add(-time.Nanosecond)
+		require.ErrorContains(t, validateIngressCase("old", corrupt), "custody timeline")
+		corrupt.CustodyFinishedAt = time.Time{}
+		require.ErrorContains(t, validateIngressCase("old", corrupt), "custody timeline")
+		value := &registrationIngressControl{Cases: map[string]registrationIngressCase{"old": pending}}
+		newer, valid := applyIngressRequest(value, registrationIngressRequest{
+			Case: "new", Action: "arm", User: 202, HoldSeconds: 10,
+		})
+		require.True(t, valid)
+		value.Cases["new"] = newer
+		require.NoError(t, validateRegistrationIngress(value))
+		require.Equal(t, "old", ingressDeliveryOrder(value)[0])
+		require.False(t, ingressPreviousAcknowledged(value, 0))
+		value.Cases["extra"] = newer
+		require.ErrorContains(t, validateRegistrationIngress(value), "budget exceeded")
+	}
+}

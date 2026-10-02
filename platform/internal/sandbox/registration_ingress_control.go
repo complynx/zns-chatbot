@@ -10,6 +10,7 @@ import (
 	"errors"
 	"maps"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
@@ -21,6 +22,7 @@ const ingressControlCases = 8
 const ingressControlBytes = 1 << 20
 const ingressHoldLimit = 10 * time.Second
 const ingressReleased = "original_released"
+const ingressOriginalPending = "original_pending"
 const ingressReplayPending = "pending"
 const ingressReplayConsumed = "replay_consumed"
 const ingressReplayExpired = "replay_expired"
@@ -35,17 +37,18 @@ type registrationIngressControl struct {
 }
 
 type registrationIngressCase struct {
-	User             int64     `json:"user"`
-	State            string    `json:"state"`
-	Deadline         time.Time `json:"deadline"`
-	ArmedAt          time.Time `json:"armed_at"`
-	CapturedAt       time.Time `json:"captured_at"`
-	Response         []byte    `json:"response,omitempty"`
-	SHA256           string    `json:"sha256"`
-	Replay           string    `json:"replay"`
-	ReplayArmedAt    time.Time `json:"replay_armed_at"`
-	ReplayDeadline   time.Time `json:"replay_deadline"`
-	ReplayFinishedAt time.Time `json:"replay_finished_at"`
+	User              int64     `json:"user"`
+	State             string    `json:"state"`
+	Deadline          time.Time `json:"deadline"`
+	ArmedAt           time.Time `json:"armed_at"`
+	CapturedAt        time.Time `json:"captured_at"`
+	CustodyFinishedAt time.Time `json:"custody_finished_at"`
+	Response          []byte    `json:"response,omitempty"`
+	SHA256            string    `json:"sha256"`
+	Replay            string    `json:"replay"`
+	ReplayArmedAt     time.Time `json:"replay_armed_at"`
+	ReplayDeadline    time.Time `json:"replay_deadline"`
+	ReplayFinishedAt  time.Time `json:"replay_finished_at"`
 }
 
 type registrationIngressRequest struct {
@@ -69,7 +72,7 @@ func validateRegistrationIngress(value *registrationIngressControl) error {
 		if err := validateIngressCase(key, item); err != nil {
 			return err
 		}
-		if item.State != ingressDelivered && item.State != ingressExpired {
+		if item.State == delayStateArmed || item.State == ingressHeld || item.State == ingressReleased {
 			active++
 		}
 		if item.Replay == ingressReplayPending {
@@ -90,9 +93,15 @@ func validateIngressCase(key string, item registrationIngressCase) error {
 		return errors.New("invalid registration provider receipt binding")
 	}
 	switch item.State {
-	case delayStateArmed, ingressExpired, ingressHeld, ingressReleased, ingressDelivered:
+	case delayStateArmed, ingressExpired, ingressHeld, ingressReleased, ingressOriginalPending, ingressDelivered:
 	default:
 		return errors.New("invalid registration provider receipt state")
+	}
+	if item.State == ingressOriginalPending && item.CustodyFinishedAt.Before(item.Deadline) ||
+		item.State != ingressOriginalPending && item.State != ingressDelivered && !item.CustodyFinishedAt.IsZero() ||
+		item.State == ingressDelivered && !item.CustodyFinishedAt.IsZero() &&
+			item.CustodyFinishedAt.Before(item.Deadline) {
+		return errors.New("invalid registration provider custody timeline")
 	}
 	if item.State == delayStateArmed || item.State == ingressExpired {
 		if len(item.Response) != 0 || item.SHA256 != "" || !item.CapturedAt.IsZero() {
@@ -228,6 +237,9 @@ func expireIngressCustody(item registrationIngressCase, now time.Time) registrat
 	if item.State == delayStateArmed && !now.Before(item.Deadline) {
 		item.State = ingressExpired
 	}
+	if (item.State == ingressHeld || item.State == ingressReleased) && !now.Before(item.Deadline) {
+		item.State, item.CustodyFinishedAt = ingressOriginalPending, now
+	}
 	if item.Replay == ingressReplayPending && !now.Before(item.ReplayDeadline) {
 		item.Replay, item.ReplayFinishedAt = ingressReplayExpired, now
 	}
@@ -290,7 +302,8 @@ func applyIngressRequest(
 		}
 	case "release":
 		valid = exists && request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
-			(item.State == ingressHeld || item.State == ingressReleased || item.State == ingressDelivered) && request.HoldSeconds == 0
+			(item.State == ingressHeld || item.State == ingressReleased || item.State == ingressOriginalPending ||
+				item.State == ingressDelivered) && request.HoldSeconds == 0
 		if valid && item.State == ingressHeld {
 			item.State = ingressReleased
 		}
@@ -325,14 +338,20 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update, offset int64
 	value := f.cloneIngressControl()
 	now := time.Now().UTC()
 	for key, item := range value.Cases {
-		item = expireIngressCustody(item, now)
+		value.Cases[key] = expireIngressCustody(item, now)
+	}
+	keys := ingressDeliveryOrder(value)
+	for _, key := range keys {
+		item := value.Cases[key]
 		var updated registrationIngressCase
 		var response []byte
 		var err error
 		if item.Replay == ingressReplayPending {
 			updated, response, err = ingressReplayResponse(item, offset, now)
-		} else {
+		} else if item.State != delayStateArmed || ingressPreviousAcknowledged(value, offset) {
 			updated, response, err = ingressOriginalResponse(item, batch)
+		} else {
+			updated = item
 		}
 		if err != nil {
 			return nil, err
@@ -348,6 +367,41 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update, offset int64
 	}
 	f.registrationIngress = value
 	return nil, nil
+}
+
+// Retained originals are delivered before a newer barrier can capture another batch.
+func ingressDeliveryOrder(value *registrationIngressControl) []string {
+	keys := make([]string, 0, len(value.Cases))
+	for key := range value.Cases {
+		keys = append(keys, key)
+	}
+	slices.SortFunc(keys, func(left, right string) int {
+		a, b := value.Cases[left], value.Cases[right]
+		if a.State == ingressOriginalPending && b.State != ingressOriginalPending {
+			return -1
+		}
+		if b.State == ingressOriginalPending && a.State != ingressOriginalPending {
+			return 1
+		}
+		if order := a.CapturedAt.Compare(b.CapturedAt); order != 0 {
+			return order
+		}
+		return bytes.Compare([]byte(left), []byte(right))
+	})
+	return keys
+}
+
+func ingressPreviousAcknowledged(value *registrationIngressControl, offset int64) bool {
+	for _, item := range value.Cases {
+		if len(item.Response) == 0 {
+			continue
+		}
+		acknowledged, err := ingressBatchAcknowledged(item.Response, offset)
+		if err != nil || !acknowledged {
+			return false
+		}
+	}
+	return true
 }
 
 func ingressReplayResponse(
@@ -397,13 +451,11 @@ func ingressOriginalResponse(
 		item.CapturedAt = now
 		item.State = ingressHeld
 	}
-	if item.State == ingressHeld && !now.Before(item.Deadline) {
-		item.State = ingressReleased
-	}
+	item = expireIngressCustody(item, now)
 	switch item.State {
 	case ingressHeld:
 		return item, []byte("{\"ok\":true,\"result\":[]}\n"), nil
-	case ingressReleased:
+	case ingressReleased, ingressOriginalPending:
 		item.State = ingressDelivered
 		return item, item.Response, nil
 	default:
