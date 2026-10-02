@@ -310,12 +310,22 @@ func TestDeliveryQueueObservationUpgradeFrom087(t *testing.T) {
 	require.NoError(t, err)
 	expectedUpgradedLedger = append(expectedUpgradedLedger,
 		queueUpgradeLedgerEntry{Name: adminPageIngressUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(ingressBody))})
-	expectedUpgradedLedger = append(expectedUpgradedLedger,
-		queueUpgradeLedgerEntry{Name: deliveryTransportUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(transportBody))})
+	expectedUpgradedLedger = append(
+		expectedUpgradedLedger,
+		queueUpgradeLedgerEntry{
+			Name:     deliveryTransportUpgrade,
+			Checksum: fmt.Sprintf("%x", sha256.Sum256(transportBody)),
+		},
+	)
 	notificationBody, err := migrations.ReadFile("migrations/" + notificationUncertaintyUpgrade)
 	require.NoError(t, err)
-	expectedUpgradedLedger = append(expectedUpgradedLedger,
-		queueUpgradeLedgerEntry{Name: notificationUncertaintyUpgrade, Checksum: fmt.Sprintf("%x", sha256.Sum256(notificationBody))})
+	expectedUpgradedLedger = append(
+		expectedUpgradedLedger,
+		queueUpgradeLedgerEntry{
+			Name:     notificationUncertaintyUpgrade,
+			Checksum: fmt.Sprintf("%x", sha256.Sum256(notificationBody)),
+		},
+	)
 	currentBody, err := migrations.ReadFile("migrations/" + current)
 	require.NoError(t, err)
 	expectedUpgradedLedger = append(expectedUpgradedLedger,
