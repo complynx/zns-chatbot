@@ -73,7 +73,7 @@ func (s Service) BeginNotification(
 		)
 	}
 	if row.LastUncertainAttempt.Valid && row.UncertainResends >= notificationUncertainResendLimit {
-		exhausted, exhaustErr := s.exhaustNotificationAdmission(ctx, tx, attempt)
+		exhausted, exhaustErr := s.exhaustNotificationAdmission(ctx, tx, attempt, row.Failure)
 		return NotificationAdmission{Admission: exhausted}, exhaustErr
 	}
 	gate, err := delivery.Begin(
@@ -111,11 +111,32 @@ func (s Service) exhaustNotificationAdmission(
 	ctx context.Context,
 	tx pgx.Tx,
 	attempt delivery.Attempt,
+	failure string,
 ) (delivery.Admission, error) {
-	if err := s.exhaustNotificationRetry(ctx, tx, attempt); err != nil {
+	gate, err := delivery.ObservePending(ctx, tx, s.Delivery, notificationReference(attempt.ID))
+	if err != nil {
 		return delivery.Admission{}, err
 	}
-	gate := delivery.Admission{Reason: notificationRetryExhaustedReason}
+	if !gate.Ready {
+		outcome := delivery.Outcome{Kind: delivery.Deferred, Reason: failure}
+		if err = s.saveNotificationOutcome(
+			ctx,
+			dbgen.New(tx),
+			attempt,
+			outcome,
+			"",
+			gate.NotBefore,
+			0,
+			false,
+		); err != nil {
+			return delivery.Admission{}, err
+		}
+		return gate, core.DatabaseOperationError(tx.Commit(ctx))
+	}
+	if err = s.exhaustNotificationRetry(ctx, tx, attempt); err != nil {
+		return delivery.Admission{}, err
+	}
+	gate = delivery.Admission{Reason: notificationRetryExhaustedReason}
 	return gate, core.DatabaseOperationError(tx.Commit(ctx))
 }
 

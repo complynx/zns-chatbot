@@ -69,7 +69,7 @@ func (s Service) BeginNotification(ctx context.Context, input NotificationAttemp
 		return NotificationAdmission{Admission: cancelled}, cancelErr
 	}
 	if row.LastUncertainAttempt.Valid && row.UncertainResends >= notificationUncertainResendLimit {
-		exhausted, exhaustErr := s.exhaustNotificationAdmission(ctx, tx, attempt, clockAttempt)
+		exhausted, exhaustErr := s.exhaustNotificationAdmission(ctx, tx, attempt, row, clockAttempt)
 		return NotificationAdmission{Admission: exhausted}, exhaustErr
 	}
 	gate, current, err := s.beginCurrentNotification(ctx, tx, attempt, row)
@@ -169,12 +169,40 @@ func (s Service) exhaustNotificationAdmission(
 	ctx context.Context,
 	tx pgx.Tx,
 	attempt delivery.Attempt,
+	row dbgen.LockNotificationAttemptRow,
 	clockAttempt *RegistrationClockAttempt,
 ) (delivery.Admission, error) {
-	if err := s.exhaustNotificationRetry(ctx, tx, attempt); err != nil {
+	gate, err := delivery.ObservePending(ctx, tx, s.Delivery, notificationReference(attempt.ID))
+	if err != nil {
 		return delivery.Admission{}, err
 	}
-	gate := delivery.Admission{Reason: notificationRetryExhaustedReason}
+	current, err := s.currentPassportNotification(ctx, tx, row, true)
+	if err != nil {
+		return delivery.Admission{}, err
+	}
+	if !current {
+		return s.cancelNotificationAdmission(ctx, tx, attempt, clockAttempt)
+	}
+	if !gate.Ready {
+		outcome := delivery.Outcome{Kind: delivery.Deferred, Reason: row.Failure}
+		if err = s.saveNotificationOutcome(
+			ctx,
+			dbgen.New(tx),
+			attempt,
+			outcome,
+			"",
+			gate.NotBefore,
+			0,
+			false,
+		); err != nil {
+			return delivery.Admission{}, err
+		}
+		return s.commitNotificationAdmission(ctx, tx, gate, clockAttempt)
+	}
+	if err = s.exhaustNotificationRetry(ctx, tx, attempt); err != nil {
+		return delivery.Admission{}, err
+	}
+	gate = delivery.Admission{Reason: notificationRetryExhaustedReason}
 	return s.commitNotificationAdmission(ctx, tx, gate, clockAttempt)
 }
 

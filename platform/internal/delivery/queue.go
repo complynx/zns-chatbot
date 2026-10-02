@@ -115,6 +115,32 @@ func Begin(ctx context.Context, tx pgx.Tx, settings Settings, ref Reference) (Ad
 	return gate, core.DatabaseOperationError(err)
 }
 
+// ObservePending checks current queue and shared pacing eligibility without a send.
+// The owner must first lock its authority and attempt. Lock order is owner, lane,
+// entry, bot/chat pacing. It reserves no interval and advances no fairness cursor.
+func ObservePending(ctx context.Context, tx pgx.Tx, settings Settings, ref Reference) (Admission, error) {
+	if err := settings.Validate(); err != nil {
+		return Admission{}, err
+	}
+	row, err := lockQueue(ctx, tx, settings.BotID, ref)
+	if err != nil {
+		return Admission{}, err
+	}
+	q := dbgen.New(tx)
+	gate, err := queueAdmission(ctx, q, row)
+	if err != nil || !gate.Ready {
+		return gate, err
+	}
+	gate, _, err = observePacing(ctx, tx, settings, Destination{Chat: row.Chat, Thread: row.ThreadID})
+	if err != nil {
+		return Admission{}, err
+	}
+	if !gate.Ready {
+		err = projectQueue(ctx, q, row, Deferred, gate.NotBefore)
+	}
+	return gate, err
+}
+
 func queueAdmission(ctx context.Context, q *dbgen.Queries, row dbgen.ReadDeliveryEntryRow) (Admission, error) {
 	if Kind(row.State) != Deferred {
 		return Admission{Reason: "delivery_not_pending"}, nil

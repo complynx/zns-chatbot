@@ -14,26 +14,47 @@ import (
 
 // Reserve holds only short pacing locks inside the caller's send-boundary transaction.
 func Reserve(ctx context.Context, tx pgx.Tx, settings Settings, destination Destination) (Admission, error) {
-	if err := settings.Validate(); err != nil {
+	gate, clock, err := observePacing(ctx, tx, settings, destination)
+	if err != nil || !gate.Ready {
+		return gate, err
+	}
+	q := dbgen.New(tx)
+	if err = extend(ctx, q, settings.BotID, "", clock.Add(settings.BotInterval), ""); err != nil {
 		return Admission{}, err
 	}
+	if err = extend(ctx, q, settings.BotID, destination.Chat, clock.Add(settings.ChatInterval), ""); err != nil {
+		return Admission{}, err
+	}
+	return gate, nil
+}
+
+// observePacing holds the existing bot/chat locks without reserving a send interval.
+func observePacing(
+	ctx context.Context,
+	tx pgx.Tx,
+	settings Settings,
+	destination Destination,
+) (Admission, time.Time, error) {
+	if err := settings.Validate(); err != nil {
+		return Admission{}, time.Time{}, err
+	}
 	if destination.Chat == "" {
-		return Admission{}, errors.New("delivery destination missing")
+		return Admission{}, time.Time{}, errors.New("delivery destination missing")
 	}
 	q := dbgen.New(tx)
 	bot, chat, err := lockPacing(ctx, q, settings.BotID, destination.Chat)
 	if err != nil {
-		return Admission{}, err
+		return Admission{}, time.Time{}, err
 	}
 	clock, err := q.DeliveryClock(ctx)
 	if err != nil {
-		return Admission{}, core.DatabaseOperationError(err)
+		return Admission{}, time.Time{}, core.DatabaseOperationError(err)
 	}
 	if bot.PauseReason != "" {
-		return Admission{Reason: bot.PauseReason, NotBefore: clock.Time.Add(settings.Fallback)}, nil
+		return Admission{Reason: bot.PauseReason, NotBefore: clock.Time.Add(settings.Fallback)}, clock.Time, nil
 	}
 	if chat.PauseReason != "" {
-		return Admission{Reason: chat.PauseReason, NotBefore: clock.Time.Add(settings.Fallback)}, nil
+		return Admission{Reason: chat.PauseReason, NotBefore: clock.Time.Add(settings.Fallback)}, clock.Time, nil
 	}
 	deadline := clock.Time
 	for _, row := range []dbgen.LockPacingRow{bot, chat} {
@@ -41,22 +62,16 @@ func Reserve(ctx context.Context, tx pgx.Tx, settings Settings, destination Dest
 			return Admission{
 				Reason:    "delivery_deadline_unrepresentable",
 				NotBefore: clock.Time.Add(settings.Fallback),
-			}, nil
+			}, clock.Time, nil
 		}
 		if row.NotBefore.Valid && row.NotBefore.Time.After(deadline) {
 			deadline = row.NotBefore.Time
 		}
 	}
 	if deadline.After(clock.Time) {
-		return Admission{NotBefore: deadline, Reason: "delivery_cooldown"}, nil
+		return Admission{NotBefore: deadline, Reason: "delivery_cooldown"}, clock.Time, nil
 	}
-	if err = extend(ctx, q, settings.BotID, "", clock.Time.Add(settings.BotInterval), ""); err != nil {
-		return Admission{}, err
-	}
-	if err = extend(ctx, q, settings.BotID, destination.Chat, clock.Time.Add(settings.ChatInterval), ""); err != nil {
-		return Admission{}, err
-	}
-	return Admission{Ready: true}, nil
+	return Admission{Ready: true}, clock.Time, nil
 }
 
 // Schedule records an observed transport outcome in the same transaction as its outbox.

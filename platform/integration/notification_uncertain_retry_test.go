@@ -839,6 +839,173 @@ func TestNotificationUncertainRetryFinal429UsesOnlyActualCooldown(t *testing.T) 
 	}
 }
 
+func TestNotificationUncertainRetryExhaustionObservesIndependentDeadlines(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		for _, boundary := range []string{"after_final429", "after_preparation", "queue_deadline"} {
+			t.Run(domain+"/"+boundary, func(t *testing.T) {
+				t.Parallel()
+				r := notificationRuntime(t, domain)
+				loss := exhaustibleNotification429(t, r, domain)
+				before := r.status(t, r.first)
+				waitNotificationEligibility(t, r, before.AvailableAt)
+				if boundary == "after_preparation" {
+					assertNotificationCandidate(t, r, domain)
+					r.prepare(t)
+				}
+				deadline := extendIndependentNotificationDeadline(t, r, domain, boundary)
+				pacing := notificationPacingAndFairness(t, r)
+				if boundary != "after_preparation" {
+					r.prepare(t)
+				}
+				prepared := r.status(t, r.first)
+				r.postAttempt(t, "begin", delivery.Attempt{ID: r.first, Generation: prepared.Attempt}, http.StatusOK)
+				current := r.status(t, r.first)
+				require.Equal(t, "pending", current.State, "independent deadline delays exhaustion")
+				assert.WithinDuration(t, deadline, current.AvailableAt, time.Millisecond)
+				assert.Equal(t, before.Attempt, current.Attempt)
+				assert.Equal(t, before.UncertainResends, current.UncertainResends)
+				assert.Equal(t, before.LastUncertainAttempt, current.LastUncertainAttempt)
+				assertNotification429Projection(t, r, domain, current)
+				assert.JSONEq(t, pacing, notificationPacingAndFairness(t, r), "observation reserves nothing")
+				assert.Equal(t, 4, loss.count())
+				assertNotificationFinal429ReplayInert(t, r, current.Attempt)
+				waitNotificationEligibility(t, r, deadline)
+				dispatch := exactNotificationDelivery(r, domain)
+				require.NoError(t, dispatch(t.Context(), r.first))
+				terminal := r.status(t, r.first)
+				assert.Equal(t, "failed", terminal.State)
+				assert.Equal(t, "telegram_uncertain_retry_exhausted", terminal.Reason)
+				assert.Equal(t, before.Attempt, terminal.Attempt)
+				assert.Equal(t, int64(3), terminal.UncertainResends)
+				assert.JSONEq(t, pacing, notificationPacingAndFairness(t, r))
+				assert.Equal(t, 4, loss.count(), "no fourth additional wire")
+				require.NoError(t, dispatch(t.Context(), r.second))
+				assert.Equal(t, "sent", r.status(t, r.second).State)
+			})
+		}
+	}
+}
+
+func assertNotificationFinal429ReplayInert(t *testing.T, r *notificationRuntimeFixture, attempt int64) {
+	t.Helper()
+	before := notificationDeliverySnapshot(t, r)
+	r.postAttempt(t, "complete", map[string]any{
+		"id": r.first, "attempt": attempt,
+		"outcome": delivery.Outcome{Kind: delivery.Deferred, Reason: "telegram_rate_limit", RetryAfter: 1},
+	}, http.StatusOK)
+	assert.JSONEq(
+		t,
+		before,
+		notificationDeliverySnapshot(t, r),
+		"final canonical negative replay stays inert after observation",
+	)
+}
+
+func exhaustibleNotification429(t *testing.T, r *notificationRuntimeFixture, domain string) *notificationLostResponse {
+	t.Helper()
+	loss := &notificationLostResponse{drops: 1}
+	r.f.b.TG.HTTP = &http.Client{Transport: loss}
+	dispatch := exactNotificationDelivery(r, domain)
+	require.NoError(t, dispatch(t.Context(), r.first))
+	requireNotificationAccepted(t, r, loss)
+	wire := notificationWireSnapshot(t, r)
+	require.NotNil(t, wire)
+	provider := notificationCooldownProviderWithRetryAfter(t, r, wire.Text, 1)
+	r.f.b.TG.Base = provider.URL
+	for attempt := range 3 {
+		// Prior backoffs are covered separately. Expire only preparatory clocks;
+		// retain the actual final 429 and all subsequent independent deadlines.
+		r.wake(t)
+		require.NoError(t, dispatch(t.Context(), r.first))
+		state := r.status(t, r.first)
+		require.Equal(t, int64(attempt+1), state.UncertainResends)
+		assertNotification429Projection(t, r, domain, state)
+	}
+	return loss
+}
+
+func TestNotificationUncertainRetryExhaustionCancelsBeforeIndependentDeadline(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			loss := exhaustibleNotification429(t, r, domain)
+			before := r.status(t, r.first)
+			waitNotificationEligibility(t, r, before.AvailableAt)
+			r.prepare(t)
+			deadline := extendIndependentNotificationDeadline(t, r, domain, "after_preparation")
+			_, err := r.f.db.Exec(t.Context(), "UPDATE core.users SET can_book=false WHERE id='bob'")
+			require.NoError(t, err)
+			pacing := notificationPacingAndFairness(t, r)
+			r.postAttempt(t, "begin", delivery.Attempt{ID: r.first, Generation: before.Attempt}, http.StatusOK)
+			current := r.status(t, r.first)
+			assert.Equal(t, "cancelled", current.State, "current rights cancellation does not wait for pacing")
+			assert.Equal(t, "notification_no_longer_current", current.Reason)
+			assert.Equal(t, before.Attempt, current.Attempt)
+			assert.Equal(t, int64(3), current.UncertainResends)
+			assert.JSONEq(t, pacing, notificationPacingAndFairness(t, r))
+			assert.Equal(t, 4, loss.count())
+			var now time.Time
+			require.NoError(t, r.f.db.QueryRow(t.Context(), "SELECT clock_timestamp()").Scan(&now))
+			assert.True(t, now.Before(deadline), "cancellation commits before independent deadline")
+		})
+	}
+}
+
+func assertNotificationCandidate(t *testing.T, r *notificationRuntimeFixture, domain string) {
+	t.Helper()
+	for _, entry := range botDeliveryCandidates(t, r.f.b) {
+		if entry.Reference.Owner == notificationQueueOwner(domain) &&
+			entry.Reference.Key == strconv.FormatInt(r.first, 10) {
+			return
+		}
+	}
+	t.Fatal("exhausted owner missing from advisory candidates before independent extension")
+}
+
+func extendIndependentNotificationDeadline(
+	t *testing.T,
+	r *notificationRuntimeFixture,
+	domain, boundary string,
+) time.Time {
+	t.Helper()
+	if boundary == "queue_deadline" {
+		var deadline time.Time
+		err := r.f.db.QueryRow(t.Context(), `UPDATE core.delivery_queue SET not_before=clock_timestamp()+interval '2 seconds'
+ WHERE bot_id=$1 AND owner_kind=$2 AND owner_key=$3 AND effect_key='send' RETURNING not_before`,
+			syntheticDeliverySettings().BotID, string(notificationQueueOwner(domain)), strconv.FormatInt(r.first, 10)).
+			Scan(&deadline)
+		require.NoError(t, err)
+		return deadline
+	}
+	// A different chat's canonical rate limit extends shared bot pacing.
+	tx, err := r.f.db.Begin(t.Context())
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(t.Context()) }()
+	_, deadline, err := delivery.Schedule(
+		t.Context(),
+		tx,
+		syntheticDeliverySettings(),
+		delivery.Destination{Chat: "303"},
+		delivery.Outcome{Kind: delivery.Deferred, Reason: "telegram_rate_limit", RetryAfter: 2},
+	)
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(t.Context()))
+	return deadline
+}
+
+func notificationPacingAndFairness(t *testing.T, r *notificationRuntimeFixture) string {
+	t.Helper()
+	var raw []byte
+	require.NoError(t, r.f.db.QueryRow(t.Context(), `SELECT jsonb_build_object(
+ 'pacing',(SELECT jsonb_agg(to_jsonb(p) ORDER BY p.bot_id,p.chat) FROM core.delivery_pacing p),
+ 'fairness',(SELECT jsonb_agg(to_jsonb(f) ORDER BY f.bot_id) FROM core.delivery_fairness f),
+ 'lanes',(SELECT jsonb_agg(to_jsonb(l) ORDER BY l.bot_id,l.chat) FROM core.delivery_lanes l))`).Scan(&raw))
+	return string(raw)
+}
+
 func assertNotification429Projection(
 	t *testing.T, r *notificationRuntimeFixture, domain string, state notificationRuntimeStatus,
 ) {
