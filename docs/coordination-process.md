@@ -13,6 +13,17 @@ Root grants three Linux heavy-check slots across all stands. Full lint,
 whole-module compilation and race/integration suites request a
 slot with owner, exact frozen source, command, environment, resource bounds and
 evidence path. Quick focused checks on independent resources can continue.
+Count every running prerequisite, including idle PostgreSQL, runtime, observer
+and browser containers, in the assigned slot's complete resource envelope.
+Checker exit does not release a still-running prerequisite. Verify terminal
+Docker state and custody before reassigning its capacity. Retain data volumes
+when parking completed synthetic stands; do not infer historical aggregate
+compliance from individual worker profiles.
+Qualify the complete required toolchain and mounts before a heavy check. A
+qualified image name does not prove that Node, Git, Go and the dependency closure
+are all available in that container. Verify actual paths, pinned hashes and
+versions together. Reuse qualified binaries read-only; do not rebuild unchanged
+product images to correct a tool-only profile.
 A granted owner slot includes preparation for that same approved check:
 owned formatter scratch work and compile preflight on the same bounded resources.
 Report changed input hashes, actual handles and terminal evidence without another
@@ -63,6 +74,15 @@ Existing checks are allowed to finish. Do not terminate or restart them because
 their output is quiet or an observation times out. Observe the same tool handle;
 if handles are scoped to another agent, that owner reports the actual process and
 terminal outcome. A transient observation failure is not a process failure.
+
+Before a recovery observation START, compare every frozen/current profile pair
+and check the monitor's startup predicates against the retained predecessor
+state. Keep raw representation differences and any declared typed-default
+equivalence explicit; never normalize unrelated fields. A historical failure
+exception must bind one exact attempt and end on a fresh START or a finite
+operational deadline. Check actual event/container timestamps, not only arrival
+order. Preserve old failures and all new failure predicates. This is not a
+restart permission or an extension of readiness and health budgets.
 Root releases a slot after terminal evidence or an explicit owner interruption,
 preserving interrupted evidence as interrupted. New checks wait for the slot.
 
@@ -216,6 +236,10 @@ reapply for the one-off migration. Do not build per-record crash recovery, parti
 resume or an exhaustive importer interruption matrix. Keep atomic domain writes,
 explicit identity mapping, owned history/proof bytes, domain order, reconcile and
 exclusive-writer checks. The importer must not automatically erase a database.
+If synthetic allocation fails before database creation, preserve the failure and
+inspect the exact owned partial resources. Empty owned resources may be removed
+and a separately recorded corrected allocation may run within the same budgets.
+Do not build a generic partial-allocation resume framework for this rehearsal.
 
 QA validates the changed source independently and performs one isolated whole-DB
 reset/reapply rehearsal with the same input and important-state comparison.
