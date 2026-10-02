@@ -84,6 +84,14 @@ func TestMessagesApplyRealUserPipeline(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, summary.Tombstoned)
 	require.Zero(t, summary.Applied)
+	_, err = db.Exec(
+		t.Context(),
+		`INSERT INTO core.conversation_events(owner,source_key,kind,text) VALUES($1,'runtime:later','user','later runtime message')`,
+		owner,
+	)
+	require.NoError(t, err)
+	_, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	require.NoError(t, err)
 	r.Messages[0].Owner = "changed-owner"
 	writeMessageResolutions(t, resolutions, r)
 	_, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())

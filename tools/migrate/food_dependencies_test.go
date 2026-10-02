@@ -70,7 +70,7 @@ func TestFoodRejectsMissingEventReceiptBaseline(t *testing.T) {
 	}
 }
 
-func assertFoodLegacyReceiptUpgrade(t *testing.T, column string) {
+func assertFoodMissingReceiptBaseline(t *testing.T, column string) {
 	t.Helper()
 	dsn, db := applyDatabase(t)
 	stage, plan, resolution := foodImportInputs(t)

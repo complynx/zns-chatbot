@@ -60,10 +60,10 @@ func importMessages(
 	if _, err = tx.Exec(ctx, `LOCK TABLE core.conversation_events IN SHARE ROW EXCLUSIVE MODE`); err != nil {
 		return result, errors.New("message_schema_unavailable")
 	}
-	if err = messagePreexisting(ctx, tx, p); err != nil {
-		return result, err
-	}
 	if !verifyOnly {
+		if err = messagePreexisting(ctx, tx, p); err != nil {
+			return result, err
+		}
 		if _, err = tx.Exec(
 			ctx,
 			`CREATE SCHEMA IF NOT EXISTS migrate_import; CREATE TABLE IF NOT EXISTS migrate_import.message_receipts(source_key text PRIMARY KEY REFERENCES core.legacy_message_references(source_key), plan_sha256 text NOT NULL, resolution_sha256 text NOT NULL)`,
