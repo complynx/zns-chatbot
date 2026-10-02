@@ -1604,9 +1604,11 @@ func TestNotificationUncertainRetryHeldSuccessAfterRecoveryRevocation(t *testing
 
 func notificationHeldSuccessRevocation(t *testing.T, domain, revoke string) {
 	t.Helper()
-	r := notificationRuntime(t, domain)
+	var r *notificationRuntimeFixture
 	if domain == "food" && revoke == "source" {
 		r = foodReviewNotificationRuntime(t)
+	} else {
+		r = notificationRuntime(t, domain)
 	}
 	accepted := make(chan telegram.Message, 1)
 	release := make(chan struct{})
