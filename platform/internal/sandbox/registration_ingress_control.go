@@ -60,10 +60,10 @@ func validateRegistrationIngress(value *registrationIngressControl) error {
 			!item.Deadline.After(item.ArmedAt) || item.Deadline.Sub(item.ArmedAt) > ingressHoldLimit {
 			return errors.New("invalid registration provider receipt binding")
 		}
-		if item.State != "armed" && item.State != "held" && item.State != "released" && item.State != "delivered" {
+		if item.State != "armed" && item.State != "expired" && item.State != "held" && item.State != "released" && item.State != "delivered" {
 			return errors.New("invalid registration provider receipt state")
 		}
-		if item.State != "delivered" {
+		if item.State != "delivered" && item.State != "expired" {
 			active++
 		}
 		if item.Replay == "pending" {
@@ -73,7 +73,7 @@ func validateRegistrationIngress(value *registrationIngressControl) error {
 			item.Replay != "" && item.State != "delivered" {
 			return errors.New("invalid registration provider replay state")
 		}
-		if item.State == "armed" {
+		if item.State == "armed" || item.State == "expired" {
 			if len(item.Response) != 0 || item.SHA256 != "" || !item.CapturedAt.IsZero() {
 				return errors.New("armed registration provider receipt has content")
 			}
@@ -163,8 +163,8 @@ func (f *Fake) registrationIngressCommand(w http.ResponseWriter, r *http.Request
 	case "arm":
 		_, known := identity.Subject(request.User)
 		if !exists && known && request.SHA256 == "" && request.HoldSeconds > 0 &&
-			time.Duration(request.HoldSeconds)*time.Second <= ingressHoldLimit && len(value.Cases) < ingressControlCases {
-			armed := time.Now()
+			request.HoldSeconds <= int(ingressHoldLimit/time.Second) && len(value.Cases) < ingressControlCases {
+			armed := time.Now().UTC()
 			item = registrationIngressCase{User: request.User, State: "armed", ArmedAt: armed,
 				Deadline: armed.Add(time.Duration(request.HoldSeconds) * time.Second)}
 			valid = true
@@ -224,6 +224,10 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update) ([]byte, err
 			f.registrationIngress = value
 			return item.Response, nil
 		}
+		if item.State == "armed" && !time.Now().Before(item.Deadline) {
+			item.State = "expired"
+			value.Cases[key] = item
+		}
 		if item.State == "armed" && ingressBatchOwner(batch, item.User) {
 			var buffer bytes.Buffer
 			if err := json.NewEncoder(&buffer).Encode(map[string]any{"ok": true, "result": batch}); err != nil {
@@ -232,7 +236,7 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update) ([]byte, err
 			item.Response = buffer.Bytes()
 			digest := sha256.Sum256(item.Response)
 			item.SHA256 = hex.EncodeToString(digest[:])
-			item.CapturedAt = time.Now()
+			item.CapturedAt = time.Now().UTC()
 			item.State = "held"
 		}
 		if item.State == "held" && !time.Now().Before(item.Deadline) {
@@ -252,5 +256,6 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update) ([]byte, err
 			return response, nil
 		}
 	}
+	f.registrationIngress = value
 	return nil, nil
 }

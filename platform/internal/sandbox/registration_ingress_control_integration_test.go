@@ -65,6 +65,7 @@ func ingressPoll(t *testing.T, f *Fake, offset int64) []byte {
 }
 
 func TestRegistrationIngressControlGuards(t *testing.T) {
+	t.Parallel()
 	f, err := New(t.Context(), nil, "synthetic-token")
 	require.NoError(t, err)
 	w := ingressRequest(t, f, http.MethodGet, "/lab/registration-ingress?case=case-a", nil, false)
@@ -92,6 +93,7 @@ func TestRegistrationIngressControlGuards(t *testing.T) {
 }
 
 func TestRegistrationIngressExactBatchAndOneShotReplay(t *testing.T) {
+	t.Parallel()
 	f := newModelControlFixture(t).fake
 	ingressCommand(t, f, registrationIngressRequest{Case: "case-a", Action: "arm", User: 101, HoldSeconds: 10}, http.StatusOK)
 	first := ingressInput(t, f, 101, "event-specific application intent")
@@ -126,6 +128,7 @@ func TestRegistrationIngressExactBatchAndOneShotReplay(t *testing.T) {
 }
 
 func TestRegistrationIngressReceiptValidationAndBounds(t *testing.T) {
+	t.Parallel()
 	f := newModelControlFixture(t).fake
 	ingressCommand(t, f, registrationIngressRequest{Case: "case-a", Action: "arm", User: 101, HoldSeconds: 10}, http.StatusOK)
 	ingressInput(t, f, 101, "original")
@@ -149,6 +152,7 @@ func TestRegistrationIngressReceiptValidationAndBounds(t *testing.T) {
 }
 
 func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
+	t.Parallel()
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL required for owned PostgreSQL integration")
@@ -180,7 +184,12 @@ func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
 	restored, err := New(t.Context(), db, "synthetic-token")
 	require.NoError(t, err)
 	restored.delay = f.delay
-	require.Equal(t, item, restored.registrationIngress.Cases["case-a"])
+	reloaded := restored.registrationIngress.Cases["case-a"]
+	require.True(t, item.Deadline.Equal(reloaded.Deadline))
+	require.True(t, item.ArmedAt.Equal(reloaded.ArmedAt))
+	require.True(t, item.CapturedAt.Equal(reloaded.CapturedAt))
+	item.Deadline, item.ArmedAt, item.CapturedAt = reloaded.Deadline, reloaded.ArmedAt, reloaded.CapturedAt
+	require.Equal(t, item, reloaded)
 	release := registrationIngressRequest{Case: "case-a", Action: "release", User: 101, SHA256: item.SHA256}
 	ingressCommand(t, restored, release, http.StatusOK)
 	require.Equal(t, item.Response, ingressPoll(t, restored, 0))
@@ -205,4 +214,43 @@ func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
 	require.NoError(t, err)
 	restarted.delay = f.delay
 	require.JSONEq(t, `{"ok":true,"result":[]}`, string(ingressPoll(t, restarted, update.ID+1)))
+	_, err = db.Exec(t.Context(), `UPDATE bot.fake_state SET data=jsonb_set(data,'{RegistrationIngress,cases,case-a,sha256}',to_jsonb('changed'::text))`)
+	require.NoError(t, err)
+	_, err = New(t.Context(), db, "synthetic-token")
+	require.ErrorContains(t, err, "original response")
+}
+
+func TestRegistrationIngressNativeCallbackAndExpiredArm(t *testing.T) {
+	t.Parallel()
+	f := newModelControlFixture(t).fake
+	ingressCommand(t, f, registrationIngressRequest{Case: "expired", Action: "arm", User: 101, HoldSeconds: 1}, http.StatusOK)
+	item := f.registrationIngress.Cases["expired"]
+	item.ArmedAt = time.Now().Add(-2 * time.Second)
+	item.Deadline = item.ArmedAt.Add(time.Second)
+	f.registrationIngress.Cases["expired"] = item
+	ingressPoll(t, f, 0)
+	require.Equal(t, "expired", f.registrationIngress.Cases["expired"].State)
+	w := ingressRequest(t, f, http.MethodPost, "/botsynthetic-token/sendMessage", map[string]any{
+		"chat_id": 101, "text": "saved event card", "reply_markup": map[string]any{
+			"inline_keyboard": [][]map[string]string{{{"text": "Original", "callback_data": "saved-event-token"}}}}}, false)
+	require.Equal(t, http.StatusOK, w.Code)
+	var sent struct {
+		Result telegram.Message `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &sent))
+	ingressCommand(t, f, registrationIngressRequest{Case: "native", Action: "arm", User: 101, HoldSeconds: 10}, http.StatusOK)
+	w = ingressRequest(t, f, http.MethodPost, "/lab/input", map[string]any{
+		"user": 101, "data": "saved-event-token", "message_id": sent.Result.ID}, false)
+	require.Equal(t, http.StatusOK, w.Code)
+	var original telegram.Update
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &original))
+	require.NotNil(t, original.Callback)
+	require.Equal(t, "saved-event-token", original.Callback.Data)
+	ingressPoll(t, f, 0)
+	item = f.registrationIngress.Cases["native"]
+	var expected bytes.Buffer
+	require.NoError(t, json.NewEncoder(&expected).Encode(map[string]any{"ok": true, "result": []telegram.Update{original}}))
+	require.Equal(t, expected.Bytes(), item.Response)
+	ingressCommand(t, f, registrationIngressRequest{Case: "native", Action: "release", User: 101, SHA256: item.SHA256}, http.StatusOK)
+	require.Equal(t, expected.Bytes(), ingressPoll(t, f, 0))
 }
