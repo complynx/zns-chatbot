@@ -41,6 +41,8 @@ test('intentional eligibility, event and receipt waits stay in the slow tier', (
     ['TestPassRedactionRetriesAfterActualDeadline', 'passbooking'],
     ['TestRuntimeAuthorityTerminalNoticeDeliveryRecovery', 'passbooking'],
     ['TestPassTakeoverConcurrentReplayAndNoticeCurrentness', 'passbooking'],
+    ['TestPassNoticeDeliveryLocaleHistoryAndRetry', 'passbooking'],
+    ['TestPassNoticeStaleRetryKeepsOriginalHistory', 'passbooking'],
     ['TestPaymentUnavailableContextKeepsExactTarget', 'orders'],
     ['TestModernExportRetriesAuthorityOutageBeforeTransport', 'orders'],
     ['TestAdminMessageProviderDeliveryBoundary', 'adminmessage'],
@@ -67,6 +69,26 @@ test('intentional eligibility, event and receipt waits stay in the slow tier', (
 
 test('short budget probes remain fast beside expensive execution waits', () => {
   for (const [packageName, slowNames, fastNames] of [
+    [
+      'internal/sandbox',
+      ['TestModelControlHoldExpiresWithoutDetachedWaiter'],
+      [
+        'TestModelInstallAdmissionEndsBeforeBlockedMutation',
+        'TestModelConsumptionSuccessfulSaveCompletionExpiresUnderControlLock',
+      ],
+    ],
+    [
+      'internal/bot',
+      [
+        'TestBotTransportRetryCapturedLanguageCard',
+        'TestBotDeliveryPostgresRecoveryRetainsOrderAndAttemptFence',
+        'TestAcknowledgeControlOutcomes',
+      ],
+      [
+        'TestAcknowledgeRequestDeadline',
+        'TestStartAgentDiagnosticsOwnTimeoutIsOmitted',
+      ],
+    ],
     [
       'internal/scriptclient',
       ['TestComposedRPCAllowsBoundedHostWorkBeyondFiveSeconds'],
@@ -152,6 +174,8 @@ test('shared or unknown changes conservatively select all slow scenarios', () =>
     'platform/internal/config/config.go',
     'platform/schema/094.sql',
     'platform/internal/clock/clock.go',
+    'platform/internal/sandbox/model_fixture_control.go',
+    'platform/internal/bot/bot.go',
     'platform/go.mod',
     'unexpected/file',
   ]) {

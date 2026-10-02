@@ -37,13 +37,20 @@
     "reason": "Two 2.7-second host callbacks prove work beyond five seconds."
   },
   {
+    "package": "internal/sandbox",
+    "selectors": ["^TestModelControlHoldExpiresWithoutDetachedWaiter$"],
+    "affected": [],
+    "reason": "The held model request must reach its actual ten-second expiry without release or external cancellation; sandbox changes conservatively select all shared runtime scenarios."
+  },
+  {
     "package": "internal/bot",
     "selectors": [
       "^TestBotTransportRetry",
-      "^TestBotDeliveryPostgresRecoveryRetainsOrderAndAttemptFence$"
+      "^TestBotDeliveryPostgresRecoveryRetainsOrderAndAttemptFence$",
+      "^TestAcknowledgeControlOutcomes$"
     ],
     "affected": [],
-    "reason": "Persisted retry/cooldown deadlines and recovered delivery leases; include the transport-retry family conservatively."
+    "reason": "Persisted retry/cooldown deadlines, recovered delivery leases and the five-second acknowledgement deadline while control pacing remains blocked; include the transport-retry and acknowledgement outcome families conservatively."
   },
   {
     "package": "integration",
@@ -103,6 +110,8 @@
     "package": "integration",
     "selectors": [
       "^TestPassNoticeDeliveryHistoryIsAtomic$",
+      "^TestPassNoticeDeliveryLocaleHistoryAndRetry$",
+      "^TestPassNoticeStaleRetryKeepsOriginalHistory$",
       "^TestPassTakeoverConcurrentReplayAndNoticeCurrentness$",
       "^TestPassPlanDeliveryRetryAndRender$",
       "^TestPassPlanCommittedStatusRetry$",

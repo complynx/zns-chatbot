@@ -59,15 +59,20 @@ The manifest covers these waits on the current integration source:
 - Script worker: blocked-input process lifetime and unresolved promise execution
   budget.
 - Script client: two 2.7-second callbacks that prove a composed RPC beyond five seconds.
+- Model control: an unreleased request reaches its actual ten-second hold expiry.
 - Bot delivery: persisted transport retries, fallback cooldowns, resend budgets,
   recovered attempts and leases. The transport-retry family is kept together.
+  Control acknowledgement outcomes include the actual five-second timeout while
+  a reserved lane remains in cooldown.
 - Inbox: retry FIFO, control cooldown, crash recovery, history rejection,
   onboarding and provider recovery after a committed deadline.
 - Food and exports: CSV, derived export continuation, XLSX and reminder retries.
-- Pass and presentation: atomic notice lease recovery, pass-plan retry,
+- Pass and presentation: notice follow-up lease recovery, pass-plan retry,
   pass-redaction cooldown, terminal refusal recovery, language/workflow notice
   and Telegram metadata retries. Concurrent takeover waits for a deferred contact
   notice to become eligible after its persisted fallback deadline.
+  Locale/history recovery and stale-notice recovery both wait for the actual
+  two-minute follow-up lease. The atomic-history sibling stays with this family.
 - Orders: payment retirement cooldown and modern export authority recovery.
 - Event boundaries: sales finish after a profile lock, persisted registration
   tier opening and knowledge classification after the actual event end.
@@ -95,6 +100,11 @@ bounded execution does not consume a long eligibility wait. Ordinary fixture
 pacing only orders successful deliveries and remains fast.
 Externally cancelled fixture work, fake-clock advancement and lock/readiness
 polling remain fast: they do not wait for a product deadline to become eligible.
+The model-control cancellation probes use short deadlines or explicit release;
+they remain fast beside the self-expiring hold. The acknowledgement deadline
+inspection test returns immediately and remains fast beside the five-second
+blocked-control outcome. Diagnostic SQL and source-collector pool acquisition
+use short bounded timeout probes and remain fast.
 
 QA owns the semantic classification and affected-domain inventory. Developers
 provide scenario intent and source changes; a separate reviewer approves the
@@ -110,6 +120,13 @@ Classification evidence includes the deadline readers in
 lock, so that scenario remains fast. Short script budget probes are defined in
 `internal/scriptclient/execute_budget_internal_test.go` and
 `internal/scriptworker/execute_test.go`.
+`recoverPassNoticeFollowup` in `integration/pass_notice_delivery_test.go` reads
+the persisted lease and is called by `TestPassNoticeDeliveryLocaleHistoryAndRetry`
+and `TestPassNoticeStaleRetryKeepsOriginalHistory`. The model hold expiry is in
+`internal/sandbox/model_fixture_control_internal_test.go`; the blocked control
+acknowledgement is in `internal/bot/acknowledge_control_internal_test.go`.
+Sandbox and bot runtime paths stay unknown to narrow domain selection because
+their provider and dispatch helpers serve multiple slow integration families.
 
 When adding a scenario that deliberately waits for eligibility, expiry, sales
 opening or event finish, add its top-level selector and domain dependencies to
