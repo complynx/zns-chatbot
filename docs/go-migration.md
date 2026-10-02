@@ -260,17 +260,24 @@ grant. Duplicate source keys, owners, identities and JSON keys fail closed. Only
 identity and booking-policy blockers can be resolved here; all other unmapped or
 invalid data prevents the whole preflight from reaching SQL.
 
-Stop runtime writers for the import and reconciliation window. Each user, profile,
-identity link, durable legacy reference and receipt commits in one transaction;
-earlier committed records survive a later conflict. Resume requires the same plan
-and resolution bytes and verifies their original target fields without updates.
-Existing target accounts are conflicts even if their values match. Changed target
-state fails reconciliation; there is no repair or overwrite mode. `reconciled`
-means each record was verified in its transaction, not a global snapshot while
-other writers run. Archive private inputs for recovery; do not delete core rows to
-roll back a partial import. Migration041 retains source-key/record hashes and owner
-references in Core after importer removal. The `migrate_import.user_receipts`
-schema is temporary, but retain it until import/replay acceptance is complete.
+Stop runtime writers for the import and reconciliation window. The one-off users
+command commits all users, profiles, identity links, legacy references and receipts
+in one domain transaction. Events, orders and messages also commit whole domains;
+food, passes and massage already use whole-domain transactions. There is no
+per-record partial resume. Existing target accounts remain conflicts even if
+their values match. Explicit `reconcile users` verifies the same plan/resolution
+bytes and original target fields without updates. Changed target state fails
+reconciliation; there is no repair or overwrite mode.
+
+On failure, stop and restore or recreate the complete pre-import target database,
+then reapply all domains in dependency order using the same verified inputs.
+Do not infer a safe prefix from a failed response or delete selected core rows;
+the importer never automatically erases the database. Keep an explicit mapping
+and archived private inputs for this recovery. See [one-off import](import-oneoff.md)
+for command and recovery boundaries. Migration041 retains source-key/record hashes
+and owner references in Core after importer removal. The temporary
+`migrate_import.user_receipts` schema remains until import/reconcile and
+whole-database recovery acceptance are complete.
 CLI output contains counts, hashes and stable error codes, never private input or
 database connection details. Acceptance for this slice uses synthetic data only;
 it does not establish production cutover or other-domain import parity.
