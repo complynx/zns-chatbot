@@ -119,8 +119,9 @@ type ingressIntakeObservation struct {
 }
 
 type ingressIntakeObserver struct {
-	db      *pgxpool.Pool
-	started chan ingressIntakeObservation
+	db       *pgxpool.Pool
+	started  chan ingressIntakeObservation
+	finished chan error
 }
 
 func (o ingressIntakeObserver) Start(ctx context.Context, _ string) (context.Context, func(error)) {
@@ -130,7 +131,12 @@ func (o ingressIntakeObserver) Start(ctx context.Context, _ string) (context.Con
 	case o.started <- value:
 	case <-ctx.Done():
 	}
-	return ctx, func(error) {}
+	return ctx, func(err error) {
+		select {
+		case o.finished <- err:
+		case <-ctx.Done():
+		}
+	}
 }
 
 type ingressCountingModel struct {
@@ -174,11 +180,12 @@ func assertNativeIngressProductDedup(t *testing.T, db *pgxpool.Pool, f *sandbox.
 	t.Cleanup(application.Close)
 	client := appclient.Client{Base: application.URL, SandboxToken: signer.Token}
 	observations := make(chan ingressIntakeObservation, 2)
+	completed := make(chan error, 2)
 	model := &ingressCountingModel{}
 	consumer := &bot.Bot{DB: db, API: client, Delivery: settings, Model: model,
 		Host:     appclient.Host{Base: application.URL, Signer: signer, UserToken: client.UserToken},
 		TG:       telegram.Client{Base: server.URL, Token: nativeIngressToken},
-		Observer: ingressIntakeObserver{db: db, started: observations}, Logger: slog.New(slog.DiscardHandler)}
+		Observer: ingressIntakeObserver{db: db, started: observations, finished: completed}, Logger: slog.New(slog.DiscardHandler)}
 	err := consumer.Run(ctx)
 	if err != nil {
 		require.ErrorIs(t, err, context.Canceled)
@@ -188,6 +195,8 @@ func assertNativeIngressProductDedup(t *testing.T, db *pgxpool.Pool, f *sandbox.
 	observation := <-observations
 	require.NoError(t, observation.err)
 	require.Equal(t, 1, observation.count, "intake committed the inbox before dispatch")
+	require.Len(t, completed, 1)
+	require.NoError(t, <-completed, "original business operation must succeed")
 	require.Equal(t, int32(1), model.calls.Load())
 	var count int
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&count))
