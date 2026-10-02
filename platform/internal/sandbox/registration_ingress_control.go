@@ -326,25 +326,14 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update, offset int64
 	now := time.Now().UTC()
 	for key, item := range value.Cases {
 		item = expireIngressCustody(item, now)
-		value.Cases[key] = item
+		var updated registrationIngressCase
+		var response []byte
+		var err error
 		if item.Replay == ingressReplayPending {
-			acknowledged, err := ingressBatchAcknowledged(item.Response, offset)
-			if err != nil {
-				return nil, err
-			}
-			if !acknowledged {
-				continue
-			}
-			item.Replay = ingressReplayConsumed
-			item.ReplayFinishedAt = now
-			value.Cases[key] = item
-			if err := validateRegistrationIngress(value); err != nil {
-				return nil, err
-			}
-			f.registrationIngress = value
-			return item.Response, nil
+			updated, response, err = ingressReplayResponse(item, offset, now)
+		} else {
+			updated, response, err = ingressOriginalResponse(item, batch)
 		}
-		updated, response, err := ingressOriginalResponse(item, batch)
 		if err != nil {
 			return nil, err
 		}
@@ -359,6 +348,19 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update, offset int64
 	}
 	f.registrationIngress = value
 	return nil, nil
+}
+
+func ingressReplayResponse(
+	item registrationIngressCase,
+	offset int64,
+	now time.Time,
+) (registrationIngressCase, []byte, error) {
+	acknowledged, err := ingressBatchAcknowledged(item.Response, offset)
+	if err != nil || !acknowledged {
+		return item, nil, err
+	}
+	item.Replay, item.ReplayFinishedAt = ingressReplayConsumed, now
+	return item, item.Response, nil
 }
 
 func ingressBatchAcknowledged(response []byte, offset int64) (bool, error) {
