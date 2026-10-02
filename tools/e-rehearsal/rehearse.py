@@ -16,7 +16,8 @@ DATABASE = None
 PROJECT = None
 ALLOCATION = None
 EVIDENCE = None
-DOMAINS = ("users", "events", "orders", "passes", "food", "massage", "messages")
+# Identity links precede original history; booking imports generate trusted history.
+DOMAINS = ("users", "messages", "events", "orders", "passes", "food", "massage")
 RECEIPTS = ("user_receipts", "event_receipts", "order_receipts", "pass_receipts",
             "food_receipts", "massage_receipts", "message_receipts")
 REQUIRED = ("core.legacy_user_references", "core.legacy_event_references",
@@ -194,7 +195,7 @@ def snapshot(expected, check_counts=True):
     tables = json.loads(sql("SELECT coalesce(json_agg(json_build_object('schema',n.nspname,"
                               "'name',c.relname,'kind',c.relkind) ORDER BY n.nspname,c.relname),'[]') "
                               "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
-                              "WHERE n.nspname IN('core','bot','interaction','public') "
+                              "WHERE n.nspname IN('core','bot','interaction','credits','public') "
                               "AND c.relkind IN('r','p','S');\n"))
     result = {}
     for table in tables:
@@ -290,16 +291,16 @@ def preflight(config, evidence, *, retired=False):
     return archived
 
 
-def validate_summary(domain, summary, *, replay=False):
+def validate_summary(domain, summary, *, read_only=False):
     if summary.get("reconciled") is not True:
         raise RuntimeError("import_reconciliation_incomplete")
-    if replay:
+    if read_only:
         if domain == "food":
             unchanged = summary.get("reused") is True
         else:
             unchanged = type(summary.get("applied")) is int and summary["applied"] == 0
         if not unchanged:
-            raise RuntimeError("import_replay_added_rows_or_missing_evidence")
+            raise RuntimeError("import_reconcile_added_rows_or_missing_evidence")
 
 
 def mounted_resources(config):
@@ -331,17 +332,15 @@ def import_all(config, evidence):
         entry = config["imports"][domain]
         args = [str(executable), "apply", domain, "--stage", entry["stage"],
                 "--plan", entry["plan"], "--resolutions", entry["resolutions"]]
-        for phase in ("first", "replay"):
-            response = json.loads(command(args, env=env))
-            summary = response["apply_" + domain]
-            validate_summary(domain, summary, replay=phase == "replay")
-            save(evidence / (domain + "-" + phase + ".json"), response)
-    for domain in ("orders", "passes", "food", "massage", "messages"):
+        response = json.loads(command(args, env=env))
+        validate_summary(domain, response["apply_" + domain])
+        save(evidence / (domain + "-first.json"), response)
+    for domain in DOMAINS:
         entry = config["imports"][domain]
         response = json.loads(command([str(executable), "reconcile", domain,
                                        "--stage", entry["stage"], "--plan", entry["plan"],
                                        "--resolutions", entry["resolutions"]], env=env))
-        validate_summary(domain, response["apply_" + domain])
+        validate_summary(domain, response["apply_" + domain], read_only=True)
         save(evidence / (domain + "-reconcile.json"), response)
     if archive_binding(config) != binding:
         raise RuntimeError("source_export_or_import_inputs_changed")
