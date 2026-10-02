@@ -185,10 +185,20 @@ func assertNativeIngressProductDedup(t *testing.T, db *pgxpool.Pool, f *sandbox.
 	observations := make(chan ingressIntakeObservation, 2)
 	completed := make(chan error, 2)
 	model := &ingressCountingModel{}
-	consumer := &bot.Bot{DB: db, API: client, Delivery: settings, Model: model,
+	consumer := &bot.Bot{
+		DB:       db,
+		API:      client,
+		Delivery: settings,
+		Model:    model,
 		Host:     appclient.Host{Base: application.URL, Signer: signer, UserToken: client.UserToken},
 		TG:       telegram.Client{Base: server.URL, Token: nativeIngressToken},
-		Observer: ingressIntakeObserver{db: db, started: observations, finished: completed}, Logger: slog.New(slog.DiscardHandler)}
+		Observer: ingressIntakeObserver{
+			db:       db,
+			started:  observations,
+			finished: completed,
+		},
+		Logger: slog.New(slog.DiscardHandler),
+	}
 	err := consumer.Run(ctx)
 	if err != nil {
 		require.ErrorIs(t, err, context.Canceled)
@@ -204,8 +214,11 @@ func assertNativeIngressProductDedup(t *testing.T, db *pgxpool.Pool, f *sandbox.
 	var count int
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM bot.telegram_inbox`).Scan(&count))
 	require.Zero(t, count, "original business operation completed")
-	require.NoError(t, db.QueryRow(t.Context(),
-		`SELECT count(*) FROM bot.interactions WHERE owner='alice' AND update_id=$1 AND kind='input'`, update.ID).Scan(&count))
+	require.NoError(t, db.QueryRow(
+		t.Context(),
+		`SELECT count(*) FROM bot.interactions WHERE owner='alice' AND update_id=$1 AND kind='input'`,
+		update.ID,
+	).Scan(&count))
 	require.Equal(t, 1, count)
 	require.NoError(t, db.QueryRow(t.Context(),
 		`SELECT count(*) FROM core.registration_ingress WHERE bot_id=999 AND request_key=$1`,
