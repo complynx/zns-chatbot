@@ -27,7 +27,7 @@ func TestDockerDiagnosticFixedOperationAndDeadline(t *testing.T) {
 		{"ps", "docker_list"}, {"inspect", "docker_inspect"}, {"private argument", "docker_command"},
 	} {
 		_, err := d.call(ctx, []string{test.command}, nil)
-		var failure *observationFailure
+		var failure *monitorObservationError
 		require.ErrorAs(t, err, &failure)
 		require.Equal(t, test.stage, failure.stage)
 		require.Equal(t, observationPredicate("operation"), failure.predicate)
@@ -41,7 +41,7 @@ func TestDockerDiagnosticFixedOperationAndDeadline(t *testing.T) {
 func TestDockerDiagnosticMalformedInventory(t *testing.T) {
 	t.Parallel()
 	_, err := (Docker{}).decodeInventory([]byte("private invalid json"))
-	var failure *observationFailure
+	var failure *monitorObservationError
 	require.ErrorAs(t, err, &failure)
 	require.Equal(t, observationStage("docker_decode"), failure.stage)
 	require.Equal(t, observationPredicate("invalid_json"), failure.predicate)

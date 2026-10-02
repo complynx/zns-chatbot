@@ -15,6 +15,7 @@ import (
 
 type diagnosticEngine struct {
 	*fixture
+
 	beforeStop func()
 }
 
@@ -26,6 +27,7 @@ func (d diagnosticEngine) Stop(ctx context.Context, containers []replacement.Con
 }
 
 func TestReplacementDiagnosticPrecedesCleanupAndDoesNotExposeErrors(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct {
 		name      string
 		stage     string
@@ -37,11 +39,10 @@ func TestReplacementDiagnosticPrecedesCleanupAndDoesNotExposeErrors(t *testing.T
 		{"sessions", "sessions", "operation", func(f *fixture) { f.sessionErr = errors.New("secret DSN and SQL") }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			var output bytes.Buffer
-			old := slog.Default()
-			slog.SetDefault(slog.New(slog.NewJSONHandler(&output, nil)))
-			defer slog.SetDefault(old)
 			f, c := newFixture(t)
+			c.Logger = slog.New(slog.NewJSONHandler(&output, nil))
 			f.onStart = func() { f.names = []string{"zns:" + installation + ":" + newLaunch + ":admit"} }
 			f.onRunning = func() { test.mutate(f) }
 			stops := 0

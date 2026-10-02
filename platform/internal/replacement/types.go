@@ -4,6 +4,7 @@ package replacement
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
@@ -83,6 +84,7 @@ type Journal interface {
 
 // Coordinator is the fixed single-host stop/start policy. Its caller owns the host lock.
 type Coordinator struct {
+	Logger        *slog.Logger
 	Engine        Engine
 	Sessions      Sessions
 	Journal       Journal

@@ -36,7 +36,6 @@ const inventoryConnectTimeout = 10 * time.Second
 const launchHexLength = 24
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, nil)))
 	if err := run(); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "replacement blocked or runtime stopped")
 		os.Exit(1)
@@ -74,6 +73,7 @@ func run() (result error) {
 		result = errors.Join(result, conn.Close(cleanup))
 	}()
 	coordinator := replacement.Coordinator{
+		Logger: slog.New(slog.NewJSONHandler(os.Stderr, nil)),
 		Engine: replacement.Docker{
 			Command:      replacement.DockerCommand{},
 			Installation: cfg.Installation,

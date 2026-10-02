@@ -13,7 +13,7 @@ import (
 type observationStage string
 type observationPredicate string
 
-type observationFailure struct {
+type monitorObservationError struct {
 	stage      observationStage
 	predicate  observationPredicate
 	elapsed    time.Duration
@@ -24,20 +24,21 @@ type observationFailure struct {
 	cause      error
 }
 
-func (e *observationFailure) Error() string { return "replacement observation failed" }
-func (e *observationFailure) Unwrap() error { return e.cause }
+func (e *monitorObservationError) Error() string { return "replacement observation failed" }
+func (e *monitorObservationError) Unwrap() error { return e.cause }
 
 func observationError(ctx context.Context, start time.Time, stage observationStage,
-	predicate observationPredicate, err error) *observationFailure {
+	predicate observationPredicate, err error) *monitorObservationError {
 	deadline := "none"
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded):
 		deadline = "deadline_exceeded"
-	} else if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+	case errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled):
 		deadline = "canceled"
-	} else if errors.Is(err, ErrDeadline) {
+	case errors.Is(err, ErrDeadline):
 		deadline = "readiness"
 	}
-	return &observationFailure{stage: stage, predicate: predicate, elapsed: time.Since(start),
+	return &monitorObservationError{stage: stage, predicate: predicate, elapsed: time.Since(start),
 		deadline: deadline, containers: -1, sessions: -1, admissions: -1, cause: err}
 }
 
@@ -63,13 +64,13 @@ func errorCategory(err error) string {
 }
 
 // recordFailure emits only fixed classifications, never underlying error text or identities.
-func recordFailure(ctx context.Context, err error) {
-	var failure *observationFailure
-	if !errors.As(err, &failure) {
-		failure = &observationFailure{stage: "monitor", predicate: "unclassified",
+func recordFailure(ctx context.Context, logger *slog.Logger, err error) {
+	failure, ok := errors.AsType[*monitorObservationError](err)
+	if !ok {
+		failure = &monitorObservationError{stage: "monitor", predicate: "unclassified",
 			deadline: "none", containers: -1, sessions: -1, admissions: -1}
 	}
-	slog.LogAttrs(ctx, slog.LevelError, "replacement monitor failure",
+	logger.LogAttrs(ctx, slog.LevelError, "replacement monitor failure",
 		slog.String("stage", string(failure.stage)), slog.String("predicate", string(failure.predicate)),
 		slog.String("error_category", errorCategory(err)), slog.String("deadline_class", failure.deadline),
 		slog.Int64("elapsed_ms", failure.elapsed.Milliseconds()), slog.Int("containers", failure.containers),
@@ -80,6 +81,10 @@ func recordFailure(ctx context.Context, err error) {
 // The service manager restarts Run after failure, through the same retirement barrier.
 func (c *Coordinator) Run(ctx context.Context) error {
 	c.DefaultBudgets()
+	logger := c.Logger
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	ledger, err := c.reconcile(ctx)
 	if err != nil {
 		return err
@@ -96,14 +101,12 @@ func (c *Coordinator) Run(ctx context.Context) error {
 	}
 	monitorStart := time.Now()
 	runErr := c.monitor(ctx, ledger)
-	if runErr != nil {
-		recordFailure(ctx, runErr)
-		slog.LogAttrs(ctx, slog.LevelInfo, "replacement monitor duration",
-			slog.Int64("elapsed_ms", time.Since(monitorStart).Milliseconds()))
-	}
+	recordFailure(ctx, logger, runErr)
+	logger.LogAttrs(ctx, slog.LevelInfo, "replacement monitor duration",
+		slog.Int64("elapsed_ms", time.Since(monitorStart).Milliseconds()))
 	cleanupStart := time.Now()
 	stopErr := c.cleanup(&ledger)
-	slog.LogAttrs(ctx, slog.LevelInfo, "replacement cleanup outcome",
+	logger.LogAttrs(ctx, slog.LevelInfo, "replacement cleanup outcome",
 		slog.String("error_category", errorCategory(stopErr)),
 		slog.Int64("elapsed_ms", time.Since(cleanupStart).Milliseconds()))
 	if errors.Is(runErr, context.Canceled) && stopErr == nil {
@@ -175,8 +178,7 @@ func (c *Coordinator) knownInventory(ctx context.Context, ledger Ledger) ([]Cont
 	start := time.Now()
 	current, err := c.Engine.Inventory(ctx)
 	if err != nil {
-		var classified *observationFailure
-		if errors.As(err, &classified) {
+		if _, ok := errors.AsType[*monitorObservationError](err); ok {
 			return nil, err
 		}
 		return nil, observationError(ctx, start, "docker_inventory", "operation", err)
@@ -316,16 +318,7 @@ func (c *Coordinator) observe(ctx context.Context, ledger Ledger) (bool, error) 
 	}
 	ready := true
 	for _, item := range inventory {
-		if !item.Running || item.Restarting || item.Paused || item.Health == "unhealthy" {
-			predicate := observationPredicate("not_running")
-			switch {
-			case item.Restarting:
-				predicate = "restarting"
-			case item.Paused:
-				predicate = "paused"
-			case item.Health == "unhealthy":
-				predicate = "unhealthy"
-			}
+		if predicate := failedProcess(item); predicate != "" {
 			return fail("process", predicate, ErrStopped, len(inventory), -1, -1)
 		}
 		if item.Component == componentApp && item.Health != "healthy" {
@@ -334,8 +327,7 @@ func (c *Coordinator) observe(ctx context.Context, ledger Ledger) (bool, error) 
 	}
 	names, err := c.Sessions.Names(ctx)
 	if err != nil {
-		var classified *observationFailure
-		if errors.As(err, &classified) {
+		if classified, ok := errors.AsType[*monitorObservationError](err); ok {
 			classified.containers = len(inventory)
 			return false, err
 		}
@@ -365,6 +357,20 @@ func (c *Coordinator) observe(ctx context.Context, ledger Ledger) (bool, error) 
 		return false, nil
 	}
 	return ready, nil
+}
+func failedProcess(item Container) observationPredicate {
+	switch {
+	case !item.Running:
+		return "not_running"
+	case item.Restarting:
+		return "restarting"
+	case item.Paused:
+		return "paused"
+	case item.Health == "unhealthy":
+		return "unhealthy"
+	default:
+		return ""
+	}
 }
 func (c *Coordinator) block(ledger *Ledger, err error) error {
 	ledger.State = StateBlocked
