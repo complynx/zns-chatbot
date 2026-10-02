@@ -266,3 +266,57 @@ func TestRegistrationIngressCommandRetiresUncapturedArm(t *testing.T) {
 	require.Equal(t, delayStateArmed, f.registrationIngress.Cases["successor"].State)
 	require.NoError(t, validateRegistrationIngress(f.registrationIngress))
 }
+
+func TestRegistrationIngressReplayTimelineAndTerminalExpiry(t *testing.T) {
+	t.Parallel()
+	f := newModelControlFixture(t).fake
+	ingressCommand(
+		t,
+		f,
+		registrationIngressRequest{Case: "bounded", Action: "arm", User: 101, HoldSeconds: 10},
+		http.StatusOK,
+	)
+	ingressInput(t, f, 101, "original")
+	ingressPoll(t, f, 0)
+	item := f.registrationIngress.Cases["bounded"]
+	command := registrationIngressRequest{Case: "bounded", Action: "release", User: 101, SHA256: item.SHA256}
+	ingressCommand(t, f, command, http.StatusOK)
+	ingressPoll(t, f, 0)
+	command.Action = "replay"
+	ingressCommand(t, f, command, http.StatusOK)
+	pending := f.registrationIngress.Cases["bounded"]
+	require.NoError(t, validateIngressReplay(pending))
+	for _, mutate := range []func(*registrationIngressCase){
+		func(item *registrationIngressCase) { item.ReplayArmedAt = time.Time{} },
+		func(item *registrationIngressCase) { item.ReplayDeadline = time.Time{} },
+		func(item *registrationIngressCase) { item.ReplayFinishedAt = item.ReplayArmedAt },
+		func(item *registrationIngressCase) {
+			item.Replay = ingressReplayConsumed
+			item.ReplayFinishedAt = item.ReplayDeadline
+		},
+		func(item *registrationIngressCase) {
+			item.Replay = ingressReplayExpired
+			item.ReplayFinishedAt = item.ReplayDeadline.Add(-time.Nanosecond)
+		},
+		func(item *registrationIngressCase) { item.Replay = "" },
+	} {
+		corrupt := pending
+		mutate(&corrupt)
+		require.Error(t, validateIngressReplay(corrupt))
+	}
+	expired := expireIngressCustody(pending, pending.ReplayDeadline)
+	require.Equal(t, ingressReplayExpired, expired.Replay)
+	require.True(t, expired.ReplayFinishedAt.Equal(pending.ReplayDeadline))
+	require.Equal(t, pending.Response, expired.Response)
+	require.Equal(t, pending.SHA256, expired.SHA256)
+	require.NoError(t, validateIngressReplay(expired))
+	f.registrationIngress.Cases["bounded"] = expired
+	ingressCommand(t, f, command, http.StatusOK)
+	require.Equal(t, expired, f.registrationIngress.Cases["bounded"])
+	ingressCommand(
+		t,
+		f,
+		registrationIngressRequest{Case: "successor", Action: "arm", User: 202, HoldSeconds: 1},
+		http.StatusOK,
+	)
+}

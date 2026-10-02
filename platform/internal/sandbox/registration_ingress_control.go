@@ -23,6 +23,7 @@ const ingressHoldLimit = 10 * time.Second
 const ingressReleased = "original_released"
 const ingressReplayPending = "pending"
 const ingressReplayConsumed = "replay_consumed"
+const ingressReplayExpired = "replay_expired"
 const ingressHeld = "held"
 const ingressDelivered = "delivered"
 const ingressExpired = "expired"
@@ -34,14 +35,17 @@ type registrationIngressControl struct {
 }
 
 type registrationIngressCase struct {
-	User       int64     `json:"user"`
-	State      string    `json:"state"`
-	Deadline   time.Time `json:"deadline"`
-	ArmedAt    time.Time `json:"armed_at"`
-	CapturedAt time.Time `json:"captured_at"`
-	Response   []byte    `json:"response,omitempty"`
-	SHA256     string    `json:"sha256"`
-	Replay     string    `json:"replay"`
+	User             int64     `json:"user"`
+	State            string    `json:"state"`
+	Deadline         time.Time `json:"deadline"`
+	ArmedAt          time.Time `json:"armed_at"`
+	CapturedAt       time.Time `json:"captured_at"`
+	Response         []byte    `json:"response,omitempty"`
+	SHA256           string    `json:"sha256"`
+	Replay           string    `json:"replay"`
+	ReplayArmedAt    time.Time `json:"replay_armed_at"`
+	ReplayDeadline   time.Time `json:"replay_deadline"`
+	ReplayFinishedAt time.Time `json:"replay_finished_at"`
 }
 
 type registrationIngressRequest struct {
@@ -90,17 +94,46 @@ func validateIngressCase(key string, item registrationIngressCase) error {
 	default:
 		return errors.New("invalid registration provider receipt state")
 	}
-	if item.Replay != "" && item.Replay != ingressReplayPending && item.Replay != ingressReplayConsumed ||
-		item.Replay != "" && item.State != ingressDelivered {
-		return errors.New("invalid registration provider replay state")
-	}
 	if item.State == delayStateArmed || item.State == ingressExpired {
 		if len(item.Response) != 0 || item.SHA256 != "" || !item.CapturedAt.IsZero() {
 			return errors.New("armed registration provider receipt has content")
 		}
+		return validateIngressReplay(item)
+	}
+	if err := validateIngressOriginal(item); err != nil {
+		return err
+	}
+	return validateIngressReplay(item)
+}
+
+func validateIngressReplay(item registrationIngressCase) error {
+	if item.Replay == "" {
+		if !item.ReplayArmedAt.IsZero() || !item.ReplayDeadline.IsZero() || !item.ReplayFinishedAt.IsZero() {
+			return errors.New("unarmed registration provider replay has timestamps")
+		}
 		return nil
 	}
-	return validateIngressOriginal(item)
+	if item.State != ingressDelivered || item.ReplayArmedAt.IsZero() || item.ReplayArmedAt.Before(item.CapturedAt) ||
+		!item.ReplayDeadline.After(
+			item.ReplayArmedAt,
+		) || item.ReplayDeadline.Sub(item.ReplayArmedAt) > ingressHoldLimit {
+		return errors.New("invalid registration provider replay binding")
+	}
+	switch item.Replay {
+	case ingressReplayPending:
+		if item.ReplayFinishedAt.IsZero() {
+			return nil
+		}
+	case ingressReplayConsumed:
+		if !item.ReplayFinishedAt.Before(item.ReplayArmedAt) && item.ReplayFinishedAt.Before(item.ReplayDeadline) {
+			return nil
+		}
+	case ingressReplayExpired:
+		if !item.ReplayFinishedAt.Before(item.ReplayDeadline) {
+			return nil
+		}
+	}
+	return errors.New("invalid registration provider replay state")
 }
 
 func validateIngressOriginal(item registrationIngressCase) error {
@@ -139,7 +172,7 @@ func (f *Fake) registrationIngressRead(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.retireIngressArms(r.Context()); err != nil {
+	if err := f.retireIngressCustody(r.Context()); err != nil {
 		api.JSON(w, http.StatusServiceUnavailable, nil)
 		return
 	}
@@ -167,15 +200,15 @@ func (f *Fake) cloneIngressControl() *registrationIngressControl {
 	return value
 }
 
-// Uncaptured custody expires even without polling; captured originals remain replayable.
-func (f *Fake) retireIngressArms(ctx context.Context) error {
+// Finite arm/replay custody expires without polling; original responses remain unchanged.
+func (f *Fake) retireIngressCustody(ctx context.Context) error {
 	value := f.cloneIngressControl()
 	changed := false
 	now := time.Now().UTC()
 	for key, item := range value.Cases {
-		if item.State == delayStateArmed && !now.Before(item.Deadline) {
-			item.State = ingressExpired
-			value.Cases[key] = item
+		updated := expireIngressCustody(item, now)
+		if updated.State != item.State || updated.Replay != item.Replay {
+			value.Cases[key] = updated
 			changed = true
 		}
 	}
@@ -191,6 +224,16 @@ func (f *Fake) retireIngressArms(ctx context.Context) error {
 	return nil
 }
 
+func expireIngressCustody(item registrationIngressCase, now time.Time) registrationIngressCase {
+	if item.State == delayStateArmed && !now.Before(item.Deadline) {
+		item.State = ingressExpired
+	}
+	if item.Replay == ingressReplayPending && !now.Before(item.ReplayDeadline) {
+		item.Replay, item.ReplayFinishedAt = ingressReplayExpired, now
+	}
+	return item
+}
+
 func (f *Fake) registrationIngressCommand(w http.ResponseWriter, r *http.Request) {
 	if !f.ingressControlAuthorized(w, r) {
 		return
@@ -204,7 +247,7 @@ func (f *Fake) registrationIngressCommand(w http.ResponseWriter, r *http.Request
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.retireIngressArms(r.Context()); err != nil {
+	if err := f.retireIngressCustody(r.Context()); err != nil {
 		api.JSON(w, http.StatusServiceUnavailable, nil)
 		return
 	}
@@ -256,6 +299,8 @@ func applyIngressRequest(
 			item.State == ingressDelivered && request.HoldSeconds == 0
 		if valid && item.Replay == "" {
 			item.Replay = ingressReplayPending
+			item.ReplayArmedAt = time.Now().UTC()
+			item.ReplayDeadline = item.ReplayArmedAt.Add(ingressHoldLimit)
 		}
 	}
 	return item, valid
@@ -278,7 +323,10 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update, offset int64
 		return nil, nil
 	}
 	value := f.cloneIngressControl()
+	now := time.Now().UTC()
 	for key, item := range value.Cases {
+		item = expireIngressCustody(item, now)
+		value.Cases[key] = item
 		if item.Replay == ingressReplayPending {
 			acknowledged, err := ingressBatchAcknowledged(item.Response, offset)
 			if err != nil {
@@ -288,7 +336,11 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update, offset int64
 				continue
 			}
 			item.Replay = ingressReplayConsumed
+			item.ReplayFinishedAt = now
 			value.Cases[key] = item
+			if err := validateRegistrationIngress(value); err != nil {
+				return nil, err
+			}
 			f.registrationIngress = value
 			return item.Response, nil
 		}
