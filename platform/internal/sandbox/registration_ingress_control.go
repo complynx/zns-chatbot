@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -137,6 +138,10 @@ func (f *Fake) registrationIngressRead(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.retireIngressArms(r.Context()); err != nil {
+		api.JSON(w, http.StatusServiceUnavailable, nil)
+		return
+	}
 	item, ok := f.ingressCase(r.URL.Query().Get("case"))
 	if !ok {
 		http.NotFound(w, r)
@@ -161,6 +166,30 @@ func (f *Fake) cloneIngressControl() *registrationIngressControl {
 	return value
 }
 
+// Uncaptured custody expires even without polling; captured originals remain replayable.
+func (f *Fake) retireIngressArms(ctx context.Context) error {
+	value := f.cloneIngressControl()
+	changed := false
+	now := time.Now().UTC()
+	for key, item := range value.Cases {
+		if item.State == delayStateArmed && !now.Before(item.Deadline) {
+			item.State = ingressExpired
+			value.Cases[key] = item
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	previous := f.registrationIngress
+	f.registrationIngress = value
+	if err := f.save(ctx); err != nil {
+		f.registrationIngress = previous
+		return err
+	}
+	return nil
+}
+
 func (f *Fake) registrationIngressCommand(w http.ResponseWriter, r *http.Request) {
 	if !f.ingressControlAuthorized(w, r) {
 		return
@@ -174,6 +203,10 @@ func (f *Fake) registrationIngressCommand(w http.ResponseWriter, r *http.Request
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := f.retireIngressArms(r.Context()); err != nil {
+		api.JSON(w, http.StatusServiceUnavailable, nil)
+		return
+	}
 	previous := f.registrationIngress
 	value := f.cloneIngressControl()
 	item, valid := applyIngressRequest(value, request)

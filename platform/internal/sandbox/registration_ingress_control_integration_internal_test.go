@@ -201,9 +201,10 @@ func TestRegistrationIngressNativeCallbackAndExpiredArm(t *testing.T) {
 	item.ArmedAt = time.Now().Add(-2 * time.Second)
 	item.Deadline = item.ArmedAt.Add(time.Second)
 	f.registrationIngress.Cases["expired"] = item
-	ingressPoll(t, f, 0)
+	w := ingressRequest(t, f, http.MethodGet, "/lab/registration-ingress?case=expired", nil, true)
+	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "expired", f.registrationIngress.Cases["expired"].State)
-	w := ingressRequest(t, f, http.MethodPost, "/botsynthetic-token/sendMessage", map[string]any{
+	w = ingressRequest(t, f, http.MethodPost, "/botsynthetic-token/sendMessage", map[string]any{
 		"chat_id": 101, "text": "saved event card", "reply_markup": map[string]any{
 			"inline_keyboard": [][]map[string]string{
 				{{"text": "Original", "callback_data": "saved-event-token"}},
@@ -242,4 +243,22 @@ func TestRegistrationIngressNativeCallbackAndExpiredArm(t *testing.T) {
 		http.StatusOK,
 	)
 	require.Equal(t, expected.Bytes(), ingressPoll(t, f, 0))
+}
+
+func TestRegistrationIngressCommandRetiresUncapturedArm(t *testing.T) {
+	t.Parallel()
+	f := newModelControlFixture(t).fake
+	ingressCommand(t, f, registrationIngressRequest{
+		Case: "elapsed", Action: "arm", User: 101, HoldSeconds: 1,
+	}, http.StatusOK)
+	item := f.registrationIngress.Cases["elapsed"]
+	item.ArmedAt = time.Now().Add(-2 * time.Second)
+	item.Deadline = item.ArmedAt.Add(time.Second)
+	f.registrationIngress.Cases["elapsed"] = item
+	ingressCommand(t, f, registrationIngressRequest{
+		Case: "successor", Action: "arm", User: 202, HoldSeconds: 10,
+	}, http.StatusOK)
+	require.Equal(t, ingressExpired, f.registrationIngress.Cases["elapsed"].State)
+	require.Equal(t, delayStateArmed, f.registrationIngress.Cases["successor"].State)
+	require.NoError(t, validateRegistrationIngress(f.registrationIngress))
 }
