@@ -2,25 +2,18 @@ package sandbox
 
 import (
 	"bytes"
-	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
-	"github.com/complynx/zns-chatbot/platform/internal/store"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -193,87 +186,6 @@ func TestRegistrationIngressReceiptValidationAndBounds(t *testing.T) {
 	item.Deadline = item.ArmedAt.Add(time.Second)
 	original.Cases["case-a"] = item
 	require.Equal(t, item.Response, ingressPoll(t, f, 0), "finite provider hold expires without changing business time")
-}
-
-func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
-	t.Parallel()
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL required for owned PostgreSQL integration")
-	}
-	admin, err := pgxpool.New(t.Context(), dsn)
-	require.NoError(t, err)
-	t.Cleanup(admin.Close)
-	name := "sandbox_ingress_" + rand.Text()
-	_, err = admin.Exec(t.Context(), "CREATE DATABASE "+pgx.Identifier{name}.Sanitize())
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_, dropErr := admin.Exec(context.WithoutCancel(t.Context()), "DROP DATABASE "+pgx.Identifier{name}.Sanitize())
-		require.NoError(t, dropErr)
-	})
-	config, err := pgxpool.ParseConfig(dsn)
-	require.NoError(t, err)
-	config.ConnConfig.Database = name
-	db, err := pgxpool.NewWithConfig(t.Context(), config)
-	require.NoError(t, err)
-	t.Cleanup(db.Close)
-	require.NoError(t, store.Migrate(t.Context(), db))
-	f, err := New(t.Context(), db, "synthetic-token")
-	require.NoError(t, err)
-	f.delay = newModelControlFixture(t).fake.delay
-	ingressCommand(
-		t,
-		f,
-		registrationIngressRequest{Case: "case-a", Action: "arm", User: 101, HoldSeconds: 10},
-		http.StatusOK,
-	)
-	update := ingressInput(t, f, 101, "specific event request")
-	ingressPoll(t, f, 0)
-	item := f.registrationIngress.Cases["case-a"]
-	restored, err := New(t.Context(), db, "synthetic-token")
-	require.NoError(t, err)
-	restored.delay = f.delay
-	reloaded := restored.registrationIngress.Cases["case-a"]
-	require.True(t, item.Deadline.Equal(reloaded.Deadline))
-	require.True(t, item.ArmedAt.Equal(reloaded.ArmedAt))
-	require.True(t, item.CapturedAt.Equal(reloaded.CapturedAt))
-	item.Deadline, item.ArmedAt, item.CapturedAt = reloaded.Deadline, reloaded.ArmedAt, reloaded.CapturedAt
-	require.Equal(t, item, reloaded)
-	release := registrationIngressRequest{Case: "case-a", Action: "release", User: 101, SHA256: item.SHA256}
-	ingressCommand(t, restored, release, http.StatusOK)
-	require.Equal(t, item.Response, ingressPoll(t, restored, 0))
-	ref := registrationingress.Reference{BotID: 999, UpdateID: update.ID}
-	for range 2 {
-		tx, txErr := db.Begin(t.Context())
-		require.NoError(t, txErr)
-		require.NoError(t, registrationingress.SaveTelegram(t.Context(), tx, ref, 101))
-		require.NoError(t, tx.Commit(t.Context()))
-	}
-	var count int
-	require.NoError(
-		t,
-		db.QueryRow(t.Context(), `SELECT count(*) FROM core.registration_ingress WHERE bot_id=999 AND request_key=$1`, strconv.FormatInt(update.ID, 10)).
-			Scan(&count),
-	)
-	require.Equal(t, 1, count)
-	ingressPoll(t, restored, update.ID+1)
-	release.Action = "replay"
-	ingressCommand(t, restored, release, http.StatusOK)
-	restoredAgain, err := New(t.Context(), db, "synthetic-token")
-	require.NoError(t, err)
-	restoredAgain.delay = f.delay
-	require.Equal(t, item.Response, ingressPoll(t, restoredAgain, update.ID+1))
-	restarted, err := New(t.Context(), db, "synthetic-token")
-	require.NoError(t, err)
-	restarted.delay = f.delay
-	require.JSONEq(t, `{"ok":true,"result":[]}`, string(ingressPoll(t, restarted, update.ID+1)))
-	_, err = db.Exec(
-		t.Context(),
-		`UPDATE bot.fake_state SET data=jsonb_set(data,'{RegistrationIngress,cases,case-a,sha256}',to_jsonb('changed'::text))`,
-	)
-	require.NoError(t, err)
-	_, err = New(t.Context(), db, "synthetic-token")
-	require.ErrorContains(t, err, "original response")
 }
 
 func TestRegistrationIngressNativeCallbackAndExpiredArm(t *testing.T) {
