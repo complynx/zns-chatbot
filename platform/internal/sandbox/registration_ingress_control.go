@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"time"
 
@@ -19,6 +20,9 @@ import (
 const ingressControlCases = 8
 const ingressControlBytes = 1 << 20
 const ingressHoldLimit = 10 * time.Second
+const ingressReleased = "original_released"
+const ingressReplayPending = "pending"
+const ingressReplayConsumed = "replay_consumed"
 
 // These receipts belong to the external provider, not product intake or ranks.
 // A replay is one exact duplicate response, never a new Telegram update.
@@ -55,43 +59,59 @@ func validateRegistrationIngress(value *registrationIngressControl) error {
 	total := 0
 	active := 0
 	for key, item := range value.Cases {
-		_, known := identity.Subject(item.User)
-		if key == "" || len(key) > 64 || !known || item.ArmedAt.IsZero() ||
-			!item.Deadline.After(item.ArmedAt) || item.Deadline.Sub(item.ArmedAt) > ingressHoldLimit {
-			return errors.New("invalid registration provider receipt binding")
-		}
-		if item.State != "armed" && item.State != "expired" && item.State != "held" && item.State != "released" && item.State != "delivered" {
-			return errors.New("invalid registration provider receipt state")
+		if err := validateIngressCase(key, item); err != nil {
+			return err
 		}
 		if item.State != "delivered" && item.State != "expired" {
 			active++
 		}
-		if item.Replay == "pending" {
+		if item.Replay == ingressReplayPending {
 			active++
-		}
-		if item.Replay != "" && item.Replay != "pending" && item.Replay != "consumed" ||
-			item.Replay != "" && item.State != "delivered" {
-			return errors.New("invalid registration provider replay state")
-		}
-		if item.State == "armed" || item.State == "expired" {
-			if len(item.Response) != 0 || item.SHA256 != "" || !item.CapturedAt.IsZero() {
-				return errors.New("armed registration provider receipt has content")
-			}
-			continue
-		}
-		var envelope struct {
-			OK     bool              `json:"ok"`
-			Result []telegram.Update `json:"result"`
-		}
-		digest := sha256.Sum256(item.Response)
-		if json.Unmarshal(item.Response, &envelope) != nil || !envelope.OK || len(envelope.Result) == 0 ||
-			!ingressBatchOwner(envelope.Result, item.User) || item.SHA256 != hex.EncodeToString(digest[:]) || item.CapturedAt.IsZero() {
-			return errors.New("invalid registration provider original response")
 		}
 		total += len(item.Response)
 	}
 	if active > 1 || total > ingressControlBytes {
 		return errors.New("registration provider receipt budget exceeded")
+	}
+	return nil
+}
+
+func validateIngressCase(key string, item registrationIngressCase) error {
+	_, known := identity.Subject(item.User)
+	if key == "" || len(key) > 64 || !known || item.ArmedAt.IsZero() ||
+		!item.Deadline.After(item.ArmedAt) || item.Deadline.Sub(item.ArmedAt) > ingressHoldLimit {
+		return errors.New("invalid registration provider receipt binding")
+	}
+	switch item.State {
+	case delayStateArmed, "expired", "held", ingressReleased, "delivered":
+	default:
+		return errors.New("invalid registration provider receipt state")
+	}
+	if item.Replay != "" && item.Replay != ingressReplayPending && item.Replay != ingressReplayConsumed ||
+		item.Replay != "" && item.State != "delivered" {
+		return errors.New("invalid registration provider replay state")
+	}
+	if item.State == delayStateArmed || item.State == "expired" {
+		if len(item.Response) != 0 || item.SHA256 != "" || !item.CapturedAt.IsZero() {
+			return errors.New("armed registration provider receipt has content")
+		}
+		return nil
+	}
+	return validateIngressOriginal(item)
+}
+
+func validateIngressOriginal(item registrationIngressCase) error {
+	var envelope struct {
+		OK     bool              `json:"ok"`
+		Result []telegram.Update `json:"result"`
+	}
+	digest := sha256.Sum256(item.Response)
+	if json.Unmarshal(item.Response, &envelope) != nil || !envelope.OK || len(envelope.Result) == 0 ||
+		!ingressBatchOwner(
+			envelope.Result,
+			item.User,
+		) || item.SHA256 != hex.EncodeToString(digest[:]) || item.CapturedAt.IsZero() {
+		return errors.New("invalid registration provider original response")
 	}
 	return nil
 }
@@ -134,9 +154,7 @@ func (f *Fake) ingressCase(key string) (registrationIngressCase, bool) {
 func (f *Fake) cloneIngressControl() *registrationIngressControl {
 	value := &registrationIngressControl{Cases: make(map[string]registrationIngressCase)}
 	if f.registrationIngress != nil {
-		for key, item := range f.registrationIngress.Cases {
-			value.Cases[key] = item
-		}
+		maps.Copy(value.Cases, f.registrationIngress.Cases)
 	}
 	return value
 }
@@ -145,11 +163,12 @@ func (f *Fake) registrationIngressCommand(w http.ResponseWriter, r *http.Request
 	if !f.ingressControlAuthorized(w, r) {
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 1024)
+	r.Body = http.MaxBytesReader(w, r.Body, delayControlBodyLimit)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	var request registrationIngressRequest
-	if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF || request.Case == "" || len(request.Case) > 64 {
+	if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF || request.Case == "" ||
+		len(request.Case) > 64 {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
 	}
@@ -157,31 +176,7 @@ func (f *Fake) registrationIngressCommand(w http.ResponseWriter, r *http.Request
 	defer f.mu.Unlock()
 	previous := f.registrationIngress
 	value := f.cloneIngressControl()
-	item, exists := value.Cases[request.Case]
-	valid := false
-	switch request.Action {
-	case "arm":
-		_, known := identity.Subject(request.User)
-		if !exists && known && request.SHA256 == "" && request.HoldSeconds > 0 &&
-			request.HoldSeconds <= int(ingressHoldLimit/time.Second) && len(value.Cases) < ingressControlCases {
-			armed := time.Now().UTC()
-			item = registrationIngressCase{User: request.User, State: "armed", ArmedAt: armed,
-				Deadline: armed.Add(time.Duration(request.HoldSeconds) * time.Second)}
-			valid = true
-		}
-	case "release":
-		valid = exists && request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
-			(item.State == "held" || item.State == "released" || item.State == "delivered") && request.HoldSeconds == 0
-		if valid && item.State == "held" {
-			item.State = "released"
-		}
-	case "replay":
-		valid = exists && request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
-			item.State == "delivered" && request.HoldSeconds == 0
-		if valid && item.Replay == "" {
-			item.Replay = "pending"
-		}
-	}
+	item, valid := applyIngressRequest(value, request)
 	if !valid {
 		api.JSON(w, http.StatusConflict, nil)
 		return
@@ -198,6 +193,38 @@ func (f *Fake) registrationIngressCommand(w http.ResponseWriter, r *http.Request
 		return
 	}
 	api.JSON(w, http.StatusOK, item)
+}
+
+func applyIngressRequest(
+	value *registrationIngressControl,
+	request registrationIngressRequest,
+) (registrationIngressCase, bool) {
+	item, exists := value.Cases[request.Case]
+	valid := false
+	switch request.Action {
+	case "arm":
+		_, known := identity.Subject(request.User)
+		if !exists && known && request.SHA256 == "" && request.HoldSeconds > 0 &&
+			request.HoldSeconds <= int(ingressHoldLimit/time.Second) && len(value.Cases) < ingressControlCases {
+			armed := time.Now().UTC()
+			item = registrationIngressCase{User: request.User, State: delayStateArmed, ArmedAt: armed,
+				Deadline: armed.Add(time.Duration(request.HoldSeconds) * time.Second)}
+			valid = true
+		}
+	case "release":
+		valid = exists && request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
+			(item.State == "held" || item.State == ingressReleased || item.State == "delivered") && request.HoldSeconds == 0
+		if valid && item.State == "held" {
+			item.State = ingressReleased
+		}
+	case "replay":
+		valid = exists && request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
+			item.State == "delivered" && request.HoldSeconds == 0
+		if valid && item.Replay == "" {
+			item.Replay = ingressReplayPending
+		}
+	}
+	return item, valid
 }
 
 func ingressBatchOwner(batch []telegram.Update, user int64) bool {
@@ -218,38 +245,19 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update) ([]byte, err
 	}
 	value := f.cloneIngressControl()
 	for key, item := range value.Cases {
-		if item.Replay == "pending" {
-			item.Replay = "consumed"
+		if item.Replay == ingressReplayPending {
+			item.Replay = ingressReplayConsumed
 			value.Cases[key] = item
 			f.registrationIngress = value
 			return item.Response, nil
 		}
-		if item.State == "armed" && !time.Now().Before(item.Deadline) {
-			item.State = "expired"
-			value.Cases[key] = item
+		updated, response, err := ingressOriginalResponse(item, batch)
+		if err != nil {
+			return nil, err
 		}
-		if item.State == "armed" && ingressBatchOwner(batch, item.User) {
-			var buffer bytes.Buffer
-			if err := json.NewEncoder(&buffer).Encode(map[string]any{"ok": true, "result": batch}); err != nil {
-				return nil, err
-			}
-			item.Response = buffer.Bytes()
-			digest := sha256.Sum256(item.Response)
-			item.SHA256 = hex.EncodeToString(digest[:])
-			item.CapturedAt = time.Now().UTC()
-			item.State = "held"
-		}
-		if item.State == "held" && !time.Now().Before(item.Deadline) {
-			item.State = "released"
-		}
-		if item.State == "held" || item.State == "released" {
-			response := []byte("{\"ok\":true,\"result\":[]}\n")
-			if item.State == "released" {
-				response = item.Response
-				item.State = "delivered"
-			}
-			value.Cases[key] = item
-			if err := validateRegistrationIngress(value); err != nil {
+		value.Cases[key] = updated
+		if response != nil {
+			if err = validateRegistrationIngress(value); err != nil {
 				return nil, err
 			}
 			f.registrationIngress = value
@@ -258,4 +266,58 @@ func (f *Fake) registrationIngressResponse(batch []telegram.Update) ([]byte, err
 	}
 	f.registrationIngress = value
 	return nil, nil
+}
+
+func ingressOriginalResponse(
+	item registrationIngressCase,
+	batch []telegram.Update,
+) (registrationIngressCase, []byte, error) {
+	now := time.Now().UTC()
+	if item.State == delayStateArmed && !now.Before(item.Deadline) {
+		item.State = "expired"
+	}
+	if item.State == delayStateArmed && ingressBatchOwner(batch, item.User) {
+		var buffer bytes.Buffer
+		if err := json.NewEncoder(&buffer).Encode(map[string]any{"ok": true, "result": batch}); err != nil {
+			return item, nil, err
+		}
+		item.Response = buffer.Bytes()
+		digest := sha256.Sum256(item.Response)
+		item.SHA256 = hex.EncodeToString(digest[:])
+		item.CapturedAt = now
+		item.State = "held"
+	}
+	if item.State == "held" && !now.Before(item.Deadline) {
+		item.State = ingressReleased
+	}
+	switch item.State {
+	case "held":
+		return item, []byte("{\"ok\":true,\"result\":[]}\n"), nil
+	case ingressReleased:
+		item.State = "delivered"
+		return item, item.Response, nil
+	default:
+		return item, nil, nil
+	}
+}
+
+func (f *Fake) writeIngressResponse(w http.ResponseWriter, r *http.Request, response []byte) {
+	var envelope struct {
+		Result []telegram.Update `json:"result"`
+	}
+	if json.Unmarshal(response, &envelope) != nil {
+		tgError(w, http.StatusServiceUnavailable, "state unavailable")
+		return
+	}
+	if len(envelope.Result) == 0 {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(emptyPollDelay):
+		}
+	}
+	f.observeDeliveredCallbacks(envelope.Result)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(response)
 }

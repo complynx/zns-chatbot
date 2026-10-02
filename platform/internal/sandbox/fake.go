@@ -263,24 +263,7 @@ func (f *Fake) getUpdates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if response != nil {
-		var envelope struct {
-			Result []telegram.Update `json:"result"`
-		}
-		if json.Unmarshal(response, &envelope) != nil {
-			tgError(w, http.StatusServiceUnavailable, "state unavailable")
-			return
-		}
-		if len(envelope.Result) == 0 {
-			select {
-			case <-r.Context().Done():
-				return
-			case <-time.After(emptyPollDelay):
-			}
-		}
-		f.observeDeliveredCallbacks(envelope.Result)
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write(response)
+		f.writeIngressResponse(w, r, response)
 		return
 	}
 	if len(batch) == 0 {
