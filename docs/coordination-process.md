@@ -110,6 +110,19 @@ mount does not restrict Docker API operations: the granted script may use only
 the explicitly authorized operations. Keep failed setup evidence distinct from
 tests or SQL that never ran; repair the profile, not the product or gate budget.
 
+Bind data guards to the original accepted readback or snapshot producer and its
+hash. Preserve typed identifiers, source-key transformations, full-body joins,
+serialization and ordering; actor labels and short projections are not substitutes.
+If a compound guard fails, run one bounded read-only comparison of its predicates
+or object fingerprints before requesting another mutation. Report object names,
+counts and digests, not private row bodies. A failed guard proves no data drift
+until the original representation and comparison algorithm have been checked.
+An application read or successful probe is not necessarily transactionally
+read-only. Identify committed lazy initialization or audit effects from source
+and capture an immediate post-probe snapshot. Keep the original baseline intact;
+justify a successor baseline with exact authorized effects and unchanged objects,
+not arbitrary current values. Use native read-only transactions for diagnostics.
+
 Prepare bounded diagnostic capture before reproducing a runtime failure. Retain
 events, timestamped health/exit snapshots and relevant read-only session state;
 capture logs and resource/OOM state at the first failure before retirement
@@ -145,6 +158,13 @@ affected areas, critical acceptance, final refactoring and final PR CI; do not
 claim execution speed gains from discovery alone.
 
 ## Functional QA access and fault windows
+
+Daniel explicitly authorized changing synthetic test stands and advancing their
+test time on 2 October 2026. Production is excluded. Coordinate the sole writer
+and release active scenarios before a conflicting change. Record the requested
+clock target, current revision, actual transition and readback; preserve scenario
+budgets and monotonic time constraints. Routine authorized synthetic operations
+do not require a new human decision for each window.
 
 The public packet names allowed actions and actual capabilities. Prohibitions
 must be specific: no dependency/installer or unrelated/personal downloads does
