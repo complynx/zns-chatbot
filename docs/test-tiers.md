@@ -27,7 +27,9 @@ domain. Changes include the merge-base diff against the supplied commit, staged
 and unstaged edits independently, and repository-wide untracked files with
 repository-relative paths. The manifest records domain dependencies, including
 notification generation from food, orders and pass registration. Identity,
-conversation and scripting runtime paths serve multiple domains and select all slow scenarios.
+conversation, workflow and scripting runtime paths serve multiple domains and
+select all slow scenarios. Order changes also select pass/presentation recovery
+and mixed export scenarios because they use order payment and source state.
 Any unknown path selects all slow tests. This includes shared database, delivery,
 query, configuration, clock, schema, build and test-runner changes. Missing
 manifest selectors and discovery failures stop the run.
@@ -62,7 +64,8 @@ The manifest covers these waits on the current integration source:
 - Food and exports: CSV, derived export continuation, XLSX and reminder retries.
 - Pass and presentation: atomic notice lease recovery, pass-plan retry,
   pass-redaction cooldown, terminal refusal recovery, language/workflow notice
-  and Telegram metadata retries.
+  and Telegram metadata retries. Concurrent takeover waits for a deferred contact
+  notice to become eligible after its persisted fallback deadline.
 - Orders: payment retirement cooldown and modern export authority recovery.
 - Event boundaries: sales finish after a profile lock, persisted registration
   tier opening and knowledge classification after the actual event end.
@@ -82,14 +85,34 @@ existing full gate. A slow compilation or database setup receipt alone does not
 make a scenario slow. Retain separate cold build and test execution budgets.
 
 Persisted retry/cooldown, lease-expiry and event-boundary waits belong to the slow
-tier regardless of duration, including one-second provider cooldowns and short
-configured receipt retries. Ordinary fixture pacing only orders successful
-deliveries and remains fast.
+tier, including one-second provider cooldowns and short configured receipt
+retries kept with their recovery family. This is not a rule to classify every
+real timer as slow. The script client's 30/500-millisecond deadline probes and
+script worker's 150/300-millisecond callback probes remain fast; their short
+bounded execution does not consume a long eligibility wait. Ordinary fixture
+pacing only orders successful deliveries and remains fast.
+Externally cancelled fixture work, fake-clock advancement and lock/readiness
+polling remain fast: they do not wait for a product deadline to become eligible.
+
+QA owns the semantic classification and affected-domain inventory. Developers
+provide scenario intent and source changes; a separate reviewer approves the
+classification. The classifier does not independently accept its own changes.
+
+Classification evidence includes the deadline readers in
+`integration/notification_uncertain_retry_test.go`,
+`integration/workflow_locale_test.go` and
+`integration/bot_delivery_identity_receipt_test.go`. The takeover scenario calls
+`deferPassTestNotice`, then reads `PendingNotifications` until eligibility;
+`syntheticDeliverySettings` configures a 30-second fallback. In contrast,
+`integration/deadlines_test.go` advances an injected clock after observing a row
+lock, so that scenario remains fast. Short script budget probes are defined in
+`internal/scriptclient/execute_budget_internal_test.go` and
+`internal/scriptworker/execute_test.go`.
 
 When adding a scenario that deliberately waits for eligibility, expiry, sales
 opening or event finish, add its top-level selector and domain dependencies to
 the manifest. Keep the original
 test and its budgets intact. Review the inventory when shared helpers change.
 
-Written by slow_test_categories (gpt-6.1-sol/Codex)
+Written by qa_test_classification (gpt-6.1-sol/Codex)
 on behalf of Daniel Drizhuk

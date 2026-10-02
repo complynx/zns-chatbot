@@ -40,6 +40,7 @@ test('intentional eligibility, event and receipt waits stay in the slow tier', (
   const waits = new Map([
     ['TestPassRedactionRetriesAfterActualDeadline', 'passbooking'],
     ['TestRuntimeAuthorityTerminalNoticeDeliveryRecovery', 'passbooking'],
+    ['TestPassTakeoverConcurrentReplayAndNoticeCurrentness', 'passbooking'],
     ['TestPaymentUnavailableContextKeepsExactTarget', 'orders'],
     ['TestModernExportRetriesAuthorityOutageBeforeTransport', 'orders'],
     ['TestAdminMessageProviderDeliveryBoundary', 'adminmessage'],
@@ -60,6 +61,41 @@ test('intentional eligibility, event and receipt waits stay in the slow tier', (
       ),
       true,
       `${name} must run after ${domain} changes`,
+    );
+  }
+});
+
+test('short budget probes remain fast beside expensive execution waits', () => {
+  for (const [packageName, slowNames, fastNames] of [
+    [
+      'internal/scriptclient',
+      ['TestComposedRPCAllowsBoundedHostWorkBeyondFiveSeconds'],
+      [
+        'TestHostOperationDeadlineStopsRun',
+        'TestCallbacksShareEarlierWholeRunDeadline',
+        'TestExpiredCallbackDoesNotPublishLateReceiptOrRepeatEffect',
+      ],
+    ],
+    [
+      'internal/scriptworker',
+      ['TestExecuteBudgetsAndDataBoundary'],
+      [
+        'TestExecuteHostWaitDoesNotUseComputeBudget',
+        'TestExecuteSequentialCallbackWallBudget',
+      ],
+    ],
+  ]) {
+    const scoped = manifest.filter((group) => group.package === packageName);
+    const fixture = new Map([
+      [`module/${packageName}`, new Set([...slowNames, ...fastNames])],
+    ]);
+    assert.deepEqual(
+      plan(fixture, 'module', 'fast', scoped)[0].names,
+      fastNames.toSorted((left, right) => left.localeCompare(right, 'en')),
+    );
+    assert.deepEqual(
+      plan(fixture, 'module', 'slow', scoped)[0].names,
+      slowNames.toSorted((left, right) => left.localeCompare(right, 'en')),
     );
   }
 });
@@ -357,10 +393,23 @@ test('cross-domain changes select notification retry and source recovery scenari
     'scriptclient',
     'scriptprotocol',
     'scriptworker',
+    'workflow',
   ])
     assert.deepEqual(
       affectedGroups([`platform/internal/${domain}/changed.go`]),
       manifest,
+    );
+  for (const selector of [
+    '^TestPassTakeoverConcurrentReplayAndNoticeCurrentness$',
+    '^TestWorkflowUnavailableNoticeLocaleAndReplay$',
+    '^TestExportDoesNotMixEventsAndRetriesTelegramFailure$',
+  ])
+    assert.equal(
+      affectedGroups(['platform/internal/orders/changed.go']).some((group) =>
+        group.selectors.includes(selector),
+      ),
+      true,
+      `${selector} must run after orders changes`,
     );
 });
 

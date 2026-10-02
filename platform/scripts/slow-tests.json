@@ -92,6 +92,7 @@
     ],
     "affected": [
       "platform/internal/legacyfood/",
+      "platform/internal/orders/",
       "platform/internal/scriptclient/",
       "platform/internal/identity/",
       "platform/identityprovision/"
@@ -102,6 +103,7 @@
     "package": "integration",
     "selectors": [
       "^TestPassNoticeDeliveryHistoryIsAtomic$",
+      "^TestPassTakeoverConcurrentReplayAndNoticeCurrentness$",
       "^TestPassPlanDeliveryRetryAndRender$",
       "^TestPassPlanCommittedStatusRetry$",
       "^TestPassRedactionRetriesAfterActualDeadline$",
@@ -111,10 +113,7 @@
       "^TestWorkflowUnavailableNoticeLocaleAndReplay$",
       "^TestTelegramMetadataCallbackRetryAndOptionalClear$"
     ],
-    "affected": [
-      "platform/internal/passbooking/",
-      "platform/internal/workflow/"
-    ],
+    "affected": ["platform/internal/passbooking/", "platform/internal/orders/"],
     "reason": "Pass-notice lease recovery and presentation retry deadlines."
   },
   {
