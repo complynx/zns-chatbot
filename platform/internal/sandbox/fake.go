@@ -35,7 +35,6 @@ const editMessageTextMethod = "editMessageText"
 const errorField = "error"
 
 type Fake struct {
-	registrationIngress *registrationIngressControl
 	callbackEvidence    callbackEvidence
 	delay               *editDelay
 	menu                telegramMenuState
@@ -55,6 +54,7 @@ type Fake struct {
 	stickers            map[string]telegram.Sticker
 	DB                  *pgxpool.Pool
 	Token               string
+	registrationIngress *registrationIngressControl
 }
 
 type snapshot struct {

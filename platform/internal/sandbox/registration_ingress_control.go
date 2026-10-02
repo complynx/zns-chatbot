@@ -24,6 +24,7 @@ const ingressReplayPending = "pending"
 const ingressReplayConsumed = "replay_consumed"
 const ingressHeld = "held"
 const ingressDelivered = "delivered"
+const ingressExpired = "expired"
 
 // These receipts belong to the external provider, not product intake or ranks.
 // A replay is one exact duplicate response, never a new Telegram update.
@@ -63,7 +64,7 @@ func validateRegistrationIngress(value *registrationIngressControl) error {
 		if err := validateIngressCase(key, item); err != nil {
 			return err
 		}
-		if item.State != ingressDelivered && item.State != "expired" {
+		if item.State != ingressDelivered && item.State != ingressExpired {
 			active++
 		}
 		if item.Replay == ingressReplayPending {
@@ -84,7 +85,7 @@ func validateIngressCase(key string, item registrationIngressCase) error {
 		return errors.New("invalid registration provider receipt binding")
 	}
 	switch item.State {
-	case delayStateArmed, "expired", ingressHeld, ingressReleased, ingressDelivered:
+	case delayStateArmed, ingressExpired, ingressHeld, ingressReleased, ingressDelivered:
 	default:
 		return errors.New("invalid registration provider receipt state")
 	}
@@ -92,7 +93,7 @@ func validateIngressCase(key string, item registrationIngressCase) error {
 		item.Replay != "" && item.State != ingressDelivered {
 		return errors.New("invalid registration provider replay state")
 	}
-	if item.State == delayStateArmed || item.State == "expired" {
+	if item.State == delayStateArmed || item.State == ingressExpired {
 		if len(item.Response) != 0 || item.SHA256 != "" || !item.CapturedAt.IsZero() {
 			return errors.New("armed registration provider receipt has content")
 		}
@@ -273,7 +274,7 @@ func ingressOriginalResponse(
 ) (registrationIngressCase, []byte, error) {
 	now := time.Now().UTC()
 	if item.State == delayStateArmed && !now.Before(item.Deadline) {
-		item.State = "expired"
+		item.State = ingressExpired
 	}
 	if item.State == delayStateArmed && ingressBatchOwner(batch, item.User) {
 		var buffer bytes.Buffer
