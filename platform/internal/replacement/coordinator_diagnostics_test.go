@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -17,6 +18,59 @@ type diagnosticEngine struct {
 	*fixture
 
 	beforeStop func()
+}
+
+func TestReplacementReadinessDiagnosticRetainsIncompletePredicate(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name           string
+		healthReady    bool
+		admissionReady bool
+		stage          string
+		predicate      string
+	}{
+		{"admission", true, false, "admission", "missing_startup"},
+		{"health", false, true, "process", "app_health_not_ready"},
+		{"both", false, false, "process", "app_health_not_ready"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var output bytes.Buffer
+			f, c := newFixture(t)
+			c.Logger = slog.New(slog.NewJSONHandler(&output, nil))
+			c.ReadyTimeout = 20 * time.Millisecond
+			f.onStart = func() {
+				f.names = nil
+				if test.admissionReady {
+					f.names = []string{"zns:" + installation + ":" + newLaunch + ":admit"}
+				}
+				if !test.healthReady {
+					for i := range f.inventory {
+						if f.inventory[i].Component == "app" {
+							f.inventory[i].Health = "starting"
+						}
+					}
+				}
+			}
+			require.ErrorIs(t, c.Run(t.Context()), replacement.ErrDeadline)
+			require.Equal(t, replacement.StateStopped, f.ledger.State)
+			require.NotContains(t, f.events, "save:running")
+			var record map[string]any
+			require.NoError(t, json.NewDecoder(bytes.NewReader(output.Bytes())).Decode(&record))
+			require.Equal(t, test.stage, record["stage"])
+			require.Equal(t, test.predicate, record["predicate"])
+			require.Equal(t, "readiness", record["deadline_class"])
+			require.Equal(t, "readiness_deadline", record["error_category"])
+			require.Equal(t, float64(len(replacement.Components())), record["containers"])
+			count := float64(0)
+			if test.admissionReady {
+				count = 1
+			}
+			require.Equal(t, count, record["sessions"])
+			require.Equal(t, count, record["admissions"])
+			require.GreaterOrEqual(t, record["elapsed_ms"].(float64), float64(20))
+		})
+	}
 }
 
 func (d diagnosticEngine) Stop(ctx context.Context, containers []replacement.Container) error {
