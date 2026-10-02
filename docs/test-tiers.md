@@ -30,6 +30,8 @@ notification generation from food, orders and pass registration. Identity,
 conversation, workflow and scripting runtime paths serve multiple domains and
 select all slow scenarios. Order changes also select pass/presentation recovery
 and mixed export scenarios because they use order payment and source state.
+They also select registration-fixture event-boundary checks, whose payment
+helper uploads proof through the orders service.
 Any unknown path selects all slow tests. This includes shared database, delivery,
 query, configuration, clock, schema, build and test-runner changes. Missing
 manifest selectors and discovery failures stop the run.

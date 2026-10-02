@@ -403,6 +403,7 @@ test('cross-domain changes select notification retry and source recovery scenari
     '^TestPassTakeoverConcurrentReplayAndNoticeCurrentness$',
     '^TestWorkflowUnavailableNoticeLocaleAndReplay$',
     '^TestExportDoesNotMixEventsAndRetriesTelegramFailure$',
+    '^TestRegistrationFixtureRealStateAndRevocation$',
   ])
     assert.equal(
       affectedGroups(['platform/internal/orders/changed.go']).some((group) =>

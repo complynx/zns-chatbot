@@ -123,7 +123,7 @@
       "^TestRegistrationFixtureRealStateAndRevocation$",
       "^TestKnowledgePriorityAndDynamicEventEnd$"
     ],
-    "affected": ["platform/internal/passbooking/"],
+    "affected": ["platform/internal/passbooking/", "platform/internal/orders/"],
     "reason": "Actual sales finish after a profile lock, persisted tier opening and knowledge event-end transition."
   },
   {
