@@ -3,6 +3,7 @@
 - KISS. Type-safe. Preserve active behavior; partial port != parity.
 - Go: pinned golangci-lint, Golden + Nebius linters, testify.
 - JS: ESLint, Prettier, Playwright. Real PostgreSQL integration tests.
+- QA owns slow/medium-long test classification and affected-domain mappings. Developers own runner mechanics. A classifier authors changes; separate fresh reviewers accept them. Preserve mandatory full/final gates and budgets. See docs/coordination-process.md.
 - UI i18n: en + ru minimum. Catalog keys. Both locales in Functional QA.
 - Free text/media: agent interprets intent. Pending form = hint, never trap next message.
 - Update `management.local/PROGRESS.html` after stage gates, plan changes, blockers. Built != accepted.
@@ -32,5 +33,6 @@
 - Both QA + required checks green: advance automatically. No extra permission wait. Production/publish/commit/push still need authorization.
 
 - Execution coordination (2026-10-01): read `docs/coordination-process.md`. All new checks run on Linux Docker/WSL; no new native Windows checks, including Windows executables targeting Linux. Root grants three Linux heavy-check slots across isolated stands. Already-running Windows checks finish and occupy a transition slot until terminal evidence; no quiet-output restarts. Functional fault windows are prepared before arming, original budgets remain unchanged, owned synthetic downloads are allowed, and progress/board/reports are checkpointed together. Prioritize the finite C–E acceptance chain.
+- AI execution update (2026-10-02): assign bounded end-to-end outcomes with explicit resource custody and stop conditions, not repeated grants for ordinary owned preparation. Prove composition preflight before runtime handoff; arm diagnostic capture before reproducing a failure. Advance independent C/E dependencies in parallel; helper work must not block them. Record actual active work versus root/dependency waits, not assignment counts. Details: docs/coordination-process.md.
 
 Details: `docs/go-migration.md`, `docs/code-quality.md`, `docs/coordination-process.md`.
