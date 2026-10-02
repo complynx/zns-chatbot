@@ -139,7 +139,7 @@ WITH retry AS (
  SELECT id,clock_timestamp() AS observed_at,
   GREATEST(available_at,sqlc.arg(provider_deadline)::timestamptz,
    clock_timestamp()+sqlc.arg(fallback_seconds)::bigint *
-    CASE uncertain_resends WHEN 0 THEN 1 WHEN 1 THEN 2 ELSE 4 END * interval '1 second') AS next_at,
+    CASE uncertain_resends WHEN 0 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 4 ELSE 0 END * interval '1 second') AS next_at,
   uncertain_resends>=3 AND (sqlc.arg(uncertain)::boolean
    OR sqlc.arg(provider_deadline)::timestamptz<=clock_timestamp()) AS exhausted
  FROM core.massage_notices

@@ -564,7 +564,7 @@ WITH retry AS (
  SELECT id,clock_timestamp() AS observed_at,
   GREATEST(available_at,$2::timestamptz,
    clock_timestamp()+$3::bigint *
-    CASE uncertain_resends WHEN 0 THEN 1 WHEN 1 THEN 2 ELSE 4 END * interval '1 second') AS next_at,
+    CASE uncertain_resends WHEN 0 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 4 ELSE 0 END * interval '1 second') AS next_at,
   uncertain_resends>=3 AND ($1::boolean
    OR $2::timestamptz<=clock_timestamp()) AS exhausted
  FROM core.pass_notifications

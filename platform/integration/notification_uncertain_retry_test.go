@@ -784,6 +784,61 @@ func TestNotificationUncertainRetryThird429RetainsCooldown(t *testing.T) {
 	}
 }
 
+func TestNotificationUncertainRetryFinal429UsesOnlyActualCooldown(t *testing.T) {
+	t.Parallel()
+	for _, domain := range []string{"orders", "registration", "massage", "food"} {
+		t.Run(domain, func(t *testing.T) {
+			t.Parallel()
+			r := notificationRuntime(t, domain)
+			business := notificationBusinessSnapshot(t, r)
+			loss := &notificationLostResponse{drops: 1}
+			r.f.b.TG.HTTP = &http.Client{Transport: loss}
+			dispatch := exactNotificationDelivery(r, domain)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			requireNotificationAccepted(t, r, loss)
+			original := r.status(t, r.first)
+			wire := notificationWireSnapshot(t, r)
+			require.NotNil(t, wire)
+			provider := notificationCooldownProviderWithRetryAfter(t, r, wire.Text, 1)
+			r.f.b.TG.Base = provider.URL
+			for attempt := range 3 {
+				waitNotificationEligibility(t, r, r.status(t, r.first).AvailableAt)
+				require.NoError(t, dispatch(t.Context(), r.first))
+				state := r.status(t, r.first)
+				require.Equal(t, "pending", state.State)
+				require.Equal(t, int64(attempt+1), state.UncertainResends)
+				assertNotification429Projection(t, r, domain, state)
+			}
+			deferred := r.status(t, r.first)
+			var cooldown time.Time
+			require.NoError(t, r.f.db.QueryRow(t.Context(),
+				"SELECT max(not_before) FROM core.delivery_pacing WHERE bot_id=$1", syntheticDeliverySettings().BotID,
+			).Scan(&cooldown))
+			assert.WithinDuration(t, cooldown, deferred.AvailableAt, time.Millisecond,
+				"exhausted retry budget adds no uncertainty backoff beyond the actual provider cooldown")
+			require.NoError(t, dispatch(t.Context(), r.first))
+			require.NoError(t, dispatch(t.Context(), r.second))
+			assert.Equal(t, 4, loss.count(), "cooldown admits no extra wire")
+			waitNotificationEligibility(t, r, cooldown)
+			require.NoError(t, dispatch(t.Context(), r.first))
+			terminal := r.status(t, r.first)
+			assert.Equal(t, "failed", terminal.State)
+			assert.Equal(t, "telegram_uncertain_retry_exhausted", terminal.Reason)
+			assert.Equal(t, deferred.Attempt, terminal.Attempt, "exhaustion admits no generation")
+			assert.Equal(t, int64(3), terminal.UncertainResends)
+			assert.Equal(t, original.LastUncertainAttempt, terminal.LastUncertainAttempt)
+			assert.Equal(t, original.LastUncertainReason, terminal.LastUncertainReason)
+			assert.Equal(t, original.LastUncertainRecordedAt, terminal.LastUncertainRecordedAt)
+			assert.Zero(t, terminal.MessageID)
+			assert.Equal(t, 4, loss.count(), "no fourth additional wire")
+			require.NoError(t, dispatch(t.Context(), r.second))
+			assert.Equal(t, "sent", r.status(t, r.second).State, "follower proceeds after actual cooldown")
+			assert.Equal(t, wire, notificationWireSnapshot(t, r))
+			assert.JSONEq(t, business, notificationBusinessSnapshot(t, r))
+		})
+	}
+}
+
 func assertNotification429Projection(
 	t *testing.T, r *notificationRuntimeFixture, domain string, state notificationRuntimeStatus,
 ) {
@@ -806,6 +861,13 @@ func assertNotification429Projection(
 }
 
 func notificationCooldownProvider(t *testing.T, r *notificationRuntimeFixture, text string) *httptest.Server {
+	t.Helper()
+	return notificationCooldownProviderWithRetryAfter(t, r, text, 21)
+}
+
+func notificationCooldownProviderWithRetryAfter(
+	t *testing.T, r *notificationRuntimeFixture, text string, retryAfter int64,
+) *httptest.Server {
 	t.Helper()
 	var mu sync.Mutex
 	var negatives int
@@ -835,10 +897,11 @@ func notificationCooldownProvider(t *testing.T, r *notificationRuntimeFixture, t
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusTooManyRequests)
-		t.Logf("actual provider HTTP 429 retry_after=21; primary negative=%d", negative)
-		_, _ = fmt.Fprint(
+		t.Logf("actual provider HTTP 429 retry_after=%d; primary negative=%d", retryAfter, negative)
+		_, _ = fmt.Fprintf(
 			w,
-			`{"ok":false,"error_code":429,"description":"synthetic confirmed cooldown","parameters":{"retry_after":21}}`,
+			`{"ok":false,"error_code":429,"description":"synthetic confirmed cooldown","parameters":{"retry_after":%d}}`,
+			retryAfter,
 		)
 	}))
 	t.Cleanup(server.Close)
