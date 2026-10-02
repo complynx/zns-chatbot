@@ -23,11 +23,20 @@ func ApplyEvents(ctx context.Context, dsn, stage, plan, resolutions string, limi
 }
 
 // ReconcileEvents verifies committed events and their original owner projections.
-func ReconcileEvents(ctx context.Context, dsn, stage, plan, resolutions string, limits Limits) (EventApplySummary, error) {
+func ReconcileEvents(
+	ctx context.Context,
+	dsn, stage, plan, resolutions string,
+	limits Limits,
+) (EventApplySummary, error) {
 	return runEventImport(ctx, dsn, stage, plan, resolutions, limits, true)
 }
 
-func runEventImport(ctx context.Context, dsn, stage, plan, resolutions string, limits Limits, verify bool) (EventApplySummary, error) {
+func runEventImport(
+	ctx context.Context,
+	dsn, stage, plan, resolutions string,
+	limits Limits,
+	verify bool,
+) (EventApplySummary, error) {
 	var summary EventApplySummary
 	prepared, err := prepareEvents(stage, plan, resolutions, limits)
 	if err != nil {
@@ -95,7 +104,9 @@ func applyOneEvent(ctx context.Context, tx pgx.Tx, plan preparedEvents, row Even
 	}
 	if verify {
 		var matched bool
-		if err = tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 AND admin_sha256=$4 FROM migrate_import.event_receipts WHERE source_key=$1`, row.Legacy.Key, plan.planHash, plan.resolutionHash, ownersHash).Scan(&matched); err != nil || !matched {
+		if err = tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 AND admin_sha256=$4 FROM migrate_import.event_receipts WHERE source_key=$1`, row.Legacy.Key, plan.planHash, plan.resolutionHash, ownersHash).
+			Scan(&matched); err != nil ||
+			!matched {
 			return errors.New("apply_receipt_conflict")
 		}
 	} else {
@@ -116,7 +127,8 @@ func applyOneEvent(ctx context.Context, tx pgx.Tx, plan preparedEvents, row Even
 		err = recordEventDependencySnapshot(ctx, tx, row.Candidate.ID, row.Legacy.Key)
 	} else {
 		var matched bool
-		err = tx.QueryRow(ctx, `SELECT event_snapshot=(SELECT to_jsonb(e) FROM core.pass_events e WHERE id=$2) AND receipt_snapshot=jsonb_build_object('source_key',source_key,'plan_sha256',plan_sha256,'resolution_sha256',resolution_sha256,'admin_sha256',admin_sha256) FROM migrate_import.event_receipts WHERE source_key=$1`, row.Legacy.Key, row.Candidate.ID).Scan(&matched)
+		err = tx.QueryRow(ctx, `SELECT event_snapshot=(SELECT to_jsonb(e) FROM core.pass_events e WHERE id=$2) AND receipt_snapshot=jsonb_build_object('source_key',source_key,'plan_sha256',plan_sha256,'resolution_sha256',resolution_sha256,'admin_sha256',admin_sha256) FROM migrate_import.event_receipts WHERE source_key=$1`, row.Legacy.Key, row.Candidate.ID).
+			Scan(&matched)
 		if err != nil || !matched {
 			return errors.New("apply_reconciliation_failed")
 		}

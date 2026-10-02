@@ -55,7 +55,7 @@ func TestMessagesApplyRealUserPipeline(t *testing.T) {
 		db.QueryRow(t.Context(), `SELECT text FROM core.conversation_events ORDER BY id LIMIT 1`).Scan(&firstText),
 	)
 	require.Equal(t, "ordinary synthetic text", firstText)
-	summary, err = migrate.ApplyMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
+	summary, err = migrate.ReconcileMessages(t.Context(), dsn, stage, plan, resolutions, migrate.DefaultLimits())
 	require.NoError(t, err)
 	require.Zero(t, summary.Applied)
 	require.Equal(t, 2, summary.Reused)
@@ -132,7 +132,11 @@ func TestMessagesOwnerConflictRollsBackWholeHistory(t *testing.T) {
 	require.Zero(t, summary.Applied)
 	require.False(t, summary.Reconciled)
 	var count int
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM core.conversation_events)+(SELECT count(*) FROM core.legacy_message_references)+(SELECT count(*) FROM core.conversation_message_bodies)`).Scan(&count))
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM core.conversation_events)+(SELECT count(*) FROM core.legacy_message_references)+(SELECT count(*) FROM core.conversation_message_bodies)`).
+			Scan(&count),
+	)
 	require.Zero(t, count)
 }
 

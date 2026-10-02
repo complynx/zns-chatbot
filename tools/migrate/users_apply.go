@@ -26,11 +26,20 @@ func ApplyUsers(ctx context.Context, dsn, stage, plan, resolutions string, limit
 }
 
 // ReconcileUsers verifies the original mappings and fields without creating rows.
-func ReconcileUsers(ctx context.Context, dsn, stage, plan, resolutions string, limits Limits) (UserApplySummary, error) {
+func ReconcileUsers(
+	ctx context.Context,
+	dsn, stage, plan, resolutions string,
+	limits Limits,
+) (UserApplySummary, error) {
 	return runUserImport(ctx, dsn, stage, plan, resolutions, limits, true)
 }
 
-func runUserImport(ctx context.Context, dsn, stage, plan, resolutions string, limits Limits, verify bool) (UserApplySummary, error) {
+func runUserImport(
+	ctx context.Context,
+	dsn, stage, plan, resolutions string,
+	limits Limits,
+	verify bool,
+) (UserApplySummary, error) {
 	var summary UserApplySummary
 	prepared, err := prepareUsers(stage, plan, resolutions, limits)
 	if err != nil {
@@ -60,7 +69,9 @@ func runUserImport(ctx context.Context, dsn, stage, plan, resolutions string, li
 	for _, user := range prepared.users {
 		if verify {
 			var matched bool
-			if err = tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 FROM migrate_import.user_receipts WHERE source_key=$1`, user.record.Legacy.Key, prepared.planHash, prepared.resolutionHash).Scan(&matched); err != nil || !matched {
+			if err = tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 FROM migrate_import.user_receipts WHERE source_key=$1`, user.record.Legacy.Key, prepared.planHash, prepared.resolutionHash).
+				Scan(&matched); err != nil ||
+				!matched {
 				return summary, errors.New("apply_receipt_conflict")
 			}
 		} else {

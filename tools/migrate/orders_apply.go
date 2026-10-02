@@ -117,7 +117,15 @@ func applyOrderEvent(
 	}
 	if verifyOnly {
 		var matched bool
-		if err = tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 FROM migrate_import.order_receipts WHERE source_key=$1`, key, p.PlanHash, p.ResolutionHash).Scan(&matched); err != nil || !matched {
+		err = tx.QueryRow(ctx, `SELECT plan_sha256=$2 AND resolution_sha256=$3 FROM migrate_import.order_receipts WHERE source_key=$1`, key, p.PlanHash, p.ResolutionHash).
+			Scan(&matched)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errors.New("apply_receipt_missing")
+		}
+		if err != nil {
+			return errors.New("apply_receipt_unavailable")
+		}
+		if !matched {
 			return errors.New("apply_receipt_conflict")
 		}
 		return reconcileImportedOrderEvent(ctx, tx, event, owners)

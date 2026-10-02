@@ -64,7 +64,10 @@ func importMessages(
 		return result, err
 	}
 	if !verifyOnly {
-		if _, err = tx.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS migrate_import; CREATE TABLE IF NOT EXISTS migrate_import.message_receipts(source_key text PRIMARY KEY REFERENCES core.legacy_message_references(source_key), plan_sha256 text NOT NULL, resolution_sha256 text NOT NULL)`); err != nil {
+		if _, err = tx.Exec(
+			ctx,
+			`CREATE SCHEMA IF NOT EXISTS migrate_import; CREATE TABLE IF NOT EXISTS migrate_import.message_receipts(source_key text PRIMARY KEY REFERENCES core.legacy_message_references(source_key), plan_sha256 text NOT NULL, resolution_sha256 text NOT NULL)`,
+		); err != nil {
 			return result, errors.New("apply_schema_unavailable")
 		}
 	}
@@ -196,12 +199,14 @@ func messagePreexisting(ctx context.Context, tx pgx.Tx, p preparedMessages) erro
 	}
 	return nil
 }
+
 // The whole committed history must retain the prepared chronological order.
 func messageOrder(ctx context.Context, tx pgx.Tx, p preparedMessages) error {
 	var previous int64
 	for _, row := range p.rows {
 		var id *int64
-		if err := tx.QueryRow(ctx, `SELECT event_id FROM core.legacy_message_references WHERE source_key=$1`, row.record.Legacy.Key).Scan(&id); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT event_id FROM core.legacy_message_references WHERE source_key=$1`, row.record.Legacy.Key).
+			Scan(&id); err != nil {
 			return errors.New("message_reference_unavailable")
 		}
 		if id != nil {

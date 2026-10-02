@@ -227,7 +227,10 @@ func TestApplyOrdersConflictRollsBackWholeDomain(t *testing.T) {
 	require.EqualError(t, err, "apply_target_conflict")
 	assert.Zero(t, summary.Applied)
 	var imported int
-	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM core.legacy_order_import_references`).Scan(&imported))
+	require.NoError(
+		t,
+		db.QueryRow(t.Context(), `SELECT count(*) FROM core.legacy_order_import_references`).Scan(&imported),
+	)
 	assert.Zero(t, imported)
 	_, err = db.Exec(t.Context(), `DELETE FROM core.order_events WHERE id='event_two'`)
 	require.NoError(t, err)
