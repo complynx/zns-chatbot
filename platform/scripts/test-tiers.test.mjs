@@ -71,7 +71,11 @@ test('short budget probes remain fast beside expensive execution waits', () => {
   for (const [packageName, slowNames, fastNames] of [
     [
       'internal/sandbox',
-      ['TestModelControlHoldExpiresWithoutDetachedWaiter'],
+      [
+        'TestModelControlHoldExpiresWithoutDetachedWaiter',
+        'TestRegistrationIngressDurableOriginalAndProductDedup',
+        'TestRegistrationIngressCapturedCustodyExpiresWithoutPoll',
+      ],
       [
         'TestModelInstallAdmissionEndsBeforeBlockedMutation',
         'TestModelConsumptionSuccessfulSaveCompletionExpiresUnderControlLock',

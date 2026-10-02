@@ -38,9 +38,13 @@
   },
   {
     "package": "internal/sandbox",
-    "selectors": ["^TestModelControlHoldExpiresWithoutDetachedWaiter$"],
+    "selectors": [
+      "^TestModelControlHoldExpiresWithoutDetachedWaiter$",
+      "^TestRegistrationIngressDurableOriginalAndProductDedup$",
+      "^TestRegistrationIngressCapturedCustodyExpiresWithoutPoll$"
+    ],
     "affected": [],
-    "reason": "The held model request must reach its actual ten-second expiry without release or external cancellation; sandbox changes conservatively select all shared runtime scenarios."
+    "reason": "Held model expiry, durable original-ingress/replay expiry and held/released custody expiry wait for actual bounded deadlines; sandbox changes conservatively select all shared runtime scenarios."
   },
   {
     "package": "internal/bot",

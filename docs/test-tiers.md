@@ -60,6 +60,9 @@ The manifest covers these waits on the current integration source:
   budget.
 - Script client: two 2.7-second callbacks that prove a composed RPC beyond five seconds.
 - Model control: an unreleased request reaches its actual ten-second hold expiry.
+- Registration ingress control: uncaptured arm expiry and durable ten-second
+  replay expiry across restart; held/released captured custody each reaches its
+  actual one-second deadline without polling before durable-state readback.
 - Bot delivery: persisted transport retries, fallback cooldowns, resend budgets,
   recovered attempts and leases. The transport-retry family is kept together.
   Control acknowledgement outcomes include the actual five-second timeout while
@@ -105,6 +108,10 @@ they remain fast beside the self-expiring hold. The acknowledgement deadline
 inspection test returns immediately and remains fast beside the five-second
 blocked-control outcome. Diagnostic SQL and source-collector pool acquisition
 use short bounded timeout probes and remain fast.
+Ingress unit guards and timeline/active-bound checks use direct deadline values
+or backdated timestamps and remain fast beside the two wall-clock PostgreSQL
+expiry scenarios. Replacement diagnostics use a short readiness probe or an
+already-expired context, not a cooldown/lease wait, and remain fast.
 
 QA owns the semantic classification and affected-domain inventory. Developers
 provide scenario intent and source changes; a separate reviewer approves the
@@ -125,6 +132,14 @@ the persisted lease and is called by `TestPassNoticeDeliveryLocaleHistoryAndRetr
 and `TestPassNoticeStaleRetryKeepsOriginalHistory`. The model hold expiry is in
 `internal/sandbox/model_fixture_control_internal_test.go`; the blocked control
 acknowledgement is in `internal/bot/acknowledge_control_internal_test.go`.
+The two ingress slow selectors are `TestRegistrationIngressDurableOriginalAndProductDedup`
+and `TestRegistrationIngressCapturedCustodyExpiresWithoutPoll` in
+`internal/sandbox/registration_ingress_control_integration_test.go`. Their
+native shutdown polling and operation watchdogs are not the slow reason;
+the tests intentionally wait for stored replay/custody deadlines. Unit siblings
+in `registration_ingress_control_integration_internal_test.go` remain fast.
+The diagnostic tests in `internal/replacement/coordinator_diagnostics_test.go`
+and `docker_diagnostics_internal_test.go` also remain fast.
 Sandbox and bot runtime paths stay unknown to narrow domain selection because
 their provider and dispatch helpers serve multiple slow integration families.
 
