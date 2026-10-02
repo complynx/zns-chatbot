@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -72,6 +73,7 @@ func run() (result error) {
 		result = errors.Join(result, conn.Close(cleanup))
 	}()
 	coordinator := replacement.Coordinator{
+		Logger: slog.New(slog.NewJSONHandler(os.Stderr, nil)),
 		Engine: replacement.Docker{
 			Command:      replacement.DockerCommand{},
 			Installation: cfg.Installation,
