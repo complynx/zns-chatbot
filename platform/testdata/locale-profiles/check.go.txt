@@ -1,0 +1,44 @@
+package i18n
+
+import (
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestSyntheticLocaleCatalogProfile(t *testing.T) {
+	t.Parallel()
+	profile := os.Getenv("ZNS_TEST_LOCALE_PROFILE")
+	require.Contains(t, []string{"primary-gap", "fallback-gap", "missing-all"}, profile)
+	require.Equal(t, []Locale{English, Russian}, SupportedLocales())
+	for _, raw := range []string{"be", "by", "uk", "ua", "pl"} {
+		t.Run(raw, func(t *testing.T) {
+			t.Parallel()
+			require.False(t, IsSupported(raw))
+			text, err := Translate(raw, LanguageChoose, nil)
+			if profile == "missing-all" {
+				require.ErrorIs(t, err, ErrUnknownMessage)
+				require.Empty(t, text)
+				return
+			}
+			require.NoError(t, err)
+			expected := "Выберите язык."
+			if raw == "pl" || profile == "fallback-gap" {
+				expected = "Choose your language."
+			}
+			require.Equal(t, expected, text)
+		})
+	}
+	for _, test := range []struct {
+		locale Locale
+		text   string
+	}{
+		{English, "Current language: en."},
+		{Russian, "Текущий язык: ru."},
+	} {
+		text, err := Translate(string(test.locale), LanguageCurrent, map[string]string{"language": string(test.locale)})
+		require.NoError(t, err)
+		require.Equal(t, test.text, text)
+	}
+}
