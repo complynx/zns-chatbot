@@ -24,6 +24,10 @@ qualified image name does not prove that Node, Git, Go and the dependency closur
 are all available in that container. Verify actual paths, pinned hashes and
 versions together. Reuse qualified binaries read-only; do not rebuild unchanged
 product images to correct a tool-only profile.
+Qualify the exact supervisor command syntax in that image, not only its presence.
+BusyBox and GNU timeout options differ. Keep the rejected command and its terminal
+evidence; use a new owned receipt child for a corrected check, with unchanged
+source and budget. Do not reuse a writable output still mounted by an old helper.
 For CLI fixtures, prove that temporary executables can run from the actual
 temporary mount and that PATH selects those fixtures before starting the suite.
 Isolate GIT_DIR/GIT_WORK_TREE only for synthetic Git fixtures; retain the real
