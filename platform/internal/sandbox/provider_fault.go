@@ -22,9 +22,9 @@ const (
 	providerFaultExhausted     = "exhausted"
 	providerFaultExpired       = "expired"
 	providerFaultReleased      = "released"
-	sendMessageMethod         = "sendMessage"
-	sendDocumentMethod        = "sendDocument"
-	delayStateIdle            = "idle"
+	sendMessageMethod          = "sendMessage"
+	sendDocumentMethod         = "sendDocument"
+	delayStateIdle             = "idle"
 )
 
 type providerFaultSpec struct {
@@ -209,7 +209,12 @@ func (f *Fake) providerFaultDelayBusy() bool {
 	f.delay.mu.Lock()
 	defer f.delay.mu.Unlock()
 	switch f.delay.state {
-	case delayStateIdle, "completed", "response_lost", "expired_unresolved", "unresolved_response", delayStateInvalidated:
+	case delayStateIdle,
+		"completed",
+		"response_lost",
+		"expired_unresolved",
+		"unresolved_response",
+		delayStateInvalidated:
 		return false
 	default:
 		return true
