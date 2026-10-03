@@ -50,6 +50,12 @@ positive cases against frozen sanitized native capsules, not profiles reconstruc
 from the guard's own assumptions. Cover volume subpaths, network_mode=none and
 running versus stopped network membership. Normalize only explicitly approved,
 typed defaults; preserve private-value hashes instead of exposing credentials.
+Compare unordered native collections by their complete typed identity: unique
+mount destinations with every field retained, or unique environment keys with
+every value and the exact entry count retained. Reject duplicate, missing, extra
+or malformed entries. Preserve raw order in evidence. Keep order exact for
+ordered contracts such as command arguments and declared HostConfig mounts;
+do not assume environment order follows CREATE arguments.
 For lifecycle admission, qualify Created, Running and Terminal separately before
 a long observation window. Retain full native profiles and typed field-presence
 differences. Do not compare a live profile with Created-only defaults or discard
