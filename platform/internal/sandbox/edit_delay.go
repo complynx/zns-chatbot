@@ -110,6 +110,7 @@ type delayEvent struct {
 // editDelay belongs only to the independently running synthetic provider.
 // It never changes a product receipt, queue, admission, or acknowledgement.
 type editDelay struct {
+	armGuard      func() (func(), bool)
 	modelControl  *modelFixtureControl
 	mu            sync.Mutex
 	arm           delayArm
@@ -144,8 +145,9 @@ func (f *Fake) enableEditDelay(ctx context.Context) error {
 		return err
 	}
 	d := &editDelay{
+		armGuard:     f.providerFaultEditGuard,
 		modelControl: f.modelControl,
-		state:        "idle",
+		state:        delayStateIdle,
 		release:      make(chan struct{}),
 		ctx:          ctx,
 		key:          key,
@@ -422,8 +424,16 @@ func (d *editDelay) controlArm(w http.ResponseWriter, body []byte) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	if d.armGuard != nil {
+		release, allowed := d.armGuard()
+		if !allowed {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		defer release()
+	}
 	d.mu.Lock()
-	if d.state != "idle" {
+	if d.state != delayStateIdle {
 		d.mu.Unlock()
 		w.WriteHeader(http.StatusConflict)
 		return

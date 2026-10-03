@@ -79,6 +79,9 @@ func (f *Fake) sendDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.rejectProviderFault(w, r, sendDocumentMethod, upload.chat, 0) {
+		return
+	}
 	if f.blocked[upload.chat] {
 		tgError(w, http.StatusForbidden, "bot was blocked by the user")
 		return

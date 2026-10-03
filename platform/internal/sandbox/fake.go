@@ -35,30 +35,33 @@ const editMessageTextMethod = "editMessageText"
 const errorField = "error"
 
 type Fake struct {
-	callbackEvidence    callbackEvidence
-	delay               *editDelay
-	menu                telegramMenuState
-	menuFailure         *menuFault
-	modelFixtures       modelFixtures
-	modelControl        *modelFixtureControl
-	modelConsumed       []modelConsumption
-	MiniAppURL          string
-	mu                  sync.Mutex
-	next                int64
-	updates             []telegram.Update
-	messages            []telegram.Message
-	edits               int
-	asrCalls            int
-	fault               string
-	blocked             map[int64]bool
-	stickers            map[string]telegram.Sticker
-	DB                  *pgxpool.Pool
-	Token               string
-	registrationIngress *registrationIngressControl
+	callbackEvidence     callbackEvidence
+	delay                *editDelay
+	menu                 telegramMenuState
+	menuFailure          *menuFault
+	modelFixtures        modelFixtures
+	modelControl         *modelFixtureControl
+	modelConsumed        []modelConsumption
+	MiniAppURL           string
+	mu                   sync.Mutex
+	next                 int64
+	updates              []telegram.Update
+	messages             []telegram.Message
+	edits                int
+	asrCalls             int
+	fault                string
+	blocked              map[int64]bool
+	stickers             map[string]telegram.Sticker
+	DB                   *pgxpool.Pool
+	Token                string
+	registrationIngress  *registrationIngressControl
+	providerFaults       *providerFaultControl
+	providerFaultEditArm bool
 }
 
 type snapshot struct {
 	RegistrationIngress *registrationIngressControl `json:"RegistrationIngress,omitempty"`
+	ProviderFaults      *providerFaultControl       `json:"ProviderFaults,omitempty"`
 	ModelConsumed       *modelConsumptionSnapshot   `json:"ModelConsumed,omitempty"`
 	Menu                telegramMenuState           `json:"Menu"`
 	Stickers            map[string]telegram.Sticker `json:"Stickers,omitempty"`
@@ -92,6 +95,10 @@ func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
 	if e = validateRegistrationIngress(s.RegistrationIngress); e != nil {
 		return nil, e
 	}
+	if e = validateProviderFaults(s.ProviderFaults); e != nil {
+		return nil, e
+	}
+	f.providerFaults = s.ProviderFaults
 	f.registrationIngress = s.RegistrationIngress
 	f.next = s.Next
 	f.updates = s.Updates
@@ -114,6 +121,7 @@ func (f *Fake) save(ctx context.Context) error {
 	raw, e := json.Marshal(
 		snapshot{
 			RegistrationIngress: f.registrationIngress,
+			ProviderFaults:      f.providerFaults,
 			ModelConsumed:       f.modelConsumptionSnapshot(),
 			Menu:                f.menu,
 			Next:                f.next,
@@ -162,6 +170,8 @@ func (f *Fake) Handler() http.Handler {
 	mux.HandleFunc("POST /lab/input", f.labInput)
 	mux.HandleFunc("POST /lab/registration-ingress", f.registrationIngressCommand)
 	mux.HandleFunc("GET /lab/registration-ingress", f.registrationIngressRead)
+	mux.HandleFunc("POST /lab/provider-fault", f.providerFaultCommand)
+	mux.HandleFunc("GET /lab/provider-fault", f.providerFaultRead)
 	mux.HandleFunc("POST /lab/fault", f.labFault)
 	mux.HandleFunc("POST /lab/blocked", f.labBlocked)
 	mux.HandleFunc("POST /lab/asr", f.fixtureTranscribe)
@@ -208,7 +218,7 @@ func (f *Fake) telegram(w http.ResponseWriter, r *http.Request) {
 		f.answerCallbackQuery(w, r)
 	case "getMe":
 		tgOK(w, telegram.User{ID: fakeBotID, IsBot: true, FirstName: "Sandbox"})
-	case "sendMessage", editMessageTextMethod:
+	case sendMessageMethod, editMessageTextMethod:
 		f.writeMessage(w, r, method)
 	case "getFile":
 		f.getFile(w, r)
@@ -216,7 +226,7 @@ func (f *Fake) telegram(w http.ResponseWriter, r *http.Request) {
 		f.getCustomEmojiStickers(w, r)
 	case "forwardMessage":
 		f.forwardMessage(w, r)
-	case "sendDocument":
+	case sendDocumentMethod:
 		f.sendDocument(w, r)
 	default:
 		tgError(w, http.StatusNotFound, "unsupported method")
@@ -295,6 +305,10 @@ func (f *Fake) writeMessage(w http.ResponseWriter, r *http.Request, method strin
 		tgError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if method == editMessageTextMethod && p.MessageID <= 0 {
+		tgError(w, http.StatusBadRequest, "invalid edit message_id")
+		return
+	}
 	text, entities, textErr := deliveryText(p)
 	if textErr != nil {
 		tgError(w, http.StatusBadRequest, "invalid message text or entities")
@@ -331,6 +345,9 @@ func (f *Fake) writeAdmittedMessage(w http.ResponseWriter, r *http.Request, in a
 		return
 	}
 	defer f.mu.Unlock()
+	if f.rejectProviderFault(w, r, method, p.ChatID, in.wire.ThreadID) {
+		return
+	}
 	if f.blocked[p.ChatID] {
 		tgError(w, http.StatusForbidden, "bot was blocked by the user")
 		return
@@ -575,6 +592,11 @@ func (f *Fake) labFault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.mu.Lock()
+	if in.Mode != noFault && (f.activeProviderFault(time.Now().UTC()) || f.providerFaultDelayBusy()) {
+		f.mu.Unlock()
+		api.JSON(w, http.StatusConflict, nil)
+		return
+	}
 	f.fault = in.Mode
 	f.mu.Unlock()
 	api.JSON(w, http.StatusOK, in)
