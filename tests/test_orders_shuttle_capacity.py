@@ -191,7 +191,17 @@ def _orders_service(event_key="grodno_26"):
     return service
 
 
-class CapacityTestCase(unittest.IsolatedAsyncioTestCase):
+class OpenOrdersTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        super().setUp()
+        # Run capacity and payment scenarios before both order deadlines.
+        self.enterContext(patch.object(
+            orders_module, "now_msk",
+            return_value=datetime.datetime(2026, 8, 23, 12, 0),
+        ))
+
+
+class CapacityTestCase(OpenOrdersTestCase):
     def setUp(self):
         super().setUp()
         # Keep capacity scenarios independent of production event limits.
@@ -1662,7 +1672,7 @@ class OrderPaymentReminderTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("payment_reminder_sent_at", order)
 
 
-class CashPaymentCapacityTests(unittest.IsolatedAsyncioTestCase):
+class CashPaymentCapacityTests(OpenOrdersTestCase):
     async def test_requesting_cash_payment_does_not_count_as_paid(self):
         service = _orders_service()
         order_id = ObjectId()
@@ -1827,7 +1837,7 @@ class OrdersExportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(activities["Трансфер Минск–Гродно"], 1)
 
 
-class OrderEventScopingTests(unittest.IsolatedAsyncioTestCase):
+class OrderEventScopingTests(OpenOrdersTestCase):
     async def test_order_lookup_excludes_previous_events(self):
         service = _orders_service()
         old_order_id = ObjectId()
