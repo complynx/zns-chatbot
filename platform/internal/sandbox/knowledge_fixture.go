@@ -12,6 +12,7 @@ import (
 )
 
 const knowledgeFixtureActor = "bob"
+const knowledgeFixtureTimeout = 30 * time.Second
 
 // KnowledgeFixture changes one synthetic ACL leaf, never proposal consent or content.
 type KnowledgeFixture struct {
@@ -25,7 +26,7 @@ func (f KnowledgeFixture) Validate() error {
 	if f.Stand != RegistrationFixtureStand {
 		return errors.New("knowledge fixture stand guard failed")
 	}
-	if f.Action != "read" && f.Action != "grant" && f.Action != "revoke" {
+	if f.Action != clockActionRead && f.Action != "grant" && f.Action != "revoke" {
 		return errors.New("unknown knowledge fixture action")
 	}
 	if f.Scope != "" && f.Scope != "sandbox-festival" && f.Scope != "sandbox-past" {
@@ -52,7 +53,7 @@ func ApplyKnowledgeFixture(ctx context.Context, db *pgxpool.Pool, f KnowledgeFix
 	if err := f.Validate(); err != nil {
 		return state, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, knowledgeFixtureTimeout)
 	defer cancel()
 	tx, err := db.Begin(ctx)
 	if err != nil {
@@ -65,7 +66,7 @@ func ApplyKnowledgeFixture(ctx context.Context, db *pgxpool.Pool, f KnowledgeFix
 	if err = registrationFixtureOperatorGuard(
 		ctx,
 		tx,
-		RegistrationFixture{Stand: f.Stand, Action: "read"},
+		RegistrationFixture{Stand: f.Stand, Action: clockActionRead},
 	); err != nil {
 		return state, err
 	}
