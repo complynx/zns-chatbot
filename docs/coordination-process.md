@@ -67,6 +67,16 @@ to an owner. Root retains priority, shared-resource conflicts, integration and
 permission boundaries. Owners resolve ordinary setup within their assignment.
 Do not request another grant for each formatter, script or owned directory.
 Missing terminal evidence and security or scope changes still require resolution.
+For new assignments, grant the complete corrective qualification outcome, not
+one setup attempt. After a terminal failure and verified custody release, the
+owner may freeze a causally changed owned candidate and run its affected check
+once under the same original per-candidate limits. Record the changed inputs,
+cause, first failure and new terminal result. This is not a retry of unchanged
+source or an extension/reanchor of the failed attempt. Existing frozen grants
+retain their exact terms. Stop for changed scope, security, shared ownership,
+data destinations or an approval-layer denial; do not weaken guards, test counts
+or no-skip predicates. Substantive final source still needs fresh independent
+review. ROOT authority for actual runtime admission remains separate.
 Evaluate improvement by accepted requirements and reduced waiting, not activity
 counts. Notify Daniel only for meaningful outcomes, failures or required action.
 
