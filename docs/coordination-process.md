@@ -50,6 +50,10 @@ positive cases against frozen sanitized native capsules, not profiles reconstruc
 from the guard's own assumptions. Cover volume subpaths, network_mode=none and
 running versus stopped network membership. Normalize only explicitly approved,
 typed defaults; preserve private-value hashes instead of exposing credentials.
+Before freezing a test change, inspect shared fixture setup and both success and
+failure result contracts. Keep the discovered suite count, emitted proof and host
+receipt predicate consistent. A passing suite with a failed host gate remains
+scoped evidence; preserve the failure and qualify a distinct corrected attempt.
 Retain each observed command exit immediately, before output-reader completion
 or cleanup. Keep bounded partial output marked incomplete; do not parse it as a
 complete container exit, identity or profile. Reader, timeout and cleanup failures
