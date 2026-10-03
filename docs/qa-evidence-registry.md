@@ -7,8 +7,10 @@ scoped to Stage B; it is not the complete global acceptance matrix.
 
 ## Evidence ownership
 
-`PROGRESS.md` records current work and accepted scopes. `PROGRESS_HISTORY.md`
-retains historical stage decisions. Original reports in `qa.local` retain exact
+The ignored [PROGRESS.html](../management.local/PROGRESS.html) records current
+work and accepted scopes; root `PROGRESS.md` is a link only. Dated local history
+and immutable `docs/qa/` reports retain historical stage decisions. Original
+reports in `qa.local` retain exact
 candidate attribution, failures, limitations and independent verdicts. Avoid
 copying their narrative into additional progress documents. This register links
 the records and records retention decisions; it does not replace their evidence.
@@ -22,7 +24,9 @@ The local inventory is under `qa.local/qa-evidence-cleanup-20260929`:
   cases. Headings, findings and limitations can also appear as rows.
 - `duplicate-reports.csv`: exact byte duplicates, retained until all snapshot and
   reference obligations are discharged.
-- `inventory-summary.json`: original scan scope; `final-summary.json` records the completed maintenance snapshot.
+- `final-summary.json` and `final-validation.json`: completed maintenance scope
+  and validation. Obsolete initial scan/path/pending lists were removed on
+  3 October 2026; canonical reconciliation records and original reports remain.
 - `REPORT.md`: maintenance outcome, protected paths and cleanup limits.
 - `batch-*-reconciled.csv`: completed manual report-to-case batches. These refine
   the automatic routing index; they do not change original candidate verdicts.

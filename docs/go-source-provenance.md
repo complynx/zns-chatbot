@@ -88,7 +88,7 @@ The first four combine delivery and intake changes. The privacy test combines se
 
 ## Retained assets
 
-Keep `platform/internal/miniapp/foodphotos` JPGs (approximately 11.48 MB): production embeds use them. Keep synthetic `platform/testdata/media` (approximately 425 KB): fake ASR uses their hashes. History and detailed documentation remain intact; the old PROGRESS content is preserved in `docs/handover-status-2026-09-29.md`, with trailing blank lines normalized. Its exact original bytes remain in the preservation commit. These are intentional source assets, not disposable build caches.
+Keep `platform/internal/miniapp/foodphotos` JPGs (approximately 11.48 MB): production embeds use them. Keep synthetic `platform/testdata/media` (approximately 425 KB): fake ASR uses their hashes. Old PROGRESS and obsolete handover snapshots remain in Git history and the preservation commit; [migration navigation](migration-navigation.md) identifies current records. These are intentional source assets, not disposable build caches.
 
 ## Verification boundary
 

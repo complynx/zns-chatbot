@@ -1,5 +1,9 @@
 # Full Go migration: staged acceptance
 
+Documentation entry point: [migration navigation](migration-navigation.md).
+Current operational evidence is in the ignored local progress and handoff; dated
+plans and historical reports do not describe the current stand automatically.
+
 Branch: `feature/go-platform-sandbox`. Full parity is the goal; completing stage 1
 does not mean the old bot can be retired. Each stage ends in a fresh independent
 diff review, validated fixes, repeated tests and a new review if code changed.

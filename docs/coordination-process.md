@@ -54,6 +54,32 @@ Daniel authorized these optimizations on 3 October 2026.
   retry. Advance independent work while that action waits. Production, push and
   publication remain separately authorized.
 
+## Continuous improvement and evidence retention
+
+Daniel authorized regular process analysis, task redistribution and delegated
+documentation/evidence cleanup on 3 October 2026. During active work, inspect the
+flow after a material blocker or stage result, plus the scheduled two-hour
+heartbeat. A paused goal stays paused. Keep this analysis bounded and reuse the
+existing board and evidence; do not create a parallel management project.
+
+Choose the main evidenced delay, then remove it or assign its complete outcome
+to an owner. Root retains priority, shared-resource conflicts, integration and
+permission boundaries. Owners resolve ordinary setup within their assignment.
+Do not request another grant for each formatter, script or owned directory.
+Missing terminal evidence and security or scope changes still require resolution.
+Evaluate improvement by accepted requirements and reduced waiting, not activity
+counts. Notify Daniel only for meaningful outcomes, failures or required action.
+
+The documentation owner maintains one current handoff and concise current views.
+Remove obsolete inactive evidence after checking its behavior against an actual
+current test or an original final-acceptance scenario. Record the mapping and
+retained canonical artifact in one compact cleanup note, not a new receipt tree.
+Hash-check byte duplicates and check current links and consumers before deletion.
+Matrix coverage is not an executed PASS and must not change acceptance status.
+Keep active frozen packets, original requirements, unique required inputs,
+necessary first-failure evidence and the only proof of an unaccepted result.
+Do not delete live stand data or unrelated resources as documentation cleanup.
+
 ## Heavy checks
 
 Daniel authorized Linux-only checks on 1 October 2026. New builds, linters,

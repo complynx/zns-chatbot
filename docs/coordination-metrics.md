@@ -1,6 +1,8 @@
 # Coordination metrics
 
-Baseline observation: 2026-09-30T22:04:53Z. Historical sole CSV writer: kanban_manager. Current ownership: root writes CSV; kanban_manager maintains this description and KANBAN.html only.
+Baseline observation: 2026-09-30T22:04:53Z. Assign one CSV writer and board owner
+in the [current local handoff](../management.local/resume-2026-10-02.md).
+Named owners in dated checkpoints below are historical assignments.
 Source: [local coordination-metrics.csv](../management.local/coordination-metrics.csv). Human view: [KANBAN.html](../management.local/KANBAN.html).
 These metrics describe engineering handoffs, not product readiness or a completion percentage.
 
@@ -10,8 +12,8 @@ Append an event after a verified state/owner/commit change. Fields: observed UTC
 task ID from the existing board, object/scope, state, current owner, exact observed
 commit/base, evidence and limitations. An initial observation is a baseline,
 not proof that the task entered this state at that time. Never invent historical
-start times. Root appends verified events to the ignored local CSV; the manager
-refreshes the local board. No competing CSV writers. Preserve prior rows.
+start times. The assigned writer appends verified events to the ignored local
+CSV and refreshes the board. No competing writers. Preserve prior rows.
 
 A task's current state is its last event for the same task/object. Commit/base
 fields may be empty when they do not apply or have not been verified. Branch
