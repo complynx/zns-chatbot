@@ -37,5 +37,11 @@ Actual observer roots, source/volume custody, full Created admission, external
 acyclic approval, bootstrap, duration and both Runtime/Functional gates remain.
 Current assignments, counters and estimates remain only in `management.local`.
 
+Subsequent actual-input qualification exposed a separate image-inventory guard
+defect: the original manifest contains six managed images plus two dependencies,
+not six total entries. This historical source verdict is not current operational
+proof. See [actual input qualification](c-actual-inputs-2026-10-03.md); a new
+source successor and independent review are required before operation.
+
 Written by Codex (gpt-6.1-sol/Codex)
 on behalf of Daniel Drizhuk
