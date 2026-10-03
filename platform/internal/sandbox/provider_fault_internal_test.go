@@ -142,6 +142,37 @@ func TestProviderFaultCountsOnlyValidSelectedRequests(t *testing.T) {
 	require.NotContains(t, string(raw), "TOKEN")
 }
 
+func TestProviderFaultInvalidEditIDDoesNotConsume(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{providerFaultRateLimit, providerFaultCredential} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			f := providerFaultTestFake()
+			spec := providerFaultTestSpec()
+			spec.Mode, spec.Method, spec.Chat = mode, providerFaultAllDelivery, 0
+			require.Equal(t, http.StatusOK, providerFaultTestArm(t, f, "edit-id", spec).Code)
+			before := providerFaultTestRead(t, f, "edit-id")
+			for _, body := range []string{
+				`{"chat_id":101,"text":"edit"}`,
+				`{"chat_id":101,"message_id":0,"text":"edit"}`,
+				`{"chat_id":101,"message_id":-1,"text":"edit"}`,
+			} {
+				w := providerFaultTestRequest(f, http.MethodPost, "/botTOKEN/editMessageText", body)
+				require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+				require.Equal(t, before, providerFaultTestRead(t, f, "edit-id"))
+			}
+			w := providerFaultTestRequest(f, http.MethodPost, "/botTOKEN/editMessageText",
+				`{"chat_id":101,"message_id":17,"text":"edit"}`)
+			require.Equal(t, providerFaultStatus(spec), w.Code, w.Body.String())
+			after := providerFaultTestRead(t, f, "edit-id")
+			require.Equal(t, before.Remaining-1, after.Remaining)
+			require.Len(t, after.Consumptions, 1)
+			require.Empty(t, f.messages)
+			require.Zero(t, f.edits)
+		})
+	}
+}
+
 func TestProviderFaultRetryAfterAndCredentialEnvelopes(t *testing.T) {
 	t.Parallel()
 	for _, retry := range []*int64{nil, new(int64(-1)), new(int64(math.MaxInt64))} {

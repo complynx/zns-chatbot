@@ -305,6 +305,10 @@ func (f *Fake) writeMessage(w http.ResponseWriter, r *http.Request, method strin
 		tgError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if method == editMessageTextMethod && p.MessageID <= 0 {
+		tgError(w, http.StatusBadRequest, "invalid edit message_id")
+		return
+	}
 	text, entities, textErr := deliveryText(p)
 	if textErr != nil {
 		tgError(w, http.StatusBadRequest, "invalid message text or entities")
