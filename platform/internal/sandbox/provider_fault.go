@@ -3,6 +3,7 @@ package sandbox
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -21,6 +22,9 @@ const (
 	providerFaultExhausted     = "exhausted"
 	providerFaultExpired       = "expired"
 	providerFaultReleased      = "released"
+	sendMessageMethod         = "sendMessage"
+	sendDocumentMethod        = "sendDocument"
+	delayStateIdle            = "idle"
 )
 
 type providerFaultSpec struct {
@@ -35,6 +39,7 @@ type providerFaultSpec struct {
 
 type providerFaultRequest struct {
 	providerFaultSpec
+
 	Case   string `json:"case"`
 	Action string `json:"action"`
 }
@@ -70,7 +75,7 @@ func (s providerFaultSpec) valid() bool {
 		return false
 	}
 	switch s.Method {
-	case "sendMessage", editMessageTextMethod, "sendDocument", providerFaultAllDelivery:
+	case sendMessageMethod, editMessageTextMethod, sendDocumentMethod, providerFaultAllDelivery:
 	default:
 		return false
 	}
@@ -81,7 +86,7 @@ func (s providerFaultSpec) valid() bool {
 	} else if _, ok := destination(strconv.FormatInt(s.Chat, 10)); !ok {
 		return false
 	}
-	if s.Thread != 0 && (s.Chat != forumID || (s.Thread != 101 && s.Thread != 102) || s.Method == "sendDocument") {
+	if s.Thread != 0 && (s.Chat != forumID || (s.Thread != 101 && s.Thread != 102) || s.Method == sendDocumentMethod) {
 		return false
 	}
 	switch s.Mode {
@@ -149,7 +154,8 @@ func validProviderFaultCase(item providerFaultCase) bool {
 	}
 	previous := item.ArmedAt
 	for index, consumed := range item.Consumptions {
-		if consumed.Ordinal != index+1 || !providerFaultMatches(item.Selector, consumed.Method, consumed.Chat, consumed.Thread) ||
+		if consumed.Ordinal != index+1 ||
+			!providerFaultMatches(item.Selector, consumed.Method, consumed.Chat, consumed.Thread) ||
 			consumed.Status != providerFaultStatus(item.Selector) || consumed.PreparedAt.Before(previous) ||
 			!consumed.PreparedAt.Before(item.Deadline) {
 			return false
@@ -160,13 +166,13 @@ func validProviderFaultCase(item providerFaultCase) bool {
 }
 
 func providerFaultMatches(spec providerFaultSpec, method string, chat, thread int64) bool {
-	if method != "sendMessage" && method != editMessageTextMethod && method != "sendDocument" {
+	if method != sendMessageMethod && method != editMessageTextMethod && method != sendDocumentMethod {
 		return false
 	}
 	if _, known := destination(strconv.FormatInt(chat, 10)); !known {
 		return false
 	}
-	if thread != 0 && (chat != forumID || (thread != 101 && thread != 102) || method == "sendDocument") {
+	if thread != 0 && (chat != forumID || (thread != 101 && thread != 102) || method == sendDocumentMethod) {
 		return false
 	}
 	return (spec.Method == providerFaultAllDelivery || spec.Method == method) &&
@@ -203,7 +209,7 @@ func (f *Fake) providerFaultDelayBusy() bool {
 	f.delay.mu.Lock()
 	defer f.delay.mu.Unlock()
 	switch f.delay.state {
-	case "idle", "completed", "response_lost", "expired_unresolved", "unresolved_response", delayStateInvalidated:
+	case delayStateIdle, "completed", "response_lost", "expired_unresolved", "unresolved_response", delayStateInvalidated:
 		return false
 	default:
 		return true
@@ -228,9 +234,7 @@ func (f *Fake) providerFaultEditGuard() (func(), bool) {
 func (f *Fake) cloneProviderFaults() *providerFaultControl {
 	copyControl := &providerFaultControl{Cases: make(map[string]providerFaultCase)}
 	if f.providerFaults != nil {
-		for key, item := range f.providerFaults.Cases {
-			copyControl.Cases[key] = item
-		}
+		maps.Copy(copyControl.Cases, f.providerFaults.Cases)
 	}
 	return copyControl
 }

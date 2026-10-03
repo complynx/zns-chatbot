@@ -147,7 +147,7 @@ func (f *Fake) enableEditDelay(ctx context.Context) error {
 	d := &editDelay{
 		armGuard:     f.providerFaultEditGuard,
 		modelControl: f.modelControl,
-		state:        "idle",
+		state:        delayStateIdle,
 		release:      make(chan struct{}),
 		ctx:          ctx,
 		key:          key,
@@ -433,7 +433,7 @@ func (d *editDelay) controlArm(w http.ResponseWriter, body []byte) {
 		defer release()
 	}
 	d.mu.Lock()
-	if d.state != "idle" {
+	if d.state != delayStateIdle {
 		d.mu.Unlock()
 		w.WriteHeader(http.StatusConflict)
 		return

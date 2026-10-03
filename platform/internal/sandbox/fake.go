@@ -218,7 +218,7 @@ func (f *Fake) telegram(w http.ResponseWriter, r *http.Request) {
 		f.answerCallbackQuery(w, r)
 	case "getMe":
 		tgOK(w, telegram.User{ID: fakeBotID, IsBot: true, FirstName: "Sandbox"})
-	case "sendMessage", editMessageTextMethod:
+	case sendMessageMethod, editMessageTextMethod:
 		f.writeMessage(w, r, method)
 	case "getFile":
 		f.getFile(w, r)
@@ -226,7 +226,7 @@ func (f *Fake) telegram(w http.ResponseWriter, r *http.Request) {
 		f.getCustomEmojiStickers(w, r)
 	case "forwardMessage":
 		f.forwardMessage(w, r)
-	case "sendDocument":
+	case sendDocumentMethod:
 		f.sendDocument(w, r)
 	default:
 		tgError(w, http.StatusNotFound, "unsupported method")

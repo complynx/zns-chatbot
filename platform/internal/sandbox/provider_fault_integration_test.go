@@ -18,7 +18,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/sandbox"
 )
 
-func providerFaultPublicRequest(t *testing.T, f *sandbox.Fake, ctx context.Context,
+func providerFaultPublicRequest(ctx context.Context, t *testing.T, f *sandbox.Fake,
 	method, path, body string,
 ) *httptest.ResponseRecorder {
 	t.Helper()
@@ -32,7 +32,7 @@ func providerFaultPublicRequest(t *testing.T, f *sandbox.Fake, ctx context.Conte
 
 func providerFaultPublicRead(t *testing.T, f *sandbox.Fake, key string) map[string]json.RawMessage {
 	t.Helper()
-	w := providerFaultPublicRequest(t, f, t.Context(), http.MethodGet, "/lab/provider-fault?case="+key, "")
+	w := providerFaultPublicRequest(t.Context(), t, f, http.MethodGet, "/lab/provider-fault?case="+key, "")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var receipt map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &receipt))
@@ -61,15 +61,15 @@ func TestProviderFaultPostgresRestartAndFailedSave(t *testing.T) {
 	t.Setenv("R104_CONTROL_KEY", strings.Repeat("s", 32))
 	f, stop := startNativeIngress(t, db)
 	arm := `{"case":"restart","action":"arm","mode":"rate_limit","method":"all_delivery","count":3,"lifetime_seconds":600,"retry_after":2}`
-	w := providerFaultPublicRequest(t, f, t.Context(), http.MethodPost, "/lab/provider-fault", arm)
+	w := providerFaultPublicRequest(t.Context(), t, f, http.MethodPost, "/lab/provider-fault", arm)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	original := providerFaultPublicRead(t, f, "restart")
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()
 	w = providerFaultPublicRequest(
+		canceled,
 		t,
 		f,
-		canceled,
 		http.MethodPost,
 		"/botsynthetic-token/sendMessage",
 		`{"chat_id":101,"text":"failed save"}`,
@@ -77,9 +77,9 @@ func TestProviderFaultPostgresRestartAndFailedSave(t *testing.T) {
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)
 	require.Equal(t, original, providerFaultPublicRead(t, f, "restart"))
 	w = providerFaultPublicRequest(
+		t.Context(),
 		t,
 		f,
-		t.Context(),
 		http.MethodPost,
 		"/botsynthetic-token/sendMessage",
 		`{"chat_id":101,"text":"private canary"}`,
@@ -90,7 +90,7 @@ func TestProviderFaultPostgresRestartAndFailedSave(t *testing.T) {
 	restarted, stopRestarted := startNativeIngress(t, db)
 	after := providerFaultPublicRead(t, restarted, "restart")
 	require.Equal(t, before, after, "restart preserves exact selector, deadline, used count and evidence")
-	w = providerFaultPublicRequest(t, restarted, t.Context(), http.MethodPost, "/lab/provider-fault", arm)
+	w = providerFaultPublicRequest(t.Context(), t, restarted, http.MethodPost, "/lab/provider-fault", arm)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, before, providerFaultPublicRead(t, restarted, "restart"), "replay cannot replenish the count")
 	assertProviderFaultDocument(t, restarted)
@@ -98,18 +98,18 @@ func TestProviderFaultPostgresRestartAndFailedSave(t *testing.T) {
 	require.NoError(t, db.QueryRow(t.Context(), "SELECT count(*) FROM bot.fake_files").Scan(&files))
 	require.Zero(t, files, "provider rejection must precede file mutation")
 	w = providerFaultPublicRequest(
+		t.Context(),
 		t,
 		restarted,
-		t.Context(),
 		http.MethodPost,
 		"/botsynthetic-token/sendMessage",
 		`{"chat_id":202,"text":"last rejection"}`,
 	)
 	require.Equal(t, http.StatusTooManyRequests, w.Code)
 	w = providerFaultPublicRequest(
+		t.Context(),
 		t,
 		restarted,
-		t.Context(),
 		http.MethodPost,
 		"/botsynthetic-token/sendMessage",
 		`{"chat_id":202,"text":"normal after exhaustion"}`,
@@ -129,12 +129,12 @@ func assertProviderFaultCredentialRestart(t *testing.T, db *pgxpool.Pool,
 ) {
 	t.Helper()
 	arm := `{"case":"credential","action":"arm","mode":"credential","method":"all_delivery","count":2,"lifetime_seconds":600}`
-	w := providerFaultPublicRequest(t, f, t.Context(), http.MethodPost, "/lab/provider-fault", arm)
+	w := providerFaultPublicRequest(t.Context(), t, f, http.MethodPost, "/lab/provider-fault", arm)
 	require.Equal(t, http.StatusOK, w.Code)
 	w = providerFaultPublicRequest(
+		t.Context(),
 		t,
 		f,
-		t.Context(),
 		http.MethodPost,
 		"/botsynthetic-token/sendMessage",
 		`{"chat_id":101,"text":"one"}`,
@@ -145,18 +145,18 @@ func assertProviderFaultCredentialRestart(t *testing.T, db *pgxpool.Pool,
 	restarted, stopRestarted := startNativeIngress(t, db)
 	require.Equal(t, before, providerFaultPublicRead(t, restarted, "credential"))
 	w = providerFaultPublicRequest(
+		t.Context(),
 		t,
 		restarted,
-		t.Context(),
 		http.MethodPost,
 		"/botsynthetic-token/sendMessage",
 		`{"chat_id":202,"text":"two"}`,
 	)
 	require.Equal(t, http.StatusUnauthorized, w.Code)
 	w = providerFaultPublicRequest(
+		t.Context(),
 		t,
 		restarted,
-		t.Context(),
 		http.MethodPost,
 		"/lab/provider-fault",
 		`{"case":"expiry","action":"arm","mode":"rate_limit","method":"sendMessage","count":1,"lifetime_seconds":1}`,
@@ -170,9 +170,9 @@ func assertProviderFaultCredentialRestart(t *testing.T, db *pgxpool.Pool,
 	expired, stopExpired := startNativeIngress(t, db)
 	defer stopExpired()
 	w = providerFaultPublicRequest(
+		t.Context(),
 		t,
 		expired,
-		t.Context(),
 		http.MethodPost,
 		"/botsynthetic-token/sendMessage",
 		`{"chat_id":101,"text":"after expiry"}`,
