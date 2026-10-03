@@ -38,7 +38,13 @@ func providerFaultTestArm(t *testing.T, f *Fake, key string, spec providerFaultS
 }
 
 func providerFaultTestSpec() providerFaultSpec {
-	return providerFaultSpec{Mode: providerFaultRateLimit, Method: "sendMessage", Chat: 101, Count: 4, LifetimeSeconds: 600}
+	return providerFaultSpec{
+		Mode:            providerFaultRateLimit,
+		Method:          "sendMessage",
+		Chat:            101,
+		Count:           4,
+		LifetimeSeconds: 600,
+	}
 }
 
 func providerFaultTestRead(t *testing.T, f *Fake, key string) providerFaultCase {
@@ -89,7 +95,10 @@ func TestProviderFaultCountsOnlyValidSelectedRequests(t *testing.T) {
 	retryAfter := int64(2)
 	spec.RetryAfter = &retryAfter
 	require.Equal(t, http.StatusOK, providerFaultTestArm(t, f, "repeated", spec).Code)
-	for _, trial := range []struct { path, body string; status int }{
+	for _, trial := range []struct {
+		path, body string
+		status     int
+	}{
 		{"/botWRONG/sendMessage", `{"chat_id":-1009002,"message_thread_id":101,"text":"private canary"}`, http.StatusUnauthorized},
 		{"/botTOKEN/sendMessage", `{"chat_id":-1009002,"message_thread_id":101,"text":5}`, http.StatusBadRequest},
 		{"/botTOKEN/sendMessage", `{"chat_id":909,"text":"private canary"}`, http.StatusBadRequest},
@@ -99,9 +108,18 @@ func TestProviderFaultCountsOnlyValidSelectedRequests(t *testing.T) {
 		require.Equal(t, trial.status, w.Code, w.Body.String())
 	}
 	for range spec.Count {
-		w := providerFaultTestRequest(f, http.MethodPost, "/botTOKEN/sendMessage", `{"chat_id":"@sandbox_forum","message_thread_id":101,"text":"private canary"}`)
+		w := providerFaultTestRequest(
+			f,
+			http.MethodPost,
+			"/botTOKEN/sendMessage",
+			`{"chat_id":"@sandbox_forum","message_thread_id":101,"text":"private canary"}`,
+		)
 		require.Equal(t, http.StatusTooManyRequests, w.Code)
-		require.JSONEq(t, `{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":2}}`, w.Body.String())
+		require.JSONEq(
+			t,
+			`{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":2}}`,
+			w.Body.String(),
+		)
 	}
 	item := providerFaultTestRead(t, f, "repeated")
 	require.Equal(t, providerFaultExhausted, item.State)
@@ -110,7 +128,12 @@ func TestProviderFaultCountsOnlyValidSelectedRequests(t *testing.T) {
 	require.NoError(t, validateProviderFaults(f.providerFaults))
 	require.Len(t, f.messages, 1)
 	require.Equal(t, http.StatusOK, providerFaultTestArm(t, f, "repeated", spec).Code)
-	w := providerFaultTestRequest(f, http.MethodPost, "/botTOKEN/sendMessage", `{"chat_id":-1009002,"message_thread_id":101,"text":"after exhaustion"}`)
+	w := providerFaultTestRequest(
+		f,
+		http.MethodPost,
+		"/botTOKEN/sendMessage",
+		`{"chat_id":-1009002,"message_thread_id":101,"text":"after exhaustion"}`,
+	)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Len(t, providerFaultTestRead(t, f, "repeated").Consumptions, spec.Count)
 	raw, err := json.Marshal(f.providerFaults)
@@ -126,18 +149,36 @@ func TestProviderFaultRetryAfterAndCredentialEnvelopes(t *testing.T) {
 		spec := providerFaultTestSpec()
 		spec.RetryAfter = retry
 		require.Equal(t, http.StatusOK, providerFaultTestArm(t, f, "raw", spec).Code)
-		w := providerFaultTestRequest(f, http.MethodPost, "/botTOKEN/sendMessage", `{"chat_id":101,"text":"raw cooldown"}`)
+		w := providerFaultTestRequest(
+			f,
+			http.MethodPost,
+			"/botTOKEN/sendMessage",
+			`{"chat_id":101,"text":"raw cooldown"}`,
+		)
 		require.Equal(t, http.StatusTooManyRequests, w.Code)
-		var envelope struct { Parameters map[string]int64 `json:"parameters"` }
+		var envelope struct {
+			Parameters map[string]int64 `json:"parameters"`
+		}
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
-		if retry == nil { require.Nil(t, envelope.Parameters) } else { require.Equal(t, *retry, envelope.Parameters["retry_after"]) }
+		if retry == nil {
+			require.Nil(t, envelope.Parameters)
+		} else {
+			require.Equal(t, *retry, envelope.Parameters["retry_after"])
+		}
 	}
 	f := providerFaultTestFake()
-	spec := providerFaultSpec{Mode: providerFaultCredential, Method: providerFaultAllDelivery, Count: 4, LifetimeSeconds: 600}
+	spec := providerFaultSpec{
+		Mode:            providerFaultCredential,
+		Method:          providerFaultAllDelivery,
+		Count:           4,
+		LifetimeSeconds: 600,
+	}
 	require.Equal(t, http.StatusOK, providerFaultTestArm(t, f, "credentials", spec).Code)
 	for _, body := range []string{`{"chat_id":101,"text":"one"}`, `{"chat_id":202,"text":"two"}`, `{"chat_id":303,"message_id":7,"text":"edit"}`} {
 		method := "sendMessage"
-		if strings.Contains(body, "message_id") { method = editMessageTextMethod }
+		if strings.Contains(body, "message_id") {
+			method = editMessageTextMethod
+		}
 		w := providerFaultTestRequest(f, http.MethodPost, "/botTOKEN/"+method, body)
 		require.Equal(t, http.StatusUnauthorized, w.Code)
 		require.JSONEq(t, `{"ok":false,"error_code":401,"description":"Unauthorized"}`, w.Body.String())
@@ -161,17 +202,31 @@ func TestProviderFaultFiniteCustodyAndSnapshotValidation(t *testing.T) {
 	require.Equal(t, http.StatusConflict, providerFaultTestArm(t, f, "first", changed).Code)
 	require.Equal(t, http.StatusConflict, providerFaultTestArm(t, f, "second", spec).Code)
 	item := f.providerFaults.Cases["first"]
-	item.ArmedAt = time.Now().UTC().Add(-601*time.Second)
-	item.Deadline = item.ArmedAt.Add(600*time.Second)
+	item.ArmedAt = time.Now().UTC().Add(-601 * time.Second)
+	item.Deadline = item.ArmedAt.Add(600 * time.Second)
 	f.providerFaults.Cases["first"] = item
 	require.Equal(t, providerFaultExpired, providerFaultTestRead(t, f, "first").State)
 	require.Equal(t, http.StatusOK, providerFaultTestArm(t, f, "first", spec).Code)
 	require.Equal(t, providerFaultExpired, providerFaultTestRead(t, f, "first").State)
 	for _, key := range []string{"b", "c", "d", "e", "f", "g", "h"} {
 		require.Equal(t, http.StatusOK, providerFaultTestArm(t, f, key, spec).Code)
-		w := providerFaultTestRequest(f, http.MethodPost, "/lab/provider-fault", `{"case":"`+key+`","action":"release"}`)
+		w := providerFaultTestRequest(
+			f,
+			http.MethodPost,
+			"/lab/provider-fault",
+			`{"case":"`+key+`","action":"release"}`,
+		)
 		require.Equal(t, http.StatusOK, w.Code)
-		require.Equal(t, http.StatusOK, providerFaultTestRequest(f, http.MethodPost, "/lab/provider-fault", `{"case":"`+key+`","action":"release"}`).Code)
+		require.Equal(
+			t,
+			http.StatusOK,
+			providerFaultTestRequest(
+				f,
+				http.MethodPost,
+				"/lab/provider-fault",
+				`{"case":"`+key+`","action":"release"}`,
+			).Code,
+		)
 		require.Equal(t, http.StatusOK, providerFaultTestArm(t, f, key, spec).Code)
 		require.Equal(t, providerFaultReleased, providerFaultTestRead(t, f, key).State)
 	}
@@ -191,7 +246,9 @@ func TestProviderFaultConcurrentEditAndLegacyCustody(t *testing.T) {
 		d.armGuard = f.providerFaultEditGuard
 		body, err := json.Marshal(d.arm)
 		require.NoError(t, err)
-		faultBody, err := json.Marshal(providerFaultRequest{Case: "race", Action: "arm", providerFaultSpec: providerFaultTestSpec()})
+		faultBody, err := json.Marshal(
+			providerFaultRequest{Case: "race", Action: "arm", providerFaultSpec: providerFaultTestSpec()},
+		)
 		require.NoError(t, err)
 		start := make(chan struct{})
 		results := make(chan int, 2)
@@ -212,14 +269,26 @@ func TestProviderFaultConcurrentEditAndLegacyCustody(t *testing.T) {
 		group.Wait()
 		require.ElementsMatch(t, []int{http.StatusOK, http.StatusConflict}, []int{<-results, <-results})
 		require.False(t, f.providerFaultEditArm)
-		require.Equal(t, http.StatusConflict, providerFaultTestRequest(f, http.MethodPost, "/lab/fault", `{"mode":"transient"}`).Code)
+		require.Equal(
+			t,
+			http.StatusConflict,
+			providerFaultTestRequest(f, http.MethodPost, "/lab/fault", `{"mode":"transient"}`).Code,
+		)
 	}
 	f := providerFaultTestFake()
-	require.Equal(t, http.StatusOK, providerFaultTestRequest(f, http.MethodPost, "/lab/fault", `{"mode":"transient"}`).Code)
+	require.Equal(
+		t,
+		http.StatusOK,
+		providerFaultTestRequest(f, http.MethodPost, "/lab/fault", `{"mode":"transient"}`).Code,
+	)
 	require.Equal(t, http.StatusConflict, providerFaultTestArm(t, f, "blocked", providerFaultTestSpec()).Code)
 	_, allowed := f.providerFaultEditGuard()
 	require.False(t, allowed)
-	require.Equal(t, http.StatusTooManyRequests, providerFaultTestRequest(f, http.MethodPost, "/botTOKEN/sendMessage", `{"chat_id":202,"text":"legacy"}`).Code)
+	require.Equal(
+		t,
+		http.StatusTooManyRequests,
+		providerFaultTestRequest(f, http.MethodPost, "/botTOKEN/sendMessage", `{"chat_id":202,"text":"legacy"}`).Code,
+	)
 	require.Equal(t, http.StatusOK, providerFaultTestArm(t, f, "after", providerFaultTestSpec()).Code)
 }
 
@@ -247,12 +316,20 @@ func TestProviderFaultEditExclusionBothDirectionsAndFailedReservation(t *testing
 	require.Equal(t, http.StatusConflict, providerFaultEditArm(t, d))
 	require.False(t, f.providerFaultEditArm, "failed edit arm releases its reservation")
 	d.state = "idle"
-	require.Equal(t, http.StatusOK, providerFaultTestRequest(f, http.MethodPost, "/lab/fault", `{"mode":"transient"}`).Code)
+	require.Equal(
+		t,
+		http.StatusOK,
+		providerFaultTestRequest(f, http.MethodPost, "/lab/fault", `{"mode":"transient"}`).Code,
+	)
 	require.Equal(t, http.StatusConflict, providerFaultEditArm(t, d))
 	require.False(t, f.providerFaultEditArm)
 	require.Equal(t, http.StatusOK, providerFaultTestRequest(f, http.MethodPost, "/lab/fault", `{"mode":"none"}`).Code)
 	require.Equal(t, http.StatusOK, providerFaultEditArm(t, d))
 	require.False(t, f.providerFaultEditArm, "successful edit arm releases its reservation")
 	require.Equal(t, http.StatusConflict, providerFaultTestArm(t, f, "second", providerFaultTestSpec()).Code)
-	require.Equal(t, http.StatusConflict, providerFaultTestRequest(f, http.MethodPost, "/lab/fault", `{"mode":"edit_missing"}`).Code)
+	require.Equal(
+		t,
+		http.StatusConflict,
+		providerFaultTestRequest(f, http.MethodPost, "/lab/fault", `{"mode":"edit_missing"}`).Code,
+	)
 }

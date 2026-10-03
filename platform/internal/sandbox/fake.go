@@ -35,33 +35,33 @@ const editMessageTextMethod = "editMessageText"
 const errorField = "error"
 
 type Fake struct {
-	callbackEvidence    callbackEvidence
-	delay               *editDelay
-	menu                telegramMenuState
-	menuFailure         *menuFault
-	modelFixtures       modelFixtures
-	modelControl        *modelFixtureControl
-	modelConsumed       []modelConsumption
-	MiniAppURL          string
-	mu                  sync.Mutex
-	next                int64
-	updates             []telegram.Update
-	messages            []telegram.Message
-	edits               int
-	asrCalls            int
-	fault               string
-	blocked             map[int64]bool
-	stickers            map[string]telegram.Sticker
-	DB                  *pgxpool.Pool
-	Token               string
-	registrationIngress *registrationIngressControl
-	providerFaults      *providerFaultControl
+	callbackEvidence     callbackEvidence
+	delay                *editDelay
+	menu                 telegramMenuState
+	menuFailure          *menuFault
+	modelFixtures        modelFixtures
+	modelControl         *modelFixtureControl
+	modelConsumed        []modelConsumption
+	MiniAppURL           string
+	mu                   sync.Mutex
+	next                 int64
+	updates              []telegram.Update
+	messages             []telegram.Message
+	edits                int
+	asrCalls             int
+	fault                string
+	blocked              map[int64]bool
+	stickers             map[string]telegram.Sticker
+	DB                   *pgxpool.Pool
+	Token                string
+	registrationIngress  *registrationIngressControl
+	providerFaults       *providerFaultControl
 	providerFaultEditArm bool
 }
 
 type snapshot struct {
 	RegistrationIngress *registrationIngressControl `json:"RegistrationIngress,omitempty"`
-	ProviderFaults       *providerFaultControl        `json:"ProviderFaults,omitempty"`
+	ProviderFaults      *providerFaultControl       `json:"ProviderFaults,omitempty"`
 	ModelConsumed       *modelConsumptionSnapshot   `json:"ModelConsumed,omitempty"`
 	Menu                telegramMenuState           `json:"Menu"`
 	Stickers            map[string]telegram.Sticker `json:"Stickers,omitempty"`
@@ -121,7 +121,7 @@ func (f *Fake) save(ctx context.Context) error {
 	raw, e := json.Marshal(
 		snapshot{
 			RegistrationIngress: f.registrationIngress,
-			ProviderFaults:       f.providerFaults,
+			ProviderFaults:      f.providerFaults,
 			ModelConsumed:       f.modelConsumptionSnapshot(),
 			Menu:                f.menu,
 			Next:                f.next,
