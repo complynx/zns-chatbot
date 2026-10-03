@@ -38,9 +38,26 @@ work, preserve that cutoff through verification and proof writing, and cover
 delayed-entry and expiry boundaries. Original tests and budgets remain required.
 No successor fix, new gate or operational admission is accepted by this report.
 
-Both reviewers used Codex; their exact model slugs were not exposed.
+## Active deadline custody
+
+Fresh independent Code QA390 reviewed successor9 without author history or
+operational receipts. Packet72 and source58 members matched before and after.
+One P1 finding: the Linux provider propagates the original cutoff, but invokes
+imports and all187 tests in-process. A hung import/test cannot be interrupted
+at that cutoff; later host/GNU deadlines do not enforce the original110 limit.
+An owned child must enforce the absolute cutoff with bounded cleanup and output
+retention. A focused hanging-child case is required. Review stopped on this
+blocker; historical source and original59+52 test bodies were not fully reread.
+There is no complete source acceptance or operational/Functional acceptance.
+
+Separately, ROOT inspected retained actual source187 helper metadata: the
+requested Pids64 limit was absent (HostConfig.PidsLimit=null). All187 tests
+passed, but this is not a compliant full-profile gate. Preserve that result;
+correct CREATE arguments and admission assertions in the next immutable batch.
+
+All three reviewers used Codex; their exact model slugs were not exposed.
 Detailed reports and member receipts remain in ignored qa.local/code-qa-388
-and qa.local/code-qa-389. Production and publication were not authorized.
+and qa.local/code-qa-389/390. Production and publication were not authorized.
 
 Written by Codex (gpt-6.1-sol/Codex)
 on behalf of Daniel Drizhuk

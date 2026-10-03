@@ -43,6 +43,11 @@ Do not amend a reviewed commit while its review is running; make a successor.
 
 ## Queue and acceptance batches
 
+Use the outcome-first workflow in execution coordination: one stand-support lane
+and two disjoint product capability lanes. Batch related consumer-chain fixes
+before a ready handoff. Source-blind Functional packets contain current
+requirements and a separate actual-access annex, not engineering history.
+
 Keep at most three finished branches waiting for review or merge. At the limit,
 developers help clear their gate/conflict/readiness dependencies before opening
 another finished handoff. Maintain the agreed two–three capability developer lanes;

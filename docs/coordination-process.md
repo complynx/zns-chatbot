@@ -3,6 +3,57 @@
 Daniel authorized these improvements on 1 October 2026. They supplement the
 existing Git and independent QA workflow; no quality or acceptance gate is removed.
 
+## Outcome-first AI workflow
+
+Daniel authorized these optimizations on 3 October 2026.
+
+- Keep one stand-support lane for C–E allocation, lifecycle, diagnostics and
+  operator preparation. Assign two product developers to unfinished approved
+  capabilities or verified boundary defects, with disjoint branch/file ownership.
+  QA owns scenarios and verdicts, not product fixes. Do not count an approval-waiting
+  worker as active or invent helper work to fill a developer lane. Preserve the
+  C–E then remaining-parity sequence; no unrelated features enter the cohort.
+- Assign a complete outcome: requirements, exact base/source, owned resources,
+  permitted operations, resource/time bounds, evidence, next consumer and stop
+  conditions. The stand owner carries preparation through actual readiness and
+  release. Root coordinates shared custody and independent gates, not each
+  formatter, receipt or ordinary owned preparation step.
+- Before review, walk the complete consumer chain and reconcile discovery,
+  emitted proof, host acceptance, phase predicates, source binding and deadlines.
+  Batch related fixes into one immutable candidate with affected automated gates.
+  Fresh independent Code QA still reviews every substantive final change; both
+  Code and Functional QA remain required per stage. Do not create a separate
+  review stage for each mechanical receipt or metadata-only identity update.
+- For new stand contracts, separate declared safety/behavior invariants from
+  native observations. Guard exact source/image, private-data boundaries,
+  commands, environment contents, mount identities/access, resources, ownership,
+  deadlines and meaningful lifecycle outcomes. Retain complete native capsules
+  for audit. Incidental representation/order and transient Docker fields are not
+  new behavior requirements by themselves. Declare typed identity and phase
+  semantics explicitly; unknown security fields, extra writers, data changes or
+  incomplete outcomes still fail closed. Revise an existing strict contract only
+  in an explicit successor with focused preservation checks and fresh independent
+  review. Never edit a frozen gate or normalize a failed result to obtain PASS.
+- Use one short current handoff: original requirements, exact immutable candidate,
+  ownership, terminal gates/limitations and next operation. Keep history outside
+  it. Functional reviewers receive only the current source-blind requirement
+  packet and a separately frozen actual-access annex, never implementation hints,
+  prior findings or author conclusions. Read current owned paths before searching
+  archived qa.local trees and caches.
+- Use the existing local CSV to record request, preparation, ready-for-review,
+  review start/result, integration, stand freeze, Functional start/result and
+  custody release as observed events. Separate preparation, execution, review,
+  root queue and external-permission waiting. Measure whole-outcome lead time and
+  independently accepted requirements; counts of tests, commits and assignments
+  are not readiness or throughput. Unknown timestamps remain unknown.
+- Prepare exact synthetic operator/access permissions and commands before short
+  fault windows. Record scope, owner, identifiers, allowed data/lifecycle actions,
+  original bounds and actual access result. Root grants and general synthetic
+  permission do not override sandbox admission. An approval-layer denial remains
+  NOT RUN; obtain the required direct approval without an alternate route or quiet
+  retry. Advance independent work while that action waits. Production, push and
+  publication remain separately authorized.
+
 ## Heavy checks
 
 Daniel authorized Linux-only checks on 1 October 2026. New builds, linters,
