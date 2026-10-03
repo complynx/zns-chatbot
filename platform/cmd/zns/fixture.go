@@ -17,9 +17,19 @@ import (
 func runFixture(ctx context.Context, db *pgxpool.Pool, command string) error {
 	switch command {
 	case "product-fixture":
+		knowledgeFixture, knowledgeEnabled, knowledgeErr := knowledgeFixtureConfig()
+		if knowledgeErr != nil {
+			return knowledgeErr
+		}
 		fixture, enabled, err := registrationFixtureConfig()
 		if err != nil {
 			return err
+		}
+		if knowledgeEnabled {
+			if enabled {
+				return errors.New("knowledge and registration fixture controls cannot be combined")
+			}
+			return runKnowledgeFixture(ctx, db, knowledgeFixture)
 		}
 		if enabled {
 			return runRegistrationFixture(ctx, db, fixture)
