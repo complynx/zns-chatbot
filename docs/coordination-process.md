@@ -45,6 +45,16 @@ frozen sources outside that output tree and record every source alias.
 Bind execution hashes to the frozen reviewed manifest, not a new inventory of
 whichever files happen to occupy the input paths. Check physical source/output
 containment and the actual tmpfs options as part of CREATE-before-START guards.
+Profile fixtures must preserve the observed native Docker representation. Check
+positive cases against frozen sanitized native capsules, not profiles reconstructed
+from the guard's own assumptions. Cover volume subpaths, network_mode=none and
+running versus stopped network membership. Normalize only explicitly approved,
+typed defaults; preserve private-value hashes instead of exposing credentials.
+Retain each observed command exit immediately, before output-reader completion
+or cleanup. Keep bounded partial output marked incomplete; do not parse it as a
+complete container exit, identity or profile. Reader, timeout and cleanup failures
+must retain the known command result and first failure as separate evidence.
+Test these boundaries through the same adapter used for actual orchestration.
 An elapsed-time assertion after a command returns does not enforce a deadline.
 Use an owned Linux supervisor or qualified timeout with bounded child cleanup
 inside the original total budget; retain nonzero terminal evidence on timeout.
