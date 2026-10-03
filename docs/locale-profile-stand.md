@@ -33,7 +33,7 @@ before preparation; a changed catalog needs a reviewed successor fixture.
 bash /src/platform/testdata/locale-profiles/prepare.sh fallback-gap
 cd /src/platform
 ZNS_TEST_LOCALE_PROFILE=fallback-gap go test \
-  -overlay=/receipts/locale-profile/overlay.json ./internal/i18n \
+  -tags=synthetic_locale_profile -overlay=/receipts/locale-profile/overlay.json ./internal/i18n \
   -run '^TestSyntheticLocaleCatalogProfile$' -count=1
 go build -overlay=/receipts/locale-profile/overlay.json -o /receipts/zns ./cmd/zns
 sha256sum /receipts/zns > /receipts/zns.sha256
@@ -46,9 +46,10 @@ source commit, profile.txt and overlay hashes in the startup access annex. Only
 the sole stand owner may install the compiled binary or replace a stand process;
 do not modify a frozen Functional QA stand.
 
-Run ordinary catalog completeness tests and pinned lint against the unchanged
-candidate without the overlay. Overlay validation checks intentionally missing
-data; it cannot stand in for the ordinary required gates.
+Run ordinary catalog completeness tests and pinned lint without the overlay or
+the synthetic test tag. Run pinned lint also with the synthetic test tag on the
+primary-gap profile, whose catalogs remain complete. Overlay validation checks
+intentionally missing data; it cannot stand in for the ordinary required gates.
 
 ## Actor input and preparation boundary
 

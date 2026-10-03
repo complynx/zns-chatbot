@@ -16,16 +16,16 @@ printf '%s\n' \
   sha256sum --check --strict
 
 printf '%s\n' '{"Replace":{' > "$output/overlay.json"
+separator=''
 for locale in en ru; do
   source="internal/i18n/catalog_${locale}.go"
   if [[ "$profile" == missing-all || ( "$profile" == fallback-gap && "$locale" == ru ) ]]; then
     [[ $(grep -c '^[[:space:]]*LanguageChoose:' "$source") == 1 ]]
     sed '/^[[:space:]]*LanguageChoose:/d' "$source" > "$output/catalog_${locale}.go"
-    printf '"/src/platform/%s":"%s/catalog_%s.go",\n' "$source" "$output" "$locale" >> "$output/overlay.json"
+    printf '%s"/src/platform/%s":"%s/catalog_%s.go"\n' "$separator" "$source" "$output" "$locale" >> "$output/overlay.json"
+    separator=','
   fi
 done
-printf '%s\n' \
-  '"/src/platform/internal/i18n/locale_profile_internal_test.go":"/src/platform/testdata/locale-profiles/check.go.txt"' \
-  '}}' >> "$output/overlay.json"
+printf '%s\n' '}}' >> "$output/overlay.json"
 printf '%s\n' "$profile" > "$output/profile.txt"
 sha256sum "$output"/* > /receipts/locale-profile.sha256

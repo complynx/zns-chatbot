@@ -1,3 +1,5 @@
+//go:build synthetic_locale_profile
+
 package i18n
 
 import (
