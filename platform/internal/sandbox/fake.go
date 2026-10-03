@@ -55,10 +55,13 @@ type Fake struct {
 	DB                  *pgxpool.Pool
 	Token               string
 	registrationIngress *registrationIngressControl
+	providerFaults      *providerFaultControl
+	providerFaultEditArm bool
 }
 
 type snapshot struct {
 	RegistrationIngress *registrationIngressControl `json:"RegistrationIngress,omitempty"`
+	ProviderFaults       *providerFaultControl        `json:"ProviderFaults,omitempty"`
 	ModelConsumed       *modelConsumptionSnapshot   `json:"ModelConsumed,omitempty"`
 	Menu                telegramMenuState           `json:"Menu"`
 	Stickers            map[string]telegram.Sticker `json:"Stickers,omitempty"`
@@ -92,6 +95,10 @@ func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
 	if e = validateRegistrationIngress(s.RegistrationIngress); e != nil {
 		return nil, e
 	}
+	if e = validateProviderFaults(s.ProviderFaults); e != nil {
+		return nil, e
+	}
+	f.providerFaults = s.ProviderFaults
 	f.registrationIngress = s.RegistrationIngress
 	f.next = s.Next
 	f.updates = s.Updates
@@ -114,6 +121,7 @@ func (f *Fake) save(ctx context.Context) error {
 	raw, e := json.Marshal(
 		snapshot{
 			RegistrationIngress: f.registrationIngress,
+			ProviderFaults:       f.providerFaults,
 			ModelConsumed:       f.modelConsumptionSnapshot(),
 			Menu:                f.menu,
 			Next:                f.next,
@@ -162,6 +170,8 @@ func (f *Fake) Handler() http.Handler {
 	mux.HandleFunc("POST /lab/input", f.labInput)
 	mux.HandleFunc("POST /lab/registration-ingress", f.registrationIngressCommand)
 	mux.HandleFunc("GET /lab/registration-ingress", f.registrationIngressRead)
+	mux.HandleFunc("POST /lab/provider-fault", f.providerFaultCommand)
+	mux.HandleFunc("GET /lab/provider-fault", f.providerFaultRead)
 	mux.HandleFunc("POST /lab/fault", f.labFault)
 	mux.HandleFunc("POST /lab/blocked", f.labBlocked)
 	mux.HandleFunc("POST /lab/asr", f.fixtureTranscribe)
@@ -331,6 +341,9 @@ func (f *Fake) writeAdmittedMessage(w http.ResponseWriter, r *http.Request, in a
 		return
 	}
 	defer f.mu.Unlock()
+	if f.rejectProviderFault(w, r, method, p.ChatID, in.wire.ThreadID) {
+		return
+	}
 	if f.blocked[p.ChatID] {
 		tgError(w, http.StatusForbidden, "bot was blocked by the user")
 		return
@@ -575,6 +588,11 @@ func (f *Fake) labFault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.mu.Lock()
+	if in.Mode != noFault && (f.activeProviderFault(time.Now().UTC()) || f.providerFaultDelayBusy()) {
+		f.mu.Unlock()
+		api.JSON(w, http.StatusConflict, nil)
+		return
+	}
 	f.fault = in.Mode
 	f.mu.Unlock()
 	api.JSON(w, http.StatusOK, in)
