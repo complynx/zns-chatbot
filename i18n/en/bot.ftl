@@ -428,7 +428,7 @@ massage-specialist-view =
 massage-specialist-view-booking-button = 📝 View booking
 massage-start-message = 
     Click "New booking", to book a massage session or select your current session to change or cancel it or to contact the specialist.
-    <a href="https://t.me/zouknonstopchannel/670">About massages at ZNS</a>.
+    <a href="https://t.me/zouknonstopchannel/1580">About massages at ZNS</a>.
     
     Our specialists:
 massage-successfully-created = Massage session was successfully booked.
