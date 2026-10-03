@@ -130,6 +130,9 @@ increasing gate duration or starving Functional QA. Reduce concurrent checks if
 resource contention is observed, never weaken a gate to fit concurrency.
 Current owners/handles and requests are recorded in the existing coordination
 metrics; no new scheduler or helper service is needed.
+Resume a completed worker with an explicit follow-up task; an informational
+message alone does not start work. Confirm acknowledgement and current running
+status before counting that worker as active or waiting for its next result.
 
 ## AI-owned execution windows
 
