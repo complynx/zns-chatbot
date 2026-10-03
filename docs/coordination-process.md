@@ -50,6 +50,11 @@ positive cases against frozen sanitized native capsules, not profiles reconstruc
 from the guard's own assumptions. Cover volume subpaths, network_mode=none and
 running versus stopped network membership. Normalize only explicitly approved,
 typed defaults; preserve private-value hashes instead of exposing credentials.
+For lifecycle admission, qualify Created, Running and Terminal separately before
+a long observation window. Retain full native profiles and typed field-presence
+differences. Do not compare a live profile with Created-only defaults or discard
+changed fields. Bind exact phase expectations to the qualified image and native
+evidence; a substantive guard change needs focused tests and fresh Code QA.
 Before freezing a test change, inspect shared fixture setup and both success and
 failure result contracts. Keep the discovered suite count, emitted proof and host
 receipt predicate consistent. A passing suite with a failed host gate remains
