@@ -15,9 +15,9 @@ const knowledgeFixtureActor = "bob"
 
 // KnowledgeFixture changes one synthetic ACL leaf, never proposal consent or content.
 type KnowledgeFixture struct {
-	Stand string
-	Action string
-	Scope string
+	Stand      string
+	Action     string
+	Scope      string
 	Permission string
 }
 
@@ -38,11 +38,11 @@ func (f KnowledgeFixture) Validate() error {
 }
 
 type KnowledgeFixtureState struct {
-	ObservedAt time.Time `json:"observed_at"`
-	Stand string `json:"stand"`
-	Database string `json:"database"`
-	Actor string `json:"actor"`
-	Scope knowledge.Scope `json:"scope"`
+	ObservedAt time.Time       `json:"observed_at"`
+	Stand      string          `json:"stand"`
+	Database   string          `json:"database"`
+	Actor      string          `json:"actor"`
+	Scope      knowledge.Scope `json:"scope"`
 }
 
 // ApplyKnowledgeFixture requires the existing private operator and initialized
@@ -62,7 +62,11 @@ func ApplyKnowledgeFixture(ctx context.Context, db *pgxpool.Pool, f KnowledgeFix
 	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(918431003)`); err != nil {
 		return state, err
 	}
-	if err = registrationFixtureOperatorGuard(ctx, tx, RegistrationFixture{Stand: f.Stand, Action: "read"}); err != nil {
+	if err = registrationFixtureOperatorGuard(
+		ctx,
+		tx,
+		RegistrationFixture{Stand: f.Stand, Action: "read"},
+	); err != nil {
 		return state, err
 	}
 	if err = knowledgeFixtureGuard(ctx, tx); err != nil {
@@ -73,19 +77,31 @@ func ApplyKnowledgeFixture(ctx context.Context, db *pgxpool.Pool, f KnowledgeFix
 	}
 	// Derived knowledge operations lock the shared gate before a destination.
 	var scope string
-	if err = tx.QueryRow(ctx, `SELECT scope FROM core.knowledge_scopes WHERE scope='' FOR UPDATE`).Scan(&scope); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT scope FROM core.knowledge_scopes WHERE scope='' FOR UPDATE`).
+		Scan(&scope); err != nil {
 		return state, err
 	}
 	if f.Scope != "" {
-		if err = tx.QueryRow(ctx, `SELECT scope FROM core.knowledge_scopes WHERE scope=$1 FOR UPDATE`, f.Scope).Scan(&scope); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT scope FROM core.knowledge_scopes WHERE scope=$1 FOR UPDATE`, f.Scope).
+			Scan(&scope); err != nil {
 			return state, err
 		}
 	}
 	switch f.Action {
 	case "grant":
-		_, err = tx.Exec(ctx, `INSERT INTO core.knowledge_permissions(scope,actor,permission) VALUES($1,'bob',$2) ON CONFLICT DO NOTHING`, f.Scope, f.Permission)
+		_, err = tx.Exec(
+			ctx,
+			`INSERT INTO core.knowledge_permissions(scope,actor,permission) VALUES($1,'bob',$2) ON CONFLICT DO NOTHING`,
+			f.Scope,
+			f.Permission,
+		)
 	case "revoke":
-		_, err = tx.Exec(ctx, `DELETE FROM core.knowledge_permissions WHERE scope=$1 AND actor='bob' AND permission=$2`, f.Scope, f.Permission)
+		_, err = tx.Exec(
+			ctx,
+			`DELETE FROM core.knowledge_permissions WHERE scope=$1 AND actor='bob' AND permission=$2`,
+			f.Scope,
+			f.Permission,
+		)
 	}
 	if err != nil {
 		return state, err
@@ -102,7 +118,10 @@ func ApplyKnowledgeFixture(ctx context.Context, db *pgxpool.Pool, f KnowledgeFix
 }
 
 func knowledgeFixtureGuard(ctx context.Context, tx pgx.Tx) error {
-	if _, err := tx.Exec(ctx, `LOCK TABLE core.knowledge_scopes, core.knowledge_permissions IN ACCESS SHARE MODE`); err != nil {
+	if _, err := tx.Exec(
+		ctx,
+		`LOCK TABLE core.knowledge_scopes, core.knowledge_permissions IN ACCESS SHARE MODE`,
+	); err != nil {
 		return err
 	}
 	var allowed bool
