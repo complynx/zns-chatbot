@@ -469,7 +469,7 @@ massage-specialist-view =
 massage-specialist-view-booking-button = 📝 К бронированию
 massage-start-message =
     Кликни "Записаться", чтобы попасть на приём к массажисту или выбери свою текущую запись из списка, чтобы внести изменения, отменить или связаться со специалистом.
-    <a href="https://t.me/zouknonstopchannel/670">Пост о массаже на ZNS</a>.
+    <a href="https://t.me/zouknonstopchannel/1580">Пост о массаже на ZNS</a>.
     
     Наши специалисты:
 massage-successfully-created = Сессия массажа успешно забронирована.
