@@ -29,7 +29,8 @@ func (f KnowledgeFixture) Validate() error {
 	if f.Action != clockActionRead && f.Action != "grant" && f.Action != "revoke" {
 		return errors.New("unknown knowledge fixture action")
 	}
-	if f.Scope != "" && f.Scope != "sandbox-festival" && f.Scope != "sandbox-past" {
+	if f.Scope != "" && f.Scope != "sandbox-festival" && f.Scope != "sandbox-past" &&
+		f.Scope != RegistrationFixtureEventA && f.Scope != RegistrationFixtureEventB {
 		return errors.New("knowledge fixture scope guard failed")
 	}
 	if f.Permission != "review" && f.Permission != "curate" {
@@ -70,7 +71,7 @@ func ApplyKnowledgeFixture(ctx context.Context, db *pgxpool.Pool, f KnowledgeFix
 	); err != nil {
 		return state, err
 	}
-	if err = knowledgeFixtureGuard(ctx, tx); err != nil {
+	if err = knowledgeFixtureGuard(ctx, tx, f.Scope); err != nil {
 		return state, err
 	}
 	if _, err = tx.Exec(ctx, `SELECT id FROM core.users WHERE id='bob' FOR NO KEY UPDATE`); err != nil {
@@ -118,7 +119,7 @@ func ApplyKnowledgeFixture(ctx context.Context, db *pgxpool.Pool, f KnowledgeFix
 		Database: RegistrationFixtureDatabase, Actor: knowledgeFixtureActor, Scope: current}, nil
 }
 
-func knowledgeFixtureGuard(ctx context.Context, tx pgx.Tx) error {
+func knowledgeFixtureGuard(ctx context.Context, tx pgx.Tx, scope string) error {
 	if _, err := tx.Exec(
 		ctx,
 		`LOCK TABLE core.knowledge_scopes, core.knowledge_permissions IN ACCESS SHARE MODE`,
@@ -142,6 +143,16 @@ func knowledgeFixtureGuard(ctx context.Context, tx pgx.Tx) error {
 	}
 	if !allowed {
 		return errors.New("knowledge fixture scope binding guard failed")
+	}
+	// User knowledge actions provision the original registration destinations.
+	// The operator cannot create scopes or change their event binding.
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM core.knowledge_scopes
+ WHERE scope=$1 AND event_id IS NOT DISTINCT FROM NULLIF($1,''))`, scope).Scan(&allowed)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return errors.New("knowledge fixture requested scope binding guard failed")
 	}
 	// Permit only ACL metadata, not private bodies, submissions or provenance.
 	err = tx.QueryRow(ctx, `SELECT

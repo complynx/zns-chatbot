@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/sandbox"
 	"github.com/complynx/zns-chatbot/platform/internal/store"
 )
@@ -52,6 +53,7 @@ func TestKnowledgeFixturePrivateRoleComposition(t *testing.T) {
  WHERE scope='sandbox-past' AND actor='bob' AND permission='review')`).Scan(&unrelated))
 		assert.True(t, unrelated, "another event remains authorized")
 	}
+	assertKnowledgeRegistrationScopes(t, owner, operator)
 	f.Action = "read"
 	_, err = owner.Exec(ctx, `GRANT SELECT ON core.knowledge_facts TO zns_registration_operator`)
 	require.NoError(t, err)
@@ -62,6 +64,63 @@ func TestKnowledgeFixturePrivateRoleComposition(t *testing.T) {
 	require.NoError(t, err)
 	_, err = sandbox.ApplyKnowledgeFixture(ctx, operator, f)
 	require.ErrorContains(t, err, "identity or marker")
+}
+
+func assertKnowledgeRegistrationScopes(t *testing.T, owner, operator *pgxpool.Pool) {
+	t.Helper()
+	ctx := t.Context()
+	service := knowledge.Service{DB: owner}
+	f := sandbox.KnowledgeFixture{Stand: sandbox.RegistrationFixtureStand, Permission: "review"}
+	var err error
+	for _, event := range []string{sandbox.RegistrationFixtureEventA, sandbox.RegistrationFixtureEventB} {
+		f.Scope, f.Action = event, "grant"
+		_, err = sandbox.ApplyKnowledgeFixture(ctx, operator, f)
+		require.ErrorContains(t, err, "requested scope binding guard", "operator cannot provision missing destinations")
+		_, err = service.Execute(ctx, "alice", knowledge.Command{
+			Name: knowledge.Suggest, Key: "fixture-proposal-" + event,
+			Event: event, Topic: "travel", FactKey: "meeting", Text: "Original event proposal",
+		})
+		require.NoError(t, err)
+		for _, action := range []string{"grant", "revoke", "grant"} {
+			f.Action = action
+			state, applyErr := sandbox.ApplyKnowledgeFixture(ctx, operator, f)
+			require.NoError(t, applyErr)
+			assert.Equal(t, event, state.Scope.Event)
+			assert.Equal(t, action == "grant", state.Scope.CanReview)
+			assert.False(t, state.Scope.CanCurate, "review control does not grant curate")
+			for _, actor := range []string{"alice", "visitor"} {
+				scope, scopeErr := service.Scope(ctx, actor, event)
+				require.NoError(t, scopeErr)
+				assert.False(t, scope.CanReview, "control is fixed to bob")
+				assert.False(t, scope.CanCurate)
+			}
+		}
+	}
+	var paymentA, paymentB, globalVisitor bool
+	require.NoError(
+		t,
+		owner.QueryRow(
+			ctx,
+			`SELECT
+ EXISTS(SELECT 1 FROM core.pass_payment_admins WHERE owner='bob' AND event_id=$1),
+ EXISTS(SELECT 1 FROM core.pass_payment_admins WHERE owner='bob' AND event_id=$2),
+ EXISTS(SELECT 1 FROM core.pass_booking_admins WHERE owner='visitor')`,
+			sandbox.RegistrationFixtureEventA,
+			sandbox.RegistrationFixtureEventB,
+		).Scan(&paymentA, &paymentB, &globalVisitor),
+	)
+	assert.True(t, paymentA, "knowledge control preserves event-A payment role")
+	assert.False(t, paymentB, "knowledge control cannot assign payment role in B")
+	assert.True(t, globalVisitor, "knowledge control preserves global booking category")
+	f.Scope, f.Action = sandbox.RegistrationFixtureEventA, "revoke"
+	_, err = sandbox.ApplyKnowledgeFixture(ctx, operator, f)
+	require.NoError(t, err)
+	otherScope, err := service.Scope(ctx, "bob", sandbox.RegistrationFixtureEventB)
+	require.NoError(t, err)
+	assert.True(t, otherScope.CanReview, "A withdrawal preserves B authority")
+	f.Scope = "registration-fixture-c"
+	_, err = sandbox.ApplyKnowledgeFixture(ctx, operator, f)
+	require.ErrorContains(t, err, "scope guard")
 }
 
 func knowledgeFixturePool(t *testing.T, role string) *pgxpool.Pool {

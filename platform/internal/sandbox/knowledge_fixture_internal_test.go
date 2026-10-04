@@ -9,7 +9,9 @@ import (
 
 func TestKnowledgeFixtureFiniteBinding(t *testing.T) {
 	t.Parallel()
-	for _, scope := range []string{"", "sandbox-festival", "sandbox-past"} {
+	for _, scope := range []string{
+		"", "sandbox-festival", "sandbox-past", RegistrationFixtureEventA, RegistrationFixtureEventB,
+	} {
 		for _, permission := range []string{"review", "curate"} {
 			for _, action := range []string{"read", "grant", "revoke"} {
 				require.NoError(t, (KnowledgeFixture{Stand: RegistrationFixtureStand, Action: action,
@@ -21,7 +23,7 @@ func TestKnowledgeFixtureFiniteBinding(t *testing.T) {
 	for _, mutate := range []func(*KnowledgeFixture){
 		func(f *KnowledgeFixture) { f.Stand = "production" },
 		func(f *KnowledgeFixture) { f.Action = "init" },
-		func(f *KnowledgeFixture) { f.Scope = RegistrationFixtureEventA },
+		func(f *KnowledgeFixture) { f.Scope = "registration-fixture-c" },
 		func(f *KnowledgeFixture) { f.Permission = "admin" },
 	} {
 		f := valid

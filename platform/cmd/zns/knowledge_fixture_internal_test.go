@@ -15,7 +15,9 @@ func TestKnowledgeFixtureOptInParsing(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, enabled)
 	assert.Equal(t, sandbox.KnowledgeFixture{}, f)
-	for _, scope := range []string{"", "sandbox-festival", "sandbox-past"} {
+	for _, scope := range []string{
+		"", "sandbox-festival", "sandbox-past", sandbox.RegistrationFixtureEventA, sandbox.RegistrationFixtureEventB,
+	} {
 		f, enabled, err = parseKnowledgeFixture("read", sandbox.RegistrationFixtureStand, scope, "review")
 		require.NoError(t, err)
 		assert.True(t, enabled)
