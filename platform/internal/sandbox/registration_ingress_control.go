@@ -31,6 +31,32 @@ const ingressHeld = "held"
 const ingressDelivered = "delivered"
 const ingressExpired = "expired"
 
+type ingressOrder string
+
+const ingressOrderOriginal ingressOrder = "original"
+const ingressOrderReverse ingressOrder = "reverse"
+
+func (order *ingressOrder) UnmarshalJSON(raw []byte) error {
+	var value string
+	if json.Unmarshal(raw, &value) != nil ||
+		value != string(ingressOrderOriginal) && value != string(ingressOrderReverse) {
+		return errors.New("invalid registration provider order")
+	}
+	*order = ingressOrder(value)
+	return nil
+}
+
+func (order ingressOrder) effective() ingressOrder {
+	if order == "" {
+		return ingressOrderOriginal
+	}
+	return order
+}
+
+func validIngressOrder(order ingressOrder) bool {
+	return order == "" || order == ingressOrderOriginal || order == ingressOrderReverse
+}
+
 // These receipts belong to the external provider, not product intake or ranks.
 // A replay is one exact duplicate response, never a new Telegram update.
 type registrationIngressControl struct {
@@ -38,26 +64,29 @@ type registrationIngressControl struct {
 }
 
 type registrationIngressCase struct {
-	User              int64     `json:"user"`
-	State             string    `json:"state"`
-	Deadline          time.Time `json:"deadline"`
-	ArmedAt           time.Time `json:"armed_at"`
-	CapturedAt        time.Time `json:"captured_at"`
-	CustodyFinishedAt time.Time `json:"custody_finished_at"`
-	Response          []byte    `json:"response,omitempty"`
-	SHA256            string    `json:"sha256"`
-	Replay            string    `json:"replay"`
-	ReplayArmedAt     time.Time `json:"replay_armed_at"`
-	ReplayDeadline    time.Time `json:"replay_deadline"`
-	ReplayFinishedAt  time.Time `json:"replay_finished_at"`
+	User              int64        `json:"user"`
+	State             string       `json:"state"`
+	Deadline          time.Time    `json:"deadline"`
+	ArmedAt           time.Time    `json:"armed_at"`
+	CapturedAt        time.Time    `json:"captured_at"`
+	CustodyFinishedAt time.Time    `json:"custody_finished_at"`
+	Response          []byte       `json:"response,omitempty"`
+	SHA256            string       `json:"sha256"`
+	Replay            string       `json:"replay"`
+	ReplayArmedAt     time.Time    `json:"replay_armed_at"`
+	ReplayDeadline    time.Time    `json:"replay_deadline"`
+	ReplayFinishedAt  time.Time    `json:"replay_finished_at"`
+	DeliveryOrder     ingressOrder `json:"delivery_order,omitempty"`
+	ReplayOrder       ingressOrder `json:"replay_order,omitempty"`
 }
 
 type registrationIngressRequest struct {
-	Case        string `json:"case"`
-	Action      string `json:"action"`
-	User        int64  `json:"user"`
-	HoldSeconds int    `json:"hold_seconds"`
-	SHA256      string `json:"sha256"`
+	Case        string       `json:"case"`
+	Action      string       `json:"action"`
+	User        int64        `json:"user"`
+	HoldSeconds int          `json:"hold_seconds"`
+	SHA256      string       `json:"sha256"`
+	Order       ingressOrder `json:"order,omitempty"`
 }
 
 func validateRegistrationIngress(value *registrationIngressControl) error {
@@ -98,6 +127,9 @@ func validateIngressCase(key string, item registrationIngressCase) error {
 	default:
 		return errors.New("invalid registration provider receipt state")
 	}
+	if err := validateIngressDeliveryOrder(item); err != nil {
+		return err
+	}
 	if item.State == ingressOriginalPending && item.CustodyFinishedAt.Before(item.Deadline) ||
 		item.State != ingressOriginalPending && item.State != ingressDelivered && !item.CustodyFinishedAt.IsZero() ||
 		item.State == ingressDelivered && !item.CustodyFinishedAt.IsZero() &&
@@ -116,9 +148,21 @@ func validateIngressCase(key string, item registrationIngressCase) error {
 	return validateIngressReplay(item)
 }
 
+func validateIngressDeliveryOrder(item registrationIngressCase) error {
+	if !validIngressOrder(item.DeliveryOrder) || item.DeliveryOrder != "" &&
+		item.State != ingressReleased && item.State != ingressOriginalPending && item.State != ingressDelivered {
+		return errors.New("invalid registration provider delivery order")
+	}
+	return nil
+}
+
 func validateIngressReplay(item registrationIngressCase) error {
+	if !validIngressOrder(item.ReplayOrder) {
+		return errors.New("invalid registration provider replay order")
+	}
 	if item.Replay == "" {
-		if !item.ReplayArmedAt.IsZero() || !item.ReplayDeadline.IsZero() || !item.ReplayFinishedAt.IsZero() {
+		if item.ReplayOrder != "" || !item.ReplayArmedAt.IsZero() || !item.ReplayDeadline.IsZero() ||
+			!item.ReplayFinishedAt.IsZero() {
 			return errors.New("unarmed registration provider replay has timestamps")
 		}
 		return nil
@@ -294,7 +338,7 @@ func applyIngressRequest(
 	switch request.Action {
 	case "arm":
 		_, known := identity.Subject(request.User)
-		if !exists && known && request.SHA256 == "" && request.HoldSeconds > 0 &&
+		if !exists && known && request.SHA256 == "" && request.Order == "" && request.HoldSeconds > 0 &&
 			request.HoldSeconds <= int(ingressHoldLimit/time.Second) && len(value.Cases) < ingressControlCases {
 			armed := time.Now().UTC()
 			item = registrationIngressCase{User: request.User, State: delayStateArmed, ArmedAt: armed,
@@ -302,22 +346,30 @@ func applyIngressRequest(
 			valid = true
 		}
 	case "release":
-		valid = exists && request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
+		valid = exists && ingressCommandMatches(item, request) &&
 			(item.State == ingressHeld || item.State == ingressReleased || item.State == ingressOriginalPending ||
-				item.State == ingressDelivered) && request.HoldSeconds == 0
+				item.State == ingressDelivered) &&
+			(item.State == ingressHeld || item.DeliveryOrder.effective() == request.Order.effective())
 		if valid && item.State == ingressHeld {
 			item.State = ingressReleased
+			item.DeliveryOrder = request.Order
 		}
 	case "replay":
-		valid = exists && request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
-			item.State == ingressDelivered && request.HoldSeconds == 0
+		valid = exists && ingressCommandMatches(item, request) && item.State == ingressDelivered &&
+			(item.Replay == "" || item.ReplayOrder.effective() == request.Order.effective())
 		if valid && item.Replay == "" {
 			item.Replay = ingressReplayPending
+			item.ReplayOrder = request.Order
 			item.ReplayArmedAt = time.Now().UTC()
 			item.ReplayDeadline = item.ReplayArmedAt.Add(ingressHoldLimit)
 		}
 	}
 	return item, valid
+}
+
+func ingressCommandMatches(item registrationIngressCase, request registrationIngressRequest) bool {
+	return request.User == item.User && request.SHA256 != "" && request.SHA256 == item.SHA256 &&
+		request.HoldSeconds == 0 && validIngressOrder(request.Order)
 }
 
 func ingressBatchOwner(batch []telegram.Update, user int64) bool {
@@ -416,7 +468,28 @@ func ingressReplayResponse(
 		return item, nil, err
 	}
 	item.Replay, item.ReplayFinishedAt = ingressReplayConsumed, now
-	return item, item.Response, nil
+	response, err := ingressOrderedResponse(item.Response, item.ReplayOrder)
+	return item, response, err
+}
+
+// Reorder only the captured array; the immutable original remains the replay identity.
+func ingressOrderedResponse(response []byte, order ingressOrder) ([]byte, error) {
+	if order.effective() != ingressOrderReverse {
+		return response, nil
+	}
+	var envelope struct {
+		OK     bool              `json:"ok"`
+		Result []json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(response, &envelope); err != nil {
+		return nil, err
+	}
+	slices.Reverse(envelope.Result)
+	var buffer bytes.Buffer
+	if err := json.NewEncoder(&buffer).Encode(envelope); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
 }
 
 func ingressBatchAcknowledged(response []byte, offset int64) (bool, error) {
@@ -459,7 +532,8 @@ func ingressOriginalResponse(
 		return item, []byte("{\"ok\":true,\"result\":[]}\n"), nil
 	case ingressReleased, ingressOriginalPending:
 		item.State = ingressDelivered
-		return item, item.Response, nil
+		response, err := ingressOrderedResponse(item.Response, item.DeliveryOrder)
+		return item, response, err
 	default:
 		return item, nil, nil
 	}

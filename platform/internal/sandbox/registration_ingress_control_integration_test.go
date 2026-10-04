@@ -59,6 +59,8 @@ type ingressPublicReceipt struct {
 	ReplayArmedAt     time.Time `json:"replay_armed_at"`
 	ReplayDeadline    time.Time `json:"replay_deadline"`
 	ReplayFinishedAt  time.Time `json:"replay_finished_at"`
+	DeliveryOrder     string    `json:"delivery_order,omitempty"`
+	ReplayOrder       string    `json:"replay_order,omitempty"`
 }
 
 func nativeIngressRequest(t *testing.T, f *sandbox.Fake, method, path string, body any) *httptest.ResponseRecorder {
@@ -494,6 +496,140 @@ func TestRegistrationIngressDurableOriginalAndProductDedup(t *testing.T) {
 	require.NoError(t, err)
 	_, err = sandbox.New(t.Context(), db, nativeIngressToken)
 	require.ErrorContains(t, err, "original response")
+}
+
+func TestRegistrationIngressReversedFirstDelivery(t *testing.T) {
+	db := newNativeIngressDB(t)
+	t.Setenv("R104_CONTROL_KEY", strings.Repeat("s", 32))
+	f, stop := startNativeIngress(t, db)
+	t.Cleanup(stop)
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress",
+		ingressPublicCommand{Case: "first-order", Action: "arm", User: 101, HoldSeconds: 10})
+	for _, user := range []int64{101, 202} {
+		nativeIngressRequest(t, f, http.MethodPost, "/lab/input",
+			map[string]any{"user": user, "text": "competing event-specific request"})
+	}
+	require.JSONEq(t, `{"ok":true,"result":[]}`, string(nativeIngressPoll(t, f, 0)))
+	original := nativeIngressReceiptFor(t, f, "first-order")
+	var captured struct {
+		Result []json.RawMessage `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(original.Response, &captured))
+	require.Len(t, captured.Result, 2)
+	command := map[string]any{"case": "first-order", "action": "release", "user": 101,
+		"sha256": original.SHA256, "order": "reverse"}
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress", command)
+	var delivered struct {
+		Result []json.RawMessage `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(nativeIngressPoll(t, f, 0), &delivered))
+	require.Equal(t, []json.RawMessage{captured.Result[1], captured.Result[0]}, delivered.Result)
+	readback := nativeIngressReceiptFor(t, f, "first-order")
+	require.Equal(t, "reverse", readback.DeliveryOrder)
+	require.Equal(t, original.Response, readback.Response)
+	require.Equal(t, original.SHA256, readback.SHA256)
+	require.True(t, original.Deadline.Equal(readback.Deadline))
+	var last telegram.Update
+	require.NoError(t, json.Unmarshal(captured.Result[1], &last))
+	command["action"] = "replay"
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress", command)
+	stop()
+	restored, stopRestored := startNativeIngress(t, db)
+	t.Cleanup(stopRestored)
+	require.Equal(t, "reverse", nativeIngressReceiptFor(t, restored, "first-order").DeliveryOrder)
+	require.Equal(t, "reverse", nativeIngressReceiptFor(t, restored, "first-order").ReplayOrder)
+	require.NoError(t, json.Unmarshal(nativeIngressPoll(t, restored, last.ID+1), &delivered))
+	require.Equal(t, []json.RawMessage{captured.Result[1], captured.Result[0]}, delivered.Result)
+	require.Equal(t, original.Response, nativeIngressReceiptFor(t, restored, "first-order").Response)
+	require.JSONEq(t, `{"ok":true,"result":[]}`, string(nativeIngressPoll(t, restored, last.ID+1)))
+}
+
+func TestRegistrationIngressOrderChoicesAreImmutable(t *testing.T) {
+	db := newNativeIngressDB(t)
+	t.Setenv("R104_CONTROL_KEY", strings.Repeat("s", 32))
+	f, stop := startNativeIngress(t, db)
+	t.Cleanup(stop)
+	reject := func(command map[string]any, status int) {
+		raw, err := json.Marshal(command)
+		require.NoError(t, err)
+		r := httptest.NewRequestWithContext(
+			t.Context(),
+			http.MethodPost,
+			"/lab/registration-ingress",
+			bytes.NewReader(raw),
+		)
+		r.Header.Set("X-Sandbox", "1")
+		r.Header.Set("X-R104-Control", os.Getenv("R104_CONTROL_KEY"))
+		w := httptest.NewRecorder()
+		f.Handler().ServeHTTP(w, r)
+		require.Equal(t, status, w.Code, w.Body.String())
+	}
+	reject(map[string]any{"case": "choices", "action": "arm", "user": 101, "hold_seconds": 10,
+		"order": "original"}, http.StatusConflict)
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress",
+		ingressPublicCommand{Case: "choices", Action: "arm", User: 101, HoldSeconds: 10})
+	for _, user := range []int64{101, 202} {
+		nativeIngressRequest(
+			t,
+			f,
+			http.MethodPost,
+			"/lab/input",
+			map[string]any{"user": user, "text": "ordered request"},
+		)
+	}
+	nativeIngressPoll(t, f, 0)
+	original := nativeIngressReceiptFor(t, f, "choices")
+	command := map[string]any{"case": "choices", "action": "release", "user": 101, "sha256": original.SHA256}
+	for _, order := range []any{nil, true, []string{"reverse"}, map[string]string{"order": "reverse"}, "", "unknown"} {
+		command["order"] = order
+		reject(command, http.StatusBadRequest)
+		require.Equal(t, original, nativeIngressReceiptFor(t, f, "choices"))
+	}
+	command["order"] = "original"
+	command["user"] = 202
+	reject(command, http.StatusConflict)
+	command["user"] = 101
+	command["sha256"] = strings.Repeat("a", 64)
+	reject(command, http.StatusConflict)
+	command["sha256"] = original.SHA256
+	require.Equal(t, original, nativeIngressReceiptFor(t, f, "choices"))
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress", command)
+	committed := nativeIngressReceiptFor(t, f, "choices")
+	require.Equal(t, "original", committed.DeliveryOrder)
+	command["order"] = "reverse"
+	reject(command, http.StatusConflict)
+	require.Equal(t, committed, nativeIngressReceiptFor(t, f, "choices"))
+	command["order"] = "original"
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress", command)
+	require.Equal(t, committed, nativeIngressReceiptFor(t, f, "choices"))
+	require.Equal(t, original.Response, nativeIngressPoll(t, f, 0))
+	command["action"] = "replay"
+	command["order"] = "reverse"
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress", command)
+	replay := nativeIngressReceiptFor(t, f, "choices")
+	require.Equal(t, "original", replay.DeliveryOrder)
+	require.Equal(t, "reverse", replay.ReplayOrder)
+	command["order"] = "original"
+	reject(command, http.StatusConflict)
+	command["order"] = "reverse"
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress", command)
+	require.Equal(t, replay, nativeIngressReceiptFor(t, f, "choices"))
+	var envelope struct {
+		Result []json.RawMessage `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(original.Response, &envelope))
+	var last telegram.Update
+	require.NoError(t, json.Unmarshal(envelope.Result[1], &last))
+	var delivered struct {
+		Result []json.RawMessage `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(nativeIngressPoll(t, f, last.ID+1), &delivered))
+	require.Equal(t, []json.RawMessage{envelope.Result[1], envelope.Result[0]}, delivered.Result)
+	require.Equal(t, original.Response, nativeIngressReceiptFor(t, f, "choices").Response)
+	consumed := nativeIngressReceiptFor(t, f, "choices")
+	nativeIngressRequest(t, f, http.MethodPost, "/lab/registration-ingress", command)
+	require.Equal(t, consumed, nativeIngressReceiptFor(t, f, "choices"))
+	require.JSONEq(t, `{"ok":true,"result":[]}`, string(nativeIngressPoll(t, f, last.ID+1)))
 }
 
 func TestRegistrationIngressCapturedCustodyExpiresWithoutPoll(t *testing.T) {
