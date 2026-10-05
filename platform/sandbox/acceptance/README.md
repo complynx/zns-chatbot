@@ -49,7 +49,8 @@ only identities, predicates, hashes, counts and release status.
 
 The four bootstrap files are byte-identical copies of the original registration
 role contract. PostgreSQL initializes the independent roles once on a new empty
-data volume. Run the following product commands serially with the `tool` service:
+data volume. Start PostgreSQL alone and establish genuine readiness first. Run
+the following product commands serially with the `tool` service:
 
 1. `migrate`
 2. `fixture`
@@ -62,6 +63,7 @@ data volume. Run the following product commands serially with the `tool` service
 7. `clock-read` reads it as the independent clock operator, with a serialization
    RW mount and no logical clock mutation. App sees the same clock directory RO.
 
+Start Fake only after these steps have installed its schema, rows and grants.
 Do not start the six runtime roles before bootstrap and the six prerequisites
 below pass. New clock revision and fresh row state are measured, not inferred
 from historical C snapshots. Each step has its own actual native profile and
