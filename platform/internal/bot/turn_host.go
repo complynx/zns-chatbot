@@ -10,6 +10,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
+	"github.com/complynx/zns-chatbot/platform/internal/readsource"
 	"github.com/complynx/zns-chatbot/platform/internal/workflow"
 )
 
@@ -134,6 +135,18 @@ func (s turnLeaves) MediaSelection(cached *interaction.SavedPlan, input, request
 // Failure propagates database failures so the durable inbox row survives and
 // Run stops, instead of saving an "agent unavailable" reply.
 func (s turnLeaves) Failure(err error) (i18n.ID, bool) {
+	// Record fixed labels only; underlying errors can contain private values.
+	reason := "unknown"
+	if errors.Is(err, readsource.ErrLimit) {
+		reason = "source_authority_limit"
+	} else if err != nil {
+		switch err.Error() {
+		case "model input exceeds budget", "model endpoint unavailable", "model transport unavailable",
+			"model unavailable", "invalid model response", "fixture request scope missing", "invalid derivation":
+			reason = err.Error()
+		}
+	}
+	s.bot.logger().Warn("agent planning failure", "reason", reason)
 	return paidFailureNotice(
 			err,
 		), errors.Is(err, errPassPlanTerminal) || errors.Is(err, interaction.ErrOrderReadUnavailable) ||

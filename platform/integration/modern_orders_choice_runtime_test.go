@@ -27,7 +27,7 @@ func TestModernChoiceFullRuntimeAcrossRestart(t *testing.T) {
 			t.Parallel()
 			worker := startModernRuntimeWorker(t)
 			f, original := modernSingleKeyOrder(t, stem)
-			f.b.Model = sandbox.FixtureRemote{URL: f.fake.URL + "/lab/model"}
+			f.b.Model = modernRuntimeDiagnosticModel(t, f.fake.URL)
 			f.b.Scripts = worker
 			f.b.WebAppURL = "https://sandbox.invalid/orders"
 			more := true
@@ -169,8 +169,31 @@ func restartModernRuntimeStand(t *testing.T, f *fixture) {
 	server := httptest.NewServer(stand.Handler())
 	t.Cleanup(server.Close)
 	f.fake = server
-	f.b.Model = sandbox.FixtureRemote{URL: server.URL + "/lab/model"}
+	f.b.Model = modernRuntimeDiagnosticModel(t, server.URL)
 	f.b.TG.Base = server.URL
+}
+
+func modernRuntimeDiagnosticModel(t *testing.T, address string) sandbox.FixtureRemote {
+	t.Helper()
+	return sandbox.FixtureRemote{
+		URL: address + "/lab/model",
+		HTTP: &http.Client{Transport: modernRuntimeModelTransport{t: t}},
+	}
+}
+
+type modernRuntimeModelTransport struct{ t *testing.T }
+
+func (transport modernRuntimeModelTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	started := time.Now()
+	response, err := http.DefaultTransport.RoundTrip(request)
+	status := 0
+	if response != nil {
+		status = response.StatusCode
+	}
+	transport.t.Logf("runtime model HTTP update=%s turn=%s path=%s bytes=%d status=%d transport_error=%t elapsed=%s",
+		request.Header.Get("X-Sandbox-Update"), request.Header.Get("X-Sandbox-Turn"), request.URL.Path,
+		request.ContentLength, status, err != nil, time.Since(started))
+	return response, err
 }
 
 func modernRuntimeScript(t *testing.T, f *fixture, text, code string) json.RawMessage {
