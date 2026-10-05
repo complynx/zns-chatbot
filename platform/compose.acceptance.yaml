@@ -5,6 +5,8 @@ x-security: &security
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
   restart: unless-stopped
+  labels:
+    synthetic.owner: c_installed_f03_finish
 
 x-current-binary: &current-binary
   type: bind
@@ -28,6 +30,7 @@ x-current-product: &current-product
   entrypoint: [/usr/local/bin/zns]
   pids_limit: 128
   labels:
+    synthetic.owner: c_installed_f03_finish
     zns.acceptance.project: synthetic-qa-c-current
     zns.acceptance.product-source: 36264bb8ef6e1a603cc0c4a0cc7e32b412c12cb8
     zns.acceptance.product-binary: 488a8accc0f4072236a6b779837a28fa6312bf0769573023271ad85d767e1261
@@ -44,6 +47,8 @@ x-clock-environment: &clock-environment
 
 services:
   postgres:
+    labels:
+      synthetic.owner: c_installed_f03_finish
     image: ${C_ACCEPTANCE_POSTGRES_IMAGE:?Set the verified immutable PostgreSQL17 image}
     pull_policy: never
     security_opt: [no-new-privileges:true]
@@ -308,21 +313,30 @@ services:
     networks: [database]
 
 networks:
-  database: {internal: true}
-  helpers: {internal: true}
+  database:
+    internal: true
+    labels: {synthetic.owner: c_installed_f03_finish}
+  helpers:
+    internal: true
+    labels: {synthetic.owner: c_installed_f03_finish}
 
 volumes:
-  pgdata: {}
+  pgdata:
+    labels: {synthetic.owner: c_installed_f03_finish}
   script-ipc:
+    labels: {synthetic.owner: c_installed_f03_finish}
     driver: local
     driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=10002,gid=10002,mode=0770,nosuid,nodev,noexec'}
   decoder-ipc:
+    labels: {synthetic.owner: c_installed_f03_finish}
     driver: local
     driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec'}
   sticker-ipc:
+    labels: {synthetic.owner: c_installed_f03_finish}
     driver: local
     driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec'}
   registration-clock:
+    labels: {synthetic.owner: c_installed_f03_finish}
     driver: local
     driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=10001,gid=10001,mode=0700,nosuid,nodev,noexec'}
 
