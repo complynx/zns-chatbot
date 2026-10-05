@@ -1,0 +1,335 @@
+name: synthetic-qa-c-current
+
+x-security: &security
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  restart: unless-stopped
+
+x-current-binary: &current-binary
+  type: bind
+  source: ${C_ACCEPTANCE_ZNS_BINARY:?Set the verified current36264 binary path}
+  target: /usr/local/bin/zns
+  read_only: true
+  bind: {create_host_path: false}
+
+x-runtime-config: &runtime-config
+  type: bind
+  source: ${C_ACCEPTANCE_SOURCE_DIR:?Set the reviewed acceptance source directory}/runtime.yaml
+  target: /etc/zns/runtime.yaml
+  read_only: true
+  bind: {create_host_path: false}
+
+x-current-product: &current-product
+  <<: *security
+  image: ${C_ACCEPTANCE_APP_BASE:?Set the verified immutable cached app base}
+  pull_policy: never
+  user: '10001:10001'
+  entrypoint: [/usr/local/bin/zns]
+  pids_limit: 128
+  labels:
+    zns.acceptance.project: synthetic-qa-c-current
+    zns.acceptance.product-source: 36264bb8ef6e1a603cc0c4a0cc7e32b412c12cb8
+    zns.acceptance.product-binary: 488a8accc0f4072236a6b779837a28fa6312bf0769573023271ad85d767e1261
+  environment:
+    ZNS_CONFIG_FILE: /etc/zns/runtime.yaml
+
+x-clock-environment: &clock-environment
+  ZNS_CONFIG_FILE: /etc/zns/runtime.yaml
+  REGISTRATION_CLOCK_FILE: /run/registration-clock/state.json
+  REGISTRATION_CLOCK_INSTALLATION: '010400000204'
+  REGISTRATION_CLOCK_CASE: c-registration-clock-20261001-v1
+  REGISTRATION_CLOCK_DATABASE_ADDRESS: postgres:5432/synthetic_qa_zns_registration_fixture
+  REGISTRATION_CLOCK_ANCHOR: '2030-10-02T12:00:00Z'
+
+services:
+  postgres:
+    image: ${C_ACCEPTANCE_POSTGRES_IMAGE:?Set the verified immutable PostgreSQL17 image}
+    pull_policy: never
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    cpus: 0.3
+    mem_limit: 768m
+    memswap_limit: 768m
+    pids_limit: 128
+    environment:
+      POSTGRES_DB: synthetic_qa_zns_registration_fixture
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password, app_password, meter_password, inventory_password, fake_password, operator_password]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - type: bind
+        source: ${C_ACCEPTANCE_SOURCE_DIR}/bootstrap/10-product-roles.sh
+        target: /docker-entrypoint-initdb.d/10-product-roles.sh
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${C_ACCEPTANCE_SOURCE_DIR}/bootstrap
+        target: /bootstrap
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d synthetic_qa_zns_registration_fixture]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    stop_grace_period: 30s
+
+  fake:
+    <<: *current-product
+    command: [fake]
+    cpus: 0.1
+    mem_limit: 256m
+    memswap_limit: 256m
+    env_file:
+      - path: ${C_ACCEPTANCE_PRIVATE_DIR:?Set the protected new-stand private directory}/fake.env
+        format: raw
+    environment:
+      ZNS_CONFIG_FILE: /etc/zns/fake.yaml
+    volumes:
+      - *current-binary
+      - type: bind
+        source: ${C_ACCEPTANCE_SOURCE_DIR}/fake.yaml
+        target: /etc/zns/fake.yaml
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [database, helpers]
+    ports: ['127.0.0.1:58119:8080']
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, /usr/local/bin/zns, health]
+      interval: 2s
+      timeout: 4s
+      retries: 20
+
+  app:
+    <<: *current-product
+    command: [app]
+    cpus: 0.3
+    mem_limit: 768m
+    memswap_limit: 768m
+    env_file:
+      - path: ${C_ACCEPTANCE_PRIVATE_DIR}/app.env
+        format: raw
+    environment:
+      <<: *clock-environment
+      ZNS_INSTALLATION_ID: '010400000204'
+      ZNS_LAUNCH_ID: c00362642026100500000001
+    volumes:
+      - *current-binary
+      - *runtime-config
+      - script-ipc:/run/script-ipc:ro
+      - registration-clock:/run/registration-clock:ro
+    group_add: ['10002']
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=64m,uid=10001,gid=10001,mode=0700']
+    networks: [database, helpers]
+    ports: ['127.0.0.1:58118:8080']
+    depends_on:
+      postgres: {condition: service_healthy}
+      fake: {condition: service_healthy}
+      evaluator: {condition: service_started}
+      media-broker: {condition: service_started}
+      sticker-broker: {condition: service_started}
+    healthcheck:
+      test: [CMD, /usr/local/bin/zns, health]
+      interval: 2s
+      timeout: 4s
+      retries: 20
+    stop_grace_period: 30s
+
+  evaluator:
+    <<: *security
+    image: ${C_ACCEPTANCE_SCRIPT_IMAGE:?Set the verified immutable script image}
+    pull_policy: never
+    user: '10002:10002'
+    network_mode: none
+    cpus: 0.05
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 32
+    volumes: [script-ipc:/run/script-ipc]
+
+  media-decoder:
+    <<: *security
+    image: ${C_ACCEPTANCE_MEDIA_DECODER_IMAGE:?Set the verified immutable media decoder image}
+    pull_policy: never
+    network_mode: none
+    user: '10002:10002'
+    cpus: 0.15
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 256
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=64m,uid=10002,gid=10002,mode=0700']
+    volumes: [decoder-ipc:/run/media-ipc]
+    environment:
+      MEDIA_WORKER_MODE: decoder
+    healthcheck:
+      test: [CMD, test, -S, /run/media-ipc/decoder.sock]
+      interval: 2s
+      timeout: 1s
+      retries: 15
+
+  media-broker:
+    <<: *security
+    image: ${C_ACCEPTANCE_MEDIA_BROKER_IMAGE:?Set the verified immutable media broker image}
+    pull_policy: never
+    user: '10002:10002'
+    cpus: 0.1
+    mem_limit: 256m
+    memswap_limit: 256m
+    pids_limit: 64
+    env_file:
+      - path: ${C_ACCEPTANCE_PRIVATE_DIR}/media.env
+        format: raw
+    environment:
+      MEDIA_WORKER_MODE: broker
+      OPENAI_TRANSCRIPTION_URL: http://fake:8080/lab/asr
+      OPENAI_TRANSCRIPTION_MODEL: gpt-transcribe
+      ZNS_INSTALLATION_ID: '010400000204'
+      ZNS_LAUNCH_ID: c00362642026100500000001
+    volumes: [decoder-ipc:/run/media-ipc:ro]
+    networks: [database, helpers]
+    depends_on:
+      media-decoder: {condition: service_healthy}
+      postgres: {condition: service_healthy}
+      fake: {condition: service_healthy}
+
+  sticker-decoder:
+    <<: *security
+    image: ${C_ACCEPTANCE_STICKER_DECODER_IMAGE:?Set the verified immutable sticker decoder image}
+    pull_policy: never
+    user: '10002:10002'
+    network_mode: none
+    cpus: 0.1
+    mem_limit: 256m
+    memswap_limit: 256m
+    pids_limit: 32
+    environment:
+      STICKER_WORKER_MODE: decoder
+    volumes: [sticker-ipc:/run/sticker-ipc]
+    tmpfs: ['/tmp:rw,nosuid,nodev,noexec,size=32m,uid=10002,gid=10002,mode=0700']
+
+  sticker-broker:
+    <<: *security
+    image: ${C_ACCEPTANCE_STICKER_BROKER_IMAGE:?Set the verified immutable sticker broker image}
+    pull_policy: never
+    user: '10002:10002'
+    cpus: 0.1
+    mem_limit: 256m
+    memswap_limit: 256m
+    pids_limit: 16
+    environment:
+      STICKER_WORKER_MODE: broker
+    env_file:
+      - path: ${C_ACCEPTANCE_PRIVATE_DIR}/sticker.env
+        format: raw
+    volumes: [sticker-ipc:/run/sticker-ipc:ro]
+    networks: [helpers]
+    depends_on:
+      sticker-decoder: {condition: service_started}
+
+  tool:
+    <<: *current-product
+    profiles: [maintenance]
+    restart: 'no'
+    command: [migrate]
+    cpus: 0.1
+    mem_limit: 256m
+    memswap_limit: 256m
+    env_file:
+      - path: ${C_ACCEPTANCE_PRIVATE_DIR}/owner.env
+        format: raw
+    volumes: [*current-binary, *runtime-config]
+    networks: [database]
+
+  roles:
+    image: ${C_ACCEPTANCE_POSTGRES_IMAGE}
+    pull_policy: never
+    profiles: [maintenance]
+    <<: *security
+    restart: 'no'
+    entrypoint: [psql]
+    command: [--no-psqlrc, --single-transaction, -v, ON_ERROR_STOP=1, -v, ECHO=none, -f, /bootstrap/runtime-roles.sql]
+    cpus: 0.1
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 32
+    env_file:
+      - path: ${C_ACCEPTANCE_PRIVATE_DIR}/roles.env
+        format: raw
+    volumes:
+      - type: bind
+        source: ${C_ACCEPTANCE_SOURCE_DIR}/bootstrap/runtime-roles.sql
+        target: /bootstrap/runtime-roles.sql
+        read_only: true
+        bind: {create_host_path: false}
+    networks: [database]
+
+  clock-init:
+    <<: *security
+    profiles: [maintenance]
+    restart: 'no'
+    image: ${C_ACCEPTANCE_CLOCK_IMAGE:?Set the verified immutable unchanged clock operator image}
+    pull_policy: never
+    user: '10001:10001'
+    entrypoint: [/usr/local/bin/registrationclockctl]
+    command: [-action, init]
+    cpus: 0.1
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 32
+    env_file:
+      - path: ${C_ACCEPTANCE_PRIVATE_DIR}/owner.env
+        format: raw
+    environment: *clock-environment
+    volumes: [*runtime-config, registration-clock:/run/registration-clock]
+    networks: [database]
+
+  clock-read:
+    <<: *security
+    profiles: [maintenance]
+    restart: 'no'
+    image: ${C_ACCEPTANCE_CLOCK_IMAGE}
+    pull_policy: never
+    user: '10001:10001'
+    entrypoint: [/usr/local/bin/registrationclockctl]
+    command: [-action, read]
+    cpus: 0.1
+    mem_limit: 128m
+    memswap_limit: 128m
+    pids_limit: 32
+    env_file:
+      - path: ${C_ACCEPTANCE_PRIVATE_DIR}/operator.env
+        format: raw
+    environment: *clock-environment
+    volumes: [*runtime-config, registration-clock:/run/registration-clock]
+    networks: [database]
+
+networks:
+  database: {internal: true}
+  helpers: {internal: true}
+
+volumes:
+  pgdata: {}
+  script-ipc:
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=10002,gid=10002,mode=0770,nosuid,nodev,noexec'}
+  decoder-ipc:
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec'}
+  sticker-ipc:
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=10002,gid=10002,mode=0700,nosuid,nodev,noexec'}
+  registration-clock:
+    driver: local
+    driver_opts: {type: tmpfs, device: tmpfs, o: 'size=1m,uid=10001,gid=10001,mode=0700,nosuid,nodev,noexec'}
+
+secrets:
+  postgres_password: {file: '${C_ACCEPTANCE_PRIVATE_DIR}/postgres.password'}
+  app_password: {file: '${C_ACCEPTANCE_PRIVATE_DIR}/app.password'}
+  meter_password: {file: '${C_ACCEPTANCE_PRIVATE_DIR}/meter.password'}
+  inventory_password: {file: '${C_ACCEPTANCE_PRIVATE_DIR}/inventory.password'}
+  fake_password: {file: '${C_ACCEPTANCE_PRIVATE_DIR}/fake.password'}
+  operator_password: {file: '${C_ACCEPTANCE_PRIVATE_DIR}/operator.password'}

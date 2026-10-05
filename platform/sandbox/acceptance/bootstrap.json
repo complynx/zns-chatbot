@@ -1,0 +1,39 @@
+{
+  "project": "synthetic-qa-c-current",
+  "product_source": "36264bb8ef6e1a603cc0c4a0cc7e32b412c12cb8",
+  "product_binary_sha256": "488a8accc0f4072236a6b779837a28fa6312bf0769573023271ad85d767e1261",
+  "state": "PREPARATION_ONLY",
+  "sole_writer": "c_installed_f03_finish",
+  "steps": [
+    {"service": "tool", "command": ["migrate"], "environment": {}},
+    {"service": "tool", "command": ["fixture"], "environment": {}},
+    {"service": "tool", "command": ["product-fixture"], "environment": {}},
+    {
+      "service": "tool",
+      "command": ["product-fixture"],
+      "environment": {
+        "REGISTRATION_FIXTURE_ACTION": "init",
+        "REGISTRATION_FIXTURE_STAND": "synthetic-qa-zns-registration-fixture",
+        "REGISTRATION_FIXTURE_OPENS_AT": "2030-10-02T13:00:00Z",
+        "REGISTRATION_FIXTURE_CLOCK_ANCHOR": "2030-10-02T12:00:00Z"
+      }
+    },
+    {"service": "roles", "command": null, "environment": {}},
+    {"service": "clock-init", "command": null, "environment": {}},
+    {"service": "clock-read", "command": null, "environment": {}}
+  ],
+  "runtime_services": ["app", "evaluator", "media-decoder", "media-broker", "sticker-decoder", "sticker-broker"],
+  "prerequisite_services": ["postgres", "fake"],
+  "continuity": "new isolated database and clock; no old C continuity claim",
+  "bounds": {
+    "whole_live_cpu_max": 2,
+    "whole_live_memory_mib_max": 4096,
+    "planned_cpu_max_including_operator_and_one_tool": 1.5,
+    "planned_memory_mib_max_including_operator_and_one_tool": 3712,
+    "composition_seconds": 90,
+    "cleanup_seconds": 30,
+    "native_seconds": 15,
+    "capture_bytes": 131072,
+    "readiness_seconds": 90
+  }
+}
