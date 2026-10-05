@@ -151,7 +151,13 @@ services:
       media-broker: { condition: service_started }
       sticker-broker: { condition: service_started }
     healthcheck:
-      test: [CMD, /usr/local/bin/zns, health]
+      test:
+        [
+          CMD,
+          /bin/sh,
+          -c,
+          'unset REGISTRATION_CLOCK_FILE REGISTRATION_CLOCK_INSTALLATION REGISTRATION_CLOCK_CASE REGISTRATION_CLOCK_DATABASE_ADDRESS REGISTRATION_CLOCK_ANCHOR; exec /usr/local/bin/zns health',
+        ]
       interval: 2s
       timeout: 4s
       retries: 20
