@@ -177,7 +177,7 @@ func modernRuntimeDiagnosticModel(t *testing.T, address string) sandbox.FixtureR
 	t.Helper()
 	return sandbox.FixtureRemote{
 		URL: address + "/lab/model",
-		HTTP: &http.Client{Transport: modernRuntimeModelTransport{t: t}},
+		HTTP: &http.Client{Timeout: 10 * time.Second, Transport: modernRuntimeModelTransport{t: t}},
 	}
 }
 
