@@ -1,10 +1,12 @@
 """Literal clean-C bootstrap using the accepted runner's native custody."""
 import copy
+import hashlib
 import json
 import math
 import os
 from pathlib import Path
 import re
+import stat
 import time
 
 PRODUCT = '36264bb8ef6e1a603cc0c4a0cc7e32b412c12cb8'
@@ -30,10 +32,83 @@ PREREQUISITES = [
     'separately-bounded-current-provider-delivery',
 ]
 
+PRIVATE_VOLUME = 'synthetic-qa-c-private-delivery1-20261006'
+PRIVATE_ROOT = '/var/lib/docker/volumes/'+PRIVATE_VOLUME+'/_data'
+PRIVATE_NAMES = sorted([role+'.password' for role in
+                        ('postgres','app','meter','inventory','fake','operator')]+
+                       [role+'.env' for role in
+                        ('app','owner','fake','operator','media','sticker','roles','inventory')])
+
+
+def delivery_snapshot(runner, approval, native, required):
+    """Keep legacy public delivery guards and admit one exact native private root."""
+    binding = approval.get('native_private_delivery')
+    if binding is None:
+        return native.delivery_snapshot(runner,approval,required)
+    if (not native.same(binding,{'volume':PRIVATE_VOLUME,'path':PRIVATE_ROOT,
+                                'driver':'local','scope':'local'})
+            or approval.get('no_host_source_writers') is not True or os.geteuid()!=0):
+        raise native.Failure('exact admitted native private volume/root')
+    private_paths = {PRIVATE_ROOT+'/'+name for name in PRIVATE_NAMES}
+    files = approval['delivery_files']
+    directories = approval['delivery_directories']
+    if (not files or len(files)>4096 or len(directories)>256
+            or len({item['path'] for item in files})!=len(files)
+            or len({item['path'] for item in directories})!=len(directories)):
+        raise native.Failure('unique complete delivery inventory')
+    private = [item for item in files if item['path'] in private_paths]
+    roots = [item for item in directories if item['path']==PRIVATE_ROOT]
+    if (len(private)!=14 or len(roots)!=1
+            or not native.same(roots[0]['members'],PRIVATE_NAMES)
+            or not native.same(roots[0]['directories'],[])):
+        raise native.Failure('exact native private14 topology')
+    public = dict(approval,delivery_files=[item for item in files if item['path'] not in private_paths],
+                  delivery_directories=[item for item in directories if item['path']!=PRIVATE_ROOT])
+    observed = native.delivery_snapshot(runner,public,required-private_paths-{PRIVATE_ROOT})
+    identities = {(item['device'],item['inode']) for item in observed}
+    with native.intake_deadline(runner.work_end,runner.work_utc_end) as check, \
+            native.physical_open(PRIVATE_ROOT,directory=True,check=check) as root:
+        info = os.fstat(root)
+        if (info.st_uid!=0 or info.st_gid!=10001 or stat.S_IMODE(info.st_mode)!=0o750
+                or sorted(os.listdir(root))!=PRIVATE_NAMES):
+            raise native.Failure('physical native private root/access')
+        for item in private:
+            name = Path(item['path']).name
+            group = 10001 if name in {'app.env','owner.env'} else 70 if name.endswith('.password') else 0
+            with native.physical_open(item['path'],check=check) as fd:
+                before = os.fstat(fd)
+                if (before.st_uid!=0 or before.st_gid!=group
+                        or stat.S_IMODE(before.st_mode)!=(0o640 if group else 0o600)
+                        or type(item['bytes']) is not int or not 0<item['bytes']<=1048576
+                        or before.st_size!=item['bytes'] or (before.st_dev,before.st_ino) in identities):
+                    raise native.Failure('exact owned bounded native private file')
+                check()
+                raw = os.read(fd,1048577)
+                check()
+                after = os.fstat(fd)
+                if (any(getattr(before,key)!=getattr(after,key) for key in
+                        ('st_dev','st_ino','st_size','st_mtime_ns','st_ctime_ns'))
+                        or len(raw)!=item['bytes'] or hashlib.sha256(raw).hexdigest()!=item['sha256']):
+                    raise native.Failure('unchanged exact native private bytes/identity')
+                identities.add((before.st_dev,before.st_ino))
+                observed.append({'path':item['path'],'bytes':before.st_size,'sha256':item['sha256'],
+                                 'device':before.st_dev,'inode':before.st_ino,
+                                 'mtime_ns':before.st_mtime_ns,'ctime_ns':before.st_ctime_ns})
+        check()
+        after = os.fstat(root)
+        if (any(getattr(info,key)!=getattr(after,key) for key in
+                ('st_dev','st_ino','st_mode','st_uid','st_gid','st_mtime_ns','st_ctime_ns'))
+                or sorted(os.listdir(root))!=PRIVATE_NAMES):
+            raise native.Failure('unchanged physical native private directory/topology')
+        observed.append({'path':PRIVATE_ROOT,'type':'directory','device':info.st_dev,'inode':info.st_ino,
+                         'mode':info.st_mode,'uid':info.st_uid,'gid':info.st_gid,
+                         'mtime_ns':info.st_mtime_ns,'ctime_ns':info.st_ctime_ns})
+    return observed
+
 
 def check_delivery(runner, approval, native):
     """Recheck the authenticated physical delivery before dependent operations."""
-    observed = native.delivery_snapshot(runner,approval,runner.install_delivery_required)
+    observed = delivery_snapshot(runner,approval,native,runner.install_delivery_required)
     if not native.same(runner.install_delivery_before,observed):
         raise native.Failure('installation delivery changed')
     return observed

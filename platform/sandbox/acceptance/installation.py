@@ -61,7 +61,7 @@ def authenticate_delivery(runner, approval, native, prior=None):
             raise native.Failure('actual graph/probe byte pin cross-binding')
     if files[app['/usr/local/bin/zns']['Source']]['sha256'] != bootstrap.BINARY:
         raise native.Failure('actual current product delivery hash')
-    observed = native.delivery_snapshot(runner,approval,required)
+    observed = bootstrap.delivery_snapshot(runner,approval,native,required)
     # Compose has expanded env_file into Config.Env. Consume those same pinned
     # app/owner bytes, not independently selected paths with equivalent names.
     with native.intake_deadline(runner.work_end,runner.work_utc_end):
@@ -149,9 +149,12 @@ def readonly_delivery(runner, approval, native, identities):
             or final['State']['ExitCode'] != 0 or final['State']['OOMKilled']):
         raise native.Failure('actual read-only probe exit')
     observed = json.loads(raw)
-    if (set(observed) != {'uid','input_count','native_ro_open_count','binary_sha256','clock_sha256'}
+    if (set(observed) != {'uid','input_count','native_ro_open_count','binary_sha256','clock_sha256',
+                         'private_other_role_denied_count'}
             or observed['uid'] != 10001 or observed['input_count'] != 5
             or observed['native_ro_open_count'] != 5
+            or type(observed['private_other_role_denied_count']) is not int
+            or observed['private_other_role_denied_count'] != 12
             or observed['binary_sha256'] != bootstrap.BINARY
             or not re.fullmatch('[a-f0-9]{64}',observed['clock_sha256'])):
         raise native.Failure('five genuine bounded native read-only probes')

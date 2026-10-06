@@ -4,6 +4,7 @@ import errno
 import hashlib
 import json
 import os
+import stat
 from urllib.parse import parse_qs, urlsplit
 
 
@@ -41,9 +42,43 @@ def environment(raw):
     return result
 
 
-def probe(config_sha, app_sha, owner_sha):
-    if os.getuid()!=10001 or os.geteuid()!=10001:
+def private_access(directory='/private'):
+    if (os.getuid()!=10001 or os.geteuid()!=10001 or os.getgid()!=10001
+            or os.getegid()!=10001 or not set(os.getgroups()).issubset({10001,10002})):
         raise ValueError('actual app/owner UID')
+    observed_directory = os.stat(directory,follow_symlinks=False)
+    if (not stat.S_ISDIR(observed_directory.st_mode) or observed_directory.st_uid!=0
+            or observed_directory.st_gid!=10001 or stat.S_IMODE(observed_directory.st_mode)!=0o750):
+        raise ValueError('actual private native directory boundary')
+    denied = 0
+    names = {role+'.password' for role in ('postgres','app','meter','inventory','fake','operator')}
+    names.update(role+'.env' for role in ('app','owner','fake','operator','media','sticker','roles','inventory'))
+    if set(os.listdir(directory))!=names:
+        raise ValueError('complete private native file inventory')
+    for name in sorted(names):
+        path = directory+'/'+name
+        observed = os.stat(path,follow_symlinks=False)
+        group = 10001 if name in {'app.env','owner.env'} else 70 if name.endswith('.password') else 0
+        if (not stat.S_ISREG(observed.st_mode) or observed.st_uid!=0
+                or observed.st_gid!=group or stat.S_IMODE(observed.st_mode)!=(0o640 if group else 0o600)):
+            raise ValueError('exact per-role private native access')
+        if name not in {'app.env','owner.env'}:
+            try:
+                descriptor = os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+            except OSError as error:
+                if error.errno!=errno.EACCES:
+                    raise ValueError('private other-role read must be denied') from error
+                denied += 1
+            else:
+                os.close(descriptor)
+                raise ValueError('private other-role secret readable')
+    if denied!=12:
+        raise ValueError('complete private other-role denial inventory')
+    return denied
+
+
+def probe(config_sha, app_sha, owner_sha):
+    denied = private_access()
     files = [('/etc/zns/runtime.yaml',config_sha),
              ('/private/app.env',app_sha),('/private/owner.env',owner_sha)]
     records = {}
@@ -86,6 +121,7 @@ def probe(config_sha, app_sha, owner_sha):
             return json.dumps(left,sort_keys=True)==json.dumps(right,sort_keys=True)
     bootstrap.clock_readback(Contract,clock_raw)
     print(json.dumps({'uid':os.getuid(),'input_count':5,'native_ro_open_count':5,
+                      'private_other_role_denied_count':denied,
                       'binary_sha256':digest.hexdigest(),
                       'clock_sha256':hashlib.sha256(clock_raw).hexdigest()}))
 

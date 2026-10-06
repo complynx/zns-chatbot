@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
-from prepare_private import DATABASE, prepare
+from prepare_private import DATABASE, admit_native_copy, prepare
 
 
 class PrivateInputsTest(unittest.TestCase):
@@ -64,6 +64,11 @@ class PrivateInputsTest(unittest.TestCase):
                 self.assertFalse(any(key.startswith("REGISTRATION_CLOCK_") for key in environment(name)))
             for path in directory.iterdir():
                 self.assertEqual(0o600, path.stat().st_mode & 0o777)
+            original = {path.name:path.read_bytes() for path in directory.iterdir()}
+            with patch.object(os, "getuid", return_value=10001), patch.object(os, "geteuid", return_value=10001):
+                with self.assertRaisesRegex(ValueError, "native preparation root"):
+                    admit_native_copy(directory,directory/"not-admitted.json")
+            self.assertEqual(original,{path.name:path.read_bytes() for path in directory.iterdir()})
 
     def test_existing_input_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:

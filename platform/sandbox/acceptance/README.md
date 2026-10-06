@@ -47,6 +47,27 @@ Compose raw format; the ordinary tool's env has no controlled-clock variables.
 Private execution/readback receipts remain private; public evidence contains
 only identities, predicates, hashes, counts and release status.
 
+For the current Linux successor, unchanged private bytes are copied into a new
+owned native input volume, not consumed through Windows UID1000/mode0600 aliases.
+`prepare_private.py --admit-native-copy MANIFEST --private-dir DIRECTORY` admits
+the exact fourteen pinned files after the copy. The preparation process uses
+UID0 with only supplementary groups70 and10001, dropped capabilities and no
+network/socket. It changes ownership groups of its own files without CHOWN or
+DAC capabilities. Directory root:10001/mode0750 contains app.env and owner.env
+root:10001/mode0640, six password files root:70/mode0640, and six remaining env
+files root:0/mode0600. The immutable PostgreSQL17-alpine image's postgres identity
+is70:70; this identity must be authenticated against the admitted image.
+
+The installer stays UID0/dropALL. Its exact canonical daemon directory is also
+the Compose client alias and the readonly probe source. PostgreSQL receives only
+the six explicit RO password-file binds at their original /run/secrets paths;
+no Compose secret-target normalization may change those paths. The UID10001
+probe must read its app/owner files, reject reads of the other twelve private
+files, and preserve all five original RO-open checks. UID0, UID10001 and PG70
+access, untrusted-user denial, whole source topology and absence of any writable
+alias require actual Linux proof before installation admission. This source
+preparation does not claim that proof or authorize a product start.
+
 The four bootstrap files are byte-identical copies of the original registration
 role contract. PostgreSQL initializes the independent roles once on a new empty
 data volume. Start PostgreSQL alone and establish genuine readiness first. Run

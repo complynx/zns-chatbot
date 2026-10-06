@@ -60,17 +60,38 @@ services:
     environment:
       POSTGRES_DB: synthetic_qa_zns_registration_fixture
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
-    secrets:
-      [
-        postgres_password,
-        app_password,
-        meter_password,
-        inventory_password,
-        fake_password,
-        operator_password,
-      ]
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - type: bind
+        source: ${C_ACCEPTANCE_PRIVATE_DIR}/postgres.password
+        target: /run/secrets/postgres_password
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${C_ACCEPTANCE_PRIVATE_DIR}/app.password
+        target: /run/secrets/app_password
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${C_ACCEPTANCE_PRIVATE_DIR}/meter.password
+        target: /run/secrets/meter_password
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${C_ACCEPTANCE_PRIVATE_DIR}/inventory.password
+        target: /run/secrets/inventory_password
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${C_ACCEPTANCE_PRIVATE_DIR}/fake.password
+        target: /run/secrets/fake_password
+        read_only: true
+        bind: { create_host_path: false }
+      - type: bind
+        source: ${C_ACCEPTANCE_PRIVATE_DIR}/operator.password
+        target: /run/secrets/operator_password
+        read_only: true
+        bind: { create_host_path: false }
       - type: bind
         source: ${C_ACCEPTANCE_SOURCE_DIR}/bootstrap/10-product-roles.sh
         target: /docker-entrypoint-initdb.d/10-product-roles.sh
@@ -396,11 +417,3 @@ volumes:
         device: tmpfs,
         o: 'size=1m,uid=10001,gid=10001,mode=0700,nosuid,nodev,noexec',
       }
-
-secrets:
-  postgres_password: { file: '${C_ACCEPTANCE_PRIVATE_DIR}/postgres.password' }
-  app_password: { file: '${C_ACCEPTANCE_PRIVATE_DIR}/app.password' }
-  meter_password: { file: '${C_ACCEPTANCE_PRIVATE_DIR}/meter.password' }
-  inventory_password: { file: '${C_ACCEPTANCE_PRIVATE_DIR}/inventory.password' }
-  fake_password: { file: '${C_ACCEPTANCE_PRIVATE_DIR}/fake.password' }
-  operator_password: { file: '${C_ACCEPTANCE_PRIVATE_DIR}/operator.password' }

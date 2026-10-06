@@ -275,6 +275,11 @@ class Contracts(unittest.TestCase):
                 changed['delivery_directories'][0]['members'].reverse()
                 with self.assertRaisesRegex(native.Failure,'exact delivery directory topology'):
                     native.delivery_snapshot(runner,changed,set())
+                changed['native_private_delivery'] = {
+                    'volume':bootstrap.PRIVATE_VOLUME+'-alias','path':bootstrap.PRIVATE_ROOT,
+                    'driver':'local','scope':'local'}
+                with self.assertRaisesRegex(native.Failure,'exact admitted native private volume/root'):
+                    bootstrap.delivery_snapshot(runner,changed,native,set())
 
     def host_main_controls(self, raw, installing=False):
         source = Path(sys.argv[3]).parent
@@ -342,7 +347,7 @@ class Contracts(unittest.TestCase):
                                 boot.captured('expired_dependency',dependency,dependency_sha)
                             execute.assert_not_called()
                 output = root/('qa.local/c-installed-f03-finish-20261005/clean-linux1/private-offline-render4/c-successor-20261006-1/'
-                               + ('install-output8' if installing else 'operator-output1'))
+                               + ('install-output9' if installing else 'operator-output1'))
                 output.mkdir(parents=True)
                 profile = copy.deepcopy(original_profile)
                 profile['host_output'] = str(output)
@@ -367,7 +372,7 @@ class Contracts(unittest.TestCase):
                 approval_path.write_bytes(approval_raw)
                 if installing:
                     self.assertEqual(approval_path.parent,output.parent)
-                    self.assertEqual(approval_path.name,'install-approval8.json')
+                    self.assertEqual(approval_path.name,'install-approval9.json')
                     self.assertFalse((boot.BASE/'APPROVAL-ROOT.json').exists())
                 profile_name = 'INSTALL-OPERATOR-PROFILE.json' if installing else 'OPERATOR-PROFILE.json'
                 (boot.BASE/profile_name).write_bytes(profile_raw)
@@ -419,6 +424,10 @@ class Contracts(unittest.TestCase):
                             stdout = b''
                             if operation=='image':
                                 stdout = json.dumps([{'Id':boot.IMAGE}]).encode()
+                            elif operation=='volume' and installing:
+                                stdout = json.dumps([{'Name':bootstrap.PRIVATE_VOLUME,'Driver':'local',
+                                    'Scope':'local','Mountpoint':bootstrap.PRIVATE_ROOT,'Options':None,
+                                    'Labels':{'synthetic.owner':'c_native_private_delivery1'}}]).encode()
                             elif operation=='create':
                                 stdout = (identity+'\n').encode()
                                 if case=='prestarted':
