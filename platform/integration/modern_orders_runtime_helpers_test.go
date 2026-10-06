@@ -118,6 +118,16 @@ func (transport modernRuntimeAPITransport) record(request *http.Request, started
 	operation := "api.other"
 	path := request.URL.Path
 	switch {
+	case path == "/v1/me/history/generation":
+		operation = "api.history_generation"
+	case path == "/internal/history/authority":
+		operation = "api.read_authority"
+	case path == "/internal/history/archive/original":
+		operation = "api.archive_original"
+	case path == "/internal/history/archive/outcome":
+		operation = "api.archive_outcome"
+	case path == "/internal/history/archive/derived":
+		operation = "api.archive_derived"
 	case strings.Contains(path, "/orders/"):
 		operation = "api.order"
 	case strings.HasSuffix(path, "/orders"):
@@ -133,15 +143,60 @@ func (transport modernRuntimeAPITransport) record(request *http.Request, started
 	}
 	transport.timings.mu.Lock()
 	defer transport.timings.mu.Unlock()
+	call := modernRuntimeAPITiming{
+		operation: transport.scope + "." + request.Method + "." + operation,
+		at:        started.Sub(transport.timings.started),
+		elapsed:   time.Since(started),
+		status:    status,
+	}
 	if len(transport.timings.api) < 128 {
-		transport.timings.api = append(transport.timings.api, modernRuntimeAPITiming{
-			operation: transport.scope + "." + request.Method + "." + operation,
-			at:        started.Sub(transport.timings.started),
-			elapsed:   time.Since(started),
-			status:    status,
-		})
+		transport.timings.api = append(transport.timings.api, call)
 	} else {
+		// Keep initial dispatch and the latest finalization calls within the same bound.
+		copy(transport.timings.api[64:], transport.timings.api[65:])
+		transport.timings.api[127] = call
 		transport.timings.dropped = true
+	}
+}
+
+func TestModernRuntimeTimingRecorderBounded(t *testing.T) {
+	t.Parallel()
+	for _, count := range []int{64, 127, 128, 129, 160} {
+		timings := &modernRuntimeTimings{started: time.Now()}
+		transport := modernRuntimeAPITransport{timings: timings, scope: "host"}
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+			"https://example.invalid/internal/history/authority?private=omitted", http.NoBody)
+		require.NoError(t, err)
+		for index := range count {
+			transport.record(request, timings.started, 1000+index)
+		}
+		require.Len(t, timings.api, min(count, 128))
+		assert.Equal(t, count > 128, timings.dropped)
+		for index, call := range timings.api {
+			original := index
+			if count > 128 && index >= 64 {
+				original += count - 128
+			}
+			assert.Equal(t, 1000+original, call.status)
+			assert.Equal(t, "host.POST.api.read_authority", call.operation)
+		}
+	}
+	for path, operation := range map[string]string{
+		"/v1/me/history/generation":          "api.history_generation",
+		"/internal/history/archive/original": "api.archive_original",
+		"/internal/history/archive/outcome":  "api.archive_outcome",
+		"/internal/history/archive/derived":  "api.archive_derived",
+		"/internal/history/archive/private":  "api.other",
+		"/v1/me/history/generation/private":  "api.other",
+	} {
+		timings := &modernRuntimeTimings{started: time.Now()}
+		transport := modernRuntimeAPITransport{timings: timings, scope: "user"}
+		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet,
+			"https://example.invalid"+path, http.NoBody)
+		require.NoError(t, err)
+		transport.record(request, timings.started, http.StatusOK)
+		require.Len(t, timings.api, 1)
+		assert.Equal(t, "user.GET."+operation, timings.api[0].operation)
 	}
 }
 
