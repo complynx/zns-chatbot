@@ -5,6 +5,7 @@ import copy
 import hashlib
 import importlib.util
 import io
+import marshal
 import os
 import sys
 import tempfile
@@ -46,6 +47,17 @@ class Contracts(unittest.TestCase):
             (root/'test_run.py').write_text('')
             (root/'README.md').write_text('')
             original_compile = compile
+            original_load = qualify_source.load_native
+            def installation_load(directory,start,utc_start):
+                self.assertEqual(directory,'/runner')
+                return original_load(root,start,utc_start)
+            def installation_boundary():
+                args = ['installation.py','--approval',str(root/'unused-approval'),
+                        '--approval-sha256','a'*64,'--output',str(root/'unused-output'),
+                        '--operation','C_INSTALL_RUNTIME']
+                with patch.object(sys,'argv',args), \
+                        patch.object(qualify_source,'load_native',side_effect=installation_load):
+                    return installation.main()
 
             def changed_path(source, filename, mode, **kwargs):
                 (root/'run.py').write_text('raise RuntimeError("reopened source")')
@@ -73,22 +85,47 @@ class Contracts(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError,'compilation deadline'):
                         qualify_source.load_native(root,now_mono,now_utc)
                     execute.assert_not_called()
+                ticks['expired'] = False
+                with self.subTest(installation_compilation_clock=clock), \
+                        patch('builtins.compile',side_effect=expire_compile), \
+                        patch.object(time,clock,side_effect=current_clock), \
+                        patch('builtins.exec') as execute:
+                    with self.assertRaisesRegex(ValueError,'compilation deadline'):
+                        installation_boundary()
+                    execute.assert_not_called()
             for name in ('guards.py','run.pyc','__pycache__'):
                 (root/'run.py').write_bytes(raw)
                 extra = root/name
+                cached = (importlib.util.MAGIC_NUMBER+b'\0'*4
+                          +int((root/'run.py').stat().st_mtime).to_bytes(4,'little')
+                          +len(raw).to_bytes(4,'little')
+                          +marshal.dumps(original_compile('raise RuntimeError("stale cached body")',
+                                                          str(root/'run.py'),'exec')))
                 if name=='__pycache__':
                     extra.mkdir()
+                    (extra/Path(importlib.util.cache_from_source(str(root/'run.py'))).name).write_bytes(cached)
                 else:
-                    extra.write_bytes(b'undeclared')
+                    extra.write_bytes(cached if name=='run.pyc' else b'undeclared')
                 with self.subTest(local=name),self.assertRaisesRegex(ValueError,'closed ROOT'):
                     qualify_source.load_native(root,time.monotonic(),time.time())
+                with self.subTest(installation_local=name), \
+                        patch('builtins.compile') as compilation, \
+                        self.assertRaisesRegex(ValueError,'closed ROOT'):
+                    installation_boundary()
+                compilation.assert_not_called()
                 if extra.is_dir():
+                    for child in extra.iterdir():
+                        child.unlink()
                     extra.rmdir()
                 else:
                     extra.unlink()
             (root/'run.py').write_bytes(b'wrong source')
             with self.assertRaisesRegex(ValueError,'exact captured'):
                 qualify_source.load_native(root,time.monotonic(),time.time())
+            with patch('builtins.compile') as compilation, \
+                    self.assertRaisesRegex(ValueError,'exact captured'):
+                installation_boundary()
+            compilation.assert_not_called()
 
     def test_qualifier_final_verification_expiry_is_sticky(self):
         native = self.native()
@@ -341,7 +378,7 @@ class Contracts(unittest.TestCase):
             'network_bool':(('NetworkSettings','Networks','none','IPPrefixLen'),False),
         }
         cases = ('pass','wrong_name','wrong_argv',*(['wrong_roles'] if installing else []),'before_birth','create',
-                 'attach','cleanup','publication','unresolved','no_outcome',
+                 'attach','cleanup','publication','unresolved','no_outcome','utc_native',
                  'prestarted','missing_domain','unresolved_domain',*substitutions)
         before_create = ['ps','image']+(['volume'] if installing else [])
         create_index = len(before_create)
@@ -450,10 +487,20 @@ class Contracts(unittest.TestCase):
                         def call(self,argv,end,utc_end):
                             self.assert_cutoffs(end,utc_end)
                             command = argv[2:]
+                            if command[0]=='start':
+                                self_outer.assertEqual(end,boot.ACTIVE)
+                                self_outer.assertEqual(utc_end,boot.UTC_ACTIVE)
+                            else:
+                                self_outer.assertLessEqual(end,time.monotonic()+15)
+                                self_outer.assertLessEqual(utc_end,time.time()+15)
+                            if case=='utc_native' and command[0]=='ps':
+                                self_outer.assertLess(time.time()+16,boot.UTC_ACTIVE)
+                                self_outer.assertGreaterEqual(time.time()+16,utc_end)
                             calls.append(command)
                             operation = command[0]
                             fail = not self.failed and (
                                 (case=='before_birth' and operation=='ps')
+                                or (case=='utc_native' and operation=='ps')
                                 or (case=='no_outcome' and operation=='image')
                                 or (case in ('create','publication','unresolved') and operation=='create')
                                 or (case=='attach' and operation=='start')
@@ -548,6 +595,7 @@ class Contracts(unittest.TestCase):
                             if end>boot.TOTAL or utc_end>boot.UTC_TOTAL:
                                 raise AssertionError('original dual cutoffs cannot extend')
 
+                    self_outer = self
                     fake = FakeCLI(None)
                     module.DockerCLI = lambda _executable:fake
                     return module
@@ -741,7 +789,8 @@ class Contracts(unittest.TestCase):
         native_path = sys.argv[2]
         def mounted_native(path,pin,*args,**kwargs):
             return read_bytes(native_path if path=='/runner/run.py' else path,pin,*args,**kwargs)
-        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules,{'run':native}), \
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(qualify_source,'load_native',return_value=native), \
                 patch.object(native,'read_bytes_pinned',side_effect=mounted_native), \
                 patch.object(native,'Runner',side_effect=AssertionError('No output may be created')) as created:
             path = Path(directory)/'approval.json'
@@ -793,7 +842,8 @@ class Contracts(unittest.TestCase):
         def mounted_native(path,pin,*args,**kwargs):
             return read_bytes(native_path if path=='/runner/run.py' else path,pin,*args,**kwargs)
 
-        with tempfile.TemporaryDirectory() as temporary,patch.dict(sys.modules,{'run':native}), \
+        with tempfile.TemporaryDirectory() as temporary, \
+                patch.object(qualify_source,'load_native',return_value=native), \
                 patch.object(native,'read_bytes_pinned',side_effect=mounted_native):
             root = Path(temporary)
             boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator9/boot_installation.py'
@@ -843,19 +893,13 @@ class Contracts(unittest.TestCase):
             with patch.object(native,'Runner',side_effect=AssertionError('invalid binding precedes output')) as created:
                 missing = ['installation.py','--approval',str(grant),'--approval-sha256',root_sha,
                            '--output',str(output)]
-                original_import = __import__
-
-                def before_native(name,*args,**kwargs):
-                    if name=='run':
-                        self.fail('missing window precedes native import')
-                    return original_import(name,*args,**kwargs)
-
                 with patch.object(sys,'argv',missing), \
-                        patch('builtins.__import__',side_effect=before_native), \
+                        patch.object(qualify_source,'load_native',side_effect=AssertionError('missing window precedes captured native intake')) as loader, \
                         patch.object(native,'read_pinned',side_effect=AssertionError('missing window precedes grant intake')) as intake, \
                         self.assertRaisesRegex(ValueError,'original prerequisite window'):
                     installation.main()
                 intake.assert_not_called()
+                loader.assert_not_called()
                 with patch.object(sys,'argv',missing+['--window',str(window)]),self.assertRaisesRegex(
                         ValueError,'complete original prerequisite window'):
                     installation.main()

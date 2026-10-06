@@ -265,13 +265,9 @@ def main():
             raw = stream.read(16385)
         window = qualify_source.mapped_window(raw,args.window_sha256,args.approval_sha256)
         start,utc_start = window['active_end']-90,window['active_utc']-90
-    # ROOT binds the complete closed /runner directory RO before this trusted
-    # interpreter starts. No caller-selected module path or unbounded loader
-    # read is introduced; subsequent byte intake uses the accepted primitive.
-    sys.path.insert(0,'/runner')
-    import run as native
+    # Authenticate the closed RO native body before compiling these same bytes.
+    native = qualify_source.load_native('/runner',start,utc_start)
     with native.intake_deadline(start+90,utc_start+90):
-        native.read_bytes_pinned('/runner/run.py',NATIVE_SHA)
         approval = native.read_pinned(args.approval,args.approval_sha256)
     if (approval.get('authority') != 'ROOT'
             or approval.get('passive_native_custody_allowed') is not True
