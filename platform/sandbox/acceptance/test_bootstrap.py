@@ -259,6 +259,8 @@ class Contracts(unittest.TestCase):
         original_input = json.loads((source/('INSTALL-INPUT.json' if installing
                                             else 'OPERATOR-INPUT.json')).read_bytes())
         self.supplied_topology_controls(original_input)
+        source_input = (original_input if installing else
+                        self.current_source_approval(original_input,source))
         substitutions = {
             'config_bool':(('Config','AttachStdin'),0),
             'host_bool':(('HostConfig','ReadonlyRootfs'),1),
@@ -290,8 +292,7 @@ class Contracts(unittest.TestCase):
                     profile['name'] = 'synthetic-qa-wrong-operator'
                 if case=='wrong_argv':
                     profile['create_argv'].insert(1,'--privileged')
-                approval = (copy.deepcopy(original_input) if installing else
-                            self.current_source_approval(original_input,source))
+                approval = copy.deepcopy(source_input)
                 # This temporary test authority cannot authorize a real dispatch.
                 approval.update(authority='ROOT',no_host_source_writers=True,
                                 passive_native_custody_allowed=True)
