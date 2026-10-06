@@ -57,6 +57,8 @@ def graph_constructors(runner, approval, native, identities):
             raise native.Failure('full installation identity')
         profile = runner.inspect(identity)
         if (profile['Id'] != identity or profile['State']['Status'] != 'created'
+                or type(profile['State']['Pid']) is not int
+                or type(profile['State']['Running']) is not bool
                 or profile['State']['Pid'] != 0 or profile['State']['Running']
                 or profile['State']['StartedAt'] != '0001-01-01T00:00:00Z'):
             raise native.Failure('complete never-started installation cohort')
@@ -125,7 +127,7 @@ def start_postgres(runner, approval, native, identities):
         native.constructor(profile, approval['services']['postgres'],
                            approval['project'], 'postgres', approval['owner'])
         state = profile['State']
-        if not state['Running'] or state['Pid'] <= 0 or state['OOMKilled']:
+        if profile['Id'] != identity or not state['Running'] or state['Pid'] <= 0 or state['OOMKilled']:
             raise native.Failure('actual PG prerequisite process')
         health = state.get('Health', {}).get('Status')
         if health == 'healthy':
@@ -220,7 +222,8 @@ def start_provider(runner, approval, native, identities, bootstrap_results, cont
     for service in ['fake'] + RUNTIME:
         profile = runner.inspect(identities[service])
         native.constructor(profile, approval['services'][service], project, service, owner)
-        if (profile['State']['Status'] != 'created' or profile['State']['Pid'] != 0
+        if (profile['Id'] != identities[service]
+                or profile['State']['Status'] != 'created' or profile['State']['Pid'] != 0
                 or profile['State']['StartedAt'] != '0001-01-01T00:00:00Z'):
             raise native.Failure('provider/runtime prelaunch state')
     identity = identities['fake']
@@ -233,7 +236,7 @@ def start_provider(runner, approval, native, identities, bootstrap_results, cont
         profile = runner.inspect(identity)
         native.constructor(profile, approval['services']['fake'], project, 'fake', owner)
         state = profile['State']
-        if not state['Running'] or state['Pid'] <= 0 or state['OOMKilled']:
+        if profile['Id'] != identity or not state['Running'] or state['Pid'] <= 0 or state['OOMKilled']:
             raise native.Failure('actual current provider process')
         if state.get('Health', {}).get('Status') == 'healthy':
             return profile

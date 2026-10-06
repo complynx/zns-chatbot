@@ -1,5 +1,6 @@
 """Focused data-contract controls; these do not accept installation runtime."""
 import json
+import copy
 import hashlib
 import importlib.util
 import os
@@ -26,6 +27,254 @@ class Native:
 
 
 class Contracts(unittest.TestCase):
+    @staticmethod
+    def native():
+        spec = importlib.util.spec_from_file_location('acceptance_native',sys.argv[2])
+        native = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(native)
+        return native
+
+    def test_actual_bootstrap_artifact_mutations_stop_before_lifecycle(self):
+        native = self.native()
+        original = json.loads(Path(sys.argv[1]).read_bytes())
+        mutations = [
+            ('project','foreign'),('product_source','a'*40),
+            ('product_binary_sha256','a'*64),('sole_writer','foreign'),
+            ('runtime_services',bootstrap.RUNTIME[:-1]),('prerequisite_services',['fake']),
+            ('steps',original['steps'][:-1]),
+            ('prerequisite_start_order',{'before_steps':['fake']}),
+        ]
+        class Runner:
+            work_end = time.monotonic()+90
+            work_utc_end = time.time()+90
+            def docker(self,*args,**kwargs):
+                raise AssertionError('Unauthenticated artifact cannot dispatch')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'bootstrap.json'
+            for field,value in mutations:
+                with self.subTest(field=field):
+                    wrong = copy.deepcopy(original)
+                    wrong[field] = value
+                    raw = json.dumps(wrong).encode()
+                    path.write_bytes(raw)
+                    approval = {'project':original['project'],'bootstrap':{
+                        'path':str(path),'sha256':native.digest(raw)}}
+                    with self.assertRaises(native.Failure):
+                        installation.prerequisites(Runner(),approval,native)
+            # Artifact notes do not grant ROOT authority; main validates the
+            # actual anchor. These six fields are the executable window contract.
+            for key in ('prerequisites_before_arm','startup_seconds',
+                        'guard_deadline_offset_seconds','readiness_seconds',
+                        'child_deadline_offset_seconds','outer_deadline_offset_seconds'):
+                with self.subTest(window=key):
+                    wrong = copy.deepcopy(original)
+                    wrong['installation_windows'][key] = [] if isinstance(
+                        wrong['installation_windows'][key],list) else 1
+                    raw = json.dumps(wrong).encode()
+                    path.write_bytes(raw)
+                    with self.assertRaises(native.Failure):
+                        bootstrap.bootstrap_contract(Runner(),{'project':original['project'],
+                            'bootstrap':{'path':str(path),'sha256':native.digest(raw)}},native)
+            path.write_bytes(json.dumps(original).encode())
+            with self.assertRaises(native.Failure):
+                bootstrap.bootstrap_contract(Runner(),{'project':original['project'],
+                    'bootstrap':{'path':str(path),'sha256':'a'*64}},native)
+
+    def test_installation_main_authenticates_raw_authority_and_anchor_before_output(self):
+        native = self.native()
+        anchor = {'authority':'ROOT','prerequisites_passed':bootstrap.PREREQUISITES,
+                  'product_source':bootstrap.PRODUCT,'product_binary_sha256':bootstrap.BINARY,
+                  'monotonic':time.monotonic(),'utc':time.time(),
+                  'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                  'time_namespace_inode':os.stat('/proc/self/ns/time').st_ino,
+                  'windows':{'startup':30,'guard':600,'readiness':90,'child':22332,'outer':22344}}
+        approval = {'authority':'ROOT','passive_native_custody_allowed':True,
+                    'no_host_source_writers':True,'operation':'C_INSTALL_RUNTIME',
+                    'project':'synthetic-qa-c-current','owner':'c_installed_f03_finish',
+                    'installation_anchor':anchor,'delivery_files':[],'delivery_directories':[],
+                    'prerequisite_observations':{'path':'unused'}}
+        mutations = [(key,value) for key,value in (
+            ('authority','PENDING_ROOT'),('passive_native_custody_allowed',1),
+            ('no_host_source_writers',False),('operation','C_RENDER'),
+            ('project','foreign'),('owner','foreign'))]
+        anchor_mutations = [('authority','PENDING_ROOT'),('prerequisites_passed',[]),
+            ('product_source','a'*40),('product_binary_sha256','a'*64),('boot_id','foreign'),
+            ('time_namespace_inode',-1),('windows',{'startup':30}),
+            ('monotonic',True),('monotonic',float('nan')),('utc',float('inf')),
+            ('monotonic',time.monotonic()+1000),('utc',time.time()+1000)]
+        anchor_mutations.extend([('monotonic',time.monotonic()-91),('utc',time.time()-91)])
+        read_bytes = native.read_bytes_pinned
+        native_path = sys.argv[2]
+        def mounted_native(path,pin,*args,**kwargs):
+            return read_bytes(native_path if path=='/runner/run.py' else path,pin,*args,**kwargs)
+        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules,{'run':native}), \
+                patch.object(native,'read_bytes_pinned',side_effect=mounted_native), \
+                patch.object(native,'Runner',side_effect=AssertionError('No output may be created')) as created:
+            path = Path(directory)/'approval.json'
+            output = Path(directory)/'output'
+            variants = []
+            for key,value in mutations:
+                wrong = copy.deepcopy(approval)
+                wrong[key] = value
+                variants.append((key,wrong))
+            for key,value in anchor_mutations:
+                wrong = copy.deepcopy(approval)
+                wrong['installation_anchor'][key] = value
+                variants.append(('anchor.'+key,wrong))
+            for label,wrong in variants:
+                with self.subTest(field=label):
+                    raw = json.dumps(wrong).encode()
+                    path.write_bytes(raw)
+                    argv = ['installation.py','--approval',str(path),'--approval-sha256',
+                            native.digest(raw),'--output',str(output)]
+                    with patch.object(sys,'argv',argv), self.assertRaises(native.Failure):
+                        installation.main()
+                    created.assert_not_called()
+                    self.assertFalse(output.exists())
+            path.write_bytes(json.dumps(approval).encode())
+            with patch.object(sys,'argv',['installation.py','--approval',str(path),
+                    '--approval-sha256','a'*64,'--output',str(output)]), self.assertRaises(native.Failure):
+                installation.main()
+            created.assert_not_called()
+
+    def test_runtime_actual_observation_mutations_precede_start_and_publication(self):
+        native = self.native()
+        names = ['postgres','fake']+bootstrap.RUNTIME
+        identities = {name:('%064x' % index) for index,name in enumerate(names,1)}
+        observed = {'state':'OBSERVATIONS_NOT_RUNTIME_ADMISSION',
+                    'product_source':bootstrap.PRODUCT,'binary_sha256':bootstrap.BINARY,
+                    'prerequisites':bootstrap.PREREQUISITES,'identities':identities,
+                    'delivery':[],'clock':{},'continuity':{}}
+        class Runner:
+            work_end = time.monotonic()+90
+            work_utc_end = time.time()+90
+            def inspect(self,*args):
+                raise AssertionError('Invalid observations forbid dependent inspection')
+            def docker(self,*args,**kwargs):
+                raise AssertionError('Invalid observations forbid START')
+            def save(self,*args):
+                raise AssertionError('Invalid observations forbid publication')
+        mutations = [('state','pass'),('product_source','a'*40),('binary_sha256','a'*64),
+                     ('prerequisites',bootstrap.PREREQUISITES[:-1]),
+                     ('identities',{key:value for key,value in identities.items() if key!='fake'}),
+                     ('identities',{**identities,'app':'a'*12}),
+                     ('identities',{**identities,'app':identities['postgres']})]
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(installation,'authenticate_delivery',return_value=[]):
+            path = Path(directory)/'prerequisites.json'
+            for key,value in mutations:
+                with self.subTest(field=key):
+                    raw = json.dumps({**observed,key:value}).encode()
+                    path.write_bytes(raw)
+                    approval = {'installation_anchor':{'monotonic':time.monotonic(),'utc':time.time()},
+                                'prerequisite_observations':{'path':str(path),'sha256':native.digest(raw)}}
+                    with self.assertRaises(native.Failure):
+                        installation.runtime(Runner(),approval,native)
+            path.write_bytes(json.dumps(observed).encode())
+            approval['prerequisite_observations']['sha256'] = 'a'*64
+            with self.assertRaises(native.Failure):
+                installation.runtime(Runner(),approval,native)
+            path.unlink()
+            with self.assertRaises((native.Failure,OSError)):
+                installation.runtime(Runner(),approval,native)
+
+    def test_original_startup_and_readiness_expiry_forbid_dependent_work(self):
+        native = self.native()
+        names = ['postgres','fake']+bootstrap.RUNTIME
+        identities = {name:('%064x' % index) for index,name in enumerate(names,1)}
+        class Runner:
+            work_end = time.monotonic()+90
+            work_utc_end = time.time()+90
+            calls = []
+            def inspect(self,identity):
+                return {'Id':identity,'State':{'Status':'created','Pid':0,
+                                              'StartedAt':'0001-01-01T00:00:00Z'}}
+            def docker(self,*args,**kwargs):
+                self.calls.append(args)
+                raise AssertionError('Expired F30/readiness cannot dispatch')
+        native.constructor = lambda *args:None
+        anchor = {'authority':'ROOT','prerequisites_passed':bootstrap.PREREQUISITES,
+                  'product_source':bootstrap.PRODUCT,'product_binary_sha256':bootstrap.BINARY,
+                  'monotonic':time.monotonic()-31,'utc':time.time()-31,
+                  'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                  'time_namespace_inode':os.stat('/proc/self/ns/time').st_ino,
+                  'windows':{'startup':30,'guard':600,'readiness':90,'child':22332,'outer':22344}}
+        approval = {'authority':'ROOT','installation_anchor':anchor,'services':dict.fromkeys(names,{}),
+                    'project':'synthetic-qa-c-current','owner':'c_installed_f03_finish'}
+        with self.assertRaises(native.Failure):
+            bootstrap.start_runtime(Runner(),approval,native,identities)
+        self.assertEqual(Runner.calls,[])
+        anchor.update(monotonic=time.monotonic()-91,utc=time.time()-91)
+        with self.assertRaises(native.Failure):
+            bootstrap.runtime_readiness(Runner(),approval,native,identities)
+        self.assertEqual(Runner.calls,[])
+
+    def test_actual_create_failure_retains_unknown_birth_without_start(self):
+        native = self.native()
+        names = ['postgres','fake']+bootstrap.RUNTIME
+        services = {name:{'name':'synthetic-qa-c-current-'+name+'-1'} for name in names}
+        class Runner:
+            unresolved_resources = False
+            create_compose_pin = 'a'*64
+            calls = []
+            work_end = time.monotonic()+90
+            work_utc_end = time.time()+90
+            def docker(self,*args,**kwargs):
+                self.calls.append(args)
+                if args[0]=='compose':
+                    raise native.Failure('CREATE returned no complete identity')
+                if args[0]=='start':
+                    raise AssertionError('Unknown births cannot START')
+                return b''
+        runner = Runner()
+        runner.calls = []
+        approval = {'retain_owned_stand':True,'project':'synthetic-qa-c-current'}
+        with patch.object(native,'compose_config',return_value=(approval['project'],
+                ['compose','--file','fixture'],services,[])), \
+                patch.object(native,'read_pinned',return_value={}), \
+                patch.object(bootstrap,'check_delivery',return_value=[]):
+            with self.assertRaises(native.Failure):
+                bootstrap.create_graph(runner,approval,native)
+        self.assertTrue(runner.unresolved_resources)
+        self.assertFalse(any(call[0]=='start' for call in runner.calls))
+
+    def test_provider_requires_complete_results_clock_rows_and_full_identity(self):
+        native = self.native()
+        names = ['postgres','fake']+bootstrap.RUNTIME
+        identities = {name:('%064x' % index) for index,name in enumerate(names,1)}
+        results = [{'step':index,'service':step['service'],'raw':b'{}'}
+                   for index,step in enumerate(bootstrap.STEPS,1)]
+        approval = {'services':dict.fromkeys(names,{}),'project':'synthetic-qa-c-current',
+                    'owner':'c_installed_f03_finish'}
+        class Runner:
+            work_end = time.monotonic()+90
+            work_utc_end = time.time()+90
+            calls = []
+            mismatch = False
+            def inspect(self,identity):
+                return {'Id':'f'*64 if self.mismatch else identity,'State':{
+                    'Status':'created','Pid':0,'StartedAt':'0001-01-01T00:00:00Z'}}
+            def docker(self,*args,**kwargs):
+                self.calls.append(args)
+                raise AssertionError('Rejected provider cannot START')
+        native.constructor = lambda *args:None
+        runner = Runner()
+        runner.calls = []
+        with self.assertRaises(native.Failure):
+            bootstrap.start_provider(runner,approval,native,identities,results[:-1],b'{}')
+        with self.assertRaises(native.Failure):
+            bootstrap.start_provider(runner,approval,native,identities,results,b'{}')
+        with patch.object(bootstrap,'clock_readback',return_value={}):
+            with self.assertRaises(native.Failure):
+                bootstrap.start_provider(runner,approval,native,identities,results,b'{}')
+        with patch.object(bootstrap,'clock_readback',return_value={}), \
+                patch.object(bootstrap,'continuity_readback',return_value={}), \
+                patch.object(bootstrap,'check_delivery',return_value=[]):
+            runner.mismatch = True
+            with self.assertRaises(native.Failure):
+                bootstrap.start_provider(runner,approval,native,identities,results,b'{}')
+        self.assertEqual(runner.calls,[])
+
     def test_actual_delivery_rejection_precedes_all_lifecycle(self):
         spec = importlib.util.spec_from_file_location('delivery_native',sys.argv[2])
         native = importlib.util.module_from_spec(spec)
@@ -63,7 +312,7 @@ class Contracts(unittest.TestCase):
             pg = {'invariants':{'Mounts':[bind('/run/secrets/'+role+'_password',private/(role+'.password'))
                     for role in ('postgres','app','meter','inventory','fake','operator')]}}
             probe = {'invariants':{'Mounts':[bind('/etc/zns',source),bind('/current/zns',root/'binary'),
-                                             bind('/private',private),clock]}}
+                                             bind('/private',private),copy.deepcopy(clock)]}}
             roots = [{'path':str(source),'members':['bootstrap.json','bootstrap/read-continuity.sql',
                                                    'runtime.yaml'],'directories':['bootstrap']},
                      {'path':str(private),'members':sorted(path.split('/',1)[1] for path in contents
@@ -79,7 +328,7 @@ class Contracts(unittest.TestCase):
             with patch.object(native,'DAEMON_SOURCE_PREFIX',str(root)+'/' ), \
                     patch.object(bootstrap,'BINARY',pins[str(root/'binary')]), \
                     patch.object(bootstrap,'bootstrap_contract',return_value={}):
-                installation.authenticate_delivery(Runner(),approval,native)
+                baseline = installation.authenticate_delivery(Runner(),approval,native)
                 for target in ('binary','source/runtime.yaml','extra'):
                     with self.subTest(target=target):
                         changed = source/'extra' if target=='extra' else root/target
@@ -94,6 +343,31 @@ class Contracts(unittest.TestCase):
                             changed.unlink()
                         else:
                             changed.write_bytes(previous)
+                mutations = [
+                    lambda value:value['bootstrap'].update(path=str(source/'runtime.yaml')),
+                    lambda value:value['continuity_sql'].update(path=str(source/'runtime.yaml')),
+                    lambda value:value['readonly_inputs'].update(runtime_config='a'*64),
+                    lambda value:value['readonly_inputs'].update(app_env='a'*64),
+                    lambda value:value['readonly_inputs'].update(owner_env='a'*64),
+                    lambda value:value['readonly_probe']['invariants']['Mounts'][0].update(Source=str(private)),
+                    lambda value:value['readonly_probe']['invariants']['Mounts'][1].update(Source=str(source/'runtime.yaml')),
+                    lambda value:value['readonly_probe']['invariants']['Mounts'][3].update(Name='foreign-clock'),
+                    lambda value:value['services']['postgres']['invariants']['Mounts'][0].update(Source=str(private/'app.password')),
+                    lambda value:value['services']['app']['invariants'].update(**{'Config.Env':['FIXTURE=foreign']}),
+                    lambda value:value['delivery_directories'][1].update(members=['app.env']),
+                    lambda value:value['delivery_files'].pop(),
+                ]
+                for index,mutate in enumerate(mutations):
+                    with self.subTest(cross_binding=index):
+                        wrong = copy.deepcopy(approval)
+                        mutate(wrong)
+                        runner = Runner()
+                        runner.calls = []
+                        with self.assertRaises(native.Failure):
+                            installation.authenticate_delivery(runner,wrong,native)
+                        self.assertEqual(runner.calls,[])
+                with self.assertRaises(native.Failure):
+                    installation.authenticate_delivery(Runner(),approval,native,baseline+[{'changed':True}])
 
     def test_c_attachments_never_override_native15(self):
         class Runner:
@@ -240,6 +514,37 @@ class Contracts(unittest.TestCase):
             installation.readonly_delivery(runner,approval,Native,{})
         self.assertEqual(len(runner.calls),1)
         self.assertEqual(runner.calls[0][0],'ps')
+        argv = ['create','--pull','never','--name',expected['name'],'--user','10001:10001',
+                '--label','synthetic.owner='+approval['owner'],
+                '--label','com.docker.compose.project='+approval['project'],
+                '--label','com.docker.compose.service=readonly-probe','--cpus','0.2',
+                '--memory','256m','--memory-swap','256m','--pids-limit','64',
+                '--read-only','--network','none','--cap-drop','ALL',
+                '--security-opt','no-new-privileges','--restart','no','--no-healthcheck',
+                '--tmpfs','/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777','--entrypoint','python3']
+        for mount in sorted(expected['invariants']['Mounts'],key=lambda item:item['Destination']):
+            argv.extend(['--mount','type='+mount['Type']+',source='+mount.get('Source',mount.get('Name'))+
+                         ',target='+mount['Destination']+',readonly'])
+        approval['readonly_probe_create'] = argv+[expected['image'],*expected['invariants']['Config.Cmd']]
+        class PartialRunner:
+            calls = []
+            unresolved_resources = False
+            def docker(self,*args,**kwargs):
+                self.calls.append(args)
+                if args[0]=='ps':
+                    return b''
+                if args[0]=='create':
+                    return self.birth
+                raise AssertionError('Unidentified probe cannot START')
+        with patch.object(bootstrap,'check_delivery',return_value=[]):
+            for birth in (b'',b'a'*12,b'a'*64+b'\n'+b'b'*64):
+                with self.subTest(birth_length=len(birth)):
+                    partial = PartialRunner()
+                    partial.calls,partial.birth = [],birth
+                    with self.assertRaises(Native.Failure):
+                        installation.readonly_delivery(partial,approval,Native,{})
+                    self.assertTrue(partial.unresolved_resources)
+                    self.assertEqual([call[0] for call in partial.calls],['ps','create'])
 
     def test_actual_readonly_and_writable_open_controls(self):
         self.assertEqual((os.getuid(),os.geteuid()),(10001,10001))
@@ -298,6 +603,18 @@ class Contracts(unittest.TestCase):
         with self.assertRaises(Native.Failure):
             bootstrap.graph_constructors(Runner(),approval,native,{key:value for key,value in ids.items()
                                                                   if key!='fake'})
+        for field,value in [('Status','running'),('Pid',1),('Pid',False),('Running',True),
+                            ('Running',0),('StartedAt','2030-10-02T12:00:00Z')]:
+            with self.subTest(state=field,value=value):
+                runner = Runner()
+                original = runner.inspect(ids['postgres'])
+                original['State'][field] = value
+                with patch.object(runner,'inspect',return_value=original), self.assertRaises(Native.Failure):
+                    bootstrap.graph_constructors(runner,approval,native,ids)
+        runner = Runner()
+        with patch.object(runner,'inspect',side_effect=AssertionError('Prefix IDs cannot be inspected')):
+            with self.assertRaises(Native.Failure):
+                bootstrap.graph_constructors(runner,approval,native,{**ids,'postgres':'a'*12})
 
     def test_fresh_role_and_row_contract(self):
         state = {

@@ -12,7 +12,7 @@ import bootstrap
 import probe_ro
 
 
-NATIVE_SHA = 'dbb506b94f55d6b8b3f9c05750ad5b8eae680374ba9e8bdbd68b3d6cc2f513f2'
+NATIVE_SHA = 'fbe5118a5981cacf2ccde4b82979e8ca608df30c9977bcff3e30af201a514392'
 
 
 def authenticate_delivery(runner, approval, native, prior=None):
@@ -266,6 +266,7 @@ def main():
                 or type(start) not in (int,float) or type(utc_start) not in (int,float)
                 or not math.isfinite(start) or not math.isfinite(utc_start)
                 or start>time.monotonic() or utc_start>time.time()
+                or start+90<=time.monotonic() or utc_start+90<=time.time()
                 or anchor['product_source']!=bootstrap.PRODUCT
                 or anchor['product_binary_sha256']!=bootstrap.BINARY
                 or anchor['boot_id']!=Path('/proc/sys/kernel/random/boot_id').read_text().strip()

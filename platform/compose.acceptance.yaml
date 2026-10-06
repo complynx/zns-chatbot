@@ -301,6 +301,12 @@ services:
         target: /bootstrap/runtime-roles.sql
         read_only: true
         bind: { create_host_path: false }
+      # Shadow the image volume without allocating anonymous or DB storage.
+      - type: bind
+        source: ${C_ACCEPTANCE_SOURCE_DIR}
+        target: /var/lib/postgresql/data
+        read_only: true
+        bind: { create_host_path: false }
     networks: [database]
 
   clock-init:
