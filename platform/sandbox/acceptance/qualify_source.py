@@ -11,7 +11,7 @@ import time
 import types
 
 NATIVE_SHA = 'fbe5118a5981cacf2ccde4b82979e8ca608df30c9977bcff3e30af201a514392'
-IMAGE = 'sha256:c7776d61291b599bb4dd2f30eb6e7f33f2336e3b88ae800cb1d580e01661467e'
+IMAGE = 'sha256:8a1a0aa958483ecef53dbf2aab6d60b85365c0a8268f00ffb7e7d0877edde916'
 BINARY = '488a8accc0f4072236a6b779837a28fa6312bf0769573023271ad85d767e1261'
 COMMAND = ('python3 -B -m tabnanny /source/bootstrap.py /source/installation.py '
            '/source/qualify_source.py /source/test_bootstrap.py && '
