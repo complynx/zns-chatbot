@@ -1,5 +1,6 @@
 """Focused data-contract controls; these do not accept installation runtime."""
 import json
+import ast
 import copy
 import hashlib
 import importlib.util
@@ -283,6 +284,36 @@ class Contracts(unittest.TestCase):
 
     def host_main_controls(self, raw, installing=False):
         source = Path(sys.argv[3]).parent
+        tree = ast.parse(raw)
+        transport_assignments = [node for node in ast.walk(tree)
+                                 if isinstance(node,ast.Assign)
+                                 and any(isinstance(target,ast.Name)
+                                         and target.id=='transport_dir'
+                                         for target in node.targets)]
+        self.assertEqual(len(transport_assignments),1)
+        expression = transport_assignments[0].value
+        self.assertIsInstance(expression,ast.BinOp)
+        self.assertIsInstance(expression.op,ast.Div)
+        self.assertIsInstance(expression.left,ast.Name)
+        self.assertEqual(expression.left.id,'ROOT')
+        transport_relative = ast.literal_eval(expression.right)
+        self.assertIs(type(transport_relative),str)
+        self.assertFalse(Path(transport_relative).is_absolute())
+        self.assertNotIn('..',Path(transport_relative).parts)
+        captured_dependencies = {}
+        for node in ast.walk(tree):
+            if not (isinstance(node,ast.Call) and isinstance(node.func,ast.Name)
+                    and node.func.id=='captured' and len(node.args)==3):
+                continue
+            path = node.args[1]
+            if not (isinstance(path,ast.BinOp) and isinstance(path.op,ast.Div)
+                    and isinstance(path.left,ast.Name)
+                    and path.left.id=='transport_dir'):
+                continue
+            filename = ast.literal_eval(path.right)
+            self.assertNotIn(filename,captured_dependencies)
+            captured_dependencies[filename] = ast.literal_eval(node.args[2])
+        self.assertEqual(set(captured_dependencies),{'guards.py','run-qualified.py'})
         original_profile = json.loads((source/('INSTALL-OPERATOR-PROFILE.json' if installing
                                               else 'OPERATOR-PROFILE.json')).read_bytes())
         original_input = json.loads((source/('INSTALL-INPUT.json' if installing
@@ -379,11 +410,14 @@ class Contracts(unittest.TestCase):
                     self.assertFalse((boot.BASE/'APPROVAL-ROOT.json').exists())
                 profile_name = 'INSTALL-OPERATOR-PROFILE.json' if installing else 'OPERATOR-PROFILE.json'
                 (boot.BASE/profile_name).write_bytes(profile_raw)
-                transport_dir = root/'qa.local/c-fileproof-entrypoint-clock-completion-20261004/candidate1/accepted-transport'
+                transport_dir = root/transport_relative
                 transport_dir.mkdir(parents=True)
                 for filename,fixture in (('guards.py','capture_guards.py'),
                                          ('run-qualified.py','capture_transport.py')):
-                    (transport_dir/filename).write_bytes((source/fixture).read_bytes())
+                    dependency_raw = (source/fixture).read_bytes()
+                    self.assertEqual(hashlib.sha256(dependency_raw).hexdigest(),
+                                     captured_dependencies[filename])
+                    (transport_dir/filename).write_bytes(dependency_raw)
                 identity = 'a'*64
                 calls = []
                 fake = None
