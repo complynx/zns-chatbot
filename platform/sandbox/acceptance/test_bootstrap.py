@@ -131,8 +131,13 @@ class Contracts(unittest.TestCase):
     def test_qualifier_original_host_window_forbids_delayed_entry(self):
         raw = Path(sys.argv[3]).read_bytes()
         boot = types.ModuleType('source_window_boot')
-        boot.__file__ = '/run/desktop/mnt/host/c/Users/ddriz/Projects/zns-chatbot/qa.local/c-installed-f03-finish-20261005/clean-linux1/l2-linux-source2/boot_operator.py'
-        exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
+        with tempfile.TemporaryDirectory() as temporary:
+            boot_path = Path(temporary)/'qa.local/c-installed-f03-successor-20261006/prepared/operator20/boot_operator.py'
+            boot_path.parent.mkdir(parents=True)
+            boot_path.write_bytes(raw)
+            boot.__file__ = str(boot_path)
+            exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
+            self.assertEqual(boot.ROOT,Path(temporary))
         root_sha = 'a'*64
         boot.M0,boot.U0 = time.monotonic()-89.8,time.time()-89.8
         boot.ACTIVE,boot.TOTAL = boot.M0+90,boot.M0+120
@@ -276,7 +281,7 @@ class Contracts(unittest.TestCase):
                 root = Path(temporary)
                 boot = types.ModuleType('actual_host_main_control')
                 boot_path = root/('qa.local/c-installed-f03-successor-20261006/prepared/'
-                                  + ('install-operator5/boot_installation.py' if installing
+                                  + ('install-operator6/boot_installation.py' if installing
                                      else 'operator8/boot_operator.py'))
                 boot_path.parent.mkdir(parents=True)
                 boot_path.write_bytes(raw)
@@ -284,7 +289,7 @@ class Contracts(unittest.TestCase):
                 exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
                 self.assertEqual(boot.ROOT,root)
                 output = root/('qa.local/c-installed-f03-finish-20261005/clean-linux1/private-offline-render4/c-successor-20261006-1/'
-                               + ('install-output5' if installing else 'operator-output1'))
+                               + ('install-output6' if installing else 'operator-output1'))
                 output.mkdir(parents=True)
                 profile = copy.deepcopy(original_profile)
                 profile['host_output'] = str(output)
@@ -307,7 +312,7 @@ class Contracts(unittest.TestCase):
                 approval_path.write_bytes(approval_raw)
                 if installing:
                     self.assertEqual(approval_path.parent,output.parent)
-                    self.assertEqual(approval_path.name,'install-approval5.json')
+                    self.assertEqual(approval_path.name,'install-approval6.json')
                     self.assertFalse((boot.BASE/'APPROVAL-ROOT.json').exists())
                 profile_name = 'INSTALL-OPERATOR-PROFILE.json' if installing else 'OPERATOR-PROFILE.json'
                 (boot.BASE/profile_name).write_bytes(profile_raw)
@@ -653,7 +658,7 @@ class Contracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary,patch.dict(sys.modules,{'run':native}), \
                 patch.object(native,'read_bytes_pinned',side_effect=mounted_native):
             root = Path(temporary)
-            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator5/boot_installation.py'
+            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator6/boot_installation.py'
             boot_path.parent.mkdir(parents=True)
             boot_path.write_bytes(raw)
             boot.__file__ = str(boot_path)
