@@ -151,7 +151,7 @@ class Contracts(unittest.TestCase):
         raw = Path(sys.argv[3]).read_bytes()
         boot = types.ModuleType('source_window_boot')
         with tempfile.TemporaryDirectory() as temporary:
-            boot_path = Path(temporary)/'qa.local/c-installed-f03-successor-20261006/prepared/operator21/boot_operator.py'
+            boot_path = Path(temporary)/'qa.local/c-installed-f03-successor-20261006/prepared/operator22/boot_operator.py'
             boot_path.parent.mkdir(parents=True)
             boot_path.write_bytes(raw)
             boot.__file__ = str(boot_path)
@@ -293,7 +293,7 @@ class Contracts(unittest.TestCase):
             'restart_bool':(('RestartCount',),False),
             'network_bool':(('NetworkSettings','Networks','none','IPPrefixLen'),False),
         }
-        cases = ('pass','wrong_name','wrong_argv','before_birth','create',
+        cases = ('pass','wrong_name','wrong_argv',*(['wrong_roles'] if installing else []),'before_birth','create',
                  'attach','cleanup','publication','unresolved','no_outcome',
                  'prestarted','missing_domain','unresolved_domain',*substitutions)
         for case in cases:
@@ -301,7 +301,7 @@ class Contracts(unittest.TestCase):
                 root = Path(temporary)
                 boot = types.ModuleType('actual_host_main_control')
                 boot_path = root/('qa.local/c-installed-f03-successor-20261006/prepared/'
-                                  + ('install-operator7/boot_installation.py' if installing
+                                  + ('install-operator8/boot_installation.py' if installing
                                      else 'operator8/boot_operator.py'))
                 boot_path.parent.mkdir(parents=True)
                 boot_path.write_bytes(raw)
@@ -340,6 +340,8 @@ class Contracts(unittest.TestCase):
                 if case=='wrong_argv':
                     profile['create_argv'].insert(1,'--privileged')
                 approval = copy.deepcopy(source_input)
+                if case=='wrong_roles':
+                    approval['services'].pop('fake')
                 # This temporary test authority cannot authorize a real dispatch.
                 approval.update(authority='ROOT',no_host_source_writers=True,
                                 passive_native_custody_allowed=True)
@@ -508,11 +510,13 @@ class Contracts(unittest.TestCase):
                         patch.object(boot,'captured',side_effect=captured), \
                         patch.object(Path,'open',new=publication), \
                         patch.object(boot.time,'sleep',side_effect=PassiveCustody):
-                    if case in ('wrong_name','wrong_argv'):
+                    if case in ('wrong_name','wrong_argv','wrong_roles'):
                         with self.assertRaises(ValueError):
                             boot.main()
                         self.assertIsNone(fake)
                         self.assertFalse((output/'host-receipts1').exists())
+                        if case=='wrong_roles':
+                            self.assertFalse((output/'WINDOW.json').exists())
                         continue
                     if case in ('cleanup','unresolved','prestarted','missing_domain','unresolved_domain') or case in substitutions:
                         with self.assertRaises(PassiveCustody):
@@ -735,7 +739,7 @@ class Contracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary,patch.dict(sys.modules,{'run':native}), \
                 patch.object(native,'read_bytes_pinned',side_effect=mounted_native):
             root = Path(temporary)
-            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator7/boot_installation.py'
+            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator8/boot_installation.py'
             boot_path.parent.mkdir(parents=True)
             boot_path.write_bytes(raw)
             boot.__file__ = str(boot_path)
