@@ -163,6 +163,65 @@ class Contracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'UTC clamp'):
             qualify_source.mapped_window(wrong,hashlib.sha256(wrong).hexdigest(),root_sha)
         self.host_main_controls(raw)
+        self.child_profile_controls()
+
+    def child_profile_controls(self):
+        source = Path(sys.argv[3]).parent
+        approval = self.current_source_approval(
+            json.loads((source/'OPERATOR-INPUT.json').read_bytes()),source)
+        native = self.native()
+        qualify_source.source_contract(approval,native)
+        for key in ('NanoCpus','Memory','MemorySwap','PidsLimit'):
+            changed = copy.deepcopy(approval)
+            changed['helper_profile']['HostConfig'][key] = float(
+                changed['helper_profile']['HostConfig'][key])
+            with self.subTest(child_resource=key),self.assertRaisesRegex(
+                    native.Failure,'literal L2 constructor before birth'):
+                qualify_source.source_contract(changed,native)
+        identity = 'b'*64
+        for started in (False,True):
+            for restart in (0,False,0.0):
+                with self.subTest(child_started=started,child_restart=repr(restart)):
+                    observed = copy.deepcopy(approval['helper_profile'])
+                    observed['Config']['Hostname'] = identity[:12]
+                    if started:
+                        observed['HostConfig']['OomKillDisable'] = None
+                    observed.update(Id=identity,Name='/'+approval['helper_name'],
+                        Image=qualify_source.IMAGE,Path='/bin/sh',
+                        Args=['-c',qualify_source.COMMAND],RestartCount=restart,
+                        State={'Status':'exited' if started else 'created',
+                            'StartedAt':'2030-10-02T12:00:00Z' if started else '0001-01-01T00:00:00Z',
+                            'Running':False,'Paused':False,'Restarting':False,
+                            'OOMKilled':False,'Dead':False,'Pid':0,'ExitCode':0},
+                        NetworkSettings={'Networks':copy.deepcopy(approval[
+                            'terminal_networks' if started else 'created_networks'])})
+                    runner = types.SimpleNamespace(inspect=lambda *_args,**_kwargs:observed)
+                    dependent = []
+                    if type(restart) is int:
+                        qualify_source.helper_profile(runner,approval,native,identity,
+                            None if started else False,cleanup=started)
+                        dependent.append('rm' if started else 'start')
+                        self.assertEqual(dependent,['rm' if started else 'start'])
+                    else:
+                        with self.assertRaisesRegex(native.Failure,'complete owned L2 helper constructor'):
+                            qualify_source.helper_profile(runner,approval,native,identity,
+                                None if started else False,cleanup=started)
+                            dependent.append('rm' if started else 'start')
+                        self.assertEqual(dependent,[])
+
+    @staticmethod
+    def current_source_approval(original, source):
+        approval = copy.deepcopy(original)
+        capsule = approval['capsule_path']
+        binary = next(item for item in approval['delivery_files']
+                      if item['path']==approval['binary_path'])
+        approval['delivery_files'] = [binary]+[{
+            'path':capsule+'/'+name,'bytes':(source/name).stat().st_size,
+            'sha256':hashlib.sha256((source/name).read_bytes()).hexdigest()}
+            for name in sorted(qualify_source.MEMBERS)]
+        approval['delivery_directories'] = [{'path':capsule,
+            'members':sorted(qualify_source.MEMBERS),'directories':[]}]
+        return approval
 
     def host_main_controls(self, raw):
         source = Path(sys.argv[3]).parent
@@ -193,19 +252,10 @@ class Contracts(unittest.TestCase):
                     profile['name'] = 'synthetic-qa-wrong-operator'
                 if case=='wrong_argv':
                     profile['create_argv'].insert(1,'--privileged')
-                approval = copy.deepcopy(original_input)
+                approval = self.current_source_approval(original_input,source)
                 # This temporary test authority cannot authorize a real dispatch.
                 approval.update(authority='ROOT',no_host_source_writers=True,
                                 passive_native_custody_allowed=True)
-                capsule = approval['capsule_path']
-                binary = next(item for item in approval['delivery_files']
-                              if item['path']==approval['binary_path'])
-                approval['delivery_files'] = [binary]+[{
-                    'path':capsule+'/'+name,'bytes':(source/name).stat().st_size,
-                    'sha256':hashlib.sha256((source/name).read_bytes()).hexdigest()}
-                    for name in sorted(qualify_source.MEMBERS)]
-                approval['delivery_directories'] = [{'path':capsule,
-                    'members':sorted(qualify_source.MEMBERS),'directories':[]}]
                 qualify_source.source_contract(approval,self.native())
                 approval_raw = json.dumps(approval).encode()
                 profile_raw = json.dumps(profile).encode()

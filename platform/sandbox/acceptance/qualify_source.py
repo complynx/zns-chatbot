@@ -188,10 +188,10 @@ def source_contract(approval, native):
             or expected['Config']['Entrypoint']!=['/bin/sh']
             or expected['Config']['Labels'].get('synthetic.owner')!=approval['owner']
             or not native.same(expected['HostConfig']['Mounts'],mounts)
-            or expected['HostConfig']['NanoCpus']!=200000000
-            or expected['HostConfig']['Memory']!=268435456
-            or expected['HostConfig']['MemorySwap']!=268435456
-            or expected['HostConfig']['PidsLimit']!=64
+            or not native.same(expected['HostConfig']['NanoCpus'],200000000)
+            or not native.same(expected['HostConfig']['Memory'],268435456)
+            or not native.same(expected['HostConfig']['MemorySwap'],268435456)
+            or not native.same(expected['HostConfig']['PidsLimit'],64)
             or expected['HostConfig']['NetworkMode']!='none'
             or expected['HostConfig']['CapDrop']!=['ALL']
             or expected['HostConfig']['CapAdd'] not in ([],None)
@@ -218,7 +218,7 @@ def helper_profile(runner, approval, native, identity, started, cleanup=False):
         expected['HostConfig']['OomKillDisable'] = None
     if (profile['Id']!=identity or profile['Name']!='/'+approval['helper_name']
             or profile['Image']!=IMAGE or profile['Path']!='/bin/sh'
-            or profile['Args']!=['-c',COMMAND] or profile['RestartCount']!=0
+            or profile['Args']!=['-c',COMMAND] or not native.same(profile['RestartCount'],0)
             or not native.same(profile['Config'],expected['Config'])
             or not native.same(profile['HostConfig'],expected['HostConfig'])
             or not native.same(profile['Mounts'],expected['Mounts'])):
