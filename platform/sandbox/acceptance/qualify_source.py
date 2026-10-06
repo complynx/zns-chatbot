@@ -47,7 +47,10 @@ def load_native(directory, start, utc_start):
         raise ValueError('original source intake deadline')
     native = types.ModuleType('c_source_native')
     native.__file__ = str(source)
-    exec(compile(raw,str(source),'exec'),native.__dict__)
+    code = compile(raw,str(source),'exec')
+    if time.monotonic() >= start+90 or time.time() >= utc_start+90:
+        raise ValueError('original source compilation deadline')
+    exec(code,native.__dict__)
     if time.monotonic() >= start+90 or time.time() >= utc_start+90:
         raise ValueError('original source compilation deadline')
     return native

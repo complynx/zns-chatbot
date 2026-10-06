@@ -53,6 +53,25 @@ class Contracts(unittest.TestCase):
             with patch('builtins.compile',side_effect=changed_path):
                 native = qualify_source.load_native(root,time.monotonic(),time.time())
             self.assertEqual(native.digest(b'captured'),hashlib.sha256(b'captured').hexdigest())
+            for clock in ('monotonic','time'):
+                (root/'run.py').write_bytes(raw)
+                ticks = {'expired':False}
+                def expire_compile(source,filename,mode,**kwargs):
+                    code = original_compile(source,filename,mode,**kwargs)
+                    ticks['expired'] = True
+                    return code
+                now_mono,now_utc = time.monotonic(),time.time()
+                original_clock = getattr(time,clock)
+                def current_clock():
+                    return ((now_mono if clock=='monotonic' else now_utc)+91
+                            if ticks['expired'] else original_clock())
+                with self.subTest(compilation_clock=clock), \
+                        patch('builtins.compile',side_effect=expire_compile), \
+                        patch.object(time,clock,side_effect=current_clock), \
+                        patch('builtins.exec') as execute:
+                    with self.assertRaisesRegex(ValueError,'compilation deadline'):
+                        qualify_source.load_native(root,now_mono,now_utc)
+                    execute.assert_not_called()
             for name in ('guards.py','run.pyc','__pycache__'):
                 (root/'run.py').write_bytes(raw)
                 extra = root/name
@@ -132,7 +151,7 @@ class Contracts(unittest.TestCase):
         raw = Path(sys.argv[3]).read_bytes()
         boot = types.ModuleType('source_window_boot')
         with tempfile.TemporaryDirectory() as temporary:
-            boot_path = Path(temporary)/'qa.local/c-installed-f03-successor-20261006/prepared/operator20/boot_operator.py'
+            boot_path = Path(temporary)/'qa.local/c-installed-f03-successor-20261006/prepared/operator21/boot_operator.py'
             boot_path.parent.mkdir(parents=True)
             boot_path.write_bytes(raw)
             boot.__file__ = str(boot_path)
@@ -275,21 +294,44 @@ class Contracts(unittest.TestCase):
             'network_bool':(('NetworkSettings','Networks','none','IPPrefixLen'),False),
         }
         cases = ('pass','wrong_name','wrong_argv','before_birth','create',
-                 'attach','cleanup','publication','unresolved','no_outcome',*substitutions)
+                 'attach','cleanup','publication','unresolved','no_outcome',
+                 'prestarted','missing_domain','unresolved_domain',*substitutions)
         for case in cases:
             with self.subTest(host_main=case),tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 boot = types.ModuleType('actual_host_main_control')
                 boot_path = root/('qa.local/c-installed-f03-successor-20261006/prepared/'
-                                  + ('install-operator6/boot_installation.py' if installing
+                                  + ('install-operator7/boot_installation.py' if installing
                                      else 'operator8/boot_operator.py'))
                 boot_path.parent.mkdir(parents=True)
                 boot_path.write_bytes(raw)
                 boot.__file__ = str(boot_path)
                 exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
                 self.assertEqual(boot.ROOT,root)
+                if case=='pass':
+                    dependency = root/'captured.py'
+                    dependency.write_bytes(b'BODY_EXECUTED = True\n')
+                    dependency_sha = hashlib.sha256(dependency.read_bytes()).hexdigest()
+                    original_compile = compile
+                    for clock in ('monotonic','time'):
+                        ticks = {'expired':False}
+                        original_clock = getattr(time,clock)
+                        def expire_compile(source,filename,mode,**kwargs):
+                            code = original_compile(source,filename,mode,**kwargs)
+                            ticks['expired'] = True
+                            return code
+                        def current_clock():
+                            return ((boot.ACTIVE if clock=='monotonic' else boot.UTC_ACTIVE)
+                                    if ticks['expired'] else original_clock())
+                        with self.subTest(host_compile_clock=clock), \
+                                patch('builtins.compile',side_effect=expire_compile), \
+                                patch.object(time,clock,side_effect=current_clock), \
+                                patch('builtins.exec') as execute:
+                            with self.assertRaises(TimeoutError):
+                                boot.captured('expired_dependency',dependency,dependency_sha)
+                            execute.assert_not_called()
                 output = root/('qa.local/c-installed-f03-finish-20261005/clean-linux1/private-offline-render4/c-successor-20261006-1/'
-                               + ('install-output6' if installing else 'operator-output1'))
+                               + ('install-output7' if installing else 'operator-output1'))
                 output.mkdir(parents=True)
                 profile = copy.deepcopy(original_profile)
                 profile['host_output'] = str(output)
@@ -312,7 +354,7 @@ class Contracts(unittest.TestCase):
                 approval_path.write_bytes(approval_raw)
                 if installing:
                     self.assertEqual(approval_path.parent,output.parent)
-                    self.assertEqual(approval_path.name,'install-approval6.json')
+                    self.assertEqual(approval_path.name,'install-approval7.json')
                     self.assertFalse((boot.BASE/'APPROVAL-ROOT.json').exists())
                 profile_name = 'INSTALL-OPERATOR-PROFILE.json' if installing else 'OPERATOR-PROFILE.json'
                 (boot.BASE/profile_name).write_bytes(profile_raw)
@@ -366,8 +408,32 @@ class Contracts(unittest.TestCase):
                                 stdout = json.dumps([{'Id':boot.IMAGE}]).encode()
                             elif operation=='create':
                                 stdout = (identity+'\n').encode()
+                                if case=='prestarted':
+                                    self.phase = 'exited'
                             elif operation=='start':
                                 self.phase = 'exited'
+                                if case!='missing_domain':
+                                    domain = output/'outcome1'
+                                    domain.mkdir()
+                                    receipt = {'pass':None,'eligible_before_publication':True,
+                                        'publication_status':'pre-publication snapshot; actual exit required',
+                                        'unresolved_resources':case=='unresolved_domain',
+                                        'utc_start':boot.U0,'work_utc_end':boot.UTC_ACTIVE,
+                                        'cleanup_utc_end':boot.UTC_TOTAL,'commands':[{
+                                            'released':True,'selector_closed':True,'acquisition':'complete',
+                                            'pid':os.getpid(),'exit':0,'reaped':True,
+                                            'eof':[True,True],'readers_closed':[True,True]}]}
+                                    receipt.update({key:[] for key in ('unresolved',
+                                        'unresolved_native_readers','unresolved_native_writers',
+                                        'unresolved_acquisition','unresolved_writers')})
+                                    (domain/'terminal.json').write_text(json.dumps(receipt))
+                                    if installing:
+                                        retained = {'state':'OBSERVATIONS_NOT_RUNTIME_ADMISSION',
+                                            'identities':{role:('%064x'%number) for number,role
+                                                in enumerate(approval['services'],1)},
+                                            'product_source':bootstrap.PRODUCT,'binary_sha256':bootstrap.BINARY,
+                                            'prerequisites':bootstrap.PREREQUISITES}
+                                        (domain/'prerequisites.json').write_text(json.dumps(retained))
                             elif operation=='inspect':
                                 observed = copy.deepcopy(profile['profile'])
                                 window_sha = hashlib.sha256((output/'WINDOW.json').read_bytes()).hexdigest()
@@ -382,7 +448,8 @@ class Contracts(unittest.TestCase):
                                     State={'Status':self.phase,'Pid':0,'ExitCode':0,
                                         'Running':False,'Paused':False,'Restarting':False,
                                         'OOMKilled':False,'Dead':False,
-                                        'StartedAt':'0001-01-01T00:00:00Z'},
+                                        'StartedAt':'0001-01-01T00:00:00Z',
+                                        'FinishedAt':'0001-01-01T00:00:00Z','Error':''},
                                     NetworkSettings={'Networks':copy.deepcopy(profile['created_networks' if self.phase=='created'
                                         else 'terminal_networks'])})
                                 if case in substitutions:
@@ -447,7 +514,7 @@ class Contracts(unittest.TestCase):
                         self.assertIsNone(fake)
                         self.assertFalse((output/'host-receipts1').exists())
                         continue
-                    if case in ('cleanup','unresolved') or case in substitutions:
+                    if case in ('cleanup','unresolved','prestarted','missing_domain','unresolved_domain') or case in substitutions:
                         with self.assertRaises(PassiveCustody):
                             boot.main()
                     else:
@@ -467,6 +534,16 @@ class Contracts(unittest.TestCase):
                     self.assertIsNone(terminal['first_failure'])
                     self.assertTrue(terminal['eligible_before_publication'])
                     self.assertTrue(terminal['removed_and_absent'])
+                    continue
+                if case in ('prestarted','missing_domain','unresolved_domain'):
+                    self.assertTrue(terminal['unresolved'])
+                    self.assertFalse(terminal['removed_and_absent'])
+                    self.assertNotIn('rm',[item[0] for item in calls])
+                    if case=='prestarted':
+                        self.assertNotIn('start',[item[0] for item in calls])
+                    self.assertTrue(any('trusted operator release failure:' in item
+                                        for item in [terminal['first_failure'],*terminal['later_failures']]
+                                        if item is not None))
                     continue
                 if case in substitutions:
                     self.assertEqual(terminal['first_failure'],
@@ -658,7 +735,7 @@ class Contracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary,patch.dict(sys.modules,{'run':native}), \
                 patch.object(native,'read_bytes_pinned',side_effect=mounted_native):
             root = Path(temporary)
-            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator6/boot_installation.py'
+            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator7/boot_installation.py'
             boot_path.parent.mkdir(parents=True)
             boot_path.write_bytes(raw)
             boot.__file__ = str(boot_path)
