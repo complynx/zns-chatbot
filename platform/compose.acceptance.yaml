@@ -66,32 +66,32 @@ services:
         source: ${C_ACCEPTANCE_PRIVATE_DIR}/postgres.password
         target: /run/secrets/postgres_password
         read_only: true
-        bind: { create_host_path: false, propagation: rprivate }
+        bind: { create_host_path: false, propagation: '${C_ACCEPTANCE_PRIVATE_FILE_PROPAGATION:-rprivate}' }
       - type: bind
         source: ${C_ACCEPTANCE_PRIVATE_DIR}/app.password
         target: /run/secrets/app_password
         read_only: true
-        bind: { create_host_path: false, propagation: rprivate }
+        bind: { create_host_path: false, propagation: '${C_ACCEPTANCE_PRIVATE_FILE_PROPAGATION:-rprivate}' }
       - type: bind
         source: ${C_ACCEPTANCE_PRIVATE_DIR}/meter.password
         target: /run/secrets/meter_password
         read_only: true
-        bind: { create_host_path: false, propagation: rprivate }
+        bind: { create_host_path: false, propagation: '${C_ACCEPTANCE_PRIVATE_FILE_PROPAGATION:-rprivate}' }
       - type: bind
         source: ${C_ACCEPTANCE_PRIVATE_DIR}/inventory.password
         target: /run/secrets/inventory_password
         read_only: true
-        bind: { create_host_path: false, propagation: rprivate }
+        bind: { create_host_path: false, propagation: '${C_ACCEPTANCE_PRIVATE_FILE_PROPAGATION:-rprivate}' }
       - type: bind
         source: ${C_ACCEPTANCE_PRIVATE_DIR}/fake.password
         target: /run/secrets/fake_password
         read_only: true
-        bind: { create_host_path: false, propagation: rprivate }
+        bind: { create_host_path: false, propagation: '${C_ACCEPTANCE_PRIVATE_FILE_PROPAGATION:-rprivate}' }
       - type: bind
         source: ${C_ACCEPTANCE_PRIVATE_DIR}/operator.password
         target: /run/secrets/operator_password
         read_only: true
-        bind: { create_host_path: false, propagation: rprivate }
+        bind: { create_host_path: false, propagation: '${C_ACCEPTANCE_PRIVATE_FILE_PROPAGATION:-rprivate}' }
       - type: bind
         source: ${C_ACCEPTANCE_SOURCE_DIR}/bootstrap/10-product-roles.sh
         target: /docker-entrypoint-initdb.d/10-product-roles.sh

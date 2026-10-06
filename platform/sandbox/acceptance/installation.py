@@ -50,8 +50,12 @@ def authenticate_delivery(runner, approval, native, prior=None):
             or roots[private]['directories'] != []):
         raise native.Failure('complete private14 delivery topology')
     postgres = mounts(approval['services']['postgres'])
+    propagation = 'rslave' if private==bootstrap.PRIVATE_ROOT else 'rprivate'
     for role in ('postgres','app','meter','inventory','fake','operator'):
-        if postgres['/run/secrets/'+role+'_password']['Source'] != private+'/'+role+'.password':
+        mounted = postgres['/run/secrets/'+role+'_password']
+        if (mounted['Source'] != private+'/'+role+'.password'
+                or mounted['Type']!='bind' or mounted['RW'] is not False
+                or mounted['Propagation']!=propagation):
             raise native.Failure('graph/private14 credential cross-binding')
     files = {item['path']:item for item in approval['delivery_files']}
     bindings = {'runtime_config':source+'/runtime.yaml','app_env':private+'/app.env',

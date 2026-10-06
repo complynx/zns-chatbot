@@ -61,7 +61,12 @@ is70:70; this identity must be authenticated against the admitted image.
 The installer stays UID0/dropALL. Its exact canonical daemon directory is also
 the Compose client alias and the readonly probe source. PostgreSQL receives only
 the six explicit RO password-file binds at their original /run/secrets paths;
-no Compose secret-target normalization may change those paths. The UID10001
+no Compose secret-target normalization may change those paths.
+`C_ACCEPTANCE_PRIVATE_FILE_PROPAGATION` defaults to `rprivate` for host delivery.
+The fixed native private-volume installer sets `rslave`, as required for bind
+sources under the daemon root. The consumer requires that exact propagation
+for the six exact file identities; `rshared` or writable binds are rejected.
+The UID10001
 probe must read its app/owner files, reject reads of the other twelve private
 files, and preserve all five original RO-open checks. UID0, UID10001 and PG70
 access, untrusted-user denial, whole source topology and absence of any writable

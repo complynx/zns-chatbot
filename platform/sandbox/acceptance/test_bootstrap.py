@@ -968,6 +968,11 @@ class Contracts(unittest.TestCase):
             with patch.dict(os.environ,env,clear=True),patch.object(runner,'docker',side_effect=docker):
                 self.assertIsNone(native.compose_config(runner,approval))
             rendered = json.loads((runner.output/'rendered-compose.json').read_bytes())
+            secrets=[mount for mount in rendered['services']['postgres']['volumes']
+                     if mount.get('target','').startswith('/run/secrets/')]
+            self.assertEqual(len(secrets),6)
+            self.assertTrue(all(mount['read_only'] is True and mount['bind']['propagation']=='rslave'
+                                and mount['bind']['create_host_path'] is False for mount in secrets))
             self.assertEqual(len(rendered['services']),12)
             expected = {'app':'APP_BASE','fake':'APP_BASE','evaluator':'SCRIPT_IMAGE',
                         'postgres':'POSTGRES_IMAGE','media-decoder':'MEDIA_DECODER_IMAGE',
@@ -979,6 +984,24 @@ class Contracts(unittest.TestCase):
             self.assertEqual(len(calls),2)
             self.assertTrue(all(item['released'] for item in runner.records))
             self.assertEqual(runner.finish(),0)
+            # The historical host delivery keeps its exact rprivate default;
+            # share the original render clocks rather than renew this case.
+            env.pop('C_ACCEPTANCE_PRIVATE_FILE_PROPAGATION')
+            host_runner=native.Runner(root/'host-render-output',start=runner.start,utc_start=runner.utc_start,
+                                      active=15,cleanup=5)
+            actual=host_runner.docker
+            calls.clear()
+            with patch.dict(os.environ,env,clear=True),patch.object(host_runner,'docker',side_effect=docker):
+                self.assertIsNone(native.compose_config(host_runner,approval))
+            host_rendered=json.loads((host_runner.output/'rendered-compose.json').read_bytes())
+            host_secrets=[mount for mount in host_rendered['services']['postgres']['volumes']
+                          if mount.get('target','').startswith('/run/secrets/')]
+            self.assertEqual(len(host_secrets),6)
+            self.assertTrue(all(mount['read_only'] is True and mount['bind']['propagation']=='rprivate'
+                                and mount['bind']['create_host_path'] is False for mount in host_secrets))
+            self.assertEqual(len(calls),2)
+            self.assertTrue(all(item['released'] for item in host_runner.records))
+            self.assertEqual(host_runner.finish(),0)
 
     def test_runtime_actual_observation_mutations_precede_start_and_publication(self):
         native = self.native()
@@ -1148,7 +1171,8 @@ class Contracts(unittest.TestCase):
             files = [{'path':str(root/path),'bytes':len(raw),
                       'sha256':hashlib.sha256(raw).hexdigest()} for path,raw in contents.items()]
             def bind(target,path):
-                return {'Destination':target,'Type':'bind','Source':str(path),'RW':False}
+                return {'Destination':target,'Type':'bind','Source':str(path),'RW':False,
+                        'Propagation':'rprivate'}
             clock = {'Destination':'/run/registration-clock','Type':'volume','Name':'clock','RW':False}
             app = {'invariants':{'Mounts':[bind('/etc/zns/runtime.yaml',source/'runtime.yaml'),
                     bind('/usr/local/bin/zns',root/'binary'),clock],'Config.Env':['FIXTURE=literal']}}
@@ -1196,6 +1220,9 @@ class Contracts(unittest.TestCase):
                     lambda value:value['readonly_probe']['invariants']['Mounts'][1].update(Source=str(source/'runtime.yaml')),
                     lambda value:value['readonly_probe']['invariants']['Mounts'][3].update(Name='foreign-clock'),
                     lambda value:value['services']['postgres']['invariants']['Mounts'][0].update(Source=str(private/'app.password')),
+                    lambda value:value['services']['postgres']['invariants']['Mounts'][0].update(RW=True),
+                    lambda value:value['services']['postgres']['invariants']['Mounts'][0].update(Propagation='rslave'),
+                    lambda value:value['services']['postgres']['invariants']['Mounts'][0].update(Propagation='rshared'),
                     lambda value:value['services']['app']['invariants'].update(**{'Config.Env':['FIXTURE=foreign']}),
                     lambda value:value['delivery_directories'][1].update(members=['app.env']),
                     lambda value:value['delivery_files'].pop(),
@@ -1211,6 +1238,20 @@ class Contracts(unittest.TestCase):
                         self.assertEqual(runner.calls,[])
                 with self.assertRaises(native.Failure):
                     installation.authenticate_delivery(Runner(),approval,native,baseline+[{'changed':True}])
+                # Use the actual credential consumer with a bounded fixture
+                # root; physical native-volume access is a separate gate.
+                current = copy.deepcopy(approval)
+                current_before = installation.authenticate_delivery(Runner(),approval,native)
+                for mounted in current['services']['postgres']['invariants']['Mounts']:
+                    mounted['Propagation']='rslave'
+                with patch.object(bootstrap,'PRIVATE_ROOT',str(private)):
+                    self.assertEqual(installation.authenticate_delivery(Runner(),current,native),current_before)
+                    for field,value in (('Propagation','rprivate'),('Propagation','rshared'),
+                                        ('RW',True),('RW',0),('Source',str(private/'extra.password'))):
+                        wrong=copy.deepcopy(current)
+                        wrong['services']['postgres']['invariants']['Mounts'][0][field]=value
+                        with self.subTest(native_private_file=(field,value)),self.assertRaises(native.Failure):
+                            installation.authenticate_delivery(Runner(),wrong,native)
 
     def test_c_attachments_never_override_native15(self):
         class Runner:
