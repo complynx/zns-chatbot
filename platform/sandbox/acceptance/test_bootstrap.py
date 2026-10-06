@@ -168,8 +168,17 @@ class Contracts(unittest.TestCase):
         source = Path(sys.argv[3]).parent
         original_profile = json.loads((source/'OPERATOR-PROFILE.json').read_bytes())
         original_input = json.loads((source/'OPERATOR-INPUT.json').read_bytes())
-        for case in ('pass','wrong_name','wrong_argv','before_birth','create',
-                     'attach','cleanup','publication','unresolved','no_outcome'):
+        substitutions = {
+            'config_bool':(('Config','AttachStdin'),0),
+            'host_bool':(('HostConfig','ReadonlyRootfs'),1),
+            'host_float':(('HostConfig','Memory'),float(original_profile['profile']['HostConfig']['Memory'])),
+            'mount_bool':(('Mounts',0,'RW'),1),
+            'restart_bool':(('RestartCount',),False),
+            'network_bool':(('NetworkSettings','Networks','none','IPPrefixLen'),False),
+        }
+        cases = ('pass','wrong_name','wrong_argv','before_birth','create',
+                 'attach','cleanup','publication','unresolved','no_outcome',*substitutions)
+        for case in cases:
             with self.subTest(host_main=case),tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 boot = types.ModuleType('actual_host_main_control')
@@ -271,8 +280,14 @@ class Contracts(unittest.TestCase):
                                         'Running':False,'Paused':False,'Restarting':False,
                                         'OOMKilled':False,'Dead':False,
                                         'StartedAt':'0001-01-01T00:00:00Z'},
-                                    NetworkSettings={'Networks':profile['created_networks' if self.phase=='created'
-                                        else 'terminal_networks']})
+                                    NetworkSettings={'Networks':copy.deepcopy(profile['created_networks' if self.phase=='created'
+                                        else 'terminal_networks'])})
+                                if case in substitutions:
+                                    keys,value = substitutions[case]
+                                    target = observed
+                                    for key in keys[:-1]:
+                                        target = target[key]
+                                    target[keys[-1]] = value
                                 stdout = json.dumps(observed).encode()
                             frame = {'pid':os.getpid(),'creation_identity':{
                                 'kind':'linux-start-ticks','pid':os.getpid(),'created':1},
@@ -329,7 +344,7 @@ class Contracts(unittest.TestCase):
                         self.assertIsNone(fake)
                         self.assertFalse((output/'host-receipts1').exists())
                         continue
-                    if case in ('cleanup','unresolved'):
+                    if case in ('cleanup','unresolved') or case in substitutions:
                         with self.assertRaises(PassiveCustody):
                             boot.main()
                     else:
@@ -349,6 +364,20 @@ class Contracts(unittest.TestCase):
                     self.assertIsNone(terminal['first_failure'])
                     self.assertTrue(terminal['eligible_before_publication'])
                     self.assertTrue(terminal['removed_and_absent'])
+                    continue
+                if case in substitutions:
+                    self.assertEqual(terminal['first_failure'],
+                        'trusted operator bootstrap failure: '+(
+                            'exact trusted operator network' if case=='network_bool'
+                            else 'complete trusted operator constructor'))
+                    self.assertFalse(terminal['eligible_before_publication'])
+                    self.assertTrue(terminal['unresolved'])
+                    self.assertFalse(terminal['removed_and_absent'])
+                    self.assertEqual(terminal['helper_id'],identity)
+                    self.assertEqual([item[0] for item in calls],
+                                     ['ps','image','create','inspect','inspect'])
+                    self.assertTrue(any('trusted operator release failure:' in item
+                                        for item in terminal['later_failures']))
                     continue
                 self.assertEqual(terminal['first_failure'],
                     'Exact native process creation identity unavailable' if case=='no_outcome'
