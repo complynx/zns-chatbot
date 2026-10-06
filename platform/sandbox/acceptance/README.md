@@ -95,6 +95,9 @@ All six original pre-F30 prerequisites remain mandatory:
 
 The approved trusted runner preserves one original 90+30 composition window,
 native15 and 128 KiB capture bounds, strict EOF/reap and exact owned cleanup.
+Prerequisite dispatch carries the authenticated original host window through
+the existing UTC/remaining-time clamp before grant intake or output creation;
+the runtime phase keeps its separately authenticated same-Linux ROOT anchor.
 The product acceptance mapping retains original F30/G600/child22332/outer22344
 and readiness90 budgets and the mandatory full/final gate classifications. A new
 execution mechanism does not extend or reset those budgets. Controlled product

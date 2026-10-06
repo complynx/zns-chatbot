@@ -223,10 +223,12 @@ class Contracts(unittest.TestCase):
             'members':sorted(qualify_source.MEMBERS),'directories':[]}]
         return approval
 
-    def host_main_controls(self, raw):
+    def host_main_controls(self, raw, installing=False):
         source = Path(sys.argv[3]).parent
-        original_profile = json.loads((source/'OPERATOR-PROFILE.json').read_bytes())
-        original_input = json.loads((source/'OPERATOR-INPUT.json').read_bytes())
+        original_profile = json.loads((source/('INSTALL-OPERATOR-PROFILE.json' if installing
+                                              else 'OPERATOR-PROFILE.json')).read_bytes())
+        original_input = json.loads((source/('INSTALL-INPUT.json' if installing
+                                            else 'OPERATOR-INPUT.json')).read_bytes())
         substitutions = {
             'config_bool':(('Config','AttachStdin'),0),
             'host_bool':(('HostConfig','ReadonlyRootfs'),1),
@@ -241,10 +243,16 @@ class Contracts(unittest.TestCase):
             with self.subTest(host_main=case),tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 boot = types.ModuleType('actual_host_main_control')
-                boot.__file__ = str(root/'qa.local/c-installed-f03-successor-20261006/prepared/operator1/boot_operator.py')
+                boot_path = root/('qa.local/c-installed-f03-successor-20261006/prepared/'
+                                  + ('install-operator1/boot_installation.py' if installing
+                                     else 'operator8/boot_operator.py'))
+                boot_path.parent.mkdir(parents=True)
+                boot_path.write_bytes(raw)
+                boot.__file__ = str(boot_path)
                 exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
-                boot.BASE.mkdir(parents=True)
-                output = root/'qa.local/c-installed-f03-finish-20261005/clean-linux1/private-offline-render4/c-successor-20261006-1/operator-output1'
+                self.assertEqual(boot.ROOT,root)
+                output = root/('qa.local/c-installed-f03-finish-20261005/clean-linux1/private-offline-render4/c-successor-20261006-1/'
+                               + ('install-output1' if installing else 'operator-output1'))
                 output.mkdir(parents=True)
                 profile = copy.deepcopy(original_profile)
                 profile['host_output'] = str(output)
@@ -252,11 +260,13 @@ class Contracts(unittest.TestCase):
                     profile['name'] = 'synthetic-qa-wrong-operator'
                 if case=='wrong_argv':
                     profile['create_argv'].insert(1,'--privileged')
-                approval = self.current_source_approval(original_input,source)
+                approval = (copy.deepcopy(original_input) if installing else
+                            self.current_source_approval(original_input,source))
                 # This temporary test authority cannot authorize a real dispatch.
                 approval.update(authority='ROOT',no_host_source_writers=True,
                                 passive_native_custody_allowed=True)
-                qualify_source.source_contract(approval,self.native())
+                if not installing:
+                    qualify_source.source_contract(approval,self.native())
                 approval_raw = json.dumps(approval).encode()
                 profile_raw = json.dumps(profile).encode()
                 approval_sha = hashlib.sha256(approval_raw).hexdigest()
@@ -579,6 +589,106 @@ class Contracts(unittest.TestCase):
                     '--approval-sha256','a'*64,'--output',str(output)]), self.assertRaises(native.Failure):
                 installation.main()
             created.assert_not_called()
+
+        self.installation_window_controls()
+
+    def installation_window_controls(self):
+        source = Path(sys.argv[3]).parent
+        raw = (source/'boot_installation.py').read_bytes()
+        boot = types.ModuleType('installation_window_boot')
+        approval = json.loads((source/'INSTALL-INPUT.json').read_bytes())
+        self.assertEqual(len(approval['delivery_files']),33)
+        self.assertEqual([len(item['members']) for item in approval['delivery_directories']],[17,14])
+        self.assertEqual(approval['authority'],'PENDING_ROOT')
+        approval.update(authority='ROOT',no_host_source_writers=True,
+                        passive_native_custody_allowed=True)
+        body = json.dumps(approval).encode()
+        root_sha = hashlib.sha256(body).hexdigest()
+        native = self.native()
+        read_bytes = native.read_bytes_pinned
+        native_path = sys.argv[2]
+
+        def mounted_native(path,pin,*args,**kwargs):
+            return read_bytes(native_path if path=='/runner/run.py' else path,pin,*args,**kwargs)
+
+        with tempfile.TemporaryDirectory() as temporary,patch.dict(sys.modules,{'run':native}), \
+                patch.object(native,'read_bytes_pinned',side_effect=mounted_native):
+            root = Path(temporary)
+            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator1/boot_installation.py'
+            boot_path.parent.mkdir(parents=True)
+            boot_path.write_bytes(raw)
+            boot.__file__ = str(boot_path)
+            exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
+            self.assertEqual(boot.ROOT,root)
+            grant,window,output = root/'approval.json',root/'window.json',root/'output'
+            grant.write_bytes(body)
+            calls,parameters,saved = [],[],[]
+
+            def acquire(_output,**kwargs):
+                parameters.append(kwargs)
+                return types.SimpleNamespace(end=kwargs['start']+120,
+                    utc_end=kwargs['utc_start']+120,
+                    work_end=kwargs['start']+90,work_utc_end=kwargs['utc_start']+90,
+                    save=lambda name,body:saved.append((name,body)),finish=lambda:0,
+                    fault=lambda reason:self.fail('unexpected prerequisite fixture fault: '+reason))
+
+            def invoke(emitted):
+                window_body = json.dumps(emitted,sort_keys=True).encode()
+                window.write_bytes(window_body)
+                return ['installation.py','--approval',str(grant),'--approval-sha256',root_sha,
+                        '--output',str(output),'--window',str(window),
+                        '--window-sha256',hashlib.sha256(window_body).hexdigest()]
+
+            emitted = boot.original_window(root_sha)
+            with patch.object(sys,'argv',invoke(emitted)), \
+                    patch.object(native,'Runner',side_effect=acquire), \
+                    patch.object(installation,'prerequisites',side_effect=lambda runner,_approval,_native:
+                        calls.append(('prerequisites',runner.end,runner.utc_end,
+                                      runner.work_end,runner.work_utc_end))):
+                self.assertEqual(installation.main(),0)
+            self.assertEqual(parameters[0]['active'],90)
+            self.assertEqual(parameters[0]['cleanup'],30)
+            self.assertEqual(calls[0][0],'prerequisites')
+            mapped = json.loads(saved[0][1])
+            self.assertLessEqual(calls[0][1],mapped['total_end'])
+            self.assertLessEqual(calls[0][3],mapped['active_end'])
+            self.assertLessEqual(parameters[0]['utc_start']+90,emitted['clamped_active_utc'])
+            self.assertLessEqual(calls[0][2],emitted['clamped_total_utc'])
+            self.assertLessEqual(calls[0][4],emitted['clamped_active_utc'])
+            self.assertIn(str(window),parameters[0]['sources'])
+            self.assertEqual([name for name,_body in saved],['original-window.json'])
+            self.assertFalse(output.exists())
+            with patch.object(native,'Runner',side_effect=AssertionError('invalid binding precedes output')) as created:
+                missing = ['installation.py','--approval',str(grant),'--approval-sha256',root_sha,
+                           '--output',str(output)]
+                with patch.object(sys,'argv',missing),self.assertRaisesRegex(
+                        native.Failure,'original prerequisite window'):
+                    installation.main()
+                with patch.object(sys,'argv',missing+['--window',str(window)]),self.assertRaisesRegex(
+                        ValueError,'complete original prerequisite window'):
+                    installation.main()
+                wrong = {**emitted,'root_sha256':'a'*64}
+                with patch.object(sys,'argv',invoke(wrong)),self.assertRaisesRegex(
+                        ValueError,'typed authenticated original host window'):
+                    installation.main()
+                created.assert_not_called()
+            self.assertFalse(output.exists())
+
+            boot.M0,boot.U0 = time.monotonic()-89.8,time.time()-89.8
+            boot.ACTIVE,boot.TOTAL = boot.M0+90,boot.M0+120
+            boot.UTC_ACTIVE,boot.UTC_TOTAL = boot.U0+90,boot.U0+120
+            delayed = boot.original_window(root_sha)
+            argv = invoke(delayed)
+            time.sleep(.3)
+            with patch.object(sys,'argv',argv), \
+                    patch.object(native,'read_pinned',side_effect=AssertionError('expired window precedes grant intake')) as intake, \
+                    patch.object(native,'Runner',side_effect=AssertionError('expired window precedes output')) as created:
+                with self.assertRaisesRegex(ValueError,'expired'):
+                    installation.main()
+                intake.assert_not_called()
+                created.assert_not_called()
+            self.assertFalse(output.exists())
+        self.host_main_controls(raw,installing=True)
 
     def test_runtime_actual_observation_mutations_precede_start_and_publication(self):
         native = self.native()

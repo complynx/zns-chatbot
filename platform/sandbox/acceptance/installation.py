@@ -10,6 +10,7 @@ import time
 
 import bootstrap
 import probe_ro
+import qualify_source
 
 
 NATIVE_SHA = 'fbe5118a5981cacf2ccde4b82979e8ca608df30c9977bcff3e30af201a514392'
@@ -236,8 +237,21 @@ def main():
     parser.add_argument('--approval',required=True)
     parser.add_argument('--approval-sha256',required=True)
     parser.add_argument('--output',required=True)
+    parser.add_argument('--window')
+    parser.add_argument('--window-sha256')
     args = parser.parse_args()
     start,utc_start = time.monotonic(),time.time()
+    window = None
+    if args.window is not None or args.window_sha256 is not None:
+        if args.window is None or args.window_sha256 is None:
+            raise ValueError('complete original prerequisite window binding')
+        path = Path(args.window)
+        if path.is_symlink() or not path.is_file() or path.stat().st_size>16384:
+            raise ValueError('bounded original prerequisite window')
+        with path.open('rb') as stream:
+            raw = stream.read(16385)
+        window = qualify_source.mapped_window(raw,args.window_sha256,args.approval_sha256)
+        start,utc_start = window['active_end']-90,window['active_utc']-90
     # ROOT binds the complete closed /runner directory RO before this trusted
     # interpreter starts. No caller-selected module path or unbounded loader
     # read is introduced; subsequent byte intake uses the accepted primitive.
@@ -257,7 +271,13 @@ def main():
     sources.extend(item['path'] for item in approval['delivery_files'])
     sources.extend(item['path'] for item in approval['delivery_directories'])
     active,cleanup = 90,30
-    if approval['operation']=='C_INSTALL_RUNTIME':
+    if approval['operation']=='C_INSTALL_PREREQUISITES':
+        if window is None or approval.get('clock_domain')!='host_original_dual_cutoffs_v1':
+            raise native.Failure('authenticated original prerequisite window before output')
+        sources.append(args.window)
+    else:
+        if window is not None:
+            raise native.Failure('runtime uses its separately authenticated Linux anchor')
         anchor = approval['installation_anchor']
         # This is not a new clock. The bootstrap startup validator checks boot,
         # namespace, six predicates and all original offsets before START.
@@ -278,8 +298,12 @@ def main():
         sources.append(approval['prerequisite_observations']['path'])
     runner = native.Runner(args.output,start=start,utc_start=utc_start,
                            active=active,cleanup=cleanup,sources=sources)
+    if window is not None:
+        runner.end = min(runner.end,window['total_end'])
+        runner.utc_end = min(runner.utc_end,window['total_utc'])
     try:
         if approval['operation']=='C_INSTALL_PREREQUISITES':
+            runner.save('original-window.json',json.dumps(window,sort_keys=True).encode())
             prerequisites(runner,approval,native)
         else:
             runtime(runner,approval,native)
