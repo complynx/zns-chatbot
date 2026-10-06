@@ -31,6 +31,18 @@ PREREQUISITES = [
 ]
 
 
+def check_delivery(runner, approval, native):
+    """Recheck the authenticated physical delivery before dependent operations."""
+    observed = native.delivery_snapshot(runner,approval,runner.install_delivery_required)
+    if not native.same(runner.install_delivery_before,observed):
+        raise native.Failure('installation delivery changed')
+    return observed
+
+
+def attach_seconds(runner):
+    return min(15,runner.work_end-time.monotonic(),runner.work_utc_end-time.time())
+
+
 def graph_constructors(runner, approval, native, identities):
     """Verify the complete owned cohort before starting PG or any product role."""
     names = ['postgres', 'fake'] + RUNTIME
@@ -70,6 +82,7 @@ def create_graph(runner, approval, native):
             raise native.Failure('fresh declared installation resource')
     with native.intake_deadline(runner.work_end,runner.work_utc_end):
         native.read_pinned(command[-1],runner.create_compose_pin)
+    check_delivery(runner,approval,native)
     runner.owned = names
     runner.unresolved_resources = True
     runner.docker(*command,'create','--no-build','--pull','never',*names)
@@ -102,6 +115,7 @@ def create_graph(runner, approval, native):
 def start_postgres(runner, approval, native, identities):
     """Start only the verified fresh PG; reuse the original active deadline."""
     graph_constructors(runner, approval, native, identities)
+    check_delivery(runner,approval,native)
     identity = identities['postgres']
     runner.docker('start', identity)
     while True:
@@ -210,6 +224,7 @@ def start_provider(runner, approval, native, identities, bootstrap_results, cont
                 or profile['State']['StartedAt'] != '0001-01-01T00:00:00Z'):
             raise native.Failure('provider/runtime prelaunch state')
     identity = identities['fake']
+    check_delivery(runner,approval,native)
     runner.docker('start', identity)
     while True:
         remaining = min(runner.work_end-time.monotonic(), runner.work_utc_end-time.time())
@@ -257,6 +272,10 @@ def start_runtime(runner, approval, native, identities):
     remaining = min(startup_end-time.monotonic(), startup_utc-time.time())
     if remaining <= 0:
         raise native.Failure('original F30 startup deadline')
+    check_delivery(runner,approval,native)
+    remaining = min(startup_end-time.monotonic(), startup_utc-time.time())
+    if remaining <= 0:
+        raise native.Failure('original F30 authenticated delivery deadline')
     runner.docker('start', *(identities[service] for service in RUNTIME),
                   seconds=min(15,remaining))
     profiles = {}
@@ -285,19 +304,27 @@ def runtime_readiness(runner, approval, native, identities):
                         runner.work_end-time.monotonic(),runner.work_utc_end-time.time())
         if remaining <= 0:
             raise native.Failure('original readiness deadline')
-        profile = runner.inspect(identities['app'])
-        if (profile['Id'] != identities['app']
-                or not native.owned_profile(profile,approval['project'],'app',approval['owner'])
-                or profile['Image'] != approval['services']['app']['image']
-                or not profile['State']['Running'] or profile['State']['OOMKilled']):
-            raise native.Failure('actual readiness app identity/process')
-        expected = approval['services']['app']['invariants']['Config.Healthcheck']
-        if not native.same(profile['Config'].get('Healthcheck'),expected):
-            raise native.Failure('current complete HTTP healthcheck constructor')
-        if profile['State'].get('Health',{}).get('Status') == 'healthy':
+        profiles, healthy = {}, True
+        for service in ['postgres','fake']+RUNTIME:
+            if min(limit-time.monotonic(),utc_limit-time.time()) <= 0:
+                raise native.Failure('original readiness cohort deadline')
+            profile = runner.inspect(identities[service])
+            native.constructor(profile,approval['services'][service],
+                               approval['project'],service,approval['owner'])
+            state = profile['State']
+            if (profile['Id'] != identities[service] or not state['Running']
+                    or state['Pid'] <= 0 or state['OOMKilled']):
+                raise native.Failure('actual readiness complete cohort process')
+            healthcheck = profile['Config'].get('Healthcheck')
+            if healthcheck and healthcheck.get('Test') != ['NONE']:
+                healthy = healthy and state.get('Health',{}).get('Status') == 'healthy'
+            profiles[service] = profile
+        healthy = healthy and profiles['app']['State'].get('Health',{}).get('Status') == 'healthy'
+        if healthy:
+            check_delivery(runner,approval,native)
             if min(limit-time.monotonic(),utc_limit-time.time()) <= 0:
                 raise native.Failure('original readiness final observation deadline')
-            return profile
+            return profiles
         time.sleep(min(.1,remaining))
 
 
@@ -340,6 +367,7 @@ def run_bootstrap(runner, approval, native, rendered):
     project, owner = approval['project'], approval['owner']
     results = []
     for index, (step, expected) in enumerate(zip(STEPS, plans), 1):
+        check_delivery(runner,approval,native)
         service = step['service']
         if expected['name'] != project+'-'+service+'-1':
             raise native.Failure('literal bootstrap constructor name')
@@ -373,8 +401,8 @@ def run_bootstrap(runner, approval, native, rendered):
                 or profile['State']['Status']!='created' or profile['State']['Pid']!=0):
             raise native.Failure('owned never-started bootstrap helper')
         native.constructor(profile,expected,project,service,owner)
-        remaining = min(runner.work_end-time.monotonic(),runner.work_utc_end-time.time())
-        output = runner.docker('start','--attach',identity,seconds=remaining)
+        check_delivery(runner,approval,native)
+        output = runner.docker('start','--attach',identity,seconds=attach_seconds(runner))
         final = runner.inspect(identity)
         native.constructor(final,expected,project,service,owner)
         if (final['State']['Status']!='exited' or final['State']['Pid']!=0

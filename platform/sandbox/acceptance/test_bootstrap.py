@@ -1,8 +1,12 @@
 """Focused data-contract controls; these do not accept installation runtime."""
 import json
+import hashlib
+import importlib.util
 import os
 import sys
 import tempfile
+import time
+from contextlib import nullcontext
 import unittest
 from unittest.mock import patch
 from pathlib import Path
@@ -22,6 +26,181 @@ class Native:
 
 
 class Contracts(unittest.TestCase):
+    def test_actual_delivery_rejection_precedes_all_lifecycle(self):
+        spec = importlib.util.spec_from_file_location('delivery_native',sys.argv[2])
+        native = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(native)
+        class Runner:
+            work_end = time.monotonic()+90
+            work_utc_end = time.time()+90
+            calls = []
+            def docker(self,*args,**kwargs):
+                self.calls.append(args)
+                raise AssertionError('CREATE and START forbidden')
+            def save(self,*args):
+                pass
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source,private = root/'source',root/'private'
+            source.mkdir()
+            private.mkdir()
+            (source/'bootstrap').mkdir()
+            contents = {'source/runtime.yaml':b'config','source/bootstrap.json':b'{}',
+                        'source/bootstrap/read-continuity.sql':b'query','binary':b'fixture binary'}
+            for role in ('postgres','app','meter','inventory','fake','operator'):
+                contents['private/'+role+'.password'] = b'fixture\n'
+            for role in ('app','owner','fake','operator','media','sticker','roles','inventory'):
+                contents['private/'+role+'.env'] = b'FIXTURE=literal\n'
+            for path,raw in contents.items():
+                (root/path).write_bytes(raw)
+            files = [{'path':str(root/path),'bytes':len(raw),
+                      'sha256':hashlib.sha256(raw).hexdigest()} for path,raw in contents.items()]
+            def bind(target,path):
+                return {'Destination':target,'Type':'bind','Source':str(path),'RW':False}
+            clock = {'Destination':'/run/registration-clock','Type':'volume','Name':'clock','RW':False}
+            app = {'invariants':{'Mounts':[bind('/etc/zns/runtime.yaml',source/'runtime.yaml'),
+                    bind('/usr/local/bin/zns',root/'binary'),clock],'Config.Env':['FIXTURE=literal']}}
+            pg = {'invariants':{'Mounts':[bind('/run/secrets/'+role+'_password',private/(role+'.password'))
+                    for role in ('postgres','app','meter','inventory','fake','operator')]}}
+            probe = {'invariants':{'Mounts':[bind('/etc/zns',source),bind('/current/zns',root/'binary'),
+                                             bind('/private',private),clock]}}
+            roots = [{'path':str(source),'members':['bootstrap.json','bootstrap/read-continuity.sql',
+                                                   'runtime.yaml'],'directories':['bootstrap']},
+                     {'path':str(private),'members':sorted(path.split('/',1)[1] for path in contents
+                                                          if path.startswith('private/')),'directories':[]}]
+            pins = {item['path']:item['sha256'] for item in files}
+            approval = {'services':{'app':app,'postgres':pg},'readonly_probe':probe,
+                        'bootstrap_constructors':[],'compose_file':str(source/'bootstrap.json'),
+                        'bootstrap':{'path':str(source/'bootstrap.json')},
+                        'continuity_sql':{'path':str(source/'bootstrap/read-continuity.sql')},
+                        'delivery_files':files,'delivery_directories':roots,'no_host_source_writers':True,
+                        'readonly_inputs':{'runtime_config':pins[str(source/'runtime.yaml')],
+                            'app_env':pins[str(private/'app.env')],'owner_env':pins[str(private/'owner.env')]}}
+            with patch.object(native,'DAEMON_SOURCE_PREFIX',str(root)+'/' ), \
+                    patch.object(bootstrap,'BINARY',pins[str(root/'binary')]), \
+                    patch.object(bootstrap,'bootstrap_contract',return_value={}):
+                installation.authenticate_delivery(Runner(),approval,native)
+                for target in ('binary','source/runtime.yaml','extra'):
+                    with self.subTest(target=target):
+                        changed = source/'extra' if target=='extra' else root/target
+                        previous = changed.read_bytes() if changed.exists() else None
+                        changed.write_bytes(b'changed')
+                        runner = Runner()
+                        runner.calls = []
+                        with self.assertRaises(native.Failure):
+                            installation.prerequisites(runner,approval,native)
+                        self.assertEqual(runner.calls,[])
+                        if previous is None:
+                            changed.unlink()
+                        else:
+                            changed.write_bytes(previous)
+
+    def test_c_attachments_never_override_native15(self):
+        class Runner:
+            work_end = time.monotonic()+90
+            work_utc_end = time.time()+90
+        self.assertLessEqual(bootstrap.attach_seconds(Runner()),15)
+        with patch.object(bootstrap.time,'monotonic',return_value=Runner.work_end-3), \
+                patch.object(bootstrap.time,'time',return_value=Runner.work_utc_end-4):
+            self.assertEqual(bootstrap.attach_seconds(Runner()),3)
+        # Both actual callers must dispatch this bound, not remaining active90.
+        import ast
+        for path in (Path(bootstrap.__file__),Path(installation.__file__)):
+            tree = ast.parse(path.read_bytes())
+            attachments = [node for node in ast.walk(tree) if isinstance(node,ast.Call)
+                           and isinstance(node.func,ast.Attribute) and node.func.attr=='docker'
+                           and len(node.args)>1 and isinstance(node.args[1],ast.Constant)
+                           and node.args[1].value=='--attach']
+            self.assertEqual(len(attachments),1)
+            seconds = next(item.value for item in attachments[0].keywords if item.arg=='seconds')
+            self.assertIsInstance(seconds,ast.Call)
+            self.assertEqual(seconds.func.attr if isinstance(seconds.func,ast.Attribute)
+                             else seconds.func.id,'attach_seconds')
+        class BootstrapRunner(Runner):
+            identity = 'a'*64
+            live = False
+            started = False
+            attachments = []
+            def docker(self,*args,**kwargs):
+                if args[:2]==('image','inspect'):
+                    return b'[{}]'
+                if args[0]=='ps':
+                    return self.identity.encode() if self.live else b''
+                if args[0]=='compose':
+                    self.live,self.started = True,False
+                elif args[:2]==('start','--attach'):
+                    self.attachments.append(kwargs['seconds'])
+                    self.started = True
+                elif args[0]=='rm':
+                    self.live = False
+                return b'{}'
+            def inspect(self,identity):
+                return {'Id':identity,'State':{'Status':'exited' if self.started else 'created',
+                        'Pid':0,'ExitCode':0,'OOMKilled':False}}
+            def save(self,name,raw):
+                (self.output/name).write_bytes(raw)
+        native = Native()
+        native.read_pinned = lambda *args: None
+        native.intake_deadline = lambda *args: nullcontext()
+        native.digest = lambda raw: hashlib.sha256(raw).hexdigest()
+        native.literal_compose = lambda value:value
+        native.owned_profile = lambda *args:True
+        native.rendered_guard = lambda *args:None
+        native.constructor = lambda *args:None
+        approval = {'project':'synthetic-qa-c-current','owner':'owner',
+                    'bootstrap_constructors':[{'name':'synthetic-qa-c-current-'+step['service']+'-1',
+                                               'image':'fixture'} for step in bootstrap.STEPS]}
+        rendered = {'services':{step['service']:{'profiles':['maintenance'],'restart':'no'}
+                                for step in bootstrap.STEPS}}
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(bootstrap,'bootstrap_contract',return_value={}), \
+                patch.object(bootstrap,'check_delivery',return_value=[]), \
+                patch.object(bootstrap,'clock_readback',return_value={}):
+            runner = BootstrapRunner()
+            runner.output = Path(directory)
+            bootstrap.run_bootstrap(runner,approval,native,rendered)
+            self.assertEqual(len(runner.attachments),7)
+            self.assertTrue(all(0<seconds<=15 for seconds in runner.attachments))
+
+    def test_readiness_rejects_exited_helper_while_app_healthy(self):
+        names = ['postgres','fake']+bootstrap.RUNTIME
+        identities = {name:('%064x' % index) for index,name in enumerate(names,1)}
+        class Runner:
+            work_end = time.monotonic()+90
+            work_utc_end = time.time()+90
+            publications = []
+            def save(self,name,raw):
+                self.publications.append(name)
+            def inspect(self,identity):
+                service = next(name for name,value in identities.items() if value==identity)
+                return {'Id':identity,'Config':{'Healthcheck':{'Test':['CMD','health']}},
+                        'State':{'Running':service!='media-decoder','Pid':0 if service=='media-decoder' else 1,
+                                 'OOMKilled':False,'Health':{'Status':'healthy'}}}
+        native = Native()
+        checked = []
+        native.constructor = lambda profile,expected,project,service,owner: checked.append(service)
+        approval = {'services':dict.fromkeys(names,{}),'project':'synthetic-qa-c-current','owner':'owner',
+                    'installation_anchor':{'monotonic':time.monotonic(),'utc':time.time()}}
+        with self.assertRaises(Native.Failure):
+            bootstrap.runtime_readiness(Runner(),approval,native,identities)
+        self.assertIn('app',checked)
+        self.assertIn('media-decoder',checked)
+        observed = {'state':'OBSERVATIONS_NOT_RUNTIME_ADMISSION',
+                    'product_source':bootstrap.PRODUCT,'binary_sha256':bootstrap.BINARY,
+                    'prerequisites':bootstrap.PREREQUISITES,'identities':identities,
+                    'delivery':[],'clock':{},'continuity':{}}
+        approval['prerequisite_observations'] = {'path':'fixture','sha256':'a'*64}
+        native.read_pinned = lambda *args:observed
+        native.intake_deadline = lambda *args:nullcontext()
+        with patch.object(installation,'authenticate_delivery',return_value=[]), \
+                patch.object(bootstrap,'clock_readback',return_value={}), \
+                patch.object(bootstrap,'continuity_readback',return_value={}), \
+                patch.object(bootstrap,'start_runtime',return_value=dict.fromkeys(bootstrap.RUNTIME,{})):
+            runner = Runner()
+            with self.assertRaises(Native.Failure):
+                installation.runtime(runner,approval,native)
+            self.assertNotIn('startup-readiness.json',runner.publications)
+
     def test_bootstrap_rejection_precedes_all_lifecycle(self):
         with patch.object(bootstrap,'bootstrap_contract',side_effect=Native.Failure('rejected artifact')):
             with patch.object(bootstrap,'create_graph',side_effect=AssertionError('CREATE is forbidden')) as create:

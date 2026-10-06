@@ -9,9 +9,71 @@ import sys
 import time
 
 import bootstrap
+import probe_ro
 
 
 NATIVE_SHA = 'dbb506b94f55d6b8b3f9c05750ad5b8eae680374ba9e8bdbd68b3d6cc2f513f2'
+
+
+def authenticate_delivery(runner, approval, native, prior=None):
+    """Bind the graph, maintenance and probe to one closed physical delivery."""
+    def mounts(plan):
+        return {item['Destination']:item for item in plan['invariants']['Mounts']}
+    app = mounts(approval['services']['app'])
+    probe = mounts(approval['readonly_probe'])
+    source = str(Path(app['/etc/zns/runtime.yaml']['Source']).parent)
+    private = probe['/private']['Source']
+    if (probe['/etc/zns']['Source'] != source
+            or probe['/current/zns']['Source'] != app['/usr/local/bin/zns']['Source']
+            or probe['/run/registration-clock']['Name'] != app['/run/registration-clock']['Name']
+            or approval['bootstrap']['path'] != source+'/bootstrap.json'
+            or approval['continuity_sql']['path'] != source+'/bootstrap/read-continuity.sql'):
+        raise native.Failure('graph/bootstrap/probe actual input cross-binding')
+    required = {approval['compose_file'],approval['bootstrap']['path'],
+                approval['continuity_sql']['path'],source,private}
+    plans = [*approval['services'].values(),*approval['bootstrap_constructors'],
+             approval['readonly_probe']]
+    for plan in plans:
+        required.update(item['Source'] for item in plan['invariants']['Mounts']
+                        if item['Type']=='bind')
+    expected_names = sorted([role+'.password' for role in
+                             ('postgres','app','meter','inventory','fake','operator')]+
+                            [role+'.env' for role in
+                             ('app','owner','fake','operator','media','sticker','roles','inventory')])
+    roots = {item['path']:item for item in approval['delivery_directories']}
+    if (private not in roots or roots[private]['members'] != expected_names
+            or roots[private]['directories'] != []):
+        raise native.Failure('complete private14 delivery topology')
+    postgres = mounts(approval['services']['postgres'])
+    for role in ('postgres','app','meter','inventory','fake','operator'):
+        if postgres['/run/secrets/'+role+'_password']['Source'] != private+'/'+role+'.password':
+            raise native.Failure('graph/private14 credential cross-binding')
+    files = {item['path']:item for item in approval['delivery_files']}
+    bindings = {'runtime_config':source+'/runtime.yaml','app_env':private+'/app.env',
+                'owner_env':private+'/owner.env'}
+    for key,path in bindings.items():
+        if approval['readonly_inputs'][key] != files[path]['sha256']:
+            raise native.Failure('actual graph/probe byte pin cross-binding')
+    if files[app['/usr/local/bin/zns']['Source']]['sha256'] != bootstrap.BINARY:
+        raise native.Failure('actual current product delivery hash')
+    observed = native.delivery_snapshot(runner,approval,required)
+    # Compose has expanded env_file into Config.Env. Consume those same pinned
+    # app/owner bytes, not independently selected paths with equivalent names.
+    with native.intake_deadline(runner.work_end,runner.work_utc_end):
+        app_env = probe_ro.environment(native.read_bytes_pinned(
+            bindings['app_env'],files[bindings['app_env']]['sha256']))
+        owner_env = probe_ro.environment(native.read_bytes_pinned(
+            bindings['owner_env'],files[bindings['owner_env']]['sha256']))
+    actual_env = dict(item.split('=',1) for item in approval['services']['app']['invariants']['Config.Env'])
+    if (any(actual_env.get(key)!=value for key,value in app_env.items())
+            or any(app_env.get(key)!=value for key,value in owner_env.items())):
+        raise native.Failure('actual app/owner constructor credential literals')
+    if prior is not None and not native.same(prior,observed):
+        raise native.Failure('retained prerequisite delivery changed')
+    runner.install_delivery_required = required
+    runner.install_delivery_before = observed
+    runner.save('delivery-before.json',json.dumps(observed,sort_keys=True).encode())
+    return observed
 
 
 def readonly_delivery(runner, approval, native, identities):
@@ -62,6 +124,7 @@ def readonly_delivery(runner, approval, native, identities):
     argv.extend([image,*literal])
     if argv != approval['readonly_probe_create']:
         raise native.Failure('complete literal probe composition before birth')
+    bootstrap.check_delivery(runner,approval,native)
     runner.unresolved_resources = True
     raw = runner.docker(*argv)
     identity = raw.decode().strip()
@@ -73,8 +136,8 @@ def readonly_delivery(runner, approval, native, identities):
             or profile['State']['Pid'] != 0
             or profile['State']['StartedAt'] != '0001-01-01T00:00:00Z'):
         raise native.Failure('never-started full read-only probe')
-    remaining = min(runner.work_end-time.monotonic(),runner.work_utc_end-time.time())
-    raw = runner.docker('start','--attach',identity,seconds=remaining)
+    bootstrap.check_delivery(runner,approval,native)
+    raw = runner.docker('start','--attach',identity,seconds=bootstrap.attach_seconds(runner))
     final = runner.inspect(identity)
     native.constructor(final,expected,project,'readonly-probe',owner)
     if (final['State']['Status'] != 'exited' or final['State']['Pid'] != 0
@@ -97,6 +160,7 @@ def readonly_delivery(runner, approval, native, identities):
 
 def prerequisites(runner, approval, native):
     bootstrap.bootstrap_contract(runner,approval,native)
+    authenticate_delivery(runner,approval,native)
     identities = bootstrap.create_graph(runner,approval,native)
     bootstrap.start_postgres(runner,approval,native,identities)
     with native.intake_deadline(runner.work_end,runner.work_utc_end):
@@ -106,19 +170,26 @@ def prerequisites(runner, approval, native):
     continuity_raw,continuity = bootstrap.read_continuity(runner,approval,native,identities)
     readonly = readonly_delivery(runner,approval,native,identities)
     bootstrap.start_provider(runner,approval,native,identities,results,continuity_raw)
+    delivery = bootstrap.check_delivery(runner,approval,native)
+    runner.save('delivery-after.json',json.dumps(delivery,sort_keys=True).encode())
     # The actual source and constructor predicates were consumed above. Only
     # ROOT can accept these observations and admit the separate original M0.
     runner.save('prerequisites.json',json.dumps({
         'state':'OBSERVATIONS_NOT_RUNTIME_ADMISSION','identities':identities,
         'product_source':bootstrap.PRODUCT,'binary_sha256':bootstrap.BINARY,
         'clock':bootstrap.clock_readback(native,results[-1]['raw']),
-        'continuity':continuity,'readonly':readonly,
+        'continuity':continuity,'readonly':readonly,'delivery':delivery,
         'prerequisites':bootstrap.PREREQUISITES,
     },sort_keys=True).encode())
 
 
 def runtime(runner, approval, native):
     """Start the retained graph on ROOT's already armed original Linux M0."""
+    anchor = approval['installation_anchor']
+    # This phase publishes readiness only. G600 remains a separate mandatory
+    # observation; no intake, native call or receipt may extend readiness90.
+    runner.work_end = min(runner.work_end,anchor['monotonic']+90)
+    runner.work_utc_end = min(runner.work_utc_end,anchor['utc']+90)
     binding = approval['prerequisite_observations']
     with native.intake_deadline(runner.work_end,runner.work_utc_end):
         observed = native.read_pinned(binding['path'],binding['sha256'])
@@ -127,6 +198,7 @@ def runtime(runner, approval, native):
             or observed['binary_sha256'] != bootstrap.BINARY
             or observed['prerequisites'] != bootstrap.PREREQUISITES):
         raise native.Failure('actual authenticated current prerequisite observations')
+    authenticate_delivery(runner,approval,native,observed['delivery'])
     identities = observed['identities']
     if set(identities) != {'postgres','fake',*bootstrap.RUNTIME}:
         raise native.Failure('complete retained installation identities')
@@ -147,12 +219,14 @@ def runtime(runner, approval, native):
                 or state['Pid']<=0 or state['OOMKilled']
                 or state.get('Health',{}).get('Status')!='healthy'):
             raise native.Failure('actual retained prerequisite delivery')
-    profiles = bootstrap.start_runtime(runner,approval,native,identities)
+    bootstrap.start_runtime(runner,approval,native,identities)
     ready = bootstrap.runtime_readiness(runner,approval,native,identities)
+    delivery = bootstrap.check_delivery(runner,approval,native)
+    runner.save('delivery-after.json',json.dumps(delivery,sort_keys=True).encode())
     runner.save('startup-readiness.json',json.dumps({
         'state':'STARTUP_READINESS_ONLY_NOT_FULL_GUARD_OR_FUNCTIONAL_QA',
-        'identities':identities,'runtime_process_count':len(profiles),
-        'app_health':ready['State']['Health']['Status'],
+        'identities':identities,'runtime_process_count':len(bootstrap.RUNTIME),
+        'cohort_process_count':len(ready),'app_health':ready['app']['State']['Health']['Status'],
         'installation_anchor':approval['installation_anchor'],
     },sort_keys=True).encode())
 
