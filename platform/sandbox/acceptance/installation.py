@@ -237,11 +237,17 @@ def main():
     parser.add_argument('--approval',required=True)
     parser.add_argument('--approval-sha256',required=True)
     parser.add_argument('--output',required=True)
+    parser.add_argument('--operation',choices=('C_INSTALL_PREREQUISITES','C_INSTALL_RUNTIME'),
+                        default='C_INSTALL_PREREQUISITES')
     parser.add_argument('--window')
     parser.add_argument('--window-sha256')
     args = parser.parse_args()
     start,utc_start = time.monotonic(),time.time()
     window = None
+    if args.operation=='C_INSTALL_PREREQUISITES' and args.window is None and args.window_sha256 is None:
+        raise ValueError('authenticated original prerequisite window before native intake')
+    if args.operation=='C_INSTALL_RUNTIME' and (args.window is not None or args.window_sha256 is not None):
+        raise ValueError('runtime uses its separately authenticated Linux anchor')
     if args.window is not None or args.window_sha256 is not None:
         if args.window is None or args.window_sha256 is None:
             raise ValueError('complete original prerequisite window binding')
@@ -262,7 +268,7 @@ def main():
         approval = native.read_pinned(args.approval,args.approval_sha256)
     if (approval.get('authority') != 'ROOT'
             or approval.get('passive_native_custody_allowed') is not True
-            or approval.get('operation') not in ('C_INSTALL_PREREQUISITES','C_INSTALL_RUNTIME')
+            or approval.get('operation') != args.operation
             or approval.get('no_host_source_writers') is not True
             or approval.get('project') != 'synthetic-qa-c-current'
             or approval.get('owner') != 'c_installed_f03_finish'):

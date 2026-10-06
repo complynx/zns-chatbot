@@ -219,9 +219,38 @@ class Contracts(unittest.TestCase):
             'path':capsule+'/'+name,'bytes':(source/name).stat().st_size,
             'sha256':hashlib.sha256((source/name).read_bytes()).hexdigest()}
             for name in sorted(qualify_source.MEMBERS)]
-        approval['delivery_directories'] = [{'path':capsule,
-            'members':sorted(qualify_source.MEMBERS),'directories':[]}]
+        # Retain the supplied topology; only fixture byte pins need reconstruction.
         return approval
+
+    def supplied_topology_controls(self, approval):
+        native = self.native()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files, directories = [], []
+            for index, supplied in enumerate(approval['delivery_directories']):
+                delivered = root/str(index)
+                delivered.mkdir()
+                for member in supplied['members']:
+                    path = delivered/member
+                    path.parent.mkdir(parents=True,exist_ok=True)
+                    raw = member.encode()
+                    path.write_bytes(raw)
+                    files.append({'path':str(path),'bytes':len(raw),
+                                  'sha256':hashlib.sha256(raw).hexdigest()})
+                for member in supplied['directories']:
+                    (delivered/member).mkdir(parents=True,exist_ok=True)
+                directories.append({**supplied,'path':str(delivered)})
+            fixture = {'no_host_source_writers':True,'delivery_files':files,
+                       'delivery_directories':directories}
+            runner = types.SimpleNamespace(work_end=time.monotonic()+15,
+                work_utc_end=time.time()+15)
+            with patch.object(native,'DAEMON_SOURCE_PREFIX',str(root)+'/'):
+                self.assertEqual(len(native.delivery_snapshot(runner,fixture,
+                    {item['path'] for item in directories})),len(files))
+                changed = copy.deepcopy(fixture)
+                changed['delivery_directories'][0]['members'].reverse()
+                with self.assertRaisesRegex(native.Failure,'exact delivery directory topology'):
+                    native.delivery_snapshot(runner,changed,set())
 
     def host_main_controls(self, raw, installing=False):
         source = Path(sys.argv[3]).parent
@@ -229,6 +258,7 @@ class Contracts(unittest.TestCase):
                                               else 'OPERATOR-PROFILE.json')).read_bytes())
         original_input = json.loads((source/('INSTALL-INPUT.json' if installing
                                             else 'OPERATOR-INPUT.json')).read_bytes())
+        self.supplied_topology_controls(original_input)
         substitutions = {
             'config_bool':(('Config','AttachStdin'),0),
             'host_bool':(('HostConfig','ReadonlyRootfs'),1),
@@ -244,7 +274,7 @@ class Contracts(unittest.TestCase):
                 root = Path(temporary)
                 boot = types.ModuleType('actual_host_main_control')
                 boot_path = root/('qa.local/c-installed-f03-successor-20261006/prepared/'
-                                  + ('install-operator3/boot_installation.py' if installing
+                                  + ('install-operator4/boot_installation.py' if installing
                                      else 'operator8/boot_operator.py'))
                 boot_path.parent.mkdir(parents=True)
                 boot_path.write_bytes(raw)
@@ -252,7 +282,7 @@ class Contracts(unittest.TestCase):
                 exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
                 self.assertEqual(boot.ROOT,root)
                 output = root/('qa.local/c-installed-f03-finish-20261005/clean-linux1/private-offline-render4/c-successor-20261006-1/'
-                               + ('install-output3' if installing else 'operator-output1'))
+                               + ('install-output4' if installing else 'operator-output1'))
                 output.mkdir(parents=True)
                 profile = copy.deepcopy(original_profile)
                 profile['host_output'] = str(output)
@@ -276,7 +306,7 @@ class Contracts(unittest.TestCase):
                 approval_path.write_bytes(approval_raw)
                 if installing:
                     self.assertEqual(approval_path.parent,output.parent)
-                    self.assertEqual(approval_path.name,'install-approval3.json')
+                    self.assertEqual(approval_path.name,'install-approval4.json')
                     self.assertFalse((boot.BASE/'APPROVAL-ROOT.json').exists())
                 profile_name = 'INSTALL-OPERATOR-PROFILE.json' if installing else 'OPERATOR-PROFILE.json'
                 (boot.BASE/profile_name).write_bytes(profile_raw)
@@ -586,14 +616,15 @@ class Contracts(unittest.TestCase):
                     raw = json.dumps(wrong).encode()
                     path.write_bytes(raw)
                     argv = ['installation.py','--approval',str(path),'--approval-sha256',
-                            native.digest(raw),'--output',str(output)]
+                            native.digest(raw),'--output',str(output),'--operation','C_INSTALL_RUNTIME']
                     with patch.object(sys,'argv',argv), self.assertRaises(native.Failure):
                         installation.main()
                     created.assert_not_called()
                     self.assertFalse(output.exists())
             path.write_bytes(json.dumps(approval).encode())
             with patch.object(sys,'argv',['installation.py','--approval',str(path),
-                    '--approval-sha256','a'*64,'--output',str(output)]), self.assertRaises(native.Failure):
+                    '--approval-sha256','a'*64,'--output',str(output),
+                    '--operation','C_INSTALL_RUNTIME']), self.assertRaises(native.Failure):
                 installation.main()
             created.assert_not_called()
 
@@ -621,7 +652,7 @@ class Contracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary,patch.dict(sys.modules,{'run':native}), \
                 patch.object(native,'read_bytes_pinned',side_effect=mounted_native):
             root = Path(temporary)
-            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator3/boot_installation.py'
+            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator4/boot_installation.py'
             boot_path.parent.mkdir(parents=True)
             boot_path.write_bytes(raw)
             boot.__file__ = str(boot_path)
@@ -668,9 +699,12 @@ class Contracts(unittest.TestCase):
             with patch.object(native,'Runner',side_effect=AssertionError('invalid binding precedes output')) as created:
                 missing = ['installation.py','--approval',str(grant),'--approval-sha256',root_sha,
                            '--output',str(output)]
-                with patch.object(sys,'argv',missing),self.assertRaisesRegex(
-                        native.Failure,'original prerequisite window'):
+                with patch.object(sys,'argv',missing), \
+                        patch('builtins.__import__',side_effect=AssertionError('missing window precedes native import')), \
+                        patch.object(native,'read_pinned',side_effect=AssertionError('missing window precedes grant intake')) as intake, \
+                        self.assertRaisesRegex(ValueError,'original prerequisite window'):
                     installation.main()
+                intake.assert_not_called()
                 with patch.object(sys,'argv',missing+['--window',str(window)]),self.assertRaisesRegex(
                         ValueError,'complete original prerequisite window'):
                     installation.main()
