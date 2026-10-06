@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import bootstrap
@@ -21,6 +22,13 @@ class Native:
 
 
 class Contracts(unittest.TestCase):
+    def test_bootstrap_rejection_precedes_all_lifecycle(self):
+        with patch.object(bootstrap,'bootstrap_contract',side_effect=Native.Failure('rejected artifact')):
+            with patch.object(bootstrap,'create_graph',side_effect=AssertionError('CREATE is forbidden')) as create:
+                with self.assertRaises(Native.Failure):
+                    installation.prerequisites(object(),{},Native)
+                create.assert_not_called()
+
     def test_readonly_probe_rejects_changed_argv_before_birth(self):
         class Runner:
             calls = []

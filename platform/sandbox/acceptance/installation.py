@@ -96,6 +96,7 @@ def readonly_delivery(runner, approval, native, identities):
 
 
 def prerequisites(runner, approval, native):
+    bootstrap.bootstrap_contract(runner,approval,native)
     identities = bootstrap.create_graph(runner,approval,native)
     bootstrap.start_postgres(runner,approval,native,identities)
     with native.intake_deadline(runner.work_end,runner.work_utc_end):
@@ -175,6 +176,7 @@ def main():
             or approval.get('passive_native_custody_allowed') is not True
             or approval.get('operation') not in ('C_INSTALL_PREREQUISITES','C_INSTALL_RUNTIME')
             or approval.get('no_host_source_writers') is not True
+            or approval.get('project') != 'synthetic-qa-c-current'
             or approval.get('owner') != 'c_installed_f03_finish'):
         raise native.Failure('literal clean-C prerequisite authority')
     sources = [args.approval,'/runner/run.py']
