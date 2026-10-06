@@ -23,7 +23,8 @@ MEMBERS = {'bootstrap.py','installation.py','qualify_source.py','probe_ro.py',
            'prepare_private.py','test_bootstrap.py','test_private.py','test_health.py',
            'bootstrap.json','native_run.py','rendered.json','boot_operator.py',
            'OPERATOR-PROFILE.json','OPERATOR-INPUT.json','capture_guards.py','capture_transport.py',
-           'boot_installation.py','INSTALL-OPERATOR-PROFILE.json','INSTALL-INPUT.json'}
+           'boot_installation.py','INSTALL-OPERATOR-PROFILE.json','INSTALL-INPUT.json',
+           'compose.acceptance.yaml'}
 
 
 def load_native(directory, start, utc_start):

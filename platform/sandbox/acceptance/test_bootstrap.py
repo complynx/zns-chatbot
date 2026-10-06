@@ -244,7 +244,7 @@ class Contracts(unittest.TestCase):
                 root = Path(temporary)
                 boot = types.ModuleType('actual_host_main_control')
                 boot_path = root/('qa.local/c-installed-f03-successor-20261006/prepared/'
-                                  + ('install-operator1/boot_installation.py' if installing
+                                  + ('install-operator2/boot_installation.py' if installing
                                      else 'operator8/boot_operator.py'))
                 boot_path.parent.mkdir(parents=True)
                 boot_path.write_bytes(raw)
@@ -252,7 +252,7 @@ class Contracts(unittest.TestCase):
                 exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
                 self.assertEqual(boot.ROOT,root)
                 output = root/('qa.local/c-installed-f03-finish-20261005/clean-linux1/private-offline-render4/c-successor-20261006-1/'
-                               + ('install-output1' if installing else 'operator-output1'))
+                               + ('install-output2' if installing else 'operator-output1'))
                 output.mkdir(parents=True)
                 profile = copy.deepcopy(original_profile)
                 profile['host_output'] = str(output)
@@ -614,7 +614,7 @@ class Contracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary,patch.dict(sys.modules,{'run':native}), \
                 patch.object(native,'read_bytes_pinned',side_effect=mounted_native):
             root = Path(temporary)
-            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator1/boot_installation.py'
+            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator2/boot_installation.py'
             boot_path.parent.mkdir(parents=True)
             boot_path.write_bytes(raw)
             boot.__file__ = str(boot_path)
@@ -689,6 +689,60 @@ class Contracts(unittest.TestCase):
                 created.assert_not_called()
             self.assertFalse(output.exists())
         self.host_main_controls(raw,installing=True)
+        self.installation_compose_controls(boot,source)
+
+    def installation_compose_controls(self,boot,source):
+        profile = json.loads((source/'INSTALL-OPERATOR-PROFILE.json').read_bytes())
+        literal = boot.environment(profile['profile']['Config']['Env'])
+        inputs = boot.compose_environment()
+        self.assertEqual({key:value for key,value in literal.items()
+                          if key.startswith('C_ACCEPTANCE_')},inputs)
+        mounts = {item['Source']:item['Destination'] for item in profile['profile']['Mounts']}
+        for key in ('C_ACCEPTANCE_SOURCE_DIR','C_ACCEPTANCE_PRIVATE_DIR','C_ACCEPTANCE_ZNS_BINARY'):
+            self.assertEqual(mounts[inputs[key]],inputs[key])
+        body = (source/'compose.acceptance.yaml').read_bytes()
+        native = self.native()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private = root/'private'
+            private.mkdir()
+            fixture = json.loads((source/'INSTALL-INPUT.json').read_bytes())
+            for item in fixture['delivery_directories'][1]['members']:
+                (private/item).write_bytes(b'FIXTURE=synthetic\n' if item.endswith('.env') else b'synthetic\n')
+            compose = root/'compose.acceptance.yaml'
+            compose.write_bytes(body)
+            # Rebind only the three mount paths to owned no-socket fixture paths.
+            # Image inputs and the actual Compose body/CLI remain literal.
+            env = dict(literal)
+            env.update(C_ACCEPTANCE_SOURCE_DIR=str(source),
+                       C_ACCEPTANCE_PRIVATE_DIR=str(private),
+                       C_ACCEPTANCE_ZNS_BINARY='/usr/local/bin/zns')
+            runner = native.Runner(root/'render-output',active=15,cleanup=5)
+            actual = runner.docker
+            calls = []
+            def docker(*args,**kwargs):
+                calls.append(args)
+                if args==('info','--format','{{.ID}}'):
+                    return b'synthetic-no-socket-daemon\n'
+                self.assertEqual(args[:1],('compose',))
+                return actual(*args,**kwargs)
+            approval = {'project':'synthetic-qa-c-current','daemon_id':'synthetic-no-socket-daemon',
+                        'compose_file':str(compose),'compose_sha256':hashlib.sha256(body).hexdigest(),
+                        'operation':'C_RENDER','services':{}}
+            with patch.dict(os.environ,env,clear=True),patch.object(runner,'docker',side_effect=docker):
+                self.assertIsNone(native.compose_config(runner,approval))
+            rendered = json.loads((runner.output/'rendered-compose.json').read_bytes())
+            self.assertEqual(len(rendered['services']),12)
+            expected = {'app':'APP_BASE','fake':'APP_BASE','evaluator':'SCRIPT_IMAGE',
+                        'postgres':'POSTGRES_IMAGE','media-decoder':'MEDIA_DECODER_IMAGE',
+                        'media-broker':'MEDIA_BROKER_IMAGE','sticker-decoder':'STICKER_DECODER_IMAGE',
+                        'sticker-broker':'STICKER_BROKER_IMAGE','tool':'APP_BASE',
+                        'roles':'POSTGRES_IMAGE','clock-init':'CLOCK_IMAGE','clock-read':'CLOCK_IMAGE'}
+            for service,key in expected.items():
+                self.assertEqual(rendered['services'][service]['image'],inputs['C_ACCEPTANCE_'+key])
+            self.assertEqual(len(calls),2)
+            self.assertTrue(all(item['released'] for item in runner.records))
+            self.assertEqual(runner.finish(),0)
 
     def test_runtime_actual_observation_mutations_precede_start_and_publication(self):
         native = self.native()
