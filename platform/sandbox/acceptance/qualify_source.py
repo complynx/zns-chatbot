@@ -21,7 +21,8 @@ COMMAND = ('python3 -B -m tabnanny /source/bootstrap.py /source/installation.py 
            '--binary /usr/local/bin/zns')
 MEMBERS = {'bootstrap.py','installation.py','qualify_source.py','probe_ro.py',
            'prepare_private.py','test_bootstrap.py','test_private.py','test_health.py',
-           'bootstrap.json','native_run.py','rendered.json','boot_operator.py'}
+           'bootstrap.json','native_run.py','rendered.json','boot_operator.py',
+           'OPERATOR-PROFILE.json','OPERATOR-INPUT.json','capture_guards.py','capture_transport.py'}
 
 
 def load_native(directory, start, utc_start):

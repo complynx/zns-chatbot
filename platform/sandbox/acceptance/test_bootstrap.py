@@ -3,12 +3,13 @@ import json
 import copy
 import hashlib
 import importlib.util
+import io
 import os
 import sys
 import tempfile
 import time
 import types
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stderr
 import unittest
 from unittest.mock import patch
 from pathlib import Path
@@ -161,6 +162,224 @@ class Contracts(unittest.TestCase):
         wrong = json.dumps(changed).encode()
         with self.assertRaisesRegex(ValueError,'UTC clamp'):
             qualify_source.mapped_window(wrong,hashlib.sha256(wrong).hexdigest(),root_sha)
+        self.host_main_controls(raw)
+
+    def host_main_controls(self, raw):
+        source = Path(sys.argv[3]).parent
+        original_profile = json.loads((source/'OPERATOR-PROFILE.json').read_bytes())
+        original_input = json.loads((source/'OPERATOR-INPUT.json').read_bytes())
+        for case in ('pass','wrong_name','wrong_argv','before_birth','create',
+                     'attach','cleanup','publication','unresolved','no_outcome'):
+            with self.subTest(host_main=case),tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                boot = types.ModuleType('actual_host_main_control')
+                boot.__file__ = str(root/'qa.local/c-installed-f03-successor-20261006/prepared/operator1/boot_operator.py')
+                exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
+                boot.BASE.mkdir(parents=True)
+                output = root/'qa.local/c-installed-f03-finish-20261005/clean-linux1/private-offline-render4/c-successor-20261006-1/operator-output1'
+                output.mkdir(parents=True)
+                profile = copy.deepcopy(original_profile)
+                profile['host_output'] = str(output)
+                if case=='wrong_name':
+                    profile['name'] = 'synthetic-qa-wrong-operator'
+                if case=='wrong_argv':
+                    profile['create_argv'].insert(1,'--privileged')
+                approval = copy.deepcopy(original_input)
+                # This temporary test authority cannot authorize a real dispatch.
+                approval.update(authority='ROOT',no_host_source_writers=True,
+                                passive_native_custody_allowed=True)
+                capsule = approval['capsule_path']
+                binary = next(item for item in approval['delivery_files']
+                              if item['path']==approval['binary_path'])
+                approval['delivery_files'] = [binary]+[{
+                    'path':capsule+'/'+name,'bytes':(source/name).stat().st_size,
+                    'sha256':hashlib.sha256((source/name).read_bytes()).hexdigest()}
+                    for name in sorted(qualify_source.MEMBERS)]
+                approval['delivery_directories'] = [{'path':capsule,
+                    'members':sorted(qualify_source.MEMBERS),'directories':[]}]
+                qualify_source.source_contract(approval,self.native())
+                approval_raw = json.dumps(approval).encode()
+                profile_raw = json.dumps(profile).encode()
+                approval_sha = hashlib.sha256(approval_raw).hexdigest()
+                profile_sha = hashlib.sha256(profile_raw).hexdigest()
+                (boot.BASE/'APPROVAL-ROOT.json').write_bytes(approval_raw)
+                (boot.BASE/'OPERATOR-PROFILE.json').write_bytes(profile_raw)
+                transport_dir = root/'qa.local/c-fileproof-entrypoint-clock-completion-20261004/candidate1/accepted-transport'
+                transport_dir.mkdir(parents=True)
+                for filename,fixture in (('guards.py','capture_guards.py'),
+                                         ('run-qualified.py','capture_transport.py')):
+                    (transport_dir/filename).write_bytes((source/fixture).read_bytes())
+                identity = 'a'*64
+                calls = []
+                fake = None
+                original_capture = boot.captured
+
+                def captured(name,path,pin):
+                    nonlocal fake
+                    # Keep immutable dependency diagnostics off unittest's
+                    # status stream, but retain them in the helper's raw stdout.
+                    diagnostics = io.StringIO()
+                    try:
+                        with redirect_stderr(diagnostics):
+                            module = original_capture(name,path,pin)
+                    finally:
+                        if diagnostics.getvalue():
+                            print('HOST_MAIN_COMPILE_DIAGNOSTICS case='+case+' module='+name)
+                            print(diagnostics.getvalue(),end='')
+                    if name!='c_trusted_boot_capture':
+                        return module
+                    exception = module.RecipeFailure
+                    native_cli = module.DockerCLI
+
+                    class FakeCLI:
+                        def __init__(self,_executable):
+                            self.unresolved = []
+                            self.last_outcome = None
+                            self.phase = 'created'
+                            self.failed = False
+
+                        def call(self,argv,end,utc_end):
+                            self.assert_cutoffs(end,utc_end)
+                            command = argv[2:]
+                            calls.append(command)
+                            operation = command[0]
+                            fail = not self.failed and (
+                                (case=='before_birth' and operation=='ps')
+                                or (case=='no_outcome' and operation=='image')
+                                or (case in ('create','publication','unresolved') and operation=='create')
+                                or (case=='attach' and operation=='start')
+                                or (case=='cleanup' and operation=='rm'))
+                            stdout = b''
+                            if operation=='image':
+                                stdout = json.dumps([{'Id':boot.IMAGE}]).encode()
+                            elif operation=='create':
+                                stdout = (identity+'\n').encode()
+                            elif operation=='start':
+                                self.phase = 'exited'
+                            elif operation=='inspect':
+                                observed = copy.deepcopy(profile['profile'])
+                                window_sha = hashlib.sha256((output/'WINDOW.json').read_bytes()).hexdigest()
+                                observed['Config']['Cmd'] = [approval_sha if item=='ROOT_FINAL_RAW_SHA'
+                                    else window_sha if item=='WINDOW_FINAL_RAW_SHA' else item
+                                    for item in observed['Config']['Cmd']]
+                                observed['Config']['Hostname'] = identity[:12]
+                                if self.phase=='exited':
+                                    observed['HostConfig']['OomKillDisable'] = None
+                                observed.update(Id=identity,Name='/'+boot.NAME,Image=boot.IMAGE,
+                                    Path='python3',Args=observed['Config']['Cmd'],RestartCount=0,
+                                    State={'Status':self.phase,'Pid':0,'ExitCode':0,
+                                        'Running':False,'Paused':False,'Restarting':False,
+                                        'OOMKilled':False,'Dead':False,
+                                        'StartedAt':'0001-01-01T00:00:00Z'},
+                                    NetworkSettings={'Networks':profile['created_networks' if self.phase=='created'
+                                        else 'terminal_networks']})
+                                stdout = json.dumps(observed).encode()
+                            frame = {'pid':os.getpid(),'creation_identity':{
+                                'kind':'linux-start-ticks','pid':os.getpid(),'created':1},
+                                'reaped':True,'exit':0,'eof':[True,True],'released':True,
+                                'original_end':end,'original_end_utc':utc_end,
+                                'capture_token':'0'*32,'readers':[], 'recovery_readers':[]}
+                            outcome = {'code':0,'stdout':stdout,'stderr':b'',
+                                'output_complete':True,'cleanup_errors':[],
+                                'custody':native_cli.capture_snapshot(frame),'failure':None}
+                            if fail:
+                                self.failed = True
+                                if case=='no_outcome':
+                                    raise exception('Exact native process creation identity unavailable')
+                                outcome.update(code=17,stderr=b'causal native stderr',
+                                    failure='Docker command timed out')
+                                frame['exit'] = 17
+                                if case=='unresolved':
+                                    frame['released'] = False
+                                    outcome['cleanup_errors'] = ['Docker pipe close: OSError']
+                                    self.unresolved.append(frame)
+                                outcome['custody'] = native_cli.capture_snapshot(frame)
+                                self.last_outcome = outcome
+                                raise exception(outcome['failure'],outcome=outcome)
+                            self.last_outcome = outcome
+                            return outcome['code'],outcome['stdout'],outcome['stderr']
+
+                        @staticmethod
+                        def assert_cutoffs(end,utc_end):
+                            if end>boot.TOTAL or utc_end>boot.UTC_TOTAL:
+                                raise AssertionError('original dual cutoffs cannot extend')
+
+                    fake = FakeCLI(None)
+                    module.DockerCLI = lambda _executable:fake
+                    return module
+
+                class PassiveCustody(Exception):
+                    pass
+
+                original_open = Path.open
+                def publication(path,*args,**kwargs):
+                    if case=='publication' and path.name=='03.stdout' and args==('xb',):
+                        raise OSError('causal publication failure')
+                    return original_open(path,*args,**kwargs)
+
+                args = ['boot_operator.py','--approval-sha256',approval_sha,
+                        '--profile-sha256',profile_sha]
+                with patch.dict(sys.modules),patch.object(sys,'argv',args), \
+                        patch.object(boot,'captured',side_effect=captured), \
+                        patch.object(Path,'open',new=publication), \
+                        patch.object(boot.time,'sleep',side_effect=PassiveCustody):
+                    if case in ('wrong_name','wrong_argv'):
+                        with self.assertRaises(ValueError):
+                            boot.main()
+                        self.assertIsNone(fake)
+                        self.assertFalse((output/'host-receipts1').exists())
+                        continue
+                    if case in ('cleanup','unresolved'):
+                        with self.assertRaises(PassiveCustody):
+                            boot.main()
+                    else:
+                        self.assertEqual(boot.main(),0 if case=='pass' else 1)
+                receipts = output/'host-receipts1'
+                terminal = json.loads((receipts/'terminal.json').read_bytes())
+                self.assertIsNone(terminal['pass'])
+                window = (output/'WINDOW.json').read_bytes()
+                mapped = qualify_source.mapped_window(window,hashlib.sha256(window).hexdigest(),approval_sha)
+                self.assertLessEqual(mapped['active_utc'],boot.UTC_ACTIVE)
+                self.assertLessEqual(mapped['total_utc'],boot.UTC_TOTAL)
+                if len(calls)>2:
+                    self.assertEqual(calls[2], [approval_sha if item=='ROOT_FINAL_RAW_SHA'
+                        else hashlib.sha256(window).hexdigest() if item=='WINDOW_FINAL_RAW_SHA'
+                        else item for item in profile['create_argv']])
+                if case=='pass':
+                    self.assertIsNone(terminal['first_failure'])
+                    self.assertTrue(terminal['eligible_before_publication'])
+                    self.assertTrue(terminal['removed_and_absent'])
+                    continue
+                self.assertEqual(terminal['first_failure'],
+                    'Exact native process creation identity unavailable' if case=='no_outcome'
+                    else 'Docker command timed out')
+                self.assertFalse(terminal['eligible_before_publication'])
+                failure_index = next(index for index,item in enumerate(terminal['native'],1)
+                                     if item['failure'] is not None)
+                recorded = terminal['native'][failure_index-1]
+                self.assertEqual(recorded['failure'],terminal['first_failure'])
+                self.assertEqual((receipts/('%02d.stderr'%failure_index)).read_bytes(),
+                                 b'' if case=='no_outcome' else b'causal native stderr')
+                if case=='no_outcome':
+                    self.assertIsNone(recorded['custody'])
+                    self.assertIsNone(recorded['code'])
+                else:
+                    self.assertEqual(recorded['cleanup_errors'],
+                        ['Docker pipe close: OSError'] if case=='unresolved' else [])
+                    self.assertEqual(recorded['custody']['exit'],17)
+                    self.assertEqual(recorded['custody']['eof'],[True,True])
+                if case in ('create','publication','unresolved'):
+                    self.assertEqual(terminal['helper_id'],identity)
+                if case=='publication':
+                    self.assertFalse((receipts/'03.stdout').exists())
+                    self.assertTrue((receipts/'03.stderr').is_file())
+                    self.assertTrue((receipts/'03.json').is_file())
+                    self.assertTrue(any('03.stdout: OSError' in item for item in terminal['later_failures']))
+                if case in ('cleanup','unresolved'):
+                    self.assertTrue(terminal['unresolved'])
+                    self.assertFalse(terminal['removed_and_absent'])
+                if case=='unresolved':
+                    self.assertEqual([item[0] for item in calls],['ps','image','create'])
 
     def test_qualifier_terminal_sync_expiry_cannot_accept(self):
         native = self.native()
