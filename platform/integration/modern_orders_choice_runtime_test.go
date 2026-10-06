@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/bot"
+	"github.com/complynx/zns-chatbot/platform/internal/observability"
 	"github.com/complynx/zns-chatbot/platform/internal/orders"
 	"github.com/complynx/zns-chatbot/platform/internal/sandbox"
 )
@@ -176,7 +178,7 @@ func restartModernRuntimeStand(t *testing.T, f *fixture) {
 func modernRuntimeDiagnosticModel(t *testing.T, address string) sandbox.FixtureRemote {
 	t.Helper()
 	return sandbox.FixtureRemote{
-		URL: address + "/lab/model",
+		URL:  address + "/lab/model",
 		HTTP: &http.Client{Timeout: 10 * time.Second, Transport: modernRuntimeModelTransport{t: t}},
 	}
 }
@@ -198,11 +200,51 @@ func (transport modernRuntimeModelTransport) RoundTrip(request *http.Request) (*
 
 func modernRuntimeScript(t *testing.T, f *fixture, text, code string) json.RawMessage {
 	t.Helper()
-	update := queueModernRuntimePlan(t, f, 101, "en", text,
-		agent.Plan{View: agent.OrdersView, ScriptAction: &agent.ScriptProposal{Code: code, InputJSON: "null"}},
-		agent.Plan{View: agent.OrdersView, Text: "Order operation recorded."})
-	completeModernRuntimeInbox(t, f, update)
-	assertModernRuntimeFixtureConsumed(t, f, update, 2)
+	// The long scenario exceeds the provider's retained 32-step capacity. Each
+	// completed interaction owns a fresh bounded model fixture, not a new Telegram stand.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	model, err := sandbox.New(ctx, nil, "sandbox")
+	require.NoError(t, err)
+	server := httptest.NewServer(model.Handler())
+	defer server.Close()
+	input, err := json.Marshal(map[string]any{"user": 101, "language_code": "en", "text": text})
+	require.NoError(t, err)
+	request, err := http.NewRequestWithContext(
+		t.Context(), http.MethodPost, f.fake.URL+"/lab/input", bytes.NewReader(input),
+	)
+	require.NoError(t, err)
+	request.Header.Set("X-Sandbox", "1")
+	response, err := http.DefaultClient.Do(request)
+	require.NoError(t, err)
+	var queued struct {
+		ID int64 `json:"update_id"`
+	}
+	decodeErr := json.NewDecoder(response.Body).Decode(&queued)
+	closeErr := response.Body.Close()
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.NoError(t, decodeErr)
+	require.NoError(t, closeErr)
+	require.Positive(t, queued.ID)
+	update := queued.ID
+	fixtureBody, err := json.Marshal(map[string]any{
+		"owner": "alice", "update_id": update,
+		"steps": []map[string]any{
+			{"expect": map[string]any{"text": text}, "plan": agent.Plan{
+				View: agent.OrdersView, ScriptAction: &agent.ScriptProposal{Code: code, InputJSON: "null"},
+			}},
+			{"expect": map[string]any{"text": text}, "plan": agent.Plan{
+				View: agent.OrdersView, Text: "Order operation recorded.",
+			}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, update, installModernRuntimeFixture(t, server.URL, fixtureBody))
+	f.b.Model = modernRuntimeDiagnosticModel(t, server.URL)
+	modelFixture := *f
+	modelFixture.fake = server
+	completeModernRuntimeInbox(t, &modelFixture, update)
+	assertModernRuntimeFixtureConsumed(t, &modelFixture, update, 2)
 	var records []struct {
 		Run agent.ScriptRun `json:"run"`
 	}
@@ -269,11 +311,24 @@ func modernSingleKeyOrder(t *testing.T, stem string) (*fixture, orders.Order) {
 // erases the distinction between a slow operation, retry loop and lock wait.
 func completeModernRuntimeInbox(t *testing.T, f *fixture, update int64) {
 	t.Helper()
+	timings := &modernRuntimeTimings{}
+	previousLogger, previousHTTP, previousHostHTTP := f.b.Logger, f.b.API.HTTP, f.b.Host.HTTP
+	f.b.API.HTTP = modernRuntimeTimedClient(previousHTTP, timings, "user")
+	f.b.Host.HTTP = modernRuntimeTimedClient(previousHostHTTP, timings, "host")
+	f.b.Logger = observability.NewLogger(timings, observability.LogConfig{})
 	started := time.Now()
+	timings.started = started
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- f.b.Run(ctx) }()
-	defer func() { cancel(); require.NoError(t, <-done) }()
+	defer func() {
+		cancel()
+		runErr := <-done
+		f.b.Logger, f.b.API.HTTP = previousLogger, previousHTTP
+		f.b.Host.HTTP = previousHostHTTP
+		timings.report(t)
+		require.NoError(t, runErr)
+	}()
 	ready := func() bool {
 		var cursor int64
 		var count int

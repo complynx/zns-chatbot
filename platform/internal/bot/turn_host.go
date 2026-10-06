@@ -136,7 +136,7 @@ func (s turnLeaves) MediaSelection(cached *interaction.SavedPlan, input, request
 // Run stops, instead of saving an "agent unavailable" reply.
 func (s turnLeaves) Failure(err error) (i18n.ID, bool) {
 	// Record fixed labels only; underlying errors can contain private values.
-	reason := "unknown"
+	reason := updateFailureUnknown
 	if errors.Is(err, readsource.ErrLimit) {
 		reason = "source_authority_limit"
 	} else if err != nil {
