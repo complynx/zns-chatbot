@@ -312,6 +312,9 @@ class Contracts(unittest.TestCase):
         cases = ('pass','wrong_name','wrong_argv',*(['wrong_roles'] if installing else []),'before_birth','create',
                  'attach','cleanup','publication','unresolved','no_outcome',
                  'prestarted','missing_domain','unresolved_domain',*substitutions)
+        before_create = ['ps','image']+(['volume'] if installing else [])
+        create_index = len(before_create)
+        create_receipt = '%02d' % (create_index+1)
         for case in cases:
             with self.subTest(host_main=case),tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
@@ -520,7 +523,7 @@ class Contracts(unittest.TestCase):
 
                 original_open = Path.open
                 def publication(path,*args,**kwargs):
-                    if case=='publication' and path.name=='03.stdout' and args==('xb',):
+                    if case=='publication' and path.name==create_receipt+'.stdout' and args==('xb',):
                         raise OSError('causal publication failure')
                     return original_open(path,*args,**kwargs)
 
@@ -550,8 +553,8 @@ class Contracts(unittest.TestCase):
                 mapped = qualify_source.mapped_window(window,hashlib.sha256(window).hexdigest(),approval_sha)
                 self.assertLessEqual(mapped['active_utc'],boot.UTC_ACTIVE)
                 self.assertLessEqual(mapped['total_utc'],boot.UTC_TOTAL)
-                if len(calls)>2:
-                    self.assertEqual(calls[2], [approval_sha if item=='ROOT_FINAL_RAW_SHA'
+                if len(calls)>create_index:
+                    self.assertEqual(calls[create_index], [approval_sha if item=='ROOT_FINAL_RAW_SHA'
                         else hashlib.sha256(window).hexdigest() if item=='WINDOW_FINAL_RAW_SHA'
                         else item for item in profile['create_argv']])
                 if case=='pass':
@@ -579,7 +582,7 @@ class Contracts(unittest.TestCase):
                     self.assertFalse(terminal['removed_and_absent'])
                     self.assertEqual(terminal['helper_id'],identity)
                     self.assertEqual([item[0] for item in calls],
-                                     ['ps','image','create','inspect','inspect'])
+                                     before_create+['create','inspect','inspect'])
                     self.assertTrue(any('trusted operator release failure:' in item
                                         for item in terminal['later_failures']))
                     continue
@@ -604,15 +607,15 @@ class Contracts(unittest.TestCase):
                 if case in ('create','publication','unresolved'):
                     self.assertEqual(terminal['helper_id'],identity)
                 if case=='publication':
-                    self.assertFalse((receipts/'03.stdout').exists())
-                    self.assertTrue((receipts/'03.stderr').is_file())
-                    self.assertTrue((receipts/'03.json').is_file())
-                    self.assertTrue(any('03.stdout: OSError' in item for item in terminal['later_failures']))
+                    self.assertFalse((receipts/(create_receipt+'.stdout')).exists())
+                    self.assertTrue((receipts/(create_receipt+'.stderr')).is_file())
+                    self.assertTrue((receipts/(create_receipt+'.json')).is_file())
+                    self.assertTrue(any(create_receipt+'.stdout: OSError' in item for item in terminal['later_failures']))
                 if case in ('cleanup','unresolved'):
                     self.assertTrue(terminal['unresolved'])
                     self.assertFalse(terminal['removed_and_absent'])
                 if case=='unresolved':
-                    self.assertEqual([item[0] for item in calls],['ps','image','create'])
+                    self.assertEqual([item[0] for item in calls],before_create+['create'])
 
     def test_qualifier_terminal_sync_expiry_cannot_accept(self):
         native = self.native()
