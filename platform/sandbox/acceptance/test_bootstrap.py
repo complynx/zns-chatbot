@@ -151,7 +151,7 @@ class Contracts(unittest.TestCase):
         raw = Path(sys.argv[3]).read_bytes()
         boot = types.ModuleType('source_window_boot')
         with tempfile.TemporaryDirectory() as temporary:
-            boot_path = Path(temporary)/'qa.local/c-installed-f03-successor-20261006/prepared/operator22/boot_operator.py'
+            boot_path = Path(temporary)/'qa.local/c-installed-f03-successor-20261006/prepared/operator23/boot_operator.py'
             boot_path.parent.mkdir(parents=True)
             boot_path.write_bytes(raw)
             boot.__file__ = str(boot_path)
@@ -282,6 +282,17 @@ class Contracts(unittest.TestCase):
                                               else 'OPERATOR-PROFILE.json')).read_bytes())
         original_input = json.loads((source/('INSTALL-INPUT.json' if installing
                                             else 'OPERATOR-INPUT.json')).read_bytes())
+        # Native HostConfig omits false for RW binds; resolved mounts still
+        # authenticate the exact writable destinations and readonly boundaries.
+        for mount in original_profile['profile']['HostConfig']['Mounts']:
+            resolved = next(item for item in original_profile['profile']['Mounts']
+                            if item['Destination']==mount['Target'])
+            if mount['Target'] in ('/output','/var/run/docker.sock'):
+                self.assertNotIn('ReadOnly',mount)
+                self.assertIs(resolved['RW'],True)
+            else:
+                self.assertIs(mount['ReadOnly'],True)
+                self.assertIs(resolved['RW'],False)
         self.supplied_topology_controls(original_input)
         source_input = (original_input if installing else
                         self.current_source_approval(original_input,source))
@@ -301,7 +312,7 @@ class Contracts(unittest.TestCase):
                 root = Path(temporary)
                 boot = types.ModuleType('actual_host_main_control')
                 boot_path = root/('qa.local/c-installed-f03-successor-20261006/prepared/'
-                                  + ('install-operator8/boot_installation.py' if installing
+                                  + ('install-operator9/boot_installation.py' if installing
                                      else 'operator8/boot_operator.py'))
                 boot_path.parent.mkdir(parents=True)
                 boot_path.write_bytes(raw)
@@ -331,7 +342,7 @@ class Contracts(unittest.TestCase):
                                 boot.captured('expired_dependency',dependency,dependency_sha)
                             execute.assert_not_called()
                 output = root/('qa.local/c-installed-f03-finish-20261005/clean-linux1/private-offline-render4/c-successor-20261006-1/'
-                               + ('install-output7' if installing else 'operator-output1'))
+                               + ('install-output8' if installing else 'operator-output1'))
                 output.mkdir(parents=True)
                 profile = copy.deepcopy(original_profile)
                 profile['host_output'] = str(output)
@@ -356,7 +367,7 @@ class Contracts(unittest.TestCase):
                 approval_path.write_bytes(approval_raw)
                 if installing:
                     self.assertEqual(approval_path.parent,output.parent)
-                    self.assertEqual(approval_path.name,'install-approval7.json')
+                    self.assertEqual(approval_path.name,'install-approval8.json')
                     self.assertFalse((boot.BASE/'APPROVAL-ROOT.json').exists())
                 profile_name = 'INSTALL-OPERATOR-PROFILE.json' if installing else 'OPERATOR-PROFILE.json'
                 (boot.BASE/profile_name).write_bytes(profile_raw)
@@ -739,7 +750,7 @@ class Contracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary,patch.dict(sys.modules,{'run':native}), \
                 patch.object(native,'read_bytes_pinned',side_effect=mounted_native):
             root = Path(temporary)
-            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator8/boot_installation.py'
+            boot_path = root/'qa.local/c-installed-f03-successor-20261006/prepared/install-operator9/boot_installation.py'
             boot_path.parent.mkdir(parents=True)
             boot_path.write_bytes(raw)
             boot.__file__ = str(boot_path)
