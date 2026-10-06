@@ -22,7 +22,8 @@ MEMBERS = {'bootstrap.py','installation.py','qualify_source.py','probe_ro.py',
            'bootstrap.json','native_run.py','rendered.json','boot_operator.py',
            'OPERATOR-PROFILE.json','OPERATOR-INPUT.json','capture_guards.py','capture_transport.py',
            'boot_installation.py','INSTALL-OPERATOR-PROFILE.json','INSTALL-INPUT.json',
-           'compose.acceptance.yaml','source_gate.py','test_source_gate.py'}
+           'compose.acceptance.yaml','source_gate.py','test_source_gate.py',
+           'private_preflight.py','test_builders.py','BUILDERS_INPUT.json'}
 
 
 def load_native(directory, start, utc_start):
