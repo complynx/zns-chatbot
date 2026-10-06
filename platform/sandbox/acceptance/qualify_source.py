@@ -1,4 +1,7 @@
 """Fixed Linux L2 caller; the child has no daemon socket or writable source."""
+import sys
+if sys.flags.isolated != 1 or getattr(sys.flags,'safe_path',False) is not True:
+    raise SystemExit('Isolated safe-path Python (-I) required')
 import argparse
 import copy
 import hashlib
@@ -13,12 +16,7 @@ import types
 NATIVE_SHA = 'fbe5118a5981cacf2ccde4b82979e8ca608df30c9977bcff3e30af201a514392'
 IMAGE = 'sha256:8a1a0aa958483ecef53dbf2aab6d60b85365c0a8268f00ffb7e7d0877edde916'
 BINARY = '488a8accc0f4072236a6b779837a28fa6312bf0769573023271ad85d767e1261'
-COMMAND = ('python3 -B -m tabnanny /source/bootstrap.py /source/installation.py '
-           '/source/qualify_source.py /source/test_bootstrap.py && '
-           'python3 -B /source/test_bootstrap.py /source/bootstrap.json /source/native_run.py /source/boot_operator.py && '
-           'python3 -B /source/test_private.py -v && '
-           'python3 -B /source/test_health.py --rendered /source/rendered.json '
-           '--binary /usr/local/bin/zns')
+COMMAND = "python3 -I -B -m tabnanny /source/bootstrap.py /source/installation.py /source/qualify_source.py /source/test_bootstrap.py && python3 -I -B -c 'import runpy,sys;sys.path.insert(0,\"/source\");sys.argv=[\"/source/test_bootstrap.py\",\"/source/bootstrap.json\",\"/source/native_run.py\",\"/source/boot_operator.py\"];runpy.run_path(sys.argv[0],run_name=\"__main__\")' && python3 -I -B -c 'import runpy,sys;sys.path.insert(0,\"/source\");sys.argv=[\"/source/test_private.py\",\"-v\"];runpy.run_path(sys.argv[0],run_name=\"__main__\")' && python3 -I -B /source/test_health.py --rendered /source/rendered.json --binary /usr/local/bin/zns"
 MEMBERS = {'bootstrap.py','installation.py','qualify_source.py','probe_ro.py',
            'prepare_private.py','test_bootstrap.py','test_private.py','test_health.py',
            'bootstrap.json','native_run.py','rendered.json','boot_operator.py',

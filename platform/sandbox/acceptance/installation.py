@@ -1,13 +1,17 @@
 """Two literal clean-C phases; this source cannot authorize an installation."""
+import sys
+if sys.flags.isolated != 1 or getattr(sys.flags,'safe_path',False) is not True:
+    raise SystemExit('Isolated safe-path Python (-I) required')
 import argparse
 import json
 import math
 import os
 from pathlib import Path
 import re
-import sys
 import time
 
+# The trusted host authenticates this complete immutable RO delivery before birth.
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 import bootstrap
 import probe_ro
 import qualify_source
