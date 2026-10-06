@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import time
+import types
 from contextlib import nullcontext
 import unittest
 from unittest.mock import patch
@@ -15,6 +16,7 @@ from pathlib import Path
 import bootstrap
 import installation
 import probe_ro
+import qualify_source
 
 
 class Native:
@@ -33,6 +35,149 @@ class Contracts(unittest.TestCase):
         native = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(native)
         return native
+
+    def test_qualifier_compiles_captured_closed_native_body(self):
+        raw = Path(sys.argv[2]).read_bytes()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root/'run.py').write_bytes(raw)
+            (root/'test_run.py').write_text('')
+            (root/'README.md').write_text('')
+            original_compile = compile
+
+            def changed_path(source, filename, mode, **kwargs):
+                (root/'run.py').write_text('raise RuntimeError("reopened source")')
+                return original_compile(source,filename,mode,**kwargs)
+
+            with patch('builtins.compile',side_effect=changed_path):
+                native = qualify_source.load_native(root,time.monotonic(),time.time())
+            self.assertEqual(native.digest(b'captured'),hashlib.sha256(b'captured').hexdigest())
+            for name in ('guards.py','run.pyc','__pycache__'):
+                (root/'run.py').write_bytes(raw)
+                extra = root/name
+                if name=='__pycache__':
+                    extra.mkdir()
+                else:
+                    extra.write_bytes(b'undeclared')
+                with self.subTest(local=name),self.assertRaisesRegex(ValueError,'closed ROOT'):
+                    qualify_source.load_native(root,time.monotonic(),time.time())
+                if extra.is_dir():
+                    extra.rmdir()
+                else:
+                    extra.unlink()
+            (root/'run.py').write_bytes(b'wrong source')
+            with self.assertRaisesRegex(ValueError,'exact captured'):
+                qualify_source.load_native(root,time.monotonic(),time.time())
+
+    def test_qualifier_final_verification_expiry_is_sticky(self):
+        native = self.native()
+        for boundary in ('source_read','completed_late'):
+            with self.subTest(boundary=boundary),tempfile.TemporaryDirectory() as temporary:
+                source = Path(temporary)/'source'
+                source.mkdir()
+                path = source/'owned'
+                path.write_bytes(b'actual delivered bytes')
+                approval = {'no_host_source_writers':True,'delivery_files':[{
+                    'path':str(path),'bytes':path.stat().st_size,
+                    'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}],
+                    'delivery_directories':[{'path':str(source),'members':['owned'],'directories':[]}]}
+                runner = native.Runner(str(Path(temporary)/'output'),active=1,cleanup=1)
+                runner.end = time.monotonic()+.05
+                runner.utc_end = time.time()+1
+
+                def delayed(*_args,**_kwargs):
+                    time.sleep(.2)
+                    return []
+
+                if boundary=='source_read':
+                    # The real delivery guard interrupts its actual read boundary.
+                    delay = patch.object(native.os,'read',side_effect=delayed)
+                    primary = 'source qualification final binding failure'
+                else:
+                    # A returned-late API hits the real publisher's sticky primary.
+                    delay = patch.object(native,'delivery_snapshot',side_effect=delayed)
+                    primary = 'original publication deadline'
+                with patch.object(native,'DAEMON_SOURCE_PREFIX',str(Path(temporary))+'/'),delay:
+                    qualify_source.final_sources(runner,approval,native,[])
+                self.assertEqual(runner.first,primary)
+                if boundary=='completed_late':
+                    self.assertIn('source qualification final binding failure',runner.later_faults)
+                self.assertFalse((runner.output/'source-after.json').exists())
+                self.assertEqual(runner.finish(),1)
+                self.assertEqual(runner.first,primary)
+
+    def test_qualifier_final_verification_uses_real_delivery(self):
+        native = self.native()
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary)/'source'
+            source.mkdir()
+            path = source/'owned'
+            path.write_bytes(b'actual delivered bytes')
+            approval = {'no_host_source_writers':True,'delivery_files':[{
+                'path':str(path),'bytes':path.stat().st_size,
+                'sha256':hashlib.sha256(path.read_bytes()).hexdigest()}],
+                'delivery_directories':[{'path':str(source),'members':['owned'],'directories':[]}]}
+            runner = native.Runner(str(Path(temporary)/'output'),sources=(str(path),str(source)))
+            # Route the existing physical reader to this owned temporary fixture.
+            # The complete delivery implementation and all its timers are real.
+            with patch.object(native,'DAEMON_SOURCE_PREFIX',str(Path(temporary))+'/'):
+                before = native.delivery_snapshot(runner,approval,{str(path),str(source)})
+                qualify_source.final_sources(runner,approval,native,before)
+            self.assertIsNone(runner.first)
+            self.assertEqual(json.loads((runner.output/'source-after.json').read_bytes()),before)
+            self.assertEqual(runner.finish(),0)
+
+    def test_qualifier_original_host_window_forbids_delayed_entry(self):
+        raw = Path(sys.argv[3]).read_bytes()
+        boot = types.ModuleType('source_window_boot')
+        boot.__file__ = '/run/desktop/mnt/host/c/Users/ddriz/Projects/zns-chatbot/qa.local/c-installed-f03-finish-20261005/clean-linux1/l2-linux-source2/boot_operator.py'
+        exec(compile(raw,boot.__file__,'exec'),boot.__dict__)
+        root_sha = 'a'*64
+        boot.M0,boot.U0 = time.monotonic()-89.8,time.time()-89.8
+        boot.ACTIVE,boot.TOTAL = boot.M0+90,boot.M0+120
+        boot.UTC_ACTIVE,boot.UTC_TOTAL = boot.U0+90,boot.U0+120
+        # Real producer, real delay and real consumer clocks; no mocked clock.
+        emitted = boot.original_window(root_sha)
+        body = json.dumps(emitted,sort_keys=True).encode()
+        pin = hashlib.sha256(body).hexdigest()
+        mapped = qualify_source.mapped_window(body,pin,root_sha)
+        self.assertLessEqual(mapped['active_utc'],emitted['active_utc'])
+        self.assertLessEqual(mapped['total_utc'],emitted['total_utc'])
+        self.assertGreater(mapped['time_namespace_inode'],0)
+        time.sleep(.3)
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary)/'window.json'
+            path.write_bytes(body)
+            args = ['qualify_source.py','--approval','unread-approval','--approval-sha256',
+                    root_sha,'--window',str(path),'--window-sha256',pin,
+                    '--output',str(Path(temporary)/'must-not-exist')]
+            with patch.object(sys,'argv',args),patch.object(qualify_source,'load_native',
+                    side_effect=AssertionError('expired entry cannot acquire native dispatcher')) as acquire:
+                with self.assertRaisesRegex(ValueError,'expired'):
+                    qualify_source.main()
+                acquire.assert_not_called()
+            self.assertFalse((Path(temporary)/'must-not-exist').exists())
+        changed = {**emitted,'clamped_total_utc':emitted['clamped_total_utc']+1}
+        wrong = json.dumps(changed).encode()
+        with self.assertRaisesRegex(ValueError,'UTC clamp'):
+            qualify_source.mapped_window(wrong,hashlib.sha256(wrong).hexdigest(),root_sha)
+
+    def test_qualifier_terminal_sync_expiry_cannot_accept(self):
+        native = self.native()
+        with tempfile.TemporaryDirectory() as temporary:
+            runner = native.Runner(str(Path(temporary)/'output'),active=1,cleanup=1)
+            runner.end = time.monotonic()+.05
+            runner.utc_end = time.time()+1
+
+            def delayed(_fd):
+                time.sleep(.2)
+
+            with patch.object(native.os,'fsync',side_effect=delayed):
+                self.assertEqual(runner.finish(),1)
+            self.assertIsNotNone(runner.first)
+            terminal = runner.output/'terminal.json'
+            if terminal.exists():
+                self.assertIsNone(json.loads(terminal.read_bytes())['pass'])
 
     def test_actual_bootstrap_artifact_mutations_stop_before_lifecycle(self):
         native = self.native()
