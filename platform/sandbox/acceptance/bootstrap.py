@@ -1,0 +1,390 @@
+"""Literal clean-C bootstrap using the accepted runner's native custody."""
+import copy
+import json
+import math
+import os
+from pathlib import Path
+import re
+import time
+
+PRODUCT = '36264bb8ef6e1a603cc0c4a0cc7e32b412c12cb8'
+BINARY = '488a8accc0f4072236a6b779837a28fa6312bf0769573023271ad85d767e1261'
+RUNTIME = ['app','evaluator','media-decoder','media-broker','sticker-decoder','sticker-broker']
+STEPS = [
+    {'service':'tool','command':['migrate'],'environment':{}},
+    {'service':'tool','command':['fixture'],'environment':{}},
+    {'service':'tool','command':['product-fixture'],'environment':{}},
+    {'service':'tool','command':['product-fixture'],'environment':{
+        'REGISTRATION_FIXTURE_ACTION':'init',
+        'REGISTRATION_FIXTURE_STAND':'synthetic-qa-zns-registration-fixture',
+        'REGISTRATION_FIXTURE_OPENS_AT':'2030-10-02T13:00:00Z',
+        'REGISTRATION_FIXTURE_CLOCK_ANCHOR':'2030-10-02T12:00:00Z'}},
+    {'service':'roles','command':None,'environment':{}},
+    {'service':'clock-init','command':None,'environment':{}},
+    {'service':'clock-read','command':None,'environment':{}},
+]
+PREREQUISITES = [
+    'current-source-and-executable','genuine-bounded-clock-read',
+    'private-config-role-row-and-fresh-data-continuity',
+    'six-complete-native-prelaunch-constructors','native-ro-app-owner-bind-probes',
+    'separately-bounded-current-provider-delivery',
+]
+
+
+def graph_constructors(runner, approval, native, identities):
+    """Verify the complete owned cohort before starting PG or any product role."""
+    names = ['postgres', 'fake'] + RUNTIME
+    if set(identities) != set(names) or set(approval['services']) != set(names):
+        raise native.Failure('complete eight-role installation cohort')
+    if len(set(identities.values())) != len(names):
+        raise native.Failure('distinct full installation identities')
+    profiles = {}
+    for service in names:
+        identity = identities[service]
+        if not re.fullmatch('[a-f0-9]{64}', identity):
+            raise native.Failure('full installation identity')
+        profile = runner.inspect(identity)
+        if (profile['Id'] != identity or profile['State']['Status'] != 'created'
+                or profile['State']['Pid'] != 0 or profile['State']['Running']
+                or profile['State']['StartedAt'] != '0001-01-01T00:00:00Z'):
+            raise native.Failure('complete never-started installation cohort')
+        native.constructor(profile, approval['services'][service],
+                           approval['project'], service, approval['owner'])
+        profiles[service] = profile
+    return profiles
+
+
+def create_graph(runner, approval, native):
+    """Create only the eight literal roles from the validated saved producer."""
+    project,command,services,resources = native.compose_config(runner,approval)
+    names = ['postgres','fake']+RUNTIME
+    if set(services)!=set(names) or approval.get('retain_owned_stand') is not True:
+        raise native.Failure('literal owned installation graph retention')
+    if runner.docker('ps','-aq','--filter','label=com.docker.compose.project='+project).strip():
+        raise native.Failure('fresh isolated installation project')
+    for expected in services.values():
+        if runner.docker('ps','-aq','--filter','name=^/'+re.escape(expected['name'])+'$').strip():
+            raise native.Failure('fresh declared installation name')
+    for kind,expected in resources:
+        if expected['name'] in native.resource_names(runner,kind,expected['name']):
+            raise native.Failure('fresh declared installation resource')
+    with native.intake_deadline(runner.work_end,runner.work_utc_end):
+        native.read_pinned(command[-1],runner.create_compose_pin)
+    runner.owned = names
+    runner.unresolved_resources = True
+    runner.docker(*command,'create','--no-build','--pull','never',*names)
+    discovered = runner.docker('ps','-aq','--no-trunc','--filter',
+                               'label=com.docker.compose.project='+project).decode().split()
+    if len(discovered)!=8:
+        raise native.Failure('full installation birth discovery custody')
+    identities = {}
+    for identity in discovered:
+        if not re.fullmatch('[a-f0-9]{64}',identity):
+            raise native.Failure('full installation birth identity')
+        profile = runner.inspect(identity)
+        service = profile['Config']['Labels'].get('com.docker.compose.service')
+        if (profile['Id']!=identity or service not in services or service in identities
+                or not native.owned_profile(profile,project,service,approval['owner'])):
+            raise native.Failure('complete distinct owned installation births')
+        identities[service] = identity
+    graph_constructors(runner,approval,native,identities)
+    for kind,expected in resources:
+        profile = json.loads(runner.docker(kind,'inspect',expected['name']))[0]
+        native.resource_guard(profile,expected,project,approval['owner'],kind)
+    # Only a complete full-ID cohort and independently verified owned resources
+    # retire unknown-birth custody; known stand ownership persists for F03.
+    runner.installation_ids = identities
+    runner.installation_resources = resources
+    runner.unresolved_resources = False
+    return identities
+
+
+def start_postgres(runner, approval, native, identities):
+    """Start only the verified fresh PG; reuse the original active deadline."""
+    graph_constructors(runner, approval, native, identities)
+    identity = identities['postgres']
+    runner.docker('start', identity)
+    while True:
+        if min(runner.work_end-time.monotonic(), runner.work_utc_end-time.time()) <= 0:
+            raise native.Failure('original PG prerequisite deadline')
+        profile = runner.inspect(identity)
+        native.constructor(profile, approval['services']['postgres'],
+                           approval['project'], 'postgres', approval['owner'])
+        state = profile['State']
+        if not state['Running'] or state['Pid'] <= 0 or state['OOMKilled']:
+            raise native.Failure('actual PG prerequisite process')
+        health = state.get('Health', {}).get('Status')
+        if health == 'healthy':
+            return profile
+        if health not in ('starting', 'unhealthy'):
+            raise native.Failure('actual PG healthcheck required')
+        remaining = min(runner.work_end-time.monotonic(), runner.work_utc_end-time.time())
+        if remaining <= 0:
+            raise native.Failure('original PG prerequisite deadline')
+        time.sleep(min(.1, remaining))
+
+
+def clock_readback(native, raw):
+    """Validate the real clock-read result before any runtime role can start."""
+    state = json.loads(raw)
+    expected = {
+        'version': 1, 'installation': '010400000204',
+        'case': 'c-registration-clock-20261001-v1',
+        'stand': 'synthetic-qa-zns-registration-fixture',
+        'database_address': 'postgres:5432/synthetic_qa_zns_registration_fixture',
+        'anchor': '2030-10-02T12:00:00Z',
+        'current': '2030-10-02T12:00:00Z', 'revision': 1,
+    }
+    if not native.same(state, expected):
+        raise native.Failure('genuine initial registration clock readback')
+    return state
+
+
+def continuity_readback(native, raw):
+    """Check actual read-only DB facts, without contacts, passwords or names."""
+    state = json.loads(raw)
+    expected = {
+        'database': 'synthetic_qa_zns_registration_fixture',
+        'session_user': 'zns_registration_operator',
+        'database_owner': 'zns_app', 'fixture_owner': 'zns_app',
+        'actors': [{'id':'alice','telegram_id':101}, {'id':'bob','telegram_id':202},
+                   {'id':'visitor','telegram_id':303}],
+        'product_markers': ['product-passport-v1','product-v1','registration-fqa-v1'],
+        'booking_count': 0, 'intent_count': 0, 'ingress_count': 0,
+        'booking_admins': ['visitor'],
+        'payment_admins': [{'event_id':'registration-fixture-a','owner':'bob'}],
+        'registration_tiers': [
+            {'event_id':'registration-fixture-a','position':0,'starts_at':'2030-10-02T13:00:00+00:00'},
+            {'event_id':'registration-fixture-a','position':1,'starts_at':'2030-10-03T13:00:00+00:00'},
+            {'event_id':'registration-fixture-b','position':0,'starts_at':'2030-10-02T13:00:00+00:00'}],
+        'allocated_roles': ['zns_app','zns_fake','zns_inventory','zns_meter',
+                            'zns_registration_operator'],
+        'role_memberships': [{'member':'zns_inventory','role':'pg_read_all_stats','admin':False}],
+        'privileged_roles': 0,
+    }
+    if not native.same(state, expected):
+        raise native.Failure('genuine fresh database/role/actor continuity')
+    return state
+
+
+def read_continuity(runner, approval, native, identities):
+    """Use one literal read-only query with the isolated operator credential."""
+    binding = approval['continuity_sql']
+    if binding['container_path'] != '/bootstrap/read-continuity.sql':
+        raise native.Failure('literal continuity SQL mount')
+    with native.intake_deadline(runner.work_end,runner.work_utc_end):
+        native.read_bytes_pinned(binding['path'],binding['sha256'])
+    identity = identities['postgres']
+    profile = runner.inspect(identity)
+    if (profile['Id'] != identity
+            or not native.owned_profile(profile,approval['project'],'postgres',approval['owner'])
+            or profile['Image'] != approval['services']['postgres']['image']
+            or not profile['State']['Running'] or profile['State']['OOMKilled']):
+        raise native.Failure('owned current PG for continuity read')
+    # The child has the PG constructor's root UID only to read its existing RO
+    # secret. SQL authenticates as the narrow registration operator, not postgres.
+    command = ('set -eu; PGPASSWORD=$(cat /run/secrets/operator_password); '
+               'export PGPASSWORD; exec psql --no-psqlrc -q -A -t '
+               '--host=127.0.0.1 --username=zns_registration_operator '
+               '--dbname=synthetic_qa_zns_registration_fixture '
+               '-v ON_ERROR_STOP=1 -v ECHO=none -f /bootstrap/read-continuity.sql')
+    raw = runner.docker('exec','--user','0',identity,'/bin/sh','-c',command)
+    result = continuity_readback(native,raw)
+    with native.intake_deadline(runner.work_end,runner.work_utc_end):
+        native.read_bytes_pinned(binding['path'],binding['sha256'])
+    return raw, result
+
+
+def start_provider(runner, approval, native, identities, bootstrap_results, continuity_raw):
+    """Start the current Fake only after actual bootstrap and readback checks."""
+    if [(item['step'], item['service']) for item in bootstrap_results] != [
+            (index, step['service']) for index, step in enumerate(STEPS, 1)]:
+        raise native.Failure('complete actual bootstrap result order')
+    clock_readback(native, bootstrap_results[-1]['raw'])
+    continuity_readback(native, continuity_raw)
+    project, owner = approval['project'], approval['owner']
+    for service in ['fake'] + RUNTIME:
+        profile = runner.inspect(identities[service])
+        native.constructor(profile, approval['services'][service], project, service, owner)
+        if (profile['State']['Status'] != 'created' or profile['State']['Pid'] != 0
+                or profile['State']['StartedAt'] != '0001-01-01T00:00:00Z'):
+            raise native.Failure('provider/runtime prelaunch state')
+    identity = identities['fake']
+    runner.docker('start', identity)
+    while True:
+        remaining = min(runner.work_end-time.monotonic(), runner.work_utc_end-time.time())
+        if remaining <= 0:
+            raise native.Failure('original current provider deadline')
+        profile = runner.inspect(identity)
+        native.constructor(profile, approval['services']['fake'], project, 'fake', owner)
+        state = profile['State']
+        if not state['Running'] or state['Pid'] <= 0 or state['OOMKilled']:
+            raise native.Failure('actual current provider process')
+        if state.get('Health', {}).get('Status') == 'healthy':
+            return profile
+        time.sleep(min(.1, remaining))
+
+
+def start_runtime(runner, approval, native, identities):
+    """Consume a separately admitted Linux M0; never arm or extend a window.
+
+    ROOT authenticates the six actual prerequisite receipts before this phase.
+    Returning process startup is not health, G600, full/final or Functional QA.
+    """
+    anchor = approval['installation_anchor']
+    if (approval['authority'] != 'ROOT' or anchor['authority'] != 'ROOT'
+            or anchor['prerequisites_passed'] != PREREQUISITES
+            or anchor['product_source'] != PRODUCT
+            or anchor['product_binary_sha256'] != BINARY
+            or anchor['boot_id'] != Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+            or anchor['time_namespace_inode'] != os.stat('/proc/self/ns/time').st_ino):
+        raise native.Failure('same Linux anchor and all six admitted prerequisites')
+    mono, utc = anchor['monotonic'], anchor['utc']
+    if (type(mono) not in (int,float) or type(utc) not in (int,float)
+            or not math.isfinite(mono) or not math.isfinite(utc)
+            or mono > time.monotonic() or utc > time.time()
+            or anchor['windows'] != {'startup':30,'guard':600,'readiness':90,
+                                     'child':22332,'outer':22344}):
+        raise native.Failure('original absolute installation windows')
+    startup_end, startup_utc = mono+30, utc+30
+    project, owner = approval['project'], approval['owner']
+    for service in RUNTIME:
+        profile = runner.inspect(identities[service])
+        native.constructor(profile, approval['services'][service], project, service, owner)
+        if (profile['State']['Status'] != 'created' or profile['State']['Pid'] != 0
+                or profile['State']['StartedAt'] != '0001-01-01T00:00:00Z'):
+            raise native.Failure('six exact never-started runtime constructors')
+    remaining = min(startup_end-time.monotonic(), startup_utc-time.time())
+    if remaining <= 0:
+        raise native.Failure('original F30 startup deadline')
+    runner.docker('start', *(identities[service] for service in RUNTIME),
+                  seconds=min(15,remaining))
+    profiles = {}
+    for service in RUNTIME:
+        if min(startup_end-time.monotonic(),startup_utc-time.time()) <= 0:
+            raise native.Failure('original F30 process startup deadline')
+        profile = runner.inspect(identities[service])
+        if (profile['Id'] != identities[service]
+                or not native.owned_profile(profile,project,service,owner)
+                or profile['Image'] != approval['services'][service]['image']
+                or not profile['State']['Running'] or profile['State']['Pid'] <= 0
+                or profile['State']['OOMKilled']):
+            raise native.Failure('six actual owned runtime processes')
+        profiles[service] = profile
+    if min(startup_end-time.monotonic(),startup_utc-time.time()) <= 0:
+        raise native.Failure('original F30 final process observation deadline')
+    return profiles
+
+
+def runtime_readiness(runner, approval, native, identities):
+    """Observe genuine app HTTP health under the same original M0+90 cutoff."""
+    anchor = approval['installation_anchor']
+    limit, utc_limit = anchor['monotonic']+90, anchor['utc']+90
+    while True:
+        remaining = min(limit-time.monotonic(),utc_limit-time.time(),
+                        runner.work_end-time.monotonic(),runner.work_utc_end-time.time())
+        if remaining <= 0:
+            raise native.Failure('original readiness deadline')
+        profile = runner.inspect(identities['app'])
+        if (profile['Id'] != identities['app']
+                or not native.owned_profile(profile,approval['project'],'app',approval['owner'])
+                or profile['Image'] != approval['services']['app']['image']
+                or not profile['State']['Running'] or profile['State']['OOMKilled']):
+            raise native.Failure('actual readiness app identity/process')
+        expected = approval['services']['app']['invariants']['Config.Healthcheck']
+        if not native.same(profile['Config'].get('Healthcheck'),expected):
+            raise native.Failure('current complete HTTP healthcheck constructor')
+        if profile['State'].get('Health',{}).get('Status') == 'healthy':
+            if min(limit-time.monotonic(),utc_limit-time.time()) <= 0:
+                raise native.Failure('original readiness final observation deadline')
+            return profile
+        time.sleep(min(.1,remaining))
+
+
+def bootstrap_contract(runner, approval, native):
+    """Read the authenticated actual artifact, not caller-selected commands."""
+    binding = approval['bootstrap']
+    with native.intake_deadline(runner.work_end, runner.work_utc_end):
+        contract = native.read_pinned(binding['path'], binding['sha256'])
+    if (contract['project'] != 'synthetic-qa-c-current'
+            or approval['project'] != contract['project']
+            or contract['product_source'] != PRODUCT
+            or contract['product_binary_sha256'] != BINARY
+            or contract['sole_writer'] != 'c_installed_f03_finish'
+            or contract['steps'] != STEPS or contract['runtime_services'] != RUNTIME
+            or contract['prerequisite_services'] != ['postgres','fake']):
+        raise native.Failure('literal current C bootstrap contract')
+    windows = contract['installation_windows']
+    if (windows['prerequisites_before_arm'] != PREREQUISITES
+            or [windows[key] for key in ('startup_seconds','guard_deadline_offset_seconds',
+                'readiness_seconds','child_deadline_offset_seconds','outer_deadline_offset_seconds')]
+                != [30,600,90,22332,22344]):
+        raise native.Failure('original C prerequisites and absolute windows')
+    if contract['prerequisite_start_order'] != {
+            'before_steps':['postgres'],'after_steps':['fake'],
+            'runtime_start_requires':'all six prerequisites passed and ROOT admitted the original Linux anchor'}:
+        raise native.Failure('PG/bootstrap/provider/runtime start order')
+    return contract
+
+
+def run_bootstrap(runner, approval, native, rendered):
+    """Execute only the seven admitted bootstrap constructors, one at a time.
+
+    Caller owns the verified running PG and existing graph. This function cannot
+    start Fake or any runtime service, arm M0 or certify the six prerequisites.
+    """
+    bootstrap_contract(runner, approval, native)
+    plans = approval['bootstrap_constructors']
+    if len(plans) != len(STEPS):
+        raise native.Failure('seven complete bootstrap native constructors required')
+    project, owner = approval['project'], approval['owner']
+    results = []
+    for index, (step, expected) in enumerate(zip(STEPS, plans), 1):
+        service = step['service']
+        if expected['name'] != project+'-'+service+'-1':
+            raise native.Failure('literal bootstrap constructor name')
+        config = copy.deepcopy(rendered)
+        role = config['services'][service]
+        if role.get('profiles') != ['maintenance'] or role.get('restart') != 'no':
+            raise native.Failure('explicit inactive maintenance constructor')
+        if step['command'] is not None:
+            role['command'] = step['command']
+        role.setdefault('environment',{}).update(step['environment'])
+        image = json.loads(runner.docker('image','inspect',expected['image']))[0]
+        native.rendered_guard(role,expected,image,config)
+        path = runner.output / ('bootstrap-%02d.compose.json' % index)
+        raw = json.dumps(native.literal_compose(config),sort_keys=True).encode()
+        runner.save(path.name,raw)
+        with native.intake_deadline(runner.work_end,runner.work_utc_end):
+            native.read_pinned(path,native.digest(raw))
+        name = expected['name']
+        if runner.docker('ps','-aq','--no-trunc','--filter','name=^/'+re.escape(name)+'$').strip():
+            raise native.Failure('fresh serial bootstrap helper required')
+        # An empty CREATE response cannot retire discovery responsibility.
+        runner.unresolved_resources = True
+        runner.docker('compose','--project-name',project,'--file',str(path),
+                      'create','--no-build','--pull','never',service)
+        ids = runner.docker('ps','-aq','--no-trunc','--filter','name=^/'+re.escape(name)+'$').decode().split()
+        if len(ids)!=1 or not re.fullmatch('[a-f0-9]{64}',ids[0]):
+            raise native.Failure('bootstrap full-ID discovery custody')
+        identity = ids[0]
+        profile = runner.inspect(identity)
+        if (profile['Id'] != identity or not native.owned_profile(profile,project,service,owner)
+                or profile['State']['Status']!='created' or profile['State']['Pid']!=0):
+            raise native.Failure('owned never-started bootstrap helper')
+        native.constructor(profile,expected,project,service,owner)
+        remaining = min(runner.work_end-time.monotonic(),runner.work_utc_end-time.time())
+        output = runner.docker('start','--attach',identity,seconds=remaining)
+        final = runner.inspect(identity)
+        native.constructor(final,expected,project,service,owner)
+        if (final['State']['Status']!='exited' or final['State']['Pid']!=0
+                or final['State']['ExitCode']!=0 or final['State']['OOMKilled']):
+            raise native.Failure('actual bootstrap exit/reap state')
+        runner.docker('rm',identity)
+        if (runner.docker('ps','-aq','--no-trunc','--filter','id='+identity).strip()
+                or runner.docker('ps','-aq','--no-trunc','--filter','name=^/'+re.escape(name)+'$').strip()):
+            raise native.Failure('bootstrap full-ID/name absence')
+        runner.unresolved_resources = False
+        results.append({'step':index,'service':service,'id':identity,'raw':output})
+    clock_readback(native, results[-1]['raw'])
+    return results
