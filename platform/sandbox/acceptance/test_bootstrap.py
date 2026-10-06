@@ -699,8 +699,15 @@ class Contracts(unittest.TestCase):
             with patch.object(native,'Runner',side_effect=AssertionError('invalid binding precedes output')) as created:
                 missing = ['installation.py','--approval',str(grant),'--approval-sha256',root_sha,
                            '--output',str(output)]
+                original_import = __import__
+
+                def before_native(name,*args,**kwargs):
+                    if name=='run':
+                        self.fail('missing window precedes native import')
+                    return original_import(name,*args,**kwargs)
+
                 with patch.object(sys,'argv',missing), \
-                        patch('builtins.__import__',side_effect=AssertionError('missing window precedes native import')), \
+                        patch('builtins.__import__',side_effect=before_native), \
                         patch.object(native,'read_pinned',side_effect=AssertionError('missing window precedes grant intake')) as intake, \
                         self.assertRaisesRegex(ValueError,'original prerequisite window'):
                     installation.main()
