@@ -114,6 +114,9 @@ func assertModernRuntimeFixtureConsumed(t *testing.T, f *fixture, update int64, 
 		NextTurn int `json:"next_turn"`
 	}
 	require.NoError(t, json.NewDecoder(response.Body).Decode(&state))
+	if state.Accepted != steps || state.NextTurn != steps || state.Rejected != 0 {
+		modernRuntimeDiagnostics(t, f, update)
+	}
 	assert.Equal(t, steps, state.Accepted)
 	assert.Equal(t, steps, state.NextTurn)
 	assert.Zero(t, state.Rejected)
