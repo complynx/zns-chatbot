@@ -156,6 +156,9 @@ func TestOrderPagingNavigationRetiresOldCardsAndSurvivesRestart(t *testing.T) {
 	assert.Contains(t, pagingCard(t, f, 101, "paging:orders").Text, "1/1")
 	assert.Empty(t, pagingCard(t, f, 101, "paging:orders").Markup.Rows)
 	assert.Empty(t, pagingCard(t, f, 101, "page-0023").Markup.Rows)
+	if t.Failed() {
+		logOrderPagingDeliveryState(t, f)
+	}
 	_, err = f.db.Exec(t.Context(), `UPDATE core.orders SET state='deleted'`)
 	require.NoError(t, err)
 	next.ID = 200

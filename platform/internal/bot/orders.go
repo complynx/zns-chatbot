@@ -134,24 +134,32 @@ func (b *Bot) orderOutcome(ctx context.Context, owner string, update int64,
 	return b.orderMessage(ctx, owner, i18n.OrderUpdated, nil)
 }
 func (b *Bot) orderButton(ctx context.Context, owner, label string, command orders.Command) (telegram.Button, error) {
+	button, encoded, err := b.encodeOrderButton(label, command)
+	if err != nil {
+		return telegram.Button{}, err
+	}
+	_, err = b.DB.Exec(
+		ctx,
+		`INSERT INTO bot.order_buttons(owner,token,command) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
+		owner,
+		strings.TrimPrefix(button.Data, orderCallbackPrefix),
+		encoded,
+	)
+	return button, core.DatabaseOperationError(err)
+}
+
+func (b *Bot) encodeOrderButton(label string, command orders.Command) (telegram.Button, []byte, error) {
 	if command.EventID == "" {
 		command.EventID = b.currentOrderEvent()
 	}
 	command.Origin = originManual
 	encoded, err := json.Marshal(command)
 	if err != nil {
-		return telegram.Button{}, err
+		return telegram.Button{}, nil, err
 	}
 	digest := sha256.Sum256(encoded)
 	token := hex.EncodeToString(digest[:16])
-	_, err = b.DB.Exec(
-		ctx,
-		`INSERT INTO bot.order_buttons(owner,token,command) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,
-		owner,
-		token,
-		encoded,
-	)
-	return telegram.Button{Text: label, Data: orderCallbackPrefix + token}, core.DatabaseOperationError(err)
+	return telegram.Button{Text: label, Data: orderCallbackPrefix + token}, encoded, nil
 }
 
 func (b *Bot) RenderOrders(ctx context.Context, owner string, chat int64) error {
@@ -181,13 +189,13 @@ func (b *Bot) RenderOrders(ctx context.Context, owner string, chat int64) error 
 	if err != nil {
 		return err
 	}
-	for _, order := range list {
-		payload, renderError := b.orderPayload(ctx, owner, chat, order, event, admins, false, preference.Language)
-		if renderError != nil {
-			return renderError
-		}
+	payloads, err := b.orderPagePayloads(ctx, owner, chat, list, event, admins, preference.Language)
+	if err != nil {
+		return err
+	}
+	for index, order := range list {
 		active[order.ID] = true
-		if err = b.deliverOrderCard(ctx, owner, order.ID, payload); err != nil {
+		if err = b.deliverOrderCard(ctx, owner, order.ID, payloads[index]); err != nil {
 			return err
 		}
 		if err = b.refreshPaymentInstructions(ctx, owner, chat, order, active); err != nil {
@@ -201,6 +209,38 @@ func (b *Bot) RenderOrders(ctx context.Context, owner string, chat int64) error 
 		return err
 	}
 	return b.retireOrderCards(ctx, owner, chat, active, available, preference.Language)
+}
+
+func (b *Bot) orderPagePayloads(ctx context.Context, owner string, chat int64,
+	list []orders.Order, event orders.Event, admins []orders.PaymentAdmin, language string,
+) ([]telegram.Send, error) {
+	var tokens, commands []string
+	button := func(label string, command orders.Command) (telegram.Button, error) {
+		result, encoded, encodeErr := b.encodeOrderButton(label, command)
+		if encodeErr == nil {
+			tokens = append(tokens, strings.TrimPrefix(result.Data, orderCallbackPrefix))
+			commands = append(commands, string(encoded))
+		}
+		return result, encodeErr
+	}
+	payloads := make([]telegram.Send, len(list))
+	for index, order := range list {
+		payload, renderError := b.orderPayloadWithButtons(chat, order, event, admins, false, language, button)
+		if renderError != nil {
+			return nil, renderError
+		}
+		payloads[index] = payload
+	}
+	// Commit every callback on this page before publishing any of its cards.
+	if len(tokens) > 0 {
+		_, err := b.DB.Exec(ctx, `INSERT INTO bot.order_buttons(owner,token,command)
+ SELECT $1,token,command::jsonb FROM unnest($2::text[],$3::text[]) AS buttons(token,command)
+ ON CONFLICT DO NOTHING`, owner, tokens, commands)
+		if err != nil {
+			return nil, core.DatabaseOperationError(err)
+		}
+	}
+	return payloads, nil
 }
 
 func (b *Bot) renderOrderMenu(ctx context.Context, owner string, chat int64, canExport bool, language string) error {
@@ -316,6 +356,21 @@ func (b *Bot) orderPayload(
 	admin bool,
 	language string,
 ) (telegram.Send, error) {
+	return b.orderPayloadWithButtons(chat, order, event, admins, admin, language,
+		func(label string, command orders.Command) (telegram.Button, error) {
+			return b.orderButton(ctx, owner, label, command)
+		})
+}
+
+func (b *Bot) orderPayloadWithButtons(
+	chat int64,
+	order orders.Order,
+	event orders.Event,
+	admins []orders.PaymentAdmin,
+	admin bool,
+	language string,
+	buttonFor func(string, orders.Command) (telegram.Button, error),
+) (telegram.Send, error) {
 	amount, err := order.Choice.Total.MarshalJSON()
 	if err != nil {
 		return telegram.Send{}, err
@@ -369,7 +424,7 @@ func (b *Bot) orderPayload(
 				return payload, err
 			}
 		}
-		button, buttonError := b.orderButton(ctx, owner, action.label, action.command)
+		button, buttonError := buttonFor(action.label, action.command)
 		if buttonError != nil {
 			return payload, buttonError
 		}
