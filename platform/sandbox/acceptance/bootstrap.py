@@ -118,6 +118,24 @@ def attach_seconds(runner):
     return min(15,runner.work_end-time.monotonic(),runner.work_utc_end-time.time())
 
 
+def postgres_password_mounts(profile, approval, native):
+    """Keep propagation in actual observations outside the frozen mount projection."""
+    planned=approval['services']['postgres']['invariants']['Mounts']
+    for role in ('postgres','app','meter','inventory','fake','operator'):
+        target='/run/secrets/'+role+'_password'
+        expected=[item for item in planned if item['Destination']==target]
+        actual=[item for item in profile['Mounts'] if item['Destination']==target]
+        if len(expected)!=1 or len(actual)!=1:
+            raise native.Failure('six distinct actual PG password binds')
+        wanted,observed=expected[0],actual[0]
+        propagation='rslave' if wanted['Source']==PRIVATE_ROOT+'/'+role+'.password' else 'rprivate'
+        if (wanted['Type']!='bind' or wanted['RW'] is not False
+                or wanted['Propagation']!=propagation
+                or observed['Type']!='bind' or observed['Source']!=wanted['Source']
+                or observed['RW'] is not False or observed['Propagation']!=propagation):
+            raise native.Failure('actual PG password source/read-only/propagation')
+
+
 def graph_constructors(runner, approval, native, identities):
     """Verify the complete owned cohort before starting PG or any product role."""
     names = ['postgres', 'fake'] + RUNTIME
@@ -139,6 +157,8 @@ def graph_constructors(runner, approval, native, identities):
             raise native.Failure('complete never-started installation cohort')
         native.constructor(profile, approval['services'][service],
                            approval['project'], service, approval['owner'])
+        if service=='postgres':
+            postgres_password_mounts(profile,approval,native)
         profiles[service] = profile
     return profiles
 
@@ -201,6 +221,7 @@ def start_postgres(runner, approval, native, identities):
         profile = runner.inspect(identity)
         native.constructor(profile, approval['services']['postgres'],
                            approval['project'], 'postgres', approval['owner'])
+        postgres_password_mounts(profile,approval,native)
         state = profile['State']
         if profile['Id'] != identity or not state['Running'] or state['Pid'] <= 0 or state['OOMKilled']:
             raise native.Failure('actual PG prerequisite process')
@@ -267,6 +288,9 @@ def read_continuity(runner, approval, native, identities):
         native.read_bytes_pinned(binding['path'],binding['sha256'])
     identity = identities['postgres']
     profile = runner.inspect(identity)
+    native.constructor(profile,approval['services']['postgres'],
+                       approval['project'],'postgres',approval['owner'])
+    postgres_password_mounts(profile,approval,native)
     if (profile['Id'] != identity
             or not native.owned_profile(profile,approval['project'],'postgres',approval['owner'])
             or profile['Image'] != approval['services']['postgres']['image']
@@ -389,6 +413,8 @@ def runtime_readiness(runner, approval, native, identities):
             profile = runner.inspect(identities[service])
             native.constructor(profile,approval['services'][service],
                                approval['project'],service,approval['owner'])
+            if service=='postgres':
+                postgres_password_mounts(profile,approval,native)
             state = profile['State']
             if (profile['Id'] != identities[service] or not state['Running']
                     or state['Pid'] <= 0 or state['OOMKilled']):

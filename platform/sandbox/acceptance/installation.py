@@ -226,6 +226,8 @@ def runtime(runner, approval, native):
         profile = runner.inspect(identities[service])
         native.constructor(profile,approval['services'][service],
                            approval['project'],service,approval['owner'])
+        if service=='postgres':
+            bootstrap.postgres_password_mounts(profile,approval,native)
         state = profile['State']
         if (profile['Id']!=identities[service] or not state['Running']
                 or state['Pid']<=0 or state['OOMKilled']

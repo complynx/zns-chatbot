@@ -31,6 +31,12 @@ class Native:
         return json.dumps(left,sort_keys=True) == json.dumps(right,sort_keys=True)
 
 
+def pg_password_fixture():
+    return [{'Type':'bind','Source':bootstrap.PRIVATE_ROOT+'/'+role+'.password',
+             'Destination':'/run/secrets/'+role+'_password','RW':False,'Propagation':'rslave'}
+            for role in ('postgres','app','meter','inventory','fake','operator')]
+
+
 class Contracts(unittest.TestCase):
     @staticmethod
     def native():
@@ -1332,6 +1338,7 @@ class Contracts(unittest.TestCase):
             def inspect(self,identity):
                 service = next(name for name,value in identities.items() if value==identity)
                 return {'Id':identity,'Config':{'Healthcheck':{'Test':['CMD','health']}},
+                        'Mounts':pg_password_fixture() if service=='postgres' else [],
                         'State':{'Running':service!='media-decoder','Pid':0 if service=='media-decoder' else 1,
                                  'OOMKilled':False,'Health':{'Status':'healthy'}}}
         native = Native()
@@ -1339,6 +1346,7 @@ class Contracts(unittest.TestCase):
         native.constructor = lambda profile,expected,project,service,owner: checked.append(service)
         approval = {'services':dict.fromkeys(names,{}),'project':'synthetic-qa-c-current','owner':'owner',
                     'installation_anchor':{'monotonic':time.monotonic(),'utc':time.time()}}
+        approval['services']['postgres']={'invariants':{'Mounts':pg_password_fixture()}}
         with self.assertRaises(Native.Failure):
             bootstrap.runtime_readiness(Runner(),approval,native,identities)
         self.assertIn('app',checked)
@@ -1468,9 +1476,27 @@ class Contracts(unittest.TestCase):
 
     def test_complete_created_cohort_before_start(self):
         class Runner:
+            work_end=time.monotonic()+90
+            work_utc_end=time.time()+90
+            calls=[]
+            started=False
+            mutation=None
             def inspect(self, identity):
-                return {'Id':identity,'State':{'Status':'created','Pid':0,'Running':False,
-                                              'StartedAt':'0001-01-01T00:00:00Z'}}
+                mounts=pg_password_fixture() if identity==ids['postgres'] else []
+                if self.mutation and mounts:
+                    index,value,after_start=self.mutation
+                    if not after_start or self.started:
+                        mounts[index]['Propagation']=value
+                return {'Id':identity,'Mounts':mounts,
+                        'State':{'Status':'running' if self.started else 'created',
+                                 'Pid':1 if self.started else 0,'Running':self.started,
+                                 'StartedAt':'2030-10-02T12:00:00Z' if self.started else '0001-01-01T00:00:00Z',
+                                 'OOMKilled':False,'Health':{'Status':'healthy'}}}
+            def docker(self,*args,**kwargs):
+                self.calls.append(args)
+                if args[0]=='start':
+                    self.started=True
+                return b''
         native = Native()
         observed = []
         native.constructor = lambda profile,expected,project,service,owner: observed.append(service)
@@ -1478,6 +1504,7 @@ class Contracts(unittest.TestCase):
         ids = {name:('%064x' % index) for index,name in enumerate(names,1)}
         approval = {'services':dict.fromkeys(names,{}),'project':'synthetic-qa-c-current',
                     'owner':'c_installed_f03_finish'}
+        approval['services']['postgres']={'invariants':{'Mounts':pg_password_fixture()}}
         bootstrap.graph_constructors(Runner(),approval,native,ids)
         self.assertEqual(observed,names)
         wrong = dict(ids)
@@ -1499,6 +1526,25 @@ class Contracts(unittest.TestCase):
         with patch.object(runner,'inspect',side_effect=AssertionError('Prefix IDs cannot be inspected')):
             with self.assertRaises(Native.Failure):
                 bootstrap.graph_constructors(runner,approval,native,{**ids,'postgres':'a'*12})
+        unchanged=copy.deepcopy(approval)
+        projection=self.native().mount_invariants
+        for index in range(6):
+            for value in ('rprivate','rshared'):
+                for after_start in (False,True):
+                    with self.subTest(actual_pg_password=index,propagation=value,after_start=after_start):
+                        runner=Runner()
+                        runner.calls=[]
+                        runner.mutation=(index,value,after_start)
+                        inspected=runner.inspect(ids['postgres'])
+                        if after_start:
+                            inspected['Mounts'][index]['Propagation']=value
+                        self.assertEqual(projection(inspected['Mounts']),
+                                         projection(approval['services']['postgres']['invariants']['Mounts']))
+                        with patch.object(bootstrap,'check_delivery',return_value=[]), \
+                                self.assertRaises(Native.Failure):
+                            bootstrap.start_postgres(runner,approval,native,ids)
+                        self.assertEqual(runner.calls,[('start',ids['postgres'])] if after_start else [])
+                        self.assertEqual(approval,unchanged)
 
     def test_fresh_role_and_row_contract(self):
         state = {
