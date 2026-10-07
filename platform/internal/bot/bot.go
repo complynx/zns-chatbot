@@ -29,6 +29,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
 	"github.com/complynx/zns-chatbot/platform/internal/registrationingress"
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 	"github.com/complynx/zns-chatbot/platform/internal/workflow"
 )
@@ -661,6 +662,7 @@ func (b *Bot) Run(ctx context.Context) (runErr error) {
 	}
 	fatal := make(chan error, 1)
 	stopDelivery := startBotDelivery(ctx, b.dispatchQueuedDeliveries, func(err error) {
+		runtimeapp.BeginShutdown(ctx)
 		select {
 		case fatal <- err:
 		default:
@@ -682,6 +684,7 @@ func (b *Bot) runPolling(ctx context.Context, conn *pgxpool.Conn, offset int64) 
 			return core.ErrDatabase
 		}
 		if cancellation := ctx.Err(); cancellation != nil {
+			runtimeapp.BeginShutdown(ctx)
 			return cancellation
 		}
 		if err = b.handlePollError(ctx, err); err != nil {
@@ -695,10 +698,12 @@ func (b *Bot) runPolling(ctx context.Context, conn *pgxpool.Conn, offset int64) 
 		}
 		select {
 		case <-ctx.Done():
+			runtimeapp.BeginShutdown(ctx)
 			return nil
 		case <-time.After(pollInterval):
 		}
 	}
+	runtimeapp.BeginShutdown(ctx)
 	return nil
 }
 
@@ -717,7 +722,8 @@ func (b *Bot) handlePollError(ctx context.Context, err error) error {
 }
 
 func (b *Bot) unlock(ctx context.Context, conn *pgxpool.Conn) {
-	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), unlockTimeout)
+	runtimeapp.BeginShutdown(ctx)
+	cleanup, cancel := runtimeapp.CompletionContext(ctx, unlockTimeout)
 	defer cancel()
 	if _, err := conn.Exec(cleanup, `SELECT pg_advisory_unlock(918273)`); err != nil {
 		b.logger().WarnContext(ctx, "bot lock cleanup failed", "error", err)

@@ -41,18 +41,20 @@ func runAdmitted(ctx context.Context, admission runtimeAdmission, work func(cont
 		defer close(watched)
 		select {
 		case <-admission.Done():
+			BeginShutdown(ctx)
 			close(lost)
 			cancel(errors.Join(ErrLost, admission.Err()))
 		case <-finished:
 		}
 	}()
 	defer func() {
+		BeginShutdown(ctx)
 		cancel(context.Canceled)
 		close(finished)
 		<-watched
-		cleanup, stop := context.WithTimeout(context.Background(), cleanupTimeout)
+		cleanup, stop := CompletionContext(ctx, cleanupTimeout)
 		defer stop()
-		result = errors.Join(result, admission.Close(cleanup))
+		result = errors.Join(result, admission.Close(cleanup), ShutdownError(ctx))
 	}()
 	if err := owned.Err(); err != nil {
 		return err

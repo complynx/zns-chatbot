@@ -33,11 +33,12 @@ func commandRole(command string) (runtimeapp.Role, bool) {
 }
 
 func closeRuntime(ctx context.Context, cfg config.Config, runtime *observability.Runtime, db *pgxpool.Pool) error {
+	runtimeapp.BeginShutdown(ctx)
 	err := flushTelemetry(ctx, runtime, cfg.Shutdown.TelemetryFlush)
 	if db != nil {
 		db.Close()
 	}
-	return err
+	return errors.Join(err, runtimeapp.ShutdownError(ctx))
 }
 
 // openRuntimeDatabase applies deployment identity before the pool's initial ping.

@@ -43,8 +43,9 @@ func serveListener(ctx context.Context, listener net.Listener, handler http.Hand
 	go func() {
 		select {
 		case <-ctx.Done():
+			runtimeapp.BeginShutdown(ctx)
 			active.stop()
-			shutdown, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Shutdown.Drain)
+			shutdown, cancel := runtimeapp.CompletionContext(ctx, cfg.Shutdown.Drain)
 			defer cancel()
 			err := server.Shutdown(shutdown)
 			if err != nil {
@@ -66,7 +67,7 @@ func serveListener(ctx context.Context, listener net.Listener, handler http.Hand
 	if errors.Is(err, http.ErrServerClosed) {
 		err = nil
 	}
-	return errors.Join(err, drainErr)
+	return errors.Join(err, drainErr, runtimeapp.ShutdownError(ctx))
 }
 
 // Handlers must honor request cancellation. Stop admission before joining so

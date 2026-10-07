@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 )
 
 // A completed wire attempt must record its outcome even if shutdown cancelled
 // the caller. The serial worker still joins this bounded persistence operation.
 func deliveryCompletionContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(context.WithoutCancel(ctx), unlockTimeout)
+	return runtimeapp.CompletionContext(ctx, unlockTimeout)
 }
 
 // startBotDelivery runs one delivery pass at a time, independently of ingress.

@@ -11,6 +11,7 @@ import (
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/config"
 	"github.com/complynx/zns-chatbot/platform/internal/observability"
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 )
 
 // Match the clients' existing defaults when supplying instrumented transports.
@@ -50,9 +51,10 @@ func telemetryClient(runtime *observability.Runtime, operation string, timeout t
 }
 
 func flushTelemetry(ctx context.Context, runtime *observability.Runtime, timeout time.Duration) error {
-	flush, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	runtimeapp.BeginShutdown(ctx)
+	flush, cancel := runtimeapp.CompletionContext(ctx, timeout)
 	defer cancel()
-	return runtime.Shutdown(flush)
+	return errors.Join(runtime.Shutdown(flush), runtimeapp.ShutdownError(ctx))
 }
 
 type observedModel struct {

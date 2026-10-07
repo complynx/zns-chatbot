@@ -54,10 +54,27 @@ func run() error {
 		return err
 	}
 	logger := configuredLogger(os.Stderr, cfg)
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx, finishShutdown := runtimeapp.WithShutdownBudget(ctx, cfg.Shutdown.Drain)
+	defer finishShutdown()
 	defer cancel()
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signals)
+	go func() {
+		select {
+		case <-signals:
+			runtimeapp.BeginShutdown(ctx)
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 	if cfg.ParentStdin {
-		go func() { _, _ = io.Copy(io.Discard, os.Stdin); cancel() }()
+		go func() {
+			_, _ = io.Copy(io.Discard, os.Stdin)
+			runtimeapp.BeginShutdown(ctx)
+			cancel()
+		}()
 	}
 	if os.Args[1] == "health" {
 		healthContext, c := context.WithTimeout(ctx, cfg.Server.HealthTimeout)
@@ -93,6 +110,8 @@ func runCommandWithDatabase(
 	runtime *observability.Runtime,
 	openDatabase func(context.Context, config.Config, *observability.Runtime) (*pgxpool.Pool, error),
 ) (result error) {
+	ctx, finishShutdown := runtimeapp.WithShutdownBudget(ctx, cfg.Shutdown.Drain)
+	defer finishShutdown()
 	registrationClock, clockConfigured, clockErr := preflightRegistrationClock(ctx, command, cfg)
 	if clockErr != nil {
 		return clockErr

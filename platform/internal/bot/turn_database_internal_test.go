@@ -16,7 +16,7 @@ import (
 
 func TestTurnFailurePropagatesOnlyDatabaseProvenance(t *testing.T) {
 	t.Parallel()
-	leaves := turnLeaves{}
+	leaves := turnLeaves{bot: &Bot{}}
 	for name, scenario := range map[string]struct {
 		err       error
 		propagate bool

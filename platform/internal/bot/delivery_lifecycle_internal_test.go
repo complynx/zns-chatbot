@@ -6,7 +6,24 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 )
+
+func TestReceiptCompletionTracksOnlyOwnerShutdown(t *testing.T) {
+	t.Parallel()
+	owner, finish := runtimeapp.WithShutdownBudget(t.Context(), 30*time.Millisecond)
+	defer finish()
+	request, cancel := context.WithCancel(owner)
+	cancel()
+	receipt, complete := deliveryCompletionContext(request)
+	defer complete()
+	require.NoError(t, receipt.Err(), "request cancellation must not discard a completed wire receipt")
+	require.NoError(t, runtimeapp.ShutdownError(owner))
+	runtimeapp.BeginShutdown(owner)
+	<-receipt.Done()
+	require.ErrorIs(t, context.Cause(receipt), context.DeadlineExceeded)
+}
 
 func TestDeliveryWorkerStopJoinsActivePass(t *testing.T) {
 	t.Parallel()

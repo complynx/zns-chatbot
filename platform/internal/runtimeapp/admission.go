@@ -61,18 +61,18 @@ func Acquire(ctx context.Context, config *pgx.ConnConfig, role Role) (*Admission
 		var locked bool
 		if err = conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1::int,$2::int)", admissionNamespace, key).
 			Scan(&locked); err != nil {
-			return nil, errors.Join(admissionFailure(ctx, ErrUnavailable), closeAdmissionConnection(conn))
+			return nil, errors.Join(admissionFailure(ctx, ErrUnavailable), closeAdmissionConnection(ctx, conn))
 		}
 		if !locked {
-			return nil, errors.Join(ErrBusy, closeAdmissionConnection(conn))
+			return nil, errors.Join(ErrBusy, closeAdmissionConnection(ctx, conn))
 		}
 	}
 	if err = ctx.Err(); err != nil {
-		return nil, errors.Join(err, closeAdmissionConnection(conn))
+		return nil, errors.Join(err, closeAdmissionConnection(ctx, conn))
 	}
 	monitor, stop := context.WithCancel(context.Background())
 	a := &Admission{stop: stop, done: make(chan struct{}), joined: make(chan struct{})}
-	go a.run(monitor, conn)
+	go a.run(monitor, ctx, conn)
 	return a, nil
 }
 
@@ -126,10 +126,10 @@ func (a *Admission) Close(ctx context.Context) error {
 	}
 }
 
-func (a *Admission) run(ctx context.Context, conn *pgx.Conn) {
+func (a *Admission) run(ctx, owner context.Context, conn *pgx.Conn) {
 	a.err = monitorAdmission(ctx, conn)
 	close(a.done)
-	a.cleanupErr = closeAdmissionConnection(conn)
+	a.cleanupErr = closeAdmissionConnection(owner, conn)
 	// A canceled pgx query may return before its bounded asynchronous cleanup.
 	// Do not confuse Conn.Close returning with all connection resources joining.
 	<-conn.PgConn().CleanupDone()
@@ -157,8 +157,8 @@ func monitorAdmission(ctx context.Context, conn *pgx.Conn) error {
 	}
 }
 
-func closeAdmissionConnection(conn *pgx.Conn) error {
-	cleanup, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
+func closeAdmissionConnection(ctx context.Context, conn *pgx.Conn) error {
+	cleanup, cancel := CompletionContext(ctx, cleanupTimeout)
 	defer cancel()
 	if err := conn.Close(cleanup); err != nil || cleanup.Err() != nil {
 		return ErrClose
