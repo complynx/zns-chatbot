@@ -164,6 +164,25 @@ func TestModernChoiceFullRuntimeAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestModernRuntimeDurableInboxCompletion(t *testing.T) {
+	t.Parallel()
+	worker := startModernRuntimeWorker(t)
+	f, order := modernSingleKeyOrder(t, "a")
+	f.b.Scripts = worker
+	f.b.WebAppURL = "https://sandbox.invalid/orders"
+	result := modernRuntimeScript(t, f, "Inspect order "+order.ID, fmt.Sprintf(
+		`let p=tools.orders.inspect({order_id:%q});return {more:p.more};`, order.ID,
+	))
+	var page struct {
+		More bool `json:"more"`
+	}
+	require.NoError(t, json.Unmarshal(result, &page))
+	require.True(t, page.More)
+	current, err := (orders.Service{DB: f.db}).Get(t.Context(), "alice", order.EventID, order.ID)
+	require.NoError(t, err)
+	require.Equal(t, order.Choice, current.Choice)
+}
+
 func restartModernRuntimeStand(t *testing.T, f *fixture) {
 	t.Helper()
 	stand, err := sandbox.New(t.Context(), f.db, "sandbox")
@@ -307,8 +326,8 @@ func modernSingleKeyOrder(t *testing.T, stem string) (*fixture, orders.Order) {
 	return f, order
 }
 
-// Keep the inbox gate unchanged, but retain progress before its cancellation
-// erases the distinction between a slow operation, retry loop and lock wait.
+// Wait for durable completion within the enclosing scenario deadline and retain
+// progress before cancellation erases a slow operation, retry loop or lock wait.
 func completeModernRuntimeInbox(t *testing.T, f *fixture, update int64) {
 	t.Helper()
 	timings := &modernRuntimeTimings{}
@@ -318,7 +337,9 @@ func completeModernRuntimeInbox(t *testing.T, f *fixture, update int64) {
 	f.b.Logger = observability.NewLogger(timings, observability.LogConfig{})
 	started := time.Now()
 	timings.started = started
-	ctx, cancel := context.WithCancel(t.Context())
+	deadline, bounded := t.Deadline()
+	require.True(t, bounded, "runtime completion requires the enclosing test deadline")
+	ctx, cancel := context.WithDeadline(t.Context(), deadline)
 	done := make(chan error, 1)
 	go func() { done <- f.b.Run(ctx) }()
 	defer func() {
@@ -336,9 +357,15 @@ func completeModernRuntimeInbox(t *testing.T, f *fixture, update int64) {
 			Scan(&cursor, &count)
 		return err == nil && cursor == update+1 && count == 0
 	}
-	if !assert.Eventually(t, ready, 5*time.Second, 10*time.Millisecond) {
-		modernRuntimeDiagnostics(t, f, update)
-		t.FailNow()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for !ready() {
+		select {
+		case <-ctx.Done():
+			modernRuntimeDiagnostics(t, f, update)
+			require.FailNow(t, "durable runtime completion did not finish", "%v", ctx.Err())
+		case <-ticker.C:
+		}
 	}
 	t.Logf("runtime update=%d complete elapsed=%s", update, time.Since(started))
 }
