@@ -476,11 +476,22 @@ func (s ScriptStore) prepareLedgerChange(
 	if generation != snapshot.records[index].HistoryGeneration {
 		return s.retirementError(ctx, owner, updateID, s.StaleError, snapshot.raw)
 	}
-	if err = s.authorizeLedger(ctx, owner, updateID, snapshot); err != nil {
+	var previous []ScriptRecord
+	if err = json.Unmarshal(snapshot.raw, &previous); err != nil {
 		return err
 	}
-	if err = change(snapshot.records, generation); err != nil {
-		return err
+	// Changes are local ledger edits. Domain effects and the transactional claim
+	// run elsewhere; no edited payload is exposed before fresh authorization.
+	changeErr := change(snapshot.records, generation)
+	_, standardPolicy := s.Policy.(ScriptAuthorization)
+	if changeErr != nil || !standardPolicy || !sameInspectCarriers(owner, previous, snapshot.records) {
+		original := scriptLedgerSnapshot{raw: snapshot.raw, records: previous}
+		if err = s.authorizeLedger(ctx, owner, updateID, original); err != nil {
+			return err
+		}
+	}
+	if changeErr != nil {
+		return changeErr
 	}
 	if err = s.authorizeLedger(ctx, owner, updateID, snapshot); err != nil {
 		return err
