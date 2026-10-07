@@ -18,6 +18,7 @@ import (
 
 const commandTimeout = 10 * time.Second
 const commandOutputLimit = 2 << 20
+const commandStderrLimit = 8 << 10
 
 // Command runs Docker directly without shell interpretation.
 type Command interface {
@@ -27,7 +28,10 @@ type Command interface {
 // DockerCommand bounds execution and output; errors never expose command output or secrets.
 type DockerCommand struct{}
 
-type commandError struct{ exitCode int }
+type commandError struct {
+	exitCode     int
+	threadDenied bool
+}
 
 func (*commandError) Error() string { return "Docker operation failed" }
 
@@ -37,23 +41,44 @@ func (DockerCommand) Run(ctx context.Context, args, environment []string) ([]byt
 	command.Env = append(os.Environ(), environment...)
 	var output boundedOutput
 	command.Stdout = &output
+	var stderr privateStderr
+	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
 		if failure, ok := errors.AsType[*exec.ExitError](err); ok {
-			return nil, &commandError{exitCode: failure.ExitCode()}
+			return nil, &commandError{exitCode: failure.ExitCode(), threadDenied: ctx.Err() == nil &&
+				failure.ExitCode() == 2 && bytes.Contains(stderr.Bytes(), []byte("runtime: failed to create new OS thread"))}
 		}
 		return nil, errors.New("Docker operation failed")
 	}
 	return output.Bytes(), nil
 }
 
-type boundedOutput struct{ bytes.Buffer }
+type boundedOutput struct {
+	buffer bytes.Buffer
+}
+
+type privateStderr struct {
+	buffer bytes.Buffer
+}
+
+func (b *boundedOutput) Bytes() []byte { return b.buffer.Bytes() }
+
+func (b *privateStderr) Bytes() []byte { return b.buffer.Bytes() }
+
+// Write drains stderr while retaining only a bounded private prefix.
+func (b *privateStderr) Write(data []byte) (int, error) {
+	count := len(data)
+	retained := min(count, commandStderrLimit-b.buffer.Len())
+	_, err := b.buffer.Write(data[:retained])
+	return count, err
+}
 
 // Write fails before retaining unbounded Docker output.
 func (b *boundedOutput) Write(data []byte) (int, error) {
-	if b.Len()+len(data) > commandOutputLimit {
+	if b.buffer.Len()+len(data) > commandOutputLimit {
 		return 0, ErrUnknown
 	}
-	return b.Buffer.Write(data)
+	return b.buffer.Write(data)
 }
 
 // Docker is the sole-launcher adapter for a fixed reviewed Compose topology.

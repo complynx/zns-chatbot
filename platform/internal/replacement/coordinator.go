@@ -67,7 +67,10 @@ func errorCategory(err error) string {
 	case errors.Is(err, ErrConfiguration):
 		return "configuration"
 	default:
-		if _, ok := errors.AsType[*commandError](err); ok {
+		if command, ok := errors.AsType[*commandError](err); ok {
+			if command.threadDenied {
+				return "thread_creation_denied"
+			}
 			return "command_exit"
 		}
 		return "operation_failed"
