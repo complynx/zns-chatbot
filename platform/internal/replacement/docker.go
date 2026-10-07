@@ -31,9 +31,12 @@ type DockerCommand struct{}
 type commandError struct {
 	exitCode     int
 	threadDenied bool
+	cancellation error
 }
 
 func (*commandError) Error() string { return "Docker operation failed" }
+
+func (e *commandError) Unwrap() error { return e.cancellation }
 
 // Run executes only the installed Docker CLI.
 func (DockerCommand) Run(ctx context.Context, args, environment []string) ([]byte, error) {
@@ -45,8 +48,15 @@ func (DockerCommand) Run(ctx context.Context, args, environment []string) ([]byt
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
 		if failure, ok := errors.AsType[*exec.ExitError](err); ok {
-			return nil, &commandError{exitCode: failure.ExitCode(), threadDenied: ctx.Err() == nil &&
+			result := &commandError{exitCode: failure.ExitCode(), threadDenied: ctx.Err() == nil &&
 				failure.ExitCode() == 2 && bytes.Contains(stderr.Bytes(), []byte("runtime: failed to create new OS thread"))}
+			if failure.ExitCode() == -1 {
+				result.cancellation = ctx.Err()
+			}
+			return nil, result
+		}
+		if ctx.Err() != nil && errors.Is(err, ctx.Err()) {
+			return nil, ctx.Err()
 		}
 		return nil, errors.New("Docker operation failed")
 	}

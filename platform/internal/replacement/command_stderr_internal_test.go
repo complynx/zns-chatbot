@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -63,12 +64,42 @@ func TestDockerCommandCancellationStillBoundsExecution(t *testing.T) {
 	docker := Docker{Command: DockerCommand{}}
 	_, err := docker.call(ctx, []string{"info"}, nil)
 	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	require.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
 	require.Less(t, time.Since(started), time.Second)
 	var output bytes.Buffer
 	recordFailure(t.Context(), slog.New(slog.NewJSONHandler(&output, nil)), err)
 	require.Contains(t, output.String(), "deadline_exceeded")
 	require.NotContains(t, output.String(), "thread_creation_denied")
+}
+
+func TestDockerCommandOwnerCancellationPreservesCause(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
+	started := filepath.Join(directory, "started")
+	script := "#!/bin/sh\nprintf '%s' started > \"$1\"\nexec sleep 10\n"
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "docker"), []byte(script), 0700))
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	finished := make(chan error, 1)
+	go func() {
+		_, err := (Docker{Command: DockerCommand{}}).call(ctx, []string{started}, nil)
+		finished <- err
+	}()
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(started)
+		return err == nil
+	}, time.Second, time.Millisecond)
+	cancel()
+	select {
+	case err := <-finished:
+		require.ErrorIs(t, err, context.Canceled)
+		failure, ok := errors.AsType[*commandError](err)
+		require.True(t, ok)
+		require.Equal(t, -1, failure.exitCode)
+	case <-time.After(time.Second):
+		t.Fatal("owner cancellation did not finish Docker command")
+	}
 }
 
 func TestDockerCommandStdoutCapRemainsEnforced(t *testing.T) {
