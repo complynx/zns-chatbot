@@ -109,3 +109,56 @@ func TestInitialRetirementFinishesAfterCallerCancellation(t *testing.T) {
 		})
 	}
 }
+
+type delayedPublication struct {
+	*fixture
+
+	stopContext context.Context
+	final       bool
+}
+
+func (p *delayedPublication) Stop(ctx context.Context, containers []replacement.Container) error {
+	p.stopContext = ctx
+	return p.fixture.Stop(ctx, containers)
+}
+
+func (p *delayedPublication) Save(ledger replacement.Ledger) error {
+	if ledger.State == replacement.StateStopped && (len(ledger.Containers) == 0) == p.final {
+		<-p.stopContext.Done()
+	}
+	return p.fixture.Save(ledger)
+}
+
+func TestLateStoppedPublicationCannotStartAnotherGeneration(t *testing.T) {
+	t.Parallel()
+	for _, final := range []bool{false, true} {
+		name := "physical-publication"
+		if final {
+			name = "final-publication"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f, coordinator := newFixture(t)
+			publication := &delayedPublication{fixture: f, final: final}
+			coordinator.Engine, coordinator.Journal = publication, publication
+			coordinator.StopTimeout = 20 * time.Millisecond
+			coordinator.VerifyTimeout = time.Second
+
+			require.ErrorIs(t, coordinator.Run(t.Context()), context.DeadlineExceeded)
+			require.Zero(t, f.createCalls)
+			require.Zero(t, f.startCalls)
+			require.Zero(t, f.killCalls)
+			require.Equal(t, uint64(1), f.ledger.Generation)
+			require.Equal(t, oldLaunch, f.ledger.Launch)
+			require.Equal(t, replacement.StateStopped, f.ledger.State)
+			if final {
+				require.Empty(t, f.ledger.Containers)
+				require.Empty(t, f.inventory)
+				return
+			}
+			require.Len(t, f.ledger.Containers, 1)
+			require.Len(t, f.inventory, 1, "expired publication must leave stopped containers in place")
+			require.False(t, f.inventory[0].Running)
+		})
+	}
+}

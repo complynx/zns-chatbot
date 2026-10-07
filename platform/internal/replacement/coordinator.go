@@ -175,11 +175,17 @@ func (c *Coordinator) retire(ctx context.Context, ledger *Ledger) error {
 	if err = c.Journal.Save(*ledger); err != nil {
 		return err
 	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
 	if err = c.Engine.Remove(verifyCtx, known); err != nil {
 		return c.block(ledger, err)
 	}
 	ledger.Containers = nil
-	return c.Journal.Save(*ledger)
+	if err = c.Journal.Save(*ledger); err != nil {
+		return err
+	}
+	return ctx.Err()
 }
 
 func (c *Coordinator) knownInventory(ctx context.Context, ledger Ledger) ([]Container, error) {
