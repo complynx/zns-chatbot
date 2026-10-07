@@ -173,7 +173,39 @@ func TestAgentHostLedgerAuthorizedReadIsReadOnly(t *testing.T) {
 	require.True(t, approvedRevision, "returned revision must pass its own fresh policy decision")
 	require.Len(t, loaded, 1)
 	require.JSONEq(t, `"new revision"`, string(loaded[0].Run.Result))
+	authorized := loaded[0]
+	legacy := authorized
+	legacy.PassRedacted = true
+	legacy.Run.Code = "retired private code"
+	store.DB = f.db
+	_, err = f.db.Exec(ctx, `INSERT INTO bot.interactions(owner,update_id,kind,content)
+ VALUES('bob',$1,'script_runs',$2)`, update+1, []agenthost.ScriptRecord{legacy})
+	require.NoError(t, err)
+	normalized, err := store.LoadAuthorized(ctx, "bob", update+1)
+	require.NoError(t, err)
+	require.Len(t, normalized, 1)
+	require.True(t, normalized[0].PassRedacted)
+	require.Empty(t, normalized[0].Run.Code)
+	var savedCode string
+	require.NoError(t, f.db.QueryRow(ctx, `SELECT COALESCE(content->0->'run'->>'code','')
+ FROM bot.interactions WHERE owner='bob' AND update_id=$1 AND kind='script_runs'`, update+1).Scan(&savedCode))
+	require.Empty(t, savedCode, "legacy normalization must remain durable")
+	store.DB = reader
+	policy.after = func(ctx context.Context, _ agenthost.ScriptRecord) error {
+		_, deleteErr := f.db.Exec(ctx, `DELETE FROM bot.interactions
+ WHERE owner='bob' AND update_id=$1 AND kind='script_runs'`, update)
+		return deleteErr
+	}
+	loaded, err = store.LoadAuthorized(ctx, "bob", update)
+	require.NoError(t, err)
+	require.Empty(t, loaded, "a removed revision must not release the earlier snapshot")
 	policy.after = nil
+	loaded, err = store.LoadAuthorized(ctx, "bob", update)
+	require.NoError(t, err)
+	require.Empty(t, loaded, "an absent ledger is empty, not an authorization failure")
+	_, err = f.db.Exec(ctx, `INSERT INTO bot.interactions(owner,update_id,kind,content)
+ VALUES('bob',$1,'script_runs',$2)`, update, []agenthost.ScriptRecord{authorized})
+	require.NoError(t, err)
 	_, err = f.db.Exec(ctx, `UPDATE core.zitadel_identities SET active=false WHERE owner='bob'`)
 	require.NoError(t, err)
 	var active bool

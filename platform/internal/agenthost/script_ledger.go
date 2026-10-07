@@ -42,14 +42,16 @@ func (s ScriptStore) commitLedger(ctx context.Context, owner string, updateID in
 	snapshot scriptLedgerSnapshot, write bool, claim func(pgx.Tx, []ScriptRecord) error) (bool, error) {
 	if !write && claim == nil {
 		// Authorization already inspected this revision. A read-only revision
-		// check needs no row lock or durable write transaction.
-		var current []byte
-		err := s.DB.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3`, owner, updateID, scriptRunsKind).
-			Scan(&current)
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		// check needs no row lock, write transaction or second full JSON response.
+		var unchanged bool
+		err := s.DB.QueryRow(ctx, `SELECT COALESCE((
+ SELECT convert_to(content::text,'UTF8')=$4::bytea FROM bot.interactions
+ WHERE owner=$1 AND update_id=$2 AND kind=$3),$5)`, owner, updateID, scriptRunsKind, snapshot.raw, len(snapshot.raw) == 0).
+			Scan(&unchanged)
+		if err != nil {
 			return false, core.DatabaseOperationContextError(ctx, err)
 		}
-		return bytes.Equal(current, snapshot.raw), nil
+		return unchanged, nil
 	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
