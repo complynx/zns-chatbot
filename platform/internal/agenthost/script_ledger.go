@@ -39,6 +39,17 @@ func (s ScriptStore) ledgerSnapshot(ctx context.Context, owner string, updateID 
 // preparation and result encoding finish before this transaction starts.
 func (s ScriptStore) commitLedger(ctx context.Context, owner string, updateID int64,
 	snapshot scriptLedgerSnapshot, write bool, claim func(pgx.Tx, []ScriptRecord) error) (bool, error) {
+	if !write && claim == nil {
+		// Authorization already inspected this revision. A read-only revision
+		// check needs no row lock or durable write transaction.
+		var current json.RawMessage
+		err := s.DB.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3`, owner, updateID, scriptRunsKind).
+			Scan(&current)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return false, core.DatabaseOperationContextError(ctx, err)
+		}
+		return bytes.Equal(current, snapshot.raw), nil
+	}
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return false, core.DatabaseOperationContextError(ctx, err)

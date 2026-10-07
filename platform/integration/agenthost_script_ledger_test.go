@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
 	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 	"github.com/complynx/zns-chatbot/platform/internal/appclient"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
+	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/knowledge"
 	"github.com/complynx/zns-chatbot/platform/internal/passbooking"
 )
@@ -92,6 +94,80 @@ type retiringLedgerAuthority struct {
 
 	retired bool
 	cause   error
+}
+
+func TestAgentHostLedgerAuthorizedReadIsReadOnly(t *testing.T) {
+	t.Parallel()
+	f := passMenuFixture(t)
+	ctx := t.Context()
+	links := identity.Links{DB: f.db, Issuer: "https://ledger.test", BotID: 1}
+	require.NoError(t, links.Bind(ctx, "bob", identity.BobTelegramID, "ledger-bob"))
+	f.b.Host.UserToken = func(ctx context.Context, owner string) (string, error) {
+		resolved, authErr := links.Subject(ctx, "ledger-bob")
+		if authErr != nil {
+			return "", authErr
+		}
+		if resolved != owner {
+			return "", identity.ErrZitadelIdentity
+		}
+		return f.b.API.UserToken(ctx, owner)
+	}
+	policy := &liveLedgerAuthority{fixture: f}
+	store := agenthost.ScriptStore{DB: f.db, Policy: policy, StaleError: appclient.ErrReadStale}
+	const update = 48900
+	generation, err := policy.Generation(ctx, "bob")
+	require.NoError(t, err)
+	_, err = store.ReserveRun(ctx, "bob", update, agent.ScriptProposal{Code: "return null;"},
+		generation, nil, nil, false)
+	require.NoError(t, err)
+	config := f.db.Config().Copy()
+	config.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
+	config.MaxConns = 2
+	reader, err := pgxpool.NewWithConfig(ctx, config)
+	require.NoError(t, err)
+	t.Cleanup(reader.Close)
+	var readOnly string
+	require.NoError(t, reader.QueryRow(ctx, `SHOW transaction_read_only`).Scan(&readOnly))
+	require.Equal(t, "on", readOnly)
+	store.DB = reader
+	loaded, err := store.LoadAuthorized(ctx, "bob", update)
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	require.Equal(t, "return null;", loaded[0].Request.Code)
+
+	injected, approvedRevision := false, false
+	policy.after = func(ctx context.Context, record agenthost.ScriptRecord) error {
+		if string(record.Run.Result) == `"new revision"` {
+			approvedRevision = true
+		}
+		if injected {
+			return nil
+		}
+		injected = true
+		record.Run.Result = json.RawMessage(`"new revision"`)
+		_, changeErr := f.db.Exec(
+			ctx,
+			`UPDATE bot.interactions SET content=$3 WHERE owner=$1 AND update_id=$2 AND kind='script_runs'`,
+			"bob",
+			update,
+			[]agenthost.ScriptRecord{record},
+		)
+		return changeErr
+	}
+	loaded, err = store.LoadAuthorized(ctx, "bob", update)
+	require.NoError(t, err)
+	require.True(t, approvedRevision, "returned revision must pass its own fresh policy decision")
+	require.Len(t, loaded, 1)
+	require.JSONEq(t, `"new revision"`, string(loaded[0].Run.Result))
+	policy.after = nil
+	_, err = f.db.Exec(ctx, `UPDATE core.zitadel_identities SET active=false WHERE owner='bob'`)
+	require.NoError(t, err)
+	var active bool
+	require.NoError(t, f.db.QueryRow(ctx, `SELECT active FROM core.zitadel_identities WHERE owner='bob'`).Scan(&active))
+	require.False(t, active)
+	loaded, err = store.LoadAuthorized(ctx, "bob", update)
+	require.Error(t, err, "inactive identity must not receive authorized ledger data")
+	require.Empty(t, loaded)
 }
 
 func (policy *retiringLedgerAuthority) AccessChanged(
