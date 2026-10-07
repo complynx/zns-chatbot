@@ -27,6 +27,10 @@ type Command interface {
 // DockerCommand bounds execution and output; errors never expose command output or secrets.
 type DockerCommand struct{}
 
+type commandError struct{ exitCode int }
+
+func (*commandError) Error() string { return "Docker operation failed" }
+
 // Run executes only the installed Docker CLI.
 func (DockerCommand) Run(ctx context.Context, args, environment []string) ([]byte, error) {
 	command := exec.CommandContext(ctx, "docker", args...)
@@ -34,6 +38,9 @@ func (DockerCommand) Run(ctx context.Context, args, environment []string) ([]byt
 	var output boundedOutput
 	command.Stdout = &output
 	if err := command.Run(); err != nil {
+		if failure, ok := errors.AsType[*exec.ExitError](err); ok {
+			return nil, &commandError{exitCode: failure.ExitCode()}
+		}
 		return nil, errors.New("Docker operation failed")
 	}
 	return output.Bytes(), nil
@@ -73,6 +80,12 @@ func (d Docker) call(ctx context.Context, args, environment []string) ([]byte, e
 				stage = "docker_list"
 			case "inspect":
 				stage = "docker_inspect"
+			case "compose":
+				if slices.Contains(args, "config") {
+					stage = "compose_config"
+				} else if slices.Contains(args, "create") {
+					stage = "compose_create"
+				}
 			}
 		}
 		return nil, observationError(limited, start, stage, "operation", err)
@@ -357,16 +370,16 @@ func (d Docker) validateComposition(ctx context.Context, environment []string) e
 		Services map[string]composeService `json:"services"`
 	}
 	if err = json.Unmarshal(data, &project); err != nil {
-		return ErrUnknown
+		return observationError(ctx, time.Now(), "compose_validation", "invalid_json", ErrUnknown)
 	}
 	for _, component := range Components() {
 		service, found := project.Services[component]
 		if !found || len(service.DependsOn) != 0 || len(service.Links) != 0 || len(service.VolumesFrom) != 0 {
-			return ErrUnknown
+			return observationError(ctx, time.Now(), "compose_validation", "invalid_topology", ErrUnknown)
 		}
 		for _, namespace := range []string{service.NetworkMode, service.PID, service.IPC} {
 			if strings.HasPrefix(namespace, "service:") {
-				return ErrUnknown
+				return observationError(ctx, time.Now(), "compose_validation", "shared_namespace", ErrUnknown)
 			}
 		}
 	}

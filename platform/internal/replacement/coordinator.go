@@ -67,6 +67,9 @@ func errorCategory(err error) string {
 	case errors.Is(err, ErrConfiguration):
 		return "configuration"
 	default:
+		if _, ok := errors.AsType[*commandError](err); ok {
+			return "command_exit"
+		}
 		return "operation_failed"
 	}
 }
@@ -78,9 +81,14 @@ func recordFailure(ctx context.Context, logger *slog.Logger, err error) {
 		failure = &monitorObservationError{stage: "monitor", predicate: "unclassified",
 			deadline: "none", containers: -1, sessions: -1, admissions: -1}
 	}
+	exitCode := -1
+	if command, found := errors.AsType[*commandError](err); found {
+		exitCode = command.exitCode
+	}
 	logger.LogAttrs(ctx, slog.LevelError, "replacement monitor failure",
 		slog.String("stage", string(failure.stage)), slog.String("predicate", string(failure.predicate)),
 		slog.String("error_category", errorCategory(err)), slog.String("deadline_class", failure.deadline),
+		slog.Int("command_exit_code", exitCode),
 		slog.Int64("elapsed_ms", failure.elapsed.Milliseconds()), slog.Int("containers", failure.containers),
 		slog.Int("sessions", failure.sessions), slog.Int("admissions", failure.admissions))
 }
@@ -104,7 +112,12 @@ func (c *Coordinator) Run(ctx context.Context) error {
 	if err = ctx.Err(); err != nil {
 		return err
 	}
+	launchStart := time.Now()
 	if err = c.launch(ctx, &ledger); err != nil {
+		if _, classified := errors.AsType[*monitorObservationError](err); !classified {
+			err = observationError(ctx, launchStart, "launch", "operation", err)
+		}
+		recordFailure(ctx, logger, err)
 		return errors.Join(err, c.cleanup(&ledger))
 	}
 	monitorStart := time.Now()

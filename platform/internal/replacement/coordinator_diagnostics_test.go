@@ -13,12 +13,35 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/replacement"
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 )
 
 type diagnosticEngine struct {
 	*fixture
 
 	beforeStop func()
+}
+
+type failedStartupEngine struct{ *fixture }
+
+func (failedStartupEngine) Create(context.Context, runtimeapp.Instance) ([]replacement.Container, error) {
+	return nil, errors.New("secret startup credentials")
+}
+
+func TestReplacementStartupFailureIsReportedWithoutSecrets(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	f, c := newFixture(t)
+	c.Logger = slog.New(slog.NewJSONHandler(&output, nil))
+	c.Engine = failedStartupEngine{fixture: f}
+	require.Error(t, c.Run(t.Context()))
+	require.Equal(t, replacement.StateStopped, f.ledger.State)
+	require.NotContains(t, f.events, "save:running")
+	require.NotContains(t, output.String(), "secret startup credentials")
+	var record map[string]any
+	require.NoError(t, json.Unmarshal(bytes.TrimSpace(output.Bytes()), &record))
+	require.Equal(t, "launch", record["stage"])
+	require.Equal(t, "operation_failed", record["error_category"])
 }
 
 func TestReplacementReadinessDiagnosticRetainsIncompletePredicate(t *testing.T) {
