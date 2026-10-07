@@ -22,10 +22,25 @@ def read_small(path):
 
 def readonly_open(path):
     # Opening without O_TRUNC never writes or changes the protected input bytes.
+    private_dac = path in {'/private/app.env','/private/owner.env'}
+    if private_dac:
+        if (os.getuid()!=10001 or os.geteuid()!=10001 or os.getgid()!=10001
+                or os.getegid()!=10001 or not set(os.getgroups()).issubset({10001,10002})):
+            raise ValueError('actual private app UID required for DAC precedence')
+        descriptor = os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+        try:
+            observed = os.fstat(descriptor)
+            mount = os.fstatvfs(descriptor)
+        finally:
+            os.close(descriptor)
+        if (not stat.S_ISREG(observed.st_mode) or observed.st_uid!=0
+                or observed.st_gid!=10001 or stat.S_IMODE(observed.st_mode)!=0o640
+                or not mount.f_flag & os.ST_RDONLY):
+            raise ValueError('exact private DAC file on read-only mount required')
     try:
         descriptor = os.open(path,os.O_RDWR|os.O_NOFOLLOW)
     except OSError as error:
-        if error.errno != errno.EROFS:
+        if error.errno != errno.EROFS and not (private_dac and error.errno==errno.EACCES):
             raise ValueError('native RO open must report EROFS') from error
         return
     os.close(descriptor)

@@ -1,11 +1,15 @@
 import os
+import errno
 from pathlib import Path
 import tempfile
 import unittest
+import stat
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
 from prepare_private import DATABASE, admit_native_copy, prepare
+from probe_ro import readonly_open
 
 
 class PrivateInputsTest(unittest.TestCase):
@@ -69,6 +73,35 @@ class PrivateInputsTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "native preparation root"):
                     admit_native_copy(directory,directory/"not-admitted.json")
             self.assertEqual(original,{path.name:path.read_bytes() for path in directory.iterdir()})
+        for name in ('app.env','owner.env'):
+            for failure in ('none','rw_mount','mode','owner','group','uid','errno','writable'):
+                with self.subTest(name=name,readonly_control=failure):
+                    calls=[]
+                    def observed_open(path,flags):
+                        calls.append(flags)
+                        if flags & os.O_RDWR and failure!='writable':
+                            raise OSError(errno.EINVAL if failure=='errno' else errno.EACCES,'controlled DAC')
+                        return 9
+                    observed=SimpleNamespace(st_mode=stat.S_IFREG|(0o660 if failure=='mode' else 0o640),
+                                             st_uid=1 if failure=='owner' else 0,
+                                             st_gid=70 if failure=='group' else 10001)
+                    with patch('probe_ro.os.getuid',return_value=10002 if failure=='uid' else 10001), \
+                            patch('probe_ro.os.geteuid',return_value=10001), \
+                            patch('probe_ro.os.getgid',return_value=10001), \
+                            patch('probe_ro.os.getegid',return_value=10001), \
+                            patch('probe_ro.os.getgroups',return_value=[10001,10002]), \
+                            patch('probe_ro.os.open',side_effect=observed_open), \
+                            patch('probe_ro.os.close'), patch('probe_ro.os.fstat',return_value=observed), \
+                            patch('probe_ro.os.fstatvfs',return_value=SimpleNamespace(f_flag=0 if failure=='rw_mount' else os.ST_RDONLY)):
+                        if failure=='none':
+                            readonly_open('/private/'+name)
+                        else:
+                            with self.assertRaises(ValueError): readonly_open('/private/'+name)
+                    self.assertFalse(any(flags & os.O_TRUNC for flags in calls))
+        with patch('probe_ro.os.open',side_effect=OSError(errno.EACCES,'unrelated DAC')):
+            with self.assertRaises(ValueError): readonly_open('/current/zns')
+        with patch('probe_ro.os.open',side_effect=OSError(errno.EROFS,'native RO')):
+            readonly_open('/current/zns')
 
     def test_existing_input_is_not_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -4,6 +4,15 @@ Preparation only. No native composition, installation or Functional acceptance
 is claimed. This stand replaces the old C delivery process, not the product or
 the original acceptance requirements.
 
+Native private read-only proof separates mount protection from DAC precedence.
+The unchanged app/owner files remain root:10001/0640: UID10001 has group read,
+not write. Their actual descriptor must report ST_RDONLY with exact UID/group/
+mode before an EACCES O_RDWR denial is admitted. Other paths still require
+EROFS. The access prerequisite separately opens those same two owner-writable
+files as capabilityless UID0 with O_RDWR and no O_TRUNC, requiring genuine
+EROFS and unchanged complete14 physical/byte snapshots. No input permission,
+mount identity, source-writer guard or original acceptance budget is relaxed.
+
 ## Ownership and identity
 
 Project `synthetic-qa-c-current` owns new PostgreSQL data, networks and IPC/clock
