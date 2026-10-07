@@ -13,16 +13,13 @@ import (
 
 // Generation fences cached history and derived model outputs after deletion.
 func (s Service) Generation(ctx context.Context, actor string) (int64, error) {
-	state, err := s.authoritySnapshot(ctx, actor, nil, authorityScope{})
-	if err != nil {
+	if err := s.knownActor(ctx, actor); err != nil {
 		return 0, err
 	}
-	defer func() { _ = state.tx.Rollback(ctx) }()
-	generation, err := dbgen.New(state.tx).HistoryGeneration(ctx, actor)
-	if err != nil {
-		return 0, core.DatabaseOperationError(err)
-	}
-	return generation, core.DatabaseOperationError(state.tx.Commit(ctx))
+	// No source bodies are exposed here. Derived writes retain their own
+	// generation lock; this read observes the current committed deletion epoch.
+	generation, err := dbgen.New(s.DB).HistoryGeneration(ctx, actor)
+	return generation, core.DatabaseOperationError(err)
 }
 
 // ReadText uses character offsets and reads only a bounded slice in PostgreSQL.
