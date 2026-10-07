@@ -8,11 +8,18 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/complynx/zns-chatbot/platform/internal/runtimeapp"
 )
 
-type failingStartupCommand struct{}
+type failingStartupCommand struct{ failCreate bool }
 
-func (failingStartupCommand) Run(context.Context, []string, []string) ([]byte, error) {
+func (command failingStartupCommand) Run(_ context.Context, args, _ []string) ([]byte, error) {
+	if command.failCreate && args[len(args)-1] == "json" {
+		return []byte(
+			`{"services":{"app":{},"evaluator":{},"media-decoder":{},"media-broker":{},"sticker-decoder":{},"sticker-broker":{}}}`,
+		), nil
+	}
 	return nil, &commandError{exitCode: 17}
 }
 
@@ -21,8 +28,13 @@ func TestStartupCommandFailureReportsPhaseAndExitCode(t *testing.T) {
 	for _, operation := range []string{"config", "create"} {
 		t.Run(operation, func(t *testing.T) {
 			t.Parallel()
-			docker := Docker{Command: failingStartupCommand{}}
-			_, err := docker.call(t.Context(), []string{"compose", operation}, nil)
+			docker := Docker{
+				Command:      failingStartupCommand{failCreate: operation == "create"},
+				Installation: "010700000225", Project: "config", Files: []string{"/config/runtime.compose.yaml"},
+			}
+			_, err := docker.Create(t.Context(), runtimeapp.Instance{
+				Installation: docker.Installation, Launch: "94d8c07929c04484cc9c285f",
+			})
 			require.Error(t, err)
 			var output bytes.Buffer
 			recordFailure(t.Context(), slog.New(slog.NewJSONHandler(&output, nil)), err)

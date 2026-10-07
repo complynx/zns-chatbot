@@ -81,10 +81,14 @@ func (d Docker) call(ctx context.Context, args, environment []string) ([]byte, e
 			case "inspect":
 				stage = "docker_inspect"
 			case "compose":
-				if slices.Contains(args, "config") {
-					stage = "compose_config"
-				} else if slices.Contains(args, "create") {
-					stage = "compose_create"
+				operation := len(d.composeArgs())
+				if len(args) > operation {
+					switch args[operation] {
+					case "config":
+						stage = "compose_config"
+					case "create":
+						stage = "compose_create"
+					}
 				}
 			}
 		}
