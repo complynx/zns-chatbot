@@ -77,11 +77,6 @@ func (b *Bot) archiveReply(
 		}
 		return b.Host.ArchiveOutcome(ctx, owner, "notification-"+strconv.FormatInt(id, 10), notice[textField])
 	}
-	if origin == interaction.DerivedReply {
-		if err := b.planAuthorization().ValidateReply(ctx, owner, id); err != nil {
-			return err
-		}
-	}
 	var text string
 	switch kind {
 	case historyReply, historyOrdersReply, knowledgeReply, registrationReply:

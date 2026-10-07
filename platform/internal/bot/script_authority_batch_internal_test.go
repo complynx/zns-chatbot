@@ -9,6 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/complynx/zns-chatbot/platform/internal/agenthost"
 
 	"github.com/stretchr/testify/require"
@@ -180,6 +183,172 @@ func inspectCompletionAuthorityHandler(scenario string, mutate func(context.Cont
 		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 	}
 }
+
+func TestPlanAuthorityKeepsUnmatchedCarriersAndFreshRevisions(t *testing.T) {
+	t.Parallel()
+	for _, scenario := range []string{"allowed", "raw_revoked", "covered_revised_revoked", "unmatched_revoked", "revised_revoked", "custom_revoked", "legacy"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			db := foodPendingDatabase(t)
+			const updateID int64 = 49813
+			record := batchAuthorityRecord("duplicate")
+			record.Calls = record.Calls[:2]
+			refs, err := agenthost.ScriptReadAuthorities("alice", []agenthost.ScriptRecord{record})
+			require.NoError(t, err)
+			if scenario == "unmatched_revoked" || scenario == "revised_revoked" {
+				record.Calls = append(record.Calls, batchAuthorityCall([]readsource.Authority{
+					{Knowledge: knowledgeauthority.ReadAuthority{Kind: knowledgeauthority.Review, Scope: "extra"}},
+				}))
+			}
+			if scenario == "legacy" {
+				record.PassContext = nil
+			}
+			_, err = db.Exec(t.Context(),
+				`INSERT INTO bot.interactions(owner,update_id,kind,content) VALUES('alice',$1,'script_runs',$2)`,
+				updateID, []agenthost.ScriptRecord{record})
+			require.NoError(t, err)
+			var revoked atomic.Bool
+			if scenario == "raw_revoked" {
+				config := db.Config()
+				config.ConnConfig.Tracer = planRawRevocation{revoked: &revoked}
+				db, err = pgxpool.NewWithConfig(t.Context(), config)
+				require.NoError(t, err)
+				t.Cleanup(db.Close)
+			}
+			mutate := func(ctx context.Context) error {
+				_, updateErr := db.Exec(
+					ctx,
+					`UPDATE bot.interactions SET content=jsonb_set(content,'{0,run,error}','"revised"'::jsonb)
+ WHERE owner='alice' AND update_id=$1 AND kind='script_runs'`,
+					updateID,
+				)
+				return updateErr
+			}
+			server := httptest.NewServer(planBoundaryAuthorityHandler(scenario, &revoked, mutate))
+			t.Cleanup(server.Close)
+			b := Bot{DB: db, Host: appclient.Host{Base: server.URL,
+				UserToken: func(context.Context, string) (string, error) { return "live-user", nil }}}
+			domain := botScriptAuthority{bot: &b}
+			ledgerDomain := domain
+			if scenario == "custom_revoked" {
+				var denied atomic.Bool
+				denied.Store(true)
+				other := httptest.NewServer(planBoundaryAuthorityHandler(scenario, &denied, mutate))
+				t.Cleanup(other.Close)
+				otherBot := b
+				otherBot.Host.Base = other.URL
+				ledgerDomain = botScriptAuthority{bot: &otherBot}
+			}
+			policy := agenthost.PlanAuthorization{
+				DB:      db,
+				Sources: domain,
+				Scripts: agenthost.ScriptStore{
+					DB:     db,
+					Policy: agenthost.ScriptAuthorization{ScriptDomainAuthority: ledgerDomain},
+				},
+			}
+			authority := &interaction.PlanAuthority{
+				Reads:           []interaction.PassContextDependency{},
+				ReadAuthorities: refs,
+				Scripts:         true,
+			}
+			changed, err := policy.Changed(t.Context(), "alice", updateID, authority)
+			require.NoError(t, err)
+			require.Equal(t, scenario != "allowed", changed)
+			assertPlanBoundaryPersistence(t, scenario, db, policy, authority, &revoked, updateID)
+		})
+	}
+}
+
+func assertPlanBoundaryPersistence(t *testing.T, scenario string, db *pgxpool.Pool,
+	policy agenthost.PlanAuthorization, authority *interaction.PlanAuthority, revoked *atomic.Bool, updateID int64) {
+	t.Helper()
+	switch scenario {
+	case "raw_revoked":
+		return
+	case "allowed":
+		revoked.Store(true)
+		changed, err := policy.Changed(t.Context(), "alice", updateID, authority)
+		require.NoError(t, err)
+		require.True(t, changed, "a later validation observes current revocation")
+	default:
+		var saved []byte
+		require.NoError(t, db.QueryRow(t.Context(),
+			`SELECT content FROM bot.interactions WHERE owner='alice' AND update_id=$1 AND kind='script_runs'`,
+			updateID).Scan(&saved))
+		if scenario == "covered_revised_revoked" {
+			require.Contains(
+				t,
+				string(saved),
+				"revised",
+				"concurrent progress is retained while current authority denies release",
+			)
+			return
+		}
+		require.NotContains(t, string(saved), "body", "invalid carriers are durably retired")
+	}
+}
+
+func planBoundaryAuthorityHandler(
+	scenario string,
+	revoked *atomic.Bool,
+	mutate func(context.Context) error,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			ReadAuthorities []readsource.Authority `json:"read_authorities"`
+		}
+		if json.NewDecoder(r.Body).Decode(&input) != nil || !readsource.Valid(input.ReadAuthorities) {
+			http.Error(w, "invalid evidence", http.StatusBadRequest)
+			return
+		}
+		changed, err := planBoundaryDecision(r.Context(), scenario, revoked, mutate, input.ReadAuthorities)
+		if err != nil {
+			http.Error(w, "fixture update failed", http.StatusInternalServerError)
+			return
+		}
+		if changed {
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]string{"code": "history_stale"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	}
+}
+
+func planBoundaryDecision(ctx context.Context, scenario string, revoked *atomic.Bool,
+	mutate func(context.Context) error, refs []readsource.Authority) (bool, error) {
+	if len(refs) > 0 && scenario == "covered_revised_revoked" && revoked.CompareAndSwap(false, true) {
+		return false, mutate(ctx)
+	}
+	for _, ref := range refs {
+		if ref.Knowledge.Scope == "extra" && scenario == "revised_revoked" && revoked.CompareAndSwap(false, true) {
+			if err := mutate(ctx); err != nil {
+				return false, err
+			}
+		}
+		if ref.Knowledge.Scope == "extra" && scenario == "unmatched_revoked" ||
+			ref.Knowledge.Scope == "same" && revoked.Load() {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Revocation becomes visible while the current raw database read is admitted.
+// The plan must authorize after that read, not retain its earlier decision.
+type planRawRevocation struct{ revoked *atomic.Bool }
+
+func (trace planRawRevocation) TraceQueryStart(
+	ctx context.Context,
+	_ *pgx.Conn,
+	_ pgx.TraceQueryStartData,
+) context.Context {
+	trace.revoked.Store(true)
+	return ctx
+}
+
+func (planRawRevocation) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
 func batchAuthorityCall(refs []readsource.Authority) agenthost.ScriptToolRecord {
 	generation := int64(0)

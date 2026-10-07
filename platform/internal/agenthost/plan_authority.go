@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"sync"
 
@@ -156,6 +157,14 @@ func (policy PlanAuthorization) Changed(
 	if authority == nil || authority.Reads == nil || authority.ReadAuthorities == nil {
 		return true, nil
 	}
+	if handled, changed, err := policy.inspectPlanChanged(ctx, owner, updateID, authority); handled {
+		return changed, err
+	}
+	return policy.changed(ctx, owner, updateID, authority)
+}
+
+func (policy PlanAuthorization) changed(ctx context.Context, owner string, updateID int64,
+	authority *interaction.PlanAuthority) (bool, error) {
 	if changed, err := policy.Sources.SourcesChanged(ctx, owner, authority.ReadAuthorities); err != nil || changed {
 		return changed, err
 	}
@@ -181,6 +190,72 @@ func (policy PlanAuthorization) Changed(
 		}
 	}
 	return false, nil
+}
+
+// Collect the exact ledger revision before its one current authority decision.
+// Unsupported carriers retain the ordinary independent validation path.
+func (policy PlanAuthorization) inspectPlanChanged(ctx context.Context, owner string, updateID int64,
+	authority *interaction.PlanAuthority) (bool, bool, error) {
+	scriptPolicy, standard := policy.Scripts.Policy.(ScriptAuthorization)
+	if !standard || !authority.Scripts || len(authority.Reads) != 0 ||
+		!reflect.ValueOf(policy.Sources).Comparable() || policy.Sources != scriptPolicy.ScriptDomainAuthority ||
+		!readsource.Valid(authority.ReadAuthorities) {
+		return false, false, nil
+	}
+	for range scriptLedgerAttempts {
+		snapshot, err := policy.Scripts.ledgerSnapshot(ctx, owner, updateID)
+		if err != nil {
+			// A failed speculative collection retains the complete ordinary path.
+			changed, fallbackErr := policy.changed(ctx, owner, updateID, authority)
+			return true, changed, fallbackErr
+		}
+		if !inspectPlanCarriersCovered(owner, snapshot.records, authority.ReadAuthorities) {
+			return false, false, nil
+		}
+		if changed, sourceErr := policy.Sources.SourcesChanged(
+			ctx,
+			owner,
+			authority.ReadAuthorities,
+		); changed ||
+			sourceErr != nil {
+			return true, changed, sourceErr
+		}
+		unchanged, err := policy.Scripts.commitLedger(ctx, owner, updateID, snapshot, false, nil)
+		if err != nil || unchanged {
+			return true, false, err
+		}
+	}
+	return true, false, ErrScriptLedgerConflict
+}
+
+func inspectPlanCarriersCovered(owner string, records []ScriptRecord, checked []readsource.Authority) bool {
+	if len(records) == 0 {
+		return false
+	}
+	for _, record := range records {
+		if scriptRetired(record) || record.PrivateProfile || record.PassContext == nil ||
+			len(record.PassContext) != 0 || record.ReadAuthorities == nil || len(record.Calls) == 0 {
+			return false
+		}
+		for _, call := range record.Calls {
+			if call.Outcome.Name != modernOrdersInspect || call.Source == nil {
+				return false
+			}
+		}
+		refs, batched, err := scriptRecordAuthorityChecks(owner, record)
+		if err != nil || !batched {
+			return false
+		}
+		for _, ref := range refs {
+			if !slices.ContainsFunc(
+				checked,
+				func(other readsource.Authority) bool { return readsource.Equal(ref, other) },
+			) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (policy PlanAuthorization) ValidatePlan(
