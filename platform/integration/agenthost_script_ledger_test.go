@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -120,6 +121,16 @@ func TestAgentHostLedgerAuthorizedReadIsReadOnly(t *testing.T) {
 	_, err = store.ReserveRun(ctx, "bob", update, agent.ScriptProposal{Code: "return null;"},
 		generation, nil, nil, false)
 	require.NoError(t, err)
+	largeResult := strings.Repeat("ledger result ", 40*1024)
+	_, err = f.db.Exec(
+		ctx,
+		`UPDATE bot.interactions SET content=jsonb_set(content,'{0,run,result}',to_jsonb($3::text))
+ WHERE owner=$1 AND update_id=$2 AND kind='script_runs'`,
+		"bob",
+		update,
+		largeResult,
+	)
+	require.NoError(t, err)
 	config := f.db.Config().Copy()
 	config.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
 	config.MaxConns = 2
@@ -134,6 +145,9 @@ func TestAgentHostLedgerAuthorizedReadIsReadOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)
 	require.Equal(t, "return null;", loaded[0].Request.Code)
+	var returnedResult string
+	require.NoError(t, json.Unmarshal(loaded[0].Run.Result, &returnedResult))
+	require.Equal(t, largeResult, returnedResult)
 
 	injected, approvedRevision := false, false
 	policy.after = func(ctx context.Context, record agenthost.ScriptRecord) error {

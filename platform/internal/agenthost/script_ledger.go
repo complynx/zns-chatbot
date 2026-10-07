@@ -18,7 +18,8 @@ const scriptLedgerAttempts = 4
 var ErrScriptLedgerConflict = errors.New("script ledger changed concurrently")
 
 type scriptLedgerSnapshot struct {
-	raw     json.RawMessage
+	// A byte slice selects pgx's raw JSON scan; RawMessage parses it again.
+	raw     []byte
 	records []ScriptRecord
 }
 
@@ -42,7 +43,7 @@ func (s ScriptStore) commitLedger(ctx context.Context, owner string, updateID in
 	if !write && claim == nil {
 		// Authorization already inspected this revision. A read-only revision
 		// check needs no row lock or durable write transaction.
-		var current json.RawMessage
+		var current []byte
 		err := s.DB.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3`, owner, updateID, scriptRunsKind).
 			Scan(&current)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -58,7 +59,7 @@ func (s ScriptStore) commitLedger(ctx context.Context, owner string, updateID in
 	if err = LockScript(ctx, tx, owner, updateID); err != nil {
 		return false, err
 	}
-	var current json.RawMessage
+	var current []byte
 	err = tx.QueryRow(ctx, `SELECT content FROM bot.interactions WHERE owner=$1 AND update_id=$2 AND kind=$3 FOR UPDATE`, owner, updateID, scriptRunsKind).
 		Scan(&current)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
