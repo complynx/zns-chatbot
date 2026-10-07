@@ -61,6 +61,43 @@ func TestDeliveryWorkerCancelledParentDoesNotDeliver(t *testing.T) {
 	require.Empty(t, calls)
 }
 
+func TestDeliveryWorkerWaitsAfterSlowPass(t *testing.T) {
+	t.Parallel()
+	first := true
+	completed := make(chan time.Time, 1)
+	next := make(chan time.Time, 1)
+	stop := startBotDelivery(t.Context(), func(ctx context.Context) error {
+		if first {
+			first = false
+			timer := time.NewTimer(pollInterval + 20*time.Millisecond)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-timer.C:
+			}
+			completed <- time.Now()
+			return nil
+		}
+		next <- time.Now()
+		<-ctx.Done()
+		return nil
+	}, func(error) { t.Error("unexpected fatal delivery result") })
+	t.Cleanup(stop)
+	var finished time.Time
+	select {
+	case finished = <-completed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first delivery did not complete")
+	}
+	select {
+	case started := <-next:
+		require.GreaterOrEqual(t, started.Sub(finished), pollInterval)
+	case <-time.After(2 * time.Second):
+		t.Fatal("next delivery did not start")
+	}
+}
+
 func TestDeliveryCompletionOutlivesCancelledParentWithinDeadline(t *testing.T) {
 	t.Parallel()
 	parent, stop := context.WithCancel(t.Context())

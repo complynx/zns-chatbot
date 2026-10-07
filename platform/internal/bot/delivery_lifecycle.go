@@ -21,17 +21,19 @@ func startBotDelivery(parent context.Context, deliver func(context.Context) erro
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(pollInterval)
-		defer ticker.Stop()
 		for ctx.Err() == nil {
 			if err := deliver(ctx); core.IsDatabaseFailure(err) {
 				onFatal(core.ErrDatabase)
 				return
 			}
+			// Wait after completion so slow recovery passes cannot consume a
+			// pending ticker event and run continuously alongside ingress.
+			timer := time.NewTimer(pollInterval)
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				return
-			case <-ticker.C:
+			case <-timer.C:
 			}
 		}
 	}()
