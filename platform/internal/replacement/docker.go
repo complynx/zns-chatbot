@@ -260,16 +260,18 @@ func (d Docker) Start(ctx context.Context, containers []Container) error {
 	return nil
 }
 
-// Stop requests a bounded graceful stop for the entire group.
+// Stop uses the caller's graceful deadline without a daemon SIGKILL fallback.
 func (d Docker) Stop(ctx context.Context, containers []Container) error {
 	if len(containers) == 0 {
 		return nil
 	}
-	args := []string{"stop", "--time", "25"}
+	bounded, cancel := context.WithTimeout(ctx, defaultStopTimeout)
+	defer cancel()
+	args := []string{"stop", "--signal", "SIGTERM", "--timeout", "-1"}
 	for _, item := range containers {
 		args = append(args, item.ID)
 	}
-	_, err := d.Command.Run(ctx, args, nil)
+	_, err := d.Command.Run(bounded, args, nil)
 	return err
 }
 

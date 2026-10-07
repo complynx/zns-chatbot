@@ -145,7 +145,7 @@ func (c *Coordinator) reconcile(ctx context.Context) (Ledger, error) {
 }
 
 func (c *Coordinator) cleanup(ledger *Ledger) error {
-	ctx, cancel := context.WithTimeout(context.Background(), c.StopTimeout+c.VerifyTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), c.StopTimeout)
 	defer cancel()
 	return c.retire(ctx, ledger)
 }
@@ -159,15 +159,15 @@ func (c *Coordinator) retire(ctx context.Context, ledger *Ledger) error {
 	if err = c.Journal.Save(*ledger); err != nil {
 		return err
 	}
-	stopCtx, cancel := context.WithTimeout(ctx, c.StopTimeout)
-	// Stop is a request, never completion proof. Verification follows even on timeout.
-	_ = c.Engine.Stop(stopCtx, known)
-	cancel()
-	verifyCtx, finish := context.WithTimeout(ctx, c.VerifyTimeout)
-	defer finish()
-	if err = c.Engine.Kill(verifyCtx, known); err != nil {
+	// Stop and physical process/session verification share one graceful deadline.
+	if err = c.Engine.Stop(ctx, known); err != nil {
 		return c.block(ledger, err)
 	}
+	if err = ctx.Err(); err != nil {
+		return c.block(ledger, err)
+	}
+	verifyCtx, finish := context.WithTimeout(ctx, c.VerifyTimeout)
+	defer finish()
 	if err = c.waitStopped(verifyCtx, *ledger); err != nil {
 		return c.block(ledger, err)
 	}
@@ -223,6 +223,9 @@ func (c *Coordinator) waitStopped(ctx context.Context, ledger Ledger) error {
 		}
 		if err = knownSessions(ledger, names); err != nil {
 			return err
+		}
+		if err = ctx.Err(); err != nil {
+			return errors.Join(ErrDeadline, err)
 		}
 		if stopped && len(names) == 0 {
 			return nil

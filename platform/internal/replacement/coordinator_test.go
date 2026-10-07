@@ -27,6 +27,10 @@ type fixture struct {
 	daemon       string
 	keepSession  bool
 	keepProcess  bool
+	stopErr      error
+	killCalls    int
+	overlap      bool
+	unsafeStart  bool
 	createCalls  int
 	startCalls   int
 	onStart      func()
@@ -55,6 +59,11 @@ func (f *fixture) Save(ledger replacement.Ledger) error {
 	return nil
 }
 func (f *fixture) Create(_ context.Context, instance runtimeapp.Instance) ([]replacement.Container, error) {
+	for _, item := range f.inventory {
+		f.overlap = f.overlap || item.Running || item.Restarting || item.Paused || item.PID != 0
+	}
+	f.overlap = f.overlap || len(f.names) != 0
+	f.unsafeStart = f.unsafeStart || f.ledger.State != replacement.StateStarting || f.ledger.Launch != instance.Launch
 	f.createCalls++
 	f.events = append(f.events, "create")
 	f.inventory = nil
@@ -71,6 +80,8 @@ func (f *fixture) Create(_ context.Context, instance runtimeapp.Instance) ([]rep
 	return slices.Clone(f.inventory), nil
 }
 func (f *fixture) Start(context.Context, []replacement.Container) error {
+	f.unsafeStart = f.unsafeStart || f.ledger.State != replacement.StateStarting ||
+		len(f.ledger.Containers) != len(f.inventory)
 	f.startCalls++
 	f.events = append(f.events, "start")
 	for i := range f.inventory {
@@ -84,10 +95,9 @@ func (f *fixture) Start(context.Context, []replacement.Container) error {
 }
 func (f *fixture) Stop(context.Context, []replacement.Container) error {
 	f.events = append(f.events, "stop")
-	return nil
-}
-func (f *fixture) Kill(context.Context, []replacement.Container) error {
-	f.events = append(f.events, "kill")
+	if f.stopErr != nil {
+		return f.stopErr
+	}
 	if !f.keepProcess {
 		for i := range f.inventory {
 			f.inventory[i].Running = false
@@ -98,6 +108,10 @@ func (f *fixture) Kill(context.Context, []replacement.Container) error {
 		f.names = nil
 	}
 	return nil
+}
+func (f *fixture) Kill(context.Context, []replacement.Container) error {
+	f.killCalls++
+	return errors.New("forced termination is not graceful retirement")
 }
 func (f *fixture) Remove(context.Context, []replacement.Container) error {
 	f.events = append(f.events, "remove")
@@ -153,9 +167,9 @@ func TestReplacementWaitsForProcessesAndSessionsBeforeStarting(t *testing.T) {
 	require.NoError(t, c.Run(ctx))
 	require.Equal(t, 1, f.startCalls)
 	require.Equal(t, replacement.StateStopped, f.ledger.State)
-	require.Less(t, slices.Index(f.events, "kill"), slices.Index(f.events, "create"))
-	require.Less(t, slices.Index(f.events, "save:stopped"), slices.Index(f.events, "create"))
-	require.Less(t, slices.Index(f.events, "save:starting"), slices.Index(f.events, "start"))
+	require.False(t, f.overlap, "old processes and sessions must be absent before create")
+	require.False(t, f.unsafeStart, "the new generation must be durable before starting")
+	require.Zero(t, f.killCalls)
 	require.Empty(t, f.inventory)
 }
 
@@ -176,9 +190,10 @@ func TestReplacementRunningAdmissionLossRetiresGeneration(t *testing.T) {
 	require.Equal(t, replacement.StateStopped, f.ledger.State)
 	require.Empty(t, f.inventory)
 	require.Empty(t, f.names)
-	running := slices.Index(f.events, "save:running")
-	require.GreaterOrEqual(t, running, 0)
-	require.Contains(t, f.events[running+1:], "kill")
+	require.Equal(t, uint64(2), f.ledger.Generation)
+	require.False(t, f.overlap)
+	require.False(t, f.unsafeStart)
+	require.Zero(t, f.killCalls)
 }
 
 func TestReplacementAdmissionReadiness(t *testing.T) {
@@ -245,7 +260,7 @@ func TestReplacementAdmissionLossKeepsIncompleteBarrierBlocked(t *testing.T) {
 
 func TestReplacementFailsClosedOnIncompleteBarrier(t *testing.T) {
 	t.Parallel()
-	for _, reason := range []string{"session", "process", "unknown-session", "unknown-container", "database", "docker", "host", "daemon", "durability", "collision"} {
+	for _, reason := range []string{"session", "process", "stop-error", "unknown-session", "unknown-container", "database", "docker", "host", "daemon", "durability", "stopped-durability", "collision"} {
 		t.Run(reason, func(t *testing.T) {
 			t.Parallel()
 			f, c := newFixture(t)
@@ -254,6 +269,8 @@ func TestReplacementFailsClosedOnIncompleteBarrier(t *testing.T) {
 				f.keepSession = true
 			case "process":
 				f.keepProcess = true
+			case "stop-error":
+				f.stopErr = errors.New("graceful stop failed")
 			case "unknown-session":
 				f.keepSession = true
 				f.names = []string{"untagged"}
@@ -269,12 +286,23 @@ func TestReplacementFailsClosedOnIncompleteBarrier(t *testing.T) {
 				f.daemon = "different-daemon"
 			case "durability":
 				f.saveFailure = replacement.StateStopping
+			case "stopped-durability":
+				f.saveFailure = replacement.StateStopped
 			case "collision":
 				c.NewLaunch = func() (string, error) { return oldLaunch, nil }
 			}
-			require.Error(t, c.Run(t.Context()))
+			err := c.Run(t.Context())
+			require.Error(t, err)
 			require.Zero(t, f.startCalls)
 			require.Zero(t, f.createCalls)
+			require.Zero(t, f.killCalls)
+			if reason == "stop-error" {
+				require.ErrorIs(t, err, f.stopErr)
+				require.Equal(t, replacement.StateBlocked, f.ledger.State)
+				require.True(t, f.inventory[0].Running)
+				require.Equal(t, oldLaunch, f.ledger.Launch)
+				require.Len(t, f.ledger.Containers, 1)
+			}
 		})
 	}
 }

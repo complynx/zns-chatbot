@@ -53,8 +53,7 @@ func (e *replacementAdmissionEngine) Start(context.Context, []replacement.Contai
 	}
 	return e.start()
 }
-func (e *replacementAdmissionEngine) Stop(context.Context, []replacement.Container) error { return nil }
-func (e *replacementAdmissionEngine) Kill(context.Context, []replacement.Container) error {
+func (e *replacementAdmissionEngine) Stop(context.Context, []replacement.Container) error {
 	for i := range e.inventory {
 		e.inventory[i].Running, e.inventory[i].PID = false, 0
 	}
@@ -362,13 +361,13 @@ func TestRuntimeReplacementPhysicalBarrier(t *testing.T) {
 		Journal:       journal,
 		Installation:  instance.Installation,
 		Host:          "synthetic-host",
-		StopTimeout:   200 * time.Millisecond,
-		VerifyTimeout: 10 * time.Second,
+		StopTimeout:   5 * time.Second,
+		VerifyTimeout: 5 * time.Second,
 		PollInterval:  20 * time.Millisecond,
 		NewLaunch:     func() (string, error) { return "222222222222222222222222", nil },
 	}
 
-	// A killed client with a long server query can leave its backend alive.
+	// A stopped client with a long server query can leave its backend alive.
 	// The barrier must block until that exact fixture session is gone.
 	runErr := coordinator.Run(ctx)
 	require.Error(t, runErr)
@@ -400,7 +399,7 @@ func TestRuntimeReplacementPhysicalBarrier(t *testing.T) {
 		current, readErr := sessions.Names(t.Context())
 		return readErr == nil && len(current) == 0
 	}, admissionTestWait, 20*time.Millisecond)
-	// New synthetic sessions detect a killed client while a long query runs.
+	// New synthetic sessions detect a stopped client while a long query runs.
 	_, err = db.Exec(t.Context(), "ALTER ROLE "+quoted+" SET client_connection_check_interval='100ms'")
 	require.NoError(t, err)
 	requireReplacementConnectionChecks(t, db.Config().ConnConfig, role, password)
@@ -420,17 +419,21 @@ func writeReplacementPhysicalCompose(
 	image, network, host, role, password, databaseName string,
 ) {
 	t.Helper()
-	script := `trap '' TERM
+	script := `children=""
+trap 'for child in $children; do kill "$child" 2>/dev/null || :; done; wait; exit 0' TERM
 touch /tmp/started
 if [ "$COMPONENT" = app ] || [ "$COMPONENT" = media-broker ]; then
  tag=media
  if [ "$COMPONENT" = app ]; then
   tag=app
   PGAPPNAME="zns:$ZNS_INSTALLATION_ID:$ZNS_LAUNCH_ID:admit" psql "$DATABASE_URL" -c 'SELECT pg_advisory_lock(918274,1); SELECT pg_sleep(120)' &
+  children="$children $!"
  fi
  PGAPPNAME="zns:$ZNS_INSTALLATION_ID:$ZNS_LAUNCH_ID:$tag" psql "$DATABASE_URL" -c "BEGIN; INSERT INTO public.replacement_effects VALUES ('$COMPONENT'); SELECT pg_sleep(120); COMMIT;" &
+ children="$children $!"
 fi
 sleep 120 &
+children="$children $!"
 wait
 `
 	script = strings.ReplaceAll(script, "$", "$$")

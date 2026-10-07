@@ -11,9 +11,10 @@ import (
 )
 
 const componentApp = "app"
-const defaultStopTimeout = 30 * time.Second
+const defaultStopTimeout = 5 * time.Second
 const defaultVerifyTimeout = 5 * time.Second
 const defaultReadyTimeout = 90 * time.Second
+const defaultPollInterval = 100 * time.Millisecond
 
 const LabelInstallation = "net.complynx.zns.installation"
 const LabelLaunch = "net.complynx.zns.launch"
@@ -67,7 +68,6 @@ type Engine interface {
 	Create(context.Context, runtimeapp.Instance) ([]Container, error)
 	Start(context.Context, []Container) error
 	Stop(context.Context, []Container) error
-	Kill(context.Context, []Container) error
 	Remove(context.Context, []Container) error
 }
 
@@ -97,9 +97,9 @@ type Coordinator struct {
 	NewLaunch     func() (string, error)
 }
 
-// DefaultBudgets bounds shutdown, verification and initial readiness independently.
+// DefaultBudgets caps the shared graceful window; verification cannot renew it.
 func (c *Coordinator) DefaultBudgets() {
-	if c.StopTimeout == 0 {
+	if c.StopTimeout == 0 || c.StopTimeout > defaultStopTimeout {
 		c.StopTimeout = defaultStopTimeout
 	}
 	if c.VerifyTimeout == 0 {
@@ -109,6 +109,6 @@ func (c *Coordinator) DefaultBudgets() {
 		c.ReadyTimeout = defaultReadyTimeout
 	}
 	if c.PollInterval == 0 {
-		c.PollInterval = time.Second
+		c.PollInterval = defaultPollInterval
 	}
 }
