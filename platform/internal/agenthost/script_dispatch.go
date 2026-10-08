@@ -102,7 +102,7 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 		ctx,
 		observability.AgentEvent{Phase: scriptDiagnosticPhase, Operation: "script.source.admit"},
 	)
-	sourceErr := s.Store.AdmitSource(stageCtx, owner, updateID, index)
+	readCall, sourceErr := s.Store.admitToolSource(stageCtx, owner, updateID, index, call.Name)
 	stage.Finish(sourceErr)
 	if sourceErr != nil {
 		if response := ScriptSourceFailure(sourceErr, s.Store.StaleError); response != nil {
@@ -127,7 +127,7 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 		ctx,
 		observability.AgentEvent{Phase: scriptDiagnosticPhase, Operation: "script.call.admit"},
 	)
-	sequence, err := s.Store.AdmitCall(stageCtx, owner, updateID, index, &record)
+	sequence, err := s.Store.admitPreparedCall(stageCtx, owner, updateID, index, &record, readCall)
 	stage.Finish(err)
 	if err != nil {
 		if response := ScriptSourceFailure(err, s.Store.StaleError); response != nil {
@@ -144,7 +144,7 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 	stage.Finish(err)
 	result, outcomeError, err := NormalizeScriptOutcome(result, err, diagnostic, s.Store.StaleError, s.ReadLimitError)
 	if core.IsDatabaseFailure(err) {
-		// The admitted call stays interrupted; Call stops the run before later effects.
+		// No failed read is published; effectful reservations stay interrupted.
 		return nil, core.ErrDatabase
 	}
 	if err != nil {
@@ -152,7 +152,15 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 		if errors.As(err, &problem) && problem.Status < 500 {
 			diagnostic.Outcome("denied", "unavailable")
 			record.Outcome.Error = "denied"
-			if saveErr := s.Store.CompleteCall(ctx, owner, updateID, index, sequence, record); saveErr != nil {
+			if saveErr := s.completeObservedCall(
+				ctx,
+				owner,
+				updateID,
+				index,
+				sequence,
+				record,
+				readCall,
+			); saveErr != nil {
 				return nil, saveErr
 			}
 		}
@@ -163,7 +171,7 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 		diagnostic.Outcome("limited", "result_limit")
 		return nil, err
 	}
-	if err = s.completeObservedCall(ctx, owner, updateID, index, sequence, record); err != nil {
+	if err = s.completeObservedCall(ctx, owner, updateID, index, sequence, record, readCall); err != nil {
 		return nil, err
 	}
 	return visible, nil
@@ -171,10 +179,15 @@ func (s ScriptHost) callObserved(ctx context.Context, owner string, updateID int
 
 // completeObservedCall measures durable completion separately from domain execution.
 func (s ScriptHost) completeObservedCall(ctx context.Context, owner string, updateID int64, index, sequence int,
-	record ScriptToolRecord) error {
+	record ScriptToolRecord, readCall *scriptReadCall) error {
 	ctx, span := observability.StartAgentEvent(ctx,
 		observability.AgentEvent{Phase: scriptDiagnosticPhase, Operation: "script.call.complete"})
-	err := s.Store.CompleteCall(ctx, owner, updateID, index, sequence, record)
+	var err error
+	if readCall != nil {
+		err = s.Store.completeReadCall(ctx, owner, updateID, index, readCall, record)
+	} else {
+		err = s.Store.CompleteCall(ctx, owner, updateID, index, sequence, record)
+	}
 	span.Finish(err)
 	return err
 }

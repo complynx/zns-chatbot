@@ -30,7 +30,11 @@ func TestOrderChoiceSnapshotBoundary(t *testing.T) {
 	raw, err := json.Marshal(order)
 	require.NoError(t, err)
 	digest := sha256.Sum256(raw)
-	expected := orders.ChoiceSnapshot{Catalog: orders.CatalogSnapshot(event), Order: hex.EncodeToString(digest[:])}
+	expected := orders.ChoiceSnapshot{
+		Catalog: orders.CatalogSnapshot(event),
+		Order:   hex.EncodeToString(digest[:]),
+		CanBook: true,
+	}
 	var envelope map[string]json.RawMessage
 	require.NoError(
 		t,
@@ -43,9 +47,10 @@ func TestOrderChoiceSnapshotBoundary(t *testing.T) {
 			&envelope,
 		),
 	)
-	require.Len(t, envelope, 2)
+	require.Len(t, envelope, 3)
 	require.Contains(t, envelope, "catalog")
 	require.Contains(t, envelope, "order")
+	require.Contains(t, envelope, "can_book")
 	for _, client := range []appclient.Client{f.b.API, localOrderClient(t, f)} {
 		result, readErr := client.OrderChoiceSnapshot(t.Context(), "alice", original.EventID, original.ID)
 		require.NoError(t, readErr)
@@ -55,6 +60,14 @@ func TestOrderChoiceSnapshotBoundary(t *testing.T) {
 		require.Equal(t, orders.ChoiceSnapshot{}, denied)
 		catalog, catErr := client.OrderChoiceSnapshot(t.Context(), "alice", original.EventID, "")
 		require.NoError(t, catErr)
-		require.Equal(t, orders.ChoiceSnapshot{Catalog: expected.Catalog}, catalog)
+		require.Equal(t, orders.ChoiceSnapshot{Catalog: expected.Catalog, CanBook: true}, catalog)
+	}
+	_, err = f.db.Exec(t.Context(), `UPDATE core.users SET can_book=false WHERE id='alice'`)
+	require.NoError(t, err)
+	for _, client := range []appclient.Client{f.b.API, localOrderClient(t, f)} {
+		current, readErr := client.OrderChoiceSnapshot(t.Context(), "alice", original.EventID, original.ID)
+		require.NoError(t, readErr)
+		require.False(t, current.CanBook)
+		require.Equal(t, expected.Order, current.Order)
 	}
 }

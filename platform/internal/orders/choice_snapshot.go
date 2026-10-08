@@ -5,12 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
+	"github.com/complynx/zns-chatbot/platform/internal/core"
 )
 
-// ChoiceSnapshot contains only current fingerprints for a retained host draft.
+// ChoiceSnapshot contains current fingerprints and booking permission, not a
+// permit. Every page must obtain a new snapshot before exposing a retained draft.
 type ChoiceSnapshot struct {
 	Catalog string `json:"catalog"`
 	Order   string `json:"order,omitempty"`
+	CanBook bool   `json:"can_book"`
 }
 
 // ChoiceSnapshot uses the same catalog and owner-scoped order reads as a quote.
@@ -21,6 +25,10 @@ func (s Service) ChoiceSnapshot(ctx context.Context, actor, event, id string) (C
 		return ChoiceSnapshot{}, err
 	}
 	result := ChoiceSnapshot{Catalog: CatalogSnapshot(value)}
+	if err = core.DatabaseOperationError(s.DB.QueryRow(ctx,
+		`SELECT can_book FROM core.users WHERE id=$1`, actor).Scan(&result.CanBook)); err != nil {
+		return ChoiceSnapshot{}, err
+	}
 	if id == "" {
 		return result, nil
 	}

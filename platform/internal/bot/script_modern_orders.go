@@ -338,12 +338,10 @@ func (b *Bot) modernOrderChunk(
 			if args.Event != "" && args.Event != event {
 				return nil, errors.New("choice event mismatch")
 			}
-			args.Event = event
+			value, err = b.currentModernQuote(ctx, owner, event, args.ChoiceRef)
+		} else {
+			value, err = b.API.QuoteOrder(ctx, owner, event, *args.Choice)
 		}
-		if err = b.resolveModernChoice(ctx, owner, name, &args, nil); err != nil {
-			return nil, err
-		}
-		value, err = b.API.QuoteOrder(ctx, owner, event, *args.Choice)
 	case modernOrdersInstructions:
 		current, readErr := b.API.Order(ctx, owner, event, args.OrderID)
 		if readErr != nil {
@@ -421,18 +419,18 @@ func (b *Bot) prepareModernOrderRead(
 	if args.Resume {
 		args.Cursor = previous.ReadCursor
 	}
-	order, err := b.modernOrderReadSource(ctx, owner, name, event, args.OrderID)
-	if err != nil {
-		return err
-	}
-	fingerprint, err := modernOrderFingerprint(order)
-	if err != nil {
-		return err
-	}
-	if previous.ReadSnapshot != "" {
-		// Keep the admitted continuation snapshot. Execution reports a changed
-		// snapshot through the durable stale-result path without adopting it.
-		fingerprint = previous.ReadSnapshot
+	fingerprint := previous.ReadSnapshot
+	// A durable continuation already binds the snapshot. Execution reloads and
+	// checks the current authorized order before returning its next page.
+	if fingerprint == "" {
+		order, readErr := b.modernOrderReadSource(ctx, owner, name, event, args.OrderID)
+		if readErr != nil {
+			return readErr
+		}
+		fingerprint, err = modernOrderFingerprint(order)
+		if err != nil {
+			return err
+		}
 	}
 	_, err = core.DecodeReadCursor(args.Cursor, owner, name+":"+event+":"+args.OrderID)
 	if err != nil {
