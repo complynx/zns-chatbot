@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ import (
 
 func TestPassOperationSummaryRevalidation(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"unchanged", "source", "grant", "outage"} {
+	for _, scenario := range []string{"unchanged", "source", "grant", "outage", "cancellation", "database"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			saved := interaction.RegistrationOperationSummary{
@@ -42,6 +43,10 @@ func TestPassOperationSummaryRevalidation(t *testing.T) {
 						Status: http.StatusServiceUnavailable,
 						Code:   "unavailable",
 					}
+				case "cancellation":
+					return interaction.RegistrationOperationRead{}, context.Canceled
+				case "database":
+					return interaction.RegistrationOperationRead{}, core.ErrDatabase
 				}
 				current := saved
 				if scenario == "source" {
@@ -61,8 +66,8 @@ func TestPassOperationSummaryRevalidation(t *testing.T) {
 				agent.ScriptToolResult{Name: scriptPassOperations, Result: raw},
 				read,
 			)
-			if scenario == "outage" {
-				require.Error(t, err)
+			if scenario == "outage" || scenario == "cancellation" || scenario == "database" {
+				assertPassSummaryUnavailable(t, scenario, changed, err)
 				return
 			}
 			require.NoError(t, err)
@@ -82,6 +87,43 @@ func TestPassOperationSummaryRevalidation(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, record.PassRedacted)
 				require.Empty(t, record.Calls[0].Outcome.Result)
+			}
+		})
+	}
+}
+
+func assertPassSummaryUnavailable(t *testing.T, scenario string, changed bool, err error) {
+	t.Helper()
+	require.Error(t, err)
+	require.False(t, changed, "an unavailable check is not evidence of retirement")
+	if expected := map[string]error{"cancellation": context.Canceled, "database": core.ErrDatabase}[scenario]; expected != nil {
+		require.ErrorIs(t, err, expected)
+	}
+}
+
+func TestPassPrivacyFailureDistinguishesDenial(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name    string
+		err     error
+		retired bool
+	}{
+		{name: "denial", err: &core.ProblemError{Status: http.StatusForbidden}, retired: true},
+		{name: "absent", err: &core.ProblemError{Status: http.StatusNotFound}, retired: true},
+		{name: "outage", err: &core.ProblemError{Status: http.StatusServiceUnavailable}},
+		{name: "canceled", err: context.Canceled},
+		{name: "deadline", err: context.DeadlineExceeded},
+		{name: "database", err: core.ErrDatabase},
+		{name: "unknown", err: errors.New("authority unavailable")},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			changed, err := passPrivacyFailure(test.err)
+			require.Equal(t, test.retired, changed)
+			if test.retired {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, test.err)
 			}
 		})
 	}

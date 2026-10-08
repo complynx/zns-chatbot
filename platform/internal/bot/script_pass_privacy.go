@@ -15,6 +15,12 @@ import (
 
 const savedOperationSummaryLimit = 20
 
+// A definitive denial retires retained data; an unavailable check only fails it.
+func passPrivacyFailure(err error) (bool, error) {
+	failure := passMenuFailure(err)
+	return failure == nil, failure
+}
+
 func decodePassOperationSummaries(raw json.RawMessage) ([]interaction.RegistrationOperationSummary, bool) {
 	var previous []interaction.RegistrationOperationSummary
 	err := json.Unmarshal(raw, &previous)
@@ -51,7 +57,7 @@ func (b *Bot) scriptPassCallChanged(ctx context.Context, owner string, call agen
 	}
 	booking, err := b.API.PassBooking(ctx, owner, previous.Event)
 	if err != nil {
-		return true, passMenuFailure(err)
+		return passPrivacyFailure(err)
 	}
 	if !samePassSnapshot(previous, booking) {
 		return true, nil
@@ -99,7 +105,7 @@ func passOperationSummaryChanged(
 	for _, saved := range previous {
 		current, err := read(ctx, owner, derivedmutation.PassOperationQuery{ID: saved.ID})
 		if err != nil {
-			return true, passMenuFailure(err)
+			return passPrivacyFailure(err)
 		}
 		if len(current.Summaries) != 1 {
 			return true, nil

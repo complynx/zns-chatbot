@@ -21,7 +21,7 @@ func (b *Bot) scriptPassDiscoveryChanged(
 	}
 	owned, err := b.API.OwnsPassEvents(ctx, owner, events)
 	if err != nil {
-		return true, passMenuFailure(err)
+		return passPrivacyFailure(err)
 	}
 	return !owned, nil
 }

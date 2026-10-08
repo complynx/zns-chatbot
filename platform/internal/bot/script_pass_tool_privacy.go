@@ -55,7 +55,7 @@ func (b *Bot) scriptPassToolReadChanged(
 func (b *Bot) passCapabilityChanged(ctx context.Context, owner, event, action string) (bool, error) {
 	capability, err := b.API.PassCapabilities(ctx, owner, event)
 	if err != nil {
-		return true, passMenuFailure(err)
+		return passPrivacyFailure(err)
 	}
 	return action == "" || !slices.Contains(capability.Actions, action), nil
 }
@@ -82,7 +82,7 @@ func (b *Bot) scriptPassInvitationsChanged(
 	}
 	current, err := b.API.PassInvitations(ctx, owner, args.Event, cursor.Position)
 	if err != nil {
-		return true, passMenuFailure(err)
+		return passPrivacyFailure(err)
 	}
 	return !agenthost.PassInvitationsPresent(previous.Items, current.Invitations), nil
 }

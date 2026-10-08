@@ -39,7 +39,7 @@ func (b *Bot) scriptPassEffectChanged(
 		}
 		current, err := b.API.PassBooking(ctx, owner, request.Command.Event)
 		if err != nil {
-			return true, passMenuFailure(err)
+			return passPrivacyFailure(err)
 		}
 		return !samePassSnapshot(previous, current), nil
 	}
@@ -78,7 +78,7 @@ func (b *Bot) scriptPassEffectAuthority(
 		}
 	}
 	if err != nil {
-		return true, passMenuFailure(err)
+		return passPrivacyFailure(err)
 	}
 	return false, nil
 }
