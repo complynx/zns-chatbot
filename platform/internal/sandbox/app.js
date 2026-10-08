@@ -335,6 +335,7 @@ $('#document-form').addEventListener('submit', async (event) => {
       body: file,
     });
     if (!response.ok) throw new Error('Документ отклонён: ' + response.status);
+    await response.json();
     $('#document').value = '';
     $('#caption').value = '';
     $('#status').textContent = '';
