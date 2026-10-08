@@ -47,6 +47,10 @@ type Container struct {
 	Paused     bool   `json:"paused"`
 	PID        int    `json:"pid"`
 	Health     string `json:"health"`
+	// Transient process observations do not change the durable ledger schema.
+	Status    string `json:"-"`
+	ExitCode  int    `json:"-"`
+	OOMKilled bool   `json:"-"`
 }
 
 // Ledger is durable before any generation is started or stopped.

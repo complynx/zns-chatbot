@@ -165,10 +165,13 @@ type dockerContainer struct {
 	Image   string `json:"Image"`
 	Created string `json:"Created"`
 	State   struct {
-		Running    bool `json:"Running"`
-		Restarting bool `json:"Restarting"`
-		Paused     bool `json:"Paused"`
-		PID        int  `json:"Pid"`
+		Status     string `json:"Status"`
+		ExitCode   int    `json:"ExitCode"`
+		OOMKilled  bool   `json:"OOMKilled"`
+		Running    bool   `json:"Running"`
+		Restarting bool   `json:"Restarting"`
+		Paused     bool   `json:"Paused"`
+		PID        int    `json:"Pid"`
 		Health     *struct {
 			Status string `json:"Status"`
 		} `json:"Health"`
@@ -212,7 +215,8 @@ func (d Docker) decodeInventory(data []byte) ([]Container, error) {
 		result = append(result, Container{ID: item.ID, Component: item.Config.Labels[LabelComponent],
 			Launch: item.Config.Labels[LabelLaunch], Image: item.Image, Created: item.Created,
 			Running: item.State.Running, Restarting: item.State.Restarting, Paused: item.State.Paused,
-			PID: item.State.PID, Health: health})
+			PID: item.State.PID, Health: health, Status: item.State.Status,
+			ExitCode: item.State.ExitCode, OOMKilled: item.State.OOMKilled})
 	}
 	return result, nil
 }

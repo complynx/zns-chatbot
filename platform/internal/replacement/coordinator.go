@@ -30,6 +30,7 @@ type monitorObservationError struct {
 	sessions   int
 	admissions int
 	cause      error
+	container  *Container
 }
 
 func (e *monitorObservationError) Error() string { return "replacement observation failed" }
@@ -77,7 +78,7 @@ func errorCategory(err error) string {
 	}
 }
 
-// recordFailure emits only fixed classifications, never underlying error text or identities.
+// recordFailure retains the failed owned process without error text or configuration.
 func recordFailure(ctx context.Context, logger *slog.Logger, err error) {
 	failure, ok := errors.AsType[*monitorObservationError](err)
 	if !ok {
@@ -88,12 +89,20 @@ func recordFailure(ctx context.Context, logger *slog.Logger, err error) {
 	if command, found := errors.AsType[*commandError](err); found {
 		exitCode = command.exitCode
 	}
-	logger.LogAttrs(ctx, slog.LevelError, "replacement monitor failure",
+	attrs := []slog.Attr{
 		slog.String("stage", string(failure.stage)), slog.String("predicate", string(failure.predicate)),
 		slog.String("error_category", errorCategory(err)), slog.String("deadline_class", failure.deadline),
 		slog.Int("command_exit_code", exitCode),
 		slog.Int64("elapsed_ms", failure.elapsed.Milliseconds()), slog.Int("containers", failure.containers),
-		slog.Int("sessions", failure.sessions), slog.Int("admissions", failure.admissions))
+		slog.Int("sessions", failure.sessions), slog.Int("admissions", failure.admissions),
+	}
+	if item := failure.container; item != nil {
+		attrs = append(attrs, slog.GroupAttrs("container",
+			slog.String("component", item.Component), slog.String("id", item.ID),
+			slog.String("status", item.Status), slog.Bool("running", item.Running),
+			slog.Int("exit_code", item.ExitCode), slog.Bool("oom_killed", item.OOMKilled)))
+	}
+	logger.LogAttrs(ctx, slog.LevelError, "replacement monitor failure", attrs...)
 }
 
 // Run retires any previous generation, starts one generation, and monitors the whole group.
@@ -363,7 +372,10 @@ func (c *Coordinator) observe(ctx context.Context, ledger Ledger, incomplete **i
 	ready := true
 	for _, item := range inventory {
 		if predicate := failedProcess(item); predicate != "" {
-			return fail("process", predicate, ErrStopped, len(inventory), -1, -1)
+			failure := observationError(ctx, start, "process", predicate, ErrStopped)
+			failure.containers = len(inventory)
+			failure.container = &item
+			return false, failure
 		}
 		if item.Component == componentApp && item.Health != "healthy" {
 			ready = false

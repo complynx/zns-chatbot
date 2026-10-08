@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -179,4 +181,95 @@ func TestReplacementJournalDiagnosticRetainsReadyCounts(t *testing.T) {
 	require.Equal(t, json.Number("1"), record["sessions"])
 	require.Equal(t, json.Number("1"), record["admissions"])
 	require.Equal(t, replacement.StateStopped, f.ledger.State)
+}
+
+func TestReplacementFailureRetainsFirstProcessBeforeCleanup(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	f, c := newFixture(t)
+	c.Logger = slog.New(slog.NewJSONHandler(&output, nil))
+	f.onStart = func() { configureReadiness(f, true, true) }
+	f.onRunning = func() {
+		f.inventory[0].Running = false
+		f.inventory[0].Status = "exited"
+		f.inventory[0].ExitCode = 137
+		f.inventory[0].OOMKilled = true
+		f.inventory[1].Running = false
+		f.inventory[1].Status = "exited"
+		f.inventory[1].ExitCode = 1
+	}
+	c.Engine = diagnosticEngine{fixture: f, beforeStop: func() {
+		if f.ledger.State == replacement.StateStopping && f.ledger.Launch == newLaunch {
+			require.Contains(t, output.String(), `"id":"evaluator-new"`)
+		}
+	}}
+	require.ErrorIs(t, c.Run(t.Context()), replacement.ErrStopped)
+	require.Empty(t, f.inventory)
+	require.Equal(t, replacement.StateStopped, f.ledger.State)
+	var record map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(output.Bytes()))
+	decoder.UseNumber()
+	require.NoError(t, decoder.Decode(&record))
+	require.Equal(t, "process", record["stage"])
+	require.Equal(t, "not_running", record["predicate"])
+	require.Equal(t, map[string]any{
+		"component": "evaluator", "id": "evaluator-new", "status": "exited",
+		"running": false, "exit_code": json.Number("137"), "oom_killed": true,
+	}, record["container"])
+}
+
+func TestDiagnosticProcessStatePreservesVersionOneJournalReaders(t *testing.T) {
+	t.Parallel()
+	// This is the deployed version1 reader schema, before process diagnostics.
+	type oldContainer struct {
+		ID         string `json:"id"`
+		Component  string `json:"component"`
+		Launch     string `json:"launch"`
+		Image      string `json:"image"`
+		Created    string `json:"created"`
+		Running    bool   `json:"running"`
+		Restarting bool   `json:"restarting"`
+		Paused     bool   `json:"paused"`
+		PID        int    `json:"pid"`
+		Health     string `json:"health"`
+	}
+	type oldLedger struct {
+		Version      int            `json:"version"`
+		Installation string         `json:"installation"`
+		Host         string         `json:"host"`
+		Daemon       string         `json:"daemon"`
+		Generation   uint64         `json:"generation"`
+		Launch       string         `json:"launch"`
+		State        string         `json:"state"`
+		Containers   []oldContainer `json:"containers"`
+	}
+	directory := t.TempDir()
+	journal := replacement.FileJournal{Directory: directory}
+	ledger := replacement.Ledger{
+		Version: 1, Installation: installation, Host: "host", Daemon: "daemon",
+		Generation: 2, Launch: newLaunch, State: replacement.StateStopping,
+		Containers: []replacement.Container{{ID: "failed-current", Component: "evaluator", Launch: newLaunch,
+			Image: "pinned-image", Created: "2026-10-08T18:16:19Z", Status: "exited", ExitCode: 137, OOMKilled: true}},
+	}
+	require.NoError(t, journal.Save(ledger))
+	data, err := os.ReadFile(filepath.Join(directory, "ledger.json"))
+	require.NoError(t, err)
+	var prior oldLedger
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	require.NoError(t, decoder.Decode(&prior))
+	require.Equal(t, 1, prior.Version)
+	require.Equal(t, newLaunch, prior.Launch)
+	require.Equal(t, []oldContainer{{ID: "failed-current", Component: "evaluator", Launch: newLaunch,
+		Image: "pinned-image", Created: "2026-10-08T18:16:19Z"}}, prior.Containers)
+	got, err := journal.Load()
+	require.NoError(t, err)
+	ledger.Containers[0].Status = ""
+	ledger.Containers[0].ExitCode = 0
+	ledger.Containers[0].OOMKilled = false
+	require.Equal(t, ledger, got)
+	require.NoError(t, journal.Save(got))
+	roundtrip, err := os.ReadFile(filepath.Join(directory, "ledger.json"))
+	require.NoError(t, err)
+	require.JSONEq(t, string(data), string(roundtrip))
 }

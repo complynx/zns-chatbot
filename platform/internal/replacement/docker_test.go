@@ -70,7 +70,10 @@ func TestDockerInventoryRejectsUnownedExecutionTopology(t *testing.T) {
 				"Id":      "exact-container-id",
 				"Image":   "sha256:digest",
 				"Created": "timestamp",
-				"State":   map[string]any{"Running": false, "Pid": 0},
+				"State": map[string]any{
+					"Running": false, "Pid": 0, "Status": "exited", "ExitCode": 137,
+					"OOMKilled": true, "Error": "private Docker error details",
+				},
 				"Config": map[string]any{
 					"Image": "reviewed@sha256:digest",
 					"Cmd":   []string{"app"},
@@ -122,6 +125,13 @@ func TestDockerInventoryRejectsUnownedExecutionTopology(t *testing.T) {
 			if change == "valid" {
 				require.NoError(t, err)
 				require.Len(t, result, 1)
+				require.Equal(t, "exited", result[0].Status)
+				require.Equal(t, 137, result[0].ExitCode)
+				require.True(t, result[0].OOMKilled)
+				projection, marshalErr := json.Marshal(result)
+				require.NoError(t, marshalErr)
+				require.NotContains(t, string(projection), "private Docker error details")
+				require.NotContains(t, string(projection), "postgres://runtime@postgres/zns")
 			} else {
 				require.ErrorIs(t, err, replacement.ErrUnknown)
 			}
