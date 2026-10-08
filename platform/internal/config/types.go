@@ -85,10 +85,11 @@ type Database struct {
 	URL Secret `yaml:"url" json:"url"`
 }
 type Auth struct {
-	LegacyBrowserOrigins string  `yaml:"legacy_browser_origins" json:"legacy_browser_origins"`
-	Mode                 string  `yaml:"mode"                   json:"mode"`
-	Zitadel              Zitadel `yaml:"zitadel"                json:"zitadel"`
-	SigningKey           Secret  `yaml:"signing_key"            json:"signing_key"`
+	SandboxTelegramOwners map[int64]string `yaml:"sandbox_telegram_owners" json:"sandbox_telegram_owners"`
+	LegacyBrowserOrigins  string           `yaml:"legacy_browser_origins"  json:"legacy_browser_origins"`
+	Mode                  string           `yaml:"mode"                    json:"mode"`
+	Zitadel               Zitadel          `yaml:"zitadel"                 json:"zitadel"`
+	SigningKey            Secret           `yaml:"signing_key"             json:"signing_key"`
 }
 type Core struct {
 	URL string `yaml:"url" json:"url"`

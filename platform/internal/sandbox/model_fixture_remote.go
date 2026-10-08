@@ -13,13 +13,14 @@ import (
 // FixtureRemote is an explicit synthetic-only alternative to a real model.
 // Production Remote never adds these lab headers or reads request scope.
 type FixtureRemote struct {
-	URL  string
-	HTTP *http.Client
+	AttestedOwners map[int64]string
+	URL            string
+	HTTP           *http.Client
 }
 
 func (m FixtureRemote) Plan(ctx context.Context, input agent.Input) (agent.Plan, error) {
 	scope, ok := agent.RequestScopeFromContext(ctx)
-	if !ok || !syntheticFixtureOwner(scope.Owner) || scope.UpdateID <= 0 || scope.Turn < 0 {
+	if !ok || !attestedModelOwner(m.AttestedOwners, scope.Owner) || scope.UpdateID <= 0 || scope.Turn < 0 {
 		return agent.Plan{}, errors.New("fixture request scope missing")
 	}
 	const timeout = 10 * time.Second
@@ -33,7 +34,7 @@ func (m FixtureRemote) AssessKnowledge(
 	input agent.KnowledgeAssessmentInput,
 ) (agent.KnowledgeAssessment, error) {
 	scope, ok := agent.RequestScopeFromContext(ctx)
-	if !ok || !syntheticFixtureOwner(scope.Owner) || scope.UpdateID <= 0 {
+	if !ok || !attestedModelOwner(m.AttestedOwners, scope.Owner) || scope.UpdateID <= 0 {
 		return agent.KnowledgeAssessment{}, errors.New("fixture request scope missing")
 	}
 	return m.scopedRemote(scope).AssessKnowledge(ctx, input)

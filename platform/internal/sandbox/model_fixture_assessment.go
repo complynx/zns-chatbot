@@ -171,7 +171,7 @@ func (f *Fake) modelFixtureAssessment(w http.ResponseWriter, r *http.Request) {
 	}
 	update, err := strconv.ParseInt(r.Header.Get("X-Sandbox-Update"), 10, 64)
 	owner := r.Header.Get("X-Sandbox-Actor")
-	if err != nil || update <= 0 || !syntheticFixtureOwner(owner) {
+	if err != nil || update <= 0 || !attestedModelOwner(f.attestedOwners, owner) {
 		api.JSON(w, http.StatusForbidden, map[string]string{errorField: invalidFixtureScope})
 		return
 	}

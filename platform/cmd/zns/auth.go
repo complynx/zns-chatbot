@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"maps"
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,9 @@ func runtimeAuth(
 	cfg config.Config,
 	signer identity.Signer,
 ) (api.VerifyOwner, *identity.Zitadel, identity.Links, error) {
+	if cfg.Auth.SandboxTelegramOwners != nil && (cfg.Env != sandboxMode || cfg.Auth.Mode != sandboxMode) {
+		return nil, nil, identity.Links{}, errors.New("sandbox Telegram owners require sandbox authentication")
+	}
 	switch cfg.Auth.Mode {
 	case "", sandboxMode:
 		return func(_ context.Context, token string) (string, error) { return signer.Verify(token) }, nil, identity.Links{}, nil
@@ -72,6 +76,7 @@ func configureBotAuth(ctx context.Context, b *bot.Bot, cfg config.Config, signer
 	}
 	if cfg.Env == sandboxMode {
 		b.API.SandboxToken = signer.Token
+		b.API.SandboxTelegramOwners = maps.Clone(cfg.Auth.SandboxTelegramOwners)
 	}
 	b.Host = appclient.Host{Base: b.API.Base, HTTP: b.API.HTTP, Signer: signer, UserToken: b.API.UserToken}
 	if err = verifyBotIdentity(ctx, b, cfg); err != nil {

@@ -35,6 +35,9 @@ func (z Zitadel) AdapterConfig(environment string) identity.ZitadelConfig {
 }
 
 func (a Auth) validate(environment string) error {
+	if err := a.validateSandboxTelegramOwners(environment); err != nil {
+		return err
+	}
 	if _, err := identity.BrowserOrigins(a.LegacyBrowserOrigins); err != nil {
 		return errDiagnosticBrowserOrigins
 	}
@@ -63,4 +66,19 @@ func (a Auth) validate(environment string) error {
 	default:
 		return errDiagnosticAuthConfiguration
 	}
+}
+
+func (a Auth) validateSandboxTelegramOwners(environment string) error {
+	if a.SandboxTelegramOwners == nil {
+		return nil
+	}
+	if environment != sandboxMode || a.Mode != sandboxMode || len(a.SandboxTelegramOwners) == 0 {
+		return errDiagnosticAuthConfiguration
+	}
+	for sender, owner := range a.SandboxTelegramOwners {
+		if sender <= 0 || owner == "" || strings.TrimSpace(owner) != owner {
+			return errDiagnosticAuthConfiguration
+		}
+	}
+	return nil
 }

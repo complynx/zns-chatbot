@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,7 +21,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -35,6 +35,7 @@ const editMessageTextMethod = "editMessageText"
 const errorField = "error"
 
 type Fake struct {
+	attestedOwners       map[int64]string
 	callbackEvidence     callbackEvidence
 	delay                *editDelay
 	menu                 telegramMenuState
@@ -73,7 +74,22 @@ type snapshot struct {
 }
 
 func New(ctx context.Context, db *pgxpool.Pool, token string) (*Fake, error) {
-	f := &Fake{DB: db, Token: token, modelControl: newModelFixtureControl(ctx)}
+	return NewWithAttestedOwners(ctx, db, token, nil)
+}
+
+// NewWithAttestedOwners binds explicit synthetic sender identities without changing stored owners.
+func NewWithAttestedOwners(
+	ctx context.Context,
+	db *pgxpool.Pool,
+	token string,
+	owners map[int64]string,
+) (*Fake, error) {
+	if err := validateAttestedOwners(owners); err != nil {
+		return nil, err
+	}
+	f := &Fake{DB: db, Token: token, modelControl: newModelFixtureControl(ctx), attestedOwners: maps.Clone(owners)}
+	f.modelFixtures.attestedOwners = f.attestedOwners
+	f.modelControl.attestedOwners = f.attestedOwners
 	var raw []byte
 	if db == nil {
 		return f, f.enableEditDelay(ctx)
@@ -443,9 +459,9 @@ func Ready(ctx context.Context, url string) error {
 }
 func (f *Fake) labState(w http.ResponseWriter, r *http.Request) {
 	uid, _ := strconv.ParseInt(r.URL.Query().Get("user"), 10, 64)
-	owner, ok := identity.Subject(uid)
+	owner, ok := f.domainOwner(uid)
 	_, destinationOK := destination(strconv.FormatInt(uid, 10))
-	if !ok && !destinationOK {
+	if !ok && (!destinationOK || uid > 0) {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
 	}
@@ -529,7 +545,7 @@ func (f *Fake) labInput(w http.ResponseWriter, r *http.Request) {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
 	}
-	if _, ok := identity.Subject(in.User); !ok {
+	if _, ok := f.domainOwner(in.User); !ok {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
 	}

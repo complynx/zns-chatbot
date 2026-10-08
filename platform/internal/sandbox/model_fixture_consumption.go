@@ -34,8 +34,8 @@ func modelScopeKey(scope modelFixtureScope) string {
 	return modelFixtureKey(scope.Owner, scope.UpdateID) + ":" + stringTurn(scope.Turn)
 }
 
-func validModelScope(scope modelFixtureScope) bool {
-	return syntheticFixtureOwner(scope.Owner) && scope.UpdateID > 0 && scope.Turn >= 0 &&
+func validModelScope(scope modelFixtureScope, owners map[int64]string) bool {
+	return attestedModelOwner(owners, scope.Owner) && scope.UpdateID > 0 && scope.Turn >= 0 &&
 		scope.Turn < maxModelFixtureSteps
 }
 
@@ -60,7 +60,8 @@ func (f *Fake) restoreModelConsumption(snapshot *modelConsumptionSnapshot) error
 	seen := map[string]bool{}
 	for _, row := range snapshot.Rows {
 		key := modelScopeKey(row.scope())
-		if !validModelScope(row.scope()) || !modelDigest(row.RequestSHA256) || !modelDigest(row.ResponseSHA256) ||
+		if !validModelScope(row.scope(), f.attestedOwners) || !modelDigest(row.RequestSHA256) ||
+			!modelDigest(row.ResponseSHA256) ||
 			seen[key] {
 			return errors.New("invalid model consumption state")
 		}

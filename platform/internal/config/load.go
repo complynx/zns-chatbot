@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"go.yaml.in/yaml/v4"
@@ -13,6 +14,7 @@ import (
 
 const maxConfigBytes = 1 << 20
 const stringTag = "!!str"
+const integerTag = "!!int"
 const trueValue = "true"
 
 // Load applies defaults, one YAML document, legacy environment aliases, then
@@ -83,15 +85,44 @@ func checkMapping(node *yaml.Node, shape reflect.Type) error {
 			return errors.New("duplicate YAML configuration field")
 		}
 		seen[key.Value] = true
-		if field.Kind() == reflect.Struct {
-			if err := checkMapping(value, field); err != nil {
-				return err
-			}
-			continue
+		if err := checkField(key.Value, value, field); err != nil {
+			return err
 		}
-		if !validScalar(value, field) {
-			return fmt.Errorf("configuration field %s has an invalid YAML type", key.Value)
+	}
+	return nil
+}
+
+func checkField(name string, node *yaml.Node, shape reflect.Type) error {
+	switch {
+	case shape == reflect.TypeFor[map[int64]string]():
+		return checkSandboxTelegramOwners(node)
+	case shape.Kind() == reflect.Struct:
+		return checkMapping(node, shape)
+	case !validScalar(node, shape):
+		return fmt.Errorf("configuration field %s has an invalid YAML type", name)
+	default:
+		return nil
+	}
+}
+
+func checkSandboxTelegramOwners(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode || node.Tag != "!!map" || node.Anchor != "" {
+		return errors.New("sandbox Telegram owners require a plain YAML mapping")
+	}
+	seen := map[int64]bool{}
+	const entrySize = 2
+	for i := 0; i < len(node.Content); i += entrySize {
+		key, value := node.Content[i], node.Content[i+1]
+		sender, err := strconv.ParseInt(key.Value, 10, 64)
+		if key.Kind != yaml.ScalarNode || key.Tag != integerTag || key.Anchor != "" || err != nil || sender <= 0 ||
+			strconv.FormatInt(sender, 10) != key.Value ||
+			seen[sender] ||
+			value.Kind != yaml.ScalarNode ||
+			value.Tag != stringTag ||
+			value.Anchor != "" {
+			return errors.New("sandbox Telegram owners require unique positive senders and literal owner strings")
 		}
+		seen[sender] = true
 	}
 	return nil
 }
@@ -109,9 +140,9 @@ func validScalar(node *yaml.Node, field reflect.Type) bool {
 	case field.Kind() == reflect.Bool:
 		return node.Tag == "!!bool" && (node.Value == trueValue || node.Value == "false")
 	case field.Kind() == reflect.Int:
-		return node.Tag == "!!int"
+		return node.Tag == integerTag
 	case field.Kind() == reflect.Float64:
-		return node.Tag == "!!float" || node.Tag == "!!int"
+		return node.Tag == "!!float" || node.Tag == integerTag
 	default:
 		return false
 	}

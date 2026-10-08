@@ -48,9 +48,10 @@ type modelFixtureControlState struct {
 // Selected model controls reuse the existing reserved authenticated listener.
 // The control mutex never owns provider SQL, an HTTP wait or a file operation.
 type modelFixtureControl struct {
-	mu       sync.Mutex
-	lifetime context.Context
-	entries  map[string]*modelFixtureHold
+	attestedOwners map[int64]string
+	mu             sync.Mutex
+	lifetime       context.Context
+	entries        map[string]*modelFixtureHold
 }
 
 func newModelFixtureControl(ctx context.Context) *modelFixtureControl {
@@ -265,7 +266,7 @@ func (c *modelFixtureControl) control(w http.ResponseWriter, r *http.Request, bo
 	update, updateErr := strconv.ParseInt(r.URL.Query().Get("update_id"), 10, 64)
 	turn, turnErr := strconv.Atoi(r.URL.Query().Get("turn"))
 	scope.UpdateID, scope.Turn = update, turn
-	if updateErr != nil || turnErr != nil || !validModelScope(scope) {
+	if updateErr != nil || turnErr != nil || !validModelScope(scope, c.attestedOwners) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

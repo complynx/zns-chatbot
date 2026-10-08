@@ -50,7 +50,7 @@ func (f *Fake) modelFixturePlan(w http.ResponseWriter, r *http.Request) {
 	update, updateErr := strconv.ParseInt(r.Header.Get("X-Sandbox-Update"), 10, 64)
 	turn, turnErr := strconv.Atoi(r.Header.Get("X-Sandbox-Turn"))
 	owner := r.Header.Get("X-Sandbox-Actor")
-	if updateErr != nil || turnErr != nil || !syntheticFixtureOwner(owner) || update <= 0 || turn < 0 {
+	if updateErr != nil || turnErr != nil || !attestedModelOwner(f.attestedOwners, owner) || update <= 0 || turn < 0 {
 		api.JSON(w, http.StatusForbidden, map[string]string{errorField: invalidFixtureScope})
 		return
 	}
@@ -85,7 +85,7 @@ func (f *Fake) modelFixtureState(w http.ResponseWriter, r *http.Request) {
 	}
 	owner := r.URL.Query().Get("owner")
 	update, err := strconv.ParseInt(r.URL.Query().Get("update_id"), 10, 64)
-	if !syntheticFixtureOwner(owner) || err != nil || update <= 0 {
+	if !attestedModelOwner(f.attestedOwners, owner) || err != nil || update <= 0 {
 		api.JSON(w, http.StatusBadRequest, map[string]string{errorField: invalidFixtureScope})
 		return
 	}

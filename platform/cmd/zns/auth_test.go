@@ -17,6 +17,19 @@ func TestRuntimeAuthRejectsUnknownMode(t *testing.T) {
 	require.EqualError(t, err, "invalid runtime authentication mode")
 }
 
+func TestRuntimeAuthRejectsSandboxOwnersOutsideExplicitSandbox(t *testing.T) {
+	t.Parallel()
+	for _, cfg := range []config.Config{
+		{Env: "production", Auth: config.Auth{Mode: "sandbox"}},
+		{Env: "sandbox", Auth: config.Auth{Mode: "zitadel"}},
+		{Env: "sandbox", Auth: config.Auth{}},
+	} {
+		cfg.Auth.SandboxTelegramOwners = map[int64]string{101: "owner-101"}
+		_, _, _, err := runtimeAuth(nil, cfg, identity.Signer{})
+		require.EqualError(t, err, "sandbox Telegram owners require sandbox authentication")
+	}
+}
+
 func TestZitadelSecretsAreRedacted(t *testing.T) {
 	t.Parallel()
 	cfg := config.Config{Log: config.Log{Level: "info"}, Auth: config.Auth{Zitadel: config.Zitadel{

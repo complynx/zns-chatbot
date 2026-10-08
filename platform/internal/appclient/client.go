@@ -24,7 +24,9 @@ type Client struct {
 	Base              string
 	// SandboxToken is injected only by sandbox composition; it cannot mint host credentials.
 	SandboxToken func(string) string
-	HTTP         *http.Client
+	// SandboxTelegramOwners is an explicit fixture attestation; nil retains the default actors.
+	SandboxTelegramOwners map[int64]string
+	HTTP                  *http.Client
 }
 
 const (

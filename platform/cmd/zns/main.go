@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -167,7 +168,12 @@ func runDatabaseCommand(ctx context.Context, logger *slog.Logger, cfg config.Con
 	case "app":
 		return runApp(ctx, db, signer, logger, cfg, runtime)
 	case "fake":
-		fake, fakeError := sandbox.New(ctx, db, cfg.Telegram.Token.Value())
+		fake, fakeError := sandbox.NewWithAttestedOwners(
+			ctx,
+			db,
+			cfg.Telegram.Token.Value(),
+			cfg.Auth.SandboxTelegramOwners,
+		)
 		if fakeError != nil {
 			return fakeError
 		}
@@ -341,8 +347,9 @@ func unobservedModel(cfg config.Config, runtime *observability.Runtime) (agent.M
 			return nil, errors.New("fixture model requires synthetic_only and an explicit URL")
 		}
 		return sandbox.FixtureRemote{
-			URL:  cfg.Model.URL,
-			HTTP: telemetryClient(runtime, "api", remoteClientTimeout),
+			URL:            cfg.Model.URL,
+			HTTP:           telemetryClient(runtime, "api", remoteClientTimeout),
+			AttestedOwners: maps.Clone(cfg.Auth.SandboxTelegramOwners),
 		}, nil
 	case "codex":
 		if !cfg.SyntheticOnly || cfg.Server.Host != "127.0.0.1" {

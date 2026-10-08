@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -22,7 +21,7 @@ func (f *Fake) installAndEnqueueFixture(ctx context.Context, value modelFixtureI
 		return value.UpdateID, f.installModelCase(ctx, value)
 	}
 	input := value.Input
-	owner, ok := identity.Subject(input.User)
+	owner, ok := f.domainOwner(input.User)
 	if !ok || value.UpdateID != 0 || value.Owner != "" || len(input.Text) == 0 || len(input.Text) > 5000 ||
 		len(input.LanguageCode) > 64 {
 		return 0, errors.New("invalid fixture input scope")

@@ -64,10 +64,11 @@ type modelFixtureCase struct {
 }
 
 type modelFixtures struct {
-	mu    sync.Mutex
-	cases map[string]*modelFixtureCase
-	bytes int
-	steps int
+	attestedOwners map[int64]string
+	mu             sync.Mutex
+	cases          map[string]*modelFixtureCase
+	bytes          int
+	steps          int
 }
 
 type modelFixtureState struct {
@@ -127,7 +128,7 @@ func (m *modelFixtures) install(value modelFixtureInstall) error {
 }
 
 func (m *modelFixtures) installContext(ctx, lifetime context.Context, value modelFixtureInstall) error {
-	if !syntheticFixtureOwner(value.Owner) || value.UpdateID <= 0 {
+	if !attestedModelOwner(m.attestedOwners, value.Owner) || value.UpdateID <= 0 {
 		return errors.New(invalidFixtureScope)
 	}
 	steps, assessment, size, err := freezeModelFixture(value)
@@ -180,7 +181,7 @@ func (m *modelFixtures) fixturePlanLocked(
 	input agent.Input,
 	consume bool,
 ) (agent.Plan, error) {
-	if !syntheticFixtureOwner(scope.Owner) || scope.UpdateID <= 0 || scope.Turn < 0 {
+	if !attestedModelOwner(m.attestedOwners, scope.Owner) || scope.UpdateID <= 0 || scope.Turn < 0 {
 		return agent.Plan{}, errors.New(invalidFixtureScope)
 	}
 	data, err := json.Marshal(input)
