@@ -73,7 +73,16 @@ func parseDocument(w http.ResponseWriter, r *http.Request) (documentUpload, erro
 
 func (f *Fake) sendDocument(w http.ResponseWriter, r *http.Request) {
 	upload, err := parseDocument(w, r)
-	if err != nil || f.DB == nil {
+	if err != nil {
+		tgError(w, http.StatusBadRequest, "invalid document")
+		return
+	}
+	chat, known := f.deliveryDestination(strconv.FormatInt(upload.chat, 10))
+	if !known {
+		tgError(w, http.StatusBadRequest, "chat not found")
+		return
+	}
+	if f.DB == nil {
 		tgError(w, http.StatusBadRequest, "invalid document")
 		return
 	}
@@ -106,7 +115,7 @@ func (f *Fake) sendDocument(w http.ResponseWriter, r *http.Request) {
 	f.next++
 	message := telegram.Message{
 		ID:   f.next,
-		Chat: telegram.Chat{ID: upload.chat, Type: privateChat},
+		Chat: chat,
 		From: telegram.User{ID: fakeBotID, IsBot: true},
 		Document: &telegram.Document{
 			FileID:   id,

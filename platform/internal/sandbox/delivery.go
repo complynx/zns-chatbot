@@ -29,6 +29,14 @@ func destination(value string) (telegram.Chat, bool) {
 	return telegram.Chat{ID: id, Type: privateChat}, ok
 }
 
+func (f *Fake) deliveryDestination(value string) (telegram.Chat, bool) {
+	chat, known := destination(value)
+	if known && chat.Type == privateChat {
+		_, known = f.domainOwner(chat.ID)
+	}
+	return chat, known
+}
+
 type deliveryRequest struct {
 	ChatID    json.RawMessage `json:"chat_id"`
 	ThreadID  int64           `json:"message_thread_id,omitempty"`
@@ -45,14 +53,9 @@ func (p deliveryRequest) resolve(f *Fake) (telegram.Send, telegram.Chat, error) 
 			return telegram.Send{}, telegram.Chat{}, err
 		}
 	}
-	chat, ok := destination(value)
+	chat, ok := f.deliveryDestination(value)
 	if !ok {
 		return telegram.Send{}, chat, errors.New("chat not found")
-	}
-	if chat.Type == privateChat {
-		if _, known := f.domainOwner(chat.ID); !known {
-			return telegram.Send{}, chat, errors.New("chat not found")
-		}
 	}
 	if p.ThreadID != 0 && (chat.ID != forumID || p.ThreadID != 101 && p.ThreadID != 102) {
 		return telegram.Send{}, chat, errors.New("message thread not found")

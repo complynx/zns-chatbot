@@ -142,6 +142,10 @@ func (f *Fake) getFile(w http.ResponseWriter, r *http.Request) {
 
 func (f *Fake) labFile(w http.ResponseWriter, r *http.Request) {
 	user, _ := strconv.ParseInt(r.URL.Query().Get("user"), 10, 64)
+	if _, known := f.deliveryDestination(strconv.FormatInt(user, 10)); !known {
+		http.NotFound(w, r)
+		return
+	}
 	f.mu.Lock()
 	found := false
 	for _, message := range f.messages {
@@ -217,6 +221,11 @@ func (f *Fake) forwardMessage(w http.ResponseWriter, r *http.Request) {
 		tgError(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
+	chat, known := f.deliveryDestination(strconv.FormatInt(input.Chat, 10))
+	if !known {
+		tgError(w, http.StatusBadRequest, "chat not found")
+		return
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var original telegram.Message
@@ -232,7 +241,7 @@ func (f *Fake) forwardMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	f.next++
 	original.ID = f.next
-	original.Chat = telegram.Chat{ID: input.Chat, Type: privateChat}
+	original.Chat = chat
 	original.From = telegram.User{ID: fakeBotID, IsBot: true}
 	original.Markup = telegram.Markup{}
 	f.messages = append(f.messages, original)
