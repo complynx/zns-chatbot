@@ -239,7 +239,7 @@ func (c *Coordinator) knownInventory(ctx context.Context, ledger Ledger) ([]Cont
 func (c *Coordinator) waitStopped(ctx context.Context, ledger Ledger) error {
 	for {
 		inventory, err := c.knownInventory(ctx, ledger)
-		if err != nil {
+		if err = retirementObservationError(ctx, err); err != nil {
 			return err
 		}
 		stopped := true
@@ -249,7 +249,7 @@ func (c *Coordinator) waitStopped(ctx context.Context, ledger Ledger) error {
 			}
 		}
 		names, err := c.Sessions.Names(ctx)
-		if err != nil {
+		if err = retirementObservationError(ctx, err); err != nil {
 			return err
 		}
 		if err = knownSessions(ledger, names); err != nil {
@@ -265,6 +265,13 @@ func (c *Coordinator) waitStopped(ctx context.Context, ledger Ledger) error {
 			return errors.Join(ErrDeadline, err)
 		}
 	}
+}
+
+func retirementObservationError(ctx context.Context, err error) error {
+	if contextErr := ctx.Err(); contextErr != nil {
+		return errors.Join(ErrDeadline, contextErr, err)
+	}
+	return err
 }
 
 func knownSessions(ledger Ledger, names []string) error {

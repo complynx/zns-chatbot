@@ -105,6 +105,16 @@ func TestRuntimeReplacementActiveAdmissionLoss(t *testing.T) {
 	require.NoError(t, err)
 	defer inventory.Close(context.WithoutCancel(t.Context()))
 	sessions := replacement.PostgresSessions{Conn: inventory, Roles: []string{role}}
+	refreshInventory := func() {
+		if !inventory.IsClosed() {
+			return
+		}
+		inventory, err = pgx.ConnectConfig(t.Context(), db.Config().ConnConfig.Copy())
+		require.NoError(t, err)
+		sessions.Conn = inventory
+		fresh := inventory
+		t.Cleanup(func() { require.NoError(t, fresh.Close(context.WithoutCancel(t.Context()))) })
+	}
 	ctx, cancel := context.WithTimeout(t.Context(), admissionTestWait)
 	defer cancel()
 	engine := &replacementAdmissionEngine{}
@@ -153,7 +163,7 @@ func TestRuntimeReplacementActiveAdmissionLoss(t *testing.T) {
 			return terminateErr
 		},
 	}
-	coordinator := replacement.Coordinator{Engine: engine, Sessions: sessions, Journal: journal,
+	coordinator := replacement.Coordinator{Engine: engine, Sessions: &sessions, Journal: journal,
 		Installation: instance.Installation, Host: "test-host", StopTimeout: time.Second,
 		VerifyTimeout: 50 * time.Millisecond, PollInterval: time.Millisecond, ReadyTimeout: time.Second,
 		NewLaunch: func() (string, error) { return instance.Launch, nil }}
@@ -161,6 +171,7 @@ func TestRuntimeReplacementActiveAdmissionLoss(t *testing.T) {
 	require.ErrorIs(t, err, replacement.ErrStopped)
 	require.ErrorIs(t, err, replacement.ErrDeadline)
 	require.NoError(t, ctx.Err(), "the active monitor must detect loss before the enclosing test deadline")
+	refreshInventory()
 	ledger, err := journal.Load()
 	require.NoError(t, err)
 	require.Equal(t, replacement.StateBlocked, ledger.State)
@@ -170,6 +181,7 @@ func TestRuntimeReplacementActiveAdmissionLoss(t *testing.T) {
 	require.NotContains(t, names, admit)
 	require.Equal(t, 1, engine.created)
 	require.ErrorIs(t, coordinator.Run(ctx), replacement.ErrDeadline)
+	refreshInventory()
 	require.Equal(t, 1, engine.created, "live old pool must block replacement creation")
 	require.NoError(t, transaction.Rollback(ctx))
 	transaction = nil

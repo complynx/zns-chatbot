@@ -273,3 +273,72 @@ func TestDiagnosticProcessStatePreservesVersionOneJournalReaders(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, string(data), string(roundtrip))
 }
+
+type retirementObservationEngine struct {
+	*fixture
+
+	stopped          bool
+	inventoryFailure bool
+	waitForDeadline  bool
+}
+
+func (e *retirementObservationEngine) Stop(ctx context.Context, containers []replacement.Container) error {
+	err := e.fixture.Stop(ctx, containers)
+	e.stopped = true
+	return err
+}
+
+func (e *retirementObservationEngine) Inventory(ctx context.Context) ([]replacement.Container, error) {
+	if e.stopped && e.inventoryFailure {
+		if e.waitForDeadline {
+			<-ctx.Done()
+		}
+		return nil, replacement.ErrUnknown
+	}
+	return e.fixture.Inventory(ctx)
+}
+
+func (e *retirementObservationEngine) Names(ctx context.Context) ([]string, error) {
+	if e.stopped && !e.inventoryFailure {
+		if e.waitForDeadline {
+			<-ctx.Done()
+		}
+		return nil, replacement.ErrUnknown
+	}
+	return e.fixture.Names(ctx)
+}
+
+func TestRetirementObservationFailurePreservesDeadlineAndOwnership(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name      string
+		inventory bool
+		deadline  bool
+	}{
+		{"inventory_deadline", true, true},
+		{"sessions_deadline", false, true},
+		{"inventory_failure", true, false},
+		{"sessions_failure", false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			f, c := newFixture(t)
+			engine := &retirementObservationEngine{
+				fixture: f, inventoryFailure: test.inventory, waitForDeadline: test.deadline,
+			}
+			c.Engine, c.Sessions = engine, engine
+			err := c.Run(t.Context())
+			require.ErrorIs(t, err, replacement.ErrUnknown)
+			if test.deadline {
+				require.ErrorIs(t, err, replacement.ErrDeadline)
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+			} else {
+				require.NotErrorIs(t, err, replacement.ErrDeadline)
+			}
+			require.Equal(t, replacement.StateBlocked, f.ledger.State)
+			require.Zero(t, f.createCalls)
+			require.Zero(t, f.killCalls)
+			require.NotEmpty(t, f.inventory)
+		})
+	}
+}
