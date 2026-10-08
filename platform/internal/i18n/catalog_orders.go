@@ -6,6 +6,7 @@ const (
 	OrderClosed              ID = "orders.closed"
 	OrderNew                 ID = "orders.new"
 	OrderUnavailable         ID = "orders.unavailable"
+	OrderEventUnavailable    ID = "orders.event_unavailable"
 	OrderRejected            ID = "orders.rejected"
 	OrderUpdated             ID = "orders.updated"
 	OrderRetired             ID = "orders.retired"

@@ -195,6 +195,7 @@ func englishCatalog() translations {
 			OrderClosed:                             "Orders closed. Use /orders to open them again.",
 			OrderNew:                                "New order",
 			OrderUnavailable:                        "This button is unavailable. Open /orders for the current view.",
+			OrderEventUnavailable:                   "Orders for the selected event are unavailable. Other commands remain available.",
 			OrderRejected:                           "Action declined: {code}. The current state is shown.",
 			OrderUpdated:                            "Order updated. The card shows its current state.",
 			OrderRetired:                            "This order was deleted or no longer needs payment review.",

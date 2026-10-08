@@ -16,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
 	"github.com/complynx/zns-chatbot/platform/internal/core"
 	"github.com/complynx/zns-chatbot/platform/internal/i18n"
 	"github.com/complynx/zns-chatbot/platform/internal/interaction"
@@ -50,7 +51,18 @@ func (b *Bot) handleOrders(ctx context.Context, in incoming, update telegram.Upd
 		return err
 	}
 	if err = b.RenderOrders(ctx, in.owner, in.chat); err != nil {
-		return err
+		if core.IsDatabaseFailure(err) {
+			return err
+		}
+		problem, missing := errors.AsType[*core.ProblemError](err)
+		if !missing || problem.Status != http.StatusNotFound || problem.Code != "event_not_found" {
+			return err
+		}
+		if err = b.queueBotUpdateResult(ctx, in.chat, "orders_event_unavailable",
+			botdelivery.Reference{Family: botFamilyStatic},
+			botdelivery.StoredResult{Notice: i18n.OrderEventUnavailable}); err != nil {
+			return err
+		}
 	}
 	if update.Callback != nil {
 		return b.acknowledge(ctx, update.Callback.ID)
