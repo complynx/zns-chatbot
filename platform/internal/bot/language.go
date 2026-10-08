@@ -95,7 +95,9 @@ func (b *Bot) refreshLanguageViews(ctx context.Context, in incoming) error {
 	}
 	if hasOrders {
 		if err = b.RenderOrders(ctx, in.owner, in.chat); err != nil {
-			return err
+			if err = b.refuseMissingOrderEvent(ctx, in.chat, err); err != nil {
+				return err
+			}
 		}
 	}
 	if err = b.refreshOpenProfile(ctx, in.owner, in.chat); err != nil {

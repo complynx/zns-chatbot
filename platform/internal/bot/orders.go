@@ -51,16 +51,7 @@ func (b *Bot) handleOrders(ctx context.Context, in incoming, update telegram.Upd
 		return err
 	}
 	if err = b.RenderOrders(ctx, in.owner, in.chat); err != nil {
-		if core.IsDatabaseFailure(err) {
-			return err
-		}
-		problem, missing := errors.AsType[*core.ProblemError](err)
-		if !missing || problem.Status != http.StatusNotFound || problem.Code != "event_not_found" {
-			return err
-		}
-		if err = b.queueBotUpdateResult(ctx, in.chat, "orders_event_unavailable",
-			botdelivery.Reference{Family: botFamilyStatic},
-			botdelivery.StoredResult{Notice: i18n.OrderEventUnavailable}); err != nil {
+		if err = b.refuseMissingOrderEvent(ctx, in.chat, err); err != nil {
 			return err
 		}
 	}
@@ -68,6 +59,19 @@ func (b *Bot) handleOrders(ctx context.Context, in incoming, update telegram.Upd
 		return b.acknowledge(ctx, update.Callback.ID)
 	}
 	return nil
+}
+
+func (b *Bot) refuseMissingOrderEvent(ctx context.Context, chat int64, err error) error {
+	if core.IsDatabaseFailure(err) {
+		return err
+	}
+	problem, missing := errors.AsType[*core.ProblemError](err)
+	if !missing || problem.Status != http.StatusNotFound || problem.Code != "event_not_found" {
+		return err
+	}
+	return b.queueBotUpdateResult(ctx, chat, "orders_event_unavailable",
+		botdelivery.Reference{Family: botFamilyStatic},
+		botdelivery.StoredResult{Notice: i18n.OrderEventUnavailable})
 }
 
 func (b *Bot) handleOrderCallback(ctx context.Context, in incoming, update int64) (string, error) {

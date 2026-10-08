@@ -69,3 +69,38 @@ func TestMissingDefaultOrderEventDoesNotHideDatabaseFailure(t *testing.T) {
 		"a database failure must remain retryable, not become a missing-event refusal")
 	assert.Empty(t, chatMessages(t, f, 101))
 }
+
+func TestMissingOrderEventKeepsExistingCardLanguageUsable(t *testing.T) {
+	t.Parallel()
+	f := setup(t)
+	handleVisible(t, f.b, message(20, 101, "/orders"))
+	orderClick(t, f, 101, 21, "Новый заказ")
+	_, err := f.db.Exec(t.Context(), `DELETE FROM core.order_admins WHERE event_id='sandbox-festival'`)
+	require.NoError(t, err)
+	_, err = f.db.Exec(t.Context(), `DELETE FROM core.order_events WHERE id='sandbox-festival'`)
+	require.NoError(t, err)
+	handleVisible(t, f.b, message(22, 101, "/orders"))
+	handleVisible(t, f.b, message(23, 101, "/language"))
+	language := orderClick(t, f, 101, 24, "en")
+	choose, err := i18n.Translate("ru", i18n.LanguageChoose, map[string]string{"language": "ru"})
+	require.NoError(t, err)
+	current, err := i18n.Translate("ru", i18n.LanguageCurrent, map[string]string{"language": "ru"})
+	require.NoError(t, err)
+	assert.Equal(t, choose+"\n"+current, language.Callback.Message.Text)
+	handleVisible(t, f.b, language)
+	preference, err := f.b.API.Preferences(t.Context(), "alice")
+	require.NoError(t, err)
+	assert.Equal(t, "en", preference.Language)
+	saved, err := i18n.Translate("en", i18n.LanguageSaved, map[string]string{"language": "en"})
+	require.NoError(t, err)
+	current, err = i18n.Translate("en", i18n.LanguageCurrent, map[string]string{"language": "en"})
+	require.NoError(t, err)
+	assert.Equal(t, saved+"\n"+current, orderClick(t, f, 101, 25, "ru").Callback.Message.Text)
+	refusal, err := i18n.Translate("en", i18n.OrderEventUnavailable, nil)
+	require.NoError(t, err)
+	texts := make([]string, 0)
+	for _, card := range chatMessages(t, f, 101) {
+		texts = append(texts, card.Text)
+	}
+	assert.Contains(t, texts, refusal, "the existing order view must not block language completion")
+}
