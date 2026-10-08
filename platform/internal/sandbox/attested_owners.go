@@ -15,8 +15,9 @@ func validateAttestedOwners(owners map[int64]string) error {
 		return errors.New("attested sandbox owners must not be empty")
 	}
 	for sender, owner := range owners {
-		if sender <= 0 || owner == "" || strings.TrimSpace(owner) != owner {
-			return errors.New("attested sandbox owners require positive senders and nonblank owners")
+		_, supported := identity.Subject(sender)
+		if !supported || owner == "" || strings.TrimSpace(owner) != owner {
+			return errors.New("attested sandbox owners require supported fixture actors and nonblank owners")
 		}
 	}
 	return nil
@@ -33,6 +34,9 @@ func (f *Fake) domainOwner(sender int64) (string, bool) {
 func attestedModelOwner(owners map[int64]string, owner string) bool {
 	if owners == nil {
 		return syntheticFixtureOwner(owner)
+	}
+	if validateAttestedOwners(owners) != nil {
+		return false
 	}
 	for _, attested := range owners {
 		if owner == attested {

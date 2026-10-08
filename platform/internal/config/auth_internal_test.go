@@ -47,6 +47,7 @@ func TestSandboxTelegramOwnersRequireExplicitSandbox(t *testing.T) {
 		{"zitadel", sandboxMode, Auth{Mode: zitadelMode, SandboxTelegramOwners: valid.SandboxTelegramOwners}},
 		{"empty mapping", sandboxMode, Auth{Mode: sandboxMode, SandboxTelegramOwners: map[int64]string{}}},
 		{"invalid sender", sandboxMode, Auth{Mode: sandboxMode, SandboxTelegramOwners: map[int64]string{0: "owner-101"}}},
+		{"unsupported fixture actor", sandboxMode, Auth{Mode: sandboxMode, SandboxTelegramOwners: map[int64]string{404: "owner-404"}}},
 		{"empty owner", sandboxMode, Auth{Mode: sandboxMode, SandboxTelegramOwners: map[int64]string{101: ""}}},
 		{"padded owner", sandboxMode, Auth{Mode: sandboxMode, SandboxTelegramOwners: map[int64]string{101: " owner-101"}}},
 	} {

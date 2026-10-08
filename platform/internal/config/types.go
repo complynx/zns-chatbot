@@ -85,6 +85,7 @@ type Database struct {
 	URL Secret `yaml:"url" json:"url"`
 }
 type Auth struct {
+	// Attest domain owners for synthetic Telegram actors 101, 202, and 303 only.
 	SandboxTelegramOwners map[int64]string `yaml:"sandbox_telegram_owners" json:"sandbox_telegram_owners"`
 	LegacyBrowserOrigins  string           `yaml:"legacy_browser_origins"  json:"legacy_browser_origins"`
 	Mode                  string           `yaml:"mode"                    json:"mode"`

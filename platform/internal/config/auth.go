@@ -76,7 +76,8 @@ func (a Auth) validateSandboxTelegramOwners(environment string) error {
 		return errDiagnosticAuthConfiguration
 	}
 	for sender, owner := range a.SandboxTelegramOwners {
-		if sender <= 0 || owner == "" || strings.TrimSpace(owner) != owner {
+		_, supported := identity.Subject(sender)
+		if !supported || owner == "" || strings.TrimSpace(owner) != owner {
 			return errDiagnosticAuthConfiguration
 		}
 	}

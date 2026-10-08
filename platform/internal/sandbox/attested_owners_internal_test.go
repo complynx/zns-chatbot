@@ -1,15 +1,70 @@
 package sandbox
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/agent"
+	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
+
+func TestAttestedSandboxActorsReceiveRepliesAndLaunchOwnedMiniApp(t *testing.T) {
+	t.Parallel()
+	fake, err := NewWithAttestedOwners(t.Context(), nil, "synthetic-token", map[int64]string{
+		101: "owner-101", 202: "owner-202", 303: "owner-303",
+	})
+	require.NoError(t, err)
+	server := httptest.NewServer(fake.Handler())
+	t.Cleanup(server.Close)
+	client := telegram.Client{Base: server.URL, Token: fake.Token}
+	address := "https://example.test/menu"
+	for _, sender := range []int64{101, 202, 303} {
+		message, sendErr := client.Send(
+			t.Context(),
+			telegram.Send{ChatID: sender, Text: "Menu", Markup: telegram.Markup{
+				Rows: [][]telegram.Button{{{Text: "Menu", WebApp: &telegram.WebApp{URL: address}}}},
+			}},
+		)
+		require.NoError(t, sendErr)
+		require.Equal(t, sender, message.Chat.ID)
+		payload, marshalErr := json.Marshal(map[string]any{"user": sender, "message_id": message.ID, "url": address})
+		require.NoError(t, marshalErr)
+		request := httptest.NewRequest(http.MethodPost, "/lab/webapp", strings.NewReader(string(payload)))
+		request.Header.Set("X-Sandbox", "1")
+		response := httptest.NewRecorder()
+		fake.Handler().ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code)
+		var result struct {
+			URL string `json:"url"`
+		}
+		require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
+		launched, parseErr := url.Parse(result.URL)
+		require.NoError(t, parseErr)
+		fragment, fragmentErr := url.ParseQuery(launched.EscapedFragment())
+		require.NoError(t, fragmentErr)
+		actor, verifyErr := telegram.VerifyWebApp(fragment.Get("tgWebAppData"), fake.Token, time.Now())
+		require.NoError(t, verifyErr)
+		require.Equal(t, sender, actor.ID)
+	}
+	_, err = client.Send(t.Context(), telegram.Send{ChatID: 404, Text: "Denied"})
+	require.Error(t, err)
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/lab/webapp",
+		strings.NewReader(`{"user":404,"message_id":1,"url":"https://example.test/menu"}`),
+	)
+	request.Header.Set("X-Sandbox", "1")
+	response := httptest.NewRecorder()
+	fake.Handler().ServeHTTP(response, request)
+	require.Equal(t, http.StatusBadRequest, response.Code)
+}
 
 func TestAttestedSandboxFixtureUsesMappedOwnerWithoutFallback(t *testing.T) {
 	t.Parallel()
@@ -70,7 +125,7 @@ func TestAttestedSandboxPublicInputAndStateDenyUnmappedActor(t *testing.T) {
 
 func TestAttestedSandboxConstructorValidationAndDefaultOwners(t *testing.T) {
 	t.Parallel()
-	for _, owners := range []map[int64]string{{}, {0: "owner-101"}, {101: ""}, {101: " owner-101"}} {
+	for _, owners := range []map[int64]string{{}, {0: "owner-101"}, {404: "owner-404"}, {101: ""}, {101: " owner-101"}} {
 		_, err := NewWithAttestedOwners(t.Context(), nil, "synthetic-token", owners)
 		require.Error(t, err)
 	}
@@ -83,6 +138,7 @@ func TestAttestedSandboxConstructorValidationAndDefaultOwners(t *testing.T) {
 	}
 	_, known := fake.domainOwner(404)
 	require.False(t, known)
+	require.False(t, attestedModelOwner(map[int64]string{404: "owner-404"}, "owner-404"))
 }
 
 func TestAttestedSandboxRemoteAndPersistedConsumptionKeepExactOwner(t *testing.T) {
