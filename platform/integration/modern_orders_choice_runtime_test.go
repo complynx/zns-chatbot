@@ -357,7 +357,8 @@ func completeModernRuntimeInbox(t *testing.T, f *fixture, update int64) {
 			Scan(&cursor, &count)
 		return err == nil && cursor == update+1 && count == 0
 	}
-	ticker := time.NewTicker(10 * time.Millisecond)
+	// Observe completion without competing with the runtime's database work.
+	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for !ready() {
 		select {
