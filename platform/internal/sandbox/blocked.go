@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/identity"
 )
 
 func (f *Fake) labBlocked(w http.ResponseWriter, r *http.Request) {
@@ -19,7 +18,7 @@ func (f *Fake) labBlocked(w http.ResponseWriter, r *http.Request) {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
 	}
-	if _, ok := identity.Subject(input.User); !ok {
+	if _, ok := f.domainOwner(input.User); !ok {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
 	}

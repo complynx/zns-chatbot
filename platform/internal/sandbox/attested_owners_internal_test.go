@@ -123,6 +123,43 @@ func TestAttestedSandboxPublicInputAndStateDenyUnmappedActor(t *testing.T) {
 	require.Equal(t, http.StatusOK, response.Code, "provider actor slots stay separate from domain owners")
 }
 
+func TestAttestedSandboxPartialMapDeniesOmittedActorEffectsAndStoredLaunch(t *testing.T) {
+	t.Parallel()
+	fake, err := NewWithAttestedOwners(t.Context(), nil, "synthetic-token", map[int64]string{101: "owner-101"})
+	require.NoError(t, err)
+	address := "https://example.test/menu"
+	// A restored transport snapshot can contain a button for an omitted actor.
+	fake.messages = []telegram.Message{{ID: 7, Chat: telegram.Chat{ID: 202, Type: privateChat}, Markup: telegram.Markup{
+		Rows: [][]telegram.Button{{{Text: "Menu", WebApp: &telegram.WebApp{URL: address}}}},
+	}}}
+	for _, test := range []struct{ path, body string }{
+		{"/botsynthetic-token/sendMessage", `{"chat_id":202,"text":"Denied"}`},
+		{"/lab/webapp", `{"user":202,"message_id":7,"url":"https://example.test/menu"}`},
+		{"/lab/document?user=202&filename=note.txt", "document"},
+		{"/lab/photo?user=202&filename=photo.png", "photo"},
+		{"/lab/sticker?user=202&filename=sticker.webp", "sticker"},
+		{"/lab/custom_emoji?user=202&filename=emoji.webp", "emoji"},
+		{"/lab/blocked", `{"user":202,"blocked":true}`},
+	} {
+		request := httptest.NewRequest(http.MethodPost, test.path, strings.NewReader(test.body))
+		request.Header.Set("X-Sandbox", "1")
+		response := httptest.NewRecorder()
+		fake.Handler().ServeHTTP(response, request)
+		require.Equal(t, http.StatusBadRequest, response.Code, test.path)
+	}
+	server := httptest.NewServer(fake.Handler())
+	t.Cleanup(server.Close)
+	client := telegram.Client{Base: server.URL, Token: fake.Token}
+	message, err := client.Send(t.Context(), telegram.Send{ChatID: 101, Text: "Allowed"})
+	require.NoError(t, err)
+	require.Equal(t, int64(101), message.Chat.ID)
+	for _, destination := range []int64{channelID, forumID} {
+		message, err = client.Send(t.Context(), telegram.Send{ChatID: destination, Text: "Provider destination"})
+		require.NoError(t, err)
+		require.Equal(t, destination, message.Chat.ID)
+	}
+}
+
 func TestAttestedSandboxConstructorValidationAndDefaultOwners(t *testing.T) {
 	t.Parallel()
 	for _, owners := range []map[int64]string{{}, {0: "owner-101"}, {404: "owner-404"}, {101: ""}, {101: " owner-101"}} {

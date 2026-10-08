@@ -38,7 +38,7 @@ type deliveryRequest struct {
 	Markup    telegram.Markup `json:"reply_markup"`
 }
 
-func (p deliveryRequest) resolve() (telegram.Send, telegram.Chat, error) {
+func (p deliveryRequest) resolve(f *Fake) (telegram.Send, telegram.Chat, error) {
 	value := string(p.ChatID)
 	if strings.HasPrefix(value, "\"") {
 		if err := json.Unmarshal(p.ChatID, &value); err != nil {
@@ -48,6 +48,11 @@ func (p deliveryRequest) resolve() (telegram.Send, telegram.Chat, error) {
 	chat, ok := destination(value)
 	if !ok {
 		return telegram.Send{}, chat, errors.New("chat not found")
+	}
+	if chat.Type == privateChat {
+		if _, known := f.domainOwner(chat.ID); !known {
+			return telegram.Send{}, chat, errors.New("chat not found")
+		}
 	}
 	if p.ThreadID != 0 && (chat.ID != forumID || p.ThreadID != 101 && p.ThreadID != 102) {
 		return telegram.Send{}, chat, errors.New("message thread not found")

@@ -15,7 +15,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -44,7 +43,7 @@ func (f *Fake) labDocument(w http.ResponseWriter, r *http.Request) {
 	user, _ := strconv.ParseInt(r.URL.Query().Get("user"), 10, 64)
 	name := r.URL.Query().Get("filename")
 	caption := r.URL.Query().Get("caption")
-	if _, ok := identity.Subject(user); !ok || name == "" || len(name) > 255 || strings.ContainsAny(name, "\r\n/\\") {
+	if _, ok := f.domainOwner(user); !ok || name == "" || len(name) > 255 || strings.ContainsAny(name, "\r\n/\\") {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
 	}

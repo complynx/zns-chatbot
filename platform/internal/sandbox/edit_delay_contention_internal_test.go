@@ -15,7 +15,7 @@ import (
 func delayContentionInput(t *testing.T) admittedDelivery {
 	t.Helper()
 	wire := deliveryRequest{ChatID: []byte("101"), MessageID: 7, Text: "replacement"}
-	send, chat, err := wire.resolve()
+	send, chat, err := wire.resolve(&Fake{})
 	require.NoError(t, err)
 	text, entities, err := deliveryText(send)
 	require.NoError(t, err)

@@ -316,7 +316,7 @@ func (f *Fake) writeMessage(w http.ResponseWriter, r *http.Request, method strin
 		tgError(w, http.StatusBadRequest, "invalid payload")
 		return
 	}
-	p, chat, err := wire.resolve()
+	p, chat, err := wire.resolve(f)
 	if err != nil {
 		tgError(w, http.StatusBadRequest, err.Error())
 		return

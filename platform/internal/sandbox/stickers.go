@@ -14,7 +14,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -34,7 +33,7 @@ func (f *Fake) labSticker(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	user, _ := strconv.ParseInt(query.Get("user"), 10, 64)
 	name, caption := query.Get("filename"), query.Get("caption")
-	if _, ok := identity.Subject(user); !ok || name == "" || len(name) > 255 || strings.ContainsAny(name, "\r\n/\\") ||
+	if _, ok := f.domainOwner(user); !ok || name == "" || len(name) > 255 || strings.ContainsAny(name, "\r\n/\\") ||
 		!utf8.ValidString(caption) || utf8.RuneCountInString(caption) > 1024 {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return

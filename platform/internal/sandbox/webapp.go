@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/complynx/zns-chatbot/platform/internal/api"
-	"github.com/complynx/zns-chatbot/platform/internal/identity"
 	"github.com/complynx/zns-chatbot/platform/internal/telegram"
 )
 
@@ -49,7 +48,7 @@ func (f *Fake) launchMiniApp(w http.ResponseWriter, r *http.Request) {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
 	}
-	if _, known := identity.Subject(input.User); !known {
+	if _, known := f.domainOwner(input.User); !known {
 		api.JSON(w, http.StatusBadRequest, nil)
 		return
 	}
