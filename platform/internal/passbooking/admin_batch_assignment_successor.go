@@ -8,7 +8,12 @@ import (
 
 // prepareAssignmentSuccessor advances only the original booking identity through
 // canonical earlier receipts of this locked batch. Command hashes remain original.
-func (b *RuntimeBatchState) prepareAssignmentSuccessor(ctx context.Context, tx pgx.Tx, index int, p *PreparedAssignment) error {
+func (b *RuntimeBatchState) prepareAssignmentSuccessor(
+	ctx context.Context,
+	tx pgx.Tx,
+	index int,
+	p *PreparedAssignment,
+) error {
 	transitions, err := b.AssignmentTransitions(ctx, tx, index)
 	if err != nil {
 		return err
@@ -17,11 +22,21 @@ func (b *RuntimeBatchState) prepareAssignmentSuccessor(ctx context.Context, tx p
 	if err != nil {
 		return err
 	}
-	p.targetVersion, err = b.assignmentSuccessorVersion(p.command.Target, p.command.TargetVersion, p.records[p.command.Target], transitions)
+	p.targetVersion, err = b.assignmentSuccessorVersion(
+		p.command.Target,
+		p.command.TargetVersion,
+		p.records[p.command.Target],
+		transitions,
+	)
 	return err
 }
 
-func (b *RuntimeBatchState) assignmentSuccessorVersion(owner string, original int64, live *Booking, transitions []BookingTransition) (int64, error) {
+func (b *RuntimeBatchState) assignmentSuccessorVersion(
+	owner string,
+	original int64,
+	live *Booking,
+	transitions []BookingTransition,
+) (int64, error) {
 	identity, pinned := b.plan.Bookings[owner]
 	// Older plans and absent bookings retain strict original-version behavior.
 	if !pinned || original <= 0 {

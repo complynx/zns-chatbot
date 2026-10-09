@@ -142,7 +142,11 @@ func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeB
 	}
 	plan.Bookings = map[string]runtimeBatchBooking{}
 	if booking := records[actor]; booking != nil {
-		plan.Bookings[actor] = runtimeBatchBooking{Version: booking.Version, TelegramID: booking.TelegramID, CreatedAt: booking.CreatedAt}
+		plan.Bookings[actor] = runtimeBatchBooking{
+			Version:    booking.Version,
+			TelegramID: booking.TelegramID,
+			CreatedAt:  booking.CreatedAt,
+		}
 	}
 	for i, id := range c.Recipients {
 		command := c.Options
@@ -165,7 +169,11 @@ func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeB
 		}
 		command.TargetVersion = bookingVersion(records[command.Target])
 		if booking := records[command.Target]; booking != nil {
-			plan.Bookings[command.Target] = runtimeBatchBooking{Version: booking.Version, TelegramID: booking.TelegramID, CreatedAt: booking.CreatedAt}
+			plan.Bookings[command.Target] = runtimeBatchBooking{
+				Version:    booking.Version,
+				TelegramID: booking.TelegramID,
+				CreatedAt:  booking.CreatedAt,
+			}
 		}
 		outcome.Target = command.Target
 		if command.Create != nil {

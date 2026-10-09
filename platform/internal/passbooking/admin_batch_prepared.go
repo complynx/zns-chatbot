@@ -183,7 +183,12 @@ func (s Service) PrepareRuntimeBatchItem(
 
 // executePreparedRuntimeBatchItem shares the grounded fences with derived batches.
 // The receipt and terminal marker still commit in the caller's transaction.
-func (s Service) executePreparedRuntimeBatchItem(ctx context.Context, outer pgx.Tx, b *RuntimeBatchState, index int) error {
+func (s Service) executePreparedRuntimeBatchItem(
+	ctx context.Context,
+	outer pgx.Tx,
+	b *RuntimeBatchState,
+	index int,
+) error {
 	tx, err := outer.Begin(ctx)
 	if err != nil {
 		return core.DatabaseOperationError(err)
