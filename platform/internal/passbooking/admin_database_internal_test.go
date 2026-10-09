@@ -122,7 +122,7 @@ func TestAdminDatabaseOrigins(t *testing.T) {
 			batch := &RuntimeBatchState{}
 			require.ErrorIs(t, batch.Persist(t.Context(), tx, RuntimeBatch{}, nil), want)
 			require.ErrorIs(t, batch.LockRuntimeBatchInTx(ctx, tx), want)
-			err = (Service{}).executeRuntimeBatchItem(t.Context(), tx, "admin", commandAdminAssign, &RuntimeBatchItem{})
+			err = (Service{}).executePreparedRuntimeBatchItem(t.Context(), tx, &RuntimeBatchState{}, 0)
 			require.ErrorIs(t, err, want)
 		})
 	}

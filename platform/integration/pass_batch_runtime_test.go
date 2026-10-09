@@ -30,7 +30,7 @@ func TestPassBatchRuntimeGroundedReplay(t *testing.T) {
 	require.Len(t, items, 3)
 	assert.Equal(t, "pass_recipient_unknown", items[0].Outcome.Code)
 	assert.Equal(t, passbooking.AdminBatchSucceeded, items[1].Outcome.Status)
-	assert.Equal(t, "pass_booking_stale", items[2].Outcome.Code)
+	assert.Equal(t, passbooking.AdminBatchSucceeded, items[2].Outcome.Status)
 	service = passbooking.Service{DB: db}
 	replay, err := service.RunBatch(t.Context(), "bob", command)
 	require.NoError(t, err)
@@ -44,7 +44,7 @@ func TestPassBatchRuntimeGroundedReplay(t *testing.T) {
 		db.QueryRow(t.Context(), `SELECT amount FROM core.pass_event_tiers WHERE event_id='dance' AND position=0`).
 			Scan(&amount),
 	)
-	assert.Equal(t, 22, amount)
+	assert.Equal(t, 24, amount)
 	_, err = db.Exec(t.Context(), `DELETE FROM core.pass_booking_admins WHERE owner='bob'`)
 	require.NoError(t, err)
 	command.Recipients = []int64{999999, 101, 202}
@@ -107,14 +107,14 @@ func TestPassBatchRuntimeInterruptedMarkerResumes(t *testing.T) {
 	items, err := service.RunBatch(t.Context(), "bob", command)
 	require.NoError(t, err)
 	assert.Equal(t, passbooking.AdminBatchSucceeded, items[0].Outcome.Status)
-	assert.Equal(t, "pass_booking_stale", items[1].Outcome.Code)
+	assert.Equal(t, passbooking.AdminBatchSucceeded, items[1].Outcome.Status)
 	var amount int
 	require.NoError(
 		t,
 		db.QueryRow(t.Context(), `SELECT amount FROM core.pass_event_tiers WHERE event_id='dance' AND position=0`).
 			Scan(&amount),
 	)
-	assert.Equal(t, 22, amount)
+	assert.Equal(t, 24, amount)
 }
 
 func TestPassBatchRuntimeConcurrentSingleConnection(t *testing.T) {

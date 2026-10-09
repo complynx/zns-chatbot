@@ -61,6 +61,8 @@ type PreparedAssignment struct {
 	tx                    pgx.Tx
 	actor                 string
 	command               AdminAssignment
+	actorVersion          int64
+	targetVersion         int64
 	event                 event
 	records               map[string]*Booking
 	keyHash               string
@@ -109,6 +111,8 @@ func (s Service) PrepareAssignmentInTx(
 		tx:                    tx,
 		actor:                 actor,
 		command:               c,
+		actorVersion:          c.Version,
+		targetVersion:         c.TargetVersion,
 		event:                 e,
 		records:               records,
 		keyHash:               keyHash,
@@ -125,7 +129,7 @@ func (p *PreparedAssignment) Apply(ctx context.Context) (AdminAssignmentResult, 
 		return p.replay, nil
 	}
 	tx, actor, c, e, records := p.tx, p.actor, p.command, p.event, p.records
-	if bookingVersion(records[actor]) != c.Version || bookingVersion(records[c.Target]) != c.TargetVersion {
+	if bookingVersion(records[actor]) != p.actorVersion || bookingVersion(records[c.Target]) != p.targetVersion {
 		return AdminAssignmentResult{}, conflict("pass_booking_stale")
 	}
 	profile, err := lockAdminProfile(ctx, tx, c)

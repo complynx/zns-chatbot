@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -30,9 +31,17 @@ type RuntimeBatchItem struct {
 }
 
 type runtimeBatchPlan struct {
-	Action string             `json:"action"`
-	Event  string             `json:"event"`
-	Items  []RuntimeBatchItem `json:"items"`
+	Action   string                         `json:"action"`
+	Event    string                         `json:"event"`
+	Items    []RuntimeBatchItem             `json:"items"`
+	Bookings map[string]runtimeBatchBooking `json:"bookings,omitempty"`
+}
+
+// runtimeBatchBooking pins the original identity without copying booking data.
+type runtimeBatchBooking struct {
+	Version    int64     `json:"version"`
+	TelegramID int64     `json:"telegram_id"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 func authorizeBatchCancel(ctx context.Context, tx pgx.Tx, actor, event string) error {
@@ -131,6 +140,10 @@ func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeB
 	if err != nil {
 		return plan, err
 	}
+	plan.Bookings = map[string]runtimeBatchBooking{}
+	if booking := records[actor]; booking != nil {
+		plan.Bookings[actor] = runtimeBatchBooking{Version: booking.Version, TelegramID: booking.TelegramID, CreatedAt: booking.CreatedAt}
+	}
 	for i, id := range c.Recipients {
 		command := c.Options
 		command.Event, command.Key, command.Version = c.Event, "batch-"+hash(
@@ -151,6 +164,9 @@ func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeB
 			return plan, core.DatabaseOperationError(err)
 		}
 		command.TargetVersion = bookingVersion(records[command.Target])
+		if booking := records[command.Target]; booking != nil {
+			plan.Bookings[command.Target] = runtimeBatchBooking{Version: booking.Version, TelegramID: booking.TelegramID, CreatedAt: booking.CreatedAt}
+		}
 		outcome.Target = command.Target
 		if command.Create != nil {
 			create := *command.Create
@@ -196,7 +212,10 @@ func (s Service) runRuntimeBatchItem(
 		}
 	}
 	if item.Outcome.Status == AdminBatchNotAttempted {
-		err = s.executeRuntimeBatchItem(ctx, tx, actor, plan.Action, item)
+		batch := &RuntimeBatchState{plan: plan, actor: actor, key: hash([]byte(c.Key))}
+		err = s.executePreparedRuntimeBatchItem(ctx, tx, batch, index)
+		plan = batch.plan
+		item = &plan.Items[index]
 		if stop := adminBatchResult(&item.Outcome, err); stop != nil {
 			return plan.Items, stop
 		}
@@ -215,53 +234,4 @@ func (s Service) runRuntimeBatchItem(
 		return committedItems, err
 	}
 	return plan.Items, core.DatabaseOperationError(tx.Commit(ctx))
-}
-
-func (s Service) executeRuntimeBatchItem(
-	ctx context.Context,
-	outer pgx.Tx,
-	actor, action string,
-	item *RuntimeBatchItem,
-) error {
-	// A domain rejection may occur after writes. Roll back its savepoint before
-	// persisting the terminal rejection, while retaining the batch row lock.
-	tx, err := outer.Begin(ctx)
-	if err != nil {
-		return core.DatabaseOperationError(err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	if err = s.mutateRuntimeBatchItem(ctx, tx, actor, action, item); err != nil {
-		return err
-	}
-	return core.DatabaseOperationError(tx.Commit(ctx))
-}
-
-func (s Service) mutateRuntimeBatchItem(
-	ctx context.Context,
-	tx pgx.Tx,
-	actor, action string,
-	item *RuntimeBatchItem,
-) error {
-	if action == commandAdminAssign {
-		assigned, err := s.adminAssignInTx(ctx, tx, actor, item.Assignment)
-		if err == nil {
-			item.Outcome.Assignment = &assigned
-		}
-		return err
-	}
-	a := item.Assignment
-	_, err := s.executeInTx(
-		ctx,
-		tx,
-		actor,
-		Command{
-			Name:          action,
-			Event:         a.Event,
-			Key:           a.Key,
-			Version:       a.Version,
-			Target:        a.Target,
-			TargetVersion: a.TargetVersion,
-		},
-	)
-	return err
 }

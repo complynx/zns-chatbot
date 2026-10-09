@@ -159,6 +159,9 @@ func (s Service) PrepareRuntimeBatchItem(
 	var err error
 	if b.plan.Action == commandAdminAssign {
 		p.assignment, err = s.PrepareAssignmentInTx(ctx, tx, b.actor, item.Assignment)
+		if err == nil && !p.assignment.found {
+			err = b.prepareAssignmentSuccessor(ctx, tx, index, p.assignment)
+		}
 	} else {
 		a := item.Assignment
 		p.command, err = s.PrepareInTx(
@@ -176,6 +179,26 @@ func (s Service) PrepareRuntimeBatchItem(
 		)
 	}
 	return p, err
+}
+
+// executePreparedRuntimeBatchItem shares the grounded fences with derived batches.
+// The receipt and terminal marker still commit in the caller's transaction.
+func (s Service) executePreparedRuntimeBatchItem(ctx context.Context, outer pgx.Tx, b *RuntimeBatchState, index int) error {
+	tx, err := outer.Begin(ctx)
+	if err != nil {
+		return core.DatabaseOperationError(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	p, err := s.PrepareRuntimeBatchItem(ctx, tx, b, index)
+	if err != nil {
+		return err
+	}
+	if !p.Replayed() {
+		if err = p.Apply(ctx); err != nil {
+			return err
+		}
+	}
+	return core.DatabaseOperationError(tx.Commit(ctx))
 }
 
 func (p *PreparedRuntimeBatchItem) Replayed() bool {
