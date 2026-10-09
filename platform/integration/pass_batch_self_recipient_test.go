@@ -16,6 +16,7 @@ func TestPassBatchSelfRecipientContinuation(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"direct", "derived"} {
 		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
 			for _, scenario := range []string{"resume", "external_version", "external_target_version", "new_identity", "telegram_identity", "missing_receipt", "revoked"} {
 				t.Run(scenario, func(t *testing.T) {
 					t.Parallel()
