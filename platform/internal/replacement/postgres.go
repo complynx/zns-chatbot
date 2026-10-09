@@ -31,7 +31,9 @@ func (p PostgresSessions) Names(ctx context.Context) ([]string, error) {
  (SELECT count(*) FROM pg_roles WHERE rolname=ANY($1::text[]))
  `, p.Roles).Scan(&current, &visible, &prepared, &roles)
 	if err != nil {
-		return nil, observationError(limited, start, "postgres_visibility", "query", ErrUnknown)
+		return nil, observationError(
+			limited, start, "postgres_visibility", "query", inventoryFailure(err, ErrUnknown),
+		)
 	}
 	if !visible || prepared != 0 || roles != len(p.Roles) || len(p.Roles) == 0 || slices.Contains(p.Roles, current) {
 		predicate := observationPredicate("role_binding")
@@ -53,7 +55,7 @@ func (p PostgresSessions) Names(ctx context.Context) ([]string, error) {
 			start,
 			"postgres_sessions",
 			"query",
-			errors.New("database session inventory unavailable"),
+			inventoryFailure(err, errors.New("database session inventory unavailable")),
 		)
 	}
 	defer rows.Close()
@@ -61,12 +63,26 @@ func (p PostgresSessions) Names(ctx context.Context) ([]string, error) {
 	for rows.Next() {
 		var name string
 		if err = rows.Scan(&name); err != nil {
-			return nil, observationError(limited, start, "postgres_sessions", "scan", ErrUnknown)
+			return nil, observationError(
+				limited, start, "postgres_sessions", "scan", inventoryFailure(err, ErrUnknown),
+			)
 		}
 		names = append(names, name)
 	}
-	if rows.Err() != nil {
-		return nil, observationError(limited, start, "postgres_sessions", "iteration", ErrUnknown)
+	if err = rows.Err(); err != nil {
+		return nil, observationError(
+			limited, start, "postgres_sessions", "iteration", inventoryFailure(err, ErrUnknown),
+		)
 	}
 	return names, nil
+}
+
+// inventoryFailure retains context failures without exposing database error text.
+func inventoryFailure(err, fallback error) error {
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded} {
+		if errors.Is(err, cause) {
+			return errors.Join(fallback, cause)
+		}
+	}
+	return fallback
 }
