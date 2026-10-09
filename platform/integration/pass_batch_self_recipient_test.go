@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -115,7 +116,7 @@ FOR EACH ROW EXECUTE FUNCTION core.interrupt_second_assignment()`,
 						assert.Equal(t, passbooking.AdminBatchSucceeded, items[1].Outcome.Status)
 						replay, replayErr := run()
 						require.NoError(t, replayErr)
-						assert.Equal(t, items, replay)
+						assertRuntimeBatchReplayEqual(t, items, replay)
 					} else {
 						assert.Equal(t, passbooking.AdminBatchRejected, items[1].Outcome.Status)
 						wantCode := "pass_booking_stale"
@@ -160,11 +161,22 @@ func TestPassBatchSelfRecipientFirst(t *testing.T) {
 	require.NoError(t, err)
 	replay, err := (passbooking.Service{DB: db}).RunBatch(t.Context(), "bob", command)
 	require.NoError(t, err)
-	require.Equal(t, items, replay)
+	assertRuntimeBatchReplayEqual(t, items, replay)
 	after, err := service.Get(t.Context(), "bob", "dance")
 	require.NoError(t, err)
 	require.Equal(t, original, after)
 	var count int
 	require.NoError(t, db.QueryRow(t.Context(), `SELECT count(*) FROM core.pass_admin_assignments`).Scan(&count))
 	require.Equal(t, 2, count)
+}
+
+// Compare every public field without freezing time.Time's private Location value.
+func assertRuntimeBatchReplayEqual(t *testing.T, expected, actual []passbooking.RuntimeBatchItem) {
+	t.Helper()
+	want, err := json.Marshal(expected)
+	require.NoError(t, err)
+	got, err := json.Marshal(actual)
+	require.NoError(t, err)
+	// Typed encoding preserves exact integer values and ordered results.
+	assert.Equal(t, string(want), string(got))
 }

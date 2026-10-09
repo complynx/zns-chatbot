@@ -28,7 +28,30 @@ func (b *RuntimeBatchState) prepareAssignmentSuccessor(
 		p.records[p.command.Target],
 		transitions,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	// Reassigning a current pair can unlink its partner as well as its target.
+	target := p.records[p.command.Target]
+	if target == nil || target.Partner == "" {
+		return nil
+	}
+	partner := p.records[target.Partner]
+	if partner == nil || partner.Partner != target.Owner {
+		return nil
+	}
+	identity, pinned := b.plan.Bookings[partner.Owner]
+	if !pinned {
+		return nil
+	}
+	version, err := b.assignmentSuccessorVersion(partner.Owner, identity.Version, partner, transitions)
+	if err != nil {
+		return err
+	}
+	if partner.Version != version {
+		return conflict("pass_booking_stale")
+	}
+	return nil
 }
 
 func (b *RuntimeBatchState) assignmentSuccessorVersion(

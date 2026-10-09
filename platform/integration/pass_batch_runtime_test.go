@@ -34,7 +34,7 @@ func TestPassBatchRuntimeGroundedReplay(t *testing.T) {
 	service = passbooking.Service{DB: db}
 	replay, err := service.RunBatch(t.Context(), "bob", command)
 	require.NoError(t, err)
-	assert.Equal(t, items, replay)
+	assertRuntimeBatchReplayEqual(t, items, replay)
 	command.Recipients = []int64{101}
 	_, err = service.RunBatch(t.Context(), "bob", command)
 	requireCode(t, err, "idempotency_conflict")
@@ -44,7 +44,7 @@ func TestPassBatchRuntimeGroundedReplay(t *testing.T) {
 		db.QueryRow(t.Context(), `SELECT amount FROM core.pass_event_tiers WHERE event_id='dance' AND position=0`).
 			Scan(&amount),
 	)
-	assert.Equal(t, 24, amount)
+	assert.Equal(t, 23, amount, "the pair adds two places; its assigned recipient adds one")
 	_, err = db.Exec(t.Context(), `DELETE FROM core.pass_booking_admins WHERE owner='bob'`)
 	require.NoError(t, err)
 	command.Recipients = []int64{999999, 101, 202}
@@ -114,7 +114,7 @@ func TestPassBatchRuntimeInterruptedMarkerResumes(t *testing.T) {
 		db.QueryRow(t.Context(), `SELECT amount FROM core.pass_event_tiers WHERE event_id='dance' AND position=0`).
 			Scan(&amount),
 	)
-	assert.Equal(t, 24, amount)
+	assert.Equal(t, 23, amount, "the pair adds two places; its assigned recipient adds one")
 }
 
 func TestPassBatchRuntimeConcurrentSingleConnection(t *testing.T) {

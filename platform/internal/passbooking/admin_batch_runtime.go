@@ -141,13 +141,7 @@ func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeB
 		return plan, err
 	}
 	plan.Bookings = map[string]runtimeBatchBooking{}
-	if booking := records[actor]; booking != nil {
-		plan.Bookings[actor] = runtimeBatchBooking{
-			Version:    booking.Version,
-			TelegramID: booking.TelegramID,
-			CreatedAt:  booking.CreatedAt,
-		}
-	}
+	plan.pinBookings(records, actor)
 	for i, id := range c.Recipients {
 		command := c.Options
 		command.Event, command.Key, command.Version = c.Event, "batch-"+hash(
@@ -168,13 +162,7 @@ func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeB
 			return plan, core.DatabaseOperationError(err)
 		}
 		command.TargetVersion = bookingVersion(records[command.Target])
-		if booking := records[command.Target]; booking != nil {
-			plan.Bookings[command.Target] = runtimeBatchBooking{
-				Version:    booking.Version,
-				TelegramID: booking.TelegramID,
-				CreatedAt:  booking.CreatedAt,
-			}
-		}
+		plan.pinBookings(records, command.Target)
 		outcome.Target = command.Target
 		if command.Create != nil {
 			create := *command.Create
@@ -184,6 +172,24 @@ func groundRuntimeBatch(ctx context.Context, tx pgx.Tx, actor string, c RuntimeB
 		plan.Items[i] = RuntimeBatchItem{TelegramID: id, Assignment: command, Outcome: outcome}
 	}
 	return plan, nil
+}
+
+// pinBookings includes the reciprocal partner that an assignment may unlink.
+func (p *runtimeBatchPlan) pinBookings(records map[string]*Booking, owner string) {
+	booking := records[owner]
+	if booking == nil {
+		return
+	}
+	for _, current := range []*Booking{booking, records[booking.Partner]} {
+		if current == nil || (current.Owner != owner && current.Partner != owner) {
+			continue
+		}
+		p.Bookings[current.Owner] = runtimeBatchBooking{
+			Version:    current.Version,
+			TelegramID: current.TelegramID,
+			CreatedAt:  current.CreatedAt,
+		}
+	}
 }
 
 func (s Service) runRuntimeBatchItem(
