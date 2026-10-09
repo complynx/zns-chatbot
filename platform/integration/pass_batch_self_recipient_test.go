@@ -120,8 +120,7 @@ FOR EACH ROW EXECUTE FUNCTION core.interrupt_second_assignment()`,
 					} else {
 						assert.Equal(t, passbooking.AdminBatchRejected, items[1].Outcome.Status)
 						wantCode := "pass_booking_stale"
-						if scenario == "missing_receipt" ||
-							(mode == "derived" && scenario == "external_target_version") {
+						if scenario == "missing_receipt" {
 							wantCode = "source_stale"
 						}
 						assert.Equal(t, wantCode, items[1].Outcome.Code)
