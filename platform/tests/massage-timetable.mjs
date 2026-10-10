@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
-const browser = await chromium.launch({ channel: 'msedge', headless: true });
+const browser = await chromium.launch({
+  channel: process.env.BROWSER_CHANNEL || 'msedge',
+  headless: true,
+});
 const base = process.env.TIMETABLE_URL;
 assert.ok(base);
 const output = 'test-results/massage-timetable';

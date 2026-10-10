@@ -5,7 +5,10 @@ import { chromium } from 'playwright';
 const stand = JSON.parse(
   await readFile('test-results/browser-auth-stand.json', 'utf8'),
 );
-const browser = await chromium.launch({ headless: true, channel: 'msedge' });
+const browser = await chromium.launch({
+  headless: true,
+  channel: process.env.BROWSER_CHANNEL || 'msedge',
+});
 const context = await browser.newContext();
 const page = await context.newPage();
 const chat = await context.newPage();
