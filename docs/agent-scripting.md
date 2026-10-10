@@ -83,8 +83,12 @@ a CPU-time budget. Host operations have a ten-second limit inside one shared
 transport deadline. An earlier parent deadline wins; callbacks cannot renew the
 shared deadline. These are the existing C5 limits in
 `platform/internal/scriptprotocol/budgets.go`, replacing the earlier 5/6/7-second
-Execute limits. They do not replace the separate five-second D-001 acceptance
-check, which remains unresolved. Hard container memory and network restrictions
+Execute limits. Daniel superseded the separate five-second D-001 normal-response
+criterion on 7 October 2026: a complete agent response may take longer. Preserve
+the full scenarios and bounded completion within existing model, execution,
+transport, Go/scenario and stand budgets. Historical failures are not PASS.
+Graceful restart remains at most five seconds without forced termination.
+Hard container memory and network restrictions
 still apply. Cancellation closes the per-run connection;
 callbacks use the original host run context rather than the RPC library's
 connection-only callback context. The legacy Evaluate budgets below are unchanged.

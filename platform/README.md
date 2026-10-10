@@ -4,6 +4,12 @@ The migration target is full parity with the active Python bot. This directory i
 a staged implementation, not a production replacement. The existing Python
 deployment is unchanged. See [the migration plan](../docs/go-migration.md).
 
+Development and QA were explicitly stopped on 10 October 2026. Before resuming,
+read [the frozen state and remaining scope](../docs/go-platform-state-2026-10-10.md),
+[developer guide](../docs/go-platform-developer-guide.md) and
+[QA guide](../docs/go-platform-qa-guide.md). Recipes below are developer fixtures,
+not evidence of accepted current composition or permission to launch during the stop.
+
 Functional reviewers: start with the [FQA toolkit](scripts/fqa/README.md) for
 preflight, public API access, owned fixtures/cleanup, mouse/touch Telegram
 interaction, evidence traces and independent XLSX inspection.

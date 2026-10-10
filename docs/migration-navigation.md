@@ -7,9 +7,15 @@ separate claims. A scenario matrix is coverage planning, not a PASS verdict.
 
 ## Current work
 
+Development was explicitly stopped on 10 October 2026. The committed-document
+snapshot is [what exists, is missing and remains](go-platform-state-2026-10-10.md),
+with [developer instructions](go-platform-developer-guide.md),
+[QA instructions](go-platform-qa-guide.md) and
+[retained local knowledge](qa/go-platform-pause-2026-10-10/README.md).
+These are frozen documentation, not current launch permission or a live task board.
+
 The ignored [progress](../management.local/PROGRESS.html),
-[board](../management.local/KANBAN.html) and
-[current handoff](../management.local/resume-2026-10-02.md) describe observed work.
+[board](../management.local/KANBAN.html) describe observed work.
 The [estimate](../management.local/readiness-estimate.md) records uncertainty;
 [bottlenecks](../management.local/bottlenecks-ai-2026-10-02.md) records the next
 constraints. These local files may be absent in a clean checkout. Historical

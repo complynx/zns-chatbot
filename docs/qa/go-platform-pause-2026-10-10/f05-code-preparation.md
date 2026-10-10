@@ -1,0 +1,36 @@
+# QA1010 actual preparation 1
+
+Verdict: SCOPED_ACTUAL_PREPARATION_ACCEPTED, WHOLE_UNARMED. No concrete preparation blocker found in the saved current capsule. This is conditional readiness for ROOT's separate current whole admission; it does not issue a grant or establish READY, ACK, business outcome or Functional/full/final PASS.
+
+Read-only independent continuation of my accepted QA1010 successor4 source. Actual HANDOFF61798d7bd0c60129a9965697057133243c4140e49ea0694c7c9b8ce12373ecc0, MANIFESTa188beabc9f2b6d6fa0c7fe59d6eb73025c2ef74165409d2ca83c02e0558202c and SEAL831934ce8e0d1ace39da9da94a986b920b233f67687c5ef67c49b5f82904c0a5. All493 actual inventory pins and all156 original source pins match SHA256/length, zero drift. Coverage distinguishes raw evidence review from inventory-only hash verification; no author conclusion supplies acceptance. No source/helper/native/test/resource execution or mutation.
+
+## Actual custody, clock and native receipts
+
+Saved current ROOT preparation grant is CURRENT_ADMITTED/F05_COMPLETE_PREPARATION_ONLY, owner /root/c_owner_sol and same107784 birth08:23:58.6756038Z. Its issue08:28:24.0702486Z/expiry08:38:24.0702486Z brackets the saved finite preparation. Controller e13ef168..., closure090ad039... and source manifest90aacc8c... match actual files. This grants no whole runtime or QA ACK. Session39143 is author-retained custody, not an independent process-live probe by this reviewer.
+
+Original producer UTC origin08:29:47.4595934Z/ticks5637977505337/frequency10000000 has exact90-second active and120-second total cutoffs. RESULT426a7d... records failure null, producer completion, full retained output, noM0/productSTART/businessACK and51.464188s capture elapsed. No cleanup-entry timestamp is fabricated for the successful held preparation. Original cleanupENTRY30 and native15/hard5 remain. The separate whole cleanup120 budget is not consumed or renewed by this preparation.
+
+RESULT has78 producer/wrapper native frames (one global roster plus77 producer). Every actual frame has exit0, EOF[true,true], reaped true, no cleanup kill, original retained false and first failure null. Global running roster raw stdout is empty. Four distinct declaration2 receipts runtime-config/volumes/networks/managed-project also have exit0/EOF2/kernel-reaped/noForce/no retained fault, with births08:30:37.5239821Z through08:30:38.4642140Z inside the original active90 window. They are separate82 total receipts, not duplicates or inferred from one aggregate PASS. The producer/checker invocation bodies retain the accepted original shared clock/capture authority. No unknown native redispatch or later deadline reset is evidenced.
+
+## Real producer/consumer and current profiles
+
+I examined the actual captured configurations, image/volume/network operands, observations and bound declarations against my unchanged checker/source context. The pinned original Linux python checker is invoked with real capture-byte SHA operands. Its actual raw bound JSON outputs exactly equal initializer producer-native-19.stdout, prerequisites-ready61, owner69 and browser77 respectively. Thus these are genuine saved producer-to-checker traversal outputs, not manually constructed matching summaries. The declarations retain current full native identities, images, births and constructor/resource/security/mount constraints. The prospective managed declaration is not a born managed cohort.
+
+Owner75e4fc822fb6dcb5e937f9823f0b4c76e19dfd2ebc3452b6d30c4ebe7812db13 was Created08:30:29.099592551Z with image17538996..., never started/PID0/noOOM. Browserb84763229ae7ee44f491957a01aaefb317d044b97ed43b1358a4d2d160b9c483 was Created08:30:32.468872916Z with imagec7776d..., never started/PID0/noOOM. Both are rootRO/dropALL/NNP under the original declared profiles. Socket mount appears only on the trusted coordinator. Browser has11 mounts, zero socket: seven accepted QA helper files RO, two dependencies RO, current successor4/public-release RO and reviewer evidence4 as its sole writable host bind. Current logical F05 QA owner and compatibility wire remain distinct, as declared.
+
+Current prerequisite PGfe3cbb... imageb0f956... and fakeeb18fa... imageffbb28... are running/healthy with actual positive PIDs762875/763135; noOOM. Current births08:30:02.11965822Z/08:30:02.096259556Z precede the held owner/browser. Initializer6c8767... and migrate2e58c7... terminal profiles show exited/PID0/exit0/noOOM and saved exact removal outputs. The live prerequisite cohort remains intentionally held; preparation acceptance is not whole-cohort retirement or continuous future health.
+
+## Closed inputs and invocation
+
+All31 launch-input closed members match actual full bytes/hash/length. Checker scalar1c3a9d7dbd3c925805fb4a22d6e2ef075a29e24a0b5797499d6323d5363324e6 equals the actual checker file and the closed record. Owner/browser/prerequisite bound files and current Created summary identities agree. Public source is db715972..., appffbb28..., strict unchanged QA successor3 action7410fab..., inputs66430e... and caller002141e... remain coherent with their actual RO mounted file bytes.
+
+Created1c4a90dec779007b75f5bf6d5ab4217d2176293c851aafe1b7c3c9a7731beaf9 and launch inputs88855bc5a58e9d8c1e8ade8a7b378f47390763a234470bc8e196e1efbb991208 bind current closuree9103658... and launcherc347aca5062317e707ce2ef360c5c30cf587d6f9022719fda4e334a0882fe027. The entire actual bound launcher equals the accepted template with exactly four substitutions: browserID, ownerID, actual launch-inputSHA, actual CreatedSHA. Current whole literal a81c31... hashes that launcher and keeps same-owner original WholeContext plus ordinary interactive exit only after true physical witness and original UTC/tick cutoffs. No source or hash receiver is fabricated by this review.
+
+## Limits and next required scope
+
+READY and runtime/admission.json were absent at review. Managed roles/whole clock/ROOT whole authority/QA business ACK remain unborn, even though prerequisites are running. Future ROOT grants and any corrected neutral proposal/capsule published after this sealed inventory are outside this report; operative current tuple above is independently checked. A fresh exact ROOT whole admission and independent current QA grant must bind this capsule and same owner. Then genuine new publication must pass current constructor/profile/observer/read-only SQL/original-clock/strict consumer validation and explicit ACK before business. The null-to-none health projection is accepted source, not yet actual positive READY proof.
+
+All original F05 four EN/RU mouse/emulated-touch privacy/principal/persistence cells, F30/G600/START400/readiness60/cleanup120/native15/model10/normal target1/hard5, actual physical/native/ordinary outer closure and full/final acceptance remain mandatory. Optional deferred historical diagnostics are not an added prerequisite. Historical failed attempts remain failed. No Findings were sent to implementation-blind Functional QA.
+
+Written by code_qa_sol (gpt-6.1-sol/Codex)
+on behalf of Daniel Drizhuk

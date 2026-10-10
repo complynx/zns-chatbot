@@ -65,8 +65,11 @@ remaining shared deadline; an earlier parent deadline wins. Callbacks cannot
 renew that deadline. The cumulative 200 ms VM-active elapsed-time budget pauses
 during host calls; it includes serialization and scheduling delay, not just CPU
 time. Canonical values are in `platform/internal/scriptprotocol/budgets.go`.
-These limits supersede the earlier 5/6/7-second Execute limits, but do not close
-or change the separate five-second D-001 acceptance check.
+These limits supersede the earlier 5/6/7-second Execute limits. Daniel separately
+superseded the five-second D-001 normal-response criterion on 7 October 2026:
+full responses may take longer, within existing execution, transport, scenario
+and stand budgets. Keep complete outcome assertions and historical failures.
+Graceful restart remains at most five seconds without forced termination.
 The child receives only code, explicit input and caller-visible tool metadata.
 See [agent-scripting.md](agent-scripting.md) for discovery, callback validation,
 byte budgets and durable mutation requirements. Legacy Evaluate limits and its

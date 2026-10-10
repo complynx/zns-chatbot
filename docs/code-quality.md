@@ -89,7 +89,7 @@ Do not use a global volume prune. An unattached volume can still contain needed
 data; establish its purpose before deleting it. Record cleanup in the progress
 history and keep QA reports outside disposable Docker resources.
 
-## Linux checks and historical Windows Firewall setup
+## Linux checks
 
 Daniel authorized Linux-only checks on 2026-10-01. Run all new quality gates,
 pinned-tool builds and automated browser suites in Linux Docker or WSL; use
@@ -97,39 +97,7 @@ the Linux branch of `scripts/quality.mjs` for `npm run quality:all` with the
 required PostgreSQL and sandbox access. Native Windows execution and Windows
 executables targeting Linux are not acceptance requirements. Follow the three
 heavy-check slots and stand ownership in `docs/coordination-process.md`.
-Already-running Windows checks finish without restart. Root confirms their
-terminal state and worker acknowledgements before Daniel removes Firewall rules.
-The following configuration is historical, not a requirement to retain or
-reinstall the Windows exceptions.
-
-On Daniel's Windows host, an AppID tagging policy was installed on 2026-10-01
-for `C:\Users\ddriz\Projects\zns-chatbot\*`, including subdirectories. Native
-Windows executables launched from this tree receive the `ZnsProject` tag.
-The enabled rules `ZnsProject-AppID-Inbound` and `ZnsProject-AppID-Outbound`
-allow traffic for this tag on the **Private** network profile only. New filenames
-and future builds in this tree do not need separate application rules.
-This is local host configuration; cloning the repository does not install it.
-
-For native Windows QA, build each stand's executables with `go build -o` into
-an owned directory inside this tree, then launch them there. Default `go run`
-and `go test` executables in the system temporary directory are outside scope.
-If those commands need the exception, the stand owner can set `GOTMPDIR` for
-that QA session to an owned directory inside the tree. Worktrees outside this
-path, external Python/Node interpreters, and Docker/WSL networking are not
-covered by this path policy. Restart existing processes to obtain the tag.
-
-Installation checks confirmed both rules in Firewall's ActiveStore. A new
-executable compiled after installation in a nested project directory received
-the tag; the identical executable launched outside the project did not.
-Traffic from another machine was not tested. Before reporting a network defect,
-check the executable path, active network profile, bind address and port, and
-any explicit blocking rules; a blocking rule takes precedence over these allows.
-Do not treat installed Firewall rules as functional acceptance evidence.
-
-Daniel approved `Disabled:Runtime FilePath Rule Protection` for this tagging
-policy because the project directory is user-writable. Any executable placed
-in the matching tree can receive the tag. Keep downloaded or unrelated binaries
-outside it; this exception is for local QA builds.
+Already-running Windows checks finish without restart.
 
 ## Go
 

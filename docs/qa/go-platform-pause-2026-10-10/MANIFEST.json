@@ -1,0 +1,164 @@
+{
+  "snapshot": "2026-10-10 explicit Daniel development stop",
+  "integration_commit": "dd47f0e8fac3247db8de3d803b600b29c02953ba",
+  "created_at": "2026-10-10T09:25:15.4074368+00:00",
+  "scope": "Exact selected public narrative reports and planning maps retained for clean-checkout knowledge. Not raw runtime evidence or new acceptance; all original scope/limitations preserved. Engineering maps must not enter blind Functional intake.",
+  "files": [
+    {
+      "file": "f03-functional.md",
+      "original_local_path": "qa.local/functional-f03-db71597-20261009/case29-evidence/CASE29-FUNCTIONAL-REPORT.md",
+      "bytes": 10802,
+      "sha256": "f6a8728f5be7dc45534e954e9f749e11280d68bb5fc3065cf116a7719544c454"
+    },
+    {
+      "file": "r01-functional.md",
+      "original_local_path": "qa.local/functional-qa-r01-current665-rotation-20261008/REPORT-SUCCESSOR2.md",
+      "bytes": 6500,
+      "sha256": "0971e8a0090f242b19f582bdfaf725aa4837d46a4503cdceeebd0b1d1f476d39"
+    },
+    {
+      "file": "i01-functional.md",
+      "original_local_path": "qa.local/functional-e-imported-current-c0e-20261008/REPORT-I01.md",
+      "bytes": 3999,
+      "sha256": "2d7122c2608784853fa29567d909ffcd62636f0366857c458942b0f623b78c7d"
+    },
+    {
+      "file": "i06-functional.md",
+      "original_local_path": "qa.local/functional-e-imported-current-c0e-20261008/REPORT-I06.md",
+      "bytes": 4756,
+      "sha256": "1704d1f80d3a2233ae87039db688574caa152c7cfb6b4c3267919242ae8441d8"
+    },
+    {
+      "file": "i08-functional.md",
+      "original_local_path": "qa.local/functional-e-imported-current-c0e-20261008/REPORT-I08-AFTER832.md",
+      "bytes": 6431,
+      "sha256": "bcbfbb9551227507951572503d56b8184378b5c576e4d3c57041271c27f99d6f"
+    },
+    {
+      "file": "f05-functional-recovered.md",
+      "original_local_path": "qa.local/functional-f05-current-20261010/cli-epoch4-actual1/RECOVERED-FUNCTIONAL-REPORT.md",
+      "bytes": 7664,
+      "sha256": "63cc7bf94a1458306bda59a5eb2829932d146c1830b84ea2c8a4ca3932531ed0"
+    },
+    {
+      "file": "f05-functional-recovery-provenance.json",
+      "original_local_path": "qa.local/functional-f05-current-20261010/cli-epoch4-actual1/RECOVERY-PROVENANCE.json",
+      "bytes": 750,
+      "sha256": "fc5352e078fc64aa9b22fe74427045a7484792635024abf5116460bc775df851"
+    },
+    {
+      "file": "f05-code-preparation.md",
+      "original_local_path": "qa.local/code-qa-1010/actual-preparation1/REPORT.md",
+      "bytes": 7038,
+      "sha256": "4f7b984818320ab7eeaece3240d6e8801260be451b3ef6fc564454f10b45d5f1"
+    },
+    {
+      "file": "f05-code-whole.md",
+      "original_local_path": "qa.local/code-qa-1010/actual-whole1/REPORT.md",
+      "bytes": 8087,
+      "sha256": "e2e354e4afc8f0b81b45201375a37b57f1666dc0d16b134b593b5f3e0f0f58e1"
+    },
+    {
+      "file": "r12-compiler-code.md",
+      "original_local_path": "qa.local/code-qa-1012/actual-build2/REPORT.md",
+      "bytes": 6725,
+      "sha256": "e26b4e5c699b69389c2bfc5d868bc5248b622befe708139ce272cac19c67aea0"
+    },
+    {
+      "file": "r12-package-source-code.md",
+      "original_local_path": "qa.local/code-qa-1015/REPORT.md",
+      "bytes": 6533,
+      "sha256": "ff2641f8acde55015062bed1ca0add629eb2b13b5f03e357b7540811aef174b7"
+    },
+    {
+      "file": "f05-helper-source-code.md",
+      "original_local_path": "qa.local/code-qa-1014/REPORT.md",
+      "bytes": 4245,
+      "sha256": "a6e7b3e152ae3c8bab1679623ee2d148de1c8210c94a108af505f8d50a35a757"
+    },
+    {
+      "file": "timetable-whole-code.md",
+      "original_local_path": "qa.local/code-qa-1008/actual-whole1/REPORT.md",
+      "bytes": 5089,
+      "sha256": "9a988851f68e3657032c68a6aa06e1dfe3ae48a79b78d687af227b8d32275f5c"
+    },
+    {
+      "file": "timetable-successor5-source-code.md",
+      "original_local_path": "qa.local/code-qa-1011/REPORT.md",
+      "bytes": 5250,
+      "sha256": "193a285edc57fdc0b9491935c5feb3822f852a04a9022d131be68b3b60dee06a"
+    },
+    {
+      "file": "active38-original-requirements.md",
+      "original_local_path": "qa.local/fqa-active38-20261003-v2/requirements.md",
+      "bytes": 7307,
+      "sha256": "b54490175fb4eebc84b929bc1b0223a62f82975edda50039693483b87f36681e"
+    },
+    {
+      "file": "c-f06-f07-engineering-map.md",
+      "original_local_path": "qa.local/c-next-knowledge-capabilities-20261010/engineering/MAPPING.md",
+      "bytes": 2294,
+      "sha256": "7d4df6a3aaacfa8b1364cc3f2e19d6414237b0404576e1eb50f605462380a9ce"
+    },
+    {
+      "file": "d-r13-r14-engineering-map.md",
+      "original_local_path": "qa.local/d-r13-r14-preparation-20261010/MAP.md",
+      "bytes": 4858,
+      "sha256": "c3cdd31768dd4804dba6984ba7cbba559c5d646f148dc1f109b27fba8acd052f"
+    },
+    {
+      "file": "e-remaining-engineering-map.md",
+      "original_local_path": "qa.local/e-remaining-preparation-20261010/REPORT.md",
+      "bytes": 6796,
+      "sha256": "fdf10b8a2704e6b65c2e4cec8f460f0e4d8f2f535d52d5aece2aadae1641e479"
+    },
+    {
+      "file": "d002-source-code.md",
+      "original_local_path": "qa.local/code-qa-994/REPORT.md",
+      "bytes": 10347,
+      "sha256": "7c5eb187bcbacf567d0ee84c6f2e8231f0ba21c5c79853ddd230b264e64dc78d"
+    },
+    {
+      "file": "d002-postmerge-code.md",
+      "original_local_path": "qa.local/code-qa-996/REPORT.md",
+      "bytes": 4593,
+      "sha256": "a026e31d050afc5b7f87af2eada38beb84d1b44fdf62c336d740f5e75e79e83e"
+    },
+    {
+      "file": "browser-channel-source-code.md",
+      "original_local_path": "qa.local/code-qa-998/REPORT.md",
+      "bytes": 3226,
+      "sha256": "26500acc52ff443b1b9b08cddd84c80456134b7c34e8c3de5c67953c20d26493"
+    },
+    {
+      "file": "browser-channel-check-code.md",
+      "original_local_path": "qa.local/code-qa-997/REPORT.md",
+      "bytes": 5376,
+      "sha256": "6e204a5fc737f87c9a4910b57d85d7a729cd2328da26b1cb0e2fc88144306d47"
+    },
+    {
+      "file": "e-current-runtime-functional.md",
+      "original_local_path": "qa.local/functional-e-resume-20261008/REPORT.md",
+      "bytes": 6663,
+      "sha256": "8b01733ee95fb083df8428258b4b743f734e9afba32a83dcd1bd847e78d3255d"
+    },
+    {
+      "file": "f05-helper5-author-handoff.md",
+      "original_local_path": "qa.local/functional-f05-current-20261010/successor5/SOURCE-HANDOFF.md",
+      "bytes": 3751,
+      "sha256": "b15e5efd8e5b0fae155b82f99420a8943fe2b9c831c10e353c14b0444a958ae0"
+    },
+    {
+      "file": "timetable-successor6-author-request.md",
+      "original_local_path": ".worktrees/browser-test-channel-portability/qa.local/timetable-browser-dd47f0e-20261010/successor6/REQUEST.md",
+      "bytes": 2631,
+      "sha256": "b1ddd46a2b46d9aa61e9ce1d1663756f1fbb6f4d6bd70ee73c7586a091a78100"
+    },
+    {
+      "file": "r12-install5-author-request.md",
+      "original_local_path": ".worktrees/d002-public-recipient-selection/qa.local/d-r12-current-20261010/install5/REQUEST.md",
+      "bytes": 4692,
+      "sha256": "1d01fa855ecec82d033f23f65752173f66253c612ab6d26824895c9a17afc386"
+    }
+  ]
+}

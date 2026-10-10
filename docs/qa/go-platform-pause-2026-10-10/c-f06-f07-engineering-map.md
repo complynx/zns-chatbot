@@ -1,0 +1,11 @@
+# Engineering mapping — not for blind Functional intake
+
+Minimal reuse: the accepted F03/F05 constructor/lifecycle and visible UI cover ordinary card/session navigation and private-memo create/read/update/delete. F07 can start with owner-private memo update/delete and current-source/history redaction, but shared/context revocation remains a separate mandatory branch; private memos alone do not close F06/F07.
+
+Existing guarded knowledge ACL fixture mutates only bob's review/curate leaf, binds a fixed registration fixture stand/database/event set and requires a restricted private operator. It cannot silently run against the F05 namespace/database and cannot fake author consent/content. Existing registration fixture can change bob's event payment rights and visitor's booking-admin role. Actual reviewed installation of this existing allocation/operator is needed before promising F06's role matrix. No public blanket ACL mutation route was established.
+
+Existing provider hold/release control is the simplest delayed-proposal mechanism. Reuse it with its ten-second lifetime and authenticated private listener; don't add a generic delay executor. The current F05 fake listener/control binding has not been proven configured for that path. A neutral current endpoint and sanitized selected-turn receipt must be delivered before QA clocks.
+
+Knowledge callbacks are principal-scoped opaque references. Authorized curate/remove_fact and memo commands are agent proposals executed by the host. Author submission consent is manual; no general public withdrawal control was established in this source pass. F06 allows role OR consent revocation, so a fully supported role-revocation window is smaller than inventing consent withdrawal. Historical deletion removes current content and can retain inactive records; provide the real visibility/retention contract for F07.
+
+Source-level tests named in the manifest demonstrate intended capabilities and localization only. They were not executed here, and their present source is not proof that the historical app6d image contains newer changes. Before next stand seal verify immutable artifact source lineage and exact source delta, then independent review determines reuse of accepted coverage. No product edits/resources/checks were performed.

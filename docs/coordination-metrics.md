@@ -1,7 +1,7 @@
 # Coordination metrics
 
 Baseline observation: 2026-09-30T22:04:53Z. Assign one CSV writer and board owner
-in the [current local handoff](../management.local/resume-2026-10-02.md).
+in the [current local board](../management.local/KANBAN.html).
 Named owners in dated checkpoints below are historical assignments.
 Source: [local coordination-metrics.csv](../management.local/coordination-metrics.csv). Human view: [KANBAN.html](../management.local/KANBAN.html).
 These metrics describe engineering handoffs, not product readiness or a completion percentage.

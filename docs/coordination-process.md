@@ -3,6 +3,79 @@
 Daniel authorized these improvements on 1 October 2026. They supplement the
 existing Git and independent QA workflow; no quality or acceptance gate is removed.
 
+## Linux acceptance delivery
+
+Daniel authorized this process replacement on 5 October 2026.
+
+- Prioritize a clean, isolated current-product C stand and complete F03, then
+  independently releasable knowledge and registration scenarios. Original E
+  migration/data stands remain separate. A clean stand is not migration parity
+  or acceptance of the old stand.
+- Keep two product outcome owners (C and D) and one stand-support owner. The
+  support owner owns the Linux runner, allocation and exact resource retirement;
+  product owners own behavior and whole acceptance handoffs. Declare disjoint
+  tracked paths and developer worktrees before editing.
+- Use the existing local Linux environment. One trusted host runner handles
+  deadlines, native capture and owned cleanup. Windows is only a thin dispatch
+  surface. Do not add another general receipt framework, model, VM or paid
+  service. Do not expose the Docker socket to untrusted source/test helpers.
+- Run actual producer-to-consumer composition preflight before submitting the
+  final immutable candidate: literal argv, mount access, image defaults and
+  real never-started native constructors. Static mocks do not prove composition.
+  Preflight is not product execution, readiness or Functional PASS.
+  Independently review the trusted runner's privileged boundary before its first
+  resource operation. Root admits that exact runner; product composition preflight
+  then runs before the product's final immutable review.
+  Before reviewing an operator successor, feed its real saved producer inputs
+  into the actual consumer validation functions in an isolated no-socket Linux
+  source gate. Mocked shapes and manual schema comparison are not that proof.
+- Guard meaningful identity, authorization, data, source/image, command, network,
+  writer exclusion, resources and lifecycle invariants. Incidental Docker field
+  representation is not an additional product requirement. Any successor maps
+  every original required assertion and budget; frozen failed gates stay failed.
+  Neither a redesign nor a clean stand waives full stage or final acceptance.
+- Batch all related blocking changes into one owned outcome and immutable review
+  scope. Keep fresh independent Code and Functional QA. Reuse accepted unchanged
+  source slices only with explicit coverage and exact complete path/hash equality.
+- For literal shell, JSON, SQL or path findings, inspect the actual source bytes
+  and decoded consumer argument. Escaping in a rendered tool response is not
+  source evidence. Confirm the alleged literal before requesting a repair.
+  Preserve erroneous review records and supersede them with an explicit correction;
+  do not manufacture code changes or count withdrawn findings as defects.
+- Reserve fault durability work for the required user-data behavior. Temporary
+  test evidence must report failure truthfully and preserve custody; do not add
+  unrelated crash-proof evidence infrastructure to the nearest scenario.
+- Before preparing a new result directory, check the conditions of its existing
+  access grant. If independent source approval is required first, review the
+  immutable source before directory protection and execution. Automated tests
+  remain mandatory afterwards; do not request the same human grant again or
+  replace a source-review verdict with an unrun test claim.
+- Arm existing bounded, metadata-only timings on the failing user path before
+  reproduction. Account for external workers separately from the host profile.
+  Reuse retained evidence for decoding; do not rerun a user scenario to repair
+  an offline decoder. Keep original scenario limits and security assertions.
+- Treat owned synthetic stands as disposable when no other check depends on
+  them. Prefer the existing reset/recreate path to new recovery machinery.
+  Retain failure evidence and required data-preservation/rollback checks. Never
+  reset a shared, frozen migration or production resource implicitly.
+- Keep an acceptance candidate immutable. Batch related defects before fresh
+  affected review; during Functional QA change only a confirmed defect or a
+  missing mandatory capability, with the required new gates. Do not add features.
+- QA owns affected-domain and long-test classification. Use controlled test time
+  for supported cooldown/opening/expiry scenarios. Preserve real-time, full and
+  final gates where the original acceptance contract requires them.
+- Measure complete accepted scenarios and change-to-acceptance lead time, not
+  receipts, source-test counts or review assignments. If a pass produces only
+  another helper package, reassess the mechanism before extending the framework.
+- Checkpoint factual progress, board and resource custody together. Record legacy
+  resources until exact retirement; do not drop live owners or infer release.
+  Separate disjoint inactive-resource retirement from a fresh isolated scenario
+  when original prerequisites and actual writer/resource custody allow it. Keep
+  retirement mandatory for final acceptance; do not add it as a speculative wait.
+  Keep public source and neutral review inputs separate from private result
+  directories. An output that must be absent at birth inherits private access
+  from its approved private parent, not from a broad public-package ACL change.
+
 ## Outcome-first AI workflow
 
 Daniel authorized these optimizations on 3 October 2026.
@@ -24,6 +97,55 @@ Daniel authorized these optimizations on 3 October 2026.
   Fresh independent Code QA still reviews every substantive final change; both
   Code and Functional QA remain required per stage. Do not create a separate
   review stage for each mechanical receipt or metadata-only identity update.
+  Dispatch review only after the developer explicitly declares the final
+  immutable candidate ready, with completed audit, terminal gates and custody
+  release. Passing intermediate gates alone is not that handoff. If the author
+  supersedes a candidate before completion, retain the allocation as incomplete;
+  never infer a verdict, reuse its counter or pass findings to the next reviewer.
+- If one source closure is too large for a complete review, assign disjoint
+  semantic slices to fresh independent Senior reviewers before dispatch. Share
+  original requirements and integration contracts, not reviewer findings. Declare
+  source, embedded fixture, native capsule and cumulative-diff ownership. Each
+  report accepts only its slice. Root requires clean verdicts and complete union
+  coverage before the Code gate; hash-only inventories or unread gaps never pass.
+  For a corrective successor, retain an independently accepted unchanged slice
+  only after verifying its complete member path set and every member hash against
+  the reviewed immutable source. Fresh review must cover every changed slice and
+  affected integration contract on both sides. Supporting reads of a changed
+  interface in an older report do not accept its successor. Reviewers receive
+  original requirements and current source/contracts, not previous reports or
+  findings; root reconciles the explicit coverage union and immutable identities.
+- Composition preflight must connect actual producer output to the actual next
+  consumer. Use frozen executable commands and mounts in integration fixtures;
+  do not replace them with an arbitrary command that matches both mocks. Check
+  Linux tool resolution, UID, noexec mounts and inherited hard limits before
+  dispatch. Arm persistent child diagnostics before reproducing a failure;
+  temporary fixture cleanup must not erase its first failure evidence.
+  Reconcile operative literal pins in every real consumer with actual frozen
+  producer bytes and the current input index. A mocked hash cannot establish
+  this contract: include a focused real-byte check where fixtures substitute
+  hashing. Keep executable policy separate from explicitly approved immutable
+  operational evidence; do not repeatedly submit an all-null packet as runnable.
+  Derive member counts and other repeated input parameters from one pinned
+  structured manifest, not independent generated literals. Validate every mounted
+  producer/preparer/consumer file before dispatch. Compare native observations
+  against actual qualified configurations; do not invent labels or freeze a
+  representation when the safety and behavior invariant is unchanged.
+- Before an owned execution handoff, parse every new or changed orchestration
+  script without executing it. Exercise the real entrypoint and producer-to-consumer
+  path, not only extracted functions with injected state. Prove that deadline
+  custody starts before the first bounded read/hash/admission operation and is
+  not reset by setup. Check shell collection expressions as actual argv arrays,
+  including separate identity and name filters used to prove release.
+  For a multi-phase caller, pass the same parent cutoff and phase-attributed
+  CREATE custody across child scopes; keep immutable receipts in distinct phase
+  paths. Bind execution and release to the same explicit daemon. Retained stream
+  reconciliation must advance positive reads and report unresolved custody at
+  the original cutoff without claiming release or discarding its physical owner.
+  Reuse qualified native observations for the same constructor kind. A bind mount
+  must not inherit a volume's incidental Mode representation; declared read-only
+  access and native RW remain mandatory. Owners batch these checks into the
+  existing preparation outcome, not another root approval or test framework.
 - For new stand contracts, separate declared safety/behavior invariants from
   native observations. Guard exact source/image, private-data boundaries,
   commands, environment contents, mount identities/access, resources, ownership,
@@ -34,9 +156,10 @@ Daniel authorized these optimizations on 3 October 2026.
   incomplete outcomes still fail closed. Revise an existing strict contract only
   in an explicit successor with focused preservation checks and fresh independent
   review. Never edit a frozen gate or normalize a failed result to obtain PASS.
-- Use one short current handoff: original requirements, exact immutable candidate,
-  ownership, terminal gates/limitations and next operation. Keep history outside
-  it. Functional reviewers receive only the current source-blind requirement
+- Keep current status in progress and board, and exact resource custody in its
+  existing local record. Do not maintain a separate current handoff. Preserve
+  requirements, candidate pins and canonical gate reports. Functional reviewers
+  receive only the current source-blind requirement
   packet and a separately frozen actual-access annex, never implementation hints,
   prior findings or author conclusions. Read current owned paths before searching
   archived qa.local trees and caches.
@@ -53,8 +176,86 @@ Daniel authorized these optimizations on 3 October 2026.
   NOT RUN; obtain the required direct approval without an alternate route or quiet
   retry. Advance independent work while that action waits. Production, push and
   publication remain separately authorized.
+- Treat an immutable READY packet with a running absolute budget as a priority
+  handoff. Root resolves its complete admission before routine status updates,
+  history reconciliation or evidence cleanup. Record the observed READY-to-grant
+  interval separately from developer execution; do not hide queue time in an
+  increased effort estimate. Within an admitted outcome, the owner performs
+  ordinary permitted preparation, qualification and release without per-step
+  grants. Changed executable/profile scope still needs exact new admission.
 
 ## Continuous improvement and evidence retention
+
+### Approval waits are operation-scoped
+
+Daniel required this correction on5 October2026 after an avoidable whole-development
+wait. Park the check requiring approval and its dependent runtime/acceptance only.
+Keep independent approved product work moving: verify unmet requirements, reproduce
+and fix evidenced source defects, prepare affected tests and independent acceptance
+inputs. Reassign complete outcomes with disjoint ownership; do not invent features
+or helper campaigns to occupy workers. A completed assignment or blocked stand is
+not evidence that the remaining migration has no independent work.
+
+Before marking the whole goal blocked, inspect its actual unmet scope and record why
+no meaningful safe independent action remains. Keep waiting workers out of active-work
+metrics. Deferred checks stay pending and mandatory; do not claim PASS or advance
+dependent QA without them. Within a confirmed standing permission, ROOT verifies
+each immutable version/profile/resource admission without another human request;
+only a genuine scope expansion or unresolved approval-layer denial needs Daniel.
+
+### Product throughput correction
+
+- Daniel authorized the next tightening on5 October2026. The current operational
+  milestone is an installed current product and its first independently accepted
+  complete user scenario. Keep the concrete scenario and prerequisites on the
+  existing board; this milestone does not replace C-E, remaining parity or final gates.
+- Assign preparation, original affected automated gates, physical resource release
+  and final immutable developer handoff together. An intermediate package is not
+  the end of the assignment. Root owns shared admission and independent review,
+  not routine owner setup or a separate grant for each ordinary preparation step.
+- After two causally different failed attempts at one outcome, stop the repair loop
+  and compare the observed mechanism with a simpler existing-tool/Linux-native
+  path. Record the smallest feasible repair versus replacement and their actual
+  migration/review cost in the owner's existing handoff. Choose from evidence,
+  not a blanket rewrite. No extra controller layer or unchanged retry.
+  A successor must preserve original tests/assertions, cutoffs, security, native
+  process/reader custody, first-fault diagnostics and independent QA; do not alter
+  frozen predecessors or inherit acceptance across changed contracts.
+- Keep AI handoffs compact: original requirement, immutable source/base, ownership,
+  allowed resources/operations, stop condition and expected consumer. Developers
+  may receive diagnostic context; independent reviewers never receive author
+  findings, earlier verdicts or conversation history. Current progress/board and
+  canonical reports replace repeated narrative copies.
+- Use existing progress/board/CSV for full accepted scenario count, time to first
+  actual run, active execution versus dependency/ROOT waits, and review returns.
+  Do not introduce a dashboard/service, a speculative task to fill a worker lane,
+  or an infrastructure improvement without a named unmet product requirement.
+- Measure progress by independently accepted complete user scenarios. Source test
+  counts, helper releases and assigned workers are supporting evidence, not
+  product completion. Report zero closures explicitly. Publish a calendar forecast
+  only with its observed throughput basis; label an unvalidated effort model as such.
+- Maintain two disjoint product lanes alongside one bounded stand-support outcome.
+  Existing behavior needs actual acceptance bindings, not speculative feature edits.
+  A verified fixture or operator mismatch belongs to its end-to-end scenario owner.
+- Before queuing Functional QA, derive the scenario's exact dependency cut from
+  original requirements. Release complete independent scenarios when their own
+  mandatory prerequisites are accepted; do not wait for unrelated reset/import
+  work. This never accepts an incomplete stage or removes full/final gates.
+- Freeze infrastructure scope to demonstrated blockers of the next product
+  outcome. Batch related producer/consumer fixes, retain accepted unchanged slices
+  with complete path/hash proof, and exclude inactive historical comparison copies
+  from new closures only after behavior mapping. Do not edit frozen review inputs.
+- Reuse the proven developer preparation mechanics. PostgreSQL bootstrap readiness
+  must target the final TCP listener, not the temporary initdb Unix socket. Build
+  Docker commands as explicit string arrays; quote complete tmpfs values and check
+  the literal argument vector before allocation. Requested capability names and
+  observed native names belong to separate declared fields, not permissive matching.
+- An outcome grant must state which preparation mechanics the owner may correct.
+  If it pins an executable hash, changed bytes require a new exact grant before
+  CREATE or START. A broad task description does not override that pin. Preserve
+  any admission incident; forward containment of an existing owned process never
+  retrospectively accepts its earlier allocation. Do not discard truthful individual
+  test observations or call an inadmissible whole operation accepted.
 
 Daniel authorized regular process analysis, task redistribution and delegated
 documentation/evidence cleanup on 3 October 2026. During active work, inspect the
@@ -80,7 +281,8 @@ review. ROOT authority for actual runtime admission remains separate.
 Evaluate improvement by accepted requirements and reduced waiting, not activity
 counts. Notify Daniel only for meaningful outcomes, failures or required action.
 
-The documentation owner maintains one current handoff and concise current views.
+The documentation owner maintains concise progress and board views, without a
+separate current handoff (Daniel's 6 October 2026 instruction).
 Remove obsolete inactive evidence after checking its behavior against an actual
 current test or an original final-acceptance scenario. Record the mapping and
 retained canonical artifact in one compact cleanup note, not a new receipt tree.
@@ -89,6 +291,23 @@ Matrix coverage is not an executed PASS and must not change acceptance status.
 Keep active frozen packets, original requirements, unique required inputs,
 necessary first-failure evidence and the only proof of an unaccepted result.
 Do not delete live stand data or unrelated resources as documentation cleanup.
+
+## Host interruption recovery
+
+After an unexpected host or Docker restart, preserve the original attempt and
+its deadlines. First inspect actual handles, private receipts and exact native
+resource identities. A missing handle is not PASS; distinguish NOT RUN,
+interrupted execution and a proven terminal result. Observation failure alone
+does not justify another launch. Resume an unallocated NOT RUN check only after
+exact absence and input identity checks; do not replay a failed frozen operation.
+
+The stand-support owner restores the whole approved synthetic composition,
+not individual commands assigned by root. Root admits the exact resource and
+permission boundary once. Record pre/post lifecycle, full source/profile and
+volume identities, aggregate limits and data continuity. Preserve historical
+first failures. Do not reset data or reuse old live-access proof to hide a
+restart; release fresh Functional access only after actual readiness. Independent
+source review and unrelated capability preparation continue during recovery.
 
 ## Heavy checks
 
@@ -297,6 +516,66 @@ Focused developer feedback does not replace full acceptance or final CI gates.
 
 ## Test classification ownership
 
+Daniel's risk-based scope (7 October 2026): prioritize real rollout/restart while
+handling messages, redelivery, persistence and ordinary service failures. Retain
+simple atomic transactions, idempotent effects, permissions and money protection.
+Do not build generic recovery infrastructure for targeted SIGKILL between rare
+internal transaction steps or exhaustive artificial race combinations. Classify
+those as optional diagnostics unless explicit business obligations or established
+high-impact risk justify a mandatory test. Optional is not PASS. QA preserves
+required behavioral coverage and separates genuine runtime prerequisites from
+generic helper-unit suites; the latter do not block unrelated product scenarios.
+
+Restart scope override (Daniel, 7 October 2026): acceptance restarts use graceful
+shutdown within at most 5 seconds, retaining any tighter limit.
+Test pending-message completion or safe replay, persisted state and no duplicate
+effects/no simultaneous generations. A timeout or forced kill fails graceful
+acceptance; do not treat it as a successful normal restart. Internal SIGKILL
+matrices are not mandatory restart scenarios. Business interruption outcomes
+may be exercised through cancellation, ordinary dependency failure or persisted
+state recovery without an instruction-level kill mechanism.
+
+Daniel's SIGTERM clarification: cancel an unfinished model request rather than
+waiting for its full response; it may be requested again after restart. Preserve
+accepted input, committed effects and current authorization. Do not regenerate
+committed work or erase uncertain delivery state. Measure shutdown separately
+from full AI-response completion. Daniel explicitly clarified on 7 and 8 October 2026
+that the five-second hard limit is for graceful restart, not a complete ordinary
+agent response. Retire the old normal-response numeric criterion in a reviewed
+successor; preserve the full workloads, durable completion, permissions,
+idempotency and existing model/script/scenario/stand budgets. Record latency
+separately. Do not change an already armed frozen run or reclassify old failures
+as PASS. Graceful timeout or forced termination still fails acceptance.
+
+QA corrects representation-only scenario predicates in a new immutable procedure,
+without requiring another product Code QA when product and privileged runner code
+are unchanged. Prove accepted input, actual user-visible output, durable semantic
+provenance and fresh-session readback; a history event name or completion flag
+alone is neither a required representation nor sufficient behavioral proof.
+
+Ordinary shutdown should normally complete within 1 second (Daniel, 7 October).
+The 5-second ceiling is not a sleep or default wait. Observe actual completion,
+cancel promptly and preserve replay/effect state; record real duration with
+existing evidence, not another instrumentation framework. Build/test/data work
+is outside this ordinary process-shutdown latency target.
+
+Most ordinary short processes and local control operations should normally
+complete within 1 second. Finish on observed completion or readiness, without
+fixed sleeps. Investigate materially slow operations using existing duration
+evidence; do not add a timing framework. Builds, imports and full test suites
+are outside this target. It does not change the hard graceful-shutdown ceiling
+or permit forced termination.
+
+Daniel's behavioral-test update (7 October 2026): prove capabilities and outcomes,
+not incidental implementation structure. Delete AST-shape/source-layout/internal
+call-order checks that do not establish observable behavior. Preserve evidence
+for results, rights, persistence/transactions, failures, read-only effects and
+bounded completion. Exact structural assertion counts do not constrain the new
+suite; retain original functional requirements and full/final acceptance scope.
+Record deleted structural checks as removed, never PASS. QA owns coverage
+classification; developers edit tests and peers review affected behavioral coverage.
+Do not introduce another test framework or a replacement test-of-tests ceremony.
+
 QA owns the slow/medium-long inventory and conservative affected-domain mapping.
 Developers own runner mechanics and provide scenario intent. Classification uses
 actual eligibility/deadline waits and dependency families, not names or one noisy
@@ -341,6 +620,25 @@ the reviewer owns observable UI results and the independent verdict.
 
 ## Final acceptance cohort and preflight
 
+When runtime admission requires private inputs that cannot be prepared without
+admission, bind one staged operator outcome. First authorize only finite owned
+input preparation and provenance/DAC checks. Runtime allocation or SQL remains
+prohibited until the specified private approval, complete source/profile closure
+and current custody checks pass and Root admits that stage. Preparation success
+is not runtime authority. Consume independent accepted read-only prerequisites
+without waiting for unrelated tooling; preserve aggregate resource limits.
+
+Owned preparation includes the exact empty output directories required by the
+reviewed driver. Check these before dispatch. A host-only failure before the
+operation clock and any native allocation is NOT RUN, not a spent runtime window.
+Preserve its receipt; correct only the missing owned prerequisite under the same
+grant. Never use this rule to retry an anchored native failure or extend a budget.
+
+Inventory every actively consumed embedded source field, including fixture
+function libraries outside the main dependency map. Qualification must compare
+each with its canonical producer bytes. Do not treat an unchanged extracted
+function as proof that a stale complete fixture body meets a current-byte contract.
+
 Root maintains one finite C–E cohort in the existing local Kanban: accepted
 registration clock, callback ACK, identity revocation cache, diagnostics, clock
 operator plus setup/role consumers, background results/schema091, and delivery
@@ -383,17 +681,65 @@ does not weaken runtime reliability gates or authorize production changes.
 
 ## Documentation and acceptance closure
 
+Daniel's reviewer-pool update (7 October 2026): reuse a small persistent pool,
+rotate ownership across nodes and use developer cross-review. A Code reviewer
+may preserve their own prior review context. Never review or accept one's own
+authored change. Intake identifies the current commit/diff, changed dependencies
+and affected interfaces; exact unchanged source coverage is reused with identity
+checks, not reread in every iteration. Read newly changed or unreviewed required
+bodies completely. Review numbers identify results, not newly created agents.
+Keep implementation-blind Functional QA separate and preserve complete stage and
+final gates. Test-only corrections get a proportionate cross-review; changes to
+actual stand lifecycle, SQL, secrets or product behavior retain affected safety
+review. Do not manufacture a separate full-closure gate for an ordinary test fix.
+
+Outcome-owner autonomy (Daniel, 7 October 2026): assign an entire scenario and
+its existing resource window, not a succession of preparation permissions.
+Owners choose implementation and focused Linux developer checks, prepare local
+synthetic inputs, resolve defects and arrange cross-review within their declared
+paths and approved limits. They do not need ROOT approval for each ordinary
+owned step. ROOT resolves shared-resource conflicts, integration and genuinely
+new permission boundaries. Independent required acceptance, source immutability
+during review/runtime, original work budgets and physical resource release remain.
+
+Daniel's synthetic-directory policy (7 October 2026) supersedes blanket QA-tree
+ACL prerequisites: explicit owner instructions are sufficient for cooperating
+local agents. Do not change directory ACLs or add replacement ownership-proof
+ceremonies for ordinary owned preparation. Preserve actual immutable-source
+hashes, read-only input mounts, sole-writer exclusion and no secret publication.
+Review executable contract changes in new successors; keep frozen/running checks
+unchanged and retain both independent acceptance gates. This does not authorize
+production access, external disclosure or unrelated resource expansion.
+
 Update ignored management.local/PROGRESS.html and management.local/KANBAN.html after material results, ownership changes,
 plan changes and blockers. Working HTML stays outside Git. Operational journals and current estimates also stay local. Root batches stable rules and
 report changes into one coherent local checkpoint per handoff/result group.
 Do not create separate commits for every minor status sentence. Allocate review
 numbers before dispatch as already required. Preserve user edits separately.
 
+Independent Functional QA may give an explicit conditional input authorization
+before browser prearm. The frozen QA consumer must verify the admitted current
+stand, exact writer identity, required healthy cohort and original deadlines
+before its first input. This replaces an extra per-field manual ACK roundtrip;
+it does not permit inputs on mere file existence, a competing writer or a renewed
+window. Record the actual authorization before execution. Never invent a late
+ACK or reinterpret an earlier unapproved input as approved.
+
 Root prioritizes the finite clock → operator → background results/schema → final
 composition → frozen stands → original C–E acceptance/import execution chain.
 Two–three product developers and parallel verified-defect fixes remain active.
 New helper work needs a named blocked scenario and an immediate consumer.
 Partial interface checks and prepared plans do not close a whole requirement.
+
+Until the nearest scenarios are accepted, defer infrastructure and architectural
+improvements without a confirmed blocking defect or immediate acceptance
+consumer. Prefer executing a ready independent scenario over another preparation
+iteration. Reuse compatible pinned images, dependencies and an owned healthy
+stand when this preserves isolation; reset only scenario-owned state as needed.
+Do not rebuild a frozen QA stand or treat a different composition as accepted.
+Resource reservations are not running processes: use a compatible physical
+vacancy for pending gates and return it on verified completion, without changing
+component limits or allowing a fourth heavy-check slot.
 
 Kanban manager tracks heavy-check requests/grants/terminal outcomes, repeated
 returns, last required merge → freeze → actual QA, and closed/added/remaining

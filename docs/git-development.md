@@ -1,6 +1,6 @@
 # Parallel Git development
 
-Integration branch: `feature/go-platform-sandbox`. Daniel authorized consolidating
+Integration branch: `codex/takt` (renamed from `feature/go-platform-sandbox` on 10 October 2026). Daniel authorized consolidating
 the current work and switching development to Git on 30 September 2026.
 
 Heavy-check slots, precise Functional QA permissions, prepared fault windows and

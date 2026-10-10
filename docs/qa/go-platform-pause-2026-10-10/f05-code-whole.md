@@ -1,0 +1,40 @@
+# QA1010 actual whole attempt 1
+
+Verdict: ACTUAL_WHOLE_FAIL; INPUT_COMPLETION_UNCERTAIN; NORMAL_PHYSICAL_RELEASE_SUPPORTED_WITH_LIMITS. Genuine current admission/ACK is evidenced, but no complete F05 cell or Functional/full/final PASS. Physical retirement does not resolve uncertain input or authorize replay.
+
+Independent read-only continuation of my own unchanged successor4 source and preparation review. Whole MANIFEST9ea1cab4c841daed95a98e63390755e79d77c5b3af09d2ec9584b3384ad269f8 has739 pinned files, all SHA256/length matched; source156 pins also unchanged. Six explicitly authorized additive current QA machine receipts and the ROOT epoch4 whole grant were read/pinned separately. No Functional prose/report/findings was read. No source, helper, native, browser, resource or test action was executed.
+
+## Actual authority, admission and ACK
+
+ROOT whole grant019c180a0f2979dcb2812c0188c1c82bf63a76cdff8317f4744c3d5e14c64b0c is CURRENT_ADMITTED, original F05 four UI cells once, issued08:43:25.8850204Z/expires08:53:25.8850204Z. Same107784 birth08:23:58.6756038Z/session39143/current owner75e4fc... and browserb84763... are bound. Current actual reviewer c_fqa_f05_epoch4_cli remains distinct from logical c_fqa_f05_current and compatibility wire functional_e_reset_current. Resources/budgets match the original cohort/global envelope, including retained legacy transition custody; no authority over that legacy process is inferred.
+
+Additive conditional grant02352eb7f18077ee39f0e7a19efe1e235671041e3d0a61ae501b9ae0df9a5691 binds that ROOT SHA, actual Created1c4a90..., accepted action7410fab.../inputs66430e..., current operator birth and sole evidence4 writer. Its conditional preparation ACK is not business ACK. The separate actual business-ack f1876c950f6f8e21fbb24a0cf39bccddf6bf66e3473a40f77eead4ab8390da46 records prerequisite_ack true at08:46:48.598Z, exact current binding087da0..., READY a93e552... and admissiond7b7c2...; writer remains unreleased at ACK. Current raw caller-ready330e4c... records browser alive, exact binding/READY and no business writes. Main action source twice calls strict validateAdmission before publishing business ACK and entering run; actual terminal at line236 proves that path was traversed, rather than inferred from a static projection.
+
+Actual READY is published08:46:40.2809081Z before readiness cutoff08:47:12.9106761Z, with current browser image and owner/browser tuple. First observer sample08:46:43.0377238Z–08:46:44.2126702Z has ten unique current profiles and positive PIDs. All six role PIDs, StartedAt, images and health match READY: three healthy and three genuinely absent-healthcheck `none`. Thus the prior null/none mismatch is not present in this attempt. Source and current role/image/birth bindings remain strict. Thirteen actual samples contain valid running/noOOM/positivePID/healthy-or-none profiles and readonly zns_inventory with two granted locks. First-sample backend/advisory correspondence is the actual strict consumer path. Between-samples-unobserved and maximum4.9122137s sample-gap limitations remain; sampled health is not business acceptance.
+
+## Failure and uncertainty
+
+The action exits1 with `page.waitForResponse: Timeout 9888ms exceeded while waiting for event response`, surfaced at unchanged run-f05.mjs:236. Source submit waits for its own POST /lab/input response under the original10s operation clock, validates update identity/persisted visible completion, and leaves acceptedUncertain true on failure. No causal claim about whether a particular input reached the server is established solely by this timeout.
+
+The additive actual done.json913d267aa7db895bc922abb2e926e930cb3ebeb00d00f8ac40eb9d9a66e652b6 at08:47:05.082Z confirms the same error, accepted_input_completion_uncertain true, inputs ceased and no remaining QA operation. It reports writer released, which is cessation of the actor, not proof of business completion. It provides no completed outcomes array. No cell is accepted; all four original EN/RU mouse/emulated-touch privacy/principal/persistence outcomes remain unproved. Do not classify all four as passed or infer input certainty from process absence. The exact uncertainty is preserved, no replay is authorized, and independent Functional assessment remains separate.
+
+Business child82 birth6628629 and supervisor74 birth6628625 are absent in the saved terminal/wait receipt, with exit1/stdout0/stderr303 sealed after wait. The normal retirement join requested no TERM because the action had already ended; actual join551.0022ms. This supports physical cessation of that invocation only. Its terminal is08:47:06.9217554Z.
+
+## Original clocks and physical release
+
+Same original whole origin is08:46:01.1435793Z (saved overall cutoff08:56:01.1435793Z minus600). Admission M0 is08:46:09.0711774Z/ticks5647793603578/frequency10000000. Actual owner start08:46:12.910676186Z; READY and first sample/ACK are within original F30/readiness60/START400/overall600. Active deadline08:52:52.9106761Z and whole cleanup deadline08:54:52.9106761Z remain unchanged. No new clock, tolerance or deadline renewal is inferred.
+
+Cleanup enters08:47:06.9998488Z, original120-second cutoff08:49:06.9998488Z, within overall08:56:01.1435793Z. Native cleanup exit0/EOF2/kernel-reaped/no retained fault completes08:47:28.6455851Z; watcher exit0/EOF2/kernel-reaped completes08:47:28.7099568Z. 168 individual native files (including77 prior producer frames and26 observer frames) normalize the two saved EOF/reap schemas; every file has exit0, fullEOF2, physical reap, no cleanup kill/original retained/first fault. The previous preparation's separate wrapper and four binder receipts remain separately scoped, not double-counted or fabricated. Transport exit0 does not alter action exit1.
+
+Actual owner/managed stop events contain normal signal15, no alternative kill signal. Owner stop-to-die is about2.75s; timing bounds ordinary cohort stop2.97s, prerequisite stop0.91s and retirement21.58s. Ordinary owner latency exceeds target1 but remains below hard5. Owner/browser final profiles are exited/PID0/exit0/noOOM. Prerequisite terminal output is exited/notrunning/PID0/exit0/noOOM. Managed roles have actual terminal0 or pinned normal-term143 plus removal observations;143 is not in-flight completion or graceful business PASS. Containers/networks/volumes exact namespace absence outputs are empty.
+
+Additive browser-shutdown cd81b0c... reports SIGTERM,81.157238ms, reaped/EOF2/kernel absent/childexit0. The earlier observer-host-terminal snapshot has kernel_reaped false, explicitly preserved. The final unchanged bound launcher requires observer HasExited plus WaitForExit(0), native custody physically released and exact namespace absence before publishing outer physical true; no independently exported later observer-reap receipt is claimed. Its earlier false snapshot is not rewritten to true.
+
+Same-owner outer-exit-request is08:47:28.7288213Z, physicaltrue/noForce/noClockRenewal and exit1. Neutral retained tool observation records same session39143/toolf368a0 ordinary exit1 at08:47:28.7845442Z and PID107784 absence tool1c6ba7 at08:48:26.2609396Z, both within original cleanup/overall. Provenance is saved synchronous tool transcription, not independent raw provider export; the report does not claim an automatic script-file exit killed an interactive host or invent a raw timestamp export.
+
+## Limits
+
+Source/actual preparation and current admission traversal are limited accepted facts. Whole outcome remains failed, accepted input completion uncertain, all F05 cells and independent Functional/full-final remain unaccepted. No diagnosis, permission or product repair is implied by this evidence review. Historical failures remain unchanged. No grant, replay, additional check or new resource operation is issued. Reviewer evidence was excluded from the owner's whole manifest by ownership; only the six expressly authorized machine receipts were added to this review, with their independent hashes recorded.
+
+Written by code_qa_sol (gpt-6.1-sol/Codex)
+on behalf of Daniel Drizhuk

@@ -1,0 +1,9 @@
+{
+  "scope": "Recovery of exact independent QA authored here-string from completed CLI command, not ROOT acceptance",
+  "source_log_sha256": "4bc3d37433a4015acc0c6e998e7e2d79671e2018e95028d6398e4093ed383a55",
+  "event_type": "item.completed",
+  "command_exit": 0,
+  "command_sha256": "35c63a4b8cbfc201f669bcd8b325a0f46d416b74bfae1811d03edd4fc9e5c5c9",
+  "recovered_sha256": "63cc7bf94a1458306bda59a5eb2829932d146c1830b84ea2c8a4ca3932531ed0",
+  "limitations": "CLI output-last-message mistakenly targeted QA full report and overwrote it with final summary. QA-owned evidence untouched. Recovery preserves NOT_ACCEPTED and uncertainty. Here-string body extracted and shell apostrophe quoting decoded; no findings authored or changed by ROOT."
+}
