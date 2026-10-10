@@ -143,7 +143,7 @@ func TestBotDeliveryBoundarySplitRolesAndRestart(t *testing.T) {
 				before: func(r *http.Request) error { return boundaryNoOpenTX(r.Context(), f.db) },
 			}
 			f.b.TG.HTTP = &http.Client{Transport: wire}
-			for _, q := range []string{`SELECT telegram_id FROM core.users LIMIT 1`, `SELECT version FROM core.conversation_summaries LIMIT 1`, `UPDATE core.knowledge_memos SET body=body WHERE false`} {
+			for _, q := range []string{`SELECT name FROM core.users LIMIT 1`, `SELECT text FROM core.conversation_summaries LIMIT 1`, `UPDATE core.knowledge_memos SET body=body WHERE false`} {
 				_, err := f.b.DB.Exec(t.Context(), q)
 				var denied *pgconn.PgError
 				require.ErrorAs(t, err, &denied)
@@ -275,7 +275,10 @@ func runBotDeliveryGenerationBoundary(t *testing.T, local bool, kind botdelivery
 	t.Helper()
 	f := memorySplitRoleFixture(t)
 	f.b.Host = boundaryRoleHost(t, f, local)
-	_, err := f.b.DB.Exec(t.Context(), `SELECT generation FROM core.conversation_history_generations`)
+	_, err := f.b.DB.Exec(
+		t.Context(),
+		`UPDATE core.conversation_history_generations SET generation=generation WHERE false`,
+	)
 	var denied *pgconn.PgError
 	require.ErrorAs(t, err, &denied)
 	require.Equal(t, "42501", denied.Code)

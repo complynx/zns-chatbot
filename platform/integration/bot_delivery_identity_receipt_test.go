@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/platform/internal/botdelivery"
@@ -141,9 +142,51 @@ func waitReceiptDeadlines(t *testing.T, f *fixture) {
 	}, 5*time.Second, 5*time.Millisecond)
 }
 
+// Probe failed delivery fence access with the same role and always roll back.
+func probeReceiptHistoryFence(t *testing.T, f *fixture, owner string) {
+	t.Helper()
+	tx, err := f.b.DB.Begin(t.Context())
+	if err != nil {
+		t.Log("restricted diagnostic transaction closed: false")
+		return
+	}
+	for _, probe := range []struct{ label, query string }{
+		{
+			label: "history fence insert",
+			query: `INSERT INTO core.conversation_summaries(owner) VALUES($1) ON CONFLICT DO NOTHING`,
+		},
+		{
+			label: "history fence lock",
+			query: `SELECT version FROM core.conversation_summaries WHERE owner=$1 FOR UPDATE`,
+		},
+	} {
+		_, err = tx.Exec(t.Context(), probe.query, owner)
+		if statement, ok := errors.AsType[*pgconn.PgError](err); ok {
+			t.Logf("restricted diagnostic %s SQLSTATE %s", probe.label, statement.Code)
+		} else {
+			t.Logf("restricted diagnostic %s SQL error present: %t", probe.label, err != nil)
+		}
+		if err != nil {
+			break
+		}
+	}
+	err = tx.Rollback(t.Context())
+	t.Logf("restricted diagnostic transaction closed: %t", err == nil)
+}
+
 func TestBotDeliveryReceiptDeniedBatchCannotStarveHealthyOwner(t *testing.T) {
 	t.Parallel()
 	f, first := receiptIdentityFixture(t)
+	for _, query := range []string{
+		`SELECT text FROM core.conversation_summaries LIMIT 1`,
+		`SELECT text FROM core.conversation_events LIMIT 1`,
+		`SELECT body FROM core.knowledge_memos LIMIT 1`,
+	} {
+		_, err := f.b.DB.Exec(t.Context(), query)
+		var denied *pgconn.PgError
+		require.ErrorAs(t, err, &denied)
+		require.Equal(t, "42501", denied.Code)
+	}
 	links, ok := f.b.API.Links.(identity.Links)
 	require.True(t, ok)
 	require.NoError(t, links.Bind(t.Context(), "bob", identity.BobTelegramID, "bob-provider"))
@@ -155,8 +198,15 @@ func TestBotDeliveryReceiptDeniedBatchCannotStarveHealthyOwner(t *testing.T) {
 		}
 		return nil
 	}}}
-	require.Error(t, f.b.DeliverBotIntent(t.Context(), first))
-	require.Equal(t, delivery.Succeeded, receiptIdentityIntent(t, f, first).State)
+	deliveryErr := f.b.DeliverBotIntent(t.Context(), first)
+	require.Error(t, deliveryErr)
+	observed := receiptIdentityIntent(t, f, first)
+	if observed.State != delivery.Succeeded {
+		t.Logf("delivery error: %v; attempt: %d; not-before: %s; transport calls: %d",
+			deliveryErr, observed.Attempt, observed.NotBefore.Format(time.RFC3339Nano), wire.calls.Load())
+		probeReceiptHistoryFence(t, f, observed.Owner)
+	}
+	require.Equal(t, delivery.Succeeded, observed.State)
 	for n := range 31 {
 		queueSentReceipt(t, f, "alice", identity.AliceTelegramID, int64(45000+n))
 	}
