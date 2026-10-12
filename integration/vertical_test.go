@@ -60,6 +60,13 @@ type peers struct {
 	iamDown, loomDown, loseCreate, loseSend bool
 	question                                bool
 	inputs                                  []loom.InputRequest
+	callbackAcks                            []string
+	loseAck                                 bool
+	rejectSendOnce                          bool
+	userInactive                            bool
+	rejectInputAndFinish                    bool
+	unknownInputBeforeRejection             bool
+	rejectInputStatus                       int
 }
 
 func newPeers(t *testing.T) *peers {
@@ -101,6 +108,7 @@ func (p *peers) token(subject string) string {
 		"iat":                                   time.Now().Unix(),
 		"urn:zitadel:iam:user:resourceowner:id": "org",
 		"urn:zitadel:iam:org:project:roles":     map[string]any{"account.me": map[string]string{"org": "Org"}},
+		"urn:zitadel:iam:org:project:api:roles": map[string]any{"account.me": map[string]string{"org": "Org"}},
 	}
 	if subject != "actor" {
 		claims["act"] = map[string]string{"sub": "actor"}
@@ -144,19 +152,7 @@ func (p *peers) identity(w http.ResponseWriter, r *http.Request) {
 		}
 		respond(w, map[string]any{"access_token": p.token(sub), "expires_in": 3600, "token_type": "Bearer"})
 	case "/intro":
-		_ = r.ParseForm()
-		parsed, e := jwt.ParseSigned(r.Form.Get("token"), []jose.SignatureAlgorithm{jose.ES256})
-		if e != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		claims := map[string]any{}
-		if parsed.Claims(&p.key.PublicKey, &claims) != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		claims["active"] = true
-		respond(w, claims)
+		p.introspect(w, r)
 	case "/v2/users":
 		var request struct {
 			Queries []struct {
@@ -196,6 +192,22 @@ func (p *peers) identity(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+func (p *peers) introspect(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	parsed, err := jwt.ParseSigned(r.Form.Get("token"), []jose.SignatureAlgorithm{jose.ES256})
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	claims := map[string]any{}
+	if parsed.Claims(&p.key.PublicKey, &claims) != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	claims["active"] = !p.userInactive || claims["sub"] == "actor"
+	respond(w, claims)
+}
+
 func (p *peers) agent(w http.ResponseWriter, r *http.Request) {
 	if !p.waitGet(r) {
 		return
@@ -222,6 +234,25 @@ func (p *peers) agent(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(r.URL.Path, "/runs") && r.Method == http.MethodPost:
 		p.createRun(w, r)
 	case strings.HasSuffix(r.URL.Path, "/input"):
+		if p.unknownInputBeforeRejection {
+			p.unknownInputBeforeRejection = false
+			var input loom.InputRequest
+			_ = json.NewDecoder(r.Body).Decode(&input)
+			p.inputs = append(p.inputs, input)
+			disconnect(w)
+			return
+		}
+		if p.rejectInputAndFinish {
+			p.rejectInputAndFinish = false
+			p.steering = false
+			for key, run := range p.runs {
+				run.Status = "completed"
+				run.Result = "first message"
+				p.runs[key] = run
+			}
+			w.WriteHeader(p.rejectInputStatus)
+			return
+		}
 		p.applyInput(w, r)
 	case strings.HasSuffix(r.URL.Path, "/cancel"):
 		p.cancelRun(w, r)
@@ -300,6 +331,20 @@ func (p *peers) createRun(w http.ResponseWriter, r *http.Request) {
 func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if strings.HasSuffix(r.URL.Path, "/answerCallbackQuery") {
+		var request struct {
+			ID string `json:"callback_query_id"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&request)
+		p.callbackAcks = append(p.callbackAcks, request.ID)
+		if p.loseAck {
+			p.loseAck = false
+			disconnect(w)
+			return
+		}
+		respond(w, map[string]any{"ok": true, "result": true})
+		return
+	}
 	var message telegram.SendMessageRequest
 	if !strings.HasSuffix(r.URL.Path, "/sendMessage") {
 		w.WriteHeader(http.StatusNotFound)
@@ -307,6 +352,12 @@ func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&message)
 	p.sent = append(p.sent, message)
+	if p.rejectSendOnce {
+		p.rejectSendOnce = false
+		w.WriteHeader(http.StatusTooManyRequests)
+		respond(w, map[string]any{"ok": false, "error_code": 429, "parameters": map[string]int{"retry_after": 2}})
+		return
+	}
 	if p.sendEntered != nil {
 		close(p.sendEntered)
 		p.sendEntered = nil
@@ -564,6 +615,108 @@ func TestUnknownTelegramReceiptIsNotSentAgainAfterRestart(t *testing.T) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	require.Len(t, p.sent, 1)
+}
+
+func TestRevocationBlocksDeferredOutputAndPreservesDenialAfterRestart(t *testing.T) {
+	t.Parallel()
+	for _, question := range []bool{false, true} {
+		name := "result"
+		if question {
+			name = "question"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := newPeers(t)
+			p.question = question
+			p.rejectSendOnce = true
+			h := setup(t, p)
+			id := h.submit(t, 62)
+			require.Eventually(t, func() bool {
+				rows, err := h.store.ListOutbox(context.Background(), id)
+				return err == nil && len(rows) == 1 && rows[0].State == "retryable"
+			}, 10*time.Second, 20*time.Millisecond)
+			accepted, err := h.store.GetTask(context.Background(), id)
+			require.NoError(t, err)
+			_, err = h.store.SetUserRevoked(context.Background(), accepted.UserID, "admin")
+			require.NoError(t, err)
+			h.stop(t)
+			h.start(t)
+			state := "delivery_failed"
+			if question {
+				state = "failed"
+			}
+			h.await(t, id, state)
+			if question {
+				require.Eventually(t, func() bool {
+					rows, checkErr := h.store.ListOutbox(context.Background(), id)
+					return checkErr == nil && len(rows) == 2 && rows[1].State == "delivered"
+				}, 10*time.Second, 20*time.Millisecond)
+			}
+			h.stop(t)
+			rows, err := h.store.ListOutbox(context.Background(), id)
+			require.NoError(t, err)
+			require.Equal(t, "delivery_blocked", rows[0].State)
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			if question {
+				require.Len(t, p.sent, 2)
+				require.Equal(t, "Access denied. Please contact the administrator.", p.sent[1].Text)
+				require.Equal(t, "delivered", rows[1].State)
+			} else {
+				require.Len(t, p.sent, 1)
+			}
+		})
+	}
+}
+
+func TestDeferredResultRechecksIAMAndWaitsForTemporaryOutage(t *testing.T) {
+	t.Parallel()
+	for _, outage := range []bool{false, true} {
+		name := "explicit_denial"
+		if outage {
+			name = "temporary_outage"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			p := newPeers(t)
+			p.rejectSendOnce = true
+			h := setup(t, p)
+			id := h.submit(t, 63)
+			require.Eventually(t, func() bool {
+				rows, checkErr := h.store.ListOutbox(context.Background(), id)
+				return checkErr == nil && len(rows) == 1 && rows[0].State == "retryable"
+			}, 10*time.Second, 20*time.Millisecond)
+			require.NoError(t, h.iam.SetPositiveCacheTTL(0))
+			p.mu.Lock()
+			p.iamDown = outage
+			p.userInactive = !outage
+			p.mu.Unlock()
+			if outage {
+				require.Never(t, func() bool {
+					p.mu.Lock()
+					defer p.mu.Unlock()
+					return len(p.sent) > 1
+				}, 3*time.Second, 25*time.Millisecond)
+				p.mu.Lock()
+				p.iamDown = false
+				p.mu.Unlock()
+				h.awaitReplies(t, 2)
+			} else {
+				h.await(t, id, "delivery_failed")
+			}
+			h.stop(t)
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			if outage {
+				require.Len(t, p.sent, 2)
+			} else {
+				require.Len(t, p.sent, 1)
+				rows, checkErr := h.store.ListOutbox(context.Background(), id)
+				require.NoError(t, checkErr)
+				require.Equal(t, "delivery_blocked", rows[0].State)
+			}
+		})
+	}
 }
 
 func TestAgentAccountUsesSubjectAndDeniesForeignTasksAndAdmin(t *testing.T) {
@@ -888,6 +1041,50 @@ func TestAcceptedTextStartsOwnRunIfPriorRunFinishesBeforeControlAfterRestart(t *
 	require.ElementsMatch(t, []string{"first message", "second message"}, results)
 }
 
+func TestRejectedSteeringStartsOwnRunAfterPriorRunCompletes(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		status  int
+		unknown bool
+	}{
+		{"rate_limit", http.StatusTooManyRequests, false},
+		{"completion_conflict", http.StatusConflict, false},
+		{"unknown_effect_before_rejection", http.StatusTooManyRequests, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p := newPeers(t)
+			p.steering = true
+			p.echoInput = true
+			p.rejectInputAndFinish = true
+			p.unknownInputBeforeRejection = tc.unknown
+			p.rejectInputStatus = tc.status
+			h := setup(t, p)
+			original := h.submitText(t, 60, "first message")
+			h.await(t, original, "running")
+			following := h.submitText(t, 61, "second message")
+			h.await(t, original, "completed")
+			h.await(t, following, "completed")
+			h.awaitReplies(t, 2)
+			h.stop(t)
+			p.mu.Lock()
+			defer p.mu.Unlock()
+			if tc.unknown {
+				require.Equal(t, []string{"first message"}, p.createdInputs)
+				require.Equal(t, []loom.InputRequest{{Kind: "steering", Text: "second message"}}, p.inputs)
+			} else {
+				require.Equal(t, []string{"first message", "second message"}, p.createdInputs)
+				require.Empty(t, p.inputs)
+				require.ElementsMatch(t,
+					[]string{"first message", "second message"},
+					[]string{p.sent[0].Text, p.sent[1].Text},
+				)
+			}
+		})
+	}
+}
+
 func TestLaterAcceptedMessageCannotOvertakePendingPromotion(t *testing.T) {
 	t.Parallel()
 	p := newPeers(t)
@@ -1030,4 +1227,70 @@ func (p *peers) applyInput(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(http.StatusNotFound)
+}
+
+func TestCallbackAcknowledgementDoesNotChangeDurableAcceptance(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	h := setup(t, p)
+	original := h.submit(t, 1)
+	h.await(t, original, "completed")
+	h.awaitReplies(t, 1)
+	p.mu.Lock()
+	p.loseAck = true
+	p.mu.Unlock()
+	update := telegram.Update{ID: 2, CallbackQuery: &telegram.CallbackQuery{
+		ID: "callback-2", From: telegram.User{ID: 456, FirstName: "Daniel"},
+		Message: &telegram.Message{ID: 1, Chat: telegram.Chat{ID: 456, Type: "private"}},
+		Data:    "q:" + original.String() + ":00000000:0",
+	}}
+	body, err := json.Marshal(update)
+	require.NoError(t, err)
+	var acceptedID uuid.UUID
+	for attempt := range 2 {
+		request, requestErr := http.NewRequest(http.MethodPost, h.server.URL+"/telegram/webhook", bytes.NewReader(body))
+		require.NoError(t, requestErr)
+		request.Header.Set("X-Telegram-Bot-Api-Secret-Token", "test-secret")
+		response, sendErr := h.server.Client().Do(request)
+		require.NoError(t, sendErr)
+		require.Equal(t, http.StatusAccepted, response.StatusCode)
+		var receipt struct {
+			ID        uuid.UUID `json:"task_id"`
+			Duplicate bool      `json:"duplicate"`
+		}
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&receipt))
+		require.NoError(t, response.Body.Close())
+		require.Equal(t, attempt == 1, receipt.Duplicate)
+		if attempt == 0 {
+			acceptedID = receipt.ID
+		} else {
+			require.Equal(t, acceptedID, receipt.ID)
+		}
+	}
+	accepted, err := h.store.GetTask(context.Background(), acceptedID)
+	require.NoError(t, err)
+	require.Equal(t, acceptedID, accepted.ID)
+	p.mu.Lock()
+	require.Equal(t, []string{"callback-2", "callback-2"}, p.callbackAcks)
+	require.Len(t, p.createdInputs, 1)
+	p.mu.Unlock()
+	update.ID = 3
+	update.CallbackQuery.ID = "callback-3"
+	update.CallbackQuery.Data = "invalid"
+	body, err = json.Marshal(update)
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, h.server.URL+"/telegram/webhook", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("X-Telegram-Bot-Api-Secret-Token", "test-secret")
+	response, err := h.server.Client().Do(request)
+	require.NoError(t, err)
+	defer response.Body.Close()
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	var ignored map[string]any
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&ignored))
+	require.Equal(t, true, ignored["ignored"])
+	require.NotContains(t, ignored, "task_id")
+	p.mu.Lock()
+	require.Equal(t, []string{"callback-2", "callback-2", "callback-3"}, p.callbackAcks)
+	p.mu.Unlock()
 }

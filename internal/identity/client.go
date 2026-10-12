@@ -331,6 +331,7 @@ func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
 		return Principal{}, err
 	}
 	form := url.Values{"token": {token}, "token_type_hint": {"access_token"}}
+	var payload json.RawMessage
 	var info struct {
 		claims
 
@@ -344,13 +345,27 @@ func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
 		"application/x-www-form-urlencoded",
 		c.options.IntrospectionClientCredentials,
 		"",
-		&info,
+		&payload,
 	)
 	if err != nil {
 		if errors.Is(err, ErrDenied) {
 			c.Invalidate(s.Subject)
 		}
 		return Principal{}, err
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(payload, &info) != nil || json.Unmarshal(payload, &fields) != nil {
+		c.Invalidate(s.Subject)
+		return Principal{}, ErrDenied
+	}
+	// Flat roles belong to the introspection client's project, which can differ
+	// from this API. Only the exact configured project claim may authorize it.
+	var apiRoles map[string]map[string]string
+	if raw, present := fields["urn:zitadel:iam:org:project:"+c.options.APIAudience+":roles"]; present {
+		if json.Unmarshal(raw, &apiRoles) != nil {
+			c.Invalidate(s.Subject)
+			return Principal{}, ErrDenied
+		}
 	}
 	if !info.Active || info.Subject != s.Subject || info.Issuer != s.Issuer || info.Org != s.Org ||
 		info.Expiry == nil ||
@@ -371,7 +386,7 @@ func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
 		Actor:          actorSubject(s),
 		OrganizationID: s.Org,
 		ExpiresAt:      expires,
-		Roles:          info.Roles,
+		Roles:          apiRoles,
 	}
 	until := time.Now().Add(ttl)
 	if expires.Before(until) {
@@ -435,6 +450,7 @@ func (c *Client) scopes(management bool) string {
 	scopes := []string{
 		"openid",
 		"urn:zitadel:iam:user:resourceowner",
+		"urn:zitadel:iam:org:projects:roles",
 		"urn:zitadel:iam:org:project:id:" + c.options.LoomAudience + ":aud",
 		"urn:zitadel:iam:org:project:id:" + c.options.APIAudience + ":aud",
 	}

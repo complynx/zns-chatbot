@@ -30,7 +30,7 @@ type intent struct {
 }
 
 func normalize(u telegram.Update, raw json.RawMessage) (intent, error) {
-	i := intent{Kind: "message", RawUpdate: raw}
+	i := intent{Kind: kindMessage, RawUpdate: raw}
 	if u.ID < 0 || !json.Valid(raw) {
 		return i, ErrUnsupportedUpdate
 	}

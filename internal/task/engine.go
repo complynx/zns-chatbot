@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,6 +17,8 @@ import (
 	"github.com/complynx/shuttle/internal/loom"
 )
 
+var errControlTargetFinished = errors.New("control target finished without applying input")
+
 type checkpoint struct {
 	Session           loom.Session           `json:"session"`
 	BootstrapAttempts int                    `json:"bootstrap_attempts,omitempty"`
@@ -23,6 +26,7 @@ type checkpoint struct {
 	Create            *loom.CreateRunRequest `json:"create,omitempty"`
 	Run               *loom.Run              `json:"run,omitempty"`
 	Control           *loom.InputRequest     `json:"control,omitempty"`
+	ControlUnapplied  bool                   `json:"control_unapplied,omitempty"`
 }
 
 func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.Outbound) error {
@@ -30,6 +34,7 @@ func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.O
 	if len(out) > 0 {
 		existing, err := s.store.ListOutbox(ctx, t.ID)
 		if err != nil {
+			s.reportDatabaseFailure(ctx, t.ID, "outbox_read", err)
 			return err
 		}
 		keys := make(map[string]bool, len(existing))
@@ -61,6 +66,8 @@ func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.O
 	saved, err := s.store.Save(ctx, *t, s.owner, t.Fence, out)
 	if err == nil {
 		*t = saved
+	} else {
+		s.reportDatabaseFailure(ctx, t.ID, "checkpoint_save", err)
 	}
 	return err
 }
@@ -69,16 +76,21 @@ func terminal(state string) bool {
 		state == stateDeliveryUnknown ||
 		state == stateDeliveryFailed
 }
+func finishedRun(status string) bool {
+	return terminal(status) || status == "succeeded" || status == "canceled"
+}
 func (s *Service) wait() error { return river.JobSnooze(s.options.PollInterval) }
 func (s *Service) work(parent context.Context, id uuid.UUID) error {
 	ctx, cancel := context.WithTimeout(parent, s.options.AttemptTimeout)
 	defer cancel()
 	t, err := s.store.Route(ctx, id)
 	if err != nil {
+		s.reportDatabaseFailure(ctx, id, "route", err)
 		return s.wait()
 	}
 	t, err = s.store.Claim(ctx, id, s.owner, s.options.LeaseDuration)
 	if err != nil {
+		s.reportDatabaseFailure(ctx, id, "claim", err)
 		return s.wait()
 	}
 	defer s.releaseTask(ctx, &t)
@@ -103,7 +115,11 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 	}
 	if t.TargetTaskID != uuid.Nil {
 		ready, gateErr := s.store.ControlReady(ctx, t.ID)
-		if gateErr != nil || !ready {
+		if gateErr != nil {
+			s.reportDatabaseFailure(ctx, t.ID, "control_gate", gateErr)
+			return s.wait()
+		}
+		if !ready {
 			return s.wait()
 		}
 	}
@@ -126,7 +142,9 @@ func (s *Service) runTask(ctx context.Context, t *db.Task, c checkpoint, i inten
 func (s *Service) releaseTask(parent context.Context, t *db.Task) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), time.Second)
 	defer cancel()
-	_ = s.store.Release(ctx, t.ID, s.owner, t.Fence)
+	if err := s.store.Release(ctx, t.ID, s.owner, t.Fence); err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "lease_release", err)
+	}
 }
 func (s *Service) traceAttempt(ctx context.Context, i intent) (context.Context, func()) {
 	if s.observer == nil {
@@ -144,6 +162,7 @@ func (s *Service) traceAttempt(ctx context.Context, i intent) (context.Context, 
 func (s *Service) authorize(ctx context.Context, t db.Task, i intent) (db.User, identity.Credential, error) {
 	user, err := s.store.GetUser(ctx, t.UserID)
 	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "user_read", err)
 		return user, identity.Credential{}, err
 	}
 	if user.Revoked {
@@ -157,6 +176,7 @@ func (s *Service) authorize(ctx context.Context, t db.Task, i intent) (db.User, 
 		}
 		user, err = s.store.BindSubject(ctx, t.UserID, account.Subject, account.OrganizationID)
 		if err != nil {
+			s.reportDatabaseFailure(ctx, t.ID, "subject_bind", err)
 			return user, identity.Credential{}, err
 		}
 	}
@@ -166,6 +186,7 @@ func (s *Service) authorize(ctx context.Context, t db.Task, i intent) (db.User, 
 	}
 	latest, err := s.store.GetUser(ctx, t.UserID)
 	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "user_recheck", err)
 		return user, service, err
 	}
 	if latest.Revoked {
@@ -330,6 +351,7 @@ func (s *Service) loomError(ctx context.Context, t *db.Task, c checkpoint, i int
 func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i intent, user db.User, service string) error {
 	target, err := s.store.GetTask(ctx, t.TargetTaskID)
 	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "control_target", err)
 		return s.wait()
 	}
 	if target.UserID != t.UserID || target.ConversationID != t.ConversationID {
@@ -356,7 +378,7 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 	if run.AuthSessionID != "" && run.AuthSessionID != target.AuthSessionID {
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
 	}
-	if terminal(run.Status) || run.Status == "succeeded" || run.Status == "canceled" {
+	if finishedRun(run.Status) {
 		return s.finishedTarget(ctx, t, c, i, user, service)
 	}
 	if i.CallbackTaskID != uuid.Nil && i.CallbackTaskID != target.ID {
@@ -364,6 +386,9 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 	}
 	applied, err := s.sendControl(ctx, t, &c, i, auth, target.RunID, run)
 	if !applied {
+		if errors.Is(err, errControlTargetFinished) {
+			return s.finishedTarget(ctx, t, c, i, user, service)
+		}
 		return err
 	}
 	t.RunID = target.RunID
@@ -384,11 +409,12 @@ func (s *Service) finishedTarget(
 	user db.User,
 	service string,
 ) error {
-	if i.Kind != "message" || c.Control != nil {
+	if i.Kind != kindMessage || c.Control != nil && !c.ControlUnapplied {
 		return s.finish(ctx, t, c, i, stateCompleted, "no_active")
 	}
 	promoted, err := s.store.PromoteMessage(ctx, t.ID, s.owner, t.Fence)
 	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "message_promote", err)
 		return s.wait()
 	}
 	// Promotion retains the immutable accepted task ID and request, with a fresh run checkpoint.
@@ -411,6 +437,7 @@ func (s *Service) sendControl(
 		}
 		return true, nil
 	}
+	unapplied := c.Control == nil || c.ControlUnapplied
 	if c.Control == nil {
 		input, err := controlInput(*t, i, run)
 		if err != nil {
@@ -421,11 +448,58 @@ func (s *Service) sendControl(
 			return false, s.wait()
 		}
 	}
+	if c.ControlUnapplied {
+		// Persist uncertainty before another attempt; a crash can hide its receipt.
+		c.ControlUnapplied = false
+		if err := s.save(ctx, t, *c, nil); err != nil {
+			return false, s.wait()
+		}
+	}
 	_, err := s.loom.Input(ctx, auth, runID, t.ID.String(), *c.Control)
 	if err != nil {
-		return false, s.loomError(ctx, t, *c, i, err)
+		return false, s.controlError(ctx, t, c, i, auth, runID, unapplied, err)
 	}
 	return true, nil
+}
+
+func (s *Service) controlError(
+	ctx context.Context, t *db.Task, c *checkpoint, i intent,
+	auth loom.Auth, runID string, unapplied bool, err error,
+) error {
+	var upstream *loom.Error
+	if unapplied && errors.As(err, &upstream) &&
+		(upstream.Outcome == loom.NotStarted || upstream.Outcome == loom.Rejected) {
+		// A later rejection cannot disprove an earlier unknown effect.
+		c.ControlUnapplied = true
+	}
+	if c.ControlUnapplied && i.Kind == kindMessage && c.Control.Kind == "steering" &&
+		upstream != nil && upstream.StatusCode == http.StatusConflict {
+		return s.reconcileControlConflict(ctx, t, c, i, auth, runID, err)
+	}
+	return s.loomError(ctx, t, *c, i, err)
+}
+
+func (s *Service) reconcileControlConflict(
+	ctx context.Context, t *db.Task, c *checkpoint, i intent,
+	auth loom.Auth, runID string, conflict error,
+) error {
+	// Completion may race the preceding read. Other conflicts remain errors.
+	latest, err := s.loom.GetRun(ctx, auth, runID)
+	if err != nil {
+		return s.loomError(ctx, t, *c, i, err)
+	}
+	if latest.AuthSessionID != "" && latest.AuthSessionID != auth.SessionID {
+		return s.finish(ctx, t, *c, i, stateFailed, "denied")
+	}
+	if !finishedRun(latest.Status) {
+		return s.loomError(ctx, t, *c, i, conflict)
+	}
+	// The parent task may not yet have saved its terminal state in PostgreSQL.
+	t.State = "awaiting_service"
+	if err = s.save(ctx, t, *c, nil); err != nil {
+		return s.wait()
+	}
+	return errControlTargetFinished
 }
 func controlInput(t db.Task, i intent, run loom.Run) (loom.InputRequest, error) {
 	switch {

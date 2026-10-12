@@ -6,6 +6,11 @@ stdlib для транспорта и инфраструктурных опер�
 Целевая платформа — сервер Daniel, Linux/Docker, linux/amd64, как у Loom.
 Windows — среда разработки; обязательные release gates выполняются в Linux.
 
+В таблицах закреплён выбор кандидатов для полного проекта, а не перечень
+уже импортируемых пакетов. Go-i18n, Goleak и otelhttp пока не используются
+реализацией. Фактический runtime graph определяется go.mod и
+tools/dependencies.lock.json; planned imports проверены отдельно в candidate.
+
 ## Основной стек
 
 | Назначение | Выбор | Версия | Лицензия | GitHub stars |
@@ -53,12 +58,15 @@ HTML renderer не применяется как промежуточный пр
 переходит в plain text, без потери ответа или изменения user reference.
 Перед отправкой проверяются Telegram nesting и UTF-16 offsets. Для renderer
 и разбиения используются повреждённые fixtures и встроенный Go fuzzing.
-Для диагностированного дефекта можно один раз запросить formatting repair в Loom
+Опциональный formatting repair через Loom пока не реализован. В будущем для
+диагностированного дефекта можно один раз запросить исправление в Loom
 с конкретной ошибкой. Это ограниченный запрос без бизнес-инструментов, после него
 entities проверяются заново. Нет необходимости писать сложный repair engine:
 при отказе Loom или повторном дефекте сохраняется локальный текстовый fallback.
 
-Для go-i18n первоначальные каталоги используют JSON и en/ru. Fallback be/uk → ru
+Go-i18n и JSON каталоги en/ru относятся к будущему i18n этапу. Сейчас системные
+строки en/ru находятся в небольшой таблице internal/task/delivery.go.
+Fallback be/uk → ru
 задаётся приложением. CLI для extraction/merge добавляется при необходимости;
 runtime не обязан импортировать TOML/YAML loaders этой CLI.
 
@@ -113,7 +121,8 @@ OTel Go repository имеет 6 574 stars, contrib — 1 678, Prometheus client 
 Прикладные metrics создаются через OTel Metrics API и экспортируются в одну
 Prometheus registry. client_golang обслуживает /metrics и стандартные collectors;
 второй независимый набор тех же прикладных counters не создаётся. Traces отправляются
-через OTLP HTTP в Alloy. Логи остаются slog JSON stdout с trace/span ID; отдельный
+через OTLP HTTP в Alloy. Логи остаются slog JSON stdout. Автоматическое добавление trace/span ID в логи
+пока не реализовано; отдельный
 OTel Logs SDK и push логов не требуются.
 
 На текущем server_configs Alloy уже собирает Prometheus и Docker logs. OTLP receiver
@@ -123,9 +132,15 @@ redaction и связь очередей проверяются отдельны
 
 Для очереди tracing выполняется короткими spans попыток с сохранёнными links.
 Личные данные, auth credentials и содержимое файлов не входят в telemetry.
-Metrics endpoint и optional pprof доступны только на внутреннем listener.
+Metrics endpoint доступен на внутреннем listener. Pprof пока не подключён;
+если потребуется, он также остаётся внутренним.
 
-## Инструменты разработки и CI
+## Инструменты разработки и требования к CI
+
+Версии инструментов и локальные проверки закреплены. Описанные ниже Go CI gates,
+pinning GitHub Actions и Dependabot — требования к будущей автоматизации.
+Текущий .github/workflows/build.yml собирает прежний Python image; отдельного
+Shuttle workflow и Dependabot configuration пока нет.
 
 - Go 1.27.2, как в Loom. Официальный стабильный release и SHA архивов проверяются;
   локальная системная установка не изменяется автоматически.
@@ -133,11 +148,11 @@ Metrics endpoint и optional pprof доступны только на внутр
   openpgp, goimports/golines и длина строки 120. В [.golangci.yml](../.golangci.yml)
   изменён только local import prefix на github.com/complynx/shuttle.
 - sqlc 1.31.1 с PostgreSQL и pgx/v5. Generated queries коммитятся вместе с SQL;
-  CI проверяет отсутствие изменений после generate. Конфигурация путей создаётся
+  Для CI требуется проверка отсутствия изменений после generate. Конфигурация путей создаётся
   вместе с первой схемой, а не ссылается на несуществующие directories.
 - Goose SQL migrations. Сборка мигратора включает только нужный PostgreSQL driver.
 - go test, go vet, race detector, httptest и testing/synctest; Testify assert/require.
-  Mock framework по умолчанию не используется. Goleak применяется к lifecycle,
+  Mock framework по умолчанию не используется. Goleak по необходимости применяется к lifecycle,
   cancellation и shutdown, а не механически ко всем тестам.
 - Реальный PostgreSQL через изолированный DSN/schema и Docker Compose, как в Loom.
   Testcontainers не нужен для первого integration harness.
@@ -147,12 +162,16 @@ Metrics endpoint и optional pprof доступны только на внутр
 - Dependabot для gomod, images и actions без auto-merge; изменение версии требует
   обновить SHA lock, аудит и релевантные проверки.
 
-Runtime использует net/http, context, log/slog, os/signal, os/exec, time/tzdata,
-html/template, encoding/json, crypto и стандартные image codecs. time/tzdata
-обеспечивает доступность IANA zones в минимальном image. Денежные значения —
-целые minor units; decimal library, Cobra/Viper и второй logger не нужны.
-Loom API вызывается типизированным stdlib HTTP client; SSE parser ограничен размером
-события и поддерживает cursor/reconnect. Собственный model SDK в Shuttle отсутствует.
+Первый этап использует net/http, context, log/slog, os/signal, encoding/json и
+crypto. Loom API вызывается типизированным stdlib HTTP client с polling run status.
+SSE cursor/reconnect пока не реализован. Если потребуется поток событий, parser
+должен ограничивать размер события и поддерживать восстановление cursor.
+
+os/exec, time/tzdata, html/template и стандартные image codecs относятся к будущим
+workers, event-timezone, HTML и media модулям. Перед event-timezone этапом нужно
+включить IANA zone data в минимальный image; сейчас time/tzdata не импортируется.
+Денежные значения планируются как целые minor units; ledger ещё не реализован.
+Decimal library, Cobra/Viper, второй logger и собственный model SDK не нужны.
 
 ## Дополнительные кандидаты по потребности
 
@@ -196,7 +215,7 @@ branches и непроверенные replace. Изменения проход�
 лицензий, govulncheck, lint, build и предметные тесты.
 
 Аудит выбора хранится в [dependency-audit/2026-10-12](dependency-audit/2026-10-12/README.md).
-Это самостоятельный candidate module, не начатая реализация бота. Его граф включает
+Это исторический самостоятельный candidate module этапа выбора. Его граф включает
 planned imports и test libraries. Размер полного module graph не равен числу
 пакетов или лицензий binary: например Goose приводит дополнительные driver modules,
 которые не импортируются PostgreSQL-only приложением.
@@ -207,8 +226,9 @@ GO-2026-6612 и GO-2026-6617 в golang.org/x/net 0.59.0. Candidate обновл�
 проверяется содержимое отчёта. Финальный результат и ограничения указаны в README аудита.
 
 Сканер лицензий предупреждает о не-Go assembly в xxhash: это ограничение проверки,
-а не обнаруженная запрещённая лицензия. В toolchain/native assets и в ещё не
-написанном приложении аудит выполняется отдельно. Выбор не заменяет production QA.
+а не обнаруженная запрещённая лицензия. Toolchain/native assets проверяются отдельно. Фактический runtime audit приложения
+уже сохранён в runtime-checks.json рядом с candidate; go.mod и
+tools/dependencies.lock.json определяют реализованный граф. Выбор не заменяет production QA.
 
 Written by Codex (gpt-6/Codex desktop)
 on behalf of Daniel Drizhuk

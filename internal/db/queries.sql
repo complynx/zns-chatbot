@@ -33,7 +33,9 @@ INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload) VALUES($1,$2,
 -- name: ListOutbox :many
 SELECT * FROM shuttle_outbox WHERE task_id=$1 ORDER BY chunk_seq;
 -- name: ReserveDelivery :one
-UPDATE shuttle_outbox SET state='send_inflight',attempt_id=$2 WHERE shuttle_outbox.id=$1 AND shuttle_outbox.state IN ('pending','retryable') AND NOT EXISTS(SELECT 1 FROM shuttle_outbox earlier WHERE earlier.task_id=shuttle_outbox.task_id AND earlier.chunk_seq<shuttle_outbox.chunk_seq AND earlier.state<>'delivered') RETURNING shuttle_outbox.*;
+UPDATE shuttle_outbox SET state='send_inflight',attempt_id=$2 WHERE shuttle_outbox.id=$1 AND shuttle_outbox.state IN ('pending','retryable') AND NOT EXISTS(SELECT 1 FROM shuttle_outbox earlier WHERE earlier.task_id=shuttle_outbox.task_id AND earlier.chunk_seq<shuttle_outbox.chunk_seq AND earlier.state NOT IN ('delivered','delivery_blocked')) RETURNING shuttle_outbox.*;
+-- name: BlockPendingDelivery :exec
+UPDATE shuttle_outbox SET state='delivery_blocked' WHERE id=$1 AND state IN ('pending','retryable');
 -- name: FinishDelivery :one
 UPDATE shuttle_outbox SET state=$3,receipt=$4 WHERE id=$1 AND attempt_id=$2 AND state='send_inflight' RETURNING *;
 -- name: RecoverUnknownDeliveries :execrows

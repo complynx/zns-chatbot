@@ -263,6 +263,11 @@ func (c *Client) call(
 	if err != nil {
 		return &Error{Outcome: NotStarted}
 	}
+	if mutation {
+		// The durable worker owns retries. Transport retries can hide an unknown
+		// first effect behind a later rejection of the same idempotency key.
+		req.GetBody = nil
+	}
 	req.Header.Set("Authorization", "Bearer "+auth.ServiceToken)
 	if auth.SubjectToken != "" {
 		req.Header.Set("X-Subject-Token", auth.SubjectToken)

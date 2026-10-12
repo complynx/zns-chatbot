@@ -218,8 +218,12 @@ func serve(
 	select {
 	case <-ctx.Done():
 	case err = <-engine.Failures():
+		err = fmt.Errorf("task worker stopped: %w", err)
 		cancel()
 	case err = <-failures:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			err = errors.New("HTTP server stopped unexpectedly")
+		}
 		cancel()
 	}
 	handlers.SetAccepting(false)
@@ -227,7 +231,7 @@ func serve(
 	defer stop()
 	drain(shutdown, engine, public, private)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return errors.New("HTTP server stopped unexpectedly")
+		return err
 	}
 	return nil
 }

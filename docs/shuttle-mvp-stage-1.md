@@ -1,5 +1,6 @@
-# Shuttle first executable stage
+# Shuttle first executable stage: b130aa09
 
+This report records the initial b130aa09 implementation and its checks.
 This stage implements durable agent messaging. It is not acceptance of the full
 business MVP and is not a production release.
 

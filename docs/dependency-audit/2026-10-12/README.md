@@ -4,7 +4,7 @@
 к готовому приложению или production composition. Основной выбор описан в
 [shuttle-dependencies.md](../../shuttle-dependencies.md).
 
-## Проверенный результат
+## Исторический результат candidate этапа выбора
 
 - Go 1.27.2: go mod tidy, go mod verify и сборка candidate прошли на Windows/amd64.
 - Cross-build Linux/amd64 с CGO=0 прошёл. Это проверка сборки, не Linux runtime QA.
@@ -12,8 +12,9 @@
   Использованная база имеет db_last_modified 2026-10-08T22:31:09Z.
 - go-licenses/v2 2.0.1 с include_tests: 71 license entry для Windows и 72 для Linux.
   Все найденные сторонние licenses — MIT, Apache-2.0, BSD-3-Clause, ISC и MPL-2.0.
-- golangci-lint 2.14.0 config verify прошёл. Линт приложения не выполнялся:
-  реализация Go-бота ещё не создана.
+- golangci-lint 2.14.0 config verify прошёл. В момент candidate audit линт приложения не выполнялся:
+  реализация Go-бота тогда ещё не была создана. Runtime результат ниже относится
+  к последующей реализации.
 - 236 модулей разрешённого candidate-графа имеют полные SHA и content sums в
   candidate-lock.json. Это не 236 библиотек в executable: граф включает модули
   неиспользуемых SQL drivers и зависимостей зависимостей.

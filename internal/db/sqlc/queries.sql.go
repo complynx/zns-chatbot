@@ -117,6 +117,15 @@ func (q *Queries) BlockDeliverySuffix(ctx context.Context, arg BlockDeliverySuff
 	return err
 }
 
+const blockPendingDelivery = `-- name: BlockPendingDelivery :exec
+UPDATE shuttle_outbox SET state='delivery_blocked' WHERE id=$1 AND state IN ('pending','retryable')
+`
+
+func (q *Queries) BlockPendingDelivery(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, blockPendingDelivery, id)
+	return err
+}
+
 const cASSettings = `-- name: CASSettings :one
 UPDATE shuttle_settings SET version=version+1,document=$2 WHERE id=true AND version=$1 RETURNING id, version, document
 `
@@ -601,7 +610,7 @@ func (q *Queries) ReleaseTask(ctx context.Context, arg ReleaseTaskParams) (int64
 }
 
 const reserveDelivery = `-- name: ReserveDelivery :one
-UPDATE shuttle_outbox SET state='send_inflight',attempt_id=$2 WHERE shuttle_outbox.id=$1 AND shuttle_outbox.state IN ('pending','retryable') AND NOT EXISTS(SELECT 1 FROM shuttle_outbox earlier WHERE earlier.task_id=shuttle_outbox.task_id AND earlier.chunk_seq<shuttle_outbox.chunk_seq AND earlier.state<>'delivered') RETURNING shuttle_outbox.id, shuttle_outbox.task_id, shuttle_outbox.dedup_key, shuttle_outbox.chunk_seq, shuttle_outbox.payload, shuttle_outbox.state, shuttle_outbox.attempt_id, shuttle_outbox.receipt, shuttle_outbox.created_at
+UPDATE shuttle_outbox SET state='send_inflight',attempt_id=$2 WHERE shuttle_outbox.id=$1 AND shuttle_outbox.state IN ('pending','retryable') AND NOT EXISTS(SELECT 1 FROM shuttle_outbox earlier WHERE earlier.task_id=shuttle_outbox.task_id AND earlier.chunk_seq<shuttle_outbox.chunk_seq AND earlier.state NOT IN ('delivered','delivery_blocked')) RETURNING shuttle_outbox.id, shuttle_outbox.task_id, shuttle_outbox.dedup_key, shuttle_outbox.chunk_seq, shuttle_outbox.payload, shuttle_outbox.state, shuttle_outbox.attempt_id, shuttle_outbox.receipt, shuttle_outbox.created_at
 `
 
 type ReserveDeliveryParams struct {

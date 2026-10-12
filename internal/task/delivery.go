@@ -13,6 +13,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/complynx/shuttle/internal/db"
+	"github.com/complynx/shuttle/internal/identity"
 	"github.com/complynx/shuttle/internal/loom"
 	"github.com/complynx/shuttle/internal/render"
 	"github.com/complynx/shuttle/internal/telegram"
@@ -141,8 +142,10 @@ func (s *Service) finish(ctx context.Context, t *db.Task, c checkpoint, i intent
 func (s *Service) deliver(ctx context.Context, t *db.Task, c checkpoint) error {
 	rows, err := s.store.ListOutbox(ctx, t.ID)
 	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_read", err)
 		return s.wait()
 	}
+	blocked := false
 	for _, row := range rows {
 		switch row.State {
 		case deliveryDelivered:
@@ -151,40 +154,120 @@ func (s *Service) deliver(ctx context.Context, t *db.Task, c checkpoint) error {
 			// A new fenced task attempt owns recovery; a former sender can only win this CAS first.
 			row, err = s.store.FinishDelivery(ctx, row.ID, row.AttemptID, stateDeliveryUnknown, nil)
 			if err != nil {
+				s.reportDatabaseFailure(ctx, t.ID, "delivery_reconcile", err)
 				return s.wait()
 			}
 			return s.gateDelivery(ctx, t, c, row)
 		case stateDeliveryUnknown, stateDeliveryFailed:
 			return s.gateDelivery(ctx, t, c, row)
 		case "delivery_blocked":
-			return nil
+			blocked = true
+			continue
 		case "pending", deliveryRetryable:
 		default:
 			return s.wait()
 		}
-		reserved, reserveErr := s.store.ReserveDelivery(ctx, row.ID)
-		if reserveErr != nil {
+		allowed, accessErr := s.deliveryAllowed(ctx, t, row)
+		if accessErr != nil {
 			return s.wait()
 		}
-		outcome, delay, sendErr := s.sendDelivery(ctx, reserved)
-		if sendErr != nil {
-			return s.wait()
+		if !allowed {
+			blocked = true
+			continue
 		}
-		if outcome == deliveryRetryable {
-			if delay <= 0 {
-				delay = s.options.PollInterval
-			}
-			return river.JobSnooze(delay)
+		more, sendErr := s.deliverPending(ctx, t, c, row)
+		if !more {
+			return sendErr
 		}
-		if outcome == stateDeliveryUnknown || outcome == stateDeliveryFailed {
-			reserved.State = outcome
-			return s.gateDelivery(ctx, t, c, reserved)
-		}
+	}
+	if blocked && t.State == stateCompleted {
+		return s.recordDeliveryState(ctx, t, c, stateDeliveryFailed)
 	}
 	return nil
 }
+
+func (s *Service) deliverPending(ctx context.Context, t *db.Task, c checkpoint, row db.Delivery) (bool, error) {
+	reserved, err := s.store.ReserveDelivery(ctx, row.ID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_reserve", err)
+		return false, s.wait()
+	}
+	outcome, delay, err := s.sendDelivery(ctx, reserved)
+	if err != nil {
+		return false, s.wait()
+	}
+	if outcome == deliveryRetryable {
+		if delay <= 0 {
+			delay = s.options.PollInterval
+		}
+		return false, river.JobSnooze(delay)
+	}
+	if outcome == stateDeliveryUnknown || outcome == stateDeliveryFailed {
+		reserved.State = outcome
+		return false, s.gateDelivery(ctx, t, c, reserved)
+	}
+	return true, nil
+}
+
+func (s *Service) deliveryAllowed(ctx context.Context, t *db.Task, row db.Delivery) (bool, error) {
+	// Access-denied notifications contain no run output and remain deliverable.
+	if strings.HasPrefix(row.DedupKey, t.ID.String()+":denied:") {
+		return true, nil
+	}
+	u, err := s.store.GetUser(ctx, t.UserID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_user_read", err)
+		return false, err
+	}
+	if u.Revoked {
+		return s.blockUnauthorizedDelivery(ctx, t, row, u.Subject)
+	}
+	err = s.verifyDeliveryAuthorization(ctx, u, row)
+	if errors.Is(err, identity.ErrDenied) || errors.Is(err, identity.ErrConflict) {
+		return s.blockUnauthorizedDelivery(ctx, t, row, u.Subject)
+	}
+	if err != nil {
+		return false, err
+	}
+	u, err = s.store.GetUser(ctx, t.UserID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_user_recheck", err)
+		return false, err
+	}
+	if u.Revoked {
+		return s.blockUnauthorizedDelivery(ctx, t, row, u.Subject)
+	}
+	return true, nil
+}
+
+func (s *Service) blockUnauthorizedDelivery(
+	ctx context.Context, t *db.Task, row db.Delivery, subject string,
+) (bool, error) {
+	s.iam.Invalidate(subject)
+	err := s.store.BlockPendingDelivery(ctx, row.ID)
+	if err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_revoke", err)
+	}
+	return false, err
+}
+
+func (s *Service) verifyDeliveryAuthorization(ctx context.Context, u db.User, row db.Delivery) error {
+	prefix := row.TaskID.String() + ":"
+	if !strings.HasPrefix(row.DedupKey, prefix+"result:") &&
+		!strings.HasPrefix(row.DedupKey, prefix+"question:") &&
+		!strings.HasPrefix(row.DedupKey, prefix+"approval:") {
+		return nil
+	}
+	credential, err := s.iam.UserToken(ctx, u.Subject)
+	if err != nil {
+		return err
+	}
+	_, err = s.iam.Verify(ctx, credential.Token)
+	return err
+}
 func (s *Service) gateDelivery(ctx context.Context, t *db.Task, c checkpoint, row db.Delivery) error {
 	if err := s.store.BlockDeliverySuffix(ctx, t.ID, row.ChunkSeq); err != nil {
+		s.reportDatabaseFailure(ctx, t.ID, "delivery_block", err)
 		return s.wait()
 	}
 	return s.recordDeliveryState(ctx, t, c, row.State)
@@ -223,6 +306,9 @@ func (s *Service) sendDelivery(ctx context.Context, row db.Delivery) (string, ti
 	finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	defer finishCancel()
 	_, err := s.store.FinishDelivery(finishCtx, row.ID, row.AttemptID, outcome, data)
+	if err != nil {
+		s.reportDatabaseFailure(finishCtx, row.TaskID, "delivery_receipt", err)
+	}
 	metricOutcome := "success"
 	switch {
 	case err != nil:

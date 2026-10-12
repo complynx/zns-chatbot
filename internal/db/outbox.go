@@ -26,6 +26,11 @@ func (s *Store) ListOutbox(ctx context.Context, id uuid.UUID) ([]Delivery, error
 	return out, nil
 }
 
+// BlockPendingDelivery retains an unsent receipt after local access revocation.
+func (s *Store) BlockPendingDelivery(ctx context.Context, id uuid.UUID) error {
+	return s.q.BlockPendingDelivery(ctx, id)
+}
+
 // ReserveDelivery persists uncertainty before the caller performs network I/O.
 func (s *Store) ReserveDelivery(ctx context.Context, id uuid.UUID) (Delivery, error) {
 	d, e := s.q.ReserveDelivery(

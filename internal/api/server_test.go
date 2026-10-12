@@ -15,6 +15,7 @@ import (
 	"github.com/complynx/shuttle/internal/api"
 	"github.com/complynx/shuttle/internal/db"
 	"github.com/complynx/shuttle/internal/identity"
+	"github.com/complynx/shuttle/internal/task"
 	"github.com/complynx/shuttle/internal/telegram"
 )
 
@@ -49,6 +50,18 @@ func newAPI(t *testing.T, a *intake) *api.Server {
 }
 
 const validUpdate = `{"update_id":1,"message":{"message_id":2,"from":{"id":123,"first_name":"Daniel"},"chat":{"id":123,"type":"private"},"text":"Hello"}}`
+
+func TestPermanentlyUnsupportedIntakeDoesNotRequestRedelivery(t *testing.T) {
+	t.Parallel()
+	a := &intake{failure: task.ErrUnsupportedUpdate}
+	s := newAPI(t, a)
+	callback := `{"update_id":3,"callback_query":{"id":"callback-3","from":{"id":123,"first_name":"Daniel"},"message":{"message_id":2,"chat":{"id":123,"type":"private"}},"data":"invalid"}}`
+	w := post(s, callback, "test-secret")
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), `"ignored":true`)
+	require.NotContains(t, w.Body.String(), "task_id")
+	require.Equal(t, 1, a.calls)
+}
 
 func post(s *api.Server, body, secret string) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(http.MethodPost, "/telegram/webhook", strings.NewReader(body))

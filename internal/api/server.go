@@ -19,6 +19,7 @@ import (
 
 	"github.com/complynx/shuttle/internal/db"
 	"github.com/complynx/shuttle/internal/identity"
+	"github.com/complynx/shuttle/internal/task"
 	"github.com/complynx/shuttle/internal/telegram"
 )
 
@@ -116,6 +117,10 @@ func (s *Server) webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t, duplicate, err := s.tasks.Accept(r.Context(), update, body)
+	if errors.Is(err, task.ErrUnsupportedUpdate) {
+		writeJSON(w, http.StatusOK, map[string]any{"ignored": true, "reason": "unsupported_update"})
+		return
+	}
 	if err != nil {
 		http.Error(w, "intake unavailable", http.StatusServiceUnavailable)
 		return

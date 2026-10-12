@@ -8,6 +8,7 @@ const (
 	lockLossStopTimeout   = 3 * time.Second
 	kindUnsupported       = "unsupported"
 	kindApproval          = "approval"
+	kindMessage           = "message"
 	stateFailed           = "failed"
 	stateCancelled        = "cancelled"
 	stateAuthUnknown      = "auth_unknown"

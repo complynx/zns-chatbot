@@ -37,6 +37,11 @@ the same key. Reauthorization with a lost receipt cannot blindly increment its
 version. Telegram delivery is reserved before sending: an unknown outcome is
 retained for investigation and is not automatically replayed.
 
+An ordinary message rejected before any possible steering effect can start its
+own run when the previous run finishes. Its saved input remains immutable.
+An earlier unknown effect remains uncertain even if a later retry is rejected;
+that message is not promoted into another run.
+
 A task survives loss of the application process. Dependency outages postpone its
 attempts. A new process reconciles abandoned delivery attempts before admitting
 workers. Shutdown cancels requests and workers, aims for one second, and has a
@@ -49,12 +54,31 @@ proposed Zitadel user ID permits reconciliation after lost creation responses.
 No Telegram numeric ID is fabricated into an OIDC subject. Local user revocation
 is checked independently of credential caches and invalidates those caches.
 
-Mock IAM verification does not establish the real Zitadel grant contract. Real
-Zitadel impersonation claims, audience and role settings, and bidirectional
-zitadeltg linking need a separate contract gate. Loom currently performs online
+Pending Telegram results and prompts recheck local revocation before each send
+attempt, and verify IAM authorization within the configured positive-cache TTL.
+Without a valid cache, temporary IAM failure postpones delivery; explicit denial
+blocks it. Revoked deliveries are durably blocked; a completed run with blocked
+output records delivery failure. Access-denied notices remain deliverable.
+Blocked positions do not hold later denial notices, while unknown or failed
+send receipts still hold the delivery barrier.
+
+Mock IAM verification does not establish the real Zitadel grant contract. The
+[disposable real IAM acceptance](shuttle-real-iam-qa-2026-10-12.md) checks grants,
+claims and project role isolation. Production permissions and bidirectional
+zitadeltg linking still need acceptance. Loom currently performs online
 introspection; continuity during an IAM outage also requires the matching Loom
 cache behavior. A Shuttle token cache alone cannot satisfy that acceptance case.
 Unknown bootstrap/reauthorization outcomes require bounded reconciliation.
+
+Administrative roles come only from the introspection claim for the exact
+Shuttle API project. The flat role claim can belong to another project and is
+not an authorization source. Actor and exchanged tokens request the plural
+projects:roles scope; the introspection application must belong to Shuttle.
+
+After an abrupt process exit, River rescues running attempts after the greater
+of the task lease and job timeout, plus one second. Its native rescue scan runs
+on a 30-second cadence, followed by retry scheduling. This is separate from the
+one-second shutdown target; recovery is not promised to finish in one second.
 
 ## Verification boundaries
 

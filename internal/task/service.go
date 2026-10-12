@@ -27,27 +27,31 @@ import (
 	"github.com/complynx/shuttle/internal/telegram"
 )
 
+const queueCleanupMargin = 2 * time.Second
+
 type Options struct {
 	BotID                                       int64
 	PollInterval, AttemptTimeout, LeaseDuration time.Duration
 	MaxWorkers                                  int
 }
 type Service struct {
-	store       *db.Store
-	iam         *identity.Client
-	loom        *loom.Client
-	tg          *telegram.Client
-	observer    *observability.Telemetry
-	logger      *slog.Logger
-	options     Options
-	queue       *river.Client[pgx.Tx]
-	owner       string
-	startMu     sync.Mutex
-	lockConn    *pgxpool.Conn
-	lockKey     string
-	watchCancel context.CancelFunc
-	watchDone   chan struct{}
-	failures    chan error
+	store                  *db.Store
+	iam                    *identity.Client
+	loom                   *loom.Client
+	tg                     *telegram.Client
+	observer               *observability.Telemetry
+	logger                 *slog.Logger
+	options                Options
+	queue                  *river.Client[pgx.Tx]
+	owner                  string
+	startMu                sync.Mutex
+	lockConn               *pgxpool.Conn
+	lockKey                string
+	watchCancel            context.CancelFunc
+	watchDone              chan struct{}
+	failures               chan error
+	diagnosticMu           sync.Mutex
+	nextDatabaseDiagnostic time.Time
 }
 
 // JobArgs deliberately contains no profile, credentials, or incoming content.
@@ -145,14 +149,19 @@ func New(
 	if err != nil {
 		return nil, err
 	}
+	jobTimeout := o.AttemptTimeout + queueCleanupMargin
+	// A crashed attempt must not wait River's one-hour default. Live attempts
+	// still keep their full timeout and lease before native rescue can retry.
+	rescueAfter := max(o.LeaseDuration, jobTimeout) + time.Second
 	s.queue, err = river.NewClient(
 		riverpgxv5.New(store.Pool()),
 		&river.Config{
-			Schema:     schema,
-			Workers:    workers,
-			Queues:     map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: o.MaxWorkers}},
-			JobTimeout: o.AttemptTimeout + 2*time.Second,
-			Logger:     logger,
+			Schema:               schema,
+			Workers:              workers,
+			Queues:               map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: o.MaxWorkers}},
+			JobTimeout:           jobTimeout,
+			RescueStuckJobsAfter: rescueAfter,
+			Logger:               logger,
 		},
 	)
 	return s, err
@@ -294,6 +303,16 @@ func (s *Service) record(ctx context.Context, component, outcome string) {
 }
 func (s *Service) Accept(ctx context.Context, update telegram.Update, raw json.RawMessage) (db.Task, bool, error) {
 	task, duplicate, err := s.accept(ctx, update, raw)
+	if update.CallbackQuery != nil && update.CallbackQuery.ID != "" &&
+		(err == nil || errors.Is(err, ErrUnsupportedUpdate)) {
+		// Callback acknowledgement affects only the Telegram spinner, not durable acceptance.
+		ack, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		ackErr := s.tg.AnswerCallbackQuery(ack, update.CallbackQuery.ID, "")
+		cancel()
+		if ackErr != nil {
+			s.logger.WarnContext(ctx, "callback acknowledgement unavailable")
+		}
+	}
 	outcome := "accepted"
 	switch {
 	case err != nil:

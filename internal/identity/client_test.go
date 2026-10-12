@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -37,6 +38,7 @@ type iamFixture struct {
 	loseCreate                      bool
 	forms                           []map[string][]string
 	userTokenExpiry                 time.Time
+	introRoleClaims                 map[string]any
 }
 
 func fixture(t *testing.T) (*iamFixture, *Client) {
@@ -119,6 +121,10 @@ func (f *iamFixture) handle(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		_ = r.ParseForm()
+		if !strings.Contains(r.Form.Get("scope"), "urn:zitadel:iam:org:projects:roles") {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		f.forms = append(f.forms, r.Form)
 		if f.tokenDelay > 0 {
 			time.Sleep(f.tokenDelay)
@@ -187,6 +193,11 @@ func (f *iamFixture) handle(w http.ResponseWriter, r *http.Request) {
 		var info map[string]any
 		_ = json.Unmarshal(b, &info)
 		info["active"] = f.active
+		if f.introRoleClaims == nil {
+			info["urn:zitadel:iam:org:project:api:roles"] = s.Roles
+		} else {
+			maps.Copy(info, f.introRoleClaims)
+		}
 		respond(info)
 	case "/v2/users":
 		var body map[string]json.RawMessage
@@ -544,4 +555,44 @@ func TestCredentialCachePrunesExpiredEntriesOnIssuance(t *testing.T) {
 	_, err = c.UserToken(ctx, "expired")
 	require.NoError(t, err)
 	require.Equal(t, before+1, f.count("token"), "expired credential must be reissued")
+}
+
+func TestAuthorizationRolesBelongToConfiguredAPIProject(t *testing.T) {
+	t.Parallel()
+	admin := map[string]map[string]string{"shuttle.admin": {"org": "Org"}}
+	cases := []struct {
+		name              string
+		roles             map[string]any
+		permitted, denied bool
+	}{
+		{"API role", map[string]any{"urn:zitadel:iam:org:project:api:roles": admin}, true, false},
+		{"flat role only", map[string]any{"urn:zitadel:iam:org:project:roles": admin}, false, false},
+		{"Loom role with same name", map[string]any{
+			"urn:zitadel:iam:org:project:roles":      admin,
+			"urn:zitadel:iam:org:project:loom:roles": admin,
+		}, false, false},
+		{"API role removed", map[string]any{
+			"urn:zitadel:iam:org:project:roles":     admin,
+			"urn:zitadel:iam:org:project:api:roles": map[string]any{},
+		}, false, false},
+		{"malformed API role", map[string]any{"urn:zitadel:iam:org:project:api:roles": "admin"}, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f, client := fixture(t)
+			f.mu.Lock()
+			f.introRoleClaims = tc.roles
+			f.mu.Unlock()
+			token := f.signed("user", "actor", "org", []string{"loom", "api"}, time.Now().Add(time.Hour))
+			principal, err := client.Verify(context.Background(), token)
+			if tc.denied {
+				require.ErrorIs(t, err, ErrDenied)
+				return
+			}
+			require.NoError(t, err)
+			_, granted := principal.Roles["shuttle.admin"]["org"]
+			require.Equal(t, tc.permitted, granted)
+		})
+	}
 }
