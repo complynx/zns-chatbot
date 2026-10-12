@@ -1,0 +1,1766 @@
+{
+  "config": {
+    "protocol_version": "v1.0.0",
+    "scanner_name": "govulncheck",
+    "scanner_version": "v1.8.0",
+    "db": "https://vuln.go.dev",
+    "db_last_modified": "2026-10-08T22:31:09Z",
+    "go_version": "go1.27.2",
+    "scan_level": "symbol",
+    "scan_mode": "source"
+  },
+  "findings": [
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6610",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6610",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2"
+      },
+      "trace_depth": 1
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrameForHeader",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 15389,
+          "line": 533,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WritePing",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 27451,
+          "line": 921,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "FrameHeader",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 4961,
+          "line": 184,
+          "column": 22
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "duplicatePseudoHeaderError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4076,
+          "line": 126,
+          "column": 37
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "ErrCode",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 1596,
+          "line": 49,
+          "column": 18
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "SettingID",
+        "position": {
+          "filename": "http2/http2.go",
+          "offset": 5026,
+          "line": 190,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ForeachSetting",
+        "receiver": "*SettingsFrame",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 25697,
+          "line": 863,
+          "column": 25
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "connError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 3770,
+          "line": 114,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "StreamError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 2647,
+          "line": 86,
+          "column": 22
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteGoAway",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 28672,
+          "line": 966,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "ConnectionError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 2010,
+          "line": 67,
+          "column": 26
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "connError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 3770,
+          "line": 114,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "ErrCode",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 1596,
+          "line": 49,
+          "column": 18
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrame",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 16747,
+          "line": 571,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteWindowUpdate",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 30936,
+          "line": 1032,
+          "column": 18
+        }
+      },
+      "trace_depth": 18
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteContinuation",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 43618,
+          "line": 1430,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "headerFieldNameError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4221,
+          "line": 132,
+          "column": 31
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteGoAway",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 28672,
+          "line": 966,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteSettingsAck",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 26578,
+          "line": 891,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "headerFieldValueError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4370,
+          "line": 138,
+          "column": 32
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteWindowUpdate",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 30936,
+          "line": 1032,
+          "column": 18
+        }
+      },
+      "trace_depth": 18
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrameHeader",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 14694,
+          "line": 511,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteSettings",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 26151,
+          "line": 878,
+          "column": 18
+        }
+      },
+      "trace_depth": 18
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteContinuation",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 43618,
+          "line": 1430,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "ErrCode",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 1596,
+          "line": 49,
+          "column": 18
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ForeachSetting",
+        "receiver": "*SettingsFrame",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 25697,
+          "line": 863,
+          "column": 25
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteHeaders",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 34475,
+          "line": 1147,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "SettingID",
+        "position": {
+          "filename": "http2/http2.go",
+          "offset": 5026,
+          "line": 190,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "ErrCode",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 1596,
+          "line": 49,
+          "column": 18
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "StreamError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 2647,
+          "line": 86,
+          "column": 22
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteSettingsAck",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 26578,
+          "line": 891,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteRSTStream",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 42438,
+          "line": 1393,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "pseudoHeaderError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 3921,
+          "line": 120,
+          "column": 28
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrame",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 16747,
+          "line": 571,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WritePing",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 27451,
+          "line": 921,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteHeaders",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 34475,
+          "line": 1147,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WritePing",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 27451,
+          "line": 921,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "StreamError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 2647,
+          "line": 86,
+          "column": 22
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrameForHeader",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 15389,
+          "line": 533,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrameForHeader",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 15389,
+          "line": 533,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "ConnectionError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 2010,
+          "line": 67,
+          "column": 26
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteWindowUpdate",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 30936,
+          "line": 1032,
+          "column": 18
+        }
+      },
+      "trace_depth": 18
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "StreamError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 2647,
+          "line": 86,
+          "column": 22
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "FrameType",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 1477,
+          "line": 60,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "headerFieldNameError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4221,
+          "line": 132,
+          "column": 31
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "pseudoHeaderError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 3921,
+          "line": 120,
+          "column": 28
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "FrameHeader",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 4961,
+          "line": 184,
+          "column": 22
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "duplicatePseudoHeaderError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4076,
+          "line": 126,
+          "column": 37
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "duplicatePseudoHeaderError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4076,
+          "line": 126,
+          "column": 37
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteSettingsAck",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 26578,
+          "line": 891,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "pseudoHeaderError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 3921,
+          "line": 120,
+          "column": 28
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteSettings",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 26151,
+          "line": 878,
+          "column": 18
+        }
+      },
+      "trace_depth": 18
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "FrameHeader",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 4961,
+          "line": 184,
+          "column": 22
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteRSTStream",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 42438,
+          "line": 1393,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ForeachSetting",
+        "receiver": "*SettingsFrame",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 25697,
+          "line": 863,
+          "column": 25
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteContinuation",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 43618,
+          "line": 1430,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "headerFieldNameError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4221,
+          "line": 132,
+          "column": 31
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteRSTStream",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 42438,
+          "line": 1393,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "pseudoHeaderError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 3921,
+          "line": 120,
+          "column": 28
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "headerFieldValueError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4370,
+          "line": 138,
+          "column": 32
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrame",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 16747,
+          "line": 571,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteHeaders",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 34475,
+          "line": 1147,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrameHeader",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 14694,
+          "line": 511,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteSettings",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 26151,
+          "line": 878,
+          "column": 18
+        }
+      },
+      "trace_depth": 18
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrame",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 16747,
+          "line": 571,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "SettingID",
+        "position": {
+          "filename": "http2/http2.go",
+          "offset": 5026,
+          "line": 190,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "connError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 3770,
+          "line": 114,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "ConnectionError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 2010,
+          "line": 67,
+          "column": 26
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "headerFieldValueError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4370,
+          "line": 138,
+          "column": 32
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "headerFieldNameError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4221,
+          "line": 132,
+          "column": 31
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "FrameType",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 1477,
+          "line": 60,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "FrameType",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 1477,
+          "line": 60,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteSettings",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 26151,
+          "line": 878,
+          "column": 18
+        }
+      },
+      "trace_depth": 18
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "FrameType",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 1477,
+          "line": 60,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrameHeader",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 14694,
+          "line": 511,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteSettingsAck",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 26578,
+          "line": 891,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrameHeader",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 14694,
+          "line": 511,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteHeaders",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 34475,
+          "line": 1147,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "SettingID",
+        "position": {
+          "filename": "http2/http2.go",
+          "offset": 5026,
+          "line": 190,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "String",
+        "receiver": "FrameHeader",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 4961,
+          "line": 184,
+          "column": 22
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WritePing",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 27451,
+          "line": 921,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "ConnectionError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 2010,
+          "line": 67,
+          "column": 26
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ForeachSetting",
+        "receiver": "*SettingsFrame",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 25697,
+          "line": 863,
+          "column": 25
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteRSTStream",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 42438,
+          "line": 1393,
+          "column": 18
+        }
+      },
+      "trace_depth": 22
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteGoAway",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 28672,
+          "line": 966,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteContinuation",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 43618,
+          "line": 1430,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6603",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "connError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 3770,
+          "line": 114,
+          "column": 20
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteWindowUpdate",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 30936,
+          "line": 1032,
+          "column": 18
+        }
+      },
+      "trace_depth": 18
+    },
+    {
+      "id": "GO-2026-6617",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "duplicatePseudoHeaderError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4076,
+          "line": 126,
+          "column": 37
+        }
+      },
+      "trace_depth": 8
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "ReadFrameForHeader",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 15389,
+          "line": 533,
+          "column": 19
+        }
+      },
+      "trace_depth": 20
+    },
+    {
+      "id": "GO-2026-6611",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "WriteGoAway",
+        "receiver": "*Framer",
+        "position": {
+          "filename": "http2/frame.go",
+          "offset": 28672,
+          "line": 966,
+          "column": 18
+        }
+      },
+      "trace_depth": 23
+    },
+    {
+      "id": "GO-2026-6612",
+      "fixed_version": "v0.60.0",
+      "affected": {
+        "module": "golang.org/x/net",
+        "version": "v0.59.0",
+        "package": "golang.org/x/net/http2",
+        "function": "Error",
+        "receiver": "headerFieldValueError",
+        "position": {
+          "filename": "http2/errors.go",
+          "offset": 4370,
+          "line": 138,
+          "column": 32
+        }
+      },
+      "trace_depth": 8
+    }
+  ],
+  "scope": "Initial candidate audit; compact findings preserve affected symbols, not complete call paths"
+}

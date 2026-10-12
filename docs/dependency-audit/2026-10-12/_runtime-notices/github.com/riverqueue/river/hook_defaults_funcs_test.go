@@ -1,0 +1,30 @@
+package river
+
+import (
+	"context"
+
+	"github.com/riverqueue/river/rivertype"
+)
+
+// Verify interface compliance.
+var (
+	_ rivertype.Hook            = HookInsertBeginFunc(func(ctx context.Context, params *rivertype.JobInsertParams) error { return nil })
+	_ rivertype.HookInsertBegin = HookInsertBeginFunc(func(ctx context.Context, params *rivertype.JobInsertParams) error { return nil })
+	_ rivertype.Plugin          = HookInsertBeginFunc(func(ctx context.Context, params *rivertype.JobInsertParams) error { return nil })
+
+	_ rivertype.Hook           = HookMetricEmitFunc(func(ctx context.Context, params *rivertype.HookMetricEmitParams) {})
+	_ rivertype.HookMetricEmit = HookMetricEmitFunc(func(ctx context.Context, params *rivertype.HookMetricEmitParams) {})
+	_ rivertype.Plugin         = HookMetricEmitFunc(func(ctx context.Context, params *rivertype.HookMetricEmitParams) {})
+
+	_ rivertype.Hook                  = HookPeriodicJobsStartFunc(func(ctx context.Context, params *rivertype.HookPeriodicJobsStartParams) error { return nil })
+	_ rivertype.HookPeriodicJobsStart = HookPeriodicJobsStartFunc(func(ctx context.Context, params *rivertype.HookPeriodicJobsStartParams) error { return nil })
+	_ rivertype.Plugin                = HookPeriodicJobsStartFunc(func(ctx context.Context, params *rivertype.HookPeriodicJobsStartParams) error { return nil })
+
+	_ rivertype.Hook          = HookWorkBeginFunc(func(ctx context.Context, job *rivertype.JobRow) error { return nil })
+	_ rivertype.HookWorkBegin = HookWorkBeginFunc(func(ctx context.Context, job *rivertype.JobRow) error { return nil })
+	_ rivertype.Plugin        = HookWorkBeginFunc(func(ctx context.Context, job *rivertype.JobRow) error { return nil })
+
+	_ rivertype.Hook        = HookWorkEndFunc(func(ctx context.Context, job *rivertype.JobRow, err error) error { return nil })
+	_ rivertype.HookWorkEnd = HookWorkEndFunc(func(ctx context.Context, job *rivertype.JobRow, err error) error { return nil })
+	_ rivertype.Plugin      = HookWorkEndFunc(func(ctx context.Context, job *rivertype.JobRow, err error) error { return nil })
+)

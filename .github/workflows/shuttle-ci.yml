@@ -1,0 +1,68 @@
+name: Shuttle CI
+
+on:
+  push:
+    branches: [main, codex/shuttle]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shuttle-ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        env:
+          POSTGRES_DB: shuttle_test
+          POSTGRES_USER: shuttle
+          POSTGRES_PASSWORD: isolated-ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shuttle -d shuttle_test"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      GOTOOLCHAIN: local
+      SHUTTLE_TEST_DATABASE_URL: postgres://shuttle:isolated-ci-only@127.0.0.1:5432/shuttle_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.2'
+          cache: true
+      - name: Verify dependency graph and checksums
+        run: |
+          go mod download all
+          go mod verify
+          python3 tools/check-dependencies.py
+      - name: Behavioral tests with PostgreSQL and race detector
+        run: go test -race -parallel 4 ./cmd/... ./internal/... ./migrations/... ./integration/...
+      - name: Build pinned developer tools
+        run: |
+          export GOBIN="$RUNNER_TEMP/shuttle-tools"
+          mkdir -p "$GOBIN"
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@114493f9b3e7257d29e4130f2b4a4aadefbb6845
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@a95e91d70ad9e1181253c333a1cfdd75ae4b95a5
+          echo "$GOBIN" >> "$GITHUB_PATH"
+      - name: Verify generated SQL
+        run: |
+          sqlc compile
+          sqlc generate
+          git diff --exit-code -- internal/db/sqlc
+          if [ -n "$(git status --porcelain --untracked-files=all -- internal/db/sqlc)" ]; then
+            echo "::error::Generated SQL files must be committed."
+            exit 1
+          fi
+      - name: Lint
+        run: golangci-lint run ./cmd/... ./internal/... ./migrations/... ./integration/...
+      - name: Build Linux binary and container
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/shuttle" ./cmd/shuttle
+          docker build --platform linux/amd64 -f deploy/shuttle/Dockerfile -t shuttle:ci .

@@ -15,3 +15,6 @@ __pycache__
 .vscode/
 .codex/local*
 *.local
+/.cache/
+/config/shuttle.yaml
+/config/shuttle.env
