@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-12",
+  "tool": "govulncheck 1.8.0",
+  "go": "1.27.2",
+  "platform": "windows/amd64",
+  "scope": "Actual cmd/internal/integration/migrations packages",
+  "findings": 0,
+  "report": "runtime-govulncheck.json.gz",
+  "report_sha256": "3864db98b4303005d4718389d6d57ddb9ca4e00b80bad5e07c0bab02a675658d",
+  "license_report": "runtime-licenses.csv",
+  "notices": "_runtime-notices",
+  "notes": "Linux selected dependency graph also audited in candidate; exact runtime license files and MPL source captured with go-licenses save",
+  "linux_source_scan": {
+    "report": "runtime-govulncheck-linux.json.gz",
+    "findings": 0,
+    "sha256": "9944814f0288e0e19424092bccf60575e957b949aaa9624440c47adb3c19599a"
+  }
+}

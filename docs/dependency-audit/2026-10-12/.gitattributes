@@ -1,2 +1,3 @@
 *.LICENSE -text
 *.json.gz -text
+*.LICENSE whitespace=-blank-at-eof

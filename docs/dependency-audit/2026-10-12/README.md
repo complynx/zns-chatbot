@@ -83,3 +83,11 @@ golangci-lint GPL-3.0 — только разрешённый dev/CI tool. Ау�
 
 Written by Codex (gpt-6/Codex desktop)
 on behalf of Daniel Drizhuk
+
+## Реализация первого этапа
+
+Фактический граф приложения закреплён в ../../../tools/dependencies.lock.json.
+Runtime audit сохранён в runtime-checks.json и runtime-licenses.csv; notices
+и соответствующие MPL sources находятся в _runtime-notices и входят в образ.
+Имя каталога исключает vendor sources из Go package discovery. Исторические
+результаты candidate выше сохранены отдельно от фактической реализации.

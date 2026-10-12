@@ -118,8 +118,8 @@ OTel Logs SDK и push логов не требуются.
 
 На текущем server_configs Alloy уже собирает Prometheus и Docker logs. OTLP receiver
 и маршрут traces требуют отдельного конфигурационного изменения; их наличие
-на production не предполагается. Loom сейчас использует собственные metrics без
-OTel SDK. Его tracing добавляется отдельной задачей по контракту в ТЗ Shuttle.
+на production не предполагается. Loom уже имеет OTel providers в internal/telemetry/otel.go. Сквозная propagation,
+redaction и связь очередей проверяются отдельным контрактом с Shuttle.
 
 Для очереди tracing выполняется короткими spans попыток с сохранёнными links.
 Личные данные, auth credentials и содержимое файлов не входят в telemetry.
@@ -174,7 +174,9 @@ Retry и ожидание зависимостей первоначально р
 разрешает автоматический replay бизнес-записей. Circuit breaker добавляется только
 при измеренной необходимости. Redis, Kafka, отдельный workflow engine, Goja,
 model SDKs, PDF/media converters и face-recognition dependencies в бот не входят.
-Общие file tools принадлежат Loom, а специфические avatar workers подключаются отдельно.
+Общие file tools принадлежат Loom и читают исходники через API Shuttle по
+`attachment_id`. В задачи передаются ID и метаданные; Loom использует временные
+рабочие копии. Специфические avatar workers подключаются отдельно.
 
 ## Лицензии фиксация и аудит
 
