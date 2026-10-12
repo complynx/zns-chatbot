@@ -4,6 +4,10 @@ Use Go 1.27.2. Copy config/shuttle.example.yaml to config/shuttle.yaml and provi
 secrets through SHUTTLE_* environment variables. Runtime business settings are
 stored in PostgreSQL and are not reset from YAML at startup.
 
+Shuttle CI runs on branch pushes and pull requests using Go 1.27.2 and isolated
+PostgreSQL. It verifies the reviewed dependency lock, behavioral/race tests,
+generated SQL, lint and Linux/Docker builds. It does not publish or deploy images.
+
 ```sh
 go run ./cmd/shuttle -config config/shuttle.yaml -migrate
 go run ./cmd/shuttle -config config/shuttle.yaml

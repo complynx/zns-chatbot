@@ -137,10 +137,13 @@ Metrics endpoint доступен на внутреннем listener. Pprof по
 
 ## Инструменты разработки и требования к CI
 
-Версии инструментов и локальные проверки закреплены. Описанные ниже Go CI gates,
-pinning GitHub Actions и Dependabot — требования к будущей автоматизации.
-Текущий .github/workflows/build.yml собирает прежний Python image; отдельного
-Shuttle workflow и Dependabot configuration пока нет.
+Версии инструментов и локальные проверки закреплены. Shuttle CI в
+[shuttle-ci.yml](../.github/workflows/shuttle-ci.yml) проверяет reviewed module graph
+и checksums, PostgreSQL behavioral/race tests, generated SQL, lint и Linux/Docker
+build. Actions и developer tools закреплены полными commit SHA; образ БД — digest.
+Workflow не публикует образ и не запускает deployment. Existing build.yml
+собирает прежний Python image. Dependabot и автоматические vulnerability/license
+gates пока остаются следующими улучшениями.
 
 - Go 1.27.2, как в Loom. Официальный стабильный release и SHA архивов проверяются;
   локальная системная установка не изменяется автоматически.
