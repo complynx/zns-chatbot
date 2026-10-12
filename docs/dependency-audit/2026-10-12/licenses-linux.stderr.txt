@@ -1,0 +1,4 @@
+W1012 17:13:05.657326  140496 library.go:141] "github.com/cespare/xxhash/v2" contains non-Go code that can't be inspected for further dependencies:
+C:\Users\ddriz\go\pkg\mod\github.com\cespare\xxhash\v2@v2.3.0\xxhash_amd64.s
+W1012 17:13:05.657872  140496 library.go:141] "golang.org/x/sys/unix" contains non-Go code that can't be inspected for further dependencies:
+C:\Users\ddriz\go\pkg\mod\golang.org\x\sys@v0.48.0\unix\asm_linux_amd64.s

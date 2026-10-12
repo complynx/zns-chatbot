@@ -1,0 +1,2366 @@
+{
+  "audit_date": "2026-10-12",
+  "scope": "Resolved audit candidate, not application lock",
+  "modules": [
+    {
+      "module": "cel.dev/expr",
+      "version": "v0.25.2",
+      "commit": "cb51b4176013ad19bd00df94be273c322916a620",
+      "repository": "https://github.com/google/cel-spec",
+      "ref": "refs/tags/v0.25.2",
+      "sum": "h1:K6j46C81hXtZQfuX60cVWQFBJahKSE2gfRbNuvr5bFs=",
+      "go_mod_sum": "h1:hrXvqGP6G6gyx8UAHSHJ5RGk//1Oj5nXQ2NI02Nrsg4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "cloud.google.com/go/auth",
+      "version": "v0.18.2",
+      "commit": "75e6b63c37d2b97010a2ccaa20239cae237e5d10",
+      "repository": "https://github.com/googleapis/google-cloud-go",
+      "ref": "refs/tags/auth/v0.18.2",
+      "sum": "h1:+Nbt5Ev0xEqxlNjd6c+yYUeosQ5TtEUaNcN/3FozlaM=",
+      "go_mod_sum": "h1:xD+oY7gcahcu7G2SG2DsBerfFxgPAJz17zz2joOFF3M=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "cloud.google.com/go/compute/metadata",
+      "version": "v0.9.0",
+      "commit": "7b2365446764b0bba37198a55644954b437bddd0",
+      "repository": "https://github.com/googleapis/google-cloud-go",
+      "ref": "refs/tags/compute/metadata/v0.9.0",
+      "sum": "h1:pDUj4QMoPejqq20dK0Pg2N4yG9zIkYGdBtwLoEkH9Zs=",
+      "go_mod_sum": "h1:E0bWwX5wTnLPedCKqk3pJmVgCBSM6qQI1yTBdEb3C10=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "filippo.io/edwards25519",
+      "version": "v1.2.0",
+      "commit": "b182a6575cfd9f4fbb1d1d4e487a6b00a3ec06f7",
+      "repository": "https://github.com/FiloSottile/edwards25519",
+      "ref": "refs/tags/v1.2.0",
+      "sum": "h1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=",
+      "go_mod_sum": "h1:xzAOLCNug/yB62zG1bQ8uziwrIqIuxhctzJT18Q77mc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/Azure/azure-sdk-for-go/sdk/azcore",
+      "version": "v1.23.1",
+      "commit": "d86ae78bd655d233689866cf78930f3c5fd42c35",
+      "repository": "https://github.com/Azure/azure-sdk-for-go",
+      "ref": "refs/tags/sdk/azcore/v1.23.1",
+      "sum": "h1:zvXfGJCWvywnCA814d8ZiVyt+fm9nnTE8xSb99zRyfo=",
+      "go_mod_sum": "h1:iptorS+VYKFL2N6PnebpS91dubG35eAOEERnT4PJbQU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/Azure/azure-sdk-for-go/sdk/azidentity",
+      "version": "v1.14.1",
+      "commit": "920e79a1664fa91142c45775c8e0cc3bd1ae20dd",
+      "repository": "https://github.com/Azure/azure-sdk-for-go",
+      "ref": "refs/tags/sdk/azidentity/v1.14.1",
+      "sum": "h1:u93s+zU2JD62im61Bm5CZIc1ZrOJaIAWEg0WOrMVkEo=",
+      "go_mod_sum": "h1:oXtinPO4OLj9d1DOTrqrL1oRwGhcqadvAmrl6wTeGlk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/Azure/azure-sdk-for-go/sdk/internal",
+      "version": "v1.12.0",
+      "commit": "923e9ab9f2a22b972491f548aa1d7e3d07729408",
+      "repository": "https://github.com/Azure/azure-sdk-for-go",
+      "ref": "refs/tags/sdk/internal/v1.12.0",
+      "sum": "h1:fhqpLE3UEXi9lPaBRpQ6XuRW0nU7hgg4zlmZZa+a9q4=",
+      "go_mod_sum": "h1:7dCRMLwisfRH3dBupKeNCioWYUZ4SS09Z14H+7i8ZoY=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/AzureAD/microsoft-authentication-library-for-go",
+      "version": "v1.9.0",
+      "commit": "247817fb0a8fe54d23a57debd9f32e96d53dc9bd",
+      "repository": "https://github.com/AzureAD/microsoft-authentication-library-for-go",
+      "ref": "refs/tags/v1.9.0",
+      "sum": "h1:MDT4FxAPve5FnYn6vOL1r7RCRDG+l9cI7a5LlCuHsqA=",
+      "go_mod_sum": "h1:Y33QHnf0FfdVewFFISOGe20mkZbxX4H839o955/PoeI=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/BurntSushi/toml",
+      "version": "v1.6.0",
+      "commit": "52534926c55b4cd85b05aee90569dd0668b8cf30",
+      "repository": "https://github.com/BurntSushi/toml",
+      "ref": null,
+      "sum": "h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=",
+      "go_mod_sum": "h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/ClickHouse/ch-go",
+      "version": "v0.74.0",
+      "commit": "373f5030e95e0b271822e4c2be33d639c526f196",
+      "repository": "https://github.com/ClickHouse/ch-go",
+      "ref": "refs/tags/v0.74.0",
+      "sum": "h1:uYs2m4wIt0ZHSM1E72rg0maCfzhR2V3xWb/vZEgpeWE=",
+      "go_mod_sum": "h1:sZ/r+8ttZMjyrP9PuFbgoVbth1ywIu2LIQNA2vgko6M=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/ClickHouse/clickhouse-go/v2",
+      "version": "v2.48.0",
+      "commit": "69b5195a9b2e04a999f9c130a7a9dc1248288689",
+      "repository": "https://github.com/ClickHouse/clickhouse-go",
+      "ref": "refs/tags/v2.48.0",
+      "sum": "h1:auzd4VkapQYhQF8F2Gog7s3x78Bi1JZmByxGbrw3C+4=",
+      "go_mod_sum": "h1:lBjUCPRG6RpRQdMbkXq+JV8rY0/O5lw+Z7jShgReFjM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp",
+      "version": "v1.33.0",
+      "commit": "059f723244364dd67f86051b38d67c66094651bd",
+      "repository": "https://github.com/GoogleCloudPlatform/opentelemetry-operations-go",
+      "ref": "refs/tags/detectors/gcp/v1.33.0",
+      "sum": "h1:l7+6kwRMJNwdCvYdDl7Eax+wzEYHSnNY7zrrfbhDdTA=",
+      "go_mod_sum": "h1:pJTkW8hEUIIi3Pf65lPZOnn4Y81yCllX6IWk2jNXdkM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/Microsoft/go-winio",
+      "version": "v0.6.2",
+      "commit": "3c9576c9346a1892dee136329e7e15309e82fb4f",
+      "repository": "https://github.com/Microsoft/go-winio",
+      "ref": "refs/tags/v0.6.2",
+      "sum": "h1:F2VQgta7ecxGYO8k3ZZz3RS8fVIXVxONVUPlNERoyfY=",
+      "go_mod_sum": "h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA8Ipt1oGCvU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/alecthomas/kingpin/v2",
+      "version": "v2.4.0",
+      "commit": "64d23c54e3e2a385ce12757939bed9c632d1693c",
+      "repository": "https://github.com/alecthomas/kingpin",
+      "ref": "refs/tags/v2.4.0",
+      "sum": "h1:f48lwail6p8zpO1bC4TxtqACaGqHYA22qkHjHpqDjYY=",
+      "go_mod_sum": "h1:0gyi0zQnjuFk8xrkNKamJoyUo382HRL7ATRpFZCw6tE=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/alecthomas/units",
+      "version": "v0.0.0-20240927000941-0f3dac36c52b",
+      "commit": "0f3dac36c52b29c22285af9a6e6593035dadd74c",
+      "repository": "https://github.com/alecthomas/units",
+      "ref": null,
+      "sum": "h1:mimo19zliBX/vSQ6PWWSL9lK8qwHozUj03+zLoEB8O0=",
+      "go_mod_sum": "h1:fvzegU4vN3H1qMT+8wDmzjAcDONcgo2/SZ/TyfdUOFs=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/andybalholm/brotli",
+      "version": "v1.2.3",
+      "commit": "6b8aef6ece266fa87b925ce3a913bc30dc4b7b70",
+      "repository": "https://github.com/andybalholm/brotli",
+      "ref": "refs/tags/v1.2.3",
+      "sum": "h1:8H1qwOkl2LPfjf3YezB90JnCliZb6SInJ/OJkEbA5NQ=",
+      "go_mod_sum": "h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/antlr4-go/antlr/v4",
+      "version": "v4.13.1",
+      "commit": "4d7e18847d8881a176db3d7cca909e3f3942a05f",
+      "repository": "https://github.com/antlr4-go/antlr",
+      "ref": "refs/tags/v4.13.1",
+      "sum": "h1:SqQKkuVZ+zWkMMNkjy5FZe5mr5WURWnlpmOuzYWrPrQ=",
+      "go_mod_sum": "h1:GKmUxMtwp6ZgGwZSva4eWPC5mS6vUAmOABFgjdkM7Nw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/apapsch/go-jsonmerge/v2",
+      "version": "v2.0.0",
+      "commit": "90b01458c2af82553f17c56a431386c57a8a569f",
+      "repository": "https://github.com/apapsch/go-jsonmerge",
+      "ref": null,
+      "sum": "h1:axGnT1gRIfimI7gJifB699GoE/oq+F2MU7Dml6nw9rQ=",
+      "go_mod_sum": "h1:lvDnEdqiQrp0O42VQGgmlKpxL1AP2+08jFMw88y4klk=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/beorn7/perks",
+      "version": "v1.0.1",
+      "commit": "37c8de3658fcb183f997c4e13e8337516ab753e6",
+      "repository": "https://github.com/beorn7/perks",
+      "ref": "v1.0.1",
+      "sum": "h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=",
+      "go_mod_sum": "h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=",
+      "pin_source": "GitHub tag or pseudo-version commit lookup"
+    },
+    {
+      "module": "github.com/bytedance/gopkg",
+      "version": "v0.1.4",
+      "commit": "165f9e47565258dbf687d8153427a5e1ed3e6b61",
+      "repository": "https://github.com/bytedance/gopkg",
+      "ref": "refs/tags/v0.1.4",
+      "sum": "h1:oZnQwnX82KAIWb7033bEwtxvTqXcYMxDBaQxo5JJHWM=",
+      "go_mod_sum": "h1:v1zWfPm21Fb+OsyXN2VAHdL6TBb2L88anLQgdyje6R4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/bytedance/sonic",
+      "version": "v1.15.2",
+      "commit": "579b6ffa7b3b36665600615500a2bf2d59964c5c",
+      "repository": "https://github.com/bytedance/sonic",
+      "ref": "refs/tags/v1.15.2",
+      "sum": "h1:90H+rcF/FwLXwfB1cudOLq/je83n683Utf4Cbp0xHCo=",
+      "go_mod_sum": "h1:mT2NbXunuaEbnZ+mRIX/vYqKISmgEuHFDI4UzmKx2SA=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/bytedance/sonic/loader",
+      "version": "v0.5.1",
+      "commit": "d64ddf953f35a9e8bfa91bf64c6779c45842504e",
+      "repository": "https://github.com/bytedance/sonic",
+      "ref": "refs/tags/loader/v0.5.1",
+      "sum": "h1:Ygpfa9zwRCCKSlrp5bBP/b/Xzc3VxsAW+5NIYXrOOpI=",
+      "go_mod_sum": "h1:AR4NYCk5DdzZizZ5djGqQ92eEhCCcdf5x77udYiSJRo=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/cenkalti/backoff/v5",
+      "version": "v5.0.3",
+      "commit": "7cad66a637c4ffff09d0795608116ddcc7eb1769",
+      "repository": "https://github.com/cenkalti/backoff",
+      "ref": "refs/tags/v5.0.3",
+      "sum": "h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=",
+      "go_mod_sum": "h1:rkhZdG3JZukswDf7f0cwqPNk4K0sa+F97BxZthm/crw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/cespare/xxhash/v2",
+      "version": "v2.3.0",
+      "commit": "998dce232f17418a7a5721ecf87ca714025a3243",
+      "repository": "https://github.com/cespare/xxhash",
+      "ref": "refs/tags/v2.3.0",
+      "sum": "h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=",
+      "go_mod_sum": "h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/clipperhouse/uax29/v2",
+      "version": "v2.7.0",
+      "commit": "b03477d1fbba89df95a6b55da0a222b2e2228610",
+      "repository": "https://github.com/clipperhouse/uax29",
+      "ref": "refs/tags/v2.7.0",
+      "sum": "h1:+gs4oBZ2gPfVrKPthwbMzWZDaAFPGYK72F0NJv2v7Vk=",
+      "go_mod_sum": "h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/cloudwego/base64x",
+      "version": "v0.1.7",
+      "commit": "4122261cd561666b700ae01022be575d27447d92",
+      "repository": "https://github.com/cloudwego/base64x",
+      "ref": "refs/tags/v0.1.7",
+      "sum": "h1:NppS+Fgzg5ovhn4NkUXaDT3x9jldgH5ToMCqzBSi2zI=",
+      "go_mod_sum": "h1:Cu1PV9zfrSf7ET2tIbWbbEy7jO7HHJ13q4X2SQ8aWYg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/cncf/xds/go",
+      "version": "v0.0.0-20260202195803-dba9d589def2",
+      "commit": "dba9d589def2cd10099a3a64887d859188c2f57a",
+      "repository": "https://github.com/cncf/xds",
+      "ref": null,
+      "sum": "h1:aBangftG7EVZoUb69Os8IaYg++6uMOdKK83QtkkvJik=",
+      "go_mod_sum": "h1:qwXFYgsP6T7XnJtbKlf1HP8AjxZZyzxMmc+Lq5GjlU4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/coder/websocket",
+      "version": "v1.8.15",
+      "commit": "9c8faadccd1b679e811a79ce506f8a10237251ad",
+      "repository": "https://github.com/coder/websocket",
+      "ref": "refs/tags/v1.8.15",
+      "sum": "h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=",
+      "go_mod_sum": "h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/containerd/errdefs",
+      "version": "v1.0.0",
+      "commit": "4817405e4a3caeb7aee9dac68ed55339c59cb635",
+      "repository": "https://github.com/containerd/errdefs",
+      "ref": "refs/tags/v1.0.0",
+      "sum": "h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=",
+      "go_mod_sum": "h1:+YBYIdtsnF4Iw6nWZhJcqGSg/dwvV7tyJ/kCkyJ2k+M=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/containerd/errdefs/pkg",
+      "version": "v0.3.0",
+      "commit": "4817405e4a3caeb7aee9dac68ed55339c59cb635",
+      "repository": "https://github.com/containerd/errdefs",
+      "ref": "refs/tags/pkg/v0.3.0",
+      "sum": "h1:9IKJ06FvyNlexW690DXuQNx2KA2cUJXx151Xdx3ZPPE=",
+      "go_mod_sum": "h1:NJw6s9HwNuRhnjJhM7pylWwMyAkmCQvQ4GpJHEqRLVk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/danielgtaylor/huma/v2",
+      "version": "v2.39.1",
+      "commit": "198225eaac0c8be4aaa1962d5a9a075d3a6fd062",
+      "repository": "https://github.com/danielgtaylor/huma",
+      "ref": "refs/tags/v2.39.1",
+      "sum": "h1:0kwF4ltQoYZ+IU55VPy+BcGekzgF44R64daTGde1H+g=",
+      "go_mod_sum": "h1:zcnQ38duIJ3VUHwFaBoZ6x8T+KN/mr33oyqxcj0HTug=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/danielgtaylor/mexpr",
+      "version": "v1.10.1",
+      "commit": "8638660ef72cd1595d914fba9bb81e05e8c5a60f",
+      "repository": "https://github.com/danielgtaylor/mexpr",
+      "ref": "refs/tags/v1.10.1",
+      "sum": "h1:e5wCXTcOARDhTTM5ho8lINK36VVaDcWt0o7gO5lPOag=",
+      "go_mod_sum": "h1:kAivYNRnBeE/IJinqBvVFvLrX54xX//9zFYwADo4Bc8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/danielgtaylor/shorthand/v2",
+      "version": "v2.4.0",
+      "commit": "614f7841e55d61c805e8316040882a6060512ce8",
+      "repository": "https://github.com/danielgtaylor/shorthand",
+      "ref": "refs/tags/v2.4.0",
+      "sum": "h1:IeVgSkTMPXQ/CC3f+pfCiipoJXtXbBO9oVzjaPRXfEM=",
+      "go_mod_sum": "h1:+JG16ZY99pciTkGphx18ruwefahdwHCv/jmllgUGKSM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/davecgh/go-spew",
+      "version": "v1.1.1",
+      "commit": "8991bc29aa16c548c550c7ff78260e27b9ab7c73",
+      "repository": "https://github.com/davecgh/go-spew",
+      "ref": null,
+      "sum": "h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=",
+      "go_mod_sum": "h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/distribution/reference",
+      "version": "v0.6.0",
+      "commit": "ff14fafe2236e51c2894ac07d4bdfc778e96d682",
+      "repository": "https://github.com/distribution/reference",
+      "ref": "refs/tags/v0.6.0",
+      "sum": "h1:0IXCQ5g4/QMHHkarYzh5l+u8T3t73zM5QvfrDyIgxBk=",
+      "go_mod_sum": "h1:BbU0aIcezP1/5jX/8MP0YiH4SdvB5Y4f/wlDRiLyi3E=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/docker/go-connections",
+      "version": "v0.8.1",
+      "commit": "9c9e2db764937383effc099843914897c8838056",
+      "repository": "https://github.com/docker/go-connections",
+      "ref": "refs/tags/v0.8.1",
+      "sum": "h1:JibmG5hULs5qXSr/cp/w3Pw5fZuStt4MOHMUExb29/M=",
+      "go_mod_sum": "h1:no1qkHdjq7kLMGUXYAduOhYPSJxxvgWBh7ogVvptn3Q=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/docker/go-units",
+      "version": "v0.5.0",
+      "commit": "e682442797b36348f8e1f98defdbf32bac0b6c6f",
+      "repository": "https://github.com/docker/go-units",
+      "ref": "refs/tags/v0.5.0",
+      "sum": "h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=",
+      "go_mod_sum": "h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/dustin/go-humanize",
+      "version": "v1.0.1",
+      "commit": "9ec74ab2f7a7161664182fd4e5e292fccffbc75f",
+      "repository": "https://github.com/dustin/go-humanize",
+      "ref": "refs/tags/v1.0.1",
+      "sum": "h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=",
+      "go_mod_sum": "h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/elastic/go-sysinfo",
+      "version": "v1.15.5",
+      "commit": "f72875d3f93794da3e3e494d75c6ff522f42bf5c",
+      "repository": "https://github.com/elastic/go-sysinfo",
+      "ref": "refs/tags/v1.15.5",
+      "sum": "h1:fCVUDmjHgljLUQCygherMnsRRJ9AkuAQIywTL7dEH28=",
+      "go_mod_sum": "h1:ZBVXmqS368dOn/jvijV/zHLfakWTYHBZPk3G244lHrU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/elastic/go-windows",
+      "version": "v1.0.2",
+      "commit": "655280b733ae86b03ea1ba9bba7458d3fdda2d8a",
+      "repository": "https://github.com/elastic/go-windows",
+      "ref": "refs/tags/v1.0.2",
+      "sum": "h1:yoLLsAsV5cfg9FLhZ9EXZ2n2sQFKeDYrHenkcivY4vI=",
+      "go_mod_sum": "h1:bGcDpBzXgYSqM0Gx3DM4+UxFj300SZLixie9u9ixLM8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/envoyproxy/go-control-plane",
+      "version": "v0.14.0",
+      "commit": "71637ad69bbc5f51fbb2562e612a4365292804a5",
+      "repository": "https://github.com/envoyproxy/go-control-plane",
+      "ref": "refs/tags/v0.14.0",
+      "sum": "h1:hbG2kr4RuFj222B6+7T83thSPqLjwBIfQawTkC++2HA=",
+      "go_mod_sum": "h1:NcS5X47pLl/hfqxU70yPwL9ZMkUlwlKxtAohpi2wBEU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/envoyproxy/go-control-plane/envoy",
+      "version": "v1.37.0",
+      "commit": "004b9ec70a4696c9fac559adea646dab4ebf62b7",
+      "repository": "https://github.com/envoyproxy/go-control-plane",
+      "ref": "refs/tags/envoy/v1.37.0",
+      "sum": "h1:u3riX6BoYRfF4Dr7dwSOroNfdSbEPe9Yyl09/B6wBrQ=",
+      "go_mod_sum": "h1:DReE9MMrmecPy+YvQOAOHNYMALuowAnbjjEMkkWOi6A=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/envoyproxy/go-control-plane/ratelimit",
+      "version": "v0.1.0",
+      "commit": "2cdf9fc1e8a104e69a6487721514041c335d86f6",
+      "repository": "https://github.com/envoyproxy/go-control-plane",
+      "ref": "refs/tags/ratelimit/v0.1.0",
+      "sum": "h1:/G9QYbddjL25KvtKTv3an9lx6VBE2cnb8wp1vEGNYGI=",
+      "go_mod_sum": "h1:Wk+tMFAFbCXaJPzVVHnPgRKdUdwW/KdbRt94AzgRee4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/envoyproxy/protoc-gen-validate",
+      "version": "v1.3.3",
+      "commit": "92b9a7df69ca9f71bfc492f7a90adf4d36eab569",
+      "repository": "https://github.com/envoyproxy/protoc-gen-validate",
+      "ref": "refs/tags/v1.3.3",
+      "sum": "h1:MVQghNeW+LZcmXe7SY1V36Z+WFMDjpqGAGacLe2T0ds=",
+      "go_mod_sum": "h1:TsndJ/ngyIdQRhMcVVGDDHINPLWB7C82oDArY51KfB0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/evanphx/json-patch/v5",
+      "version": "v5.9.11",
+      "commit": "84a4bb100ade42a86fce2647c95a7dbcbf569cb2",
+      "repository": "https://github.com/evanphx/json-patch",
+      "ref": "refs/tags/v5.9.11",
+      "sum": "h1:/8HVnzMq13/3x9TPvjG08wUGqBTmZBsCWzjTM0wiaDU=",
+      "go_mod_sum": "h1:3j+LviiESTElxA4p3EMKAB9HXj3/XEtnUf6OZxqIQTM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/felixge/httpsnoop",
+      "version": "v1.1.0",
+      "commit": "0fc9006be0bfd68ee14bc3db0d58f7c7241892e0",
+      "repository": "https://github.com/felixge/httpsnoop",
+      "ref": "refs/tags/v1.1.0",
+      "sum": "h1:3YtUj32ZZkqZtt3sZZsClsymw/QDuVfpNhoA31zeORc=",
+      "go_mod_sum": "h1:Zqxgdd+1Rkcz8euOqdr7lqgCRJztwr5hp9vDSi5UZCE=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/fxamacker/cbor/v2",
+      "version": "v2.9.2",
+      "commit": "45589abe5c63bea2db4d311e0d0fcc551cd772ae",
+      "repository": "https://github.com/fxamacker/cbor",
+      "ref": "refs/tags/v2.9.2",
+      "sum": "h1:X4Ksno9+x3cz0TZv69ec1hxP/+tymuR8PXQJyDwfh78=",
+      "go_mod_sum": "h1:vM4b+DJCtHn+zz7h3FFp/hDAI9WNWCsZj23V5ytsSxQ=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/gabriel-vasile/mimetype",
+      "version": "v1.4.13",
+      "commit": "8822588d35ff221d0a72627f27a94ba58f661d89",
+      "repository": "https://github.com/gabriel-vasile/mimetype",
+      "ref": "refs/tags/v1.4.13",
+      "sum": "h1:46nXokslUBsAJE/wMsp5gtO500a4F3Nkz9Ufpk2AcUM=",
+      "go_mod_sum": "h1:d+9Oxyo1wTzWdyVUPMmXFvp4F9tea18J8ufA774AB3s=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/gin-contrib/sse",
+      "version": "v1.1.1",
+      "commit": "41aa9c0d6d639b46ce650e49009820fd864f9df5",
+      "repository": "https://github.com/gin-contrib/sse",
+      "ref": "refs/tags/v1.1.1",
+      "sum": "h1:uGYpNwTacv5R68bSGMapo62iLTRa9l5zxGCps4hK6ko=",
+      "go_mod_sum": "h1:QXzuVkA0YO7o/gun03UI1Q+FTI8ZV/n5t03kIQAI89s=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/gin-gonic/gin",
+      "version": "v1.12.0",
+      "commit": "73726dc606796a025971fe451f0aa6f1b9b847f6",
+      "repository": "https://github.com/gin-gonic/gin",
+      "ref": "refs/tags/v1.12.0",
+      "sum": "h1:b3YAbrZtnf8N//yjKeU2+MQsh2mY5htkZidOM7O0wG8=",
+      "go_mod_sum": "h1:VxccKfsSllpKshkBWgVgRniFFAzFb9csfngsqANjnLc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-chi/chi/v5",
+      "version": "v5.3.1",
+      "commit": "8b258c7bb28f97a5f2a856ff7ef962578fec9215",
+      "repository": "https://github.com/go-chi/chi",
+      "ref": "refs/tags/v5.3.1",
+      "sum": "h1:3j4HZLGZQ3JpMCrPJF/Jl3mYJfWLKBfNJ6quurUGCf8=",
+      "go_mod_sum": "h1:R+tYY2hNuVUUjxoPtqUdgBqevM9s9njzkTLutVsOCto=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-faster/city",
+      "version": "v1.0.1",
+      "commit": "a8bba0b791a6f365c59218d52895b0e214e06d98",
+      "repository": "https://github.com/go-faster/city",
+      "ref": null,
+      "sum": "h1:4WAxSZ3V2Ws4QRDrscLEDcibJY8uf41H6AhXDrNDcGw=",
+      "go_mod_sum": "h1:jKcUJId49qdW3L1qKHH/3wPeUstCVpVSXTM6vO3VcTw=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/go-faster/errors",
+      "version": "v0.8.0",
+      "commit": "9e48784c076274b8da0083668e2daa72812e19f6",
+      "repository": "https://github.com/go-faster/errors",
+      "ref": "refs/tags/v0.8.0",
+      "sum": "h1:9T9eJrM+72dFk7n4DfhuaDDe6cyuFCSW2oNUkN77Yqc=",
+      "go_mod_sum": "h1:5ySTjWFiphBs07IKuiL69nxdfd5+fzh1u7FPGZP2quo=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-jose/go-jose/v4",
+      "version": "v4.1.4",
+      "commit": "0e59876635f3dbf46d7b5e97b52bb75a3f96e7d9",
+      "repository": "https://github.com/go-jose/go-jose",
+      "ref": "refs/tags/v4.1.4",
+      "sum": "h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=",
+      "go_mod_sum": "h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-logr/logr",
+      "version": "v1.4.4",
+      "commit": "96a9abaa56526dd5d51745e817732a2d61505fb7",
+      "repository": "https://github.com/go-logr/logr",
+      "ref": "refs/tags/v1.4.4",
+      "sum": "h1:tG4xh9yMsRCAiodLVTxyrkzSZ9+o0L1Kg/+cPVcbP/8=",
+      "go_mod_sum": "h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-logr/stdr",
+      "version": "v1.2.2",
+      "commit": "521af2addfa7c81c8a65d0e85ed34bb6bb6dc262",
+      "repository": "https://github.com/go-logr/stdr",
+      "ref": null,
+      "sum": "h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=",
+      "go_mod_sum": "h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/go-openapi/analysis",
+      "version": "v0.25.5",
+      "commit": "f65b57650f15860b5c7225e5391d194b6241dd9b",
+      "repository": "https://github.com/go-openapi/analysis",
+      "ref": "refs/tags/v0.25.5",
+      "sum": "h1:xPYEvTb90o1y0epuiOPAoG4QqahjP3cdp5xNlHeKJRI=",
+      "go_mod_sum": "h1:d3UGtQC5uq5Kqqqis2VH09Km/v3vwsWrYkbp4gdm+Rc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/errors",
+      "version": "v0.22.8",
+      "commit": "a6770388153a83b5e93288d66979a29883828211",
+      "repository": "https://github.com/go-openapi/errors",
+      "ref": "refs/tags/v0.22.8",
+      "sum": "h1:oP7sW7TWc3wFFjrzzj0nI83H2qMBkNjNfSd+XRejk/I=",
+      "go_mod_sum": "h1:BuUoHcYrU6E7V9gfj1I5wLQqgtIHnup/alXZ8KdgQ0w=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/jsonpointer",
+      "version": "v1.0.0",
+      "commit": "94e86086395062d3094c09c01aea3592df0fcba3",
+      "repository": "https://github.com/go-openapi/jsonpointer",
+      "ref": "refs/tags/v1.0.0",
+      "sum": "h1:kR9tHqY0CtZaOPVFm622dPVNhrvYpwr4uCxgL3h1H8s=",
+      "go_mod_sum": "h1:Z3rw7dWu1p9IgitXCFamSlA5lmDiklEB6vkaxcNZW5Y=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/jsonreference",
+      "version": "v1.0.0",
+      "commit": "edb350b0a13c936c03de055a3483ea334a50478c",
+      "repository": "https://github.com/go-openapi/jsonreference",
+      "ref": "refs/tags/v1.0.0",
+      "sum": "h1:jlmTr6torcd1YgDQvSfNmRtKzYDO4FGBkrAdlAVWnpY=",
+      "go_mod_sum": "h1:jtwdyGbJk0Xhe5Y+rwtglQP6Sb1WZST4rT32LWB+sv0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/loads",
+      "version": "v0.25.0",
+      "commit": "8538331e9bf306361c9549b885844c978c1c21a5",
+      "repository": "https://github.com/go-openapi/loads",
+      "ref": "refs/tags/v0.25.0",
+      "sum": "h1:74Bc2snfaVlsHzwdQj/3gsA9XJz3daXTJVs+4ZaK7jI=",
+      "go_mod_sum": "h1:JFBw4SIB9+PTIFHDfcXuSSy5h6aWzjtUCrPYyx3qWU8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/runtime",
+      "version": "v0.33.0",
+      "commit": "accfcf5c480ab8f04b693164b8d65449bb2273b5",
+      "repository": "https://github.com/go-openapi/runtime",
+      "ref": "refs/tags/v0.33.0",
+      "sum": "h1:Dd3Oj2ig+WH8ckK95l0Wn2V8a4bH/UqWPRZVT0vc8yU=",
+      "go_mod_sum": "h1:+rsupH3+TFKqmFysqkmgBOTxpVJV8eV+j9myvvea2Xw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/runtime/server-middleware",
+      "version": "v0.30.0",
+      "commit": "644458839dffd601a7e1790861a36da72f013346",
+      "repository": "https://github.com/go-openapi/runtime",
+      "ref": "refs/tags/server-middleware/v0.30.0",
+      "sum": "h1:8rPoJ/xv7JL8BsovaqboKETlpWBArVh8n+0L/GyePog=",
+      "go_mod_sum": "h1:OYNT/TxNvB/VK5oe4htM2jDTwlEXuejVJmu0DVZfAMs=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/spec",
+      "version": "v0.22.9",
+      "commit": "e682f665cd0b25eee1bcc3ec42d939d7b037a1f1",
+      "repository": "https://github.com/go-openapi/spec",
+      "ref": "refs/tags/v0.22.9",
+      "sum": "h1:/vKIFDcGKp0ktZWGbym/tJEWbk6/XOEmAVU0kqKMH+w=",
+      "go_mod_sum": "h1:b/mNUYIOQOyIiUzUzXEE8xzyZqf93KvM9hQGP91yfl0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/strfmt",
+      "version": "v0.27.0",
+      "commit": "836482188ed4ce2c1b9207af61ac5c7bae328155",
+      "repository": "https://github.com/go-openapi/strfmt",
+      "ref": "refs/tags/v0.27.0",
+      "sum": "h1:kbcTeaD9TXuXD0hhMXzuYa1sdTo6+dWGvwjW93E80IM=",
+      "go_mod_sum": "h1:s/qhDqfY72irigXUGJmtgid2Rm+3tnz3k8hZaRmvWYc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/v0.28.0",
+      "sum": "h1:xkgbOSKj6DZziNpyqRRAOt3GJGtgjgsd2RoyT30VWuw=",
+      "go_mod_sum": "h1:4qYnT3Cqr1p1VknOdPo70evN4rgQnAg6jwApHyxSGIg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/cmdutils",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/cmdutils/v0.28.0",
+      "sum": "h1:7TOeNtkYru1SG8Y34tDh9WBbLsMqGnptuxWiHREPZ4Q=",
+      "go_mod_sum": "h1:Sm1MVFMkF6guJJ+pQqHnQA3N0j9qALV3NxzDSv6bETM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/conv",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/conv/v0.28.0",
+      "sum": "h1:GtqqbyFe7vR5Y7ehxG9W6/OvrSFdf1OLeTGp40TqxH8=",
+      "go_mod_sum": "h1:mbUE+mzctnhxi864m0Q07SpN8OowD9JhxmxuYvZZD/k=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/fileutils",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/fileutils/v0.28.0",
+      "sum": "h1:Z04XWQD7R8Eq+7GnOrjovBxPPmZzsS4gt2H2GPGIViU=",
+      "go_mod_sum": "h1:VvJFZLTZS0AI854gEQz5tk7dBESdLjiNUMSZ/th2ry8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/jsonutils",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/jsonutils/v0.28.0",
+      "sum": "h1:YIch6FwO7RXzeAnbO8Tu7dWBZeUEH+4nA0HXltVTnv4=",
+      "go_mod_sum": "h1:CYM3WlTUcagR2ZoHdz54di/cbBqt82tuxuXgAjxw+mg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/loading",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/loading/v0.28.0",
+      "sum": "h1:td8QZdZC9MIYGGSnSPKShKiK22I2tU5UQvuUhIBPRLU=",
+      "go_mod_sum": "h1:rXB0QiQX5mMveXEA7ouM4KiiM9jVJe4K6BVbwhD1M4k=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/mangling",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/mangling/v0.28.0",
+      "sum": "h1:pH8eyeNO9SLYsTMWJrurnNfKmDa28XrlA+HePVD53VM=",
+      "go_mod_sum": "h1:jtBE2+V+3pILxOR7Vgce+Cwp6A2PgZbvVqfNntbVs0w=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/netutils",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/netutils/v0.28.0",
+      "sum": "h1:YXN6TALEi2pzts8/8GNm6T61HTAZsieukGZidap989k=",
+      "go_mod_sum": "h1:J+WYyFMLtvtCGqa6jLv+YNUmIKI3ZRQRrvfNDMoQoEQ=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/pools",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/pools/v0.28.0",
+      "sum": "h1:HPMZWSAfce3rdVTFcjFiCIBtDg9h4x2QlRrHipwhxeU=",
+      "go_mod_sum": "h1:kVQefhSK5RWuRe7BXsL8htgBPAMpN7HDGpGEknqugeE=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/stringutils",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/stringutils/v0.28.0",
+      "sum": "h1:ixsc9iYgDPubHL/8nSkbnryEHpD2VRlBMLKpQyPXcDU=",
+      "go_mod_sum": "h1:lzRN95CxXmA03XcDWHLOb6nOMcxCqR5rGY0lOgsfRoM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/typeutils",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/typeutils/v0.28.0",
+      "sum": "h1:nRBKSBXjDgf01VDPB3fWeD9nQuhCOVeIYAkUx2tbkyY=",
+      "go_mod_sum": "h1:Srm0xFNRZ1Y+vCxJclo5qzx8aj+1pAKda/YfFPrG0dQ=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/swag/yamlutils",
+      "version": "v0.28.0",
+      "commit": "e3df19940ebd798e4bc6441542427b26484506d9",
+      "repository": "https://github.com/go-openapi/swag",
+      "ref": "refs/tags/yamlutils/v0.28.0",
+      "sum": "h1:TV3JXH6DS46KUroDtMLAYHGkdWf5VDq3wVWFirmzROY=",
+      "go_mod_sum": "h1:x0q/yndZHEgk9Rx3DyDqzFUmHy55KTvIZldvF2dTJXs=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-openapi/validate",
+      "version": "v0.26.1",
+      "commit": "9b81767db56f7b5b2f868bcb884d9dc07e6a7da0",
+      "repository": "https://github.com/go-openapi/validate",
+      "ref": "refs/tags/v0.26.1",
+      "sum": "h1:pZSbvtRO8G2R2FpWTYRn3w8LrsNwbtaVhP2dWiBa0Us=",
+      "go_mod_sum": "h1:B8UMgXiQiwwQWIbmuROlwJZDPGlikPuh7iHV1vPX9Oo=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-playground/locales",
+      "version": "v0.14.1",
+      "commit": "ce315c8672599942003599943a1e64288f55b03f",
+      "repository": "https://github.com/go-playground/locales",
+      "ref": "refs/tags/v0.14.1",
+      "sum": "h1:EWaQ/wswjilfKLTECiXz7Rh+3BjFhfDFKv/oXslEjJA=",
+      "go_mod_sum": "h1:hxrqLVvrK65+Rwrd5Fc6F2O76J/NuW9t0sjnWqG1slY=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-playground/universal-translator",
+      "version": "v0.18.1",
+      "commit": "f83cd526536e253181a13835b00cd107f627c505",
+      "repository": "https://github.com/go-playground/universal-translator",
+      "ref": "refs/tags/v0.18.1",
+      "sum": "h1:Bcnm0ZwsGyWbCzImXv+pAJnYK9S473LQFuzCbDbfSFY=",
+      "go_mod_sum": "h1:xekY+UJKNuX9WP91TpwSH2VMlDf28Uj24BCp08ZFTUY=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-playground/validator/v10",
+      "version": "v10.30.3",
+      "commit": "ac4c1bab0d4aa957466faa1948af28130767e43a",
+      "repository": "https://github.com/go-playground/validator",
+      "ref": "refs/tags/v10.30.3",
+      "sum": "h1:4MU6YkEwx7GbcPJOZxrtbu+QfF3pJLJuaYTeAH0DYy8=",
+      "go_mod_sum": "h1:4Axh7oCNGcoGkqLoE4YWt6n20mcEIsPRlB7vPk3lpyc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-sql-driver/mysql",
+      "version": "v1.10.0",
+      "commit": "a065b60ab6d0c8e15468e7709c7f76acf4431647",
+      "repository": "https://github.com/go-sql-driver/mysql",
+      "ref": "refs/tags/v1.10.0",
+      "sum": "h1:Q+1LV8DkHJvSYAdR83XzuhDaTykuDx0l6fkXxoWCWfw=",
+      "go_mod_sum": "h1:M+cqaI7+xxXGG9swrdeUIoPG3Y3KCkF0pZej+SK+nWk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/go-viper/mapstructure/v2",
+      "version": "v2.5.0",
+      "commit": "9aa3f77c68e2a56222ea436c1bfa631f1b1072d5",
+      "repository": "https://github.com/go-viper/mapstructure",
+      "ref": "refs/tags/v2.5.0",
+      "sum": "h1:vM5IJoUAy3d7zRSVtIwQgBj7BiWtMPfmPEgAXnvj1Ro=",
+      "go_mod_sum": "h1:oJDH3BJKyqBA2TXFhDsKDGDTlndYOZ6rGS0BRZIxGhM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/goccy/go-json",
+      "version": "v0.10.6",
+      "commit": "e4877d51d546f8c67b1cd9b49ab002ba3af37785",
+      "repository": "https://github.com/goccy/go-json",
+      "ref": "refs/tags/v0.10.6",
+      "sum": "h1:p8HrPJzOakx/mn/bQtjgNjdTcN+/S6FcG2CTtQOrHVU=",
+      "go_mod_sum": "h1:oq7eo15ShAhp70Anwd5lgX2pLfOS3QCiwU/PULtXL6M=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/goccy/go-yaml",
+      "version": "v1.19.2",
+      "commit": "92bc79cb5f685e999ad131473168fc45215d12d9",
+      "repository": "https://github.com/goccy/go-yaml",
+      "ref": "refs/tags/v1.19.2",
+      "sum": "h1:PmFC1S6h8ljIz6gMRBopkjP1TVT7xuwrButHID66PoM=",
+      "go_mod_sum": "h1:XBurs7gK8ATbW4ZPGKgcbrY1Br56PdM69F7LkFRi1kA=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/gofiber/fiber/v2",
+      "version": "v2.52.14",
+      "commit": "a74500f6335abc020023d3581a46ba56a893edc3",
+      "repository": "https://github.com/gofiber/fiber",
+      "ref": "refs/tags/v2.52.14",
+      "sum": "h1:Of3L+9qVFaQNwPlcmEdl5IIodHz8BSE0j37R7rWu4pE=",
+      "go_mod_sum": "h1:YEcBbO/FB+5M1IZNBP9FO3J9281zgPAreiI1oqg8nDw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/gofiber/fiber/v3",
+      "version": "v3.4.0",
+      "commit": "e88e762b9995a2acb014b6d7ac6e334e2288cd89",
+      "repository": "https://github.com/gofiber/fiber",
+      "ref": "refs/tags/v3.4.0",
+      "sum": "h1:F0aND4vwZF7dR7cbvSwFQQEpBU902XHKWxrLsFBkVqw=",
+      "go_mod_sum": "h1:nAhJfdxUIJJph2tPWPmqWf8QDIN2iiqQiQf3lENZpdk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/gofiber/schema",
+      "version": "v1.8.2",
+      "commit": "860b052580e4445400f6fc5f578f7f9ee47ff82d",
+      "repository": "https://github.com/gofiber/schema",
+      "ref": "refs/tags/v1.8.2",
+      "sum": "h1:wq+LO2xEGlsqma/8Akp9PUebQ6vcsYmF0xYQ4F2ijvU=",
+      "go_mod_sum": "h1:iyAMJztdyky7Pk2U7bwUP3EHjzMqUNjZ/hglE0nYO/g=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/gofiber/utils/v2",
+      "version": "v2.2.0",
+      "commit": "ab61971a22486fca37d6b099b5ec432393b95cdd",
+      "repository": "https://github.com/gofiber/utils",
+      "ref": "refs/tags/v2.2.0",
+      "sum": "h1:YSSmCzQponq/f9uSOg2HtXC5qK1Dmor0o6DqaQVz8GE=",
+      "go_mod_sum": "h1:Ieopk6sQh7rbhQ12aBNCJtJuG0gxAg0nz63sFCrrOmE=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/golang-jwt/jwt/v4",
+      "version": "v4.5.2",
+      "commit": "2f0e9add62078527821828c76865661aa7718a84",
+      "repository": "https://github.com/golang-jwt/jwt",
+      "ref": "refs/tags/v4.5.2",
+      "sum": "h1:YtQM7lnr8iZ+j5q71MGKkNw9Mn7AjHM68uc9g5fXeUI=",
+      "go_mod_sum": "h1:m21LjoU+eqJr34lmDMbreY2eSTRJ1cv77w39/MY0Ch0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/golang-jwt/jwt/v5",
+      "version": "v5.3.1",
+      "commit": "7ceae619e739dc8a7bf577214aa8ebf26668e9db",
+      "repository": "https://github.com/golang-jwt/jwt",
+      "ref": "refs/tags/v5.3.1",
+      "sum": "h1:kYf81DTWFe7t+1VvL7eS+jKFVWaUnK9cB1qbwn63YCY=",
+      "go_mod_sum": "h1:fxCRLWMO43lRc8nhHWY6LGqRcf+1gQWArsqaEUEa5bE=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/golang-sql/civil",
+      "version": "v0.0.0-20220223132316-b832511892a9",
+      "commit": "b832511892a9aa2766214afc9cc347c94e7088ea",
+      "repository": "https://github.com/golang-sql/civil",
+      "ref": null,
+      "sum": "h1:au07oEsX2xN0ktxqI+Sida1w446QrXBRJ0nee3SNZlA=",
+      "go_mod_sum": "h1:8vg3r2VgvsThLBIFL93Qb5yWzgyZWhEmBwUJWevAkK0=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/golang-sql/sqlexp",
+      "version": "v0.1.0",
+      "commit": "d42ba59f5c11011b1df5abc536ee75821c22bdac",
+      "repository": "https://github.com/golang-sql/sqlexp",
+      "ref": null,
+      "sum": "h1:ZCD6MBpcuOVfGVqsEmY5/4FtYiKz6tSyUv9LPEDei6A=",
+      "go_mod_sum": "h1:J4ad9Vo8ZCWQ2GMrC4UCQy1JpCbwU9m3EOqtpKwwwHI=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/golang/glog",
+      "version": "v1.2.5",
+      "commit": "2b790ef78571cd58d29ce909a8d4e3f71cc4c47e",
+      "repository": "https://github.com/golang/glog",
+      "ref": "refs/tags/v1.2.5",
+      "sum": "h1:DrW6hGnjIhtvhOIiAKT6Psh/Kd/ldepEa81DKeiRJ5I=",
+      "go_mod_sum": "h1:6AhwSGph0fcJtXVM/PEHPqZlFeoLxhs7/t5UDAwmO+w=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/golang/protobuf",
+      "version": "v1.5.4",
+      "commit": "75de7c059e36b64f01d0dd234ff2fff404ec3374",
+      "repository": "https://github.com/golang/protobuf",
+      "ref": "refs/tags/v1.5.4",
+      "sum": "h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=",
+      "go_mod_sum": "h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/google/go-cmp",
+      "version": "v0.7.0",
+      "commit": "9b12f366a942ebc7254abc7f32ca05068b455fb7",
+      "repository": "https://github.com/google/go-cmp",
+      "ref": "refs/tags/v0.7.0",
+      "sum": "h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=",
+      "go_mod_sum": "h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/google/s2a-go",
+      "version": "v0.1.9",
+      "commit": "b293be1aa7a6e6e4565f9967c093dd412253b267",
+      "repository": "https://github.com/google/s2a-go",
+      "ref": "refs/tags/v0.1.9",
+      "sum": "h1:LGD7gtMgezd8a/Xak7mEWL0PjoTQFvpRudN895yqKW0=",
+      "go_mod_sum": "h1:YA0Ei2ZQL3acow2O62kdp9UlnvMmU7kA6Eutn0dXayM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/google/uuid",
+      "version": "v1.6.0",
+      "commit": "0f11ee6918f41a04c201eceeadf612a377bc7fbc",
+      "repository": "https://github.com/google/uuid",
+      "ref": "refs/tags/v1.6.0",
+      "sum": "h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=",
+      "go_mod_sum": "h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/googleapis/enterprise-certificate-proxy",
+      "version": "v0.3.11",
+      "commit": "84fe33f9b5f729c5596077f469ad19751a239a42",
+      "repository": "https://github.com/googleapis/enterprise-certificate-proxy",
+      "ref": "refs/tags/v0.3.11",
+      "sum": "h1:vAe81Msw+8tKUxi2Dqh/NZMz7475yUvmRIkXr4oN2ao=",
+      "go_mod_sum": "h1:RFV7MUdlb7AgEq2v7FmMCfeSMCllAzWxFgRdusoGks8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/googleapis/gax-go/v2",
+      "version": "v2.17.0",
+      "commit": "f3fb23db5cd85c402dac650b2357356245711508",
+      "repository": "https://github.com/googleapis/gax-go",
+      "ref": "refs/tags/v2.17.0",
+      "sum": "h1:RksgfBpxqff0EZkDWYuz9q/uWsTVz+kf43LsZ1J6SMc=",
+      "go_mod_sum": "h1:mzaqghpQp4JDh3HvADwrat+6M3MOIDp5YKHhb9PAgDY=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/gorilla/mux",
+      "version": "v1.8.1",
+      "commit": "b4617d0b9670ad14039b2739167fd35a60f557c5",
+      "repository": "https://github.com/gorilla/mux",
+      "ref": "refs/tags/v1.8.1",
+      "sum": "h1:TuBL49tXwgrFYWhqrNgrUNEY92u81SPhu7sTdzQEiWY=",
+      "go_mod_sum": "h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWSiMQ=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/grpc-ecosystem/grpc-gateway/v2",
+      "version": "v2.30.0",
+      "commit": "1debdeabd09134bc7755b9bc85802a7840bae100",
+      "repository": "https://github.com/grpc-ecosystem/grpc-gateway",
+      "ref": "refs/tags/v2.30.0",
+      "sum": "h1:/Tnpcb2E0Pz/tN9s3bfEY2Q8ePCEX9iuS+cneUwncnw=",
+      "go_mod_sum": "h1:zOBXOsUaBSjKgmH4OGzV1esUpR3oUSCPYVd2cUBjKYY=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/inconshreveable/mousetrap",
+      "version": "v1.1.0",
+      "commit": "4e8053ee7ef85a6bd26368364a6d27f1641c1d21",
+      "repository": "https://github.com/inconshreveable/mousetrap",
+      "ref": "refs/tags/v1.1.0",
+      "sum": "h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=",
+      "go_mod_sum": "h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/jackc/pgerrcode",
+      "version": "v0.0.0-20240316143900-6e2875d9b438",
+      "commit": "6e2875d9b438d43808cc033afe2d978db3b9c9e7",
+      "repository": "https://github.com/jackc/pgerrcode",
+      "ref": null,
+      "sum": "h1:Dj0L5fhJ9F82ZJyVOmBx6msDp/kfd1t9GRfny/mfJA0=",
+      "go_mod_sum": "h1:a/s9Lp5W7n/DD0VrVoyJ00FbP2ytTPDVOivvn2bMlds=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/jackc/pgpassfile",
+      "version": "v1.0.0",
+      "commit": "99d8e8e28945ffceaf75b0299fcb2bb656b8a683",
+      "repository": "https://github.com/jackc/pgpassfile",
+      "ref": null,
+      "sum": "h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=",
+      "go_mod_sum": "h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/jackc/pgservicefile",
+      "version": "v0.0.0-20240606120523-5a60cdf6a761",
+      "commit": "5a60cdf6a76120dc3d5152b95f3b5fd8aa7cc9eb",
+      "repository": "https://github.com/jackc/pgservicefile",
+      "ref": null,
+      "sum": "h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=",
+      "go_mod_sum": "h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "version": "v5.11.0",
+      "commit": "5e583fa7aabfa88b796292f849fc9d7d75ac159d",
+      "repository": "https://github.com/jackc/pgx",
+      "ref": "refs/tags/v5.11.0",
+      "sum": "h1:IzBBtyK9AHqf98cctWFifYSci2hgQR/cd56wB4p+ogg=",
+      "go_mod_sum": "h1:mal1tBGAFfLHvZzaYh77YS/eC6IX9OWbRV1QIIM0Jn4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/jackc/puddle/v2",
+      "version": "v2.2.2",
+      "commit": "bd09d14bd4018b6d65a9d7770e2f3ddf8b00af1c",
+      "repository": "https://github.com/jackc/puddle",
+      "ref": "refs/tags/v2.2.2",
+      "sum": "h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=",
+      "go_mod_sum": "h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/joho/godotenv",
+      "version": "v1.5.1",
+      "commit": "3fc4292b58a67b78e1dbb6e47b4879a6cc602ec4",
+      "repository": "https://github.com/joho/godotenv",
+      "ref": "refs/tags/v1.5.1",
+      "sum": "h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=",
+      "go_mod_sum": "h1:f4LDr5Voq0i2e/R5DDNOoa2zzDfwtkZa6DnEwAbqwq4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/jonboulle/clockwork",
+      "version": "v0.5.0",
+      "commit": "6d8d032a18422c2e3ef651170a8a55012d1f704c",
+      "repository": "https://github.com/jonboulle/clockwork",
+      "ref": "refs/tags/v0.5.0",
+      "sum": "h1:Hyh9A8u51kptdkR+cqRpT1EebBwTn1oK9YfGYbdFz6I=",
+      "go_mod_sum": "h1:3mZlmanh0g2NDKO5TWZVJAfofYk64M7XN3SzBPjZF60=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/jpillora/backoff",
+      "version": "v1.0.0",
+      "commit": "d80867952dff4e2fbfb4280ded4ff94d67790457",
+      "repository": "https://github.com/jpillora/backoff",
+      "ref": "v1.0.0",
+      "sum": "h1:uvFg412JmmHBHw7iwprIxkPMI+sGQ4kzOWsMeHnm2EA=",
+      "go_mod_sum": "h1:J/6gKK9jxlEcS3zixgDgUAsiuZ7yrSoa/FX5e0EB2j4=",
+      "pin_source": "GitHub tag or pseudo-version commit lookup"
+    },
+    {
+      "module": "github.com/json-iterator/go",
+      "version": "v1.1.12",
+      "commit": "024077e996b048517130b21ea6bf12aa23055d3d",
+      "repository": "https://github.com/json-iterator/go",
+      "ref": null,
+      "sum": "h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=",
+      "go_mod_sum": "h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/julienschmidt/httprouter",
+      "version": "v1.3.0",
+      "commit": "4eec211fa4e8df74ed978dc5681612131854144f",
+      "repository": "https://github.com/julienschmidt/httprouter",
+      "ref": null,
+      "sum": "h1:U0609e9tgbseu3rBINet9P48AI/D3oJs4dN7jwJOQ1U=",
+      "go_mod_sum": "h1:JR6WtHb+2LUe8TCKY3cZOxFyyO8IZAc4RVcycCCAKdM=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/klauspost/compress",
+      "version": "v1.20.1",
+      "commit": "5d880f230c38a0fc806b9ca1613103a44feff0ac",
+      "repository": "https://github.com/klauspost/compress",
+      "ref": "refs/tags/v1.20.1",
+      "sum": "h1:T7kKElXUMXrUJ2E9QhQhxFtcK5rPyLdsGZvdbLMPdiQ=",
+      "go_mod_sum": "h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/klauspost/cpuid/v2",
+      "version": "v2.4.0",
+      "commit": "8590c161fbc87954548d2aedb65e2aad4e5137d1",
+      "repository": "https://github.com/klauspost/cpuid",
+      "ref": "refs/tags/v2.4.0",
+      "sum": "h1:S6Hrbc7+ywsr0r+RLapfGBHfyefhCTwEh3A0tV913Dw=",
+      "go_mod_sum": "h1:19jmZ9mjzoF//ddRSUsv0zfBTJWh3QJh9FNxZTMrGxU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/kr/pretty",
+      "version": "v0.3.1",
+      "commit": "3cd153a126da607b78d1762779b1e1054f9889fc",
+      "repository": "https://github.com/kr/pretty",
+      "ref": "refs/tags/v0.3.1",
+      "sum": "h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=",
+      "go_mod_sum": "h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/kylelemons/godebug",
+      "version": "v1.1.0",
+      "commit": "9ff306d4fbead574800b66369df5b6144732d58e",
+      "repository": "https://github.com/kylelemons/godebug",
+      "ref": null,
+      "sum": "h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=",
+      "go_mod_sum": "h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/labstack/echo/v4",
+      "version": "v4.15.4",
+      "commit": "ec79b584025d300acc9cb0a2b127a7209c902fd2",
+      "repository": "https://github.com/labstack/echo",
+      "ref": "refs/tags/v4.15.4",
+      "sum": "h1:DL45vVYa+BWE+XuW+zZNd9H0YEdZ80UAWJGcTVW4EVs=",
+      "go_mod_sum": "h1:CuMetKIRwsuO/qlAgMq+KTAalwGoB/h4tC+yPdrTj1g=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/labstack/echo/v5",
+      "version": "v5.3.0",
+      "commit": "caa018246b840091e71a1d61ea9ee1176ab81333",
+      "repository": "https://github.com/labstack/echo",
+      "ref": "refs/tags/v5.3.0",
+      "sum": "h1:KT74Mprk053PQEHwSZdeCDIz1BigTZOZhavMD0c9Fjs=",
+      "go_mod_sum": "h1:Q3j2+clBRgJr0O3DDONQeXNsM7RHgSwUhcuo47unqm8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/labstack/gommon",
+      "version": "v0.5.0",
+      "commit": "2659cdaeb998f92ea22bbeb46892eb0e5d79fda3",
+      "repository": "https://github.com/labstack/gommon",
+      "ref": "refs/tags/v0.5.0",
+      "sum": "h1:6VSQ2NOzsnEJ5W6+84E0RbcaDDmgB6NIAzWCczTEe6c=",
+      "go_mod_sum": "h1:Rzlg7HHy1maLfzBYGg9NZcVuz1sA68HHhLjhcEllYE0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/leodido/go-urn",
+      "version": "v1.4.0",
+      "commit": "d725923fe33ce69c89b9e2033d069099b498224f",
+      "repository": "https://github.com/leodido/go-urn",
+      "ref": "refs/tags/v1.4.0",
+      "sum": "h1:WT9HwE9SGECu3lg4d/dIA+jxlljEa1/ffXKmRjqdmIQ=",
+      "go_mod_sum": "h1:bvxc+MVxLKB4z00jd1z+Dvzr47oO32F/QSNjSBOlFxI=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/mattn/go-colorable",
+      "version": "v0.1.15",
+      "commit": "8bf39a204f13f0cfcf86ab9b297c3d6e0668e54a",
+      "repository": "https://github.com/mattn/go-colorable",
+      "ref": "refs/tags/v0.1.15",
+      "sum": "h1:+u9SLTRGnXv73cEsnsmoZBom+dMU88B2M0aDcWy0/jY=",
+      "go_mod_sum": "h1:6LmQG8QLFO4G5z1gPvYEzlUgJ2wF+stgPZH1UqBm1s8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/mattn/go-isatty",
+      "version": "v0.0.24",
+      "commit": "c44dc0b9c702c76577fdb7898032969e0611efc2",
+      "repository": "https://github.com/mattn/go-isatty",
+      "ref": "refs/tags/v0.0.24",
+      "sum": "h1:tGZZoVgT/KiqK1c8ocVLeDS8BSWMRd47J3Lbz7vsReI=",
+      "go_mod_sum": "h1:nMCL3Zebbrt45jsMDgnfIwz6ydEQApk5oEI3HqDio6A=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/mattn/go-runewidth",
+      "version": "v0.0.24",
+      "commit": "0383c20520084afbe27423b6a24301c9e59c4a4b",
+      "repository": "https://github.com/mattn/go-runewidth",
+      "ref": "refs/tags/v0.0.24",
+      "sum": "h1:cpokDiIn0MGnhdHwuWnJBITySJ20QyNGnY2kR/ay2DU=",
+      "go_mod_sum": "h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/mfridman/interpolate",
+      "version": "v0.0.2",
+      "commit": "64fb0942bf9e1561b87c3ff780080318115028c4",
+      "repository": "https://github.com/mfridman/interpolate",
+      "ref": "refs/tags/v0.0.2",
+      "sum": "h1:pnuTK7MQIxxFz1Gr+rjSIx9u7qVjf5VOoM/u6BbAxPY=",
+      "go_mod_sum": "h1:p+7uk6oE07mpE/Ik1b8EckO0O4ZXiGAfshKBWLUM9Xg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/mfridman/xflag",
+      "version": "v0.1.0",
+      "commit": "efb77353e57879ffd3419b66e1e2ad141a6e9987",
+      "repository": "https://github.com/mfridman/xflag",
+      "ref": "refs/tags/v0.1.0",
+      "sum": "h1:TWZrZwG1QklFX5S4j1vxfF1sZbZeZSGofMwPMLAF29M=",
+      "go_mod_sum": "h1:/483ywM5ZO5SuMVjrIGquYNE5CzLrj5Ux/LxWWnjRaE=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/microsoft/go-mssqldb",
+      "version": "v1.11.0",
+      "commit": "ecf85606f8cfedae0be026042581596a92642edd",
+      "repository": "https://github.com/microsoft/go-mssqldb",
+      "ref": "refs/tags/v1.11.0",
+      "sum": "h1:YbDqolEjGH9hBfvKzONTf5/dbl9RKXmizMJE93lVxNs=",
+      "go_mod_sum": "h1:goQLDOPlMN/l1REhnNPElMoY/yX+fUWn1+7UoFJPH9Y=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/moby/docker-image-spec",
+      "version": "v1.3.1",
+      "commit": "f1d00ebd2d6d6805170d5543dbca4b850f35f9af",
+      "repository": "https://github.com/moby/docker-image-spec",
+      "ref": "refs/tags/v1.3.1",
+      "sum": "h1:jMKff3w6PgbfSa69GfNg+zN/XLhfXJGnEx3Nl2EsFP0=",
+      "go_mod_sum": "h1:eKmb5VW8vQEh/BAr2yvVNvuiJuY6UIocYsFu/DxxRpo=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/moby/moby/api",
+      "version": "v1.55.0",
+      "commit": "b6c53c270450e3a0fd47c276ce1008f525e76884",
+      "repository": "https://github.com/moby/moby",
+      "ref": "refs/tags/api/v1.55.0",
+      "sum": "h1:2/sexvQyqIWS8pRSCFddBfpW2qE7vR7FCL+vN8pxwMc=",
+      "go_mod_sum": "h1:+RQ6wluLwtYaTd1WnPLykIDPekkuyD/ROWQClE83pzs=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/moby/moby/client",
+      "version": "v0.5.1",
+      "commit": "455591864a6e1b24d490f37b7041e730bfe03387",
+      "repository": "https://github.com/moby/moby",
+      "ref": "refs/tags/client/v0.5.1",
+      "sum": "h1:tYNaJno4c0HXz12y5BiqEDy0rVTYkWzI26lGvnTMiJw=",
+      "go_mod_sum": "h1:odLstlZ6uSnfvAgVxMpvgmb8SUdd+siH2T0GBuxVAlM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/modern-go/concurrent",
+      "version": "v0.0.0-20180306012644-bacd9c7ef1dd",
+      "commit": "bacd9c7ef1dd9b15be4a9909b8ac7a4e313eec94",
+      "repository": "https://github.com/modern-go/concurrent",
+      "ref": null,
+      "sum": "h1:TRLaZ9cD/w8PVh93nsPXa1VrQ6jlwL5oN8l14QlcNfg=",
+      "go_mod_sum": "h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/modern-go/reflect2",
+      "version": "v1.0.2",
+      "commit": "2b33151c9bbc5231aea69b8861c540102b087070",
+      "repository": "https://github.com/modern-go/reflect2",
+      "ref": null,
+      "sum": "h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9Gz0M=",
+      "go_mod_sum": "h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/munnerz/goautoneg",
+      "version": "v0.0.0-20191010083416-a7dc8b61c822",
+      "commit": "a7dc8b61c822528f973a5e4e7b272055c6fdb43e",
+      "repository": "https://github.com/munnerz/goautoneg",
+      "ref": "a7dc8b61c822",
+      "sum": "h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=",
+      "go_mod_sum": "h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=",
+      "pin_source": "GitHub tag or pseudo-version commit lookup"
+    },
+    {
+      "module": "github.com/mwitkow/go-conntrack",
+      "version": "v0.0.0-20190716064945-2f068394615f",
+      "commit": "2f068394615f73e460c2f3d2c158b0ad9321cadb",
+      "repository": "https://github.com/mwitkow/go-conntrack",
+      "ref": "2f068394615f",
+      "sum": "h1:KUppIJq7/+SVif2QVs3tOP0zanoHgBEVAwHxUSIzRqU=",
+      "go_mod_sum": "h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=",
+      "pin_source": "GitHub tag or pseudo-version commit lookup"
+    },
+    {
+      "module": "github.com/ncruces/go-strftime",
+      "version": "v1.0.0",
+      "commit": "7be8eef566cc7f1ae99e76af8f8208913758a28d",
+      "repository": "https://github.com/ncruces/go-strftime",
+      "ref": "refs/tags/v1.0.0",
+      "sum": "h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOFAw7w=",
+      "go_mod_sum": "h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/nicksnyder/go-i18n/v2",
+      "version": "v2.6.1",
+      "commit": "4d19ec6ddbb40b67e6a3cff1055b1ef004f1d48e",
+      "repository": "https://github.com/nicksnyder/go-i18n",
+      "ref": "refs/tags/v2.6.1",
+      "sum": "h1:JDEJraFsQE17Dut9HFDHzCoAWGEQJom5s0TRd17NIEQ=",
+      "go_mod_sum": "h1:Vee0/9RD3Quc/NmwEjzzD7VTZ+Ir7QbXocrkhOzmUKA=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/oapi-codegen/runtime",
+      "version": "v1.6.0",
+      "commit": "01be2fa2667493dab65b6167f668a3c09a38ab34",
+      "repository": "https://github.com/oapi-codegen/runtime",
+      "ref": "refs/tags/v1.6.0",
+      "sum": "h1:7Xx+GlueD6nRuyKoCPzL434Jfi3BetbiJOrzCHp/VPU=",
+      "go_mod_sum": "h1:GwV7hC2hviaMzj+ITfHVRESK5J2W/GefVwIND/bMGvU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/oklog/ulid/v2",
+      "version": "v2.1.1",
+      "commit": "96c4edf226ef639c92f96f42c7c2a161ae0e1a66",
+      "repository": "https://github.com/oklog/ulid",
+      "ref": "refs/tags/v2.1.1",
+      "sum": "h1:suPZ4ARWLOJLegGFiZZ1dFAkqzhMjL3J1TzI+5wHz8s=",
+      "go_mod_sum": "h1:rcEKHmBBKfef9DhnvX7y1HZBYxjXb0cP5ExxNsTT1QQ=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/opencontainers/go-digest",
+      "version": "v1.0.0",
+      "commit": "ea51bea511f75cfa3ef6098cc253c5c3609b037a",
+      "repository": "https://github.com/opencontainers/go-digest",
+      "ref": null,
+      "sum": "h1:apOUWs51W5PlhuyGyz9FCeeBIOUDA/6nW8Oi/yOhh5U=",
+      "go_mod_sum": "h1:0JzlMkj0TRzQZfJkVvzbP0HBR3IKzErnv2BNG4W4MAM=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/opencontainers/image-spec",
+      "version": "v1.1.1",
+      "commit": "147f9c13cedb47a0c4d9a11a222961073d585877",
+      "repository": "https://github.com/opencontainers/image-spec",
+      "ref": "refs/tags/v1.1.1",
+      "sum": "h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJwooC2xJA040=",
+      "go_mod_sum": "h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/paulmach/orb",
+      "version": "v0.13.0",
+      "commit": "a12a48ea0c2bcfdea706cc1ab274c735cbc68939",
+      "repository": "https://github.com/paulmach/orb",
+      "ref": "refs/tags/v0.13.0",
+      "sum": "h1:r7n7mQGGF+cj/CbcivEj9J3HGK+XR+yXnvzRdq9saIw=",
+      "go_mod_sum": "h1:6scRWINywA2Jf05dcjOfLfxrUIMECvTSG2MVbRLxu/k=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/pelletier/go-toml/v2",
+      "version": "v2.4.3",
+      "commit": "071a36c2a57244f2e70369bfc69889fda2a1f60f",
+      "repository": "https://github.com/pelletier/go-toml",
+      "ref": "refs/tags/v2.4.3",
+      "sum": "h1:GTRvJQutkOSftxIFD5xw9aepkYNuPWmVJpffdDPYVpY=",
+      "go_mod_sum": "h1:2gIqNv+qfxSVS7cM2xJQKtLSTLUE9V8t9Stt+h56mCY=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/philhofer/fwd",
+      "version": "v1.2.0",
+      "commit": "20a13a1f6b7cb47a126dcb75152e21e1383bbaba",
+      "repository": "https://github.com/philhofer/fwd",
+      "ref": "refs/tags/v1.2.0",
+      "sum": "h1:e6DnBTl7vGY+Gz322/ASL4Gyp1FspeMvx1RNDoToZuM=",
+      "go_mod_sum": "h1:RqIHx9QI14HlwKwm98g9Re5prTQ6LdeRQn+gXJFxsJM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/pierrec/lz4/v4",
+      "version": "v4.1.29",
+      "commit": "8708173b9f0183548f741b46661c61627d2ac28b",
+      "repository": "https://github.com/pierrec/lz4",
+      "ref": "refs/tags/v4.1.29",
+      "sum": "h1:CDQY6qZOLI4DW0Nx6R1vRrifrCeQHnNXkMb0hZWXFjg=",
+      "go_mod_sum": "h1:EoQMVJgeeEOMsCqCzqFm2O0cJvljX2nGZjcRIPL34O4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/pkg/browser",
+      "version": "v0.0.0-20240102092130-5ac0b6a4141c",
+      "commit": "5ac0b6a4141c771a0d3a081c36b87c977cf9c7db",
+      "repository": "https://github.com/pkg/browser",
+      "ref": null,
+      "sum": "h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=",
+      "go_mod_sum": "h1:7rwL4CYBLnjLxUqIJNnCWiEdr3bn6IUYi15bNlnbCCU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/planetscale/vtprotobuf",
+      "version": "v0.6.1-0.20240319094008-0393e58bdf10",
+      "commit": "0393e58bdf106fe0347e554d272a8f2c84d12461",
+      "repository": "https://github.com/planetscale/vtprotobuf",
+      "ref": null,
+      "sum": "h1:GFCKgmp0tecUJ0sJuv4pzYCqS9+RGSn52M3FUwPs+uo=",
+      "go_mod_sum": "h1:t/avpk3KcrXxUnYOhZhMXJlSEyie6gQbtLq5NM3loB8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/pmezard/go-difflib",
+      "version": "v1.0.0",
+      "commit": "792786c7400a136282c1664665ae0a8db921c6c2",
+      "repository": "https://github.com/pmezard/go-difflib",
+      "ref": null,
+      "sum": "h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=",
+      "go_mod_sum": "h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/pressly/goose/v3",
+      "version": "v3.28.0",
+      "commit": "43d2d9c819ed6c9ba2b67a86bdf9fc08562495b7",
+      "repository": "https://github.com/pressly/goose",
+      "ref": "refs/tags/v3.28.0",
+      "sum": "h1:D2M+iL31GmpZxSHOhX8mqyqAT3CXnokUmm0eKoSP+Vc=",
+      "go_mod_sum": "h1:v26MOuB8bL3kzzrt3Vqhb3R0PRVsl8hFQKdrht/L6Rk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/prometheus/client_golang",
+      "version": "v1.25.0",
+      "commit": "0d88875bc7494ed8414e067756ff3399e3068c64",
+      "repository": "https://github.com/prometheus/client_golang",
+      "ref": "refs/tags/v1.25.0",
+      "sum": "h1:cDtW1TcFsMi1RJc8khwCKB4VhzwV04aKqbYtNOXuiK0=",
+      "go_mod_sum": "h1:j2X/4/kaQHLPnmyEU8zjmkndo1T317VpCIQEml8LTKk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/prometheus/client_model",
+      "version": "v0.6.3",
+      "commit": "a834711dbe83d46508daa32d3389f109cc85f53b",
+      "repository": "https://github.com/prometheus/client_model",
+      "ref": "refs/tags/v0.6.3",
+      "sum": "h1:O0jaTVAYNxTHYInEPFJt5I3+sN8zqBtVMPTB1qyxiEo=",
+      "go_mod_sum": "h1:gpN5P9S7Rr6Yr92PiQ+Ixvhf6JZEkF1dnxsYL2aPBEM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/prometheus/common",
+      "version": "v0.72.0",
+      "commit": "ca4f6e15e233b3f333973ff2530041301f91a859",
+      "repository": "https://github.com/prometheus/common",
+      "ref": "refs/tags/v0.72.0",
+      "sum": "h1:tAYsE+sPJxIncDAobm4H5aQjmox9ZxEIIqPbiffa8G4=",
+      "go_mod_sum": "h1:77NWqAQ2tXT7BIK40qjJdw5Acrsrg1TlHAnsQi3i6mk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/prometheus/otlptranslator",
+      "version": "v1.0.0",
+      "commit": "57de713e8b6c626d888cefba633272dece33a352",
+      "repository": "https://github.com/prometheus/otlptranslator",
+      "ref": "refs/tags/v1.0.0",
+      "sum": "h1:s0LJW/iN9dkIH+EnhiD3BlkkP5QVIUVEoIwkU+A6qos=",
+      "go_mod_sum": "h1:vRYWnXvI6aWGpsdY/mOT/cbeVRBlPWtBNDb7kGR3uKM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/prometheus/procfs",
+      "version": "v0.22.0",
+      "commit": "e81f9e1a1a27c41b2c23dc1d58b56a85ebb7da4d",
+      "repository": "https://github.com/prometheus/procfs",
+      "ref": "refs/tags/v0.22.0",
+      "sum": "h1:6q9+/JL9IKAPbCmBrv9n5O5Ty3NKnciV5X7YGw0oics=",
+      "go_mod_sum": "h1:CvmFr/GVhIjIvWJZW3tgkODBQMRIf0EyWMQLHCHab58=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/quic-go/qpack",
+      "version": "v0.6.0",
+      "commit": "1661efa70093a118695f62e222b94ce192119092",
+      "repository": "https://github.com/quic-go/qpack",
+      "ref": "refs/tags/v0.6.0",
+      "sum": "h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=",
+      "go_mod_sum": "h1:lUpLKChi8njB4ty2bFLX2x4gzDqXwUpaO1DP9qMDZII=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/quic-go/quic-go",
+      "version": "v0.60.0",
+      "commit": "7612ad1036957cde45d672bebb8b9ec9c2e9b2a7",
+      "repository": "https://github.com/quic-go/quic-go",
+      "ref": "refs/tags/v0.60.0",
+      "sum": "h1:xcQioE8OM66UQLeUMHltK1CCcOu3JbVB4JAQdDQSB+0=",
+      "go_mod_sum": "h1:wpKpjmPpftl30sL6pFh7REVpjbcCVy4zt2vDyK1TuJk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/remyoudompheng/bigfft",
+      "version": "v0.0.0-20230129092748-24d4a6f8daec",
+      "commit": "24d4a6f8daece64d3c9a7660d4ee0974c4e31021",
+      "repository": "https://github.com/remyoudompheng/bigfft",
+      "ref": null,
+      "sum": "h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=",
+      "go_mod_sum": "h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "version": "v0.49.0",
+      "commit": "da5a26e21c18c706e0cd48cef3e1e5016e00492c",
+      "repository": "https://github.com/riverqueue/river",
+      "ref": "refs/tags/v0.49.0",
+      "sum": "h1:JUCLFgregbX1Wu+bSTHCjF/WHGdrwGbtz/ddInHfeb0=",
+      "go_mod_sum": "h1:USYb57gpMBXLQm2l7poskAalOPaf5uHjSZgp2AOoYDw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/riverqueue/river/riverdriver",
+      "version": "v0.49.0",
+      "commit": "da5a26e21c18c706e0cd48cef3e1e5016e00492c",
+      "repository": "https://github.com/riverqueue/river",
+      "ref": "refs/tags/riverdriver/v0.49.0",
+      "sum": "h1:kSykNQJNB7AeG6kudjB0mThV29PvykoOBIFT8ipCHEc=",
+      "go_mod_sum": "h1:rVUuX/fTF2kAiJjpPT+10Lft8n90kvLqjm6b+rFXaVE=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/riverqueue/river/riverdriver/riverpgxv5",
+      "version": "v0.49.0",
+      "commit": "da5a26e21c18c706e0cd48cef3e1e5016e00492c",
+      "repository": "https://github.com/riverqueue/river",
+      "ref": "refs/tags/riverdriver/riverpgxv5/v0.49.0",
+      "sum": "h1:c7YA1plP/nrNS3SEHuKizf4wHx9OQ87Yxuhj3V0eQ50=",
+      "go_mod_sum": "h1:o7zkFstM+Fk+mnlOW2sx92mQW4JswSc6zvN191l8Isg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivershared",
+      "version": "v0.49.0",
+      "commit": "da5a26e21c18c706e0cd48cef3e1e5016e00492c",
+      "repository": "https://github.com/riverqueue/river",
+      "ref": "refs/tags/rivershared/v0.49.0",
+      "sum": "h1:wnCYVwftMiu85kT1JrUPKEgujKkBIWoRtSNZJTUtotY=",
+      "go_mod_sum": "h1:E8UzQAdDutFT8rVL1wZeNbuphmIS81TgngU7/1F4U5E=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/riverqueue/river/rivertype",
+      "version": "v0.49.0",
+      "commit": "da5a26e21c18c706e0cd48cef3e1e5016e00492c",
+      "repository": "https://github.com/riverqueue/river",
+      "ref": "refs/tags/rivertype/v0.49.0",
+      "sum": "h1:3up3P2DtOqnM2yEYSC1xeK9AjrljOtIfl10yZlaF4aM=",
+      "go_mod_sum": "h1:XKkcRQR6zm8RR/JQa1Q2ywpj8uXQu21quPa4Lpw1Xhw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/robfig/cron/v3",
+      "version": "v3.0.1",
+      "commit": "ccba498c397bb90a9c84945bbb0f7af2d72b6309",
+      "repository": "https://github.com/robfig/cron",
+      "ref": null,
+      "sum": "h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=",
+      "go_mod_sum": "h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/rogpeppe/fastuuid",
+      "version": "v1.2.0",
+      "commit": "10c3923834d38e951ae8f627bfec2dc632c5b6cb",
+      "repository": "https://github.com/rogpeppe/fastuuid",
+      "ref": null,
+      "sum": "h1:Ppwyp6VYCF1nvBTXL3trRso7mXMlRrw9ooo375wvi2s=",
+      "go_mod_sum": "h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/rogpeppe/go-internal",
+      "version": "v1.14.1",
+      "commit": "9ee3698d19c525c9cefe855433e5f6096b77c6f5",
+      "repository": "https://github.com/rogpeppe/go-internal",
+      "ref": "refs/tags/v1.14.1",
+      "sum": "h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=",
+      "go_mod_sum": "h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/segmentio/asm",
+      "version": "v1.2.1",
+      "commit": "1cfacc81a878d4a07b13f51f2368cd86893d23fa",
+      "repository": "https://github.com/segmentio/asm",
+      "ref": "refs/tags/v1.2.1",
+      "sum": "h1:DTNbBqs57ioxAD4PrArqftgypG4/qNpXoJx8TVXxPR0=",
+      "go_mod_sum": "h1:BqMnlJP91P8d+4ibuonYZw9mfnzI9HfxselHZr5aAcs=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/sethvargo/go-retry",
+      "version": "v0.4.0",
+      "commit": "d3eb50afd37a09a9c0606c218d0dbe06e29d1544",
+      "repository": "https://github.com/sethvargo/go-retry",
+      "ref": "refs/tags/v0.4.0",
+      "sum": "h1:9qy1OoIAxBL+gBYnkTnTnWle5wlfsXQlwRzIbbpdqPw=",
+      "go_mod_sum": "h1:tvsjdKG6xfiCx4LSiUZ06kcv38xvdVQwv8R6/VnnVWg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/shopspring/decimal",
+      "version": "v1.4.0",
+      "commit": "a2e78c6cff3451d68a784428ce443e5a9021a89f",
+      "repository": "https://github.com/shopspring/decimal",
+      "ref": "refs/tags/v1.4.0",
+      "sum": "h1:bxl37RwXBklmTi0C79JfXCEBD1cqqHt0bbgBAGFp81k=",
+      "go_mod_sum": "h1:gawqmDU56v4yIKSwfBSFip1HdCCXN8/+DMd9qYNcwME=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/spf13/cobra",
+      "version": "v1.10.2",
+      "commit": "88b30ab89da2d0d0abb153818746c5a2d30eccec",
+      "repository": "https://github.com/spf13/cobra",
+      "ref": "refs/tags/v1.10.2",
+      "sum": "h1:DMTTonx5m65Ic0GOoRY2c16WCbHxOOw6xxezuLaBpcU=",
+      "go_mod_sum": "h1:7C1pvHqHw5A4vrJfjNwvOdzYu0Gml16OCs2GRiTUUS4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/spf13/pflag",
+      "version": "v1.0.10",
+      "commit": "0491e5702ad2bb108bc519a5221bcc0f52aa9564",
+      "repository": "https://github.com/spf13/pflag",
+      "ref": "refs/tags/v1.0.10",
+      "sum": "h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=",
+      "go_mod_sum": "h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/spiffe/go-spiffe/v2",
+      "version": "v2.7.0",
+      "commit": "76b14bd4140aac9bef74b27a77c81333c47feee1",
+      "repository": "https://github.com/spiffe/go-spiffe",
+      "ref": "refs/tags/v2.7.0",
+      "sum": "h1:uXe1MflJoHw58wAUvxVlcM7WpKtijWG7I1UidcGh6g4=",
+      "go_mod_sum": "h1:47Q0Q9/AqGha8QLHp+kxpH4Wca7X7EnOtlIJy3mxZ3U=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/stretchr/objx",
+      "version": "v0.5.3",
+      "commit": "b152998cb1395c270b4ae1659971578328983793",
+      "repository": "https://github.com/stretchr/objx",
+      "ref": "refs/tags/v0.5.3",
+      "sum": "h1:jmXUvGomnU1o3W/V5h2VEradbpJDwGrzugQQvL0POH4=",
+      "go_mod_sum": "h1:rDQraq+vQZU7Fde9LOZLr8Tax6zZvy4kuNKF+QYS+U0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/stretchr/testify",
+      "version": "v1.12.1",
+      "commit": "959dbdacf1533e155162811ea90c90117a420463",
+      "repository": "https://github.com/stretchr/testify",
+      "ref": "refs/tags/v1.12.1",
+      "sum": "h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=",
+      "go_mod_sum": "h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/tidwall/gjson",
+      "version": "v1.19.0",
+      "commit": "0fac2c9aa6eb5d5564bfaaaad513ce0d5d2314de",
+      "repository": "https://github.com/tidwall/gjson",
+      "ref": "refs/tags/v1.19.0",
+      "sum": "h1:xwxm7n691Uf3u5OFjzngavjGTh55KX5q/9w9xHW88JU=",
+      "go_mod_sum": "h1:V37/opeE/JbLUOfH0QTXiNez2l0RUjYUhpT4szFQAfc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/tidwall/match",
+      "version": "v1.2.0",
+      "commit": "afc69bce52e08c02e78156a7697bd808fc868ec5",
+      "repository": "https://github.com/tidwall/match",
+      "ref": "refs/tags/v1.2.0",
+      "sum": "h1:0pt8FlkOwjN2fPt4bIl4BoNxb98gGHN2ObFEDkrfZnM=",
+      "go_mod_sum": "h1:eRSPERbgtNPcGhD8UCthc6PmLEQXEWd3PRB5JTxsfmM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/tidwall/pretty",
+      "version": "v1.2.1",
+      "commit": "9090695766b652478676cc3e55bc3187056b1ff0",
+      "repository": "https://github.com/tidwall/pretty",
+      "ref": "refs/tags/v1.2.1",
+      "sum": "h1:qjsOFOWWQl+N3RsoF5/ssm1pHmJJwhjlSbZ51I6wMl4=",
+      "go_mod_sum": "h1:ITEVvHYasfjBbM0u2Pg8T2nJnzm8xPwvNhhsoaGGjNU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/tidwall/sjson",
+      "version": "v1.2.5",
+      "commit": "b279807a1bad9fa155988667d97a3d2fff4061b5",
+      "repository": "https://github.com/tidwall/sjson",
+      "ref": "refs/tags/v1.2.5",
+      "sum": "h1:kLy8mja+1c9jlljvWTlSazM7cKDRfJuR/bOJhcY5NcY=",
+      "go_mod_sum": "h1:Fvgq9kS/6ociJEDnK0Fk1cpYF4FIW6ZF7LAe+6jwd28=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/tinylib/msgp",
+      "version": "v1.6.4",
+      "commit": "6f99c863451752e6aa9c7aacde4215a471a64242",
+      "repository": "https://github.com/tinylib/msgp",
+      "ref": "refs/tags/v1.6.4",
+      "sum": "h1:mOwYbyYDLPj35mkA2BjjYejgJk9BuHxDdvRnb6v2ZcQ=",
+      "go_mod_sum": "h1:RSp0LW9oSxFut3KzESt5Voq4GVWyS+PSulT77roAqEA=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/tursodatabase/libsql-client-go",
+      "version": "v0.0.0-20260528064733-9d5d30a29a60",
+      "commit": "9d5d30a29a601546f95fc0b35573b3adf4878ec7",
+      "repository": "https://github.com/tursodatabase/libsql-client-go",
+      "ref": null,
+      "sum": "h1:TfQEwhr0Q9t+Bgs0TNk2eHZ9EGD107Mimic0kcoGS1M=",
+      "go_mod_sum": "h1:08inkKyguB6CGGssc/JzhmQWwBgFQBgjlYFjxjRh7nU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/twitchyliquid64/golang-asm",
+      "version": "v0.15.1",
+      "commit": "8d7f1f783b11f9a00f5bcdfcae17f5ac8f22512e",
+      "repository": "https://github.com/twitchyliquid64/golang-asm",
+      "ref": null,
+      "sum": "h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS4MhqMhdFk5YI=",
+      "go_mod_sum": "h1:a1lVb/DtPvCB8fslRZhAngC2+aY1QWCk3Cedj/Gdt08=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/ugorji/go/codec",
+      "version": "v1.3.1",
+      "commit": "abdbcb14375efa8946cc162ffa07e5e602d893c3",
+      "repository": "https://github.com/ugorji/go",
+      "ref": "refs/tags/codec/v1.3.1",
+      "sum": "h1:waO7eEiFDwidsBN6agj1vJQ4AG7lh2yqXyOXqhgQuyY=",
+      "go_mod_sum": "h1:pRBVtBSKl77K30Bv8R2P+cLSGaTtex6fsA2Wjqmfxj4=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/uptrace/bunrouter",
+      "version": "v1.0.23",
+      "commit": "d3ef29e6da21d5900a457ff376552fc0a5ea7e9d",
+      "repository": "https://github.com/uptrace/bunrouter",
+      "ref": "refs/tags/v1.0.23",
+      "sum": "h1:Bi7NKw3uCQkcA/GUCtDNPq5LE5UdR9pe+UyWbjHB/wU=",
+      "go_mod_sum": "h1:O3jAcl+5qgnF+ejhgkmbceEk0E/mqaK+ADOocdNpY8M=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/valyala/bytebufferpool",
+      "version": "v1.0.0",
+      "commit": "e746df99fe4a3986f4d4f79e13c1e0117ce9c2f7",
+      "repository": "https://github.com/valyala/bytebufferpool",
+      "ref": null,
+      "sum": "h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=",
+      "go_mod_sum": "h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/valyala/fasthttp",
+      "version": "v1.72.0",
+      "commit": "37a31d78c5d221b24b9cb6652481b5acd4dd674f",
+      "repository": "https://github.com/valyala/fasthttp",
+      "ref": "refs/tags/v1.72.0",
+      "sum": "h1:R7kYdoWhn1ye1fVpP+cDHDJwYm3NkwLliwgzJ/Abg7M=",
+      "go_mod_sum": "h1:zsbLTYqcpIktdQytlVBwIjY9La5d6bs990nBxWg8efk=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/valyala/fasttemplate",
+      "version": "v1.2.2",
+      "commit": "2a2d1afadadf9715bfa19683cdaeac8347e5d9f9",
+      "repository": "https://github.com/valyala/fasttemplate",
+      "ref": "refs/tags/v1.2.2",
+      "sum": "h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQD0Loo=",
+      "go_mod_sum": "h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+qRAEEKiv+SiQ=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/vertica/vertica-sql-go",
+      "version": "v1.3.8",
+      "commit": "8d0b7b159d40fbffafcdfa9fae4e46d0866a1c86",
+      "repository": "https://github.com/vertica/vertica-sql-go",
+      "ref": "refs/tags/v1.3.8",
+      "sum": "h1:FomjkM3cam9yE6zSic31flNWPLdsZbYGK9ihlLtbF1Y=",
+      "go_mod_sum": "h1:c4OZ8lq1Ztc18w8a0nG+dzQh69BzJRcKN2LZOnYbERI=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/x448/float16",
+      "version": "v0.8.4",
+      "commit": "cb9afec31f2649663ebb64da5c6c32c3d365c3ca",
+      "repository": "https://github.com/x448/float16",
+      "ref": null,
+      "sum": "h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=",
+      "go_mod_sum": "h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "github.com/xhit/go-str2duration/v2",
+      "version": "v2.1.0",
+      "commit": "017325bfda0895fe02177e4ebb07962e58735bbf",
+      "repository": "https://github.com/xhit/go-str2duration",
+      "ref": "refs/tags/v2.1.0",
+      "sum": "h1:lxklc02Drh6ynqX+DdPyp5pCKLUQpRT8bp8Ydu2Bstc=",
+      "go_mod_sum": "h1:ohY8p+0f07DiV6Em5LKB0s2YpLtXVyJfNt1+BlmyAsU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/xyproto/randomstring",
+      "version": "v1.2.0",
+      "commit": "602266555c19dae842ae74308d6de6856575931e",
+      "repository": "https://github.com/xyproto/randomstring",
+      "ref": "refs/tags/v1.2.0",
+      "sum": "h1:y7PXAEBM3XlwJjPG2JQg4voxBYZ4+hPgRdGKCfU8wik=",
+      "go_mod_sum": "h1:rgmS5DeNXLivK7YprL0pY+lTuhNQW3iGxZ18UQApw/E=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/ydb-platform/ydb-go-genproto",
+      "version": "v0.0.0-20260810123728-f0c151ab31b9",
+      "commit": "f0c151ab31b93f2d9955b54492067c65eb7c4a7c",
+      "repository": "https://github.com/ydb-platform/ydb-go-genproto",
+      "ref": null,
+      "sum": "h1:WcjfLaNwBZzyl0a/2Ms+tucKRZvulR1HMXM9V7evjLc=",
+      "go_mod_sum": "h1:Er+FePu1dNUieD+XTMDduGpQuCPssK5Q4BjF+IIXJ3I=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/ydb-platform/ydb-go-sdk/v3",
+      "version": "v3.151.1",
+      "commit": "a998ffdb23e984d1e0354430f55afe00c71c9fd4",
+      "repository": "https://github.com/ydb-platform/ydb-go-sdk",
+      "ref": "refs/tags/v3.151.1",
+      "sum": "h1:T+fB2ZDHpYIGC7DWjK+rzZHLoexBF0zG/n3Q9DGNskY=",
+      "go_mod_sum": "h1:dJXJ1u00IqO8Vsph8fWmYj8b1E7jyphnvJPqA69emBY=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/yuin/goldmark/v2",
+      "version": "v2.1.6",
+      "commit": "a8d4ee5a0bd7d5493fdd1e339b4e75df92f8684c",
+      "repository": "https://github.com/yuin/goldmark",
+      "ref": "refs/tags/v2.1.6",
+      "sum": "h1:igy0q9JcqovoFXFx/XjtU8sHVhcUHavPj2sA3EoKJUE=",
+      "go_mod_sum": "h1:G6M4/qOFtfn01/o14BU1UR2Lo5N3S9Qo7xCuz/sHjGQ=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/ziutek/mymysql",
+      "version": "v1.5.4",
+      "commit": "e08c2f35356576b3c3690c252fe5dca728ae9292",
+      "repository": "https://github.com/ziutek/mymysql",
+      "ref": null,
+      "sum": "h1:GB0qdRGsTwQSBVYuVShFBKaXSnSnYYC2d9knnE1LHFs=",
+      "go_mod_sum": "h1:LMSpPZ6DbqWFxNCHW77HeMg9I646SAhApZ/wKdgO/C0=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "go.mongodb.org/mongo-driver/v2",
+      "version": "v2.8.0",
+      "commit": "b724f0afb06709bb78997060a3bbf89b5a9bfe95",
+      "repository": "https://github.com/mongodb/mongo-go-driver.git",
+      "ref": "refs/tags/v2.8.0",
+      "sum": "h1:CxWDGQYY8QQwNjAl/aq2sfWakdnWZynnqJ9F4DhHbP8=",
+      "go_mod_sum": "h1:yOI9kBsufol30iFsl1slpdq1I0eHPzybRWdyYUs8K/0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/auto/sdk",
+      "version": "v1.2.1",
+      "commit": "715f58ce2f17e2176b8e53b871e47531a259cc1d",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go-instrumentation",
+      "ref": "refs/tags/sdk/v1.2.1",
+      "sum": "h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=",
+      "go_mod_sum": "h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/contrib/detectors/gcp",
+      "version": "v1.44.0",
+      "commit": "03b2bcdb54b3dde73c9ff91ae216aec262f6c8f5",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go-contrib",
+      "ref": "refs/tags/detectors/gcp/v1.44.0",
+      "sum": "h1:NmLfL734pJhM0JKaYd2Y28+nY9dPRWYAAbxhRCrKXPw=",
+      "go_mod_sum": "h1:tNAsgd8avTGke1+MndXlU5Cru4PQ9Ai/cCNWQv/ZJ/s=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc",
+      "version": "v0.70.0",
+      "commit": "c8a87a60ba1b3374fd16df11fc3eeae6c41abbc9",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go-contrib",
+      "ref": "refs/tags/instrumentation/google.golang.org/grpc/otelgrpc/v0.70.0",
+      "sum": "h1:oECp5f+hN7nkwjU/8BxQ/q23bGPb8FIrD839owX222E=",
+      "go_mod_sum": "h1:DqEFwLumhzMBDQv9PcWbyoDxHI/4lAk6CM4nJBH39sc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+      "version": "v0.72.0",
+      "commit": "0c76f6137a2ceea80984d55e3de165924d823f71",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go-contrib",
+      "ref": "refs/tags/instrumentation/net/http/otelhttp/v0.72.0",
+      "sum": "h1:LxwW/9ctSCv+QkE/cLR7M91ZIkXNMqJtEMi1vCw9U8s=",
+      "go_mod_sum": "h1:tOsftB4SslBwwErVEPaenU2RpThXWPIU8DoJHEC4dyw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/v1.47.0",
+      "sum": "h1:j7ALJ/zgkS7Z6aeJW09p8VC9804bC+PpeTfCD4XPnOM=",
+      "go_mod_sum": "h1:8wS9O2qfXrYrzp6hIF/HOYJJf/wIhFPhR2xLuP+iXQU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/exporters/otlp/otlptrace",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/exporters/otlp/otlptrace/v1.47.0",
+      "sum": "h1:julhjPeUH/q/7hinbSdDdqt5h7Zw9YWmRlWRhI0jd54=",
+      "go_mod_sum": "h1:Ao2mz688LH/tFf0yMAenidq6k2YNSx6SIY2q6jDACck=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/exporters/otlp/otlptrace/otlptracehttp/v1.47.0",
+      "sum": "h1:aXZXsZ012wOgVkqaiQv+Z/d8V0xKjmg70F6m4CE94lc=",
+      "go_mod_sum": "h1:ziu1gUIJhAaxM3EV1e3Ralk5AAyL1UOYz3lJJ4VSI38=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/exporters/prometheus",
+      "version": "v0.69.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/exporters/prometheus/v0.69.0",
+      "sum": "h1:LQVBTGnHvzrfGJpDoCSVTY7eaLZArvaTSq5l84Skxew=",
+      "go_mod_sum": "h1:moif0nlgj/M16NRT8lDZVt8MC52+EOAJfR8EKRJ8LyU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/exporters/stdout/stdouttrace",
+      "version": "v1.45.0",
+      "commit": "93a693edeed0e07ce5ebd1dfe67af42d1e2055d8",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/exporters/stdout/stdouttrace/v1.45.0",
+      "sum": "h1:lsA/S1bxgdbyFGkTj+3meEdJ6ADVU7QoFstV6MXgE68=",
+      "go_mod_sum": "h1:L7u+MirGoB1bjeLH66+xDykF4RC8C3RN7lIFpBiewUo=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/log",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/log/v1.47.0",
+      "sum": "h1:cOTS1CcLbSQeZKanGJ+0JpF/+t4PELi3O3bbl2lqCcI=",
+      "go_mod_sum": "h1:9byitSQ5pLC6PpqwGXjqdMKya6ZTswHRZh2vvXT33nw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/metric",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/metric/v1.47.0",
+      "sum": "h1:4PptaldXx3Eat1XjMZ68pPJEs5wrhlemctZE9a3UdWY=",
+      "go_mod_sum": "h1:ADGSXxRrXM6bjbvLo535EstVFlPpPYZm4LBKixjDHwU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/metric/x",
+      "version": "v0.69.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/metric/x/v0.69.0",
+      "sum": "h1:DjRLr15H83v+hCW7JA9NoJvOkYTtmq5YoDRbe9deYpM=",
+      "go_mod_sum": "h1:uVvsMPMFFyj/HUQfrUnH3JjnOQ1dwFDorgFLRBasM0k=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/sdk",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/sdk/v1.47.0",
+      "sum": "h1:zWXEr4j2lFefG87TU6Yg8a7ngfohIKFZHKp0Hf5hC6I=",
+      "go_mod_sum": "h1:VUc24kiOeoGsxG8G9ULx3fWKvB7jMhnGE8Oi607lgR0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/sdk/metric",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/sdk/metric/v1.47.0",
+      "sum": "h1:lfISg2j93VT6yqdk9OfUaZmw/GfcZqCCV3jdXtsPnKw=",
+      "go_mod_sum": "h1:ypLp+mW1Nt2x+Szt3b5/i1syodyts49lMOwxpDI3VGw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/trace",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "ref": "refs/tags/trace/v1.47.0",
+      "sum": "h1:JOjX/Oci8K94QHddo+bbfya/Ai/nf6/dt9ZfrFNWSrM=",
+      "go_mod_sum": "h1:jNaSLa2PZEYFG6fRjJABAu+bw4FS08uDmPg28lTghu0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/proto/otlp",
+      "version": "v1.11.0",
+      "commit": "bc625d6e040020737ab65c675c87e03bc841fd60",
+      "repository": "https://github.com/open-telemetry/opentelemetry-proto-go",
+      "ref": "refs/tags/otlp/v1.11.0",
+      "sum": "h1:5rrYs0Ykyj50sdU/JU0x8etU+LubXWb+gED6TbEdMIk=",
+      "go_mod_sum": "h1:SmVizdCOAm3XBtG1g1NnOdhW6jtddT72hLMhv8VwA8E=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.uber.org/goleak",
+      "version": "v1.3.0",
+      "commit": "31095c657c34bba405a8d480db27989aa5f60b9c",
+      "repository": "https://github.com/uber-go/goleak",
+      "ref": "refs/tags/v1.3.0",
+      "sum": "h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=",
+      "go_mod_sum": "h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.uber.org/multierr",
+      "version": "v1.11.0",
+      "commit": "de75ae527b39a27afcb50a84427ec7b84021d5f4",
+      "repository": "https://github.com/uber-go/multierr",
+      "ref": "refs/tags/v1.11.0",
+      "sum": "h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=",
+      "go_mod_sum": "h1:20+QtiLqy0Nd6FdQB9TLXag12DsQkrbs3htMFfDN80Y=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.yaml.in/yaml/v2",
+      "version": "v2.4.4",
+      "commit": "43b627a9da72517e91dbcf07cd10dfd6618423d8",
+      "repository": "https://github.com/yaml/go-yaml",
+      "ref": "refs/tags/v2.4.4",
+      "sum": "h1:tuyd0P+2Ont/d6e2rl3be67goVK4R6deVxCUX5vyPaQ=",
+      "go_mod_sum": "h1:gMZqIpDtDqOfM0uNfy0SkpRhvUryYH0Z6wdMYcacYXQ=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.yaml.in/yaml/v3",
+      "version": "v3.0.5",
+      "commit": "e16c7af9361b241fa02d91582fb59ce4954d8afc",
+      "repository": "https://github.com/yaml/go-yaml",
+      "ref": "refs/tags/v3.0.5",
+      "sum": "h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=",
+      "go_mod_sum": "h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/arch",
+      "version": "v0.29.0",
+      "commit": "3272c9030fbd9910980beef07069be5629f57e92",
+      "repository": "https://go.googlesource.com/arch",
+      "ref": "refs/tags/v0.29.0",
+      "sum": "h1:8sSET5wB0+exBm0FGmOtdHMqjlRdV2DRD3/IV6OZgho=",
+      "go_mod_sum": "h1:0X+GdSIP+kL5wPmpK7sdkEVTt2XoYP0cSjQSbZBwOi8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/crypto",
+      "version": "v0.57.0",
+      "commit": "3f62bf119e84c6e35e8518a2958089ade622d1a3",
+      "repository": "https://go.googlesource.com/crypto",
+      "ref": "refs/tags/v0.57.0",
+      "sum": "h1:3ZVCjf8Ggz7zneR/EHRVx68Ctf+2pmIMP2UFhh9cC6M=",
+      "go_mod_sum": "h1:Fdz0i5U6CoizGwLda9DttjSk6qlZo25zYNtR+ycvuZA=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/exp",
+      "version": "v0.0.0-20260824195058-e88cd73687aa",
+      "commit": "e88cd73687aa969fbec16261e6c467ab22a053f2",
+      "repository": "https://go.googlesource.com/exp",
+      "ref": null,
+      "sum": "h1:QSyA8ishJCyT21kER9KwNt0b7BM3iRK4x9QXhjN5Fdk=",
+      "go_mod_sum": "h1:zeBbvyFKDaLwa7CH/zI8KXt7gTl14SF7sO08Pl5jBCM=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/mod",
+      "version": "v0.41.0",
+      "commit": "d0a27b2d4a48460806692bf5c87fc157c3c65292",
+      "repository": "https://go.googlesource.com/mod",
+      "ref": "refs/tags/v0.41.0",
+      "sum": "h1:qJmnOUb4YB+FsEuM3HcWucdZASCPGhsX6uljO6pog0c=",
+      "go_mod_sum": "h1:Ek9pY8RKWXwsWvd3rQiHYtMqkjSUV+s1Rj7j4H5Ur6o=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/net",
+      "version": "v0.60.0",
+      "commit": "18ece0ce30bc35fa81fe72028bf309bb3ff3f4a5",
+      "repository": "https://go.googlesource.com/net",
+      "ref": "refs/tags/v0.60.0",
+      "sum": "h1:79p50tfZlm0J9YfoDsSi639qSXNGVwEzOPLCxM2FsYU=",
+      "go_mod_sum": "h1:2DA/G1UfVbCpQPeWTmMPGY7Cs2PkBkwu743bVX5PIVg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/oauth2",
+      "version": "v0.37.0",
+      "commit": "c624b89dadc3221560b7345c090bbe69e90808ee",
+      "repository": "https://go.googlesource.com/oauth2",
+      "ref": "refs/tags/v0.37.0",
+      "sum": "h1:JUlcxA8oAtauLfiH8FX2/FkAWHAdi0QtGCGc+hofE98=",
+      "go_mod_sum": "h1:IxwZNxUULJmpBFf9K/9NTMSIfZZuvuTy1gGxhigP/58=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/sync",
+      "version": "v0.24.0",
+      "commit": "36f2d70ecde9857dc4e363242a1369c7645d6770",
+      "repository": "https://go.googlesource.com/sync",
+      "ref": "refs/tags/v0.24.0",
+      "sum": "h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=",
+      "go_mod_sum": "h1:sUUOizhqBxiL6pEWpqNLUiaJn1ShEbZ6BBqskPbjZm0=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/sys",
+      "version": "v0.48.0",
+      "commit": "613e2570718ecde85c04e69ebd5585c3881c442c",
+      "repository": "https://go.googlesource.com/sys",
+      "ref": "refs/tags/v0.48.0",
+      "sum": "h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=",
+      "go_mod_sum": "h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/term",
+      "version": "v0.46.0",
+      "commit": "6226200ed12cba417a9d9e799c2a7179d3fc0e27",
+      "repository": "https://go.googlesource.com/term",
+      "ref": "refs/tags/v0.46.0",
+      "sum": "h1:3+OXuTbaKDgwk8jTi3aSLHRlmWqHEUDUtxnbFigO4YE=",
+      "go_mod_sum": "h1:+K02xbkittuwc0Am4abfA3Fc+XRGXkvBXNO88NCXPoc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/text",
+      "version": "v0.43.0",
+      "commit": "ac40b0f06c159afb5bfca4d1860f8b4b60dbc160",
+      "repository": "https://go.googlesource.com/text",
+      "ref": "refs/tags/v0.43.0",
+      "sum": "h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=",
+      "go_mod_sum": "h1:hbSIYA/amXcRXTFSZqh8tWHEoqRvvbKPJ2uz/KU+a+s=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/tools",
+      "version": "v0.51.0",
+      "commit": "ea2f152dc35325e4b9b639583972375972350a84",
+      "repository": "https://go.googlesource.com/tools",
+      "ref": "refs/tags/v0.51.0",
+      "sum": "h1:k4Xc/1Om9jwkBJBo4NVLMSARBoWtK10mx+W5BnXCeAI=",
+      "go_mod_sum": "h1:9eEncMayCV6zRMGhR5eZEC2iBx98qWcF1HZ9Z7wJOoA=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "gonum.org/v1/gonum",
+      "version": "v0.17.0",
+      "commit": "fc402bc485e3a92f8d4f1f0ee5a49e2edf232ed2",
+      "repository": "https://github.com/gonum/gonum",
+      "ref": "refs/tags/v0.17.0",
+      "sum": "h1:VbpOemQlsSMrYmn7T2OUvQ4dqxQXU+ouZFQsZOx50z4=",
+      "go_mod_sum": "h1:El3tOrEuMpv2UdMrbNlKEh9vd86bmQ6vqIcDwxEOc1E=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "google.golang.org/genproto/googleapis/api",
+      "version": "v0.0.0-20260928230214-8a89bd6388cc",
+      "commit": "8a89bd6388cc9f960fc7076f7e2a43f96ad592e9",
+      "repository": "https://github.com/googleapis/go-genproto",
+      "ref": null,
+      "sum": "h1:rZHRz0ogq4Pid1IKtA/ivHi8XONVF5tqUQXA2TtgpkE=",
+      "go_mod_sum": "h1:K/n0XLazCJHjD73YuMyNJsN38BPPy1kfFnKxUXaThFU=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "google.golang.org/genproto/googleapis/rpc",
+      "version": "v0.0.0-20260928230214-8a89bd6388cc",
+      "commit": "8a89bd6388cc9f960fc7076f7e2a43f96ad592e9",
+      "repository": "https://github.com/googleapis/go-genproto",
+      "ref": null,
+      "sum": "h1:4bNTbnb44EqGVy9HaQxSY2jnafSUdgV3qHtedvNpDKg=",
+      "go_mod_sum": "h1:OaIUM3+LpYcK2GXM4FTmhWoIq371Owdr+Cc7/BsYHHc=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "google.golang.org/grpc",
+      "version": "v1.83.2",
+      "commit": "030ee8becb20ce4315d6bf2dfa26bdd876169dc4",
+      "repository": "https://github.com/grpc/grpc-go",
+      "ref": "refs/tags/v1.83.2",
+      "sum": "h1:EManeRomTObA0BU7I8vXgg/78uE5MJ9M8B39EX2WscU=",
+      "go_mod_sum": "h1:YPI1hK3kDked6iHvgX3tR0y+nX/qpMFKhPgFsokw1S8=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "google.golang.org/protobuf",
+      "version": "v1.36.12",
+      "commit": "cdd4c5f7406e82462949c7a65defa9f3029c162d",
+      "repository": "https://go.googlesource.com/protobuf",
+      "ref": "refs/tags/v1.36.12",
+      "sum": "h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=",
+      "go_mod_sum": "h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "gopkg.in/check.v1",
+      "version": "v1.0.0-20201130134442-10cb98267c6c",
+      "commit": "10cb98267c6cb43ea9cd6793f29ff4089c306974",
+      "repository": "https://gopkg.in/check.v1",
+      "ref": null,
+      "sum": "h1:Hei/4ADfdWqJk1ZMxUNpqntNwaWcugrBjAiHlqqRiVk=",
+      "go_mod_sum": "h1:JHkPIbrfpd72SG/EVd6muEfDQjcINNoR0C8j2r3qZ4Q=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "gopkg.in/yaml.v3",
+      "version": "v3.0.1",
+      "commit": "f6f7691b1fdeb513f56608cd2c32c51f8194bf51",
+      "repository": "https://gopkg.in/yaml.v3",
+      "ref": null,
+      "sum": "h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=",
+      "go_mod_sum": "h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=",
+      "pin_source": "Matching version in Loom lock"
+    },
+    {
+      "module": "howett.net/plist",
+      "version": "v1.0.1",
+      "commit": "5afcd134990e1c90a92bac94906f74af0b10042d",
+      "repository": "https://github.com/DHowett/go-plist.git",
+      "ref": "refs/tags/v1.0.1",
+      "sum": "h1:37GdZ8tP09Q35o9ych3ehygcsL+HqKSwzctveSlarvM=",
+      "go_mod_sum": "h1:lqaXoTrLY4hg8tnEzNru53gicrbv7rrk+2xJA/7hw9g=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "modernc.org/libc",
+      "version": "v1.75.6",
+      "commit": "f4e070f67594be56f29655f63ab2c1862345a8be",
+      "repository": "https://gitlab.com/cznic/libc",
+      "ref": "refs/tags/v1.75.6",
+      "sum": "h1:yKk8qo+Di4gkmvRboK8ocCqH22FiUCR6jRy2OwtCRus=",
+      "go_mod_sum": "h1:bO5o2ztHxBb2rjz0PgdHN0sSMw57CgxGFLZ3Qd/QpVQ=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "modernc.org/mathutil",
+      "version": "v1.7.1",
+      "commit": "28129eec384c30a304561c3c8779e4bb29cbff12",
+      "repository": "https://gitlab.com/cznic/mathutil",
+      "ref": "refs/tags/v1.7.1",
+      "sum": "h1:GCZVGXdaN8gTqB1Mf/usp1Y/hSqgI2vAGGP4jZMCxOU=",
+      "go_mod_sum": "h1:4p5IwJITfppl0G4sUEDtCr4DthTaT47/N3aT6MhfgJg=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "modernc.org/memory",
+      "version": "v1.12.1",
+      "commit": "bb3d99379ed7361ae4c08f11c2876aef046c2a18",
+      "repository": "https://gitlab.com/cznic/memory",
+      "ref": "refs/tags/v1.12.1",
+      "sum": "h1:nFMiWrpStgZczNl6XI9GnIk/rWhYIyHGUaR04pGbp9g=",
+      "go_mod_sum": "h1:/JP4VbVC+K5sU2wZi9bHoq2MAkCnrt2r98UGeSK7Mjw=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "modernc.org/sqlite",
+      "version": "v1.57.0",
+      "commit": "6e86ac4a89e3f36359d1947e36355c469b18430c",
+      "repository": "https://gitlab.com/cznic/sqlite",
+      "ref": "refs/tags/v1.57.0",
+      "sum": "h1:qNQP6xnx5M0ISNtlnxoOX0+cD5bJ0/gr9aMmndFczzg=",
+      "go_mod_sum": "h1:yCJ2cmAaIkHQ25oXWrF8H4O1lIfPYPR26yCEDj2P3pQ=",
+      "pin_source": "Go proxy VCS origin"
+    }
+  ]
+}

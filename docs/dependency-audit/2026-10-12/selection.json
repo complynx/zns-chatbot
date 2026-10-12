@@ -1,0 +1,444 @@
+{
+  "audit_date": "2026-10-12",
+  "captured_at_utc": "2026-10-12T15:15:04.6498679Z",
+  "scope": "Library/tool selection including reserved Telegram client; resolved audit graph is separate",
+  "loom_lock_sha256": "7ff39ff43637f57a0244cca9649b09334a571644a2ddc957231c85aaddc44818",
+  "go": {
+    "version": "go1.27.2",
+    "commit": "022c8636110ebac86a9b88724cda168ed713c21f",
+    "archives": [
+      {
+        "filename": "go1.27.2.src.tar.gz",
+        "sha256": "03495da2ba64894d40f5c4992e49454fa78b50690604ff92b6afff5081b76e62"
+      },
+      {
+        "filename": "go1.27.2.linux-amd64.tar.gz",
+        "sha256": "ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5"
+      },
+      {
+        "filename": "go1.27.2.windows-amd64.zip",
+        "sha256": "1314008898bd40df77af4b014f777f08873dbdfbcd3d92308728ee03304fe04f"
+      }
+    ]
+  },
+  "selected": [
+    {
+      "module": "github.com/danielgtaylor/huma/v2",
+      "version": "v2.39.1",
+      "commit": "198225eaac0c8be4aaa1962d5a9a075d3a6fd062",
+      "repository": "https://github.com/danielgtaylor/huma",
+      "indirect": false,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/go-jose/go-jose/v4",
+      "version": "v4.1.4",
+      "commit": "0e59876635f3dbf46d7b5e97b52bb75a3f96e7d9",
+      "repository": "https://github.com/go-jose/go-jose",
+      "indirect": false,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/google/uuid",
+      "version": "v1.6.0",
+      "commit": "0f11ee6918f41a04c201eceeadf612a377bc7fbc",
+      "repository": "https://github.com/google/uuid",
+      "indirect": false,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "version": "v5.11.0",
+      "commit": "5e583fa7aabfa88b796292f849fc9d7d75ac159d",
+      "repository": "https://github.com/jackc/pgx",
+      "indirect": false,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/pressly/goose/v3",
+      "version": "v3.28.0",
+      "commit": "43d2d9c819ed6c9ba2b67a86bdf9fc08562495b7",
+      "repository": "https://github.com/pressly/goose",
+      "indirect": false,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "version": "v0.49.0",
+      "commit": "da5a26e21c18c706e0cd48cef3e1e5016e00492c",
+      "repository": "https://github.com/riverqueue/river",
+      "indirect": false,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/riverqueue/river/riverdriver/riverpgxv5",
+      "version": "v0.49.0",
+      "commit": "da5a26e21c18c706e0cd48cef3e1e5016e00492c",
+      "repository": "https://github.com/riverqueue/river",
+      "indirect": false,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/stretchr/testify",
+      "version": "v1.12.1",
+      "commit": "959dbdacf1533e155162811ea90c90117a420463",
+      "repository": "https://github.com/stretchr/testify",
+      "indirect": false,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "go.yaml.in/yaml/v3",
+      "version": "v3.0.5",
+      "commit": "e16c7af9361b241fa02d91582fb59ce4954d8afc",
+      "repository": "https://github.com/yaml/go-yaml",
+      "indirect": false,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "golang.org/x/sync",
+      "version": "v0.24.0",
+      "commit": "36f2d70ecde9857dc4e363242a1369c7645d6770",
+      "repository": "https://go.googlesource.com/sync",
+      "indirect": true,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "golang.org/x/text",
+      "version": "v0.43.0",
+      "commit": "ac40b0f06c159afb5bfca4d1860f8b4b60dbc160",
+      "repository": "https://go.googlesource.com/text",
+      "indirect": true,
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/sqlc-dev/sqlc",
+      "version": "v1.31.1",
+      "commit": "a95e91d70ad9e1181253c333a1cfdd75ae4b95a5",
+      "repository": "https://github.com/sqlc-dev/sqlc",
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/golangci/golangci-lint/v2",
+      "version": "v2.14.0",
+      "commit": "114493f9b3e7257d29e4130f2b4a4aadefbb6845",
+      "repository": "https://github.com/golangci/golangci-lint",
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/google/go-licenses/v2",
+      "version": "v2.0.1",
+      "commit": "3e084b0caf710f7bfead967567539214f598c0a2",
+      "repository": "https://github.com/google/go-licenses",
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "golang.org/x/vuln",
+      "version": "v1.8.0",
+      "commit": "709015412431dd2b5b28a53c06c70bc02d49074c",
+      "repository": "https://go.googlesource.com/vuln",
+      "pin_source": "Loom lock"
+    },
+    {
+      "module": "github.com/go-telegram/bot",
+      "version": "v1.27.0",
+      "commit": "6215b5e99a68127014f19a5d58f86befd2946f45",
+      "repository": "https://github.com/go-telegram/bot",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/yuin/goldmark/v2",
+      "version": "v2.1.6",
+      "commit": "a8d4ee5a0bd7d5493fdd1e339b4e75df92f8684c",
+      "repository": "https://github.com/yuin/goldmark",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/nicksnyder/go-i18n/v2",
+      "version": "v2.6.1",
+      "commit": "4d19ec6ddbb40b67e6a3cff1055b1ef004f1d48e",
+      "repository": "https://github.com/nicksnyder/go-i18n",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/sdk",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/sdk/metric",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/exporters/prometheus",
+      "version": "v0.69.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+      "version": "v0.72.0",
+      "commit": "0c76f6137a2ceea80984d55e3de165924d823f71",
+      "repository": "https://github.com/open-telemetry/opentelemetry-go-contrib",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "github.com/prometheus/client_golang",
+      "version": "v1.25.0",
+      "commit": "0d88875bc7494ed8414e067756ff3399e3068c64",
+      "repository": "https://github.com/prometheus/client_golang",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "go.uber.org/goleak",
+      "version": "v1.3.0",
+      "commit": "31095c657c34bba405a8d480db27989aa5f60b9c",
+      "repository": "https://github.com/uber-go/goleak",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
+      "module": "golang.org/x/net",
+      "version": "v0.60.0",
+      "commit": "18ece0ce30bc35fa81fe72028bf309bb3ff3f4a5",
+      "repository": "https://github.com/golang/net",
+      "pin_source": "Go proxy VCS origin"
+    }
+  ],
+  "license_notices": [
+    {
+      "module": "github.com/danielgtaylor/huma/v2",
+      "version": "v2.39.1",
+      "commit": "198225eaac0c8be4aaa1962d5a9a075d3a6fd062",
+      "source": "https://raw.githubusercontent.com/danielgtaylor/huma/198225eaac0c8be4aaa1962d5a9a075d3a6fd062/LICENSE.md",
+      "file": "github.com_danielgtaylor_huma_v2.LICENSE",
+      "sha256": "8581fc55ebc53d30053517be42affdd6a9cb829188d054d0846b85201e21583d"
+    },
+    {
+      "module": "github.com/go-jose/go-jose/v4",
+      "version": "v4.1.4",
+      "commit": "0e59876635f3dbf46d7b5e97b52bb75a3f96e7d9",
+      "source": "https://raw.githubusercontent.com/go-jose/go-jose/0e59876635f3dbf46d7b5e97b52bb75a3f96e7d9/LICENSE",
+      "file": "github.com_go-jose_go-jose_v4.LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "module": "github.com/google/uuid",
+      "version": "v1.6.0",
+      "commit": "0f11ee6918f41a04c201eceeadf612a377bc7fbc",
+      "source": "https://raw.githubusercontent.com/google/uuid/0f11ee6918f41a04c201eceeadf612a377bc7fbc/LICENSE",
+      "file": "github.com_google_uuid.LICENSE",
+      "sha256": "0a8d61ed3cbfd5312326e8126c31ce9c627a283adc99131b56896d29ada04b2d"
+    },
+    {
+      "module": "github.com/jackc/pgx/v5",
+      "version": "v5.11.0",
+      "commit": "5e583fa7aabfa88b796292f849fc9d7d75ac159d",
+      "source": "https://raw.githubusercontent.com/jackc/pgx/5e583fa7aabfa88b796292f849fc9d7d75ac159d/LICENSE",
+      "file": "github.com_jackc_pgx_v5.LICENSE",
+      "sha256": "467f95e074fe23079a5623ed652619682692041b8551da27e3c2ddb9659a1507"
+    },
+    {
+      "module": "github.com/pressly/goose/v3",
+      "version": "v3.28.0",
+      "commit": "43d2d9c819ed6c9ba2b67a86bdf9fc08562495b7",
+      "source": "https://raw.githubusercontent.com/pressly/goose/43d2d9c819ed6c9ba2b67a86bdf9fc08562495b7/LICENSE",
+      "file": "github.com_pressly_goose_v3.LICENSE",
+      "sha256": "f23985556a879c0e68bb4e136ee4b88a550d26fa33db77a65d76b721c93093ef"
+    },
+    {
+      "module": "github.com/riverqueue/river",
+      "version": "v0.49.0",
+      "commit": "da5a26e21c18c706e0cd48cef3e1e5016e00492c",
+      "source": "https://raw.githubusercontent.com/riverqueue/river/da5a26e21c18c706e0cd48cef3e1e5016e00492c/LICENSE",
+      "file": "github.com_riverqueue_river.LICENSE",
+      "sha256": "393eaf2b92b3d49bea139e39b6fd205b6e99c499999986aec5554586a830dfdd"
+    },
+    {
+      "module": "github.com/riverqueue/river/riverdriver/riverpgxv5",
+      "version": "v0.49.0",
+      "commit": "da5a26e21c18c706e0cd48cef3e1e5016e00492c",
+      "source": "https://raw.githubusercontent.com/riverqueue/river/da5a26e21c18c706e0cd48cef3e1e5016e00492c/LICENSE",
+      "file": "github.com_riverqueue_river_riverdriver_riverpgxv5.LICENSE",
+      "sha256": "393eaf2b92b3d49bea139e39b6fd205b6e99c499999986aec5554586a830dfdd"
+    },
+    {
+      "module": "github.com/stretchr/testify",
+      "version": "v1.12.1",
+      "commit": "959dbdacf1533e155162811ea90c90117a420463",
+      "source": "https://raw.githubusercontent.com/stretchr/testify/959dbdacf1533e155162811ea90c90117a420463/LICENSE",
+      "file": "github.com_stretchr_testify.LICENSE",
+      "sha256": "f8e536c1c7b695810427095dc85f5f80d44ff7c10535e8a9486cf393e2599189"
+    },
+    {
+      "module": "go.yaml.in/yaml/v3",
+      "version": "v3.0.5",
+      "commit": "e16c7af9361b241fa02d91582fb59ce4954d8afc",
+      "source": "https://raw.githubusercontent.com/yaml/go-yaml/e16c7af9361b241fa02d91582fb59ce4954d8afc/LICENSE",
+      "file": "go.yaml.in_yaml_v3.LICENSE",
+      "sha256": "d18f6323b71b0b768bb5e9616e36da390fbd39369a81807cca352de4e4e6aa0b"
+    },
+    {
+      "module": "golang.org/x/sync",
+      "version": "v0.24.0",
+      "commit": "36f2d70ecde9857dc4e363242a1369c7645d6770",
+      "source": "https://raw.githubusercontent.com/golang/sync/36f2d70ecde9857dc4e363242a1369c7645d6770/LICENSE",
+      "file": "golang.org_x_sync.LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "module": "golang.org/x/text",
+      "version": "v0.43.0",
+      "commit": "ac40b0f06c159afb5bfca4d1860f8b4b60dbc160",
+      "source": "https://raw.githubusercontent.com/golang/text/ac40b0f06c159afb5bfca4d1860f8b4b60dbc160/LICENSE",
+      "file": "golang.org_x_text.LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "module": "github.com/sqlc-dev/sqlc",
+      "version": "v1.31.1",
+      "commit": "a95e91d70ad9e1181253c333a1cfdd75ae4b95a5",
+      "source": "https://raw.githubusercontent.com/sqlc-dev/sqlc/a95e91d70ad9e1181253c333a1cfdd75ae4b95a5/LICENSE",
+      "file": "github.com_sqlc-dev_sqlc.LICENSE",
+      "sha256": "fc69a4525f6f7e79675fba3645351f2cdaf9331978e72d44155634575a4455ea"
+    },
+    {
+      "module": "github.com/golangci/golangci-lint/v2",
+      "version": "v2.14.0",
+      "commit": "114493f9b3e7257d29e4130f2b4a4aadefbb6845",
+      "source": "https://raw.githubusercontent.com/golangci/golangci-lint/114493f9b3e7257d29e4130f2b4a4aadefbb6845/LICENSE",
+      "file": "github.com_golangci_golangci-lint_v2.LICENSE",
+      "sha256": "8b1ba204bb69a0ade2bfcf65ef294a920f6bb361b317dba43c7ef29d96332b9b"
+    },
+    {
+      "module": "github.com/google/go-licenses/v2",
+      "version": "v2.0.1",
+      "commit": "3e084b0caf710f7bfead967567539214f598c0a2",
+      "source": "https://raw.githubusercontent.com/google/go-licenses/3e084b0caf710f7bfead967567539214f598c0a2/LICENSE",
+      "file": "github.com_google_go-licenses_v2.LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "module": "golang.org/x/vuln",
+      "version": "v1.8.0",
+      "commit": "709015412431dd2b5b28a53c06c70bc02d49074c",
+      "source": "https://raw.githubusercontent.com/golang/vuln/709015412431dd2b5b28a53c06c70bc02d49074c/LICENSE",
+      "file": "golang.org_x_vuln.LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    },
+    {
+      "module": "github.com/go-telegram/bot",
+      "version": "v1.27.0",
+      "commit": "6215b5e99a68127014f19a5d58f86befd2946f45",
+      "source": "https://raw.githubusercontent.com/go-telegram/bot/6215b5e99a68127014f19a5d58f86befd2946f45/LICENSE",
+      "file": "github.com_go-telegram_bot.LICENSE",
+      "sha256": "aa3347b145366b8f6802adf800e7bbd8637174b436cc9495925fb60fd26b4ae3"
+    },
+    {
+      "module": "github.com/yuin/goldmark/v2",
+      "version": "v2.1.6",
+      "commit": "a8d4ee5a0bd7d5493fdd1e339b4e75df92f8684c",
+      "source": "https://raw.githubusercontent.com/yuin/goldmark/a8d4ee5a0bd7d5493fdd1e339b4e75df92f8684c/LICENSE",
+      "file": "github.com_yuin_goldmark_v2.LICENSE",
+      "sha256": "c1d6f653c38c80294dc7994647ba0dcc508ce64a86996303c804efa2f7982bff"
+    },
+    {
+      "module": "github.com/nicksnyder/go-i18n/v2",
+      "version": "v2.6.1",
+      "commit": "4d19ec6ddbb40b67e6a3cff1055b1ef004f1d48e",
+      "source": "https://raw.githubusercontent.com/nicksnyder/go-i18n/4d19ec6ddbb40b67e6a3cff1055b1ef004f1d48e/LICENSE",
+      "file": "github.com_nicksnyder_go-i18n_v2.LICENSE",
+      "sha256": "8fb3aead091abd1579670cd4d805c7923b66ee97b771148f4ef928a65c259328"
+    },
+    {
+      "module": "go.opentelemetry.io/otel",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go/66cfc9520e205b7d450183532772401bc2b6674c/LICENSE",
+      "file": "go.opentelemetry.io_otel.LICENSE",
+      "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/sdk",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go/66cfc9520e205b7d450183532772401bc2b6674c/LICENSE",
+      "file": "go.opentelemetry.io_otel_sdk.LICENSE",
+      "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/sdk/metric",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go/66cfc9520e205b7d450183532772401bc2b6674c/LICENSE",
+      "file": "go.opentelemetry.io_otel_sdk_metric.LICENSE",
+      "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "version": "v1.47.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go/66cfc9520e205b7d450183532772401bc2b6674c/LICENSE",
+      "file": "go.opentelemetry.io_otel_exporters_otlp_otlptrace_otlptracehttp.LICENSE",
+      "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+    },
+    {
+      "module": "go.opentelemetry.io/otel/exporters/prometheus",
+      "version": "v0.69.0",
+      "commit": "66cfc9520e205b7d450183532772401bc2b6674c",
+      "source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go/66cfc9520e205b7d450183532772401bc2b6674c/LICENSE",
+      "file": "go.opentelemetry.io_otel_exporters_prometheus.LICENSE",
+      "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+    },
+    {
+      "module": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+      "version": "v0.72.0",
+      "commit": "0c76f6137a2ceea80984d55e3de165924d823f71",
+      "source": "https://raw.githubusercontent.com/open-telemetry/opentelemetry-go-contrib/0c76f6137a2ceea80984d55e3de165924d823f71/LICENSE",
+      "file": "go.opentelemetry.io_contrib_instrumentation_net_http_otelhttp.LICENSE",
+      "sha256": "1ae07514be1d7bb33f0698f8d91fb51b8b9fe1463157ec1c72081a49b9bc6f40"
+    },
+    {
+      "module": "github.com/prometheus/client_golang",
+      "version": "v1.25.0",
+      "commit": "0d88875bc7494ed8414e067756ff3399e3068c64",
+      "source": "https://raw.githubusercontent.com/prometheus/client_golang/0d88875bc7494ed8414e067756ff3399e3068c64/LICENSE",
+      "file": "github.com_prometheus_client_golang.LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "module": "go.uber.org/goleak",
+      "version": "v1.3.0",
+      "commit": "31095c657c34bba405a8d480db27989aa5f60b9c",
+      "source": "https://raw.githubusercontent.com/uber-go/goleak/31095c657c34bba405a8d480db27989aa5f60b9c/LICENSE",
+      "file": "go.uber.org_goleak.LICENSE",
+      "sha256": "cea390bdf643a06fbdd99fbab18c50e82c34e7bead0d55bf1168bd0d65b9fa32"
+    },
+    {
+      "module": "golang.org/x/net",
+      "version": "v0.60.0",
+      "commit": "18ece0ce30bc35fa81fe72028bf309bb3ff3f4a5",
+      "source": "https://raw.githubusercontent.com/golang/net/18ece0ce30bc35fa81fe72028bf309bb3ff3f4a5/LICENSE",
+      "file": "golang.org_x_net.LICENSE",
+      "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+    }
+  ]
+}
