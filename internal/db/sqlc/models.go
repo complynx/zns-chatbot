@@ -84,6 +84,17 @@ type ShuttleTask struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type ShuttleTaskResolution struct {
+	TaskID           uuid.UUID          `json:"task_id"`
+	OperationID      string             `json:"operation_id"`
+	Actor            string             `json:"actor"`
+	ExpectedVersion  int64              `json:"expected_version"`
+	ResultingVersion int64              `json:"resulting_version"`
+	Reason           string             `json:"reason"`
+	PreviousState    string             `json:"previous_state"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
 type ShuttleUser struct {
 	ID             uuid.UUID `json:"id"`
 	BotID          int64     `json:"bot_id"`

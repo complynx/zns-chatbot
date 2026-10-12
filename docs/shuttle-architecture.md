@@ -69,6 +69,10 @@ zitadeltg linking still need acceptance. Loom currently performs online
 introspection; continuity during an IAM outage also requires the matching Loom
 cache behavior. A Shuttle token cache alone cannot satisfy that acceptance case.
 Unknown bootstrap/reauthorization outcomes require bounded reconciliation.
+The private operator API exposes safe task/queue metadata and audited local
+closure of uncertain tasks. Closure uses a version check, rejects live leases,
+and preserves unknown effects. The terminal `closed` state prevents worker replay.
+See [step 0](shuttle-step-0.md) for scope and rollback constraints.
 
 Administrative roles come only from the introspection claim for the exact
 Shuttle API project. The flat role claim can belong to another project and is

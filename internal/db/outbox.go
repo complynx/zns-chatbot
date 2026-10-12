@@ -11,6 +11,8 @@ import (
 	"github.com/complynx/shuttle/internal/db/sqlc"
 )
 
+const deliveryUnknown = "delivery_unknown"
+
 func delivery(d sqlc.ShuttleOutbox) Delivery {
 	return Delivery{d.ID, d.TaskID, d.DedupKey, d.ChunkSeq, d.Payload, d.State, uuid.UUID(d.AttemptID.Bytes), d.Receipt}
 }
@@ -46,7 +48,7 @@ func (s *Store) FinishDelivery(
 	state string,
 	receipt json.RawMessage,
 ) (Delivery, error) {
-	if state != "delivered" && state != "delivery_unknown" && state != "retryable" && state != "delivery_failed" {
+	if state != "delivered" && state != deliveryUnknown && state != "retryable" && state != "delivery_failed" {
 		return Delivery{}, fmt.Errorf("invalid delivery outcome")
 	}
 	if len(receipt) == 0 {

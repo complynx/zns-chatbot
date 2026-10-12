@@ -36,6 +36,8 @@ import (
 // These tests exercise real durable acceptance and recovery; upstream services
 // remain HTTP peers so their uncertainty is observed through public behavior.
 type peers struct {
+	adminRole                               bool
+	loseAuth                                bool
 	getEntered                              chan struct{}
 	getRelease                              chan struct{}
 	echoInput                               bool
@@ -109,6 +111,12 @@ func (p *peers) token(subject string) string {
 		"urn:zitadel:iam:user:resourceowner:id": "org",
 		"urn:zitadel:iam:org:project:roles":     map[string]any{"account.me": map[string]string{"org": "Org"}},
 		"urn:zitadel:iam:org:project:api:roles": map[string]any{"account.me": map[string]string{"org": "Org"}},
+	}
+	if p.adminRole {
+		claims["urn:zitadel:iam:org:project:api:roles"] = map[string]any{
+			"account.me":    map[string]string{"org": "Org"},
+			"shuttle.admin": map[string]string{"org": "Org"},
+		}
 	}
 	if subject != "actor" {
 		claims["act"] = map[string]string{"sub": "actor"}
@@ -226,11 +234,7 @@ func (p *peers) agent(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case strings.HasSuffix(r.URL.Path, "/auth/sessions"):
-		if r.Header.Get("X-Subject-Token") == "" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		respond(w, loom.Session{ID: "session", Version: 1, ExpiresAt: time.Now().Add(time.Hour)})
+		p.authSession(w, r)
 	case strings.HasSuffix(r.URL.Path, "/runs") && r.Method == http.MethodPost:
 		p.createRun(w, r)
 	case strings.HasSuffix(r.URL.Path, "/input"):
@@ -378,11 +382,12 @@ func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 }
 
 type harness struct {
-	store   *db.Store
-	peers   *peers
-	service *task.Service
-	server  *httptest.Server
-	iam     *identity.Client
+	store    *db.Store
+	peers    *peers
+	service  *task.Service
+	server   *httptest.Server
+	endpoint *api.Server
+	iam      *identity.Client
 }
 
 func setup(t *testing.T, p *peers) *harness {
@@ -469,6 +474,7 @@ func (h *harness) start(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
+	h.endpoint = endpoint
 	h.server = httptest.NewServer(endpoint.PublicHandler())
 	require.NoError(t, service.Start(context.Background()))
 }
@@ -1293,4 +1299,16 @@ func TestCallbackAcknowledgementDoesNotChangeDurableAcceptance(t *testing.T) {
 	p.mu.Lock()
 	require.Equal(t, []string{"callback-2", "callback-2", "callback-3"}, p.callbackAcks)
 	p.mu.Unlock()
+}
+
+func (p *peers) authSession(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Subject-Token") == "" {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if p.loseAuth {
+		disconnect(w)
+		return
+	}
+	respond(w, loom.Session{ID: "session", Version: 1, ExpiresAt: time.Now().Add(time.Hour)})
 }

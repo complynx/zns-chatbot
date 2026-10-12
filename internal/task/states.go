@@ -5,6 +5,7 @@ import "time"
 const (
 	deliveryDelivered     = "delivered"
 	stateCompleted        = "completed"
+	stateClosed           = "closed"
 	lockLossStopTimeout   = 3 * time.Second
 	kindUnsupported       = "unsupported"
 	kindApproval          = "approval"

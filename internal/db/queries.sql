@@ -70,7 +70,7 @@ SELECT NOT EXISTS (
  AND earlier.target_task_id=current_task.target_task_id
  AND earlier.seq<current_task.seq
  AND earlier.route IN ('input','cancel','approval')
- AND earlier.state NOT IN ('completed','failed','cancelled','delivery_unknown','delivery_failed')
+ AND earlier.state NOT IN ('completed','failed','cancelled','delivery_unknown','delivery_failed','closed')
 ) AS ready;
 -- name: BlockDeliverySuffix :exec
 UPDATE shuttle_outbox SET state='delivery_blocked'
@@ -87,6 +87,31 @@ SELECT EXISTS (
  JOIN shuttle_tasks target ON target.id=earlier.target_task_id
  WHERE earlier.conversation_id=$1 AND earlier.seq<$2
  AND earlier.request->>'kind'='message' AND earlier.route='input'
- AND earlier.state NOT IN ('completed','failed','cancelled','delivery_unknown','delivery_failed')
- AND target.state IN ('completed','failed','cancelled','delivery_unknown','delivery_failed')
+ AND earlier.state NOT IN ('completed','failed','cancelled','delivery_unknown','delivery_failed','closed')
+ AND target.state IN ('completed','failed','cancelled','delivery_unknown','delivery_failed','closed')
 ) AS has_earlier;
+
+-- name: GetAdminTask :one
+SELECT t.* FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+WHERE t.id=sqlc.arg(id) AND u.bot_id=sqlc.arg(bot_id)
+AND (u.zitadel_org='' OR u.zitadel_org=sqlc.arg(org));
+-- name: LockAdminTask :one
+SELECT t.* FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+WHERE t.id=sqlc.arg(id) AND u.bot_id=sqlc.arg(bot_id)
+AND (u.zitadel_org='' OR u.zitadel_org=sqlc.arg(org)) FOR UPDATE OF t;
+-- name: ListAdminTasks :many
+SELECT t.* FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+WHERE u.bot_id=sqlc.arg(bot_id) AND (u.zitadel_org='' OR u.zitadel_org=sqlc.arg(org))
+AND (sqlc.arg(state)::text='' OR t.state=sqlc.arg(state))
+AND (sqlc.arg(after_id)::uuid='00000000-0000-0000-0000-000000000000' OR t.id>sqlc.arg(after_id))
+ORDER BY t.id LIMIT sqlc.arg(page_limit);
+-- name: GetTaskResolution :one
+SELECT * FROM shuttle_task_resolutions WHERE task_id=$1 AND operation_id=$2;
+-- name: ListTaskResolutions :many
+SELECT * FROM shuttle_task_resolutions WHERE task_id=$1 ORDER BY created_at,operation_id;
+-- name: CloseUncertainTask :one
+UPDATE shuttle_tasks SET state='closed',version=version+1,fence=fence+1,lease_owner='',lease_until=NULL
+WHERE id=$1 AND version=$2 AND (lease_until IS NULL OR lease_until<=now()) RETURNING *;
+-- name: InsertTaskResolution :one
+INSERT INTO shuttle_task_resolutions(task_id,operation_id,actor,expected_version,resulting_version,reason,previous_state)
+VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *;

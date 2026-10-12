@@ -74,7 +74,7 @@ func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.O
 func terminal(state string) bool {
 	return state == stateCompleted || state == stateFailed || state == stateCancelled ||
 		state == stateDeliveryUnknown ||
-		state == stateDeliveryFailed
+		state == stateDeliveryFailed || state == stateClosed
 }
 func finishedRun(status string) bool {
 	return terminal(status) || status == "succeeded" || status == "canceled"
@@ -94,6 +94,9 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 		return s.wait()
 	}
 	defer s.releaseTask(ctx, &t)
+	if t.State == stateClosed {
+		return nil
+	}
 	var i intent
 	var c checkpoint
 	if json.Unmarshal(t.Request, &i) != nil || json.Unmarshal(t.Snapshot, &c) != nil {

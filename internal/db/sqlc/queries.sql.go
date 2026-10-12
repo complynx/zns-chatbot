@@ -192,6 +192,42 @@ func (q *Queries) ClearConversationRun(ctx context.Context, arg ClearConversatio
 	return err
 }
 
+const closeUncertainTask = `-- name: CloseUncertainTask :one
+UPDATE shuttle_tasks SET state='closed',version=version+1,fence=fence+1,lease_owner='',lease_until=NULL
+WHERE id=$1 AND version=$2 AND (lease_until IS NULL OR lease_until<=now()) RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at
+`
+
+type CloseUncertainTaskParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) CloseUncertainTask(ctx context.Context, arg CloseUncertainTaskParams) (ShuttleTask, error) {
+	row := q.db.QueryRow(ctx, closeUncertainTask, arg.ID, arg.Version)
+	var i ShuttleTask
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ConversationID,
+		&i.Seq,
+		&i.Request,
+		&i.State,
+		&i.Route,
+		&i.TargetTaskID,
+		&i.TargetRunID,
+		&i.RunID,
+		&i.AuthSessionID,
+		&i.QuestionID,
+		&i.Snapshot,
+		&i.Version,
+		&i.Fence,
+		&i.LeaseOwner,
+		&i.LeaseUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const controlReady = `-- name: ControlReady :one
 SELECT NOT EXISTS (
  SELECT 1 FROM shuttle_tasks earlier
@@ -200,7 +236,7 @@ SELECT NOT EXISTS (
  AND earlier.target_task_id=current_task.target_task_id
  AND earlier.seq<current_task.seq
  AND earlier.route IN ('input','cancel','approval')
- AND earlier.state NOT IN ('completed','failed','cancelled','delivery_unknown','delivery_failed')
+ AND earlier.state NOT IN ('completed','failed','cancelled','delivery_unknown','delivery_failed','closed')
 ) AS ready
 `
 
@@ -286,6 +322,44 @@ func (q *Queries) FinishDelivery(ctx context.Context, arg FinishDeliveryParams) 
 	return i, err
 }
 
+const getAdminTask = `-- name: GetAdminTask :one
+SELECT t.id, t.user_id, t.conversation_id, t.seq, t.request, t.state, t.route, t.target_task_id, t.target_run_id, t.run_id, t.auth_session_id, t.question_id, t.snapshot, t.version, t.fence, t.lease_owner, t.lease_until, t.created_at FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+WHERE t.id=$1 AND u.bot_id=$2
+AND (u.zitadel_org='' OR u.zitadel_org=$3)
+`
+
+type GetAdminTaskParams struct {
+	ID    uuid.UUID `json:"id"`
+	BotID int64     `json:"bot_id"`
+	Org   string    `json:"org"`
+}
+
+func (q *Queries) GetAdminTask(ctx context.Context, arg GetAdminTaskParams) (ShuttleTask, error) {
+	row := q.db.QueryRow(ctx, getAdminTask, arg.ID, arg.BotID, arg.Org)
+	var i ShuttleTask
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ConversationID,
+		&i.Seq,
+		&i.Request,
+		&i.State,
+		&i.Route,
+		&i.TargetTaskID,
+		&i.TargetRunID,
+		&i.RunID,
+		&i.AuthSessionID,
+		&i.QuestionID,
+		&i.Snapshot,
+		&i.Version,
+		&i.Fence,
+		&i.LeaseOwner,
+		&i.LeaseUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSettings = `-- name: GetSettings :one
 SELECT id, version, document FROM shuttle_settings WHERE id=true
 `
@@ -322,6 +396,31 @@ func (q *Queries) GetTask(ctx context.Context, id uuid.UUID) (ShuttleTask, error
 		&i.Fence,
 		&i.LeaseOwner,
 		&i.LeaseUntil,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getTaskResolution = `-- name: GetTaskResolution :one
+SELECT task_id, operation_id, actor, expected_version, resulting_version, reason, previous_state, created_at FROM shuttle_task_resolutions WHERE task_id=$1 AND operation_id=$2
+`
+
+type GetTaskResolutionParams struct {
+	TaskID      uuid.UUID `json:"task_id"`
+	OperationID string    `json:"operation_id"`
+}
+
+func (q *Queries) GetTaskResolution(ctx context.Context, arg GetTaskResolutionParams) (ShuttleTaskResolution, error) {
+	row := q.db.QueryRow(ctx, getTaskResolution, arg.TaskID, arg.OperationID)
+	var i ShuttleTaskResolution
+	err := row.Scan(
+		&i.TaskID,
+		&i.OperationID,
+		&i.Actor,
+		&i.ExpectedVersion,
+		&i.ResultingVersion,
+		&i.Reason,
+		&i.PreviousState,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -371,8 +470,8 @@ SELECT EXISTS (
  JOIN shuttle_tasks target ON target.id=earlier.target_task_id
  WHERE earlier.conversation_id=$1 AND earlier.seq<$2
  AND earlier.request->>'kind'='message' AND earlier.route='input'
- AND earlier.state NOT IN ('completed','failed','cancelled','delivery_unknown','delivery_failed')
- AND target.state IN ('completed','failed','cancelled','delivery_unknown','delivery_failed')
+ AND earlier.state NOT IN ('completed','failed','cancelled','delivery_unknown','delivery_failed','closed')
+ AND target.state IN ('completed','failed','cancelled','delivery_unknown','delivery_failed','closed')
 ) AS has_earlier
 `
 
@@ -476,6 +575,106 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (Shuttle
 	return i, err
 }
 
+const insertTaskResolution = `-- name: InsertTaskResolution :one
+INSERT INTO shuttle_task_resolutions(task_id,operation_id,actor,expected_version,resulting_version,reason,previous_state)
+VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING task_id, operation_id, actor, expected_version, resulting_version, reason, previous_state, created_at
+`
+
+type InsertTaskResolutionParams struct {
+	TaskID           uuid.UUID `json:"task_id"`
+	OperationID      string    `json:"operation_id"`
+	Actor            string    `json:"actor"`
+	ExpectedVersion  int64     `json:"expected_version"`
+	ResultingVersion int64     `json:"resulting_version"`
+	Reason           string    `json:"reason"`
+	PreviousState    string    `json:"previous_state"`
+}
+
+func (q *Queries) InsertTaskResolution(ctx context.Context, arg InsertTaskResolutionParams) (ShuttleTaskResolution, error) {
+	row := q.db.QueryRow(ctx, insertTaskResolution,
+		arg.TaskID,
+		arg.OperationID,
+		arg.Actor,
+		arg.ExpectedVersion,
+		arg.ResultingVersion,
+		arg.Reason,
+		arg.PreviousState,
+	)
+	var i ShuttleTaskResolution
+	err := row.Scan(
+		&i.TaskID,
+		&i.OperationID,
+		&i.Actor,
+		&i.ExpectedVersion,
+		&i.ResultingVersion,
+		&i.Reason,
+		&i.PreviousState,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listAdminTasks = `-- name: ListAdminTasks :many
+SELECT t.id, t.user_id, t.conversation_id, t.seq, t.request, t.state, t.route, t.target_task_id, t.target_run_id, t.run_id, t.auth_session_id, t.question_id, t.snapshot, t.version, t.fence, t.lease_owner, t.lease_until, t.created_at FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+WHERE u.bot_id=$1 AND (u.zitadel_org='' OR u.zitadel_org=$2)
+AND ($3::text='' OR t.state=$3)
+AND ($4::uuid='00000000-0000-0000-0000-000000000000' OR t.id>$4)
+ORDER BY t.id LIMIT $5
+`
+
+type ListAdminTasksParams struct {
+	BotID     int64     `json:"bot_id"`
+	Org       string    `json:"org"`
+	State     string    `json:"state"`
+	AfterID   uuid.UUID `json:"after_id"`
+	PageLimit int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListAdminTasks(ctx context.Context, arg ListAdminTasksParams) ([]ShuttleTask, error) {
+	rows, err := q.db.Query(ctx, listAdminTasks,
+		arg.BotID,
+		arg.Org,
+		arg.State,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleTask
+	for rows.Next() {
+		var i ShuttleTask
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ConversationID,
+			&i.Seq,
+			&i.Request,
+			&i.State,
+			&i.Route,
+			&i.TargetTaskID,
+			&i.TargetRunID,
+			&i.RunID,
+			&i.AuthSessionID,
+			&i.QuestionID,
+			&i.Snapshot,
+			&i.Version,
+			&i.Fence,
+			&i.LeaseOwner,
+			&i.LeaseUntil,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOutbox = `-- name: ListOutbox :many
 SELECT id, task_id, dedup_key, chunk_seq, payload, state, attempt_id, receipt, created_at FROM shuttle_outbox WHERE task_id=$1 ORDER BY chunk_seq
 `
@@ -508,6 +707,77 @@ func (q *Queries) ListOutbox(ctx context.Context, taskID uuid.UUID) ([]ShuttleOu
 		return nil, err
 	}
 	return items, nil
+}
+
+const listTaskResolutions = `-- name: ListTaskResolutions :many
+SELECT task_id, operation_id, actor, expected_version, resulting_version, reason, previous_state, created_at FROM shuttle_task_resolutions WHERE task_id=$1 ORDER BY created_at,operation_id
+`
+
+func (q *Queries) ListTaskResolutions(ctx context.Context, taskID uuid.UUID) ([]ShuttleTaskResolution, error) {
+	rows, err := q.db.Query(ctx, listTaskResolutions, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleTaskResolution
+	for rows.Next() {
+		var i ShuttleTaskResolution
+		if err := rows.Scan(
+			&i.TaskID,
+			&i.OperationID,
+			&i.Actor,
+			&i.ExpectedVersion,
+			&i.ResultingVersion,
+			&i.Reason,
+			&i.PreviousState,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockAdminTask = `-- name: LockAdminTask :one
+SELECT t.id, t.user_id, t.conversation_id, t.seq, t.request, t.state, t.route, t.target_task_id, t.target_run_id, t.run_id, t.auth_session_id, t.question_id, t.snapshot, t.version, t.fence, t.lease_owner, t.lease_until, t.created_at FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+WHERE t.id=$1 AND u.bot_id=$2
+AND (u.zitadel_org='' OR u.zitadel_org=$3) FOR UPDATE OF t
+`
+
+type LockAdminTaskParams struct {
+	ID    uuid.UUID `json:"id"`
+	BotID int64     `json:"bot_id"`
+	Org   string    `json:"org"`
+}
+
+func (q *Queries) LockAdminTask(ctx context.Context, arg LockAdminTaskParams) (ShuttleTask, error) {
+	row := q.db.QueryRow(ctx, lockAdminTask, arg.ID, arg.BotID, arg.Org)
+	var i ShuttleTask
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ConversationID,
+		&i.Seq,
+		&i.Request,
+		&i.State,
+		&i.Route,
+		&i.TargetTaskID,
+		&i.TargetRunID,
+		&i.RunID,
+		&i.AuthSessionID,
+		&i.QuestionID,
+		&i.Snapshot,
+		&i.Version,
+		&i.Fence,
+		&i.LeaseOwner,
+		&i.LeaseUntil,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const lockConversation = `-- name: LockConversation :one

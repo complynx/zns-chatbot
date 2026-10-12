@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -66,11 +67,12 @@ type revokeResponse struct {
 }
 
 func (s *Server) register(api huma.API) {
+	s.registerTaskAdministration(api)
 	huma.Register(
 		api,
 		huma.Operation{
 			OperationID:  "account-me",
-			Method:       "POST",
+			Method:       http.MethodPost,
 			Path:         "/internal/agent/account/me",
 			MaxBodyBytes: internalBodyLimit,
 		},
@@ -78,25 +80,29 @@ func (s *Server) register(api huma.API) {
 	)
 	huma.Register(
 		api,
-		huma.Operation{OperationID: "get-settings", Method: "GET", Path: "/internal/admin/settings"},
+		huma.Operation{OperationID: "get-settings", Method: http.MethodGet, Path: "/internal/admin/settings"},
 		s.getSettings,
 	)
 	huma.Register(
 		api,
 		huma.Operation{
 			OperationID:  "update-settings",
-			Method:       "PUT",
+			Method:       http.MethodPut,
 			Path:         "/internal/admin/settings",
 			MaxBodyBytes: internalBodyLimit,
 		},
 		s.updateSettings,
 	)
-	huma.Register(api, huma.Operation{OperationID: "get-task", Method: "GET", Path: "/internal/tasks/{id}"}, s.getTask)
+	huma.Register(
+		api,
+		huma.Operation{OperationID: "get-task", Method: http.MethodGet, Path: "/internal/tasks/{id}"},
+		s.getTask,
+	)
 	huma.Register(
 		api,
 		huma.Operation{
 			OperationID:  "revoke-user",
-			Method:       "POST",
+			Method:       http.MethodPost,
 			Path:         "/internal/admin/users/{id}/revoke",
 			MaxBodyBytes: internalBodyLimit,
 		},

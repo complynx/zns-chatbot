@@ -57,6 +57,9 @@ observability work; the current slice exports HTTP/runtime/attempt/delivery metr
 and trace propagation. File ingestion and business registration flows are not
 implemented in this slice.
 
+See [step 0 operator recovery](shuttle-step-0.md) for private task diagnostics,
+confirmed local closure of uncertain tasks and migration/rollback constraints.
+
 See [the server rollout guide](shuttle-server-rollout.md) for the complynx.net
 pilot plan and deployment gates.
 The [current review and QA report](shuttle-review-qa-2026-10-12.md) records the

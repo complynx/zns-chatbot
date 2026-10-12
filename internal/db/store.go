@@ -336,7 +336,7 @@ func (s *Store) Save(ctx context.Context, t Task, owner string, fence int64, out
 
 func terminalTask(state string) bool {
 	switch state {
-	case "completed", "failed", "cancelled", "delivery_unknown", "delivery_failed":
+	case "completed", "failed", "cancelled", deliveryUnknown, "delivery_failed", "closed":
 		return true
 	default:
 		return false
