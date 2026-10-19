@@ -42,6 +42,7 @@ type miniAppBootstrapResponse struct {
 
 func (s *Server) registerMiniApp() {
 	s.registerMiniAppPairs()
+	s.registerMiniAppAssignments()
 	s.registerMiniAppMassage()
 	s.registerMiniAppOrders()
 	s.registerMiniAppMeals()

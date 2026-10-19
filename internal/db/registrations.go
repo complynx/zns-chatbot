@@ -59,7 +59,7 @@ func (s *Store) ChangeRegistration(
 	actor, operation string,
 	change RegistrationChange,
 ) (registrations.Registration, error) {
-	return s.changeRegistration(ctx, scope, actor, operation, change, uuid.Nil, nil)
+	return s.changeRegistration(ctx, scope, actor, operation, change, uuid.Nil, nil, nil)
 }
 
 func (s *Store) changeRegistration(
@@ -69,6 +69,7 @@ func (s *Store) changeRegistration(
 	change RegistrationChange,
 	proposalID uuid.UUID,
 	selection *RegistrationEntry,
+	session *MiniAppAssignmentSession,
 ) (registrations.Registration, error) {
 	if scope.BotID <= 0 || scope.Organization == "" || actor == "" || operation == "" || len(operation) > 128 ||
 		!validRegistrationChange(change) {
@@ -91,7 +92,8 @@ func (s *Store) changeRegistration(
 	); err != nil {
 		return registrations.Registration{}, err
 	}
-	operation, err = assignmentOperationForChange(ctx, q, scope, actor, operation, change.EventID, proposalID)
+	transport := operation
+	operation, err = assignmentOperationForChange(ctx, q, scope, actor, operation, change.EventID, proposalID, session)
 	if err != nil {
 		return registrations.Registration{}, err
 	}
@@ -110,7 +112,11 @@ func (s *Store) changeRegistration(
 		},
 	)
 	if err == nil {
-		return decodeRegistrationReceipt(receipt, digest[:])
+		result, decodeErr := decodeRegistrationReceipt(receipt, digest[:])
+		if decodeErr != nil {
+			return registrations.Registration{}, decodeErr
+		}
+		return finishAssignmentConfirmation(ctx, tx, q, scope, actor, transport, proposalID, result, session)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return registrations.Registration{}, err
@@ -118,19 +124,9 @@ func (s *Store) changeRegistration(
 	if err = nativeDetailsOutcome(ctx, tx, q, scope, change, selection, false); err != nil {
 		return registrations.Registration{}, err
 	}
-	var approved []AssignmentQuote
-	if proposalID != uuid.Nil {
-		stored, readErr := q.GetAssignmentPreparation(ctx, sqlc.GetAssignmentPreparationParams{
-			BotID: scope.BotID, OrganizationID: scope.Organization, Actor: actor, OperationID: operation,
-		})
-		if readErr != nil {
-			return registrations.Registration{}, readErr
-		}
-		var preparation AssignmentPreparation
-		if err = json.Unmarshal(stored.Document, &preparation); err != nil {
-			return registrations.Registration{}, err
-		}
-		approved = preparation.Quotes
+	approved, err := assignmentApprovedQuotes(ctx, q, scope, actor, operation, proposalID)
+	if err != nil {
+		return registrations.Registration{}, err
 	}
 	row, err := applyRegistrationChange(ctx, q, scope, actor, change, expiresAt, approved, selection)
 	if err != nil {
@@ -158,10 +154,7 @@ func (s *Store) changeRegistration(
 	); err != nil {
 		return registrations.Registration{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return registrations.Registration{}, err
-	}
-	return result, nil
+	return finishAssignmentConfirmation(ctx, tx, q, scope, actor, transport, proposalID, result, session)
 }
 
 func decodeRegistrationReceipt(

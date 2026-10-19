@@ -2,11 +2,7 @@ package db
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
-	"errors"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/internal/db/sqlc"
 	"github.com/complynx/zns-chatbot/internal/registrations"
@@ -39,32 +35,7 @@ func authorizePairMiniApp(
 	if session == nil {
 		return nil
 	}
-	initial, err := q.FindMiniAppBearer(
-		ctx,
-		sqlc.FindMiniAppBearerParams{BotID: owner.BotID, BearerHash: session.Bearer[:]},
-	)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ErrMiniAppDenied
-	}
-	if err != nil {
-		return err
-	}
-	if initial.UserID != owner.ID {
-		return ErrMiniAppDenied
-	}
-	row, err := q.LockMiniAppSession(ctx, initial.ID)
-	if err != nil {
-		return err
-	}
-	now, err := q.RegistrationNow(ctx)
-	if err != nil {
-		return err
-	}
-	if row.State != miniAppActive || !hmac.Equal(row.BearerHash, session.Bearer[:]) ||
-		!miniAppCurrent(row, owner, session.Generation, now.Time) {
-		return ErrMiniAppDenied
-	}
-	return nil
+	return checkMiniAppActorSession(ctx, q, owner, session.Bearer, session.Generation)
 }
 
 // DissolveMiniAppPair uses the agent operation with session validation before any receipt replay.

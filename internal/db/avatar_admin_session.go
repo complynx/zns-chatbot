@@ -2,11 +2,7 @@ package db
 
 import (
 	"context"
-	"crypto/hmac"
 	"crypto/sha256"
-	"errors"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/internal/db/sqlc"
 	"github.com/complynx/zns-chatbot/internal/payments"
@@ -29,32 +25,7 @@ func lockAvatarAdminSession(
 	if session.AuthorityUnchanged != nil && !session.AuthorityUnchanged() {
 		return payments.ErrDenied
 	}
-	initial, err := q.FindMiniAppBearer(
-		ctx,
-		sqlc.FindMiniAppBearerParams{BotID: actor.BotID, BearerHash: session.Bearer[:]},
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrMiniAppDenied
-		}
-		return err
-	}
-	if initial.UserID != actor.ID {
-		return ErrMiniAppDenied
-	}
-	row, err := q.LockMiniAppSession(ctx, initial.ID)
-	if err != nil {
-		return err
-	}
-	now, err := q.RegistrationNow(ctx)
-	if err != nil {
-		return err
-	}
-	if row.State != miniAppActive || !hmac.Equal(row.BearerHash, session.Bearer[:]) ||
-		!miniAppCurrent(row, actor, session.Generation, now.Time) {
-		return ErrMiniAppDenied
-	}
-	return nil
+	return checkMiniAppActorSession(ctx, q, actor, session.Bearer, session.Generation)
 }
 
 // Actor and session locks are already held. Rechecking before commit fences

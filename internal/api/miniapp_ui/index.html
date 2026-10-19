@@ -18,6 +18,7 @@
   <script src="./massage.js" defer></script>
   <script src="./massage-staff.js" defer></script>
   <script src="./massage-admin.js" defer></script>
+  <script src="./assignments.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
@@ -393,6 +394,18 @@
       <div id="ma-receipt" aria-live="polite"></div><div id="ma-choices"></div>
       <div class="actions"><button id="ma-choices-first" type="button" hidden>First unfinished choices</button><button id="ma-choices-next" type="button" hidden>Next unfinished choices</button></div>
       <button id="ma-reload" type="button">Reload current state</button>
+    </section>
+    <section id="pass-assignments" hidden aria-labelledby="pa-title">
+      <h1 id="pa-title">Assign a solo pass</h1><p id="pa-note"></p><p id="pa-status" role="status" aria-live="polite"></p>
+      <label id="pa-event-label" for="pa-event">Event</label><select id="pa-event"></select>
+      <div class="actions"><button id="pa-events-first" type="button" hidden>First events</button><button id="pa-events-next" type="button" hidden>Next events</button></div>
+      <label id="pa-target-label" for="pa-target">Participant</label><select id="pa-target"></select>
+      <div class="actions"><button id="pa-targets-first" type="button">Refresh participants</button><button id="pa-targets-next" type="button" hidden>Next participants</button></div>
+      <button id="pa-prepare" type="button">Review pass assignment</button><div id="pa-preview"></div>
+      <label><input id="pa-consent" type="checkbox" hidden><span id="pa-consent-label" hidden>I approve this exact pass assignment and its terms</span></label>
+      <div class="actions"><button id="pa-confirm" type="button" hidden>Assign this pass</button><button id="pa-close" type="button" hidden>Close local preview</button><button id="pa-recover" type="button" hidden>Check earlier request</button><button id="pa-retry" type="button" hidden>Retry the same preparation</button></div>
+      <div id="pa-receipt" aria-live="polite"></div><h2 id="pa-pending-title">Unfinished assignments</h2><div id="pa-pending"></div>
+      <div class="actions"><button id="pa-reload" type="button">Reload unfinished assignments</button><button id="pa-recent" type="button">Recent form operations</button><button id="pa-first" type="button" hidden>First proposals</button><button id="pa-next" type="button" hidden>Next proposals</button></div>
     </section>
   </main>
 </body>

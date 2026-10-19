@@ -1,4 +1,9 @@
-Current state: see the [2026-10-19 checkpoint](shuttle-checkpoint-2026-10-19.md).
+Current source and acceptance scope: [native pass assignments](shuttle-native-pass-assignments.md),
+[local-primary schema61/mvp69 acceptance](shuttle-native-pass-assignment-primary-qa-2026-10-19.md),
+and the [registration/pass parity plan](shuttle-registration-pass-parity-plan.md).
+The [pair continuation foundation](shuttle-native-pair-assignment-foundation.md)
+is source/component accepted and uninstalled; native form/session/history
+acceptance remains pending.
 The entries below are historical stage reports. Their run counts, installation
 status, and next-step statements describe each stage at the time of acceptance.
 

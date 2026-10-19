@@ -59,12 +59,12 @@ func (s *Store) PairAssignmentOperation(
 		return PairAssignmentResult{}, err
 	}
 	row, err := q.GetPairOperation(ctx, sqlc.GetPairOperationParams{
-		BotID: scope.BotID, OrganizationID: scope.Organization, Actor: scope.Subject, OperationID: operation,
+		BotID: scope.BotID, OrganizationID: scope.Organization, Actor: scope.Subject, OperationID: prep.OperationID,
 	})
 	if err != nil {
 		return PairAssignmentResult{}, err
 	}
-	if row.Kind != pairAssign {
+	if row.Kind != pairAssign || !bytes.Equal(row.RequestHash, prep.RequestHash) {
 		return PairAssignmentResult{}, pgx.ErrNoRows
 	}
 	var result PairAssignmentResult
@@ -87,6 +87,7 @@ type PairAssignment struct {
 }
 
 type PairAssignmentPreparation struct {
+	Timezone    string            `json:"timezone,omitempty"`
 	Quotes      []AssignmentQuote `json:"quotes,omitempty"`
 	ID          uuid.UUID         `json:"proposal_id"`
 	Arguments   PairAssignment    `json:"arguments"`
@@ -121,19 +122,19 @@ func lockPairAssignment(
 	); err != nil {
 		return err
 	}
+	return lockPairAssignmentAuthority(ctx, q, scope, eventID)
+}
+
+// The event row serializes role changes and assignment effects. It also permits
+// historical receipt reads after sales close without rerunning effect eligibility.
+func lockPairAssignmentAuthority(ctx context.Context, q *sqlc.Queries, scope PaymentScope, eventID uuid.UUID) error {
 	if _, err := q.LockRegistrationEvent(ctx, sqlc.LockRegistrationEventParams{
 		ID: eventID, BotID: scope.BotID, OrganizationID: scope.Organization,
 	}); err != nil {
 		return err
 	}
-	actor, err := q.LockAuthorityActor(ctx, sqlc.LockAuthorityActorParams{
-		BotID: scope.BotID, ZitadelOrg: scope.Organization, ZitadelSubject: scope.Subject,
-	})
-	if err != nil {
+	if err := lockPairAssignmentActor(ctx, q, scope); err != nil {
 		return err
-	}
-	if actor.ID != scope.UserID {
-		return ErrPairDenied
 	}
 	if scope.GlobalAdmin {
 		return nil
@@ -148,6 +149,22 @@ func lockPairAssignment(
 		return err
 	}
 	if authority.Role != AuthorityAdministrator {
+		return ErrPairDenied
+	}
+	return nil
+}
+
+func lockPairAssignmentActor(ctx context.Context, q *sqlc.Queries, scope PaymentScope) error {
+	actor, err := q.LockAuthorityActor(ctx, sqlc.LockAuthorityActorParams{
+		BotID: scope.BotID, ZitadelOrg: scope.Organization, ZitadelSubject: scope.Subject,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrPairDenied
+	}
+	if err != nil {
+		return err
+	}
+	if actor.ID != scope.UserID {
 		return ErrPairDenied
 	}
 	return nil
@@ -283,6 +300,12 @@ func (s *Store) PreparePairAssignment(
 	operation string,
 	args PairAssignment,
 ) (PairAssignmentPreparation, error) {
+	return s.preparePairAssignment(ctx, scope, operation, args, uuid.Nil)
+}
+
+func (s *Store) preparePairAssignment(ctx context.Context, scope PaymentScope, operation string,
+	args PairAssignment, resume uuid.UUID,
+) (PairAssignmentPreparation, error) {
 	if !pairAssignmentValid(scope, operation, args) {
 		return PairAssignmentPreparation{}, registrations.ErrInvalid
 	}
@@ -310,15 +333,20 @@ func (s *Store) PreparePairAssignment(
 		},
 	)
 	if err == nil {
-		if !bytes.Equal(prior.RequestHash, hash[:]) {
-			return PairAssignmentPreparation{}, ErrConflict
-		}
-		var result PairAssignmentPreparation
-		err = json.Unmarshal(prior.Document, &result)
-		return result, err
+		return replayPairAssignmentPreparation(ctx, q, prior, hash[:], resume)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return PairAssignmentPreparation{}, err
+	}
+	if err = requireUnusedPairAssignmentOperation(ctx, q, scope, operation); err != nil {
+		return PairAssignmentPreparation{}, err
+	}
+	if resume != uuid.Nil {
+		result, adoptErr := adoptPairAssignment(ctx, q, scope, operation, resume, hash[:])
+		if adoptErr != nil {
+			return PairAssignmentPreparation{}, adoptErr
+		}
+		return result, tx.Commit(ctx)
 	}
 	c, err := checkPairAssignment(ctx, q, scope, args, pgtype.Timestamptz{})
 	if err != nil {
@@ -333,6 +361,7 @@ func (s *Store) PreparePairAssignment(
 		return PairAssignmentPreparation{}, err
 	}
 	result := PairAssignmentPreparation{
+		Timezone:    c.Event.Document.Timezone,
 		Quotes:      c.Quotes,
 		ID:          uuid.New(),
 		Arguments:   args,
@@ -435,21 +464,11 @@ func (s *Store) ConfirmPairAssignment(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
-	if err = lockPairAssignment(ctx, q, scope, operation, args.EventID); err != nil {
-		return PairAssignmentResult{}, err
-	}
-	prep, err := q.GetPairPreparation(
-		ctx,
-		sqlc.GetPairPreparationParams{
-			BotID:          scope.BotID,
-			OrganizationID: scope.Organization,
-			Actor:          scope.Subject,
-			OperationID:    operation,
-		},
-	)
+	prep, err := lockPairAssignmentConfirmation(ctx, q, scope, operation, args.EventID)
 	if err != nil {
 		return PairAssignmentResult{}, err
 	}
+	operation = prep.OperationID
 	if prep.ProposalID != proposalID || !bytes.Equal(prep.RequestHash, hash[:]) {
 		return PairAssignmentResult{}, ErrConflict
 	}

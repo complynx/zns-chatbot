@@ -127,6 +127,9 @@ func (s *Store) dissolvePair(
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return registrations.Pair{}, err
 	}
+	if err = requireUnreservedPairParticipantOperation(ctx, q, scope, operation); err != nil {
+		return registrations.Pair{}, err
+	}
 	if pair.Version != args.ExpectedVersion || pair.State == "dissolved" {
 		return registrations.Pair{}, ErrConflict
 	}

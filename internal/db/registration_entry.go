@@ -74,5 +74,5 @@ func (s *Store) RegisterPresented(
 		entry.ExpiresAt.IsZero() {
 		return registrations.Registration{}, registrations.ErrInvalid
 	}
-	return s.changeRegistration(ctx, scope, actor, operation, change, uuid.Nil, &entry)
+	return s.changeRegistration(ctx, scope, actor, operation, change, uuid.Nil, &entry, nil)
 }

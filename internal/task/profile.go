@@ -209,6 +209,9 @@ func (s *Service) appendStructuredContext(
 	if err = s.appendNativeAvatarDraftContext(ctx, text, scope, taskID); err != nil {
 		return err
 	}
+	if err = s.appendNativeAssignmentContext(ctx, text, user, taskID); err != nil {
+		return err
+	}
 	if err = s.appendNativeAvatarResolutionContext(ctx, text, user, taskID); err != nil {
 		return err
 	}

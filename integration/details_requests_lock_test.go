@@ -62,10 +62,11 @@ func TestDetailsRequestBeginAndOwnAdminEventConfirmationDoNotDeadlock(t *testing
 		)
 		began <- beginOutcome{result, e}
 	})
+	// Observe the blocking relation, not whether the writer first uses SELECT or UPDATE.
 	var beginPID uint32
 	require.Eventually(t, func() bool {
 		e := h.store.Pool().
-			QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND strpos(query,'pg_advisory_xact_lock')>0 LIMIT 1`, control.Conn().PgConn().PID()).
+			QueryRow(ctx, `SELECT pid FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) LIMIT 1`, control.Conn().PgConn().PID()).
 			Scan(&beginPID)
 		return e == nil
 	}, 3*time.Second, 10*time.Millisecond)
@@ -81,7 +82,7 @@ func TestDetailsRequestBeginAndOwnAdminEventConfirmationDoNotDeadlock(t *testing
 	require.Eventually(t, func() bool {
 		var waiting bool
 		e := h.store.Pool().
-			QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)) AND strpos(query,'UPDATE shuttle_events')>0)`, beginPID).
+			QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid)))`, beginPID).
 			Scan(&waiting)
 		return e == nil && waiting
 	}, 3*time.Second, 10*time.Millisecond)

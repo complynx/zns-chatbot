@@ -148,22 +148,14 @@ func (s *Store) pairOperation(
 	if err = authorizePairMiniApp(ctx, q, actor, session); err != nil {
 		return PairResult{}, err
 	}
-	prior, err := q.GetPairOperation(
-		ctx,
-		sqlc.GetPairOperationParams{
-			BotID: scope.BotID, OrganizationID: scope.Organization,
-			Actor: scope.Subject, OperationID: op,
-		},
-	)
+	prior, err := pairParticipantReceipt(ctx, q, scope, op, kind, hash[:])
 	if err == nil {
-		if prior.Kind != kind || !bytes.Equal(prior.RequestHash, hash[:]) {
-			return PairResult{}, ErrConflict
-		}
-		var result PairResult
-		err = json.Unmarshal(prior.Result, &result)
-		return result, err
+		return prior, nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
+		return PairResult{}, err
+	}
+	if err = requireUnreservedPairParticipantOperation(ctx, q, scope, op); err != nil {
 		return PairResult{}, err
 	}
 	if !slices.Contains(event.Modules, "registrations") && kind != pairDecline && kind != pairRevoke {
@@ -616,4 +608,23 @@ func (s *Store) PairInvitation(
 // Used by both singleton preparation and execution so new holds cannot be bypassed.
 func pairAssignmentAvailable(ctx context.Context, q *sqlc.Queries, id uuid.UUID) error {
 	return ensurePairUnheld(ctx, q, id)
+}
+
+// Participant replay uses only its exact key and kind. Assignment aliases are
+// rejected separately before a fresh participant action applies any effects.
+func pairParticipantReceipt(ctx context.Context, q *sqlc.Queries, scope PaymentScope,
+	operation, kind string, hash []byte,
+) (PairResult, error) {
+	prior, err := q.GetPairOperation(ctx, sqlc.GetPairOperationParams{
+		BotID: scope.BotID, OrganizationID: scope.Organization, Actor: scope.Subject, OperationID: operation,
+	})
+	if err != nil {
+		return PairResult{}, err
+	}
+	if prior.Kind != kind || !bytes.Equal(prior.RequestHash, hash) {
+		return PairResult{}, ErrConflict
+	}
+	var result PairResult
+	err = json.Unmarshal(prior.Result, &result)
+	return result, err
 }

@@ -139,6 +139,10 @@
     request: (path, method, body) => request(path, method, body, session.token),
     setBusy, denied: detailsDenied
   });
+  const assignmentsUI = window.createZinusyaAssignments?.({
+    request: (path, method, body) => request(path, method, body, session.token),
+    setBusy, denied: detailsDenied
+  });
   const avatarAdminUI = window.createZinusyaAvatarAdmin?.({
     request: (path, method, body) => request(path, method, body, session.token),
     setBusy, denied: detailsDenied
@@ -194,6 +198,7 @@
     massageStaffUI?.setBusy(value);
     massageAdminUI?.setBusy(value);
     avatarAdminUI?.setBusy(value);
+    assignmentsUI?.setBusy(value);
   }
 
   function clearAccount() {
@@ -208,6 +213,7 @@
     massageStaffUI?.clear();
     massageAdminUI?.clear();
     avatarAdminUI?.clear();
+    assignmentsUI?.clear();
     clearDetails();
     profileSection.hidden = true;
     profileVersion = undefined;
@@ -294,8 +300,9 @@
       if (session.token) await massageStaffUI?.start(account.user_id, language);
       if (session.token) await massageAdminUI?.start(account.user_id, language);
       if (session.token) await avatarAdminUI?.start(account.user_id, language);
+      if (session.token) await assignmentsUI?.start(account.user_id, language);
       // Restore the launch position after all modules reveal their content.
-      if (session.token && ["pairs", "avatars", "orders", "meals", "massage", "payment-review"].includes(launchTarget)) {
+      if (session.token && ["pairs", "avatars", "orders", "meals", "massage", "payment-review", "pass-assignments"].includes(launchTarget)) {
         const section = document.getElementById(launchTarget);
         if (section && !section.hidden) section.scrollIntoView({ block: "start" });
       }
@@ -345,6 +352,7 @@
       massageStaffUI?.setLanguage(language);
       massageAdminUI?.setLanguage(language);
       avatarAdminUI?.setLanguage(language);
+      assignmentsUI?.setLanguage(language);
       profileLabels();
       detailsLabels();
       name.textContent = p.full_name;

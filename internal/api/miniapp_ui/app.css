@@ -57,7 +57,7 @@ textarea { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid 
 
 #meals-items fieldset { margin: 16px 0; padding: 12px; border: 1px solid GrayText; }
 #meals-items input[type="checkbox"] { width: auto; margin-right: 8px; }
-#pairs input[type="checkbox"] { width: auto; margin-right: 8px; }
+#pairs input[type="checkbox"], #pass-assignments input[type="checkbox"] { width: auto; margin-right: 8px; }
 #meals-saved { overflow-wrap: anywhere; }
 
 #avatars-canvas, #avatars-saved-preview { display: block; width: 100%; height: auto; max-width: 32rem; border: 1px solid GrayText; box-sizing: border-box; }

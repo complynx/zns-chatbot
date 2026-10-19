@@ -293,7 +293,7 @@ func assignmentMethods() []map[string]any {
 		schemaEventID:            uuidField,
 		schemaRegistrationID:     uuidField,
 		schemaExpectedVersion:    map[string]any{manifestType: schemaInteger, schemaMinimum: 1},
-		"resume_proposal_id":     uuidField,
+		schemaResumeProposalID:   uuidField,
 		"expected_event_version": map[string]any{manifestType: schemaInteger, schemaMinimum: 1},
 	}
 	return append(assignmentProposalMethods(), []map[string]any{

@@ -21,7 +21,7 @@ func (s *Store) AdoptAssignment(ctx context.Context, scope EventScope, actor, op
 	if proposal == uuid.Nil {
 		return AssignmentPreparation{}, ErrConflict
 	}
-	return s.prepareAssignment(ctx, scope, actor, operation, args, proposal)
+	return s.prepareAssignment(ctx, scope, actor, operation, args, proposal, nil)
 }
 
 // Event precedes canonical proposal locks, as it does for assignment effects.
@@ -113,7 +113,7 @@ func replayAssignmentPreparation(ctx context.Context, q *sqlc.Queries, row sqlc.
 // canonical operation lock before the event: the receipt namespace trigger uses
 // that lock, so taking it after the event would invert concurrent confirmations.
 func assignmentOperationForChange(ctx context.Context, q *sqlc.Queries, scope EventScope,
-	actor, operation string, event, proposal uuid.UUID,
+	actor, operation string, event, proposal uuid.UUID, session *MiniAppAssignmentSession,
 ) (string, error) {
 	row, err := q.GetAssignmentPreparation(ctx, sqlc.GetAssignmentPreparationParams{
 		BotID: scope.BotID, OrganizationID: scope.Organization, Actor: actor, OperationID: operation,
@@ -144,6 +144,9 @@ func assignmentOperationForChange(ctx context.Context, q *sqlc.Queries, scope Ev
 	if err = lockAssignmentEvent(ctx, q, scope, event); err != nil {
 		return "", err
 	}
+	if err = authorizeAssignmentMiniApp(ctx, q, scope, actor, session); err != nil {
+		return "", err
+	}
 	locked, err := q.LockAssignmentCanonicalPreparation(ctx, sqlc.LockAssignmentCanonicalPreparationParams{
 		BotID: scope.BotID, OrganizationID: scope.Organization, Actor: actor, OperationID: row.OperationID,
 	})
@@ -164,4 +167,38 @@ func requireUnusedRegistrationOperation(ctx context.Context, q *sqlc.Queries, sc
 		return nil
 	}
 	return err
+}
+
+// The transport namespace is locked before the event and actor/session barrier.
+func lockAssignmentPreparationOrigin(ctx context.Context, q *sqlc.Queries, scope EventScope,
+	actor, operation string, event, resume uuid.UUID, session *MiniAppAssignmentSession,
+) error {
+	if err := q.LockEventOperation(
+		ctx,
+		fmt.Sprintf("registration:%d:%s:%s:%s", scope.BotID, scope.Organization, actor, operation),
+	); err != nil {
+		return err
+	}
+	if resume != uuid.Nil || session != nil {
+		if err := lockAssignmentEvent(ctx, q, scope, event); err != nil {
+			return err
+		}
+	}
+	return authorizeAssignmentMiniApp(ctx, q, scope, actor, session)
+}
+
+func assignmentApprovedQuotes(ctx context.Context, q *sqlc.Queries, scope EventScope,
+	actor, operation string, proposal uuid.UUID,
+) ([]AssignmentQuote, error) {
+	if proposal == uuid.Nil {
+		return nil, nil
+	}
+	stored, err := q.GetAssignmentPreparation(ctx, sqlc.GetAssignmentPreparationParams{
+		BotID: scope.BotID, OrganizationID: scope.Organization, Actor: actor, OperationID: operation,
+	})
+	if err != nil {
+		return nil, err
+	}
+	preparation, err := decodeAssignmentPreparation(stored)
+	return preparation.Quotes, err
 }

@@ -97,14 +97,21 @@ func assignmentProposalView(ctx context.Context, q *sqlc.Queries, row sqlc.Shutt
 func (s *Store) PendingAssignmentProposals(ctx context.Context, scope EventScope, actor string,
 	after uuid.UUID, limit int,
 ) (AssignmentProposalPage, error) {
+	return pendingAssignmentProposals(ctx, s.q, scope, actor, after, limit)
+}
+
+func pendingAssignmentProposals(ctx context.Context, q *sqlc.Queries, scope EventScope, actor string,
+	after uuid.UUID, limit int,
+) (AssignmentProposalPage, error) {
 	if scope.BotID <= 0 || scope.Organization == "" || actor == "" || limit < 1 || limit > assignmentProposalPageLimit {
 		return AssignmentProposalPage{}, registrations.ErrInvalid
 	}
-	now, err := s.q.RegistrationNow(ctx)
+
+	now, err := q.RegistrationNow(ctx)
 	if err != nil {
 		return AssignmentProposalPage{}, err
 	}
-	rows, err := s.q.ListPendingAssignmentProposals(ctx, sqlc.ListPendingAssignmentProposalsParams{
+	rows, err := q.ListPendingAssignmentProposals(ctx, sqlc.ListPendingAssignmentProposalsParams{
 		BotID: scope.BotID, OrganizationID: scope.Organization, Actor: actor, AfterID: after,
 		NowAt: pgtype.Timestamptz{Time: now.Time, Valid: true}, PageLimit: int32(limit + 1),
 	})
@@ -118,7 +125,7 @@ func (s *Store) PendingAssignmentProposals(ctx context.Context, scope EventScope
 		page.Next = &last
 	}
 	for _, row := range rows {
-		view, readErr := assignmentProposalView(ctx, s.q, row, now.Time)
+		view, readErr := assignmentProposalView(ctx, q, row, now.Time)
 		if readErr != nil {
 			return AssignmentProposalPage{}, readErr
 		}

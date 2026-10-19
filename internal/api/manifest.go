@@ -40,10 +40,11 @@ const (
 	discoveryStatic       = "static"
 	manifestMethods       = "methods"
 
-	schemaAfter          = "after"
-	schemaLimit          = "limit"
-	schemaKind           = "kind"
-	schemaRegistrationID = "registration_id"
+	schemaAfter            = "after"
+	schemaLimit            = "limit"
+	schemaKind             = "kind"
+	schemaRegistrationID   = "registration_id"
+	schemaResumeProposalID = "resume_proposal_id"
 
 	schemaMinimum    = "minimum"
 	confirmationNone = "none"
@@ -91,7 +92,7 @@ const (
 )
 
 func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
-	revision := "mvp-69"
+	revision := "mvp-70"
 	writeJSON(w, http.StatusOK, map[string]any{
 		"protocol_version":  1,
 		schemaServiceID:     "zinusya",

@@ -599,7 +599,10 @@ WHERE e.bot_id=$1 AND e.organization_id=$2 AND i.state='pending' AND i.expires_a
 AND i.id>sqlc.arg(after_id)::uuid ORDER BY i.id LIMIT sqlc.arg(page_limit);
 
 -- name: GetPairPreparation :one
-SELECT * FROM shuttle_pair_preparations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4;
+SELECT p.* FROM shuttle_pair_preparations p
+WHERE p.bot_id=$1 AND p.organization_id=$2 AND p.actor=$3
+AND (p.operation_id=$4 OR p.operation_id=(SELECT a.canonical_operation_id FROM shuttle_pair_assignment_aliases a
+ WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.actor=$3 AND a.operation_id=$4));
 -- name: InsertPairPreparation :exec
 INSERT INTO shuttle_pair_preparations(bot_id,organization_id,actor,operation_id,proposal_id,request_hash,expires_at,document)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8);
@@ -1824,5 +1827,61 @@ SELECT p.* FROM shuttle_assignment_preparations p
 WHERE p.bot_id=sqlc.arg(bot_id) AND p.organization_id=sqlc.arg(organization_id) AND p.actor=sqlc.arg(actor)
 AND p.proposal_id>sqlc.arg(after_id)::uuid AND p.expires_at>sqlc.arg(now_at)::timestamptz
 AND NOT EXISTS(SELECT 1 FROM shuttle_registration_operations r
+ WHERE r.bot_id=p.bot_id AND r.organization_id=p.organization_id AND r.actor=p.actor AND r.operation_id=p.operation_id)
+ORDER BY p.proposal_id LIMIT sqlc.arg(page_limit);
+
+-- name: InsertNativeAssignmentAction :exec
+INSERT INTO shuttle_miniapp_assignment_actions(user_id,operation_id,proposal_id,kind,registration_version)
+VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id,operation_id,kind) DO NOTHING;
+-- name: HasNativeAssignmentContext :one
+SELECT EXISTS(SELECT 1 FROM shuttle_miniapp_assignment_actions a
+JOIN shuttle_assignment_preparations p ON p.proposal_id=a.proposal_id
+JOIN shuttle_tasks t ON t.user_id=a.user_id
+WHERE a.user_id=sqlc.arg(user_id) AND t.id=sqlc.arg(task_id)
+AND p.bot_id=sqlc.arg(bot_id) AND p.organization_id=sqlc.arg(organization_id) AND p.actor=sqlc.arg(actor)
+AND a.created_at<t.created_at);
+-- name: RecentNativeAssignmentActions :many
+SELECT a.operation_id,a.proposal_id,a.kind,a.registration_version,a.created_at,
+p.operation_id AS canonical_operation_id
+FROM shuttle_miniapp_assignment_actions a
+JOIN shuttle_assignment_preparations p ON p.proposal_id=a.proposal_id
+JOIN shuttle_tasks t ON t.user_id=a.user_id
+WHERE a.user_id=sqlc.arg(user_id) AND t.id=sqlc.arg(task_id)
+AND p.bot_id=sqlc.arg(bot_id) AND p.organization_id=sqlc.arg(organization_id) AND p.actor=sqlc.arg(actor)
+AND a.created_at<t.created_at
+ORDER BY a.created_at DESC,a.operation_id,a.kind LIMIT 5;
+
+-- name: RecentNativeAssignmentProposals :many
+SELECT p.* FROM shuttle_assignment_preparations p
+JOIN (SELECT proposal_id,max(created_at) AS last_at
+ FROM shuttle_miniapp_assignment_actions WHERE user_id=sqlc.arg(user_id)
+ GROUP BY proposal_id) a ON a.proposal_id=p.proposal_id
+WHERE p.bot_id=sqlc.arg(bot_id) AND p.organization_id=sqlc.arg(organization_id)
+ AND p.actor=sqlc.arg(actor)
+ORDER BY a.last_at DESC,p.proposal_id DESC LIMIT 20;
+
+-- name: LockPairAssignmentCanonicalPreparation :one
+SELECT * FROM shuttle_pair_preparations
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 FOR UPDATE;
+-- name: LockPairAssignmentProposal :one
+SELECT * FROM shuttle_pair_preparations
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND proposal_id=$4 FOR UPDATE;
+-- name: InsertPairAssignmentAlias :exec
+INSERT INTO shuttle_pair_assignment_aliases(bot_id,organization_id,actor,operation_id,canonical_operation_id)
+VALUES($1,$2,$3,$4,$5);
+-- name: GetPairAssignmentProposal :one
+SELECT * FROM shuttle_pair_preparations
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND proposal_id=$4;
+-- name: ListPendingPairAssignmentProposals :many
+SELECT p.* FROM shuttle_pair_preparations p
+JOIN shuttle_events e ON e.id=(p.document->'arguments'->>'event_id')::uuid
+JOIN shuttle_users u ON u.id=sqlc.arg(user_id) AND u.bot_id=p.bot_id
+AND u.zitadel_org=p.organization_id AND u.zitadel_subject=p.actor AND NOT u.revoked
+WHERE p.bot_id=sqlc.arg(bot_id) AND p.organization_id=sqlc.arg(organization_id) AND p.actor=sqlc.arg(actor)
+AND e.bot_id=p.bot_id AND e.organization_id=p.organization_id
+AND (sqlc.arg(global_admin)::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
+ WHERE a.event_id=e.id AND a.user_id=u.id AND a.role='administrator'))
+AND p.proposal_id>sqlc.arg(after_id)::uuid AND p.expires_at>sqlc.arg(now_at)::timestamptz
+AND NOT EXISTS(SELECT 1 FROM shuttle_pair_operations r
  WHERE r.bot_id=p.bot_id AND r.organization_id=p.organization_id AND r.actor=p.actor AND r.operation_id=p.operation_id)
 ORDER BY p.proposal_id LIMIT sqlc.arg(page_limit);

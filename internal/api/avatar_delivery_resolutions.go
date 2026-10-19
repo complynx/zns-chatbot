@@ -243,7 +243,7 @@ func avatarDeliveryAdministrativeMethods() []map[string]any {
 		"Retry or dismiss a saved-draft avatar document with current global administrator authority. Inspect avatar_delivery and the Telegram chat first: unknown may already be delivered; retry can duplicate the document and is a last resort. Never generate another avatar to retry delivery. Exact confirmation binds delivery/version/action/reason. Dismiss does not prove delivery. Retry rechecks the captured recipient. Reconcile the same operation ID before any new action. To continue your existing unexpired proposal from another interface, use its exact original arguments plus optional resume_proposal_id; this binds the new operation to that proposal without extending expiry or supplying consent. A fresh exact approval is still required. Completed/expired proposals must be reconciled, never adopted as fresh consent.",
 		map[string]any{
 			schemaAvatarDeliveryID: uuidField,
-			"resume_proposal_id":   uuidField,
+			schemaResumeProposalID: uuidField,
 			schemaExpectedVersion:  map[string]any{manifestType: schemaInteger, schemaMinimum: 1},
 			schemaAvatarResolutionAction: map[string]any{
 				manifestType: schemaString,

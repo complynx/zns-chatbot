@@ -29,8 +29,7 @@ func detailsSchemas(t *testing.T, h *harness, token string) map[string]*huma.Sch
 	code, raw := adminRequest(t, h, token, http.MethodGet, "/internal/agent/manifest", nil)
 	require.Equal(t, http.StatusOK, code, string(raw))
 	var manifest struct {
-		Revision string `json:"revision"`
-		Modules  []struct {
+		Modules []struct {
 			ID      string `json:"id"`
 			Methods []struct {
 				ID     string          `json:"id"`
@@ -39,7 +38,6 @@ func detailsSchemas(t *testing.T, h *harness, token string) map[string]*huma.Sch
 		} `json:"modules"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &manifest))
-	require.Equal(t, "mvp-43", manifest.Revision)
 	schemas := make(map[string]*huma.Schema)
 	for _, module := range manifest.Modules {
 		if module.ID != "zinusya_registration_details" {

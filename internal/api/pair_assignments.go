@@ -17,6 +17,13 @@ import (
 
 const pairAssignmentPath = "/internal/agent/pairs/assign"
 
+// pairAssignmentArguments keeps continuation metadata outside the domain command.
+type pairAssignmentArguments struct {
+	db.PairAssignment
+
+	ResumeProposalID *uuid.UUID `json:"resume_proposal_id,omitempty"`
+}
+
 type pairAssignmentPreparationResponse struct {
 	Body struct {
 		Status        string                  `json:"status"`
@@ -29,6 +36,7 @@ type pairAssignmentPreparationResponse struct {
 }
 
 func (s *Server) registerPairAssignments(api huma.API) {
+	s.registerPairAssignmentProposalReads(api)
 	s.registerPairPrerequisites(api)
 	s.registerPairParticipants(api)
 	s.registerPairInvitations(api)
@@ -57,6 +65,7 @@ func (s *Server) discoverPairs(ctx context.Context, in *AuthInput) (*agentDiscov
 	methods = append(methods, pairInvitationMethods()...)
 	if allowed {
 		methods = append(methods, pairPrerequisiteMethods()...)
+		methods = append(methods, pairAssignmentProposalMethods()...)
 		methods = append(methods, pairAssignmentMethod())
 	}
 	return discoveryResult(methods)
@@ -71,13 +80,19 @@ func pairAssignmentError(err error) error {
 
 func (s *Server) preparePairAssignment(
 	ctx context.Context,
-	in *agentReadRequest[db.PairAssignment],
+	in *agentReadRequest[pairAssignmentArguments],
 ) (*pairAssignmentPreparationResponse, error) {
 	scope, err := s.paymentScope(ctx, in.AuthInput)
 	if err != nil {
 		return nil, err
 	}
-	prep, err := s.store.PreparePairAssignment(ctx, scope, in.Body.OperationID, in.Body.Arguments)
+	var prep db.PairAssignmentPreparation
+	if in.Body.Arguments.ResumeProposalID != nil {
+		prep, err = s.store.AdoptPairAssignment(ctx, scope, in.Body.OperationID,
+			in.Body.Arguments.PairAssignment, *in.Body.Arguments.ResumeProposalID)
+	} else {
+		prep, err = s.store.PreparePairAssignment(ctx, scope, in.Body.OperationID, in.Body.Arguments.PairAssignment)
+	}
 	if err != nil {
 		return nil, pairAssignmentError(err)
 	}
@@ -90,7 +105,7 @@ func (s *Server) preparePairAssignment(
 
 func (s *Server) assignPair(
 	ctx context.Context,
-	in *paymentWriteRequest[db.PairAssignment],
+	in *paymentWriteRequest[pairAssignmentArguments],
 ) (*paymentWriteResponse[db.PairAssignmentResult], error) {
 	scope, err := s.paymentScope(ctx, in.AuthInput)
 	if err != nil {
@@ -102,11 +117,15 @@ func (s *Server) assignPair(
 		body.Confirmation.Preconditions.ProposalID == uuid.Nil {
 		return nil, huma.Error400BadRequest("matching operation key and exact proposal confirmation required")
 	}
+	if body.Arguments.ResumeProposalID != nil &&
+		*body.Arguments.ResumeProposalID != body.Confirmation.Preconditions.ProposalID {
+		return nil, huma.Error400BadRequest("resume proposal must match exact confirmation")
+	}
 	result, err := s.store.ConfirmPairAssignment(
 		ctx,
 		scope,
 		body.OperationID,
-		body.Arguments,
+		body.Arguments.PairAssignment,
 		body.Confirmation.Preconditions.ProposalID,
 	)
 	out := &paymentWriteResponse[db.PairAssignmentResult]{}

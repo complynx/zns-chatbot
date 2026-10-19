@@ -538,6 +538,15 @@ type ShuttleMealDraftOperation struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type ShuttleMiniappAssignmentAction struct {
+	UserID              uuid.UUID          `json:"user_id"`
+	OperationID         string             `json:"operation_id"`
+	ProposalID          uuid.UUID          `json:"proposal_id"`
+	Kind                string             `json:"kind"`
+	RegistrationVersion int64              `json:"registration_version"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
 type ShuttleMiniappAvatarResolutionAction struct {
 	UserID          uuid.UUID          `json:"user_id"`
 	OperationID     uuid.UUID          `json:"operation_id"`
@@ -819,6 +828,14 @@ type ShuttlePair struct {
 	CreatedAt              pgtype.Timestamptz `json:"created_at"`
 	AssignedAt             pgtype.Timestamptz `json:"assigned_at"`
 	DissolvedAt            pgtype.Timestamptz `json:"dissolved_at"`
+}
+
+type ShuttlePairAssignmentAlias struct {
+	BotID                int64  `json:"bot_id"`
+	OrganizationID       string `json:"organization_id"`
+	Actor                string `json:"actor"`
+	OperationID          string `json:"operation_id"`
+	CanonicalOperationID string `json:"canonical_operation_id"`
 }
 
 type ShuttlePairInvitation struct {

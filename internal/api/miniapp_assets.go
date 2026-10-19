@@ -18,6 +18,8 @@ func (s *Server) miniAppPage(w http.ResponseWriter, r *http.Request) {
 		file, contentType = "app.js", javaScriptType
 	case "/app/order-proof.js":
 		file, contentType = "order-proof.js", javaScriptType
+	case "/app/assignments.js":
+		file, contentType = "assignments.js", javaScriptType
 	case "/app/avatar-admin.js":
 		file, contentType = "avatar-admin.js", javaScriptType
 	case "/app/pairs.js":

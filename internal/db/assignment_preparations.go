@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/complynx/zns-chatbot/internal/db/sqlc"
+	"github.com/complynx/zns-chatbot/internal/events"
 	"github.com/complynx/zns-chatbot/internal/registrations"
 )
 
@@ -39,6 +40,7 @@ func (a PassAssignment) change() RegistrationChange {
 }
 
 type AssignmentPreparation struct {
+	Timezone    string            `json:"timezone,omitempty"`
 	Quotes      []AssignmentQuote `json:"quotes,omitempty"`
 	ID          uuid.UUID         `json:"proposal_id"`
 	Arguments   PassAssignment    `json:"arguments"`
@@ -54,11 +56,11 @@ func (s *Store) PrepareAssignment(
 	actor, operation string,
 	args PassAssignment,
 ) (AssignmentPreparation, error) {
-	return s.prepareAssignment(ctx, scope, actor, operation, args, uuid.Nil)
+	return s.prepareAssignment(ctx, scope, actor, operation, args, uuid.Nil, nil)
 }
 
 func (s *Store) prepareAssignment(ctx context.Context, scope EventScope, actor, operation string,
-	args PassAssignment, resume uuid.UUID,
+	args PassAssignment, resume uuid.UUID, session *MiniAppAssignmentSession,
 ) (AssignmentPreparation, error) {
 	if scope.BotID <= 0 || scope.Organization == "" || actor == "" || operation == "" || len(operation) > 128 ||
 		!validRegistrationChange(args.change()) {
@@ -75,16 +77,17 @@ func (s *Store) prepareAssignment(ctx context.Context, scope EventScope, actor, 
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
-	if err = q.LockEventOperation(
+	if err = lockAssignmentPreparationOrigin(
 		ctx,
-		fmt.Sprintf("registration:%d:%s:%s:%s", scope.BotID, scope.Organization, actor, operation),
+		q,
+		scope,
+		actor,
+		operation,
+		args.EventID,
+		resume,
+		session,
 	); err != nil {
 		return AssignmentPreparation{}, err
-	}
-	if resume != uuid.Nil {
-		if err = lockAssignmentEvent(ctx, q, scope, args.EventID); err != nil {
-			return AssignmentPreparation{}, err
-		}
 	}
 	prior, err := q.GetAssignmentPreparation(
 		ctx,
@@ -96,7 +99,11 @@ func (s *Store) prepareAssignment(ctx context.Context, scope EventScope, actor, 
 		},
 	)
 	if err == nil {
-		return replayAssignmentPreparation(ctx, q, prior, hash[:], resume)
+		result, replayErr := replayAssignmentPreparation(ctx, q, prior, hash[:], resume)
+		if replayErr != nil {
+			return AssignmentPreparation{}, replayErr
+		}
+		return finishAssignmentPreparation(ctx, tx, q, scope, actor, operation, result, session)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return AssignmentPreparation{}, err
@@ -110,10 +117,7 @@ func (s *Store) prepareAssignment(ctx context.Context, scope EventScope, actor, 
 		if adoptErr != nil {
 			return AssignmentPreparation{}, adoptErr
 		}
-		if err = tx.Commit(ctx); err != nil {
-			return AssignmentPreparation{}, err
-		}
-		return result, nil
+		return finishAssignmentPreparation(ctx, tx, q, scope, actor, operation, result, session)
 	}
 	result, err := buildAssignmentPreparation(ctx, q, scope, args)
 	if err != nil {
@@ -138,10 +142,7 @@ func (s *Store) prepareAssignment(ctx context.Context, scope EventScope, actor, 
 	); err != nil {
 		return AssignmentPreparation{}, err
 	}
-	if err = tx.Commit(ctx); err != nil {
-		return AssignmentPreparation{}, err
-	}
-	return result, nil
+	return finishAssignmentPreparation(ctx, tx, q, scope, actor, operation, result, session)
 }
 
 func buildAssignmentPreparation(
@@ -196,10 +197,6 @@ func buildAssignmentPreparation(
 	if err != nil {
 		return AssignmentPreparation{}, err
 	}
-	zone, err := time.LoadLocation(event.Document.Timezone)
-	if err != nil {
-		return AssignmentPreparation{}, err
-	}
 	prices, err := assignmentPrices(ctx, q, event, now.Time, []string{entry.Role})
 	if err != nil {
 		return AssignmentPreparation{}, err
@@ -208,24 +205,53 @@ func buildAssignmentPreparation(
 	if err != nil {
 		return AssignmentPreparation{}, err
 	}
+	description, err := describeAssignmentPreparation(event, entry.Role, user.TgUserID, quotes[0])
+	if err != nil {
+		return AssignmentPreparation{}, err
+	}
+	expiresAt := now.Time.Add(assignmentPreparationTTL)
+	if rules.ClosesAt.Before(expiresAt) {
+		expiresAt = rules.ClosesAt
+	}
+	return AssignmentPreparation{
+		Timezone:    event.Document.Timezone,
+		Quotes:      quotes,
+		ID:          uuid.New(),
+		Arguments:   args,
+		Description: description,
+		ExpiresAt:   expiresAt.UTC(),
+	}, nil
+}
+
+func describeAssignmentPreparation(
+	event events.Event,
+	role string,
+	telegramID int64,
+	quote AssignmentQuote,
+) (string, error) {
+	rules := event.Document.Registration
+	zone, err := time.LoadLocation(event.Document.Timezone)
+	if err != nil {
+		return "", err
+	}
 	description := fmt.Sprintf(
 		"Assign an unpaid %s pass to Telegram user %d for %s (event %s). Price %s %s. Payment window: %d seconds after assignment, capped at %s. No payment is recorded.",
-		entry.Role,
-		user.TgUserID,
+		role,
+		telegramID,
 		event.Document.Name,
 		event.ID,
-		minorAmount(quotes[0].PriceMinor, rules.CurrencyScale),
+		minorAmount(quote.PriceMinor, rules.CurrencyScale),
 		rules.Currency,
 		rules.PaymentWindowSeconds,
 		rules.ClosesAt.In(zone).Format(time.RFC3339),
 	)
-	if quotes[0].Tier != nil {
-		description += fmt.Sprintf(" Tier %d (%s).", quotes[0].Tier.Number, quotes[0].Tier.ID)
+	if quote.Tier != nil {
+		description += fmt.Sprintf(" Tier %d (%s).", quote.Tier.Number, quote.Tier.ID)
 	}
 	if event.Document.Deposit != nil {
-		threshold, thresholdErr := event.Document.Deposit.Threshold(quotes[0].PriceMinor)
+		threshold, thresholdErr := event.Document.Deposit.Threshold(quote.PriceMinor)
 		if thresholdErr != nil {
-			return AssignmentPreparation{}, thresholdErr
+			return "", thresholdErr
 		}
 		description += fmt.Sprintf(
 			" Deposit minimum: %s %s. Final top-up deadline: %s.",
@@ -234,17 +260,7 @@ func buildAssignmentPreparation(
 			rules.ClosesAt.In(zone).Format(time.RFC3339),
 		)
 	}
-	expiresAt := now.Time.Add(assignmentPreparationTTL)
-	if rules.ClosesAt.Before(expiresAt) {
-		expiresAt = rules.ClosesAt
-	}
-	return AssignmentPreparation{
-		Quotes:      quotes,
-		ID:          uuid.New(),
-		Arguments:   args,
-		Description: description,
-		ExpiresAt:   expiresAt.UTC(),
-	}, nil
+	return description, nil
 }
 
 func minorAmount(amount int64, scale int32) string {
@@ -270,7 +286,7 @@ func (s *Store) ConfirmAssignment(
 	if proposalID == uuid.Nil {
 		return registrations.Registration{}, ErrConflict
 	}
-	return s.changeRegistration(ctx, scope, actor, operation, args.change(), proposalID, nil)
+	return s.changeRegistration(ctx, scope, actor, operation, args.change(), proposalID, nil, nil)
 }
 
 // AssignmentOperation excludes owner joins and unprepared operator assignments.

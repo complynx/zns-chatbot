@@ -1,3 +1,31 @@
+# Current roadmap direction, 2026-10-19
+
+The [native solo assignment source and owned-runtime gates](shuttle-native-pass-assignments.md)
+pass in all four interface combinations. The candidate is schema 61 / `mvp-69`;
+[local-primary installation and rollback](shuttle-native-pass-assignment-primary-qa-2026-10-19.md)
+are accepted. The primary is now schema 61 / `mvp-69`, with eleven services and
+134 Loom runs preserved.
+
+The [pair canonical-continuation foundation](shuttle-native-pair-assignment-foundation.md)
+now passes DB/API component gates in source schema 62 / `mvp-70`; it is
+uninstalled. Native sessions, form/history and four-path runtime acceptance
+remain next. The primary is unchanged.
+
+Continue in this order, retaining the broader requirements below:
+
+1. Finish native/agent pass parity: pair assignment, participant payment and
+   top-up flows, ambassador confirmation, deadlines, and both mixed handoffs.
+2. Complete orders/meals and massage process parity and real multi-user form/
+   agent acceptance, including administrative and specialist operations.
+3. Complete Zitadel/zitadeltg linking and real Mini App/HTML acceptance. Joint
+   browser CA trust/provider work remains deferred with Daniel; continue work
+   that does not need it.
+4. Close process, IAM/Loom recovery, observability, Linux/race and deployment
+   gates before any separately authorized production cutover.
+
+The earlier stage reports below are historical. Their run counts, installation
+status and next-step sentences describe those stages, not the current runtime.
+
 The [primary pair image and actual Telegram entry gate](shuttle-native-pair-primary-qa-2026-10-19.md)
 now pass: candidate/old/candidate rollback, three subsecond bot stops,14 exact
 assets, one delivered `/pairs` command and one revoked real Mini App session.

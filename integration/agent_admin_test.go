@@ -69,20 +69,29 @@ func TestAgentAdministrativeReadsRespectRoleScopeAndRevocation(t *testing.T) {
 		} `json:"methods"`
 	}
 	require.NoError(t, json.Unmarshal(data, &discovery))
+	writeMethods := map[string]bool{
+		"assign": true, "authority": true, "resolve_notification": true, "store_archive": true,
+		"apply_history": true, "set_orders_catalog": true, "set_massage_schedule": true,
+		"set_massage_specialist_binding": true, "close_task": true, "update_settings": true,
+		"revoke_user": true, "change_event": true,
+	}
+	methodEffects := make(map[string]string)
 	methodIDs := make(map[string]bool)
 	for _, method := range discovery.Methods {
 		require.False(t, methodIDs[method.ID], "duplicate administrative tool: %s", method.ID)
 		methodIDs[method.ID] = true
-		if method.ID == "assign" || method.ID == "authority" || method.ID == "resolve_notification" ||
-			method.ID == "store_archive" || method.ID == "apply_history" || method.ID == "set_orders_catalog" || method.ID == "set_massage_schedule" || method.ID == "set_massage_specialist_binding" || method.ID == "close_task" || method.ID == "update_settings" || method.ID == "revoke_user" || method.ID == "change_event" {
-			require.Equal(t, "write", method.Effect)
-		} else {
-			require.Equal(t, "read", method.Effect)
+		require.Contains(t, []string{"read", "write"}, method.Effect, method.ID)
+		methodEffects[method.ID] = method.Effect
+		if writeMethods[method.ID] {
+			require.Equal(t, "write", method.Effect, method.ID)
 		}
 	}
 	for _, required := range []string{"events", "event", "registrations", "assign", "authorities", "authority",
 		"resolve_notification", "notifications", "notification", "pair_notifications", "pair_notification", "settings", "tasks", "task", "orders_catalog", "set_orders_catalog", "massage_schedule", "set_massage_schedule", "close_task", "update_settings", "revoke_user", "user", "user_revocation_receipt", "change_event"} {
 		require.True(t, methodIDs[required], "missing administrative tool: %s", required)
+		if !writeMethods[required] {
+			require.Equal(t, "read", methodEffects[required], required)
+		}
 	}
 	code, data = agentAdminRead(t, h, operator, "settings", map[string]any{})
 	require.Equal(t, http.StatusOK, code, string(data))

@@ -97,7 +97,7 @@ func pairAssignmentMethod() map[string]any {
 	version := map[string]any{manifestType: schemaInteger, schemaMinimum: 1}
 	return map[string]any{
 		"id":                pairAssignMethod,
-		manifestDescription: "Assign both passes atomically only after a global or event administrator request and exact approval. Read event, pair and both registration versions first. Preparation names both recipients, each configured price/currency, deposit minimum and event-local payment deadlines; it reserves no capacity. Confirmation lasts at most five minutes. Both accounts, membership, versions and capacities are rechecked before writing. No payment is recorded. After uncertainty reconcile the same operation ID; missing status is unknown, never create a replacement operation blindly.",
+		manifestDescription: "Assign both passes atomically only after a global or event administrator request and exact approval. Read event, pair and both registration versions first. Preparation names both recipients, each configured price/currency, deposit minimum and event-local payment deadlines; it reserves no capacity. Confirmation lasts at most five minutes. Both accounts, membership, versions and capacities are rechecked before writing. No payment is recorded. After uncertainty reconcile the same operation ID; missing status is unknown, never create a replacement operation blindly. To continue your own pending preparation from another interface, supply its original exact arguments and resume_proposal_id. Adoption preserves the original operation, terms and expiry and requires fresh exact approval. Read completed or expired proposals instead of adopting them.",
 		manifestPermissions: []string{},
 		manifestPath:        pairAssignmentPath,
 		manifestEffect:      effectWrite,
@@ -116,6 +116,7 @@ func pairAssignmentMethod() map[string]any {
 			},
 			schemaProperties: map[string]any{
 				schemaEventID: uuidField, schemaPairID: uuidField,
+				schemaResumeProposalID:     uuidField,
 				schemaExpectedEventVersion: version, "expected_pair_version": version,
 				"expected_leader_version": version, "expected_follower_version": version,
 			},
