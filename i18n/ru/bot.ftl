@@ -117,7 +117,7 @@ orders-capacity-proof-too-late =
 undefined-state-error = Что-то пошло не так, попробуй ещё раз!
 unsupported-message-error = Прости, я не понимаю этого сообщения.
 max-assistant-messages-reached =  К сожалению, на сегодня лимит сообщений исчерпан. Приходи снова через 24 часа)
-avatar-without-command = Зуконавт, пришли мне фото, и я сделаю для тебя аватарку ZoukDelight Marathon. Регистрация на марафон не нужна.
+avatar-without-command = Зуконавт, пришли мне фото, и я сделаю для тебя аватарку ZoukDelight Marathon.
 something-went-wrong = Что-то пошло не так. Попробуй ещё.
 
 food-adm-payment-proof-accept-button = ✅ Подтверждено

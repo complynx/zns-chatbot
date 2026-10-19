@@ -117,7 +117,7 @@ undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
 max-assistant-messages-reached = You've reached your questions limit for a day, please come back in 24 hours.
 avatar-custom-crop = Crop differently
-avatar-without-command = Zoukonaut, send me a photo and I'll make a ZoukDelight Marathon avatar for you. No marathon registration is needed.
+avatar-without-command = Zoukonaut, send me a photo and I'll make a ZoukDelight Marathon avatar for you.
 something-went-wrong = Something went wrong. Try again.
 
 # Food Plugin Entries
