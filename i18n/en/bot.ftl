@@ -1,10 +1,9 @@
 avatar-no-face = No face found on the image. Please try again with another image: either move away from the phone or move closer, or turn the phone straight.
-avatar-no-role = I can't create your avatar because you aren't registered for the next ZoukDelight Marathon. Please register first using /passes.
 avatar-processing =
     Your photo is processing...
     It may take a while.
 avatar-disabled = Creation of userpics temporarily disabled.
-avatar-choose-method = Choose how to create your ZoukDelight Marathon avatar.
+avatar-choose-method = Zoukonaut, choose how to create your ZoukDelight Marathon avatar.
 avatar-method-simple = 🖼 Photo frame
 avatar-method-detailed = 🙂 Face swap
 avatar-cancel-button = ❌ Cancel
@@ -12,7 +11,7 @@ avatar-error-generic = Something went wrong. Please try again.
 avatar-cancelled-message = Avatar creation cancelled.
 avatar-processing-initial = Processing your request...
 avatar-error-file-expired-or-missing = Unfortunately, the file was not found or has expired. Please try uploading it again.
-avatar-simple-caption = Your ZoukDelight Marathon avatar is ready! Set it as your profile photo and see you at ZD.
+avatar-simple-caption = Zoukonaut, your ZoukDelight Marathon avatar is ready! Set it as your profile photo and see you in Turkiye.
 avatar-error-frame-missing = Error: Frame file for simple avatar is missing. Please contact an administrator.
 avatar-error-config-role = Error: Configuration for your role is missing or incomplete. Please contact an administrator.
 
@@ -22,11 +21,11 @@ auth-cancelled = Request cancelled
 auth-decline = ❌ Decline
 auth-declined = Request declined
 auth-request =
-    Someone requested authorization for the ZoukDelight Marathon bot from site {$origin}
+    Someone requested authorization for ZNS bot from site {$origin}
     Their IP: {$ip}
     Their User-agent: {$useragent}
 start-message =
-    <b>Hello!</b> I'm the <b>ZoukDelight Marathon (ZD)</b> assistant.
+    <b>Hello, Zoukonaut!</b> I am <b>ZiNuSya</b>, your digital assistant in the world of convenience and technology.
     Always here to help you register a pass, order hot meals, book a massage,
     create an avatar, and much more — if these features are currently available.
     Want to know what I can do for you right now?
@@ -118,7 +117,7 @@ undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
 max-assistant-messages-reached = You've reached your questions limit for a day, please come back in 24 hours.
 avatar-custom-crop = Crop differently
-avatar-without-command = Send me a photo and I'll make a ZoukDelight Marathon avatar for you.
+avatar-without-command = Zoukonaut, send me a photo and I'll make a ZoukDelight Marathon avatar for you. No marathon registration is needed.
 something-went-wrong = Something went wrong. Try again.
 
 # Food Plugin Entries
@@ -144,7 +143,7 @@ food-button-edit-order = ✏️ Edit Order
 food-button-pay = 💸 Pay for Order
 food-button-view-order = 👁️ View Order
 food-cannot-submit-proof-now = Cannot submit payment proof for this order at this time.
-food-command-description = Order meals at ZoukDelight Marathon.
+food-command-description = Your cosmic snack on ZNS.
 food-no-order = You have no active food order. Create one using the button below.
 food-not-authorized-admin = You are not authorized for this action.
 food-order-already-paid = This order has already been paid.
@@ -164,7 +163,7 @@ food-payment-proof-accepted = Your payment for the food order with a total of {$
 food-payment-proof-cancelled = Payment proof submission cancelled. You can try to pay again or manage your order using the /food command.
 food-payment-proof-confirmed =
     The administrator has confirmed the order for participant <i>{$name}</i>.
-    See you at ZD.
+    See you at ZNS.
 food-payment-proof-forwarded = Your payment proof has been sent for review.
 food-payment-proof-rejected =
     The administrator has rejected the order for participant <i>{$name}</i>.
@@ -199,7 +198,7 @@ food-payment-request-waiting-message =
     Please send a screenshot or a PDF file <u>here, to the bot,</u> as proof of payment for your order of <code>{$total}</code> ₽.
     {food-payment-method}
 food-notification-message-first =
-    Hello!
+    Hello, zoukonaut!
     Last day to place a food order for the marathon is <b>June 4th</b> (till the end of the day).
     If you want your order to be delivered to the marathon, you need to pay for it and send me the payment confirmation by the end of the day.
     Don't miss out!
@@ -221,7 +220,7 @@ activity-adm-payment-rejected-msg =
     Payment for {$link}'s activities with a total of <code>{$activitiesTotal}</code> ₽ is rejected.
 
 activity-select-message =
-    At ZoukDelight Marathon, there will be several activities. Some of them require a prior booking, even if you have a full pass and they are included in its cost.
+    At Zouk Non Stop Picnic, there will be several activities. Some of them require a prior booking, even if you have a full pass and they are included in its cost.
     Mark the ones you want to attend, by toggling the buttons below between ☑️ and ❌.
 
     Cost:
@@ -359,7 +358,7 @@ massage-edit-select-specialists-filtered = Some specialists are not shown becaus
 massage-exit-button = 🚪 Exit
 massage-exited = If you need it again, you can always click: /massage
 massage-notification-additional =
-    Hi!
+    Hi, zoukonaut!
     You have a massage booking:
     Massage type: {massage-pd}.
     Party: <b>{$party}</b>
@@ -369,7 +368,7 @@ massage-notification-additional =
     Come <u>on time</u> because there is somebody after you. If you can't come, please cancel in advance.
     Enjoy your cake of peace!
 massage-notification-prior-long =
-    Hi!
+    Hi, zoukonaut!
     I remind you that you have a massage in {$inminutes} minutes, at <b>{$time}</b>:
     Massage type: {massage-pd}.
     Specialist: {$specialist}
@@ -377,7 +376,7 @@ massage-notification-prior-long =
     Come <u>on time</u> because there is somebody after you. If you can't come, please cancel in advance.
     Enjoy your cake of peace!
 massage-notification-prior =
-    Hi!
+    Hi, zoukonaut!
     I remind you that you have a massage in {$inminutes} minutes, at <b>{$time}</b>:
     Massage type: {massage-pd}.
     Specialist: {$specialist}
@@ -428,6 +427,7 @@ massage-specialist-view =
 massage-specialist-view-booking-button = 📝 View booking
 massage-start-message = 
     Click "New booking", to book a massage session or select your current session to change or cancel it or to contact the specialist.
+    <a href="https://t.me/zouknonstopchannel/1580">About massages at ZNS</a>.
     
     Our specialists:
 massage-successfully-created = Massage session was successfully booked.
@@ -462,7 +462,7 @@ passes-button-cancel = ❌ Cancel ⚠️
 passes-button-change-name = 🏷 Change name
 passes-button-exit = 🚪 Exit
 passes-button-pay = 💸 Payment proof
-passes-command-description = Register for ZoukDelight Marathon or manage your registration
+passes-command-description = Register to ZNS or manage your registration
 passes-added-to-waitlist =
     Hello, <i>{$name}</i>!
     Unfortunately, all the passes are currently sold out. However, you've been added to the waiting list for the next {passes-pass-description}.
@@ -678,7 +678,7 @@ passes-payment-proof-forwarded =
     I've sent your payment proof to our administrators for verification. They will review it, and I'll update you with the result soon.
     If you need to view your pass details in the meantime, use the /passes command.
 passes-select-type-message =
-    Select your ZoukDelight Marathon event:
+    Select, which Zouk Non Stop marathon we will work with:
 passes-select-type-button =
     {$eventCountryEmoji} {$eventTitleShort}
 passes-sell-not-started =
@@ -710,7 +710,7 @@ passes-role-button-cancel = ❌ Cancel and exit
 passes-role-saved = Your new role as a {$role} is saved.
 passes-role-exit = To change role again, use command /role
 passes-promopass-select-role =
-    You have registered for a ZoukDelight Marathon pass and are on the waitlist, but haven't yet selected a pass type.
+    You have registered for Zouk Non Stop pass and are in the waitlist, but haven't yet selected a pass type.
     You won't loose your position in the waitlist if you change the pass to couple pass now.
     In 2 days all the passes will be automatically converted to solo passes.
 passes-payment-deadline-close =

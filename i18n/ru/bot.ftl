@@ -1,10 +1,9 @@
 avatar-no-face = Лицо на изображении не определено. Попробуй с другим изображением, например отодвинь телефон подальше от лица или поближе, или держи его прямее.
-avatar-no-role = Не могу создать аватарку, потому что ты не зарегистрирован на ближайший ZoukDelight Marathon. Пожалуйста, зарегистрируйся с помощью команды /passes.
 avatar-processing =
     Ваше фото обрабатывается...
     Это может занять некоторое время.
 avatar-disabled = Создание аватарок временно отключено.
-avatar-choose-method = Выбери, как создать аватарку ZoukDelight Marathon.
+avatar-choose-method = Зуконавт, выбери, как создать аватарку ZoukDelight Marathon.
 avatar-method-simple = 🖼 Рамка для фото
 avatar-method-detailed = 🙂 Замена лица
 avatar-cancel-button = ❌ Отменить
@@ -13,7 +12,7 @@ avatar-cancelled-message = Создание аватарки отменено.
 avatar-processing-initial = Обрабатываю ваш запрос...
 avatar-error-file-expired-or-missing = К сожалению, файл не найден или срок его действия истек. Пожалуйста, попробуйте загрузить его снова.
 avatar-custom-crop = Поменять расположение
-avatar-simple-caption = Твоя аватарка ZoukDelight Marathon готова! Ставь её на фото профиля и до встречи на ZD.
+avatar-simple-caption = Зуконавт, твоя аватарка ZoukDelight Marathon готова! Ставь её на фото профиля и до встречи в Турции.
 avatar-error-frame-missing = Ошибка: файл рамки для простого аватара отсутствует. Обратитесь к администратору.
 avatar-error-config-role = Ошибка: конфигурация для вашей роли отсутствует или неполна. Обратитесь к администратору.
 
@@ -23,11 +22,11 @@ auth-cancelled = Запрос отменён
 auth-decline = ❌ Отклонить
 auth-declined = Запрос отклонён
 auth-request =
-    Кто-то запросил авторизацию для бота ZoukDelight Marathon с сайта {$origin}
+    Кто-то запросил авторизацию для ZNS бота с сайта = {$origin}
     Его IP: {$ip}
     Его юзер-агент: {$useragent}
 start-message =
-    <b>Привет!</b> Я — помощница <b>ZoukDelight Marathon (ZD)</b>.
+    <b>Привет, Зуконавт!</b> Я — <b>ЗиНуСя</b>, твой цифровой помощник в мире удобства и технологий.
     Всегда на связи, чтобы оформить пасс, заказать горячее питание, записать на массаж,
     создать аватарку и многое другое — если эти функции сейчас доступны.
     Хочешь узнать, что я могу для тебя сделать прямо сейчас?
@@ -55,7 +54,7 @@ orders-adm-payment-cash-requested =
 orders-adm-payment-proof-received =
     Пользователь {$link} прислал подтверждение оплаты заказа
     на сумму: {$total} ₽
-    для участника по имени <i>{$name}</i>. Требуется подтверждение.
+    для зуконавта по имени <i>{$name}</i>. Требуется подтверждение.
     <b>Внимание</b>, не стоит помечать отсутствие оплаты раньше времени, лучше сначала удостовериться.
 orders-admin-belarus = {$name}/{$region}
 orders-back-button = Назад
@@ -118,24 +117,24 @@ orders-capacity-proof-too-late =
 undefined-state-error = Что-то пошло не так, попробуй ещё раз!
 unsupported-message-error = Прости, я не понимаю этого сообщения.
 max-assistant-messages-reached =  К сожалению, на сегодня лимит сообщений исчерпан. Приходи снова через 24 часа)
-avatar-without-command = Пришли мне фото, и я сделаю для тебя аватарку ZoukDelight Marathon.
+avatar-without-command = Зуконавт, пришли мне фото, и я сделаю для тебя аватарку ZoukDelight Marathon. Регистрация на марафон не нужна.
 something-went-wrong = Что-то пошло не так. Попробуй ещё.
 
 food-adm-payment-proof-accept-button = ✅ Подтверждено
-food-adm-payment-proof-confirmed = Заказ от пользователя {$link} для участника по имени <i>{$name}</i> подтверждён.
+food-adm-payment-proof-confirmed = Заказ от пользователя {$link} для зуконавта по имени <i>{$name}</i> подтверждён.
 food-adm-payment-proof-received =
     Пользователь {$link} отправил подтверждение оплаты для своего заказа еды.
     Общая сумма заказа: {$total} ₽. Требуется подтверждение.
     <b>Внимание</b>, не отклоняйте подтверждение сразу, подождите немного и сначала попытайтесь найти платеж.
 food-adm-payment-proof-reject-button = ❌ Отказ
-food-adm-payment-proof-rejected = Заказ от пользователя {$link} для участника по имени <i>{$name}</i> был отклонён.
+food-adm-payment-proof-rejected = Заказ от пользователя {$link} для зуконавта по имени <i>{$name}</i> был отклонён.
 food-adm-payment-accepted-msg = Оплата заказа на сумму {$total} ₽ от пользователя {$link} принята.
 food-adm-payment-already-processed-or-error = Заказ уже обработан или произошла ошибка.
 food-adm-payment-rejected-msg = Оплата заказа на сумму {$total} ₽ от пользователя {$link} отклонена.
 
 food-back-button = К началу.
 food-cancel-order-button = Отменить заказ.
-food-command-description = Заказ питания на ZoukDelight Marathon.
+food-command-description = Твой космический паёк на ZNS.
 food-confirm-payment-button = Оплатить заказ
 food-created-write-for-who = Твой заказ сохранён. Напиши своё имя, чтобы мы могли идентифицировать твой заказ и выдать его тебе.
 food-day-wednesday = Среда
@@ -145,14 +144,14 @@ food-day-sunday = Воскресенье
 food-edit-order-button = Изменить заказ.
 food-meal-lunch = обед
 food-meal-dinner = ужин
-food-name-update-cancelled = Имя участника не изменено.
-food-name-updated = Новое имя участника <i>{$name}</i> сохранено.
+food-name-update-cancelled = Имя зуконавта не изменено.
+food-name-updated = Новое имя зуконавта <i>{$name}</i> сохранено.
 food-new-order-button = Создать новый
 food-no-orders-yet = 
-    Чтобы хватало сил на танцы, участнику нужно полноценное питание!
+    Для полного погружения зуконавту необходимо полноценное питание!
     Жми на кнопку и выбирай себе обед и/или ужин.
 food-order-button = {$created}|{$name}
-food-order-for = Заказ для участника по имени <b>{$name}</b>
+food-order-for = Заказ для зуконавта по имени <b>{$name}</b>
 food-order-message-begin = Вот твой заказ. Здесь ты можешь его просмотреть, или изменить.
 food-order-saved = Твой заказ сохранён, теперь можно приступить к оплате.
 food-order-unexpected-state = Заказ находится в неожиданном состоянии для проведения оплаты.
@@ -165,11 +164,11 @@ food-payment-instructions-proof =
     Сюда можно будет снова вернуться.
 food-payment-proof-cancelled = Отправка подтверждения оплаты отменена. Вы можете попробовать снова или управлять своим заказом с помощью команды /food.
 food-payment-proof-confirmed =
-    Администратор подтвердил заказ для участника по имени <i>{$name}</i>.
-    Ждём тебя на ZD.
+    Администратор подтвердил заказ для зуконавта по имени <i>{$name}</i>.
+    Ждём тебя на ZNS.
 food-payment-proof-failed = Я ожидала подтверждение оплаты, а это не похоже на него. Чтобы снова отправить подтверждение оплаты, придётся зайти в меню.
 food-payment-proof-rejected = 
-    Администратор отменил заказ для участника по имени <i>{$name}</i>.
+    Админинстратор отменил заказ для зуконавта по имени <i>{$name}</i>.
     Можно заказать заново, или попробовать прислать другое подтверждение.
 food-payment-admin-desc = Оплатить: {$adminLink}
 food-remind-about-order =
@@ -183,7 +182,7 @@ food-remind-about-order =
 food-rename-button = Переименовать
 food-select-order =  Пожалуйста, ознакомься со своим заказом, или создай новый.
 food-total = <b>Итого:</b> <code>{$total}</code> ₽
-food-write-for-who = Укажи полные <b>имя</b> и <b>фамилию</b> участника, для которого будет этот заказ.
+food-write-for-who = Укажи полные <b>имя</b> и <b>фамилию</b> зуконавта, для которого будет этот заказ.
 food-button-create-order = 📝 Создать заказ
 food-button-delete-order = 🗑️ Удалить заказ
 food-button-edit-order = ✏️ Изменить заказ
@@ -239,7 +238,7 @@ food-payment-request-waiting-message =
 
 food-payment-rejected = Ваш платеж за заказ на сумму {$total} ₽ был отклонен. Пожалуйста, свяжитесь с {$adminLink} для уточнения деталей.
 food-notification-message-first =
-    Привет!
+    Привет, зуконавт!
     Последний день, когда можно оставить заказ еды на марафон — <b>4 июня</b> (до конца дня).
     Если ты хочешь, чтобы твой заказ был доставлен на марафон, тебе нужно оплатить его и прислать подтверждение оплаты до конца дня.
     Успей!
@@ -262,7 +261,7 @@ activity-adm-payment-rejected-msg =
     Подтверждение оплаты за активности {$link} на сумму <code>{$activitiesTotal}</code> ₽ отклонено.
 
 activity-select-message =
-    На ZoukDelight Marathon будет несколько практик. На некоторые из них требуется предварительная запись, даже если у тебя фулл-пасс и они входят в его стоимость.
+    На Пикнике Zouk Non Stop будет несколько практик. На некоторые из них требуется предварительная запись, даже если у тебя фулл-пасс и они входят в его стоимость.
     Отметь, на какие из них ты хочешь записаться, переключая кнопки ниже между ☑️ и ❌.
 
     Стоимость:
@@ -400,7 +399,7 @@ massage-edit-select-specialists-filtered = Некоторые массажист
 massage-exit-button = 🚪 Выйти
 massage-exited = Если ещё понадобится, можно всегда вызвать команду вновь: /massage
 massage-notification-additional =
-    Привет!
+    Привет зуконавт!
     Ты записан на массаж:
     Тип массажа: {massage-pd}.
     Вечеринка: <b>{$party}</b>
@@ -410,7 +409,7 @@ massage-notification-additional =
     Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.
     Приятного погружения!
 massage-notification-prior-long =
-    Привет!
+    Привет зуконавт!
     Напоминаю, что у тебя есть запись на массаж через {$inminutes} минут, в <b>{$time}</b>:
     Тип массажа: {massage-pd}.
     Специалист: {$specialist}
@@ -418,7 +417,7 @@ massage-notification-prior-long =
     Приходи <u>вовремя</u> ведь после тебя будет кто-то ещё. А если не можешь прийти — лучше заранее отменить.
     Приятного погружения!
 massage-notification-prior =
-    Привет!
+    Привет зуконавт!
     Напоминаю, что у тебя есть запись на массаж через {$inminutes} минут, в <b>{$time}</b>:
     Тип массажа: {massage-pd}.
     Специалист: {$specialist}
@@ -469,6 +468,7 @@ massage-specialist-view =
 massage-specialist-view-booking-button = 📝 К бронированию
 massage-start-message =
     Кликни "Записаться", чтобы попасть на приём к массажисту или выбери свою текущую запись из списка, чтобы внести изменения, отменить или связаться со специалистом.
+    <a href="https://t.me/zouknonstopchannel/1580">Пост о массаже на ZNS</a>.
     
     Наши специалисты:
 massage-successfully-created = Сессия массажа успешно забронирована.
@@ -497,7 +497,7 @@ passes-button-cancel = ❌ Отменить ⚠️
 passes-button-change-name = 🏷 Изменить имя
 passes-button-exit = 🚪 Выйти
 passes-button-pay = 💸 Подтверждение оплаты
-passes-command-description = Регистрация на ZoukDelight Marathon и управление ей
+passes-command-description = Регистрация на ЗНС и управление ей
 passes-pass-description =
     {$type ->
         [couple] Парный пасс на {$eventTitleLong} с вашей ролью {passes-role} и вторым участником {$coupleLink}
@@ -688,7 +688,7 @@ passes-couple-request-wrong-data =
 passes-couple-request-edit =
     Прокрутите вниз чтобы выбрать пару.
 passes-promopass-select-role =
-    Вы зарегистрированы на пасс ZoukDelight Marathon и находитесь в списке ожидания, но не выбрали тип пасса.
+    Вы зарегистрированы на пасс Zouk Non Stop и находитесь в списке ожидания, но не выбрали тип пасса.
     Если вы решите поменять тип пасса на парный, то можете это сделать сейчас без потери позиции.
     Через два дня все нетронутые пассы в листе ожидания будут сконвертированы в сольные.
 passes-couple-saved =
@@ -733,7 +733,7 @@ passes-couple-request-invitee-paid =
 passes-couple-request-timeout =
     Я не дождалась пересланного сообщения от вашей пары. Чтобы попробовать ещё раз, введите команду /passes снова.
 passes-select-type-message =
-    Выбери мероприятие ZoukDelight Marathon:
+    Выбери, с каким Зук Нон Стоп марафоном мы будем работать сейчас:
 passes-select-type-button =
     {$eventCountryEmoji} {$eventTitleShort}
 passes-solo-saved =

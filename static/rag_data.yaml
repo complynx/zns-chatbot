@@ -1,4 +1,22 @@
 collection:
+  - question: Who is Vladimir Butman?
+    answer: Владимир Бутман @vbutman is the captain of ZNS.
+
+  - question: What is Butman's strength?
+    answer: Сила Бутмана в каждом батончике!
+
+  - question: Who organizes ZNS?
+    alt_questions:
+    - Who are team members?
+    answer: |
+      Here is a list of team members:
+      - Владимир Бутман @vbutman - the captain
+      - Люба Зеленская - payments and accounting, passes
+      - Remy - art, tech and sound
+      - Люся - content, reels
+      - Аня Атман - meetings and data manager
+      and many more who help
+
   # - question: Who are the DJs at ZNS?
   #   alt_questions:
   #   - Will DJ play at ZNS?
@@ -20,7 +38,19 @@ collection:
     alt_questions:
       - How to change name?
     answer: |
-      To change the name on your ZoukDelight Marathon pass, use the /legal_name command.
+      To change your name for your pass and lisoborie pass, use command "/legal_name"
+
+  - question: Who is Remy?
+    alt_questions:
+      - Who is Виталий Портников?
+    answer: |
+      DJ Remy - (Веталь), SPb
+      He does art, tech and sound at ZNS. He also creates our merch.
+
+  - question: Who is Touchzouk?
+    answer: |
+      DJ Touchzouk - Даниил Дрижук, Amsterdam, will not be at ZNS
+      He is my creator and IT specialist in the core ZNS team.
 
   # - question: Show me full DJ schedule for each day.
   #   alt_questions:
@@ -77,7 +107,7 @@ collection:
   # - question: "Where is open-air located on map?"
   #   answer: "Here is map link to open-air: https://maps.app.goo.gl/Dvf1AH47GSGeGhy99"
 
-  - question: What is the participant list for ZoukDelight Marathon? / What is the balance?
+  - question: What is the participant list for ZNS? / What is the balance?
     answer: |
       The list of participants is not available to bot.
 
@@ -262,7 +292,7 @@ collection:
 
   - question: How can I make an avatar or userpic for ZoukDelight Marathon?
     answer: |
-      Send me your photo and I will add the ZoukDelight Marathon frame.
+      Send me your photo and I will add the ZoukDelight Marathon frame. No marathon registration is needed.
 
   # - question: What is the marathon schedule for ZNS?
   #   answer: |
@@ -284,6 +314,11 @@ collection:
   #   answer: |
   #     The videographers at ZNS are:
   #     - Каролина Зянюк
+
+  - question: Who stole Alexey Merkulov's t-shirt?
+    answer: |
+      Алексей Меркулов lost his t-shirt and couldn't find it at one of the previous ZNS marathons.
+      People joke that some of his fans might have stolen it.
 
   # - question: Who are the photographers?
   #   answer: |
