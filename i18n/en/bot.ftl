@@ -1,18 +1,17 @@
 avatar-no-face = No face found on the image. Please try again with another image: either move away from the phone or move closer, or turn the phone straight.
-avatar-no-role = Can't create avatar, because you seem not to be registered to the next ZNS. Please register first using /passes command.
 avatar-processing =
     Your photo is processing...
     It may take a while.
 avatar-disabled = Creation of userpics temporarily disabled.
-avatar-choose-method = Personal portholes are available for the Zukerion crew. The bravest zoukonauts can go into outer space; for this, it will be necessary to wear a spacesuit.
-avatar-method-simple = 🪞 Porthole
-avatar-method-detailed = 🧑‍🚀 Spacesuit
+avatar-choose-method = Zoukonaut, choose how to create your ZoukDelight Marathon avatar.
+avatar-method-simple = 🖼 Photo frame
+avatar-method-detailed = 🙂 Face swap
 avatar-cancel-button = ❌ Cancel
 avatar-error-generic = Something went wrong. Please try again.
 avatar-cancelled-message = Avatar creation cancelled.
 avatar-processing-initial = Processing your request...
 avatar-error-file-expired-or-missing = Unfortunately, the file was not found or has expired. Please try uploading it again.
-avatar-simple-caption = Welcome to our Notre-Dame picture gallery
+avatar-simple-caption = Zoukonaut, your ZoukDelight Marathon avatar is ready! Set it as your profile photo and see you in Turkiye.
 avatar-error-frame-missing = Error: Frame file for simple avatar is missing. Please contact an administrator.
 avatar-error-config-role = Error: Configuration for your role is missing or incomplete. Please contact an administrator.
 
@@ -118,7 +117,7 @@ undefined-state-error = Something went wrong, try again.
 unsupported-message-error = Sorry, I can't understand this message.
 max-assistant-messages-reached = You've reached your questions limit for a day, please come back in 24 hours.
 avatar-custom-crop = Crop differently
-avatar-without-command = No need to send this command anymore, sending the picture right away is better.
+avatar-without-command = Zoukonaut, send me a photo and I'll make a ZoukDelight Marathon avatar for you.
 something-went-wrong = Something went wrong. Try again.
 
 # Food Plugin Entries
