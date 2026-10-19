@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/complynx/shuttle/internal/db"
+	"github.com/complynx/zns-chatbot/internal/db"
 )
 
 type adminTaskListRequest struct {

@@ -5,6 +5,8 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+
+	"github.com/complynx/zns-chatbot/internal/files"
 )
 
 var (
@@ -15,6 +17,7 @@ var (
 )
 
 type IntakeRequest struct {
+	Attachments                             []files.Incoming
 	BotID, UpdateID, TelegramUserID, ChatID int64
 	Profile, Payload                        json.RawMessage
 }
@@ -49,11 +52,26 @@ type Delivery struct {
 	AttemptID  uuid.UUID
 	Receipt    json.RawMessage
 }
+
+// DeliveryReceipt reports an applied receipt. ResponseElapsedSeconds is present
+// only for the transaction that first confirms every final-response chunk.
+type DeliveryReceipt struct {
+	Delivery
+
+	ResponseElapsedSeconds *float64
+}
 type Settings struct {
-	AuthCacheTTLSeconds    int    `json:"auth_cache_ttl_seconds"`
-	DefaultLanguage        string `json:"default_language"`
-	MaxParallelTasks       int    `json:"max_parallel_tasks"`
-	QuestionTimeoutSeconds int    `json:"question_timeout_seconds"`
+	MassageNotifyClientPriorLongSeconds int    `json:"massage_notify_client_prior_long_seconds,omitempty" doc:"Long massage reminder lead in nonnegative 32-bit seconds; zero uses 3600. Changes reschedule pending/retryable reminders."`
+	MassageNotifyClientPriorSeconds     int    `json:"massage_notify_client_prior_seconds,omitempty"      doc:"Short massage reminder lead in nonnegative 32-bit seconds; zero uses 600. Changes reschedule pending/retryable reminders."`
+	MassageMaxBookingsPerWindow         int    `json:"massage_max_bookings_per_window,omitempty"          doc:"Ordinary-owner massage booking limit per configured party window; zero uses the legacy default 3. Range 1 to 100."`
+	AuthCacheTTLSeconds                 int    `json:"auth_cache_ttl_seconds"`
+	DefaultLanguage                     string `json:"default_language"`
+	MaxParallelTasks                    int    `json:"max_parallel_tasks"                                 doc:"Worker concurrency; changes apply after application restart."`
+	QuestionTimeoutSeconds              int    `json:"question_timeout_seconds"                           doc:"Reserved for future expectations. Does not change current Loom prompt expiry."`
+	NameExpectationSeconds              int    `json:"name_expectation_seconds,omitempty"                 doc:"Name request lifetime in seconds; zero uses 7200. Range 60 to 86400."`
+	MiniAppMaxAgeSeconds                int    `json:"mini_app_max_age_seconds,omitempty"                 doc:"Telegram login proof maximum age; zero uses 300 seconds. Range 30 to 900."`
+	MiniAppPendingSeconds               int    `json:"mini_app_pending_seconds,omitempty"                 doc:"Login reconciliation window; zero uses 120 seconds. Range 30 to 300."`
+	MiniAppSessionSeconds               int    `json:"mini_app_session_seconds,omitempty"                 doc:"Absolute browser session lifetime; zero uses 900 seconds. Range 60 to 3600. Existing sessions do not extend."`
 }
 type VersionedSettings struct {
 	Version  int64    `json:"version"`

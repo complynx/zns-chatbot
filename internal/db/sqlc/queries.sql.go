@@ -12,6 +12,46 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateMiniAppSession = `-- name: ActivateMiniAppSession :one
+UPDATE shuttle_miniapp_sessions SET state='active',subject=$2,organization=$3,bearer_hash=$4
+WHERE id=$1 AND expires_at>clock_timestamp()
+AND (state='active' OR (state='pending' AND pending_until>clock_timestamp())) RETURNING id, bot_id, user_id, proof_hash, nonce_hash, key_generation, bearer_hash, state, subject, organization, auth_date, pending_until, expires_at, created_at
+`
+
+type ActivateMiniAppSessionParams struct {
+	ID           uuid.UUID `json:"id"`
+	Subject      string    `json:"subject"`
+	Organization string    `json:"organization"`
+	BearerHash   []byte    `json:"bearer_hash"`
+}
+
+func (q *Queries) ActivateMiniAppSession(ctx context.Context, arg ActivateMiniAppSessionParams) (ShuttleMiniappSession, error) {
+	row := q.db.QueryRow(ctx, activateMiniAppSession,
+		arg.ID,
+		arg.Subject,
+		arg.Organization,
+		arg.BearerHash,
+	)
+	var i ShuttleMiniappSession
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.UserID,
+		&i.ProofHash,
+		&i.NonceHash,
+		&i.KeyGeneration,
+		&i.BearerHash,
+		&i.State,
+		&i.Subject,
+		&i.Organization,
+		&i.AuthDate,
+		&i.PendingUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const activatePromotedTask = `-- name: ActivatePromotedTask :exec
 UPDATE shuttle_conversations SET active_task_id=$2,active_run_id='',awaiting_question_id='' WHERE id=$1
 `
@@ -23,6 +63,40 @@ type ActivatePromotedTaskParams struct {
 
 func (q *Queries) ActivatePromotedTask(ctx context.Context, arg ActivatePromotedTaskParams) error {
 	_, err := q.db.Exec(ctx, activatePromotedTask, arg.ID, arg.ActiveTaskID)
+	return err
+}
+
+const advancePairRegistration = `-- name: AdvancePairRegistration :one
+UPDATE shuttle_registrations SET version=version+1 WHERE id=$1 AND event_id=$2 RETURNING id, event_id, user_id, role, state, version, requested_at
+`
+
+type AdvancePairRegistrationParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) AdvancePairRegistration(ctx context.Context, arg AdvancePairRegistrationParams) (ShuttleRegistration, error) {
+	row := q.db.QueryRow(ctx, advancePairRegistration, arg.ID, arg.EventID)
+	var i ShuttleRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.Role,
+		&i.State,
+		&i.Version,
+		&i.RequestedAt,
+	)
+	return i, err
+}
+
+const advancePaymentVersion = `-- name: AdvancePaymentVersion :exec
+INSERT INTO shuttle_payment_versions(pass_id,version) VALUES($1,1)
+ON CONFLICT(pass_id) DO UPDATE SET version=shuttle_payment_versions.version+1
+`
+
+func (q *Queries) AdvancePaymentVersion(ctx context.Context, passID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, advancePaymentVersion, passID)
 	return err
 }
 
@@ -39,6 +113,90 @@ type AdvanceRoutingParams struct {
 func (q *Queries) AdvanceRouting(ctx context.Context, arg AdvanceRoutingParams) error {
 	_, err := q.db.Exec(ctx, advanceRouting, arg.ID, arg.RoutedSeq, arg.ActiveTaskID)
 	return err
+}
+
+const applyAvatarDeliveryResolution = `-- name: ApplyAvatarDeliveryResolution :one
+UPDATE shuttle_avatar_deliveries SET state=$2,version=version+1,attempt_id=NULL,
+ receipt='{}',next_attempt_at=clock_timestamp()
+WHERE id=$1 AND version=$3
+AND state IN ('delivery_unknown','delivery_failed','delivery_blocked') RETURNING id, artifact_id, user_id, telegram_user_id, state, version, attempt_id, receipt, next_attempt_at, created_at
+`
+
+type ApplyAvatarDeliveryResolutionParams struct {
+	ID              uuid.UUID `json:"id"`
+	Outcome         string    `json:"outcome"`
+	ExpectedVersion int64     `json:"expected_version"`
+}
+
+func (q *Queries) ApplyAvatarDeliveryResolution(ctx context.Context, arg ApplyAvatarDeliveryResolutionParams) (ShuttleAvatarDelivery, error) {
+	row := q.db.QueryRow(ctx, applyAvatarDeliveryResolution, arg.ID, arg.Outcome, arg.ExpectedVersion)
+	var i ShuttleAvatarDelivery
+	err := row.Scan(
+		&i.ID,
+		&i.ArtifactID,
+		&i.UserID,
+		&i.TelegramUserID,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const assignPair = `-- name: AssignPair :one
+UPDATE shuttle_pairs SET state='assigned',version=version+1,assigned_at=$3
+WHERE id=$1 AND version=$2 AND state='waitlisted' RETURNING id, event_id, leader_registration_id, follower_registration_id, state, version, queued_at, created_at, assigned_at, dissolved_at
+`
+
+type AssignPairParams struct {
+	ID         uuid.UUID          `json:"id"`
+	Version    int64              `json:"version"`
+	AssignedAt pgtype.Timestamptz `json:"assigned_at"`
+}
+
+func (q *Queries) AssignPair(ctx context.Context, arg AssignPairParams) (ShuttlePair, error) {
+	row := q.db.QueryRow(ctx, assignPair, arg.ID, arg.Version, arg.AssignedAt)
+	var i ShuttlePair
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.LeaderRegistrationID,
+		&i.FollowerRegistrationID,
+		&i.State,
+		&i.Version,
+		&i.QueuedAt,
+		&i.CreatedAt,
+		&i.AssignedAt,
+		&i.DissolvedAt,
+	)
+	return i, err
+}
+
+const assignRegistration = `-- name: AssignRegistration :one
+UPDATE shuttle_registrations SET state='assigned',version=version+1 WHERE id=$1 AND version=$2 AND state='waitlisted' RETURNING id, event_id, user_id, role, state, version, requested_at
+`
+
+type AssignRegistrationParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) AssignRegistration(ctx context.Context, arg AssignRegistrationParams) (ShuttleRegistration, error) {
+	row := q.db.QueryRow(ctx, assignRegistration, arg.ID, arg.Version)
+	var i ShuttleRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.Role,
+		&i.State,
+		&i.Version,
+		&i.RequestedAt,
+	)
+	return i, err
 }
 
 const auditIdentity = `-- name: AuditIdentity :exec
@@ -77,6 +235,48 @@ func (q *Queries) AuditSettings(ctx context.Context, arg AuditSettingsParams) er
 	return err
 }
 
+const avatarDeliveryRecipient = `-- name: AvatarDeliveryRecipient :one
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked FROM shuttle_avatar_deliveries n JOIN shuttle_users u ON u.id=n.user_id
+WHERE n.id=$1 AND u.bot_id=$2 AND u.zitadel_org=$3 AND NOT u.revoked
+AND u.zitadel_subject<>'' AND u.tg_user_id=n.telegram_user_id
+`
+
+type AvatarDeliveryRecipientParams struct {
+	ID         uuid.UUID `json:"id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+func (q *Queries) AvatarDeliveryRecipient(ctx context.Context, arg AvatarDeliveryRecipientParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, avatarDeliveryRecipient, arg.ID, arg.BotID, arg.ZitadelOrg)
+	var i ShuttleUser
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.TgUserID,
+		&i.Profile,
+		&i.ZitadelSubject,
+		&i.ZitadelOrg,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const bindDeployment = `-- name: BindDeployment :exec
+INSERT INTO shuttle_deployment(id,bot_id,organization_id,issuer) VALUES(true,$1,$2,$3) ON CONFLICT(id) DO NOTHING
+`
+
+type BindDeploymentParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Issuer         string `json:"issuer"`
+}
+
+func (q *Queries) BindDeployment(ctx context.Context, arg BindDeploymentParams) error {
+	_, err := q.db.Exec(ctx, bindDeployment, arg.BotID, arg.OrganizationID, arg.Issuer)
+	return err
+}
+
 const bindIdentity = `-- name: BindIdentity :one
 UPDATE shuttle_users SET zitadel_subject=$2,zitadel_org=$3 WHERE id=$1 AND (zitadel_subject='' OR zitadel_subject=$2) AND (zitadel_org='' OR zitadel_org=$3) RETURNING id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked
 `
@@ -102,6 +302,44 @@ func (q *Queries) BindIdentity(ctx context.Context, arg BindIdentityParams) (Shu
 	return i, err
 }
 
+const blockAvatarDelivery = `-- name: BlockAvatarDelivery :execrows
+UPDATE shuttle_avatar_deliveries SET state='delivery_blocked',version=version+1
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
+`
+
+type BlockAvatarDeliveryParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) BlockAvatarDelivery(ctx context.Context, arg BlockAvatarDeliveryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, blockAvatarDelivery, arg.ID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const blockBookedMassageSpecialistNotification = `-- name: BlockBookedMassageSpecialistNotification :exec
+UPDATE shuttle_massage_specialist_notifications SET state='delivery_blocked',version=version+1
+WHERE booking_id=$1 AND kind IN ('booked','soon') AND state IN ('pending','retryable')
+`
+
+func (q *Queries) BlockBookedMassageSpecialistNotification(ctx context.Context, bookingID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, blockBookedMassageSpecialistNotification, bookingID)
+	return err
+}
+
+const blockBookingMassageReminders = `-- name: BlockBookingMassageReminders :exec
+UPDATE shuttle_massage_reminders SET state='delivery_blocked',version=version+1
+WHERE booking_id=$1 AND state IN ('pending','retryable')
+`
+
+func (q *Queries) BlockBookingMassageReminders(ctx context.Context, bookingID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, blockBookingMassageReminders, bookingID)
+	return err
+}
+
 const blockDeliverySuffix = `-- name: BlockDeliverySuffix :exec
 UPDATE shuttle_outbox SET state='delivery_blocked'
 WHERE task_id=$1 AND chunk_seq>$2 AND state IN ('pending','retryable')
@@ -114,6 +352,91 @@ type BlockDeliverySuffixParams struct {
 
 func (q *Queries) BlockDeliverySuffix(ctx context.Context, arg BlockDeliverySuffixParams) error {
 	_, err := q.db.Exec(ctx, blockDeliverySuffix, arg.TaskID, arg.ChunkSeq)
+	return err
+}
+
+const blockMassageReminder = `-- name: BlockMassageReminder :execrows
+UPDATE shuttle_massage_reminders SET state='delivery_blocked',version=version+1
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
+`
+
+type BlockMassageReminderParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) BlockMassageReminder(ctx context.Context, arg BlockMassageReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, blockMassageReminder, arg.ID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const blockMassageSpecialistNotification = `-- name: BlockMassageSpecialistNotification :execrows
+UPDATE shuttle_massage_specialist_notifications SET state='delivery_blocked',version=version+1
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
+`
+
+type BlockMassageSpecialistNotificationParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) BlockMassageSpecialistNotification(ctx context.Context, arg BlockMassageSpecialistNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, blockMassageSpecialistNotification, arg.ID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const blockOrderNotification = `-- name: BlockOrderNotification :execrows
+UPDATE shuttle_order_evidence_notices SET state='delivery_blocked',version=version+1
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
+`
+
+type BlockOrderNotificationParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) BlockOrderNotification(ctx context.Context, arg BlockOrderNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, blockOrderNotification, arg.ID, arg.Version)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const blockPairInvitationNotification = `-- name: BlockPairInvitationNotification :exec
+UPDATE shuttle_pair_notifications SET state='delivery_blocked',version=version+1
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
+`
+
+type BlockPairInvitationNotificationParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) BlockPairInvitationNotification(ctx context.Context, arg BlockPairInvitationNotificationParams) error {
+	_, err := q.db.Exec(ctx, blockPairInvitationNotification, arg.ID, arg.Version)
+	return err
+}
+
+const blockPaymentNotification = `-- name: BlockPaymentNotification :exec
+UPDATE shuttle_payment_notifications SET state=$3,version=version+1
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
+`
+
+type BlockPaymentNotificationParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+	State   string    `json:"state"`
+}
+
+func (q *Queries) BlockPaymentNotification(ctx context.Context, arg BlockPaymentNotificationParams) error {
+	_, err := q.db.Exec(ctx, blockPaymentNotification, arg.ID, arg.Version, arg.State)
 	return err
 }
 
@@ -142,8 +465,127 @@ func (q *Queries) CASSettings(ctx context.Context, arg CASSettingsParams) (Shutt
 	return i, err
 }
 
+const cancelMassageBooking = `-- name: CancelMassageBooking :one
+UPDATE shuttle_massage_bookings SET state='cancelled',version=version+1,cancelled_at=clock_timestamp()
+WHERE id=$1 AND event_id=$2 AND user_id=$3 AND version=$4 AND state='booked' RETURNING id, event_id, user_id, preparation_id, window_id, specialist_id, service_id, version, state, starts_at, treatment_ends_at, occupancy_ends_at, requires_table, currency, currency_scale, price_minor, snapshot, source, booked_at, cancelled_at
+`
+
+type CancelMassageBookingParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+	UserID  uuid.UUID `json:"user_id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) CancelMassageBooking(ctx context.Context, arg CancelMassageBookingParams) (ShuttleMassageBooking, error) {
+	row := q.db.QueryRow(ctx, cancelMassageBooking,
+		arg.ID,
+		arg.EventID,
+		arg.UserID,
+		arg.Version,
+	)
+	var i ShuttleMassageBooking
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.PreparationID,
+		&i.WindowID,
+		&i.SpecialistID,
+		&i.ServiceID,
+		&i.Version,
+		&i.State,
+		&i.StartsAt,
+		&i.TreatmentEndsAt,
+		&i.OccupancyEndsAt,
+		&i.RequiresTable,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.PriceMinor,
+		&i.Snapshot,
+		&i.Source,
+		&i.BookedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
+const cancelOrderReviewWorkspace = `-- name: CancelOrderReviewWorkspace :execrows
+UPDATE shuttle_order_review_workspaces SET state='cancelled' WHERE id=$1 AND actor_id=$2 AND state='prepared'
+`
+
+type CancelOrderReviewWorkspaceParams struct {
+	ID      uuid.UUID `json:"id"`
+	ActorID uuid.UUID `json:"actor_id"`
+}
+
+func (q *Queries) CancelOrderReviewWorkspace(ctx context.Context, arg CancelOrderReviewWorkspaceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, cancelOrderReviewWorkspace, arg.ID, arg.ActorID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const cancelSubmittedOrder = `-- name: CancelSubmittedOrder :one
+UPDATE shuttle_orders AS o SET version=o.version+1,state='cancelled',cancelled_at=$1
+WHERE o.id=$2 AND o.user_id=$3 AND o.event_id=$4
+ AND o.order_kind='service' AND o.version=$5 AND o.version<9223372036854775807 AND o.state='submitted' AND o.sales_closes_at>$1
+ AND NOT EXISTS(SELECT 1 FROM shuttle_order_evidence ev WHERE ev.order_id=o.id)
+RETURNING o.id, o.user_id, o.event_id, o.source_draft_version, o.preparation_id, o.request_hash, o.version, o.state, o.submitted_result, o.sales_closes_at, o.submitted_at, o.cancelled_at, o.order_kind
+`
+
+type CancelSubmittedOrderParams struct {
+	ObservedAt      pgtype.Timestamptz `json:"observed_at"`
+	ID              uuid.UUID          `json:"id"`
+	UserID          uuid.UUID          `json:"user_id"`
+	EventID         uuid.UUID          `json:"event_id"`
+	ExpectedVersion int64              `json:"expected_version"`
+}
+
+func (q *Queries) CancelSubmittedOrder(ctx context.Context, arg CancelSubmittedOrderParams) (ShuttleOrder, error) {
+	row := q.db.QueryRow(ctx, cancelSubmittedOrder,
+		arg.ObservedAt,
+		arg.ID,
+		arg.UserID,
+		arg.EventID,
+		arg.ExpectedVersion,
+	)
+	var i ShuttleOrder
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.SourceDraftVersion,
+		&i.PreparationID,
+		&i.RequestHash,
+		&i.Version,
+		&i.State,
+		&i.SubmittedResult,
+		&i.SalesClosesAt,
+		&i.SubmittedAt,
+		&i.CancelledAt,
+		&i.OrderKind,
+	)
+	return i, err
+}
+
+const changeOrderAllocations = `-- name: ChangeOrderAllocations :exec
+UPDATE shuttle_order_allocations SET state=$2 WHERE evidence_id=$1 AND state='held'
+`
+
+type ChangeOrderAllocationsParams struct {
+	EvidenceID uuid.UUID `json:"evidence_id"`
+	State      string    `json:"state"`
+}
+
+func (q *Queries) ChangeOrderAllocations(ctx context.Context, arg ChangeOrderAllocationsParams) error {
+	_, err := q.db.Exec(ctx, changeOrderAllocations, arg.EvidenceID, arg.State)
+	return err
+}
+
 const claimTask = `-- name: ClaimTask :one
-UPDATE shuttle_tasks SET fence=fence+1,lease_owner=$2,lease_until=now()+($3::bigint * interval '1 millisecond') WHERE id=$1 AND (lease_until IS NULL OR lease_until<=now()) RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at
+UPDATE shuttle_tasks SET fence=fence+1,lease_owner=$2,lease_until=now()+($3::bigint * interval '1 millisecond') WHERE id=$1 AND (lease_until IS NULL OR lease_until<=now()) RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at, response_started_at, response_first_chunk_seq, response_last_chunk_seq, response_delivered_at
 `
 
 type ClaimTaskParams struct {
@@ -174,6 +616,10 @@ func (q *Queries) ClaimTask(ctx context.Context, arg ClaimTaskParams) (ShuttleTa
 		&i.LeaseOwner,
 		&i.LeaseUntil,
 		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
 	)
 	return i, err
 }
@@ -194,7 +640,7 @@ func (q *Queries) ClearConversationRun(ctx context.Context, arg ClearConversatio
 
 const closeUncertainTask = `-- name: CloseUncertainTask :one
 UPDATE shuttle_tasks SET state='closed',version=version+1,fence=fence+1,lease_owner='',lease_until=NULL
-WHERE id=$1 AND version=$2 AND (lease_until IS NULL OR lease_until<=now()) RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at
+WHERE id=$1 AND version=$2 AND (lease_until IS NULL OR lease_until<=now()) RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at, response_started_at, response_first_chunk_seq, response_last_chunk_seq, response_delivered_at
 `
 
 type CloseUncertainTaskParams struct {
@@ -224,8 +670,166 @@ func (q *Queries) CloseUncertainTask(ctx context.Context, arg CloseUncertainTask
 		&i.LeaseOwner,
 		&i.LeaseUntil,
 		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
 	)
 	return i, err
+}
+
+const completeFinalResponse = `-- name: CompleteFinalResponse :one
+UPDATE shuttle_tasks t SET response_delivered_at=clock_timestamp()
+WHERE t.id=$1 AND t.route='new_run' AND t.state='completed' AND t.run_id<>''
+AND t.response_started_at IS NOT NULL AND t.response_first_chunk_seq IS NOT NULL
+AND t.response_last_chunk_seq IS NOT NULL AND t.response_delivered_at IS NULL
+AND isfinite(t.response_started_at)
+AND $2::integer BETWEEN t.response_first_chunk_seq AND t.response_last_chunk_seq
+AND (SELECT count(*) FROM shuttle_outbox o WHERE o.task_id=t.id
+ AND o.chunk_seq BETWEEN t.response_first_chunk_seq AND t.response_last_chunk_seq)
+ =t.response_last_chunk_seq::bigint-t.response_first_chunk_seq::bigint+1
+AND NOT EXISTS(SELECT 1 FROM shuttle_outbox o WHERE o.task_id=t.id
+ AND o.chunk_seq BETWEEN t.response_first_chunk_seq AND t.response_last_chunk_seq AND o.state<>'delivered')
+RETURNING extract(epoch FROM (response_delivered_at-response_started_at))::double precision AS elapsed_seconds
+`
+
+type CompleteFinalResponseParams struct {
+	TaskID   uuid.UUID `json:"task_id"`
+	ChunkSeq int32     `json:"chunk_seq"`
+}
+
+func (q *Queries) CompleteFinalResponse(ctx context.Context, arg CompleteFinalResponseParams) (float64, error) {
+	row := q.db.QueryRow(ctx, completeFinalResponse, arg.TaskID, arg.ChunkSeq)
+	var elapsed_seconds float64
+	err := row.Scan(&elapsed_seconds)
+	return elapsed_seconds, err
+}
+
+const completeOrderReviewCall = `-- name: CompleteOrderReviewCall :execrows
+UPDATE shuttle_order_review_calls SET result=$3,completed_at=clock_timestamp()
+WHERE actor_id=$1 AND operation_id=$2 AND kind='commit' AND result IS NULL
+`
+
+type CompleteOrderReviewCallParams struct {
+	ActorID     uuid.UUID `json:"actor_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) CompleteOrderReviewCall(ctx context.Context, arg CompleteOrderReviewCallParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeOrderReviewCall, arg.ActorID, arg.OperationID, arg.Result)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completeOrderReviewWorkspace = `-- name: CompleteOrderReviewWorkspace :execrows
+UPDATE shuttle_order_review_workspaces SET state='completed' WHERE id=$1 AND actor_id=$2 AND state='prepared'
+`
+
+type CompleteOrderReviewWorkspaceParams struct {
+	ID      uuid.UUID `json:"id"`
+	ActorID uuid.UUID `json:"actor_id"`
+}
+
+func (q *Queries) CompleteOrderReviewWorkspace(ctx context.Context, arg CompleteOrderReviewWorkspaceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, completeOrderReviewWorkspace, arg.ID, arg.ActorID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completePaymentReviewWorkspace = `-- name: CompletePaymentReviewWorkspace :exec
+UPDATE shuttle_payment_review_workspaces SET state='completed'
+WHERE id::text=$1::text AND actor_id=$2
+`
+
+type CompletePaymentReviewWorkspaceParams struct {
+	OperationID string    `json:"operation_id"`
+	UserID      uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) CompletePaymentReviewWorkspace(ctx context.Context, arg CompletePaymentReviewWorkspaceParams) error {
+	_, err := q.db.Exec(ctx, completePaymentReviewWorkspace, arg.OperationID, arg.UserID)
+	return err
+}
+
+const completeTelegramPrelink = `-- name: CompleteTelegramPrelink :one
+UPDATE shuttle_telegram_prelinks SET state='completed',subject=$2,completed_at=clock_timestamp()
+WHERE id=$1 AND state='pending' AND expires_at>clock_timestamp() RETURNING id, bot_id, user_id, provider_issuer, assertion_jti, assertion_hash, organization, provider_id, external_subject, expires_at, state, subject, created_at, completed_at
+`
+
+type CompleteTelegramPrelinkParams struct {
+	ID      uuid.UUID `json:"id"`
+	Subject string    `json:"subject"`
+}
+
+func (q *Queries) CompleteTelegramPrelink(ctx context.Context, arg CompleteTelegramPrelinkParams) (ShuttleTelegramPrelink, error) {
+	row := q.db.QueryRow(ctx, completeTelegramPrelink, arg.ID, arg.Subject)
+	var i ShuttleTelegramPrelink
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.UserID,
+		&i.ProviderIssuer,
+		&i.AssertionJti,
+		&i.AssertionHash,
+		&i.Organization,
+		&i.ProviderID,
+		&i.ExternalSubject,
+		&i.ExpiresAt,
+		&i.State,
+		&i.Subject,
+		&i.CreatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const consumeMassagePreparation = `-- name: ConsumeMassagePreparation :execrows
+UPDATE shuttle_massage_preparations SET booking_id=$2,consumed_at=clock_timestamp(),consumed_result=$3
+WHERE id=$1 AND consumed_at IS NULL
+`
+
+type ConsumeMassagePreparationParams struct {
+	ID             uuid.UUID   `json:"id"`
+	BookingID      pgtype.UUID `json:"booking_id"`
+	ConsumedResult []byte      `json:"consumed_result"`
+}
+
+func (q *Queries) ConsumeMassagePreparation(ctx context.Context, arg ConsumeMassagePreparationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeMassagePreparation, arg.ID, arg.BookingID, arg.ConsumedResult)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const consumeOrderPreparation = `-- name: ConsumeOrderPreparation :execrows
+UPDATE shuttle_order_preparations SET consumed_at=$1
+WHERE id=$2 AND user_id=$3 AND event_id=$4 AND consumed_at IS NULL AND order_kind='service'
+`
+
+type ConsumeOrderPreparationParams struct {
+	ObservedAt pgtype.Timestamptz `json:"observed_at"`
+	ID         uuid.UUID          `json:"id"`
+	UserID     uuid.UUID          `json:"user_id"`
+	EventID    uuid.UUID          `json:"event_id"`
+}
+
+func (q *Queries) ConsumeOrderPreparation(ctx context.Context, arg ConsumeOrderPreparationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeOrderPreparation,
+		arg.ObservedAt,
+		arg.ID,
+		arg.UserID,
+		arg.EventID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const controlReady = `-- name: ControlReady :one
@@ -245,6 +849,400 @@ func (q *Queries) ControlReady(ctx context.Context, id uuid.UUID) (bool, error) 
 	var ready bool
 	err := row.Scan(&ready)
 	return ready, err
+}
+
+const countAssignedRole = `-- name: CountAssignedRole :one
+SELECT count(*) FROM shuttle_registrations WHERE event_id=$1 AND role=$2 AND state='assigned'
+`
+
+type CountAssignedRoleParams struct {
+	EventID uuid.UUID `json:"event_id"`
+	Role    string    `json:"role"`
+}
+
+func (q *Queries) CountAssignedRole(ctx context.Context, arg CountAssignedRoleParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAssignedRole, arg.EventID, arg.Role)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countOwnPartyMassages = `-- name: CountOwnPartyMassages :one
+SELECT count(*) FROM shuttle_massage_bookings WHERE event_id=$1 AND user_id=$2 AND window_id=$3 AND state='booked'
+`
+
+type CountOwnPartyMassagesParams struct {
+	EventID  uuid.UUID `json:"event_id"`
+	UserID   uuid.UUID `json:"user_id"`
+	WindowID string    `json:"window_id"`
+}
+
+func (q *Queries) CountOwnPartyMassages(ctx context.Context, arg CountOwnPartyMassagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOwnPartyMassages, arg.EventID, arg.UserID, arg.WindowID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createEvent = `-- name: CreateEvent :one
+INSERT INTO shuttle_events(id,bot_id,organization_id,name,timezone,starts_at,ends_at,modules)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO NOTHING RETURNING id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version
+`
+
+type CreateEventParams struct {
+	ID             uuid.UUID          `json:"id"`
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Name           string             `json:"name"`
+	Timezone       string             `json:"timezone"`
+	StartsAt       pgtype.Timestamptz `json:"starts_at"`
+	EndsAt         pgtype.Timestamptz `json:"ends_at"`
+	Modules        []string           `json:"modules"`
+}
+
+func (q *Queries) CreateEvent(ctx context.Context, arg CreateEventParams) (ShuttleEvent, error) {
+	row := q.db.QueryRow(ctx, createEvent,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Timezone,
+		arg.StartsAt,
+		arg.EndsAt,
+		arg.Modules,
+	)
+	var i ShuttleEvent
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Timezone,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Modules,
+		&i.Version,
+	)
+	return i, err
+}
+
+const createFile = `-- name: CreateFile :exec
+INSERT INTO shuttle_files(id,user_id,task_id,telegram_id,unique_id,kind,mime_type,filename,size_bytes,message_id,sent_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+`
+
+type CreateFileParams struct {
+	ID         uuid.UUID          `json:"id"`
+	UserID     uuid.UUID          `json:"user_id"`
+	TaskID     uuid.UUID          `json:"task_id"`
+	TelegramID string             `json:"telegram_id"`
+	UniqueID   string             `json:"unique_id"`
+	Kind       string             `json:"kind"`
+	MimeType   string             `json:"mime_type"`
+	Filename   string             `json:"filename"`
+	SizeBytes  int64              `json:"size_bytes"`
+	MessageID  int64              `json:"message_id"`
+	SentAt     pgtype.Timestamptz `json:"sent_at"`
+}
+
+func (q *Queries) CreateFile(ctx context.Context, arg CreateFileParams) error {
+	_, err := q.db.Exec(ctx, createFile,
+		arg.ID,
+		arg.UserID,
+		arg.TaskID,
+		arg.TelegramID,
+		arg.UniqueID,
+		arg.Kind,
+		arg.MimeType,
+		arg.Filename,
+		arg.SizeBytes,
+		arg.MessageID,
+		arg.SentAt,
+	)
+	return err
+}
+
+const createPass = `-- name: CreatePass :one
+INSERT INTO shuttle_passes(id,registration_id,price_minor,currency,currency_scale,assigned_at,payment_due_at)
+VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id, registration_id, price_minor, currency, currency_scale, assigned_at, payment_due_at
+`
+
+type CreatePassParams struct {
+	ID             uuid.UUID          `json:"id"`
+	RegistrationID uuid.UUID          `json:"registration_id"`
+	PriceMinor     int64              `json:"price_minor"`
+	Currency       string             `json:"currency"`
+	CurrencyScale  int32              `json:"currency_scale"`
+	AssignedAt     pgtype.Timestamptz `json:"assigned_at"`
+	PaymentDueAt   pgtype.Timestamptz `json:"payment_due_at"`
+}
+
+func (q *Queries) CreatePass(ctx context.Context, arg CreatePassParams) (ShuttlePass, error) {
+	row := q.db.QueryRow(ctx, createPass,
+		arg.ID,
+		arg.RegistrationID,
+		arg.PriceMinor,
+		arg.Currency,
+		arg.CurrencyScale,
+		arg.AssignedAt,
+		arg.PaymentDueAt,
+	)
+	var i ShuttlePass
+	err := row.Scan(
+		&i.ID,
+		&i.RegistrationID,
+		&i.PriceMinor,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.AssignedAt,
+		&i.PaymentDueAt,
+	)
+	return i, err
+}
+
+const createPassDepositPolicy = `-- name: CreatePassDepositPolicy :exec
+INSERT INTO shuttle_pass_deposit_policy(pass_id,document) VALUES($1,$2)
+`
+
+type CreatePassDepositPolicyParams struct {
+	PassID   uuid.UUID `json:"pass_id"`
+	Document []byte    `json:"document"`
+}
+
+func (q *Queries) CreatePassDepositPolicy(ctx context.Context, arg CreatePassDepositPolicyParams) error {
+	_, err := q.db.Exec(ctx, createPassDepositPolicy, arg.PassID, arg.Document)
+	return err
+}
+
+const createPassTier = `-- name: CreatePassTier :exec
+INSERT INTO shuttle_pass_tiers(pass_id,tier_id,tier_number) VALUES($1,$2,$3)
+`
+
+type CreatePassTierParams struct {
+	PassID     uuid.UUID `json:"pass_id"`
+	TierID     string    `json:"tier_id"`
+	TierNumber int32     `json:"tier_number"`
+}
+
+func (q *Queries) CreatePassTier(ctx context.Context, arg CreatePassTierParams) error {
+	_, err := q.db.Exec(ctx, createPassTier, arg.PassID, arg.TierID, arg.TierNumber)
+	return err
+}
+
+const createRegistration = `-- name: CreateRegistration :one
+INSERT INTO shuttle_registrations(id,event_id,user_id,role,requested_at) VALUES($1,$2,$3,$4,$5) RETURNING id, event_id, user_id, role, state, version, requested_at
+`
+
+type CreateRegistrationParams struct {
+	ID          uuid.UUID          `json:"id"`
+	EventID     uuid.UUID          `json:"event_id"`
+	UserID      uuid.UUID          `json:"user_id"`
+	Role        string             `json:"role"`
+	RequestedAt pgtype.Timestamptz `json:"requested_at"`
+}
+
+func (q *Queries) CreateRegistration(ctx context.Context, arg CreateRegistrationParams) (ShuttleRegistration, error) {
+	row := q.db.QueryRow(ctx, createRegistration,
+		arg.ID,
+		arg.EventID,
+		arg.UserID,
+		arg.Role,
+		arg.RequestedAt,
+	)
+	var i ShuttleRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.Role,
+		&i.State,
+		&i.Version,
+		&i.RequestedAt,
+	)
+	return i, err
+}
+
+const currentOrderReviewWorkspace = `-- name: CurrentOrderReviewWorkspace :one
+SELECT w.id FROM shuttle_order_review_workspaces w WHERE w.actor_id=$1 AND w.event_id=$2 AND w.evidence_id=$3
+ORDER BY w.revision DESC LIMIT 1
+`
+
+type CurrentOrderReviewWorkspaceParams struct {
+	ActorID    uuid.UUID `json:"actor_id"`
+	EventID    uuid.UUID `json:"event_id"`
+	EvidenceID uuid.UUID `json:"evidence_id"`
+}
+
+func (q *Queries) CurrentOrderReviewWorkspace(ctx context.Context, arg CurrentOrderReviewWorkspaceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, currentOrderReviewWorkspace, arg.ActorID, arg.EventID, arg.EvidenceID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const deactivateRemovedMassageSpecialists = `-- name: DeactivateRemovedMassageSpecialists :execrows
+UPDATE shuttle_massage_specialist_bindings
+SET active=false,version=version+1,updated_by=$1,updated_at=clock_timestamp()
+WHERE event_id=$2 AND active
+AND NOT(specialist_id=ANY($3::text[]))
+`
+
+type DeactivateRemovedMassageSpecialistsParams struct {
+	ActorID     uuid.UUID `json:"actor_id"`
+	EventID     uuid.UUID `json:"event_id"`
+	RetainedIds []string  `json:"retained_ids"`
+}
+
+func (q *Queries) DeactivateRemovedMassageSpecialists(ctx context.Context, arg DeactivateRemovedMassageSpecialistsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivateRemovedMassageSpecialists, arg.ActorID, arg.EventID, arg.RetainedIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const decidePairInvitation = `-- name: DecidePairInvitation :one
+UPDATE shuttle_pair_invitations SET state=$3,version=version+1,decided_at=$4,pair_id=$5
+WHERE id=$1 AND version=$2 AND state='pending' RETURNING id, event_id, inviter_registration_id, target_user_id, state, version, created_at, expires_at, decided_at, pair_id
+`
+
+type DecidePairInvitationParams struct {
+	ID        uuid.UUID          `json:"id"`
+	Version   int64              `json:"version"`
+	State     string             `json:"state"`
+	DecidedAt pgtype.Timestamptz `json:"decided_at"`
+	PairID    pgtype.UUID        `json:"pair_id"`
+}
+
+func (q *Queries) DecidePairInvitation(ctx context.Context, arg DecidePairInvitationParams) (ShuttlePairInvitation, error) {
+	row := q.db.QueryRow(ctx, decidePairInvitation,
+		arg.ID,
+		arg.Version,
+		arg.State,
+		arg.DecidedAt,
+		arg.PairID,
+	)
+	var i ShuttlePairInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.InviterRegistrationID,
+		&i.TargetUserID,
+		&i.State,
+		&i.Version,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.DecidedAt,
+		&i.PairID,
+	)
+	return i, err
+}
+
+const deleteActivePairMembers = `-- name: DeleteActivePairMembers :execrows
+DELETE FROM shuttle_active_pair_members WHERE pair_id=$1
+`
+
+func (q *Queries) DeleteActivePairMembers(ctx context.Context, pairID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteActivePairMembers, pairID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deliveryTaskID = `-- name: DeliveryTaskID :one
+SELECT task_id FROM shuttle_outbox WHERE id=$1
+`
+
+func (q *Queries) DeliveryTaskID(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deliveryTaskID, id)
+	var task_id uuid.UUID
+	err := row.Scan(&task_id)
+	return task_id, err
+}
+
+const deploymentDataMatches = `-- name: DeploymentDataMatches :one
+SELECT NOT EXISTS (SELECT 1 FROM shuttle_users WHERE bot_id<>$1 OR (zitadel_org<>'' AND zitadel_org<>$2))
+`
+
+type DeploymentDataMatchesParams struct {
+	BotID      int64  `json:"bot_id"`
+	ZitadelOrg string `json:"zitadel_org"`
+}
+
+func (q *Queries) DeploymentDataMatches(ctx context.Context, arg DeploymentDataMatchesParams) (bool, error) {
+	row := q.db.QueryRow(ctx, deploymentDataMatches, arg.BotID, arg.ZitadelOrg)
+	var not_exists bool
+	err := row.Scan(&not_exists)
+	return not_exists, err
+}
+
+const dissolvePair = `-- name: DissolvePair :one
+UPDATE shuttle_pairs SET state='dissolved',version=version+1,dissolved_at=$3
+WHERE id=$1 AND version=$2 AND state IN ('waitlisted','assigned') RETURNING id, event_id, leader_registration_id, follower_registration_id, state, version, queued_at, created_at, assigned_at, dissolved_at
+`
+
+type DissolvePairParams struct {
+	ID          uuid.UUID          `json:"id"`
+	Version     int64              `json:"version"`
+	DissolvedAt pgtype.Timestamptz `json:"dissolved_at"`
+}
+
+func (q *Queries) DissolvePair(ctx context.Context, arg DissolvePairParams) (ShuttlePair, error) {
+	row := q.db.QueryRow(ctx, dissolvePair, arg.ID, arg.Version, arg.DissolvedAt)
+	var i ShuttlePair
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.LeaderRegistrationID,
+		&i.FollowerRegistrationID,
+		&i.State,
+		&i.Version,
+		&i.QueuedAt,
+		&i.CreatedAt,
+		&i.AssignedAt,
+		&i.DissolvedAt,
+	)
+	return i, err
+}
+
+const dueMassageSpecialistSoonBookings = `-- name: DueMassageSpecialistSoonBookings :many
+SELECT b.id FROM shuttle_massage_bookings b
+JOIN shuttle_events e ON e.id=b.event_id
+JOIN shuttle_massage_specialist_bindings s ON s.event_id=b.event_id AND s.specialist_id=b.specialist_id AND s.active
+JOIN shuttle_users u ON u.id=s.user_id AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND 'massage'=ANY(e.modules) AND e.ends_at>clock_timestamp()
+AND b.state='booked' AND b.starts_at<=clock_timestamp()+interval '5 minutes'
+AND NOT u.revoked AND u.zitadel_subject<>''
+AND NOT EXISTS(SELECT 1 FROM shuttle_massage_specialist_notifications n WHERE n.booking_id=b.id AND n.kind='soon')
+ORDER BY b.starts_at,b.id LIMIT $3
+`
+
+type DueMassageSpecialistSoonBookingsParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	PageLimit      int32  `json:"page_limit"`
+}
+
+func (q *Queries) DueMassageSpecialistSoonBookings(ctx context.Context, arg DueMassageSpecialistSoonBookingsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, dueMassageSpecialistSoonBookings, arg.BotID, arg.OrganizationID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const ensureConversation = `-- name: EnsureConversation :one
@@ -273,6 +1271,90 @@ func (q *Queries) EnsureConversation(ctx context.Context, arg EnsureConversation
 	return i, err
 }
 
+const ensureTelegramUser = `-- name: EnsureTelegramUser :one
+INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile) VALUES($1,$2,$3,$4)
+ON CONFLICT(bot_id,tg_user_id) DO UPDATE SET tg_user_id=shuttle_users.tg_user_id RETURNING id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked
+`
+
+type EnsureTelegramUserParams struct {
+	ID       uuid.UUID `json:"id"`
+	BotID    int64     `json:"bot_id"`
+	TgUserID int64     `json:"tg_user_id"`
+	Profile  []byte    `json:"profile"`
+}
+
+func (q *Queries) EnsureTelegramUser(ctx context.Context, arg EnsureTelegramUserParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, ensureTelegramUser,
+		arg.ID,
+		arg.BotID,
+		arg.TgUserID,
+		arg.Profile,
+	)
+	var i ShuttleUser
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.TgUserID,
+		&i.Profile,
+		&i.ZitadelSubject,
+		&i.ZitadelOrg,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const ensureUserEventContext = `-- name: EnsureUserEventContext :exec
+INSERT INTO shuttle_user_event_context(user_id) VALUES($1) ON CONFLICT(user_id) DO NOTHING
+`
+
+func (q *Queries) EnsureUserEventContext(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, ensureUserEventContext, userID)
+	return err
+}
+
+const expiredPairInvitations = `-- name: ExpiredPairInvitations :many
+SELECT i.id,i.event_id FROM shuttle_pair_invitations i JOIN shuttle_events e ON e.id=i.event_id
+WHERE e.bot_id=$1 AND e.organization_id=$2 AND i.state='pending' AND i.expires_at<=clock_timestamp()
+AND i.id>$3::uuid ORDER BY i.id LIMIT $4
+`
+
+type ExpiredPairInvitationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ExpiredPairInvitationsRow struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) ExpiredPairInvitations(ctx context.Context, arg ExpiredPairInvitationsParams) ([]ExpiredPairInvitationsRow, error) {
+	rows, err := q.db.Query(ctx, expiredPairInvitations,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ExpiredPairInvitationsRow
+	for rows.Next() {
+		var i ExpiredPairInvitationsRow
+		if err := rows.Scan(&i.ID, &i.EventID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findInbox = `-- name: FindInbox :one
 SELECT task_id FROM shuttle_inbox WHERE bot_id=$1 AND update_id=$2
 `
@@ -287,6 +1369,106 @@ func (q *Queries) FindInbox(ctx context.Context, arg FindInboxParams) (uuid.UUID
 	var task_id uuid.UUID
 	err := row.Scan(&task_id)
 	return task_id, err
+}
+
+const findMiniAppBearer = `-- name: FindMiniAppBearer :one
+SELECT id, bot_id, user_id, proof_hash, nonce_hash, key_generation, bearer_hash, state, subject, organization, auth_date, pending_until, expires_at, created_at FROM shuttle_miniapp_sessions WHERE bot_id=$1 AND bearer_hash=$2
+`
+
+type FindMiniAppBearerParams struct {
+	BotID      int64  `json:"bot_id"`
+	BearerHash []byte `json:"bearer_hash"`
+}
+
+func (q *Queries) FindMiniAppBearer(ctx context.Context, arg FindMiniAppBearerParams) (ShuttleMiniappSession, error) {
+	row := q.db.QueryRow(ctx, findMiniAppBearer, arg.BotID, arg.BearerHash)
+	var i ShuttleMiniappSession
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.UserID,
+		&i.ProofHash,
+		&i.NonceHash,
+		&i.KeyGeneration,
+		&i.BearerHash,
+		&i.State,
+		&i.Subject,
+		&i.Organization,
+		&i.AuthDate,
+		&i.PendingUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const findPendingOrderPreparation = `-- name: FindPendingOrderPreparation :one
+SELECT id, user_id, event_id, source_draft_version, request_hash, arguments, snapshot, created_at, expires_at, consumed_at, order_kind FROM shuttle_order_preparations WHERE user_id=$1 AND event_id=$2
+ AND order_kind='service' AND source_draft_version=$3 AND request_hash=$4
+ AND consumed_at IS NULL AND expires_at>$5 ORDER BY created_at DESC,id DESC LIMIT 1
+`
+
+type FindPendingOrderPreparationParams struct {
+	UserID             uuid.UUID          `json:"user_id"`
+	EventID            uuid.UUID          `json:"event_id"`
+	SourceDraftVersion int64              `json:"source_draft_version"`
+	RequestHash        []byte             `json:"request_hash"`
+	ObservedAt         pgtype.Timestamptz `json:"observed_at"`
+}
+
+func (q *Queries) FindPendingOrderPreparation(ctx context.Context, arg FindPendingOrderPreparationParams) (ShuttleOrderPreparation, error) {
+	row := q.db.QueryRow(ctx, findPendingOrderPreparation,
+		arg.UserID,
+		arg.EventID,
+		arg.SourceDraftVersion,
+		arg.RequestHash,
+		arg.ObservedAt,
+	)
+	var i ShuttleOrderPreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.SourceDraftVersion,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.Snapshot,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.OrderKind,
+	)
+	return i, err
+}
+
+const finishAvatarDelivery = `-- name: FinishAvatarDelivery :execrows
+UPDATE shuttle_avatar_deliveries SET state=$2,version=version+1,receipt=$3,
+next_attempt_at=clock_timestamp()+$4::bigint*interval '1 millisecond'
+WHERE id=$1 AND version=$5 AND attempt_id=$6 AND state='send_inflight'
+`
+
+type FinishAvatarDeliveryParams struct {
+	ID              uuid.UUID   `json:"id"`
+	Outcome         string      `json:"outcome"`
+	Receipt         []byte      `json:"receipt"`
+	DelayMs         int64       `json:"delay_ms"`
+	ExpectedVersion int64       `json:"expected_version"`
+	AttemptID       pgtype.UUID `json:"attempt_id"`
+}
+
+func (q *Queries) FinishAvatarDelivery(ctx context.Context, arg FinishAvatarDeliveryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishAvatarDelivery,
+		arg.ID,
+		arg.Outcome,
+		arg.Receipt,
+		arg.DelayMs,
+		arg.ExpectedVersion,
+		arg.AttemptID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const finishDelivery = `-- name: FinishDelivery :one
@@ -322,8 +1504,168 @@ func (q *Queries) FinishDelivery(ctx context.Context, arg FinishDeliveryParams) 
 	return i, err
 }
 
+const finishMassageReminder = `-- name: FinishMassageReminder :execrows
+UPDATE shuttle_massage_reminders SET state=$1,version=version+1,receipt=$2,
+next_attempt_at=clock_timestamp()+$3::bigint*interval '1 millisecond',
+lead_seconds=CASE WHEN $1::text='retryable' THEN $4::integer ELSE lead_seconds END,
+due_at=CASE WHEN $1::text='retryable' THEN $5::timestamptz ELSE due_at END
+WHERE id=$6::uuid AND attempt_id=$7::uuid AND state='send_inflight'
+`
+
+type FinishMassageReminderParams struct {
+	State       string             `json:"state"`
+	Receipt     []byte             `json:"receipt"`
+	DelayMs     int64              `json:"delay_ms"`
+	LeadSeconds int32              `json:"lead_seconds"`
+	DueAt       pgtype.Timestamptz `json:"due_at"`
+	ID          uuid.UUID          `json:"id"`
+	AttemptID   uuid.UUID          `json:"attempt_id"`
+}
+
+func (q *Queries) FinishMassageReminder(ctx context.Context, arg FinishMassageReminderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishMassageReminder,
+		arg.State,
+		arg.Receipt,
+		arg.DelayMs,
+		arg.LeadSeconds,
+		arg.DueAt,
+		arg.ID,
+		arg.AttemptID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const finishMassageSpecialistNotification = `-- name: FinishMassageSpecialistNotification :execrows
+UPDATE shuttle_massage_specialist_notifications SET state=$1,version=version+1,receipt=$2,
+next_attempt_at=clock_timestamp()+$3::bigint*interval '1 millisecond'
+WHERE id=$4::uuid AND attempt_id=$5::uuid AND state='send_inflight'
+`
+
+type FinishMassageSpecialistNotificationParams struct {
+	State     string    `json:"state"`
+	Receipt   []byte    `json:"receipt"`
+	DelayMs   int64     `json:"delay_ms"`
+	ID        uuid.UUID `json:"id"`
+	AttemptID uuid.UUID `json:"attempt_id"`
+}
+
+func (q *Queries) FinishMassageSpecialistNotification(ctx context.Context, arg FinishMassageSpecialistNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishMassageSpecialistNotification,
+		arg.State,
+		arg.Receipt,
+		arg.DelayMs,
+		arg.ID,
+		arg.AttemptID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const finishOrderNotification = `-- name: FinishOrderNotification :execrows
+UPDATE shuttle_order_evidence_notices SET state=$3,version=version+1,receipt=$4,
+next_attempt_at=clock_timestamp()+$5::bigint*interval '1 millisecond'
+WHERE id=$1 AND attempt_id=$2 AND state='send_inflight'
+`
+
+type FinishOrderNotificationParams struct {
+	ID        uuid.UUID   `json:"id"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	State     string      `json:"state"`
+	Receipt   []byte      `json:"receipt"`
+	DelayMs   int64       `json:"delay_ms"`
+}
+
+func (q *Queries) FinishOrderNotification(ctx context.Context, arg FinishOrderNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishOrderNotification,
+		arg.ID,
+		arg.AttemptID,
+		arg.State,
+		arg.Receipt,
+		arg.DelayMs,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const finishPairInvitationNotification = `-- name: FinishPairInvitationNotification :execrows
+UPDATE shuttle_pair_notifications SET state=$3,version=version+1,receipt=$4,
+next_attempt_at=clock_timestamp()+$5::bigint*interval '1 millisecond'
+WHERE id=$1 AND attempt_id=$2 AND state='send_inflight'
+`
+
+type FinishPairInvitationNotificationParams struct {
+	ID        uuid.UUID   `json:"id"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	State     string      `json:"state"`
+	Receipt   []byte      `json:"receipt"`
+	DelayMs   int64       `json:"delay_ms"`
+}
+
+func (q *Queries) FinishPairInvitationNotification(ctx context.Context, arg FinishPairInvitationNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishPairInvitationNotification,
+		arg.ID,
+		arg.AttemptID,
+		arg.State,
+		arg.Receipt,
+		arg.DelayMs,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const finishPaymentNotification = `-- name: FinishPaymentNotification :one
+UPDATE shuttle_payment_notifications SET state=$3,version=version+1,receipt=$4,
+next_attempt_at=clock_timestamp()+$5::bigint*interval '1 millisecond'
+WHERE id=$1 AND attempt_id=$2 AND state='send_inflight' RETURNING id, bot_id, organization_id, evidence_id, recipient_id, kind, document, state, version, attempt_id, payload, receipt, next_attempt_at, created_at
+`
+
+type FinishPaymentNotificationParams struct {
+	ID        uuid.UUID   `json:"id"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	State     string      `json:"state"`
+	Receipt   []byte      `json:"receipt"`
+	DelayMs   int64       `json:"delay_ms"`
+}
+
+func (q *Queries) FinishPaymentNotification(ctx context.Context, arg FinishPaymentNotificationParams) (ShuttlePaymentNotification, error) {
+	row := q.db.QueryRow(ctx, finishPaymentNotification,
+		arg.ID,
+		arg.AttemptID,
+		arg.State,
+		arg.Receipt,
+		arg.DelayMs,
+	)
+	var i ShuttlePaymentNotification
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.EvidenceID,
+		&i.RecipientID,
+		&i.Kind,
+		&i.Document,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getAdminTask = `-- name: GetAdminTask :one
-SELECT t.id, t.user_id, t.conversation_id, t.seq, t.request, t.state, t.route, t.target_task_id, t.target_run_id, t.run_id, t.auth_session_id, t.question_id, t.snapshot, t.version, t.fence, t.lease_owner, t.lease_until, t.created_at FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+SELECT t.id, t.user_id, t.conversation_id, t.seq, t.request, t.state, t.route, t.target_task_id, t.target_run_id, t.run_id, t.auth_session_id, t.question_id, t.snapshot, t.version, t.fence, t.lease_owner, t.lease_until, t.created_at, t.response_started_at, t.response_first_chunk_seq, t.response_last_chunk_seq, t.response_delivered_at FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
 WHERE t.id=$1 AND u.bot_id=$2
 AND (u.zitadel_org='' OR u.zitadel_org=$3)
 `
@@ -356,8 +1698,1309 @@ func (q *Queries) GetAdminTask(ctx context.Context, arg GetAdminTaskParams) (Shu
 		&i.LeaseOwner,
 		&i.LeaseUntil,
 		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
 	)
 	return i, err
+}
+
+const getAssignmentPreparation = `-- name: GetAssignmentPreparation :one
+SELECT p.bot_id, p.organization_id, p.actor, p.operation_id, p.proposal_id, p.request_hash, p.expires_at, p.document FROM shuttle_assignment_preparations p
+WHERE p.bot_id=$1 AND p.organization_id=$2 AND p.actor=$3
+AND (p.operation_id=$4 OR p.operation_id=(SELECT a.canonical_operation_id FROM shuttle_assignment_aliases a
+ WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.actor=$3 AND a.operation_id=$4))
+`
+
+type GetAssignmentPreparationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetAssignmentPreparation(ctx context.Context, arg GetAssignmentPreparationParams) (ShuttleAssignmentPreparation, error) {
+	row := q.db.QueryRow(ctx, getAssignmentPreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleAssignmentPreparation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+	)
+	return i, err
+}
+
+const getAssignmentProposal = `-- name: GetAssignmentProposal :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, request_hash, expires_at, document FROM shuttle_assignment_preparations
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND proposal_id=$4
+`
+
+type GetAssignmentProposalParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	ProposalID     uuid.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) GetAssignmentProposal(ctx context.Context, arg GetAssignmentProposalParams) (ShuttleAssignmentPreparation, error) {
+	row := q.db.QueryRow(ctx, getAssignmentProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.ProposalID,
+	)
+	var i ShuttleAssignmentPreparation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+	)
+	return i, err
+}
+
+const getAuthorityOperation = `-- name: GetAuthorityOperation :one
+SELECT bot_id, organization_id, actor, operation_id, request_hash, result, created_at FROM shuttle_authority_operations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetAuthorityOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetAuthorityOperation(ctx context.Context, arg GetAuthorityOperationParams) (ShuttleAuthorityOperation, error) {
+	row := q.db.QueryRow(ctx, getAuthorityOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleAuthorityOperation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getAuthorityPreparation = `-- name: GetAuthorityPreparation :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, request_hash, expires_at, document FROM shuttle_authority_preparations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetAuthorityPreparationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetAuthorityPreparation(ctx context.Context, arg GetAuthorityPreparationParams) (ShuttleAuthorityPreparation, error) {
+	row := q.db.QueryRow(ctx, getAuthorityPreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleAuthorityPreparation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+	)
+	return i, err
+}
+
+const getAvatarDelivery = `-- name: GetAvatarDelivery :one
+SELECT n.id, n.artifact_id, n.user_id, n.telegram_user_id, n.state, n.version, n.attempt_id, n.receipt, n.next_attempt_at, n.created_at FROM shuttle_avatar_deliveries n JOIN shuttle_users u ON u.id=n.user_id
+WHERE n.id=$1 AND u.bot_id=$2 AND u.zitadel_org=$3
+`
+
+type GetAvatarDeliveryParams struct {
+	ID         uuid.UUID `json:"id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+func (q *Queries) GetAvatarDelivery(ctx context.Context, arg GetAvatarDeliveryParams) (ShuttleAvatarDelivery, error) {
+	row := q.db.QueryRow(ctx, getAvatarDelivery, arg.ID, arg.BotID, arg.ZitadelOrg)
+	var i ShuttleAvatarDelivery
+	err := row.Scan(
+		&i.ID,
+		&i.ArtifactID,
+		&i.UserID,
+		&i.TelegramUserID,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getAvatarDeliveryProposal = `-- name: GetAvatarDeliveryProposal :one
+SELECT r.bot_id, r.organization_id, r.actor, r.operation_id, r.proposal_id, r.delivery_id, r.request_hash, r.expires_at, r.document, r.result FROM shuttle_avatar_delivery_resolutions r
+WHERE r.bot_id=$1 AND r.organization_id=$2 AND r.actor=$3
+AND (($4::uuid <> '00000000-0000-0000-0000-000000000000'
+ AND (r.operation_id=$4 OR r.operation_id=(SELECT a.canonical_operation_id FROM shuttle_avatar_resolution_aliases a
+ WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.actor=$3 AND a.operation_id=$4))) OR
+ ($5::uuid <> '00000000-0000-0000-0000-000000000000' AND r.proposal_id=$5))
+`
+
+type GetAvatarDeliveryProposalParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	OperationID    uuid.UUID `json:"operation_id"`
+	ProposalID     uuid.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) GetAvatarDeliveryProposal(ctx context.Context, arg GetAvatarDeliveryProposalParams) (ShuttleAvatarDeliveryResolution, error) {
+	row := q.db.QueryRow(ctx, getAvatarDeliveryProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+	)
+	var i ShuttleAvatarDeliveryResolution
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.DeliveryID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+	)
+	return i, err
+}
+
+const getAvatarDeliveryResolution = `-- name: GetAvatarDeliveryResolution :one
+SELECT r.bot_id, r.organization_id, r.actor, r.operation_id, r.proposal_id, r.delivery_id, r.request_hash, r.expires_at, r.document, r.result FROM shuttle_avatar_delivery_resolutions r
+WHERE r.bot_id=$1 AND r.organization_id=$2 AND r.actor=$3
+AND (r.operation_id=$4 OR r.operation_id=(SELECT a.canonical_operation_id FROM shuttle_avatar_resolution_aliases a
+ WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.actor=$3 AND a.operation_id=$4))
+`
+
+type GetAvatarDeliveryResolutionParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	OperationID    uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) GetAvatarDeliveryResolution(ctx context.Context, arg GetAvatarDeliveryResolutionParams) (ShuttleAvatarDeliveryResolution, error) {
+	row := q.db.QueryRow(ctx, getAvatarDeliveryResolution,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleAvatarDeliveryResolution
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.DeliveryID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+	)
+	return i, err
+}
+
+const getDeployment = `-- name: GetDeployment :one
+SELECT bot_id,organization_id,issuer FROM shuttle_deployment WHERE id=true
+`
+
+type GetDeploymentRow struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Issuer         string `json:"issuer"`
+}
+
+func (q *Queries) GetDeployment(ctx context.Context) (GetDeploymentRow, error) {
+	row := q.db.QueryRow(ctx, getDeployment)
+	var i GetDeploymentRow
+	err := row.Scan(&i.BotID, &i.OrganizationID, &i.Issuer)
+	return i, err
+}
+
+const getEvent = `-- name: GetEvent :one
+SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3
+`
+
+type GetEventParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) GetEvent(ctx context.Context, arg GetEventParams) (ShuttleEvent, error) {
+	row := q.db.QueryRow(ctx, getEvent, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ShuttleEvent
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Timezone,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Modules,
+		&i.Version,
+	)
+	return i, err
+}
+
+const getEventChangeProposal = `-- name: GetEventChangeProposal :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, request_hash, expires_at, document, result FROM shuttle_event_change_proposals
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetEventChangeProposalParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetEventChangeProposal(ctx context.Context, arg GetEventChangeProposalParams) (ShuttleEventChangeProposal, error) {
+	row := q.db.QueryRow(ctx, getEventChangeProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleEventChangeProposal
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+	)
+	return i, err
+}
+
+const getEventConfiguration = `-- name: GetEventConfiguration :one
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,r.document AS registration_rules,d.document AS deposit_policy FROM shuttle_events e
+LEFT JOIN shuttle_event_registration_rules r ON r.event_id=e.id
+LEFT JOIN shuttle_event_deposit_policy d ON d.event_id=e.id
+WHERE e.id=$1 AND e.bot_id=$2 AND e.organization_id=$3
+`
+
+type GetEventConfigurationParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+type GetEventConfigurationRow struct {
+	ShuttleEvent      ShuttleEvent `json:"shuttle_event"`
+	RegistrationRules []byte       `json:"registration_rules"`
+	DepositPolicy     []byte       `json:"deposit_policy"`
+}
+
+func (q *Queries) GetEventConfiguration(ctx context.Context, arg GetEventConfigurationParams) (GetEventConfigurationRow, error) {
+	row := q.db.QueryRow(ctx, getEventConfiguration, arg.ID, arg.BotID, arg.OrganizationID)
+	var i GetEventConfigurationRow
+	err := row.Scan(
+		&i.ShuttleEvent.ID,
+		&i.ShuttleEvent.BotID,
+		&i.ShuttleEvent.OrganizationID,
+		&i.ShuttleEvent.Name,
+		&i.ShuttleEvent.Timezone,
+		&i.ShuttleEvent.StartsAt,
+		&i.ShuttleEvent.EndsAt,
+		&i.ShuttleEvent.Modules,
+		&i.ShuttleEvent.Version,
+		&i.RegistrationRules,
+		&i.DepositPolicy,
+	)
+	return i, err
+}
+
+const getEventContextOperation = `-- name: GetEventContextOperation :one
+SELECT user_id, operation_id, request_hash, result, created_at FROM shuttle_event_context_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type GetEventContextOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID string    `json:"operation_id"`
+}
+
+func (q *Queries) GetEventContextOperation(ctx context.Context, arg GetEventContextOperationParams) (ShuttleEventContextOperation, error) {
+	row := q.db.QueryRow(ctx, getEventContextOperation, arg.UserID, arg.OperationID)
+	var i ShuttleEventContextOperation
+	err := row.Scan(
+		&i.UserID,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getEventOperation = `-- name: GetEventOperation :one
+SELECT bot_id, organization_id, actor, operation_id, request_hash, result, created_at FROM shuttle_event_operations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetEventOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetEventOperation(ctx context.Context, arg GetEventOperationParams) (ShuttleEventOperation, error) {
+	row := q.db.QueryRow(ctx, getEventOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleEventOperation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getHistoryApplication = `-- name: GetHistoryApplication :one
+SELECT receipt FROM shuttle_legacy_history_applications WHERE archive_id=$1 AND projection_version=$2
+`
+
+type GetHistoryApplicationParams struct {
+	ArchiveID         uuid.UUID `json:"archive_id"`
+	ProjectionVersion string    `json:"projection_version"`
+}
+
+func (q *Queries) GetHistoryApplication(ctx context.Context, arg GetHistoryApplicationParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getHistoryApplication, arg.ArchiveID, arg.ProjectionVersion)
+	var receipt []byte
+	err := row.Scan(&receipt)
+	return receipt, err
+}
+
+const getHistoryOperation = `-- name: GetHistoryOperation :one
+SELECT user_id, operation_id, proposal_id, archive_id, request_hash, receipt FROM shuttle_legacy_history_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type GetHistoryOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) GetHistoryOperation(ctx context.Context, arg GetHistoryOperationParams) (ShuttleLegacyHistoryOperation, error) {
+	row := q.db.QueryRow(ctx, getHistoryOperation, arg.UserID, arg.OperationID)
+	var i ShuttleLegacyHistoryOperation
+	err := row.Scan(
+		&i.UserID,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.ArchiveID,
+		&i.RequestHash,
+		&i.Receipt,
+	)
+	return i, err
+}
+
+const getHistoryPreparation = `-- name: GetHistoryPreparation :one
+SELECT id, user_id, operation_id, arguments, request_hash, expires_at,expires_at>clock_timestamp() AS unexpired FROM shuttle_legacy_history_preparations WHERE user_id=$1 AND operation_id=$2
+`
+
+type GetHistoryPreparationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+type GetHistoryPreparationRow struct {
+	ID          uuid.UUID          `json:"id"`
+	UserID      uuid.UUID          `json:"user_id"`
+	OperationID uuid.UUID          `json:"operation_id"`
+	Arguments   []byte             `json:"arguments"`
+	RequestHash []byte             `json:"request_hash"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	Unexpired   bool               `json:"unexpired"`
+}
+
+func (q *Queries) GetHistoryPreparation(ctx context.Context, arg GetHistoryPreparationParams) (GetHistoryPreparationRow, error) {
+	row := q.db.QueryRow(ctx, getHistoryPreparation, arg.UserID, arg.OperationID)
+	var i GetHistoryPreparationRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.Arguments,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Unexpired,
+	)
+	return i, err
+}
+
+const getLegacyArchive = `-- name: GetLegacyArchive :one
+SELECT id, bot_id, organization_id, sha256, size_bytes, validation, created_by, created_at FROM shuttle_legacy_archives WHERE id=$1 AND bot_id=$2 AND organization_id=$3
+`
+
+type GetLegacyArchiveParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) GetLegacyArchive(ctx context.Context, arg GetLegacyArchiveParams) (ShuttleLegacyArchive, error) {
+	row := q.db.QueryRow(ctx, getLegacyArchive, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ShuttleLegacyArchive
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Sha256,
+		&i.SizeBytes,
+		&i.Validation,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLegacyArchiveByDigest = `-- name: GetLegacyArchiveByDigest :one
+SELECT id, bot_id, organization_id, sha256, size_bytes, validation, created_by, created_at FROM shuttle_legacy_archives WHERE bot_id=$1 AND organization_id=$2 AND sha256=$3
+`
+
+type GetLegacyArchiveByDigestParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Sha256         string `json:"sha256"`
+}
+
+func (q *Queries) GetLegacyArchiveByDigest(ctx context.Context, arg GetLegacyArchiveByDigestParams) (ShuttleLegacyArchive, error) {
+	row := q.db.QueryRow(ctx, getLegacyArchiveByDigest, arg.BotID, arg.OrganizationID, arg.Sha256)
+	var i ShuttleLegacyArchive
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Sha256,
+		&i.SizeBytes,
+		&i.Validation,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getLegacyArchiveChunk = `-- name: GetLegacyArchiveChunk :one
+SELECT content FROM shuttle_legacy_archive_chunks WHERE archive_id=$1 AND ordinal=$2
+`
+
+type GetLegacyArchiveChunkParams struct {
+	ArchiveID uuid.UUID `json:"archive_id"`
+	Ordinal   int32     `json:"ordinal"`
+}
+
+func (q *Queries) GetLegacyArchiveChunk(ctx context.Context, arg GetLegacyArchiveChunkParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getLegacyArchiveChunk, arg.ArchiveID, arg.Ordinal)
+	var content []byte
+	err := row.Scan(&content)
+	return content, err
+}
+
+const getLegacyArchiveOperation = `-- name: GetLegacyArchiveOperation :one
+SELECT user_id, operation_id, proposal_id, archive_id, request_hash, receipt FROM shuttle_legacy_archive_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type GetLegacyArchiveOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) GetLegacyArchiveOperation(ctx context.Context, arg GetLegacyArchiveOperationParams) (ShuttleLegacyArchiveOperation, error) {
+	row := q.db.QueryRow(ctx, getLegacyArchiveOperation, arg.UserID, arg.OperationID)
+	var i ShuttleLegacyArchiveOperation
+	err := row.Scan(
+		&i.UserID,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.ArchiveID,
+		&i.RequestHash,
+		&i.Receipt,
+	)
+	return i, err
+}
+
+const getLegacyArchivePreparation = `-- name: GetLegacyArchivePreparation :one
+SELECT id, user_id, operation_id, arguments, request_hash, expires_at, expires_at>clock_timestamp() AS unexpired FROM shuttle_legacy_archive_preparations
+WHERE user_id=$1 AND operation_id=$2
+`
+
+type GetLegacyArchivePreparationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+type GetLegacyArchivePreparationRow struct {
+	ID          uuid.UUID          `json:"id"`
+	UserID      uuid.UUID          `json:"user_id"`
+	OperationID uuid.UUID          `json:"operation_id"`
+	Arguments   []byte             `json:"arguments"`
+	RequestHash []byte             `json:"request_hash"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	Unexpired   bool               `json:"unexpired"`
+}
+
+func (q *Queries) GetLegacyArchivePreparation(ctx context.Context, arg GetLegacyArchivePreparationParams) (GetLegacyArchivePreparationRow, error) {
+	row := q.db.QueryRow(ctx, getLegacyArchivePreparation, arg.UserID, arg.OperationID)
+	var i GetLegacyArchivePreparationRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.Arguments,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Unexpired,
+	)
+	return i, err
+}
+
+const getMiniAppSession = `-- name: GetMiniAppSession :one
+SELECT id, bot_id, user_id, proof_hash, nonce_hash, key_generation, bearer_hash, state, subject, organization, auth_date, pending_until, expires_at, created_at FROM shuttle_miniapp_sessions WHERE id=$1
+`
+
+func (q *Queries) GetMiniAppSession(ctx context.Context, id uuid.UUID) (ShuttleMiniappSession, error) {
+	row := q.db.QueryRow(ctx, getMiniAppSession, id)
+	var i ShuttleMiniappSession
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.UserID,
+		&i.ProofHash,
+		&i.NonceHash,
+		&i.KeyGeneration,
+		&i.BearerHash,
+		&i.State,
+		&i.Subject,
+		&i.Organization,
+		&i.AuthDate,
+		&i.PendingUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getNotificationResolution = `-- name: GetNotificationResolution :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, notification_id, request_hash, expires_at, document, result, pair_notification_id, order_notification_id, massage_reminder_id, massage_specialist_notification_id FROM shuttle_notification_resolutions
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetNotificationResolutionParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetNotificationResolution(ctx context.Context, arg GetNotificationResolutionParams) (ShuttleNotificationResolution, error) {
+	row := q.db.QueryRow(ctx, getNotificationResolution,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleNotificationResolution
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.NotificationID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+		&i.PairNotificationID,
+		&i.OrderNotificationID,
+		&i.MassageReminderID,
+		&i.MassageSpecialistNotificationID,
+	)
+	return i, err
+}
+
+const getOrderEvidenceFile = `-- name: GetOrderEvidenceFile :one
+SELECT f.id, f.user_id, f.task_id, f.telegram_id, f.unique_id, f.kind, f.mime_type, f.filename, f.size_bytes, f.message_id, f.sent_at, f.accepted_at FROM shuttle_files f
+JOIN shuttle_order_evidence ev ON ev.file_id=f.id AND ev.user_id=f.user_id
+JOIN shuttle_users owner ON owner.id=ev.user_id
+WHERE ev.id=$1 AND ev.event_id=$2 AND owner.bot_id=$3 AND owner.zitadel_org=$4
+`
+
+type GetOrderEvidenceFileParams struct {
+	ID         uuid.UUID `json:"id"`
+	EventID    uuid.UUID `json:"event_id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+func (q *Queries) GetOrderEvidenceFile(ctx context.Context, arg GetOrderEvidenceFileParams) (ShuttleFile, error) {
+	row := q.db.QueryRow(ctx, getOrderEvidenceFile,
+		arg.ID,
+		arg.EventID,
+		arg.BotID,
+		arg.ZitadelOrg,
+	)
+	var i ShuttleFile
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TaskID,
+		&i.TelegramID,
+		&i.UniqueID,
+		&i.Kind,
+		&i.MimeType,
+		&i.Filename,
+		&i.SizeBytes,
+		&i.MessageID,
+		&i.SentAt,
+		&i.AcceptedAt,
+	)
+	return i, err
+}
+
+const getOrderNotification = `-- name: GetOrderNotification :one
+SELECT n.id, n.evidence_id, n.recipient_id, n.kind, n.document, n.created_at, n.state, n.version, n.attempt_id, n.payload, n.receipt, n.next_attempt_at,o.submitted_result FROM shuttle_order_evidence_notices n
+JOIN shuttle_order_evidence ev ON ev.id=n.evidence_id
+JOIN shuttle_orders o ON o.id=ev.order_id
+JOIN shuttle_events e ON e.id=ev.event_id
+WHERE n.id=$1 AND e.bot_id=$2 AND e.organization_id=$3
+`
+
+type GetOrderNotificationParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+type GetOrderNotificationRow struct {
+	ShuttleOrderEvidenceNotice ShuttleOrderEvidenceNotice `json:"shuttle_order_evidence_notice"`
+	SubmittedResult            []byte                     `json:"submitted_result"`
+}
+
+func (q *Queries) GetOrderNotification(ctx context.Context, arg GetOrderNotificationParams) (GetOrderNotificationRow, error) {
+	row := q.db.QueryRow(ctx, getOrderNotification, arg.ID, arg.BotID, arg.OrganizationID)
+	var i GetOrderNotificationRow
+	err := row.Scan(
+		&i.ShuttleOrderEvidenceNotice.ID,
+		&i.ShuttleOrderEvidenceNotice.EvidenceID,
+		&i.ShuttleOrderEvidenceNotice.RecipientID,
+		&i.ShuttleOrderEvidenceNotice.Kind,
+		&i.ShuttleOrderEvidenceNotice.Document,
+		&i.ShuttleOrderEvidenceNotice.CreatedAt,
+		&i.ShuttleOrderEvidenceNotice.State,
+		&i.ShuttleOrderEvidenceNotice.Version,
+		&i.ShuttleOrderEvidenceNotice.AttemptID,
+		&i.ShuttleOrderEvidenceNotice.Payload,
+		&i.ShuttleOrderEvidenceNotice.Receipt,
+		&i.ShuttleOrderEvidenceNotice.NextAttemptAt,
+		&i.SubmittedResult,
+	)
+	return i, err
+}
+
+const getOwnedFile = `-- name: GetOwnedFile :one
+SELECT f.id, f.user_id, f.task_id, f.telegram_id, f.unique_id, f.kind, f.mime_type, f.filename, f.size_bytes, f.message_id, f.sent_at, f.accepted_at FROM shuttle_files f JOIN shuttle_users u ON u.id=f.user_id
+WHERE f.id=$1 AND u.id=$2 AND u.bot_id=$3 AND u.zitadel_org=$4 AND u.zitadel_subject=$5 AND NOT u.revoked
+`
+
+type GetOwnedFileParams struct {
+	ID             uuid.UUID `json:"id"`
+	ID_2           uuid.UUID `json:"id_2"`
+	BotID          int64     `json:"bot_id"`
+	ZitadelOrg     string    `json:"zitadel_org"`
+	ZitadelSubject string    `json:"zitadel_subject"`
+}
+
+func (q *Queries) GetOwnedFile(ctx context.Context, arg GetOwnedFileParams) (ShuttleFile, error) {
+	row := q.db.QueryRow(ctx, getOwnedFile,
+		arg.ID,
+		arg.ID_2,
+		arg.BotID,
+		arg.ZitadelOrg,
+		arg.ZitadelSubject,
+	)
+	var i ShuttleFile
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TaskID,
+		&i.TelegramID,
+		&i.UniqueID,
+		&i.Kind,
+		&i.MimeType,
+		&i.Filename,
+		&i.SizeBytes,
+		&i.MessageID,
+		&i.SentAt,
+		&i.AcceptedAt,
+	)
+	return i, err
+}
+
+const getPair = `-- name: GetPair :one
+SELECT id, event_id, leader_registration_id, follower_registration_id, state, version, queued_at, created_at, assigned_at, dissolved_at FROM shuttle_pairs WHERE id=$1 AND event_id=$2
+`
+
+type GetPairParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) GetPair(ctx context.Context, arg GetPairParams) (ShuttlePair, error) {
+	row := q.db.QueryRow(ctx, getPair, arg.ID, arg.EventID)
+	var i ShuttlePair
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.LeaderRegistrationID,
+		&i.FollowerRegistrationID,
+		&i.State,
+		&i.Version,
+		&i.QueuedAt,
+		&i.CreatedAt,
+		&i.AssignedAt,
+		&i.DissolvedAt,
+	)
+	return i, err
+}
+
+const getPairInvitation = `-- name: GetPairInvitation :one
+SELECT id, event_id, inviter_registration_id, target_user_id, state, version, created_at, expires_at, decided_at, pair_id FROM shuttle_pair_invitations WHERE id=$1 AND event_id=$2
+`
+
+type GetPairInvitationParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) GetPairInvitation(ctx context.Context, arg GetPairInvitationParams) (ShuttlePairInvitation, error) {
+	row := q.db.QueryRow(ctx, getPairInvitation, arg.ID, arg.EventID)
+	var i ShuttlePairInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.InviterRegistrationID,
+		&i.TargetUserID,
+		&i.State,
+		&i.Version,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.DecidedAt,
+		&i.PairID,
+	)
+	return i, err
+}
+
+const getPairInvitationNotification = `-- name: GetPairInvitationNotification :one
+SELECT n.id, n.bot_id, n.organization_id, n.invitation_id, n.invitation_version, n.recipient_id, n.kind, n.state, n.version, n.attempt_id, n.payload, n.receipt, n.next_attempt_at, n.created_at,i.id, i.event_id, i.inviter_registration_id, i.target_user_id, i.state, i.version, i.created_at, i.expires_at, i.decided_at, i.pair_id,e.name AS event_name,e.timezone,e.starts_at,e.ends_at,
+trim(coalesce(u.profile->>'first_name','')||' '||coalesce(u.profile->>'last_name',''))::text AS inviter_name,
+r.user_id AS inviter_user_id,r.role AS inviter_role
+FROM shuttle_pair_notifications n JOIN shuttle_pair_invitations i ON i.id=n.invitation_id
+JOIN shuttle_events e ON e.id=i.event_id
+JOIN shuttle_registrations r ON r.id=i.inviter_registration_id JOIN shuttle_users u ON u.id=r.user_id
+WHERE n.id=$1 AND n.bot_id=$2 AND n.organization_id=$3
+AND e.bot_id=n.bot_id AND e.organization_id=n.organization_id
+`
+
+type GetPairInvitationNotificationParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+type GetPairInvitationNotificationRow struct {
+	ShuttlePairNotification ShuttlePairNotification `json:"shuttle_pair_notification"`
+	ShuttlePairInvitation   ShuttlePairInvitation   `json:"shuttle_pair_invitation"`
+	EventName               string                  `json:"event_name"`
+	Timezone                string                  `json:"timezone"`
+	StartsAt                pgtype.Timestamptz      `json:"starts_at"`
+	EndsAt                  pgtype.Timestamptz      `json:"ends_at"`
+	InviterName             string                  `json:"inviter_name"`
+	InviterUserID           uuid.UUID               `json:"inviter_user_id"`
+	InviterRole             string                  `json:"inviter_role"`
+}
+
+func (q *Queries) GetPairInvitationNotification(ctx context.Context, arg GetPairInvitationNotificationParams) (GetPairInvitationNotificationRow, error) {
+	row := q.db.QueryRow(ctx, getPairInvitationNotification, arg.ID, arg.BotID, arg.OrganizationID)
+	var i GetPairInvitationNotificationRow
+	err := row.Scan(
+		&i.ShuttlePairNotification.ID,
+		&i.ShuttlePairNotification.BotID,
+		&i.ShuttlePairNotification.OrganizationID,
+		&i.ShuttlePairNotification.InvitationID,
+		&i.ShuttlePairNotification.InvitationVersion,
+		&i.ShuttlePairNotification.RecipientID,
+		&i.ShuttlePairNotification.Kind,
+		&i.ShuttlePairNotification.State,
+		&i.ShuttlePairNotification.Version,
+		&i.ShuttlePairNotification.AttemptID,
+		&i.ShuttlePairNotification.Payload,
+		&i.ShuttlePairNotification.Receipt,
+		&i.ShuttlePairNotification.NextAttemptAt,
+		&i.ShuttlePairNotification.CreatedAt,
+		&i.ShuttlePairInvitation.ID,
+		&i.ShuttlePairInvitation.EventID,
+		&i.ShuttlePairInvitation.InviterRegistrationID,
+		&i.ShuttlePairInvitation.TargetUserID,
+		&i.ShuttlePairInvitation.State,
+		&i.ShuttlePairInvitation.Version,
+		&i.ShuttlePairInvitation.CreatedAt,
+		&i.ShuttlePairInvitation.ExpiresAt,
+		&i.ShuttlePairInvitation.DecidedAt,
+		&i.ShuttlePairInvitation.PairID,
+		&i.EventName,
+		&i.Timezone,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.InviterName,
+		&i.InviterUserID,
+		&i.InviterRole,
+	)
+	return i, err
+}
+
+const getPairOperation = `-- name: GetPairOperation :one
+SELECT bot_id, organization_id, actor, operation_id, kind, request_hash, result, created_at FROM shuttle_pair_operations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetPairOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetPairOperation(ctx context.Context, arg GetPairOperationParams) (ShuttlePairOperation, error) {
+	row := q.db.QueryRow(ctx, getPairOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttlePairOperation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.Kind,
+		&i.RequestHash,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPairPreparation = `-- name: GetPairPreparation :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, request_hash, expires_at, document FROM shuttle_pair_preparations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetPairPreparationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetPairPreparation(ctx context.Context, arg GetPairPreparationParams) (ShuttlePairPreparation, error) {
+	row := q.db.QueryRow(ctx, getPairPreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttlePairPreparation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+	)
+	return i, err
+}
+
+const getPass = `-- name: GetPass :one
+SELECT id, registration_id, price_minor, currency, currency_scale, assigned_at, payment_due_at FROM shuttle_passes WHERE registration_id=$1
+`
+
+func (q *Queries) GetPass(ctx context.Context, registrationID uuid.UUID) (ShuttlePass, error) {
+	row := q.db.QueryRow(ctx, getPass, registrationID)
+	var i ShuttlePass
+	err := row.Scan(
+		&i.ID,
+		&i.RegistrationID,
+		&i.PriceMinor,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.AssignedAt,
+		&i.PaymentDueAt,
+	)
+	return i, err
+}
+
+const getPassTier = `-- name: GetPassTier :one
+SELECT pass_id, tier_id, tier_number FROM shuttle_pass_tiers WHERE pass_id=$1
+`
+
+func (q *Queries) GetPassTier(ctx context.Context, passID uuid.UUID) (ShuttlePassTier, error) {
+	row := q.db.QueryRow(ctx, getPassTier, passID)
+	var i ShuttlePassTier
+	err := row.Scan(&i.PassID, &i.TierID, &i.TierNumber)
+	return i, err
+}
+
+const getPaymentEvidenceFile = `-- name: GetPaymentEvidenceFile :one
+SELECT f.id, f.user_id, f.task_id, f.telegram_id, f.unique_id, f.kind, f.mime_type, f.filename, f.size_bytes, f.message_id, f.sent_at, f.accepted_at FROM shuttle_files f JOIN shuttle_payment_evidence ev ON ev.file_id=f.id
+WHERE ev.id=$1 AND ev.event_id=$2 AND f.user_id=ev.user_id
+`
+
+type GetPaymentEvidenceFileParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) GetPaymentEvidenceFile(ctx context.Context, arg GetPaymentEvidenceFileParams) (ShuttleFile, error) {
+	row := q.db.QueryRow(ctx, getPaymentEvidenceFile, arg.ID, arg.EventID)
+	var i ShuttleFile
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TaskID,
+		&i.TelegramID,
+		&i.UniqueID,
+		&i.Kind,
+		&i.MimeType,
+		&i.Filename,
+		&i.SizeBytes,
+		&i.MessageID,
+		&i.SentAt,
+		&i.AcceptedAt,
+	)
+	return i, err
+}
+
+const getPaymentNotification = `-- name: GetPaymentNotification :one
+SELECT id, bot_id, organization_id, evidence_id, recipient_id, kind, document, state, version, attempt_id, payload, receipt, next_attempt_at, created_at FROM shuttle_payment_notifications WHERE id=$1 AND bot_id=$2 AND organization_id=$3
+`
+
+type GetPaymentNotificationParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) GetPaymentNotification(ctx context.Context, arg GetPaymentNotificationParams) (ShuttlePaymentNotification, error) {
+	row := q.db.QueryRow(ctx, getPaymentNotification, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ShuttlePaymentNotification
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.EvidenceID,
+		&i.RecipientID,
+		&i.Kind,
+		&i.Document,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPaymentOperation = `-- name: GetPaymentOperation :one
+SELECT bot_id, organization_id, actor, operation_id, kind, request_hash, result, created_at FROM shuttle_payment_operations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetPaymentOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetPaymentOperation(ctx context.Context, arg GetPaymentOperationParams) (ShuttlePaymentOperation, error) {
+	row := q.db.QueryRow(ctx, getPaymentOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttlePaymentOperation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.Kind,
+		&i.RequestHash,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPaymentPreparation = `-- name: GetPaymentPreparation :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, request_hash, expires_at, document FROM shuttle_payment_preparations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetPaymentPreparationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetPaymentPreparation(ctx context.Context, arg GetPaymentPreparationParams) (ShuttlePaymentPreparation, error) {
+	row := q.db.QueryRow(ctx, getPaymentPreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttlePaymentPreparation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+	)
+	return i, err
+}
+
+const getRegistration = `-- name: GetRegistration :one
+SELECT id, event_id, user_id, role, state, version, requested_at FROM shuttle_registrations WHERE event_id=$1 AND user_id=$2
+`
+
+type GetRegistrationParams struct {
+	EventID uuid.UUID `json:"event_id"`
+	UserID  uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetRegistration(ctx context.Context, arg GetRegistrationParams) (ShuttleRegistration, error) {
+	row := q.db.QueryRow(ctx, getRegistration, arg.EventID, arg.UserID)
+	var i ShuttleRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.Role,
+		&i.State,
+		&i.Version,
+		&i.RequestedAt,
+	)
+	return i, err
+}
+
+const getRegistrationByID = `-- name: GetRegistrationByID :one
+SELECT id, event_id, user_id, role, state, version, requested_at FROM shuttle_registrations WHERE id=$1 AND event_id=$2
+`
+
+type GetRegistrationByIDParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) GetRegistrationByID(ctx context.Context, arg GetRegistrationByIDParams) (ShuttleRegistration, error) {
+	row := q.db.QueryRow(ctx, getRegistrationByID, arg.ID, arg.EventID)
+	var i ShuttleRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.Role,
+		&i.State,
+		&i.Version,
+		&i.RequestedAt,
+	)
+	return i, err
+}
+
+const getRegistrationDetails = `-- name: GetRegistrationDetails :one
+SELECT user_id, version, encrypted_record, legal_name_present, passport_number_present FROM shuttle_registration_details WHERE user_id=$1
+`
+
+func (q *Queries) GetRegistrationDetails(ctx context.Context, userID uuid.UUID) (ShuttleRegistrationDetail, error) {
+	row := q.db.QueryRow(ctx, getRegistrationDetails, userID)
+	var i ShuttleRegistrationDetail
+	err := row.Scan(
+		&i.UserID,
+		&i.Version,
+		&i.EncryptedRecord,
+		&i.LegalNamePresent,
+		&i.PassportNumberPresent,
+	)
+	return i, err
+}
+
+const getRegistrationDetailsRequest = `-- name: GetRegistrationDetailsRequest :one
+SELECT id, user_id, event_id, event_version, event_timezone, legal_name_required, passport_number_required, created_at, expires_at, completed_at, completed_details_version, superseded_at FROM shuttle_registration_details_requests WHERE id=$1 AND user_id=$2
+`
+
+type GetRegistrationDetailsRequestParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetRegistrationDetailsRequest(ctx context.Context, arg GetRegistrationDetailsRequestParams) (ShuttleRegistrationDetailsRequest, error) {
+	row := q.db.QueryRow(ctx, getRegistrationDetailsRequest, arg.ID, arg.UserID)
+	var i ShuttleRegistrationDetailsRequest
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.EventVersion,
+		&i.EventTimezone,
+		&i.LegalNameRequired,
+		&i.PassportNumberRequired,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.CompletedAt,
+		&i.CompletedDetailsVersion,
+		&i.SupersededAt,
+	)
+	return i, err
+}
+
+const getRegistrationOperation = `-- name: GetRegistrationOperation :one
+SELECT bot_id, organization_id, actor, operation_id, request_hash, result, created_at FROM shuttle_registration_operations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetRegistrationOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetRegistrationOperation(ctx context.Context, arg GetRegistrationOperationParams) (ShuttleRegistrationOperation, error) {
+	row := q.db.QueryRow(ctx, getRegistrationOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleRegistrationOperation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getRevocationUser = `-- name: GetRevocationUser :one
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3
+`
+
+type GetRevocationUserParams struct {
+	ID         uuid.UUID `json:"id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+func (q *Queries) GetRevocationUser(ctx context.Context, arg GetRevocationUserParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, getRevocationUser, arg.ID, arg.BotID, arg.ZitadelOrg)
+	var i ShuttleUser
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.TgUserID,
+		&i.Profile,
+		&i.ZitadelSubject,
+		&i.ZitadelOrg,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const getRunEventContext = `-- name: GetRunEventContext :one
+SELECT event_id FROM shuttle_run_event_context WHERE user_id=$1 AND run_id=$2
+`
+
+type GetRunEventContextParams struct {
+	UserID uuid.UUID `json:"user_id"`
+	RunID  string    `json:"run_id"`
+}
+
+func (q *Queries) GetRunEventContext(ctx context.Context, arg GetRunEventContextParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getRunEventContext, arg.UserID, arg.RunID)
+	var event_id uuid.UUID
+	err := row.Scan(&event_id)
+	return event_id, err
 }
 
 const getSettings = `-- name: GetSettings :one
@@ -371,8 +3014,42 @@ func (q *Queries) GetSettings(ctx context.Context) (ShuttleSetting, error) {
 	return i, err
 }
 
+const getSettingsChangeProposal = `-- name: GetSettingsChangeProposal :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, request_hash, expires_at, document, result FROM shuttle_settings_change_proposals
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetSettingsChangeProposalParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetSettingsChangeProposal(ctx context.Context, arg GetSettingsChangeProposalParams) (ShuttleSettingsChangeProposal, error) {
+	row := q.db.QueryRow(ctx, getSettingsChangeProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleSettingsChangeProposal
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+	)
+	return i, err
+}
+
 const getTask = `-- name: GetTask :one
-SELECT id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at FROM shuttle_tasks WHERE id=$1
+SELECT id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at, response_started_at, response_first_chunk_seq, response_last_chunk_seq, response_delivered_at FROM shuttle_tasks WHERE id=$1
 `
 
 func (q *Queries) GetTask(ctx context.Context, id uuid.UUID) (ShuttleTask, error) {
@@ -397,6 +3074,45 @@ func (q *Queries) GetTask(ctx context.Context, id uuid.UUID) (ShuttleTask, error
 		&i.LeaseOwner,
 		&i.LeaseUntil,
 		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
+	)
+	return i, err
+}
+
+const getTaskClosureProposal = `-- name: GetTaskClosureProposal :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, task_id, request_hash, expires_at, document, result FROM shuttle_task_closure_proposals
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetTaskClosureProposalParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetTaskClosureProposal(ctx context.Context, arg GetTaskClosureProposalParams) (ShuttleTaskClosureProposal, error) {
+	row := q.db.QueryRow(ctx, getTaskClosureProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleTaskClosureProposal
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.TaskID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
 	)
 	return i, err
 }
@@ -426,6 +3142,32 @@ func (q *Queries) GetTaskResolution(ctx context.Context, arg GetTaskResolutionPa
 	return i, err
 }
 
+const getTelegramPrelink = `-- name: GetTelegramPrelink :one
+SELECT id, bot_id, user_id, provider_issuer, assertion_jti, assertion_hash, organization, provider_id, external_subject, expires_at, state, subject, created_at, completed_at FROM shuttle_telegram_prelinks WHERE id=$1
+`
+
+func (q *Queries) GetTelegramPrelink(ctx context.Context, id uuid.UUID) (ShuttleTelegramPrelink, error) {
+	row := q.db.QueryRow(ctx, getTelegramPrelink, id)
+	var i ShuttleTelegramPrelink
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.UserID,
+		&i.ProviderIssuer,
+		&i.AssertionJti,
+		&i.AssertionHash,
+		&i.Organization,
+		&i.ProviderID,
+		&i.ExternalSubject,
+		&i.ExpiresAt,
+		&i.State,
+		&i.Subject,
+		&i.CreatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const getUser = `-- name: GetUser :one
 SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=$1
 `
@@ -446,11 +3188,17 @@ func (q *Queries) GetUser(ctx context.Context, id uuid.UUID) (ShuttleUser, error
 }
 
 const getUserBySubject = `-- name: GetUserBySubject :one
-SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE zitadel_subject=$1 ORDER BY bot_id,tg_user_id LIMIT 1
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE bot_id=$1 AND zitadel_org=$2 AND zitadel_subject=$3 ORDER BY tg_user_id LIMIT 1
 `
 
-func (q *Queries) GetUserBySubject(ctx context.Context, zitadelSubject string) (ShuttleUser, error) {
-	row := q.db.QueryRow(ctx, getUserBySubject, zitadelSubject)
+type GetUserBySubjectParams struct {
+	BotID          int64  `json:"bot_id"`
+	ZitadelOrg     string `json:"zitadel_org"`
+	ZitadelSubject string `json:"zitadel_subject"`
+}
+
+func (q *Queries) GetUserBySubject(ctx context.Context, arg GetUserBySubjectParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, getUserBySubject, arg.BotID, arg.ZitadelOrg, arg.ZitadelSubject)
 	var i ShuttleUser
 	err := row.Scan(
 		&i.ID,
@@ -462,6 +3210,103 @@ func (q *Queries) GetUserBySubject(ctx context.Context, zitadelSubject string) (
 		&i.Revoked,
 	)
 	return i, err
+}
+
+const getUserEventContext = `-- name: GetUserEventContext :one
+SELECT user_id, event_id, version FROM shuttle_user_event_context WHERE user_id=$1
+`
+
+func (q *Queries) GetUserEventContext(ctx context.Context, userID uuid.UUID) (ShuttleUserEventContext, error) {
+	row := q.db.QueryRow(ctx, getUserEventContext, userID)
+	var i ShuttleUserEventContext
+	err := row.Scan(&i.UserID, &i.EventID, &i.Version)
+	return i, err
+}
+
+const getUserRevocationProposal = `-- name: GetUserRevocationProposal :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, target_id, request_hash, expires_at, document, result FROM shuttle_user_revocation_proposals
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
+`
+
+type GetUserRevocationProposalParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) GetUserRevocationProposal(ctx context.Context, arg GetUserRevocationProposalParams) (ShuttleUserRevocationProposal, error) {
+	row := q.db.QueryRow(ctx, getUserRevocationProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleUserRevocationProposal
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.TargetID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+	)
+	return i, err
+}
+
+const getUserRevocationProposalByID = `-- name: GetUserRevocationProposalByID :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, target_id, request_hash, expires_at, document, result FROM shuttle_user_revocation_proposals
+WHERE bot_id=$1 AND organization_id=$2 AND proposal_id=$3
+`
+
+type GetUserRevocationProposalByIDParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ProposalID     uuid.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) GetUserRevocationProposalByID(ctx context.Context, arg GetUserRevocationProposalByIDParams) (ShuttleUserRevocationProposal, error) {
+	row := q.db.QueryRow(ctx, getUserRevocationProposalByID, arg.BotID, arg.OrganizationID, arg.ProposalID)
+	var i ShuttleUserRevocationProposal
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.TargetID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+	)
+	return i, err
+}
+
+const hasActiveOrderEvidence = `-- name: HasActiveOrderEvidence :one
+SELECT EXISTS(SELECT 1 FROM shuttle_order_evidence WHERE order_id=$1 AND state<>'rejected') AS present
+`
+
+func (q *Queries) HasActiveOrderEvidence(ctx context.Context, orderID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveOrderEvidence, orderID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
+}
+
+const hasActivePairMember = `-- name: HasActivePairMember :one
+SELECT EXISTS(SELECT 1 FROM shuttle_active_pair_members WHERE registration_id=$1) AS active
+`
+
+func (q *Queries) HasActivePairMember(ctx context.Context, registrationID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActivePairMember, registrationID)
+	var active bool
+	err := row.Scan(&active)
+	return active, err
 }
 
 const hasEarlierPromotableMessage = `-- name: HasEarlierPromotableMessage :one
@@ -487,6 +3332,540 @@ func (q *Queries) HasEarlierPromotableMessage(ctx context.Context, arg HasEarlie
 	return has_earlier, err
 }
 
+const hasEventPaymentAuthority = `-- name: HasEventPaymentAuthority :one
+SELECT EXISTS(SELECT 1 FROM shuttle_event_authorities a JOIN shuttle_events e ON e.id=a.event_id
+WHERE a.user_id=$1 AND e.bot_id=$2 AND e.organization_id=$3 AND a.role IN ('ambassador','administrator')
+AND 'registrations'=ANY(e.modules)) AS available
+`
+
+type HasEventPaymentAuthorityParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) HasEventPaymentAuthority(ctx context.Context, arg HasEventPaymentAuthorityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasEventPaymentAuthority, arg.UserID, arg.BotID, arg.OrganizationID)
+	var available bool
+	err := row.Scan(&available)
+	return available, err
+}
+
+const hasNativeAvatarResolutionContext = `-- name: HasNativeAvatarResolutionContext :one
+SELECT EXISTS(SELECT 1 FROM shuttle_miniapp_avatar_resolution_actions a
+JOIN shuttle_avatar_delivery_resolutions r ON r.proposal_id=a.proposal_id
+JOIN shuttle_tasks t ON t.user_id=a.user_id
+WHERE a.user_id=$1 AND t.id=$2
+AND r.bot_id=$3 AND r.organization_id=$4 AND r.actor=$5
+AND a.created_at<t.created_at)
+`
+
+type HasNativeAvatarResolutionContextParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	TaskID         uuid.UUID `json:"task_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+}
+
+func (q *Queries) HasNativeAvatarResolutionContext(ctx context.Context, arg HasNativeAvatarResolutionContextParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasNativeAvatarResolutionContext,
+		arg.UserID,
+		arg.TaskID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasOrderEvidence = `-- name: HasOrderEvidence :one
+SELECT EXISTS(SELECT 1 FROM shuttle_order_evidence WHERE order_id=$1) AS present
+`
+
+func (q *Queries) HasOrderEvidence(ctx context.Context, orderID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOrderEvidence, orderID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
+}
+
+const hasOrderReviewWorkspaceHistory = `-- name: HasOrderReviewWorkspaceHistory :one
+SELECT EXISTS(SELECT 1 FROM shuttle_order_review_workspaces WHERE actor_id=$1 AND event_id=$2 AND evidence_id=$3) AS present
+`
+
+type HasOrderReviewWorkspaceHistoryParams struct {
+	ActorID    uuid.UUID `json:"actor_id"`
+	EventID    uuid.UUID `json:"event_id"`
+	EvidenceID uuid.UUID `json:"evidence_id"`
+}
+
+func (q *Queries) HasOrderReviewWorkspaceHistory(ctx context.Context, arg HasOrderReviewWorkspaceHistoryParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOrderReviewWorkspaceHistory, arg.ActorID, arg.EventID, arg.EvidenceID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
+}
+
+const hasOrdersEvidenceAuthority = `-- name: HasOrdersEvidenceAuthority :one
+SELECT EXISTS(SELECT 1 FROM shuttle_event_authorities a JOIN shuttle_events e ON e.id=a.event_id
+WHERE a.user_id=$1 AND e.bot_id=$2 AND e.organization_id=$3 AND a.role IN ('ambassador','administrator')
+AND 'orders'=ANY(e.modules)) AS available
+`
+
+type HasOrdersEvidenceAuthorityParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) HasOrdersEvidenceAuthority(ctx context.Context, arg HasOrdersEvidenceAuthorityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOrdersEvidenceAuthority, arg.UserID, arg.BotID, arg.OrganizationID)
+	var available bool
+	err := row.Scan(&available)
+	return available, err
+}
+
+const hasPairAssignmentAuthority = `-- name: HasPairAssignmentAuthority :one
+SELECT EXISTS(SELECT 1 FROM shuttle_users u
+WHERE u.id=$1 AND u.bot_id=$2
+AND u.zitadel_org=$3 AND u.zitadel_subject=$4 AND NOT u.revoked
+AND ($5::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
+JOIN shuttle_events e ON e.id=a.event_id WHERE a.user_id=u.id AND a.role='administrator'
+AND e.bot_id=u.bot_id AND e.organization_id=u.zitadel_org AND 'registrations'=ANY(e.modules)))) AS available
+`
+
+type HasPairAssignmentAuthorityParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Subject        string    `json:"subject"`
+	GlobalAdmin    bool      `json:"global_admin"`
+}
+
+func (q *Queries) HasPairAssignmentAuthority(ctx context.Context, arg HasPairAssignmentAuthorityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPairAssignmentAuthority,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Subject,
+		arg.GlobalAdmin,
+	)
+	var available bool
+	err := row.Scan(&available)
+	return available, err
+}
+
+const hasTaskMassageBindingContext = `-- name: HasTaskMassageBindingContext :one
+SELECT EXISTS(SELECT 1 FROM shuttle_tasks t
+JOIN shuttle_massage_binding_operations o ON o.actor_id=t.user_id
+JOIN shuttle_events e ON e.id=o.event_id
+WHERE t.id=$1::uuid AND t.user_id=$2::uuid
+AND e.bot_id=$3 AND e.organization_id=$4
+AND o.created_at<t.created_at
+AND ((o.result IS NULL AND o.expires_at>clock_timestamp()) OR
+ (o.result IS NOT NULL AND (o.result->>'updated_at')::timestamptz<t.created_at)))
+`
+
+type HasTaskMassageBindingContextParams struct {
+	TaskID         uuid.UUID `json:"task_id"`
+	ActorID        uuid.UUID `json:"actor_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) HasTaskMassageBindingContext(ctx context.Context, arg HasTaskMassageBindingContextParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasTaskMassageBindingContext,
+		arg.TaskID,
+		arg.ActorID,
+		arg.BotID,
+		arg.OrganizationID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasUnrejectedPaymentSource = `-- name: HasUnrejectedPaymentSource :one
+SELECT EXISTS(SELECT 1 FROM shuttle_payment_evidence ev
+LEFT JOIN shuttle_payment_reviews rv ON rv.evidence_id=ev.id
+WHERE ev.user_id=$1 AND ev.source_unique_id=$2 AND (rv.id IS NULL OR rv.decision='confirmed')
+UNION ALL SELECT 1 FROM shuttle_order_evidence oe WHERE oe.user_id=$1 AND oe.source_unique_id=$2 AND oe.state<>'rejected') AS used
+`
+
+type HasUnrejectedPaymentSourceParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	SourceUniqueID string    `json:"source_unique_id"`
+}
+
+func (q *Queries) HasUnrejectedPaymentSource(ctx context.Context, arg HasUnrejectedPaymentSourceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasUnrejectedPaymentSource, arg.UserID, arg.SourceUniqueID)
+	var used bool
+	err := row.Scan(&used)
+	return used, err
+}
+
+const historyUsage = `-- name: HistoryUsage :one
+SELECT count(*)::bigint AS records,coalesce(sum(octet_length(projection::text)),0)::bigint AS bytes
+FROM shuttle_legacy_history_records WHERE bot_id=$1 AND organization_id=$2
+`
+
+type HistoryUsageParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+type HistoryUsageRow struct {
+	Records int64 `json:"records"`
+	Bytes   int64 `json:"bytes"`
+}
+
+func (q *Queries) HistoryUsage(ctx context.Context, arg HistoryUsageParams) (HistoryUsageRow, error) {
+	row := q.db.QueryRow(ctx, historyUsage, arg.BotID, arg.OrganizationID)
+	var i HistoryUsageRow
+	err := row.Scan(&i.Records, &i.Bytes)
+	return i, err
+}
+
+const insertActivePairMembers = `-- name: InsertActivePairMembers :execrows
+INSERT INTO shuttle_active_pair_members(pair_id,event_id,registration_id,role)
+SELECT p.id,p.event_id,p.leader_registration_id,'leader' FROM shuttle_pairs p WHERE p.id=$1 AND p.event_id=$2
+UNION ALL
+SELECT p.id,p.event_id,p.follower_registration_id,'follower' FROM shuttle_pairs p WHERE p.id=$1 AND p.event_id=$2
+`
+
+type InsertActivePairMembersParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) InsertActivePairMembers(ctx context.Context, arg InsertActivePairMembersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertActivePairMembers, arg.ID, arg.EventID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertAssignmentAlias = `-- name: InsertAssignmentAlias :exec
+INSERT INTO shuttle_assignment_aliases(bot_id,organization_id,actor,operation_id,canonical_operation_id)
+VALUES($1,$2,$3,$4,$5)
+`
+
+type InsertAssignmentAliasParams struct {
+	BotID                int64  `json:"bot_id"`
+	OrganizationID       string `json:"organization_id"`
+	Actor                string `json:"actor"`
+	OperationID          string `json:"operation_id"`
+	CanonicalOperationID string `json:"canonical_operation_id"`
+}
+
+func (q *Queries) InsertAssignmentAlias(ctx context.Context, arg InsertAssignmentAliasParams) error {
+	_, err := q.db.Exec(ctx, insertAssignmentAlias,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.CanonicalOperationID,
+	)
+	return err
+}
+
+const insertAssignmentPreparation = `-- name: InsertAssignmentPreparation :exec
+INSERT INTO shuttle_assignment_preparations(bot_id,organization_id,actor,operation_id,proposal_id,request_hash,expires_at,document)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+`
+
+type InsertAssignmentPreparationParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Document       []byte             `json:"document"`
+}
+
+func (q *Queries) InsertAssignmentPreparation(ctx context.Context, arg InsertAssignmentPreparationParams) error {
+	_, err := q.db.Exec(ctx, insertAssignmentPreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+	)
+	return err
+}
+
+const insertAuthorityOperation = `-- name: InsertAuthorityOperation :exec
+INSERT INTO shuttle_authority_operations(bot_id,organization_id,actor,operation_id,request_hash,result) VALUES($1,$2,$3,$4,$5,$6)
+`
+
+type InsertAuthorityOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	RequestHash    []byte `json:"request_hash"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) InsertAuthorityOperation(ctx context.Context, arg InsertAuthorityOperationParams) error {
+	_, err := q.db.Exec(ctx, insertAuthorityOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertAuthorityPreparation = `-- name: InsertAuthorityPreparation :exec
+INSERT INTO shuttle_authority_preparations(bot_id,organization_id,actor,operation_id,proposal_id,request_hash,expires_at,document)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+`
+
+type InsertAuthorityPreparationParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Document       []byte             `json:"document"`
+}
+
+func (q *Queries) InsertAuthorityPreparation(ctx context.Context, arg InsertAuthorityPreparationParams) error {
+	_, err := q.db.Exec(ctx, insertAuthorityPreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+	)
+	return err
+}
+
+const insertAvatarDeliveryResolution = `-- name: InsertAvatarDeliveryResolution :exec
+INSERT INTO shuttle_avatar_delivery_resolutions(bot_id,organization_id,actor,operation_id,proposal_id,delivery_id,request_hash,expires_at,document)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+`
+
+type InsertAvatarDeliveryResolutionParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    uuid.UUID          `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	DeliveryID     uuid.UUID          `json:"delivery_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Document       []byte             `json:"document"`
+}
+
+func (q *Queries) InsertAvatarDeliveryResolution(ctx context.Context, arg InsertAvatarDeliveryResolutionParams) error {
+	_, err := q.db.Exec(ctx, insertAvatarDeliveryResolution,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.DeliveryID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+	)
+	return err
+}
+
+const insertAvatarDeliveryResolutionAlias = `-- name: InsertAvatarDeliveryResolutionAlias :exec
+INSERT INTO shuttle_avatar_resolution_aliases(bot_id,organization_id,actor,operation_id,canonical_operation_id)
+VALUES($1,$2,$3,$4,$5)
+`
+
+type InsertAvatarDeliveryResolutionAliasParams struct {
+	BotID                int64     `json:"bot_id"`
+	OrganizationID       string    `json:"organization_id"`
+	Actor                string    `json:"actor"`
+	OperationID          uuid.UUID `json:"operation_id"`
+	CanonicalOperationID uuid.UUID `json:"canonical_operation_id"`
+}
+
+func (q *Queries) InsertAvatarDeliveryResolutionAlias(ctx context.Context, arg InsertAvatarDeliveryResolutionAliasParams) error {
+	_, err := q.db.Exec(ctx, insertAvatarDeliveryResolutionAlias,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.CanonicalOperationID,
+	)
+	return err
+}
+
+const insertEventChangeProposal = `-- name: InsertEventChangeProposal :exec
+INSERT INTO shuttle_event_change_proposals
+(bot_id,organization_id,actor,operation_id,proposal_id,request_hash,expires_at,document)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+`
+
+type InsertEventChangeProposalParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Document       []byte             `json:"document"`
+}
+
+func (q *Queries) InsertEventChangeProposal(ctx context.Context, arg InsertEventChangeProposalParams) error {
+	_, err := q.db.Exec(ctx, insertEventChangeProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+	)
+	return err
+}
+
+const insertEventContextOperation = `-- name: InsertEventContextOperation :exec
+INSERT INTO shuttle_event_context_operations(user_id,operation_id,request_hash,result) VALUES($1,$2,$3,$4)
+`
+
+type InsertEventContextOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID string    `json:"operation_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) InsertEventContextOperation(ctx context.Context, arg InsertEventContextOperationParams) error {
+	_, err := q.db.Exec(ctx, insertEventContextOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertEventOperation = `-- name: InsertEventOperation :exec
+INSERT INTO shuttle_event_operations(bot_id,organization_id,actor,operation_id,request_hash,result)
+VALUES($1,$2,$3,$4,$5,$6)
+`
+
+type InsertEventOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	RequestHash    []byte `json:"request_hash"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) InsertEventOperation(ctx context.Context, arg InsertEventOperationParams) error {
+	_, err := q.db.Exec(ctx, insertEventOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertHistoryApplication = `-- name: InsertHistoryApplication :exec
+INSERT INTO shuttle_legacy_history_applications(archive_id,projection_version,receipt) VALUES($1,$2,$3)
+`
+
+type InsertHistoryApplicationParams struct {
+	ArchiveID         uuid.UUID `json:"archive_id"`
+	ProjectionVersion string    `json:"projection_version"`
+	Receipt           []byte    `json:"receipt"`
+}
+
+func (q *Queries) InsertHistoryApplication(ctx context.Context, arg InsertHistoryApplicationParams) error {
+	_, err := q.db.Exec(ctx, insertHistoryApplication, arg.ArchiveID, arg.ProjectionVersion, arg.Receipt)
+	return err
+}
+
+const insertHistoryOperation = `-- name: InsertHistoryOperation :exec
+INSERT INTO shuttle_legacy_history_operations(user_id,operation_id,proposal_id,archive_id,request_hash,receipt)
+VALUES($1,$2,$3,$4,$5,$6)
+`
+
+type InsertHistoryOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	ProposalID  uuid.UUID `json:"proposal_id"`
+	ArchiveID   uuid.UUID `json:"archive_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Receipt     []byte    `json:"receipt"`
+}
+
+func (q *Queries) InsertHistoryOperation(ctx context.Context, arg InsertHistoryOperationParams) error {
+	_, err := q.db.Exec(ctx, insertHistoryOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.ArchiveID,
+		arg.RequestHash,
+		arg.Receipt,
+	)
+	return err
+}
+
+const insertHistoryPreparation = `-- name: InsertHistoryPreparation :one
+INSERT INTO shuttle_legacy_history_preparations(id,user_id,operation_id,arguments,request_hash)
+VALUES($1,$2,$3,$4,$5) RETURNING id, user_id, operation_id, arguments, request_hash, expires_at
+`
+
+type InsertHistoryPreparationParams struct {
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	Arguments   []byte    `json:"arguments"`
+	RequestHash []byte    `json:"request_hash"`
+}
+
+func (q *Queries) InsertHistoryPreparation(ctx context.Context, arg InsertHistoryPreparationParams) (ShuttleLegacyHistoryPreparation, error) {
+	row := q.db.QueryRow(ctx, insertHistoryPreparation,
+		arg.ID,
+		arg.UserID,
+		arg.OperationID,
+		arg.Arguments,
+		arg.RequestHash,
+	)
+	var i ShuttleLegacyHistoryPreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.Arguments,
+		&i.RequestHash,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
 const insertInbox = `-- name: InsertInbox :exec
 INSERT INTO shuttle_inbox(bot_id,update_id,task_id,payload) VALUES($1,$2,$3,$4)
 `
@@ -504,6 +3883,1181 @@ func (q *Queries) InsertInbox(ctx context.Context, arg InsertInboxParams) error 
 		arg.UpdateID,
 		arg.TaskID,
 		arg.Payload,
+	)
+	return err
+}
+
+const insertLegacyArchive = `-- name: InsertLegacyArchive :one
+INSERT INTO shuttle_legacy_archives(id,bot_id,organization_id,sha256,size_bytes,validation,created_by)
+VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id, bot_id, organization_id, sha256, size_bytes, validation, created_by, created_at
+`
+
+type InsertLegacyArchiveParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Sha256         string    `json:"sha256"`
+	SizeBytes      int64     `json:"size_bytes"`
+	Validation     []byte    `json:"validation"`
+	CreatedBy      uuid.UUID `json:"created_by"`
+}
+
+func (q *Queries) InsertLegacyArchive(ctx context.Context, arg InsertLegacyArchiveParams) (ShuttleLegacyArchive, error) {
+	row := q.db.QueryRow(ctx, insertLegacyArchive,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Sha256,
+		arg.SizeBytes,
+		arg.Validation,
+		arg.CreatedBy,
+	)
+	var i ShuttleLegacyArchive
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Sha256,
+		&i.SizeBytes,
+		&i.Validation,
+		&i.CreatedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertLegacyArchiveChunk = `-- name: InsertLegacyArchiveChunk :exec
+INSERT INTO shuttle_legacy_archive_chunks(archive_id,ordinal,content) VALUES($1,$2,$3)
+`
+
+type InsertLegacyArchiveChunkParams struct {
+	ArchiveID uuid.UUID `json:"archive_id"`
+	Ordinal   int32     `json:"ordinal"`
+	Content   []byte    `json:"content"`
+}
+
+func (q *Queries) InsertLegacyArchiveChunk(ctx context.Context, arg InsertLegacyArchiveChunkParams) error {
+	_, err := q.db.Exec(ctx, insertLegacyArchiveChunk, arg.ArchiveID, arg.Ordinal, arg.Content)
+	return err
+}
+
+const insertLegacyArchiveOperation = `-- name: InsertLegacyArchiveOperation :exec
+INSERT INTO shuttle_legacy_archive_operations(user_id,operation_id,proposal_id,archive_id,request_hash,receipt)
+VALUES($1,$2,$3,$4,$5,$6)
+`
+
+type InsertLegacyArchiveOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	ProposalID  uuid.UUID `json:"proposal_id"`
+	ArchiveID   uuid.UUID `json:"archive_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Receipt     []byte    `json:"receipt"`
+}
+
+func (q *Queries) InsertLegacyArchiveOperation(ctx context.Context, arg InsertLegacyArchiveOperationParams) error {
+	_, err := q.db.Exec(ctx, insertLegacyArchiveOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.ArchiveID,
+		arg.RequestHash,
+		arg.Receipt,
+	)
+	return err
+}
+
+const insertLegacyArchivePreparation = `-- name: InsertLegacyArchivePreparation :one
+INSERT INTO shuttle_legacy_archive_preparations(id,user_id,operation_id,arguments,request_hash)
+VALUES($1,$2,$3,$4,$5) RETURNING id, user_id, operation_id, arguments, request_hash, expires_at
+`
+
+type InsertLegacyArchivePreparationParams struct {
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	Arguments   []byte    `json:"arguments"`
+	RequestHash []byte    `json:"request_hash"`
+}
+
+func (q *Queries) InsertLegacyArchivePreparation(ctx context.Context, arg InsertLegacyArchivePreparationParams) (ShuttleLegacyArchivePreparation, error) {
+	row := q.db.QueryRow(ctx, insertLegacyArchivePreparation,
+		arg.ID,
+		arg.UserID,
+		arg.OperationID,
+		arg.Arguments,
+		arg.RequestHash,
+	)
+	var i ShuttleLegacyArchivePreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.Arguments,
+		&i.RequestHash,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const insertMassageBindingOperation = `-- name: InsertMassageBindingOperation :one
+INSERT INTO shuttle_massage_binding_operations(actor_id,operation_id,proposal_id,event_id,specialist_id,request_hash,arguments)
+VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING actor_id, operation_id, proposal_id, event_id, specialist_id, request_hash, arguments, created_at, expires_at, result
+`
+
+type InsertMassageBindingOperationParams struct {
+	ActorID      uuid.UUID `json:"actor_id"`
+	OperationID  uuid.UUID `json:"operation_id"`
+	ProposalID   uuid.UUID `json:"proposal_id"`
+	EventID      uuid.UUID `json:"event_id"`
+	SpecialistID string    `json:"specialist_id"`
+	RequestHash  []byte    `json:"request_hash"`
+	Arguments    []byte    `json:"arguments"`
+}
+
+func (q *Queries) InsertMassageBindingOperation(ctx context.Context, arg InsertMassageBindingOperationParams) (ShuttleMassageBindingOperation, error) {
+	row := q.db.QueryRow(ctx, insertMassageBindingOperation,
+		arg.ActorID,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.EventID,
+		arg.SpecialistID,
+		arg.RequestHash,
+		arg.Arguments,
+	)
+	var i ShuttleMassageBindingOperation
+	err := row.Scan(
+		&i.ActorID,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.EventID,
+		&i.SpecialistID,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Result,
+	)
+	return i, err
+}
+
+const insertMassageBindingOperationAlias = `-- name: InsertMassageBindingOperationAlias :exec
+INSERT INTO shuttle_massage_binding_operation_aliases(actor_id,operation_id,canonical_operation_id)
+VALUES($1,$2,$3)
+`
+
+type InsertMassageBindingOperationAliasParams struct {
+	ActorID              uuid.UUID `json:"actor_id"`
+	OperationID          uuid.UUID `json:"operation_id"`
+	CanonicalOperationID uuid.UUID `json:"canonical_operation_id"`
+}
+
+func (q *Queries) InsertMassageBindingOperationAlias(ctx context.Context, arg InsertMassageBindingOperationAliasParams) error {
+	_, err := q.db.Exec(ctx, insertMassageBindingOperationAlias, arg.ActorID, arg.OperationID, arg.CanonicalOperationID)
+	return err
+}
+
+const insertMassageBooking = `-- name: InsertMassageBooking :one
+INSERT INTO shuttle_massage_bookings(id,event_id,user_id,preparation_id,window_id,specialist_id,service_id,
+starts_at,treatment_ends_at,occupancy_ends_at,requires_table,currency,currency_scale,price_minor,snapshot,source)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id, event_id, user_id, preparation_id, window_id, specialist_id, service_id, version, state, starts_at, treatment_ends_at, occupancy_ends_at, requires_table, currency, currency_scale, price_minor, snapshot, source, booked_at, cancelled_at
+`
+
+type InsertMassageBookingParams struct {
+	ID              uuid.UUID          `json:"id"`
+	EventID         uuid.UUID          `json:"event_id"`
+	UserID          uuid.UUID          `json:"user_id"`
+	PreparationID   uuid.UUID          `json:"preparation_id"`
+	WindowID        string             `json:"window_id"`
+	SpecialistID    string             `json:"specialist_id"`
+	ServiceID       string             `json:"service_id"`
+	StartsAt        pgtype.Timestamptz `json:"starts_at"`
+	TreatmentEndsAt pgtype.Timestamptz `json:"treatment_ends_at"`
+	OccupancyEndsAt pgtype.Timestamptz `json:"occupancy_ends_at"`
+	RequiresTable   bool               `json:"requires_table"`
+	Currency        string             `json:"currency"`
+	CurrencyScale   int32              `json:"currency_scale"`
+	PriceMinor      int64              `json:"price_minor"`
+	Snapshot        []byte             `json:"snapshot"`
+	Source          string             `json:"source"`
+}
+
+func (q *Queries) InsertMassageBooking(ctx context.Context, arg InsertMassageBookingParams) (ShuttleMassageBooking, error) {
+	row := q.db.QueryRow(ctx, insertMassageBooking,
+		arg.ID,
+		arg.EventID,
+		arg.UserID,
+		arg.PreparationID,
+		arg.WindowID,
+		arg.SpecialistID,
+		arg.ServiceID,
+		arg.StartsAt,
+		arg.TreatmentEndsAt,
+		arg.OccupancyEndsAt,
+		arg.RequiresTable,
+		arg.Currency,
+		arg.CurrencyScale,
+		arg.PriceMinor,
+		arg.Snapshot,
+		arg.Source,
+	)
+	var i ShuttleMassageBooking
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.PreparationID,
+		&i.WindowID,
+		&i.SpecialistID,
+		&i.ServiceID,
+		&i.Version,
+		&i.State,
+		&i.StartsAt,
+		&i.TreatmentEndsAt,
+		&i.OccupancyEndsAt,
+		&i.RequiresTable,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.PriceMinor,
+		&i.Snapshot,
+		&i.Source,
+		&i.BookedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
+const insertMassageOperation = `-- name: InsertMassageOperation :exec
+INSERT INTO shuttle_massage_operations(user_id,operation_id,event_id,kind,request_hash,preparation_id,booking_id,result,source)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+`
+
+type InsertMassageOperationParams struct {
+	UserID        uuid.UUID `json:"user_id"`
+	OperationID   uuid.UUID `json:"operation_id"`
+	EventID       uuid.UUID `json:"event_id"`
+	Kind          string    `json:"kind"`
+	RequestHash   []byte    `json:"request_hash"`
+	PreparationID uuid.UUID `json:"preparation_id"`
+	BookingID     uuid.UUID `json:"booking_id"`
+	Result        []byte    `json:"result"`
+	Source        string    `json:"source"`
+}
+
+func (q *Queries) InsertMassageOperation(ctx context.Context, arg InsertMassageOperationParams) error {
+	_, err := q.db.Exec(ctx, insertMassageOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.EventID,
+		arg.Kind,
+		arg.RequestHash,
+		arg.PreparationID,
+		arg.BookingID,
+		arg.Result,
+		arg.Source,
+	)
+	return err
+}
+
+const insertMassagePreparation = `-- name: InsertMassagePreparation :one
+INSERT INTO shuttle_massage_preparations(id,event_id,user_id,operation_id,kind,request_hash,arguments,snapshot,booking_id,source,expires_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,clock_timestamp()+interval '5 minutes') RETURNING id, event_id, user_id, operation_id, kind, source, created_at, request_hash, arguments, snapshot, booking_id, expires_at, consumed_at, consumed_result
+`
+
+type InsertMassagePreparationParams struct {
+	ID          uuid.UUID   `json:"id"`
+	EventID     uuid.UUID   `json:"event_id"`
+	UserID      uuid.UUID   `json:"user_id"`
+	OperationID uuid.UUID   `json:"operation_id"`
+	Kind        string      `json:"kind"`
+	RequestHash []byte      `json:"request_hash"`
+	Arguments   []byte      `json:"arguments"`
+	Snapshot    []byte      `json:"snapshot"`
+	BookingID   pgtype.UUID `json:"booking_id"`
+	Source      string      `json:"source"`
+}
+
+func (q *Queries) InsertMassagePreparation(ctx context.Context, arg InsertMassagePreparationParams) (ShuttleMassagePreparation, error) {
+	row := q.db.QueryRow(ctx, insertMassagePreparation,
+		arg.ID,
+		arg.EventID,
+		arg.UserID,
+		arg.OperationID,
+		arg.Kind,
+		arg.RequestHash,
+		arg.Arguments,
+		arg.Snapshot,
+		arg.BookingID,
+		arg.Source,
+	)
+	var i ShuttleMassagePreparation
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.OperationID,
+		&i.Kind,
+		&i.Source,
+		&i.CreatedAt,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.Snapshot,
+		&i.BookingID,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.ConsumedResult,
+	)
+	return i, err
+}
+
+const insertMassageReminder = `-- name: InsertMassageReminder :exec
+INSERT INTO shuttle_massage_reminders(id,booking_id,kind,lead_seconds,due_at)
+SELECT $1::uuid,b.id,$2::text,$3::integer,
+ b.starts_at-$3::integer*interval '1 second'
+FROM shuttle_massage_bookings b WHERE b.id=$4::uuid
+`
+
+type InsertMassageReminderParams struct {
+	ID          uuid.UUID `json:"id"`
+	Kind        string    `json:"kind"`
+	LeadSeconds int32     `json:"lead_seconds"`
+	BookingID   uuid.UUID `json:"booking_id"`
+}
+
+func (q *Queries) InsertMassageReminder(ctx context.Context, arg InsertMassageReminderParams) error {
+	_, err := q.db.Exec(ctx, insertMassageReminder,
+		arg.ID,
+		arg.Kind,
+		arg.LeadSeconds,
+		arg.BookingID,
+	)
+	return err
+}
+
+const insertMassageSchedule = `-- name: InsertMassageSchedule :one
+INSERT INTO shuttle_massage_schedules(event_id,version,document) VALUES($1,1,$2)
+ON CONFLICT(event_id) DO NOTHING RETURNING event_id, version, document
+`
+
+type InsertMassageScheduleParams struct {
+	EventID  uuid.UUID `json:"event_id"`
+	Document []byte    `json:"document"`
+}
+
+func (q *Queries) InsertMassageSchedule(ctx context.Context, arg InsertMassageScheduleParams) (ShuttleMassageSchedule, error) {
+	row := q.db.QueryRow(ctx, insertMassageSchedule, arg.EventID, arg.Document)
+	var i ShuttleMassageSchedule
+	err := row.Scan(&i.EventID, &i.Version, &i.Document)
+	return i, err
+}
+
+const insertMassageScheduleOperation = `-- name: InsertMassageScheduleOperation :exec
+INSERT INTO shuttle_massage_schedule_operations(user_id,operation_id,request_hash,result) VALUES($1,$2,$3,$4)
+`
+
+type InsertMassageScheduleOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) InsertMassageScheduleOperation(ctx context.Context, arg InsertMassageScheduleOperationParams) error {
+	_, err := q.db.Exec(ctx, insertMassageScheduleOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertMassageSchedulePreparation = `-- name: InsertMassageSchedulePreparation :one
+INSERT INTO shuttle_massage_schedule_preparations(id,user_id,operation_id,request_hash,arguments,expires_at)
+VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '5 minutes') RETURNING id, user_id, operation_id, request_hash, arguments, expires_at
+`
+
+type InsertMassageSchedulePreparationParams struct {
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Arguments   []byte    `json:"arguments"`
+}
+
+func (q *Queries) InsertMassageSchedulePreparation(ctx context.Context, arg InsertMassageSchedulePreparationParams) (ShuttleMassageSchedulePreparation, error) {
+	row := q.db.QueryRow(ctx, insertMassageSchedulePreparation,
+		arg.ID,
+		arg.UserID,
+		arg.OperationID,
+		arg.RequestHash,
+		arg.Arguments,
+	)
+	var i ShuttleMassageSchedulePreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const insertMassageSpecialistBinding = `-- name: InsertMassageSpecialistBinding :one
+INSERT INTO shuttle_massage_specialist_bindings(event_id,specialist_id,user_id,active,updated_by)
+VALUES($1,$2,$3,$4,$5) RETURNING event_id, specialist_id, user_id, active, version, updated_by, created_at, updated_at
+`
+
+type InsertMassageSpecialistBindingParams struct {
+	EventID      uuid.UUID `json:"event_id"`
+	SpecialistID string    `json:"specialist_id"`
+	UserID       uuid.UUID `json:"user_id"`
+	Active       bool      `json:"active"`
+	UpdatedBy    uuid.UUID `json:"updated_by"`
+}
+
+func (q *Queries) InsertMassageSpecialistBinding(ctx context.Context, arg InsertMassageSpecialistBindingParams) (ShuttleMassageSpecialistBinding, error) {
+	row := q.db.QueryRow(ctx, insertMassageSpecialistBinding,
+		arg.EventID,
+		arg.SpecialistID,
+		arg.UserID,
+		arg.Active,
+		arg.UpdatedBy,
+	)
+	var i ShuttleMassageSpecialistBinding
+	err := row.Scan(
+		&i.EventID,
+		&i.SpecialistID,
+		&i.UserID,
+		&i.Active,
+		&i.Version,
+		&i.UpdatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertMassageSpecialistNotification = `-- name: InsertMassageSpecialistNotification :exec
+INSERT INTO shuttle_massage_specialist_notifications
+ (id,booking_id,kind,recipient_id,binding_version,preference_version,client_name)
+SELECT $1::uuid,b.id,$2::text,s.user_id,s.version,coalesce(p.notify_bookings_version,0),
+ left(coalesce(nullif(btrim(client_profile.full_name),''),
+ nullif(btrim(concat_ws(' ',client.profile->>'first_name',client.profile->>'last_name')),''),''),256)
+FROM shuttle_massage_bookings b
+JOIN shuttle_events e ON e.id=b.event_id AND 'massage'=ANY(e.modules)
+JOIN shuttle_massage_specialist_bindings s ON s.event_id=b.event_id AND s.specialist_id=b.specialist_id AND s.active
+JOIN shuttle_users recipient ON recipient.id=s.user_id AND recipient.bot_id=e.bot_id
+ AND recipient.zitadel_org=e.organization_id AND recipient.zitadel_subject<>'' AND NOT recipient.revoked
+JOIN shuttle_users client ON client.id=b.user_id AND client.bot_id=e.bot_id AND client.zitadel_org=e.organization_id
+LEFT JOIN shuttle_user_profiles client_profile ON client_profile.user_id=client.id
+LEFT JOIN shuttle_massage_specialist_preferences p ON p.user_id=s.user_id
+WHERE b.id=$3::uuid AND coalesce(p.notify_bookings,true)
+AND (($2::text='booked' AND b.state='booked') OR
+ ($2::text='cancelled' AND b.state='cancelled'))
+ON CONFLICT(booking_id,kind) DO NOTHING
+`
+
+type InsertMassageSpecialistNotificationParams struct {
+	ID        uuid.UUID `json:"id"`
+	Kind      string    `json:"kind"`
+	BookingID uuid.UUID `json:"booking_id"`
+}
+
+func (q *Queries) InsertMassageSpecialistNotification(ctx context.Context, arg InsertMassageSpecialistNotificationParams) error {
+	_, err := q.db.Exec(ctx, insertMassageSpecialistNotification, arg.ID, arg.Kind, arg.BookingID)
+	return err
+}
+
+const insertMassageSpecialistPreferenceOperation = `-- name: InsertMassageSpecialistPreferenceOperation :exec
+INSERT INTO shuttle_massage_specialist_preference_operations(user_id,operation_id,event_id,source,request_hash,result)
+VALUES($1,$2,$3,$4,$5,$6)
+`
+
+type InsertMassageSpecialistPreferenceOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	EventID     uuid.UUID `json:"event_id"`
+	Source      string    `json:"source"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) InsertMassageSpecialistPreferenceOperation(ctx context.Context, arg InsertMassageSpecialistPreferenceOperationParams) error {
+	_, err := q.db.Exec(ctx, insertMassageSpecialistPreferenceOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.EventID,
+		arg.Source,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertMassageSpecialistSoonNotification = `-- name: InsertMassageSpecialistSoonNotification :exec
+INSERT INTO shuttle_massage_specialist_notifications
+(id,booking_id,kind,recipient_id,binding_version,preference_version,client_name,state)
+SELECT $1::uuid,b.id,'soon',s.user_id,s.version,coalesce(p.notify_next_version,0),
+ left(coalesce(nullif(btrim(client_profile.full_name),''),
+ nullif(btrim(concat_ws(' ',client.profile->>'first_name',client.profile->>'last_name')),''),''),256),
+ CASE WHEN coalesce(p.notify_next,true) THEN 'pending' ELSE 'delivery_blocked' END
+FROM shuttle_massage_bookings b JOIN shuttle_events e ON e.id=b.event_id
+JOIN shuttle_massage_specialist_bindings s ON s.event_id=b.event_id AND s.specialist_id=b.specialist_id AND s.active
+JOIN shuttle_users recipient ON recipient.id=s.user_id AND recipient.bot_id=e.bot_id
+ AND recipient.zitadel_org=e.organization_id AND recipient.zitadel_subject<>'' AND NOT recipient.revoked
+JOIN shuttle_users client ON client.id=b.user_id AND client.bot_id=e.bot_id AND client.zitadel_org=e.organization_id
+LEFT JOIN shuttle_user_profiles client_profile ON client_profile.user_id=client.id
+LEFT JOIN shuttle_massage_specialist_preferences p ON p.user_id=s.user_id
+WHERE b.id=$2::uuid AND e.bot_id=$3
+AND e.organization_id=$4 AND 'massage'=ANY(e.modules)
+AND e.ends_at>clock_timestamp() AND b.state='booked' AND b.starts_at<=clock_timestamp()+interval '5 minutes'
+ON CONFLICT(booking_id,kind) DO NOTHING
+`
+
+type InsertMassageSpecialistSoonNotificationParams struct {
+	ID             uuid.UUID `json:"id"`
+	BookingID      uuid.UUID `json:"booking_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) InsertMassageSpecialistSoonNotification(ctx context.Context, arg InsertMassageSpecialistSoonNotificationParams) error {
+	_, err := q.db.Exec(ctx, insertMassageSpecialistSoonNotification,
+		arg.ID,
+		arg.BookingID,
+		arg.BotID,
+		arg.OrganizationID,
+	)
+	return err
+}
+
+const insertMealCatalog = `-- name: InsertMealCatalog :one
+INSERT INTO shuttle_meal_catalogs(event_id,version,document) VALUES($1,$2,$3) RETURNING event_id, version, document
+`
+
+type InsertMealCatalogParams struct {
+	EventID  uuid.UUID `json:"event_id"`
+	Version  int64     `json:"version"`
+	Document []byte    `json:"document"`
+}
+
+func (q *Queries) InsertMealCatalog(ctx context.Context, arg InsertMealCatalogParams) (ShuttleMealCatalog, error) {
+	row := q.db.QueryRow(ctx, insertMealCatalog, arg.EventID, arg.Version, arg.Document)
+	var i ShuttleMealCatalog
+	err := row.Scan(&i.EventID, &i.Version, &i.Document)
+	return i, err
+}
+
+const insertMealCatalogOperation = `-- name: InsertMealCatalogOperation :exec
+INSERT INTO shuttle_meal_catalog_operations(user_id,operation_id,event_id,request_hash,result) VALUES($1,$2,$3,$4,$5)
+`
+
+type InsertMealCatalogOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	EventID     uuid.UUID `json:"event_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) InsertMealCatalogOperation(ctx context.Context, arg InsertMealCatalogOperationParams) error {
+	_, err := q.db.Exec(ctx, insertMealCatalogOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.EventID,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertMealCatalogPreparation = `-- name: InsertMealCatalogPreparation :one
+INSERT INTO shuttle_meal_catalog_preparations(id,user_id,operation_id,event_id,request_hash,arguments,expires_at)
+VALUES($1,$2,$3,$4,$5,$6,clock_timestamp()+interval '5 minutes') RETURNING id, user_id, operation_id, event_id, request_hash, arguments, expires_at
+`
+
+type InsertMealCatalogPreparationParams struct {
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	EventID     uuid.UUID `json:"event_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Arguments   []byte    `json:"arguments"`
+}
+
+func (q *Queries) InsertMealCatalogPreparation(ctx context.Context, arg InsertMealCatalogPreparationParams) (ShuttleMealCatalogPreparation, error) {
+	row := q.db.QueryRow(ctx, insertMealCatalogPreparation,
+		arg.ID,
+		arg.UserID,
+		arg.OperationID,
+		arg.EventID,
+		arg.RequestHash,
+		arg.Arguments,
+	)
+	var i ShuttleMealCatalogPreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.EventID,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const insertMealDraftOperation = `-- name: InsertMealDraftOperation :exec
+INSERT INTO shuttle_meal_draft_operations(user_id,operation_id,event_id,catalog_version,request_hash,result) VALUES($1,$2,$3,$4,$5,$6)
+`
+
+type InsertMealDraftOperationParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	OperationID    uuid.UUID `json:"operation_id"`
+	EventID        uuid.UUID `json:"event_id"`
+	CatalogVersion int64     `json:"catalog_version"`
+	RequestHash    []byte    `json:"request_hash"`
+	Result         []byte    `json:"result"`
+}
+
+func (q *Queries) InsertMealDraftOperation(ctx context.Context, arg InsertMealDraftOperationParams) error {
+	_, err := q.db.Exec(ctx, insertMealDraftOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.EventID,
+		arg.CatalogVersion,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertMiniAppMealDraftAction = `-- name: InsertMiniAppMealDraftAction :exec
+INSERT INTO shuttle_miniapp_meal_draft_actions(user_id,operation_id) VALUES($1,$2)
+`
+
+type InsertMiniAppMealDraftActionParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) InsertMiniAppMealDraftAction(ctx context.Context, arg InsertMiniAppMealDraftActionParams) error {
+	_, err := q.db.Exec(ctx, insertMiniAppMealDraftAction, arg.UserID, arg.OperationID)
+	return err
+}
+
+const insertMiniAppSession = `-- name: InsertMiniAppSession :exec
+INSERT INTO shuttle_miniapp_sessions(id,bot_id,user_id,proof_hash,nonce_hash,key_generation,subject,organization,auth_date,pending_until,expires_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(bot_id,proof_hash) DO NOTHING
+`
+
+type InsertMiniAppSessionParams struct {
+	ID            uuid.UUID          `json:"id"`
+	BotID         int64              `json:"bot_id"`
+	UserID        uuid.UUID          `json:"user_id"`
+	ProofHash     []byte             `json:"proof_hash"`
+	NonceHash     []byte             `json:"nonce_hash"`
+	KeyGeneration []byte             `json:"key_generation"`
+	Subject       string             `json:"subject"`
+	Organization  string             `json:"organization"`
+	AuthDate      pgtype.Timestamptz `json:"auth_date"`
+	PendingUntil  pgtype.Timestamptz `json:"pending_until"`
+	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertMiniAppSession(ctx context.Context, arg InsertMiniAppSessionParams) error {
+	_, err := q.db.Exec(ctx, insertMiniAppSession,
+		arg.ID,
+		arg.BotID,
+		arg.UserID,
+		arg.ProofHash,
+		arg.NonceHash,
+		arg.KeyGeneration,
+		arg.Subject,
+		arg.Organization,
+		arg.AuthDate,
+		arg.PendingUntil,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertNativeAvatarResolutionAction = `-- name: InsertNativeAvatarResolutionAction :exec
+INSERT INTO shuttle_miniapp_avatar_resolution_actions(user_id,operation_id,proposal_id,kind,delivery_version)
+VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id,operation_id,kind) DO NOTHING
+`
+
+type InsertNativeAvatarResolutionActionParams struct {
+	UserID          uuid.UUID `json:"user_id"`
+	OperationID     uuid.UUID `json:"operation_id"`
+	ProposalID      uuid.UUID `json:"proposal_id"`
+	Kind            string    `json:"kind"`
+	DeliveryVersion int64     `json:"delivery_version"`
+}
+
+func (q *Queries) InsertNativeAvatarResolutionAction(ctx context.Context, arg InsertNativeAvatarResolutionActionParams) error {
+	_, err := q.db.Exec(ctx, insertNativeAvatarResolutionAction,
+		arg.UserID,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.Kind,
+		arg.DeliveryVersion,
+	)
+	return err
+}
+
+const insertNotificationResolution = `-- name: InsertNotificationResolution :exec
+INSERT INTO shuttle_notification_resolutions
+(bot_id,organization_id,actor,operation_id,proposal_id,notification_id,request_hash,expires_at,document,pair_notification_id,order_notification_id,massage_reminder_id,massage_specialist_notification_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+`
+
+type InsertNotificationResolutionParams struct {
+	BotID                           int64              `json:"bot_id"`
+	OrganizationID                  string             `json:"organization_id"`
+	Actor                           string             `json:"actor"`
+	OperationID                     string             `json:"operation_id"`
+	ProposalID                      uuid.UUID          `json:"proposal_id"`
+	NotificationID                  pgtype.UUID        `json:"notification_id"`
+	RequestHash                     []byte             `json:"request_hash"`
+	ExpiresAt                       pgtype.Timestamptz `json:"expires_at"`
+	Document                        []byte             `json:"document"`
+	PairNotificationID              pgtype.UUID        `json:"pair_notification_id"`
+	OrderNotificationID             pgtype.UUID        `json:"order_notification_id"`
+	MassageReminderID               pgtype.UUID        `json:"massage_reminder_id"`
+	MassageSpecialistNotificationID pgtype.UUID        `json:"massage_specialist_notification_id"`
+}
+
+func (q *Queries) InsertNotificationResolution(ctx context.Context, arg InsertNotificationResolutionParams) error {
+	_, err := q.db.Exec(ctx, insertNotificationResolution,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.NotificationID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+		arg.PairNotificationID,
+		arg.OrderNotificationID,
+		arg.MassageReminderID,
+		arg.MassageSpecialistNotificationID,
+	)
+	return err
+}
+
+const insertOrderAllocation = `-- name: InsertOrderAllocation :exec
+INSERT INTO shuttle_order_allocations(evidence_id,event_id,resource_id,units,state) VALUES($1,$2,$3,$4,'held')
+`
+
+type InsertOrderAllocationParams struct {
+	EvidenceID uuid.UUID `json:"evidence_id"`
+	EventID    uuid.UUID `json:"event_id"`
+	ResourceID string    `json:"resource_id"`
+	Units      int64     `json:"units"`
+}
+
+func (q *Queries) InsertOrderAllocation(ctx context.Context, arg InsertOrderAllocationParams) error {
+	_, err := q.db.Exec(ctx, insertOrderAllocation,
+		arg.EvidenceID,
+		arg.EventID,
+		arg.ResourceID,
+		arg.Units,
+	)
+	return err
+}
+
+const insertOrderEvidence = `-- name: InsertOrderEvidence :one
+INSERT INTO shuttle_order_evidence(id,order_id,event_id,user_id,file_id,source_unique_id,reported_amount_minor,quoted_amount_minor,currency,currency_scale,sent_at,submitted_at,due_at,admission_state,reason,state)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$14) RETURNING id, order_id, event_id, user_id, file_id, source_unique_id, reported_amount_minor, quoted_amount_minor, currency, currency_scale, sent_at, submitted_at, due_at, admission_state, reason, state, version, order_kind
+`
+
+type InsertOrderEvidenceParams struct {
+	ID                  uuid.UUID          `json:"id"`
+	OrderID             uuid.UUID          `json:"order_id"`
+	EventID             uuid.UUID          `json:"event_id"`
+	UserID              uuid.UUID          `json:"user_id"`
+	FileID              uuid.UUID          `json:"file_id"`
+	SourceUniqueID      string             `json:"source_unique_id"`
+	ReportedAmountMinor int64              `json:"reported_amount_minor"`
+	QuotedAmountMinor   int64              `json:"quoted_amount_minor"`
+	Currency            string             `json:"currency"`
+	CurrencyScale       int32              `json:"currency_scale"`
+	SentAt              pgtype.Timestamptz `json:"sent_at"`
+	SubmittedAt         pgtype.Timestamptz `json:"submitted_at"`
+	DueAt               pgtype.Timestamptz `json:"due_at"`
+	AdmissionState      string             `json:"admission_state"`
+	Reason              string             `json:"reason"`
+}
+
+func (q *Queries) InsertOrderEvidence(ctx context.Context, arg InsertOrderEvidenceParams) (ShuttleOrderEvidence, error) {
+	row := q.db.QueryRow(ctx, insertOrderEvidence,
+		arg.ID,
+		arg.OrderID,
+		arg.EventID,
+		arg.UserID,
+		arg.FileID,
+		arg.SourceUniqueID,
+		arg.ReportedAmountMinor,
+		arg.QuotedAmountMinor,
+		arg.Currency,
+		arg.CurrencyScale,
+		arg.SentAt,
+		arg.SubmittedAt,
+		arg.DueAt,
+		arg.AdmissionState,
+		arg.Reason,
+	)
+	var i ShuttleOrderEvidence
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.EventID,
+		&i.UserID,
+		&i.FileID,
+		&i.SourceUniqueID,
+		&i.ReportedAmountMinor,
+		&i.QuotedAmountMinor,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.SentAt,
+		&i.SubmittedAt,
+		&i.DueAt,
+		&i.AdmissionState,
+		&i.Reason,
+		&i.State,
+		&i.Version,
+		&i.OrderKind,
+	)
+	return i, err
+}
+
+const insertOrderEvidenceNotice = `-- name: InsertOrderEvidenceNotice :exec
+INSERT INTO shuttle_order_evidence_notices(id,evidence_id,recipient_id,kind,document) VALUES($1,$2,$3,$4,$5)
+`
+
+type InsertOrderEvidenceNoticeParams struct {
+	ID          uuid.UUID `json:"id"`
+	EvidenceID  uuid.UUID `json:"evidence_id"`
+	RecipientID uuid.UUID `json:"recipient_id"`
+	Kind        string    `json:"kind"`
+	Document    []byte    `json:"document"`
+}
+
+func (q *Queries) InsertOrderEvidenceNotice(ctx context.Context, arg InsertOrderEvidenceNoticeParams) error {
+	_, err := q.db.Exec(ctx, insertOrderEvidenceNotice,
+		arg.ID,
+		arg.EvidenceID,
+		arg.RecipientID,
+		arg.Kind,
+		arg.Document,
+	)
+	return err
+}
+
+const insertOrderEvidenceOperation = `-- name: InsertOrderEvidenceOperation :exec
+INSERT INTO shuttle_order_evidence_operations(user_id,operation_id,kind,event_id,request_hash,result) VALUES($1,$2,$3,$4,$5,$6)
+`
+
+type InsertOrderEvidenceOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	Kind        string    `json:"kind"`
+	EventID     uuid.UUID `json:"event_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) InsertOrderEvidenceOperation(ctx context.Context, arg InsertOrderEvidenceOperationParams) error {
+	_, err := q.db.Exec(ctx, insertOrderEvidenceOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.Kind,
+		arg.EventID,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertOrderEvidencePreparation = `-- name: InsertOrderEvidencePreparation :exec
+INSERT INTO shuttle_order_evidence_preparations(id,user_id,operation_id,event_id,request_hash,document,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)
+`
+
+type InsertOrderEvidencePreparationParams struct {
+	ID          uuid.UUID          `json:"id"`
+	UserID      uuid.UUID          `json:"user_id"`
+	OperationID uuid.UUID          `json:"operation_id"`
+	EventID     uuid.UUID          `json:"event_id"`
+	RequestHash []byte             `json:"request_hash"`
+	Document    []byte             `json:"document"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertOrderEvidencePreparation(ctx context.Context, arg InsertOrderEvidencePreparationParams) error {
+	_, err := q.db.Exec(ctx, insertOrderEvidencePreparation,
+		arg.ID,
+		arg.UserID,
+		arg.OperationID,
+		arg.EventID,
+		arg.RequestHash,
+		arg.Document,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertOrderEvidenceReview = `-- name: InsertOrderEvidenceReview :exec
+INSERT INTO shuttle_order_evidence_reviews(evidence_id,actor_id,actor_subject,authority_role,decision,amount_minor,reason,reviewed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+`
+
+type InsertOrderEvidenceReviewParams struct {
+	EvidenceID    uuid.UUID          `json:"evidence_id"`
+	ActorID       uuid.UUID          `json:"actor_id"`
+	ActorSubject  string             `json:"actor_subject"`
+	AuthorityRole string             `json:"authority_role"`
+	Decision      string             `json:"decision"`
+	AmountMinor   int64              `json:"amount_minor"`
+	Reason        string             `json:"reason"`
+	ReviewedAt    pgtype.Timestamptz `json:"reviewed_at"`
+}
+
+func (q *Queries) InsertOrderEvidenceReview(ctx context.Context, arg InsertOrderEvidenceReviewParams) error {
+	_, err := q.db.Exec(ctx, insertOrderEvidenceReview,
+		arg.EvidenceID,
+		arg.ActorID,
+		arg.ActorSubject,
+		arg.AuthorityRole,
+		arg.Decision,
+		arg.AmountMinor,
+		arg.Reason,
+		arg.ReviewedAt,
+	)
+	return err
+}
+
+const insertOrderOperation = `-- name: InsertOrderOperation :exec
+INSERT INTO shuttle_order_operations(user_id,operation_id,kind,event_id,preparation_id,order_id,business_hash,request_hash,result,source,order_kind)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'service')
+`
+
+type InsertOrderOperationParams struct {
+	UserID        uuid.UUID   `json:"user_id"`
+	OperationID   uuid.UUID   `json:"operation_id"`
+	Kind          string      `json:"kind"`
+	EventID       uuid.UUID   `json:"event_id"`
+	PreparationID pgtype.UUID `json:"preparation_id"`
+	OrderID       pgtype.UUID `json:"order_id"`
+	BusinessHash  []byte      `json:"business_hash"`
+	RequestHash   []byte      `json:"request_hash"`
+	Result        []byte      `json:"result"`
+	Source        string      `json:"source"`
+}
+
+func (q *Queries) InsertOrderOperation(ctx context.Context, arg InsertOrderOperationParams) error {
+	_, err := q.db.Exec(ctx, insertOrderOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.Kind,
+		arg.EventID,
+		arg.PreparationID,
+		arg.OrderID,
+		arg.BusinessHash,
+		arg.RequestHash,
+		arg.Result,
+		arg.Source,
+	)
+	return err
+}
+
+const insertOrderPreparation = `-- name: InsertOrderPreparation :exec
+INSERT INTO shuttle_order_preparations(id,user_id,event_id,source_draft_version,request_hash,arguments,snapshot,created_at,expires_at,order_kind)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'service')
+`
+
+type InsertOrderPreparationParams struct {
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	EventID            uuid.UUID          `json:"event_id"`
+	SourceDraftVersion int64              `json:"source_draft_version"`
+	RequestHash        []byte             `json:"request_hash"`
+	Arguments          []byte             `json:"arguments"`
+	Snapshot           []byte             `json:"snapshot"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertOrderPreparation(ctx context.Context, arg InsertOrderPreparationParams) error {
+	_, err := q.db.Exec(ctx, insertOrderPreparation,
+		arg.ID,
+		arg.UserID,
+		arg.EventID,
+		arg.SourceDraftVersion,
+		arg.RequestHash,
+		arg.Arguments,
+		arg.Snapshot,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertOrderReviewCall = `-- name: InsertOrderReviewCall :exec
+INSERT INTO shuttle_order_review_calls(actor_id,operation_id,kind,source,request_hash,workspace_id,proposal_id,expires_at,document,result,completed_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+`
+
+type InsertOrderReviewCallParams struct {
+	ActorID     uuid.UUID          `json:"actor_id"`
+	OperationID uuid.UUID          `json:"operation_id"`
+	Kind        string             `json:"kind"`
+	Source      string             `json:"source"`
+	RequestHash []byte             `json:"request_hash"`
+	WorkspaceID uuid.UUID          `json:"workspace_id"`
+	ProposalID  pgtype.UUID        `json:"proposal_id"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	Document    []byte             `json:"document"`
+	Result      []byte             `json:"result"`
+	CompletedAt pgtype.Timestamptz `json:"completed_at"`
+}
+
+func (q *Queries) InsertOrderReviewCall(ctx context.Context, arg InsertOrderReviewCallParams) error {
+	_, err := q.db.Exec(ctx, insertOrderReviewCall,
+		arg.ActorID,
+		arg.OperationID,
+		arg.Kind,
+		arg.Source,
+		arg.RequestHash,
+		arg.WorkspaceID,
+		arg.ProposalID,
+		arg.ExpiresAt,
+		arg.Document,
+		arg.Result,
+		arg.CompletedAt,
+	)
+	return err
+}
+
+const insertOrderReviewWorkspace = `-- name: InsertOrderReviewWorkspace :exec
+INSERT INTO shuttle_order_review_workspaces(id,actor_id,event_id,evidence_id,revision,proposal_id,state)
+VALUES($1,$2,$3,$4,$5,$6,'prepared')
+`
+
+type InsertOrderReviewWorkspaceParams struct {
+	ID         uuid.UUID `json:"id"`
+	ActorID    uuid.UUID `json:"actor_id"`
+	EventID    uuid.UUID `json:"event_id"`
+	EvidenceID uuid.UUID `json:"evidence_id"`
+	Revision   int64     `json:"revision"`
+	ProposalID uuid.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) InsertOrderReviewWorkspace(ctx context.Context, arg InsertOrderReviewWorkspaceParams) error {
+	_, err := q.db.Exec(ctx, insertOrderReviewWorkspace,
+		arg.ID,
+		arg.ActorID,
+		arg.EventID,
+		arg.EvidenceID,
+		arg.Revision,
+		arg.ProposalID,
+	)
+	return err
+}
+
+const insertOrdersCatalog = `-- name: InsertOrdersCatalog :one
+INSERT INTO shuttle_orders_catalogs(event_id,version,document) VALUES($1,1,$2)
+ON CONFLICT(event_id) DO NOTHING RETURNING event_id, version, document
+`
+
+type InsertOrdersCatalogParams struct {
+	EventID  uuid.UUID `json:"event_id"`
+	Document []byte    `json:"document"`
+}
+
+func (q *Queries) InsertOrdersCatalog(ctx context.Context, arg InsertOrdersCatalogParams) (ShuttleOrdersCatalog, error) {
+	row := q.db.QueryRow(ctx, insertOrdersCatalog, arg.EventID, arg.Document)
+	var i ShuttleOrdersCatalog
+	err := row.Scan(&i.EventID, &i.Version, &i.Document)
+	return i, err
+}
+
+const insertOrdersCatalogOperation = `-- name: InsertOrdersCatalogOperation :exec
+INSERT INTO shuttle_orders_catalog_operations(user_id,operation_id,request_hash,result) VALUES($1,$2,$3,$4)
+`
+
+type InsertOrdersCatalogOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) InsertOrdersCatalogOperation(ctx context.Context, arg InsertOrdersCatalogOperationParams) error {
+	_, err := q.db.Exec(ctx, insertOrdersCatalogOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertOrdersCatalogPreparation = `-- name: InsertOrdersCatalogPreparation :one
+INSERT INTO shuttle_orders_catalog_preparations(id,user_id,operation_id,request_hash,arguments,expires_at)
+VALUES($1,$2,$3,$4,$5,clock_timestamp()+interval '5 minutes') RETURNING id, user_id, operation_id, request_hash, arguments, expires_at
+`
+
+type InsertOrdersCatalogPreparationParams struct {
+	ID          uuid.UUID `json:"id"`
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Arguments   []byte    `json:"arguments"`
+}
+
+func (q *Queries) InsertOrdersCatalogPreparation(ctx context.Context, arg InsertOrdersCatalogPreparationParams) (ShuttleOrdersCatalogPreparation, error) {
+	row := q.db.QueryRow(ctx, insertOrdersCatalogPreparation,
+		arg.ID,
+		arg.UserID,
+		arg.OperationID,
+		arg.RequestHash,
+		arg.Arguments,
+	)
+	var i ShuttleOrdersCatalogPreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const insertOrdersSelectionOperation = `-- name: InsertOrdersSelectionOperation :exec
+INSERT INTO shuttle_orders_selection_operations(user_id,operation_id,event_id,request_hash,result) VALUES($1,$2,$3,$4,$5)
+`
+
+type InsertOrdersSelectionOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	EventID     uuid.UUID `json:"event_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) InsertOrdersSelectionOperation(ctx context.Context, arg InsertOrdersSelectionOperationParams) error {
+	_, err := q.db.Exec(ctx, insertOrdersSelectionOperation,
+		arg.UserID,
+		arg.OperationID,
+		arg.EventID,
+		arg.RequestHash,
+		arg.Result,
 	)
 	return err
 }
@@ -531,8 +5085,433 @@ func (q *Queries) InsertOutbox(ctx context.Context, arg InsertOutboxParams) erro
 	return err
 }
 
+const insertPair = `-- name: InsertPair :one
+INSERT INTO shuttle_pairs(id,event_id,leader_registration_id,follower_registration_id,queued_at,created_at)
+VALUES($1,$2,$3,$4,$5,$6) RETURNING id, event_id, leader_registration_id, follower_registration_id, state, version, queued_at, created_at, assigned_at, dissolved_at
+`
+
+type InsertPairParams struct {
+	ID                     uuid.UUID          `json:"id"`
+	EventID                uuid.UUID          `json:"event_id"`
+	LeaderRegistrationID   uuid.UUID          `json:"leader_registration_id"`
+	FollowerRegistrationID uuid.UUID          `json:"follower_registration_id"`
+	QueuedAt               pgtype.Timestamptz `json:"queued_at"`
+	CreatedAt              pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) InsertPair(ctx context.Context, arg InsertPairParams) (ShuttlePair, error) {
+	row := q.db.QueryRow(ctx, insertPair,
+		arg.ID,
+		arg.EventID,
+		arg.LeaderRegistrationID,
+		arg.FollowerRegistrationID,
+		arg.QueuedAt,
+		arg.CreatedAt,
+	)
+	var i ShuttlePair
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.LeaderRegistrationID,
+		&i.FollowerRegistrationID,
+		&i.State,
+		&i.Version,
+		&i.QueuedAt,
+		&i.CreatedAt,
+		&i.AssignedAt,
+		&i.DissolvedAt,
+	)
+	return i, err
+}
+
+const insertPairInvitation = `-- name: InsertPairInvitation :one
+INSERT INTO shuttle_pair_invitations(id,event_id,inviter_registration_id,target_user_id,created_at,expires_at)
+VALUES($1,$2,$3,$4,$5,$6) RETURNING id, event_id, inviter_registration_id, target_user_id, state, version, created_at, expires_at, decided_at, pair_id
+`
+
+type InsertPairInvitationParams struct {
+	ID                    uuid.UUID          `json:"id"`
+	EventID               uuid.UUID          `json:"event_id"`
+	InviterRegistrationID uuid.UUID          `json:"inviter_registration_id"`
+	TargetUserID          uuid.UUID          `json:"target_user_id"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt             pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertPairInvitation(ctx context.Context, arg InsertPairInvitationParams) (ShuttlePairInvitation, error) {
+	row := q.db.QueryRow(ctx, insertPairInvitation,
+		arg.ID,
+		arg.EventID,
+		arg.InviterRegistrationID,
+		arg.TargetUserID,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	var i ShuttlePairInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.InviterRegistrationID,
+		&i.TargetUserID,
+		&i.State,
+		&i.Version,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.DecidedAt,
+		&i.PairID,
+	)
+	return i, err
+}
+
+const insertPairInvitationNotification = `-- name: InsertPairInvitationNotification :exec
+INSERT INTO shuttle_pair_notifications(id,bot_id,organization_id,invitation_id,invitation_version,recipient_id,kind)
+SELECT $1,e.bot_id,e.organization_id,i.id,i.version,
+CASE WHEN i.state IN ('pending','revoked') THEN i.target_user_id ELSE r.user_id END,i.state
+FROM shuttle_pair_invitations i JOIN shuttle_events e ON e.id=i.event_id
+JOIN shuttle_registrations r ON r.id=i.inviter_registration_id
+WHERE i.id=$2
+ON CONFLICT(invitation_id,invitation_version,recipient_id) DO NOTHING
+`
+
+type InsertPairInvitationNotificationParams struct {
+	ID           uuid.UUID `json:"id"`
+	InvitationID uuid.UUID `json:"invitation_id"`
+}
+
+func (q *Queries) InsertPairInvitationNotification(ctx context.Context, arg InsertPairInvitationNotificationParams) error {
+	_, err := q.db.Exec(ctx, insertPairInvitationNotification, arg.ID, arg.InvitationID)
+	return err
+}
+
+const insertPairOperation = `-- name: InsertPairOperation :exec
+INSERT INTO shuttle_pair_operations(bot_id,organization_id,actor,operation_id,kind,request_hash,result)
+VALUES($1,$2,$3,$4,$5,$6,$7)
+`
+
+type InsertPairOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	Kind           string `json:"kind"`
+	RequestHash    []byte `json:"request_hash"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) InsertPairOperation(ctx context.Context, arg InsertPairOperationParams) error {
+	_, err := q.db.Exec(ctx, insertPairOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.Kind,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertPairPreparation = `-- name: InsertPairPreparation :exec
+INSERT INTO shuttle_pair_preparations(bot_id,organization_id,actor,operation_id,proposal_id,request_hash,expires_at,document)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+`
+
+type InsertPairPreparationParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Document       []byte             `json:"document"`
+}
+
+func (q *Queries) InsertPairPreparation(ctx context.Context, arg InsertPairPreparationParams) error {
+	_, err := q.db.Exec(ctx, insertPairPreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+	)
+	return err
+}
+
+const insertPaymentEvidence = `-- name: InsertPaymentEvidence :one
+INSERT INTO shuttle_payment_evidence(id,event_id,pass_id,user_id,file_id,source_unique_id,amount_minor,currency,currency_scale,purpose,sent_at,due_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, event_id, pass_id, user_id, file_id, source_unique_id, amount_minor, currency, currency_scale, purpose, sent_at, submitted_at, due_at
+`
+
+type InsertPaymentEvidenceParams struct {
+	ID             uuid.UUID          `json:"id"`
+	EventID        uuid.UUID          `json:"event_id"`
+	PassID         uuid.UUID          `json:"pass_id"`
+	UserID         uuid.UUID          `json:"user_id"`
+	FileID         uuid.UUID          `json:"file_id"`
+	SourceUniqueID string             `json:"source_unique_id"`
+	AmountMinor    int64              `json:"amount_minor"`
+	Currency       string             `json:"currency"`
+	CurrencyScale  int32              `json:"currency_scale"`
+	Purpose        string             `json:"purpose"`
+	SentAt         pgtype.Timestamptz `json:"sent_at"`
+	DueAt          pgtype.Timestamptz `json:"due_at"`
+}
+
+func (q *Queries) InsertPaymentEvidence(ctx context.Context, arg InsertPaymentEvidenceParams) (ShuttlePaymentEvidence, error) {
+	row := q.db.QueryRow(ctx, insertPaymentEvidence,
+		arg.ID,
+		arg.EventID,
+		arg.PassID,
+		arg.UserID,
+		arg.FileID,
+		arg.SourceUniqueID,
+		arg.AmountMinor,
+		arg.Currency,
+		arg.CurrencyScale,
+		arg.Purpose,
+		arg.SentAt,
+		arg.DueAt,
+	)
+	var i ShuttlePaymentEvidence
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.PassID,
+		&i.UserID,
+		&i.FileID,
+		&i.SourceUniqueID,
+		&i.AmountMinor,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.Purpose,
+		&i.SentAt,
+		&i.SubmittedAt,
+		&i.DueAt,
+	)
+	return i, err
+}
+
+const insertPaymentNotification = `-- name: InsertPaymentNotification :exec
+INSERT INTO shuttle_payment_notifications(id,bot_id,organization_id,evidence_id,recipient_id,kind,document)
+VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(evidence_id,recipient_id,kind) DO NOTHING
+`
+
+type InsertPaymentNotificationParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	EvidenceID     uuid.UUID `json:"evidence_id"`
+	RecipientID    uuid.UUID `json:"recipient_id"`
+	Kind           string    `json:"kind"`
+	Document       []byte    `json:"document"`
+}
+
+func (q *Queries) InsertPaymentNotification(ctx context.Context, arg InsertPaymentNotificationParams) error {
+	_, err := q.db.Exec(ctx, insertPaymentNotification,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.EvidenceID,
+		arg.RecipientID,
+		arg.Kind,
+		arg.Document,
+	)
+	return err
+}
+
+const insertPaymentOperation = `-- name: InsertPaymentOperation :exec
+INSERT INTO shuttle_payment_operations(bot_id,organization_id,actor,operation_id,kind,request_hash,result) VALUES($1,$2,$3,$4,$5,$6,$7)
+`
+
+type InsertPaymentOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	Kind           string `json:"kind"`
+	RequestHash    []byte `json:"request_hash"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) InsertPaymentOperation(ctx context.Context, arg InsertPaymentOperationParams) error {
+	_, err := q.db.Exec(ctx, insertPaymentOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.Kind,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertPaymentPreparation = `-- name: InsertPaymentPreparation :exec
+INSERT INTO shuttle_payment_preparations(bot_id,organization_id,actor,operation_id,proposal_id,request_hash,expires_at,document)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+`
+
+type InsertPaymentPreparationParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Document       []byte             `json:"document"`
+}
+
+func (q *Queries) InsertPaymentPreparation(ctx context.Context, arg InsertPaymentPreparationParams) error {
+	_, err := q.db.Exec(ctx, insertPaymentPreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+	)
+	return err
+}
+
+const insertPaymentReview = `-- name: InsertPaymentReview :one
+INSERT INTO shuttle_payment_reviews(id,evidence_id,actor_id,actor_subject,authority_role,decision,amount_minor,reason)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, evidence_id, actor_id, actor_subject, authority_role, decision, amount_minor, reason, reviewed_at
+`
+
+type InsertPaymentReviewParams struct {
+	ID            uuid.UUID `json:"id"`
+	EvidenceID    uuid.UUID `json:"evidence_id"`
+	ActorID       uuid.UUID `json:"actor_id"`
+	ActorSubject  string    `json:"actor_subject"`
+	AuthorityRole string    `json:"authority_role"`
+	Decision      string    `json:"decision"`
+	AmountMinor   int64     `json:"amount_minor"`
+	Reason        string    `json:"reason"`
+}
+
+func (q *Queries) InsertPaymentReview(ctx context.Context, arg InsertPaymentReviewParams) (ShuttlePaymentReview, error) {
+	row := q.db.QueryRow(ctx, insertPaymentReview,
+		arg.ID,
+		arg.EvidenceID,
+		arg.ActorID,
+		arg.ActorSubject,
+		arg.AuthorityRole,
+		arg.Decision,
+		arg.AmountMinor,
+		arg.Reason,
+	)
+	var i ShuttlePaymentReview
+	err := row.Scan(
+		&i.ID,
+		&i.EvidenceID,
+		&i.ActorID,
+		&i.ActorSubject,
+		&i.AuthorityRole,
+		&i.Decision,
+		&i.AmountMinor,
+		&i.Reason,
+		&i.ReviewedAt,
+	)
+	return i, err
+}
+
+const insertRegistrationOperation = `-- name: InsertRegistrationOperation :exec
+INSERT INTO shuttle_registration_operations(bot_id,organization_id,actor,operation_id,request_hash,result) VALUES($1,$2,$3,$4,$5,$6)
+`
+
+type InsertRegistrationOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	RequestHash    []byte `json:"request_hash"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) InsertRegistrationOperation(ctx context.Context, arg InsertRegistrationOperationParams) error {
+	_, err := q.db.Exec(ctx, insertRegistrationOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertSettingsChangeProposal = `-- name: InsertSettingsChangeProposal :exec
+INSERT INTO shuttle_settings_change_proposals
+(bot_id,organization_id,actor,operation_id,proposal_id,request_hash,expires_at,document)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+`
+
+type InsertSettingsChangeProposalParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Document       []byte             `json:"document"`
+}
+
+func (q *Queries) InsertSettingsChangeProposal(ctx context.Context, arg InsertSettingsChangeProposalParams) error {
+	_, err := q.db.Exec(ctx, insertSettingsChangeProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+	)
+	return err
+}
+
+const insertSubmittedOrder = `-- name: InsertSubmittedOrder :exec
+INSERT INTO shuttle_orders(id,user_id,event_id,source_draft_version,preparation_id,request_hash,version,state,submitted_result,sales_closes_at,submitted_at,order_kind)
+VALUES($1,$2,$3,$4,$5,$6,1,'submitted',$7,$8,$9,'service')
+`
+
+type InsertSubmittedOrderParams struct {
+	ID                 uuid.UUID          `json:"id"`
+	UserID             uuid.UUID          `json:"user_id"`
+	EventID            uuid.UUID          `json:"event_id"`
+	SourceDraftVersion int64              `json:"source_draft_version"`
+	PreparationID      uuid.UUID          `json:"preparation_id"`
+	RequestHash        []byte             `json:"request_hash"`
+	SubmittedResult    []byte             `json:"submitted_result"`
+	SalesClosesAt      pgtype.Timestamptz `json:"sales_closes_at"`
+	SubmittedAt        pgtype.Timestamptz `json:"submitted_at"`
+}
+
+func (q *Queries) InsertSubmittedOrder(ctx context.Context, arg InsertSubmittedOrderParams) error {
+	_, err := q.db.Exec(ctx, insertSubmittedOrder,
+		arg.ID,
+		arg.UserID,
+		arg.EventID,
+		arg.SourceDraftVersion,
+		arg.PreparationID,
+		arg.RequestHash,
+		arg.SubmittedResult,
+		arg.SalesClosesAt,
+		arg.SubmittedAt,
+	)
+	return err
+}
+
 const insertTask = `-- name: InsertTask :one
-INSERT INTO shuttle_tasks(id,user_id,conversation_id,seq,request) VALUES($1,$2,$3,$4,$5) RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at
+INSERT INTO shuttle_tasks(id,user_id,conversation_id,seq,request,response_started_at) VALUES($1,$2,$3,$4,$5,clock_timestamp()) RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at, response_started_at, response_first_chunk_seq, response_last_chunk_seq, response_delivered_at
 `
 
 type InsertTaskParams struct {
@@ -571,8 +5550,45 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (Shuttle
 		&i.LeaseOwner,
 		&i.LeaseUntil,
 		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
 	)
 	return i, err
+}
+
+const insertTaskClosureProposal = `-- name: InsertTaskClosureProposal :exec
+INSERT INTO shuttle_task_closure_proposals
+(bot_id,organization_id,actor,operation_id,proposal_id,task_id,request_hash,expires_at,document)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+`
+
+type InsertTaskClosureProposalParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	TaskID         uuid.UUID          `json:"task_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Document       []byte             `json:"document"`
+}
+
+func (q *Queries) InsertTaskClosureProposal(ctx context.Context, arg InsertTaskClosureProposalParams) error {
+	_, err := q.db.Exec(ctx, insertTaskClosureProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.TaskID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+	)
+	return err
 }
 
 const insertTaskResolution = `-- name: InsertTaskResolution :one
@@ -614,8 +5630,485 @@ func (q *Queries) InsertTaskResolution(ctx context.Context, arg InsertTaskResolu
 	return i, err
 }
 
+const insertTelegramPrelink = `-- name: InsertTelegramPrelink :exec
+INSERT INTO shuttle_telegram_prelinks(id,bot_id,user_id,provider_issuer,assertion_jti,assertion_hash,organization,provider_id,external_subject,expires_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(provider_issuer,assertion_jti) DO NOTHING
+`
+
+type InsertTelegramPrelinkParams struct {
+	ID              uuid.UUID          `json:"id"`
+	BotID           int64              `json:"bot_id"`
+	UserID          uuid.UUID          `json:"user_id"`
+	ProviderIssuer  string             `json:"provider_issuer"`
+	AssertionJti    string             `json:"assertion_jti"`
+	AssertionHash   []byte             `json:"assertion_hash"`
+	Organization    string             `json:"organization"`
+	ProviderID      string             `json:"provider_id"`
+	ExternalSubject string             `json:"external_subject"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertTelegramPrelink(ctx context.Context, arg InsertTelegramPrelinkParams) error {
+	_, err := q.db.Exec(ctx, insertTelegramPrelink,
+		arg.ID,
+		arg.BotID,
+		arg.UserID,
+		arg.ProviderIssuer,
+		arg.AssertionJti,
+		arg.AssertionHash,
+		arg.Organization,
+		arg.ProviderID,
+		arg.ExternalSubject,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertUserRevocationProposal = `-- name: InsertUserRevocationProposal :exec
+INSERT INTO shuttle_user_revocation_proposals
+(bot_id,organization_id,actor,operation_id,proposal_id,target_id,request_hash,expires_at,document)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+`
+
+type InsertUserRevocationProposalParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	TargetID       uuid.UUID          `json:"target_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Document       []byte             `json:"document"`
+}
+
+func (q *Queries) InsertUserRevocationProposal(ctx context.Context, arg InsertUserRevocationProposalParams) error {
+	_, err := q.db.Exec(ctx, insertUserRevocationProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.TargetID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+		arg.Document,
+	)
+	return err
+}
+
+const latestOrderReviewRevision = `-- name: LatestOrderReviewRevision :one
+SELECT coalesce(max(revision),0)::bigint FROM shuttle_order_review_workspaces WHERE actor_id=$1 AND evidence_id=$2
+`
+
+type LatestOrderReviewRevisionParams struct {
+	ActorID    uuid.UUID `json:"actor_id"`
+	EvidenceID uuid.UUID `json:"evidence_id"`
+}
+
+func (q *Queries) LatestOrderReviewRevision(ctx context.Context, arg LatestOrderReviewRevisionParams) (int64, error) {
+	row := q.db.QueryRow(ctx, latestOrderReviewRevision, arg.ActorID, arg.EvidenceID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const latestRegistrationDetailsRequest = `-- name: LatestRegistrationDetailsRequest :one
+SELECT id, user_id, event_id, event_version, event_timezone, legal_name_required, passport_number_required, created_at, expires_at, completed_at, completed_details_version, superseded_at FROM shuttle_registration_details_requests WHERE user_id=$1 AND event_id=$2 AND superseded_at IS NULL
+ORDER BY created_at DESC,id DESC LIMIT 1
+`
+
+type LatestRegistrationDetailsRequestParams struct {
+	UserID  uuid.UUID `json:"user_id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) LatestRegistrationDetailsRequest(ctx context.Context, arg LatestRegistrationDetailsRequestParams) (ShuttleRegistrationDetailsRequest, error) {
+	row := q.db.QueryRow(ctx, latestRegistrationDetailsRequest, arg.UserID, arg.EventID)
+	var i ShuttleRegistrationDetailsRequest
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.EventVersion,
+		&i.EventTimezone,
+		&i.LegalNameRequired,
+		&i.PassportNumberRequired,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.CompletedAt,
+		&i.CompletedDetailsVersion,
+		&i.SupersededAt,
+	)
+	return i, err
+}
+
+const legacyArchiveChunkStats = `-- name: LegacyArchiveChunkStats :one
+SELECT count(*)::bigint AS chunks,coalesce(sum(octet_length(content)),0)::bigint AS bytes,
+coalesce(min(ordinal),-1)::integer AS first_ordinal,coalesce(max(ordinal),-1)::integer AS last_ordinal
+FROM shuttle_legacy_archive_chunks WHERE archive_id=$1
+`
+
+type LegacyArchiveChunkStatsRow struct {
+	Chunks       int64 `json:"chunks"`
+	Bytes        int64 `json:"bytes"`
+	FirstOrdinal int32 `json:"first_ordinal"`
+	LastOrdinal  int32 `json:"last_ordinal"`
+}
+
+func (q *Queries) LegacyArchiveChunkStats(ctx context.Context, archiveID uuid.UUID) (LegacyArchiveChunkStatsRow, error) {
+	row := q.db.QueryRow(ctx, legacyArchiveChunkStats, archiveID)
+	var i LegacyArchiveChunkStatsRow
+	err := row.Scan(
+		&i.Chunks,
+		&i.Bytes,
+		&i.FirstOrdinal,
+		&i.LastOrdinal,
+	)
+	return i, err
+}
+
+const legacyArchiveUsage = `-- name: LegacyArchiveUsage :one
+SELECT count(*)::bigint AS archives,coalesce(sum(size_bytes),0)::bigint AS bytes
+FROM shuttle_legacy_archives WHERE bot_id=$1 AND organization_id=$2
+`
+
+type LegacyArchiveUsageParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+type LegacyArchiveUsageRow struct {
+	Archives int64 `json:"archives"`
+	Bytes    int64 `json:"bytes"`
+}
+
+func (q *Queries) LegacyArchiveUsage(ctx context.Context, arg LegacyArchiveUsageParams) (LegacyArchiveUsageRow, error) {
+	row := q.db.QueryRow(ctx, legacyArchiveUsage, arg.BotID, arg.OrganizationID)
+	var i LegacyArchiveUsageRow
+	err := row.Scan(&i.Archives, &i.Bytes)
+	return i, err
+}
+
+const listAdminMassageReminders = `-- name: ListAdminMassageReminders :many
+SELECT n.id,n.booking_id,b.event_id,b.user_id AS recipient_id,n.kind,n.lead_seconds,n.due_at,n.next_attempt_at,n.state,n.version,n.created_at
+FROM shuttle_massage_reminders n JOIN shuttle_massage_bookings b ON b.id=n.booking_id
+JOIN shuttle_events e ON e.id=b.event_id
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND ($3::text='' OR n.state=$3)
+AND n.id>$4::uuid ORDER BY n.id LIMIT $5
+`
+
+type ListAdminMassageRemindersParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	FilterState    string    `json:"filter_state"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListAdminMassageRemindersRow struct {
+	ID            uuid.UUID          `json:"id"`
+	BookingID     uuid.UUID          `json:"booking_id"`
+	EventID       uuid.UUID          `json:"event_id"`
+	RecipientID   uuid.UUID          `json:"recipient_id"`
+	Kind          string             `json:"kind"`
+	LeadSeconds   int32              `json:"lead_seconds"`
+	DueAt         pgtype.Timestamptz `json:"due_at"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	State         string             `json:"state"`
+	Version       int64              `json:"version"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListAdminMassageReminders(ctx context.Context, arg ListAdminMassageRemindersParams) ([]ListAdminMassageRemindersRow, error) {
+	rows, err := q.db.Query(ctx, listAdminMassageReminders,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.FilterState,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAdminMassageRemindersRow
+	for rows.Next() {
+		var i ListAdminMassageRemindersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BookingID,
+			&i.EventID,
+			&i.RecipientID,
+			&i.Kind,
+			&i.LeadSeconds,
+			&i.DueAt,
+			&i.NextAttemptAt,
+			&i.State,
+			&i.Version,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdminMassageSpecialistNotifications = `-- name: ListAdminMassageSpecialistNotifications :many
+SELECT n.id,n.booking_id,b.event_id,n.recipient_id,n.kind,n.state,n.version,n.binding_version,n.preference_version,n.next_attempt_at,n.created_at
+FROM shuttle_massage_specialist_notifications n JOIN shuttle_massage_bookings b ON b.id=n.booking_id
+JOIN shuttle_events e ON e.id=b.event_id
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND ($3::text='' OR n.state=$3)
+AND n.id>$4::uuid ORDER BY n.id LIMIT $5
+`
+
+type ListAdminMassageSpecialistNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	FilterState    string    `json:"filter_state"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListAdminMassageSpecialistNotificationsRow struct {
+	ID                uuid.UUID          `json:"id"`
+	BookingID         uuid.UUID          `json:"booking_id"`
+	EventID           uuid.UUID          `json:"event_id"`
+	RecipientID       uuid.UUID          `json:"recipient_id"`
+	Kind              string             `json:"kind"`
+	State             string             `json:"state"`
+	Version           int64              `json:"version"`
+	BindingVersion    int64              `json:"binding_version"`
+	PreferenceVersion int64              `json:"preference_version"`
+	NextAttemptAt     pgtype.Timestamptz `json:"next_attempt_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListAdminMassageSpecialistNotifications(ctx context.Context, arg ListAdminMassageSpecialistNotificationsParams) ([]ListAdminMassageSpecialistNotificationsRow, error) {
+	rows, err := q.db.Query(ctx, listAdminMassageSpecialistNotifications,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.FilterState,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAdminMassageSpecialistNotificationsRow
+	for rows.Next() {
+		var i ListAdminMassageSpecialistNotificationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BookingID,
+			&i.EventID,
+			&i.RecipientID,
+			&i.Kind,
+			&i.State,
+			&i.Version,
+			&i.BindingVersion,
+			&i.PreferenceVersion,
+			&i.NextAttemptAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdminOrderNotifications = `-- name: ListAdminOrderNotifications :many
+SELECT n.id,n.evidence_id,n.recipient_id,n.kind,n.state,n.version,n.next_attempt_at,n.created_at
+FROM shuttle_order_evidence_notices n
+JOIN shuttle_order_evidence ev ON ev.id=n.evidence_id JOIN shuttle_events e ON e.id=ev.event_id
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND ($3::text='' OR n.state=$3) AND n.id>$4::uuid
+ORDER BY n.id LIMIT $5
+`
+
+type ListAdminOrderNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	FilterState    string    `json:"filter_state"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListAdminOrderNotificationsRow struct {
+	ID            uuid.UUID          `json:"id"`
+	EvidenceID    uuid.UUID          `json:"evidence_id"`
+	RecipientID   uuid.UUID          `json:"recipient_id"`
+	Kind          string             `json:"kind"`
+	State         string             `json:"state"`
+	Version       int64              `json:"version"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListAdminOrderNotifications(ctx context.Context, arg ListAdminOrderNotificationsParams) ([]ListAdminOrderNotificationsRow, error) {
+	rows, err := q.db.Query(ctx, listAdminOrderNotifications,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.FilterState,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAdminOrderNotificationsRow
+	for rows.Next() {
+		var i ListAdminOrderNotificationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EvidenceID,
+			&i.RecipientID,
+			&i.Kind,
+			&i.State,
+			&i.Version,
+			&i.NextAttemptAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdminPairNotifications = `-- name: ListAdminPairNotifications :many
+SELECT id, bot_id, organization_id, invitation_id, invitation_version, recipient_id, kind, state, version, attempt_id, payload, receipt, next_attempt_at, created_at FROM shuttle_pair_notifications WHERE bot_id=$1 AND organization_id=$2
+AND ($3::text='' OR state=$3) AND id>$4::uuid
+ORDER BY id LIMIT $5
+`
+
+type ListAdminPairNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	FilterState    string    `json:"filter_state"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListAdminPairNotifications(ctx context.Context, arg ListAdminPairNotificationsParams) ([]ShuttlePairNotification, error) {
+	rows, err := q.db.Query(ctx, listAdminPairNotifications,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.FilterState,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttlePairNotification
+	for rows.Next() {
+		var i ShuttlePairNotification
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.InvitationID,
+			&i.InvitationVersion,
+			&i.RecipientID,
+			&i.Kind,
+			&i.State,
+			&i.Version,
+			&i.AttemptID,
+			&i.Payload,
+			&i.Receipt,
+			&i.NextAttemptAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdminPaymentNotifications = `-- name: ListAdminPaymentNotifications :many
+SELECT id,evidence_id,recipient_id,kind,state,version,next_attempt_at,created_at
+FROM shuttle_payment_notifications WHERE bot_id=$1 AND organization_id=$2
+AND ($3::text='' OR state=$3) AND id>$4::uuid
+ORDER BY id LIMIT $5
+`
+
+type ListAdminPaymentNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	FilterState    string    `json:"filter_state"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListAdminPaymentNotificationsRow struct {
+	ID            uuid.UUID          `json:"id"`
+	EvidenceID    uuid.UUID          `json:"evidence_id"`
+	RecipientID   uuid.UUID          `json:"recipient_id"`
+	Kind          string             `json:"kind"`
+	State         string             `json:"state"`
+	Version       int64              `json:"version"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListAdminPaymentNotifications(ctx context.Context, arg ListAdminPaymentNotificationsParams) ([]ListAdminPaymentNotificationsRow, error) {
+	rows, err := q.db.Query(ctx, listAdminPaymentNotifications,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.FilterState,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAdminPaymentNotificationsRow
+	for rows.Next() {
+		var i ListAdminPaymentNotificationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EvidenceID,
+			&i.RecipientID,
+			&i.Kind,
+			&i.State,
+			&i.Version,
+			&i.NextAttemptAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAdminTasks = `-- name: ListAdminTasks :many
-SELECT t.id, t.user_id, t.conversation_id, t.seq, t.request, t.state, t.route, t.target_task_id, t.target_run_id, t.run_id, t.auth_session_id, t.question_id, t.snapshot, t.version, t.fence, t.lease_owner, t.lease_until, t.created_at FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+SELECT t.id, t.user_id, t.conversation_id, t.seq, t.request, t.state, t.route, t.target_task_id, t.target_run_id, t.run_id, t.auth_session_id, t.question_id, t.snapshot, t.version, t.fence, t.lease_owner, t.lease_until, t.created_at, t.response_started_at, t.response_first_chunk_seq, t.response_last_chunk_seq, t.response_delivered_at FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
 WHERE u.bot_id=$1 AND (u.zitadel_org='' OR u.zitadel_org=$2)
 AND ($3::text='' OR t.state=$3)
 AND ($4::uuid='00000000-0000-0000-0000-000000000000' OR t.id>$4)
@@ -664,6 +6157,817 @@ func (q *Queries) ListAdminTasks(ctx context.Context, arg ListAdminTasksParams) 
 			&i.LeaseOwner,
 			&i.LeaseUntil,
 			&i.CreatedAt,
+			&i.ResponseStartedAt,
+			&i.ResponseFirstChunkSeq,
+			&i.ResponseLastChunkSeq,
+			&i.ResponseDeliveredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listContextEvents = `-- name: ListContextEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,rules.document AS registration_rules,d.document AS deposit_policy FROM shuttle_events e
+LEFT JOIN shuttle_event_registration_rules rules ON rules.event_id=e.id
+LEFT JOIN shuttle_event_deposit_policy d ON d.event_id=e.id
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND ($3::uuid='00000000-0000-0000-0000-000000000000' OR e.id=$3)
+AND e.id>$4::uuid
+AND e.ends_at>$5::timestamptz AND $6::text=ANY(e.modules)
+AND CASE WHEN $6::text='registrations'
+ THEN rules.document IS NOT NULL AND (rules.document->>'closes_at')::timestamptz>$5::timestamptz
+ ELSE EXISTS(SELECT 1 FROM shuttle_registrations r JOIN shuttle_passes p ON p.registration_id=r.id
+ WHERE r.event_id=e.id AND r.user_id=$7 AND r.state='assigned') END
+ORDER BY CASE WHEN $8::boolean THEN 0 WHEN e.starts_at<=$5::timestamptz THEN 0 ELSE 1 END,
+CASE WHEN $8::boolean THEN NULL ELSE e.starts_at END,e.id
+LIMIT $9
+`
+
+type ListContextEventsParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	EventID        uuid.UUID          `json:"event_id"`
+	AfterID        uuid.UUID          `json:"after_id"`
+	AtTime         pgtype.Timestamptz `json:"at_time"`
+	ModuleID       string             `json:"module_id"`
+	UserID         uuid.UUID          `json:"user_id"`
+	ListOrder      bool               `json:"list_order"`
+	PageLimit      int32              `json:"page_limit"`
+}
+
+type ListContextEventsRow struct {
+	ShuttleEvent      ShuttleEvent `json:"shuttle_event"`
+	RegistrationRules []byte       `json:"registration_rules"`
+	DepositPolicy     []byte       `json:"deposit_policy"`
+}
+
+func (q *Queries) ListContextEvents(ctx context.Context, arg ListContextEventsParams) ([]ListContextEventsRow, error) {
+	rows, err := q.db.Query(ctx, listContextEvents,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.EventID,
+		arg.AfterID,
+		arg.AtTime,
+		arg.ModuleID,
+		arg.UserID,
+		arg.ListOrder,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListContextEventsRow
+	for rows.Next() {
+		var i ListContextEventsRow
+		if err := rows.Scan(
+			&i.ShuttleEvent.ID,
+			&i.ShuttleEvent.BotID,
+			&i.ShuttleEvent.OrganizationID,
+			&i.ShuttleEvent.Name,
+			&i.ShuttleEvent.Timezone,
+			&i.ShuttleEvent.StartsAt,
+			&i.ShuttleEvent.EndsAt,
+			&i.ShuttleEvent.Modules,
+			&i.ShuttleEvent.Version,
+			&i.RegistrationRules,
+			&i.DepositPolicy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEventAuthorities = `-- name: ListEventAuthorities :many
+SELECT a.event_id, a.user_id, a.role, a.version FROM shuttle_event_authorities a JOIN shuttle_users u ON u.id=a.user_id
+WHERE a.event_id=$1 AND u.bot_id=$2 AND u.zitadel_org=$3 AND NOT u.revoked
+AND a.user_id>$4 ORDER BY a.user_id LIMIT $5
+`
+
+type ListEventAuthoritiesParams struct {
+	EventID    uuid.UUID `json:"event_id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+	UserID     uuid.UUID `json:"user_id"`
+	Limit      int32     `json:"limit"`
+}
+
+func (q *Queries) ListEventAuthorities(ctx context.Context, arg ListEventAuthoritiesParams) ([]ShuttleEventAuthority, error) {
+	rows, err := q.db.Query(ctx, listEventAuthorities,
+		arg.EventID,
+		arg.BotID,
+		arg.ZitadelOrg,
+		arg.UserID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEventAuthority
+	for rows.Next() {
+		var i ShuttleEventAuthority
+		if err := rows.Scan(
+			&i.EventID,
+			&i.UserID,
+			&i.Role,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEventConfigurations = `-- name: ListEventConfigurations :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,r.document AS registration_rules,d.document AS deposit_policy FROM shuttle_events e
+LEFT JOIN shuttle_event_registration_rules r ON r.event_id=e.id
+LEFT JOIN shuttle_event_deposit_policy d ON d.event_id=e.id
+WHERE e.bot_id=$1 AND e.organization_id=$2 AND e.id>$3 ORDER BY e.id LIMIT $4
+`
+
+type ListEventConfigurationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ID             uuid.UUID `json:"id"`
+	Limit          int32     `json:"limit"`
+}
+
+type ListEventConfigurationsRow struct {
+	ShuttleEvent      ShuttleEvent `json:"shuttle_event"`
+	RegistrationRules []byte       `json:"registration_rules"`
+	DepositPolicy     []byte       `json:"deposit_policy"`
+}
+
+func (q *Queries) ListEventConfigurations(ctx context.Context, arg ListEventConfigurationsParams) ([]ListEventConfigurationsRow, error) {
+	rows, err := q.db.Query(ctx, listEventConfigurations,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListEventConfigurationsRow
+	for rows.Next() {
+		var i ListEventConfigurationsRow
+		if err := rows.Scan(
+			&i.ShuttleEvent.ID,
+			&i.ShuttleEvent.BotID,
+			&i.ShuttleEvent.OrganizationID,
+			&i.ShuttleEvent.Name,
+			&i.ShuttleEvent.Timezone,
+			&i.ShuttleEvent.StartsAt,
+			&i.ShuttleEvent.EndsAt,
+			&i.ShuttleEvent.Modules,
+			&i.ShuttleEvent.Version,
+			&i.RegistrationRules,
+			&i.DepositPolicy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEventMassageBookings = `-- name: ListEventMassageBookings :many
+SELECT id, event_id, user_id, preparation_id, window_id, specialist_id, service_id, version, state, starts_at, treatment_ends_at, occupancy_ends_at, requires_table, currency, currency_scale, price_minor, snapshot, source, booked_at, cancelled_at FROM shuttle_massage_bookings WHERE event_id=$1 AND id>$2 ORDER BY id LIMIT $3
+`
+
+type ListEventMassageBookingsParams struct {
+	EventID uuid.UUID `json:"event_id"`
+	ID      uuid.UUID `json:"id"`
+	Limit   int32     `json:"limit"`
+}
+
+func (q *Queries) ListEventMassageBookings(ctx context.Context, arg ListEventMassageBookingsParams) ([]ShuttleMassageBooking, error) {
+	rows, err := q.db.Query(ctx, listEventMassageBookings, arg.EventID, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassageBooking
+	for rows.Next() {
+		var i ShuttleMassageBooking
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.UserID,
+			&i.PreparationID,
+			&i.WindowID,
+			&i.SpecialistID,
+			&i.ServiceID,
+			&i.Version,
+			&i.State,
+			&i.StartsAt,
+			&i.TreatmentEndsAt,
+			&i.OccupancyEndsAt,
+			&i.RequiresTable,
+			&i.Currency,
+			&i.CurrencyScale,
+			&i.PriceMinor,
+			&i.Snapshot,
+			&i.Source,
+			&i.BookedAt,
+			&i.CancelledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEventRegistrations = `-- name: ListEventRegistrations :many
+SELECT r.id, r.event_id, r.user_id, r.role, r.state, r.version, r.requested_at FROM shuttle_registrations r JOIN shuttle_users u ON u.id=r.user_id
+WHERE r.event_id=$1 AND u.bot_id=$2 AND u.zitadel_org=$3 AND r.id>$4 ORDER BY r.id LIMIT $5
+`
+
+type ListEventRegistrationsParams struct {
+	EventID    uuid.UUID `json:"event_id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+	ID         uuid.UUID `json:"id"`
+	Limit      int32     `json:"limit"`
+}
+
+func (q *Queries) ListEventRegistrations(ctx context.Context, arg ListEventRegistrationsParams) ([]ShuttleRegistration, error) {
+	rows, err := q.db.Query(ctx, listEventRegistrations,
+		arg.EventID,
+		arg.BotID,
+		arg.ZitadelOrg,
+		arg.ID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleRegistration
+	for rows.Next() {
+		var i ShuttleRegistration
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.UserID,
+			&i.Role,
+			&i.State,
+			&i.Version,
+			&i.RequestedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEvents = `-- name: ListEvents :many
+SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version FROM shuttle_events WHERE bot_id=$1 AND organization_id=$2 AND id>$3 ORDER BY id LIMIT $4
+`
+
+type ListEventsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ID             uuid.UUID `json:"id"`
+	Limit          int32     `json:"limit"`
+}
+
+func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]ShuttleEvent, error) {
+	rows, err := q.db.Query(ctx, listEvents,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEvent
+	for rows.Next() {
+		var i ShuttleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Modules,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMassageBindingEvents = `-- name: ListMassageBindingEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND e.id>$3::uuid
+AND EXISTS(SELECT 1 FROM shuttle_massage_schedules s WHERE s.event_id=e.id)
+ORDER BY e.id LIMIT $4
+`
+
+type ListMassageBindingEventsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListMassageBindingEvents(ctx context.Context, arg ListMassageBindingEventsParams) ([]ShuttleEvent, error) {
+	rows, err := q.db.Query(ctx, listMassageBindingEvents,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEvent
+	for rows.Next() {
+		var i ShuttleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Modules,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMassageSpecialistBindings = `-- name: ListMassageSpecialistBindings :many
+SELECT event_id, specialist_id, user_id, active, version, updated_by, created_at, updated_at FROM shuttle_massage_specialist_bindings
+WHERE event_id=$1 AND specialist_id>$2::text
+ORDER BY specialist_id LIMIT $3
+`
+
+type ListMassageSpecialistBindingsParams struct {
+	EventID   uuid.UUID `json:"event_id"`
+	AfterID   string    `json:"after_id"`
+	PageLimit int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListMassageSpecialistBindings(ctx context.Context, arg ListMassageSpecialistBindingsParams) ([]ShuttleMassageSpecialistBinding, error) {
+	rows, err := q.db.Query(ctx, listMassageSpecialistBindings, arg.EventID, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassageSpecialistBinding
+	for rows.Next() {
+		var i ShuttleMassageSpecialistBinding
+		if err := rows.Scan(
+			&i.EventID,
+			&i.SpecialistID,
+			&i.UserID,
+			&i.Active,
+			&i.Version,
+			&i.UpdatedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMassageStaffBookings = `-- name: ListMassageStaffBookings :many
+SELECT b.id, b.event_id, b.user_id, b.preparation_id, b.window_id, b.specialist_id, b.service_id, b.version, b.state, b.starts_at, b.treatment_ends_at, b.occupancy_ends_at, b.requires_table, b.currency, b.currency_scale, b.price_minor, b.snapshot, b.source, b.booked_at, b.cancelled_at,
+ left(coalesce(nullif(btrim(p.full_name),''),
+ nullif(btrim(concat_ws(' ',u.profile->>'first_name',u.profile->>'last_name')),''),''),256)::text AS client_name,
+ CASE WHEN b.specialist_id=ANY($1::text[]) THEN u.tg_user_id ELSE 0 END::bigint AS contact_id
+FROM shuttle_massage_bookings b
+JOIN shuttle_events e ON e.id=b.event_id
+JOIN shuttle_users u ON u.id=b.user_id AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id
+LEFT JOIN shuttle_user_profiles p ON p.user_id=u.id
+WHERE b.event_id=$2::uuid AND b.state='booked'
+AND (NOT $3::boolean OR b.specialist_id=ANY($1::text[]))
+AND ($4::uuid='00000000-0000-0000-0000-000000000000' OR b.id=$4::uuid)
+AND ($5::text='' OR b.window_id=$5::text)
+AND b.starts_at<$6::timestamptz AND b.occupancy_ends_at>$7::timestamptz
+AND ($8::uuid='00000000-0000-0000-0000-000000000000'
+ OR (b.starts_at,b.id)>($9::timestamptz,$8::uuid))
+ORDER BY b.starts_at,b.id LIMIT $10
+`
+
+type ListMassageStaffBookingsParams struct {
+	OwnIds    []string           `json:"own_ids"`
+	EventID   uuid.UUID          `json:"event_id"`
+	OwnOnly   bool               `json:"own_only"`
+	BookingID uuid.UUID          `json:"booking_id"`
+	WindowID  string             `json:"window_id"`
+	UntilAt   pgtype.Timestamptz `json:"until_at"`
+	FromAt    pgtype.Timestamptz `json:"from_at"`
+	AfterID   uuid.UUID          `json:"after_id"`
+	AfterAt   pgtype.Timestamptz `json:"after_at"`
+	PageLimit int32              `json:"page_limit"`
+}
+
+type ListMassageStaffBookingsRow struct {
+	ShuttleMassageBooking ShuttleMassageBooking `json:"shuttle_massage_booking"`
+	ClientName            string                `json:"client_name"`
+	ContactID             int64                 `json:"contact_id"`
+}
+
+func (q *Queries) ListMassageStaffBookings(ctx context.Context, arg ListMassageStaffBookingsParams) ([]ListMassageStaffBookingsRow, error) {
+	rows, err := q.db.Query(ctx, listMassageStaffBookings,
+		arg.OwnIds,
+		arg.EventID,
+		arg.OwnOnly,
+		arg.BookingID,
+		arg.WindowID,
+		arg.UntilAt,
+		arg.FromAt,
+		arg.AfterID,
+		arg.AfterAt,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMassageStaffBookingsRow
+	for rows.Next() {
+		var i ListMassageStaffBookingsRow
+		if err := rows.Scan(
+			&i.ShuttleMassageBooking.ID,
+			&i.ShuttleMassageBooking.EventID,
+			&i.ShuttleMassageBooking.UserID,
+			&i.ShuttleMassageBooking.PreparationID,
+			&i.ShuttleMassageBooking.WindowID,
+			&i.ShuttleMassageBooking.SpecialistID,
+			&i.ShuttleMassageBooking.ServiceID,
+			&i.ShuttleMassageBooking.Version,
+			&i.ShuttleMassageBooking.State,
+			&i.ShuttleMassageBooking.StartsAt,
+			&i.ShuttleMassageBooking.TreatmentEndsAt,
+			&i.ShuttleMassageBooking.OccupancyEndsAt,
+			&i.ShuttleMassageBooking.RequiresTable,
+			&i.ShuttleMassageBooking.Currency,
+			&i.ShuttleMassageBooking.CurrencyScale,
+			&i.ShuttleMassageBooking.PriceMinor,
+			&i.ShuttleMassageBooking.Snapshot,
+			&i.ShuttleMassageBooking.Source,
+			&i.ShuttleMassageBooking.BookedAt,
+			&i.ShuttleMassageBooking.CancelledAt,
+			&i.ClientName,
+			&i.ContactID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMassageStaffEvents = `-- name: ListMassageStaffEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND e.id>$3::uuid
+AND EXISTS(SELECT 1 FROM shuttle_massage_specialist_bindings a
+ WHERE a.event_id=e.id AND a.user_id=$4 AND a.active)
+ORDER BY e.id LIMIT $5
+`
+
+type ListMassageStaffEventsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListMassageStaffEvents(ctx context.Context, arg ListMassageStaffEventsParams) ([]ShuttleEvent, error) {
+	rows, err := q.db.Query(ctx, listMassageStaffEvents,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.UserID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEvent
+	for rows.Next() {
+		var i ShuttleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Modules,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMassageStaffWindows = `-- name: ListMassageStaffWindows :many
+WITH candidates AS (
+ SELECT w->>'id' AS window_id, (w->>'starts_at')::timestamptz AS starts_at,
+ (w->>'ends_at')::timestamptz AS ends_at, w->'name' AS name, 0 AS priority,
+ '00000000-0000-0000-0000-000000000000'::uuid AS booking_id
+ FROM shuttle_massage_schedules s,
+ jsonb_array_elements(s.document->'windows') w WHERE s.event_id=$5::uuid
+ UNION ALL
+ SELECT b.window_id, (b.snapshot->'terms'->>'window_starts_at')::timestamptz,
+ (b.snapshot->'terms'->>'window_ends_at')::timestamptz,
+ b.snapshot->'terms'->'window_name', 1, b.id
+ FROM shuttle_massage_bookings b WHERE b.event_id=$5::uuid AND b.state='booked'
+), windows AS (
+ SELECT DISTINCT ON (starts_at,ends_at,window_id COLLATE "C") window_id,starts_at,ends_at,name
+ FROM candidates ORDER BY starts_at,ends_at,window_id COLLATE "C",priority,booking_id
+)
+SELECT window_id::text,starts_at::timestamptz,ends_at::timestamptz,name::jsonb
+FROM windows
+WHERE NOT $1::boolean OR
+ (starts_at,ends_at,window_id COLLATE "C")>
+ ($2::timestamptz,$3::timestamptz,$4::text COLLATE "C")
+ORDER BY starts_at,ends_at,window_id COLLATE "C" LIMIT 21
+`
+
+type ListMassageStaffWindowsParams struct {
+	HasAfter      bool               `json:"has_after"`
+	AfterStartsAt pgtype.Timestamptz `json:"after_starts_at"`
+	AfterEndsAt   pgtype.Timestamptz `json:"after_ends_at"`
+	AfterWindowID string             `json:"after_window_id"`
+	EventID       uuid.UUID          `json:"event_id"`
+}
+
+type ListMassageStaffWindowsRow struct {
+	WindowID string             `json:"window_id"`
+	StartsAt pgtype.Timestamptz `json:"starts_at"`
+	EndsAt   pgtype.Timestamptz `json:"ends_at"`
+	Name     []byte             `json:"name"`
+}
+
+func (q *Queries) ListMassageStaffWindows(ctx context.Context, arg ListMassageStaffWindowsParams) ([]ListMassageStaffWindowsRow, error) {
+	rows, err := q.db.Query(ctx, listMassageStaffWindows,
+		arg.HasAfter,
+		arg.AfterStartsAt,
+		arg.AfterEndsAt,
+		arg.AfterWindowID,
+		arg.EventID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMassageStaffWindowsRow
+	for rows.Next() {
+		var i ListMassageStaffWindowsRow
+		if err := rows.Scan(
+			&i.WindowID,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMiniAppOrderEvidenceFiles = `-- name: ListMiniAppOrderEvidenceFiles :many
+SELECT id,left(filename,256)::text AS filename,left(mime_type,128)::text AS mime_type,
+ left(kind,32)::text AS kind,size_bytes,sent_at,accepted_at
+FROM shuttle_files WHERE user_id=$1 AND id>$2
+ORDER BY id LIMIT $3
+`
+
+type ListMiniAppOrderEvidenceFilesParams struct {
+	UserID    uuid.UUID `json:"user_id"`
+	AfterID   uuid.UUID `json:"after_id"`
+	PageLimit int32     `json:"page_limit"`
+}
+
+type ListMiniAppOrderEvidenceFilesRow struct {
+	ID         uuid.UUID          `json:"id"`
+	Filename   string             `json:"filename"`
+	MimeType   string             `json:"mime_type"`
+	Kind       string             `json:"kind"`
+	SizeBytes  int64              `json:"size_bytes"`
+	SentAt     pgtype.Timestamptz `json:"sent_at"`
+	AcceptedAt pgtype.Timestamptz `json:"accepted_at"`
+}
+
+func (q *Queries) ListMiniAppOrderEvidenceFiles(ctx context.Context, arg ListMiniAppOrderEvidenceFilesParams) ([]ListMiniAppOrderEvidenceFilesRow, error) {
+	rows, err := q.db.Query(ctx, listMiniAppOrderEvidenceFiles, arg.UserID, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMiniAppOrderEvidenceFilesRow
+	for rows.Next() {
+		var i ListMiniAppOrderEvidenceFilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Filename,
+			&i.MimeType,
+			&i.Kind,
+			&i.SizeBytes,
+			&i.SentAt,
+			&i.AcceptedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrderEvidence = `-- name: ListOrderEvidence :many
+SELECT ev.id, ev.order_id, ev.event_id, ev.user_id, ev.file_id, ev.source_unique_id, ev.reported_amount_minor, ev.quoted_amount_minor, ev.currency, ev.currency_scale, ev.sent_at, ev.submitted_at, ev.due_at, ev.admission_state, ev.reason, ev.state, ev.version, ev.order_kind FROM shuttle_order_evidence ev JOIN shuttle_users owner ON owner.id=ev.user_id
+WHERE ev.event_id=$1 AND owner.bot_id=$2 AND owner.zitadel_org=$3
+ AND ($4::uuid='00000000-0000-0000-0000-000000000000'::uuid OR ev.user_id=$4)
+ AND ($5::uuid='00000000-0000-0000-0000-000000000000'::uuid OR ev.order_id=$5)
+ AND (NOT $6::boolean OR ev.state IN ('pending','exhausted','needs_decision'))
+ AND ev.id>$7 ORDER BY ev.id LIMIT $8
+`
+
+type ListOrderEvidenceParams struct {
+	EventID        uuid.UUID `json:"event_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	OwnerID        uuid.UUID `json:"owner_id"`
+	OrderID        uuid.UUID `json:"order_id"`
+	UnresolvedOnly bool      `json:"unresolved_only"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListOrderEvidence(ctx context.Context, arg ListOrderEvidenceParams) ([]ShuttleOrderEvidence, error) {
+	rows, err := q.db.Query(ctx, listOrderEvidence,
+		arg.EventID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.OwnerID,
+		arg.OrderID,
+		arg.UnresolvedOnly,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleOrderEvidence
+	for rows.Next() {
+		var i ShuttleOrderEvidence
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.EventID,
+			&i.UserID,
+			&i.FileID,
+			&i.SourceUniqueID,
+			&i.ReportedAmountMinor,
+			&i.QuotedAmountMinor,
+			&i.Currency,
+			&i.CurrencyScale,
+			&i.SentAt,
+			&i.SubmittedAt,
+			&i.DueAt,
+			&i.AdmissionState,
+			&i.Reason,
+			&i.State,
+			&i.Version,
+			&i.OrderKind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrderReviewEvents = `-- name: ListOrderReviewEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+JOIN shuttle_users actor ON actor.id=$1 AND actor.bot_id=e.bot_id
+AND actor.zitadel_org=e.organization_id AND actor.zitadel_subject=$2 AND NOT actor.revoked
+LEFT JOIN shuttle_event_authorities a ON a.event_id=e.id AND a.user_id=actor.id
+WHERE e.bot_id=$3 AND e.organization_id=$4
+AND 'orders'=ANY(e.modules) AND e.id>$5::uuid
+AND ($6::boolean OR a.role IN ('ambassador','administrator'))
+ORDER BY e.id LIMIT $7
+`
+
+type ListOrderReviewEventsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	Subject        string    `json:"subject"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	GlobalAdmin    bool      `json:"global_admin"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListOrderReviewEvents(ctx context.Context, arg ListOrderReviewEventsParams) ([]ShuttleEvent, error) {
+	rows, err := q.db.Query(ctx, listOrderReviewEvents,
+		arg.UserID,
+		arg.Subject,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.GlobalAdmin,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEvent
+	for rows.Next() {
+		var i ShuttleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Modules,
+			&i.Version,
 		); err != nil {
 			return nil, err
 		}
@@ -709,6 +7013,1439 @@ func (q *Queries) ListOutbox(ctx context.Context, taskID uuid.UUID) ([]ShuttleOu
 	return items, nil
 }
 
+const listOwnAccountEvents = `-- name: ListOwnAccountEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,r.id, r.event_id, r.user_id, r.role, r.state, r.version, r.requested_at
+FROM shuttle_registrations r JOIN shuttle_events e ON e.id=r.event_id
+JOIN shuttle_users u ON u.id=r.user_id AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id
+WHERE u.id=$1 AND u.zitadel_subject=$2 AND NOT u.revoked
+AND e.bot_id=$3 AND e.organization_id=$4
+AND e.id>$5::uuid ORDER BY e.id LIMIT $6
+`
+
+type ListOwnAccountEventsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	Subject        string    `json:"subject"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListOwnAccountEventsRow struct {
+	ShuttleEvent        ShuttleEvent        `json:"shuttle_event"`
+	ShuttleRegistration ShuttleRegistration `json:"shuttle_registration"`
+}
+
+func (q *Queries) ListOwnAccountEvents(ctx context.Context, arg ListOwnAccountEventsParams) ([]ListOwnAccountEventsRow, error) {
+	rows, err := q.db.Query(ctx, listOwnAccountEvents,
+		arg.UserID,
+		arg.Subject,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnAccountEventsRow
+	for rows.Next() {
+		var i ListOwnAccountEventsRow
+		if err := rows.Scan(
+			&i.ShuttleEvent.ID,
+			&i.ShuttleEvent.BotID,
+			&i.ShuttleEvent.OrganizationID,
+			&i.ShuttleEvent.Name,
+			&i.ShuttleEvent.Timezone,
+			&i.ShuttleEvent.StartsAt,
+			&i.ShuttleEvent.EndsAt,
+			&i.ShuttleEvent.Modules,
+			&i.ShuttleEvent.Version,
+			&i.ShuttleRegistration.ID,
+			&i.ShuttleRegistration.EventID,
+			&i.ShuttleRegistration.UserID,
+			&i.ShuttleRegistration.Role,
+			&i.ShuttleRegistration.State,
+			&i.ShuttleRegistration.Version,
+			&i.ShuttleRegistration.RequestedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnMassageBookings = `-- name: ListOwnMassageBookings :many
+SELECT id, event_id, user_id, preparation_id, window_id, specialist_id, service_id, version, state, starts_at, treatment_ends_at, occupancy_ends_at, requires_table, currency, currency_scale, price_minor, snapshot, source, booked_at, cancelled_at FROM shuttle_massage_bookings WHERE event_id=$1 AND user_id=$2 AND id>$3 ORDER BY id LIMIT $4
+`
+
+type ListOwnMassageBookingsParams struct {
+	EventID uuid.UUID `json:"event_id"`
+	UserID  uuid.UUID `json:"user_id"`
+	ID      uuid.UUID `json:"id"`
+	Limit   int32     `json:"limit"`
+}
+
+func (q *Queries) ListOwnMassageBookings(ctx context.Context, arg ListOwnMassageBookingsParams) ([]ShuttleMassageBooking, error) {
+	rows, err := q.db.Query(ctx, listOwnMassageBookings,
+		arg.EventID,
+		arg.UserID,
+		arg.ID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassageBooking
+	for rows.Next() {
+		var i ShuttleMassageBooking
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.UserID,
+			&i.PreparationID,
+			&i.WindowID,
+			&i.SpecialistID,
+			&i.ServiceID,
+			&i.Version,
+			&i.State,
+			&i.StartsAt,
+			&i.TreatmentEndsAt,
+			&i.OccupancyEndsAt,
+			&i.RequiresTable,
+			&i.Currency,
+			&i.CurrencyScale,
+			&i.PriceMinor,
+			&i.Snapshot,
+			&i.Source,
+			&i.BookedAt,
+			&i.CancelledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnMassageEvents = `-- name: ListOwnMassageEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND e.id>$3::uuid
+AND (EXISTS(SELECT 1 FROM shuttle_massage_bookings b WHERE b.event_id=e.id AND b.user_id=$4)
+ OR EXISTS(SELECT 1 FROM shuttle_massage_preparations pending WHERE pending.event_id=e.id
+ AND pending.user_id=$4 AND pending.consumed_at IS NULL AND pending.expires_at>clock_timestamp())
+ OR ('massage'=ANY(e.modules) AND EXISTS(SELECT 1 FROM shuttle_registrations r
+ JOIN shuttle_passes p ON p.registration_id=r.id WHERE r.event_id=e.id AND r.user_id=$4 AND r.state='assigned')))
+ORDER BY e.id LIMIT $5
+`
+
+type ListOwnMassageEventsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListOwnMassageEvents(ctx context.Context, arg ListOwnMassageEventsParams) ([]ShuttleEvent, error) {
+	rows, err := q.db.Query(ctx, listOwnMassageEvents,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.UserID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEvent
+	for rows.Next() {
+		var i ShuttleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Modules,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnMealDraftEvents = `-- name: ListOwnMealDraftEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+JOIN shuttle_registrations r ON r.event_id=e.id AND r.user_id=$1 AND r.state='assigned'
+JOIN shuttle_passes p ON p.registration_id=r.id
+WHERE e.bot_id=$2 AND e.organization_id=$3 AND 'meals'=ANY(e.modules) AND e.id>$4
+ORDER BY e.id LIMIT $5
+`
+
+type ListOwnMealDraftEventsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ID             uuid.UUID `json:"id"`
+	Limit          int32     `json:"limit"`
+}
+
+func (q *Queries) ListOwnMealDraftEvents(ctx context.Context, arg ListOwnMealDraftEventsParams) ([]ShuttleEvent, error) {
+	rows, err := q.db.Query(ctx, listOwnMealDraftEvents,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEvent
+	for rows.Next() {
+		var i ShuttleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Modules,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnOrdersSelectionEvents = `-- name: ListOwnOrdersSelectionEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+JOIN shuttle_registrations r ON r.event_id=e.id AND r.user_id=$1 AND r.state='assigned'
+JOIN shuttle_passes p ON p.registration_id=r.id
+WHERE e.bot_id=$2 AND e.organization_id=$3 AND 'orders'=ANY(e.modules) AND e.id>$4
+ORDER BY e.id LIMIT $5
+`
+
+type ListOwnOrdersSelectionEventsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ID             uuid.UUID `json:"id"`
+	Limit          int32     `json:"limit"`
+}
+
+func (q *Queries) ListOwnOrdersSelectionEvents(ctx context.Context, arg ListOwnOrdersSelectionEventsParams) ([]ShuttleEvent, error) {
+	rows, err := q.db.Query(ctx, listOwnOrdersSelectionEvents,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEvent
+	for rows.Next() {
+		var i ShuttleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Modules,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnPaymentExpectations = `-- name: ListOwnPaymentExpectations :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,r.id, r.event_id, r.user_id, r.role, r.state, r.version, r.requested_at
+FROM shuttle_registrations r JOIN shuttle_passes p ON p.registration_id=r.id
+JOIN shuttle_events e ON e.id=r.event_id
+WHERE r.user_id=$1 AND r.state='assigned'
+AND e.bot_id=$2 AND e.organization_id=$3
+AND 'registrations'=ANY(e.modules) AND p.id>$4::uuid
+AND p.price_minor>(SELECT coalesce(sum(rv.amount_minor),0) FROM shuttle_payment_reviews rv
+JOIN shuttle_payment_evidence ev ON ev.id=rv.evidence_id WHERE ev.pass_id=p.id AND rv.decision='confirmed')
+ORDER BY p.id LIMIT $5
+`
+
+type ListOwnPaymentExpectationsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListOwnPaymentExpectationsRow struct {
+	ShuttleEvent        ShuttleEvent        `json:"shuttle_event"`
+	ShuttleRegistration ShuttleRegistration `json:"shuttle_registration"`
+}
+
+func (q *Queries) ListOwnPaymentExpectations(ctx context.Context, arg ListOwnPaymentExpectationsParams) ([]ListOwnPaymentExpectationsRow, error) {
+	rows, err := q.db.Query(ctx, listOwnPaymentExpectations,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnPaymentExpectationsRow
+	for rows.Next() {
+		var i ListOwnPaymentExpectationsRow
+		if err := rows.Scan(
+			&i.ShuttleEvent.ID,
+			&i.ShuttleEvent.BotID,
+			&i.ShuttleEvent.OrganizationID,
+			&i.ShuttleEvent.Name,
+			&i.ShuttleEvent.Timezone,
+			&i.ShuttleEvent.StartsAt,
+			&i.ShuttleEvent.EndsAt,
+			&i.ShuttleEvent.Modules,
+			&i.ShuttleEvent.Version,
+			&i.ShuttleRegistration.ID,
+			&i.ShuttleRegistration.EventID,
+			&i.ShuttleRegistration.UserID,
+			&i.ShuttleRegistration.Role,
+			&i.ShuttleRegistration.State,
+			&i.ShuttleRegistration.Version,
+			&i.ShuttleRegistration.RequestedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnPendingMassagePreparations = `-- name: ListOwnPendingMassagePreparations :many
+SELECT id, event_id, user_id, operation_id, kind, source, created_at, request_hash, arguments, snapshot, booking_id, expires_at, consumed_at, consumed_result FROM shuttle_massage_preparations
+WHERE event_id=$1 AND user_id=$2 AND id>$3 AND consumed_at IS NULL AND expires_at>clock_timestamp()
+ORDER BY id LIMIT $4
+`
+
+type ListOwnPendingMassagePreparationsParams struct {
+	EventID uuid.UUID `json:"event_id"`
+	UserID  uuid.UUID `json:"user_id"`
+	ID      uuid.UUID `json:"id"`
+	Limit   int32     `json:"limit"`
+}
+
+func (q *Queries) ListOwnPendingMassagePreparations(ctx context.Context, arg ListOwnPendingMassagePreparationsParams) ([]ShuttleMassagePreparation, error) {
+	rows, err := q.db.Query(ctx, listOwnPendingMassagePreparations,
+		arg.EventID,
+		arg.UserID,
+		arg.ID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassagePreparation
+	for rows.Next() {
+		var i ShuttleMassagePreparation
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.UserID,
+			&i.OperationID,
+			&i.Kind,
+			&i.Source,
+			&i.CreatedAt,
+			&i.RequestHash,
+			&i.Arguments,
+			&i.Snapshot,
+			&i.BookingID,
+			&i.ExpiresAt,
+			&i.ConsumedAt,
+			&i.ConsumedResult,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnSubmittedOrders = `-- name: ListOwnSubmittedOrders :many
+SELECT id, user_id, event_id, source_draft_version, preparation_id, request_hash, version, state, submitted_result, sales_closes_at, submitted_at, cancelled_at, order_kind FROM shuttle_orders WHERE user_id=$1 AND event_id=$2 AND id>$3
+AND order_kind='service' ORDER BY id LIMIT $4
+`
+
+type ListOwnSubmittedOrdersParams struct {
+	UserID    uuid.UUID `json:"user_id"`
+	EventID   uuid.UUID `json:"event_id"`
+	AfterID   uuid.UUID `json:"after_id"`
+	PageLimit int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListOwnSubmittedOrders(ctx context.Context, arg ListOwnSubmittedOrdersParams) ([]ShuttleOrder, error) {
+	rows, err := q.db.Query(ctx, listOwnSubmittedOrders,
+		arg.UserID,
+		arg.EventID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleOrder
+	for rows.Next() {
+		var i ShuttleOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.EventID,
+			&i.SourceDraftVersion,
+			&i.PreparationID,
+			&i.RequestHash,
+			&i.Version,
+			&i.State,
+			&i.SubmittedResult,
+			&i.SalesClosesAt,
+			&i.SubmittedAt,
+			&i.CancelledAt,
+			&i.OrderKind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedPairs = `-- name: ListOwnedPairs :many
+SELECT p.id, p.event_id, p.leader_registration_id, p.follower_registration_id, p.state, p.version, p.queued_at, p.created_at, p.assigned_at, p.dissolved_at,e.name AS event_name,e.timezone,e.starts_at,e.ends_at
+FROM shuttle_pairs p JOIN shuttle_events e ON e.id=p.event_id
+JOIN shuttle_registrations l ON l.id=p.leader_registration_id
+JOIN shuttle_registrations f ON f.id=p.follower_registration_id
+JOIN shuttle_users u ON u.id=$1 AND u.bot_id=e.bot_id
+AND u.zitadel_org=e.organization_id AND u.zitadel_subject=$2 AND NOT u.revoked
+WHERE e.bot_id=$3 AND e.organization_id=$4
+AND (l.user_id=u.id OR f.user_id=u.id) AND p.state IN ('waitlisted','assigned')
+AND ($5::uuid='00000000-0000-0000-0000-000000000000'::uuid OR e.id=$5)
+AND p.id>$6::uuid ORDER BY p.id LIMIT $7
+`
+
+type ListOwnedPairsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	Subject        string    `json:"subject"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	EventID        uuid.UUID `json:"event_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListOwnedPairsRow struct {
+	ShuttlePair ShuttlePair        `json:"shuttle_pair"`
+	EventName   string             `json:"event_name"`
+	Timezone    string             `json:"timezone"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+func (q *Queries) ListOwnedPairs(ctx context.Context, arg ListOwnedPairsParams) ([]ListOwnedPairsRow, error) {
+	rows, err := q.db.Query(ctx, listOwnedPairs,
+		arg.UserID,
+		arg.Subject,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.EventID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListOwnedPairsRow
+	for rows.Next() {
+		var i ListOwnedPairsRow
+		if err := rows.Scan(
+			&i.ShuttlePair.ID,
+			&i.ShuttlePair.EventID,
+			&i.ShuttlePair.LeaderRegistrationID,
+			&i.ShuttlePair.FollowerRegistrationID,
+			&i.ShuttlePair.State,
+			&i.ShuttlePair.Version,
+			&i.ShuttlePair.QueuedAt,
+			&i.ShuttlePair.CreatedAt,
+			&i.ShuttlePair.AssignedAt,
+			&i.ShuttlePair.DissolvedAt,
+			&i.EventName,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPairAssignmentCandidates = `-- name: ListPairAssignmentCandidates :many
+SELECT p.id, p.event_id, p.leader_registration_id, p.follower_registration_id, p.state, p.version, p.queued_at, p.created_at, p.assigned_at, p.dissolved_at,l.user_id AS leader_user_id,l.version AS leader_version,
+f.user_id AS follower_user_id,f.version AS follower_version
+FROM shuttle_pairs p JOIN shuttle_registrations l ON l.id=p.leader_registration_id
+JOIN shuttle_registrations f ON f.id=p.follower_registration_id
+WHERE p.event_id=$1 AND p.state='waitlisted' AND p.id>$2::uuid
+ORDER BY p.id LIMIT $3
+`
+
+type ListPairAssignmentCandidatesParams struct {
+	EventID   uuid.UUID `json:"event_id"`
+	AfterID   uuid.UUID `json:"after_id"`
+	PageLimit int32     `json:"page_limit"`
+}
+
+type ListPairAssignmentCandidatesRow struct {
+	ShuttlePair     ShuttlePair `json:"shuttle_pair"`
+	LeaderUserID    uuid.UUID   `json:"leader_user_id"`
+	LeaderVersion   int64       `json:"leader_version"`
+	FollowerUserID  uuid.UUID   `json:"follower_user_id"`
+	FollowerVersion int64       `json:"follower_version"`
+}
+
+func (q *Queries) ListPairAssignmentCandidates(ctx context.Context, arg ListPairAssignmentCandidatesParams) ([]ListPairAssignmentCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listPairAssignmentCandidates, arg.EventID, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPairAssignmentCandidatesRow
+	for rows.Next() {
+		var i ListPairAssignmentCandidatesRow
+		if err := rows.Scan(
+			&i.ShuttlePair.ID,
+			&i.ShuttlePair.EventID,
+			&i.ShuttlePair.LeaderRegistrationID,
+			&i.ShuttlePair.FollowerRegistrationID,
+			&i.ShuttlePair.State,
+			&i.ShuttlePair.Version,
+			&i.ShuttlePair.QueuedAt,
+			&i.ShuttlePair.CreatedAt,
+			&i.ShuttlePair.AssignedAt,
+			&i.ShuttlePair.DissolvedAt,
+			&i.LeaderUserID,
+			&i.LeaderVersion,
+			&i.FollowerUserID,
+			&i.FollowerVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPairAssignmentEvents = `-- name: ListPairAssignmentEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e JOIN shuttle_users u ON u.id=$1
+AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id AND u.zitadel_subject=$2 AND NOT u.revoked
+WHERE e.bot_id=$3 AND e.organization_id=$4
+AND 'registrations'=ANY(e.modules) AND e.id>$5::uuid
+AND ($6::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
+WHERE a.event_id=e.id AND a.user_id=u.id AND a.role='administrator'))
+ORDER BY e.id LIMIT $7
+`
+
+type ListPairAssignmentEventsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	Subject        string    `json:"subject"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	GlobalAdmin    bool      `json:"global_admin"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListPairAssignmentEvents(ctx context.Context, arg ListPairAssignmentEventsParams) ([]ShuttleEvent, error) {
+	rows, err := q.db.Query(ctx, listPairAssignmentEvents,
+		arg.UserID,
+		arg.Subject,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.GlobalAdmin,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEvent
+	for rows.Next() {
+		var i ShuttleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Modules,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPairInvitations = `-- name: ListPairInvitations :many
+SELECT i.id, i.event_id, i.inviter_registration_id, i.target_user_id, i.state, i.version, i.created_at, i.expires_at, i.decided_at, i.pair_id,e.name AS event_name,e.timezone,e.starts_at,e.ends_at,
+r.user_id AS inviter_user_id,r.role AS inviter_role,
+trim(coalesce(inviter.profile->>'first_name','')||' '||coalesce(inviter.profile->>'last_name',''))::text AS inviter_name
+FROM shuttle_pair_invitations i JOIN shuttle_events e ON e.id=i.event_id
+JOIN shuttle_registrations r ON r.id=i.inviter_registration_id
+JOIN shuttle_users inviter ON inviter.id=r.user_id AND inviter.bot_id=e.bot_id AND inviter.zitadel_org=e.organization_id
+JOIN shuttle_users actor ON actor.id=$1 AND actor.bot_id=e.bot_id
+AND actor.zitadel_org=e.organization_id AND actor.zitadel_subject=$2 AND NOT actor.revoked
+WHERE e.bot_id=$3 AND e.organization_id=$4
+AND (($5::text='incoming' AND i.target_user_id=actor.id)
+OR ($5::text='outgoing' AND r.user_id=actor.id))
+AND ($6::uuid='00000000-0000-0000-0000-000000000000'::uuid OR e.id=$6)
+AND ($7::text='' OR i.state=$7)
+AND i.id>$8::uuid ORDER BY i.id LIMIT $9
+`
+
+type ListPairInvitationsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	Subject        string    `json:"subject"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Direction      string    `json:"direction"`
+	EventID        uuid.UUID `json:"event_id"`
+	FilterState    string    `json:"filter_state"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListPairInvitationsRow struct {
+	ShuttlePairInvitation ShuttlePairInvitation `json:"shuttle_pair_invitation"`
+	EventName             string                `json:"event_name"`
+	Timezone              string                `json:"timezone"`
+	StartsAt              pgtype.Timestamptz    `json:"starts_at"`
+	EndsAt                pgtype.Timestamptz    `json:"ends_at"`
+	InviterUserID         uuid.UUID             `json:"inviter_user_id"`
+	InviterRole           string                `json:"inviter_role"`
+	InviterName           string                `json:"inviter_name"`
+}
+
+func (q *Queries) ListPairInvitations(ctx context.Context, arg ListPairInvitationsParams) ([]ListPairInvitationsRow, error) {
+	rows, err := q.db.Query(ctx, listPairInvitations,
+		arg.UserID,
+		arg.Subject,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Direction,
+		arg.EventID,
+		arg.FilterState,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPairInvitationsRow
+	for rows.Next() {
+		var i ListPairInvitationsRow
+		if err := rows.Scan(
+			&i.ShuttlePairInvitation.ID,
+			&i.ShuttlePairInvitation.EventID,
+			&i.ShuttlePairInvitation.InviterRegistrationID,
+			&i.ShuttlePairInvitation.TargetUserID,
+			&i.ShuttlePairInvitation.State,
+			&i.ShuttlePairInvitation.Version,
+			&i.ShuttlePairInvitation.CreatedAt,
+			&i.ShuttlePairInvitation.ExpiresAt,
+			&i.ShuttlePairInvitation.DecidedAt,
+			&i.ShuttlePairInvitation.PairID,
+			&i.EventName,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.InviterUserID,
+			&i.InviterRole,
+			&i.InviterName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentEvents = `-- name: ListPaymentEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version,coalesce(p.id,'00000000-0000-0000-0000-000000000000'::uuid)::uuid AS own_pass_id
+FROM shuttle_events e
+JOIN shuttle_users actor ON actor.id=$1 AND actor.bot_id=e.bot_id
+AND actor.zitadel_org=e.organization_id AND actor.zitadel_subject=$2 AND NOT actor.revoked
+LEFT JOIN shuttle_registrations r ON r.event_id=e.id AND r.user_id=actor.id AND r.state='assigned'
+LEFT JOIN shuttle_passes p ON p.registration_id=r.id
+LEFT JOIN shuttle_event_authorities a ON a.event_id=e.id AND a.user_id=actor.id
+WHERE e.bot_id=$3 AND e.organization_id=$4
+AND 'registrations'=ANY(e.modules) AND e.id>$5::uuid
+AND ($6::boolean OR p.id IS NOT NULL OR a.role IN ('ambassador','administrator'))
+ORDER BY e.id LIMIT $7
+`
+
+type ListPaymentEventsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	Subject        string    `json:"subject"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	GlobalAdmin    bool      `json:"global_admin"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListPaymentEventsRow struct {
+	ShuttleEvent ShuttleEvent `json:"shuttle_event"`
+	OwnPassID    uuid.UUID    `json:"own_pass_id"`
+}
+
+func (q *Queries) ListPaymentEvents(ctx context.Context, arg ListPaymentEventsParams) ([]ListPaymentEventsRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentEvents,
+		arg.UserID,
+		arg.Subject,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.GlobalAdmin,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPaymentEventsRow
+	for rows.Next() {
+		var i ListPaymentEventsRow
+		if err := rows.Scan(
+			&i.ShuttleEvent.ID,
+			&i.ShuttleEvent.BotID,
+			&i.ShuttleEvent.OrganizationID,
+			&i.ShuttleEvent.Name,
+			&i.ShuttleEvent.Timezone,
+			&i.ShuttleEvent.StartsAt,
+			&i.ShuttleEvent.EndsAt,
+			&i.ShuttleEvent.Modules,
+			&i.ShuttleEvent.Version,
+			&i.OwnPassID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentEvidence = `-- name: ListPaymentEvidence :many
+SELECT ev.id, ev.event_id, ev.pass_id, ev.user_id, ev.file_id, ev.source_unique_id, ev.amount_minor, ev.currency, ev.currency_scale, ev.purpose, ev.sent_at, ev.submitted_at, ev.due_at,coalesce(rv.decision,'pending')::text AS state,to_jsonb(rv) AS review FROM shuttle_payment_evidence ev
+LEFT JOIN shuttle_payment_reviews rv ON rv.evidence_id=ev.id
+WHERE ev.event_id=$1 AND ($2::uuid='00000000-0000-0000-0000-000000000000' OR ev.user_id=$2)
+AND ev.id>$3::uuid ORDER BY ev.id LIMIT $4
+`
+
+type ListPaymentEvidenceParams struct {
+	EventID   uuid.UUID `json:"event_id"`
+	OwnerID   uuid.UUID `json:"owner_id"`
+	AfterID   uuid.UUID `json:"after_id"`
+	PageLimit int32     `json:"page_limit"`
+}
+
+type ListPaymentEvidenceRow struct {
+	ShuttlePaymentEvidence ShuttlePaymentEvidence `json:"shuttle_payment_evidence"`
+	State                  string                 `json:"state"`
+	Review                 []byte                 `json:"review"`
+}
+
+func (q *Queries) ListPaymentEvidence(ctx context.Context, arg ListPaymentEvidenceParams) ([]ListPaymentEvidenceRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentEvidence,
+		arg.EventID,
+		arg.OwnerID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPaymentEvidenceRow
+	for rows.Next() {
+		var i ListPaymentEvidenceRow
+		if err := rows.Scan(
+			&i.ShuttlePaymentEvidence.ID,
+			&i.ShuttlePaymentEvidence.EventID,
+			&i.ShuttlePaymentEvidence.PassID,
+			&i.ShuttlePaymentEvidence.UserID,
+			&i.ShuttlePaymentEvidence.FileID,
+			&i.ShuttlePaymentEvidence.SourceUniqueID,
+			&i.ShuttlePaymentEvidence.AmountMinor,
+			&i.ShuttlePaymentEvidence.Currency,
+			&i.ShuttlePaymentEvidence.CurrencyScale,
+			&i.ShuttlePaymentEvidence.Purpose,
+			&i.ShuttlePaymentEvidence.SentAt,
+			&i.ShuttlePaymentEvidence.SubmittedAt,
+			&i.ShuttlePaymentEvidence.DueAt,
+			&i.State,
+			&i.Review,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentNotificationRecipients = `-- name: ListPaymentNotificationRecipients :many
+SELECT u.id FROM shuttle_event_authorities a JOIN shuttle_users u ON u.id=a.user_id
+WHERE a.event_id=$1 AND a.role IN ('ambassador','administrator') AND NOT u.revoked
+AND u.bot_id=$2 AND u.zitadel_org=$3 AND u.zitadel_subject<>'' ORDER BY u.id
+`
+
+type ListPaymentNotificationRecipientsParams struct {
+	EventID    uuid.UUID `json:"event_id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+func (q *Queries) ListPaymentNotificationRecipients(ctx context.Context, arg ListPaymentNotificationRecipientsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listPaymentNotificationRecipients, arg.EventID, arg.BotID, arg.ZitadelOrg)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentReviewEvents = `-- name: ListPaymentReviewEvents :many
+SELECT e.id, e.bot_id, e.organization_id, e.name, e.timezone, e.starts_at, e.ends_at, e.modules, e.version FROM shuttle_events e
+JOIN shuttle_users actor ON actor.id=$1 AND actor.bot_id=e.bot_id
+AND actor.zitadel_org=e.organization_id AND actor.zitadel_subject=$2 AND NOT actor.revoked
+LEFT JOIN shuttle_event_authorities a ON a.event_id=e.id AND a.user_id=actor.id
+WHERE e.bot_id=$3 AND e.organization_id=$4
+AND 'registrations'=ANY(e.modules) AND e.id>$5::uuid
+AND ($6::boolean OR a.role IN ('ambassador','administrator'))
+ORDER BY e.id LIMIT $7
+`
+
+type ListPaymentReviewEventsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	Subject        string    `json:"subject"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	GlobalAdmin    bool      `json:"global_admin"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+func (q *Queries) ListPaymentReviewEvents(ctx context.Context, arg ListPaymentReviewEventsParams) ([]ShuttleEvent, error) {
+	rows, err := q.db.Query(ctx, listPaymentReviewEvents,
+		arg.UserID,
+		arg.Subject,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.GlobalAdmin,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleEvent
+	for rows.Next() {
+		var i ShuttleEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Name,
+			&i.Timezone,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Modules,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingAssignmentProposals = `-- name: ListPendingAssignmentProposals :many
+SELECT p.bot_id, p.organization_id, p.actor, p.operation_id, p.proposal_id, p.request_hash, p.expires_at, p.document FROM shuttle_assignment_preparations p
+WHERE p.bot_id=$1 AND p.organization_id=$2 AND p.actor=$3
+AND p.proposal_id>$4::uuid AND p.expires_at>$5::timestamptz
+AND NOT EXISTS(SELECT 1 FROM shuttle_registration_operations r
+ WHERE r.bot_id=p.bot_id AND r.organization_id=p.organization_id AND r.actor=p.actor AND r.operation_id=p.operation_id)
+ORDER BY p.proposal_id LIMIT $6
+`
+
+type ListPendingAssignmentProposalsParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	AfterID        uuid.UUID          `json:"after_id"`
+	NowAt          pgtype.Timestamptz `json:"now_at"`
+	PageLimit      int32              `json:"page_limit"`
+}
+
+func (q *Queries) ListPendingAssignmentProposals(ctx context.Context, arg ListPendingAssignmentProposalsParams) ([]ShuttleAssignmentPreparation, error) {
+	rows, err := q.db.Query(ctx, listPendingAssignmentProposals,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.AfterID,
+		arg.NowAt,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleAssignmentPreparation
+	for rows.Next() {
+		var i ShuttleAssignmentPreparation
+		if err := rows.Scan(
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Actor,
+			&i.OperationID,
+			&i.ProposalID,
+			&i.RequestHash,
+			&i.ExpiresAt,
+			&i.Document,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingAvatarDeliveryProposals = `-- name: ListPendingAvatarDeliveryProposals :many
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, delivery_id, request_hash, expires_at, document, result FROM shuttle_avatar_delivery_resolutions
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3
+AND proposal_id > $4::uuid AND result IS NULL AND expires_at > $5::timestamptz
+ORDER BY proposal_id LIMIT $6
+`
+
+type ListPendingAvatarDeliveryProposalsParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	AfterID        uuid.UUID          `json:"after_id"`
+	NowAt          pgtype.Timestamptz `json:"now_at"`
+	PageLimit      int32              `json:"page_limit"`
+}
+
+func (q *Queries) ListPendingAvatarDeliveryProposals(ctx context.Context, arg ListPendingAvatarDeliveryProposalsParams) ([]ShuttleAvatarDeliveryResolution, error) {
+	rows, err := q.db.Query(ctx, listPendingAvatarDeliveryProposals,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.AfterID,
+		arg.NowAt,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleAvatarDeliveryResolution
+	for rows.Next() {
+		var i ShuttleAvatarDeliveryResolution
+		if err := rows.Scan(
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Actor,
+			&i.OperationID,
+			&i.ProposalID,
+			&i.DeliveryID,
+			&i.RequestHash,
+			&i.ExpiresAt,
+			&i.Document,
+			&i.Result,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingMassageBindingProposals = `-- name: ListPendingMassageBindingProposals :many
+SELECT o.actor_id, o.operation_id, o.proposal_id, o.event_id, o.specialist_id, o.request_hash, o.arguments, o.created_at, o.expires_at, o.result FROM shuttle_massage_binding_operations o
+WHERE o.actor_id=$1
+AND ($2::uuid='00000000-0000-0000-0000-000000000000' OR o.event_id=$2::uuid)
+AND o.result IS NULL AND o.expires_at>clock_timestamp()
+AND ($3::uuid='00000000-0000-0000-0000-000000000000'
+ OR (o.created_at,o.proposal_id)>(SELECT c.created_at,c.proposal_id FROM shuttle_massage_binding_operations c
+ WHERE c.actor_id=$1 AND c.proposal_id=$3::uuid))
+ORDER BY o.created_at,o.proposal_id LIMIT 21
+`
+
+type ListPendingMassageBindingProposalsParams struct {
+	ActorID uuid.UUID `json:"actor_id"`
+	EventID uuid.UUID `json:"event_id"`
+	AfterID uuid.UUID `json:"after_id"`
+}
+
+func (q *Queries) ListPendingMassageBindingProposals(ctx context.Context, arg ListPendingMassageBindingProposalsParams) ([]ShuttleMassageBindingOperation, error) {
+	rows, err := q.db.Query(ctx, listPendingMassageBindingProposals, arg.ActorID, arg.EventID, arg.AfterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassageBindingOperation
+	for rows.Next() {
+		var i ShuttleMassageBindingOperation
+		if err := rows.Scan(
+			&i.ActorID,
+			&i.OperationID,
+			&i.ProposalID,
+			&i.EventID,
+			&i.SpecialistID,
+			&i.RequestHash,
+			&i.Arguments,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Result,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRegistrationDetailsRequests = `-- name: ListRegistrationDetailsRequests :many
+SELECT id, user_id, event_id, event_version, event_timezone, legal_name_required, passport_number_required, created_at, expires_at, completed_at, completed_details_version, superseded_at FROM shuttle_registration_details_requests WHERE user_id=$1 AND id>$2 AND superseded_at IS NULL
+ORDER BY id LIMIT $3
+`
+
+type ListRegistrationDetailsRequestsParams struct {
+	UserID uuid.UUID `json:"user_id"`
+	ID     uuid.UUID `json:"id"`
+	Limit  int32     `json:"limit"`
+}
+
+func (q *Queries) ListRegistrationDetailsRequests(ctx context.Context, arg ListRegistrationDetailsRequestsParams) ([]ShuttleRegistrationDetailsRequest, error) {
+	rows, err := q.db.Query(ctx, listRegistrationDetailsRequests, arg.UserID, arg.ID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleRegistrationDetailsRequest
+	for rows.Next() {
+		var i ShuttleRegistrationDetailsRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.EventID,
+			&i.EventVersion,
+			&i.EventTimezone,
+			&i.LegalNameRequired,
+			&i.PassportNumberRequired,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.CompletedAt,
+			&i.CompletedDetailsVersion,
+			&i.SupersededAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskCompletedMassageBindings = `-- name: ListTaskCompletedMassageBindings :many
+SELECT o.actor_id, o.operation_id, o.proposal_id, o.event_id, o.specialist_id, o.request_hash, o.arguments, o.created_at, o.expires_at, o.result FROM shuttle_tasks t
+JOIN shuttle_massage_binding_operations o ON o.actor_id=t.user_id
+JOIN shuttle_events e ON e.id=o.event_id
+WHERE t.id=$1::uuid AND t.user_id=$2::uuid
+AND e.bot_id=$3 AND e.organization_id=$4
+AND o.created_at<t.created_at AND o.result IS NOT NULL
+AND (o.result->>'updated_at')::timestamptz<t.created_at
+ORDER BY (o.result->>'updated_at')::timestamptz DESC,o.proposal_id DESC LIMIT 5
+`
+
+type ListTaskCompletedMassageBindingsParams struct {
+	TaskID         uuid.UUID `json:"task_id"`
+	ActorID        uuid.UUID `json:"actor_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) ListTaskCompletedMassageBindings(ctx context.Context, arg ListTaskCompletedMassageBindingsParams) ([]ShuttleMassageBindingOperation, error) {
+	rows, err := q.db.Query(ctx, listTaskCompletedMassageBindings,
+		arg.TaskID,
+		arg.ActorID,
+		arg.BotID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassageBindingOperation
+	for rows.Next() {
+		var i ShuttleMassageBindingOperation
+		if err := rows.Scan(
+			&i.ActorID,
+			&i.OperationID,
+			&i.ProposalID,
+			&i.EventID,
+			&i.SpecialistID,
+			&i.RequestHash,
+			&i.Arguments,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Result,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskMassageOperations = `-- name: ListTaskMassageOperations :many
+SELECT op.operation_id,op.event_id,op.kind,op.source,op.preparation_id,op.booking_id,
+coalesce(op.result->>'state','')::text AS original_state,op.created_at
+FROM shuttle_tasks task JOIN shuttle_massage_operations op ON op.user_id=task.user_id
+JOIN shuttle_events e ON e.id=op.event_id
+WHERE task.id=$1::uuid AND task.user_id=$2::uuid
+AND e.bot_id=$3 AND e.organization_id=$4
+AND op.created_at<task.created_at ORDER BY op.created_at DESC,op.operation_id LIMIT 5
+`
+
+type ListTaskMassageOperationsParams struct {
+	TaskID         uuid.UUID `json:"task_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+type ListTaskMassageOperationsRow struct {
+	OperationID   uuid.UUID          `json:"operation_id"`
+	EventID       uuid.UUID          `json:"event_id"`
+	Kind          string             `json:"kind"`
+	Source        string             `json:"source"`
+	PreparationID uuid.UUID          `json:"preparation_id"`
+	BookingID     uuid.UUID          `json:"booking_id"`
+	OriginalState string             `json:"original_state"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListTaskMassageOperations(ctx context.Context, arg ListTaskMassageOperationsParams) ([]ListTaskMassageOperationsRow, error) {
+	rows, err := q.db.Query(ctx, listTaskMassageOperations,
+		arg.TaskID,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTaskMassageOperationsRow
+	for rows.Next() {
+		var i ListTaskMassageOperationsRow
+		if err := rows.Scan(
+			&i.OperationID,
+			&i.EventID,
+			&i.Kind,
+			&i.Source,
+			&i.PreparationID,
+			&i.BookingID,
+			&i.OriginalState,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskMassageSpecialistPreferenceOperations = `-- name: ListTaskMassageSpecialistPreferenceOperations :many
+SELECT op.user_id, op.operation_id, op.event_id, op.source, op.created_at, op.request_hash, op.result FROM shuttle_tasks task
+JOIN shuttle_massage_specialist_preference_operations op ON op.user_id=task.user_id
+JOIN shuttle_events e ON e.id=op.event_id
+WHERE task.id=$1::uuid AND task.user_id=$2::uuid
+AND e.bot_id=$3 AND e.organization_id=$4
+AND 'massage'=ANY(e.modules)
+AND EXISTS(SELECT 1 FROM shuttle_massage_specialist_bindings b
+ WHERE b.event_id=e.id AND b.user_id=task.user_id AND b.active)
+AND op.created_at<task.created_at
+ORDER BY op.created_at DESC,op.operation_id LIMIT 5
+`
+
+type ListTaskMassageSpecialistPreferenceOperationsParams struct {
+	TaskID         uuid.UUID `json:"task_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) ListTaskMassageSpecialistPreferenceOperations(ctx context.Context, arg ListTaskMassageSpecialistPreferenceOperationsParams) ([]ShuttleMassageSpecialistPreferenceOperation, error) {
+	rows, err := q.db.Query(ctx, listTaskMassageSpecialistPreferenceOperations,
+		arg.TaskID,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassageSpecialistPreferenceOperation
+	for rows.Next() {
+		var i ShuttleMassageSpecialistPreferenceOperation
+		if err := rows.Scan(
+			&i.UserID,
+			&i.OperationID,
+			&i.EventID,
+			&i.Source,
+			&i.CreatedAt,
+			&i.RequestHash,
+			&i.Result,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskPendingMassageBindings = `-- name: ListTaskPendingMassageBindings :many
+SELECT o.actor_id, o.operation_id, o.proposal_id, o.event_id, o.specialist_id, o.request_hash, o.arguments, o.created_at, o.expires_at, o.result FROM shuttle_tasks t
+JOIN shuttle_massage_binding_operations o ON o.actor_id=t.user_id
+JOIN shuttle_events e ON e.id=o.event_id
+WHERE t.id=$1::uuid AND t.user_id=$2::uuid
+AND e.bot_id=$3 AND e.organization_id=$4
+AND o.created_at<t.created_at AND o.result IS NULL AND o.expires_at>clock_timestamp()
+ORDER BY o.created_at DESC,o.proposal_id DESC LIMIT 5
+`
+
+type ListTaskPendingMassageBindingsParams struct {
+	TaskID         uuid.UUID `json:"task_id"`
+	ActorID        uuid.UUID `json:"actor_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) ListTaskPendingMassageBindings(ctx context.Context, arg ListTaskPendingMassageBindingsParams) ([]ShuttleMassageBindingOperation, error) {
+	rows, err := q.db.Query(ctx, listTaskPendingMassageBindings,
+		arg.TaskID,
+		arg.ActorID,
+		arg.BotID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassageBindingOperation
+	for rows.Next() {
+		var i ShuttleMassageBindingOperation
+		if err := rows.Scan(
+			&i.ActorID,
+			&i.OperationID,
+			&i.ProposalID,
+			&i.EventID,
+			&i.SpecialistID,
+			&i.RequestHash,
+			&i.Arguments,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Result,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskPendingMassagePreparations = `-- name: ListTaskPendingMassagePreparations :many
+SELECT p.id, p.event_id, p.user_id, p.operation_id, p.kind, p.source, p.created_at, p.request_hash, p.arguments, p.snapshot, p.booking_id, p.expires_at, p.consumed_at, p.consumed_result FROM shuttle_tasks task
+JOIN shuttle_massage_preparations p ON p.user_id=task.user_id
+JOIN shuttle_events e ON e.id=p.event_id
+WHERE task.id=$1::uuid AND task.user_id=$2::uuid
+AND e.bot_id=$3 AND e.organization_id=$4
+AND p.created_at<task.created_at AND p.consumed_at IS NULL AND p.expires_at>clock_timestamp()
+ORDER BY p.created_at DESC,p.id LIMIT 5
+`
+
+type ListTaskPendingMassagePreparationsParams struct {
+	TaskID         uuid.UUID `json:"task_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) ListTaskPendingMassagePreparations(ctx context.Context, arg ListTaskPendingMassagePreparationsParams) ([]ShuttleMassagePreparation, error) {
+	rows, err := q.db.Query(ctx, listTaskPendingMassagePreparations,
+		arg.TaskID,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassagePreparation
+	for rows.Next() {
+		var i ShuttleMassagePreparation
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.UserID,
+			&i.OperationID,
+			&i.Kind,
+			&i.Source,
+			&i.CreatedAt,
+			&i.RequestHash,
+			&i.Arguments,
+			&i.Snapshot,
+			&i.BookingID,
+			&i.ExpiresAt,
+			&i.ConsumedAt,
+			&i.ConsumedResult,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTaskResolutions = `-- name: ListTaskResolutions :many
 SELECT task_id, operation_id, actor, expected_version, resulting_version, reason, previous_state, created_at FROM shuttle_task_resolutions WHERE task_id=$1 ORDER BY created_at,operation_id
 `
@@ -742,8 +8479,43 @@ func (q *Queries) ListTaskResolutions(ctx context.Context, taskID uuid.UUID) ([]
 	return items, nil
 }
 
+const listTierUsage = `-- name: ListTierUsage :many
+SELECT r.role,COALESCE(t.tier_id,'')::text AS tier_id,count(*) AS count
+FROM shuttle_registrations r JOIN shuttle_passes p ON p.registration_id=r.id
+LEFT JOIN shuttle_pass_tiers t ON t.pass_id=p.id
+WHERE r.event_id=$1 AND r.state='assigned'
+GROUP BY r.role,COALESCE(t.tier_id,'')
+ORDER BY r.role,tier_id
+`
+
+type ListTierUsageRow struct {
+	Role   string `json:"role"`
+	TierID string `json:"tier_id"`
+	Count  int64  `json:"count"`
+}
+
+func (q *Queries) ListTierUsage(ctx context.Context, eventID uuid.UUID) ([]ListTierUsageRow, error) {
+	rows, err := q.db.Query(ctx, listTierUsage, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTierUsageRow
+	for rows.Next() {
+		var i ListTierUsageRow
+		if err := rows.Scan(&i.Role, &i.TierID, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockAdminTask = `-- name: LockAdminTask :one
-SELECT t.id, t.user_id, t.conversation_id, t.seq, t.request, t.state, t.route, t.target_task_id, t.target_run_id, t.run_id, t.auth_session_id, t.question_id, t.snapshot, t.version, t.fence, t.lease_owner, t.lease_until, t.created_at FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
+SELECT t.id, t.user_id, t.conversation_id, t.seq, t.request, t.state, t.route, t.target_task_id, t.target_run_id, t.run_id, t.auth_session_id, t.question_id, t.snapshot, t.version, t.fence, t.lease_owner, t.lease_until, t.created_at, t.response_started_at, t.response_first_chunk_seq, t.response_last_chunk_seq, t.response_delivered_at FROM shuttle_tasks t JOIN shuttle_users u ON u.id=t.user_id
 WHERE t.id=$1 AND u.bot_id=$2
 AND (u.zitadel_org='' OR u.zitadel_org=$3) FOR UPDATE OF t
 `
@@ -776,6 +8548,244 @@ func (q *Queries) LockAdminTask(ctx context.Context, arg LockAdminTaskParams) (S
 		&i.LeaseOwner,
 		&i.LeaseUntil,
 		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
+	)
+	return i, err
+}
+
+const lockAssignmentCanonicalPreparation = `-- name: LockAssignmentCanonicalPreparation :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, request_hash, expires_at, document FROM shuttle_assignment_preparations
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 FOR UPDATE
+`
+
+type LockAssignmentCanonicalPreparationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) LockAssignmentCanonicalPreparation(ctx context.Context, arg LockAssignmentCanonicalPreparationParams) (ShuttleAssignmentPreparation, error) {
+	row := q.db.QueryRow(ctx, lockAssignmentCanonicalPreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleAssignmentPreparation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+	)
+	return i, err
+}
+
+const lockAssignmentProposal = `-- name: LockAssignmentProposal :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, request_hash, expires_at, document FROM shuttle_assignment_preparations
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND proposal_id=$4 FOR UPDATE
+`
+
+type LockAssignmentProposalParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	ProposalID     uuid.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) LockAssignmentProposal(ctx context.Context, arg LockAssignmentProposalParams) (ShuttleAssignmentPreparation, error) {
+	row := q.db.QueryRow(ctx, lockAssignmentProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.ProposalID,
+	)
+	var i ShuttleAssignmentPreparation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+	)
+	return i, err
+}
+
+const lockAuthorityActor = `-- name: LockAuthorityActor :one
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE bot_id=$1 AND zitadel_org=$2 AND zitadel_subject=$3 AND NOT revoked FOR SHARE
+`
+
+type LockAuthorityActorParams struct {
+	BotID          int64  `json:"bot_id"`
+	ZitadelOrg     string `json:"zitadel_org"`
+	ZitadelSubject string `json:"zitadel_subject"`
+}
+
+func (q *Queries) LockAuthorityActor(ctx context.Context, arg LockAuthorityActorParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, lockAuthorityActor, arg.BotID, arg.ZitadelOrg, arg.ZitadelSubject)
+	var i ShuttleUser
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.TgUserID,
+		&i.Profile,
+		&i.ZitadelSubject,
+		&i.ZitadelOrg,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const lockAvatarDeliveryCanonicalResolution = `-- name: LockAvatarDeliveryCanonicalResolution :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, delivery_id, request_hash, expires_at, document, result FROM shuttle_avatar_delivery_resolutions
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 FOR UPDATE
+`
+
+type LockAvatarDeliveryCanonicalResolutionParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	OperationID    uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) LockAvatarDeliveryCanonicalResolution(ctx context.Context, arg LockAvatarDeliveryCanonicalResolutionParams) (ShuttleAvatarDeliveryResolution, error) {
+	row := q.db.QueryRow(ctx, lockAvatarDeliveryCanonicalResolution,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+	)
+	var i ShuttleAvatarDeliveryResolution
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.DeliveryID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+	)
+	return i, err
+}
+
+const lockAvatarDeliveryResolutionOwner = `-- name: LockAvatarDeliveryResolutionOwner :one
+SELECT id FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3 FOR SHARE
+`
+
+type LockAvatarDeliveryResolutionOwnerParams struct {
+	ID         uuid.UUID `json:"id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+func (q *Queries) LockAvatarDeliveryResolutionOwner(ctx context.Context, arg LockAvatarDeliveryResolutionOwnerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockAvatarDeliveryResolutionOwner, arg.ID, arg.BotID, arg.ZitadelOrg)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockAvatarDeliveryResolutionProposal = `-- name: LockAvatarDeliveryResolutionProposal :one
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, delivery_id, request_hash, expires_at, document, result FROM shuttle_avatar_delivery_resolutions
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND proposal_id=$4 FOR UPDATE
+`
+
+type LockAvatarDeliveryResolutionProposalParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	ProposalID     uuid.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) LockAvatarDeliveryResolutionProposal(ctx context.Context, arg LockAvatarDeliveryResolutionProposalParams) (ShuttleAvatarDeliveryResolution, error) {
+	row := q.db.QueryRow(ctx, lockAvatarDeliveryResolutionProposal,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.ProposalID,
+	)
+	var i ShuttleAvatarDeliveryResolution
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.DeliveryID,
+		&i.RequestHash,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+	)
+	return i, err
+}
+
+const lockAvatarDeliveryResolutionTarget = `-- name: LockAvatarDeliveryResolutionTarget :one
+SELECT n.id, n.artifact_id, n.user_id, n.telegram_user_id, n.state, n.version, n.attempt_id, n.receipt, n.next_attempt_at, n.created_at FROM shuttle_avatar_deliveries n JOIN shuttle_users u ON u.id=n.user_id
+WHERE n.id=$1 AND u.bot_id=$2 AND u.zitadel_org=$3 FOR UPDATE OF n
+`
+
+type LockAvatarDeliveryResolutionTargetParams struct {
+	ID         uuid.UUID `json:"id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+func (q *Queries) LockAvatarDeliveryResolutionTarget(ctx context.Context, arg LockAvatarDeliveryResolutionTargetParams) (ShuttleAvatarDelivery, error) {
+	row := q.db.QueryRow(ctx, lockAvatarDeliveryResolutionTarget, arg.ID, arg.BotID, arg.ZitadelOrg)
+	var i ShuttleAvatarDelivery
+	err := row.Scan(
+		&i.ID,
+		&i.ArtifactID,
+		&i.UserID,
+		&i.TelegramUserID,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockContextEvent = `-- name: LockContextEvent :one
+SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3 FOR SHARE
+`
+
+type LockContextEventParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) LockContextEvent(ctx context.Context, arg LockContextEventParams) (ShuttleEvent, error) {
+	row := q.db.QueryRow(ctx, lockContextEvent, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ShuttleEvent
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Timezone,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Modules,
+		&i.Version,
 	)
 	return i, err
 }
@@ -800,6 +8810,468 @@ func (q *Queries) LockConversation(ctx context.Context, id uuid.UUID) (ShuttleCo
 	return i, err
 }
 
+const lockEventOperation = `-- name: LockEventOperation :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text,0))
+`
+
+func (q *Queries) LockEventOperation(ctx context.Context, dollar_1 string) error {
+	_, err := q.db.Exec(ctx, lockEventOperation, dollar_1)
+	return err
+}
+
+const lockMassageReminder = `-- name: LockMassageReminder :one
+SELECT id, booking_id, kind, lead_seconds, due_at, next_attempt_at, state, version, attempt_id, payload, receipt, created_at FROM shuttle_massage_reminders WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) LockMassageReminder(ctx context.Context, id uuid.UUID) (ShuttleMassageReminder, error) {
+	row := q.db.QueryRow(ctx, lockMassageReminder, id)
+	var i ShuttleMassageReminder
+	err := row.Scan(
+		&i.ID,
+		&i.BookingID,
+		&i.Kind,
+		&i.LeadSeconds,
+		&i.DueAt,
+		&i.NextAttemptAt,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockMiniAppProof = `-- name: LockMiniAppProof :one
+SELECT id, bot_id, user_id, proof_hash, nonce_hash, key_generation, bearer_hash, state, subject, organization, auth_date, pending_until, expires_at, created_at FROM shuttle_miniapp_sessions WHERE bot_id=$1 AND proof_hash=$2 FOR UPDATE
+`
+
+type LockMiniAppProofParams struct {
+	BotID     int64  `json:"bot_id"`
+	ProofHash []byte `json:"proof_hash"`
+}
+
+func (q *Queries) LockMiniAppProof(ctx context.Context, arg LockMiniAppProofParams) (ShuttleMiniappSession, error) {
+	row := q.db.QueryRow(ctx, lockMiniAppProof, arg.BotID, arg.ProofHash)
+	var i ShuttleMiniappSession
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.UserID,
+		&i.ProofHash,
+		&i.NonceHash,
+		&i.KeyGeneration,
+		&i.BearerHash,
+		&i.State,
+		&i.Subject,
+		&i.Organization,
+		&i.AuthDate,
+		&i.PendingUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockMiniAppSession = `-- name: LockMiniAppSession :one
+SELECT id, bot_id, user_id, proof_hash, nonce_hash, key_generation, bearer_hash, state, subject, organization, auth_date, pending_until, expires_at, created_at FROM shuttle_miniapp_sessions WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) LockMiniAppSession(ctx context.Context, id uuid.UUID) (ShuttleMiniappSession, error) {
+	row := q.db.QueryRow(ctx, lockMiniAppSession, id)
+	var i ShuttleMiniappSession
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.UserID,
+		&i.ProofHash,
+		&i.NonceHash,
+		&i.KeyGeneration,
+		&i.BearerHash,
+		&i.State,
+		&i.Subject,
+		&i.Organization,
+		&i.AuthDate,
+		&i.PendingUntil,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const lockOrderEvidenceOwner = `-- name: LockOrderEvidenceOwner :one
+SELECT id FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3 FOR SHARE
+`
+
+type LockOrderEvidenceOwnerParams struct {
+	ID         uuid.UUID `json:"id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+func (q *Queries) LockOrderEvidenceOwner(ctx context.Context, arg LockOrderEvidenceOwnerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockOrderEvidenceOwner, arg.ID, arg.BotID, arg.ZitadelOrg)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockRegistrationEvent = `-- name: LockRegistrationEvent :one
+SELECT id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version FROM shuttle_events WHERE id=$1 AND bot_id=$2 AND organization_id=$3 FOR UPDATE
+`
+
+type LockRegistrationEventParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) LockRegistrationEvent(ctx context.Context, arg LockRegistrationEventParams) (ShuttleEvent, error) {
+	row := q.db.QueryRow(ctx, lockRegistrationEvent, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ShuttleEvent
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Timezone,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Modules,
+		&i.Version,
+	)
+	return i, err
+}
+
+const lockRegistrationUser = `-- name: LockRegistrationUser :one
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=$1 AND bot_id=$2 AND zitadel_org=$3 AND NOT revoked FOR SHARE
+`
+
+type LockRegistrationUserParams struct {
+	ID         uuid.UUID `json:"id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+func (q *Queries) LockRegistrationUser(ctx context.Context, arg LockRegistrationUserParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, lockRegistrationUser, arg.ID, arg.BotID, arg.ZitadelOrg)
+	var i ShuttleUser
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.TgUserID,
+		&i.Profile,
+		&i.ZitadelSubject,
+		&i.ZitadelOrg,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const lockResponseTask = `-- name: LockResponseTask :exec
+SELECT id FROM shuttle_tasks WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) LockResponseTask(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockResponseTask, id)
+	return err
+}
+
+const lockRevocationUsers = `-- name: LockRevocationUsers :many
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=ANY($1::uuid[])
+AND bot_id=$2 AND zitadel_org=$3
+ORDER BY id FOR UPDATE
+`
+
+type LockRevocationUsersParams struct {
+	Ids            []uuid.UUID `json:"ids"`
+	BotID          int64       `json:"bot_id"`
+	OrganizationID string      `json:"organization_id"`
+}
+
+func (q *Queries) LockRevocationUsers(ctx context.Context, arg LockRevocationUsersParams) ([]ShuttleUser, error) {
+	rows, err := q.db.Query(ctx, lockRevocationUsers, arg.Ids, arg.BotID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleUser
+	for rows.Next() {
+		var i ShuttleUser
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.TgUserID,
+			&i.Profile,
+			&i.ZitadelSubject,
+			&i.ZitadelOrg,
+			&i.Revoked,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockSchedulableMassageReminders = `-- name: LockSchedulableMassageReminders :many
+SELECT id FROM shuttle_massage_reminders
+WHERE state IN ('pending','retryable') AND
+ ($1::uuid='00000000-0000-0000-0000-000000000000' OR booking_id=$1::uuid)
+ORDER BY id FOR UPDATE
+`
+
+func (q *Queries) LockSchedulableMassageReminders(ctx context.Context, bookingID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockSchedulableMassageReminders, bookingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockSettings = `-- name: LockSettings :one
+SELECT id, version, document FROM shuttle_settings WHERE id=true FOR UPDATE
+`
+
+func (q *Queries) LockSettings(ctx context.Context) (ShuttleSetting, error) {
+	row := q.db.QueryRow(ctx, lockSettings)
+	var i ShuttleSetting
+	err := row.Scan(&i.ID, &i.Version, &i.Document)
+	return i, err
+}
+
+const lockTelegramPrelink = `-- name: LockTelegramPrelink :one
+SELECT id, bot_id, user_id, provider_issuer, assertion_jti, assertion_hash, organization, provider_id, external_subject, expires_at, state, subject, created_at, completed_at FROM shuttle_telegram_prelinks WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) LockTelegramPrelink(ctx context.Context, id uuid.UUID) (ShuttleTelegramPrelink, error) {
+	row := q.db.QueryRow(ctx, lockTelegramPrelink, id)
+	var i ShuttleTelegramPrelink
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.UserID,
+		&i.ProviderIssuer,
+		&i.AssertionJti,
+		&i.AssertionHash,
+		&i.Organization,
+		&i.ProviderID,
+		&i.ExternalSubject,
+		&i.ExpiresAt,
+		&i.State,
+		&i.Subject,
+		&i.CreatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const lockTelegramPrelinkProof = `-- name: LockTelegramPrelinkProof :one
+SELECT id, bot_id, user_id, provider_issuer, assertion_jti, assertion_hash, organization, provider_id, external_subject, expires_at, state, subject, created_at, completed_at FROM shuttle_telegram_prelinks WHERE provider_issuer=$1 AND assertion_jti=$2 FOR UPDATE
+`
+
+type LockTelegramPrelinkProofParams struct {
+	ProviderIssuer string `json:"provider_issuer"`
+	AssertionJti   string `json:"assertion_jti"`
+}
+
+func (q *Queries) LockTelegramPrelinkProof(ctx context.Context, arg LockTelegramPrelinkProofParams) (ShuttleTelegramPrelink, error) {
+	row := q.db.QueryRow(ctx, lockTelegramPrelinkProof, arg.ProviderIssuer, arg.AssertionJti)
+	var i ShuttleTelegramPrelink
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.UserID,
+		&i.ProviderIssuer,
+		&i.AssertionJti,
+		&i.AssertionHash,
+		&i.Organization,
+		&i.ProviderID,
+		&i.ExternalSubject,
+		&i.ExpiresAt,
+		&i.State,
+		&i.Subject,
+		&i.CreatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const lockTelegramUser = `-- name: LockTelegramUser :one
+SELECT id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked FROM shuttle_users WHERE id=$1 AND bot_id=$2 FOR UPDATE
+`
+
+type LockTelegramUserParams struct {
+	ID    uuid.UUID `json:"id"`
+	BotID int64     `json:"bot_id"`
+}
+
+func (q *Queries) LockTelegramUser(ctx context.Context, arg LockTelegramUserParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, lockTelegramUser, arg.ID, arg.BotID)
+	var i ShuttleUser
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.TgUserID,
+		&i.Profile,
+		&i.ZitadelSubject,
+		&i.ZitadelOrg,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const lockUserEventContext = `-- name: LockUserEventContext :one
+SELECT user_id, event_id, version FROM shuttle_user_event_context WHERE user_id=$1 FOR UPDATE
+`
+
+func (q *Queries) LockUserEventContext(ctx context.Context, userID uuid.UUID) (ShuttleUserEventContext, error) {
+	row := q.db.QueryRow(ctx, lockUserEventContext, userID)
+	var i ShuttleUserEventContext
+	err := row.Scan(&i.UserID, &i.EventID, &i.Version)
+	return i, err
+}
+
+const massageBookingsOutsideEvent = `-- name: MassageBookingsOutsideEvent :one
+SELECT EXISTS(SELECT 1 FROM shuttle_massage_bookings WHERE event_id=$1 AND state='booked'
+AND occupancy_ends_at>clock_timestamp()
+AND (starts_at<$2::timestamptz OR occupancy_ends_at>$3::timestamptz)) AS conflicts
+`
+
+type MassageBookingsOutsideEventParams struct {
+	EventID  uuid.UUID          `json:"event_id"`
+	StartsAt pgtype.Timestamptz `json:"starts_at"`
+	EndsAt   pgtype.Timestamptz `json:"ends_at"`
+}
+
+func (q *Queries) MassageBookingsOutsideEvent(ctx context.Context, arg MassageBookingsOutsideEventParams) (bool, error) {
+	row := q.db.QueryRow(ctx, massageBookingsOutsideEvent, arg.EventID, arg.StartsAt, arg.EndsAt)
+	var conflicts bool
+	err := row.Scan(&conflicts)
+	return conflicts, err
+}
+
+const massageReminderRecipient = `-- name: MassageReminderRecipient :one
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked FROM shuttle_massage_reminders n
+JOIN shuttle_massage_bookings b ON b.id=n.booking_id JOIN shuttle_events e ON e.id=b.event_id
+JOIN shuttle_users u ON u.id=b.user_id
+WHERE n.id=$1::uuid AND e.bot_id=$2 AND e.organization_id=$3
+AND 'massage'=ANY(e.modules) AND b.state='booked' AND NOT u.revoked AND u.zitadel_subject<>''
+AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id
+`
+
+type MassageReminderRecipientParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) MassageReminderRecipient(ctx context.Context, arg MassageReminderRecipientParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, massageReminderRecipient, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ShuttleUser
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.TgUserID,
+		&i.Profile,
+		&i.ZitadelSubject,
+		&i.ZitadelOrg,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const massageScheduleVersion = `-- name: MassageScheduleVersion :one
+SELECT version FROM shuttle_massage_schedules WHERE event_id=$1
+`
+
+func (q *Queries) MassageScheduleVersion(ctx context.Context, eventID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, massageScheduleVersion, eventID)
+	var version int64
+	err := row.Scan(&version)
+	return version, err
+}
+
+const massageSpecialistNotificationRecipient = `-- name: MassageSpecialistNotificationRecipient :one
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked FROM shuttle_massage_specialist_notifications n
+JOIN shuttle_massage_bookings b ON b.id=n.booking_id JOIN shuttle_events e ON e.id=b.event_id
+JOIN shuttle_users u ON u.id=n.recipient_id AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id
+JOIN shuttle_massage_specialist_bindings s ON s.event_id=b.event_id AND s.specialist_id=b.specialist_id
+ AND s.user_id=n.recipient_id AND s.active AND s.version=n.binding_version
+LEFT JOIN shuttle_massage_specialist_preferences p ON p.user_id=u.id
+WHERE n.id=$1::uuid AND e.bot_id=$2 AND e.organization_id=$3
+AND 'massage'=ANY(e.modules) AND NOT u.revoked AND u.zitadel_subject<>''
+AND ((n.kind IN ('booked','cancelled') AND coalesce(p.notify_bookings,true)
+ AND coalesce(p.notify_bookings_version,0)=n.preference_version
+ AND ((n.kind='booked' AND b.state='booked') OR (n.kind='cancelled' AND b.state='cancelled')))
+ OR (n.kind='soon' AND b.state='booked' AND e.ends_at>clock_timestamp()
+ AND coalesce(p.notify_next,true) AND coalesce(p.notify_next_version,0)=n.preference_version))
+`
+
+type MassageSpecialistNotificationRecipientParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) MassageSpecialistNotificationRecipient(ctx context.Context, arg MassageSpecialistNotificationRecipientParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, massageSpecialistNotificationRecipient, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ShuttleUser
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.TgUserID,
+		&i.Profile,
+		&i.ZitadelSubject,
+		&i.ZitadelOrg,
+		&i.Revoked,
+	)
+	return i, err
+}
+
+const massageWindowPeakTableUse = `-- name: MassageWindowPeakTableUse :one
+WITH boundaries AS (
+ SELECT greatest(b.starts_at,$1::timestamptz) AS at,1 AS delta
+ FROM shuttle_massage_bookings b WHERE b.event_id=$2::uuid AND b.state='booked' AND b.requires_table AND b.occupancy_ends_at>clock_timestamp()
+ AND b.starts_at<$3::timestamptz AND b.occupancy_ends_at>$1::timestamptz
+ UNION ALL
+ SELECT least(b.occupancy_ends_at,$3::timestamptz) AS at,-1 AS delta
+ FROM shuttle_massage_bookings b WHERE b.event_id=$2::uuid AND b.state='booked' AND b.requires_table AND b.occupancy_ends_at>clock_timestamp()
+ AND b.starts_at<$3::timestamptz AND b.occupancy_ends_at>$1::timestamptz
+), changes AS (SELECT at,sum(delta) AS delta FROM boundaries GROUP BY at),
+loads AS (SELECT sum(delta) OVER(ORDER BY at) AS used FROM changes)
+SELECT coalesce(max(used),0)::bigint AS peak FROM loads
+`
+
+type MassageWindowPeakTableUseParams struct {
+	FromAt  pgtype.Timestamptz `json:"from_at"`
+	EventID uuid.UUID          `json:"event_id"`
+	UntilAt pgtype.Timestamptz `json:"until_at"`
+}
+
+func (q *Queries) MassageWindowPeakTableUse(ctx context.Context, arg MassageWindowPeakTableUseParams) (int64, error) {
+	row := q.db.QueryRow(ctx, massageWindowPeakTableUse, arg.FromAt, arg.EventID, arg.UntilAt)
+	var peak int64
+	err := row.Scan(&peak)
+	return peak, err
+}
+
 const nextSequence = `-- name: NextSequence :one
 UPDATE shuttle_conversations SET next_seq=next_seq+1 WHERE id=$1 RETURNING next_seq
 `
@@ -811,10 +9283,481 @@ func (q *Queries) NextSequence(ctx context.Context, id uuid.UUID) (int64, error)
 	return next_seq, err
 }
 
+const orderEvidenceEvent = `-- name: OrderEvidenceEvent :one
+SELECT ev.event_id FROM shuttle_order_evidence ev JOIN shuttle_events e ON e.id=ev.event_id
+WHERE ev.id=$1 AND e.bot_id=$2 AND e.organization_id=$3
+`
+
+type OrderEvidenceEventParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) OrderEvidenceEvent(ctx context.Context, arg OrderEvidenceEventParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, orderEvidenceEvent, arg.ID, arg.BotID, arg.OrganizationID)
+	var event_id uuid.UUID
+	err := row.Scan(&event_id)
+	return event_id, err
+}
+
+const orderNotificationRecipient = `-- name: OrderNotificationRecipient :one
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked,EXISTS(SELECT 1 FROM shuttle_event_authorities a
+WHERE a.event_id=e.id AND a.user_id=u.id AND a.role IN ('ambassador','administrator')) AS reviewer
+FROM shuttle_order_evidence_notices n
+JOIN shuttle_order_evidence ev ON ev.id=n.evidence_id
+JOIN shuttle_events e ON e.id=ev.event_id
+JOIN shuttle_users u ON u.id=n.recipient_id
+WHERE n.id=$1 AND e.bot_id=$2 AND e.organization_id=$3 AND 'orders'=ANY(e.modules)
+AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id AND NOT u.revoked AND u.zitadel_subject<>''
+AND n.kind=ev.state
+AND (u.id=ev.user_id OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
+ WHERE a.event_id=e.id AND a.user_id=u.id AND a.role IN ('ambassador','administrator')))
+`
+
+type OrderNotificationRecipientParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+type OrderNotificationRecipientRow struct {
+	ShuttleUser ShuttleUser `json:"shuttle_user"`
+	Reviewer    bool        `json:"reviewer"`
+}
+
+func (q *Queries) OrderNotificationRecipient(ctx context.Context, arg OrderNotificationRecipientParams) (OrderNotificationRecipientRow, error) {
+	row := q.db.QueryRow(ctx, orderNotificationRecipient, arg.ID, arg.BotID, arg.OrganizationID)
+	var i OrderNotificationRecipientRow
+	err := row.Scan(
+		&i.ShuttleUser.ID,
+		&i.ShuttleUser.BotID,
+		&i.ShuttleUser.TgUserID,
+		&i.ShuttleUser.Profile,
+		&i.ShuttleUser.ZitadelSubject,
+		&i.ShuttleUser.ZitadelOrg,
+		&i.ShuttleUser.Revoked,
+		&i.Reviewer,
+	)
+	return i, err
+}
+
+const orderResourceUsage = `-- name: OrderResourceUsage :many
+SELECT resource_id,sum(units)::bigint AS units FROM shuttle_order_allocations
+WHERE event_id=$1 AND state IN ('held','occupied') GROUP BY resource_id ORDER BY resource_id
+`
+
+type OrderResourceUsageRow struct {
+	ResourceID string `json:"resource_id"`
+	Units      int64  `json:"units"`
+}
+
+func (q *Queries) OrderResourceUsage(ctx context.Context, eventID uuid.UUID) ([]OrderResourceUsageRow, error) {
+	rows, err := q.db.Query(ctx, orderResourceUsage, eventID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OrderResourceUsageRow
+	for rows.Next() {
+		var i OrderResourceUsageRow
+		if err := rows.Scan(&i.ResourceID, &i.Units); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const outboxMetrics = `-- name: OutboxMetrics :many
+SELECT (CASE WHEN state IN ('pending','retryable','send_inflight','delivery_unknown')
+ THEN state ELSE 'other' END)::text AS metric_state,
+count(*)::bigint AS chunk_count,
+coalesce(extract(epoch FROM (statement_timestamp()-min(created_at))),0)::double precision AS created_age_seconds
+FROM shuttle_outbox
+WHERE state NOT IN ('delivered','delivery_blocked','delivery_failed')
+GROUP BY metric_state ORDER BY metric_state
+`
+
+type OutboxMetricsRow struct {
+	MetricState       string  `json:"metric_state"`
+	ChunkCount        int64   `json:"chunk_count"`
+	CreatedAgeSeconds float64 `json:"created_age_seconds"`
+}
+
+func (q *Queries) OutboxMetrics(ctx context.Context) ([]OutboxMetricsRow, error) {
+	rows, err := q.db.Query(ctx, outboxMetrics)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OutboxMetricsRow
+	for rows.Next() {
+		var i OutboxMetricsRow
+		if err := rows.Scan(&i.MetricState, &i.ChunkCount, &i.CreatedAgeSeconds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ownActiveMassageSpecialistIDs = `-- name: OwnActiveMassageSpecialistIDs :many
+SELECT specialist_id FROM shuttle_massage_specialist_bindings
+WHERE event_id=$1 AND user_id=$2 AND active ORDER BY specialist_id
+`
+
+type OwnActiveMassageSpecialistIDsParams struct {
+	EventID uuid.UUID `json:"event_id"`
+	UserID  uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) OwnActiveMassageSpecialistIDs(ctx context.Context, arg OwnActiveMassageSpecialistIDsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, ownActiveMassageSpecialistIDs, arg.EventID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var specialist_id string
+		if err := rows.Scan(&specialist_id); err != nil {
+			return nil, err
+		}
+		items = append(items, specialist_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ownerHistoryPage = `-- name: OwnerHistoryPage :many
+SELECT id,source_instance,collection_name,source_key,source_role,first_archive_id,first_line,projection_version,preview::jsonb
+FROM shuttle_legacy_history_previews WHERE bot_id=$1 AND organization_id=$2 AND owner_telegram_id=$3 AND id>$4
+ORDER BY id LIMIT $5
+`
+
+type OwnerHistoryPageParams struct {
+	BotID           int64     `json:"bot_id"`
+	OrganizationID  string    `json:"organization_id"`
+	OwnerTelegramID int64     `json:"owner_telegram_id"`
+	ID              uuid.UUID `json:"id"`
+	Limit           int32     `json:"limit"`
+}
+
+type OwnerHistoryPageRow struct {
+	ID                uuid.UUID `json:"id"`
+	SourceInstance    string    `json:"source_instance"`
+	CollectionName    string    `json:"collection_name"`
+	SourceKey         string    `json:"source_key"`
+	SourceRole        string    `json:"source_role"`
+	FirstArchiveID    uuid.UUID `json:"first_archive_id"`
+	FirstLine         int32     `json:"first_line"`
+	ProjectionVersion string    `json:"projection_version"`
+	Preview           []byte    `json:"preview"`
+}
+
+func (q *Queries) OwnerHistoryPage(ctx context.Context, arg OwnerHistoryPageParams) ([]OwnerHistoryPageRow, error) {
+	rows, err := q.db.Query(ctx, ownerHistoryPage,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.OwnerTelegramID,
+		arg.ID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OwnerHistoryPageRow
+	for rows.Next() {
+		var i OwnerHistoryPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceInstance,
+			&i.CollectionName,
+			&i.SourceKey,
+			&i.SourceRole,
+			&i.FirstArchiveID,
+			&i.FirstLine,
+			&i.ProjectionVersion,
+			&i.Preview,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ownerHistoryRegistrationSource = `-- name: OwnerHistoryRegistrationSource :one
+SELECT h.id, h.bot_id, h.organization_id, h.source_instance, h.collection_name, h.source_key, h.source_role, h.owner_telegram_id, h.canonical_hash, h.projection_version, h.projection, h.first_archive_id, h.first_line,a.id, a.bot_id, a.organization_id, a.sha256, a.size_bytes, a.validation, a.created_by, a.created_at
+FROM shuttle_legacy_history_records h
+JOIN shuttle_legacy_history_memberships m ON m.record_id=h.id AND m.archive_id=h.first_archive_id
+ AND m.source_role=h.source_role AND m.source_line=h.first_line
+JOIN shuttle_legacy_archives a ON a.id=m.archive_id AND a.bot_id=h.bot_id AND a.organization_id=h.organization_id
+JOIN shuttle_legacy_history_applications app ON app.archive_id=a.id AND app.projection_version=h.projection_version
+WHERE h.id=$1 AND h.bot_id=$2 AND h.organization_id=$3 AND h.owner_telegram_id=$4 AND h.source_role='users'
+`
+
+type OwnerHistoryRegistrationSourceParams struct {
+	ID              uuid.UUID `json:"id"`
+	BotID           int64     `json:"bot_id"`
+	OrganizationID  string    `json:"organization_id"`
+	OwnerTelegramID int64     `json:"owner_telegram_id"`
+}
+
+type OwnerHistoryRegistrationSourceRow struct {
+	ShuttleLegacyHistoryRecord ShuttleLegacyHistoryRecord `json:"shuttle_legacy_history_record"`
+	ShuttleLegacyArchive       ShuttleLegacyArchive       `json:"shuttle_legacy_archive"`
+}
+
+func (q *Queries) OwnerHistoryRegistrationSource(ctx context.Context, arg OwnerHistoryRegistrationSourceParams) (OwnerHistoryRegistrationSourceRow, error) {
+	row := q.db.QueryRow(ctx, ownerHistoryRegistrationSource,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.OwnerTelegramID,
+	)
+	var i OwnerHistoryRegistrationSourceRow
+	err := row.Scan(
+		&i.ShuttleLegacyHistoryRecord.ID,
+		&i.ShuttleLegacyHistoryRecord.BotID,
+		&i.ShuttleLegacyHistoryRecord.OrganizationID,
+		&i.ShuttleLegacyHistoryRecord.SourceInstance,
+		&i.ShuttleLegacyHistoryRecord.CollectionName,
+		&i.ShuttleLegacyHistoryRecord.SourceKey,
+		&i.ShuttleLegacyHistoryRecord.SourceRole,
+		&i.ShuttleLegacyHistoryRecord.OwnerTelegramID,
+		&i.ShuttleLegacyHistoryRecord.CanonicalHash,
+		&i.ShuttleLegacyHistoryRecord.ProjectionVersion,
+		&i.ShuttleLegacyHistoryRecord.Projection,
+		&i.ShuttleLegacyHistoryRecord.FirstArchiveID,
+		&i.ShuttleLegacyHistoryRecord.FirstLine,
+		&i.ShuttleLegacyArchive.ID,
+		&i.ShuttleLegacyArchive.BotID,
+		&i.ShuttleLegacyArchive.OrganizationID,
+		&i.ShuttleLegacyArchive.Sha256,
+		&i.ShuttleLegacyArchive.SizeBytes,
+		&i.ShuttleLegacyArchive.Validation,
+		&i.ShuttleLegacyArchive.CreatedBy,
+		&i.ShuttleLegacyArchive.CreatedAt,
+	)
+	return i, err
+}
+
+const ownerHistoryText = `-- name: OwnerHistoryText :one
+SELECT substring(projection->>'content' FROM $5::integer+1 FOR 4096)::text AS content,
+length(projection->>'content')::integer AS total_runes
+FROM shuttle_legacy_history_records WHERE id=$1 AND bot_id=$2 AND organization_id=$3 AND owner_telegram_id=$4
+AND projection->>'kind'='message'
+`
+
+type OwnerHistoryTextParams struct {
+	ID              uuid.UUID `json:"id"`
+	BotID           int64     `json:"bot_id"`
+	OrganizationID  string    `json:"organization_id"`
+	OwnerTelegramID int64     `json:"owner_telegram_id"`
+	StartRune       int32     `json:"start_rune"`
+}
+
+type OwnerHistoryTextRow struct {
+	Content    string `json:"content"`
+	TotalRunes int32  `json:"total_runes"`
+}
+
+func (q *Queries) OwnerHistoryText(ctx context.Context, arg OwnerHistoryTextParams) (OwnerHistoryTextRow, error) {
+	row := q.db.QueryRow(ctx, ownerHistoryText,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.OwnerTelegramID,
+		arg.StartRune,
+	)
+	var i OwnerHistoryTextRow
+	err := row.Scan(&i.Content, &i.TotalRunes)
+	return i, err
+}
+
+const pairInvitationNotificationAllowed = `-- name: PairInvitationNotificationAllowed :one
+SELECT EXISTS(SELECT 1 FROM shuttle_pair_notifications n
+JOIN shuttle_pair_invitations i ON i.id=n.invitation_id
+JOIN shuttle_events e ON e.id=i.event_id
+JOIN shuttle_registrations r ON r.id=i.inviter_registration_id
+JOIN shuttle_users inviter ON inviter.id=r.user_id
+JOIN shuttle_users target ON target.id=i.target_user_id
+JOIN shuttle_users recipient ON recipient.id=n.recipient_id
+WHERE n.id=$1 AND n.bot_id=$2 AND n.organization_id=$3
+AND e.bot_id=n.bot_id AND e.organization_id=n.organization_id
+AND recipient.bot_id=n.bot_id AND recipient.zitadel_org=n.organization_id
+AND recipient.zitadel_subject<>'' AND NOT recipient.revoked
+AND inviter.bot_id=n.bot_id AND inviter.zitadel_org=n.organization_id
+AND target.bot_id=n.bot_id AND target.zitadel_org=n.organization_id
+AND n.invitation_version=i.version AND n.kind=i.state
+AND recipient.id=CASE WHEN n.kind IN ('pending','revoked') THEN target.id ELSE inviter.id END
+AND (n.kind NOT IN ('pending','accepted') OR (NOT inviter.revoked AND NOT target.revoked))
+AND (n.kind<>'pending' OR ('registrations'=ANY(e.modules) AND i.expires_at>clock_timestamp()))
+AND (n.kind<>'accepted' OR EXISTS(SELECT 1 FROM shuttle_pairs p WHERE p.id=i.pair_id AND p.state IN ('waitlisted','assigned')))
+) AS allowed
+`
+
+type PairInvitationNotificationAllowedParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) PairInvitationNotificationAllowed(ctx context.Context, arg PairInvitationNotificationAllowedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, pairInvitationNotificationAllowed, arg.ID, arg.BotID, arg.OrganizationID)
+	var allowed bool
+	err := row.Scan(&allowed)
+	return allowed, err
+}
+
+const pairMemberMatches = `-- name: PairMemberMatches :one
+SELECT EXISTS(SELECT 1 FROM shuttle_active_pair_members
+WHERE pair_id=$1 AND event_id=$2 AND registration_id=$3 AND role=$4) AS matches
+`
+
+type PairMemberMatchesParams struct {
+	PairID         uuid.UUID `json:"pair_id"`
+	EventID        uuid.UUID `json:"event_id"`
+	RegistrationID uuid.UUID `json:"registration_id"`
+	Role           string    `json:"role"`
+}
+
+func (q *Queries) PairMemberMatches(ctx context.Context, arg PairMemberMatchesParams) (bool, error) {
+	row := q.db.QueryRow(ctx, pairMemberMatches,
+		arg.PairID,
+		arg.EventID,
+		arg.RegistrationID,
+		arg.Role,
+	)
+	var matches bool
+	err := row.Scan(&matches)
+	return matches, err
+}
+
+const pairRegistrationHeld = `-- name: PairRegistrationHeld :one
+SELECT EXISTS(SELECT 1 FROM shuttle_active_pair_members WHERE registration_id=$1)
+OR EXISTS(SELECT 1 FROM shuttle_pair_invitations WHERE inviter_registration_id=$1 AND state='pending') AS held
+`
+
+func (q *Queries) PairRegistrationHeld(ctx context.Context, registrationID uuid.UUID) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, pairRegistrationHeld, registrationID)
+	var held pgtype.Bool
+	err := row.Scan(&held)
+	return held, err
+}
+
+const paymentEvidenceEvent = `-- name: PaymentEvidenceEvent :one
+SELECT ev.event_id FROM shuttle_payment_evidence ev JOIN shuttle_events e ON e.id=ev.event_id
+WHERE ev.id=$1 AND e.bot_id=$2 AND e.organization_id=$3
+`
+
+type PaymentEvidenceEventParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) PaymentEvidenceEvent(ctx context.Context, arg PaymentEvidenceEventParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, paymentEvidenceEvent, arg.ID, arg.BotID, arg.OrganizationID)
+	var event_id uuid.UUID
+	err := row.Scan(&event_id)
+	return event_id, err
+}
+
+const paymentNotificationAllowed = `-- name: PaymentNotificationAllowed :one
+SELECT EXISTS(SELECT 1 FROM shuttle_payment_notifications n
+JOIN shuttle_payment_evidence ev ON ev.id=n.evidence_id
+JOIN shuttle_events e ON e.id=ev.event_id
+JOIN shuttle_users recipient ON recipient.id=n.recipient_id
+JOIN shuttle_users owner ON owner.id=ev.user_id
+WHERE n.id=$1 AND n.bot_id=$2 AND n.organization_id=$3
+AND e.bot_id=n.bot_id AND e.organization_id=n.organization_id AND 'registrations'=ANY(e.modules)
+AND recipient.bot_id=n.bot_id AND recipient.zitadel_org=n.organization_id
+AND recipient.zitadel_subject<>'' AND NOT recipient.revoked
+AND owner.bot_id=n.bot_id AND owner.zitadel_org=n.organization_id AND NOT owner.revoked
+AND ((n.kind='submitted' AND NOT EXISTS(SELECT 1 FROM shuttle_payment_reviews rv WHERE rv.evidence_id=ev.id)
+AND EXISTS(SELECT 1 FROM shuttle_event_authorities a WHERE a.event_id=e.id AND a.user_id=recipient.id
+AND a.role IN ('ambassador','administrator')))
+OR (n.kind IN ('confirmed','rejected') AND recipient.id=owner.id))) AS allowed
+`
+
+type PaymentNotificationAllowedParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) PaymentNotificationAllowed(ctx context.Context, arg PaymentNotificationAllowedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, paymentNotificationAllowed, arg.ID, arg.BotID, arg.OrganizationID)
+	var allowed bool
+	err := row.Scan(&allowed)
+	return allowed, err
+}
+
+const paymentTotal = `-- name: PaymentTotal :one
+SELECT coalesce(sum(rv.amount_minor),0)::bigint AS amount FROM shuttle_payment_reviews rv
+JOIN shuttle_payment_evidence ev ON ev.id=rv.evidence_id WHERE ev.pass_id=$1 AND rv.decision='confirmed'
+`
+
+func (q *Queries) PaymentTotal(ctx context.Context, passID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, paymentTotal, passID)
+	var amount int64
+	err := row.Scan(&amount)
+	return amount, err
+}
+
+const pendingOutgoingPairInvitation = `-- name: PendingOutgoingPairInvitation :one
+SELECT id, event_id, inviter_registration_id, target_user_id, state, version, created_at, expires_at, decided_at, pair_id FROM shuttle_pair_invitations WHERE inviter_registration_id=$1 AND state='pending'
+`
+
+func (q *Queries) PendingOutgoingPairInvitation(ctx context.Context, inviterRegistrationID uuid.UUID) (ShuttlePairInvitation, error) {
+	row := q.db.QueryRow(ctx, pendingOutgoingPairInvitation, inviterRegistrationID)
+	var i ShuttlePairInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.InviterRegistrationID,
+		&i.TargetUserID,
+		&i.State,
+		&i.Version,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.DecidedAt,
+		&i.PairID,
+	)
+	return i, err
+}
+
+const pendingPassEvidence = `-- name: PendingPassEvidence :one
+SELECT count(*)::bigint FROM shuttle_payment_evidence ev
+WHERE ev.pass_id=$1 AND NOT EXISTS(SELECT 1 FROM shuttle_payment_reviews rv WHERE rv.evidence_id=ev.id)
+`
+
+func (q *Queries) PendingPassEvidence(ctx context.Context, passID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, pendingPassEvidence, passID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const promoteTask = `-- name: PromoteTask :one
 UPDATE shuttle_tasks SET route='new_run',target_task_id='00000000-0000-0000-0000-000000000000',target_run_id='',run_id='',auth_session_id='',question_id='',snapshot='{}',state='accepted',version=version+1
 WHERE id=$1 AND lease_owner=$2 AND fence=$3 AND lease_until>now() AND route='input' AND request->>'kind'='message'
-RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at
+RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at, response_started_at, response_first_chunk_seq, response_last_chunk_seq, response_delivered_at
 `
 
 type PromoteTaskParams struct {
@@ -845,8 +9788,2013 @@ func (q *Queries) PromoteTask(ctx context.Context, arg PromoteTaskParams) (Shutt
 		&i.LeaseOwner,
 		&i.LeaseUntil,
 		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
 	)
 	return i, err
+}
+
+const pruneMiniAppSessions = `-- name: PruneMiniAppSessions :execrows
+DELETE FROM shuttle_miniapp_sessions target WHERE target.id IN (
+ SELECT expired.id FROM shuttle_miniapp_sessions expired WHERE expired.bot_id=$1
+ AND expired.auth_date<=clock_timestamp()-interval '24 hours'
+ AND expired.expires_at<=clock_timestamp() AND expired.pending_until<=clock_timestamp()
+ ORDER BY expired.auth_date LIMIT 100 FOR UPDATE SKIP LOCKED)
+`
+
+func (q *Queries) PruneMiniAppSessions(ctx context.Context, botID int64) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneMiniAppSessions, botID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const readCanonicalOrder = `-- name: ReadCanonicalOrder :one
+SELECT id, user_id, event_id, source_draft_version, preparation_id, request_hash, version, state, submitted_result, sales_closes_at, submitted_at, cancelled_at, order_kind FROM shuttle_orders WHERE user_id=$1 AND event_id=$2 AND source_draft_version=$3 AND order_kind='service'
+`
+
+type ReadCanonicalOrderParams struct {
+	UserID             uuid.UUID `json:"user_id"`
+	EventID            uuid.UUID `json:"event_id"`
+	SourceDraftVersion int64     `json:"source_draft_version"`
+}
+
+func (q *Queries) ReadCanonicalOrder(ctx context.Context, arg ReadCanonicalOrderParams) (ShuttleOrder, error) {
+	row := q.db.QueryRow(ctx, readCanonicalOrder, arg.UserID, arg.EventID, arg.SourceDraftVersion)
+	var i ShuttleOrder
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.SourceDraftVersion,
+		&i.PreparationID,
+		&i.RequestHash,
+		&i.Version,
+		&i.State,
+		&i.SubmittedResult,
+		&i.SalesClosesAt,
+		&i.SubmittedAt,
+		&i.CancelledAt,
+		&i.OrderKind,
+	)
+	return i, err
+}
+
+const readEventAuthority = `-- name: ReadEventAuthority :one
+SELECT a.event_id, a.user_id, a.role, a.version FROM shuttle_event_authorities a JOIN shuttle_events e ON e.id=a.event_id
+JOIN shuttle_users u ON u.id=a.user_id
+WHERE a.event_id=$1 AND a.user_id=$2 AND e.bot_id=$3 AND e.organization_id=$4
+AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id AND NOT u.revoked
+`
+
+type ReadEventAuthorityParams struct {
+	EventID        uuid.UUID `json:"event_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) ReadEventAuthority(ctx context.Context, arg ReadEventAuthorityParams) (ShuttleEventAuthority, error) {
+	row := q.db.QueryRow(ctx, readEventAuthority,
+		arg.EventID,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+	)
+	var i ShuttleEventAuthority
+	err := row.Scan(
+		&i.EventID,
+		&i.UserID,
+		&i.Role,
+		&i.Version,
+	)
+	return i, err
+}
+
+const readEventDepositPolicy = `-- name: ReadEventDepositPolicy :one
+SELECT document FROM shuttle_event_deposit_policy WHERE event_id=$1
+`
+
+func (q *Queries) ReadEventDepositPolicy(ctx context.Context, eventID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, readEventDepositPolicy, eventID)
+	var document []byte
+	err := row.Scan(&document)
+	return document, err
+}
+
+const readFutureMassageBookings = `-- name: ReadFutureMassageBookings :many
+SELECT id, event_id, user_id, preparation_id, window_id, specialist_id, service_id, version, state, starts_at, treatment_ends_at, occupancy_ends_at, requires_table, currency, currency_scale, price_minor, snapshot, source, booked_at, cancelled_at FROM shuttle_massage_bookings WHERE event_id=$1 AND state='booked'
+AND occupancy_ends_at>clock_timestamp() AND id>$2::uuid ORDER BY id LIMIT 100
+`
+
+type ReadFutureMassageBookingsParams struct {
+	EventID uuid.UUID `json:"event_id"`
+	AfterID uuid.UUID `json:"after_id"`
+}
+
+func (q *Queries) ReadFutureMassageBookings(ctx context.Context, arg ReadFutureMassageBookingsParams) ([]ShuttleMassageBooking, error) {
+	rows, err := q.db.Query(ctx, readFutureMassageBookings, arg.EventID, arg.AfterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleMassageBooking
+	for rows.Next() {
+		var i ShuttleMassageBooking
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventID,
+			&i.UserID,
+			&i.PreparationID,
+			&i.WindowID,
+			&i.SpecialistID,
+			&i.ServiceID,
+			&i.Version,
+			&i.State,
+			&i.StartsAt,
+			&i.TreatmentEndsAt,
+			&i.OccupancyEndsAt,
+			&i.RequiresTable,
+			&i.Currency,
+			&i.CurrencyScale,
+			&i.PriceMinor,
+			&i.Snapshot,
+			&i.Source,
+			&i.BookedAt,
+			&i.CancelledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readMassageBindingOperation = `-- name: ReadMassageBindingOperation :one
+SELECT o.actor_id, o.operation_id, o.proposal_id, o.event_id, o.specialist_id, o.request_hash, o.arguments, o.created_at, o.expires_at, o.result FROM shuttle_massage_binding_operation_aliases a
+JOIN shuttle_massage_binding_operations o
+ ON o.actor_id=a.actor_id AND o.operation_id=a.canonical_operation_id
+WHERE a.actor_id=$1 AND a.operation_id=$2
+`
+
+type ReadMassageBindingOperationParams struct {
+	ActorID     uuid.UUID `json:"actor_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadMassageBindingOperation(ctx context.Context, arg ReadMassageBindingOperationParams) (ShuttleMassageBindingOperation, error) {
+	row := q.db.QueryRow(ctx, readMassageBindingOperation, arg.ActorID, arg.OperationID)
+	var i ShuttleMassageBindingOperation
+	err := row.Scan(
+		&i.ActorID,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.EventID,
+		&i.SpecialistID,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Result,
+	)
+	return i, err
+}
+
+const readMassageBindingProposal = `-- name: ReadMassageBindingProposal :one
+SELECT actor_id, operation_id, proposal_id, event_id, specialist_id, request_hash, arguments, created_at, expires_at, result FROM shuttle_massage_binding_operations WHERE actor_id=$1 AND proposal_id=$2
+`
+
+type ReadMassageBindingProposalParams struct {
+	ActorID    uuid.UUID `json:"actor_id"`
+	ProposalID uuid.UUID `json:"proposal_id"`
+}
+
+func (q *Queries) ReadMassageBindingProposal(ctx context.Context, arg ReadMassageBindingProposalParams) (ShuttleMassageBindingOperation, error) {
+	row := q.db.QueryRow(ctx, readMassageBindingProposal, arg.ActorID, arg.ProposalID)
+	var i ShuttleMassageBindingOperation
+	err := row.Scan(
+		&i.ActorID,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.EventID,
+		&i.SpecialistID,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Result,
+	)
+	return i, err
+}
+
+const readMassageBindingTarget = `-- name: ReadMassageBindingTarget :one
+SELECT u.id,u.tg_user_id,u.revoked,(u.zitadel_subject<>'')::boolean AS linked,
+ left(coalesce(nullif(btrim(p.full_name),''),
+ nullif(btrim(concat_ws(' ',u.profile->>'first_name',u.profile->>'last_name')),''),''),256)::text AS display_name
+FROM shuttle_users u LEFT JOIN shuttle_user_profiles p ON p.user_id=u.id
+WHERE u.bot_id=$1 AND u.zitadel_org=$2
+AND (($3::uuid<>'00000000-0000-0000-0000-000000000000' AND u.id=$3::uuid)
+ OR ($4::bigint>0 AND u.tg_user_id=$4::bigint))
+`
+
+type ReadMassageBindingTargetParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	TelegramUserID int64     `json:"telegram_user_id"`
+}
+
+type ReadMassageBindingTargetRow struct {
+	ID          uuid.UUID `json:"id"`
+	TgUserID    int64     `json:"tg_user_id"`
+	Revoked     bool      `json:"revoked"`
+	Linked      bool      `json:"linked"`
+	DisplayName string    `json:"display_name"`
+}
+
+func (q *Queries) ReadMassageBindingTarget(ctx context.Context, arg ReadMassageBindingTargetParams) (ReadMassageBindingTargetRow, error) {
+	row := q.db.QueryRow(ctx, readMassageBindingTarget,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.TelegramUserID,
+	)
+	var i ReadMassageBindingTargetRow
+	err := row.Scan(
+		&i.ID,
+		&i.TgUserID,
+		&i.Revoked,
+		&i.Linked,
+		&i.DisplayName,
+	)
+	return i, err
+}
+
+const readMassageBooking = `-- name: ReadMassageBooking :one
+SELECT id, event_id, user_id, preparation_id, window_id, specialist_id, service_id, version, state, starts_at, treatment_ends_at, occupancy_ends_at, requires_table, currency, currency_scale, price_minor, snapshot, source, booked_at, cancelled_at FROM shuttle_massage_bookings WHERE id=$1 AND event_id=$2 AND user_id=$3
+`
+
+type ReadMassageBookingParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+	UserID  uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) ReadMassageBooking(ctx context.Context, arg ReadMassageBookingParams) (ShuttleMassageBooking, error) {
+	row := q.db.QueryRow(ctx, readMassageBooking, arg.ID, arg.EventID, arg.UserID)
+	var i ShuttleMassageBooking
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.PreparationID,
+		&i.WindowID,
+		&i.SpecialistID,
+		&i.ServiceID,
+		&i.Version,
+		&i.State,
+		&i.StartsAt,
+		&i.TreatmentEndsAt,
+		&i.OccupancyEndsAt,
+		&i.RequiresTable,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.PriceMinor,
+		&i.Snapshot,
+		&i.Source,
+		&i.BookedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
+const readMassageBookingByID = `-- name: ReadMassageBookingByID :one
+SELECT id, event_id, user_id, preparation_id, window_id, specialist_id, service_id, version, state, starts_at, treatment_ends_at, occupancy_ends_at, requires_table, currency, currency_scale, price_minor, snapshot, source, booked_at, cancelled_at FROM shuttle_massage_bookings WHERE id=$1
+`
+
+func (q *Queries) ReadMassageBookingByID(ctx context.Context, id uuid.UUID) (ShuttleMassageBooking, error) {
+	row := q.db.QueryRow(ctx, readMassageBookingByID, id)
+	var i ShuttleMassageBooking
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.PreparationID,
+		&i.WindowID,
+		&i.SpecialistID,
+		&i.ServiceID,
+		&i.Version,
+		&i.State,
+		&i.StartsAt,
+		&i.TreatmentEndsAt,
+		&i.OccupancyEndsAt,
+		&i.RequiresTable,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.PriceMinor,
+		&i.Snapshot,
+		&i.Source,
+		&i.BookedAt,
+		&i.CancelledAt,
+	)
+	return i, err
+}
+
+const readMassageBookingOccupations = `-- name: ReadMassageBookingOccupations :many
+SELECT user_id,specialist_id,starts_at,occupancy_ends_at,requires_table FROM shuttle_massage_bookings WHERE event_id=$1 AND state='booked'
+AND starts_at<$2::timestamptz AND occupancy_ends_at>$3::timestamptz ORDER BY starts_at,id
+`
+
+type ReadMassageBookingOccupationsParams struct {
+	EventID uuid.UUID          `json:"event_id"`
+	UntilAt pgtype.Timestamptz `json:"until_at"`
+	FromAt  pgtype.Timestamptz `json:"from_at"`
+}
+
+type ReadMassageBookingOccupationsRow struct {
+	UserID          uuid.UUID          `json:"user_id"`
+	SpecialistID    string             `json:"specialist_id"`
+	StartsAt        pgtype.Timestamptz `json:"starts_at"`
+	OccupancyEndsAt pgtype.Timestamptz `json:"occupancy_ends_at"`
+	RequiresTable   bool               `json:"requires_table"`
+}
+
+func (q *Queries) ReadMassageBookingOccupations(ctx context.Context, arg ReadMassageBookingOccupationsParams) ([]ReadMassageBookingOccupationsRow, error) {
+	rows, err := q.db.Query(ctx, readMassageBookingOccupations, arg.EventID, arg.UntilAt, arg.FromAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadMassageBookingOccupationsRow
+	for rows.Next() {
+		var i ReadMassageBookingOccupationsRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.SpecialistID,
+			&i.StartsAt,
+			&i.OccupancyEndsAt,
+			&i.RequiresTable,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readMassageOperation = `-- name: ReadMassageOperation :one
+SELECT user_id, operation_id, event_id, kind, source, request_hash, preparation_id, booking_id, result, created_at FROM shuttle_massage_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadMassageOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadMassageOperation(ctx context.Context, arg ReadMassageOperationParams) (ShuttleMassageOperation, error) {
+	row := q.db.QueryRow(ctx, readMassageOperation, arg.UserID, arg.OperationID)
+	var i ShuttleMassageOperation
+	err := row.Scan(
+		&i.UserID,
+		&i.OperationID,
+		&i.EventID,
+		&i.Kind,
+		&i.Source,
+		&i.RequestHash,
+		&i.PreparationID,
+		&i.BookingID,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const readMassagePreparation = `-- name: ReadMassagePreparation :one
+SELECT id, event_id, user_id, operation_id, kind, source, created_at, request_hash, arguments, snapshot, booking_id, expires_at, consumed_at, consumed_result FROM shuttle_massage_preparations WHERE id=$1 AND event_id=$2 AND user_id=$3
+`
+
+type ReadMassagePreparationParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+	UserID  uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) ReadMassagePreparation(ctx context.Context, arg ReadMassagePreparationParams) (ShuttleMassagePreparation, error) {
+	row := q.db.QueryRow(ctx, readMassagePreparation, arg.ID, arg.EventID, arg.UserID)
+	var i ShuttleMassagePreparation
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.OperationID,
+		&i.Kind,
+		&i.Source,
+		&i.CreatedAt,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.Snapshot,
+		&i.BookingID,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.ConsumedResult,
+	)
+	return i, err
+}
+
+const readMassagePreparationByOperation = `-- name: ReadMassagePreparationByOperation :one
+SELECT id, event_id, user_id, operation_id, kind, source, created_at, request_hash, arguments, snapshot, booking_id, expires_at, consumed_at, consumed_result FROM shuttle_massage_preparations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadMassagePreparationByOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadMassagePreparationByOperation(ctx context.Context, arg ReadMassagePreparationByOperationParams) (ShuttleMassagePreparation, error) {
+	row := q.db.QueryRow(ctx, readMassagePreparationByOperation, arg.UserID, arg.OperationID)
+	var i ShuttleMassagePreparation
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.OperationID,
+		&i.Kind,
+		&i.Source,
+		&i.CreatedAt,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.Snapshot,
+		&i.BookingID,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.ConsumedResult,
+	)
+	return i, err
+}
+
+const readMassageReminder = `-- name: ReadMassageReminder :one
+SELECT n.id, n.booking_id, n.kind, n.lead_seconds, n.due_at, n.next_attempt_at, n.state, n.version, n.attempt_id, n.payload, n.receipt, n.created_at,b.id, b.event_id, b.user_id, b.preparation_id, b.window_id, b.specialist_id, b.service_id, b.version, b.state, b.starts_at, b.treatment_ends_at, b.occupancy_ends_at, b.requires_table, b.currency, b.currency_scale, b.price_minor, b.snapshot, b.source, b.booked_at, b.cancelled_at FROM shuttle_massage_reminders n
+JOIN shuttle_massage_bookings b ON b.id=n.booking_id JOIN shuttle_events e ON e.id=b.event_id
+WHERE n.id=$1::uuid AND e.bot_id=$2 AND e.organization_id=$3
+`
+
+type ReadMassageReminderParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+type ReadMassageReminderRow struct {
+	ShuttleMassageReminder ShuttleMassageReminder `json:"shuttle_massage_reminder"`
+	ShuttleMassageBooking  ShuttleMassageBooking  `json:"shuttle_massage_booking"`
+}
+
+func (q *Queries) ReadMassageReminder(ctx context.Context, arg ReadMassageReminderParams) (ReadMassageReminderRow, error) {
+	row := q.db.QueryRow(ctx, readMassageReminder, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ReadMassageReminderRow
+	err := row.Scan(
+		&i.ShuttleMassageReminder.ID,
+		&i.ShuttleMassageReminder.BookingID,
+		&i.ShuttleMassageReminder.Kind,
+		&i.ShuttleMassageReminder.LeadSeconds,
+		&i.ShuttleMassageReminder.DueAt,
+		&i.ShuttleMassageReminder.NextAttemptAt,
+		&i.ShuttleMassageReminder.State,
+		&i.ShuttleMassageReminder.Version,
+		&i.ShuttleMassageReminder.AttemptID,
+		&i.ShuttleMassageReminder.Payload,
+		&i.ShuttleMassageReminder.Receipt,
+		&i.ShuttleMassageReminder.CreatedAt,
+		&i.ShuttleMassageBooking.ID,
+		&i.ShuttleMassageBooking.EventID,
+		&i.ShuttleMassageBooking.UserID,
+		&i.ShuttleMassageBooking.PreparationID,
+		&i.ShuttleMassageBooking.WindowID,
+		&i.ShuttleMassageBooking.SpecialistID,
+		&i.ShuttleMassageBooking.ServiceID,
+		&i.ShuttleMassageBooking.Version,
+		&i.ShuttleMassageBooking.State,
+		&i.ShuttleMassageBooking.StartsAt,
+		&i.ShuttleMassageBooking.TreatmentEndsAt,
+		&i.ShuttleMassageBooking.OccupancyEndsAt,
+		&i.ShuttleMassageBooking.RequiresTable,
+		&i.ShuttleMassageBooking.Currency,
+		&i.ShuttleMassageBooking.CurrencyScale,
+		&i.ShuttleMassageBooking.PriceMinor,
+		&i.ShuttleMassageBooking.Snapshot,
+		&i.ShuttleMassageBooking.Source,
+		&i.ShuttleMassageBooking.BookedAt,
+		&i.ShuttleMassageBooking.CancelledAt,
+	)
+	return i, err
+}
+
+const readMassageSchedule = `-- name: ReadMassageSchedule :one
+SELECT event_id, version, document FROM shuttle_massage_schedules WHERE event_id=$1
+`
+
+func (q *Queries) ReadMassageSchedule(ctx context.Context, eventID uuid.UUID) (ShuttleMassageSchedule, error) {
+	row := q.db.QueryRow(ctx, readMassageSchedule, eventID)
+	var i ShuttleMassageSchedule
+	err := row.Scan(&i.EventID, &i.Version, &i.Document)
+	return i, err
+}
+
+const readMassageScheduleOperation = `-- name: ReadMassageScheduleOperation :one
+SELECT user_id, operation_id, request_hash, result, created_at FROM shuttle_massage_schedule_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadMassageScheduleOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadMassageScheduleOperation(ctx context.Context, arg ReadMassageScheduleOperationParams) (ShuttleMassageScheduleOperation, error) {
+	row := q.db.QueryRow(ctx, readMassageScheduleOperation, arg.UserID, arg.OperationID)
+	var i ShuttleMassageScheduleOperation
+	err := row.Scan(
+		&i.UserID,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const readMassageSchedulePreparation = `-- name: ReadMassageSchedulePreparation :one
+SELECT id, user_id, operation_id, request_hash, arguments, expires_at FROM shuttle_massage_schedule_preparations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadMassageSchedulePreparationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadMassageSchedulePreparation(ctx context.Context, arg ReadMassageSchedulePreparationParams) (ShuttleMassageSchedulePreparation, error) {
+	row := q.db.QueryRow(ctx, readMassageSchedulePreparation, arg.UserID, arg.OperationID)
+	var i ShuttleMassageSchedulePreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const readMassageSpecialistBinding = `-- name: ReadMassageSpecialistBinding :one
+SELECT event_id, specialist_id, user_id, active, version, updated_by, created_at, updated_at FROM shuttle_massage_specialist_bindings WHERE event_id=$1 AND specialist_id=$2
+`
+
+type ReadMassageSpecialistBindingParams struct {
+	EventID      uuid.UUID `json:"event_id"`
+	SpecialistID string    `json:"specialist_id"`
+}
+
+func (q *Queries) ReadMassageSpecialistBinding(ctx context.Context, arg ReadMassageSpecialistBindingParams) (ShuttleMassageSpecialistBinding, error) {
+	row := q.db.QueryRow(ctx, readMassageSpecialistBinding, arg.EventID, arg.SpecialistID)
+	var i ShuttleMassageSpecialistBinding
+	err := row.Scan(
+		&i.EventID,
+		&i.SpecialistID,
+		&i.UserID,
+		&i.Active,
+		&i.Version,
+		&i.UpdatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const readMassageSpecialistNotification = `-- name: ReadMassageSpecialistNotification :one
+SELECT n.id, n.booking_id, n.kind, n.recipient_id, n.binding_version, n.preference_version, n.client_name, n.next_attempt_at, n.state, n.version, n.attempt_id, n.payload, n.receipt, n.created_at,b.id, b.event_id, b.user_id, b.preparation_id, b.window_id, b.specialist_id, b.service_id, b.version, b.state, b.starts_at, b.treatment_ends_at, b.occupancy_ends_at, b.requires_table, b.currency, b.currency_scale, b.price_minor, b.snapshot, b.source, b.booked_at, b.cancelled_at FROM shuttle_massage_specialist_notifications n
+JOIN shuttle_massage_bookings b ON b.id=n.booking_id JOIN shuttle_events e ON e.id=b.event_id
+WHERE n.id=$1::uuid AND e.bot_id=$2 AND e.organization_id=$3
+`
+
+type ReadMassageSpecialistNotificationParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+type ReadMassageSpecialistNotificationRow struct {
+	ShuttleMassageSpecialistNotification ShuttleMassageSpecialistNotification `json:"shuttle_massage_specialist_notification"`
+	ShuttleMassageBooking                ShuttleMassageBooking                `json:"shuttle_massage_booking"`
+}
+
+func (q *Queries) ReadMassageSpecialistNotification(ctx context.Context, arg ReadMassageSpecialistNotificationParams) (ReadMassageSpecialistNotificationRow, error) {
+	row := q.db.QueryRow(ctx, readMassageSpecialistNotification, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ReadMassageSpecialistNotificationRow
+	err := row.Scan(
+		&i.ShuttleMassageSpecialistNotification.ID,
+		&i.ShuttleMassageSpecialistNotification.BookingID,
+		&i.ShuttleMassageSpecialistNotification.Kind,
+		&i.ShuttleMassageSpecialistNotification.RecipientID,
+		&i.ShuttleMassageSpecialistNotification.BindingVersion,
+		&i.ShuttleMassageSpecialistNotification.PreferenceVersion,
+		&i.ShuttleMassageSpecialistNotification.ClientName,
+		&i.ShuttleMassageSpecialistNotification.NextAttemptAt,
+		&i.ShuttleMassageSpecialistNotification.State,
+		&i.ShuttleMassageSpecialistNotification.Version,
+		&i.ShuttleMassageSpecialistNotification.AttemptID,
+		&i.ShuttleMassageSpecialistNotification.Payload,
+		&i.ShuttleMassageSpecialistNotification.Receipt,
+		&i.ShuttleMassageSpecialistNotification.CreatedAt,
+		&i.ShuttleMassageBooking.ID,
+		&i.ShuttleMassageBooking.EventID,
+		&i.ShuttleMassageBooking.UserID,
+		&i.ShuttleMassageBooking.PreparationID,
+		&i.ShuttleMassageBooking.WindowID,
+		&i.ShuttleMassageBooking.SpecialistID,
+		&i.ShuttleMassageBooking.ServiceID,
+		&i.ShuttleMassageBooking.Version,
+		&i.ShuttleMassageBooking.State,
+		&i.ShuttleMassageBooking.StartsAt,
+		&i.ShuttleMassageBooking.TreatmentEndsAt,
+		&i.ShuttleMassageBooking.OccupancyEndsAt,
+		&i.ShuttleMassageBooking.RequiresTable,
+		&i.ShuttleMassageBooking.Currency,
+		&i.ShuttleMassageBooking.CurrencyScale,
+		&i.ShuttleMassageBooking.PriceMinor,
+		&i.ShuttleMassageBooking.Snapshot,
+		&i.ShuttleMassageBooking.Source,
+		&i.ShuttleMassageBooking.BookedAt,
+		&i.ShuttleMassageBooking.CancelledAt,
+	)
+	return i, err
+}
+
+const readMassageSpecialistPreference = `-- name: ReadMassageSpecialistPreference :one
+SELECT coalesce(p.notify_bookings,true)::boolean AS notify_bookings,
+ coalesce(p.notify_next,true)::boolean AS notify_next, coalesce(p.version,0)::bigint AS version
+FROM shuttle_users u LEFT JOIN shuttle_massage_specialist_preferences p ON p.user_id=u.id
+WHERE u.id=$1
+`
+
+type ReadMassageSpecialistPreferenceRow struct {
+	NotifyBookings bool  `json:"notify_bookings"`
+	NotifyNext     bool  `json:"notify_next"`
+	Version        int64 `json:"version"`
+}
+
+func (q *Queries) ReadMassageSpecialistPreference(ctx context.Context, id uuid.UUID) (ReadMassageSpecialistPreferenceRow, error) {
+	row := q.db.QueryRow(ctx, readMassageSpecialistPreference, id)
+	var i ReadMassageSpecialistPreferenceRow
+	err := row.Scan(&i.NotifyBookings, &i.NotifyNext, &i.Version)
+	return i, err
+}
+
+const readMassageSpecialistPreferenceOperation = `-- name: ReadMassageSpecialistPreferenceOperation :one
+SELECT user_id, operation_id, event_id, source, created_at, request_hash, result FROM shuttle_massage_specialist_preference_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadMassageSpecialistPreferenceOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadMassageSpecialistPreferenceOperation(ctx context.Context, arg ReadMassageSpecialistPreferenceOperationParams) (ShuttleMassageSpecialistPreferenceOperation, error) {
+	row := q.db.QueryRow(ctx, readMassageSpecialistPreferenceOperation, arg.UserID, arg.OperationID)
+	var i ShuttleMassageSpecialistPreferenceOperation
+	err := row.Scan(
+		&i.UserID,
+		&i.OperationID,
+		&i.EventID,
+		&i.Source,
+		&i.CreatedAt,
+		&i.RequestHash,
+		&i.Result,
+	)
+	return i, err
+}
+
+const readMealCatalog = `-- name: ReadMealCatalog :one
+SELECT event_id, version, document FROM shuttle_meal_catalogs WHERE event_id=$1 ORDER BY version DESC LIMIT 1
+`
+
+func (q *Queries) ReadMealCatalog(ctx context.Context, eventID uuid.UUID) (ShuttleMealCatalog, error) {
+	row := q.db.QueryRow(ctx, readMealCatalog, eventID)
+	var i ShuttleMealCatalog
+	err := row.Scan(&i.EventID, &i.Version, &i.Document)
+	return i, err
+}
+
+const readMealCatalogOperation = `-- name: ReadMealCatalogOperation :one
+SELECT event_id,request_hash,result FROM shuttle_meal_catalog_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadMealCatalogOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+type ReadMealCatalogOperationRow struct {
+	EventID     uuid.UUID `json:"event_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) ReadMealCatalogOperation(ctx context.Context, arg ReadMealCatalogOperationParams) (ReadMealCatalogOperationRow, error) {
+	row := q.db.QueryRow(ctx, readMealCatalogOperation, arg.UserID, arg.OperationID)
+	var i ReadMealCatalogOperationRow
+	err := row.Scan(&i.EventID, &i.RequestHash, &i.Result)
+	return i, err
+}
+
+const readMealCatalogPreparation = `-- name: ReadMealCatalogPreparation :one
+SELECT id, user_id, operation_id, event_id, request_hash, arguments, expires_at FROM shuttle_meal_catalog_preparations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadMealCatalogPreparationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadMealCatalogPreparation(ctx context.Context, arg ReadMealCatalogPreparationParams) (ShuttleMealCatalogPreparation, error) {
+	row := q.db.QueryRow(ctx, readMealCatalogPreparation, arg.UserID, arg.OperationID)
+	var i ShuttleMealCatalogPreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.EventID,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const readMealCatalogVersion = `-- name: ReadMealCatalogVersion :one
+SELECT event_id, version, document FROM shuttle_meal_catalogs WHERE event_id=$1 AND version=$2
+`
+
+type ReadMealCatalogVersionParams struct {
+	EventID uuid.UUID `json:"event_id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ReadMealCatalogVersion(ctx context.Context, arg ReadMealCatalogVersionParams) (ShuttleMealCatalog, error) {
+	row := q.db.QueryRow(ctx, readMealCatalogVersion, arg.EventID, arg.Version)
+	var i ShuttleMealCatalog
+	err := row.Scan(&i.EventID, &i.Version, &i.Document)
+	return i, err
+}
+
+const readMealDraft = `-- name: ReadMealDraft :one
+SELECT result FROM shuttle_meal_drafts WHERE user_id=$1 AND event_id=$2
+`
+
+type ReadMealDraftParams struct {
+	UserID  uuid.UUID `json:"user_id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) ReadMealDraft(ctx context.Context, arg ReadMealDraftParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, readMealDraft, arg.UserID, arg.EventID)
+	var result []byte
+	err := row.Scan(&result)
+	return result, err
+}
+
+const readMealDraftOperation = `-- name: ReadMealDraftOperation :one
+SELECT event_id,request_hash,result FROM shuttle_meal_draft_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadMealDraftOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+type ReadMealDraftOperationRow struct {
+	EventID     uuid.UUID `json:"event_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) ReadMealDraftOperation(ctx context.Context, arg ReadMealDraftOperationParams) (ReadMealDraftOperationRow, error) {
+	row := q.db.QueryRow(ctx, readMealDraftOperation, arg.UserID, arg.OperationID)
+	var i ReadMealDraftOperationRow
+	err := row.Scan(&i.EventID, &i.RequestHash, &i.Result)
+	return i, err
+}
+
+const readOrderEvidence = `-- name: ReadOrderEvidence :one
+SELECT id, order_id, event_id, user_id, file_id, source_unique_id, reported_amount_minor, quoted_amount_minor, currency, currency_scale, sent_at, submitted_at, due_at, admission_state, reason, state, version, order_kind FROM shuttle_order_evidence WHERE id=$1 AND event_id=$2
+`
+
+type ReadOrderEvidenceParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) ReadOrderEvidence(ctx context.Context, arg ReadOrderEvidenceParams) (ShuttleOrderEvidence, error) {
+	row := q.db.QueryRow(ctx, readOrderEvidence, arg.ID, arg.EventID)
+	var i ShuttleOrderEvidence
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.EventID,
+		&i.UserID,
+		&i.FileID,
+		&i.SourceUniqueID,
+		&i.ReportedAmountMinor,
+		&i.QuotedAmountMinor,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.SentAt,
+		&i.SubmittedAt,
+		&i.DueAt,
+		&i.AdmissionState,
+		&i.Reason,
+		&i.State,
+		&i.Version,
+		&i.OrderKind,
+	)
+	return i, err
+}
+
+const readOrderEvidenceOperation = `-- name: ReadOrderEvidenceOperation :one
+SELECT user_id, operation_id, kind, event_id, request_hash, result FROM shuttle_order_evidence_operations WHERE user_id=$1 AND operation_id=$2 AND kind=$3
+`
+
+type ReadOrderEvidenceOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	Kind        string    `json:"kind"`
+}
+
+func (q *Queries) ReadOrderEvidenceOperation(ctx context.Context, arg ReadOrderEvidenceOperationParams) (ShuttleOrderEvidenceOperation, error) {
+	row := q.db.QueryRow(ctx, readOrderEvidenceOperation, arg.UserID, arg.OperationID, arg.Kind)
+	var i ShuttleOrderEvidenceOperation
+	err := row.Scan(
+		&i.UserID,
+		&i.OperationID,
+		&i.Kind,
+		&i.EventID,
+		&i.RequestHash,
+		&i.Result,
+	)
+	return i, err
+}
+
+const readOrderEvidencePreparation = `-- name: ReadOrderEvidencePreparation :one
+SELECT id, user_id, operation_id, event_id, request_hash, document, expires_at FROM shuttle_order_evidence_preparations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadOrderEvidencePreparationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadOrderEvidencePreparation(ctx context.Context, arg ReadOrderEvidencePreparationParams) (ShuttleOrderEvidencePreparation, error) {
+	row := q.db.QueryRow(ctx, readOrderEvidencePreparation, arg.UserID, arg.OperationID)
+	var i ShuttleOrderEvidencePreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.EventID,
+		&i.RequestHash,
+		&i.Document,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const readOrderEvidenceReview = `-- name: ReadOrderEvidenceReview :one
+SELECT evidence_id, actor_id, actor_subject, authority_role, decision, amount_minor, reason, reviewed_at FROM shuttle_order_evidence_reviews WHERE evidence_id=$1
+`
+
+func (q *Queries) ReadOrderEvidenceReview(ctx context.Context, evidenceID uuid.UUID) (ShuttleOrderEvidenceReview, error) {
+	row := q.db.QueryRow(ctx, readOrderEvidenceReview, evidenceID)
+	var i ShuttleOrderEvidenceReview
+	err := row.Scan(
+		&i.EvidenceID,
+		&i.ActorID,
+		&i.ActorSubject,
+		&i.AuthorityRole,
+		&i.Decision,
+		&i.AmountMinor,
+		&i.Reason,
+		&i.ReviewedAt,
+	)
+	return i, err
+}
+
+const readOrderOperations = `-- name: ReadOrderOperations :many
+SELECT user_id, operation_id, kind, event_id, preparation_id, order_id, business_hash, request_hash, result, source, created_at, order_kind FROM shuttle_order_operations WHERE user_id=$1 AND operation_id=$2 ORDER BY kind
+`
+
+type ReadOrderOperationsParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadOrderOperations(ctx context.Context, arg ReadOrderOperationsParams) ([]ShuttleOrderOperation, error) {
+	rows, err := q.db.Query(ctx, readOrderOperations, arg.UserID, arg.OperationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleOrderOperation
+	for rows.Next() {
+		var i ShuttleOrderOperation
+		if err := rows.Scan(
+			&i.UserID,
+			&i.OperationID,
+			&i.Kind,
+			&i.EventID,
+			&i.PreparationID,
+			&i.OrderID,
+			&i.BusinessHash,
+			&i.RequestHash,
+			&i.Result,
+			&i.Source,
+			&i.CreatedAt,
+			&i.OrderKind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readOrderPreparation = `-- name: ReadOrderPreparation :one
+SELECT id, user_id, event_id, source_draft_version, request_hash, arguments, snapshot, created_at, expires_at, consumed_at, order_kind FROM shuttle_order_preparations WHERE id=$1 AND user_id=$2 AND event_id=$3 AND order_kind='service'
+`
+
+type ReadOrderPreparationParams struct {
+	ID      uuid.UUID `json:"id"`
+	UserID  uuid.UUID `json:"user_id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) ReadOrderPreparation(ctx context.Context, arg ReadOrderPreparationParams) (ShuttleOrderPreparation, error) {
+	row := q.db.QueryRow(ctx, readOrderPreparation, arg.ID, arg.UserID, arg.EventID)
+	var i ShuttleOrderPreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.SourceDraftVersion,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.Snapshot,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+		&i.OrderKind,
+	)
+	return i, err
+}
+
+const readOrderReviewCall = `-- name: ReadOrderReviewCall :one
+SELECT actor_id, operation_id, kind, source, request_hash, workspace_id, proposal_id, expires_at, document, result, completed_at FROM shuttle_order_review_calls WHERE actor_id=$1 AND operation_id=$2
+`
+
+type ReadOrderReviewCallParams struct {
+	ActorID     uuid.UUID `json:"actor_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadOrderReviewCall(ctx context.Context, arg ReadOrderReviewCallParams) (ShuttleOrderReviewCall, error) {
+	row := q.db.QueryRow(ctx, readOrderReviewCall, arg.ActorID, arg.OperationID)
+	var i ShuttleOrderReviewCall
+	err := row.Scan(
+		&i.ActorID,
+		&i.OperationID,
+		&i.Kind,
+		&i.Source,
+		&i.RequestHash,
+		&i.WorkspaceID,
+		&i.ProposalID,
+		&i.ExpiresAt,
+		&i.Document,
+		&i.Result,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const readOrderReviewPresentation = `-- name: ReadOrderReviewPresentation :one
+SELECT left(coalesce(nullif(btrim(owner_profile.full_name),''),
+ nullif(btrim(concat_ws(' ',owner.profile->>'first_name',owner.profile->>'last_name')),''),owner.id::text),256)::text AS payer_name,
+ coalesce(actor_profile.bot_language,'auto')::text AS language_preference,
+ coalesce(actor.profile->>'language_code','')::text AS telegram_language,
+ coalesce(settings.document->>'default_language','en')::text AS default_language
+FROM shuttle_order_evidence evidence JOIN shuttle_events event ON event.id=evidence.event_id
+JOIN shuttle_users owner ON owner.id=evidence.user_id JOIN shuttle_users actor ON actor.id=$1
+LEFT JOIN shuttle_user_profiles owner_profile ON owner_profile.user_id=owner.id
+LEFT JOIN shuttle_user_profiles actor_profile ON actor_profile.user_id=actor.id
+JOIN shuttle_settings settings ON settings.id=true
+WHERE evidence.id=$2 AND event.id=$3
+AND event.bot_id=$4 AND event.organization_id=$5
+AND actor.bot_id=event.bot_id AND actor.zitadel_org=event.organization_id
+AND actor.zitadel_subject=$6 AND NOT actor.revoked
+AND owner.bot_id=event.bot_id AND owner.zitadel_org=event.organization_id
+`
+
+type ReadOrderReviewPresentationParams struct {
+	ActorID      uuid.UUID `json:"actor_id"`
+	EvidenceID   uuid.UUID `json:"evidence_id"`
+	EventID      uuid.UUID `json:"event_id"`
+	BotID        int64     `json:"bot_id"`
+	Organization string    `json:"organization"`
+	Subject      string    `json:"subject"`
+}
+
+type ReadOrderReviewPresentationRow struct {
+	PayerName          string `json:"payer_name"`
+	LanguagePreference string `json:"language_preference"`
+	TelegramLanguage   string `json:"telegram_language"`
+	DefaultLanguage    string `json:"default_language"`
+}
+
+func (q *Queries) ReadOrderReviewPresentation(ctx context.Context, arg ReadOrderReviewPresentationParams) (ReadOrderReviewPresentationRow, error) {
+	row := q.db.QueryRow(ctx, readOrderReviewPresentation,
+		arg.ActorID,
+		arg.EvidenceID,
+		arg.EventID,
+		arg.BotID,
+		arg.Organization,
+		arg.Subject,
+	)
+	var i ReadOrderReviewPresentationRow
+	err := row.Scan(
+		&i.PayerName,
+		&i.LanguagePreference,
+		&i.TelegramLanguage,
+		&i.DefaultLanguage,
+	)
+	return i, err
+}
+
+const readOrderReviewWorkspace = `-- name: ReadOrderReviewWorkspace :one
+SELECT w.id, w.actor_id, w.event_id, w.evidence_id, w.revision, w.proposal_id, w.state,p.document,NOT EXISTS(SELECT 1 FROM shuttle_order_review_workspaces later
+ WHERE later.actor_id=w.actor_id AND later.evidence_id=w.evidence_id AND later.revision>w.revision) AS current
+FROM shuttle_order_review_workspaces w JOIN shuttle_order_evidence_preparations p ON p.id=w.proposal_id
+WHERE w.id=$1 AND w.actor_id=$2
+`
+
+type ReadOrderReviewWorkspaceParams struct {
+	ID      uuid.UUID `json:"id"`
+	ActorID uuid.UUID `json:"actor_id"`
+}
+
+type ReadOrderReviewWorkspaceRow struct {
+	ID         uuid.UUID `json:"id"`
+	ActorID    uuid.UUID `json:"actor_id"`
+	EventID    uuid.UUID `json:"event_id"`
+	EvidenceID uuid.UUID `json:"evidence_id"`
+	Revision   int64     `json:"revision"`
+	ProposalID uuid.UUID `json:"proposal_id"`
+	State      string    `json:"state"`
+	Document   []byte    `json:"document"`
+	Current    bool      `json:"current"`
+}
+
+func (q *Queries) ReadOrderReviewWorkspace(ctx context.Context, arg ReadOrderReviewWorkspaceParams) (ReadOrderReviewWorkspaceRow, error) {
+	row := q.db.QueryRow(ctx, readOrderReviewWorkspace, arg.ID, arg.ActorID)
+	var i ReadOrderReviewWorkspaceRow
+	err := row.Scan(
+		&i.ID,
+		&i.ActorID,
+		&i.EventID,
+		&i.EvidenceID,
+		&i.Revision,
+		&i.ProposalID,
+		&i.State,
+		&i.Document,
+		&i.Current,
+	)
+	return i, err
+}
+
+const readOrdersCatalog = `-- name: ReadOrdersCatalog :one
+SELECT event_id, version, document FROM shuttle_orders_catalogs WHERE event_id=$1
+`
+
+func (q *Queries) ReadOrdersCatalog(ctx context.Context, eventID uuid.UUID) (ShuttleOrdersCatalog, error) {
+	row := q.db.QueryRow(ctx, readOrdersCatalog, eventID)
+	var i ShuttleOrdersCatalog
+	err := row.Scan(&i.EventID, &i.Version, &i.Document)
+	return i, err
+}
+
+const readOrdersCatalogOperation = `-- name: ReadOrdersCatalogOperation :one
+SELECT user_id, operation_id, request_hash, result, created_at FROM shuttle_orders_catalog_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadOrdersCatalogOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadOrdersCatalogOperation(ctx context.Context, arg ReadOrdersCatalogOperationParams) (ShuttleOrdersCatalogOperation, error) {
+	row := q.db.QueryRow(ctx, readOrdersCatalogOperation, arg.UserID, arg.OperationID)
+	var i ShuttleOrdersCatalogOperation
+	err := row.Scan(
+		&i.UserID,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const readOrdersCatalogPreparation = `-- name: ReadOrdersCatalogPreparation :one
+SELECT id, user_id, operation_id, request_hash, arguments, expires_at FROM shuttle_orders_catalog_preparations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadOrdersCatalogPreparationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+func (q *Queries) ReadOrdersCatalogPreparation(ctx context.Context, arg ReadOrdersCatalogPreparationParams) (ShuttleOrdersCatalogPreparation, error) {
+	row := q.db.QueryRow(ctx, readOrdersCatalogPreparation, arg.UserID, arg.OperationID)
+	var i ShuttleOrdersCatalogPreparation
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.OperationID,
+		&i.RequestHash,
+		&i.Arguments,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const readOrdersSelection = `-- name: ReadOrdersSelection :one
+SELECT result FROM shuttle_orders_selections WHERE user_id=$1 AND event_id=$2
+`
+
+type ReadOrdersSelectionParams struct {
+	UserID  uuid.UUID `json:"user_id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) ReadOrdersSelection(ctx context.Context, arg ReadOrdersSelectionParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, readOrdersSelection, arg.UserID, arg.EventID)
+	var result []byte
+	err := row.Scan(&result)
+	return result, err
+}
+
+const readOrdersSelectionOperation = `-- name: ReadOrdersSelectionOperation :one
+SELECT event_id,request_hash,result FROM shuttle_orders_selection_operations WHERE user_id=$1 AND operation_id=$2
+`
+
+type ReadOrdersSelectionOperationParams struct {
+	UserID      uuid.UUID `json:"user_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+}
+
+type ReadOrdersSelectionOperationRow struct {
+	EventID     uuid.UUID `json:"event_id"`
+	RequestHash []byte    `json:"request_hash"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) ReadOrdersSelectionOperation(ctx context.Context, arg ReadOrdersSelectionOperationParams) (ReadOrdersSelectionOperationRow, error) {
+	row := q.db.QueryRow(ctx, readOrdersSelectionOperation, arg.UserID, arg.OperationID)
+	var i ReadOrdersSelectionOperationRow
+	err := row.Scan(&i.EventID, &i.RequestHash, &i.Result)
+	return i, err
+}
+
+const readPassDepositPolicy = `-- name: ReadPassDepositPolicy :one
+SELECT document FROM shuttle_pass_deposit_policy WHERE pass_id=$1
+`
+
+func (q *Queries) ReadPassDepositPolicy(ctx context.Context, passID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, readPassDepositPolicy, passID)
+	var document []byte
+	err := row.Scan(&document)
+	return document, err
+}
+
+const readPaymentEvidence = `-- name: ReadPaymentEvidence :one
+SELECT ev.id, ev.event_id, ev.pass_id, ev.user_id, ev.file_id, ev.source_unique_id, ev.amount_minor, ev.currency, ev.currency_scale, ev.purpose, ev.sent_at, ev.submitted_at, ev.due_at,coalesce(rv.decision,'pending')::text AS state,to_jsonb(rv) AS review FROM shuttle_payment_evidence ev
+LEFT JOIN shuttle_payment_reviews rv ON rv.evidence_id=ev.id
+WHERE ev.id=$1 AND ev.event_id=$2
+`
+
+type ReadPaymentEvidenceParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+type ReadPaymentEvidenceRow struct {
+	ShuttlePaymentEvidence ShuttlePaymentEvidence `json:"shuttle_payment_evidence"`
+	State                  string                 `json:"state"`
+	Review                 []byte                 `json:"review"`
+}
+
+func (q *Queries) ReadPaymentEvidence(ctx context.Context, arg ReadPaymentEvidenceParams) (ReadPaymentEvidenceRow, error) {
+	row := q.db.QueryRow(ctx, readPaymentEvidence, arg.ID, arg.EventID)
+	var i ReadPaymentEvidenceRow
+	err := row.Scan(
+		&i.ShuttlePaymentEvidence.ID,
+		&i.ShuttlePaymentEvidence.EventID,
+		&i.ShuttlePaymentEvidence.PassID,
+		&i.ShuttlePaymentEvidence.UserID,
+		&i.ShuttlePaymentEvidence.FileID,
+		&i.ShuttlePaymentEvidence.SourceUniqueID,
+		&i.ShuttlePaymentEvidence.AmountMinor,
+		&i.ShuttlePaymentEvidence.Currency,
+		&i.ShuttlePaymentEvidence.CurrencyScale,
+		&i.ShuttlePaymentEvidence.Purpose,
+		&i.ShuttlePaymentEvidence.SentAt,
+		&i.ShuttlePaymentEvidence.SubmittedAt,
+		&i.ShuttlePaymentEvidence.DueAt,
+		&i.State,
+		&i.Review,
+	)
+	return i, err
+}
+
+const readPaymentPass = `-- name: ReadPaymentPass :one
+SELECT r.id, r.event_id, r.user_id, r.role, r.state, r.version, r.requested_at FROM shuttle_registrations r JOIN shuttle_passes p ON p.registration_id=r.id
+WHERE p.id=$1 AND r.event_id=$2 AND r.state='assigned'
+`
+
+type ReadPaymentPassParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) ReadPaymentPass(ctx context.Context, arg ReadPaymentPassParams) (ShuttleRegistration, error) {
+	row := q.db.QueryRow(ctx, readPaymentPass, arg.ID, arg.EventID)
+	var i ShuttleRegistration
+	err := row.Scan(
+		&i.ID,
+		&i.EventID,
+		&i.UserID,
+		&i.Role,
+		&i.State,
+		&i.Version,
+		&i.RequestedAt,
+	)
+	return i, err
+}
+
+const readPaymentReviewPayer = `-- name: ReadPaymentReviewPayer :one
+SELECT u.id AS user_id,
+ left(coalesce(nullif(btrim(p.full_name),''),
+ nullif(btrim(concat_ws(' ',u.profile->>'first_name',u.profile->>'last_name')),''),''),256)::text AS full_name
+FROM shuttle_payment_evidence e
+JOIN shuttle_users u ON u.id=e.user_id
+LEFT JOIN shuttle_user_profiles p ON p.user_id=u.id
+WHERE e.id=$1 AND e.event_id=$2 AND u.bot_id=$3 AND u.zitadel_org=$4
+`
+
+type ReadPaymentReviewPayerParams struct {
+	ID         uuid.UUID `json:"id"`
+	EventID    uuid.UUID `json:"event_id"`
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+}
+
+type ReadPaymentReviewPayerRow struct {
+	UserID   uuid.UUID `json:"user_id"`
+	FullName string    `json:"full_name"`
+}
+
+func (q *Queries) ReadPaymentReviewPayer(ctx context.Context, arg ReadPaymentReviewPayerParams) (ReadPaymentReviewPayerRow, error) {
+	row := q.db.QueryRow(ctx, readPaymentReviewPayer,
+		arg.ID,
+		arg.EventID,
+		arg.BotID,
+		arg.ZitadelOrg,
+	)
+	var i ReadPaymentReviewPayerRow
+	err := row.Scan(&i.UserID, &i.FullName)
+	return i, err
+}
+
+const readPaymentReviewPresentation = `-- name: ReadPaymentReviewPresentation :one
+SELECT event.name AS event_name,
+ left(coalesce(nullif(btrim(owner_profile.full_name),''),
+ nullif(btrim(concat_ws(' ',owner.profile->>'first_name',owner.profile->>'last_name')),''),owner.id::text),256)::text AS payer_name,
+ coalesce(actor_profile.bot_language,'auto')::text AS language_preference,
+ coalesce(actor.profile->>'language_code','')::text AS telegram_language,
+ coalesce(settings.document->>'default_language','en')::text AS default_language
+FROM shuttle_payment_evidence evidence
+JOIN shuttle_events event ON event.id=evidence.event_id
+JOIN shuttle_users owner ON owner.id=evidence.user_id
+JOIN shuttle_users actor ON actor.id=$1
+LEFT JOIN shuttle_user_profiles owner_profile ON owner_profile.user_id=owner.id
+LEFT JOIN shuttle_user_profiles actor_profile ON actor_profile.user_id=actor.id
+JOIN shuttle_settings settings ON settings.id=true
+WHERE evidence.id=$2 AND event.id=$3
+AND event.bot_id=$4 AND event.organization_id=$5
+AND actor.bot_id=event.bot_id AND actor.zitadel_org=event.organization_id
+AND actor.zitadel_subject=$6 AND NOT actor.revoked
+AND owner.bot_id=event.bot_id AND owner.zitadel_org=event.organization_id
+`
+
+type ReadPaymentReviewPresentationParams struct {
+	ActorID      uuid.UUID `json:"actor_id"`
+	EvidenceID   uuid.UUID `json:"evidence_id"`
+	EventID      uuid.UUID `json:"event_id"`
+	BotID        int64     `json:"bot_id"`
+	Organization string    `json:"organization"`
+	Subject      string    `json:"subject"`
+}
+
+type ReadPaymentReviewPresentationRow struct {
+	EventName          string `json:"event_name"`
+	PayerName          string `json:"payer_name"`
+	LanguagePreference string `json:"language_preference"`
+	TelegramLanguage   string `json:"telegram_language"`
+	DefaultLanguage    string `json:"default_language"`
+}
+
+func (q *Queries) ReadPaymentReviewPresentation(ctx context.Context, arg ReadPaymentReviewPresentationParams) (ReadPaymentReviewPresentationRow, error) {
+	row := q.db.QueryRow(ctx, readPaymentReviewPresentation,
+		arg.ActorID,
+		arg.EvidenceID,
+		arg.EventID,
+		arg.BotID,
+		arg.Organization,
+		arg.Subject,
+	)
+	var i ReadPaymentReviewPresentationRow
+	err := row.Scan(
+		&i.EventName,
+		&i.PayerName,
+		&i.LanguagePreference,
+		&i.TelegramLanguage,
+		&i.DefaultLanguage,
+	)
+	return i, err
+}
+
+const readPaymentReviewWorkspaceGate = `-- name: ReadPaymentReviewWorkspaceGate :one
+SELECT w.state, NOT EXISTS(SELECT 1 FROM shuttle_payment_review_workspaces newer
+ WHERE newer.actor_id=w.actor_id AND newer.evidence_id=w.evidence_id AND newer.revision>w.revision) AS is_current
+FROM shuttle_payment_review_workspaces w
+WHERE w.id::text=$1::text AND w.actor_id=$2
+`
+
+type ReadPaymentReviewWorkspaceGateParams struct {
+	OperationID string    `json:"operation_id"`
+	UserID      uuid.UUID `json:"user_id"`
+}
+
+type ReadPaymentReviewWorkspaceGateRow struct {
+	State     string `json:"state"`
+	IsCurrent bool   `json:"is_current"`
+}
+
+func (q *Queries) ReadPaymentReviewWorkspaceGate(ctx context.Context, arg ReadPaymentReviewWorkspaceGateParams) (ReadPaymentReviewWorkspaceGateRow, error) {
+	row := q.db.QueryRow(ctx, readPaymentReviewWorkspaceGate, arg.OperationID, arg.UserID)
+	var i ReadPaymentReviewWorkspaceGateRow
+	err := row.Scan(&i.State, &i.IsCurrent)
+	return i, err
+}
+
+const readPaymentVersion = `-- name: ReadPaymentVersion :one
+SELECT coalesce((SELECT version FROM shuttle_payment_versions WHERE pass_id=$1),0)::bigint AS version
+`
+
+func (q *Queries) ReadPaymentVersion(ctx context.Context, passID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, readPaymentVersion, passID)
+	var version int64
+	err := row.Scan(&version)
+	return version, err
+}
+
+const readRegistrationRules = `-- name: ReadRegistrationRules :one
+SELECT document FROM shuttle_event_registration_rules WHERE event_id=$1
+`
+
+func (q *Queries) ReadRegistrationRules(ctx context.Context, eventID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, readRegistrationRules, eventID)
+	var document []byte
+	err := row.Scan(&document)
+	return document, err
+}
+
+const readSettingsForMassage = `-- name: ReadSettingsForMassage :one
+SELECT id, version, document FROM shuttle_settings WHERE id=true FOR SHARE
+`
+
+func (q *Queries) ReadSettingsForMassage(ctx context.Context) (ShuttleSetting, error) {
+	row := q.db.QueryRow(ctx, readSettingsForMassage)
+	var i ShuttleSetting
+	err := row.Scan(&i.ID, &i.Version, &i.Document)
+	return i, err
+}
+
+const readSubmittedOrder = `-- name: ReadSubmittedOrder :one
+SELECT id, user_id, event_id, source_draft_version, preparation_id, request_hash, version, state, submitted_result, sales_closes_at, submitted_at, cancelled_at, order_kind FROM shuttle_orders WHERE id=$1 AND user_id=$2 AND event_id=$3 AND order_kind='service'
+`
+
+type ReadSubmittedOrderParams struct {
+	ID      uuid.UUID `json:"id"`
+	UserID  uuid.UUID `json:"user_id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) ReadSubmittedOrder(ctx context.Context, arg ReadSubmittedOrderParams) (ShuttleOrder, error) {
+	row := q.db.QueryRow(ctx, readSubmittedOrder, arg.ID, arg.UserID, arg.EventID)
+	var i ShuttleOrder
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.SourceDraftVersion,
+		&i.PreparationID,
+		&i.RequestHash,
+		&i.Version,
+		&i.State,
+		&i.SubmittedResult,
+		&i.SalesClosesAt,
+		&i.SubmittedAt,
+		&i.CancelledAt,
+		&i.OrderKind,
+	)
+	return i, err
+}
+
+const readyAvatarDeliveries = `-- name: ReadyAvatarDeliveries :many
+SELECT n.id,n.version FROM shuttle_avatar_deliveries n JOIN shuttle_users u ON u.id=n.user_id
+WHERE u.bot_id=$1 AND u.zitadel_org=$2 AND n.state IN ('pending','retryable')
+AND n.next_attempt_at<=clock_timestamp() AND n.id>$3::uuid
+ORDER BY n.id LIMIT $4
+`
+
+type ReadyAvatarDeliveriesParams struct {
+	BotID      int64     `json:"bot_id"`
+	ZitadelOrg string    `json:"zitadel_org"`
+	AfterID    uuid.UUID `json:"after_id"`
+	PageLimit  int32     `json:"page_limit"`
+}
+
+type ReadyAvatarDeliveriesRow struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ReadyAvatarDeliveries(ctx context.Context, arg ReadyAvatarDeliveriesParams) ([]ReadyAvatarDeliveriesRow, error) {
+	rows, err := q.db.Query(ctx, readyAvatarDeliveries,
+		arg.BotID,
+		arg.ZitadelOrg,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadyAvatarDeliveriesRow
+	for rows.Next() {
+		var i ReadyAvatarDeliveriesRow
+		if err := rows.Scan(&i.ID, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readyMassageReminders = `-- name: ReadyMassageReminders :many
+SELECT n.id,n.version FROM shuttle_massage_reminders n
+JOIN shuttle_massage_bookings b ON b.id=n.booking_id JOIN shuttle_events e ON e.id=b.event_id
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND n.state IN ('pending','retryable') AND n.due_at<=clock_timestamp() AND n.next_attempt_at<=clock_timestamp()
+AND n.id>$3::uuid ORDER BY n.id LIMIT $4
+`
+
+type ReadyMassageRemindersParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ReadyMassageRemindersRow struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ReadyMassageReminders(ctx context.Context, arg ReadyMassageRemindersParams) ([]ReadyMassageRemindersRow, error) {
+	rows, err := q.db.Query(ctx, readyMassageReminders,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadyMassageRemindersRow
+	for rows.Next() {
+		var i ReadyMassageRemindersRow
+		if err := rows.Scan(&i.ID, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readyMassageSpecialistNotifications = `-- name: ReadyMassageSpecialistNotifications :many
+SELECT n.id,n.version FROM shuttle_massage_specialist_notifications n
+JOIN shuttle_massage_bookings b ON b.id=n.booking_id JOIN shuttle_events e ON e.id=b.event_id
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND n.state IN ('pending','retryable') AND n.next_attempt_at<=clock_timestamp()
+AND n.id>$3::uuid ORDER BY n.id LIMIT $4
+`
+
+type ReadyMassageSpecialistNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ReadyMassageSpecialistNotificationsRow struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ReadyMassageSpecialistNotifications(ctx context.Context, arg ReadyMassageSpecialistNotificationsParams) ([]ReadyMassageSpecialistNotificationsRow, error) {
+	rows, err := q.db.Query(ctx, readyMassageSpecialistNotifications,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadyMassageSpecialistNotificationsRow
+	for rows.Next() {
+		var i ReadyMassageSpecialistNotificationsRow
+		if err := rows.Scan(&i.ID, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readyOrderNotifications = `-- name: ReadyOrderNotifications :many
+SELECT n.id,n.version FROM shuttle_order_evidence_notices n
+JOIN shuttle_order_evidence ev ON ev.id=n.evidence_id
+JOIN shuttle_events e ON e.id=ev.event_id
+WHERE e.bot_id=$1 AND e.organization_id=$2
+AND n.state IN ('pending','retryable') AND n.next_attempt_at<=clock_timestamp()
+AND n.id>$3::uuid ORDER BY n.id LIMIT $4
+`
+
+type ReadyOrderNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ReadyOrderNotificationsRow struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ReadyOrderNotifications(ctx context.Context, arg ReadyOrderNotificationsParams) ([]ReadyOrderNotificationsRow, error) {
+	rows, err := q.db.Query(ctx, readyOrderNotifications,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadyOrderNotificationsRow
+	for rows.Next() {
+		var i ReadyOrderNotificationsRow
+		if err := rows.Scan(&i.ID, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readyPairInvitationNotifications = `-- name: ReadyPairInvitationNotifications :many
+SELECT n.id, n.bot_id, n.organization_id, n.invitation_id, n.invitation_version, n.recipient_id, n.kind, n.state, n.version, n.attempt_id, n.payload, n.receipt, n.next_attempt_at, n.created_at FROM shuttle_pair_notifications n
+WHERE n.bot_id=$1 AND n.organization_id=$2 AND n.state IN ('pending','retryable')
+AND n.next_attempt_at<=clock_timestamp() AND n.id>$3::uuid
+ORDER BY n.id LIMIT $4
+`
+
+type ReadyPairInvitationNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+func (q *Queries) ReadyPairInvitationNotifications(ctx context.Context, arg ReadyPairInvitationNotificationsParams) ([]ShuttlePairNotification, error) {
+	rows, err := q.db.Query(ctx, readyPairInvitationNotifications,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttlePairNotification
+	for rows.Next() {
+		var i ShuttlePairNotification
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.InvitationID,
+			&i.InvitationVersion,
+			&i.RecipientID,
+			&i.Kind,
+			&i.State,
+			&i.Version,
+			&i.AttemptID,
+			&i.Payload,
+			&i.Receipt,
+			&i.NextAttemptAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const readyPaymentNotifications = `-- name: ReadyPaymentNotifications :many
+SELECT id,version FROM shuttle_payment_notifications WHERE bot_id=$1 AND organization_id=$2
+AND state IN ('pending','retryable') AND next_attempt_at<=clock_timestamp()
+AND id>$3::uuid ORDER BY id LIMIT $4
+`
+
+type ReadyPaymentNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ReadyPaymentNotificationsRow struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ReadyPaymentNotifications(ctx context.Context, arg ReadyPaymentNotificationsParams) ([]ReadyPaymentNotificationsRow, error) {
+	rows, err := q.db.Query(ctx, readyPaymentNotifications,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadyPaymentNotificationsRow
+	for rows.Next() {
+		var i ReadyPaymentNotificationsRow
+		if err := rows.Scan(&i.ID, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentMiniAppMealDraftActions = `-- name: RecentMiniAppMealDraftActions :many
+SELECT a.operation_id,op.event_id,(op.result->>'version')::bigint AS draft_version,
+ (op.result->>'event_version')::bigint AS event_version,
+ (op.result->>'catalog_version')::bigint AS catalog_version,
+ (op.result->>'cleared')::boolean AS cleared,a.completed_at
+ FROM shuttle_tasks task JOIN shuttle_miniapp_meal_draft_actions a ON a.user_id=task.user_id
+ JOIN shuttle_meal_draft_operations op ON op.user_id=a.user_id AND op.operation_id=a.operation_id
+ JOIN shuttle_events e ON e.id=op.event_id
+ JOIN shuttle_registrations r ON r.event_id=e.id AND r.user_id=a.user_id AND r.state='assigned'
+ JOIN shuttle_passes p ON p.registration_id=r.id
+ WHERE task.id=$1 AND task.user_id=$2 AND a.completed_at<task.created_at
+ AND e.bot_id=$3 AND e.organization_id=$4 AND 'meals'=ANY(e.modules)
+ ORDER BY a.completed_at DESC,a.operation_id LIMIT 5
+`
+
+type RecentMiniAppMealDraftActionsParams struct {
+	ID             uuid.UUID `json:"id"`
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+type RecentMiniAppMealDraftActionsRow struct {
+	OperationID    uuid.UUID          `json:"operation_id"`
+	EventID        uuid.UUID          `json:"event_id"`
+	DraftVersion   int64              `json:"draft_version"`
+	EventVersion   int64              `json:"event_version"`
+	CatalogVersion int64              `json:"catalog_version"`
+	Cleared        bool               `json:"cleared"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
+}
+
+func (q *Queries) RecentMiniAppMealDraftActions(ctx context.Context, arg RecentMiniAppMealDraftActionsParams) ([]RecentMiniAppMealDraftActionsRow, error) {
+	rows, err := q.db.Query(ctx, recentMiniAppMealDraftActions,
+		arg.ID,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RecentMiniAppMealDraftActionsRow
+	for rows.Next() {
+		var i RecentMiniAppMealDraftActionsRow
+		if err := rows.Scan(
+			&i.OperationID,
+			&i.EventID,
+			&i.DraftVersion,
+			&i.EventVersion,
+			&i.CatalogVersion,
+			&i.Cleared,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentNativeAvatarResolutionActions = `-- name: RecentNativeAvatarResolutionActions :many
+SELECT a.operation_id,a.proposal_id,a.kind,a.delivery_version,a.created_at,
+r.operation_id AS canonical_operation_id,r.delivery_id
+FROM shuttle_miniapp_avatar_resolution_actions a
+JOIN shuttle_avatar_delivery_resolutions r ON r.proposal_id=a.proposal_id
+JOIN shuttle_tasks t ON t.user_id=a.user_id
+WHERE a.user_id=$1 AND t.id=$2
+AND r.bot_id=$3 AND r.organization_id=$4 AND r.actor=$5
+AND a.created_at<t.created_at
+ORDER BY a.created_at DESC,a.operation_id,a.kind LIMIT 5
+`
+
+type RecentNativeAvatarResolutionActionsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	TaskID         uuid.UUID `json:"task_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+}
+
+type RecentNativeAvatarResolutionActionsRow struct {
+	OperationID          uuid.UUID          `json:"operation_id"`
+	ProposalID           uuid.UUID          `json:"proposal_id"`
+	Kind                 string             `json:"kind"`
+	DeliveryVersion      int64              `json:"delivery_version"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	CanonicalOperationID uuid.UUID          `json:"canonical_operation_id"`
+	DeliveryID           uuid.UUID          `json:"delivery_id"`
+}
+
+func (q *Queries) RecentNativeAvatarResolutionActions(ctx context.Context, arg RecentNativeAvatarResolutionActionsParams) ([]RecentNativeAvatarResolutionActionsRow, error) {
+	rows, err := q.db.Query(ctx, recentNativeAvatarResolutionActions,
+		arg.UserID,
+		arg.TaskID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RecentNativeAvatarResolutionActionsRow
+	for rows.Next() {
+		var i RecentNativeAvatarResolutionActionsRow
+		if err := rows.Scan(
+			&i.OperationID,
+			&i.ProposalID,
+			&i.Kind,
+			&i.DeliveryVersion,
+			&i.CreatedAt,
+			&i.CanonicalOperationID,
+			&i.DeliveryID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentRegistrationDetailsRequests = `-- name: RecentRegistrationDetailsRequests :many
+SELECT r.id, r.user_id, r.event_id, r.event_version, r.event_timezone, r.legal_name_required, r.passport_number_required, r.created_at, r.expires_at, r.completed_at, r.completed_details_version, r.superseded_at FROM shuttle_registration_details_requests r JOIN shuttle_tasks t ON t.user_id=r.user_id
+WHERE t.id=$1 AND r.user_id=$2 AND r.created_at<t.created_at AND r.superseded_at IS NULL
+ORDER BY r.created_at DESC,r.id DESC LIMIT 5
+`
+
+type RecentRegistrationDetailsRequestsParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) RecentRegistrationDetailsRequests(ctx context.Context, arg RecentRegistrationDetailsRequestsParams) ([]ShuttleRegistrationDetailsRequest, error) {
+	rows, err := q.db.Query(ctx, recentRegistrationDetailsRequests, arg.ID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleRegistrationDetailsRequest
+	for rows.Next() {
+		var i ShuttleRegistrationDetailsRequest
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.EventID,
+			&i.EventVersion,
+			&i.EventTimezone,
+			&i.LegalNameRequired,
+			&i.PassportNumberRequired,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.CompletedAt,
+			&i.CompletedDetailsVersion,
+			&i.SupersededAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recoverAvatarDeliveries = `-- name: RecoverAvatarDeliveries :execrows
+UPDATE shuttle_avatar_deliveries n SET state='delivery_unknown',version=n.version+1
+FROM shuttle_users u WHERE u.id=n.user_id AND u.bot_id=$1 AND u.zitadel_org=$2 AND n.state='send_inflight'
+`
+
+type RecoverAvatarDeliveriesParams struct {
+	BotID      int64  `json:"bot_id"`
+	ZitadelOrg string `json:"zitadel_org"`
+}
+
+func (q *Queries) RecoverAvatarDeliveries(ctx context.Context, arg RecoverAvatarDeliveriesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverAvatarDeliveries, arg.BotID, arg.ZitadelOrg)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recoverMassageReminders = `-- name: RecoverMassageReminders :execrows
+UPDATE shuttle_massage_reminders n SET state='delivery_unknown',version=n.version+1
+FROM shuttle_massage_bookings b,shuttle_events e
+WHERE b.id=n.booking_id AND e.id=b.event_id AND e.bot_id=$1 AND e.organization_id=$2 AND n.state='send_inflight'
+`
+
+type RecoverMassageRemindersParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func (q *Queries) RecoverMassageReminders(ctx context.Context, arg RecoverMassageRemindersParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverMassageReminders, arg.BotID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recoverMassageSpecialistNotifications = `-- name: RecoverMassageSpecialistNotifications :execrows
+UPDATE shuttle_massage_specialist_notifications n SET state='delivery_unknown',version=n.version+1
+FROM shuttle_massage_bookings b,shuttle_events e
+WHERE b.id=n.booking_id AND e.id=b.event_id AND e.bot_id=$1 AND e.organization_id=$2 AND n.state='send_inflight'
+`
+
+type RecoverMassageSpecialistNotificationsParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func (q *Queries) RecoverMassageSpecialistNotifications(ctx context.Context, arg RecoverMassageSpecialistNotificationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverMassageSpecialistNotifications, arg.BotID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recoverOrderNotifications = `-- name: RecoverOrderNotifications :execrows
+UPDATE shuttle_order_evidence_notices n SET state='delivery_unknown',version=n.version+1
+FROM shuttle_order_evidence ev,shuttle_events e
+WHERE ev.id=n.evidence_id AND e.id=ev.event_id AND e.bot_id=$1 AND e.organization_id=$2 AND n.state='send_inflight'
+`
+
+type RecoverOrderNotificationsParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func (q *Queries) RecoverOrderNotifications(ctx context.Context, arg RecoverOrderNotificationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverOrderNotifications, arg.BotID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const recoverPairInvitationNotifications = `-- name: RecoverPairInvitationNotifications :exec
+UPDATE shuttle_pair_notifications SET state='delivery_unknown',version=version+1
+WHERE bot_id=$1 AND organization_id=$2 AND state='send_inflight'
+`
+
+type RecoverPairInvitationNotificationsParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func (q *Queries) RecoverPairInvitationNotifications(ctx context.Context, arg RecoverPairInvitationNotificationsParams) error {
+	_, err := q.db.Exec(ctx, recoverPairInvitationNotifications, arg.BotID, arg.OrganizationID)
+	return err
+}
+
+const recoverPaymentNotifications = `-- name: RecoverPaymentNotifications :execrows
+UPDATE shuttle_payment_notifications SET state='delivery_unknown',version=version+1
+WHERE bot_id=$1 AND organization_id=$2 AND state='send_inflight'
+`
+
+type RecoverPaymentNotificationsParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func (q *Queries) RecoverPaymentNotifications(ctx context.Context, arg RecoverPaymentNotificationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverPaymentNotifications, arg.BotID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recoverUnknownDeliveries = `-- name: RecoverUnknownDeliveries :execrows
@@ -859,6 +11807,37 @@ func (q *Queries) RecoverUnknownDeliveries(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const registerFinalResponse = `-- name: RegisterFinalResponse :exec
+UPDATE shuttle_tasks t SET response_first_chunk_seq=r.first_seq,response_last_chunk_seq=r.last_seq
+FROM (SELECT min(chunk_seq) AS first_seq,max(chunk_seq) AS last_seq,count(*) AS chunks
+ FROM shuttle_outbox WHERE task_id=$1 AND dedup_key=ANY($2::text[])) r
+WHERE t.id=$1 AND t.route='new_run' AND t.state='completed' AND t.run_id<>''
+AND t.response_started_at IS NOT NULL AND t.response_first_chunk_seq IS NULL
+AND r.first_seq>=0 AND r.chunks>0 AND r.chunks=cardinality($2::text[])
+AND r.last_seq::bigint-r.first_seq::bigint+1=r.chunks
+`
+
+type RegisterFinalResponseParams struct {
+	TaskID     uuid.UUID `json:"task_id"`
+	OutboxKeys []string  `json:"outbox_keys"`
+}
+
+func (q *Queries) RegisterFinalResponse(ctx context.Context, arg RegisterFinalResponseParams) error {
+	_, err := q.db.Exec(ctx, registerFinalResponse, arg.TaskID, arg.OutboxKeys)
+	return err
+}
+
+const registrationNow = `-- name: RegistrationNow :one
+SELECT clock_timestamp()::timestamptz AS current_time
+`
+
+func (q *Queries) RegistrationNow(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, registrationNow)
+	var current_time pgtype.Timestamptz
+	err := row.Scan(&current_time)
+	return current_time, err
 }
 
 const releaseTask = `-- name: ReleaseTask :execrows
@@ -877,6 +11856,55 @@ func (q *Queries) ReleaseTask(ctx context.Context, arg ReleaseTaskParams) (int64
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const rescheduleMassageReminders = `-- name: RescheduleMassageReminders :exec
+UPDATE shuttle_massage_reminders n SET
+ lead_seconds=CASE WHEN n.kind='owner_long' THEN $1::integer ELSE $2::integer END,
+ due_at=b.starts_at-(CASE WHEN n.kind='owner_long' THEN $1::integer ELSE $2::integer END)*interval '1 second',
+ version=n.version+1
+FROM shuttle_massage_bookings b WHERE n.booking_id=b.id AND n.state IN ('pending','retryable')
+AND n.lead_seconds<>(CASE WHEN n.kind='owner_long' THEN $1::integer ELSE $2::integer END)
+`
+
+type RescheduleMassageRemindersParams struct {
+	LongSeconds  int32 `json:"long_seconds"`
+	ShortSeconds int32 `json:"short_seconds"`
+}
+
+func (q *Queries) RescheduleMassageReminders(ctx context.Context, arg RescheduleMassageRemindersParams) error {
+	_, err := q.db.Exec(ctx, rescheduleMassageReminders, arg.LongSeconds, arg.ShortSeconds)
+	return err
+}
+
+const reserveAvatarDelivery = `-- name: ReserveAvatarDelivery :one
+UPDATE shuttle_avatar_deliveries SET state='send_inflight',version=version+1,attempt_id=$3
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
+AND next_attempt_at<=clock_timestamp() RETURNING id, artifact_id, user_id, telegram_user_id, state, version, attempt_id, receipt, next_attempt_at, created_at
+`
+
+type ReserveAvatarDeliveryParams struct {
+	ID        uuid.UUID   `json:"id"`
+	Version   int64       `json:"version"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+}
+
+func (q *Queries) ReserveAvatarDelivery(ctx context.Context, arg ReserveAvatarDeliveryParams) (ShuttleAvatarDelivery, error) {
+	row := q.db.QueryRow(ctx, reserveAvatarDelivery, arg.ID, arg.Version, arg.AttemptID)
+	var i ShuttleAvatarDelivery
+	err := row.Scan(
+		&i.ID,
+		&i.ArtifactID,
+		&i.UserID,
+		&i.TelegramUserID,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const reserveDelivery = `-- name: ReserveDelivery :one
@@ -905,6 +11933,417 @@ func (q *Queries) ReserveDelivery(ctx context.Context, arg ReserveDeliveryParams
 	return i, err
 }
 
+const reserveMassageReminder = `-- name: ReserveMassageReminder :one
+UPDATE shuttle_massage_reminders SET state='send_inflight',version=version+1,attempt_id=$3,payload=$4
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
+AND due_at<=clock_timestamp() AND next_attempt_at<=clock_timestamp() RETURNING id, booking_id, kind, lead_seconds, due_at, next_attempt_at, state, version, attempt_id, payload, receipt, created_at
+`
+
+type ReserveMassageReminderParams struct {
+	ID        uuid.UUID   `json:"id"`
+	Version   int64       `json:"version"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	Payload   []byte      `json:"payload"`
+}
+
+func (q *Queries) ReserveMassageReminder(ctx context.Context, arg ReserveMassageReminderParams) (ShuttleMassageReminder, error) {
+	row := q.db.QueryRow(ctx, reserveMassageReminder,
+		arg.ID,
+		arg.Version,
+		arg.AttemptID,
+		arg.Payload,
+	)
+	var i ShuttleMassageReminder
+	err := row.Scan(
+		&i.ID,
+		&i.BookingID,
+		&i.Kind,
+		&i.LeadSeconds,
+		&i.DueAt,
+		&i.NextAttemptAt,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const reserveMassageSpecialistNotification = `-- name: ReserveMassageSpecialistNotification :one
+UPDATE shuttle_massage_specialist_notifications SET state='send_inflight',version=version+1,attempt_id=$3,payload=$4
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable') AND next_attempt_at<=clock_timestamp() RETURNING id, booking_id, kind, recipient_id, binding_version, preference_version, client_name, next_attempt_at, state, version, attempt_id, payload, receipt, created_at
+`
+
+type ReserveMassageSpecialistNotificationParams struct {
+	ID        uuid.UUID   `json:"id"`
+	Version   int64       `json:"version"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	Payload   []byte      `json:"payload"`
+}
+
+func (q *Queries) ReserveMassageSpecialistNotification(ctx context.Context, arg ReserveMassageSpecialistNotificationParams) (ShuttleMassageSpecialistNotification, error) {
+	row := q.db.QueryRow(ctx, reserveMassageSpecialistNotification,
+		arg.ID,
+		arg.Version,
+		arg.AttemptID,
+		arg.Payload,
+	)
+	var i ShuttleMassageSpecialistNotification
+	err := row.Scan(
+		&i.ID,
+		&i.BookingID,
+		&i.Kind,
+		&i.RecipientID,
+		&i.BindingVersion,
+		&i.PreferenceVersion,
+		&i.ClientName,
+		&i.NextAttemptAt,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const reserveOrderNotification = `-- name: ReserveOrderNotification :one
+UPDATE shuttle_order_evidence_notices SET state='send_inflight',version=version+1,attempt_id=$3,payload=$4
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable') RETURNING id, evidence_id, recipient_id, kind, document, created_at, state, version, attempt_id, payload, receipt, next_attempt_at
+`
+
+type ReserveOrderNotificationParams struct {
+	ID        uuid.UUID   `json:"id"`
+	Version   int64       `json:"version"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	Payload   []byte      `json:"payload"`
+}
+
+func (q *Queries) ReserveOrderNotification(ctx context.Context, arg ReserveOrderNotificationParams) (ShuttleOrderEvidenceNotice, error) {
+	row := q.db.QueryRow(ctx, reserveOrderNotification,
+		arg.ID,
+		arg.Version,
+		arg.AttemptID,
+		arg.Payload,
+	)
+	var i ShuttleOrderEvidenceNotice
+	err := row.Scan(
+		&i.ID,
+		&i.EvidenceID,
+		&i.RecipientID,
+		&i.Kind,
+		&i.Document,
+		&i.CreatedAt,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
+	)
+	return i, err
+}
+
+const reservePairInvitationNotification = `-- name: ReservePairInvitationNotification :one
+UPDATE shuttle_pair_notifications SET state='send_inflight',version=version+1,attempt_id=$3,payload=$4
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable') RETURNING id, bot_id, organization_id, invitation_id, invitation_version, recipient_id, kind, state, version, attempt_id, payload, receipt, next_attempt_at, created_at
+`
+
+type ReservePairInvitationNotificationParams struct {
+	ID        uuid.UUID   `json:"id"`
+	Version   int64       `json:"version"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	Payload   []byte      `json:"payload"`
+}
+
+func (q *Queries) ReservePairInvitationNotification(ctx context.Context, arg ReservePairInvitationNotificationParams) (ShuttlePairNotification, error) {
+	row := q.db.QueryRow(ctx, reservePairInvitationNotification,
+		arg.ID,
+		arg.Version,
+		arg.AttemptID,
+		arg.Payload,
+	)
+	var i ShuttlePairNotification
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.InvitationID,
+		&i.InvitationVersion,
+		&i.RecipientID,
+		&i.Kind,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const reservePaymentNotification = `-- name: ReservePaymentNotification :one
+UPDATE shuttle_payment_notifications SET state='send_inflight',version=version+1,attempt_id=$3,payload=$4
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable') RETURNING id, bot_id, organization_id, evidence_id, recipient_id, kind, document, state, version, attempt_id, payload, receipt, next_attempt_at, created_at
+`
+
+type ReservePaymentNotificationParams struct {
+	ID        uuid.UUID   `json:"id"`
+	Version   int64       `json:"version"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	Payload   []byte      `json:"payload"`
+}
+
+func (q *Queries) ReservePaymentNotification(ctx context.Context, arg ReservePaymentNotificationParams) (ShuttlePaymentNotification, error) {
+	row := q.db.QueryRow(ctx, reservePaymentNotification,
+		arg.ID,
+		arg.Version,
+		arg.AttemptID,
+		arg.Payload,
+	)
+	var i ShuttlePaymentNotification
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.EvidenceID,
+		&i.RecipientID,
+		&i.Kind,
+		&i.Document,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const resolveMassageReminder = `-- name: ResolveMassageReminder :one
+UPDATE shuttle_massage_reminders SET state=$1,version=version+1,next_attempt_at=clock_timestamp(),
+lead_seconds=CASE WHEN $1::text='pending' THEN $2::integer ELSE lead_seconds END,
+due_at=CASE WHEN $1::text='pending' THEN $3::timestamptz ELSE due_at END
+WHERE id=$4::uuid AND version=$5::bigint
+AND state IN ('delivery_unknown','delivery_failed','delivery_blocked') RETURNING id, booking_id, kind, lead_seconds, due_at, next_attempt_at, state, version, attempt_id, payload, receipt, created_at
+`
+
+type ResolveMassageReminderParams struct {
+	State       string             `json:"state"`
+	LeadSeconds int32              `json:"lead_seconds"`
+	DueAt       pgtype.Timestamptz `json:"due_at"`
+	ID          uuid.UUID          `json:"id"`
+	Version     int64              `json:"version"`
+}
+
+func (q *Queries) ResolveMassageReminder(ctx context.Context, arg ResolveMassageReminderParams) (ShuttleMassageReminder, error) {
+	row := q.db.QueryRow(ctx, resolveMassageReminder,
+		arg.State,
+		arg.LeadSeconds,
+		arg.DueAt,
+		arg.ID,
+		arg.Version,
+	)
+	var i ShuttleMassageReminder
+	err := row.Scan(
+		&i.ID,
+		&i.BookingID,
+		&i.Kind,
+		&i.LeadSeconds,
+		&i.DueAt,
+		&i.NextAttemptAt,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const resolveMassageSpecialistNotification = `-- name: ResolveMassageSpecialistNotification :one
+UPDATE shuttle_massage_specialist_notifications SET state=$1,version=version+1,next_attempt_at=clock_timestamp()
+WHERE id=$2::uuid AND version=$3::bigint
+AND state IN ('delivery_unknown','delivery_failed','delivery_blocked') RETURNING id, booking_id, kind, recipient_id, binding_version, preference_version, client_name, next_attempt_at, state, version, attempt_id, payload, receipt, created_at
+`
+
+type ResolveMassageSpecialistNotificationParams struct {
+	State   string    `json:"state"`
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ResolveMassageSpecialistNotification(ctx context.Context, arg ResolveMassageSpecialistNotificationParams) (ShuttleMassageSpecialistNotification, error) {
+	row := q.db.QueryRow(ctx, resolveMassageSpecialistNotification, arg.State, arg.ID, arg.Version)
+	var i ShuttleMassageSpecialistNotification
+	err := row.Scan(
+		&i.ID,
+		&i.BookingID,
+		&i.Kind,
+		&i.RecipientID,
+		&i.BindingVersion,
+		&i.PreferenceVersion,
+		&i.ClientName,
+		&i.NextAttemptAt,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const resolveOrderNotification = `-- name: ResolveOrderNotification :one
+UPDATE shuttle_order_evidence_notices SET state=$3,version=version+1,next_attempt_at=clock_timestamp()
+WHERE id=$1 AND version=$2 AND state IN ('delivery_unknown','delivery_failed','delivery_blocked')
+RETURNING id, evidence_id, recipient_id, kind, document, created_at, state, version, attempt_id, payload, receipt, next_attempt_at
+`
+
+type ResolveOrderNotificationParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+	State   string    `json:"state"`
+}
+
+func (q *Queries) ResolveOrderNotification(ctx context.Context, arg ResolveOrderNotificationParams) (ShuttleOrderEvidenceNotice, error) {
+	row := q.db.QueryRow(ctx, resolveOrderNotification, arg.ID, arg.Version, arg.State)
+	var i ShuttleOrderEvidenceNotice
+	err := row.Scan(
+		&i.ID,
+		&i.EvidenceID,
+		&i.RecipientID,
+		&i.Kind,
+		&i.Document,
+		&i.CreatedAt,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
+	)
+	return i, err
+}
+
+const resolvePairInvitationNotification = `-- name: ResolvePairInvitationNotification :one
+UPDATE shuttle_pair_notifications SET state=$3,version=version+1,next_attempt_at=clock_timestamp()
+WHERE id=$1 AND version=$2 AND state IN ('delivery_unknown','delivery_failed','delivery_blocked') RETURNING id, bot_id, organization_id, invitation_id, invitation_version, recipient_id, kind, state, version, attempt_id, payload, receipt, next_attempt_at, created_at
+`
+
+type ResolvePairInvitationNotificationParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+	State   string    `json:"state"`
+}
+
+func (q *Queries) ResolvePairInvitationNotification(ctx context.Context, arg ResolvePairInvitationNotificationParams) (ShuttlePairNotification, error) {
+	row := q.db.QueryRow(ctx, resolvePairInvitationNotification, arg.ID, arg.Version, arg.State)
+	var i ShuttlePairNotification
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.InvitationID,
+		&i.InvitationVersion,
+		&i.RecipientID,
+		&i.Kind,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const resolvePaymentNotification = `-- name: ResolvePaymentNotification :one
+UPDATE shuttle_payment_notifications SET state=$3,version=version+1,next_attempt_at=clock_timestamp()
+WHERE id=$1 AND version=$2 AND state IN ('delivery_unknown','delivery_failed','delivery_blocked')
+RETURNING id, bot_id, organization_id, evidence_id, recipient_id, kind, document, state, version, attempt_id, payload, receipt, next_attempt_at, created_at
+`
+
+type ResolvePaymentNotificationParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+	State   string    `json:"state"`
+}
+
+func (q *Queries) ResolvePaymentNotification(ctx context.Context, arg ResolvePaymentNotificationParams) (ShuttlePaymentNotification, error) {
+	row := q.db.QueryRow(ctx, resolvePaymentNotification, arg.ID, arg.Version, arg.State)
+	var i ShuttlePaymentNotification
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.EvidenceID,
+		&i.RecipientID,
+		&i.Kind,
+		&i.Document,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const reviewOrderEvidence = `-- name: ReviewOrderEvidence :one
+UPDATE shuttle_order_evidence SET state=$2,version=2 WHERE id=$1 AND version=1 RETURNING id, order_id, event_id, user_id, file_id, source_unique_id, reported_amount_minor, quoted_amount_minor, currency, currency_scale, sent_at, submitted_at, due_at, admission_state, reason, state, version, order_kind
+`
+
+type ReviewOrderEvidenceParams struct {
+	ID    uuid.UUID `json:"id"`
+	State string    `json:"state"`
+}
+
+func (q *Queries) ReviewOrderEvidence(ctx context.Context, arg ReviewOrderEvidenceParams) (ShuttleOrderEvidence, error) {
+	row := q.db.QueryRow(ctx, reviewOrderEvidence, arg.ID, arg.State)
+	var i ShuttleOrderEvidence
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.EventID,
+		&i.UserID,
+		&i.FileID,
+		&i.SourceUniqueID,
+		&i.ReportedAmountMinor,
+		&i.QuotedAmountMinor,
+		&i.Currency,
+		&i.CurrencyScale,
+		&i.SentAt,
+		&i.SubmittedAt,
+		&i.DueAt,
+		&i.AdmissionState,
+		&i.Reason,
+		&i.State,
+		&i.Version,
+		&i.OrderKind,
+	)
+	return i, err
+}
+
+const revokeMiniAppSession = `-- name: RevokeMiniAppSession :exec
+UPDATE shuttle_miniapp_sessions SET state='revoked' WHERE id=$1
+`
+
+func (q *Queries) RevokeMiniAppSession(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, revokeMiniAppSession, id)
+	return err
+}
+
 const revokeUser = `-- name: RevokeUser :execrows
 UPDATE shuttle_users SET revoked=$2 WHERE id=$1
 `
@@ -922,8 +12361,200 @@ func (q *Queries) RevokeUser(ctx context.Context, arg RevokeUserParams) (int64, 
 	return result.RowsAffected(), nil
 }
 
+const routedSequence = `-- name: RoutedSequence :one
+SELECT coalesce((SELECT seq-1 FROM shuttle_tasks
+ WHERE conversation_id=$1 AND seq>$2 AND route=''
+ ORDER BY seq LIMIT 1),$3::bigint)::bigint
+`
+
+type RoutedSequenceParams struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	RoutedSeq      int64     `json:"routed_seq"`
+	NextSeq        int64     `json:"next_seq"`
+}
+
+func (q *Queries) RoutedSequence(ctx context.Context, arg RoutedSequenceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, routedSequence, arg.ConversationID, arg.RoutedSeq, arg.NextSeq)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const saveAvatarDeliveryResolution = `-- name: SaveAvatarDeliveryResolution :execrows
+UPDATE shuttle_avatar_delivery_resolutions SET result=$5
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 AND result IS NULL
+`
+
+type SaveAvatarDeliveryResolutionParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	OperationID    uuid.UUID `json:"operation_id"`
+	Result         []byte    `json:"result"`
+}
+
+func (q *Queries) SaveAvatarDeliveryResolution(ctx context.Context, arg SaveAvatarDeliveryResolutionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveAvatarDeliveryResolution,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.Result,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveEventChangeResult = `-- name: SaveEventChangeResult :execrows
+UPDATE shuttle_event_change_proposals SET result=$5
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 AND result IS NULL
+`
+
+type SaveEventChangeResultParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) SaveEventChangeResult(ctx context.Context, arg SaveEventChangeResultParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveEventChangeResult,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.Result,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveMassageBindingOperation = `-- name: SaveMassageBindingOperation :execrows
+UPDATE shuttle_massage_binding_operations SET result=$3
+WHERE actor_id=$1 AND operation_id=$2 AND result IS NULL
+`
+
+type SaveMassageBindingOperationParams struct {
+	ActorID     uuid.UUID `json:"actor_id"`
+	OperationID uuid.UUID `json:"operation_id"`
+	Result      []byte    `json:"result"`
+}
+
+func (q *Queries) SaveMassageBindingOperation(ctx context.Context, arg SaveMassageBindingOperationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveMassageBindingOperation, arg.ActorID, arg.OperationID, arg.Result)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveMealDraft = `-- name: SaveMealDraft :exec
+INSERT INTO shuttle_meal_drafts(user_id,event_id,catalog_version,version,result) VALUES($1,$2,$3,$4,$5)
+ON CONFLICT(user_id,event_id) DO UPDATE SET catalog_version=EXCLUDED.catalog_version,version=EXCLUDED.version,result=EXCLUDED.result
+`
+
+type SaveMealDraftParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	EventID        uuid.UUID `json:"event_id"`
+	CatalogVersion int64     `json:"catalog_version"`
+	Version        int64     `json:"version"`
+	Result         []byte    `json:"result"`
+}
+
+func (q *Queries) SaveMealDraft(ctx context.Context, arg SaveMealDraftParams) error {
+	_, err := q.db.Exec(ctx, saveMealDraft,
+		arg.UserID,
+		arg.EventID,
+		arg.CatalogVersion,
+		arg.Version,
+		arg.Result,
+	)
+	return err
+}
+
+const saveNotificationResolution = `-- name: SaveNotificationResolution :execrows
+UPDATE shuttle_notification_resolutions SET result=$5
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 AND result IS NULL
+`
+
+type SaveNotificationResolutionParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) SaveNotificationResolution(ctx context.Context, arg SaveNotificationResolutionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveNotificationResolution,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.Result,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveOrdersSelection = `-- name: SaveOrdersSelection :exec
+INSERT INTO shuttle_orders_selections(user_id,event_id,version,result) VALUES($1,$2,$3,$4)
+ON CONFLICT(user_id,event_id) DO UPDATE SET version=EXCLUDED.version,result=EXCLUDED.result
+`
+
+type SaveOrdersSelectionParams struct {
+	UserID  uuid.UUID `json:"user_id"`
+	EventID uuid.UUID `json:"event_id"`
+	Version int64     `json:"version"`
+	Result  []byte    `json:"result"`
+}
+
+func (q *Queries) SaveOrdersSelection(ctx context.Context, arg SaveOrdersSelectionParams) error {
+	_, err := q.db.Exec(ctx, saveOrdersSelection,
+		arg.UserID,
+		arg.EventID,
+		arg.Version,
+		arg.Result,
+	)
+	return err
+}
+
+const saveSettingsChangeResult = `-- name: SaveSettingsChangeResult :execrows
+UPDATE shuttle_settings_change_proposals SET result=$5
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 AND result IS NULL
+`
+
+type SaveSettingsChangeResultParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) SaveSettingsChangeResult(ctx context.Context, arg SaveSettingsChangeResultParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveSettingsChangeResult,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.Result,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const saveTask = `-- name: SaveTask :one
-UPDATE shuttle_tasks SET state=$4,run_id=$5,auth_session_id=$6,question_id=$7,snapshot=$8,version=version+1 WHERE id=$1 AND lease_owner=$2 AND fence=$3 AND lease_until>now() RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at
+UPDATE shuttle_tasks SET state=$4,run_id=$5,auth_session_id=$6,question_id=$7,snapshot=$8,version=version+1 WHERE id=$1 AND lease_owner=$2 AND fence=$3 AND lease_until>now() RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at, response_started_at, response_first_chunk_seq, response_last_chunk_seq, response_delivered_at
 `
 
 type SaveTaskParams struct {
@@ -968,12 +12599,167 @@ func (q *Queries) SaveTask(ctx context.Context, arg SaveTaskParams) (ShuttleTask
 		&i.LeaseOwner,
 		&i.LeaseUntil,
 		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
+	)
+	return i, err
+}
+
+const saveTaskClosureResult = `-- name: SaveTaskClosureResult :execrows
+UPDATE shuttle_task_closure_proposals SET result=$5
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 AND result IS NULL
+`
+
+type SaveTaskClosureResultParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) SaveTaskClosureResult(ctx context.Context, arg SaveTaskClosureResultParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveTaskClosureResult,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.Result,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const saveUserRevocationResult = `-- name: SaveUserRevocationResult :execrows
+UPDATE shuttle_user_revocation_proposals SET result=$5
+WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 AND result IS NULL
+`
+
+type SaveUserRevocationResultParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	OperationID    string `json:"operation_id"`
+	Result         []byte `json:"result"`
+}
+
+func (q *Queries) SaveUserRevocationResult(ctx context.Context, arg SaveUserRevocationResultParams) (int64, error) {
+	result, err := q.db.Exec(ctx, saveUserRevocationResult,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.OperationID,
+		arg.Result,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setEventAuthority = `-- name: SetEventAuthority :one
+INSERT INTO shuttle_event_authorities(event_id,user_id,role,version) VALUES($1,$2,$3,1)
+ON CONFLICT(event_id,user_id) DO UPDATE SET role=EXCLUDED.role,version=shuttle_event_authorities.version+1 RETURNING event_id, user_id, role, version
+`
+
+type SetEventAuthorityParams struct {
+	EventID uuid.UUID `json:"event_id"`
+	UserID  uuid.UUID `json:"user_id"`
+	Role    string    `json:"role"`
+}
+
+func (q *Queries) SetEventAuthority(ctx context.Context, arg SetEventAuthorityParams) (ShuttleEventAuthority, error) {
+	row := q.db.QueryRow(ctx, setEventAuthority, arg.EventID, arg.UserID, arg.Role)
+	var i ShuttleEventAuthority
+	err := row.Scan(
+		&i.EventID,
+		&i.UserID,
+		&i.Role,
+		&i.Version,
+	)
+	return i, err
+}
+
+const setEventDepositPolicy = `-- name: SetEventDepositPolicy :exec
+INSERT INTO shuttle_event_deposit_policy(event_id,document) VALUES($1,$2)
+ON CONFLICT(event_id) DO UPDATE SET document=EXCLUDED.document
+`
+
+type SetEventDepositPolicyParams struct {
+	EventID  uuid.UUID `json:"event_id"`
+	Document []byte    `json:"document"`
+}
+
+func (q *Queries) SetEventDepositPolicy(ctx context.Context, arg SetEventDepositPolicyParams) error {
+	_, err := q.db.Exec(ctx, setEventDepositPolicy, arg.EventID, arg.Document)
+	return err
+}
+
+const setEventRegistrationRules = `-- name: SetEventRegistrationRules :exec
+INSERT INTO shuttle_event_registration_rules(event_id,document) VALUES($1,$2)
+ON CONFLICT(event_id) DO UPDATE SET document=EXCLUDED.document
+`
+
+type SetEventRegistrationRulesParams struct {
+	EventID  uuid.UUID `json:"event_id"`
+	Document []byte    `json:"document"`
+}
+
+func (q *Queries) SetEventRegistrationRules(ctx context.Context, arg SetEventRegistrationRulesParams) error {
+	_, err := q.db.Exec(ctx, setEventRegistrationRules, arg.EventID, arg.Document)
+	return err
+}
+
+const setMassageSpecialistPreference = `-- name: SetMassageSpecialistPreference :one
+INSERT INTO shuttle_massage_specialist_preferences
+ (user_id,notify_bookings,notify_next,version,notify_bookings_version,notify_next_version)
+VALUES($1,$2::boolean,$3::boolean,$4::bigint,
+ CASE WHEN $2::boolean THEN 0 ELSE $4::bigint END,
+ CASE WHEN $3::boolean THEN 0 ELSE $4::bigint END)
+ON CONFLICT(user_id) DO UPDATE SET
+ notify_bookings=EXCLUDED.notify_bookings,notify_next=EXCLUDED.notify_next,version=EXCLUDED.version,
+ notify_bookings_version=CASE WHEN shuttle_massage_specialist_preferences.notify_bookings<>EXCLUDED.notify_bookings
+ THEN EXCLUDED.version ELSE shuttle_massage_specialist_preferences.notify_bookings_version END,
+ notify_next_version=CASE WHEN shuttle_massage_specialist_preferences.notify_next<>EXCLUDED.notify_next
+ THEN EXCLUDED.version ELSE shuttle_massage_specialist_preferences.notify_next_version END
+WHERE shuttle_massage_specialist_preferences.version=$5
+RETURNING user_id, notify_bookings, version, notify_next, notify_bookings_version, notify_next_version
+`
+
+type SetMassageSpecialistPreferenceParams struct {
+	UserID          uuid.UUID `json:"user_id"`
+	NotifyBookings  bool      `json:"notify_bookings"`
+	NotifyNext      bool      `json:"notify_next"`
+	NextVersion     int64     `json:"next_version"`
+	ExpectedVersion int64     `json:"expected_version"`
+}
+
+func (q *Queries) SetMassageSpecialistPreference(ctx context.Context, arg SetMassageSpecialistPreferenceParams) (ShuttleMassageSpecialistPreference, error) {
+	row := q.db.QueryRow(ctx, setMassageSpecialistPreference,
+		arg.UserID,
+		arg.NotifyBookings,
+		arg.NotifyNext,
+		arg.NextVersion,
+		arg.ExpectedVersion,
+	)
+	var i ShuttleMassageSpecialistPreference
+	err := row.Scan(
+		&i.UserID,
+		&i.NotifyBookings,
+		&i.Version,
+		&i.NotifyNext,
+		&i.NotifyBookingsVersion,
+		&i.NotifyNextVersion,
 	)
 	return i, err
 }
 
 const setRoute = `-- name: SetRoute :one
-UPDATE shuttle_tasks SET route=$2,target_run_id=$3,question_id=$4,target_task_id=$5,version=version+1 WHERE id=$1 AND route='' RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at
+UPDATE shuttle_tasks SET route=$2,target_run_id=$3,question_id=$4,target_task_id=$5,version=version+1 WHERE id=$1 AND route='' RETURNING id, user_id, conversation_id, seq, request, state, route, target_task_id, target_run_id, run_id, auth_session_id, question_id, snapshot, version, fence, lease_owner, lease_until, created_at, response_started_at, response_first_chunk_seq, response_last_chunk_seq, response_delivered_at
 `
 
 type SetRouteParams struct {
@@ -1012,8 +12798,66 @@ func (q *Queries) SetRoute(ctx context.Context, arg SetRouteParams) (ShuttleTask
 		&i.LeaseOwner,
 		&i.LeaseUntil,
 		&i.CreatedAt,
+		&i.ResponseStartedAt,
+		&i.ResponseFirstChunkSeq,
+		&i.ResponseLastChunkSeq,
+		&i.ResponseDeliveredAt,
 	)
 	return i, err
+}
+
+const setRunEventContext = `-- name: SetRunEventContext :exec
+INSERT INTO shuttle_run_event_context(user_id,run_id,event_id) VALUES($1,$2,$3)
+ON CONFLICT(user_id,run_id) DO UPDATE SET event_id=EXCLUDED.event_id
+`
+
+type SetRunEventContextParams struct {
+	UserID  uuid.UUID `json:"user_id"`
+	RunID   string    `json:"run_id"`
+	EventID uuid.UUID `json:"event_id"`
+}
+
+func (q *Queries) SetRunEventContext(ctx context.Context, arg SetRunEventContextParams) error {
+	_, err := q.db.Exec(ctx, setRunEventContext, arg.UserID, arg.RunID, arg.EventID)
+	return err
+}
+
+const taskMetrics = `-- name: TaskMetrics :many
+SELECT (CASE WHEN state IN (
+ 'accepted','creating_run','running','awaiting_service','awaiting_authorization',
+ 'auth_reauthorizing','awaiting_user','auth_unknown','delivery_unknown'
+) THEN state ELSE 'other' END)::text AS metric_state,
+count(*)::bigint AS task_count,
+coalesce(extract(epoch FROM (statement_timestamp()-min(created_at))),0)::double precision AS accepted_age_seconds
+FROM shuttle_tasks
+WHERE state NOT IN ('completed','failed','cancelled','delivery_failed','closed')
+GROUP BY metric_state ORDER BY metric_state
+`
+
+type TaskMetricsRow struct {
+	MetricState        string  `json:"metric_state"`
+	TaskCount          int64   `json:"task_count"`
+	AcceptedAgeSeconds float64 `json:"accepted_age_seconds"`
+}
+
+func (q *Queries) TaskMetrics(ctx context.Context) ([]TaskMetricsRow, error) {
+	rows, err := q.db.Query(ctx, taskMetrics)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TaskMetricsRow
+	for rows.Next() {
+		var i TaskMetricsRow
+		if err := rows.Scan(&i.MetricState, &i.TaskCount, &i.AcceptedAgeSeconds); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateConversationRun = `-- name: UpdateConversationRun :exec
@@ -1035,6 +12879,142 @@ func (q *Queries) UpdateConversationRun(ctx context.Context, arg UpdateConversat
 		arg.AwaitingQuestionID,
 	)
 	return err
+}
+
+const updateEvent = `-- name: UpdateEvent :one
+UPDATE shuttle_events SET name=$5,timezone=$6,starts_at=$7,ends_at=$8,modules=$9,version=version+1
+WHERE id=$1 AND bot_id=$2 AND organization_id=$3 AND version=$4 RETURNING id, bot_id, organization_id, name, timezone, starts_at, ends_at, modules, version
+`
+
+type UpdateEventParams struct {
+	ID             uuid.UUID          `json:"id"`
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Version        int64              `json:"version"`
+	Name           string             `json:"name"`
+	Timezone       string             `json:"timezone"`
+	StartsAt       pgtype.Timestamptz `json:"starts_at"`
+	EndsAt         pgtype.Timestamptz `json:"ends_at"`
+	Modules        []string           `json:"modules"`
+}
+
+func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (ShuttleEvent, error) {
+	row := q.db.QueryRow(ctx, updateEvent,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Version,
+		arg.Name,
+		arg.Timezone,
+		arg.StartsAt,
+		arg.EndsAt,
+		arg.Modules,
+	)
+	var i ShuttleEvent
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Timezone,
+		&i.StartsAt,
+		&i.EndsAt,
+		&i.Modules,
+		&i.Version,
+	)
+	return i, err
+}
+
+const updateMassageSchedule = `-- name: UpdateMassageSchedule :one
+UPDATE shuttle_massage_schedules SET document=$2,version=version+1
+WHERE event_id=$1 AND version=$3 RETURNING event_id, version, document
+`
+
+type UpdateMassageScheduleParams struct {
+	EventID  uuid.UUID `json:"event_id"`
+	Document []byte    `json:"document"`
+	Version  int64     `json:"version"`
+}
+
+func (q *Queries) UpdateMassageSchedule(ctx context.Context, arg UpdateMassageScheduleParams) (ShuttleMassageSchedule, error) {
+	row := q.db.QueryRow(ctx, updateMassageSchedule, arg.EventID, arg.Document, arg.Version)
+	var i ShuttleMassageSchedule
+	err := row.Scan(&i.EventID, &i.Version, &i.Document)
+	return i, err
+}
+
+const updateMassageSpecialistBinding = `-- name: UpdateMassageSpecialistBinding :one
+UPDATE shuttle_massage_specialist_bindings
+SET active=$1,version=version+1,updated_by=$2,updated_at=clock_timestamp()
+WHERE event_id=$3 AND specialist_id=$4
+AND user_id=$5 AND version=$6::bigint RETURNING event_id, specialist_id, user_id, active, version, updated_by, created_at, updated_at
+`
+
+type UpdateMassageSpecialistBindingParams struct {
+	Active          bool      `json:"active"`
+	ActorID         uuid.UUID `json:"actor_id"`
+	EventID         uuid.UUID `json:"event_id"`
+	SpecialistID    string    `json:"specialist_id"`
+	UserID          uuid.UUID `json:"user_id"`
+	ExpectedVersion int64     `json:"expected_version"`
+}
+
+func (q *Queries) UpdateMassageSpecialistBinding(ctx context.Context, arg UpdateMassageSpecialistBindingParams) (ShuttleMassageSpecialistBinding, error) {
+	row := q.db.QueryRow(ctx, updateMassageSpecialistBinding,
+		arg.Active,
+		arg.ActorID,
+		arg.EventID,
+		arg.SpecialistID,
+		arg.UserID,
+		arg.ExpectedVersion,
+	)
+	var i ShuttleMassageSpecialistBinding
+	err := row.Scan(
+		&i.EventID,
+		&i.SpecialistID,
+		&i.UserID,
+		&i.Active,
+		&i.Version,
+		&i.UpdatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateOrdersCatalog = `-- name: UpdateOrdersCatalog :one
+UPDATE shuttle_orders_catalogs SET document=$2,version=version+1
+WHERE event_id=$1 AND version=$3 RETURNING event_id, version, document
+`
+
+type UpdateOrdersCatalogParams struct {
+	EventID  uuid.UUID `json:"event_id"`
+	Document []byte    `json:"document"`
+	Version  int64     `json:"version"`
+}
+
+func (q *Queries) UpdateOrdersCatalog(ctx context.Context, arg UpdateOrdersCatalogParams) (ShuttleOrdersCatalog, error) {
+	row := q.db.QueryRow(ctx, updateOrdersCatalog, arg.EventID, arg.Document, arg.Version)
+	var i ShuttleOrdersCatalog
+	err := row.Scan(&i.EventID, &i.Version, &i.Document)
+	return i, err
+}
+
+const updateUserEventContext = `-- name: UpdateUserEventContext :one
+UPDATE shuttle_user_event_context SET event_id=$2,version=version+1 WHERE user_id=$1 AND version=$3 RETURNING user_id, event_id, version
+`
+
+type UpdateUserEventContextParams struct {
+	UserID  uuid.UUID   `json:"user_id"`
+	EventID pgtype.UUID `json:"event_id"`
+	Version int64       `json:"version"`
+}
+
+func (q *Queries) UpdateUserEventContext(ctx context.Context, arg UpdateUserEventContextParams) (ShuttleUserEventContext, error) {
+	row := q.db.QueryRow(ctx, updateUserEventContext, arg.UserID, arg.EventID, arg.Version)
+	var i ShuttleUserEventContext
+	err := row.Scan(&i.UserID, &i.EventID, &i.Version)
+	return i, err
 }
 
 const upsertUser = `-- name: UpsertUser :one
@@ -1066,4 +13046,35 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (Shuttle
 		&i.Revoked,
 	)
 	return i, err
+}
+
+const userModuleAvailable = `-- name: UserModuleAvailable :one
+SELECT EXISTS(SELECT 1 FROM shuttle_events e
+JOIN shuttle_registrations r ON r.event_id=e.id AND r.state='assigned'
+JOIN shuttle_passes p ON p.registration_id=r.id
+JOIN shuttle_users u ON u.id=r.user_id
+WHERE e.id=$1 AND e.bot_id=$2 AND e.organization_id=$3 AND u.id=$4
+AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id AND NOT u.revoked
+AND $5::text=ANY(e.modules)) AS available
+`
+
+type UserModuleAvailableParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ID_2           uuid.UUID `json:"id_2"`
+	Column5        string    `json:"column_5"`
+}
+
+func (q *Queries) UserModuleAvailable(ctx context.Context, arg UserModuleAvailableParams) (bool, error) {
+	row := q.db.QueryRow(ctx, userModuleAvailable,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ID_2,
+		arg.Column5,
+	)
+	var available bool
+	err := row.Scan(&available)
+	return available, err
 }

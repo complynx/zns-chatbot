@@ -76,7 +76,13 @@ type Client struct {
 	tokens         map[string]Credential
 	positive       map[[32]byte]positive
 	generation     map[string]uint64
+	cacheStats     CacheStats
 	flight         singleflight.Group
+}
+
+// DeploymentScope returns immutable startup identity without credentials.
+func (c *Client) DeploymentScope() (int64, string, string) {
+	return c.options.BotID, c.options.OrganizationID, c.options.Issuer
 }
 
 func New(o Options, h *http.Client) (*Client, error) {
@@ -159,7 +165,8 @@ func (c *Client) request(
 		return ErrUnavailable
 	}
 	if len(b) > maxResponseBytes || json.Unmarshal(b, out) != nil {
-		return ErrDenied
+		// A malformed successful reply cannot prove that a mutation was rejected.
+		return ErrUnavailable
 	}
 	return nil
 }
@@ -318,12 +325,12 @@ func (c *Client) Verify(ctx context.Context, token string) (Principal, error) {
 	}
 	hash := sha256.Sum256([]byte(token))
 	c.mu.Lock()
-	cached, ok := c.positive[hash]
+	cached, hit := c.positiveLookup(hash)
 	generation := c.generation[s.Subject]
 	epoch := c.cacheEpoch
 	ttl := c.options.PositiveCacheTTL
 	c.mu.Unlock()
-	if ok && time.Now().Before(cached.until) {
+	if hit {
 		return clonePrincipal(cached.principal), nil
 	}
 	d, err := c.discover(ctx)
@@ -632,6 +639,9 @@ func (c *Client) fallback(
 	if errors.Is(err, ErrUnavailable) && cached.ExpiresAt.After(time.Now()) {
 		c.mu.Lock()
 		unchanged := c.generation[subject] == generation && c.generation[c.options.ActorID] == actorGeneration
+		if unchanged {
+			c.recordFallback(subject)
+		}
 		c.mu.Unlock()
 		if unchanged {
 			return cached, nil

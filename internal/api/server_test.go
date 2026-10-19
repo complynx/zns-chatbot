@@ -12,11 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/shuttle/internal/api"
-	"github.com/complynx/shuttle/internal/db"
-	"github.com/complynx/shuttle/internal/identity"
-	"github.com/complynx/shuttle/internal/task"
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/api"
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
+	"github.com/complynx/zns-chatbot/internal/task"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 type intake struct {
@@ -141,6 +141,10 @@ func TestManifestAndHealthAreAvailableWithoutIAM(t *testing.T) {
 	var manifest map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &manifest))
 	require.InDelta(t, float64(1), manifest["protocol_version"], 0)
+	require.Equal(t, "zinusya", manifest["service_id"])
+	require.Contains(t, w.Body.String(), "Zinusya")
+	require.Contains(t, w.Body.String(), "zinusya_account")
+	require.Contains(t, w.Body.String(), "zinusya_administration")
 	require.NotContains(t, w.Body.String(), "test-secret")
 	w = httptest.NewRecorder()
 	r := httptest.NewRequest(
@@ -167,4 +171,34 @@ func TestAccountToolForwardsBearerToIdentityVerification(t *testing.T) {
 	s.InternalHandler().ServeHTTP(w, r)
 	require.Equal(t, http.StatusUnauthorized, w.Code)
 	require.Contains(t, w.Body.String(), "invalid identity")
+}
+
+func TestFileToolsUseConsumerReadableStaticManifest(t *testing.T) {
+	t.Parallel()
+	server := newAPI(t, &intake{})
+	output := httptest.NewRecorder()
+	server.InternalHandler().ServeHTTP(output, httptest.NewRequest(http.MethodGet, "/internal/agent/manifest", nil))
+	var manifest struct {
+		Modules []struct {
+			ID        string `json:"id"`
+			Discovery string `json:"discovery"`
+			Methods   []struct {
+				ID string `json:"id"`
+			} `json:"methods"`
+		} `json:"modules"`
+	}
+	require.NoError(t, json.Unmarshal(output.Body.Bytes(), &manifest))
+	for _, module := range manifest.Modules {
+		if module.ID != "zinusya_files" {
+			continue
+		}
+		require.Equal(t, "static", module.Discovery)
+		names := []string{}
+		for _, method := range module.Methods {
+			names = append(names, method.ID)
+		}
+		require.ElementsMatch(t, []string{"info", "fetch"}, names)
+		return
+	}
+	t.Fatal("file tools not discoverable")
 }

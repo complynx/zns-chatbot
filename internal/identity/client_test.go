@@ -21,7 +21,7 @@ import (
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 type iamFixture struct {
@@ -353,6 +353,8 @@ func TestRenewalFallbackOnlyWhileValidAndTransient(t *testing.T) {
 	got, err := c.UserToken(ctx, "user")
 	require.NoError(t, err)
 	require.Equal(t, original.Token, got.Token)
+	require.Equal(t, int64(1), c.CacheStats().UserFallbacks)
+	require.Zero(t, c.CacheStats().ServiceFallbacks)
 	f.mu.Lock()
 	f.tokenStatus = 400
 	f.mu.Unlock()
@@ -364,6 +366,12 @@ func TestRenewalFallbackOnlyWhileValidAndTransient(t *testing.T) {
 	f.mu.Unlock()
 	_, err = c.UserToken(ctx, "user")
 	require.ErrorIs(t, err, ErrUnavailable)
+	require.Equal(
+		t,
+		int64(1),
+		c.CacheStats().UserFallbacks,
+		"denial and missing credentials are not successful fallbacks",
+	)
 }
 func TestRenewalTimeoutPreservesValidTokenButNotExpiredToken(t *testing.T) {
 	t.Parallel()
@@ -390,10 +398,12 @@ func TestRenewalTimeoutPreservesValidTokenButNotExpiredToken(t *testing.T) {
 	defer cancel2()
 	_, err = c.UserToken(ctx2, "user")
 	require.ErrorIs(t, err, ErrUnavailable)
+	require.Equal(t, int64(1), c.CacheStats().UserFallbacks, "an expired credential cannot count as a fallback")
 }
 func TestVerifyCacheOutageAndKnownInactive(t *testing.T) {
 	t.Parallel()
 	f, c := fixture(t)
+	require.Equal(t, CacheStats{}, c.CacheStats())
 	token, err := c.UserToken(context.Background(), "user")
 	require.NoError(t, err)
 	p, err := c.Verify(context.Background(), token.Token)
@@ -406,6 +416,7 @@ func TestVerifyCacheOutageAndKnownInactive(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Org", p.Roles["account.me"]["org"])
 	require.Equal(t, 1, f.count("intro"))
+	require.Equal(t, CacheStats{PositiveHits: 1, PositiveMisses: 1}, c.CacheStats())
 	require.NoError(t, c.SetPositiveCacheTTL(0))
 	_, err = c.Verify(context.Background(), token.Token)
 	require.ErrorIs(t, err, ErrUnavailable)
@@ -418,7 +429,52 @@ func TestVerifyCacheOutageAndKnownInactive(t *testing.T) {
 	_, err = c.Verify(context.Background(), token.Token)
 	require.ErrorIs(t, err, ErrDenied)
 	require.Empty(t, c.tokens["user"])
+	require.Equal(t, CacheStats{PositiveHits: 1, PositiveMisses: 3}, c.CacheStats())
 }
+
+func TestCacheStatsSeparateNestedFallbacksAndConcurrentLookups(t *testing.T) {
+	t.Parallel()
+	f, c := fixture(t)
+	ctx := context.Background()
+	original, err := c.UserToken(ctx, "user")
+	require.NoError(t, err)
+	_, err = c.Verify(ctx, original.Token)
+	require.NoError(t, err)
+	var wg sync.WaitGroup
+	errs := make(chan error, 20)
+	for range 20 {
+		wg.Go(func() {
+			_, verifyErr := c.Verify(ctx, original.Token)
+			errs <- verifyErr
+			_ = c.CacheStats()
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for verifyErr := range errs {
+		require.NoError(t, verifyErr)
+	}
+	require.Equal(t, CacheStats{PositiveHits: 20, PositiveMisses: 1}, c.CacheStats())
+	c.mu.Lock()
+	for _, subject := range []string{"actor", "user"} {
+		cached := c.tokens[subject]
+		cached.ExpiresAt = time.Now().Add(20 * time.Second)
+		c.tokens[subject] = cached
+	}
+	c.mu.Unlock()
+	f.mu.Lock()
+	f.tokenStatus = http.StatusServiceUnavailable
+	f.mu.Unlock()
+	got, err := c.UserToken(ctx, "user")
+	require.NoError(t, err)
+	require.Equal(t, original.Token, got.Token)
+	require.Equal(
+		t,
+		CacheStats{PositiveHits: 20, PositiveMisses: 1, ServiceFallbacks: 1, UserFallbacks: 1},
+		c.CacheStats(),
+	)
+}
+
 func TestVerifyRejectsJWTTrustMismatch(t *testing.T) {
 	t.Parallel()
 	f, c := fixture(t)
@@ -433,6 +489,7 @@ func TestVerifyRejectsJWTTrustMismatch(t *testing.T) {
 			token := f.signed("user", test.actor, test.org, test.aud, test.expiry)
 			_, err := c.Verify(context.Background(), token)
 			require.ErrorIs(t, err, ErrDenied)
+			require.Equal(t, CacheStats{}, c.CacheStats(), "JWT trust rejection precedes cache lookup")
 		})
 	}
 	require.Equal(t, 0, f.count("intro"))
@@ -559,7 +616,7 @@ func TestCredentialCachePrunesExpiredEntriesOnIssuance(t *testing.T) {
 
 func TestAuthorizationRolesBelongToConfiguredAPIProject(t *testing.T) {
 	t.Parallel()
-	admin := map[string]map[string]string{"shuttle.admin": {"org": "Org"}}
+	admin := map[string]map[string]string{"zinusya.admin": {"org": "Org"}}
 	cases := []struct {
 		name              string
 		roles             map[string]any
@@ -591,8 +648,27 @@ func TestAuthorizationRolesBelongToConfiguredAPIProject(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			_, granted := principal.Roles["shuttle.admin"]["org"]
+			_, granted := principal.Roles["zinusya.admin"]["org"]
 			require.Equal(t, tc.permitted, granted)
 		})
 	}
+}
+
+func TestVerifyRejectsFutureIssuedTokenBeforeIntrospection(t *testing.T) {
+	t.Parallel()
+	f, c := fixture(t)
+	now := time.Now()
+	token, err := jwt.Signed(f.signer).Claims(claims{
+		Issuer:   f.server.URL,
+		Subject:  "user",
+		Audience: jwt.Audience{"api"},
+		Expiry:   jwt.NewNumericDate(now.Add(time.Hour)),
+		IssuedAt: jwt.NewNumericDate(now.Add(time.Minute)),
+		Org:      "org",
+	}).Serialize()
+	require.NoError(t, err)
+	_, err = c.Verify(t.Context(), token)
+	require.ErrorIs(t, err, ErrDenied)
+	require.Zero(t, f.count("intro"))
+	require.Equal(t, CacheStats{}, c.CacheStats())
 }

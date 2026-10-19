@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/complynx/shuttle/internal/db"
+	"github.com/complynx/zns-chatbot/internal/db"
 )
 
 const databaseDiagnosticInterval = 30 * time.Second

@@ -1,15 +1,9 @@
 **
 !go.mod
 !go.sum
-!cmd/
 !cmd/**
-!internal/
 !internal/**
-!migrations/
 !migrations/**
 !LICENSE
-!docs/
-!docs/dependency-audit/
-!docs/dependency-audit/2026-10-12/
-!docs/dependency-audit/2026-10-12/_runtime-notices/
 !docs/dependency-audit/2026-10-12/_runtime-notices/**
+!docs/dependency-audit/2026-10-14-avatars/notices/**

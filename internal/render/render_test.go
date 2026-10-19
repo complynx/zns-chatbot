@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/shuttle/internal/render"
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/render"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 func TestRenderFixtures(t *testing.T) {

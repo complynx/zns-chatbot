@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/shuttle/internal/db"
+	"github.com/complynx/zns-chatbot/internal/db"
 )
 
 func taskAdminToken(t *testing.T, h *harness, id uuid.UUID) string {

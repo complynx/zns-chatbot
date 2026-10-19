@@ -334,6 +334,16 @@
       "pin_source": "Matching version in Loom lock"
     },
     {
+      "module": "github.com/disintegration/imaging",
+      "version": "v1.6.2",
+      "commit": "acabd8315e63bfcaac97d52d68a7a0b88d2eea93",
+      "repository": "https://github.com/disintegration/imaging",
+      "ref": "refs/tags/v1.6.2",
+      "sum": "h1:w1LecBlG2Lnp8B3jk5zSuNqd7b4DXhcjwek1ei82L+c=",
+      "go_mod_sum": "h1:44/5580QXChDfwIclfc/PCwrr44amcmDAg8hxG0Ewe4=",
+      "pin_source": "Official repository tag via git ls-remote"
+    },
+    {
       "module": "github.com/distribution/reference",
       "version": "v0.6.0",
       "commit": "ff14fafe2236e51c2894ac07d4bdfc778e96d682",
@@ -2144,6 +2154,16 @@
       "pin_source": "Go proxy VCS origin"
     },
     {
+      "module": "golang.org/x/image",
+      "version": "v0.47.0",
+      "commit": "c437a9130dcb43e6df402a034160826e29fd29b8",
+      "repository": "https://go.googlesource.com/image",
+      "ref": "refs/tags/v0.47.0",
+      "sum": "h1:za/8gVz++PPZqmZJBNSISICN5Rrj5zixP/8K++fgmqo=",
+      "go_mod_sum": "h1:IkN5o4A7vq55vXN8FWjjnhg9Rs2GOtffqsSi9mWAKYE=",
+      "pin_source": "Go proxy VCS origin"
+    },
+    {
       "module": "golang.org/x/mod",
       "version": "v0.41.0",
       "commit": "d0a27b2d4a48460806692bf5c87fc157c3c65292",
@@ -2185,11 +2205,11 @@
     },
     {
       "module": "golang.org/x/sys",
-      "version": "v0.48.0",
-      "commit": "613e2570718ecde85c04e69ebd5585c3881c442c",
+      "version": "v0.49.0",
+      "commit": "b6b8557e8e2974925aec7a136ba0e323eedc5f43",
       "repository": "https://go.googlesource.com/sys",
-      "ref": "refs/tags/v0.48.0",
-      "sum": "h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=",
+      "ref": "refs/tags/v0.49.0",
+      "sum": "h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=",
       "go_mod_sum": "h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=",
       "pin_source": "Go proxy VCS origin"
     },
@@ -2343,5 +2363,8 @@
       "go_mod_sum": "h1:yCJ2cmAaIkHQ25oXWrF8H4O1lIfPYPR26yCEDj2P3pQ=",
       "pin_source": "Go proxy VCS origin"
     }
+  ],
+  "supplemental_audits": [
+    "docs/dependency-audit/2026-10-14-avatars/selection.json"
   ]
 }

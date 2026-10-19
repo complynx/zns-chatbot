@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -16,14 +17,16 @@ import (
 
 	"go.opentelemetry.io/otel/propagation"
 
-	"github.com/complynx/shuttle/internal/api"
-	"github.com/complynx/shuttle/internal/config"
-	"github.com/complynx/shuttle/internal/db"
-	"github.com/complynx/shuttle/internal/identity"
-	"github.com/complynx/shuttle/internal/loom"
-	"github.com/complynx/shuttle/internal/observability"
-	"github.com/complynx/shuttle/internal/task"
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/api"
+	"github.com/complynx/zns-chatbot/internal/avatar"
+	"github.com/complynx/zns-chatbot/internal/config"
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
+	"github.com/complynx/zns-chatbot/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/observability"
+	"github.com/complynx/zns-chatbot/internal/registrationdetails"
+	"github.com/complynx/zns-chatbot/internal/task"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 const (
@@ -34,11 +37,15 @@ const (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger := newLogger(os.Stdout)
 	if err := run(logger); err != nil {
 		logger.Error("application stopped", "error", err.Error())
 		os.Exit(1)
 	}
+}
+
+func newLogger(output io.Writer) *slog.Logger {
+	return slog.New(observability.WithTraceContext(slog.NewJSONHandler(output, nil)))
 }
 
 func run(logger *slog.Logger) error {
@@ -92,6 +99,10 @@ func compose(
 	settings db.VersionedSettings,
 	logger *slog.Logger,
 ) (*task.Service, *api.Server, *observability.Telemetry, error) {
+	details, err := registrationDetailsProtector(c)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	h := &http.Client{Timeout: c.HTTPTimeout}
 	iam, err := identity.New(identityOptions(c, settings), h)
 	if err != nil {
@@ -101,17 +112,12 @@ func compose(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	obs, err := observability.New(
-		ctx,
-		observability.Options{
-			OTLPEndpoint: c.OTel.Endpoint,
-			ServiceName:  c.OTel.ServiceName,
-			SampleRatio:  c.OTel.SampleRatio,
-			MaxQueueSize: c.OTel.MaxQueueSize,
-			Timeout:      c.OTel.Timeout,
-		},
-	)
+	obs, err := observability.New(ctx, telemetryOptions(c))
 	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err = observeDependencies(obs, iam, store); err != nil {
+		_ = obs.Shutdown(ctx)
 		return nil, nil, nil, err
 	}
 	lc, err := loom.New(
@@ -125,6 +131,7 @@ func compose(
 		_ = obs.Shutdown(ctx)
 		return nil, nil, nil, err
 	}
+	miniAppURL := c.MiniAppURL()
 	engine, err := task.New(
 		store,
 		iam,
@@ -133,13 +140,20 @@ func compose(
 		obs,
 		logger,
 		task.Options{
-			BotID:          c.Telegram.BotID,
-			MaxWorkers:     settings.Document.MaxParallelTasks,
-			PollInterval:   time.Second,
-			AttemptTimeout: c.HTTPTimeout,
-			LeaseDuration:  c.HTTPTimeout + hardShutdownTimeout,
+			BotID:                      c.Telegram.BotID,
+			MiniAppURL:                 miniAppURL,
+			RegistrationDetailsEnabled: details != nil,
+			MaxWorkers:                 settings.Document.MaxParallelTasks,
+			PollInterval:               time.Second,
+			AttemptTimeout:             c.HTTPTimeout,
+			LeaseDuration:              c.HTTPTimeout + hardShutdownTimeout,
 		},
 	)
+	if err != nil {
+		_ = obs.Shutdown(ctx)
+		return nil, nil, nil, err
+	}
+	renderer, err := avatar.NewExecutable(c.AvatarExecutable)
 	if err != nil {
 		_ = obs.Shutdown(ctx)
 		return nil, nil, nil, err
@@ -149,12 +163,27 @@ func compose(
 		iam,
 		engine,
 		api.Options{
-			BotID:          c.Telegram.BotID,
-			WebhookSecret:  c.Telegram.WebhookSecret,
-			OrganizationID: c.Identity.OrganizationID,
-			ActorID:        c.Identity.ActorID,
-			Issuer:         c.Identity.Issuer,
-			LoomAudience:   c.Identity.Audience,
+			RegistrationDetails: details,
+			TelegramPrelink: api.TelegramPrelinkOptions{
+				Issuer:        c.TelegramPrelink.Issuer,
+				JWKSURL:       c.TelegramPrelink.JWKSURL,
+				Audience:      c.TelegramPrelink.Audience,
+				ProviderID:    c.TelegramPrelink.ProviderID,
+				ServiceBearer: c.TelegramPrelink.ServiceBearer,
+				HTTP:          h,
+			},
+			APIAudience:           c.Identity.APIAudience,
+			MiniAppOrigin:         c.MiniAppOrigin,
+			MiniAppAllowLocalHTTP: c.MiniAppAllowLocalHTTP,
+			MiniAppBotToken:       c.Telegram.Token,
+			AvatarRenderer:        renderer,
+			Telegram:              tg,
+			BotID:                 c.Telegram.BotID,
+			WebhookSecret:         c.Telegram.WebhookSecret,
+			OrganizationID:        c.Identity.OrganizationID,
+			ActorID:               c.Identity.ActorID,
+			Issuer:                c.Identity.Issuer,
+			LoomAudience:          c.Identity.Audience,
 		},
 	)
 	if err != nil {
@@ -162,6 +191,21 @@ func compose(
 		return nil, nil, nil, err
 	}
 	return engine, handlers, obs, nil
+}
+
+func telemetryOptions(c config.Config) observability.Options {
+	return observability.Options{
+		OTLPEndpoint: c.OTel.Endpoint, ServiceName: c.OTel.ServiceName, SampleRatio: c.OTel.SampleRatio,
+		MaxQueueSize: c.OTel.MaxQueueSize, Timeout: c.OTel.Timeout,
+	}
+}
+
+func registrationDetailsProtector(c config.Config) (*registrationdetails.Protector, error) {
+	key, err := c.RegistrationDetailsSecret()
+	if err != nil || len(key) == 0 {
+		return nil, err
+	}
+	return registrationdetails.NewProtector(key)
 }
 
 func identityOptions(c config.Config, settings db.VersionedSettings) identity.Options {
@@ -206,8 +250,8 @@ func serve(
 	privateMux := http.NewServeMux()
 	privateMux.Handle("/metrics", obs.MetricsHandler())
 	privateMux.Handle("/", handlers.InternalHandler())
-	public := server(c, obs.Middleware(handlers.PublicHandler()))
-	private := server(c, obs.Middleware(privateMux))
+	public := server(ctx, c, obs.Middleware(handlers.PublicHandler()))
+	private := server(ctx, c, obs.Middleware(privateMux))
 	if err = engine.Start(ctx); err != nil {
 		return err
 	}
@@ -229,36 +273,22 @@ func serve(
 	handlers.SetAccepting(false)
 	shutdown, stop := context.WithTimeout(context.WithoutCancel(ctx), c.ShutdownTimeout)
 	defer stop()
-	drain(shutdown, engine, public, private)
+	summary := drain(shutdown, engine.Stop, public, private)
+	logDrain(shutdown, logger, summary, c.ShutdownTimeout)
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
 }
 
-func server(c config.Config, handler http.Handler) *http.Server {
+func server(ctx context.Context, c config.Config, handler http.Handler) *http.Server {
 	return &http.Server{
+		BaseContext:       func(net.Listener) context.Context { return ctx },
 		Handler:           handler,
 		ReadHeaderTimeout: headerTimeout,
 		ReadTimeout:       c.HTTPTimeout,
 		WriteTimeout:      c.HTTPTimeout,
 		IdleTimeout:       time.Minute,
-	}
-}
-
-func drain(ctx context.Context, engine *task.Service, public, private *http.Server) {
-	done := make(chan struct{}, shutdownParticipants)
-	go func() { _ = public.Shutdown(ctx); _ = public.Close(); done <- struct{}{} }()
-	go func() { _ = private.Shutdown(ctx); _ = private.Close(); done <- struct{}{} }()
-	go func() { _ = engine.Stop(ctx); done <- struct{}{} }()
-	for range shutdownParticipants {
-		select {
-		case <-done:
-		case <-ctx.Done():
-			_ = public.Close()
-			_ = private.Close()
-			return
-		}
 	}
 }
 
@@ -292,4 +322,25 @@ func (t propagationTransport) RoundTrip(request *http.Request) (*http.Response, 
 	cloned := request.Clone(request.Context())
 	t.propagator.Inject(request.Context(), propagation.HeaderCarrier(cloned.Header))
 	return t.base.RoundTrip(cloned)
+}
+
+func observeDependencies(obs *observability.Telemetry, iam *identity.Client, store *db.Store) error {
+	if err := obs.ObserveQueue(func(ctx context.Context) ([]observability.QueueMetric, error) {
+		return task.QueueMetrics(ctx, store.Pool())
+	}); err != nil {
+		return errors.New("initialize queue metrics")
+	}
+	if err := obs.ObserveIdentity(iam); err != nil {
+		return errors.New("initialize identity cache metrics")
+	}
+	if err := obs.ObserveDatabasePool(store.Pool()); err != nil {
+		return errors.New("initialize database pool metrics")
+	}
+	if err := obs.ObserveTasks(store); err != nil {
+		return errors.New("initialize task metrics")
+	}
+	if err := obs.ObserveOutbox(store); err != nil {
+		return errors.New("initialize outbox metrics")
+	}
+	return nil
 }

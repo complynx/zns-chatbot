@@ -2,8 +2,26 @@
 
 Это инструкция для оператора, а не запись выполненного deployment. Проверка
 сервера 2026-10-12 была только на чтение. Текущий этап Shuttle не заменяет рабочий
-бот: регистрации, пары, платежи, аватарки и миграция ещё не реализованы.
+бот. Регистрации, пары, платежи, аватарки и подготовка миграции теперь имеют
+реализованные и проверенные на отдельном стенде части; текущие границы приёмки
+перечислены в [roadmap](shuttle-roadmap.md). Production cutover ещё не принят.
 Начинать следует с отдельного тестового Telegram-бота.
+
+Полная локальная сборка штатного Dockerfile, содержимое образа и запуск со свежей
+БД проверены отдельно: [приёмка образа](shuttle-full-image-qa-2026-10-15.md).
+Это не опубликованный релиз и не разрешение на deployment. Перед развёртыванием
+по-прежнему нужны выбранный source commit, согласованная публикация образа и
+серверные gates ниже.
+
+Mini App — отдельная опция после миграции 24: задать `mini_app_origin` либо
+`SHUTTLE_MINI_APP_ORIGIN` как точный HTTPS origin и направить его на public listener.
+Internal listener при этом остаётся закрытым. Пустое значение отключает `/app/`.
+Настройка Telegram launch URL, доверенный сертификат и проверка реального WebView
+выполняются отдельно; текущая [граница приёмки](shuttle-miniapp.md) не означает
+готовности production-входа.
+Для Mini App на выбранном HTTPS origin нужен маршрут `/app/` на public port
+8080. Приведённый ниже webhook-router `/shuttle-pilot/` этого не обеспечивает;
+launch URL с таким префиксом не заменяет маршрут Mini App.
 
 ## 1. Зафиксировать исходное состояние и релиз
 
@@ -39,10 +57,18 @@ ss -ltn
 Не перезаписывать грязный checkout. Порты ниже предлагаются для пилота:
 `127.0.0.1:58380` и `127.0.0.1:58390`; убедиться, что они свободны.
 
-Сначала выбрать прошедший QA source commit. Локальный первый этап — `b130aa09`,
-но последующие исправления review/QA должны войти в выбранный релиз. Сборка:
+Сначала выбрать зафиксированный source commit, прошедший QA для публикуемого
+релиза. Последующие исправления review/QA должны войти в него. Сборку выполнять
+на Linux/Docker build host из корня отдельного checkout **zns-chatbot**, а не из
+`/home/complynx/server_configs`. Путь ниже заменить фактическим путём этого checkout:
+
+Проверить, что checkout чистый, а `git rev-parse HEAD` совпадает с выбранным
+релизным SHA. При расхождении остановиться до сборки.
 
 ```sh
+cd /absolute/path/to/zns-chatbot
+git status --short
+git rev-parse HEAD
 docker build --platform linux/amd64 -f deploy/shuttle/Dockerfile \
   -t complynx/shuttle:<release-tag> .
 ```
@@ -67,7 +93,7 @@ receiver обновлений и согласованные Alloy changes. Не 
 - confidential OIDC client с Token Exchange grant;
 - API/introspection application именно в проекте Shuttle, а не Loom;
   её client ID/secret соответствуют настроенному identity.api_audience;
-- аудитории проектов Loom и Shuttle; отдельную роль `shuttle.admin`;
+- аудитории проектов Loom и Shuttle; отдельную роль `zinusya.admin`;
 - права service account на создание/поиск пользователей в целевой организации
   и разрешённую impersonation. Точные назначения проверить на Zitadel v4.16.3.
 
@@ -140,7 +166,7 @@ CREATE ROLE shuttle_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
 \password shuttle_runtime
 CREATE DATABASE shuttle OWNER shuttle_migrator;
 REVOKE ALL ON DATABASE shuttle FROM PUBLIC;
-GRANT CONNECT ON DATABASE shuttle TO shuttle_runtime;
+GRANT CONNECT, TEMPORARY ON DATABASE shuttle TO shuttle_runtime;
 \connect shuttle
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE shuttle_migrator IN SCHEMA public
@@ -150,8 +176,10 @@ ALTER DEFAULT PRIVILEGES FOR ROLE shuttle_migrator IN SCHEMA public
 \quit
 ```
 
-Runtime role не владеет схемой и не запускает DDL. Миграция Goose и River выполняется
-в одном отдельном release step. Не применять SQL из старой Go-ветки поверх этой БД.
+Runtime role не владеет постоянной схемой и не выполняет её миграции. Для применения
+исторического архива она создаёт временную staging-таблицу; для этого нужен
+`TEMPORARY` на свою БД. Миграция Goose и River выполняется в одном отдельном release
+step. Не применять SQL из старой Go-ветки поверх этой БД.
 В DSN использовать URL-encoded пароль; для генерации можно выбрать hex пароль.
 
 ## 4. Каталоги и конфигурация
@@ -294,6 +322,7 @@ docker compose -f docker-compose.prod.yml --profile migration run --rm --no-deps
 ```sh
 docker exec -i postgres-postgres-1 psql -v ON_ERROR_STOP=1 -U complynx -d shuttle <<'SQL'
 GRANT USAGE ON SCHEMA public TO shuttle_runtime;
+GRANT CONNECT, TEMPORARY ON DATABASE shuttle TO shuttle_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO shuttle_runtime;
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO shuttle_runtime;
 SQL
@@ -309,8 +338,9 @@ Readiness проверяет PostgreSQL и admission, но не IAM/Loom и не
 записи: принятые задачи могут ждать upstream. Проверить отдельным действием запись
 в БД, identity provisioning, run и Telegram delivery через реальный пилот.
 Loom discovery должен найти label, принять manifest и показать разрешённый
-`account.me`. Сейчас admin endpoints существуют как HTTP API, но не входят в
-agent manifest. Проверьте вызов account.me именно агентом, не только curl.
+`account.me`. Административные инструменты обнаруживаются динамически по текущим
+правам пользователя. Проверить read-вызов через Loom script и write-вызов с точным
+подтверждением именно агентом, не только curl.
 
 ## 7. Webhook отдельного бота и наблюдаемость
 
@@ -347,9 +377,9 @@ PY
 В Alloy добавить один scrape, сохранив существующий Docker log pipeline:
 
 ```alloy
-prometheus.scrape "shuttle" {
+prometheus.scrape "zinusya" {
     targets = [{"__address__" = "shuttle:9090", "instance" = "complynx.net"}]
-    job_name = "integrations/shuttle"
+    job_name = "integrations/zinusya"
     scrape_interval = "15s"
     scrape_timeout = "5s"
     forward_to = [prometheus.remote_write.metrics_service.receiver]
@@ -359,10 +389,22 @@ prometheus.scrape "shuttle" {
 Alloy должен входить в `clx-observability`. Обновлять только его профиль, не весь
 server_configs. Не создавать второй источник Docker logs.
 
+Подготовленные [alert rules и порядок проверки](shuttle-alerts.md) рассчитаны на
+`job="integrations/zinusya", instance="complynx.net"`. Alias контейнера `shuttle`
+в адресе scrape сохраняется. Не собирать один endpoint двумя job: это дублирует
+метрики. Установка rules в Grafana Cloud и маршрута уведомлений — отдельный шаг
+пилота; сам Alloy scrape не включает alerts.
+
 OTLP endpoint на текущем сервере не подтверждён: оставить `otel.endpoint: ""` до
 подготовки private collector/Alloy OTLP HTTP receiver. Затем оба сервиса направить
 в один проверенный receiver, например `http://alloy:4318`, и проверить связанный
-trace Telegram intake → durable attempt → Loom. Для Grafana OTLP URL, stack ID и
+trace Telegram intake → durable attempt → Loom. Zinusya добавляет `/v1/traces`
+к адресу без пути или с путём `/`; явно указанный другой путь сохраняется.
+У Loom endpoint остаётся origin, пути сигналов задаёт сам Loom.
+Текущий Loom начинает отдельную трассу при обработке очереди: наличие spans у
+обоих сервисов ещё не доказывает причинную связь через очередь. См.
+[границы нативной проверки](shuttle-tracing-qa-2026-10-15.md).
+Для Grafana OTLP URL, stack ID и
 права token взять из вашего Cloud portal, не выводить из имеющегося metrics user ID.
 Не публиковать 4318 наружу. Telemetry outage не должна останавливать обработку.
 
@@ -431,3 +473,7 @@ updates старого бота, настройки и backup; останови�
 
 Written by Codex (gpt-6/Codex desktop)
 on behalf of Daniel Drizhuk
+
+The queue schema is pinned to bot ID, IAM organization and issuer before worker
+recovery; mismatched startup fails without rewriting accepted work. Apply
+migration 00004 explicitly. See [deployment scope](shuttle-deployment-scope.md).

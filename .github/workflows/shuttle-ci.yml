@@ -44,6 +44,31 @@ jobs:
           python3 tools/check-dependencies.py
       - name: Behavioral tests with PostgreSQL and race detector
         run: go test -race -parallel 4 ./cmd/... ./internal/... ./migrations/... ./integration/...
+      - name: Test stand ingress and egress guards
+        run: python3 -m unittest discover -s deploy/shuttle/test -p 'test_*.py'
+      - name: Test isolated Telegram simulator
+        run: python3 -m unittest discover -s deploy/shuttle/mock_tg -p 'test_*.py'
+      - name: Validate operational alerts
+        run: |
+          docker run --rm --network none --read-only --memory 128m --memory-swap 128m \
+            --cpus 1 --pids-limit 64 --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m -e GOMEMLIMIT=80MiB \
+            --mount "type=bind,source=$PWD/deploy/shuttle/observability,target=/rules,readonly" \
+            --workdir /rules --entrypoint /bin/sh \
+            prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e \
+            -ec '/bin/promtool check rules alerts.yaml; /bin/promtool test rules alerts.test.yaml'
+      - name: Mini App browser behavior
+        run: node --test tools/test-miniapp-ui.cjs tools/test-miniapp-pairs-ui.cjs tools/test-miniapp-orders-ui.cjs tools/test-miniapp-meals-ui.cjs tools/test-miniapp-avatars-ui.cjs tools/test-miniapp-avatar-admin-ui.cjs tools/test-miniapp-massage-ui.cjs tools/test-miniapp-massage-staff-ui.cjs tools/test-miniapp-massage-admin-ui.cjs tools/test-miniapp-payment-reviews-ui.cjs tools/test-order-proof-ui.cjs tools/test-order-reviews-ui.cjs
+      - name: Validate operational dashboard queries
+        run: |
+          python3 tools/test-dashboard.py "$RUNNER_TEMP/zinusya-dashboard"
+          docker run --rm --network none --read-only --memory 128m --memory-swap 128m \
+            --cpus 1 --pids-limit 64 --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m -e GOMEMLIMIT=80MiB \
+            --mount "type=bind,source=$RUNNER_TEMP/zinusya-dashboard,target=/qa,readonly" \
+            --entrypoint /bin/promtool \
+            prom/prometheus@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e \
+            test rules /qa/dashboard.test.yaml
       - name: Build pinned developer tools
         run: |
           export GOBIN="$RUNNER_TEMP/shuttle-tools"
@@ -65,4 +90,5 @@ jobs:
       - name: Build Linux binary and container
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/shuttle" ./cmd/shuttle
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/shuttle-import" ./cmd/shuttle-import
           docker build --platform linux/amd64 -f deploy/shuttle/Dockerfile -t shuttle:ci .

@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/complynx/shuttle/internal/db"
+	"github.com/complynx/zns-chatbot/internal/db"
 )
 
 type accountRequest struct {
@@ -67,7 +67,35 @@ type revokeResponse struct {
 }
 
 func (s *Server) register(api huma.API) {
+	s.registerAgentAdministration(api)
+	s.registerArchiveValidation(api)
+	s.registerArchiveStorage(api)
+	s.registerHistory(api)
+	s.registerEvents(api)
+	s.registerOrdersCatalog(api)
+	s.registerMealCatalog(api)
+	s.registerMassageSchedule(api)
+	s.registerPartnerCode(api)
+	s.registerAuthorities(api)
+	s.registerPayments(api)
+	s.registerOrderEvidence(api)
+	s.registerNotificationAPI(api)
+	s.registerNotificationResolutions(api)
+	s.registerAvatarDeliveryResolutions(api)
+	s.registerRegistrations(api)
+	s.registerAgentRegistrations(api)
+	s.registerPairReads(api)
+	s.registerPairAssignments(api)
+	s.registerAgentAssignments(api)
+	s.registerAgentEventContext(api)
+	s.registerProfile(api)
+	s.registerRegistrationDetails(api)
+	s.registerAvatars(api)
 	s.registerTaskAdministration(api)
+	s.registerTaskClosures(api)
+	s.registerSettingsChanges(api)
+	s.registerUserRevocations(api)
+	s.registerEventChanges(api)
 	huma.Register(
 		api,
 		huma.Operation{
@@ -123,7 +151,7 @@ func (s *Server) accountMe(ctx context.Context, in *accountRequest) (*accountRes
 		return nil, err
 	}
 	out := &accountResponse{}
-	out.Body.Status = "succeeded"
+	out.Body.Status = agentSucceeded
 	out.Body.OperationID = in.Body.OperationID
 	out.Body.Result = accountResult{u.ID, u.TelegramUserID, u.Profile}
 	return out, nil
@@ -149,12 +177,15 @@ func (s *Server) updateSettings(ctx context.Context, in *settingsRequest) (*sett
 		return nil, err
 	}
 	d := in.Body.Document
-	if in.Body.Version < 1 || d.AuthCacheTTLSeconds < 0 || d.AuthCacheTTLSeconds > 300 ||
+	_, miniAppPolicyErr := d.MiniAppPolicy()
+	if miniAppPolicyErr != nil || in.Body.Version < 1 || d.AuthCacheTTLSeconds < 0 || d.AuthCacheTTLSeconds > 300 ||
 		(d.DefaultLanguage != "en" && d.DefaultLanguage != "ru") ||
 		d.MaxParallelTasks < 1 ||
 		d.MaxParallelTasks > 128 ||
 		d.QuestionTimeoutSeconds < 1 ||
-		d.QuestionTimeoutSeconds > 604800 {
+		d.QuestionTimeoutSeconds > 604800 ||
+		(d.MassageMaxBookingsPerWindow < 0 || d.MassageMaxBookingsPerWindow > 100) ||
+		(d.NameExpectationSeconds != 0 && (d.NameExpectationSeconds < 60 || d.NameExpectationSeconds > 86400)) {
 		return nil, huma.Error400BadRequest("invalid settings")
 	}
 	result, err := s.store.CompareAndSwapSettings(ctx, in.Body.Version, d, p.Subject)
@@ -167,6 +198,7 @@ func (s *Server) updateSettings(ctx context.Context, in *settingsRequest) (*sett
 	if err = s.iam.SetPositiveCacheTTL(time.Duration(d.AuthCacheTTLSeconds) * time.Second); err != nil {
 		return nil, huma.Error503ServiceUnavailable("cache configuration unavailable")
 	}
+	s.settingsTTL, s.settingsTTLKnown = time.Duration(d.AuthCacheTTLSeconds)*time.Second, true
 	return &settingsResponse{Body: result}, nil
 }
 
@@ -194,25 +226,23 @@ func (s *Server) getTask(ctx context.Context, in *taskRequest) (*taskResponse, e
 }
 
 func (s *Server) revokeUser(ctx context.Context, in *revokeRequest) (*revokeResponse, error) {
-	p, err := s.authorize(ctx, in.Authorization, true)
+	scope, err := s.adminScope(ctx, in.AuthInput)
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.store.GetUser(ctx, in.ID)
+	u, err := s.store.RevokeScopedUser(ctx, scope, in.ID)
+	if u.Subject != "" {
+		s.iam.Invalidate(u.Subject)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, huma.Error404NotFound("user not found")
 	}
-	if err != nil {
-		return nil, huma.Error503ServiceUnavailable("account unavailable")
+	if errors.Is(err, db.ErrAdminDenied) {
+		return nil, huma.Error403Forbidden("active global administrator required")
 	}
-	if target.Organization != s.options.OrganizationID {
-		return nil, huma.Error404NotFound("user not found")
-	}
-	u, err := s.store.SetUserRevoked(ctx, in.ID, p.Subject)
 	if err != nil {
 		return nil, huma.Error503ServiceUnavailable("revocation unavailable")
 	}
-	s.iam.Invalidate(u.Subject)
 	out := &revokeResponse{}
 	out.Body.ID = u.ID
 	out.Body.Revoked = u.Revoked

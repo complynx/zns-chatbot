@@ -1,6 +1,7 @@
 # Shuttle библиотеки и инструменты
 
-Выбор на 12 октября 2026 года. Основной принцип — небольшие предметные модули,
+Выбор и аудит зависимостей — снимок на 12 октября 2026 года. Описание
+реализованных частей сверено с кодом 15 октября 2026 года. Основной принцип — небольшие предметные модули,
 stdlib для транспорта и инфраструктурных операций, общий проверенный стек с Loom.
 Зависимость добавляется в приложение только вместе с использующим её кодом.
 Целевая платформа — сервер Daniel, Linux/Docker, linux/amd64, как у Loom.
@@ -121,9 +122,10 @@ OTel Go repository имеет 6 574 stars, contrib — 1 678, Prometheus client 
 Прикладные metrics создаются через OTel Metrics API и экспортируются в одну
 Prometheus registry. client_golang обслуживает /metrics и стандартные collectors;
 второй независимый набор тех же прикладных counters не создаётся. Traces отправляются
-через OTLP HTTP в Alloy. Логи остаются slog JSON stdout. Автоматическое добавление trace/span ID в логи
-пока не реализовано; отдельный
-OTel Logs SDK и push логов не требуются.
+через OTLP HTTP в Alloy. Логи остаются slog JSON stdout. Контекстные записи теперь
+получают валидные trace/span ID через stdlib slog.Handler и существующий OTel API;
+записи без span остаются без ID. См. [контракт и ограничения](shuttle-log-correlation.md).
+Отдельный OTel Logs SDK и push логов не требуются.
 
 На текущем server_configs Alloy уже собирает Prometheus и Docker logs. OTLP receiver
 и маршрут traces требуют отдельного конфигурационного изменения; их наличие
@@ -149,10 +151,10 @@ gates пока остаются следующими улучшениями.
   локальная системная установка не изменяется автоматически.
 - golangci-lint 2.14.0 с Golden-конфигурацией Loom: contextcheck, запрет deprecated
   openpgp, goimports/golines и длина строки 120. В [.golangci.yml](../.golangci.yml)
-  изменён только local import prefix на github.com/complynx/shuttle.
+  текущий local import prefix — github.com/complynx/zns-chatbot.
 - sqlc 1.31.1 с PostgreSQL и pgx/v5. Generated queries коммитятся вместе с SQL;
-  Для CI требуется проверка отсутствия изменений после generate. Конфигурация путей создаётся
-  вместе с первой схемой, а не ссылается на несуществующие directories.
+  CI проверяет отсутствие изменений после generate. [sqlc.yaml](../sqlc.yaml)
+  читает migrations и internal/db/queries.sql, результат — internal/db/sqlc.
 - Goose SQL migrations. Сборка мигратора включает только нужный PostgreSQL driver.
 - go test, go vet, race detector, httptest и testing/synctest; Testify assert/require.
   Mock framework по умолчанию не используется. Goleak по необходимости применяется к lifecycle,
@@ -170,10 +172,12 @@ crypto. Loom API вызывается типизированным stdlib HTTP c
 SSE cursor/reconnect пока не реализован. Если потребуется поток событий, parser
 должен ограничивать размер события и поддерживать восстановление cursor.
 
-os/exec, time/tzdata, html/template и стандартные image codecs относятся к будущим
-workers, event-timezone, HTML и media модулям. Перед event-timezone этапом нужно
-включить IANA zone data в минимальный image; сейчас time/tzdata не импортируется.
-Денежные значения планируются как целые minor units; ledger ещё не реализован.
+os/exec уже запускает отдельный avatar executable, а стандартные image codecs
+используются его renderer. См. [avatar contract](shuttle-avatars.md).
+internal/events импортирует time/tzdata: IANA zone data включены в бинарник
+для минимального Linux image. html/template пока не используется.
+Деньги хранятся в целых minor units с currency scale; подтверждённые платежи,
+частичные оплаты и ledger уже реализованы. См. [payment contract](shuttle-payments.md).
 Decimal library, Cobra/Viper, второй logger и собственный model SDK не нужны.
 
 ## Дополнительные кандидаты по потребности

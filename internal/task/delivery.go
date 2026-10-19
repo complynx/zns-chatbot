@@ -1,10 +1,10 @@
 package task
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -12,11 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
 
-	"github.com/complynx/shuttle/internal/db"
-	"github.com/complynx/shuttle/internal/identity"
-	"github.com/complynx/shuttle/internal/loom"
-	"github.com/complynx/shuttle/internal/render"
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
+	"github.com/complynx/zns-chatbot/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/render"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 func languageChoice(code, fallback string) string {
@@ -32,9 +32,17 @@ func languageChoice(code, fallback string) string {
 	}
 }
 func (s *Service) languageFor(ctx context.Context, i intent) string {
+	bot, organization, _ := s.iam.DeploymentScope()
+	preference, err := s.store.ProfileLanguageByTelegram(ctx, bot, organization, i.User.ID)
+	if err == nil && (preference == "en" || preference == "ru") {
+		return preference
+	}
+	if err != nil && (i.PreferredLanguage == "en" || i.PreferredLanguage == "ru") {
+		return i.PreferredLanguage
+	}
 	fallback := "en"
 	if strings.TrimSpace(i.User.LanguageCode) == "" {
-		if settings, err := s.store.Settings(ctx); err == nil {
+		if settings, settingsErr := s.store.Settings(ctx); settingsErr == nil {
 			fallback = settings.Document.DefaultLanguage
 		}
 	}
@@ -51,7 +59,10 @@ func (s *Service) localized(ctx context.Context, i intent, key string) string {
 			"Доступ запрещён. Обратитесь к администратору.",
 			"Access denied. Please contact the administrator.",
 		},
-		stateFailed: {"Не удалось выполнить задачу.", "The task could not be completed."},
+		stateFailed: {
+			"Не удалось завершить задачу. Действия могли уже выполниться. Проверь их статус перед повтором.",
+			"The task could not be completed. Actions may already have completed. Check their status before retrying.",
+		},
 		stateCancelled: {
 			"Задача отменена. Уже выполненные действия могут сохраниться.",
 			"Task cancelled. Actions already completed may remain.",
@@ -82,35 +93,45 @@ func (s *Service) result(i intent, text, key string) []db.Outbound {
 	}
 	return out
 }
-func (s *Service) question(i intent, id uuid.UUID, q loom.Question) []db.Outbound {
-	key := "question:" + promptKey(q)
-	out := s.result(i, q.Text, key)
-	if len(out) == 0 {
-		return nil
+func (s *Service) question(i intent, q loom.Question) []db.Outbound {
+	out := s.result(i, q.Text, "question:dialog-v1:"+keyboardPromptKey(q))
+	if len(q.Choices) > 0 {
+		setReplyMarkup(out, questionKeyboard(q))
+	} else {
+		removeReplyKeyboard(out)
 	}
-	var markup telegram.InlineKeyboardMarkup
-	for n, choice := range q.Choices {
-		if n >= maxChoices {
-			break
-		}
-		markup.InlineKeyboard = append(
-			markup.InlineKeyboard,
-			[]telegram.InlineKeyboardButton{
-				{Text: choice.Label, CallbackData: fmt.Sprintf("q:%s:%s:%d", id, promptKey(q), n)},
-			},
-		)
-	}
-	if len(markup.InlineKeyboard) > 0 {
-		var payload telegram.SendMessageRequest
-		_ = json.Unmarshal(out[len(out)-1].Payload, &payload)
-		payload.ReplyMarkup = &markup
-		out[len(out)-1].Payload, _ = json.Marshal(payload)
-	}
+	recordPromptContext(out, loom.InputPresentation{QuestionID: q.ID})
 	return out
 }
 func (s *Service) approval(ctx context.Context, i intent, id uuid.UUID, a loom.Approval) []db.Outbound {
-	key := "approval:" + promptKey(a)
-	out := s.result(i, a.Text, key)
+	text := a.Text
+	// Loom binds these complete service-generated human terms to the exact action.
+	completeServiceQuote := strings.TrimSpace(a.Text) != "" &&
+		(a.Method == "zinusya_massage.book" || a.Method == "zinusya_massage.cancel" ||
+			a.Method == "zinusya_massage_staff.instant" ||
+			a.Method == "zinusya_administration.set_massage_specialist_binding")
+	if approvalHasArguments(a) && !completeServiceQuote {
+		var arguments bytes.Buffer
+		if err := json.Indent(&arguments, a.Arguments, "", "  "); err != nil {
+			s.logger.WarnContext(ctx, "approval arguments invalid", "class", "approval_arguments")
+			return nil
+		}
+		// Complete parameters precede the buttons, using the same durable chunk order.
+		text += "\n\n```json\n" + arguments.String() + "\n```"
+	}
+	return s.approvalContent(ctx, i, id, a, text)
+}
+
+// Presentation can change without changing the pending action's identity.
+func (s *Service) approvalContent(
+	ctx context.Context,
+	i intent,
+	id uuid.UUID,
+	a loom.Approval,
+	text string,
+) []db.Outbound {
+	key := "approval:dialog-v1:" + keyboardPromptKey(a)
+	out := s.result(i, text, key)
 	if len(out) == 0 {
 		return nil
 	}
@@ -120,20 +141,33 @@ func (s *Service) approval(ctx context.Context, i intent, id uuid.UUID, a loom.A
 	if s.languageFor(ctx, i) == "ru" {
 		yes, no = "Подтвердить", "Отклонить"
 	}
-	payload.ReplyMarkup = &telegram.InlineKeyboardMarkup{
-		InlineKeyboard: [][]telegram.InlineKeyboardButton{
-			{
-				{Text: yes, CallbackData: fmt.Sprintf("a:%s:%s:approve", id, promptKey(a))},
-				{Text: no, CallbackData: fmt.Sprintf("a:%s:%s:reject", id, promptKey(a))},
-			},
-		},
+	switch a.ReplyMode {
+	case loom.ReplyModeAgent:
+		payload.ReplyMarkup = approvalKeyboard(yes, no)
+	case loom.ReplyModeProtocol:
+		payload.ReplyMarkup = &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{
+			{Text: yes, CallbackData: "a:" + id.String() + ":" + approvalPromptKey(a) + ":approve"},
+			{Text: no, CallbackData: "a:" + id.String() + ":" + approvalPromptKey(a) + ":reject"},
+		}}}
+	default:
+		return nil
 	}
 	out[len(out)-1].Payload, _ = json.Marshal(payload)
+	recordPromptContext(out, loom.InputPresentation{ApprovalID: a.ID})
 	return out
+}
+
+func approvalHasArguments(a loom.Approval) bool {
+	arguments := bytes.TrimSpace(a.Arguments)
+	return len(arguments) > 0 && !bytes.Equal(arguments, []byte("null"))
 }
 func (s *Service) finish(ctx context.Context, t *db.Task, c checkpoint, i intent, state, key string) error {
 	t.State = state
 	out := s.result(i, s.localized(ctx, i, key), key)
+	if c.KeyboardPrompt != "" {
+		removeReplyKeyboard(out)
+		c.KeyboardPrompt = ""
+	}
 	if e := s.save(ctx, t, c, out); e != nil {
 		return s.wait()
 	}
@@ -150,20 +184,22 @@ func (s *Service) deliver(ctx context.Context, t *db.Task, c checkpoint) error {
 		switch row.State {
 		case deliveryDelivered:
 			continue
-		case "send_inflight":
+		case deliverySending:
 			// A new fenced task attempt owns recovery; a former sender can only win this CAS first.
-			row, err = s.store.FinishDelivery(ctx, row.ID, row.AttemptID, stateDeliveryUnknown, nil)
+			receipt, finishErr := s.store.FinishDelivery(ctx, row.ID, row.AttemptID, stateDeliveryUnknown, nil)
+			err = finishErr
 			if err != nil {
 				s.reportDatabaseFailure(ctx, t.ID, "delivery_reconcile", err)
 				return s.wait()
 			}
+			row = receipt.Delivery
 			return s.gateDelivery(ctx, t, c, row)
 		case stateDeliveryUnknown, stateDeliveryFailed:
 			return s.gateDelivery(ctx, t, c, row)
 		case "delivery_blocked":
 			blocked = true
 			continue
-		case "pending", deliveryRetryable:
+		case deliveryPending, deliveryRetryable:
 		default:
 			return s.wait()
 		}
@@ -255,7 +291,8 @@ func (s *Service) verifyDeliveryAuthorization(ctx context.Context, u db.User, ro
 	prefix := row.TaskID.String() + ":"
 	if !strings.HasPrefix(row.DedupKey, prefix+"result:") &&
 		!strings.HasPrefix(row.DedupKey, prefix+"question:") &&
-		!strings.HasPrefix(row.DedupKey, prefix+"approval:") {
+		!strings.HasPrefix(row.DedupKey, prefix+"approval:") &&
+		!strings.HasPrefix(row.DedupKey, prefix+"avatar:") {
 		return nil
 	}
 	credential, err := s.iam.UserToken(ctx, u.Subject)
@@ -289,34 +326,42 @@ func (s *Service) recordDeliveryState(ctx context.Context, t *db.Task, c checkpo
 	return nil
 }
 func (s *Service) sendDelivery(ctx context.Context, row db.Delivery) (string, time.Duration, error) {
-	var payload telegram.SendMessageRequest
-	if json.Unmarshal(row.Payload, &payload) != nil {
-		return "", 0, errors.New("invalid outbound payload")
+	unlock, sendErr := s.lockKeyboardDelivery(ctx, row)
+	defer unlock()
+	var receipt telegram.Receipt
+	var keyboardHash string
+	if sendErr == nil {
+		receipt, keyboardHash, sendErr = s.sendOutbound(ctx, row)
 	}
-	receipt, sendErr := s.tg.SendMessage(ctx, payload)
-	var rejected *telegram.Error
-	if errors.As(sendErr, &rejected) && rejected.InvalidEntities && rejected.Outcome == telegram.Rejected &&
-		len(payload.Entities) > 0 {
-		payload.Entities = nil
-		receipt, sendErr = s.tg.SendMessage(ctx, payload)
+	sentAt := ""
+	if keyboardHash != "" {
+		sentAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	outcome, delay := deliveryOutcome(sendErr)
-	data, _ := json.Marshal(map[string]int64{"message_id": receipt.MessageID, "chat_id": receipt.ChatID})
+	data, _ := json.Marshal(struct {
+		MessageID      int64  `json:"message_id"`
+		ChatID         int64  `json:"chat_id"`
+		KeyboardHash   string `json:"reply_keyboard_hash,omitempty"`
+		KeyboardSentAt string `json:"reply_keyboard_sent_at,omitempty"`
+	}{receipt.MessageID, receipt.ChatID, keyboardHash, sentAt})
 	// Preserve the outcome through cancellation, with a bounded inherited context.
 	finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	defer finishCancel()
-	_, err := s.store.FinishDelivery(finishCtx, row.ID, row.AttemptID, outcome, data)
+	finished, err := s.store.FinishDelivery(finishCtx, row.ID, row.AttemptID, outcome, data)
 	if err != nil {
 		s.reportDatabaseFailure(finishCtx, row.TaskID, "delivery_receipt", err)
 	}
-	metricOutcome := "success"
+	if err == nil && finished.ResponseElapsedSeconds != nil && s.observer != nil {
+		s.observer.RecordResponseLatency(finishCtx, *finished.ResponseElapsedSeconds)
+	}
+	metricOutcome := metricSuccess
 	switch {
 	case err != nil:
-		metricOutcome = "error"
+		metricOutcome = metricError
 	case outcome == deliveryRetryable:
-		metricOutcome = "retry"
+		metricOutcome = metricRetry
 	case outcome != deliveryDelivered:
-		metricOutcome = "error"
+		metricOutcome = metricError
 	}
 	s.record(ctx, "deliver", metricOutcome)
 	return outcome, delay, err

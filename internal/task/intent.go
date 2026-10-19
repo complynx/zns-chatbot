@@ -5,28 +5,35 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/files"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 var ErrUnsupportedUpdate = errors.New("unsupported Telegram update")
 
 type intent struct {
-	TraceParent    string          `json:"traceparent,omitempty"`
-	TraceState     string          `json:"tracestate,omitempty"`
-	Kind           string          `json:"kind"`
-	User           telegram.User   `json:"user"`
-	ChatID         int64           `json:"chat_id"`
-	Text           string          `json:"text,omitempty"`
-	RawUpdate      json.RawMessage `json:"raw_update"`
-	CallbackTaskID uuid.UUID       `json:"callback_task_id,omitempty"`
-	PromptKey      string          `json:"prompt_key,omitempty"`
-	ChoiceIndex    int             `json:"choice_index,omitempty"`
-	Decision       string          `json:"decision,omitempty"`
+	RegistrationPromptID uuid.UUID        `json:"registration_prompt_id,omitempty"`
+	RegistrationRole     string           `json:"registration_role,omitempty"`
+	CallbackMessageID    int64            `json:"callback_message_id,omitempty"`
+	ReplyToMessageID     int64            `json:"reply_to_message_id,omitempty"`
+	StructuredCommand    string           `json:"structured_command,omitempty"`
+	PartnerCode          *uuid.UUID       `json:"partner_code,omitempty"`
+	Attachments          []files.Incoming `json:"attachments,omitempty"`
+	PreferredLanguage    string           `json:"preferred_language,omitempty"`
+	TraceParent          string           `json:"traceparent,omitempty"`
+	TraceState           string           `json:"tracestate,omitempty"`
+	Kind                 string           `json:"kind"`
+	User                 telegram.User    `json:"user"`
+	ChatID               int64            `json:"chat_id"`
+	Text                 string           `json:"text,omitempty"`
+	RawUpdate            json.RawMessage  `json:"raw_update"`
+	CallbackTaskID       uuid.UUID        `json:"callback_task_id,omitempty"`
+	PromptKey            string           `json:"prompt_key,omitempty"`
+	Decision             string           `json:"decision,omitempty"`
 }
 
 func normalize(u telegram.Update, raw json.RawMessage) (intent, error) {
@@ -58,11 +65,27 @@ func messageIntent(i intent, m *telegram.Message) (intent, error) {
 	i.User = *m.From
 	i.ChatID = m.Chat.ID
 	i.Text = m.Text
-	if strings.TrimSpace(m.Text) == "" || unsupportedMedia(i.RawUpdate) {
-		i.Kind = kindUnsupported
+	var err error
+	i.Attachments, err = files.FromMessage(m)
+	if err != nil {
+		return i, ErrUnsupportedUpdate
 	}
-	if strings.TrimSpace(m.Text) == "/cancel" {
-		i.Kind = "cancel"
+	if len(i.Attachments) > 0 {
+		i.Text = m.Caption
+	}
+	if len(i.Attachments) == 0 {
+		i.PartnerCode = telegram.PartnerStartCode(m.Text)
+	}
+	if (strings.TrimSpace(i.Text) == "" && len(i.Attachments) == 0) || unsupportedMedia(i.RawUpdate) {
+		i.Kind = kindUnsupported
+		i.Attachments = nil
+	}
+	if i.Kind == kindMessage && m.ReplyToMessage != nil {
+		i.ReplyToMessageID = m.ReplyToMessage.ID
+	}
+	if i.Kind == kindMessage && len(i.Attachments) == 0 && structuredCommand(m.Text) {
+		i.Kind = kindStructured
+		i.StructuredCommand = strings.Fields(strings.TrimSpace(m.Text))[0]
 	}
 	return i, nil
 }
@@ -71,7 +94,7 @@ func unsupportedMedia(raw json.RawMessage) bool {
 	var message map[string]json.RawMessage
 	_ = json.Unmarshal(raw, &update)
 	_ = json.Unmarshal(update["message"], &message)
-	for _, key := range []string{"sticker", "photo", "video", "document", "audio", "voice", "video_note", "animation", "contact", "location", "poll", "dice"} {
+	for _, key := range []string{"sticker", "contact", "location", "poll", "dice", "paid_media", "live_photo", "rich_message"} {
 		if _, ok := message[key]; ok {
 			return true
 		}
@@ -84,6 +107,18 @@ func callbackIntent(i intent, cb *telegram.CallbackQuery) (intent, error) {
 	}
 	i.User = cb.From
 	i.ChatID = cb.Message.Chat.ID
+	if normalized, matched, err := registrationCallback(i, cb); matched {
+		return normalized, err
+	}
+	if cursor, ok := strings.CutPrefix(cb.Data, registrationPageCallback); ok {
+		after, err := uuid.Parse(cursor)
+		if err != nil || after == uuid.Nil || after.String() != cursor {
+			return i, ErrUnsupportedUpdate
+		}
+		i.Kind, i.StructuredCommand = kindStructured, registrationsCommand
+		i.Text = registrationsCommand + " " + cursor
+		return i, nil
+	}
 	parts := strings.Split(cb.Data, ":")
 	if len(parts) != 4 || len(cb.Data) > 64 {
 		return i, ErrUnsupportedUpdate
@@ -101,13 +136,6 @@ func callbackIntent(i intent, cb *telegram.CallbackQuery) (intent, error) {
 }
 func callbackChoice(i intent, kind, value string) (intent, error) {
 	switch kind {
-	case "q":
-		i.Kind = "input"
-		index, err := strconv.Atoi(value)
-		if err != nil || index < 0 || index >= maxChoices {
-			return i, ErrUnsupportedUpdate
-		}
-		i.ChoiceIndex = index
 	case "a":
 		i.Kind = kindApproval
 		i.Decision = value

@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,21 +15,32 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/complynx/shuttle/internal/db"
-	"github.com/complynx/shuttle/internal/identity"
-	"github.com/complynx/shuttle/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/files"
+	"github.com/complynx/zns-chatbot/internal/identity"
+	"github.com/complynx/zns-chatbot/internal/loom"
 )
 
 var errControlTargetFinished = errors.New("control target finished without applying input")
 
 type checkpoint struct {
-	Session           loom.Session           `json:"session"`
-	BootstrapAttempts int                    `json:"bootstrap_attempts,omitempty"`
-	Reauthorizing     bool                   `json:"reauthorizing,omitempty"`
-	Create            *loom.CreateRunRequest `json:"create,omitempty"`
-	Run               *loom.Run              `json:"run,omitempty"`
-	Control           *loom.InputRequest     `json:"control,omitempty"`
-	ControlUnapplied  bool                   `json:"control_unapplied,omitempty"`
+	KeyboardRevision      int64                  `json:"keyboard_revision,omitempty"`
+	InputReceipt          *loom.ControlReceipt   `json:"input_receipt,omitempty"`
+	KeyboardPrompt        string                 `json:"keyboard_prompt,omitempty"`
+	RegistrationEntry     *db.RegistrationEntry  `json:"registration_entry,omitempty"`
+	RegistrationChange    *db.RegistrationChange `json:"registration_change,omitempty"`
+	RegistrationActor     string                 `json:"registration_actor,omitempty"`
+	RegistrationOperation string                 `json:"registration_operation,omitempty"`
+	ProfileChange         *db.ProfileMutation    `json:"profile_change,omitempty"`
+	ResumeKey             string                 `json:"resume_key,omitempty"`
+	LoomAuthRetryUntil    *time.Time             `json:"loom_auth_retry_until,omitempty"`
+	Session               loom.Session           `json:"session"`
+	BootstrapAttempts     int                    `json:"bootstrap_attempts,omitempty"`
+	Reauthorizing         bool                   `json:"reauthorizing,omitempty"`
+	Create                *loom.CreateRunRequest `json:"create,omitempty"`
+	Run                   *loom.Run              `json:"run,omitempty"`
+	Control               *loom.InputRequest     `json:"control,omitempty"`
+	ControlUnapplied      bool                   `json:"control_unapplied,omitempty"`
 }
 
 func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.Outbound) error {
@@ -115,6 +129,9 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 	}
 	if t.Route == "no_active" {
 		return s.finish(ctx, &t, c, i, stateCompleted, "no_active")
+	}
+	if t.Route == kindStructured {
+		return s.structured(ctx, &t, c, i)
 	}
 	if t.TargetTaskID != uuid.Nil {
 		ready, gateErr := s.store.ControlReady(ctx, t.ID)
@@ -207,8 +224,15 @@ func (s *Service) ensureSession(
 	user db.User,
 	service string,
 ) (bool, error) {
-	if t.AuthSessionID != "" && c.Session.ExpiresAt.After(time.Now().Add(sessionRenewSkew)) {
+	recovering := c.Run != nil && c.Run.Status == "waiting_auth" && c.Run.Reason == "authorization_required"
+	if t.AuthSessionID != "" && c.Session.ExpiresAt.After(time.Now().Add(sessionRenewSkew)) && !recovering {
 		return true, nil
+	}
+	if recovering {
+		if c.LoomAuthRetryUntil != nil && !time.Now().Before(*c.LoomAuthRetryUntil) {
+			return false, s.finish(ctx, t, *c, i, stateFailed, "denied")
+		}
+		s.iam.Invalidate(user.Subject)
 	}
 	if t.AuthSessionID == "" && c.BootstrapAttempts >= maxBootstrapAttempts {
 		return false, s.finish(ctx, t, *c, i, stateAuthUnknown, stateAuthUnknown)
@@ -217,6 +241,12 @@ func (s *Service) ensureSession(
 	if err != nil {
 		return false, s.identityError(ctx, t, *c, i, err)
 	}
+	// A valid cached fallback may not extend the session. Avoid an unnecessary mutation
+	// until a fresher credential is available or the existing authorization expires.
+	if t.AuthSessionID != "" && !recovering && c.Session.ExpiresAt.After(time.Now()) &&
+		!credential.ExpiresAt.After(c.Session.ExpiresAt) {
+		return true, nil
+	}
 	auth := loom.Auth{ServiceToken: service, SubjectToken: credential.Token}
 	session, err := s.renewSession(ctx, t, c, auth)
 	if err != nil {
@@ -224,6 +254,10 @@ func (s *Service) ensureSession(
 	}
 	c.Session = session
 	c.Reauthorizing = false
+	if recovering {
+		// The receipt is durable before a fresh run read; do not renew twice after restart.
+		c.Run = nil
+	}
 	t.AuthSessionID = session.ID
 	t.State = "running"
 	// Persist this receipt before creating a run.
@@ -259,9 +293,13 @@ func (s *Service) sessionError(ctx context.Context, t *db.Task, c *checkpoint, i
 	if t.AuthSessionID == "" && known && upstream.Outcome != loom.Unknown {
 		c.BootstrapAttempts--
 	}
+	if known && upstream.StatusCode == http.StatusUnauthorized && upstream.Outcome == loom.Rejected {
+		return s.waitForLoomAuthorization(ctx, t, *c, i)
+	}
 	if known && !upstream.Retryable && upstream.Outcome == loom.Rejected {
 		return s.finish(ctx, t, *c, i, stateFailed, "denied")
 	}
+	c.LoomAuthRetryUntil = nil
 	t.State = stateAwaitingAuth
 	_ = s.save(ctx, t, *c, nil)
 	return s.wait()
@@ -270,17 +308,8 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	var run loom.Run
 	var err error
 	if t.RunID == "" {
-		if c.Create == nil {
-			c.Create = &loom.CreateRunRequest{
-				Input:            loom.Input{Text: i.Text},
-				Interaction:      loom.Interaction{Questions: "choices_and_text", Approvals: true},
-				DisconnectPolicy: "continue",
-				Delivery:         loom.Delivery{Mode: "async"},
-			}
-			t.State = "creating_run"
-			if err = s.save(ctx, t, c, nil); err != nil {
-				return s.wait()
-			}
+		if err = s.prepareCreate(ctx, t, &c, i); err != nil {
+			return s.wait()
 		}
 		run, err = s.loom.CreateRun(ctx, auth, t.ID.String(), *c.Create)
 	} else {
@@ -292,6 +321,26 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	if run.AuthSessionID != "" && run.AuthSessionID != t.AuthSessionID {
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
 	}
+	if run.Status == "paused" && run.Reason == "shutdown" {
+		return s.resumeShutdown(ctx, t, c, i, auth, run)
+	}
+	if run.Status == "waiting_auth" {
+		t.RunID = run.ID
+		c.Run = &run
+		if run.Reason == "permission_revoked" {
+			return s.finish(ctx, t, c, i, stateFailed, "denied")
+		}
+		if run.Reason == "authorization_required" {
+			return s.waitForLoomAuthorization(ctx, t, c, i)
+		}
+		t.State = stateAwaitingAuth
+		if err = s.save(ctx, t, c, nil); err != nil {
+			return s.wait()
+		}
+		return s.wait()
+	}
+	c.ResumeKey = ""
+	c.LoomAuthRetryUntil = nil
 	return s.observeRun(ctx, t, c, i, run)
 }
 func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i intent, run loom.Run) error {
@@ -301,7 +350,15 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
 	switch run.Status {
 	case stateCompleted, "succeeded":
 		t.State = stateCompleted
-		if err := s.save(ctx, t, c, s.result(i, run.Result, "result")); err != nil {
+		out := s.result(i, run.Result, "result")
+		if c.KeyboardPrompt != "" {
+			if len(out) == 0 {
+				out = s.result(i, structuredText(s.languageFor(ctx, i) == "ru", "Done.", "Готово."), "result")
+			}
+			removeReplyKeyboard(out)
+			c.KeyboardPrompt = ""
+		}
+		if err := s.save(ctx, t, c, out); err != nil {
 			return s.wait()
 		}
 		return s.deliver(ctx, t, c)
@@ -311,21 +368,18 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
 		return s.finish(ctx, t, c, i, stateCancelled, stateCancelled)
 	default:
 		t.State = "running"
-		var out []db.Outbound
-		if run.Question != nil {
-			t.State = "awaiting_user"
-			t.QuestionID = run.Question.ID
-			out = s.question(i, t.ID, *run.Question)
+		if run.Status == "paused" || run.Status == "reconciling" {
+			t.State = stateAwaitingService
 		}
-		if run.Approval != nil {
-			t.State = "awaiting_user"
-			t.QuestionID = run.Approval.ID
-			out = s.approval(ctx, i, t.ID, *run.Approval)
-		}
-		if err := s.save(ctx, t, c, out); err != nil {
+		out, err := s.pendingRunOutput(ctx, t, &c, i, run)
+		if err != nil {
+			s.reportDatabaseFailure(ctx, t.ID, "approval_presentation", err)
 			return s.wait()
 		}
-		if err := s.deliver(ctx, t, c); err != nil {
+		if err = s.save(ctx, t, c, out); err != nil {
+			return s.wait()
+		}
+		if err = s.deliver(ctx, t, c); err != nil {
 			return err
 		}
 		if terminal(t.State) {
@@ -338,16 +392,22 @@ func (s *Service) identityError(ctx context.Context, t *db.Task, c checkpoint, i
 	if errors.Is(err, identity.ErrDenied) || errors.Is(err, identity.ErrConflict) {
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
 	}
+	c.LoomAuthRetryUntil = nil
 	t.State = stateAwaitingAuth
 	_ = s.save(ctx, t, c, nil)
 	return s.wait()
 }
 func (s *Service) loomError(ctx context.Context, t *db.Task, c checkpoint, i intent, err error) error {
 	var upstream *loom.Error
-	if errors.As(err, &upstream) && upstream.Outcome == loom.Rejected && !upstream.Retryable {
+	if errors.As(err, &upstream) && upstream.Outcome == loom.Rejected &&
+		upstream.StatusCode == http.StatusUnauthorized {
+		return s.waitForLoomAuthorization(ctx, t, c, i)
+	}
+	if upstream != nil && upstream.Outcome == loom.Rejected && !upstream.Retryable {
 		return s.finish(ctx, t, c, i, stateFailed, stateFailed)
 	}
-	t.State = "awaiting_service"
+	c.LoomAuthRetryUntil = nil
+	t.State = stateAwaitingService
 	_ = s.save(ctx, t, c, nil)
 	return s.wait()
 }
@@ -361,7 +421,7 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
 	}
 	if terminal(target.State) || target.State == stateAuthUnknown {
-		return s.finishedTarget(ctx, t, c, i, user, service)
+		return s.finishedTarget(ctx, t, c, i, user, service, target)
 	}
 	if target.RunID == "" {
 		return s.wait()
@@ -382,7 +442,7 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
 	}
 	if finishedRun(run.Status) {
-		return s.finishedTarget(ctx, t, c, i, user, service)
+		return s.finishedTarget(ctx, t, c, i, user, service, target)
 	}
 	if i.CallbackTaskID != uuid.Nil && i.CallbackTaskID != target.ID {
 		return s.finish(ctx, t, c, i, stateFailed, "stale")
@@ -390,7 +450,7 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 	applied, err := s.sendControl(ctx, t, &c, i, auth, target.RunID, run)
 	if !applied {
 		if errors.Is(err, errControlTargetFinished) {
-			return s.finishedTarget(ctx, t, c, i, user, service)
+			return s.finishedTarget(ctx, t, c, i, user, service, target)
 		}
 		return err
 	}
@@ -411,8 +471,15 @@ func (s *Service) finishedTarget(
 	i intent,
 	user db.User,
 	service string,
+	target db.Task,
 ) error {
-	if i.Kind != kindMessage || c.Control != nil && !c.ControlUnapplied {
+	if c.Control != nil && !c.ControlUnapplied {
+		handled, err := s.reconcileFinishedInput(ctx, t, c, i, user, service, target)
+		if handled {
+			return err
+		}
+	}
+	if i.Kind != kindMessage {
 		return s.finish(ctx, t, c, i, stateCompleted, "no_active")
 	}
 	promoted, err := s.store.PromoteMessage(ctx, t.ID, s.owner, t.Fence)
@@ -424,6 +491,47 @@ func (s *Service) finishedTarget(
 	*t = promoted
 	return s.runTask(ctx, t, checkpoint{}, i, user, service)
 }
+
+// A prepared Input is uncertain until the same key returns a receipt or run_terminal.
+// Fresh delegation also works after the terminal parent's session has expired.
+func (s *Service) reconcileFinishedInput(
+	ctx context.Context, t *db.Task, c checkpoint, i intent,
+	user db.User, service string, target db.Task,
+) (bool, error) {
+	if target.RunID == "" {
+		return true, s.wait()
+	}
+	credential, err := s.iam.UserToken(ctx, user.Subject)
+	if err != nil {
+		return true, s.identityError(ctx, t, c, i, err)
+	}
+	auth := loom.Auth{ServiceToken: service, SubjectToken: credential.Token}
+	receipt, err := s.loom.Input(ctx, auth, target.RunID, t.ID.String(), *c.Control)
+	if err != nil {
+		var upstream *loom.Error
+		if errors.As(err, &upstream) && upstream.Outcome == loom.Rejected &&
+			upstream.StatusCode == http.StatusConflict && upstream.Code == loom.CodeRunTerminal {
+			// Loom checks the retained idempotency record before this terminal rejection.
+			// PromoteMessage atomically clears the now-proven-unapplied checkpoint.
+			return false, nil
+		}
+		// A generic rejection cannot disprove an earlier acceptance with a lost receipt.
+		t.State = stateAwaitingService
+		if saveErr := s.save(ctx, t, c, nil); saveErr != nil {
+			return true, s.wait()
+		}
+		return true, s.wait()
+	}
+	c.InputReceipt = &receipt
+	t.RunID = target.RunID
+	t.AuthSessionID = target.AuthSessionID
+	t.State = stateCompleted
+	if err = s.save(ctx, t, c, nil); err != nil {
+		return true, s.wait()
+	}
+	return true, s.deliver(ctx, t, c)
+}
+
 func (s *Service) sendControl(
 	ctx context.Context,
 	t *db.Task,
@@ -433,23 +541,12 @@ func (s *Service) sendControl(
 	runID string,
 	run loom.Run,
 ) (bool, error) {
-	if t.Route == "cancel" {
-		_, err := s.loom.Cancel(ctx, auth, runID, t.ID.String())
-		if err != nil {
-			return false, s.loomError(ctx, t, *c, i, err)
-		}
-		return true, nil
-	}
 	unapplied := c.Control == nil || c.ControlUnapplied
-	if c.Control == nil {
-		input, err := controlInput(*t, i, run)
-		if err != nil {
+	if err := s.prepareControl(ctx, t, c, i, run); err != nil {
+		if errors.Is(err, ErrUnsupportedUpdate) {
 			return false, s.finish(ctx, t, *c, i, stateFailed, "stale")
 		}
-		c.Control = &input
-		if err = s.save(ctx, t, *c, nil); err != nil {
-			return false, s.wait()
-		}
+		return false, s.wait()
 	}
 	if c.ControlUnapplied {
 		// Persist uncertainty before another attempt; a crash can hide its receipt.
@@ -458,10 +555,11 @@ func (s *Service) sendControl(
 			return false, s.wait()
 		}
 	}
-	_, err := s.loom.Input(ctx, auth, runID, t.ID.String(), *c.Control)
+	receipt, err := s.loom.Input(ctx, auth, runID, t.ID.String(), *c.Control)
 	if err != nil {
 		return false, s.controlError(ctx, t, c, i, auth, runID, unapplied, err)
 	}
+	c.InputReceipt = &receipt
 	return true, nil
 }
 
@@ -470,14 +568,23 @@ func (s *Service) controlError(
 	auth loom.Auth, runID string, unapplied bool, err error,
 ) error {
 	var upstream *loom.Error
-	if unapplied && errors.As(err, &upstream) &&
+	known := errors.As(err, &upstream)
+	terminalRejection := known && upstream.Outcome == loom.Rejected &&
+		upstream.StatusCode == http.StatusConflict && upstream.Code == loom.CodeRunTerminal
+	if terminalRejection || unapplied && known &&
 		(upstream.Outcome == loom.NotStarted || upstream.Outcome == loom.Rejected) {
 		// A later rejection cannot disprove an earlier unknown effect.
 		c.ControlUnapplied = true
 	}
-	if c.ControlUnapplied && i.Kind == kindMessage && c.Control.Kind == "steering" &&
+	if c.ControlUnapplied && i.Kind == kindMessage && (c.Control.Kind == "steering" || terminalRejection) &&
 		upstream != nil && upstream.StatusCode == http.StatusConflict {
 		return s.reconcileControlConflict(ctx, t, c, i, auth, runID, err)
+	}
+	if !c.ControlUnapplied && !unapplied {
+		// An earlier unknown effect survives a later unrelated rejection.
+		t.State = stateAwaitingService
+		_ = s.save(ctx, t, *c, nil)
+		return s.wait()
 	}
 	return s.loomError(ctx, t, *c, i, err)
 }
@@ -498,40 +605,92 @@ func (s *Service) reconcileControlConflict(
 		return s.loomError(ctx, t, *c, i, conflict)
 	}
 	// The parent task may not yet have saved its terminal state in PostgreSQL.
-	t.State = "awaiting_service"
+	t.State = stateAwaitingService
 	if err = s.save(ctx, t, *c, nil); err != nil {
 		return s.wait()
 	}
 	return errControlTargetFinished
 }
-func controlInput(t db.Task, i intent, run loom.Run) (loom.InputRequest, error) {
-	switch {
-	case i.Kind == kindApproval:
+func controlInput(_ db.Task, i intent, run loom.Run) (loom.InputRequest, error) {
+	if i.Kind == kindApproval {
 		a := run.Approval
-		if a == nil || i.PromptKey != promptKey(a) || !a.ExpiresAt.After(time.Now()) {
+		if a == nil || a.ReplyMode != loom.ReplyModeProtocol || a.Decision != "" ||
+			i.PromptKey != approvalPromptKey(*a) ||
+			!a.ExpiresAt.After(time.Now()) {
 			return loom.InputRequest{}, ErrUnsupportedUpdate
 		}
 		return loom.InputRequest{Kind: kindApproval, ApprovalID: a.ID, Decision: i.Decision}, nil
-	case i.CallbackTaskID != uuid.Nil:
-		q := run.Question
-		if q == nil || i.PromptKey != promptKey(q) || i.ChoiceIndex >= len(q.Choices) ||
-			!q.ExpiresAt.After(time.Now()) {
-			return loom.InputRequest{}, ErrUnsupportedUpdate
-		}
-		return loom.InputRequest{
-			Kind:       "answer",
-			QuestionID: q.ID,
-			ChoiceIDs:  []string{q.Choices[i.ChoiceIndex].ID},
-		}, nil
-	case run.Question != nil && t.QuestionID != "":
-		q := run.Question
-		if t.QuestionID != q.ID || !q.AllowText || !q.ExpiresAt.After(time.Now()) {
-			return loom.InputRequest{}, ErrUnsupportedUpdate
-		}
-		return loom.InputRequest{Kind: "answer", QuestionID: q.ID, Text: i.Text}, nil
-	case run.Approval != nil || t.QuestionID != "":
-		return loom.InputRequest{}, ErrUnsupportedUpdate
-	default:
-		return loom.InputRequest{Kind: "steering", Text: i.Text}, nil
 	}
+	if i.CallbackTaskID != uuid.Nil {
+		return loom.InputRequest{}, ErrUnsupportedUpdate
+	}
+	input := loom.InputRequest{Kind: "steering", Text: files.Prompt(i.Text, i.PreferredLanguage, i.Attachments)}
+	if i.ReplyToMessageID > 0 {
+		input.Presentation = &loom.InputPresentation{
+			ReplyTo: fmt.Sprintf("telegram:%d:%d", i.ChatID, i.ReplyToMessageID),
+		}
+	}
+	return input, nil
+}
+
+// A valid caller can disappear from Loom discovery during restart. Keep the
+// immutable operation/session while discovery catches up. Expiry-driven renewal
+// and its unknown-outcome gate remain unchanged.
+func (s *Service) waitForLoomAuthorization(ctx context.Context, t *db.Task, c checkpoint, i intent) error {
+	if c.LoomAuthRetryUntil == nil {
+		deadline := time.Now().Add(loomAuthorizationRetryWindow)
+		c.LoomAuthRetryUntil = &deadline
+	}
+	if !time.Now().Before(*c.LoomAuthRetryUntil) {
+		return s.finish(ctx, t, c, i, stateFailed, "denied")
+	}
+	t.State = stateAwaitingAuth
+	if err := s.save(ctx, t, c, nil); err != nil {
+		return s.wait()
+	}
+	return s.wait()
+}
+
+func (s *Service) pendingRunOutput(
+	ctx context.Context,
+	t *db.Task,
+	c *checkpoint,
+	i intent,
+	run loom.Run,
+) ([]db.Outbound, error) {
+	t.QuestionID = ""
+	out, err := s.pendingApprovalMessages(ctx, t, i, run.Approval)
+	if err != nil {
+		return nil, err
+	}
+	if run.Question != nil && run.Question.Answer == nil {
+		t.State, t.QuestionID = "awaiting_user", run.Question.ID
+		if run.Question.ExpiresAt.After(time.Now()) {
+			out = append(out, s.question(i, *run.Question)...)
+		}
+	}
+	nextKeyboard := liveKeyboardID(&run)
+	if nextKeyboard != c.KeyboardPrompt {
+		c.KeyboardRevision++
+	}
+	if nextKeyboard != "" {
+		// Presentation ownership can return to the same blocked action after a question.
+		// Its stable operation identity must not suppress this new keyboard delivery.
+		for n := range out {
+			if strings.HasPrefix(out[n].DedupKey, nextKeyboard+":") {
+				out[n].DedupKey += ":presentation:" + strconv.FormatInt(c.KeyboardRevision, 10)
+			}
+		}
+	}
+	if nextKeyboard == "" && c.KeyboardPrompt != "" {
+		cleanup := s.result(
+			i,
+			retiredKeyboardText(run, c.KeyboardPrompt, s.languageFor(ctx, i) == "ru"),
+			"keyboard-closed:"+c.KeyboardPrompt+":presentation:"+strconv.FormatInt(c.KeyboardRevision, 10),
+		)
+		removeReplyKeyboard(cleanup)
+		out = append(out, cleanup...)
+	}
+	c.KeyboardPrompt = nextKeyboard
+	return out, nil
 }

@@ -7,10 +7,13 @@ COPY cmd ./cmd
 COPY internal ./internal
 COPY migrations ./migrations
 RUN go build -trimpath -buildvcs=false -ldflags='-s -w' -o /out/shuttle ./cmd/shuttle
+RUN go build -trimpath -buildvcs=false -ldflags='-s -w' -o /out/zinusya-avatar ./cmd/zinusya-avatar
 FROM scratch
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=build /out/shuttle /usr/local/bin/shuttle
+COPY --from=build /out/zinusya-avatar /usr/local/bin/zinusya-avatar
 COPY docs/dependency-audit/2026-10-12/_runtime-notices /licenses/dependencies/
+COPY docs/dependency-audit/2026-10-14-avatars/notices /licenses/avatars/
 COPY LICENSE /licenses/shuttle/LICENSE
 COPY --from=build /usr/local/go/LICENSE /usr/local/go/PATENTS /licenses/go/
 USER 10001:10001

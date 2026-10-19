@@ -40,7 +40,7 @@ func TestMetricsBoundedAndPrivate(t *testing.T) {
 	w := httptest.NewRecorder()
 	tm.MetricsHandler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	body := w.Body.String()
-	for _, want := range []string{"go_goroutines", "process_cpu_seconds", "shuttle_operations_total", `component="other",outcome="other"} 100`, `component="queue",outcome="accepted"} 1`, "shuttle_http_requests_total"} {
+	for _, want := range []string{"go_goroutines", "process_cpu_seconds", "zinusya_operations_total", `component="other",outcome="other"} 100`, `component="queue",outcome="accepted"} 1`, "zinusya_http_requests_total"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing metrics %q in %s", want, body)
 		}

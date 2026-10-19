@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/complynx/shuttle/internal/db"
+	"github.com/complynx/zns-chatbot/internal/db"
 )
 
 func testStore(t *testing.T) *db.Store {

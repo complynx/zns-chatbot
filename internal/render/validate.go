@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 // ErrInvalidEntities identifies unsupported, overlapping, or out-of-bounds entities.

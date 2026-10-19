@@ -40,7 +40,24 @@ type MessageEntity struct {
 	Language      string `json:"language,omitempty"`
 	CustomEmojiID string `json:"custom_emoji_id,omitempty"`
 }
+type MediaFile struct {
+	FileID    string `json:"file_id"`
+	UniqueID  string `json:"file_unique_id"`
+	SizeBytes int64  `json:"file_size,omitempty"`
+	Filename  string `json:"file_name,omitempty"`
+	MIMEType  string `json:"mime_type,omitempty"`
+	Width     int32  `json:"width,omitempty"`
+	Height    int32  `json:"height,omitempty"`
+}
 type Message struct {
+	Photo     []MediaFile `json:"photo,omitempty"`
+	Document  *MediaFile  `json:"document,omitempty"`
+	Audio     *MediaFile  `json:"audio,omitempty"`
+	Voice     *MediaFile  `json:"voice,omitempty"`
+	Video     *MediaFile  `json:"video,omitempty"`
+	VideoNote *MediaFile  `json:"video_note,omitempty"`
+	Animation *MediaFile  `json:"animation,omitempty"`
+
 	ID             int64           `json:"message_id"`
 	From           *User           `json:"from,omitempty"`
 	Chat           Chat            `json:"chat"`
@@ -61,19 +78,24 @@ type Update struct {
 	Message       *Message       `json:"message,omitempty"`
 	CallbackQuery *CallbackQuery `json:"callback_query,omitempty"`
 }
+type WebAppInfo struct {
+	URL string `json:"url"`
+}
+
 type InlineKeyboardButton struct {
-	Text         string `json:"text"`
-	CallbackData string `json:"callback_data,omitempty"`
-	URL          string `json:"url,omitempty"`
+	Text         string      `json:"text"`
+	CallbackData string      `json:"callback_data,omitempty"`
+	URL          string      `json:"url,omitempty"`
+	WebApp       *WebAppInfo `json:"web_app,omitempty"`
 }
 type InlineKeyboardMarkup struct {
 	InlineKeyboard [][]InlineKeyboardButton `json:"inline_keyboard"`
 }
 type SendMessageRequest struct {
-	ChatID      int64                 `json:"chat_id"`
-	Text        string                `json:"text"`
-	Entities    []MessageEntity       `json:"entities,omitempty"`
-	ReplyMarkup *InlineKeyboardMarkup `json:"reply_markup,omitempty"`
+	ChatID      int64           `json:"chat_id"`
+	Text        string          `json:"text"`
+	Entities    []MessageEntity `json:"entities,omitempty"`
+	ReplyMarkup ReplyMarkup     `json:"reply_markup,omitempty"`
 }
 type EditMessageRequest struct {
 	ChatID      int64                 `json:"chat_id"`
@@ -97,10 +119,11 @@ const (
 )
 
 type Error struct {
-	StatusCode int
-	Retryable  bool
-	RetryAfter time.Duration
-	Outcome    Outcome
+	fileTooLarge bool
+	StatusCode   int
+	Retryable    bool
+	RetryAfter   time.Duration
+	Outcome      Outcome
 	// InvalidEntities permits a plain text fallback after an explicit parsing rejection.
 	InvalidEntities bool
 }
@@ -189,6 +212,10 @@ func (c *Client) call(ctx context.Context, method string, input, result any, mut
 		return &Error{Outcome: NotStarted}
 	}
 	req.Header.Set("Content-Type", "application/json")
+	return c.do(req, result, mutation)
+}
+
+func (c *Client) do(req *http.Request, result any, mutation bool) error {
 	resp, err := c.http.Do(req)
 	outcome := Rejected
 	if mutation {
@@ -251,6 +278,8 @@ func rejection(status, code int, description string, retryAfter int64, mutation 
 		code = status
 	}
 	e := &Error{StatusCode: code, Outcome: Rejected}
+	e.fileTooLarge = (status == http.StatusOK || status == http.StatusBadRequest) &&
+		code == http.StatusBadRequest && description == "Bad Request: file is too big"
 	e.InvalidEntities = status == http.StatusBadRequest && code == http.StatusBadRequest &&
 		strings.Contains(strings.ToLower(description), "can't parse entities")
 	if code == http.StatusTooManyRequests {

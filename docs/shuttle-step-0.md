@@ -15,11 +15,13 @@ Later commits require their own green checks.
 ## Operator access
 
 Use the private listener. Every request requires a verified user bearer token,
-the `shuttle.admin` role in the configured API project and a locally active
+the `zinusya.admin` role in the configured API project and a locally active
 account in the configured organization. Target tasks must belong to this bot
 and to an unbound user or the configured organization. Foreign tasks return 404.
-No public Telegram endpoint exposes these operations. The agent manifest still
-advertises only account.me; administrative agent manifests are a later stage.
+No public Telegram endpoint exposes these operations. The current agent manifest
+also exposes role-gated administrative reads and writes with exact-parameter
+approval; see [agent administration](shuttle-agent-administration.md) for the
+available methods and their individual authorization contracts.
 
 Run the explicit application migrations before starting this version. Migration
 00002 creates `shuttle_task_resolutions`; River migrations remain separately
@@ -40,6 +42,11 @@ tokens, session IDs and native queue errors/arguments are excluded. Queue jobs
 may disappear after River retention; application task/audit history remains.
 
 ## Close an uncertain task
+
+The same local effect is available to an authorized agent through
+[`zinusya_administration.close_task`](shuttle-task-closures.md), with persisted
+preparation, exact approval and status/reconcile. The operator API below remains
+available with its existing receipt contract.
 
 First inspect the task and check the external result using the relevant service.
 The API supports local closure only: it neither confirms Telegram delivery nor

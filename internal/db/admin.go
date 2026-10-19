@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/complynx/shuttle/internal/db/sqlc"
+	"github.com/complynx/zns-chatbot/internal/db/sqlc"
 )
 
 type TaskSummary struct {
@@ -191,7 +191,25 @@ func (s *Store) CloseUncertainTask(ctx context.Context, in CloseTaskRequest) (Ta
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return TaskResolution{}, err
 	}
-	if err = s.requireUncertainTask(ctx, q, t); err != nil {
+	result, err := s.closeUncertainTaskTx(ctx, q, t, in)
+	if err != nil {
+		return TaskResolution{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return TaskResolution{}, err
+	}
+	return result, nil
+}
+
+// closeUncertainTaskTx applies local closure to a locked task. Its caller owns
+// receipt replay and the transaction, so an agent proposal can commit atomically.
+func (s *Store) closeUncertainTaskTx(
+	ctx context.Context,
+	q *sqlc.Queries,
+	t sqlc.ShuttleTask,
+	in CloseTaskRequest,
+) (TaskResolution, error) {
+	if err := s.requireUncertainTask(ctx, q, t); err != nil {
 		return TaskResolution{}, err
 	}
 	closed, err := q.CloseUncertainTask(ctx, sqlc.CloseUncertainTaskParams{ID: t.ID, Version: in.ExpectedVersion})
@@ -223,9 +241,6 @@ func (s *Store) CloseUncertainTask(ctx context.Context, in CloseTaskRequest) (Ta
 		},
 	)
 	if err != nil {
-		return TaskResolution{}, err
-	}
-	if err = tx.Commit(ctx); err != nil {
 		return TaskResolution{}, err
 	}
 	return resolution(saved), nil

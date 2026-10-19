@@ -34,19 +34,22 @@ type Options struct {
 }
 
 const otherLabel = "other"
+const errorLabel = "error"
 
 const maxExportBatchSize = 128
 
 type Telemetry struct {
-	traces       *sdktrace.TracerProvider
-	meters       *sdkmetric.MeterProvider
-	tracer       trace.Tracer
-	propagator   propagation.TextMapPropagator
-	handler      http.Handler
-	operations   metric.Int64Counter
-	httpRequests metric.Int64Counter
-	httpDuration metric.Float64Histogram
-	timeout      time.Duration
+	traces          *sdktrace.TracerProvider
+	meters          *sdkmetric.MeterProvider
+	tracer          trace.Tracer
+	propagator      propagation.TextMapPropagator
+	handler         http.Handler
+	operations      metric.Int64Counter
+	httpRequests    metric.Int64Counter
+	httpDuration    metric.Float64Histogram
+	workerDuration  metric.Float64Histogram
+	responseLatency metric.Float64Histogram
+	timeout         time.Duration
 }
 
 func New(ctx context.Context, opts Options) (*Telemetry, error) {
@@ -61,7 +64,7 @@ func New(ctx context.Context, opts Options) (*Telemetry, error) {
 		opts.MaxQueueSize = 256
 	}
 	if opts.ServiceName == "" {
-		opts.ServiceName = "shuttle"
+		opts.ServiceName = "zinusya"
 	}
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(
@@ -90,9 +93,12 @@ func New(ctx context.Context, opts Options) (*Telemetry, error) {
 			_ = meters.Shutdown(ctx)
 			return nil, errors.New("invalid telemetry endpoint")
 		}
+		if u.Path == "" || u.Path == "/" {
+			u.Path = "/v1/traces"
+		}
 		exp, exportErr := otlptracehttp.New(
 			ctx,
-			otlptracehttp.WithEndpointURL(opts.OTLPEndpoint),
+			otlptracehttp.WithEndpointURL(u.String()),
 			otlptracehttp.WithTimeout(opts.Timeout),
 		)
 		if exportErr != nil {
@@ -113,23 +119,12 @@ func New(ctx context.Context, opts Options) (*Telemetry, error) {
 	t := &Telemetry{
 		traces:     traces,
 		meters:     meters,
-		tracer:     traces.Tracer("shuttle"),
+		tracer:     traces.Tracer("zinusya"),
 		propagator: propagation.TraceContext{},
 		handler:    promhttp.HandlerFor(registry, promhttp.HandlerOpts{}),
 		timeout:    opts.Timeout,
 	}
-	meter := meters.Meter("shuttle")
-	t.operations, err = meter.Int64Counter("shuttle.operations", metric.WithDescription("Operation outcomes"))
-	if err == nil {
-		t.httpRequests, err = meter.Int64Counter(
-			"shuttle.http.requests",
-			metric.WithDescription("Business HTTP requests"),
-		)
-	}
-	if err == nil {
-		t.httpDuration, err = meter.Float64Histogram("shuttle.http.duration", metric.WithUnit("s"))
-	}
-	if err != nil {
+	if err = t.initInstruments(meters.Meter("zinusya")); err != nil {
 		_ = t.Shutdown(ctx)
 		return nil, errors.New("initialize telemetry instruments")
 	}
@@ -191,7 +186,7 @@ func (t *Telemetry) Middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(rw, r.WithContext(ctx))
 		outcome := "success"
 		if rw.status >= http.StatusInternalServerError {
-			outcome = "error"
+			outcome = errorLabel
 			span.SetStatus(codes.Error, "request failed")
 		} else if rw.status >= http.StatusBadRequest {
 			outcome = "rejected"
@@ -271,6 +266,11 @@ func boundedComponent(s string) string {
 		"poll",
 		"webhook",
 		"deliver",
+		"notifications",
+		"pair_notifications",
+		"order_notifications", "avatar_deliveries",
+		"massage_reminders",
+		"massage_specialist_notices",
 		"execute",
 		"renew",
 		"identity",
@@ -283,7 +283,7 @@ func boundedComponent(s string) string {
 func boundedOutcome(s string) string {
 	switch s {
 	case "success",
-		"error",
+		errorLabel,
 		"rejected",
 		"retry",
 		"timeout",
@@ -308,4 +308,26 @@ func boundedMethod(s string) string {
 	default:
 		return otherLabel
 	}
+}
+
+func (t *Telemetry) initInstruments(meter metric.Meter) error {
+	var err error
+	t.operations, err = meter.Int64Counter("zinusya.operations", metric.WithDescription("Operation outcomes"))
+	if err == nil {
+		t.httpRequests, err = meter.Int64Counter(
+			"zinusya.http.requests",
+			metric.WithDescription("Business HTTP requests"),
+		)
+	}
+	if err == nil {
+		t.httpDuration, err = meter.Float64Histogram("zinusya.http.duration", metric.WithUnit("s"))
+	}
+	if err == nil {
+		t.workerDuration, err = newWorkerDuration(meter)
+	}
+	if err == nil {
+		t.responseLatency, err = newResponseLatency(meter)
+	}
+
+	return err
 }

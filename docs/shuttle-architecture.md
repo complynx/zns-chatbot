@@ -8,10 +8,13 @@ River job state is not the business source of truth. Loom owns the agent loop.
 
 The first slice accepts private Telegram text messages, provisions or resolves a
 Zitadel account, obtains delegated credentials, starts a Loom run and delivers
-its result through Telegram entities. The private agent API exposes account.me.
+its result through Telegram entities. The private agent API exposes account.me and
+[role-gated administrative reads](shuttle-agent-administration.md).
 Question, answer, approval and cancellation follow the same durable intake path.
-Registration, passes, payment ledgers, pairs, avatars and migration remain later
-MVP stages. This slice does not claim acceptance for those business modules.
+At this initial checkpoint, registration, passes, payment ledgers, pairs, avatars
+and migration were later stages. Subsequent bounded implementations and acceptance
+are recorded in the [current roadmap](shuttle-roadmap.md). This section describes
+the original first slice, not the current completion status of those modules.
 
 - `internal/config`: startup YAML and secret/environment overrides.
 - `internal/db`: PostgreSQL state, sqlc queries and embedded Goose migrations.
@@ -45,7 +48,12 @@ that message is not promoted into another run.
 A task survives loss of the application process. Dependency outages postpone its
 attempts. A new process reconciles abandoned delivery attempts before admitting
 workers. Shutdown cancels requests and workers, aims for one second, and has a
-five-second hard bound. PostgreSQL shutdown is outside this application contract.
+five-second hard bound. SIGTERM with graceful shutdown is the normal restart
+path. SIGKILL is exceptional: preserve accepted work and business state, retaining
+durable identifiers and evidence for human or agent reconciliation when an external
+outcome cannot be established automatically. Do not blindly replay uncertain effects
+or build a complex recovery platform for rare exceptions. PostgreSQL shutdown is
+outside this application contract.
 
 ## Identity and authorization gates
 
@@ -108,3 +116,18 @@ data migration, real service contracts and production cutover remain explicit.
 
 Written by Codex (gpt-6/Codex desktop)
 on behalf of Daniel Drizhuk
+
+## Event configuration and Loom shutdown recovery
+
+The private operator API persists event catalogue changes and immutable operation
+receipts in PostgreSQL. See [event catalogue](shuttle-events.md). Configuration
+does not establish registration or module eligibility on its own.
+
+Accepted tasks resume an existing Loom run after an observed shutdown pause,
+using a durable operation key and a subsequent full run read for delivery. Known
+reconciliation conflicts wait. See [shutdown recovery](shuttle-loom-resume.md),
+including the sole-controller assumption until Loom supports atomic preconditions.
+
+The queue schema is pinned to bot ID, IAM organization and issuer before worker
+recovery; mismatched startup fails without rewriting accepted work. Apply
+migration 00004 explicitly. See [deployment scope](shuttle-deployment-scope.md).

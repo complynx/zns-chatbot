@@ -1,0 +1,148 @@
+package db
+
+import (
+	"context"
+	"crypto/sha256"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/complynx/zns-chatbot/internal/db/sqlc"
+)
+
+type MiniAppOrderSession struct {
+	Bearer, Generation [sha256.Size]byte
+}
+
+// miniAppOrderTx validates the session inside the business transaction, including
+// receipt replays. Its event -> owner -> session order matches agent writes and
+// logout. Callers must check IAM before entry and own commit/rollback afterward.
+func (s *Store) miniAppOrderTx(
+	ctx context.Context,
+	deployment EventScope,
+	session MiniAppOrderSession,
+	event, operation uuid.UUID,
+) (pgx.Tx, ProfileScope, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, ProfileScope{}, err
+	}
+	scope, err := s.lockMiniAppOrder(ctx, tx, deployment, session, event, operation)
+	if err != nil {
+		rollbackLegacyArchive(ctx, tx)
+		return nil, ProfileScope{}, err
+	}
+	return tx, scope, nil
+}
+
+func (s *Store) lockMiniAppOrder(
+	ctx context.Context,
+	tx pgx.Tx,
+	deployment EventScope,
+	session MiniAppOrderSession,
+	event, operation uuid.UUID,
+) (ProfileScope, error) {
+	q := s.q.WithTx(tx)
+	initial, err := q.FindMiniAppBearer(
+		ctx,
+		sqlc.FindMiniAppBearerParams{BotID: deployment.BotID, BearerHash: session.Bearer[:]},
+	)
+	if err != nil {
+		return ProfileScope{}, err
+	}
+	if err = q.LockEventOperation(ctx, fmt.Sprintf("orders:%s:%s", initial.UserID, operation)); err != nil {
+		return ProfileScope{}, err
+	}
+	_, err = q.LockRegistrationEvent(
+		ctx,
+		sqlc.LockRegistrationEventParams{ID: event, BotID: deployment.BotID, OrganizationID: deployment.Organization},
+	)
+	if err != nil {
+		return ProfileScope{}, err
+	}
+	attempt, err := s.lockMiniAppBearer(ctx, tx, deployment.BotID, session.Bearer, session.Generation)
+	if err != nil {
+		return ProfileScope{}, err
+	}
+	if attempt.User.ID != initial.UserID || attempt.User.Organization != deployment.Organization {
+		return ProfileScope{}, ErrMiniAppDenied
+	}
+	scope := ProfileScope{
+		BotID:        deployment.BotID,
+		Organization: deployment.Organization,
+		Subject:      attempt.User.Subject,
+		UserID:       attempt.User.ID,
+	}
+	return scope, authorizeOrdersSelection(ctx, tx, scope, event)
+}
+
+func (s *Store) PrepareMiniAppOrderSubmission(
+	ctx context.Context,
+	deployment EventScope,
+	session MiniAppOrderSession,
+	operation uuid.UUID,
+	args OrderSubmission,
+) (OrderPreparation, error) {
+	call, err := orderPrepareCall(operation, args, OrderSourceMiniApp)
+	if err != nil {
+		return OrderPreparation{}, err
+	}
+	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, args.EventID, operation)
+	if err != nil {
+		return OrderPreparation{}, err
+	}
+	defer rollbackLegacyArchive(ctx, tx)
+	result, replayed, err := s.prepareOrderSubmission(ctx, tx, scope, call, args)
+	if err != nil || replayed {
+		return result, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+func (s *Store) SubmitMiniAppOrder(
+	ctx context.Context,
+	deployment EventScope,
+	session MiniAppOrderSession,
+	operation uuid.UUID,
+	args OrderSubmission,
+	proposal uuid.UUID,
+) (OrderSubmissionResult, error) {
+	call, err := orderSubmitCall(operation, args, proposal, OrderSourceMiniApp)
+	if err != nil {
+		return OrderSubmissionResult{}, err
+	}
+	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, args.EventID, operation)
+	if err != nil {
+		return OrderSubmissionResult{}, err
+	}
+	defer rollbackLegacyArchive(ctx, tx)
+	result, replayed, err := s.submitOrder(ctx, tx, scope, call, args, proposal)
+	if err != nil || replayed {
+		return result, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+func (s *Store) CancelMiniAppOrder(
+	ctx context.Context,
+	deployment EventScope,
+	session MiniAppOrderSession,
+	operation uuid.UUID,
+	args OrderCancellation,
+) (SubmittedOrder, error) {
+	call, err := orderCancelCall(operation, args, OrderSourceMiniApp)
+	if err != nil {
+		return SubmittedOrder{}, err
+	}
+	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, args.EventID, operation)
+	if err != nil {
+		return SubmittedOrder{}, err
+	}
+	defer rollbackLegacyArchive(ctx, tx)
+	result, replayed, err := s.cancelOrder(ctx, tx, scope, call, args)
+	if err != nil || replayed {
+		return result, err
+	}
+	return result, tx.Commit(ctx)
+}

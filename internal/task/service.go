@@ -20,38 +20,56 @@ import (
 	"github.com/riverqueue/river/rivermigrate"
 	"go.opentelemetry.io/otel/propagation"
 
-	"github.com/complynx/shuttle/internal/db"
-	"github.com/complynx/shuttle/internal/identity"
-	"github.com/complynx/shuttle/internal/loom"
-	"github.com/complynx/shuttle/internal/observability"
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
+	"github.com/complynx/zns-chatbot/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/miniapp"
+	"github.com/complynx/zns-chatbot/internal/observability"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
-const queueCleanupMargin = 2 * time.Second
+const (
+	queueCleanupMargin         = 2 * time.Second
+	minimumTaskPoolConnections = 2
+	metricSuccess              = "success"
+	metricError                = "error"
+	metricRetry                = "retry"
+)
 
 type Options struct {
+	RegistrationDetailsEnabled                  bool
+	MiniAppURL                                  string
 	BotID                                       int64
 	PollInterval, AttemptTimeout, LeaseDuration time.Duration
 	MaxWorkers                                  int
 }
 type Service struct {
-	store                  *db.Store
-	iam                    *identity.Client
-	loom                   *loom.Client
-	tg                     *telegram.Client
-	observer               *observability.Telemetry
-	logger                 *slog.Logger
-	options                Options
-	queue                  *river.Client[pgx.Tx]
-	owner                  string
-	startMu                sync.Mutex
-	lockConn               *pgxpool.Conn
-	lockKey                string
-	watchCancel            context.CancelFunc
-	watchDone              chan struct{}
-	failures               chan error
-	diagnosticMu           sync.Mutex
-	nextDatabaseDiagnostic time.Time
+	keyboardSend                  [keyboardLockCount]sync.Mutex
+	avatarDeliverySend            [avatarDeliveryLockCount]sync.Mutex
+	store                         *db.Store
+	iam                           *identity.Client
+	loom                          *loom.Client
+	tg                            *telegram.Client
+	observer                      *observability.Telemetry
+	logger                        *slog.Logger
+	options                       Options
+	queue                         *river.Client[pgx.Tx]
+	owner                         string
+	startMu                       sync.Mutex
+	lockConn                      *pgxpool.Conn
+	lockKey                       string
+	watchCancel                   context.CancelFunc
+	watchDone                     chan struct{}
+	failures                      chan error
+	diagnosticMu                  sync.Mutex
+	nextDatabaseDiagnostic        time.Time
+	notificationCursor            uuid.UUID
+	pairExpiryCursor              uuid.UUID
+	pairNotificationCursor        uuid.UUID
+	avatarDeliveryCursor          uuid.UUID
+	orderNotificationCursor       uuid.UUID
+	massageReminderCursor         uuid.UUID
+	massageSpecialistNoticeCursor uuid.UUID
 }
 
 // JobArgs deliberately contains no profile, credentials, or incoming content.
@@ -68,10 +86,12 @@ type worker struct {
 }
 
 func (w *worker) Work(ctx context.Context, job *river.Job[JobArgs]) error {
+	started := time.Now()
 	err := w.service.work(ctx, job.Args.TaskID)
-	outcome := "success"
+	w.service.recordWorkerDuration(ctx, job.Args.Kind(), err, time.Since(started))
+	outcome := metricSuccess
 	if err != nil {
-		outcome = "retry"
+		outcome = metricRetry
 	}
 	w.service.record(ctx, "worker", outcome)
 	return err
@@ -113,6 +133,14 @@ func New(
 	if store == nil || iam == nil || loomClient == nil || tg == nil || o.BotID <= 0 {
 		return nil, errors.New("task dependencies and bot ID required")
 	}
+	// The instance lease holds one pooled connection throughout execution.
+	// Startup and workers must still be able to acquire another connection.
+	if store.Pool() == nil || store.Pool().Config().MaxConns < minimumTaskPoolConnections {
+		return nil, errors.New("task database pool requires at least two connections")
+	}
+	if o.MiniAppURL != "" && !miniapp.ValidLaunchURL(o.MiniAppURL) {
+		return nil, errors.New("mini app launch URL must use canonical HTTPS and end in /app/")
+	}
 	if o.PollInterval == 0 {
 		o.PollInterval = time.Second
 	}
@@ -145,6 +173,12 @@ func New(
 	}
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &worker{service: s})
+	river.AddWorker(workers, &notificationWorker{service: s})
+	river.AddWorker(workers, &pairNotificationWorker{service: s})
+	river.AddWorker(workers, &orderNotificationWorker{service: s})
+	river.AddWorker(workers, &avatarDeliveryWorker{service: s})
+	river.AddWorker(workers, &massageReminderWorker{service: s})
+	river.AddWorker(workers, &massageSpecialistNoticeWorker{service: s})
 	schema, err := queueSchema(store.Pool())
 	if err != nil {
 		return nil, err
@@ -165,6 +199,20 @@ func New(
 		},
 	)
 	return s, err
+}
+
+// Recovery runs under the exclusive service lock and before queue workers start.
+func (s *Service) recoverBusinessNotifications(ctx context.Context) error {
+	scope := s.notificationScope()
+	for _, recoverNotices := range []func(context.Context, db.EventScope) error{
+		s.store.RecoverNotifications, s.store.RecoverPairNotifications, s.store.RecoverOrderNotifications, s.store.RecoverAvatarDeliveries,
+		s.store.RecoverMassageReminders, s.store.RecoverMassageSpecialistNotifications,
+	} {
+		if err := recoverNotices(ctx, scope); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Start is called once after the previous application instance has ended.
@@ -191,7 +239,20 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.lockConn = conn
 	s.lockKey = key
+	botID, organization, issuer := s.iam.DeploymentScope()
+	if botID != s.options.BotID {
+		s.releaseLock(ctx)
+		return db.ErrDeploymentScope
+	}
+	if err = s.store.BindDeployment(ctx, botID, organization, issuer); err != nil {
+		s.releaseLock(ctx)
+		return err
+	}
 	if _, err = s.store.RecoverUnknownDeliveries(ctx); err != nil {
+		s.releaseLock(ctx)
+		return err
+	}
+	if err = s.recoverBusinessNotifications(ctx); err != nil {
 		s.releaseLock(ctx)
 		return err
 	}
@@ -241,6 +302,27 @@ func (s *Service) watchLock(ctx context.Context, conn *pgxpool.Conn, done chan s
 				stopCancel()
 				return
 			}
+			noticeCtx, noticeCancel := context.WithTimeout(ctx, time.Second)
+			err = s.scheduleNotifications(noticeCtx)
+			noticeCancel()
+			if err != nil && ctx.Err() == nil {
+				s.record(ctx, "notifications", "error")
+				s.logger.WarnContext(ctx, "notification scheduling unavailable", "class", "notification_queue")
+			}
+			s.repairPairNotifications(ctx)
+			s.repairOrderNotifications(ctx)
+			s.repairAvatarDeliveries(ctx)
+			s.repairMassageReminders(ctx)
+			s.repairMassageSpecialistNotices(ctx)
+			expiryCtx, expiryCancel := context.WithTimeout(ctx, time.Second)
+			next, expiryErr := s.store.ExpirePairInvitations(expiryCtx, s.notificationScope(), s.pairExpiryCursor)
+			expiryCancel()
+			if expiryErr == nil {
+				s.pairExpiryCursor = next
+			} else if ctx.Err() == nil {
+				s.record(ctx, "pair_expiry", metricError)
+				s.logger.WarnContext(ctx, "pair invitation expiry unavailable", "class", "pair_expiry")
+			}
 		}
 	}
 }
@@ -275,6 +357,7 @@ func (s *Service) accept(ctx context.Context, update telegram.Update, raw json.R
 		request.TraceParent = carrier.Get("traceparent")
 		request.TraceState = carrier.Get("tracestate")
 	}
+	request.PreferredLanguage = s.languageFor(ctx, request)
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return db.Task{}, false, err
@@ -283,6 +366,7 @@ func (s *Service) accept(ctx context.Context, update telegram.Update, raw json.R
 	return s.store.Intake(
 		ctx,
 		db.IntakeRequest{
+			Attachments:    request.Attachments,
 			BotID:          s.options.BotID,
 			UpdateID:       update.ID,
 			TelegramUserID: request.User.ID,

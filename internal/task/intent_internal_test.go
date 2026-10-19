@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/complynx/shuttle/internal/loom"
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 func TestNormalizeTrustedPrivateSender(t *testing.T) {
@@ -56,11 +56,11 @@ func TestNormalizeUnsupportedMediaDoesNotBecomeModelText(t *testing.T) {
 	u.Message.Text = "/cancel"
 	raw, _ := json.Marshal(u)
 	i, err = normalize(u, raw)
-	if err != nil || i.Kind != "cancel" {
+	if err != nil || i.Kind != kindMessage {
 		t.Fatal(i.Kind, err)
 	}
 }
-func TestGeneratedCallbacksStayBoundedAndBindExactPrompt(t *testing.T) {
+func TestOperationCallbacksStayBoundedAndBindExactPrompt(t *testing.T) {
 	t.Parallel()
 	id := uuid.New()
 	q := loom.Question{
@@ -70,14 +70,8 @@ func TestGeneratedCallbacksStayBoundedAndBindExactPrompt(t *testing.T) {
 		ExpiresAt: time.Now().Add(time.Minute),
 		Choices:   []loom.Choice{{ID: "choice", Label: "First"}},
 	}
-	svc := &Service{}
 	i := intent{User: telegram.User{ID: 7}, ChatID: 7}
-	out := svc.question(i, id, q)
-	var payload telegram.SendMessageRequest
-	if err := json.Unmarshal(out[0].Payload, &payload); err != nil {
-		t.Fatal(err)
-	}
-	data := payload.ReplyMarkup.InlineKeyboard[0][0].CallbackData
+	data := fmt.Sprintf("a:%s:%s:approve", id, promptKey(q))
 	if len(data) > 64 {
 		t.Fatalf("callback length %d", len(data))
 	}
@@ -91,7 +85,7 @@ func TestGeneratedCallbacksStayBoundedAndBindExactPrompt(t *testing.T) {
 	}
 	raw, _ := json.Marshal(u)
 	got, err := normalize(u, raw)
-	if err != nil || got.CallbackTaskID != id || got.PromptKey != promptKey(q) || got.ChoiceIndex != 0 {
+	if err != nil || got.CallbackTaskID != id || got.PromptKey != promptKey(q) || got.Decision != "approve" {
 		t.Fatal(got, err)
 	}
 	old := promptKey(q)

@@ -14,9 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/complynx/shuttle/internal/db/sqlc"
-	"github.com/complynx/shuttle/migrations"
+	"github.com/complynx/zns-chatbot/internal/db/sqlc"
+	"github.com/complynx/zns-chatbot/migrations"
 )
+
+const routeNewRun = "new_run"
+const routeStructured = "structured"
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -77,8 +80,10 @@ func (s *Store) GetUser(ctx context.Context, id uuid.UUID) (User, error) {
 	u, e := s.q.GetUser(ctx, id)
 	return user(u), e
 }
-func (s *Store) GetUserBySubject(ctx context.Context, subject string) (User, error) {
-	u, e := s.q.GetUserBySubject(ctx, subject)
+func (s *Store) GetUserBySubject(ctx context.Context, botID int64, organization, subject string) (User, error) {
+	u, e := s.q.GetUserBySubject(ctx, sqlc.GetUserBySubjectParams{
+		BotID: botID, ZitadelOrg: organization, ZitadelSubject: subject,
+	})
 	return user(u), e
 }
 func (s *Store) BindSubject(ctx context.Context, id uuid.UUID, subject, org string) (User, error) {
@@ -150,6 +155,9 @@ func (s *Store) Intake(
 	if e != nil {
 		return Task{}, false, e
 	}
+	if e = insertAttachments(ctx, q, u.ID, t.ID, r.Attachments); e != nil {
+		return Task{}, false, e
+	}
 	if e = q.InsertInbox(
 		ctx,
 		sqlc.InsertInboxParams{BotID: r.BotID, UpdateID: r.UpdateID, TaskID: t.ID, Payload: r.Payload},
@@ -190,9 +198,6 @@ func (s *Store) Route(ctx context.Context, id uuid.UUID) (Task, error) {
 	if t.Route != "" {
 		return task(t), nil
 	}
-	if t.Seq != c.RoutedSeq+1 {
-		return Task{}, ErrRoutingPending
-	}
 	var envelope struct {
 		Kind       string `json:"kind"`
 		QuestionID string `json:"question_id"`
@@ -200,8 +205,13 @@ func (s *Store) Route(ctx context.Context, id uuid.UUID) (Task, error) {
 	if e = json.Unmarshal(t.Request, &envelope); e != nil {
 		return Task{}, e
 	}
-	route := "new_run"
-	target := uuid.Nil
+	if envelope.Kind == routeStructured {
+		return saveStructuredRoute(ctx, tx, q, c, t)
+	}
+	if t.Seq != c.RoutedSeq+1 {
+		return Task{}, ErrRoutingPending
+	}
+	route, target := routeNewRun, uuid.Nil
 	run, question := "", envelope.QuestionID
 	active := c.ActiveTaskID
 	a, lookupErr := routingActiveTask(ctx, q, c, t.Seq)
@@ -225,7 +235,7 @@ func (s *Store) Route(ctx context.Context, id uuid.UUID) (Task, error) {
 			route = "no_active"
 		}
 	}
-	if route == "new_run" {
+	if route == routeNewRun {
 		active = pgtype.UUID{Bytes: t.ID, Valid: true}
 	}
 	t, e = q.SetRoute(
@@ -235,17 +245,9 @@ func (s *Store) Route(ctx context.Context, id uuid.UUID) (Task, error) {
 	if e != nil {
 		return Task{}, e
 	}
-	if e = q.AdvanceRouting(
-		ctx,
-		sqlc.AdvanceRoutingParams{ID: c.ID, RoutedSeq: t.Seq, ActiveTaskID: active},
-	); e != nil {
-		return Task{}, e
-	}
-	if e = tx.Commit(ctx); e != nil {
-		return Task{}, e
-	}
-	return task(t), nil
+	return finishRouting(ctx, tx, q, c, t, active)
 }
+
 func (s *Store) Claim(ctx context.Context, id uuid.UUID, owner string, lease time.Duration) (Task, error) {
 	if owner == "" || lease <= 0 {
 		return Task{}, fmt.Errorf("invalid lease")
@@ -297,7 +299,7 @@ func (s *Store) Save(ctx context.Context, t Task, owner string, fence int64, out
 			ctx,
 			sqlc.ClearConversationRunParams{ID: t.ConversationID, ActiveTaskID: pgtype.UUID{Bytes: t.ID, Valid: true}},
 		)
-	} else {
+	} else if saved.Route != routeStructured {
 		e = q.UpdateConversationRun(
 			ctx,
 			sqlc.UpdateConversationRunParams{
@@ -311,19 +313,17 @@ func (s *Store) Save(ctx context.Context, t Task, owner string, fence int64, out
 	if e != nil {
 		return Task{}, e
 	}
-	for _, o := range out {
-		if o.ID == uuid.Nil {
-			o.ID = uuid.New()
+	if e = appendOutbox(ctx, tx, t.ID, out); e != nil {
+		return Task{}, e
+	}
+	if saved.Route == routeNewRun && saved.State == "completed" && saved.RunID != "" && len(out) > 0 {
+		keys := make([]string, len(out))
+		for n, item := range out {
+			keys[n] = item.DedupKey
 		}
-		if e = q.InsertOutbox(
+		if e = q.RegisterFinalResponse(
 			ctx,
-			sqlc.InsertOutboxParams{
-				ID:       o.ID,
-				TaskID:   t.ID,
-				DedupKey: o.DedupKey,
-				ChunkSeq: o.ChunkSeq,
-				Payload:  o.Payload,
-			},
+			sqlc.RegisterFinalResponseParams{TaskID: t.ID, OutboxKeys: keys},
 		); e != nil {
 			return Task{}, e
 		}
@@ -336,7 +336,7 @@ func (s *Store) Save(ctx context.Context, t Task, owner string, fence int64, out
 
 func terminalTask(state string) bool {
 	switch state {
-	case "completed", "failed", "cancelled", deliveryUnknown, "delivery_failed", "closed":
+	case "completed", "failed", "cancelled", deliveryUnknown, deliveryFailed, "closed":
 		return true
 	default:
 		return false
@@ -362,7 +362,8 @@ func (s *Store) ControlReady(ctx context.Context, taskID uuid.UUID) (bool, error
 }
 
 // PromoteMessage preserves accepted text when its routed target has finished.
-// Call only before any external input intent has been persisted or submitted.
+// Call only with proof that no external input effect occurred. A rejected input
+// may have a persisted intent; an unknown outcome does not permit promotion.
 func (s *Store) PromoteMessage(ctx context.Context, taskID uuid.UUID, owner string, fence int64) (Task, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -435,4 +436,44 @@ func routingActiveTask(
 		return sqlc.ShuttleTask{}, ErrRoutingPending
 	}
 	return active, nil
+}
+
+func saveStructuredRoute(
+	ctx context.Context,
+	tx pgx.Tx,
+	q *sqlc.Queries,
+	c sqlc.ShuttleConversation,
+	t sqlc.ShuttleTask,
+) (Task, error) {
+	routed, err := q.SetRoute(ctx, sqlc.SetRouteParams{ID: t.ID, Route: routeStructured, TargetTaskID: uuid.Nil})
+	if err != nil {
+		return Task{}, err
+	}
+	return finishRouting(ctx, tx, q, c, routed, c.ActiveTaskID)
+}
+
+func finishRouting(
+	ctx context.Context,
+	tx pgx.Tx,
+	q *sqlc.Queries,
+	c sqlc.ShuttleConversation,
+	t sqlc.ShuttleTask,
+	active pgtype.UUID,
+) (Task, error) {
+	routed, e := q.RoutedSequence(ctx, sqlc.RoutedSequenceParams{
+		ConversationID: c.ID, RoutedSeq: c.RoutedSeq, NextSeq: c.NextSeq,
+	})
+	if e != nil {
+		return Task{}, e
+	}
+	if e = q.AdvanceRouting(
+		ctx,
+		sqlc.AdvanceRoutingParams{ID: c.ID, RoutedSeq: routed, ActiveTaskID: active},
+	); e != nil {
+		return Task{}, e
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return Task{}, e
+	}
+	return task(t), nil
 }

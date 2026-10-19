@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/complynx/shuttle/internal/loom"
+	"github.com/complynx/zns-chatbot/internal/loom"
 )
 
 func TestCreateRunReplaysStableKeyAfterLostReceipt(t *testing.T) {
@@ -252,4 +252,73 @@ func TestClosedListenerDoesNotConsumeBootstrapAttempt(t *testing.T) {
 	require.True(t, failure.Retryable)
 	require.NotContains(t, err.Error(), endpoint)
 	require.NotContains(t, err.Error(), "secret")
+}
+
+func TestInputRecoveryRecognizesOnlyTypedTerminalRejection(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		status   int
+		body     string
+		terminal bool
+	}{
+		{"terminal", http.StatusConflict, `{"error":{"code":"run_terminal","message":"private diagnostic"}}`, true},
+		{"other_conflict", http.StatusConflict, `{"error":{"code":"idempotency_conflict"}}`, false},
+		{"generic_conflict", http.StatusConflict, ``, false},
+		{"wrong_status", http.StatusUnauthorized, `{"error":{"code":"run_terminal"}}`, false},
+		{"upstream_uncertainty", http.StatusServiceUnavailable, `{"error":{"code":"run_terminal"}}`, false},
+		{"malformed", http.StatusConflict, `{"error":{"code":"run_terminal"}`, false},
+		{"trailing_json", http.StatusConflict, `{"error":{"code":"run_terminal"}} {}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/v1/runs/run-1/input", r.URL.Path)
+				assert.Equal(t, "accepted-message-1", r.Header.Get("Idempotency-Key"))
+				assert.Equal(t, "subject-secret", r.Header.Get("X-Subject-Token"))
+				assert.Empty(t, r.Header.Get("X-Auth-Session-Id"))
+				w.WriteHeader(tc.status)
+				fmt.Fprint(w, tc.body)
+			}))
+			defer server.Close()
+			client, err := loom.New(server.URL, server.Client())
+			require.NoError(t, err)
+			_, err = client.Input(
+				context.Background(),
+				loom.Auth{ServiceToken: "service-secret", SubjectToken: "subject-secret"},
+				"run-1",
+				"accepted-message-1",
+				loom.InputRequest{Kind: "steering", Text: "accepted text"},
+			)
+			var failure *loom.Error
+			require.ErrorAs(t, err, &failure)
+			require.Equal(t, tc.terminal, failure.Code == loom.CodeRunTerminal)
+			require.NotContains(t, err.Error(), "private diagnostic")
+			require.NotContains(t, err.Error(), "subject-secret")
+			if tc.status == http.StatusServiceUnavailable {
+				require.Equal(t, loom.Unknown, failure.Outcome)
+			}
+		})
+	}
+}
+func TestGetRunPreservesResolvedPromptState(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprint(
+			w,
+			`{"run_id":"run","status":"running","question":{"question_id":"q","text":"Pick","allow_text":true,"expires_at":"2026-10-16T10:00:00Z","answer":{"id":"input","kind":"answer","question_id":"q","choice_ids":["one"],"applied":true}},"approval":{"approval_id":"a","text":"Confirm","decision":"approve","expires_at":"2026-10-16T10:00:00Z"}}`,
+		)
+	}))
+	defer server.Close()
+	client, err := loom.New(server.URL, server.Client())
+	require.NoError(t, err)
+	run, err := client.GetRun(t.Context(), loom.Auth{ServiceToken: "service"}, "run")
+	require.NoError(t, err)
+	require.NotNil(t, run.Question)
+	require.NotNil(t, run.Question.Answer)
+	require.Equal(t, "answer", run.Question.Answer.Kind)
+	require.Equal(t, []string{"one"}, run.Question.Answer.ChoiceIDs)
+	require.NotNil(t, run.Approval)
+	require.Equal(t, "approve", run.Approval.Decision)
 }

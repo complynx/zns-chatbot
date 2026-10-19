@@ -18,3 +18,5 @@ __pycache__
 /.cache/
 /config/shuttle.yaml
 /config/shuttle.env
+/config/shuttle.test.env
+/.worktrees/

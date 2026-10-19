@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/complynx/shuttle/internal/telegram"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
 const identitySearchLimit = 2

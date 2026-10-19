@@ -15,6 +15,9 @@ import (
 	"time"
 )
 
+const ReplyModeAgent = "agent"
+const ReplyModeProtocol = "protocol"
+
 const MaxResponseBytes = 1 << 20
 const defaultHTTPTimeout = 10 * time.Second
 
@@ -33,6 +36,7 @@ type Input struct {
 	ArtifactIDs []string `json:"artifact_ids,omitempty"`
 }
 type Interaction struct {
+	ReplyMode string `json:"reply_mode"`
 	Questions string `json:"questions"`
 	Approvals bool   `json:"approvals"`
 }
@@ -59,47 +63,69 @@ type Choice struct {
 	Label string `json:"label"`
 }
 type Question struct {
-	ID        string    `json:"question_id"`
-	Text      string    `json:"text"`
-	Choices   []Choice  `json:"choices,omitempty"`
-	AllowText bool      `json:"allow_text"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Answer    *InputRequest `json:"answer,omitempty"`
+	ID        string        `json:"question_id"`
+	Text      string        `json:"text"`
+	Choices   []Choice      `json:"choices,omitempty"`
+	AllowText bool          `json:"allow_text"`
+	ExpiresAt time.Time     `json:"expires_at"`
 }
 type Approval struct {
-	ID             string          `json:"approval_id"`
-	Text           string          `json:"text"`
-	OperationID    string          `json:"operation_id"`
-	Method         string          `json:"method"`
-	Arguments      json.RawMessage `json:"arguments"`
-	ArgumentHash   string          `json:"argument_hash"`
-	ConfirmationID string          `json:"confirmation_id,omitempty"`
-	Precondition   string          `json:"precondition,omitempty"`
-	ExpiresAt      time.Time       `json:"expires_at"`
+	ReplyMode        string          `json:"reply_mode"`
+	ConfirmationText string          `json:"confirmation_text,omitempty"`
+	Decision         string          `json:"decision,omitempty"`
+	ID               string          `json:"approval_id"`
+	Text             string          `json:"text"`
+	OperationID      string          `json:"operation_id"`
+	Method           string          `json:"method"`
+	Arguments        json.RawMessage `json:"arguments"`
+	ArgumentHash     string          `json:"argument_hash"`
+	ConfirmationID   string          `json:"confirmation_id,omitempty"`
+	Precondition     string          `json:"precondition,omitempty"`
+	ExpiresAt        time.Time       `json:"expires_at"`
 }
 type Run struct {
-	ID            string    `json:"run_id"`
-	ChatID        string    `json:"chat_id"`
-	AuthSessionID string    `json:"auth_session_id"`
-	Status        string    `json:"status"`
-	Reason        string    `json:"reason,omitempty"`
-	Result        string    `json:"result,omitempty"`
-	Version       int64     `json:"version"`
-	Question      *Question `json:"question,omitempty"`
-	Approval      *Approval `json:"approval,omitempty"`
+	Interaction          Interaction `json:"interaction"`
+	ConversationRevision int64       `json:"conversation_revision,omitempty"`
+	ID                   string      `json:"run_id"`
+	ChatID               string      `json:"chat_id"`
+	AuthSessionID        string      `json:"auth_session_id"`
+	Status               string      `json:"status"`
+	Reason               string      `json:"reason,omitempty"`
+	Result               string      `json:"result,omitempty"`
+	Version              int64       `json:"version"`
+	Question             *Question   `json:"question,omitempty"`
+	Approval             *Approval   `json:"approval,omitempty"`
 }
+type InputPresentation struct {
+	ReplyTo    string `json:"reply_to,omitempty"`
+	QuestionID string `json:"question_id,omitempty"`
+	ApprovalID string `json:"approval_id,omitempty"`
+}
+
+type InputContext struct {
+	Revision    int64  `json:"revision"`
+	SourceActor string `json:"source_actor"`
+	QuestionID  string `json:"question_id,omitempty"`
+	ApprovalID  string `json:"approval_id,omitempty"`
+}
+
 type InputRequest struct {
-	Kind       string   `json:"kind"`
-	Text       string   `json:"text,omitempty"`
-	QuestionID string   `json:"question_id,omitempty"`
-	ChoiceIDs  []string `json:"choice_ids,omitempty"`
-	ApprovalID string   `json:"approval_id,omitempty"`
-	Decision   string   `json:"decision,omitempty"`
+	Presentation *InputPresentation `json:"presentation,omitempty"`
+	Kind         string             `json:"kind"`
+	Text         string             `json:"text,omitempty"`
+	QuestionID   string             `json:"question_id,omitempty"`
+	ChoiceIDs    []string           `json:"choice_ids,omitempty"`
+	ApprovalID   string             `json:"approval_id,omitempty"`
+	Decision     string             `json:"decision,omitempty"`
 }
 type ControlReceipt struct {
-	ID      string `json:"run_id"`
-	Status  string `json:"status"`
-	Reason  string `json:"reason,omitempty"`
-	Version int64  `json:"version"`
+	InputID string        `json:"input_id,omitempty"`
+	Context *InputContext `json:"context,omitempty"`
+	ID      string        `json:"run_id"`
+	Status  string        `json:"status"`
+	Reason  string        `json:"reason,omitempty"`
+	Version int64         `json:"version"`
 }
 type Outcome string
 
@@ -109,7 +135,10 @@ const (
 	Unknown    Outcome = "unknown"
 )
 
+const CodeRunTerminal = "run_terminal"
+
 type Error struct {
+	Code       string
 	StatusCode int
 	Retryable  bool
 	Outcome    Outcome
@@ -180,6 +209,9 @@ func (c *Client) CreateRun(ctx context.Context, auth Auth, key string, input Cre
 		input.Interaction.Questions = "choices_and_text"
 	}
 	err := c.call(ctx, http.MethodPost, "/runs", auth, key, input, &result, true, true)
+	if err == nil && input.Interaction.ReplyMode == "agent" && result.Interaction.ReplyMode != "agent" {
+		return result, &Error{Code: "unsupported_reply_mode", Outcome: Rejected}
+	}
 	if err == nil && (result.ID == "" || result.Status == "") {
 		err = &Error{Outcome: Unknown, Retryable: true}
 	}
@@ -213,8 +245,14 @@ func (c *Client) Input(ctx context.Context, auth Auth, id, key string, input Inp
 	return result, err
 }
 func (c *Client) Cancel(ctx context.Context, auth Auth, id, key string) (ControlReceipt, error) {
+	return c.control(ctx, auth, id, key, "/cancel")
+}
+func (c *Client) Resume(ctx context.Context, auth Auth, id, key string) (ControlReceipt, error) {
+	return c.control(ctx, auth, id, key, "/resume")
+}
+func (c *Client) control(ctx context.Context, auth Auth, id, key, action string) (ControlReceipt, error) {
 	var result ControlReceipt
-	path, err := resourcePath("runs", id, "/cancel")
+	path, err := resourcePath("runs", id, action)
 	if err != nil {
 		return result, err
 	}
@@ -306,8 +344,20 @@ func decodeResponse(resp *http.Response, result any, mutation bool, idempotent b
 	if err != nil || len(data) > MaxResponseBytes {
 		return &Error{StatusCode: resp.StatusCode, Outcome: outcome, Retryable: !mutation || idempotent}
 	}
+	var code string
+	// Only this typed conflict is safe negative evidence after an idempotent Input replay.
+	if resp.StatusCode == http.StatusConflict {
+		var body struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		if json.Unmarshal(data, &body) == nil && body.Error.Code == CodeRunTerminal {
+			code = CodeRunTerminal
+		}
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		e := &Error{StatusCode: resp.StatusCode, Outcome: Rejected}
+		e := &Error{StatusCode: resp.StatusCode, Outcome: Rejected, Code: code}
 		if resp.StatusCode >= http.StatusInternalServerError {
 			e.Outcome = outcome
 			e.Retryable = !mutation || idempotent

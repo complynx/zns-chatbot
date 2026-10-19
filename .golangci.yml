@@ -37,7 +37,7 @@ formatters:
       # with the given prefixes are grouped after 3rd-party packages.
       # Default: []
       local-prefixes:
-        - github.com/complynx/shuttle
+        - github.com/complynx/zns-chatbot
 
     golines:
       # Target maximum line length.
