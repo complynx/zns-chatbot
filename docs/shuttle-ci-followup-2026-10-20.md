@@ -113,3 +113,23 @@ The [new run at83e8701d](https://github.com/complynx/zns-chatbot/actions/runs/39
 is pending full acceptance; no product, integration-test or workflow source changed
 between these two heads. Its push counterpart was cancelled by configured
 concurrency, which is separate from a test failure.
+
+## Following run exceeds the available job budget
+
+The [run at83e8701d](https://github.com/complynx/zns-chatbot/actions/runs/39463177833)
+is now terminal/cancelled, not accepted. All814 integration roots and344 UI cases
+pass again. Tool installation and generated SQL checks complete successfully.
+Lint prints `0 issues.` but its step is marked cancelled, and Linux/container
+build is skipped. Do not count that lint step as successful CI.
+
+The job starts at17:06:41 UTC and completes at17:51:46 UTC, against a configured
+45-minute limit. Cancellation occurs at the budget boundary; no newer branch
+workflow run was observed. An explicit timeout annotation was unavailable, so
+budget exhaustion is a timing-supported diagnosis rather than a distinct
+reported `timed_out` conclusion. The measured preceding steps leave no time for
+the required build under that budget.
+
+Increase only the overall job limit to60 minutes. Existing ten-minute package and
+integration-batch limits, test selection, race detector, checks and failure
+handling remain unchanged. A fresh full remote pass is required; neither this
+cancelled run nor local component results open the primary installation gate.
