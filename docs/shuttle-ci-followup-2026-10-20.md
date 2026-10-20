@@ -164,3 +164,14 @@ integration suite or a restored-database test. A fresh full remote pass is still
 required before the prepared primary installation. Local follow-up evidence is in
 `.cache/shuttle-work/ci-file-denial-pg-v1/`; controlled IAM proof is in
 `.cache/shuttle-work/ci-auth-denial-race-v1/`.
+
+## Exact-source full pass after the assertion fix
+
+[Run39478991989](https://github.com/complynx/zns-chatbot/actions/runs/39478991989)
+at832c1d7e completes successfully:814/814 integration roots,344 UI tests and all
+remaining checks, including lint and Linux/container build. The original failed
+runs above retain their results. The full log is334,877 UTF-8 bytes, SHA-256
+`a0206f07dc37a212f66774c4baab152f1720d655b48789699d9bcb821c120834`.
+This opens the reviewed local installation gate; the separate
+[primary installation report](shuttle-knowledge-primary-qa-2026-10-20.md) records
+its backup, initial verifier failure, bounded correction and final acceptance.
