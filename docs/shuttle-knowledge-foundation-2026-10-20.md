@@ -2,16 +2,18 @@
 
 Status: store, agent API, native forms and bounded archive maintenance are
 installed on the owned shuttle-live-test stand at schema65/mvp79. Real Telegram
-native suggestion acceptance passes. Moderator notifications, moderator UI and
-full mixed-channel acceptance remain open.
+native suggestion and native-to-agent read acceptance pass. Independent fixture
+publication/replay succeeded, but full moderation acceptance failed on agent
+article reading (HTTP422). The reviewed source fix is mvp80 and is not installed.
+Moderator notifications, moderator UI and remaining mixed-channel acceptance stay open.
 
 ## Applied implementation checkpoint
 
 The domain and additive migration65 are applied to source. The store implements
 published retrieval, suggestions, independent review, named moderators, exact
 operation receipts and event archival. The agent API exposes these operations
-under `zinusya_knowledge`; both source and the owned installed stand use mvp79.
-The stand received additive migration65 after a decoded pre-migration backup.
+under `zinusya_knowledge`; the owned stand uses mvp79 and corrected source uses
+mvp80. The stand received additive migration65 after a decoded pre-migration backup.
 
 The final isolated Linux/race PostgreSQL gate v5 passed nine roots and18 terminal
 cases, with no failures, skips or OOM. It covers independent review, event scope
@@ -258,6 +260,59 @@ post-QA epochs are separate records. This proves the deployed native suggestion
 path with actual Telegram and IAM. It does not prove moderator publication,
 agent continuation or the complete end-to-end knowledge workflow.
 
+## Native-to-agent read and navigation defect
+
+The real Telegram follow-up completed as task209 and Loom run
+`d21035ea-4ab9-4299-acd7-a610903fa0ad`, with Bot API reply4627. The original native
+operation locator was present in the new request's context, explicitly marked
+untrusted history. The controlled synthetic provider called
+`zinusya_knowledge.operation` and `zinusya_knowledge.suggestion` through Loom's
+script tool, then returned the visible answer. Both tools used the real user
+identity. All knowledge/business-table hashes remained unchanged, with no new
+knowledge operation, duplicate suggestion or publication. All eleven runtime
+fingerprints stayed the same. Loom run count became135. This proves integration
+and continuation, not model quality or token accounting. The retained initial
+read-back failure guessed route `agent`; the actual stored route is `new_run`.
+The corrected read-back passes. Evidence: ignored `knowledge-native-agent-v1/`.
+
+A separate existing fixture identity, not the Telegram owner, tested moderation
+through actual IAM tokens and HTTP. Both the owner and the global administrator
+without named moderator membership received403 on review preparation. The
+fixture administrator then explicitly assigned itself named moderator membership,
+prepared and approved the synthetic suggestion with exact normalized terms, and
+replayed the identical operation. Replay returned the same receipt. The published
+article has one immutable revision and distinct proposer/reviewer identities.
+Only this fixture's knowledge role changed; the Telegram owner's rights did not.
+
+Full moderation acceptance remains FAILED in `knowledge-moderation-real-v1/`:
+the following published article read returned422, rejecting valid `article_id`
+and `revision` as unexpected properties. The completed mutation intents are
+retained and must not be replayed to retry this read. This is a Zinusya HTTP
+schema bug. Huma skips unexported embedded fields before flattening anonymous
+fields; JSON decoding alone did not expose it. It affects agent `read`, `outline`
+and `find`. Native article reads use the concrete reference type and are not
+subject to this embedding error.
+
+The narrow source fix exports the shared embedded reference type, preserving the
+wire shape and strict validation, and advances the manifest to80. A new positive
+contract test first reproduced all three failures. The corrected tests accept
+explicit article/revision references and still reject negative or missing
+references. Actual PostgreSQL/Linux race HTTP checks now exercise all three
+navigation methods plus404 for unavailable explicit revision2. The gate passes
+six roots/nine terminal cases, with no failures, skips or OOM. Its full database
+archive decoded; own containers, volume and network were removed; installed
+stand preservation passed. Full API tests and strict lint pass. The static asset
+selector was extracted to keep the new knowledge asset below the function-size
+limit; the same whitelist/security-header check passed before and after.
+Independent source/controller review is clean. The Linux/amd64 CGO-disabled
+Go1.27.2 build passes. Evidence: ignored `knowledge-article-schema-v1/`,
+`knowledge-http-pg-v3/` and `knowledge-article-build-v1/`.
+
+The installed mvp79 still needs the mvp80 image and a read-only completion check
+against the already approved suggestion. Source and fixture gates do not close
+that deployed acceptance gap. The current custody baseline records this known
+failure rather than relabeling moderation acceptance as passed.
+
 ## Remaining acceptance
 
 Add moderator management UI and durable reviewer notices. The native client now supports event and actor-owned
@@ -265,11 +320,12 @@ operation selection for article/review workflows. Moderator assignment recovery
 is not yet exposed by that interface; recent assignment entries are metadata
 only. Prove continuation across channels/devices against real HTTP and IAM.
 
-Continue owned multi-user real-IAM/Loom/mock-Telegram acceptance, including
-moderator publication, both native/agent continuation directions and notification
-recovery. The installed corpus has no published articles; its single synthetic
-suggestion remains pending. The source has not been pushed or declared
-production-ready.
+Install the corrected mvp80 image and complete the original failed moderation
+probe through reads only. Continue both directions of edit/review continuation,
+owned multi-user acceptance and notification recovery. The installed corpus now
+contains one explicitly synthetic article at revision1; its suggestion is
+approved. The original suggestion submission receipt remains historical. The
+source has not been pushed or declared production-ready.
 
 No production-readiness or production-deployment claim is made.
 

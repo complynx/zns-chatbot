@@ -9,46 +9,8 @@ import (
 var miniAppAssets embed.FS
 
 func (s *Server) miniAppPage(w http.ResponseWriter, r *http.Request) {
-	const javaScriptType = "text/javascript; charset=utf-8"
-	var file, contentType string
-	switch r.URL.Path {
-	case "/app/":
-		file, contentType = "index.html", "text/html; charset=utf-8"
-	case "/app/app.js":
-		file, contentType = "app.js", javaScriptType
-	case "/app/order-proof.js":
-		file, contentType = "order-proof.js", javaScriptType
-	case "/app/pair-assignments.js":
-		file, contentType = "pair-assignments.js", javaScriptType
-	case "/app/assignments.js":
-		file, contentType = "assignments.js", javaScriptType
-	case "/app/avatar-admin.js":
-		file, contentType = "avatar-admin.js", javaScriptType
-	case "/app/pairs.js":
-		file, contentType = "pairs.js", javaScriptType
-	case "/app/avatars.js":
-		file, contentType = "avatars.js", javaScriptType
-	case "/app/meals.js":
-		file, contentType = "meals.js", javaScriptType
-	case "/app/orders.js":
-		file, contentType = "orders.js", javaScriptType
-	case "/app/order-reviews.js":
-		file, contentType = "order-reviews.js", javaScriptType
-	case "/app/pass-payments.js":
-		file, contentType = "pass-payments.js", javaScriptType
-	case "/app/payment-reviews.js":
-		file, contentType = "payment-reviews.js", javaScriptType
-	case "/app/massage.js":
-		file, contentType = "massage.js", javaScriptType
-	case "/app/massage-admin.js":
-		file, contentType = "massage-admin.js", javaScriptType
-	case "/app/massage-staff.js":
-		file, contentType = "massage-staff.js", javaScriptType
-	case "/app/knowledge.js":
-		file, contentType = "knowledge.js", javaScriptType
-	case "/app/app.css":
-		file, contentType = "app.css", "text/css; charset=utf-8"
-	default:
+	file, contentType := miniAppAsset(r.URL.Path)
+	if file == "" {
 		http.NotFound(w, r)
 		return
 	}
@@ -64,4 +26,49 @@ func (s *Server) miniAppPage(w http.ResponseWriter, r *http.Request) {
 		Set("Content-Security-Policy", "default-src 'none'; script-src 'self' https://telegram.org; style-src 'self'; connect-src 'self'; img-src 'self' blob:; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors https://web.telegram.org")
 	w.Header().Set("Content-Type", contentType)
 	_, _ = w.Write(raw)
+}
+
+// miniAppAsset keeps public asset lookup limited to the explicit route list.
+func miniAppAsset(path string) (string, string) {
+	const javaScriptType = "text/javascript; charset=utf-8"
+	switch path {
+	case "/app/":
+		return "index.html", "text/html; charset=utf-8"
+	case "/app/app.js":
+		return "app.js", javaScriptType
+	case "/app/order-proof.js":
+		return "order-proof.js", javaScriptType
+	case "/app/pair-assignments.js":
+		return "pair-assignments.js", javaScriptType
+	case "/app/assignments.js":
+		return "assignments.js", javaScriptType
+	case "/app/avatar-admin.js":
+		return "avatar-admin.js", javaScriptType
+	case "/app/pairs.js":
+		return "pairs.js", javaScriptType
+	case "/app/avatars.js":
+		return "avatars.js", javaScriptType
+	case "/app/meals.js":
+		return "meals.js", javaScriptType
+	case "/app/orders.js":
+		return "orders.js", javaScriptType
+	case "/app/order-reviews.js":
+		return "order-reviews.js", javaScriptType
+	case "/app/pass-payments.js":
+		return "pass-payments.js", javaScriptType
+	case "/app/payment-reviews.js":
+		return "payment-reviews.js", javaScriptType
+	case "/app/massage.js":
+		return "massage.js", javaScriptType
+	case "/app/massage-admin.js":
+		return "massage-admin.js", javaScriptType
+	case "/app/massage-staff.js":
+		return "massage-staff.js", javaScriptType
+	case "/app/knowledge.js":
+		return "knowledge.js", javaScriptType
+	case "/app/app.css":
+		return "app.css", "text/css; charset=utf-8"
+	default:
+		return "", ""
+	}
 }

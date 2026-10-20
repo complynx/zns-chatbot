@@ -83,7 +83,7 @@ func (s *Server) registerMiniAppKnowledgeReads() {
 	registerMiniAppKnowledgePost(
 		s,
 		"read",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in knowledgeArticleArguments) (any, error) {
+		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in KnowledgeArticleArguments) (any, error) {
 			article, err := s.store.ReadKnowledge(ctx, scope, in.ArticleID, in.Revision)
 			if err != nil {
 				return nil, err

@@ -251,6 +251,32 @@ func TestKnowledgeHTTPNativeSuggestionAgentReviewAndRecovery(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(article, &read))
 	require.Equal(t, content.Body, read.Body)
+	for _, method := range []string{"read", "outline", "find"} {
+		t.Run("agent_"+method, func(t *testing.T) {
+			t.Parallel()
+			args := map[string]any{"article_id": result.Suggestion.ArticleID, "revision": 1}
+			if method == "find" {
+				args["query"] = "canary"
+			}
+			envelope := map[string]any{"protocol_version": 1, "operation_id": uuid.NewString(), "arguments": args}
+			found := knowledgeAgentCall(t, f, f.ownerScope, method, envelope, http.StatusOK)
+			var response struct {
+				Result map[string]json.RawMessage `json:"result"`
+			}
+			require.NoError(t, json.Unmarshal(found, &response))
+			require.Contains(t, string(found), result.Suggestion.ArticleID.String())
+			switch method {
+			case "read":
+				require.Contains(t, string(response.Result["excerpt"]), "Native proposal body canary")
+			case "outline":
+				require.Contains(t, string(response.Result["outline"]), "HTTP reference")
+			case "find":
+				require.Contains(t, string(response.Result["matches"]), "canary")
+			}
+			args["revision"] = 2
+			knowledgeAgentCall(t, f, f.ownerScope, method, envelope, http.StatusNotFound)
+		})
+	}
 }
 
 func TestKnowledgeHTTPAgentPreparationRequiresExactNativeConsent(t *testing.T) {

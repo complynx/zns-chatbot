@@ -33,20 +33,21 @@ type knowledgeModeratorListArguments struct {
 	Limit int       `json:"limit,omitempty" minimum:"1" maximum:"20"`
 }
 
-type knowledgeArticleArguments struct {
+// KnowledgeArticleArguments is exported so Huma includes its promoted request fields.
+type KnowledgeArticleArguments struct {
 	ArticleID uuid.UUID `json:"article_id"`
 	Revision  int64     `json:"revision,omitempty" minimum:"0"`
 }
 type knowledgeReadArguments struct {
-	knowledgeArticleArguments
+	KnowledgeArticleArguments
 	knowledge.ReadRequest
 }
 type knowledgeOutlineArguments struct {
-	knowledgeArticleArguments
+	KnowledgeArticleArguments
 	knowledge.OutlineRequest
 }
 type knowledgeFindArguments struct {
-	knowledgeArticleArguments
+	KnowledgeArticleArguments
 	knowledge.FindRequest
 }
 type knowledgeRevisionArguments struct {

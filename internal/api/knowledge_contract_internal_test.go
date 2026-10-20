@@ -279,3 +279,28 @@ func TestKnowledgeSearchBoundsAndPassageProvenance(t *testing.T) {
 		knowledgeValidate(t, knowledgeSchema[knowledgeSuggestionView](), suggestion, huma.ModeReadFromServer),
 	)
 }
+
+// Agent discovery must accept the same pinned article references as JSON decoding.
+func TestKnowledgeArticleNavigationAcceptsPinnedReferences(t *testing.T) {
+	t.Parallel()
+	id := uuid.NewString()
+	for _, method := range knowledgeMethods(db.KnowledgeCapabilities{}) {
+		name := method["id"].(string)
+		if name != "read" && name != "outline" && name != "find" {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			args := map[string]any{"article_id": id, "revision": 1}
+			if name == "find" {
+				args["query"] = "reference"
+			}
+			require.Empty(t, knowledgeValidate(t, method[manifestInputSchema], args, huma.ModeWriteToServer))
+			args["revision"] = -1
+			require.NotEmpty(t, knowledgeValidate(t, method[manifestInputSchema], args, huma.ModeWriteToServer))
+			delete(args, "article_id")
+			args["revision"] = 1
+			require.NotEmpty(t, knowledgeValidate(t, method[manifestInputSchema], args, huma.ModeWriteToServer))
+		})
+	}
+}
