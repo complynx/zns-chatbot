@@ -1,42 +1,37 @@
 # Current roadmap checkpoint, 2026-10-20
 
-This is the pre-installation checkpoint for knowledge notices and their exact
-resolution. The owned primary runs `mvp81/schema65`. The tested candidate is
-`mvp83/schema67`; it is not installed. Complete remote CI remains required.
-The chronological records below retain the scope and result of each earlier gate;
+The owned primary runs `mvp83/schema67`; its
+[installation is accepted](shuttle-knowledge-primary-qa-2026-10-20.md), including
+full CI at832c1d7e, a decoded backup, preserved domain data and resumed ingress.
+The source now includes the separately reviewed order-review preview, which is
+not yet installed. The chronological records below retain each earlier result;
 a later component pass does not turn an earlier failed full run into a pass.
 
 ## Next actions, in order
 
-1. Finish the full CI run for the reviewed file-revocation assertion fix. The
-   [CI follow-up](shuttle-ci-followup-2026-10-20.md) records the original failures
-   and bounded local checks. Do not substitute selected local passes for CI.
-2. Install the already-tested knowledge-notice candidate on the owned primary:
-   gracefully fence ingress, save and decode its backup, apply migrations66/67,
-   activate the candidate, verify original data/notice/authentication boundaries,
-   then resume the same ingress. Keep fixture recipients disabled. The
-   [runtime resolution](shuttle-knowledge-resolution-runtime-qa-2026-10-20.md) and
-   [binary compatibility](shuttle-knowledge-resolution-compat-qa-2026-10-20.md)
-   reports prove temporary-stand behavior, not this primary installation.
-3. Integrate the separately reviewed
-   [literal order-review preview](shuttle-order-review-preview.md), retaining
-   the original financial terms and confirmation operation. Validate the changed
-   candidate before installing it. Its browser fixture is not full order-payment QA.
-4. Close exact prepared-operation native-to-agent handoff when the generic
+1. Validate the integrated [literal order-review preview](shuttle-order-review-preview.md)
+   and complete its CI. Preserve original financial terms and confirmation IDs;
+   its browser fixture is not full order-payment QA.
+   The [CI follow-up](shuttle-ci-followup-2026-10-20.md) preserves the earlier
+   full successful run and preceding failures; that pass predates this UI change.
+2. Install the validated preview on the owned primary with a graceful restart,
+   preserving schema67, domain data, queues, original ingress and companions.
+   No further database migration is required by this display-only change.
+3. Close exact prepared-operation native-to-agent handoff when the generic
    [Loom adoption contract](shuttle-loom-native-operation-adoption.md) is agreed
    and available. Also resolve the documented
    [revocation/consent lifecycle](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md).
    Independent native completion and agent reads remain usable; neither proves
    adoption of the original preparation. Do not change the Loom developer's stand.
-5. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
+4. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
    when Daniel is available. Revalidate the retained configuration first;
    isolated HTTP/Edge results do not replace that joint check.
-6. Continue meal financial checkout after the recorded policy decisions: empty
+5. Continue meal financial checkout after the recorded policy decisions: empty
    completed selections, the financial cutoff across services, and explicit meal
    capacity. Catalogs/drafts and shared kind-isolated storage exist; exposed meal
    submission/payment/review is still missing. Service-order acceptance does not
    cover meals. Keep unresolved decisions in the ignored local decisions file.
-7. Finish real export/account/avatar migration and server-specific cutover
+6. Finish real export/account/avatar migration and server-specific cutover
    acceptance before any separately authorized production deployment. Historical
    payment records stay reference material, not credits in the new live ledger.
 

@@ -25,7 +25,9 @@ injected HTML elements and send no business writes. Manual inspection of the
 are readable. Fixture terms intentionally stay in their saved language.
 
 This is presentation verification. It does not add IAM, Loom, real Telegram
-WebView, deployed-image or production acceptance. The primary stand and its
-pending installation candidate remain unchanged. Local browser evidence is in
+WebView, deployed-image or production acceptance. At that fixture checkpoint,
+the primary stand and its pending installation candidate were unchanged. The later
+[knowledge installation](shuttle-knowledge-primary-qa-2026-10-20.md) does not include
+this preview; preview image installation remains open. Local browser evidence is in
 `.cache/shuttle-work/readable-order-preview-v1/browser-proof.json` in the primary
 checkout. Independent textual review found no actionable code findings.
