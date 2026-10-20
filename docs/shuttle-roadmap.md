@@ -1,4 +1,6 @@
-The [bounded Linux follow-up](shuttle-linux-batched-qa-2026-10-20.md) now passes four critical roots/11 cases,316 UI cases and37 API/task roots. The preceding eight-batch run retains784/785 passing roots and one corrected false-positive assertion. A meal deadline test now runs on Linux after its accidental Windows suffix was removed. The current786-root repetition and installation of the reviewed UI fixes remain open; both temporary stands are archived/removed and the primary is preserved.
+The [complete bounded Linux gate](shuttle-linux-batched-full-qa-2026-10-20.md) now passes786 roots/1169 cases at commit387716bf, with its stand archived/removed and primary preserved. The separate [knowledge foundation](shuttle-knowledge-foundation-2026-10-20.md) now passes nine critical roots/18 cases, strict lint and source review; whole-feature acceptance remains open; native UI asset installation and remote CI remain open.
+
+The [bounded Linux follow-up](shuttle-linux-batched-qa-2026-10-20.md) now passes four critical roots/11 cases,316 UI cases and37 API/task roots. The preceding eight-batch run retains784/785 passing roots and one corrected false-positive assertion. A meal deadline test now runs on Linux after its accidental Windows suffix was removed. That786-root repetition passed at the snapshot above; installation of the reviewed UI fixes remains open; both temporary stands are archived/removed and the primary is preserved.
 
 # Current roadmap direction, 2026-10-20
 

@@ -240,6 +240,116 @@ type ShuttleInbox struct {
 	ReceivedAt pgtype.Timestamptz `json:"received_at"`
 }
 
+type ShuttleKnowledgeArticle struct {
+	ID              uuid.UUID          `json:"id"`
+	BotID           int64              `json:"bot_id"`
+	OrganizationID  string             `json:"organization_id"`
+	EventID         pgtype.UUID        `json:"event_id"`
+	Slug            string             `json:"slug"`
+	Title           string             `json:"title"`
+	Language        string             `json:"language"`
+	Topics          []string           `json:"topics"`
+	Body            string             `json:"body"`
+	Sources         []byte             `json:"sources"`
+	CurrentRevision int64              `json:"current_revision"`
+	EventName       pgtype.Text        `json:"event_name"`
+	EventStartsAt   pgtype.Timestamptz `json:"event_starts_at"`
+	EventEndsAt     pgtype.Timestamptz `json:"event_ends_at"`
+	EventTimezone   pgtype.Text        `json:"event_timezone"`
+	ArchivedAt      pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	SearchVector    interface{}        `json:"search_vector"`
+}
+
+type ShuttleKnowledgeModerator struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	UserID         uuid.UUID          `json:"user_id"`
+	Enabled        bool               `json:"enabled"`
+	Version        int64              `json:"version"`
+	ChangedBy      uuid.UUID          `json:"changed_by"`
+	ChangedAt      pgtype.Timestamptz `json:"changed_at"`
+}
+
+type ShuttleKnowledgeOperation struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	ActorID        uuid.UUID          `json:"actor_id"`
+	ActionKind     string             `json:"action_kind"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	Result         []byte             `json:"result"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
+}
+
+type ShuttleKnowledgePreparation struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	ActorID        uuid.UUID          `json:"actor_id"`
+	ActionKind     string             `json:"action_kind"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	Document       []byte             `json:"document"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+}
+
+type ShuttleKnowledgeRevision struct {
+	BotID            int64              `json:"bot_id"`
+	OrganizationID   string             `json:"organization_id"`
+	ArticleID        uuid.UUID          `json:"article_id"`
+	Revision         int64              `json:"revision"`
+	PreviousRevision pgtype.Int8        `json:"previous_revision"`
+	ChangeKind       string             `json:"change_kind"`
+	AuthorID         pgtype.UUID        `json:"author_id"`
+	ProposerID       pgtype.UUID        `json:"proposer_id"`
+	ReviewerID       pgtype.UUID        `json:"reviewer_id"`
+	SuggestionID     pgtype.UUID        `json:"suggestion_id"`
+	Reason           string             `json:"reason"`
+	Slug             string             `json:"slug"`
+	Title            string             `json:"title"`
+	Language         string             `json:"language"`
+	Topics           []string           `json:"topics"`
+	Body             string             `json:"body"`
+	Sources          []byte             `json:"sources"`
+	EventID          pgtype.UUID        `json:"event_id"`
+	EventName        pgtype.Text        `json:"event_name"`
+	EventStartsAt    pgtype.Timestamptz `json:"event_starts_at"`
+	EventEndsAt      pgtype.Timestamptz `json:"event_ends_at"`
+	EventTimezone    pgtype.Text        `json:"event_timezone"`
+	ArchivedAt       pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type ShuttleKnowledgeSuggestion struct {
+	ID                uuid.UUID          `json:"id"`
+	BotID             int64              `json:"bot_id"`
+	OrganizationID    string             `json:"organization_id"`
+	ArticleID         uuid.UUID          `json:"article_id"`
+	BaseRevision      int64              `json:"base_revision"`
+	EventID           pgtype.UUID        `json:"event_id"`
+	EventVersion      pgtype.Int8        `json:"event_version"`
+	ProposerID        uuid.UUID          `json:"proposer_id"`
+	Reason            string             `json:"reason"`
+	Slug              string             `json:"slug"`
+	Title             string             `json:"title"`
+	Language          string             `json:"language"`
+	Topics            []string           `json:"topics"`
+	Body              string             `json:"body"`
+	Sources           []byte             `json:"sources"`
+	State             string             `json:"state"`
+	ReviewerID        pgtype.UUID        `json:"reviewer_id"`
+	DecisionReason    pgtype.Text        `json:"decision_reason"`
+	DecidedAt         pgtype.Timestamptz `json:"decided_at"`
+	PublishedRevision pgtype.Int8        `json:"published_revision"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
 type ShuttleLegacyArchive struct {
 	ID             uuid.UUID          `json:"id"`
 	BotID          int64              `json:"bot_id"`

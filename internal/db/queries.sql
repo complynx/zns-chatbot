@@ -1943,3 +1943,155 @@ WHERE p.bot_id=sqlc.arg(bot_id) AND p.organization_id=sqlc.arg(organization_id) 
 AND (sqlc.arg(global_admin)::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities r
  WHERE r.event_id=e.id AND r.user_id=u.id AND r.role='administrator'))
 ORDER BY a.last_at DESC,p.proposal_id DESC LIMIT 20;
+
+-- name: ReadKnowledgeArticle :one
+SELECT sqlc.embed(a), COALESCE(a.event_id IS NOT NULL AND
+ (a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)),false)::boolean AS historical
+FROM shuttle_knowledge_articles a
+LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+WHERE a.bot_id=sqlc.arg(bot_id) AND a.organization_id=sqlc.arg(organization_id) AND a.id=sqlc.arg(article_id);
+
+-- name: ReadKnowledgeRevision :one
+SELECT r.* FROM shuttle_knowledge_revisions r
+JOIN shuttle_knowledge_articles a ON a.id=r.article_id AND a.bot_id=r.bot_id AND a.organization_id=r.organization_id
+WHERE a.bot_id=sqlc.arg(bot_id) AND a.organization_id=sqlc.arg(organization_id)
+ AND a.id=sqlc.arg(article_id) AND r.revision=sqlc.arg(revision) AND r.revision<=a.current_revision;
+
+-- name: ListKnowledgeRevisions :many
+SELECT r.revision,r.previous_revision,r.change_kind,r.author_id,r.proposer_id,r.reviewer_id,r.reason,r.created_at
+FROM shuttle_knowledge_revisions r
+JOIN shuttle_knowledge_articles a ON a.id=r.article_id AND a.bot_id=r.bot_id AND a.organization_id=r.organization_id
+WHERE a.bot_id=sqlc.arg(bot_id) AND a.organization_id=sqlc.arg(organization_id)
+ AND a.id=sqlc.arg(article_id) AND r.revision<=a.current_revision AND r.revision<sqlc.arg(before_revision)
+ORDER BY r.revision DESC LIMIT sqlc.arg(page_limit);
+
+-- name: SearchKnowledgeArticles :many
+WITH terms AS (
+ SELECT q AS query,
+  websearch_to_tsquery('english'::regconfig,q) || websearch_to_tsquery('russian'::regconfig,q) || websearch_to_tsquery('simple'::regconfig,q) AS ts
+ FROM unnest(sqlc.arg(queries)::text[]) q
+), candidates AS (
+ SELECT a.*, COALESCE(a.event_id IS NOT NULL AND
+  (a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)),false)::boolean AS historical
+ FROM shuttle_knowledge_articles a
+ LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+ WHERE a.bot_id=sqlc.arg(bot_id) AND a.organization_id=sqlc.arg(organization_id)
+  AND (sqlc.narg(event_id)::uuid IS NULL OR a.event_id=sqlc.narg(event_id))
+  AND (sqlc.arg(language)::text='' OR a.language=sqlc.arg(language))
+  AND (sqlc.arg(topic)::text='' OR sqlc.arg(topic)=ANY(a.topics))
+), matches AS (
+ SELECT a.id,a.title,a.slug,a.language,a.topics,a.body,a.sources,a.current_revision,
+  a.event_id,a.event_name,a.event_starts_at,a.event_ends_at,a.event_timezone,a.archived_at,a.updated_at,a.historical,
+  max(CASE WHEN lower(a.title)=lower(t.query) OR a.slug=lower(t.query) THEN 1 ELSE 0 END)::integer AS title_match,
+  max(ts_rank_cd(a.search_vector,t.ts))::real AS rank,
+  array_agg(DISTINCT t.query ORDER BY t.query)::text[] AS matched_queries
+ FROM candidates a CROSS JOIN terms t
+ WHERE (sqlc.arg(collection)::text='all' OR
+   (sqlc.arg(collection)='general' AND (a.event_id IS NULL OR a.historical)) OR
+   (sqlc.arg(collection)='event' AND a.event_id IS NOT NULL AND NOT a.historical))
+  AND (a.search_vector @@ t.ts OR lower(a.title)=lower(t.query) OR a.slug=lower(t.query) OR lower(t.query)=ANY(a.topics))
+ GROUP BY a.id,a.title,a.slug,a.language,a.topics,a.body,a.sources,a.current_revision,
+  a.event_id,a.event_name,a.event_starts_at,a.event_ends_at,a.event_timezone,a.archived_at,a.updated_at,a.historical
+)
+SELECT * FROM matches ORDER BY title_match DESC,rank DESC,id
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
+
+-- name: LockKnowledgeArticle :one
+SELECT * FROM shuttle_knowledge_articles WHERE bot_id=$1 AND organization_id=$2 AND id=$3 FOR UPDATE;
+-- name: ReadKnowledgeSuggestion :one
+SELECT * FROM shuttle_knowledge_suggestions WHERE bot_id=$1 AND organization_id=$2 AND id=$3;
+-- name: LockKnowledgeSuggestion :one
+SELECT * FROM shuttle_knowledge_suggestions WHERE bot_id=$1 AND organization_id=$2 AND id=$3 FOR UPDATE;
+-- name: ReadKnowledgeModerator :one
+SELECT * FROM shuttle_knowledge_moderators WHERE bot_id=$1 AND organization_id=$2 AND user_id=$3;
+-- name: SetKnowledgeModerator :one
+INSERT INTO shuttle_knowledge_moderators(bot_id,organization_id,user_id,enabled,version,changed_by)
+VALUES($1,$2,$3,$4,1,$5) ON CONFLICT(bot_id,organization_id,user_id) DO UPDATE SET
+enabled=excluded.enabled,version=shuttle_knowledge_moderators.version+1,changed_by=excluded.changed_by,changed_at=clock_timestamp() RETURNING *;
+-- name: ReadKnowledgePreparation :one
+SELECT * FROM shuttle_knowledge_preparations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND action_kind=$4 AND operation_id=$5;
+-- name: InsertKnowledgePreparation :exec
+INSERT INTO shuttle_knowledge_preparations(bot_id,organization_id,actor,actor_id,action_kind,operation_id,proposal_id,request_hash,document,expires_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10);
+-- name: ReadKnowledgeOperation :one
+SELECT * FROM shuttle_knowledge_operations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND action_kind=$4 AND operation_id=$5;
+-- name: InsertKnowledgeOperation :exec
+INSERT INTO shuttle_knowledge_operations(bot_id,organization_id,actor,actor_id,action_kind,operation_id,proposal_id,request_hash,result)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9);
+-- name: InsertKnowledgeArticle :one
+INSERT INTO shuttle_knowledge_articles(id,bot_id,organization_id,event_id,slug,title,language,topics,body,sources,current_revision,event_name,event_starts_at,event_ends_at,event_timezone,archived_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1,$11,$12,$13,$14,$15) RETURNING *;
+-- name: UpdateKnowledgeArticle :one
+UPDATE shuttle_knowledge_articles SET slug=$4,title=$5,language=$6,topics=$7,body=$8,sources=$9,
+current_revision=current_revision+1,event_name=$10,event_starts_at=$11,event_ends_at=$12,event_timezone=$13,archived_at=$14,updated_at=clock_timestamp()
+WHERE bot_id=$1 AND organization_id=$2 AND id=$3 AND current_revision=sqlc.arg(expected_revision) RETURNING *;
+-- name: InsertKnowledgeRevision :exec
+INSERT INTO shuttle_knowledge_revisions(bot_id,organization_id,article_id,revision,previous_revision,change_kind,author_id,proposer_id,reviewer_id,suggestion_id,reason,
+slug,title,language,topics,body,sources,event_id,event_name,event_starts_at,event_ends_at,event_timezone,archived_at)
+SELECT bot_id,organization_id,id,current_revision,NULLIF(current_revision-1,0),sqlc.arg(change_kind),sqlc.narg(author_id)::uuid,sqlc.narg(proposer_id)::uuid,sqlc.narg(reviewer_id)::uuid,sqlc.narg(suggestion_id)::uuid,sqlc.arg(reason),
+slug,title,language,topics,body,sources,event_id,event_name,event_starts_at,event_ends_at,event_timezone,archived_at
+FROM shuttle_knowledge_articles a WHERE a.bot_id=sqlc.arg(bot_id) AND a.organization_id=sqlc.arg(organization_id) AND a.id=sqlc.arg(article_id);
+-- name: InsertKnowledgeSuggestion :one
+INSERT INTO shuttle_knowledge_suggestions(id,bot_id,organization_id,article_id,base_revision,event_id,event_version,proposer_id,reason,slug,title,language,topics,body,sources)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *;
+-- name: DecideKnowledgeSuggestion :one
+UPDATE shuttle_knowledge_suggestions SET state=$4,reviewer_id=$5,decision_reason=$6,decided_at=clock_timestamp(),published_revision=$7
+WHERE bot_id=$1 AND organization_id=$2 AND id=$3 AND state='pending' RETURNING *;
+-- name: ListKnowledgeSuggestions :many
+SELECT s.* FROM shuttle_knowledge_suggestions s
+LEFT JOIN shuttle_events e ON e.id=s.event_id AND e.bot_id=s.bot_id AND e.organization_id=s.organization_id
+LEFT JOIN shuttle_knowledge_articles a ON a.id=s.article_id AND a.bot_id=s.bot_id AND a.organization_id=s.organization_id
+WHERE s.bot_id=sqlc.arg(bot_id) AND s.organization_id=sqlc.arg(organization_id)
+AND (sqlc.narg(event_id)::uuid IS NULL OR s.event_id=sqlc.narg(event_id)) AND s.id>sqlc.arg(after_id)::uuid
+AND ((NOT sqlc.arg(pending)::boolean AND s.proposer_id=sqlc.arg(user_id)) OR
+ (sqlc.arg(pending)::boolean AND s.state='pending' AND s.proposer_id<>sqlc.arg(user_id) AND
+  ((s.event_id IS NULL OR a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=s.bot_id AND h.organization_id=s.organization_id AND h.event_id=s.event_id AND h.archived_at IS NOT NULL)) AND EXISTS(
+    SELECT 1 FROM shuttle_knowledge_moderators m WHERE m.bot_id=s.bot_id AND m.organization_id=s.organization_id AND m.user_id=sqlc.arg(user_id) AND m.enabled)
+   OR (s.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=s.bot_id AND h.organization_id=s.organization_id AND h.event_id=s.event_id AND h.archived_at IS NOT NULL) AND
+    (sqlc.arg(global_admin)::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities r WHERE r.event_id=s.event_id AND r.user_id=sqlc.arg(user_id) AND r.role='administrator'))))))
+ORDER BY s.id LIMIT sqlc.arg(page_limit);
+-- name: ListKnowledgeArticles :many
+SELECT sqlc.embed(a), COALESCE(a.event_id IS NOT NULL AND (a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)),false)::boolean AS historical
+FROM shuttle_knowledge_articles a LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+WHERE a.bot_id=sqlc.arg(bot_id) AND a.organization_id=sqlc.arg(organization_id) AND a.id>sqlc.arg(after_id)::uuid
+AND (sqlc.narg(event_id)::uuid IS NULL OR a.event_id=sqlc.narg(event_id))
+AND (sqlc.arg(language)::text='' OR a.language=sqlc.arg(language)) AND (sqlc.arg(topic)::text='' OR sqlc.arg(topic)=ANY(a.topics))
+AND (sqlc.arg(collection)::text='all' OR (sqlc.arg(collection)='general' AND (a.event_id IS NULL OR a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)))
+OR (sqlc.arg(collection)='event' AND a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)))
+ORDER BY a.id LIMIT sqlc.arg(page_limit);
+-- name: KnowledgeOverviewCounts :many
+SELECT CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN 'event' ELSE 'general' END::text AS collection,
+CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN a.event_id::text ELSE '' END::text AS event_key,
+CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN e.name ELSE '' END::text AS event_name,count(*)::bigint AS count
+FROM shuttle_knowledge_articles a LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+WHERE a.bot_id=$1 AND a.organization_id=$2 GROUP BY 1,2,3 ORDER BY collection,event_key LIMIT 21;
+-- name: KnowledgeOverviewTopics :many
+SELECT topic::text,count(*)::bigint AS count FROM shuttle_knowledge_articles a CROSS JOIN unnest(a.topics) topic
+WHERE a.bot_id=$1 AND a.organization_id=$2 GROUP BY topic ORDER BY count DESC,topic LIMIT 41;
+-- name: EndedKnowledgeArticles :many
+SELECT a.id FROM shuttle_knowledge_articles a JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.id>$3 AND a.archived_at IS NULL AND (e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)) ORDER BY a.id LIMIT 20;
+
+-- name: KnowledgeOnlyArchiveGap :one
+SELECT NOT EXISTS(SELECT 1 FROM shuttle_knowledge_revisions r WHERE r.bot_id=$1 AND r.organization_id=$2 AND r.article_id=$3
+AND r.revision>sqlc.arg(base_revision)::bigint AND r.change_kind<>'archive') AS unchanged;
+
+-- name: KnowledgeEventArchived :one
+SELECT EXISTS(SELECT 1 FROM shuttle_knowledge_articles a WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.event_id=$3 AND a.archived_at IS NOT NULL) AS archived;
+
+-- name: KnowledgeEventArchiveOrigin :one
+SELECT * FROM shuttle_knowledge_articles a WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.event_id=$3 AND a.archived_at IS NOT NULL ORDER BY a.archived_at,a.id LIMIT 1;
+
+-- name: KnowledgeAnyEventAdministrator :one
+SELECT EXISTS(SELECT 1 FROM shuttle_events e WHERE e.bot_id=sqlc.arg(bot_id) AND e.organization_id=sqlc.arg(organization_id) AND e.ends_at>clock_timestamp()
+AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles a WHERE a.bot_id=e.bot_id AND a.organization_id=e.organization_id AND a.event_id=e.id AND a.archived_at IS NOT NULL)
+AND (sqlc.arg(global_admin)::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities r WHERE r.event_id=e.id AND r.user_id=sqlc.arg(user_id) AND r.role='administrator'))) AS available;
+
+-- name: ListKnowledgeModerators :many
+SELECT * FROM shuttle_knowledge_moderators WHERE bot_id=$1 AND organization_id=$2 AND user_id>$3 ORDER BY user_id LIMIT $4;
+
+-- name: RecentKnowledgePreparations :many
+SELECT action_kind,operation_id,proposal_id,created_at,expires_at
+FROM shuttle_knowledge_preparations WHERE bot_id=sqlc.arg(bot_id) AND organization_id=sqlc.arg(organization_id)
+AND actor=sqlc.arg(actor) AND actor_id=sqlc.arg(actor_id) AND created_at<sqlc.arg(before_at)::timestamptz
+ORDER BY created_at DESC,proposal_id DESC LIMIT 5;

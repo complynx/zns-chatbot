@@ -1101,6 +1101,58 @@ func (q *Queries) DeactivateRemovedMassageSpecialists(ctx context.Context, arg D
 	return result.RowsAffected(), nil
 }
 
+const decideKnowledgeSuggestion = `-- name: DecideKnowledgeSuggestion :one
+UPDATE shuttle_knowledge_suggestions SET state=$4,reviewer_id=$5,decision_reason=$6,decided_at=clock_timestamp(),published_revision=$7
+WHERE bot_id=$1 AND organization_id=$2 AND id=$3 AND state='pending' RETURNING id, bot_id, organization_id, article_id, base_revision, event_id, event_version, proposer_id, reason, slug, title, language, topics, body, sources, state, reviewer_id, decision_reason, decided_at, published_revision, created_at
+`
+
+type DecideKnowledgeSuggestionParams struct {
+	BotID             int64       `json:"bot_id"`
+	OrganizationID    string      `json:"organization_id"`
+	ID                uuid.UUID   `json:"id"`
+	State             string      `json:"state"`
+	ReviewerID        pgtype.UUID `json:"reviewer_id"`
+	DecisionReason    pgtype.Text `json:"decision_reason"`
+	PublishedRevision pgtype.Int8 `json:"published_revision"`
+}
+
+func (q *Queries) DecideKnowledgeSuggestion(ctx context.Context, arg DecideKnowledgeSuggestionParams) (ShuttleKnowledgeSuggestion, error) {
+	row := q.db.QueryRow(ctx, decideKnowledgeSuggestion,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.State,
+		arg.ReviewerID,
+		arg.DecisionReason,
+		arg.PublishedRevision,
+	)
+	var i ShuttleKnowledgeSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.ArticleID,
+		&i.BaseRevision,
+		&i.EventID,
+		&i.EventVersion,
+		&i.ProposerID,
+		&i.Reason,
+		&i.Slug,
+		&i.Title,
+		&i.Language,
+		&i.Topics,
+		&i.Body,
+		&i.Sources,
+		&i.State,
+		&i.ReviewerID,
+		&i.DecisionReason,
+		&i.DecidedAt,
+		&i.PublishedRevision,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const decidePairInvitation = `-- name: DecidePairInvitation :one
 UPDATE shuttle_pair_invitations SET state=$3,version=version+1,decided_at=$4,pair_id=$5
 WHERE id=$1 AND version=$2 AND state='pending' RETURNING id, event_id, inviter_registration_id, target_user_id, state, version, created_at, expires_at, decided_at, pair_id
@@ -1227,6 +1279,37 @@ type DueMassageSpecialistSoonBookingsParams struct {
 
 func (q *Queries) DueMassageSpecialistSoonBookings(ctx context.Context, arg DueMassageSpecialistSoonBookingsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, dueMassageSpecialistSoonBookings, arg.BotID, arg.OrganizationID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const endedKnowledgeArticles = `-- name: EndedKnowledgeArticles :many
+SELECT a.id FROM shuttle_knowledge_articles a JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.id>$3 AND a.archived_at IS NULL AND (e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)) ORDER BY a.id LIMIT 20
+`
+
+type EndedKnowledgeArticlesParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ID             uuid.UUID `json:"id"`
+}
+
+func (q *Queries) EndedKnowledgeArticles(ctx context.Context, arg EndedKnowledgeArticlesParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, endedKnowledgeArticles, arg.BotID, arg.OrganizationID, arg.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -4015,6 +4098,241 @@ func (q *Queries) InsertInbox(ctx context.Context, arg InsertInboxParams) error 
 	return err
 }
 
+const insertKnowledgeArticle = `-- name: InsertKnowledgeArticle :one
+INSERT INTO shuttle_knowledge_articles(id,bot_id,organization_id,event_id,slug,title,language,topics,body,sources,current_revision,event_name,event_starts_at,event_ends_at,event_timezone,archived_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1,$11,$12,$13,$14,$15) RETURNING id, bot_id, organization_id, event_id, slug, title, language, topics, body, sources, current_revision, event_name, event_starts_at, event_ends_at, event_timezone, archived_at, created_at, updated_at, search_vector
+`
+
+type InsertKnowledgeArticleParams struct {
+	ID             uuid.UUID          `json:"id"`
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	EventID        pgtype.UUID        `json:"event_id"`
+	Slug           string             `json:"slug"`
+	Title          string             `json:"title"`
+	Language       string             `json:"language"`
+	Topics         []string           `json:"topics"`
+	Body           string             `json:"body"`
+	Sources        []byte             `json:"sources"`
+	EventName      pgtype.Text        `json:"event_name"`
+	EventStartsAt  pgtype.Timestamptz `json:"event_starts_at"`
+	EventEndsAt    pgtype.Timestamptz `json:"event_ends_at"`
+	EventTimezone  pgtype.Text        `json:"event_timezone"`
+	ArchivedAt     pgtype.Timestamptz `json:"archived_at"`
+}
+
+func (q *Queries) InsertKnowledgeArticle(ctx context.Context, arg InsertKnowledgeArticleParams) (ShuttleKnowledgeArticle, error) {
+	row := q.db.QueryRow(ctx, insertKnowledgeArticle,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.EventID,
+		arg.Slug,
+		arg.Title,
+		arg.Language,
+		arg.Topics,
+		arg.Body,
+		arg.Sources,
+		arg.EventName,
+		arg.EventStartsAt,
+		arg.EventEndsAt,
+		arg.EventTimezone,
+		arg.ArchivedAt,
+	)
+	var i ShuttleKnowledgeArticle
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.EventID,
+		&i.Slug,
+		&i.Title,
+		&i.Language,
+		&i.Topics,
+		&i.Body,
+		&i.Sources,
+		&i.CurrentRevision,
+		&i.EventName,
+		&i.EventStartsAt,
+		&i.EventEndsAt,
+		&i.EventTimezone,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SearchVector,
+	)
+	return i, err
+}
+
+const insertKnowledgeOperation = `-- name: InsertKnowledgeOperation :exec
+INSERT INTO shuttle_knowledge_operations(bot_id,organization_id,actor,actor_id,action_kind,operation_id,proposal_id,request_hash,result)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+`
+
+type InsertKnowledgeOperationParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	ActorID        uuid.UUID `json:"actor_id"`
+	ActionKind     string    `json:"action_kind"`
+	OperationID    string    `json:"operation_id"`
+	ProposalID     uuid.UUID `json:"proposal_id"`
+	RequestHash    []byte    `json:"request_hash"`
+	Result         []byte    `json:"result"`
+}
+
+func (q *Queries) InsertKnowledgeOperation(ctx context.Context, arg InsertKnowledgeOperationParams) error {
+	_, err := q.db.Exec(ctx, insertKnowledgeOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.ActorID,
+		arg.ActionKind,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.RequestHash,
+		arg.Result,
+	)
+	return err
+}
+
+const insertKnowledgePreparation = `-- name: InsertKnowledgePreparation :exec
+INSERT INTO shuttle_knowledge_preparations(bot_id,organization_id,actor,actor_id,action_kind,operation_id,proposal_id,request_hash,document,expires_at)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+`
+
+type InsertKnowledgePreparationParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	ActorID        uuid.UUID          `json:"actor_id"`
+	ActionKind     string             `json:"action_kind"`
+	OperationID    string             `json:"operation_id"`
+	ProposalID     uuid.UUID          `json:"proposal_id"`
+	RequestHash    []byte             `json:"request_hash"`
+	Document       []byte             `json:"document"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertKnowledgePreparation(ctx context.Context, arg InsertKnowledgePreparationParams) error {
+	_, err := q.db.Exec(ctx, insertKnowledgePreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.ActorID,
+		arg.ActionKind,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.RequestHash,
+		arg.Document,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const insertKnowledgeRevision = `-- name: InsertKnowledgeRevision :exec
+INSERT INTO shuttle_knowledge_revisions(bot_id,organization_id,article_id,revision,previous_revision,change_kind,author_id,proposer_id,reviewer_id,suggestion_id,reason,
+slug,title,language,topics,body,sources,event_id,event_name,event_starts_at,event_ends_at,event_timezone,archived_at)
+SELECT bot_id,organization_id,id,current_revision,NULLIF(current_revision-1,0),$1,$2::uuid,$3::uuid,$4::uuid,$5::uuid,$6,
+slug,title,language,topics,body,sources,event_id,event_name,event_starts_at,event_ends_at,event_timezone,archived_at
+FROM shuttle_knowledge_articles a WHERE a.bot_id=$7 AND a.organization_id=$8 AND a.id=$9
+`
+
+type InsertKnowledgeRevisionParams struct {
+	ChangeKind     string      `json:"change_kind"`
+	AuthorID       pgtype.UUID `json:"author_id"`
+	ProposerID     pgtype.UUID `json:"proposer_id"`
+	ReviewerID     pgtype.UUID `json:"reviewer_id"`
+	SuggestionID   pgtype.UUID `json:"suggestion_id"`
+	Reason         string      `json:"reason"`
+	BotID          int64       `json:"bot_id"`
+	OrganizationID string      `json:"organization_id"`
+	ArticleID      uuid.UUID   `json:"article_id"`
+}
+
+func (q *Queries) InsertKnowledgeRevision(ctx context.Context, arg InsertKnowledgeRevisionParams) error {
+	_, err := q.db.Exec(ctx, insertKnowledgeRevision,
+		arg.ChangeKind,
+		arg.AuthorID,
+		arg.ProposerID,
+		arg.ReviewerID,
+		arg.SuggestionID,
+		arg.Reason,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ArticleID,
+	)
+	return err
+}
+
+const insertKnowledgeSuggestion = `-- name: InsertKnowledgeSuggestion :one
+INSERT INTO shuttle_knowledge_suggestions(id,bot_id,organization_id,article_id,base_revision,event_id,event_version,proposer_id,reason,slug,title,language,topics,body,sources)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id, bot_id, organization_id, article_id, base_revision, event_id, event_version, proposer_id, reason, slug, title, language, topics, body, sources, state, reviewer_id, decision_reason, decided_at, published_revision, created_at
+`
+
+type InsertKnowledgeSuggestionParams struct {
+	ID             uuid.UUID   `json:"id"`
+	BotID          int64       `json:"bot_id"`
+	OrganizationID string      `json:"organization_id"`
+	ArticleID      uuid.UUID   `json:"article_id"`
+	BaseRevision   int64       `json:"base_revision"`
+	EventID        pgtype.UUID `json:"event_id"`
+	EventVersion   pgtype.Int8 `json:"event_version"`
+	ProposerID     uuid.UUID   `json:"proposer_id"`
+	Reason         string      `json:"reason"`
+	Slug           string      `json:"slug"`
+	Title          string      `json:"title"`
+	Language       string      `json:"language"`
+	Topics         []string    `json:"topics"`
+	Body           string      `json:"body"`
+	Sources        []byte      `json:"sources"`
+}
+
+func (q *Queries) InsertKnowledgeSuggestion(ctx context.Context, arg InsertKnowledgeSuggestionParams) (ShuttleKnowledgeSuggestion, error) {
+	row := q.db.QueryRow(ctx, insertKnowledgeSuggestion,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ArticleID,
+		arg.BaseRevision,
+		arg.EventID,
+		arg.EventVersion,
+		arg.ProposerID,
+		arg.Reason,
+		arg.Slug,
+		arg.Title,
+		arg.Language,
+		arg.Topics,
+		arg.Body,
+		arg.Sources,
+	)
+	var i ShuttleKnowledgeSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.ArticleID,
+		&i.BaseRevision,
+		&i.EventID,
+		&i.EventVersion,
+		&i.ProposerID,
+		&i.Reason,
+		&i.Slug,
+		&i.Title,
+		&i.Language,
+		&i.Topics,
+		&i.Body,
+		&i.Sources,
+		&i.State,
+		&i.ReviewerID,
+		&i.DecisionReason,
+		&i.DecidedAt,
+		&i.PublishedRevision,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertLegacyArchive = `-- name: InsertLegacyArchive :one
 INSERT INTO shuttle_legacy_archives(id,bot_id,organization_id,sha256,size_bytes,validation,created_by)
 VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id, bot_id, organization_id, sha256, size_bytes, validation, created_by, created_at
@@ -5901,6 +6219,189 @@ func (q *Queries) InsertUserRevocationProposal(ctx context.Context, arg InsertUs
 	return err
 }
 
+const knowledgeAnyEventAdministrator = `-- name: KnowledgeAnyEventAdministrator :one
+SELECT EXISTS(SELECT 1 FROM shuttle_events e WHERE e.bot_id=$1 AND e.organization_id=$2 AND e.ends_at>clock_timestamp()
+AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles a WHERE a.bot_id=e.bot_id AND a.organization_id=e.organization_id AND a.event_id=e.id AND a.archived_at IS NOT NULL)
+AND ($3::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities r WHERE r.event_id=e.id AND r.user_id=$4 AND r.role='administrator'))) AS available
+`
+
+type KnowledgeAnyEventAdministratorParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	GlobalAdmin    bool      `json:"global_admin"`
+	UserID         uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) KnowledgeAnyEventAdministrator(ctx context.Context, arg KnowledgeAnyEventAdministratorParams) (bool, error) {
+	row := q.db.QueryRow(ctx, knowledgeAnyEventAdministrator,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.GlobalAdmin,
+		arg.UserID,
+	)
+	var available bool
+	err := row.Scan(&available)
+	return available, err
+}
+
+const knowledgeEventArchiveOrigin = `-- name: KnowledgeEventArchiveOrigin :one
+SELECT id, bot_id, organization_id, event_id, slug, title, language, topics, body, sources, current_revision, event_name, event_starts_at, event_ends_at, event_timezone, archived_at, created_at, updated_at, search_vector FROM shuttle_knowledge_articles a WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.event_id=$3 AND a.archived_at IS NOT NULL ORDER BY a.archived_at,a.id LIMIT 1
+`
+
+type KnowledgeEventArchiveOriginParams struct {
+	BotID          int64       `json:"bot_id"`
+	OrganizationID string      `json:"organization_id"`
+	EventID        pgtype.UUID `json:"event_id"`
+}
+
+func (q *Queries) KnowledgeEventArchiveOrigin(ctx context.Context, arg KnowledgeEventArchiveOriginParams) (ShuttleKnowledgeArticle, error) {
+	row := q.db.QueryRow(ctx, knowledgeEventArchiveOrigin, arg.BotID, arg.OrganizationID, arg.EventID)
+	var i ShuttleKnowledgeArticle
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.EventID,
+		&i.Slug,
+		&i.Title,
+		&i.Language,
+		&i.Topics,
+		&i.Body,
+		&i.Sources,
+		&i.CurrentRevision,
+		&i.EventName,
+		&i.EventStartsAt,
+		&i.EventEndsAt,
+		&i.EventTimezone,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SearchVector,
+	)
+	return i, err
+}
+
+const knowledgeEventArchived = `-- name: KnowledgeEventArchived :one
+SELECT EXISTS(SELECT 1 FROM shuttle_knowledge_articles a WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.event_id=$3 AND a.archived_at IS NOT NULL) AS archived
+`
+
+type KnowledgeEventArchivedParams struct {
+	BotID          int64       `json:"bot_id"`
+	OrganizationID string      `json:"organization_id"`
+	EventID        pgtype.UUID `json:"event_id"`
+}
+
+func (q *Queries) KnowledgeEventArchived(ctx context.Context, arg KnowledgeEventArchivedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, knowledgeEventArchived, arg.BotID, arg.OrganizationID, arg.EventID)
+	var archived bool
+	err := row.Scan(&archived)
+	return archived, err
+}
+
+const knowledgeOnlyArchiveGap = `-- name: KnowledgeOnlyArchiveGap :one
+SELECT NOT EXISTS(SELECT 1 FROM shuttle_knowledge_revisions r WHERE r.bot_id=$1 AND r.organization_id=$2 AND r.article_id=$3
+AND r.revision>$4::bigint AND r.change_kind<>'archive') AS unchanged
+`
+
+type KnowledgeOnlyArchiveGapParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ArticleID      uuid.UUID `json:"article_id"`
+	BaseRevision   int64     `json:"base_revision"`
+}
+
+func (q *Queries) KnowledgeOnlyArchiveGap(ctx context.Context, arg KnowledgeOnlyArchiveGapParams) (bool, error) {
+	row := q.db.QueryRow(ctx, knowledgeOnlyArchiveGap,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ArticleID,
+		arg.BaseRevision,
+	)
+	var unchanged bool
+	err := row.Scan(&unchanged)
+	return unchanged, err
+}
+
+const knowledgeOverviewCounts = `-- name: KnowledgeOverviewCounts :many
+SELECT CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN 'event' ELSE 'general' END::text AS collection,
+CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN a.event_id::text ELSE '' END::text AS event_key,
+CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN e.name ELSE '' END::text AS event_name,count(*)::bigint AS count
+FROM shuttle_knowledge_articles a LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+WHERE a.bot_id=$1 AND a.organization_id=$2 GROUP BY 1,2,3 ORDER BY collection,event_key LIMIT 21
+`
+
+type KnowledgeOverviewCountsParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+type KnowledgeOverviewCountsRow struct {
+	Collection string `json:"collection"`
+	EventKey   string `json:"event_key"`
+	EventName  string `json:"event_name"`
+	Count      int64  `json:"count"`
+}
+
+func (q *Queries) KnowledgeOverviewCounts(ctx context.Context, arg KnowledgeOverviewCountsParams) ([]KnowledgeOverviewCountsRow, error) {
+	rows, err := q.db.Query(ctx, knowledgeOverviewCounts, arg.BotID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeOverviewCountsRow
+	for rows.Next() {
+		var i KnowledgeOverviewCountsRow
+		if err := rows.Scan(
+			&i.Collection,
+			&i.EventKey,
+			&i.EventName,
+			&i.Count,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const knowledgeOverviewTopics = `-- name: KnowledgeOverviewTopics :many
+SELECT topic::text,count(*)::bigint AS count FROM shuttle_knowledge_articles a CROSS JOIN unnest(a.topics) topic
+WHERE a.bot_id=$1 AND a.organization_id=$2 GROUP BY topic ORDER BY count DESC,topic LIMIT 41
+`
+
+type KnowledgeOverviewTopicsParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+type KnowledgeOverviewTopicsRow struct {
+	Topic string `json:"topic"`
+	Count int64  `json:"count"`
+}
+
+func (q *Queries) KnowledgeOverviewTopics(ctx context.Context, arg KnowledgeOverviewTopicsParams) ([]KnowledgeOverviewTopicsRow, error) {
+	rows, err := q.db.Query(ctx, knowledgeOverviewTopics, arg.BotID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KnowledgeOverviewTopicsRow
+	for rows.Next() {
+		var i KnowledgeOverviewTopicsRow
+		if err := rows.Scan(&i.Topic, &i.Count); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const latestOrderReviewRevision = `-- name: LatestOrderReviewRevision :one
 SELECT coalesce(max(revision),0)::bigint FROM shuttle_order_review_workspaces WHERE actor_id=$1 AND evidence_id=$2
 `
@@ -6688,6 +7189,267 @@ func (q *Queries) ListEvents(ctx context.Context, arg ListEventsParams) ([]Shutt
 			&i.EndsAt,
 			&i.Modules,
 			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnowledgeArticles = `-- name: ListKnowledgeArticles :many
+SELECT a.id, a.bot_id, a.organization_id, a.event_id, a.slug, a.title, a.language, a.topics, a.body, a.sources, a.current_revision, a.event_name, a.event_starts_at, a.event_ends_at, a.event_timezone, a.archived_at, a.created_at, a.updated_at, a.search_vector, COALESCE(a.event_id IS NOT NULL AND (a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)),false)::boolean AS historical
+FROM shuttle_knowledge_articles a LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.id>$3::uuid
+AND ($4::uuid IS NULL OR a.event_id=$4)
+AND ($5::text='' OR a.language=$5) AND ($6::text='' OR $6=ANY(a.topics))
+AND ($7::text='all' OR ($7='general' AND (a.event_id IS NULL OR a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)))
+OR ($7='event' AND a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)))
+ORDER BY a.id LIMIT $8
+`
+
+type ListKnowledgeArticlesParams struct {
+	BotID          int64       `json:"bot_id"`
+	OrganizationID string      `json:"organization_id"`
+	AfterID        uuid.UUID   `json:"after_id"`
+	EventID        pgtype.UUID `json:"event_id"`
+	Language       string      `json:"language"`
+	Topic          string      `json:"topic"`
+	Collection     string      `json:"collection"`
+	PageLimit      int32       `json:"page_limit"`
+}
+
+type ListKnowledgeArticlesRow struct {
+	ShuttleKnowledgeArticle ShuttleKnowledgeArticle `json:"shuttle_knowledge_article"`
+	Historical              bool                    `json:"historical"`
+}
+
+func (q *Queries) ListKnowledgeArticles(ctx context.Context, arg ListKnowledgeArticlesParams) ([]ListKnowledgeArticlesRow, error) {
+	rows, err := q.db.Query(ctx, listKnowledgeArticles,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.AfterID,
+		arg.EventID,
+		arg.Language,
+		arg.Topic,
+		arg.Collection,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKnowledgeArticlesRow
+	for rows.Next() {
+		var i ListKnowledgeArticlesRow
+		if err := rows.Scan(
+			&i.ShuttleKnowledgeArticle.ID,
+			&i.ShuttleKnowledgeArticle.BotID,
+			&i.ShuttleKnowledgeArticle.OrganizationID,
+			&i.ShuttleKnowledgeArticle.EventID,
+			&i.ShuttleKnowledgeArticle.Slug,
+			&i.ShuttleKnowledgeArticle.Title,
+			&i.ShuttleKnowledgeArticle.Language,
+			&i.ShuttleKnowledgeArticle.Topics,
+			&i.ShuttleKnowledgeArticle.Body,
+			&i.ShuttleKnowledgeArticle.Sources,
+			&i.ShuttleKnowledgeArticle.CurrentRevision,
+			&i.ShuttleKnowledgeArticle.EventName,
+			&i.ShuttleKnowledgeArticle.EventStartsAt,
+			&i.ShuttleKnowledgeArticle.EventEndsAt,
+			&i.ShuttleKnowledgeArticle.EventTimezone,
+			&i.ShuttleKnowledgeArticle.ArchivedAt,
+			&i.ShuttleKnowledgeArticle.CreatedAt,
+			&i.ShuttleKnowledgeArticle.UpdatedAt,
+			&i.ShuttleKnowledgeArticle.SearchVector,
+			&i.Historical,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnowledgeModerators = `-- name: ListKnowledgeModerators :many
+SELECT bot_id, organization_id, user_id, enabled, version, changed_by, changed_at FROM shuttle_knowledge_moderators WHERE bot_id=$1 AND organization_id=$2 AND user_id>$3 ORDER BY user_id LIMIT $4
+`
+
+type ListKnowledgeModeratorsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	Limit          int32     `json:"limit"`
+}
+
+func (q *Queries) ListKnowledgeModerators(ctx context.Context, arg ListKnowledgeModeratorsParams) ([]ShuttleKnowledgeModerator, error) {
+	rows, err := q.db.Query(ctx, listKnowledgeModerators,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleKnowledgeModerator
+	for rows.Next() {
+		var i ShuttleKnowledgeModerator
+		if err := rows.Scan(
+			&i.BotID,
+			&i.OrganizationID,
+			&i.UserID,
+			&i.Enabled,
+			&i.Version,
+			&i.ChangedBy,
+			&i.ChangedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnowledgeRevisions = `-- name: ListKnowledgeRevisions :many
+SELECT r.revision,r.previous_revision,r.change_kind,r.author_id,r.proposer_id,r.reviewer_id,r.reason,r.created_at
+FROM shuttle_knowledge_revisions r
+JOIN shuttle_knowledge_articles a ON a.id=r.article_id AND a.bot_id=r.bot_id AND a.organization_id=r.organization_id
+WHERE a.bot_id=$1 AND a.organization_id=$2
+ AND a.id=$3 AND r.revision<=a.current_revision AND r.revision<$4
+ORDER BY r.revision DESC LIMIT $5
+`
+
+type ListKnowledgeRevisionsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ArticleID      uuid.UUID `json:"article_id"`
+	BeforeRevision int64     `json:"before_revision"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListKnowledgeRevisionsRow struct {
+	Revision         int64              `json:"revision"`
+	PreviousRevision pgtype.Int8        `json:"previous_revision"`
+	ChangeKind       string             `json:"change_kind"`
+	AuthorID         pgtype.UUID        `json:"author_id"`
+	ProposerID       pgtype.UUID        `json:"proposer_id"`
+	ReviewerID       pgtype.UUID        `json:"reviewer_id"`
+	Reason           string             `json:"reason"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListKnowledgeRevisions(ctx context.Context, arg ListKnowledgeRevisionsParams) ([]ListKnowledgeRevisionsRow, error) {
+	rows, err := q.db.Query(ctx, listKnowledgeRevisions,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ArticleID,
+		arg.BeforeRevision,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKnowledgeRevisionsRow
+	for rows.Next() {
+		var i ListKnowledgeRevisionsRow
+		if err := rows.Scan(
+			&i.Revision,
+			&i.PreviousRevision,
+			&i.ChangeKind,
+			&i.AuthorID,
+			&i.ProposerID,
+			&i.ReviewerID,
+			&i.Reason,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnowledgeSuggestions = `-- name: ListKnowledgeSuggestions :many
+SELECT s.id, s.bot_id, s.organization_id, s.article_id, s.base_revision, s.event_id, s.event_version, s.proposer_id, s.reason, s.slug, s.title, s.language, s.topics, s.body, s.sources, s.state, s.reviewer_id, s.decision_reason, s.decided_at, s.published_revision, s.created_at FROM shuttle_knowledge_suggestions s
+LEFT JOIN shuttle_events e ON e.id=s.event_id AND e.bot_id=s.bot_id AND e.organization_id=s.organization_id
+LEFT JOIN shuttle_knowledge_articles a ON a.id=s.article_id AND a.bot_id=s.bot_id AND a.organization_id=s.organization_id
+WHERE s.bot_id=$1 AND s.organization_id=$2
+AND ($3::uuid IS NULL OR s.event_id=$3) AND s.id>$4::uuid
+AND ((NOT $5::boolean AND s.proposer_id=$6) OR
+ ($5::boolean AND s.state='pending' AND s.proposer_id<>$6 AND
+  ((s.event_id IS NULL OR a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=s.bot_id AND h.organization_id=s.organization_id AND h.event_id=s.event_id AND h.archived_at IS NOT NULL)) AND EXISTS(
+    SELECT 1 FROM shuttle_knowledge_moderators m WHERE m.bot_id=s.bot_id AND m.organization_id=s.organization_id AND m.user_id=$6 AND m.enabled)
+   OR (s.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=s.bot_id AND h.organization_id=s.organization_id AND h.event_id=s.event_id AND h.archived_at IS NOT NULL) AND
+    ($7::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities r WHERE r.event_id=s.event_id AND r.user_id=$6 AND r.role='administrator'))))))
+ORDER BY s.id LIMIT $8
+`
+
+type ListKnowledgeSuggestionsParams struct {
+	BotID          int64       `json:"bot_id"`
+	OrganizationID string      `json:"organization_id"`
+	EventID        pgtype.UUID `json:"event_id"`
+	AfterID        uuid.UUID   `json:"after_id"`
+	Pending        bool        `json:"pending"`
+	UserID         uuid.UUID   `json:"user_id"`
+	GlobalAdmin    bool        `json:"global_admin"`
+	PageLimit      int32       `json:"page_limit"`
+}
+
+func (q *Queries) ListKnowledgeSuggestions(ctx context.Context, arg ListKnowledgeSuggestionsParams) ([]ShuttleKnowledgeSuggestion, error) {
+	rows, err := q.db.Query(ctx, listKnowledgeSuggestions,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.EventID,
+		arg.AfterID,
+		arg.Pending,
+		arg.UserID,
+		arg.GlobalAdmin,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttleKnowledgeSuggestion
+	for rows.Next() {
+		var i ShuttleKnowledgeSuggestion
+		if err := rows.Scan(
+			&i.ID,
+			&i.BotID,
+			&i.OrganizationID,
+			&i.ArticleID,
+			&i.BaseRevision,
+			&i.EventID,
+			&i.EventVersion,
+			&i.ProposerID,
+			&i.Reason,
+			&i.Slug,
+			&i.Title,
+			&i.Language,
+			&i.Topics,
+			&i.Body,
+			&i.Sources,
+			&i.State,
+			&i.ReviewerID,
+			&i.DecisionReason,
+			&i.DecidedAt,
+			&i.PublishedRevision,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -9092,6 +9854,82 @@ func (q *Queries) LockEventOperation(ctx context.Context, dollar_1 string) error
 	return err
 }
 
+const lockKnowledgeArticle = `-- name: LockKnowledgeArticle :one
+SELECT id, bot_id, organization_id, event_id, slug, title, language, topics, body, sources, current_revision, event_name, event_starts_at, event_ends_at, event_timezone, archived_at, created_at, updated_at, search_vector FROM shuttle_knowledge_articles WHERE bot_id=$1 AND organization_id=$2 AND id=$3 FOR UPDATE
+`
+
+type LockKnowledgeArticleParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ID             uuid.UUID `json:"id"`
+}
+
+func (q *Queries) LockKnowledgeArticle(ctx context.Context, arg LockKnowledgeArticleParams) (ShuttleKnowledgeArticle, error) {
+	row := q.db.QueryRow(ctx, lockKnowledgeArticle, arg.BotID, arg.OrganizationID, arg.ID)
+	var i ShuttleKnowledgeArticle
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.EventID,
+		&i.Slug,
+		&i.Title,
+		&i.Language,
+		&i.Topics,
+		&i.Body,
+		&i.Sources,
+		&i.CurrentRevision,
+		&i.EventName,
+		&i.EventStartsAt,
+		&i.EventEndsAt,
+		&i.EventTimezone,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SearchVector,
+	)
+	return i, err
+}
+
+const lockKnowledgeSuggestion = `-- name: LockKnowledgeSuggestion :one
+SELECT id, bot_id, organization_id, article_id, base_revision, event_id, event_version, proposer_id, reason, slug, title, language, topics, body, sources, state, reviewer_id, decision_reason, decided_at, published_revision, created_at FROM shuttle_knowledge_suggestions WHERE bot_id=$1 AND organization_id=$2 AND id=$3 FOR UPDATE
+`
+
+type LockKnowledgeSuggestionParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ID             uuid.UUID `json:"id"`
+}
+
+func (q *Queries) LockKnowledgeSuggestion(ctx context.Context, arg LockKnowledgeSuggestionParams) (ShuttleKnowledgeSuggestion, error) {
+	row := q.db.QueryRow(ctx, lockKnowledgeSuggestion, arg.BotID, arg.OrganizationID, arg.ID)
+	var i ShuttleKnowledgeSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.ArticleID,
+		&i.BaseRevision,
+		&i.EventID,
+		&i.EventVersion,
+		&i.ProposerID,
+		&i.Reason,
+		&i.Slug,
+		&i.Title,
+		&i.Language,
+		&i.Topics,
+		&i.Body,
+		&i.Sources,
+		&i.State,
+		&i.ReviewerID,
+		&i.DecisionReason,
+		&i.DecidedAt,
+		&i.PublishedRevision,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const lockMassageReminder = `-- name: LockMassageReminder :one
 SELECT id, booking_id, kind, lead_seconds, due_at, next_attempt_at, state, version, attempt_id, payload, receipt, created_at FROM shuttle_massage_reminders WHERE id=$1 FOR UPDATE
 `
@@ -10273,6 +11111,241 @@ func (q *Queries) ReadFutureMassageBookings(ctx context.Context, arg ReadFutureM
 		return nil, err
 	}
 	return items, nil
+}
+
+const readKnowledgeArticle = `-- name: ReadKnowledgeArticle :one
+SELECT a.id, a.bot_id, a.organization_id, a.event_id, a.slug, a.title, a.language, a.topics, a.body, a.sources, a.current_revision, a.event_name, a.event_starts_at, a.event_ends_at, a.event_timezone, a.archived_at, a.created_at, a.updated_at, a.search_vector, COALESCE(a.event_id IS NOT NULL AND
+ (a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)),false)::boolean AS historical
+FROM shuttle_knowledge_articles a
+LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+WHERE a.bot_id=$1 AND a.organization_id=$2 AND a.id=$3
+`
+
+type ReadKnowledgeArticleParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ArticleID      uuid.UUID `json:"article_id"`
+}
+
+type ReadKnowledgeArticleRow struct {
+	ShuttleKnowledgeArticle ShuttleKnowledgeArticle `json:"shuttle_knowledge_article"`
+	Historical              bool                    `json:"historical"`
+}
+
+func (q *Queries) ReadKnowledgeArticle(ctx context.Context, arg ReadKnowledgeArticleParams) (ReadKnowledgeArticleRow, error) {
+	row := q.db.QueryRow(ctx, readKnowledgeArticle, arg.BotID, arg.OrganizationID, arg.ArticleID)
+	var i ReadKnowledgeArticleRow
+	err := row.Scan(
+		&i.ShuttleKnowledgeArticle.ID,
+		&i.ShuttleKnowledgeArticle.BotID,
+		&i.ShuttleKnowledgeArticle.OrganizationID,
+		&i.ShuttleKnowledgeArticle.EventID,
+		&i.ShuttleKnowledgeArticle.Slug,
+		&i.ShuttleKnowledgeArticle.Title,
+		&i.ShuttleKnowledgeArticle.Language,
+		&i.ShuttleKnowledgeArticle.Topics,
+		&i.ShuttleKnowledgeArticle.Body,
+		&i.ShuttleKnowledgeArticle.Sources,
+		&i.ShuttleKnowledgeArticle.CurrentRevision,
+		&i.ShuttleKnowledgeArticle.EventName,
+		&i.ShuttleKnowledgeArticle.EventStartsAt,
+		&i.ShuttleKnowledgeArticle.EventEndsAt,
+		&i.ShuttleKnowledgeArticle.EventTimezone,
+		&i.ShuttleKnowledgeArticle.ArchivedAt,
+		&i.ShuttleKnowledgeArticle.CreatedAt,
+		&i.ShuttleKnowledgeArticle.UpdatedAt,
+		&i.ShuttleKnowledgeArticle.SearchVector,
+		&i.Historical,
+	)
+	return i, err
+}
+
+const readKnowledgeModerator = `-- name: ReadKnowledgeModerator :one
+SELECT bot_id, organization_id, user_id, enabled, version, changed_by, changed_at FROM shuttle_knowledge_moderators WHERE bot_id=$1 AND organization_id=$2 AND user_id=$3
+`
+
+type ReadKnowledgeModeratorParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	UserID         uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) ReadKnowledgeModerator(ctx context.Context, arg ReadKnowledgeModeratorParams) (ShuttleKnowledgeModerator, error) {
+	row := q.db.QueryRow(ctx, readKnowledgeModerator, arg.BotID, arg.OrganizationID, arg.UserID)
+	var i ShuttleKnowledgeModerator
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.Enabled,
+		&i.Version,
+		&i.ChangedBy,
+		&i.ChangedAt,
+	)
+	return i, err
+}
+
+const readKnowledgeOperation = `-- name: ReadKnowledgeOperation :one
+SELECT bot_id, organization_id, actor, actor_id, action_kind, operation_id, proposal_id, request_hash, result, completed_at FROM shuttle_knowledge_operations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND action_kind=$4 AND operation_id=$5
+`
+
+type ReadKnowledgeOperationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	ActionKind     string `json:"action_kind"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) ReadKnowledgeOperation(ctx context.Context, arg ReadKnowledgeOperationParams) (ShuttleKnowledgeOperation, error) {
+	row := q.db.QueryRow(ctx, readKnowledgeOperation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.ActionKind,
+		arg.OperationID,
+	)
+	var i ShuttleKnowledgeOperation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.ActorID,
+		&i.ActionKind,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.Result,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
+const readKnowledgePreparation = `-- name: ReadKnowledgePreparation :one
+SELECT bot_id, organization_id, actor, actor_id, action_kind, operation_id, proposal_id, request_hash, document, created_at, expires_at FROM shuttle_knowledge_preparations WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND action_kind=$4 AND operation_id=$5
+`
+
+type ReadKnowledgePreparationParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+	Actor          string `json:"actor"`
+	ActionKind     string `json:"action_kind"`
+	OperationID    string `json:"operation_id"`
+}
+
+func (q *Queries) ReadKnowledgePreparation(ctx context.Context, arg ReadKnowledgePreparationParams) (ShuttleKnowledgePreparation, error) {
+	row := q.db.QueryRow(ctx, readKnowledgePreparation,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.ActionKind,
+		arg.OperationID,
+	)
+	var i ShuttleKnowledgePreparation
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.Actor,
+		&i.ActorID,
+		&i.ActionKind,
+		&i.OperationID,
+		&i.ProposalID,
+		&i.RequestHash,
+		&i.Document,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const readKnowledgeRevision = `-- name: ReadKnowledgeRevision :one
+SELECT r.bot_id, r.organization_id, r.article_id, r.revision, r.previous_revision, r.change_kind, r.author_id, r.proposer_id, r.reviewer_id, r.suggestion_id, r.reason, r.slug, r.title, r.language, r.topics, r.body, r.sources, r.event_id, r.event_name, r.event_starts_at, r.event_ends_at, r.event_timezone, r.archived_at, r.created_at FROM shuttle_knowledge_revisions r
+JOIN shuttle_knowledge_articles a ON a.id=r.article_id AND a.bot_id=r.bot_id AND a.organization_id=r.organization_id
+WHERE a.bot_id=$1 AND a.organization_id=$2
+ AND a.id=$3 AND r.revision=$4 AND r.revision<=a.current_revision
+`
+
+type ReadKnowledgeRevisionParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ArticleID      uuid.UUID `json:"article_id"`
+	Revision       int64     `json:"revision"`
+}
+
+func (q *Queries) ReadKnowledgeRevision(ctx context.Context, arg ReadKnowledgeRevisionParams) (ShuttleKnowledgeRevision, error) {
+	row := q.db.QueryRow(ctx, readKnowledgeRevision,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ArticleID,
+		arg.Revision,
+	)
+	var i ShuttleKnowledgeRevision
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.ArticleID,
+		&i.Revision,
+		&i.PreviousRevision,
+		&i.ChangeKind,
+		&i.AuthorID,
+		&i.ProposerID,
+		&i.ReviewerID,
+		&i.SuggestionID,
+		&i.Reason,
+		&i.Slug,
+		&i.Title,
+		&i.Language,
+		&i.Topics,
+		&i.Body,
+		&i.Sources,
+		&i.EventID,
+		&i.EventName,
+		&i.EventStartsAt,
+		&i.EventEndsAt,
+		&i.EventTimezone,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const readKnowledgeSuggestion = `-- name: ReadKnowledgeSuggestion :one
+SELECT id, bot_id, organization_id, article_id, base_revision, event_id, event_version, proposer_id, reason, slug, title, language, topics, body, sources, state, reviewer_id, decision_reason, decided_at, published_revision, created_at FROM shuttle_knowledge_suggestions WHERE bot_id=$1 AND organization_id=$2 AND id=$3
+`
+
+type ReadKnowledgeSuggestionParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	ID             uuid.UUID `json:"id"`
+}
+
+func (q *Queries) ReadKnowledgeSuggestion(ctx context.Context, arg ReadKnowledgeSuggestionParams) (ShuttleKnowledgeSuggestion, error) {
+	row := q.db.QueryRow(ctx, readKnowledgeSuggestion, arg.BotID, arg.OrganizationID, arg.ID)
+	var i ShuttleKnowledgeSuggestion
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.ArticleID,
+		&i.BaseRevision,
+		&i.EventID,
+		&i.EventVersion,
+		&i.ProposerID,
+		&i.Reason,
+		&i.Slug,
+		&i.Title,
+		&i.Language,
+		&i.Topics,
+		&i.Body,
+		&i.Sources,
+		&i.State,
+		&i.ReviewerID,
+		&i.DecisionReason,
+		&i.DecidedAt,
+		&i.PublishedRevision,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const readMassageBindingOperation = `-- name: ReadMassageBindingOperation :one
@@ -11855,6 +12928,61 @@ func (q *Queries) ReadyPaymentNotifications(ctx context.Context, arg ReadyPaymen
 	return items, nil
 }
 
+const recentKnowledgePreparations = `-- name: RecentKnowledgePreparations :many
+SELECT action_kind,operation_id,proposal_id,created_at,expires_at
+FROM shuttle_knowledge_preparations WHERE bot_id=$1 AND organization_id=$2
+AND actor=$3 AND actor_id=$4 AND created_at<$5::timestamptz
+ORDER BY created_at DESC,proposal_id DESC LIMIT 5
+`
+
+type RecentKnowledgePreparationsParams struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	ActorID        uuid.UUID          `json:"actor_id"`
+	BeforeAt       pgtype.Timestamptz `json:"before_at"`
+}
+
+type RecentKnowledgePreparationsRow struct {
+	ActionKind  string             `json:"action_kind"`
+	OperationID string             `json:"operation_id"`
+	ProposalID  uuid.UUID          `json:"proposal_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) RecentKnowledgePreparations(ctx context.Context, arg RecentKnowledgePreparationsParams) ([]RecentKnowledgePreparationsRow, error) {
+	rows, err := q.db.Query(ctx, recentKnowledgePreparations,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.ActorID,
+		arg.BeforeAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RecentKnowledgePreparationsRow
+	for rows.Next() {
+		var i RecentKnowledgePreparationsRow
+		if err := rows.Scan(
+			&i.ActionKind,
+			&i.OperationID,
+			&i.ProposalID,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const recentMiniAppMealDraftActions = `-- name: RecentMiniAppMealDraftActions :many
 SELECT a.operation_id,op.event_id,(op.result->>'version')::bigint AS draft_version,
  (op.result->>'event_version')::bigint AS event_version,
@@ -13251,6 +14379,122 @@ func (q *Queries) SaveUserRevocationResult(ctx context.Context, arg SaveUserRevo
 	return result.RowsAffected(), nil
 }
 
+const searchKnowledgeArticles = `-- name: SearchKnowledgeArticles :many
+WITH terms AS (
+ SELECT q AS query,
+  websearch_to_tsquery('english'::regconfig,q) || websearch_to_tsquery('russian'::regconfig,q) || websearch_to_tsquery('simple'::regconfig,q) AS ts
+ FROM unnest($3::text[]) q
+), candidates AS (
+ SELECT a.id, a.bot_id, a.organization_id, a.event_id, a.slug, a.title, a.language, a.topics, a.body, a.sources, a.current_revision, a.event_name, a.event_starts_at, a.event_ends_at, a.event_timezone, a.archived_at, a.created_at, a.updated_at, a.search_vector, COALESCE(a.event_id IS NOT NULL AND
+  (a.archived_at IS NOT NULL OR e.ends_at<=clock_timestamp() OR EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)),false)::boolean AS historical
+ FROM shuttle_knowledge_articles a
+ LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
+ WHERE a.bot_id=$4 AND a.organization_id=$5
+  AND ($6::uuid IS NULL OR a.event_id=$6)
+  AND ($7::text='' OR a.language=$7)
+  AND ($8::text='' OR $8=ANY(a.topics))
+), matches AS (
+ SELECT a.id,a.title,a.slug,a.language,a.topics,a.body,a.sources,a.current_revision,
+  a.event_id,a.event_name,a.event_starts_at,a.event_ends_at,a.event_timezone,a.archived_at,a.updated_at,a.historical,
+  max(CASE WHEN lower(a.title)=lower(t.query) OR a.slug=lower(t.query) THEN 1 ELSE 0 END)::integer AS title_match,
+  max(ts_rank_cd(a.search_vector,t.ts))::real AS rank,
+  array_agg(DISTINCT t.query ORDER BY t.query)::text[] AS matched_queries
+ FROM candidates a CROSS JOIN terms t
+ WHERE ($9::text='all' OR
+   ($9='general' AND (a.event_id IS NULL OR a.historical)) OR
+   ($9='event' AND a.event_id IS NOT NULL AND NOT a.historical))
+  AND (a.search_vector @@ t.ts OR lower(a.title)=lower(t.query) OR a.slug=lower(t.query) OR lower(t.query)=ANY(a.topics))
+ GROUP BY a.id,a.title,a.slug,a.language,a.topics,a.body,a.sources,a.current_revision,
+  a.event_id,a.event_name,a.event_starts_at,a.event_ends_at,a.event_timezone,a.archived_at,a.updated_at,a.historical
+)
+SELECT id, title, slug, language, topics, body, sources, current_revision, event_id, event_name, event_starts_at, event_ends_at, event_timezone, archived_at, updated_at, historical, title_match, rank, matched_queries FROM matches ORDER BY title_match DESC,rank DESC,id
+LIMIT $2 OFFSET $1
+`
+
+type SearchKnowledgeArticlesParams struct {
+	PageOffset     int32       `json:"page_offset"`
+	PageLimit      int32       `json:"page_limit"`
+	Queries        []string    `json:"queries"`
+	BotID          int64       `json:"bot_id"`
+	OrganizationID string      `json:"organization_id"`
+	EventID        pgtype.UUID `json:"event_id"`
+	Language       string      `json:"language"`
+	Topic          string      `json:"topic"`
+	Collection     string      `json:"collection"`
+}
+
+type SearchKnowledgeArticlesRow struct {
+	ID              uuid.UUID          `json:"id"`
+	Title           string             `json:"title"`
+	Slug            string             `json:"slug"`
+	Language        string             `json:"language"`
+	Topics          []string           `json:"topics"`
+	Body            string             `json:"body"`
+	Sources         []byte             `json:"sources"`
+	CurrentRevision int64              `json:"current_revision"`
+	EventID         pgtype.UUID        `json:"event_id"`
+	EventName       pgtype.Text        `json:"event_name"`
+	EventStartsAt   pgtype.Timestamptz `json:"event_starts_at"`
+	EventEndsAt     pgtype.Timestamptz `json:"event_ends_at"`
+	EventTimezone   pgtype.Text        `json:"event_timezone"`
+	ArchivedAt      pgtype.Timestamptz `json:"archived_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	Historical      bool               `json:"historical"`
+	TitleMatch      int32              `json:"title_match"`
+	Rank            float32            `json:"rank"`
+	MatchedQueries  []string           `json:"matched_queries"`
+}
+
+func (q *Queries) SearchKnowledgeArticles(ctx context.Context, arg SearchKnowledgeArticlesParams) ([]SearchKnowledgeArticlesRow, error) {
+	rows, err := q.db.Query(ctx, searchKnowledgeArticles,
+		arg.PageOffset,
+		arg.PageLimit,
+		arg.Queries,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.EventID,
+		arg.Language,
+		arg.Topic,
+		arg.Collection,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchKnowledgeArticlesRow
+	for rows.Next() {
+		var i SearchKnowledgeArticlesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.Slug,
+			&i.Language,
+			&i.Topics,
+			&i.Body,
+			&i.Sources,
+			&i.CurrentRevision,
+			&i.EventID,
+			&i.EventName,
+			&i.EventStartsAt,
+			&i.EventEndsAt,
+			&i.EventTimezone,
+			&i.ArchivedAt,
+			&i.UpdatedAt,
+			&i.Historical,
+			&i.TitleMatch,
+			&i.Rank,
+			&i.MatchedQueries,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setEventAuthority = `-- name: SetEventAuthority :one
 INSERT INTO shuttle_event_authorities(event_id,user_id,role,version) VALUES($1,$2,$3,1)
 ON CONFLICT(event_id,user_id) DO UPDATE SET role=EXCLUDED.role,version=shuttle_event_authorities.version+1 RETURNING event_id, user_id, role, version
@@ -13302,6 +14546,41 @@ type SetEventRegistrationRulesParams struct {
 func (q *Queries) SetEventRegistrationRules(ctx context.Context, arg SetEventRegistrationRulesParams) error {
 	_, err := q.db.Exec(ctx, setEventRegistrationRules, arg.EventID, arg.Document)
 	return err
+}
+
+const setKnowledgeModerator = `-- name: SetKnowledgeModerator :one
+INSERT INTO shuttle_knowledge_moderators(bot_id,organization_id,user_id,enabled,version,changed_by)
+VALUES($1,$2,$3,$4,1,$5) ON CONFLICT(bot_id,organization_id,user_id) DO UPDATE SET
+enabled=excluded.enabled,version=shuttle_knowledge_moderators.version+1,changed_by=excluded.changed_by,changed_at=clock_timestamp() RETURNING bot_id, organization_id, user_id, enabled, version, changed_by, changed_at
+`
+
+type SetKnowledgeModeratorParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	Enabled        bool      `json:"enabled"`
+	ChangedBy      uuid.UUID `json:"changed_by"`
+}
+
+func (q *Queries) SetKnowledgeModerator(ctx context.Context, arg SetKnowledgeModeratorParams) (ShuttleKnowledgeModerator, error) {
+	row := q.db.QueryRow(ctx, setKnowledgeModerator,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.UserID,
+		arg.Enabled,
+		arg.ChangedBy,
+	)
+	var i ShuttleKnowledgeModerator
+	err := row.Scan(
+		&i.BotID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.Enabled,
+		&i.Version,
+		&i.ChangedBy,
+		&i.ChangedAt,
+	)
+	return i, err
 }
 
 const setMassageSpecialistPreference = `-- name: SetMassageSpecialistPreference :one
@@ -13511,6 +14790,73 @@ func (q *Queries) UpdateEvent(ctx context.Context, arg UpdateEventParams) (Shutt
 		&i.EndsAt,
 		&i.Modules,
 		&i.Version,
+	)
+	return i, err
+}
+
+const updateKnowledgeArticle = `-- name: UpdateKnowledgeArticle :one
+UPDATE shuttle_knowledge_articles SET slug=$4,title=$5,language=$6,topics=$7,body=$8,sources=$9,
+current_revision=current_revision+1,event_name=$10,event_starts_at=$11,event_ends_at=$12,event_timezone=$13,archived_at=$14,updated_at=clock_timestamp()
+WHERE bot_id=$1 AND organization_id=$2 AND id=$3 AND current_revision=$15 RETURNING id, bot_id, organization_id, event_id, slug, title, language, topics, body, sources, current_revision, event_name, event_starts_at, event_ends_at, event_timezone, archived_at, created_at, updated_at, search_vector
+`
+
+type UpdateKnowledgeArticleParams struct {
+	BotID            int64              `json:"bot_id"`
+	OrganizationID   string             `json:"organization_id"`
+	ID               uuid.UUID          `json:"id"`
+	Slug             string             `json:"slug"`
+	Title            string             `json:"title"`
+	Language         string             `json:"language"`
+	Topics           []string           `json:"topics"`
+	Body             string             `json:"body"`
+	Sources          []byte             `json:"sources"`
+	EventName        pgtype.Text        `json:"event_name"`
+	EventStartsAt    pgtype.Timestamptz `json:"event_starts_at"`
+	EventEndsAt      pgtype.Timestamptz `json:"event_ends_at"`
+	EventTimezone    pgtype.Text        `json:"event_timezone"`
+	ArchivedAt       pgtype.Timestamptz `json:"archived_at"`
+	ExpectedRevision int64              `json:"expected_revision"`
+}
+
+func (q *Queries) UpdateKnowledgeArticle(ctx context.Context, arg UpdateKnowledgeArticleParams) (ShuttleKnowledgeArticle, error) {
+	row := q.db.QueryRow(ctx, updateKnowledgeArticle,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.Slug,
+		arg.Title,
+		arg.Language,
+		arg.Topics,
+		arg.Body,
+		arg.Sources,
+		arg.EventName,
+		arg.EventStartsAt,
+		arg.EventEndsAt,
+		arg.EventTimezone,
+		arg.ArchivedAt,
+		arg.ExpectedRevision,
+	)
+	var i ShuttleKnowledgeArticle
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.EventID,
+		&i.Slug,
+		&i.Title,
+		&i.Language,
+		&i.Topics,
+		&i.Body,
+		&i.Sources,
+		&i.CurrentRevision,
+		&i.EventName,
+		&i.EventStartsAt,
+		&i.EventEndsAt,
+		&i.EventTimezone,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SearchVector,
 	)
 	return i, err
 }

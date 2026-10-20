@@ -50,6 +50,7 @@ func (s *Server) registerMiniApp() {
 	s.registerMiniAppAvatars()
 	s.registerMiniAppPayments()
 	s.registerMiniAppPassPayments()
+	s.registerMiniAppKnowledge()
 	s.public.HandleFunc("GET /app/", s.miniAppPage)
 	s.public.HandleFunc("POST /app/session/bootstrap", s.miniAppBootstrap)
 	s.public.HandleFunc("GET /app/me", s.miniAppMe)
