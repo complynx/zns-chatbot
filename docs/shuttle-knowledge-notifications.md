@@ -1,8 +1,9 @@
 # Durable knowledge notifications
 
 Status: implemented in source mvp82 with additive migration66. The owned main
-stand remains schema65/mvp81. This source has not been installed or accepted
-against a full real-IAM/Loom/mock-Telegram stand.
+stand remains schema65/mvp81. A separate full real-IAM/Loom/mock-Telegram
+[acceptance gate](shuttle-knowledge-notices-runtime-qa-2026-10-20.md) passes for
+this candidate; it has not been installed on the main stand.
 
 ## Recipient policy
 
@@ -74,9 +75,12 @@ retained under ignored `knowledge-notices-source-v1/`.
 The frozen all-knowledge Linux/PostgreSQL race gate passes25 roots/42 terminal
 cases with no failures, skips or OOM. It uses mock IAM/Loom/Telegram HTTP peers
 and real PostgreSQL; it is not the separate full real-IAM/Loom/mock-Telegram
-stand. Source correctness and quality reviews found no actionable findings. Full standalone mock-Telegram
-acceptance, real Loom moderation dialogues, separate-device handoffs and exact
-API tools for human-authorized resolution of ambiguous delivery remain open.
+stand. Source correctness and quality reviews found no actionable findings. The separate full mock-Telegram runtime gate now passes delivery, current-rights
+checks, event-to-history routing and three graceful restarts. A controlled real
+Loom readback distinguishes the immutable submission receipt, current review
+state and recipient-owned delivery metadata without changing business data.
+Model-driven moderation writes, separate-device handoffs and exact API tools
+for human-authorized resolution of ambiguous delivery remain open.
 Do not install this candidate on a real Telegram stand to exercise synthetic
 reviewer identities. Multi-user delivery belongs on isolated mock Telegram.
 
