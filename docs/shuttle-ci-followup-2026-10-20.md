@@ -175,3 +175,13 @@ runs above retain their results. The full log is334,877 UTF-8 bytes, SHA-256
 This opens the reviewed local installation gate; the separate
 [primary installation report](shuttle-knowledge-primary-qa-2026-10-20.md) records
 its backup, initial verifier failure, bounded correction and final acceptance.
+
+## Full pass for the integrated order-review preview
+
+[Run39486263424](https://github.com/complynx/zns-chatbot/actions/runs/39486263424)
+at `7fc7bd31` succeeds with 814/814 integration roots, 347 UI tests and every remaining
+check, including lint and Linux/container build. Its log and preceding canonical
+receipt are retained under `.cache/shuttle-work/ci-7fc-terminal-v1/`.
+The [image-only installation](shuttle-order-preview-primary-qa-2026-10-20.md)
+subsequently passes on the owned primary without a schema migration. Earlier
+failed or cancelled runs above remain historical results, not retroactive passes.

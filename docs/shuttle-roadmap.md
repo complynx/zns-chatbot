@@ -1,37 +1,33 @@
 # Current roadmap checkpoint, 2026-10-20
 
-The owned primary runs `mvp83/schema67`; its
-[installation is accepted](shuttle-knowledge-primary-qa-2026-10-20.md), including
-full CI at832c1d7e, a decoded backup, preserved domain data and resumed ingress.
-The source now includes the separately reviewed order-review preview, which is
-not yet installed. The chronological records below retain each earlier result;
-a later component pass does not turn an earlier failed full run into a pass.
+The owned primary runs `mvp83/schema67`. Both the
+[knowledge installation](shuttle-knowledge-primary-qa-2026-10-20.md) and later
+[order-review preview installation](shuttle-order-preview-primary-qa-2026-10-20.md)
+are accepted. The latter full CI at `7fc7bd31` passes 814 integration roots and 347 UI
+tests. Domain data and original ingress remain preserved. The chronological
+records below retain each earlier result; later success does not rewrite failures.
 
 ## Next actions, in order
 
-1. Validate the integrated [literal order-review preview](shuttle-order-review-preview.md)
-   and complete its CI. Preserve original financial terms and confirmation IDs;
-   its browser fixture is not full order-payment QA.
-   The [CI follow-up](shuttle-ci-followup-2026-10-20.md) preserves the earlier
-   full successful run and preceding failures; that pass predates this UI change.
-2. Install the validated preview on the owned primary with a graceful restart,
-   preserving schema67, domain data, queues, original ingress and companions.
-   No further database migration is required by this display-only change.
-3. Close exact prepared-operation native-to-agent handoff when the generic
+1. Check a bounded set of natural-language knowledge requests with model-generated
+   tool choices on an isolated stand. Controlled-provider receipts establish
+   transport and durable writes, not model comprehension or answer quality.
+   Preserve that distinction and report any simulated usage separately.
+2. Close exact prepared-operation native-to-agent handoff when the generic
    [Loom adoption contract](shuttle-loom-native-operation-adoption.md) is agreed
    and available. Also resolve the documented
    [revocation/consent lifecycle](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md).
    Independent native completion and agent reads remain usable; neither proves
    adoption of the original preparation. Do not change the Loom developer's stand.
-4. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
+3. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
    when Daniel is available. Revalidate the retained configuration first;
    isolated HTTP/Edge results do not replace that joint check.
-5. Continue meal financial checkout after the recorded policy decisions: empty
+4. Continue meal financial checkout after the recorded policy decisions: empty
    completed selections, the financial cutoff across services, and explicit meal
    capacity. Catalogs/drafts and shared kind-isolated storage exist; exposed meal
    submission/payment/review is still missing. Service-order acceptance does not
    cover meals. Keep unresolved decisions in the ignored local decisions file.
-6. Finish real export/account/avatar migration and server-specific cutover
+5. Finish real export/account/avatar migration and server-specific cutover
    acceptance before any separately authorized production deployment. Historical
    payment records stay reference material, not credits in the new live ledger.
 

@@ -28,6 +28,7 @@ This is presentation verification. It does not add IAM, Loom, real Telegram
 WebView, deployed-image or production acceptance. At that fixture checkpoint,
 the primary stand and its pending installation candidate were unchanged. The later
 [knowledge installation](shuttle-knowledge-primary-qa-2026-10-20.md) does not include
-this preview; preview image installation remains open. Local browser evidence is in
+this preview. Subsequent [preview installation](shuttle-order-preview-primary-qa-2026-10-20.md)
+is accepted separately; the fixture evidence retains its original scope. Local browser evidence is in
 `.cache/shuttle-work/readable-order-preview-v1/browser-proof.json` in the primary
 checkout. Independent textual review found no actionable code findings.
