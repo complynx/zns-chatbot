@@ -2113,3 +2113,55 @@ SELECT action_kind,operation_id,proposal_id,created_at,expires_at
 FROM shuttle_knowledge_preparations WHERE bot_id=sqlc.arg(bot_id) AND organization_id=sqlc.arg(organization_id)
 AND actor=sqlc.arg(actor) AND actor_id=sqlc.arg(actor_id) AND created_at<sqlc.arg(before_at)::timestamptz
 ORDER BY created_at DESC,proposal_id DESC LIMIT 5;
+
+-- name: EnsureKnowledgeNotifications :execrows
+INSERT INTO shuttle_knowledge_notices(bot_id,organization_id,suggestion_id,recipient_id,kind)
+SELECT c.bot_id,c.organization_id,c.suggestion_id,c.recipient_id,c.kind
+FROM shuttle_knowledge_notice_candidates c
+WHERE c.bot_id=sqlc.arg(bot_id) AND c.organization_id=sqlc.arg(organization_id)
+AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_notices n WHERE n.bot_id=c.bot_id
+ AND n.organization_id=c.organization_id AND n.suggestion_id=c.suggestion_id
+ AND n.recipient_id=c.recipient_id AND n.kind=c.kind)
+ORDER BY c.suggestion_id,c.recipient_id LIMIT 100
+ON CONFLICT(bot_id,organization_id,suggestion_id,recipient_id,kind) DO NOTHING;
+
+-- name: ReadyKnowledgeNotifications :many
+SELECT id,version FROM shuttle_knowledge_notices
+WHERE bot_id=$1 AND organization_id=$2 AND state IN ('pending','retryable')
+AND next_attempt_at<=clock_timestamp() AND id>sqlc.arg(after_id)::uuid
+ORDER BY id LIMIT 100;
+
+-- name: GetKnowledgeNotification :one
+SELECT sqlc.embed(n),s.article_id,s.event_id FROM shuttle_knowledge_notices n
+JOIN shuttle_knowledge_suggestions s ON s.id=n.suggestion_id AND s.bot_id=n.bot_id AND s.organization_id=n.organization_id
+WHERE n.id=$1 AND n.bot_id=$2 AND n.organization_id=$3;
+
+-- name: KnowledgeNotificationRecipient :one
+SELECT u.* FROM shuttle_knowledge_notices n
+JOIN shuttle_knowledge_notice_candidates c ON c.bot_id=n.bot_id AND c.organization_id=n.organization_id
+AND c.suggestion_id=n.suggestion_id AND c.recipient_id=n.recipient_id AND c.kind=n.kind
+JOIN shuttle_users u ON u.id=n.recipient_id
+WHERE n.id=$1 AND n.bot_id=$2 AND n.organization_id=$3;
+
+-- name: ReserveKnowledgeNotification :one
+UPDATE shuttle_knowledge_notices SET state='send_inflight',version=version+1,attempt_id=$3,payload=$4
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable') RETURNING *;
+
+-- name: FinishKnowledgeNotification :execrows
+UPDATE shuttle_knowledge_notices SET state=$3,version=version+1,receipt=$4,
+next_attempt_at=clock_timestamp()+sqlc.arg(delay_ms)::bigint*interval '1 millisecond'
+WHERE id=$1 AND attempt_id=$2 AND state='send_inflight';
+
+-- name: BlockKnowledgeNotification :execrows
+UPDATE shuttle_knowledge_notices SET state='delivery_blocked',version=version+1
+WHERE id=$1 AND bot_id=$2 AND organization_id=$3 AND version=$4 AND state IN ('pending','retryable');
+
+-- name: RecoverKnowledgeNotifications :execrows
+UPDATE shuttle_knowledge_notices SET state='delivery_unknown',version=version+1
+WHERE bot_id=$1 AND organization_id=$2 AND state='send_inflight';
+
+-- name: ListKnowledgeNotifications :many
+SELECT id,suggestion_id,recipient_id,kind,state,version,next_attempt_at,created_at
+FROM shuttle_knowledge_notices WHERE bot_id=sqlc.arg(bot_id) AND organization_id=sqlc.arg(organization_id)
+AND (sqlc.arg(global_admin)::boolean OR recipient_id=sqlc.arg(user_id))
+AND id>sqlc.arg(after_id)::uuid ORDER BY id LIMIT sqlc.arg(page_limit);

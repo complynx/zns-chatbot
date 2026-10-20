@@ -69,14 +69,14 @@ function backend() {
     throw Error("Unexpected route " + route);
   }; return b;
 }
-function harness(b = backend(), store = new Map()) {
+function harness(b = backend(), store = new Map(), suggestionID) {
   const map = new Map(), section = new Element("section");
   const get = id => { if (id === "knowledge") return section; if (!map.has(id)) { const e = new Element(id === "kb-consent" ? "input" : id.includes("label") ? "label" : "button"); map.set(id, e); section.append(e); } return map.get(id); };
   const storage = { getItem: key => store.get(key) || null, setItem: (key, value) => { if (h.failStorage) throw Error("Unavailable"); store.set(key, value); }, removeItem: key => store.delete(key) };
   const window = {}; let ui;
   runInNewContext(source, { window, document: { getElementById: get, createElement: tag => new Element(tag) }, sessionStorage: storage, crypto: { randomUUID }, TextEncoder, Date, console });
   const h = { b, store, get: id => get(id.startsWith("kb-") || id === "knowledge" ? id : "kb-" + id), ui: undefined, failStorage: false, denied: 0 };
-  ui = window.createZinusyaKnowledge({ request: b.request, setBusy: value => ui.setBusy(value), denied: () => h.denied++ }); h.ui = ui;
+  ui = window.createZinusyaKnowledge({ suggestionID, request: b.request, setBusy: value => ui.setBusy(value), denied: () => h.denied++ }); h.ui = ui;
   h.start = (id = b.owner, locale = "en") => ui.start(id, locale);
   h.click = async id => { const e = h.get(id); assert.equal(e.disabled, false, id + " disabled"); assert.equal(e.hidden, false, id + " hidden"); await e.listeners.click(); };
   h.text = id => { const flatten = e => e.textContent + e.children.map(flatten).join(" "); return flatten(h.get(id)); };
@@ -264,4 +264,15 @@ test("moderator fields and rows clear on signout and translated history has no i
  assert.match(h.text("moderators-heading"), /Модераторы/); assert.match(h.text("moderator-version"), /Новое назначение/); await h.click("moderators-reload"); await h.choose("moderators-list");
  await h.choose("results"); await h.click("history"); assert.match(h.text("revisions"), /Редактирование/); assert.doesNotMatch(h.text("revisions"), / · edit · /);
  h.ui.clear(); assert.equal(h.get("moderators").hidden, true); assert.equal(h.get("moderator-user").value, ""); assert.equal(h.get("moderators-list").children.length, 0);
+});
+
+
+test("notification link reads the exact authorized suggestion without preparation or consent", async () => {
+ const b=backend();b.suggestion={id:randomUUID(),article_id:b.articleID,base_revision:2,proposer_id:randomUUID(),state:"pending",content:{title:"Linked proposal",language:"en",sources:[]}};b.caps={moderator:true};
+ const h=harness(b,new Map(),b.suggestion.id);await h.start();assert.match(h.text("suggestion"),/Linked proposal/);assert.equal(h.get("review").hidden,false);assert.equal(b.preps.size,0);assert.equal(b.effects,0);assert.equal(h.get("confirm").hidden,true);
+});
+
+test("an unfinished original operation takes precedence over a notification link", async () => {
+ const b=backend(),store=new Map(),h=harness(b,store);await h.start();await h.click("new");h.fill();await h.click("prepare");const count=b.calls.filter(c=>c.path.endsWith("/suggestion")).length;
+ const reloaded=harness(b,store,randomUUID());await reloaded.start();assert.equal(b.calls.filter(c=>c.path.endsWith("/suggestion")).length,count);assert.equal(reloaded.get("confirm").disabled,true);assert.equal(b.effects,0);
 });

@@ -34,7 +34,7 @@ func boundedWorkerKind(kind string) string {
 	case "shuttle_task",
 		"zinusya_payment_notification",
 		"zinusya_pair_notification",
-		"zinusya_order_notification", "zinusya_avatar_delivery",
+		"zinusya_order_notification", "zinusya_knowledge_notification", "zinusya_avatar_delivery",
 		"zinusya_massage_reminder", "zinusya_massage_specialist_notice":
 		return kind
 	default:

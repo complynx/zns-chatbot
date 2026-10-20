@@ -398,8 +398,12 @@ removed. Evidence is under ignored `knowledge-moderator-http-v1/`,
 
 ## Remaining acceptance
 
-Add durable reviewer notices with multi-user delivery on mock Telegram. A real
-Loom moderation dialogue and continuation across separate devices remain open.
+The [durable knowledge-notice source slice](shuttle-knowledge-notifications.md)
+adds bounded repair, recipient reauthorization, decision notices, diagnostics and
+read-only exact-suggestion links in mvp82/migration66. Its25 PostgreSQL/race
+roots/42 cases and60 Mini App cases pass. It is not installed on this main stand.
+Full real-IAM/Loom/mock-Telegram delivery, a real Loom moderation dialogue and
+continuation across separate devices remain open.
 
 Continue both directions of edit/review continuation,
 owned multi-user acceptance and notification recovery. The installed corpus now

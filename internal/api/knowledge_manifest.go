@@ -43,6 +43,10 @@ func knowledgeWriteMethod[I any](id, description string) map[string]any {
 }
 func knowledgeMethods(c db.KnowledgeCapabilities) []map[string]any {
 	methods := []map[string]any{
+		knowledgeMethod[knowledgeNotificationArguments, db.KnowledgeNotificationPage](
+			"notifications",
+			"Read your own bounded delivery metadata for knowledge suggestions, without proposed text, payloads or credentials. Current global admins may inspect deployment-wide metadata. Default limit10/max20; next is after. Delivery state is separate from moderation state. delivery_unknown is ambiguous: do not automatically resend or infer that review failed; inspect logs/receipts and current suggestion. This method does not change delivery state.",
+		),
 		knowledgeMethod[knowledgeOverviewArguments, db.KnowledgeOverview](
 			"overview",
 			"Browse general/history counts and up to twenty active event collections, INCLUDING empty events, with bounded topic counts. No pass or enabled registration module is required. General appears on every page. Follow next_event as after to continue the event directory; truncated can also mean the topic preview is limited. Event IDs come from these results, never guesses.",

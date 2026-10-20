@@ -67,7 +67,8 @@ func (s *Service) scheduleNotifications(ctx context.Context) error {
 }
 
 func notificationDenied(err error) bool {
-	return errors.Is(err, payments.ErrDenied) || errors.Is(err, payments.ErrUnavailable) ||
+	return errors.Is(err, db.ErrKnowledgeDenied) || errors.Is(err, payments.ErrDenied) ||
+		errors.Is(err, payments.ErrUnavailable) ||
 		errors.Is(err, identity.ErrDenied) ||
 		errors.Is(err, identity.ErrConflict) ||
 		errors.Is(err, pgx.ErrNoRows)

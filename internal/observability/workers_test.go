@@ -21,7 +21,7 @@ func TestWorkerDurationMetricsBoundLabelsAndRecordSecondsWithCancelledContext(t 
 	telemetry, err := observability.New(t.Context(), observability.Options{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, telemetry.Shutdown(context.Background())) })
-	for _, kind := range []string{"shuttle_task", "zinusya_payment_notification", "zinusya_pair_notification", "zinusya_order_notification", "zinusya_avatar_delivery", "zinusya_massage_reminder", "zinusya_massage_specialist_notice"} {
+	for _, kind := range []string{"shuttle_task", "zinusya_payment_notification", "zinusya_pair_notification", "zinusya_order_notification", "zinusya_knowledge_notification", "zinusya_avatar_delivery", "zinusya_massage_reminder", "zinusya_massage_specialist_notice"} {
 		for _, outcome := range []string{"returned", "snoozed", "cancelled", "error"} {
 			telemetry.RecordWorkerDuration(t.Context(), kind, outcome, 250*time.Millisecond)
 		}
@@ -41,7 +41,7 @@ func TestWorkerDurationMetricsBoundLabelsAndRecordSecondsWithCancelledContext(t 
 	telemetry.MetricsHandler().ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	require.Equal(t, http.StatusOK, w.Code)
 	body := w.Body.String()
-	for _, kind := range []string{"shuttle_task", "zinusya_payment_notification", "zinusya_pair_notification", "zinusya_order_notification", "zinusya_avatar_delivery", "zinusya_massage_reminder", "zinusya_massage_specialist_notice"} {
+	for _, kind := range []string{"shuttle_task", "zinusya_payment_notification", "zinusya_pair_notification", "zinusya_order_notification", "zinusya_knowledge_notification", "zinusya_avatar_delivery", "zinusya_massage_reminder", "zinusya_massage_specialist_notice"} {
 		for _, outcome := range []string{"returned", "snoozed", "cancelled", "error"} {
 			count, sum := 1, "0.25"
 			if kind == "shuttle_task" && outcome == "error" {
@@ -58,7 +58,7 @@ func TestWorkerDurationMetricsBoundLabelsAndRecordSecondsWithCancelledContext(t 
 	}
 	require.Contains(t, body, `zinusya_worker_attempt_duration_seconds_count{kind="other",outcome="other"} 100`)
 	require.Contains(t, body, `le="0.25"`)
-	require.Equal(t, 29, strings.Count(body, "\nzinusya_worker_attempt_duration_seconds_count{"))
+	require.Equal(t, 33, strings.Count(body, "\nzinusya_worker_attempt_duration_seconds_count{"))
 	require.NotContains(t, body, "private-")
 	require.Equal(t, globalTrace, otel.GetTracerProvider())
 	require.Equal(t, globalMeter, otel.GetMeterProvider())

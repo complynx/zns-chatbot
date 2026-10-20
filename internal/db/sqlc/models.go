@@ -272,6 +272,30 @@ type ShuttleKnowledgeModerator struct {
 	ChangedAt      pgtype.Timestamptz `json:"changed_at"`
 }
 
+type ShuttleKnowledgeNotice struct {
+	ID             uuid.UUID          `json:"id"`
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	SuggestionID   uuid.UUID          `json:"suggestion_id"`
+	RecipientID    uuid.UUID          `json:"recipient_id"`
+	Kind           string             `json:"kind"`
+	State          string             `json:"state"`
+	Version        int64              `json:"version"`
+	AttemptID      pgtype.UUID        `json:"attempt_id"`
+	Payload        []byte             `json:"payload"`
+	Receipt        []byte             `json:"receipt"`
+	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type ShuttleKnowledgeNoticeCandidate struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	SuggestionID   uuid.UUID `json:"suggestion_id"`
+	RecipientID    uuid.UUID `json:"recipient_id"`
+	Kind           string    `json:"kind"`
+}
+
 type ShuttleKnowledgeOperation struct {
 	BotID          int64              `json:"bot_id"`
 	OrganizationID string             `json:"organization_id"`

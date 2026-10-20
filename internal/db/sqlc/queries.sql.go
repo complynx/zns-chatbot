@@ -355,6 +355,31 @@ func (q *Queries) BlockDeliverySuffix(ctx context.Context, arg BlockDeliverySuff
 	return err
 }
 
+const blockKnowledgeNotification = `-- name: BlockKnowledgeNotification :execrows
+UPDATE shuttle_knowledge_notices SET state='delivery_blocked',version=version+1
+WHERE id=$1 AND bot_id=$2 AND organization_id=$3 AND version=$4 AND state IN ('pending','retryable')
+`
+
+type BlockKnowledgeNotificationParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Version        int64     `json:"version"`
+}
+
+func (q *Queries) BlockKnowledgeNotification(ctx context.Context, arg BlockKnowledgeNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, blockKnowledgeNotification,
+		arg.ID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Version,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const blockMassageReminder = `-- name: BlockMassageReminder :execrows
 UPDATE shuttle_massage_reminders SET state='delivery_blocked',version=version+1
 WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
@@ -1354,6 +1379,31 @@ func (q *Queries) EnsureConversation(ctx context.Context, arg EnsureConversation
 	return i, err
 }
 
+const ensureKnowledgeNotifications = `-- name: EnsureKnowledgeNotifications :execrows
+INSERT INTO shuttle_knowledge_notices(bot_id,organization_id,suggestion_id,recipient_id,kind)
+SELECT c.bot_id,c.organization_id,c.suggestion_id,c.recipient_id,c.kind
+FROM shuttle_knowledge_notice_candidates c
+WHERE c.bot_id=$1 AND c.organization_id=$2
+AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_notices n WHERE n.bot_id=c.bot_id
+ AND n.organization_id=c.organization_id AND n.suggestion_id=c.suggestion_id
+ AND n.recipient_id=c.recipient_id AND n.kind=c.kind)
+ORDER BY c.suggestion_id,c.recipient_id LIMIT 100
+ON CONFLICT(bot_id,organization_id,suggestion_id,recipient_id,kind) DO NOTHING
+`
+
+type EnsureKnowledgeNotificationsParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func (q *Queries) EnsureKnowledgeNotifications(ctx context.Context, arg EnsureKnowledgeNotificationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, ensureKnowledgeNotifications, arg.BotID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const ensureTelegramUser = `-- name: EnsureTelegramUser :one
 INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile) VALUES($1,$2,$3,$4)
 ON CONFLICT(bot_id,tg_user_id) DO UPDATE SET tg_user_id=shuttle_users.tg_user_id RETURNING id, bot_id, tg_user_id, profile, zitadel_subject, zitadel_org, revoked
@@ -1585,6 +1635,34 @@ func (q *Queries) FinishDelivery(ctx context.Context, arg FinishDeliveryParams) 
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const finishKnowledgeNotification = `-- name: FinishKnowledgeNotification :execrows
+UPDATE shuttle_knowledge_notices SET state=$3,version=version+1,receipt=$4,
+next_attempt_at=clock_timestamp()+$5::bigint*interval '1 millisecond'
+WHERE id=$1 AND attempt_id=$2 AND state='send_inflight'
+`
+
+type FinishKnowledgeNotificationParams struct {
+	ID        uuid.UUID   `json:"id"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	State     string      `json:"state"`
+	Receipt   []byte      `json:"receipt"`
+	DelayMs   int64       `json:"delay_ms"`
+}
+
+func (q *Queries) FinishKnowledgeNotification(ctx context.Context, arg FinishKnowledgeNotificationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finishKnowledgeNotification,
+		arg.ID,
+		arg.AttemptID,
+		arg.State,
+		arg.Receipt,
+		arg.DelayMs,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const finishMassageReminder = `-- name: FinishMassageReminder :execrows
@@ -2265,6 +2343,47 @@ func (q *Queries) GetHistoryPreparation(ctx context.Context, arg GetHistoryPrepa
 		&i.RequestHash,
 		&i.ExpiresAt,
 		&i.Unexpired,
+	)
+	return i, err
+}
+
+const getKnowledgeNotification = `-- name: GetKnowledgeNotification :one
+SELECT n.id, n.bot_id, n.organization_id, n.suggestion_id, n.recipient_id, n.kind, n.state, n.version, n.attempt_id, n.payload, n.receipt, n.next_attempt_at, n.created_at,s.article_id,s.event_id FROM shuttle_knowledge_notices n
+JOIN shuttle_knowledge_suggestions s ON s.id=n.suggestion_id AND s.bot_id=n.bot_id AND s.organization_id=n.organization_id
+WHERE n.id=$1 AND n.bot_id=$2 AND n.organization_id=$3
+`
+
+type GetKnowledgeNotificationParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+type GetKnowledgeNotificationRow struct {
+	ShuttleKnowledgeNotice ShuttleKnowledgeNotice `json:"shuttle_knowledge_notice"`
+	ArticleID              uuid.UUID              `json:"article_id"`
+	EventID                pgtype.UUID            `json:"event_id"`
+}
+
+func (q *Queries) GetKnowledgeNotification(ctx context.Context, arg GetKnowledgeNotificationParams) (GetKnowledgeNotificationRow, error) {
+	row := q.db.QueryRow(ctx, getKnowledgeNotification, arg.ID, arg.BotID, arg.OrganizationID)
+	var i GetKnowledgeNotificationRow
+	err := row.Scan(
+		&i.ShuttleKnowledgeNotice.ID,
+		&i.ShuttleKnowledgeNotice.BotID,
+		&i.ShuttleKnowledgeNotice.OrganizationID,
+		&i.ShuttleKnowledgeNotice.SuggestionID,
+		&i.ShuttleKnowledgeNotice.RecipientID,
+		&i.ShuttleKnowledgeNotice.Kind,
+		&i.ShuttleKnowledgeNotice.State,
+		&i.ShuttleKnowledgeNotice.Version,
+		&i.ShuttleKnowledgeNotice.AttemptID,
+		&i.ShuttleKnowledgeNotice.Payload,
+		&i.ShuttleKnowledgeNotice.Receipt,
+		&i.ShuttleKnowledgeNotice.NextAttemptAt,
+		&i.ShuttleKnowledgeNotice.CreatedAt,
+		&i.ArticleID,
+		&i.EventID,
 	)
 	return i, err
 }
@@ -6298,6 +6417,35 @@ func (q *Queries) KnowledgeEventArchived(ctx context.Context, arg KnowledgeEvent
 	return archived, err
 }
 
+const knowledgeNotificationRecipient = `-- name: KnowledgeNotificationRecipient :one
+SELECT u.id, u.bot_id, u.tg_user_id, u.profile, u.zitadel_subject, u.zitadel_org, u.revoked FROM shuttle_knowledge_notices n
+JOIN shuttle_knowledge_notice_candidates c ON c.bot_id=n.bot_id AND c.organization_id=n.organization_id
+AND c.suggestion_id=n.suggestion_id AND c.recipient_id=n.recipient_id AND c.kind=n.kind
+JOIN shuttle_users u ON u.id=n.recipient_id
+WHERE n.id=$1 AND n.bot_id=$2 AND n.organization_id=$3
+`
+
+type KnowledgeNotificationRecipientParams struct {
+	ID             uuid.UUID `json:"id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+}
+
+func (q *Queries) KnowledgeNotificationRecipient(ctx context.Context, arg KnowledgeNotificationRecipientParams) (ShuttleUser, error) {
+	row := q.db.QueryRow(ctx, knowledgeNotificationRecipient, arg.ID, arg.BotID, arg.OrganizationID)
+	var i ShuttleUser
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.TgUserID,
+		&i.Profile,
+		&i.ZitadelSubject,
+		&i.ZitadelOrg,
+		&i.Revoked,
+	)
+	return i, err
+}
+
 const knowledgeOnlyArchiveGap = `-- name: KnowledgeOnlyArchiveGap :one
 SELECT NOT EXISTS(SELECT 1 FROM shuttle_knowledge_revisions r WHERE r.bot_id=$1 AND r.organization_id=$2 AND r.article_id=$3
 AND r.revision>$4::bigint AND r.change_kind<>'archive') AS unchanged
@@ -7335,6 +7483,69 @@ func (q *Queries) ListKnowledgeModerators(ctx context.Context, arg ListKnowledge
 			&i.Version,
 			&i.ChangedBy,
 			&i.ChangedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKnowledgeNotifications = `-- name: ListKnowledgeNotifications :many
+SELECT id,suggestion_id,recipient_id,kind,state,version,next_attempt_at,created_at
+FROM shuttle_knowledge_notices WHERE bot_id=$1 AND organization_id=$2
+AND ($3::boolean OR recipient_id=$4)
+AND id>$5::uuid ORDER BY id LIMIT $6
+`
+
+type ListKnowledgeNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	GlobalAdmin    bool      `json:"global_admin"`
+	UserID         uuid.UUID `json:"user_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+	PageLimit      int32     `json:"page_limit"`
+}
+
+type ListKnowledgeNotificationsRow struct {
+	ID            uuid.UUID          `json:"id"`
+	SuggestionID  uuid.UUID          `json:"suggestion_id"`
+	RecipientID   uuid.UUID          `json:"recipient_id"`
+	Kind          string             `json:"kind"`
+	State         string             `json:"state"`
+	Version       int64              `json:"version"`
+	NextAttemptAt pgtype.Timestamptz `json:"next_attempt_at"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListKnowledgeNotifications(ctx context.Context, arg ListKnowledgeNotificationsParams) ([]ListKnowledgeNotificationsRow, error) {
+	rows, err := q.db.Query(ctx, listKnowledgeNotifications,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.GlobalAdmin,
+		arg.UserID,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListKnowledgeNotificationsRow
+	for rows.Next() {
+		var i ListKnowledgeNotificationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SuggestionID,
+			&i.RecipientID,
+			&i.Kind,
+			&i.State,
+			&i.Version,
+			&i.NextAttemptAt,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -12720,6 +12931,44 @@ func (q *Queries) ReadyAvatarDeliveries(ctx context.Context, arg ReadyAvatarDeli
 	return items, nil
 }
 
+const readyKnowledgeNotifications = `-- name: ReadyKnowledgeNotifications :many
+SELECT id,version FROM shuttle_knowledge_notices
+WHERE bot_id=$1 AND organization_id=$2 AND state IN ('pending','retryable')
+AND next_attempt_at<=clock_timestamp() AND id>$3::uuid
+ORDER BY id LIMIT 100
+`
+
+type ReadyKnowledgeNotificationsParams struct {
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	AfterID        uuid.UUID `json:"after_id"`
+}
+
+type ReadyKnowledgeNotificationsRow struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+}
+
+func (q *Queries) ReadyKnowledgeNotifications(ctx context.Context, arg ReadyKnowledgeNotificationsParams) ([]ReadyKnowledgeNotificationsRow, error) {
+	rows, err := q.db.Query(ctx, readyKnowledgeNotifications, arg.BotID, arg.OrganizationID, arg.AfterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReadyKnowledgeNotificationsRow
+	for rows.Next() {
+		var i ReadyKnowledgeNotificationsRow
+		if err := rows.Scan(&i.ID, &i.Version); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const readyMassageReminders = `-- name: ReadyMassageReminders :many
 SELECT n.id,n.version FROM shuttle_massage_reminders n
 JOIN shuttle_massage_bookings b ON b.id=n.booking_id JOIN shuttle_events e ON e.id=b.event_id
@@ -13450,6 +13699,24 @@ func (q *Queries) RecoverAvatarDeliveries(ctx context.Context, arg RecoverAvatar
 	return result.RowsAffected(), nil
 }
 
+const recoverKnowledgeNotifications = `-- name: RecoverKnowledgeNotifications :execrows
+UPDATE shuttle_knowledge_notices SET state='delivery_unknown',version=version+1
+WHERE bot_id=$1 AND organization_id=$2 AND state='send_inflight'
+`
+
+type RecoverKnowledgeNotificationsParams struct {
+	BotID          int64  `json:"bot_id"`
+	OrganizationID string `json:"organization_id"`
+}
+
+func (q *Queries) RecoverKnowledgeNotifications(ctx context.Context, arg RecoverKnowledgeNotificationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recoverKnowledgeNotifications, arg.BotID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recoverMassageReminders = `-- name: RecoverMassageReminders :execrows
 UPDATE shuttle_massage_reminders n SET state='delivery_unknown',version=n.version+1
 FROM shuttle_massage_bookings b,shuttle_events e
@@ -13671,6 +13938,44 @@ func (q *Queries) ReserveDelivery(ctx context.Context, arg ReserveDeliveryParams
 		&i.State,
 		&i.AttemptID,
 		&i.Receipt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const reserveKnowledgeNotification = `-- name: ReserveKnowledgeNotification :one
+UPDATE shuttle_knowledge_notices SET state='send_inflight',version=version+1,attempt_id=$3,payload=$4
+WHERE id=$1 AND version=$2 AND state IN ('pending','retryable') RETURNING id, bot_id, organization_id, suggestion_id, recipient_id, kind, state, version, attempt_id, payload, receipt, next_attempt_at, created_at
+`
+
+type ReserveKnowledgeNotificationParams struct {
+	ID        uuid.UUID   `json:"id"`
+	Version   int64       `json:"version"`
+	AttemptID pgtype.UUID `json:"attempt_id"`
+	Payload   []byte      `json:"payload"`
+}
+
+func (q *Queries) ReserveKnowledgeNotification(ctx context.Context, arg ReserveKnowledgeNotificationParams) (ShuttleKnowledgeNotice, error) {
+	row := q.db.QueryRow(ctx, reserveKnowledgeNotification,
+		arg.ID,
+		arg.Version,
+		arg.AttemptID,
+		arg.Payload,
+	)
+	var i ShuttleKnowledgeNotice
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.SuggestionID,
+		&i.RecipientID,
+		&i.Kind,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
 		&i.CreatedAt,
 	)
 	return i, err

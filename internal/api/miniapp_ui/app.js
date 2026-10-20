@@ -96,6 +96,7 @@
   let accountAfter;
   let accountNextCursor;
   const knowledgeUI = window.createZinusyaKnowledge?.({
+ suggestionID: launchTarget === "knowledge" ? (window.location?.hash || "").split(/[?&#]/).find(part => part.startsWith("suggestion="))?.slice("suggestion=".length) : undefined,
     request: (path, method, body) => request(path, method, body, session.token),
     setBusy, denied: detailsDenied
   });

@@ -268,7 +268,7 @@ func boundedComponent(s string) string {
 		"deliver",
 		"notifications",
 		"pair_notifications",
-		"order_notifications", "avatar_deliveries",
+		"order_notifications", "knowledge_notifications", "avatar_deliveries",
 		"massage_reminders",
 		"massage_specialist_notices",
 		"execute",

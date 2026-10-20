@@ -66,6 +66,7 @@ type Service struct {
 	notificationCursor            uuid.UUID
 	pairExpiryCursor              uuid.UUID
 	knowledgeArchiveCursor        uuid.UUID
+	knowledgeNotificationCursor   uuid.UUID
 	pairNotificationCursor        uuid.UUID
 	avatarDeliveryCursor          uuid.UUID
 	orderNotificationCursor       uuid.UUID
@@ -177,6 +178,7 @@ func New(
 	river.AddWorker(workers, &notificationWorker{service: s})
 	river.AddWorker(workers, &pairNotificationWorker{service: s})
 	river.AddWorker(workers, &orderNotificationWorker{service: s})
+	river.AddWorker(workers, &knowledgeNotificationWorker{service: s})
 	river.AddWorker(workers, &avatarDeliveryWorker{service: s})
 	river.AddWorker(workers, &massageReminderWorker{service: s})
 	river.AddWorker(workers, &massageSpecialistNoticeWorker{service: s})
@@ -207,7 +209,7 @@ func (s *Service) recoverBusinessNotifications(ctx context.Context) error {
 	scope := s.notificationScope()
 	for _, recoverNotices := range []func(context.Context, db.EventScope) error{
 		s.store.RecoverNotifications, s.store.RecoverPairNotifications, s.store.RecoverOrderNotifications, s.store.RecoverAvatarDeliveries,
-		s.store.RecoverMassageReminders, s.store.RecoverMassageSpecialistNotifications,
+		s.store.RecoverMassageReminders, s.store.RecoverMassageSpecialistNotifications, s.store.RecoverKnowledgeNotifications,
 	} {
 		if err := recoverNotices(ctx, scope); err != nil {
 			return err
@@ -312,6 +314,7 @@ func (s *Service) watchLock(ctx context.Context, conn *pgxpool.Conn, done chan s
 			}
 			s.repairPairNotifications(ctx)
 			s.repairOrderNotifications(ctx)
+			s.repairKnowledgeNotifications(ctx)
 			s.repairAvatarDeliveries(ctx)
 			s.repairMassageReminders(ctx)
 			s.repairMassageSpecialistNotices(ctx)

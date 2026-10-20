@@ -35,8 +35,8 @@ func TestQueueMetricsFixedPairsAgeAndFailureRecovery(t *testing.T) {
 		return rows, nil
 	}, func() time.Time { return now }))
 	body := taskMetricsBody(t, telemetry)
-	require.Equal(t, 21, strings.Count(body, "\nzinusya_queue_due{"))
-	require.Equal(t, 21, strings.Count(body, "\nzinusya_queue_oldest_scheduled_age_seconds{"))
+	require.Equal(t, 24, strings.Count(body, "\nzinusya_queue_due{"))
+	require.Equal(t, 24, strings.Count(body, "\nzinusya_queue_oldest_scheduled_age_seconds{"))
 	require.Contains(t, body, `zinusya_queue_due{kind="shuttle_task",state="available"} 2`)
 	require.Contains(t, body, `zinusya_queue_due{kind="zinusya_pair_notification",state="available"} 1`)
 	require.Contains(t, body, `zinusya_queue_due{kind="zinusya_payment_notification",state="retryable"} 0`)
@@ -66,7 +66,7 @@ func TestQueueMetricsFixedPairsAgeAndFailureRecovery(t *testing.T) {
 	rows = nil
 	body = taskMetricsBody(t, telemetry)
 	require.Contains(t, body, "\nzinusya_queue_collection_success 1\n")
-	require.Equal(t, 21, strings.Count(body, "\nzinusya_queue_due{"))
+	require.Equal(t, 24, strings.Count(body, "\nzinusya_queue_due{"))
 	require.NotContains(t, body, "} 99")
 	require.Equal(t, 3, calls)
 }

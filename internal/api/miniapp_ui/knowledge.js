@@ -310,7 +310,7 @@ window.createZinusyaKnowledge = env => {
         const raw = sessionStorage.getItem(key());
         if (raw) { if (bytes(raw) > 1024 * 1024) throw { local: "storage" }; pending = JSON.parse(raw); if (pending.owner !== owner || !["suggest", "edit", "review", "set_moderator"].includes(pending.kind) || !uuid(pending.operation_id) || !pending.arguments || !["preparing", "locating", "prepared", "confirming", "expired"].includes(pending.phase) || (!["preparing", "locating"].includes(pending.phase) && (!uuid(pending.proposal_id) || !Number.isFinite(Date.parse(pending.expires_at))))) throw { local: "storage" }; }
       } catch { blocked = true; status("storage"); }
-      try { await overview(e); await capabilitiesFor(e); await list(e); if (pending && !blocked) { await recover(e); if (pending && !terminalExpired && previewReady) status("restored"); } }
+      try { await overview(e); await capabilitiesFor(e); await list(e); if (pending && !blocked) { await recover(e); if (pending && !terminalExpired && previewReady) status("restored"); } if (!pending && !blocked && uuid(env.suggestionID)) await readSuggestion(e, env.suggestionID); }
       catch (error) { if (e === epoch) failure(error); } controls();
     }
   };
