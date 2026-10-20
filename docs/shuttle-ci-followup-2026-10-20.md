@@ -133,3 +133,34 @@ Increase only the overall job limit to60 minutes. Existing ten-minute package an
 integration-batch limits, test selection, race detector, checks and failure
 handling remain unchanged. A fresh full remote pass is required; neither this
 cancelled run nor local component results open the primary installation gate.
+
+## Following run exposes a revocation-status assertion
+
+The [run atd625be69](https://github.com/complynx/zns-chatbot/actions/runs/39470207733)
+finishes with failure:813 of814 integration roots pass. The remaining root is
+`TestUnknownFileSizeUsesCloudRefusalWithoutExposingForeignMetadata`. Its direct
+content GET after local revocation returns401 where the test requires403. Later
+UI, tool, SQL, lint and build steps are skipped; this is not full CI acceptance.
+The original log and previous failed canonical receipt remain archived locally.
+
+The implementation can reject a verification that overlaps cache invalidation.
+A controlled local IAM probe holds the first introspection response across
+`Invalidate`: that `Verify` returns `ErrDenied`, and a fresh verification of the
+same still-valid synthetic token succeeds. The API maps identity denial to401;
+a request that reaches the revoked local-account check instead receives403.
+This proves the permitted outcome, not the exact interleaving in the failed CI.
+The temporary probe source and log are retained; its owned worktree file is removed.
+
+Only the two post-revocation file assertions now accept401 or403. Foreign-owner404,
+known/cloud oversize413, unavailable503 and exact Telegram read counts remain
+strict. Production authorization, invalidation and file-reading code are unchanged.
+The bounded Linux/PostgreSQL/race follow-up passes all three existing file-limit
+roots five times each:15 executions, no failures or skips, exit0 and no OOM.
+It uses frozen source, keeps exact Telegram read-count assertions and has clean
+independent reviews of the test change and QA controller. Remaining fixture state
+is archived and fully decoded; both owned containers, volume and network are
+removed. The source and primary stand remain preserved. This is not the full
+integration suite or a restored-database test. A fresh full remote pass is still
+required before the prepared primary installation. Local follow-up evidence is in
+`.cache/shuttle-work/ci-file-denial-pg-v1/`; controlled IAM proof is in
+`.cache/shuttle-work/ci-auth-denial-race-v1/`.

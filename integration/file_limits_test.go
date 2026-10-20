@@ -39,7 +39,7 @@ func TestKnownOversizeFileRejectsReadingBeforeTelegramIO(t *testing.T) {
 	id := sizedFileID(t, h, 981, files.MaxReadBytes+1)
 	require.Equal(t, files.MaxReadBytes+1, fileInfo(t, h, owner, id).SizeBytes)
 
-	assertReads := func(token string, expected int) {
+	assertReads := func(token string, allowed ...int) {
 		t.Helper()
 		code, _ := adminRequest(
 			t,
@@ -53,7 +53,7 @@ func TestKnownOversizeFileRejectsReadingBeforeTelegramIO(t *testing.T) {
 				"arguments":        map[string]any{"external_id": id},
 			},
 		)
-		require.Equal(t, expected, code)
+		require.Contains(t, allowed, code)
 		server := httptest.NewServer(h.endpoint.InternalHandler())
 		defer server.Close()
 		req, requestErr := http.NewRequest(http.MethodGet, server.URL+"/internal/files/"+id.String()+"/content", nil)
@@ -62,7 +62,7 @@ func TestKnownOversizeFileRejectsReadingBeforeTelegramIO(t *testing.T) {
 		response, requestErr := server.Client().Do(req)
 		require.NoError(t, requestErr)
 		response.Body.Close()
-		require.Equal(t, expected, response.StatusCode)
+		require.Contains(t, allowed, response.StatusCode)
 		p.mu.Lock()
 		gets := p.fileGets
 		p.mu.Unlock()
@@ -72,7 +72,8 @@ func TestKnownOversizeFileRejectsReadingBeforeTelegramIO(t *testing.T) {
 	assertReads(foreign, http.StatusNotFound)
 	_, err := h.store.SetUserRevoked(context.Background(), ownerID, "fixture")
 	require.NoError(t, err)
-	assertReads(owner, http.StatusForbidden)
+	// In-flight cache invalidation can reject identity before the local account check.
+	assertReads(owner, http.StatusForbidden, http.StatusUnauthorized)
 }
 
 func TestFileAtDeclaredReadLimitStillUsesBoundedReader(t *testing.T) {
@@ -116,32 +117,33 @@ func TestUnknownFileSizeUsesCloudRefusalWithoutExposingForeignMetadata(t *testin
 	require.Zero(t, fileInfo(t, h, owner, id).SizeBytes)
 	server := httptest.NewServer(h.endpoint.InternalHandler())
 	t.Cleanup(server.Close)
-	assertReads := func(token string, expected, expectedGets int) {
+	assertReads := func(token string, expectedGets int, allowed ...int) {
 		t.Helper()
 		code, _ := adminRequest(t, h, token, http.MethodPost, "/internal/agent/files/fetch", map[string]any{
 			"protocol_version": 1, "operation_id": "unknown-size",
 			"arguments": map[string]any{"external_id": id},
 		})
-		require.Equal(t, expected, code)
+		require.Contains(t, allowed, code)
 		req, err := http.NewRequest(http.MethodGet, server.URL+"/internal/files/"+id.String()+"/content", nil)
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer "+token)
 		response, err := server.Client().Do(req)
 		require.NoError(t, err)
 		response.Body.Close()
-		require.Equal(t, expected, response.StatusCode)
+		require.Contains(t, allowed, response.StatusCode)
 		p.mu.Lock()
 		gets := p.fileGets
 		p.mu.Unlock()
 		require.Equal(t, expectedGets, gets)
 	}
-	assertReads(foreign, http.StatusNotFound, 0)
-	assertReads(owner, http.StatusRequestEntityTooLarge, 2)
+	assertReads(foreign, 0, http.StatusNotFound)
+	assertReads(owner, 2, http.StatusRequestEntityTooLarge)
 	p.mu.Lock()
 	p.fileGone = true
 	p.mu.Unlock()
-	assertReads(owner, http.StatusServiceUnavailable, 4)
+	assertReads(owner, 4, http.StatusServiceUnavailable)
 	_, err := h.store.SetUserRevoked(t.Context(), ownerID, "fixture")
 	require.NoError(t, err)
-	assertReads(owner, http.StatusForbidden, 4)
+	// In-flight cache invalidation can reject identity before the local account check.
+	assertReads(owner, 4, http.StatusForbidden, http.StatusUnauthorized)
 }
