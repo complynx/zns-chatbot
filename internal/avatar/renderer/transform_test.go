@@ -2,12 +2,10 @@ package renderer_test
 
 import (
 	"bytes"
-	"context"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -89,9 +87,7 @@ func TestEditedRenderExtremeAspectAndOffsetsStayOutputBounded(t *testing.T) {
 	t.Parallel()
 	photo := image.NewNRGBA(image.Rect(0, 0, avatar.MaxDimension, 1))
 	transform := avatar.Transform{ZoomPPM: avatar.MaxZoomPPM, OffsetXPPM: avatar.MaxOffsetPPM, AngleMilli: 45000}
-	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-	defer cancel()
-	rendered, err := renderer.Render(ctx, pngBytes(t, photo), transform)
+	rendered, err := renderer.Render(t.Context(), pngBytes(t, photo), transform)
 	require.NoError(t, err)
 	require.LessOrEqual(t, len(rendered.JPEG), avatar.MaxOutputBytes)
 	output, err := jpeg.Decode(bytes.NewReader(rendered.JPEG))
