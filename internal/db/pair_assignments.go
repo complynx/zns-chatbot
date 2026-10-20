@@ -86,13 +86,22 @@ type PairAssignment struct {
 	ExpectedFollowerVersion int64     `json:"expected_follower_version"`
 }
 
+// PairAssignmentDisplayTerms preserves human-facing event and timing terms.
+// Older proposals keep their original description when this snapshot is absent.
+type PairAssignmentDisplayTerms struct {
+	EventName            string    `json:"event_name"`
+	PaymentWindowSeconds int32     `json:"payment_window_seconds"`
+	PaymentClosesAt      time.Time `json:"payment_closes_at"`
+}
+
 type PairAssignmentPreparation struct {
-	Timezone    string            `json:"timezone,omitempty"`
-	Quotes      []AssignmentQuote `json:"quotes,omitempty"`
-	ID          uuid.UUID         `json:"proposal_id"`
-	Arguments   PairAssignment    `json:"arguments"`
-	Description string            `json:"description"`
-	ExpiresAt   time.Time         `json:"expires_at"`
+	DisplayTerms *PairAssignmentDisplayTerms `json:"display_terms,omitempty"`
+	Timezone     string                      `json:"timezone,omitempty"`
+	Quotes       []AssignmentQuote           `json:"quotes,omitempty"`
+	ID           uuid.UUID                   `json:"proposal_id"`
+	Arguments    PairAssignment              `json:"arguments"`
+	Description  string                      `json:"description"`
+	ExpiresAt    time.Time                   `json:"expires_at"`
 }
 
 // PairAssignmentResult contains both owner passes and is restricted to assignment administrators.
@@ -300,11 +309,11 @@ func (s *Store) PreparePairAssignment(
 	operation string,
 	args PairAssignment,
 ) (PairAssignmentPreparation, error) {
-	return s.preparePairAssignment(ctx, scope, operation, args, uuid.Nil)
+	return s.preparePairAssignment(ctx, scope, operation, args, uuid.Nil, nil)
 }
 
 func (s *Store) preparePairAssignment(ctx context.Context, scope PaymentScope, operation string,
-	args PairAssignment, resume uuid.UUID,
+	args PairAssignment, resume uuid.UUID, session *MiniAppPairAssignmentSession,
 ) (PairAssignmentPreparation, error) {
 	if !pairAssignmentValid(scope, operation, args) {
 		return PairAssignmentPreparation{}, registrations.ErrInvalid
@@ -323,6 +332,9 @@ func (s *Store) preparePairAssignment(ctx context.Context, scope PaymentScope, o
 	if err = lockPairAssignment(ctx, q, scope, operation, args.EventID); err != nil {
 		return PairAssignmentPreparation{}, err
 	}
+	if err = authorizePairAssignmentMiniApp(ctx, q, scope, session); err != nil {
+		return PairAssignmentPreparation{}, err
+	}
 	prior, err := q.GetPairPreparation(
 		ctx,
 		sqlc.GetPairPreparationParams{
@@ -333,7 +345,11 @@ func (s *Store) preparePairAssignment(ctx context.Context, scope PaymentScope, o
 		},
 	)
 	if err == nil {
-		return replayPairAssignmentPreparation(ctx, q, prior, hash[:], resume)
+		result, replayErr := replayPairAssignmentPreparation(ctx, q, prior, hash[:], resume)
+		if replayErr != nil {
+			return PairAssignmentPreparation{}, replayErr
+		}
+		return finishPairAssignmentPreparation(ctx, tx, q, scope, operation, result, session)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return PairAssignmentPreparation{}, err
@@ -346,7 +362,7 @@ func (s *Store) preparePairAssignment(ctx context.Context, scope PaymentScope, o
 		if adoptErr != nil {
 			return PairAssignmentPreparation{}, adoptErr
 		}
-		return result, tx.Commit(ctx)
+		return finishPairAssignmentPreparation(ctx, tx, q, scope, operation, result, session)
 	}
 	c, err := checkPairAssignment(ctx, q, scope, args, pgtype.Timestamptz{})
 	if err != nil {
@@ -361,6 +377,11 @@ func (s *Store) preparePairAssignment(ctx context.Context, scope PaymentScope, o
 		return PairAssignmentPreparation{}, err
 	}
 	result := PairAssignmentPreparation{
+		DisplayTerms: &PairAssignmentDisplayTerms{
+			EventName:            c.Event.Document.Name,
+			PaymentWindowSeconds: c.Event.Document.Registration.PaymentWindowSeconds,
+			PaymentClosesAt:      c.Event.Document.Registration.ClosesAt.UTC(),
+		},
 		Timezone:    c.Event.Document.Timezone,
 		Quotes:      c.Quotes,
 		ID:          uuid.New(),
@@ -385,10 +406,10 @@ func (s *Store) preparePairAssignment(ctx context.Context, scope PaymentScope, o
 			Document:       document,
 		},
 	)
-	if err == nil {
-		err = tx.Commit(ctx)
+	if err != nil {
+		return PairAssignmentPreparation{}, err
 	}
-	return result, err
+	return finishPairAssignmentPreparation(ctx, tx, q, scope, operation, result, session)
 }
 
 func describePairAssignment(c pairAssignmentCandidate, args PairAssignment) (string, error) {
@@ -450,6 +471,12 @@ func (s *Store) ConfirmPairAssignment(
 	args PairAssignment,
 	proposalID uuid.UUID,
 ) (PairAssignmentResult, error) {
+	return s.confirmPairAssignment(ctx, scope, operation, args, proposalID, nil)
+}
+
+func (s *Store) confirmPairAssignment(ctx context.Context, scope PaymentScope, operation string,
+	args PairAssignment, proposalID uuid.UUID, session *MiniAppPairAssignmentSession,
+) (PairAssignmentResult, error) {
 	if !pairAssignmentValid(scope, operation, args) || proposalID == uuid.Nil {
 		return PairAssignmentResult{}, registrations.ErrInvalid
 	}
@@ -464,10 +491,11 @@ func (s *Store) ConfirmPairAssignment(
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := s.q.WithTx(tx)
-	prep, err := lockPairAssignmentConfirmation(ctx, q, scope, operation, args.EventID)
+	prep, err := lockPairAssignmentConfirmation(ctx, q, scope, operation, args.EventID, session)
 	if err != nil {
 		return PairAssignmentResult{}, err
 	}
+	transport := operation
 	operation = prep.OperationID
 	if prep.ProposalID != proposalID || !bytes.Equal(prep.RequestHash, hash[:]) {
 		return PairAssignmentResult{}, ErrConflict
@@ -486,8 +514,10 @@ func (s *Store) ConfirmPairAssignment(
 			return PairAssignmentResult{}, ErrConflict
 		}
 		var result PairAssignmentResult
-		err = json.Unmarshal(prior.Result, &result)
-		return result, err
+		if err = json.Unmarshal(prior.Result, &result); err != nil {
+			return PairAssignmentResult{}, err
+		}
+		return finishPairAssignmentConfirmation(ctx, tx, q, scope, transport, proposalID, result, session)
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return PairAssignmentResult{}, err
@@ -523,10 +553,10 @@ func (s *Store) ConfirmPairAssignment(
 			Result:         payload,
 		},
 	)
-	if err == nil {
-		err = tx.Commit(ctx)
+	if err != nil {
+		return PairAssignmentResult{}, err
 	}
-	return result, err
+	return finishPairAssignmentConfirmation(ctx, tx, q, scope, transport, proposalID, result, session)
 }
 
 // Both owner snapshots use the checked final instant inside the caller transaction.

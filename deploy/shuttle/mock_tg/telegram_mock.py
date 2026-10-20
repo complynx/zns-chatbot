@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import secrets
+import signal
 import sqlite3
 import ssl
 import threading
@@ -581,6 +582,11 @@ def make_server(config, host='0.0.0.0', port=8080, store=None, tls=False):
     return server
 
 
+def terminate(_signum, _frame):
+    # Linux PID1 needs an explicit handler; unwind the existing listener cleanup.
+    raise SystemExit(0)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', required=True)
@@ -593,6 +599,7 @@ def main():
         raise SystemExit('app_url must target the isolated shuttle service')
     if not config.get('qa_token') or not config.get('webhook_secret'):
         raise SystemExit('QA token and webhook secret are required')
+    signal.signal(signal.SIGTERM, terminate)
     store = Store(config)
     plain = make_server(config, store=store)
     secure = make_server(config, port=8443, store=store, tls=True)

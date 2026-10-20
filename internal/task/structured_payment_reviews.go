@@ -10,6 +10,9 @@ func structuredFormLabel(command string, ru bool) string {
 	if command == menuCommand || command == startCommand {
 		return structuredText(ru, "Open meals", "Открыть питание")
 	}
+	if command == paymentsCommand {
+		return structuredText(ru, "Open pass payment", "Открыть оплату пасса")
+	}
 	if command == pairsCommand {
 		return structuredText(ru, "Open pair invitations", "Открыть приглашения в пару")
 	}

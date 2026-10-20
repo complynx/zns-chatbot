@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/complynx/zns-chatbot/internal/db"
+	"github.com/complynx/zns-chatbot/internal/identity"
 	"github.com/complynx/zns-chatbot/internal/payments"
 )
 
@@ -76,7 +77,7 @@ func miniAppPaymentJSON(w http.ResponseWriter, result any) {
 
 func miniAppPaymentError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, db.ErrMiniAppDenied):
+	case errors.Is(err, db.ErrMiniAppDenied), errors.Is(err, identity.ErrDenied):
 		miniAppError(w, err)
 	case errors.Is(err, payments.ErrDenied), errors.Is(err, payments.ErrUnavailable):
 		miniAppHTTPError(w, http.StatusForbidden, "current event payment authority required")

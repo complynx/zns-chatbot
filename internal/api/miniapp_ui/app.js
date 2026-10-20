@@ -95,6 +95,10 @@
   let detailsBody;
   let accountAfter;
   let accountNextCursor;
+  const passPaymentsUI = window.createZinusyaPassPayments?.({
+    request: (path, method, body) => request(path, method, body, session.token),
+    setBusy, denied: detailsDenied, readProof
+  });
   const orderProofUI = window.createZinusyaOrderProof?.({
     request: (path, method, body) => request(path, method, body, session.token),
     setBusy, denied: detailsDenied, readProof
@@ -136,6 +140,10 @@
     setBusy, denied: detailsDenied
   });
   const massageAdminUI = window.createZinusyaMassageAdmin?.({
+    request: (path, method, body) => request(path, method, body, session.token),
+    setBusy, denied: detailsDenied
+  });
+  const pairAssignmentsUI = window.createZinusyaPairAssignments?.({
     request: (path, method, body) => request(path, method, body, session.token),
     setBusy, denied: detailsDenied
   });
@@ -187,6 +195,7 @@
     profileSaveLanguage.disabled = value || profileVersion === undefined || (!!pending && pending.kind !== "language");
     profileRefresh.disabled = value;
     detailsControls(value);
+    passPaymentsUI?.setLocked(value);
     orderProofUI?.setBusy(value);
     ordersUI?.setBusy(value);
     mealsUI?.setBusy(value);
@@ -199,9 +208,11 @@
     massageAdminUI?.setBusy(value);
     avatarAdminUI?.setBusy(value);
     assignmentsUI?.setBusy(value);
+    pairAssignmentsUI?.setBusy(value);
   }
 
   function clearAccount() {
+    passPaymentsUI?.clear();
     orderProofUI?.clear();
     ordersUI?.clear();
     mealsUI?.clear();
@@ -214,6 +225,7 @@
     massageAdminUI?.clear();
     avatarAdminUI?.clear();
     assignmentsUI?.clear();
+    pairAssignmentsUI?.clear();
     clearDetails();
     profileSection.hidden = true;
     profileVersion = undefined;
@@ -289,6 +301,7 @@
       await readProfile();
       await readAccount();
       if (session.token) await readDetails();
+      if (session.token) await passPaymentsUI?.start(account.user_id, language);
       if (session.token) await orderProofUI?.start(account.user_id, language);
       if (session.token) await ordersUI?.start(account.user_id, language);
       if (session.token) await mealsUI?.start(account.user_id, language);
@@ -301,8 +314,9 @@
       if (session.token) await massageAdminUI?.start(account.user_id, language);
       if (session.token) await avatarAdminUI?.start(account.user_id, language);
       if (session.token) await assignmentsUI?.start(account.user_id, language);
+      if (session.token) await pairAssignmentsUI?.start(account.user_id, language);
       // Restore the launch position after all modules reveal their content.
-      if (session.token && ["pairs", "avatars", "orders", "meals", "massage", "payment-review", "pass-assignments"].includes(launchTarget)) {
+      if (session.token && ["pass-payments", "pairs", "avatars", "orders", "meals", "massage", "payment-review", "pass-assignments", "pair-assignments"].includes(launchTarget)) {
         const section = document.getElementById(launchTarget);
         if (section && !section.hidden) section.scrollIntoView({ block: "start" });
       }
@@ -341,6 +355,7 @@
       profileVersion = p.version;
       language = p.bot_language === "en" || p.bot_language === "ru" ? p.bot_language : defaultLanguage;
       document.documentElement.lang = language;
+      passPaymentsUI?.setLanguage(language);
       orderProofUI?.setLanguage(language);
       ordersUI?.setLanguage(language);
       mealsUI?.setLanguage(language);
@@ -353,6 +368,7 @@
       massageAdminUI?.setLanguage(language);
       avatarAdminUI?.setLanguage(language);
       assignmentsUI?.setLanguage(language);
+      pairAssignmentsUI?.setLanguage(language);
       profileLabels();
       detailsLabels();
       name.textContent = p.full_name;
@@ -586,6 +602,12 @@
     } else if (item.pass) {
       const pass = item.pass;
       const balance = pass.balance;
+      if (passPaymentsUI && balance?.pass_id) {
+        const payments = textElement("button", language === "ru" ? "Подтверждения оплаты пасса" : "Pass payment evidence");
+        payments.type = "button";
+        payments.addEventListener("click", () => passPaymentsUI.show(item.event_id, balance.pass_id));
+        article.append(payments);
+      }
       const format = amount => money(amount, balance.currency_scale, balance.currency);
       const details = document.createElement("dl");
       for (const [label, value] of [[w.price, format(balance.price_minor)], [w.confirmed, format(balance.confirmed_minor)],
@@ -674,3 +696,4 @@
   window.Telegram?.WebApp?.ready();
   connect();
 })();
+

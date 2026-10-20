@@ -7,6 +7,7 @@
   <title>Зинуся</title>
   <link rel="stylesheet" href="./app.css">
   <script src="https://telegram.org/js/telegram-web-app.js?63" defer></script>
+  <script src="./pass-payments.js" defer></script>
   <script src="./order-proof.js" defer></script>
   <script src="./orders.js" defer></script>
   <script src="./meals.js" defer></script>
@@ -19,6 +20,7 @@
   <script src="./massage-staff.js" defer></script>
   <script src="./massage-admin.js" defer></script>
   <script src="./assignments.js" defer></script>
+  <script src="./pair-assignments.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
@@ -225,6 +227,23 @@
         <button id="orders-submitted-next" type="button" hidden>Next orders</button>
       </div>
     </section>
+    <section id="pass-payments" hidden aria-labelledby="pp-title">
+      <h1 id="pp-title">Pass payment evidence</h1>
+      <p id="pp-note"></p><p id="pp-status" role="status" aria-live="polite"></p>
+      <label for="pp-targets">Pass</label><select id="pp-targets"></select>
+      <div class="actions"><button id="pp-targets-first" type="button" hidden>First passes</button><button id="pp-targets-next" type="button" hidden>Next passes</button><button id="pp-recent" type="button">Recent form submissions</button></div>
+      <div id="pp-recent-list"></div><div id="pp-target"></div><div id="pp-receipt" aria-live="polite"></div>
+      <div id="pp-history"></div><button id="pp-history-next" type="button" hidden>More evidence</button>
+      <p id="pp-preview-info" role="status" aria-live="polite"></p>
+      <form id="pp-form">
+        <label id="pp-file-label" for="pp-file">Accepted Telegram file</label><select id="pp-file"></select>
+        <div class="actions"><button id="pp-files-first" type="button" hidden>First files</button><button id="pp-files-next" type="button" hidden>Next files</button><button id="pp-preview" type="button">Load selected file</button><a id="pp-download" download hidden>Download loaded file</a></div>
+        <label id="pp-amount-label" for="pp-amount">Reported amount</label><input id="pp-amount" type="text" inputmode="decimal" maxlength="24" autocomplete="off">
+        <label id="pp-purpose-label" for="pp-purpose">Purpose</label><select id="pp-purpose"><option value="">Choose…</option><option id="pp-initial" value="initial">Initial payment / deposit</option><option id="pp-top_up" value="top_up">Top-up</option></select>
+        <button id="pp-submit" type="submit">Share evidence for review</button>
+      </form>
+      <div class="actions"><button id="pp-reload" type="button">Reload pass and evidence</button><button id="pp-recover" type="button" hidden>Check earlier request</button><button id="pp-retry" type="button" hidden>Retry the exact same request</button></div>
+    </section>
     <section id="order-proof" hidden aria-labelledby="op-title">
       <h1 id="op-title">Order payment proof</h1>
       <p id="op-note">Send the file to this Telegram bot first, then select it here. Only an ambassador can confirm payment.</p>
@@ -407,6 +426,19 @@
       <div id="pa-receipt" aria-live="polite"></div><h2 id="pa-pending-title">Unfinished assignments</h2><div id="pa-pending"></div>
       <div class="actions"><button id="pa-reload" type="button">Reload unfinished assignments</button><button id="pa-recent" type="button">Recent form operations</button><button id="pa-first" type="button" hidden>First proposals</button><button id="pa-next" type="button" hidden>Next proposals</button></div>
     </section>
+    <section id="pair-assignments" hidden aria-labelledby="ppa-title">
+      <h1 id="ppa-title">Assign passes to a pair</h1><p id="ppa-note"></p><p id="ppa-status" role="status" aria-live="polite"></p>
+      <label id="ppa-event-label" for="ppa-event">Event</label><select id="ppa-event"></select>
+      <div class="actions"><button id="ppa-events-first" type="button">Refresh events</button><button id="ppa-events-next" type="button" hidden>Next events</button></div>
+      <label id="ppa-target-label" for="ppa-target">Pair</label><select id="ppa-target"></select>
+      <div class="actions"><button id="ppa-targets-first" type="button">Refresh pairs</button><button id="ppa-targets-next" type="button" hidden>Next pairs</button></div>
+      <button id="ppa-prepare" type="button">Review pair assignment</button><div id="ppa-preview"></div>
+      <label><input id="ppa-consent" type="checkbox" hidden><span id="ppa-consent-label" hidden>I approve this exact pair assignment and its terms</span></label>
+      <div class="actions"><button id="ppa-confirm" type="button" hidden>Assign both passes</button><button id="ppa-close" type="button" hidden>Close local preview</button><button id="ppa-recover" type="button" hidden>Check earlier request</button><button id="ppa-retry" type="button" hidden>Retry the same preparation</button></div>
+      <div id="ppa-receipt" aria-live="polite"></div><h2 id="ppa-pending-title">Unfinished assignments</h2><div id="ppa-pending"></div>
+      <div class="actions"><button id="ppa-reload" type="button">Reload unfinished assignments</button><button id="ppa-recent" type="button">Recent form operations</button><button id="ppa-first" type="button" hidden>First proposals</button><button id="ppa-next" type="button" hidden>Next proposals</button></div>
+    </section>
   </main>
 </body>
 </html>
+

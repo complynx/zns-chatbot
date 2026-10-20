@@ -148,6 +148,7 @@ func (s *Service) notifyMassage(ctx context.Context, args massageReminderArgs) e
 }
 
 // Absolute event-local time remains factual for short-notice and late catch-up.
+// Reminder kinds label scheduled stages, not the time remaining at delivery.
 // Labels are plain text; a displayed price does not assert confirmed payment.
 func massageReminderText(n db.MassageReminder, language string) (string, error) {
 	terms := n.Booking.Snapshot.Terms
@@ -160,9 +161,17 @@ func massageReminderText(n db.MassageReminder, language string) (string, error) 
 	}
 	specialist, service := terms.SpecialistName.EN, terms.ServiceName.EN
 	heading, startLabel, serviceLabel, specialistLabel, priceLabel, referenceLabel := "Massage booking reminder", "Start", "Service", "Specialist", "Price", "Booking"
+	advance, final := " (advance)", " (final)"
 	if language == "ru" {
 		specialist, service = terms.SpecialistName.RU, terms.ServiceName.RU
 		heading, startLabel, serviceLabel, specialistLabel, priceLabel, referenceLabel = "Напоминание о записи на массаж", "Начало", "Услуга", "Специалист", "Стоимость", "Запись"
+		advance, final = " (предварительное)", " (заключительное)"
+	}
+	switch n.Kind {
+	case db.MassageReminderLong:
+		heading += advance
+	case db.MassageReminderShort:
+		heading += final
 	}
 	return fmt.Sprintf(
 		"%s\n%s\n%s: %s (%s)\n%s: %s\n%s: %s\n%s: %s\n%s: %s",

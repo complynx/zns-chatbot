@@ -1,27 +1,163 @@
-# Current roadmap direction, 2026-10-19
+The [full Linux/race gate](shuttle-linux-race-qa-2026-10-20.md) is failed:956 roots pass,19 fail, and the integration package reaches its20-minute limit. All19 unchanged failures pass a separate serial diagnostic. No OOM or race warning was observed, but full coverage is incomplete. Both temporary stands are archived/removed and the primary is preserved. Bounded batches with exact coverage are next; full Linux/race acceptance remains open.
 
-The [native solo assignment source and owned-runtime gates](shuttle-native-pass-assignments.md)
-pass in all four interface combinations. The candidate is schema 61 / `mvp-69`;
-[local-primary installation and rollback](shuttle-native-pass-assignment-primary-qa-2026-10-19.md)
-are accepted. The primary is now schema 61 / `mvp-69`, with eleven services and
-134 Loom runs preserved.
+# Current roadmap direction, 2026-10-20
 
-The [pair canonical-continuation foundation](shuttle-native-pair-assignment-foundation.md)
-now passes DB/API component gates in source schema 62 / `mvp-70`; it is
-uninstalled. Native sessions, form/history and four-path runtime acceptance
-remain next. The primary is unchanged.
+The owned primary is schema64 / `mvp-78`, now with the
+[payment-consent fix installed and binary rollback verified](shuttle-payment-consent-primary-qa-2026-10-20.md).
+Eleven services, domain data, queues and the contents of 134 Loom runs are preserved.
+The preceding [massage mvp78 installation](shuttle-massage-primary-qa-2026-10-20.md)
+remains a separate historical gate.
+The [payment-consent presentation fix](shuttle-payment-consent-presentation-2026-10-20.md)
+now passes focused component checks and fresh source reviews. It restores the
+original human terms without technical JSON and preserves reconciliation after
+native/agent completion. Packaging and the
+[owned runtime gate](shuttle-payment-consent-runtime-qa-2026-10-20.md) now pass:
+two completed Loom runs, one 30 BYN credit, and three actual recipient-checked
+notifications. The nine temporary services are archived/removed. The separately
+linked primary gate now verifies fixed/original/fixed images, 17 installed HTTP
+assets, three unauthenticated 401 boundaries, and original ingress recovery.
+Manifest78/schema64 stay unchanged; the exact image digest identifies the fix.
 
-Continue in this order, retaining the broader requirements below:
+The [actual token-expiry and dual-outage gate](shuttle-iam-expiry-dual-outage-qa-2026-10-20.md)
+now passes separately: natural short-session expiry while IAM and Loom are down,
+cold bot restart, three persisted authorization waits and three completed runs.
+The original task/run/session survive and session version advances. Existing and
+new users retain verified IAM identities and receive one reply each. Both owned
+nine-service stands are archived/removed; the first QA observer failure remains
+recorded. Multi-hour outages, business approval expiry and broader faults remain open.
 
-1. Finish native/agent pass parity: pair assignment, participant payment and
-   top-up flows, ambassador confirmation, deadlines, and both mixed handoffs.
+The preceding [mvp77 primary installation](shuttle-pair-terms-primary-qa-2026-10-20.md) verifies binary-only77/74/77 rollback,
+original ingress recovery and installed HTTP/auth/custody checks. [Payment installation, authentication fix and binary rollback](shuttle-native-pass-payment-primary-qa-2026-10-20.md)
+are accepted. [Pair assignment installation](shuttle-native-pair-assignment-primary-qa-2026-10-19.md)
+records the preceding schema63/mvp72 stage. The preceding [solo assignment](shuttle-native-pass-assignments.md)
+four-path and [schema61/mvp69 installation](shuttle-native-pass-assignment-primary-qa-2026-10-19.md)
+gates remain historical accepted stages.
+
+The [native pair assignment workspace](shuttle-native-pair-assignments.md)
+is implemented in source schema 63 / `mvp-72`, including current administrator
+sessions, both recipient identities, shared history and both handoffs. Source
+checks pass: the mvp71 baseline has 1037 Go roots and 285 UI cases; the mvp72
+bounded agent-identity follow-up has 58 affected PostgreSQL roots, lint/sqlc and
+fresh independent reviews. The approval-presentation follow-up passes 14
+PostgreSQL scenarios, affected units/lint and final independent reviews.
+The owned real-IAM/Loom/mock-Telegram/Edge four-path gate now passes: eight
+passes, four assignment receipts and three completed Loom runs. A 0.703-second
+bot stop preserves the original pending approval. Both temporary runtime stands
+were archived and removed. Local-primary installation/rollback now passes;
+whole mixed pair joining-through-assignment happy paths now pass on candidate mvp75 below. Participant
+payment/top-up/ambassador runtime parity is accepted separately below. The earlier
+[canonical foundation report](shuttle-native-pair-assignment-foundation.md)
+records the preceding schema62/mvp70 component stage.
+
+The [participant pass-payment source slice](shuttle-native-pass-payment-evidence.md)
+now passes schema64 / `mvp-73` component gates: 64 PostgreSQL roots, 304 UI cases,
+affected units, lint0, exact sqlc and a Linux cross-build. Three review rounds
+closed a session-expiry write race. Its [owned runtime matrix](shuttle-native-pass-payment-runtime-qa-2026-10-19.md)
+now passes all four participant paths: eight receipts/reviews, both handoffs,
+lost-response recovery and a 0.828-second graceful stop. All temporary services
+were archived and removed. The auth follow-up is installed at schema64/mvp74
+after20 API unit roots,18 authorization cases,20 PostgreSQL roots, lint, Linux
+build and actual primary rollback/HTTP checks.
+
+The separate [display-name four-path runtime gate](shuttle-profile-four-path-runtime-qa-2026-10-20.md)
+now passes on the unchanged mvp74 image: native with Loom stopped, agent and both
+handoffs, including the original question/run across a 0.875-second graceful stop.
+Nine profile receipts, two actual form writes and three completed Loom runs are
+verified. The nine-service temporary stand was archived after writer shutdown and
+removed. This does not close the whole registration/pair/payment journey.
+
+The [complete native joined journey](shuttle-joined-native-runtime-qa-2026-10-20.md)
+now passes from fresh participant registration through pair consent, exact native
+two-pass assignment and both deposits/top-ups reviewed by an ambassador. Loom is
+stopped throughout those actions. All four queued files later reach two real Loom
+runs, with controlled acknowledgements and unchanged business state. The temporary
+stand is archived/removed. Stop command wall time is4.125s; logged application
+drain is10.54ms. Exact full process exit within1s is not proved by those separate
+measurements. The [whole agent joined gate](shuttle-joined-agent-runtime-qa-2026-10-20.md)
+now passes separately: two fresh registrations, one pair, two paid passes, four
+reviews and15 completed real Loom runs with a controlled provider. The original
+assignment approval survives restart; live matched Docker signal/exit events
+measure0.530 seconds for this probe. Four exact original file captions are audited.
+The nine-service stand is archived and removed; primary stays unchanged. Whole
+mixed happy paths now also pass on [candidate mvp75](shuttle-joined-mixed-runtime-qa-2026-10-20.md): 22 completed runs, four paid passes and eight reviews across two fresh stands. Both stands are archived/removed. That mixed gate left the primary at mvp74. The subsequent mvp77 installation below is separate; broader fault/timing gates remain open.
+
+The [structured native terms candidate](shuttle-pair-assignment-terms-2026-10-20.md)
+is now packaged at mvp77. New preparations show original event/window/cap without
+technical description IDs; legacy proposals retain their original description.
+The component gate passes 1,061 Go roots (six recorded Windows skips), 310 UI cases,
+two additional compatibility roots and five Linux process roots. The subsequent
+[isolated binary runtime gate](shuttle-pair-terms-binary-runtime-qa-2026-10-20.md)
+now passes both directions through real IAM and nine actual form invocations,
+with one receipt and two unpaid passes. The temporary stand is archived/removed.
+The candidate is now installed on the primary through the separately linked installation gate. Full Linux/race and real Telegram acceptance remain separate.
+
+The [native initial-deadline and late-decision gate](shuttle-pass-deadline-runtime-qa-2026-10-20.md) now passes separately on mvp77:
+real45-second timing, a graceful restart, two retained partially paid passes,
+three proofs, two confirmations and one rejection. Total credited money is60.00
+BYN, with zero Loom runs. The QA driver's read-only failure is retained; all nine
+temporary services are archived/removed. Sales closing and agent-driven deadline
+variants remain open.
+
+The [whole native service-order gate](shuttle-orders-whole-native-runtime-qa-2026-10-20.md)
+now passes on mvp77 from eligible fixture passes: real owner selection, full quote,
+submission, original mock-Telegram files, capacity admission and ambassador forms
+with Loom stopped. Two orders, three claims, two rejections, one25.68-BYN
+confirmation and12 notices are verified. Original queued media and immutable
+receipts are retained; the nine-service stand is archived/removed. The agent
+gate below is separate; mixed order/reviewer and bounded owner-proof handoffs
+pass below. Meals checkout and fulfillment remain open.
+
+The [whole agent service-order gate](shuttle-orders-whole-agent-runtime-qa-2026-10-20.md)
+now passes separately on mvp77: eight controlled-provider real Loom runs, two
+orders, three claims, two rejections, one25.68-BYN confirmation and12 verified
+notices. All original media tasks complete. Two QA observer failures retain their
+original evidence and continue the same first task/run/order without a repeated
+business effect. Nine services are archived/removed; primary stays unchanged.
+Both [mixed order/reviewer workflows](shuttle-orders-whole-mixed-runtime-qa-2026-10-20.md)
+now pass on mvp77:16 completed runs, four orders and six decisions across two
+separate stands. All18 services are archived/removed with exit0 and no OOM.
+Owner proof submission remains agent-driven in those two workflows. A separate
+[owner-proof handoff gate](shuttle-orders-owner-proof-handoffs-qa-2026-10-20.md) now
+passes both missing continuations: five completed real Loom runs, two original
+claims and no duplicate effects. Its nine-service stand is archived/removed,
+exit0/no OOM. The separate
+[massage owner/specialist lifecycle](shuttle-massage-owner-lifecycle-qa-2026-10-20.md)
+passes on candidate78: native booking, specialist agent reads,
+exact owner agent cancellation after free-text consent, released-slot/native
+history and three completed Loom runs. Original receipts and exact notices are
+verified. The current and preceding failed nine-service stands are archived and
+removed, exit0/no OOM; failed observer evidence is retained. Candidate78 also
+distinguishes advance/final reminder text in en/ru. Its separate
+[primary installation/rollback](shuttle-massage-primary-qa-2026-10-20.md) now passes,
+with schema64, original data/queues, eleven services and134 Loom runs preserved.
+The [original-consent outage gate](shuttle-massage-cancel-outage-qa-2026-10-20.md)
+now also passes on78: one owner reply is durably admitted while local IAM and
+Loom are stopped, then survives a clean bot restart while both remain unavailable.
+The same run/approval resumes and cancels once. Three Loom runs finish; all nine
+temporary services are archived/removed, exit0/no OOM. This is a short issued-token
+outage, not token-expiry or all-fault acceptance. The separate
+[agent payment closing gate](shuttle-pass-agent-closing-runtime-qa-2026-10-20.md)
+now passes on78 from an explicitly assigned pass: an original early PDF/caption
+after Loom downtime and clean bot restart, actual45-second sales cap, timely
+30.00-BYN confirmation after closing and an explicitly reasoned late70.00-BYN
+top-up. Four Loom runs and six notices finish; both temporary stands are
+archived/removed, exit0/no OOM, with the first setup failure retained. Technical
+payment-approval JSON is a recorded presentation follow-up. Meals checkout,
+wider timing/fault coverage and other broader gates remain open.
+
+Current stages and next order, retaining the broader requirements below:
+
+1. Registration/pass whole native, agent and both mixed happy paths, primary
+   installation/rollback and the bounded native initial-deadline/late-decision
+   gate pass separately. Keep their version and acceptance boundaries.
 2. Complete orders/meals and massage process parity and real multi-user form/
    agent acceptance, including administrative and specialist operations.
 3. Complete Zitadel/zitadeltg linking and real Mini App/HTML acceptance. Joint
    browser CA trust/provider work remains deferred with Daniel; continue work
    that does not need it.
-4. Close process, IAM/Loom recovery, observability, Linux/race and deployment
-   gates before any separately authorized production cutover.
+4. Close remaining payment timing/agent-failure variants, process, IAM/Loom
+   recovery, observability, Linux/race and deployment gates before any separately
+   authorized production cutover.
 
 The earlier stage reports below are historical. Their run counts, installation
 status and next-step sentences describe those stages, not the current runtime.
@@ -1146,8 +1282,6 @@ established and completion needs it. Check stored receipts and the actual chat
 first where available; explicitly record possible duplication. Never replay the
 underlying payment or registration to recover a message.
 
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
 
 ## Progress checkpoint: 2026-10-13, solo registration foundation
 
@@ -1242,8 +1376,6 @@ now pass on our own stand; native unknown receipt was explicitly fault-injected.
 See [native QA limits](shuttle-notification-qa-2026-10-14.md) and
 [notification delivery and reconciliation](shuttle-payment-notifications.md).
 
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot developer
-on behalf of Daniel Drizhuk
 
 ### Native payment correction/top-up progress (2026-10-14)
 

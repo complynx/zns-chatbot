@@ -668,6 +668,9 @@ func (s *Store) paymentReviewWorkspaceOperation(
 	if c.Kind == "commit" {
 		result.Review = &PaymentWorkspaceReviewResult{}
 		err = json.Unmarshal(c.Result, result.Review)
+		if err == nil && c.Source == paymentReviewAgent {
+			result.Preparation, err = reviewCallPreparation(w, c)
+		}
 	} else {
 		result.Workspace = &PaymentReviewWorkspace{}
 		err = json.Unmarshal(c.Result, result.Workspace)
@@ -681,15 +684,11 @@ func pendingReviewCallReceipt(
 	ctx context.Context, q *sqlc.Queries, scope PaymentScope,
 	w PaymentReviewWorkspace, c paymentReviewCall,
 ) (PaymentReviewWorkspaceReceipt, error) {
-	args := workspaceCommitArguments(w)
-	hash, err := reviewWorkspaceHash(args)
+	prepared, err := reviewCallPreparation(w, c)
 	if err != nil {
 		return PaymentReviewWorkspaceReceipt{}, err
 	}
-	if err = matchReviewCall(c, "commit", hash, paymentReviewAgent); err != nil {
-		return PaymentReviewWorkspaceReceipt{}, err
-	}
-	reviewHash, err := reviewWorkspaceHash(args.Review)
+	reviewHash, err := reviewWorkspaceHash(prepared.Arguments.Review)
 	if err != nil {
 		return PaymentReviewWorkspaceReceipt{}, err
 	}
@@ -699,19 +698,33 @@ func pendingReviewCallReceipt(
 		return PaymentReviewWorkspaceReceipt{}, err
 	}
 	if found {
-		return PaymentReviewWorkspaceReceipt{Kind: c.Kind, Completed: true,
+		return PaymentReviewWorkspaceReceipt{Kind: c.Kind, Completed: true, Preparation: prepared,
 			Review: &PaymentWorkspaceReviewResult{CanonicalOperationID: w.ID.String(), Review: prior}}, nil
-	}
-	if c.Proposal == nil || c.Expires == nil {
-		return PaymentReviewWorkspaceReceipt{}, ErrConflict
 	}
 	reason, err := reviewCallUnavailableReason(ctx, q, scope, w, c, reviewHash)
 	if err != nil {
 		return PaymentReviewWorkspaceReceipt{}, err
 	}
 	return PaymentReviewWorkspaceReceipt{Kind: c.Kind, Workspace: &w, UnavailableReason: reason,
-		Preparation: &PaymentReviewCommitPreparation{ID: *c.Proposal, Arguments: args,
-			Description: w.Preparation.Description, ExpiresAt: *c.Expires}}, nil
+		Preparation: prepared}, nil
+}
+
+// Preserve the original agent consent even when another interface has already
+// completed its decision. This read does not prepare or execute a new operation.
+func reviewCallPreparation(w PaymentReviewWorkspace, c paymentReviewCall) (*PaymentReviewCommitPreparation, error) {
+	args := workspaceCommitArguments(w)
+	hash, err := reviewWorkspaceHash(args)
+	if err != nil {
+		return nil, err
+	}
+	if err = matchReviewCall(c, "commit", hash, paymentReviewAgent); err != nil {
+		return nil, err
+	}
+	if c.Proposal == nil || c.Expires == nil {
+		return nil, ErrConflict
+	}
+	return &PaymentReviewCommitPreparation{ID: *c.Proposal, Arguments: args,
+		Description: w.Preparation.Description, ExpiresAt: *c.Expires}, nil
 }
 
 // The event/canonical locks and database clock establish whether a pending call

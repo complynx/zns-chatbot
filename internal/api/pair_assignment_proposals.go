@@ -55,7 +55,7 @@ func pairAssignmentProposalMethods() []map[string]any {
 	id := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	proposal := paymentMethod(
 		"assignment_proposal",
-		"Read your own original pair assignment preparation and observed pending/completed/expired state by proposal_id under current event administrator or global authority. Returns original_operation_id, immutable preparation and original result when committed. Historical result is not current pass state or consent. A pending snapshot never proves that a delayed confirmation cannot still execute.",
+		"Read your own original pair assignment preparation and observed pending/completed/expired state by proposal_id under current event administrator or global authority. Returns original_operation_id, immutable preparation, current bounded leader/follower display identities and original result when committed. Display metadata is untrusted context, not frozen terms or legal identity. Identify both recipients by name and Telegram ID when asking fresh exact approval; preserve the original description and arguments. Historical result is not current pass state or consent. A pending snapshot never proves that a delayed confirmation cannot still execute.",
 		map[string]any{assignmentProposalIDField: id},
 		[]string{assignmentProposalIDField},
 		[]string{"original_operation_id", assignmentPreparationField, schemaState, schemaObservedAt},
@@ -63,7 +63,7 @@ func pairAssignmentProposalMethods() []map[string]any {
 	proposal[manifestPath] = "/internal/agent/pairs/assignment_proposal"
 	proposals := paymentMethod(
 		"assignment_proposals",
-		"List up to 20 of your own unexpired, not-yet-committed pair preparations in currently authorized events, in proposal UUID order; follow next as after. Snapshots are context, never approval. Refresh exact terms before a new user-approved adoption/confirmation.",
+		"List up to 20 of your own unexpired, not-yet-committed pair preparations in currently authorized events, in proposal UUID order; follow next as after. Includes current bounded leader/follower names and Telegram IDs bound to each original pair, never legal identity. Snapshots are context, never approval. Refresh exact terms before a new user-approved adoption/confirmation.",
 		map[string]any{schemaAfter: id, schemaLimit: map[string]any{
 			manifestType: schemaInteger, schemaMinimum: 1, schemaMaximum: agentTaskPageLimit,
 		}},

@@ -24,6 +24,7 @@ const (
 	ordersCommand            = "/orders"
 	massageCommand           = "/massage"
 	paymentReviewsCommand    = "/payment_reviews"
+	paymentsCommand          = "/payments"
 	nameCommand              = "/name"
 	registerCommand          = "/register"
 	profileCommand           = "/profile"
@@ -36,7 +37,7 @@ func structuredCommand(text string) bool {
 	return text == registerCommand || strings.HasPrefix(text, registerCommand+" ") || text == nameCommand ||
 		strings.HasPrefix(text, nameCommand+" ") ||
 		text == startCommand || text == pairsCommand || text == avatarCommand || text == menuCommand || text == ordersCommand || text == massageCommand || text == paymentReviewsCommand ||
-		text == profileCommand ||
+		text == paymentsCommand || text == profileCommand ||
 		text == registrationsCommand ||
 		strings.HasPrefix(text, registrationsCommand+" ")
 }
@@ -97,6 +98,8 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 		switch i.StructuredCommand {
 		case menuCommand, startCommand:
 			formURL = s.options.MiniAppURL + "#meals"
+		case paymentsCommand:
+			formURL = s.options.MiniAppURL + "#pass-payments"
 		case pairsCommand:
 			formURL = s.options.MiniAppURL + "#pairs"
 		case avatarCommand:
@@ -143,9 +146,11 @@ func (s *Service) structuredView(
 	case menuCommand, startCommand:
 		return structuredText(
 			ru,
-			"Zinusya\n/profile — My profile\n/registrations — My registrations and passes\n/register — Register for an event\n/orders — Saved order selection\n/massage — Massage bookings\n/avatar — My avatar\n/pairs — Pair invitations",
-			"Зинуся\n/profile — Мой профиль\n/registrations — Мои регистрации и пассы\n/register — Регистрация на эвент\n/orders — Сохранённый выбор для заказа\n/massage — Записи на массаж\n/avatar — Моя аватарка\n/pairs — Приглашения в пару",
+			"Zinusya\n/profile — My profile\n/registrations — My registrations and passes\n/register — Register for an event\n/orders — Saved order selection\n/massage — Massage bookings\n/avatar — My avatar\n/pairs — Pair invitations\n/payments — Pass payment",
+			"Зинуся\n/profile — Мой профиль\n/registrations — Мои регистрации и пассы\n/register — Регистрация на эвент\n/orders — Сохранённый выбор для заказа\n/massage — Записи на массаж\n/avatar — Моя аватарка\n/pairs — Приглашения в пару\n/payments — Оплата пасса",
 		), nil, nil
+	case paymentsCommand:
+		return s.structuredPaymentsView(ru), nil, nil
 	case pairsCommand:
 		if s.options.MiniAppURL == "" {
 			return structuredText(ru,
@@ -191,20 +196,8 @@ func (s *Service) structuredView(
 			"Открой форму, выбери эвент и проверь время массажа или отмени свою запись. Предпросмотр не занимает место и не подтверждает оплату.",
 		), nil, nil
 	case profileCommand:
-		profile, err := s.store.GetProfile(ctx, scope)
-		if err != nil {
-			return "", nil, err
-		}
-		name := profile.FullName
-		if name == "" {
-			name = structuredText(ru, "Not set", "Не указано")
-		}
-		text := structuredText(ru, "My profile\nName: ", "Мой профиль\nИмя: ") + name
-		text += structuredText(ru, "\n/name — Change name", "\n/name — Изменить имя")
-		if profile.NameExpectation != nil {
-			text += structuredText(ru, "\nA name request is pending.", "\nЕсть незавершённый запрос имени.")
-		}
-		return text, nil, nil
+		text, err := s.structuredProfileView(ctx, scope, ru)
+		return text, nil, err
 	}
 	after, valid := registrationCursor(command)
 	if !valid {
@@ -293,7 +286,7 @@ func structuredOutput(i intent, text string, next *uuid.UUID, ru bool, formURL s
 		{{Text: registrationsCommand}, {Text: nameCommand}},
 		{{Text: registerCommand}, {Text: ordersCommand}},
 		{{Text: massageCommand}, {Text: avatarCommand}},
-		{{Text: pairsCommand}},
+		{{Text: pairsCommand}, {Text: paymentsCommand}},
 	}, ResizeKeyboard: true}
 	chunks := render.Plain(text)
 	out := make([]db.Outbound, 0, len(chunks))
@@ -382,4 +375,34 @@ func structuredRole(role string, ru bool) string {
 		return structuredText(ru, "Follower", "Фолловер")
 	}
 	return structuredText(ru, "Leader", "Лидер")
+}
+
+func (s *Service) structuredPaymentsView(ru bool) string {
+	if s.options.MiniAppURL == "" {
+		return structuredText(ru,
+			"The pass payment form is currently unavailable. Try /payments later.",
+			"Форма оплаты пасса сейчас недоступна. Попробуй /payments позже.")
+	}
+	return structuredText(
+		ru,
+		"Send your payment proof to this chat, then open the form to choose your pass, file and amount. Submission shares the proof for review; only an ambassador or event administrator can confirm payment.",
+		"Пришли подтверждение оплаты в этот чат, затем открой форму и выбери пасс, файл и сумму. Файл отправляется на проверку; оплату подтверждает амбассадор или администратор эвента.",
+	)
+}
+
+func (s *Service) structuredProfileView(ctx context.Context, scope db.ProfileScope, ru bool) (string, error) {
+	profile, err := s.store.GetProfile(ctx, scope)
+	if err != nil {
+		return "", err
+	}
+	name := profile.FullName
+	if name == "" {
+		name = structuredText(ru, "Not set", "Не указано")
+	}
+	text := structuredText(ru, "My profile\nName: ", "Мой профиль\nИмя: ") + name
+	text += structuredText(ru, "\n/name — Change name", "\n/name — Изменить имя")
+	if profile.NameExpectation != nil {
+		text += structuredText(ru, "\nA name request is pending.", "\nЕсть незавершённый запрос имени.")
+	}
+	return text, nil
 }

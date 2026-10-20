@@ -582,6 +582,17 @@ type ShuttleMiniappOrdersSelectionAction struct {
 	CompletedAt pgtype.Timestamptz `json:"completed_at"`
 }
 
+type ShuttleMiniappPairAssignmentAction struct {
+	UserID          uuid.UUID          `json:"user_id"`
+	OperationID     string             `json:"operation_id"`
+	ProposalID      uuid.UUID          `json:"proposal_id"`
+	Kind            string             `json:"kind"`
+	PairVersion     int64              `json:"pair_version"`
+	LeaderVersion   int64              `json:"leader_version"`
+	FollowerVersion int64              `json:"follower_version"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type ShuttleMiniappProfileAction struct {
 	UserID      uuid.UUID          `json:"user_id"`
 	OperationID uuid.UUID          `json:"operation_id"`
@@ -604,6 +615,15 @@ type ShuttleMiniappSession struct {
 	PendingUntil  pgtype.Timestamptz `json:"pending_until"`
 	ExpiresAt     pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type ShuttleNativePaymentEvidenceAction struct {
+	BotID          int64              `json:"bot_id"`
+	OrganizationID string             `json:"organization_id"`
+	Actor          string             `json:"actor"`
+	OperationID    string             `json:"operation_id"`
+	UserID         uuid.UUID          `json:"user_id"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
 }
 
 type ShuttleNotificationResolution struct {

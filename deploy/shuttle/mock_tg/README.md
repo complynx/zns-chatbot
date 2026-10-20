@@ -208,6 +208,13 @@ projects. The supplied name cannot select those projects. Retained files are
 private and should be removed deliberately when their evidence is no longer
 needed.
 
+The Telegram fixture installs an explicit SIGTERM handler, so Linux container
+PID1 exits through cleanup of its HTTP and TLS listeners. A stalled request must
+not retain the process. Acknowledged SQLite messages and message counters survive
+restart. The focused process test runs on POSIX; the mock-stand CI suite discovers
+it with the other `test_*.py` cases. The [joined-agent QA report](../../../docs/shuttle-joined-agent-runtime-qa-2026-10-20.md#fixture-shutdown-follow-up)
+records the original forced-stop observation and the separate direct-PID1 probe.
+
 A final release still needs a small real-Telegram gate for transport, Mini App
 launch/verified Telegram data and actual client rendering. This fixture does not
 replace that gate or prove production readiness.

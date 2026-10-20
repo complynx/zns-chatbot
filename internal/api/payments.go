@@ -339,6 +339,33 @@ func (s *Server) paymentReceipt(ctx context.Context, in *agentRegistrationStatus
 	}
 	return receipt, nil
 }
+
+type paymentOperationArguments struct {
+	OperationID string `json:"operation_id" minLength:"1" maxLength:"128"`
+}
+
+type paymentOperationView struct {
+	Receipt *db.PaymentReceipt `json:"receipt"`
+}
+
+func (s *Server) agentPaymentOperation(
+	ctx context.Context,
+	in *agentReadRequest[paymentOperationArguments],
+) (*agentReadResponse[paymentOperationView], error) {
+	scope, err := s.paymentScope(ctx, in.AuthInput)
+	if err != nil {
+		return nil, err
+	}
+	receipt, err := s.store.PaymentOperation(ctx, scope, in.Body.Arguments.OperationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return agentReadResult(in.Body.OperationID, paymentOperationView{}), nil
+	}
+	if err != nil {
+		return nil, paymentError(err)
+	}
+	return agentReadResult(in.Body.OperationID, paymentOperationView{Receipt: &receipt}), nil
+}
+
 func paymentStatusResult[T any](operation string, result *T, err error) (*paymentWriteResponse[T], error) {
 	out := &paymentWriteResponse[T]{}
 	out.Body.OperationID = operation
@@ -371,6 +398,12 @@ func (s *Server) paymentReviewStatus(
 }
 
 func (s *Server) registerPaymentReads(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID:  "agent-payment-operation",
+		Method:       http.MethodPost,
+		Path:         paymentPath + "operation",
+		MaxBodyBytes: internalBodyLimit,
+	}, s.agentPaymentOperation)
 	huma.Register(
 		api,
 		huma.Operation{

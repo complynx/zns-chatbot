@@ -43,11 +43,13 @@ type miniAppBootstrapResponse struct {
 func (s *Server) registerMiniApp() {
 	s.registerMiniAppPairs()
 	s.registerMiniAppAssignments()
+	s.registerMiniAppPairAssignments()
 	s.registerMiniAppMassage()
 	s.registerMiniAppOrders()
 	s.registerMiniAppMeals()
 	s.registerMiniAppAvatars()
 	s.registerMiniAppPayments()
+	s.registerMiniAppPassPayments()
 	s.public.HandleFunc("GET /app/", s.miniAppPage)
 	s.public.HandleFunc("POST /app/session/bootstrap", s.miniAppBootstrap)
 	s.public.HandleFunc("GET /app/me", s.miniAppMe)

@@ -3447,6 +3447,38 @@ func (q *Queries) HasNativeAvatarResolutionContext(ctx context.Context, arg HasN
 	return exists, err
 }
 
+const hasNativePairAssignmentContext = `-- name: HasNativePairAssignmentContext :one
+SELECT EXISTS(SELECT 1 FROM shuttle_miniapp_pair_assignment_actions a
+JOIN shuttle_pair_preparations p ON p.proposal_id=a.proposal_id
+JOIN shuttle_tasks t ON t.user_id=a.user_id
+JOIN shuttle_users u ON u.id=a.user_id AND u.bot_id=p.bot_id
+AND u.zitadel_org=p.organization_id AND u.zitadel_subject=p.actor AND NOT u.revoked
+WHERE a.user_id=$1 AND t.id=$2
+AND p.bot_id=$3 AND p.organization_id=$4 AND p.actor=$5
+AND a.created_at<t.created_at)
+`
+
+type HasNativePairAssignmentContextParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	TaskID         uuid.UUID `json:"task_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+}
+
+func (q *Queries) HasNativePairAssignmentContext(ctx context.Context, arg HasNativePairAssignmentContextParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasNativePairAssignmentContext,
+		arg.UserID,
+		arg.TaskID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const hasOrderEvidence = `-- name: HasOrderEvidence :one
 SELECT EXISTS(SELECT 1 FROM shuttle_order_evidence WHERE order_id=$1) AS present
 `
@@ -3489,6 +3521,36 @@ type HasOrdersEvidenceAuthorityParams struct {
 
 func (q *Queries) HasOrdersEvidenceAuthority(ctx context.Context, arg HasOrdersEvidenceAuthorityParams) (bool, error) {
 	row := q.db.QueryRow(ctx, hasOrdersEvidenceAuthority, arg.UserID, arg.BotID, arg.OrganizationID)
+	var available bool
+	err := row.Scan(&available)
+	return available, err
+}
+
+const hasPairAssignmentAccess = `-- name: HasPairAssignmentAccess :one
+SELECT EXISTS(SELECT 1 FROM shuttle_users u
+WHERE u.id=$1 AND u.bot_id=$2
+AND u.zitadel_org=$3 AND u.zitadel_subject=$4 AND NOT u.revoked
+AND ($5::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
+JOIN shuttle_events e ON e.id=a.event_id WHERE a.user_id=u.id AND a.role='administrator'
+AND e.bot_id=u.bot_id AND e.organization_id=u.zitadel_org))) AS available
+`
+
+type HasPairAssignmentAccessParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Subject        string    `json:"subject"`
+	GlobalAdmin    bool      `json:"global_admin"`
+}
+
+func (q *Queries) HasPairAssignmentAccess(ctx context.Context, arg HasPairAssignmentAccessParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPairAssignmentAccess,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Subject,
+		arg.GlobalAdmin,
+	)
 	var available bool
 	err := row.Scan(&available)
 	return available, err
@@ -4695,6 +4757,34 @@ func (q *Queries) InsertNativeAvatarResolutionAction(ctx context.Context, arg In
 		arg.ProposalID,
 		arg.Kind,
 		arg.DeliveryVersion,
+	)
+	return err
+}
+
+const insertNativePairAssignmentAction = `-- name: InsertNativePairAssignmentAction :exec
+INSERT INTO shuttle_miniapp_pair_assignment_actions(user_id,operation_id,proposal_id,kind,pair_version,leader_version,follower_version)
+VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(user_id,operation_id,kind) DO NOTHING
+`
+
+type InsertNativePairAssignmentActionParams struct {
+	UserID          uuid.UUID `json:"user_id"`
+	OperationID     string    `json:"operation_id"`
+	ProposalID      uuid.UUID `json:"proposal_id"`
+	Kind            string    `json:"kind"`
+	PairVersion     int64     `json:"pair_version"`
+	LeaderVersion   int64     `json:"leader_version"`
+	FollowerVersion int64     `json:"follower_version"`
+}
+
+func (q *Queries) InsertNativePairAssignmentAction(ctx context.Context, arg InsertNativePairAssignmentActionParams) error {
+	_, err := q.db.Exec(ctx, insertNativePairAssignmentAction,
+		arg.UserID,
+		arg.OperationID,
+		arg.ProposalID,
+		arg.Kind,
+		arg.PairVersion,
+		arg.LeaderVersion,
+		arg.FollowerVersion,
 	)
 	return err
 }
@@ -7662,6 +7752,11 @@ SELECT p.id, p.event_id, p.leader_registration_id, p.follower_registration_id, p
 f.user_id AS follower_user_id,f.version AS follower_version
 FROM shuttle_pairs p JOIN shuttle_registrations l ON l.id=p.leader_registration_id
 JOIN shuttle_registrations f ON f.id=p.follower_registration_id
+JOIN shuttle_events e ON e.id=p.event_id
+JOIN shuttle_users lu ON lu.id=l.user_id AND lu.bot_id=e.bot_id
+AND lu.zitadel_org=e.organization_id AND NOT lu.revoked
+JOIN shuttle_users fu ON fu.id=f.user_id AND fu.bot_id=e.bot_id
+AND fu.zitadel_org=e.organization_id AND NOT fu.revoked
 WHERE p.event_id=$1 AND p.state='waitlisted' AND p.id>$2::uuid
 ORDER BY p.id LIMIT $3
 `
@@ -11991,6 +12086,144 @@ func (q *Queries) RecentNativeAvatarResolutionActions(ctx context.Context, arg R
 			&i.CreatedAt,
 			&i.CanonicalOperationID,
 			&i.DeliveryID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentNativePairAssignmentActions = `-- name: RecentNativePairAssignmentActions :many
+SELECT a.operation_id,a.proposal_id,a.kind,a.pair_version,a.leader_version,a.follower_version,a.created_at,
+p.operation_id AS canonical_operation_id,
+(p.document->'arguments'->>'event_id')::uuid AS event_id,
+(p.document->'arguments'->>'pair_id')::uuid AS pair_id
+FROM shuttle_miniapp_pair_assignment_actions a
+JOIN shuttle_pair_preparations p ON p.proposal_id=a.proposal_id
+JOIN shuttle_tasks t ON t.user_id=a.user_id
+JOIN shuttle_users u ON u.id=a.user_id AND u.bot_id=p.bot_id
+AND u.zitadel_org=p.organization_id AND u.zitadel_subject=p.actor AND NOT u.revoked
+JOIN shuttle_events e ON e.id=(p.document->'arguments'->>'event_id')::uuid
+AND e.bot_id=p.bot_id AND e.organization_id=p.organization_id
+WHERE a.user_id=$1 AND t.id=$2
+AND p.bot_id=$3 AND p.organization_id=$4 AND p.actor=$5
+AND ($6::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities r
+ WHERE r.event_id=e.id AND r.user_id=u.id AND r.role='administrator'))
+AND a.created_at<t.created_at
+ORDER BY a.created_at DESC,a.operation_id,a.kind LIMIT 5
+`
+
+type RecentNativePairAssignmentActionsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	TaskID         uuid.UUID `json:"task_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	GlobalAdmin    bool      `json:"global_admin"`
+}
+
+type RecentNativePairAssignmentActionsRow struct {
+	OperationID          string             `json:"operation_id"`
+	ProposalID           uuid.UUID          `json:"proposal_id"`
+	Kind                 string             `json:"kind"`
+	PairVersion          int64              `json:"pair_version"`
+	LeaderVersion        int64              `json:"leader_version"`
+	FollowerVersion      int64              `json:"follower_version"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	CanonicalOperationID string             `json:"canonical_operation_id"`
+	EventID              uuid.UUID          `json:"event_id"`
+	PairID               uuid.UUID          `json:"pair_id"`
+}
+
+func (q *Queries) RecentNativePairAssignmentActions(ctx context.Context, arg RecentNativePairAssignmentActionsParams) ([]RecentNativePairAssignmentActionsRow, error) {
+	rows, err := q.db.Query(ctx, recentNativePairAssignmentActions,
+		arg.UserID,
+		arg.TaskID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.GlobalAdmin,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RecentNativePairAssignmentActionsRow
+	for rows.Next() {
+		var i RecentNativePairAssignmentActionsRow
+		if err := rows.Scan(
+			&i.OperationID,
+			&i.ProposalID,
+			&i.Kind,
+			&i.PairVersion,
+			&i.LeaderVersion,
+			&i.FollowerVersion,
+			&i.CreatedAt,
+			&i.CanonicalOperationID,
+			&i.EventID,
+			&i.PairID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentNativePairAssignmentProposals = `-- name: RecentNativePairAssignmentProposals :many
+SELECT p.bot_id, p.organization_id, p.actor, p.operation_id, p.proposal_id, p.request_hash, p.expires_at, p.document FROM shuttle_pair_preparations p
+JOIN (SELECT proposal_id,max(created_at) AS last_at
+ FROM shuttle_miniapp_pair_assignment_actions history WHERE history.user_id=$1
+ GROUP BY proposal_id) a ON a.proposal_id=p.proposal_id
+JOIN shuttle_users u ON u.id=$1 AND u.bot_id=p.bot_id
+AND u.zitadel_org=p.organization_id AND u.zitadel_subject=p.actor AND NOT u.revoked
+JOIN shuttle_events e ON e.id=(p.document->'arguments'->>'event_id')::uuid
+AND e.bot_id=p.bot_id AND e.organization_id=p.organization_id
+WHERE p.bot_id=$2 AND p.organization_id=$3 AND p.actor=$4
+AND ($5::boolean OR EXISTS(SELECT 1 FROM shuttle_event_authorities r
+ WHERE r.event_id=e.id AND r.user_id=u.id AND r.role='administrator'))
+ORDER BY a.last_at DESC,p.proposal_id DESC LIMIT 20
+`
+
+type RecentNativePairAssignmentProposalsParams struct {
+	UserID         uuid.UUID `json:"user_id"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
+	Actor          string    `json:"actor"`
+	GlobalAdmin    bool      `json:"global_admin"`
+}
+
+func (q *Queries) RecentNativePairAssignmentProposals(ctx context.Context, arg RecentNativePairAssignmentProposalsParams) ([]ShuttlePairPreparation, error) {
+	rows, err := q.db.Query(ctx, recentNativePairAssignmentProposals,
+		arg.UserID,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.Actor,
+		arg.GlobalAdmin,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ShuttlePairPreparation
+	for rows.Next() {
+		var i ShuttlePairPreparation
+		if err := rows.Scan(
+			&i.BotID,
+			&i.OrganizationID,
+			&i.Actor,
+			&i.OperationID,
+			&i.ProposalID,
+			&i.RequestHash,
+			&i.ExpiresAt,
+			&i.Document,
 		); err != nil {
 			return nil, err
 		}

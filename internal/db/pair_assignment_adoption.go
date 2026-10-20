@@ -21,7 +21,7 @@ func (s *Store) AdoptPairAssignment(ctx context.Context, scope PaymentScope, ope
 	if proposal == uuid.Nil {
 		return PairAssignmentPreparation{}, ErrConflict
 	}
-	return s.preparePairAssignment(ctx, scope, operation, args, proposal)
+	return s.preparePairAssignment(ctx, scope, operation, args, proposal, nil)
 }
 
 func decodePairAssignmentPreparation(row sqlc.ShuttlePairPreparation) (PairAssignmentPreparation, error) {
@@ -126,7 +126,7 @@ func replayPairAssignmentPreparation(ctx context.Context, q *sqlc.Queries, row s
 // Acquire it before the event to avoid inversion with a concurrent original-key
 // confirmation; lock the actual preparation only after the authority barrier.
 func lockPairAssignmentConfirmation(ctx context.Context, q *sqlc.Queries, scope PaymentScope,
-	operation string, event uuid.UUID,
+	operation string, event uuid.UUID, session *MiniAppPairAssignmentSession,
 ) (sqlc.ShuttlePairPreparation, error) {
 	lock := func(key string) error {
 		return q.LockEventOperation(
@@ -149,6 +149,9 @@ func lockPairAssignmentConfirmation(ctx context.Context, q *sqlc.Queries, scope 
 		}
 	}
 	if err = lockPairAssignmentAuthority(ctx, q, scope, event); err != nil {
+		return sqlc.ShuttlePairPreparation{}, err
+	}
+	if err = authorizePairAssignmentMiniApp(ctx, q, scope, session); err != nil {
 		return sqlc.ShuttlePairPreparation{}, err
 	}
 	return q.LockPairAssignmentCanonicalPreparation(ctx, sqlc.LockPairAssignmentCanonicalPreparationParams{

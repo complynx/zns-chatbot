@@ -31,6 +31,20 @@ func (s *Service) pendingApprovalMessages(
 	if !a.ExpiresAt.After(time.Now()) {
 		return nil, nil
 	}
+	if a.Method == "zinusya_pairs.assign" {
+		text, err := s.pairAssignmentApprovalText(ctx, *t, i, *a)
+		if err != nil {
+			return nil, err
+		}
+		return s.approvalContent(ctx, i, t.ID, *a, text), nil
+	}
+	if a.Method == "zinusya_payments.review_commit" {
+		text, err := s.paymentReviewApprovalText(ctx, *t, i, *a)
+		if err != nil {
+			return nil, err
+		}
+		return s.approvalContent(ctx, i, t.ID, *a, text), nil
+	}
 	if a.Method == "zinusya_order_payments.review_commit" {
 		text, err := s.orderReviewApprovalText(ctx, *t, i, *a)
 		if err != nil {

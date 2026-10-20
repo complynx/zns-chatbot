@@ -188,7 +188,7 @@ func TestPaymentAPIConfirmationTopUpAndRestart(t *testing.T) {
 		for _, method := range discovery.Methods {
 			ids = append(ids, method.ID)
 		}
-		expected := []string{"expectations", "events", "balance", "evidence", "list", "submit", "fetch"}
+		expected := []string{"expectations", "operation", "events", "balance", "evidence", "list", "submit", "fetch"}
 		if tc.review {
 			expected = append(
 				expected,

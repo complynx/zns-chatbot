@@ -23,6 +23,9 @@ type PairAssignmentProposalView struct {
 	State               AssignmentProposalState   `json:"state"`
 	Result              *PairAssignmentResult     `json:"result,omitempty"`
 	ObservedAt          time.Time                 `json:"observed_at"`
+	// Current display identities are bound to the original pair, not frozen terms.
+	Leader   *PairAssignmentParticipant `json:"leader,omitempty"`
+	Follower *PairAssignmentParticipant `json:"follower,omitempty"`
 }
 
 type PairAssignmentProposalPage struct {
@@ -61,7 +64,14 @@ func (s *Store) PairAssignmentProposal(ctx context.Context, scope PaymentScope,
 	if err != nil {
 		return PairAssignmentProposalView{}, err
 	}
-	return pairAssignmentProposalView(ctx, q, row, now.Time)
+	view, err := pairAssignmentProposalView(ctx, q, row, now.Time)
+	if err != nil {
+		return PairAssignmentProposalView{}, err
+	}
+	if err = enrichPairAssignmentView(ctx, tx, q, &view); err != nil {
+		return PairAssignmentProposalView{}, err
+	}
+	return view, nil
 }
 
 func pairAssignmentProposalView(ctx context.Context, q *sqlc.Queries, row sqlc.ShuttlePairPreparation,
@@ -116,6 +126,15 @@ func (s *Store) PendingPairAssignmentProposals(ctx context.Context, scope Paymen
 	if err = lockPairAssignmentActor(ctx, q, scope); err != nil {
 		return PairAssignmentProposalPage{}, err
 	}
+	return pendingPairAssignmentProposals(ctx, tx, q, scope, after, limit)
+}
+
+func pendingPairAssignmentProposals(ctx context.Context, tx pgx.Tx, q *sqlc.Queries, scope PaymentScope,
+	after uuid.UUID, limit int,
+) (PairAssignmentProposalPage, error) {
+	if limit < 1 || limit > pairReadPageLimit {
+		return PairAssignmentProposalPage{}, registrations.ErrInvalid
+	}
 	now, err := q.RegistrationNow(ctx)
 	if err != nil {
 		return PairAssignmentProposalPage{}, err
@@ -142,6 +161,9 @@ func (s *Store) PendingPairAssignmentProposals(ctx context.Context, scope Paymen
 	for _, row := range rows {
 		view, e := pairAssignmentProposalView(ctx, q, row, now.Time)
 		if e != nil {
+			return PairAssignmentProposalPage{}, e
+		}
+		if e = enrichPairAssignmentView(ctx, tx, q, &view); e != nil {
 			return PairAssignmentProposalPage{}, e
 		}
 		page.Proposals = append(page.Proposals, view)

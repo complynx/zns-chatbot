@@ -277,8 +277,19 @@ func (s *Store) SubmitPaymentEvidence(
 	if _, _, err = lockPaymentEvent(ctx, q, scope, args.EventID, false); err != nil {
 		return payments.Evidence{}, err
 	}
+	result, err := submitPaymentEvidence(ctx, q, scope, operation, args, hash[:], nil)
+	if err != nil {
+		return payments.Evidence{}, err
+	}
+	return result, tx.Commit(ctx)
+}
+
+// submitPaymentEvidence applies an already authorized submission on the caller's lease.
+func submitPaymentEvidence(ctx context.Context, q *sqlc.Queries, scope PaymentScope,
+	operation string, args payments.Submission, hash []byte, fence func() error,
+) (payments.Evidence, error) {
 	var prior payments.Evidence
-	found, err := paymentReceipt(ctx, q, scope, operation, paymentSubmission, hash[:], &prior)
+	found, err := paymentReceipt(ctx, q, scope, operation, paymentSubmission, hash, &prior)
 	if found || err != nil {
 		return prior, err
 	}
@@ -314,6 +325,11 @@ func (s *Store) SubmitPaymentEvidence(
 	if err = paymentSourceAvailable(ctx, q, scope, file.UniqueID); err != nil {
 		return payments.Evidence{}, err
 	}
+	if fence != nil {
+		if err = fence(); err != nil {
+			return payments.Evidence{}, err
+		}
+	}
 	row, err := q.InsertPaymentEvidence(
 		ctx,
 		sqlc.InsertPaymentEvidenceParams{
@@ -338,10 +354,7 @@ func (s *Store) SubmitPaymentEvidence(
 	if err = createPaymentNotifications(ctx, q, scope, result, "submitted", nil); err != nil {
 		return payments.Evidence{}, err
 	}
-	if err = savePaymentReceipt(ctx, q, scope, operation, paymentSubmission, hash[:], result); err != nil {
-		return payments.Evidence{}, err
-	}
-	if err = tx.Commit(ctx); err != nil {
+	if err = savePaymentReceipt(ctx, q, scope, operation, paymentSubmission, hash, result); err != nil {
 		return payments.Evidence{}, err
 	}
 	return result, nil

@@ -145,7 +145,7 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 	text.WriteString(paymentExpectationContextMarker)
 	text.Write(paymentContext)
 	text.WriteString(
-		"\nUse zinusya_payments.expectations to refresh or page this snapshot. Pending proofs await human confirmation; they do not reduce confirmed balance and do not call for automatic resubmission. Overdue does not cancel a pass. Classify actual user text and file content independently of name/payment expectations; an image may be unrelated media or an avatar. Clarify multiple plausible payment targets or matching amounts. Read the current balance before any payment write. Deadlines use the named event timezone. Do not start an action merely because an expectation exists.",
+		"\nUse zinusya_payments.expectations to refresh or page this snapshot. Pending proofs await human confirmation; they do not reduce confirmed balance and do not call for automatic resubmission. Overdue does not cancel a pass. Classify actual user text and file content independently of name/payment expectations; an image may be unrelated media or an avatar. Clarify multiple plausible payment targets or matching amounts. Before any new submission, refresh zinusya_payments.list and the current balance, including for an older queued attachment whose native submission may have happened later. An existing pending or confirmed claim is not a new payment. Reconcile a known operation instead of submitting it again. Deadlines use the named event timezone. Do not start an action merely because an expectation exists.",
 	)
 	pairContext, err := s.pairExpectationPrompt(ctx, scope)
 	if err != nil {
@@ -210,6 +210,12 @@ func (s *Service) appendStructuredContext(
 		return err
 	}
 	if err = s.appendNativeAssignmentContext(ctx, text, user, taskID); err != nil {
+		return err
+	}
+	if err = s.appendNativePairAssignmentContext(ctx, text, user, taskID); err != nil {
+		return err
+	}
+	if err = s.appendNativePaymentEvidenceContext(ctx, text, scope, taskID); err != nil {
 		return err
 	}
 	if err = s.appendNativeAvatarResolutionContext(ctx, text, user, taskID); err != nil {

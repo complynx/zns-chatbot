@@ -23,6 +23,27 @@ provenance deduplication, not bank-transaction or cross-user fraud detection.
 The registration module must remain enabled for the event. Assigned unpaid passes
 remain assigned after deadlines. There is no automatic cancellation or forfeiture.
 
+## Original receipt reads
+
+The source candidate `zinusya/mvp-75` adds the read-only agent method
+`zinusya_payments.operation` at `/internal/agent/payments/operation`. Its
+`arguments.operation_id` is the original payment operation locator; the outer
+read request has its own operation ID. No event hint or new write is needed.
+
+The result contains `receipt`, with `kind:submit` and the complete original
+`evidence`, or `kind:review` and the original legacy `review` result. A submission
+receipt stays pending after later human confirmation; read `evidence` and
+`balance` for current money. Missing or another actor's operation returns
+`receipt:null`, which is unknown rather than proof of non-execution. Never
+replace the operation or resubmit its file solely because a receipt is missing.
+
+Reads reuse the existing actor/bot/organization-scoped operation lookup and
+recheck current event/evidence access. Event authority does not expose another
+actor's original receipt. Reading a historical receipt creates no evidence,
+credit, consent or renewed preparation. Shared review-workspace transport
+receipts still use `review_operation`, with their separate canonical operation.
+This operation read is installed on the owned schema64/mvp78 primary.
+
 ## Human decisions
 
 The actor must be the current event ambassador/administrator or a global
@@ -42,6 +63,18 @@ and records no money. Execute requires exact approval bound to actor, operation,
 arguments and proposal. It rechecks authority, evidence, balance version, remaining
 amount and expiry after locks. Decision, ledger revision and original receipt commit
 atomically. Concurrent confirmations from the same balance version allow one effect.
+
+The [payment-consent source fix](shuttle-payment-consent-presentation-2026-10-20.md)
+uses the original actor-owned workspace preparation for agent questions, even if
+Loom supplies an abbreviated prompt. It displays human terms without raw argument
+JSON and rechecks exact parameters, current rights, availability and expiry before
+delivery. If that decision already completed through either interface, the question
+says so and retains the original terms for reconciliation; replay credits no new
+money. This fix has passed component tests, source review and the
+[packaged owned IAM/Loom runtime gate](shuttle-payment-consent-runtime-qa-2026-10-20.md).
+The fix is now [installed on the owned primary](shuttle-payment-consent-primary-qa-2026-10-20.md),
+with fixed/original/fixed binary rollback, unchanged data/queues and ingress
+recovery verified. This is a local stand installation, not production deployment.
 
 Confirmed review rows form the append-only money ledger. Rejected decisions remain
 as audit rows. Balance exposes confirmed_minor, remaining_minor, deposit_required_minor,
@@ -133,4 +166,7 @@ passed on the owned stand with synthetic money. See
 context, byte-integrity and remaining classification limits.
 
 Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
+on behalf of Daniel Drizhuk
+
+Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk

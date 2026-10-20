@@ -723,7 +723,8 @@ func (h *harness) stop(t *testing.T) {
 		h.server = nil
 	}
 	if h.service != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		// Fixture teardown uses the hard bound; process tests cover the soft drain budget.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		require.NoError(t, h.service.Stop(ctx))
 		h.service = nil

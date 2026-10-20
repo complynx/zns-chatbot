@@ -44,6 +44,19 @@ func paymentMethods(audit bool) []map[string]any {
 	methods := []map[string]any{
 		paymentExpectationsMethod(),
 		paymentMethod(
+			"operation",
+			"Recover your own original pass-payment operation by operation_id, including submissions made in the Mini App. The receipt contains kind submit with the complete original evidence, or kind review with the complete original legacy review result. Current account/event access is rechecked; event authority does not grant another actor's receipt. A submission receipt can remain pending after confirmation: read evidence and balance separately for current money. receipt:null is unknown, never proof of non-execution or permission to resubmit. This read never submits evidence, confirms money or renews a proposal.",
+			map[string]any{
+				detailsOperationID: map[string]any{
+					manifestType:    schemaString,
+					schemaMinLength: 1,
+					schemaMaxLength: paymentOperationIDLimit,
+				},
+			},
+			[]string{detailsOperationID},
+			[]string{paymentSchemaReceipt},
+		),
+		paymentMethod(
 			"events",
 			"List events where you have an assigned pass or current payment authority, with name, IANA timezone, dates and optional own_pass frozen terms. Sales closing does not hide pending payment expectations. UUID pagination, default/max 20, follow next as after. Use explicit/pinned event when known; otherwise choose the nearest relevant registered event from dates and user context, or ask when several expectations are ambiguous. Only your own pass details are included.",
 			map[string]any{
@@ -135,7 +148,7 @@ func paymentReviewMethod(uuidField map[string]any) map[string]any {
 func paymentSubmissionMethod(uuidField, amount map[string]any) map[string]any {
 	submit := paymentMethod(
 		"submit",
-		"Submit your accepted attachment as pending payment evidence only after a user request. Required explicit event_id/pass_id/file_id (opaque attachment ID), amount_minor, currency, currency_scale, purpose. initial uses the frozen initial deadline; top_up uses frozen final deadline and requires a deposit or explicit human case decision before credit. Amount/currency must be verified from the receipt or clarified; ask if multiple expectations are ambiguous. Evidence arrival time comes from the original Telegram message, not processing time. Sharing with this event's payment authorities creates no money credit or paid pass. Rejected proof may be corrected and resubmitted; pending/confirmed sources cannot fund another expectation. Missing operation status is unknown: reconcile same operation before retry, never replace blindly.",
+		"Submit your accepted attachment as pending payment evidence only after a user request. Before a new submission, refresh zinusya_payments.list and balance to find native or agent submissions already recorded for this file; inspect existing evidence or reconcile its operation instead of submitting it again. Required explicit event_id/pass_id/file_id (opaque attachment ID), amount_minor, currency, currency_scale, purpose. initial uses the frozen initial deadline; top_up uses frozen final deadline and requires a deposit or explicit human case decision before credit. Amount/currency must be verified from the receipt or clarified; ask if multiple expectations are ambiguous. Evidence arrival time comes from the original Telegram message, not processing time. Sharing with this event's payment authorities creates no money credit or paid pass. Rejected proof may be corrected and resubmitted; pending/confirmed sources cannot fund another expectation. Missing operation status is unknown: reconcile same operation before retry, never replace blindly.",
 		map[string]any{
 			schemaEventID:     uuidField,
 			schemaPassID:      uuidField,

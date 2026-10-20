@@ -13,10 +13,12 @@ import (
 const pairReadPageLimit = 20
 
 type PairAssignmentCandidate struct {
-	Arguments      PairAssignment     `json:"arguments"`
-	Pair           registrations.Pair `json:"pair"`
-	LeaderUserID   uuid.UUID          `json:"leader_user_id"`
-	FollowerUserID uuid.UUID          `json:"follower_user_id"`
+	Arguments      PairAssignment            `json:"arguments"`
+	Pair           registrations.Pair        `json:"pair"`
+	LeaderUserID   uuid.UUID                 `json:"leader_user_id"`
+	FollowerUserID uuid.UUID                 `json:"follower_user_id"`
+	Leader         PairAssignmentParticipant `json:"leader"`
+	Follower       PairAssignmentParticipant `json:"follower"`
 }
 
 // PairAssignmentEvents lists event metadata under current account and assignment authority.
@@ -47,7 +49,8 @@ func (s *Store) PairAssignmentEvents(
 	return result, nil
 }
 
-// PairAssignmentCandidates returns current IDs and versions without partner financial data.
+// PairAssignmentCandidates returns current IDs, versions and bounded display identities.
+// It does not return legal identity or partner financial data.
 // A candidate is a queue snapshot, not a capacity reservation or an eligibility guarantee.
 func (s *Store) PairAssignmentCandidates(
 	ctx context.Context,
@@ -83,6 +86,14 @@ func (s *Store) PairAssignmentCandidates(
 	}
 	result := make([]PairAssignmentCandidate, 0, len(rows))
 	for _, row := range rows {
+		leader, _, e := pairAssignmentParticipant(ctx, tx, q, row.LeaderUserID)
+		if e != nil {
+			return nil, e
+		}
+		follower, _, e := pairAssignmentParticipant(ctx, tx, q, row.FollowerUserID)
+		if e != nil {
+			return nil, e
+		}
 		result = append(result, PairAssignmentCandidate{
 			Arguments: PairAssignment{
 				EventID:                 eventID,
@@ -93,6 +104,7 @@ func (s *Store) PairAssignmentCandidates(
 				ExpectedFollowerVersion: row.FollowerVersion,
 			},
 			Pair: pairRecord(row.ShuttlePair), LeaderUserID: row.LeaderUserID, FollowerUserID: row.FollowerUserID,
+			Leader: leader, Follower: follower,
 		})
 	}
 	return result, nil

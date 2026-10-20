@@ -1,9 +1,68 @@
+The [full Linux/race gate](shuttle-linux-race-qa-2026-10-20.md) is failed:956 roots pass,19 fail, and the integration package reaches its20-minute limit. All19 unchanged failures pass a separate serial diagnostic. No OOM or race warning was observed, but full coverage is incomplete. Both temporary stands are archived/removed and the primary is preserved. Bounded batches with exact coverage are next; full Linux/race acceptance remains open.
+
+The owned primary is schema64/mvp78 after the [payment-consent installation and binary rollback](shuttle-payment-consent-primary-qa-2026-10-20.md).
+The preceding [massage mvp78 installation](shuttle-massage-primary-qa-2026-10-20.md) remains a separate historical gate.
+The preceding [mvp77 installation](shuttle-pair-terms-primary-qa-2026-10-20.md) remains a historical accepted stage.
+It preserves eleven services, original data/queues and134 Loom runs.
+Participant payments were installed at the earlier schema64/mvp74 stage.
+[Installation and auth-fix acceptance](shuttle-native-pass-payment-primary-qa-2026-10-20.md)
+verifies data preservation, binary rollback,17 exact assets and401 without a
+session. The [isolated financial matrix](shuttle-native-pass-payment-runtime-qa-2026-10-19.md)
+passes four paths from assigned passes. Source mvp73 checks remain64 PostgreSQL
+roots and304 UI cases; the bounded mvp74 auth follow-up passes20 API roots,
+18 authorization cases,20 PostgreSQL scenarios, lint and Linux build.
+
 Current source and acceptance scope: [native pass assignments](shuttle-native-pass-assignments.md),
-[local-primary schema61/mvp69 acceptance](shuttle-native-pass-assignment-primary-qa-2026-10-19.md),
+[preceding local-primary schema63/mvp72 acceptance](shuttle-native-pair-assignment-primary-qa-2026-10-19.md),
 and the [registration/pass parity plan](shuttle-registration-pass-parity-plan.md).
-The [pair continuation foundation](shuttle-native-pair-assignment-foundation.md)
-is source/component accepted and uninstalled; native form/session/history
-acceptance remains pending.
+The [native pair assignment workspace](shuttle-native-pair-assignments.md)
+passed installation at the schema63/mvp72 stage. The current primary includes
+it at schema64/mvp78. The mvp71
+baseline has 1037 Go roots/285 UI cases; the bounded mvp72 agent-identity fix
+passes 58 affected PostgreSQL roots, lint/sqlc and fresh reviews. The approval
+presentation follow-up passes 14 PostgreSQL scenarios, units/lint and fresh
+reviews. Its owned real-IAM/Loom/mock-Telegram/Edge four-path gate now passes,
+including lost-reply read recovery and a 0.703-second graceful bot stop retaining
+the same approval. Eight passes, four assignment receipts and three completed
+Loom runs were verified. Both temporary runtime stands were archived and removed.
+Local-primary installation/rollback now passes; eleven services and 134 Loom
+runs remain preserved. The [native joined registration/pair/payment journey](shuttle-joined-native-runtime-qa-2026-10-20.md)
+now passes from fresh participants, with Loom stopped throughout the financial
+workflow. All four queued files later reach two controlled-provider Loom runs
+without financial changes. The separate
+[joined agent gate](shuttle-joined-agent-runtime-qa-2026-10-20.md) now passes from
+fresh registrations through two paid passes, four ambassador reviews and15
+completed controlled-provider Loom runs. Exact original file captions are audited;
+the original assignment approval survives restart, with live signal/exit events
+measuring0.530 seconds for that probe. Its nine-service stand is archived and
+removed, with the primary unchanged. Both [whole mixed happy paths](shuttle-joined-mixed-runtime-qa-2026-10-20.md) now pass on uninstalled candidate mvp75: 22 runs and four paid passes across two fresh stands, both archived/removed. The [mvp77 source and packaged candidate](shuttle-pair-assignment-terms-2026-10-20.md) now implement structured native terms for new proposals, with legacy description fallback. Both directions now pass the [isolated binary runtime gate](shuttle-pair-terms-binary-runtime-qa-2026-10-20.md), with exact original proposal rows and one two-pass receipt retained. Its nine-service stand is archived/removed. Primary installation/rollback now passes in the separate mvp77 report; real Telegram WebView acceptance remains open. The logged application drain is 10.54 ms;
+the stop command wall time is 4.125 s, which does not establish exact full process
+exit within one second. The temporary nine-service stand is archived and removed.
+The [pair foundation report](shuttle-native-pair-assignment-foundation.md)
+records the preceding DB/API component stage.
+The [native initial-deadline and late-decision gate](shuttle-pass-deadline-runtime-qa-2026-10-20.md) now passes on mvp77 with real45-second
+timing and restart, two retained partially paid passes, three proofs and60.00 BYN
+credited by two ambassador confirmations; a third review rejects proof for zero
+credit. No Loom run is created. The read-only QA driver failure is retained and
+resolved without replaying business writes. All nine temporary services are
+archived/removed. The later [agent closing/timing gate](shuttle-pass-agent-closing-runtime-qa-2026-10-20.md)
+now passes on78: original early proof across Loom downtime/bot restart, actual
+sales closing,30.00-BYN timely confirmation and explicit late70.00-BYN top-up.
+Four Loom runs and six notices finish. Both temporary stands are archived/removed,
+exit0/no OOM; the original zero-business-effect setup failure is retained.
+The [payment-consent presentation fix](shuttle-payment-consent-primary-qa-2026-10-20.md) is now installed with rollback verified; broader timing/fault coverage remains open. Whole service-order and bounded owner-proof handoffs now pass below;
+[massage owner/specialist reconciliation](shuttle-massage-owner-lifecycle-qa-2026-10-20.md)
+passes on candidate78, which now also passes the separate local-primary
+installation/rollback gate. Meal checkout and broader faults remain open.
+
+The [actual token-expiry and dual-outage gate](shuttle-iam-expiry-dual-outage-qa-2026-10-20.md)
+now passes separately: natural short-session expiry while IAM and Loom are down,
+cold bot restart, three persisted authorization waits and three completed runs.
+The original task/run/session survive and session version advances. Existing and
+new users retain verified IAM identities and receive one reply each. Both owned
+nine-service stands are archived/removed; the first QA observer failure remains
+recorded. Multi-hour outages, business approval expiry and broader faults remain open.
+
 The entries below are historical stage reports. Their run counts, installation
 status, and next-step statements describe each stage at the time of acceptance.
 
@@ -492,6 +551,41 @@ local dates/DST, English/Russian and visible mobile/desktop behavior.
 
 ## 3. Orders and meals as complete workflows
 
+The [whole native service-order runtime gate](shuttle-orders-whole-native-runtime-qa-2026-10-20.md)
+now accepts owner entry through actual payment-proof admission and ambassador
+review on schema64/mvp77 with Loom stopped. Eligible unpaid passes are fixture
+prerequisites; orders/proofs/reviews are not fixtures. It verifies two orders,
+three claims, release after rejection, explicit full-capacity resolution, one
+25.68-BYN confirmation and12 notices. Queued original media remain archived,
+with zero Loom runs. The separate agent gate follows below; both handoff paths
+and meal financial checkout remain open. Earlier stage/version statements below describe their historical
+gates, not the current primary77.
+
+
+The [whole agent service-order gate](shuttle-orders-whole-agent-runtime-qa-2026-10-20.md)
+now also passes on the same accepted image: eight real Loom runs with a controlled
+provider, original file/caption intake, exact free-text approvals, two orders,
+three claims, two rejections and one25.68-BYN confirmation. All12 delivered notices
+and completed original media tasks are verified. Two retained observer failures
+recover the original first order without repeating consent or a write. The owned
+stand is archived/removed. Both [mixed order/reviewer workflows](shuttle-orders-whole-mixed-runtime-qa-2026-10-20.md)
+now pass on mvp77:16 completed runs across two stands, with both archived/removed
+and all18 services exit0/no OOM. Proof submission stays agent-driven in those mixed workflows. The separate
+[owner-proof gate](shuttle-orders-owner-proof-handoffs-qa-2026-10-20.md) now accepts
+native submission to real reactive Loom and fresh native discovery of an agent
+claim: five completed runs, two original claims and no duplicate effects. All nine
+services are archived/removed with exit0/no OOM. The separate
+[massage owner/specialist lifecycle](shuttle-massage-owner-lifecycle-qa-2026-10-20.md)
+passes on candidate78: native booking, specialist agent reads,
+exact agent cancellation after free-text owner consent and native/staff
+reconciliation. Three actual Loom runs finish; original receipts and notices
+match. Both real temporary stands are archived/removed with exit0/no OOM; the
+preceding failed browser observations remain preserved. Candidate78 separates
+en/ru advance/final reminder text, with scheduling unchanged. The separate
+[primary78 installation/rollback](shuttle-massage-primary-qa-2026-10-20.md) now passes,
+preserving schema64, original data and134 runs. Broader faults, rescheduling and
+charging remain open; accepted staff reservation/access handoffs need no repeat.
+
 The [source schema54 storage expansion](shuttle-order-kind.md) now separates
 service/meal canonical identity while preserving service receipts and restricting
 existing service APIs/evidence to service rows. Meal checkout remains open.
@@ -568,6 +662,14 @@ separately. Exact permissions and human decisions must also apply to agent calls
 the browser and agent share the same business service.
 
 ## 5. Hardening and Loom integration at every stage
+
+The bounded [massage original-consent recovery](shuttle-massage-cancel-outage-qa-2026-10-20.md)
+now passes on schema64/mvp78: one normal Telegram reply is persisted during
+simultaneous IAM/Loom downtime, the bot restarts cleanly while both stay down,
+and the original run/approval resumes after dependencies return. Exactly one
+cancellation applies. All nine temporary services are archived/removed with
+exit0/no OOM; primary remains78 with134 original runs. This covers recently issued
+tokens and an unexpired approval, not cache exhaustion, long outages or all faults.
 
 Keep accepted work durable across bot restarts and simultaneous IAM/Loom outages.
 Retry uncertain effects using their original key/body and fresh authorization;
