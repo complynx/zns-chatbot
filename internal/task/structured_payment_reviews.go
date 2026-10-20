@@ -25,6 +25,9 @@ func structuredFormLabel(command string, ru bool) string {
 	if command == massageCommand {
 		return structuredText(ru, "Open massage bookings", "Открыть записи на массаж")
 	}
+	if command == knowledgeCommand {
+		return structuredText(ru, "Open knowledge base", "Открыть базу знаний")
+	}
 	return structuredText(ru, "Open saved selection", "Открыть сохранённый выбор")
 }
 

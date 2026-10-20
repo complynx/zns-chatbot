@@ -188,15 +188,42 @@ blocked forms after definitive preparation rejection, mismatched suggestion
 pagination, changing review context during consent, and hidden publication/
 review metadata. The final metadata patch reran all18 knowledge cases.
 
+## Telegram entry and native HTTP acceptance
+
+The `/knowledge` command and menu entry use existing structured durable tasks
+and outbox delivery. They open `#knowledge` without starting a Loom run or
+consuming the current agent question. The command has EN/RU labels and an
+explicit unavailable-form response when no Mini App URL is configured. Native
+navigation is included in the next user-triggered agent context.
+
+Three additional HTTP behavior roots use real PostgreSQL and the bot's public/
+internal HTTP handlers with mocked IAM, Loom and Telegram peers. They exercise
+native suggestion through independent review and restart receipt replay, agent
+preparation continued through native exact consent, and origin/session/current-
+moderator guards. Another three roots exercise command delivery deduplication,
+restart/question continuity and unavailable-form behavior.
+
+The first owned race run remains FAILED: five roots passed and one failed. All
+three native HTTP roots passed; continuing the agent question exposed a real
+missing `/knowledge` entry in the structured-history SQL allow-list. The fix adds
+that command to the existing actor/conversation-scoped history. Its failed logs
+and fully decoded database archive are retained; all first-run fixture resources
+were removed. This evidence was not relabeled as a pass. The corrected source
+has clean lint and independent source/controller reviews. The replacement
+Linux/PostgreSQL17 race gate passes all six roots/cases with zero failures,
+skips or OOM. Its source remained frozen through validated archive and resource
+removal; the primary stand was preserved. The Linux/amd64 Go1.27.2 binary also
+builds with CGO disabled. These remain mocked-upstream fixture checks, not a
+real-Zitadel/Loom/browser acceptance claim.
+
 ## Remaining acceptance
 
-Add the Telegram `/knowledge` command/menu entry, moderator management UI and
-durable reviewer notices. The native client now supports event and actor-owned
+Add moderator management UI and durable reviewer notices. The native client now supports event and actor-owned
 operation selection for article/review workflows. Moderator assignment recovery
 is not yet exposed by that interface; recent assignment entries are metadata
 only. Prove continuation across channels/devices against real HTTP and IAM.
 
-Then perform native HTTP authorization and owned multi-user real-IAM/Loom/mock-
+Then perform deployed native HTTP and owned multi-user real-IAM/Loom/mock-
 Telegram acceptance, including both native/agent continuation directions and
 notification recovery. The corpus contains no fabricated factual seed material.
 The new source is not installed, pushed or declared production-ready.

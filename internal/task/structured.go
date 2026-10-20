@@ -23,6 +23,7 @@ const (
 	menuCommand              = "/menu"
 	ordersCommand            = "/orders"
 	massageCommand           = "/massage"
+	knowledgeCommand         = "/knowledge"
 	paymentReviewsCommand    = "/payment_reviews"
 	paymentsCommand          = "/payments"
 	nameCommand              = "/name"
@@ -37,7 +38,7 @@ func structuredCommand(text string) bool {
 	return text == registerCommand || strings.HasPrefix(text, registerCommand+" ") || text == nameCommand ||
 		strings.HasPrefix(text, nameCommand+" ") ||
 		text == startCommand || text == pairsCommand || text == avatarCommand || text == menuCommand || text == ordersCommand || text == massageCommand || text == paymentReviewsCommand ||
-		text == paymentsCommand || text == profileCommand ||
+		text == knowledgeCommand || text == paymentsCommand || text == profileCommand ||
 		text == registrationsCommand ||
 		strings.HasPrefix(text, registrationsCommand+" ")
 }
@@ -108,6 +109,8 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 			formURL = s.options.MiniAppURL + "#orders"
 		case massageCommand:
 			formURL = s.options.MiniAppURL + "#massage"
+		case knowledgeCommand:
+			formURL = s.options.MiniAppURL + "#knowledge"
 		}
 	}
 	t.State = stateCompleted
@@ -146,8 +149,8 @@ func (s *Service) structuredView(
 	case menuCommand, startCommand:
 		return structuredText(
 			ru,
-			"Zinusya\n/profile — My profile\n/registrations — My registrations and passes\n/register — Register for an event\n/orders — Saved order selection\n/massage — Massage bookings\n/avatar — My avatar\n/pairs — Pair invitations\n/payments — Pass payment",
-			"Зинуся\n/profile — Мой профиль\n/registrations — Мои регистрации и пассы\n/register — Регистрация на эвент\n/orders — Сохранённый выбор для заказа\n/massage — Записи на массаж\n/avatar — Моя аватарка\n/pairs — Приглашения в пару\n/payments — Оплата пасса",
+			"Zinusya\n/profile — My profile\n/registrations — My registrations and passes\n/register — Register for an event\n/orders — Saved order selection\n/massage — Massage bookings\n/avatar — My avatar\n/pairs — Pair invitations\n/payments — Pass payment\n/knowledge — Community and event knowledge",
+			"Зинуся\n/profile — Мой профиль\n/registrations — Мои регистрации и пассы\n/register — Регистрация на эвент\n/orders — Сохранённый выбор для заказа\n/massage — Записи на массаж\n/avatar — Моя аватарка\n/pairs — Приглашения в пару\n/payments — Оплата пасса\n/knowledge — База знаний сообщества и эвентов",
 		), nil, nil
 	case paymentsCommand:
 		return s.structuredPaymentsView(ru), nil, nil
@@ -195,6 +198,8 @@ func (s *Service) structuredView(
 			"Open the form to choose an event and review a massage slot or cancel your booking. A preview does not reserve a slot or confirm payment.",
 			"Открой форму, выбери эвент и проверь время массажа или отмени свою запись. Предпросмотр не занимает место и не подтверждает оплату.",
 		), nil, nil
+	case knowledgeCommand:
+		return s.structuredKnowledgeView(ru), nil, nil
 	case profileCommand:
 		text, err := s.structuredProfileView(ctx, scope, ru)
 		return text, nil, err
@@ -287,6 +292,7 @@ func structuredOutput(i intent, text string, next *uuid.UUID, ru bool, formURL s
 		{{Text: registerCommand}, {Text: ordersCommand}},
 		{{Text: massageCommand}, {Text: avatarCommand}},
 		{{Text: pairsCommand}, {Text: paymentsCommand}},
+		{{Text: knowledgeCommand}},
 	}, ResizeKeyboard: true}
 	chunks := render.Plain(text)
 	out := make([]db.Outbound, 0, len(chunks))

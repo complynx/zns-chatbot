@@ -39,7 +39,7 @@ LEFT JOIN shuttle_profile_operations op ON op.user_id=prior.user_id AND op.opera
  AND prior.snapshot#>>'{profile_change,kind}' IN ('set_name','complete_name','request_name')
 WHERE current_task.id=$1 AND current_task.user_id=$2
  AND prior.route='structured' AND prior.state IN ('completed','delivery_unknown','delivery_failed','closed')
- AND (prior.request->>'structured_command' IN ('/start','/avatar','/pairs','/menu','/profile','/registrations','/register','/orders','/massage','/payment_reviews','/payments') OR op.user_id IS NOT NULL)
+ AND (prior.request->>'structured_command' IN ('/start','/avatar','/pairs','/menu','/profile','/registrations','/register','/orders','/massage','/knowledge','/payment_reviews','/payments') OR op.user_id IS NOT NULL)
 ORDER BY prior.seq DESC LIMIT 5`,
 		taskID,
 		scope.UserID,
