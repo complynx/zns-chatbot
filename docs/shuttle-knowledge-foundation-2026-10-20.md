@@ -1,16 +1,17 @@
 # Knowledge foundation evidence, 2026-10-20
 
-Status: store, agent API and bounded archive maintenance are now in the working
-branch. They are not installed on the main stand. Native forms, moderator
-notifications and end-to-end knowledge acceptance remain open.
+Status: store, agent API, native forms and bounded archive maintenance are
+installed on the owned shuttle-live-test stand at schema65/mvp79. Real Telegram
+native suggestion acceptance passes. Moderator notifications, moderator UI and
+full mixed-channel acceptance remain open.
 
 ## Applied implementation checkpoint
 
 The domain and additive migration65 are applied to source. The store implements
 published retrieval, suggestions, independent review, named moderators, exact
 operation receipts and event archival. The agent API exposes these operations
-under `zinusya_knowledge`; the source manifest is mvp79. The installed stand is
-still schema64/mvp78 and has not received these changes.
+under `zinusya_knowledge`; both source and the owned installed stand use mvp79.
+The stand received additive migration65 after a decoded pre-migration backup.
 
 The final isolated Linux/race PostgreSQL gate v5 passed nine roots and18 terminal
 cases, with no failures, skips or OOM. It covers independent review, event scope
@@ -216,6 +217,47 @@ removal; the primary stand was preserved. The Linux/amd64 Go1.27.2 binary also
 builds with CGO disabled. These remain mocked-upstream fixture checks, not a
 real-Zitadel/Loom/browser acceptance claim.
 
+## Owned installation and real Telegram native acceptance
+
+Commit2024ce85 was built with Go1.27.2 for Linux/amd64, with CGO disabled.
+The installed image is
+`sha256:19539bab1b2d9639afa51b1200ba3caa437eed1c69680b5ca1c8769404e33663`.
+The extracted binary matched the build artifact. The installation controller
+passed independent textual review. Ingress and bot stopped gracefully, the
+private PostgreSQL archive decoded fully, migration65 applied through the actual
+application migration entry point, and only the bot container was recreated.
+The temporary migration container was removed. The same poller resumed and
+completed a fresh successful polling cycle. All eleven services were running;
+companion identities, old business data and Loom state were preserved.
+
+The isolated schema-guard v1 remains failed: excluding the approved new legacy
+index left one extra pg_dump separator line. The exact stanza normalization was
+corrected without general whitespace normalization. Replacement v2 passes actual
+64-to-65 DDL, checks the exact new index definition, and rejects an unrelated
+legacy index. Both disposable PostgreSQL containers were removed without OOM;
+the main stand remained unchanged during those checks.
+
+The real Telegram probe used only the authorized account and test-bot chat.
+`/knowledge` delivered its Mini App button through one completed structured task,
+sequence208, with no agent run or auth session. The Bot API receipt is message4625;
+Telegram Web uses a different local message index. The form authenticated the
+user automatically and landed visibly on Knowledge. An ordinary user prepared
+and explicitly confirmed a synthetic general/history article suggestion, read
+it back through My suggestions, then signed out and closed the form. Suggestion
+`4989096e-45f7-417e-971b-b9ea7bf49fe0` remains pending, with no reviewer or published
+revision. Published articles and revisions both remain empty. No community facts
+were invented or imported. Loom run count stayed134; other business-table hashes
+were unchanged. Two read-back assertions were corrected (empty-string run fields
+and the Web/Bot API message-index distinction); their failed attempt records are
+retained separately from the passing result.
+
+Local evidence is retained under ignored `knowledge-install-v1/`,
+`knowledge-install-schema-qa-v1/`, `knowledge-install-schema-qa-v2/` and
+`knowledge-native-real-v1/` within `.cache/shuttle-work/`. Installation and
+post-QA epochs are separate records. This proves the deployed native suggestion
+path with actual Telegram and IAM. It does not prove moderator publication,
+agent continuation or the complete end-to-end knowledge workflow.
+
 ## Remaining acceptance
 
 Add moderator management UI and durable reviewer notices. The native client now supports event and actor-owned
@@ -223,12 +265,13 @@ operation selection for article/review workflows. Moderator assignment recovery
 is not yet exposed by that interface; recent assignment entries are metadata
 only. Prove continuation across channels/devices against real HTTP and IAM.
 
-Then perform deployed native HTTP and owned multi-user real-IAM/Loom/mock-
-Telegram acceptance, including both native/agent continuation directions and
-notification recovery. The corpus contains no fabricated factual seed material.
-The new source is not installed, pushed or declared production-ready.
+Continue owned multi-user real-IAM/Loom/mock-Telegram acceptance, including
+moderator publication, both native/agent continuation directions and notification
+recovery. The installed corpus has no published articles; its single synthetic
+suggestion remains pending. The source has not been pushed or declared
+production-ready.
 
-No production-readiness or deployment claim is made.
+No production-readiness or production-deployment claim is made.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
