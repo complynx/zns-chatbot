@@ -2,7 +2,8 @@
 
 Status: architecture agreed; store and agent API are implemented in source.
 Native interfaces and a selected desktop browser path are accepted separately;
-whole-feature acceptance remains open; see the
+whole-feature acceptance remains open. Exact prepared-operation native-to-agent
+adoption has a [reproduced contract gap](shuttle-loom-native-operation-adoption.md); see the
 [foundation evidence](shuttle-knowledge-foundation-2026-10-20.md).
 This document defines target behavior; the foundation evidence tracks implemented
 and accepted scope.

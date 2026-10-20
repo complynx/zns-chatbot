@@ -96,3 +96,20 @@ fully decoded dump are retained under ignored
 removed; the primary is preserved. This is a selected CPU-pressure diagnostic,
 not full CI or an exact reproduction of the hosted runner. A new exact-source
 remote CI pass remains required. Primary remains mvp81/schema65.
+
+## Full behavioral pass and dependency-download failure
+
+The [run at1deb3cc2](https://github.com/complynx/zns-chatbot/actions/runs/39456420165)
+passes all814 integration roots in nine batches, the package/race tests,
+stand isolation, Telegram simulator, alert/dashboard checks and all344 UI tests.
+It then fails while building pinned developer tools: Go proxy returns an HTTP/2
+`INTERNAL_ERROR` fetching a `google.golang.org/genproto/googleapis/api` archive.
+Generated SQL, lint and final Linux/container build are skipped. This run is a
+failed full CI result despite its passing behavioral tests. The primary remains
+mvp81/schema65 and the installation gate stays closed.
+
+The two reviewed documentation commits were pushed after that terminal result.
+The [new run at83e8701d](https://github.com/complynx/zns-chatbot/actions/runs/39463177833)
+is pending full acceptance; no product, integration-test or workflow source changed
+between these two heads. Its push counterpart was cancelled by configured
+concurrency, which is separate from a test failure.
