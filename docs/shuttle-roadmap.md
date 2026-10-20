@@ -7,27 +7,30 @@ are accepted. The latter full CI at `7fc7bd31` passes 814 integration roots and 
 tests. Domain data and original ingress remain preserved. The chronological
 records below retain each earlier result; later success does not rewrite failures.
 
+The [bounded model-assisted knowledge probe](shuttle-knowledge-model-qa-2026-10-20.md)
+now passes four Russian/English current/history/glossary/missing-policy dialogues
+with model-generated tool choices and actual Loom/IAM. All four replies are
+delivered, the six knowledge tables are unchanged after seeding, and the nine
+temporary services are archived/removed. Its 15 model turns use a synthetic
+mailbox provider; this is not native-provider or broad model-quality acceptance.
+
 ## Next actions, in order
 
-1. Check a bounded set of natural-language knowledge requests with model-generated
-   tool choices on an isolated stand. Controlled-provider receipts establish
-   transport and durable writes, not model comprehension or answer quality.
-   Preserve that distinction and report any simulated usage separately.
-2. Close exact prepared-operation native-to-agent handoff when the generic
+1. Close exact prepared-operation native-to-agent handoff when the generic
    [Loom adoption contract](shuttle-loom-native-operation-adoption.md) is agreed
    and available. Also resolve the documented
    [revocation/consent lifecycle](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md).
    Independent native completion and agent reads remain usable; neither proves
    adoption of the original preparation. Do not change the Loom developer's stand.
-3. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
+2. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
    when Daniel is available. Revalidate the retained configuration first;
    isolated HTTP/Edge results do not replace that joint check.
-4. Continue meal financial checkout after the recorded policy decisions: empty
+3. Continue meal financial checkout after the recorded policy decisions: empty
    completed selections, the financial cutoff across services, and explicit meal
    capacity. Catalogs/drafts and shared kind-isolated storage exist; exposed meal
    submission/payment/review is still missing. Service-order acceptance does not
    cover meals. Keep unresolved decisions in the ignored local decisions file.
-5. Finish real export/account/avatar migration and server-specific cutover
+4. Finish real export/account/avatar migration and server-specific cutover
    acceptance before any separately authorized production deployment. Historical
    payment records stay reference material, not credits in the new live ledger.
 
