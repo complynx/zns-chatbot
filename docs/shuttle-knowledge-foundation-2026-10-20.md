@@ -1,3 +1,5 @@
+The later [event runtime gate](shuttle-knowledge-event-runtime-qa-2026-10-20.md) accepts one native-API/actual-Loom event-admin publication path, automatic archival and named historical-moderator editing on an isolated stand. Browser editing, autonomous model quality and main installation remain separate gates. Earlier component and runtime results below retain their original scope.
+
 # Knowledge foundation evidence, 2026-10-20
 
 Status: store, agent API, native forms and bounded archive maintenance are

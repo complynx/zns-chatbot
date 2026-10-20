@@ -1,7 +1,7 @@
 # Shared and event knowledge
 
 Status: architecture agreed; store and agent API are implemented in source.
-Native interfaces and whole-feature acceptance remain open; see the
+Native interfaces are present; browser and whole-feature acceptance remain open; see the
 [foundation evidence](shuttle-knowledge-foundation-2026-10-20.md).
 This document defines target behavior; the foundation evidence tracks implemented
 and accepted scope.
