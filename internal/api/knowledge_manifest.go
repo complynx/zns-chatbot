@@ -43,9 +43,9 @@ func knowledgeWriteMethod[I any](id, description string) map[string]any {
 }
 func knowledgeMethods(c db.KnowledgeCapabilities) []map[string]any {
 	methods := []map[string]any{
-		knowledgeMethod[struct{}, db.KnowledgeOverview](
+		knowledgeMethod[knowledgeOverviewArguments, db.KnowledgeOverview](
 			"overview",
-			"Browse bounded collection/event/topic counts before choosing scope. Empty collections are valid. Event IDs come from these results, never guesses. truncated reports overview bounds.",
+			"Browse general/history counts and up to twenty active event collections, INCLUDING empty events, with bounded topic counts. No pass or enabled registration module is required. General appears on every page. Follow next_event as after to continue the event directory; truncated can also mean the topic preview is limited. Event IDs come from these results, never guesses.",
 		),
 		knowledgeMethod[db.KnowledgeListRequest, knowledgeListView](
 			"list",
@@ -88,6 +88,7 @@ func knowledgeMethods(c db.KnowledgeCapabilities) []map[string]any {
 			"Submit a frozen new article or complete replacement only on the authenticated user's request. For new articles omit article_id and use expected_revision 0; event_id chooses an active event, omission chooses general. Existing articles require expected_revision from read; event origin cannot be moved. content contains slug,title,language(en/ru),topics(max12),body(exact Markdown <=98304 UTF-8 bytes),sources(max16 HTTP(S) label/URL references). reason is required. Submission creates pending review; only a DIFFERENT currently authorized reviewer may approve it. Never treat proposer confirmation as publication approval.",
 		),
 	}
+	methods = append(methods, knowledgeActionMethods()...)
 	if c.CanEdit {
 		methods = append(
 			methods,

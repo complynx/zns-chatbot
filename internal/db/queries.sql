@@ -2060,11 +2060,29 @@ AND (sqlc.arg(collection)::text='all' OR (sqlc.arg(collection)='general' AND (a.
 OR (sqlc.arg(collection)='event' AND a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL)))
 ORDER BY a.id LIMIT sqlc.arg(page_limit);
 -- name: KnowledgeOverviewCounts :many
-SELECT CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN 'event' ELSE 'general' END::text AS collection,
-CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN a.event_id::text ELSE '' END::text AS event_key,
-CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN e.name ELSE '' END::text AS event_name,count(*)::bigint AS count
-FROM shuttle_knowledge_articles a LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
-WHERE a.bot_id=$1 AND a.organization_id=$2 GROUP BY 1,2,3 ORDER BY collection,event_key LIMIT 21;
+WITH active_events AS MATERIALIZED (
+ SELECT e.id,e.name FROM shuttle_events e
+ WHERE e.bot_id=sqlc.arg(bot_id) AND e.organization_id=sqlc.arg(organization_id)
+ AND e.ends_at>clock_timestamp()
+ AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h
+  WHERE h.bot_id=e.bot_id AND h.organization_id=e.organization_id AND h.event_id=e.id AND h.archived_at IS NOT NULL)
+), event_counts AS (
+ SELECT a.event_id,count(*)::bigint AS count FROM shuttle_knowledge_articles a
+ JOIN active_events e ON e.id=a.event_id
+ WHERE a.bot_id=sqlc.arg(bot_id) AND a.organization_id=sqlc.arg(organization_id) AND a.archived_at IS NULL
+ GROUP BY a.event_id
+), collections AS (
+ SELECT 'general'::text AS collection,NULL::uuid AS event_id,''::text AS event_name,count(*)::bigint AS count
+ FROM shuttle_knowledge_articles a
+ WHERE a.bot_id=sqlc.arg(bot_id) AND a.organization_id=sqlc.arg(organization_id)
+ AND (a.event_id IS NULL OR a.archived_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM active_events e WHERE e.id=a.event_id))
+ UNION ALL
+ SELECT 'event'::text,e.id,e.name,coalesce(c.count,0)::bigint
+ FROM active_events e LEFT JOIN event_counts c ON c.event_id=e.id
+)
+SELECT collection,coalesce(event_id::text,'')::text AS event_key,event_name,count FROM collections
+WHERE event_id IS NULL OR event_id>sqlc.arg(after_event)::uuid
+ORDER BY event_id NULLS FIRST LIMIT sqlc.arg(page_limit);
 -- name: KnowledgeOverviewTopics :many
 SELECT topic::text,count(*)::bigint AS count FROM shuttle_knowledge_articles a CROSS JOIN unnest(a.topics) topic
 WHERE a.bot_id=$1 AND a.organization_id=$2 GROUP BY topic ORDER BY count DESC,topic LIMIT 41;

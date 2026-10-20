@@ -6323,16 +6323,36 @@ func (q *Queries) KnowledgeOnlyArchiveGap(ctx context.Context, arg KnowledgeOnly
 }
 
 const knowledgeOverviewCounts = `-- name: KnowledgeOverviewCounts :many
-SELECT CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN 'event' ELSE 'general' END::text AS collection,
-CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN a.event_id::text ELSE '' END::text AS event_key,
-CASE WHEN a.event_id IS NOT NULL AND a.archived_at IS NULL AND e.ends_at>clock_timestamp() AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h WHERE h.bot_id=a.bot_id AND h.organization_id=a.organization_id AND h.event_id=a.event_id AND h.archived_at IS NOT NULL) THEN e.name ELSE '' END::text AS event_name,count(*)::bigint AS count
-FROM shuttle_knowledge_articles a LEFT JOIN shuttle_events e ON e.id=a.event_id AND e.bot_id=a.bot_id AND e.organization_id=a.organization_id
-WHERE a.bot_id=$1 AND a.organization_id=$2 GROUP BY 1,2,3 ORDER BY collection,event_key LIMIT 21
+WITH active_events AS MATERIALIZED (
+ SELECT e.id,e.name FROM shuttle_events e
+ WHERE e.bot_id=$3 AND e.organization_id=$4
+ AND e.ends_at>clock_timestamp()
+ AND NOT EXISTS(SELECT 1 FROM shuttle_knowledge_articles h
+  WHERE h.bot_id=e.bot_id AND h.organization_id=e.organization_id AND h.event_id=e.id AND h.archived_at IS NOT NULL)
+), event_counts AS (
+ SELECT a.event_id,count(*)::bigint AS count FROM shuttle_knowledge_articles a
+ JOIN active_events e ON e.id=a.event_id
+ WHERE a.bot_id=$3 AND a.organization_id=$4 AND a.archived_at IS NULL
+ GROUP BY a.event_id
+), collections AS (
+ SELECT 'general'::text AS collection,NULL::uuid AS event_id,''::text AS event_name,count(*)::bigint AS count
+ FROM shuttle_knowledge_articles a
+ WHERE a.bot_id=$3 AND a.organization_id=$4
+ AND (a.event_id IS NULL OR a.archived_at IS NOT NULL OR NOT EXISTS(SELECT 1 FROM active_events e WHERE e.id=a.event_id))
+ UNION ALL
+ SELECT 'event'::text,e.id,e.name,coalesce(c.count,0)::bigint
+ FROM active_events e LEFT JOIN event_counts c ON c.event_id=e.id
+)
+SELECT collection,coalesce(event_id::text,'')::text AS event_key,event_name,count FROM collections
+WHERE event_id IS NULL OR event_id>$1::uuid
+ORDER BY event_id NULLS FIRST LIMIT $2
 `
 
 type KnowledgeOverviewCountsParams struct {
-	BotID          int64  `json:"bot_id"`
-	OrganizationID string `json:"organization_id"`
+	AfterEvent     uuid.UUID `json:"after_event"`
+	PageLimit      int32     `json:"page_limit"`
+	BotID          int64     `json:"bot_id"`
+	OrganizationID string    `json:"organization_id"`
 }
 
 type KnowledgeOverviewCountsRow struct {
@@ -6343,7 +6363,12 @@ type KnowledgeOverviewCountsRow struct {
 }
 
 func (q *Queries) KnowledgeOverviewCounts(ctx context.Context, arg KnowledgeOverviewCountsParams) ([]KnowledgeOverviewCountsRow, error) {
-	rows, err := q.db.Query(ctx, knowledgeOverviewCounts, arg.BotID, arg.OrganizationID)
+	rows, err := q.db.Query(ctx, knowledgeOverviewCounts,
+		arg.AfterEvent,
+		arg.PageLimit,
+		arg.BotID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return nil, err
 	}

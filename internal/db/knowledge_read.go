@@ -444,6 +444,17 @@ func (s *Store) ListKnowledge(
 	return p, nil
 }
 func (s *Store) KnowledgeOverview(ctx context.Context, scope PaymentScope) (KnowledgeOverview, error) {
+	return s.KnowledgeOverviewAfter(ctx, scope, uuid.Nil)
+}
+
+// KnowledgeOverviewAfter always includes general knowledge, then at most twenty
+// active event collections, including empty ones. NextEvent continues only the
+// event directory; topics retain their separately disclosed bounded preview.
+func (s *Store) KnowledgeOverviewAfter(
+	ctx context.Context,
+	scope PaymentScope,
+	after uuid.UUID,
+) (KnowledgeOverview, error) {
 	tx, q, err := s.kbRead(ctx, scope)
 	if err != nil {
 		return KnowledgeOverview{}, err
@@ -451,7 +462,12 @@ func (s *Store) KnowledgeOverview(ctx context.Context, scope PaymentScope) (Know
 	defer func() { _ = tx.Rollback(ctx) }()
 	rows, err := q.KnowledgeOverviewCounts(
 		ctx,
-		sqlc.KnowledgeOverviewCountsParams{BotID: scope.BotID, OrganizationID: scope.Organization},
+		sqlc.KnowledgeOverviewCountsParams{
+			BotID:          scope.BotID,
+			OrganizationID: scope.Organization,
+			AfterEvent:     after,
+			PageLimit:      kbOverviewItemLimit + 1,
+		},
 	)
 	if err != nil {
 		return KnowledgeOverview{}, err
@@ -466,9 +482,9 @@ func (s *Store) KnowledgeOverview(ctx context.Context, scope PaymentScope) (Know
 	p := KnowledgeOverview{
 		Items:     []KnowledgeOverviewItem{},
 		Topics:    []KnowledgeTopic{},
-		Truncated: len(rows) > kbOverviewLimit || len(topics) > kbTopicLimit,
+		Truncated: len(rows) > kbOverviewItemLimit || len(topics) > kbTopicLimit,
 	}
-	for _, r := range rows[:min(kbOverviewLimit, len(rows))] {
+	for _, r := range rows[:min(kbOverviewItemLimit, len(rows))] {
 		var eventID *uuid.UUID
 		if r.EventKey != "" {
 			id, e := uuid.Parse(r.EventKey)
@@ -486,6 +502,9 @@ func (s *Store) KnowledgeOverview(ctx context.Context, scope PaymentScope) (Know
 				Count:      r.Count,
 			},
 		)
+	}
+	if len(rows) > kbOverviewItemLimit {
+		p.NextEvent = p.Items[len(p.Items)-1].EventID
 	}
 	for _, r := range topics[:min(kbTopicLimit, len(topics))] {
 		p.Topics = append(p.Topics, KnowledgeTopic{Topic: r.Topic, Count: r.Count})

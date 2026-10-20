@@ -115,13 +115,13 @@ func knowledgeResultProject(result db.KnowledgeResult) knowledgeResultView {
 
 func (s *Server) knowledgeOverview(
 	ctx context.Context,
-	in *agentReadRequest[struct{}],
+	in *agentReadRequest[knowledgeOverviewArguments],
 ) (*agentReadResponse[db.KnowledgeOverview], error) {
 	scope, err := s.paymentScope(ctx, in.AuthInput)
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.store.KnowledgeOverview(ctx, scope)
+	result, err := s.store.KnowledgeOverviewAfter(ctx, scope, in.Body.Arguments.After)
 	if err != nil {
 		return nil, knowledgeError(err)
 	}

@@ -12,17 +12,18 @@ import (
 var ErrKnowledgeDenied = errors.New("current knowledge authority required")
 
 const (
-	kbSuggest        = "suggest"
-	kbEdit           = "edit"
-	kbReview         = "review"
-	kbSetModerator   = "set_moderator"
-	kbApprove        = "approve"
-	kbReject         = "reject"
-	kbPending        = "pending"
-	kbOverviewLimit  = 20
-	kbTopicLimit     = 40
-	kbArchiveBatch   = 20
-	kbPreparationTTL = 5 * time.Minute
+	kbSuggest           = "suggest"
+	kbEdit              = "edit"
+	kbReview            = "review"
+	kbSetModerator      = "set_moderator"
+	kbApprove           = "approve"
+	kbReject            = "reject"
+	kbPending           = "pending"
+	kbOverviewLimit     = 20
+	kbOverviewItemLimit = kbOverviewLimit + 1
+	kbTopicLimit        = 40
+	kbArchiveBatch      = 20
+	kbPreparationTTL    = 5 * time.Minute
 )
 
 type KnowledgeArticle struct {
@@ -155,4 +156,5 @@ type KnowledgeOverview struct {
 	Items     []KnowledgeOverviewItem `json:"items"`
 	Topics    []KnowledgeTopic        `json:"topics"`
 	Truncated bool                    `json:"truncated"`
+	NextEvent *uuid.UUID              `json:"next_event,omitempty"`
 }

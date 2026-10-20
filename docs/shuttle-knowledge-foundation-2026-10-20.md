@@ -120,13 +120,48 @@ copies in an approval result. Article and source field limits, HTTP1 MiB limits,
 foreign keys and populated-rollback refusal stay unchanged. V5 then passed both
 variants through suggestion, approval, publication and receipt replay.
 
+## Event discovery and continuation follow-up
+
+The overview now includes active events with no articles, independent of passes,
+registration and module availability. Each page contains general/history and at
+most20 active events. Pass `next_event` as `after` to continue; the general row
+repeats. `truncated` can also describe the bounded topic preview, so it does not
+always imply another event page. Archived origins stay historical after an event
+is rescheduled. Original article provenance is preserved.
+
+The agent has actor-owned `operation` and `recent_actions` reads. Native clients
+have `recent_actions` and the existing per-verb status endpoints. Recent discovery
+returns at most five metadata-only locators, not an exhaustive operation history.
+Exact normalized arguments come from operation status. This permits discovery of
+another channel's preparation without treating past activity as new consent.
+
+Existing reactive tasks include recent knowledge action locators created before
+that task's immutable creation time. Task ownership and the actor's current
+bot/organization/subject binding are checked. Later actions do not enter that
+original task on retry. Historical metadata is marked untrusted and never creates
+a new agent run. Confirmation still checks current authority, versions and expiry.
+
+The follow-up owned Linux/PostgreSQL17 race gate passed12 roots/21 cases, with
+zero failures, skips or OOM. It repeats the prior nine foundation roots and adds
+empty-event pagination/isolation, rescheduled-archive provenance and task owner/
+cutoff/revocation checks. The private database dump was fully decoded before all
+fixture containers, network and volume were removed. Frozen source remained
+unchanged and the primary stand was preserved. Host API/db/domain/task tests and
+the combined lint gate passed. Independent DB/task and API/context reviews found
+no actionable defects. One earlier review incorrectly applied pre-Go1.27
+composite-literal restrictions; the Go1.27.2 compiler and current linter accept
+the promoted-field initializer used here.
+
+These tests exercise store behavior and API projections. They do not establish
+native HTTP/session, actual Loom prompt consumption or real Telegram acceptance.
+The separate ignored UI draft is not installed or included in this source gate.
+
 ## Remaining acceptance
 
-Connect the native frontend and Telegram `/knowledge` entry. Add actor-owned
-operation discovery and reactive agent context, an event directory independent
-of registration/module validity, moderator management UI and durable reviewer
-notices. Known-operation recovery already returns exact terms; selecting those
-operations across channels/devices remains open.
+Connect the native frontend and Telegram `/knowledge` entry. Add moderator
+management UI and durable reviewer notices. The backend now supports event and
+actor-owned operation discovery; wire selection and recovery into the native
+client, then prove continuation across channels/devices.
 
 Then perform native HTTP authorization and owned multi-user real-IAM/Loom/mock-
 Telegram acceptance, including both native/agent continuation directions and

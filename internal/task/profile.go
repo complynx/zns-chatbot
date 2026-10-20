@@ -191,6 +191,9 @@ func (s *Service) appendStructuredContext(
 	if err != nil {
 		return err
 	}
+	if err = s.appendKnowledgeContext(ctx, text, user, taskID); err != nil {
+		return err
+	}
 	if err = s.appendPairOperationContext(ctx, text, scope, taskID); err != nil {
 		return err
 	}

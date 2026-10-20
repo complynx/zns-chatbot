@@ -15,8 +15,8 @@ func (s *Server) registerMiniAppKnowledgeReads() {
 	registerMiniAppKnowledgePost(
 		s,
 		"overview",
-		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, _ struct{}) (any, error) {
-			return s.store.KnowledgeOverview(ctx, scope)
+		func(ctx context.Context, scope db.PaymentScope, _ db.MiniAppKnowledgeSession, in knowledgeOverviewArguments) (any, error) {
+			return s.store.KnowledgeOverviewAfter(ctx, scope, in.After)
 		},
 	)
 	registerMiniAppKnowledgePost(

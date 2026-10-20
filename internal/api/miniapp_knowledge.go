@@ -16,6 +16,7 @@ import (
 // Native knowledge routes share canonical article, suggestion and operation IDs
 // with agent tools. Every request uses the current server-resolved actor.
 func (s *Server) registerMiniAppKnowledge() {
+	s.registerMiniAppKnowledgeActions()
 	s.registerMiniAppKnowledgeReads()
 	registerMiniAppKnowledgeWrite(s, "suggest", knowledgeEditChange, knowledgeEditFromChange)
 	registerMiniAppKnowledgeWrite(s, "edit", knowledgeEditChange, knowledgeEditFromChange)
