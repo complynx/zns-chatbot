@@ -60,7 +60,8 @@ suggestions, articles or other notification families.
 
 The down migration refuses to discard knowledge resolution history or dismissed
 notices. Export and decide any intentional history removal separately. Preceding
-binary compatibility and runtime installation still require their own proof.
+binary compatibility has a separate linked report; runtime installation still
+requires its own proof.
 
 ## Focused verification
 
@@ -94,8 +95,8 @@ The primary stand remains unchanged. Ignored proof lives under
 `knowledge-notice-resolutions-pg-v1/`, `knowledge-notice-resolutions-pg-v2/`,
 `knowledge-notice-resolutions-pg-v3/` and `knowledge-notice-resolutions-build-v1/`.
 The linked full runtime gate now passes with a controlled provider. The [mvp82 binary compatibility gate](shuttle-knowledge-resolution-compat-qa-2026-10-20.md)
-also passes83/82/83 against populated schema67. Compatibility of the installed
-mvp81 binary, main installation and autonomous model quality remain separate
+also passes83/82/83 and, in a separate fresh fixture,83/81/83 against populated
+schema67. Main installation and autonomous model quality remain separate
 acceptance work. No production readiness is claimed.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer

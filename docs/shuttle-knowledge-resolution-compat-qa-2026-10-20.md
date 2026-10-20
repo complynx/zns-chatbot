@@ -47,10 +47,37 @@ the native fixture checkpoint, original private request intents, journal and
 three dumps. The controller passed a fresh textual review after fixing empty
 HTTP204 handling; no runtime failure occurred in this gate.
 
-The installed primary binary is mvp81/schema65. Its compatibility with schema67
-has not been tested by this83/82/83 gate. Main installation, content-moderation
-Loom write handoffs, joint browser-CA/ZitadelTG acceptance and final remote CI
-remain separate. No production readiness or deployment is claimed.
+## Installed mvp81 follow-up
+
+A second, fresh nine-service project, `zinusya-mock-kb-resolution-old81-r1`,
+separately passes83/81/83 on populated schema67. The mvp81 image is exactly the
+installed primary image:
+`sha256:98f5149909fc3fa1b852c42c93fc5c538fbb3f40889b0ada4474c8a801cb90a0`.
+The primary itself is not changed by this fixture gate.
+
+The old binary reads current capabilities and creates an ordinary native
+suggestion with exact preparation and consent. This version predates knowledge
+notices: no notice exists for that suggestion at its confirmation, and the gate
+does not claim old81 delivery or later catch-up. The participant reads the new
+suggestion through the agent API. After returning to83, all six post-write
+business-table hashes match; original notice and resolution audit rows remain
+unchanged. Both original resolution status results and the new suggestion are
+read back. No Loom run starts.
+
+The bot shutdowns take0.750s and0.671s, both exit0, with unchanged companion
+fingerprints and no observed OOM. Total replacement duration is not measured.
+The same logout, producer-stop, final paginated journal and three fully decoded
+private-dump sequence precedes removal of all nine containers, project network
+and volumes. Primary custody is verified unchanged. A separate fresh controller
+review passes. Ignored proof is in
+`.cache/shuttle-work/knowledge-resolution-compat81-v1/compat.json` and its native
+checkpoint, intents, journal and archives.
+
+Main installation, content-moderation Loom write handoffs, joint
+browser-CA/ZitadelTG acceptance and final remote CI remain separate. A primary
+installation must first prevent synthetic fixture recipients from becoming
+eligible for real-Telegram knowledge delivery. No production readiness or
+deployment is claimed.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
