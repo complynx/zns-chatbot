@@ -1,19 +1,18 @@
 # Knowledge foundation evidence, 2026-10-20
 
 Status: store, agent API, native forms and bounded archive maintenance are
-installed on the owned shuttle-live-test stand at schema65/mvp79. Real Telegram
-native suggestion and native-to-agent read acceptance pass. Independent fixture
-publication/replay succeeded, but full moderation acceptance failed on agent
-article reading (HTTP422). The reviewed source fix is mvp80 and is not installed.
-Moderator notifications, moderator UI and remaining mixed-channel acceptance stay open.
+installed on the owned shuttle-live-test stand at schema65/mvp80. Real Telegram
+native suggestion, native-to-agent read, independent fixture publication/replay
+and deployed published navigation pass. The initial HTTP422 moderation failure
+is retained; its read-only completion passes after the installed correction.
+Moderator notifications, moderator UI and remaining mixed-channel write acceptance stay open.
 
 ## Applied implementation checkpoint
 
 The domain and additive migration65 are applied to source. The store implements
 published retrieval, suggestions, independent review, named moderators, exact
 operation receipts and event archival. The agent API exposes these operations
-under `zinusya_knowledge`; the owned stand uses mvp79 and corrected source uses
-mvp80. The stand received additive migration65 after a decoded pre-migration backup.
+under `zinusya_knowledge`; both owned stand and corrected source use mvp80. The stand received additive migration65 after a decoded pre-migration backup.
 
 The final isolated Linux/race PostgreSQL gate v5 passed nine roots and18 terminal
 cases, with no failures, skips or OOM. It covers independent review, event scope
@@ -284,7 +283,7 @@ replayed the identical operation. Replay returned the same receipt. The publishe
 article has one immutable revision and distinct proposer/reviewer identities.
 Only this fixture's knowledge role changed; the Telegram owner's rights did not.
 
-Full moderation acceptance remains FAILED in `knowledge-moderation-real-v1/`:
+The original moderation acceptance attempt remains FAILED in `knowledge-moderation-real-v1/`:
 the following published article read returned422, rejecting valid `article_id`
 and `revision` as unexpected properties. The completed mutation intents are
 retained and must not be replayed to retry this read. This is a Zinusya HTTP
@@ -308,10 +307,50 @@ Independent source/controller review is clean. The Linux/amd64 CGO-disabled
 Go1.27.2 build passes. Evidence: ignored `knowledge-article-schema-v1/`,
 `knowledge-http-pg-v3/` and `knowledge-article-build-v1/`.
 
-The installed mvp79 still needs the mvp80 image and a read-only completion check
-against the already approved suggestion. Source and fixture gates do not close
-that deployed acceptance gap. The current custody baseline records this known
-failure rather than relabeling moderation acceptance as passed.
+These source checks did not close deployed acceptance by themselves. The later
+binary-only installation and read-only completion below use the already approved
+suggestion, without repeating any completed mutation. The original failed probe
+and its custody record remain unchanged.
+
+## Installed navigation correction and read-only completion
+
+Source commitacb21cb is installed as schema65/mvp80 using image
+`sha256:750ba6b2d007f8f17ed470b7835d70cca8268984ffb81db8db7ae0a858c530c7`.
+Its extracted Linux binary matched the tested build. The independently reviewed
+binary-only procedure fenced ingress, stopped the bot gracefully, saved and
+fully decoded a fresh backup, and recreated only the bot. No migration or
+business operation was repeated. The same poller resumed and completed a fresh
+successful cycle. All eleven services are running and prior domain data and
+Loom state were preserved.
+
+The first packaging preflight stopped before creating an image, probe or output
+directory because one Loom `run_contexts` row had disappeared. Read-only source
+and state inspection identified the normal15-minute history-prefix cache:
+all135 runs had been terminal longer than its TTL, and every other Loom data/
+schema digest was unchanged. The lifecycle cleanup deletes expired cache rows;
+terminal execution clears the run lease required to save them. A separate
+custody observation records the1-to-0 cache transition. No cache row was restored,
+no service restarted and no Loom source or developer stand was changed. This
+was an overstrict snapshot assumption in the local QA guard, not a Loom defect.
+
+Read-only deployed completion now passes with actual user IAM credentials:
+`read`, `outline` and `find` advertise and accept article/revision references,
+return the original revision1, and return404 for explicit unavailable revision2.
+The original review status returns the same stored publication result. The
+proposer's original suggestion-submission receipt still describes its historical
+pending result, while a current suggestion read reports approved. Article,
+revision and operation counts remain1,1 and3. No write was submitted to complete
+this check. The failed attempt remains retained separately.
+
+Real Telegram Mini App acceptance also passes for the published article: the
+existing button reopens the authenticated knowledge section, the ordinary user
+sees the article in the list, reads its revision1 body and opens revision history.
+The session is explicitly signed out and the modal closed. Exactly one new
+session is revoked; previous session hashes and business data are unchanged.
+No extra Telegram message or Loom run was created. The observed screenshot is
+retained locally. Evidence is under ignored `knowledge-article-image-v1/`,
+`knowledge-navigation-install-v1/`, `knowledge-navigation-readonly-completion-v1/`,
+`knowledge-cache-retention-custody-v1/` and `knowledge-published-native-real-v1/`.
 
 ## Remaining acceptance
 
@@ -320,8 +359,7 @@ operation selection for article/review workflows. Moderator assignment recovery
 is not yet exposed by that interface; recent assignment entries are metadata
 only. Prove continuation across channels/devices against real HTTP and IAM.
 
-Install the corrected mvp80 image and complete the original failed moderation
-probe through reads only. Continue both directions of edit/review continuation,
+Continue both directions of edit/review continuation,
 owned multi-user acceptance and notification recovery. The installed corpus now
 contains one explicitly synthetic article at revision1; its suggestion is
 approved. The original suggestion submission receipt remains historical. The
