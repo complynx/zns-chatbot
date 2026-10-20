@@ -354,10 +354,26 @@ retained locally. Evidence is under ignored `knowledge-article-image-v1/`,
 
 ## Remaining acceptance
 
-Add moderator management UI and durable reviewer notices. The native client now supports event and actor-owned
-operation selection for article/review workflows. Moderator assignment recovery
-is not yet exposed by that interface; recent assignment entries are metadata
-only. Prove continuation across channels/devices against real HTTP and IAM.
+Source mvp81 adds native named moderator management through the existing exact
+preparation, confirmation and operation journal. Global administrators can load
+assignments, select their current version, grant or revoke general/history
+moderation, and recover an earlier assignment operation. The UI shows the exact
+user, access flag, version and reason before fresh consent. Event and global
+administration are not granted. Revision and operation labels are localized.
+
+All58 Mini App behavioral cases pass, including26 knowledge cases. The full API
+package passes and strict lint reports zero issues. Independent correctness and
+usability reviews found no actionable issues; the staging area remained empty
+during both reviews. A loopback browser fixture served the actual HTML/CSS/JS
+with the existing synthetic test backend: revoking assignment version3 survived
+reload, required fresh consent, and produced exactly one version4 result from
+one preparation and one confirmation. The fixture was stopped and its tab
+closed. This is UI evidence, not real IAM/PostgreSQL/Telegram acceptance. Evidence
+is retained under ignored `knowledge-moderators-ui-v1/`.
+
+The installed stand remains schema65/mvp80. Build/install mvp81 and prove
+moderator assignment continuation across channels/devices against real HTTP and
+IAM. Add durable reviewer notices with multi-user delivery on mock Telegram.
 
 Continue both directions of edit/review continuation,
 owned multi-user acceptance and notification recovery. The installed corpus now

@@ -463,6 +463,15 @@
   <div class="actions"><button id="kb-mine" type="button">My suggestions and decisions</button><button id="kb-pending" type="button" hidden>Review pending suggestions</button><button id="kb-suggestions-next" type="button" hidden>Next suggestions</button></div>
   <div id="kb-suggestions"></div><article id="kb-suggestion" hidden></article>
   <div id="kb-review" hidden><label id="kb-review-reason-label" for="kb-review-reason">Decision reason</label><textarea id="kb-review-reason" rows="3" maxlength="1000"></textarea><div class="actions"><button id="kb-approve" type="button">Review approval</button><button id="kb-reject" type="button">Review rejection</button></div></div>
+  <section id="kb-moderators" hidden aria-labelledby="kb-moderators-heading">
+    <h2 id="kb-moderators-heading">Knowledge moderators</h2><p id="kb-moderators-note"></p>
+    <div class="actions"><button id="kb-moderators-reload" type="button">Load assignments</button><button id="kb-moderators-next" type="button" hidden>More assignments</button><button id="kb-moderator-new" type="button">New assignment</button></div>
+    <div id="kb-moderators-list"></div>
+    <label id="kb-moderator-user-label" for="kb-moderator-user">User code</label><input id="kb-moderator-user" maxlength="36" autocomplete="off"><p id="kb-moderator-version"></p>
+    <label><input id="kb-moderator-enabled" type="checkbox"><span id="kb-moderator-enabled-label">Allow knowledge moderation</span></label>
+    <label id="kb-moderator-reason-label" for="kb-moderator-reason">Reason for access change</label><textarea id="kb-moderator-reason" rows="3" maxlength="1000"></textarea>
+    <button id="kb-moderator-prepare" type="button">Review access change</button>
+  </section>
   <div id="kb-preview"></div>
   <label id="kb-consent-wrap" hidden><input id="kb-consent" type="checkbox"><span id="kb-consent-label">I confirm this exact change</span></label>
   <div class="actions"><button id="kb-confirm" type="button" hidden>Confirm this change</button><button id="kb-recover" type="button" hidden>Check earlier request</button><button id="kb-retry" type="button" hidden>Retry the same preparation</button><button id="kb-close-expired" type="button" hidden>Close the expired request</button></div><div id="kb-receipt" aria-live="polite"></div>
