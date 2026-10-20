@@ -1,4 +1,4 @@
-The [full Linux/race gate](shuttle-linux-race-qa-2026-10-20.md) is failed:956 roots pass,19 fail, and the integration package reaches its20-minute limit. All19 unchanged failures pass a separate serial diagnostic. No OOM or race warning was observed, but full coverage is incomplete. Both temporary stands are archived/removed and the primary is preserved. Bounded batches with exact coverage are next; full Linux/race acceptance remains open.
+The [bounded Linux follow-up](shuttle-linux-batched-qa-2026-10-20.md) now passes four critical roots/11 cases,316 UI cases and37 API/task roots. The preceding eight-batch run retains784/785 passing roots and one corrected false-positive assertion. A meal deadline test now runs on Linux after its accidental Windows suffix was removed. The current786-root repetition and installation of the reviewed UI fixes remain open; both temporary stands are archived/removed and the primary is preserved.
 
 # Current roadmap direction, 2026-10-20
 

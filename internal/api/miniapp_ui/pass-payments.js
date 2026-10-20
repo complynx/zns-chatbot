@@ -56,7 +56,13 @@ window.createZinusyaPassPayments = function (env) {
   function evidenceView(v,historical) { const n=node("article",""); n.append(node("p",w()[historical?"original":"current"]+": "+w()[v.state+"_state"]),node("p",w().reported+": "+money(v.amount_minor,{price_minor:0,...v})),node("p",w().purpose+": "+w()[v.purpose]),node("p",w().file+": "+v.file_id),node("p","ID: "+v.id),node("p",w().sent+": "+date(v.sent_at,historical?originalTimezone:target?.timezone||originalTimezone)),node("p",date(v.due_at,historical?originalTimezone:target?.timezone||originalTimezone)+" · "+w()[v.timely?"timely":"late"])); if(v.review?.reason) n.append(node("p",v.review.reason)); if(!historical) { const b=node("button",w().read); b.type="button"; b.addEventListener("click",()=>run(e=>loadProof(e,v.file_id,false))); buttons.push(b); n.append(b); } return n; }
   function renderHistory() { el.history.replaceChildren(); if(!evidence.length) el.history.append(node("p",w().empty)); for(const v of evidence) el.history.append(evidenceView(v,false)); }
   function renderFiles() { const selected=el.file.value; const blank=node("option",files.length?w().choose:w().noFiles); blank.value=""; el.file.replaceChildren(blank); for(const f of files) {const n=node("option",(f.filename||f.kind)+" · "+date(f.sent_at)+" · "+f.id); n.value=f.id; el.file.append(n);} el.file.value=files.some(f=>f.id===selected)?selected:""; }
-  async function loadTargets(e,cursor) { const page=await call(e,"./pass-payments/targets"+(cursor?"?after="+cursor:"")); if(!Array.isArray(page.targets)||page.targets.length>20||(page.next!==undefined&&!uuid(page.next))) throw Error("Invalid targets"); targets=page.targets.map(checkTarget); targetsNext=page.next; targetsAfter=cursor; const blank=node("option",w().targets); blank.value=""; el.targets.replaceChildren(blank); for(const t of targets) {const n=node("option",t.event_name+" · "+t.registration.pass.id); n.value=t.registration.pass.id; el.targets.append(n);} el.targets.value=targets.some(t=>t.registration.pass.id===passID)?passID:""; }
+  function renderTargetOptions() {
+    const choices=target&&!targets.some(t=>t.registration.pass.id===target.registration.pass.id)?[target,...targets]:targets;
+    const blank=node("option",w().targets); blank.value=""; el.targets.replaceChildren(blank);
+    for(const t of choices) {const n=node("option",t.event_name+" · "+t.registration.pass.id);n.value=t.registration.pass.id;el.targets.append(n);}
+    el.targets.value=choices.some(t=>t.registration.pass.id===passID)?passID:"";
+  }
+  async function loadTargets(e,cursor) { const page=await call(e,"./pass-payments/targets"+(cursor?"?after="+cursor:"")); if(!Array.isArray(page.targets)||page.targets.length>20||(page.next!==undefined&&!uuid(page.next))) throw Error("Invalid targets"); targets=page.targets.map(checkTarget); targetsNext=page.next; targetsAfter=cursor; renderTargetOptions(); }
   async function loadFiles(e,cursor) { const page=await call(e,base()+"/files"+(cursor?"?after="+cursor:"")); if(!Array.isArray(page.files)||page.files.length>20||(page.next!==undefined&&!uuid(page.next))) throw Error("Invalid files"); for(const f of page.files) if(!uuid(f.id)||typeof f.filename!=="string"||!Number.isFinite(Date.parse(f.sent_at))) throw Error("Invalid file"); dropPreview(); files=page.files; filesNext=page.next; filesAfter=cursor; renderFiles(); }
   async function loadHistory(e,cursor) { if(!cursor) historyReady=false; const page=await call(e,base()+"/evidence?pass_id="+passID+(cursor?"&after="+cursor:"")); if(!Array.isArray(page.evidence)||page.evidence.length>20||(page.next!==undefined&&!uuid(page.next))) throw Error("Invalid evidence page"); evidence=page.evidence.map(checkEvidence); historyNext=page.next; historyReady=true; renderHistory(); }
   async function load(e, historical=false) {
@@ -66,6 +72,7 @@ window.createZinusyaPassPayments = function (env) {
       if(v.event_id!==eventID||v.registration.pass.id!==passID) throw Error("Wrong target");
       target=v; renderTarget();
     } catch(error) { if(!historical||error.status!==404) throw error; dropPreview(); el.target.replaceChildren(node("p",w().targetUnavailable)); }
+    renderTargetOptions();
     await loadHistory(e);
     if(target&&!pending) await loadFiles(e);
     status(pending?"unknown":blocked?"blocked":historical?"recorded":"ready");
@@ -95,7 +102,7 @@ window.createZinusyaPassPayments = function (env) {
     }
   }
   function validPending(p) { const b=p?.body; return p&&Object.keys(p).sort().join()==="body,event_id,owner"&&p.owner===owner&&uuid(p.event_id)&&b&&Object.keys(b).sort().join()==="amount_minor,file_id,operation_id,pass_id,purpose"&&uuid(b.operation_id)&&uuid(b.pass_id)&&uuid(b.file_id)&&positive(b.amount_minor)&&["initial","top_up"].includes(b.purpose); }
-  function resetTarget(event,pass) { dropPreview(); eventID=event; passID=pass; target=original=originalTimezone=undefined; historyReady=false; historyNext=filesNext=filesAfter=undefined; evidence=[]; files=[]; el.amount.value=el.purpose.value=""; for(const id of ["target","history","receipt","file"]) el[id].replaceChildren(); }
+  function resetTarget(event,pass) { dropPreview(); eventID=event; passID=pass; target=original=originalTimezone=undefined; historyReady=false; historyNext=filesNext=filesAfter=undefined; evidence=[]; files=[]; el.amount.value=el.purpose.value=""; for(const id of ["target","history","receipt","file"]) el[id].replaceChildren(); renderTargetOptions(); }
   function forget() { try {sessionStorage.removeItem(key()); if(sessionStorage.getItem(key())!==null) throw Error();} catch { blocked=true; throw {local:"blocked"};} pending=undefined; }
   async function accept(e,value,timezone=target?.timezone) {
     const v=checkEvidence(value),b=pending.body;
@@ -130,7 +137,7 @@ window.createZinusyaPassPayments = function (env) {
   async function loadProof(e,id,selection) { if(!uuid(id)) throw {local:"invalid"}; const blob=await env.readProof(base()+"/files/"+id+"/content"); if(e!==epoch) return; dropPreview(); blobURL=URL.createObjectURL(blob); loadedFile=selection?id:undefined; el.download.href=blobURL; el.download.download=files.find(f=>f.id===id)?.filename||"payment-evidence"; el.download.hidden=false; el["preview-info"].textContent=w().file+": "+id; }
   el.form.addEventListener("submit",event=>{event.preventDefault();return run(async e=>{if(blocked||pending||!target||!historyReady||historyNext||loadedFile!==el.file.value||!files.some(f=>f.id===loadedFile)||!["initial","top_up"].includes(el.purpose.value)) throw {local:"invalid"}; const record={owner,event_id:eventID,body:{operation_id:crypto.randomUUID(),pass_id:passID,file_id:loadedFile,amount_minor:amount(),purpose:el.purpose.value}}; try {const raw=JSON.stringify(record);sessionStorage.setItem(key(),raw);if(sessionStorage.getItem(key())!==raw) throw Error();} catch {blocked=true;throw {local:"blocked"};} pending=record; await dispatch(e);});});
   el.file.addEventListener("change",()=>{dropPreview();controls();});
-  el.targets.addEventListener("change",()=>run(async e=>{if(pending)return;const t=targets.find(t=>t.registration.pass.id===el.targets.value);if(t){resetTarget(t.event_id,t.registration.pass.id);await load(e);}}));
+  el.targets.addEventListener("change",()=>run(async e=>{if(pending)return;const t=targets.find(t=>t.registration.pass.id===el.targets.value)||(target?.registration.pass.id===el.targets.value?target:undefined);resetTarget(t?.event_id,t?.registration.pass.id);if(t)await load(e);else status("ready");}));
   el.preview.addEventListener("click",()=>run(e=>loadProof(e,pending?.body.file_id||el.file.value,true)));
   for(const [id,fn] of [["reload",e=>pending?recover(e):load(e,!!original)],["recover",recover],["retry",dispatch],["recent",recent],["targets-first",e=>loadTargets(e)],["targets-next",e=>loadTargets(e,targetsNext)],["files-first",e=>loadFiles(e)],["files-next",e=>loadFiles(e,filesNext)],["history-next",e=>loadHistory(e,historyNext)]]) el[id].addEventListener("click",()=>run(fn));
   clear();

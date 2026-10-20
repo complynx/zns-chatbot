@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
@@ -43,7 +43,10 @@ jobs:
           go mod verify
           python3 tools/check-dependencies.py
       - name: Behavioral tests with PostgreSQL and race detector
-        run: go test -race -timeout 20m -parallel 4 ./cmd/... ./internal/... ./migrations/... ./integration/...
+        run: |
+          go test -race -timeout 10m -parallel 4 ./cmd/... ./internal/... ./migrations/...
+          python3 -m unittest discover -s tools -p test_integration_runner.py
+          python3 tools/test-integration.py "$RUNNER_TEMP/zinusya-integration"
       - name: Test stand ingress and egress guards
         run: python3 -m unittest discover -s deploy/shuttle/test -p 'test_*.py'
       - name: Test isolated Telegram simulator

@@ -50,7 +50,7 @@ function backend() {
         const t = b.targets.find(t => t.pair.id === p.preparation.arguments.pair_id); if (!t || t.pair.version !== body.arguments.expected_pair_version || Date.parse(p.preparation.expires_at) <= Date.now()) throw { status: 409 };
         const pair = { ...t.pair, state: "assigned", version: t.pair.version + 1 };
         p.result = { pair };
-        for (const [i, role] of ["leader", "follower"].entries()) p.result[role] = { id: pair[role + "_registration_id"], user_id: t[role].user_id, event_id: pair.event_id, state: "assigned", role, version: body.arguments["expected_" + role + "_version"] + 1, pass: { ...p.preparation.quotes[i], payment_due_at: new Date(Date.now() + 3600000 * (i + 1)).toISOString() } };
+        for (const [i, role] of ["leader", "follower"].entries()) p.result[role] = { id: pair[role + "_registration_id"], user_id: t[role].user_id, event_id: pair.event_id, state: "assigned", role, version: body.arguments["expected_" + role + "_version"] + 1, pass: { ...(p.preparation.quotes?.[i] || { price_minor: 12345, currency: "BYN", currency_scale: 2 }), payment_due_at: new Date(Date.now() + 3600000 * (i + 1)).toISOString() } };
         p.state = "completed"; b.effects++;
       }
       if (b.lose === "confirm") { b.lose = undefined; throw Error("Lost response after commit"); } return structuredClone(p.result);
@@ -201,4 +201,15 @@ test("incomplete structured timing is rejected rather than replaced with current
     corrupt(p.preparation.display_terms); await h.choose();
     assert.equal(h.get("confirm").hidden, true); assert.equal(h.b.effects, 0);
   }
+});
+
+for(const quotes of [undefined,[]]) test("legacy flat-price agent proposal can continue natively with explicit consent: "+JSON.stringify(quotes),async()=>{
+ const h=fixture(),e=h.b.events[0],t=h.b.targets[0],p=h.b.proposal(e,t);p.preparation.quotes=quotes;p.preparation.description+=" Each pass: 123.45 BYN.";await h.start();assert.equal(h.get("pending").querySelectorAll("button").length,1);await h.choose();assert.match(h.text("preview"),/Each pass: 123.45 BYN/);assert.equal(h.b.writes.length,0);assert.match(h.text("preview"),/Alex <script>.*123456/);assert.match(h.text("preview"),/Sam.*654321/);
+ h.b.hook=(path,method)=>method==="GET"&&path.endsWith("/proposals")?{proposals:[]}:undefined;const reload=harness(h.b,h.store);await reload.start();assert.equal(reload.get("pending").querySelectorAll("button").length,0);assert.match(reload.text("preview"),/Alex <script>.*123456/);assert.match(reload.text("preview"),/Sam.*654321/);assert.equal(reload.get("confirm").disabled,true);reload.consent();await reload.click("confirm");assert.equal(h.b.effects,1);assert.match(reload.text("receipt"),/123.45 BYN/);
+});
+test("legacy completed pair receipt remains readable without new financial effects",async()=>{
+ const h=fixture(),e=h.b.events[0],t=h.b.targets[0],p=h.b.proposal(e,t);await h.b.request("./pair-assignments/confirm","POST",{operation_id:p.original_operation_id,proposal_id:p.preparation.proposal_id,arguments:p.preparation.arguments,confirmed:true});delete p.preparation.quotes;const before=h.b.writes.length;await h.start();await h.click("recent");await h.choose();assert.match(h.text("receipt"),/historical/);assert.equal(h.b.writes.length,before);assert.equal(h.b.effects,1);
+});
+test("modern structured pair proposal cannot drop its two quotes",async()=>{
+ const h=fixture(),e=h.b.events[0],t=h.b.targets[0],p=h.b.proposal(e,t);p.preparation.display_terms={event_name:e.document.name,payment_window_seconds:3600,payment_closes_at:new Date(Date.now()+86400000).toISOString()};delete p.preparation.quotes;await h.start();assert.equal(h.get("pending").querySelectorAll("button").length,0);assert.equal(h.b.writes.length,0);
 });

@@ -18,10 +18,15 @@ window.createZinusyaPairAssignments = env => {
   const validQuote = q => q && uuid(q.registration_id) && Number.isSafeInteger(q.price_minor) && q.price_minor >= 0 && /^[A-Z]{3}$/.test(q.currency) && Number.isInteger(q.currency_scale) && q.currency_scale >= 0 && q.currency_scale <= 6 && (!q.tier || (Number.isSafeInteger(q.tier.number) && q.tier.number > 0)) && validDeposit(q.deposit);
   const validZone = v => typeof v === "string" && (() => { try { new Intl.DateTimeFormat("en", { timeZone: v }); return true; } catch { return false; } })();
   const validDisplayTerms = (d, zone) => d === undefined || (d && typeof d.event_name === "string" && d.event_name.trim() && [...d.event_name].length <= 256 && Number.isInteger(d.payment_window_seconds) && d.payment_window_seconds > 0 && d.payment_window_seconds <= 2147483647 && instant(d.payment_closes_at) && validZone(zone));
-  const validPreparation = p => p && validDisplayTerms(p.display_terms, p.timezone) && (p.timezone === undefined || validZone(p.timezone)) && uuid(p.proposal_id) && validArgs(p.arguments) && typeof p.description === "string" && p.description.trim() && instant(p.expires_at) && Array.isArray(p.quotes) && p.quotes.length === 2 && p.quotes.every(validQuote) && p.quotes[0].registration_id !== p.quotes[1].registration_id;
+  // Old flat-price preparations keep their approval terms in the description.
+  function validPreparationQuotes(p) {
+    if (p.quotes === undefined || (Array.isArray(p.quotes) && p.quotes.length === 0)) return p.display_terms === undefined;
+    return Array.isArray(p.quotes) && p.quotes.length === 2 && p.quotes.every(validQuote) && p.quotes[0].registration_id !== p.quotes[1].registration_id;
+  }
+  const validPreparation = p => p && validDisplayTerms(p.display_terms, p.timezone) && (p.timezone === undefined || validZone(p.timezone)) && uuid(p.proposal_id) && validArgs(p.arguments) && typeof p.description === "string" && p.description.trim() && instant(p.expires_at) && validPreparationQuotes(p);
   const validRegistration = r => r && uuid(r.id) && uuid(r.event_id) && uuid(r.user_id) && version(r.version) && ["leader", "follower"].includes(r.role) && ["waitlisted", "assigned", "cancelled"].includes(r.state);
   const validPair = p => p && uuid(p.id) && uuid(p.event_id) && uuid(p.leader_registration_id) && uuid(p.follower_registration_id) && p.leader_registration_id !== p.follower_registration_id && version(p.version) && ["waitlisted", "assigned", "dissolved"].includes(p.state);
-  const validResult = (r, a, quotes) => r && validPair(r.pair) && r.pair.id === a.pair_id && r.pair.event_id === a.event_id && r.pair.state === "assigned" && ["leader", "follower"].every(role => validRegistration(r[role]) && r[role].id === r.pair[role + "_registration_id"] && r[role].event_id === a.event_id && r[role].role === role && r[role].state === "assigned" && r[role].pass && validDeposit(r[role].pass.deposit) && quotes.some(q => q.registration_id === r[role].id));
+  const validResult = (r, a, quotes) => r && validPair(r.pair) && r.pair.id === a.pair_id && r.pair.event_id === a.event_id && r.pair.state === "assigned" && ["leader", "follower"].every(role => validRegistration(r[role]) && r[role].id === r.pair[role + "_registration_id"] && r[role].event_id === a.event_id && r[role].role === role && r[role].state === "assigned" && r[role].pass && validQuote({ ...r[role].pass, registration_id: r[role].id }) && (!quotes || quotes.length === 0 || quotes.some(q => q.registration_id === r[role].id)));
   const validView = v => v && validRecipient(v.leader) && validRecipient(v.follower) && v.leader.user_id !== v.follower.user_id && v.leader.telegram_user_id !== v.follower.telegram_user_id && operation(v.original_operation_id) && validPreparation(v.preparation) && ["pending", "expired", "completed"].includes(v.state) && instant(v.observed_at) && (v.state !== "completed" || (validResult(v.result, v.preparation.arguments, v.preparation.quotes) && ["leader", "follower"].every(role => v.result[role].user_id === v[role].user_id)));
   const validEvent = e => e && uuid(e.id) && version(e.version) && e.document && typeof e.document.name === "string" && typeof e.document.timezone === "string" && (() => { try { new Intl.DateTimeFormat("en", { timeZone: e.document.timezone }); return true; } catch { return false; } })();
   const validRecipient = r => r && uuid(r.user_id) && Number.isSafeInteger(r.telegram_user_id) && r.telegram_user_id > 0 && typeof r.display_name === "string";
@@ -108,8 +113,10 @@ window.createZinusyaPairAssignments = env => {
         // Legacy timing exists only in this immutable description, not current event settings.
         el.preview.append(node("p", p.description));
       }
-      for (const [index, q] of p.quotes.entries()) {
-        el.preview.append(node("h2", recipientLabel(view, index === 0 ? "leader" : "follower")));
+      for (const [index, role] of ["leader", "follower"].entries()) {
+        el.preview.append(node("h2", recipientLabel(view, role)));
+        const q = p.quotes?.[index];
+        if (!q) continue;
         el.preview.append(node("p", w().price + ": " + money(q)));
         if (q.tier) el.preview.append(node("p", w().tier + ": " + q.tier.number));
         depositTerms(el.preview, q, p.timezone);

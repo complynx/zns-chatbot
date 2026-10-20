@@ -144,10 +144,20 @@ func TestPaymentReviewApprovalDoesNotOfferUnverifiableConsent(t *testing.T) {
 			}, 5*time.Second, 10*time.Millisecond)
 			f.H.stop(t)
 			f.H.peers.mu.Lock()
-			for _, m := range f.H.peers.sent {
-				require.NotEqual(t, int64(11003), m.ChatID, "Unverified consent must not reach the reviewer")
-			}
+			sent := append([]telegram.SendMessageRequest(nil), f.H.peers.sent...)
 			f.H.peers.mu.Unlock()
+			title, _, _ := strings.Cut(prep.Description, "\n")
+			for _, m := range sent {
+				if m.ChatID != 11003 {
+					continue
+				}
+				// A pending-proof notice is allowed; an unverified approval is not.
+				require.NotContains(t, m.Text, title)
+				require.NotContains(t, m.Text, "INCOMPLETE UNTRUSTED SUMMARY")
+				require.NotContains(t, m.Text, "WRONG AMOUNT")
+				_, approvalKeyboard := m.ReplyMarkup.(*telegram.ReplyKeyboardMarkup)
+				require.False(t, approvalKeyboard, "Unverified consent must not offer approval choices")
+			}
 			balance, err := f.H.store.PaymentBalance(
 				t.Context(),
 				paymentScope(t, f.H, f.OwnerID, false),

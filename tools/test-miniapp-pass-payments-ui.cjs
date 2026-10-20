@@ -132,3 +132,13 @@ test("authorization failure during optional current-target read clears historica
  const fresh=browser(api);await fresh.start();await fresh.get("recent-list").children[0].listeners.click();assert.doesNotMatch(fresh.text(),/Original operation result/);assert.equal(fresh.get("receipt").children.length,0);assert.equal(writes(fresh).length,0);
 });
 
+
+test("deselecting the assigned pass cannot submit evidence against the old target",async()=>{
+ const api=backend(),b=browser(api);await b.start();await b.open();b.get("targets").value=passID;await b.fire("targets","change");await b.select();b.get("targets").value="";await b.fire("targets","change");await b.submit();assert.equal(writes(b).length,0);assert.equal(b.get("submit").disabled,true);
+});
+
+test("pass pagination keeps the active pass visibly selected while paging other targets",async()=>{
+ const api=backend(),cursor=randomUUID(),otherTarget=clone(api.target);otherTarget.registration.pass.id=randomUUID();otherTarget.balance.pass_id=otherTarget.registration.pass.id;
+ api.hook=(p,m,b,base)=>p==="./pass-payments/targets"?{targets:[api.target],next:cursor}:p.startsWith("./pass-payments/targets?after=")?{targets:[otherTarget]}:base(p,m,b);
+ const b=browser(api);await b.start();await b.open();await b.select();await b.fire("targets-next");assert.equal(b.get("targets").value,passID);assert.equal(b.get("targets").children.length,3);await b.submit();assert.equal(writes(b)[0].body.pass_id,passID);
+});
