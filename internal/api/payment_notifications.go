@@ -27,6 +27,13 @@ type notificationListResult struct {
 func (s *Server) registerNotificationAPI(api huma.API) {
 	s.registerPairNotificationAPI(api)
 	s.registerOrderNotificationAPI(api)
+	registerAgentPost(
+		api,
+		"agent-admin-knowledge-notification",
+		"/internal/agent/administration/knowledge_notification",
+		internalBodyLimit,
+		s.knowledgeNoticeDiagnostics,
+	)
 	s.registerMassageReminderAPI(api)
 	s.registerMassageSpecialistNotificationAPI(api)
 	huma.Register(
@@ -135,6 +142,7 @@ func notificationMethods() []map[string]any {
 	}
 	methods = append(methods, pairNotificationMethods()...)
 	methods = append(methods, orderNotificationMethods()...)
+	methods = append(methods, knowledgeNoticeDiagnosticsMethod())
 	methods = append(methods, massageReminderMethods()...)
 	return append(methods, massageSpecialistNotificationMethods()...)
 }

@@ -545,8 +545,8 @@ SELECT * FROM shuttle_notification_resolutions
 WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4;
 -- name: InsertNotificationResolution :exec
 INSERT INTO shuttle_notification_resolutions
-(bot_id,organization_id,actor,operation_id,proposal_id,notification_id,request_hash,expires_at,document,pair_notification_id,order_notification_id,massage_reminder_id,massage_specialist_notification_id)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
+(bot_id,organization_id,actor,operation_id,proposal_id,notification_id,request_hash,expires_at,document,pair_notification_id,order_notification_id,massage_reminder_id,massage_specialist_notification_id,knowledge_notice_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
 -- name: SaveNotificationResolution :execrows
 UPDATE shuttle_notification_resolutions SET result=$5
 WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4 AND result IS NULL;
@@ -2165,3 +2165,8 @@ SELECT id,suggestion_id,recipient_id,kind,state,version,next_attempt_at,created_
 FROM shuttle_knowledge_notices WHERE bot_id=sqlc.arg(bot_id) AND organization_id=sqlc.arg(organization_id)
 AND (sqlc.arg(global_admin)::boolean OR recipient_id=sqlc.arg(user_id))
 AND id>sqlc.arg(after_id)::uuid ORDER BY id LIMIT sqlc.arg(page_limit);
+
+-- name: ResolveKnowledgeNotification :one
+UPDATE shuttle_knowledge_notices SET state=$3,version=version+1,next_attempt_at=clock_timestamp()
+WHERE id=$1 AND version=$2 AND state IN ('delivery_unknown','delivery_failed','delivery_blocked')
+RETURNING *;

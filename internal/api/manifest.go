@@ -92,7 +92,7 @@ const (
 )
 
 func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
-	revision := "mvp-82"
+	revision := "mvp-83"
 	writeJSON(w, http.StatusOK, map[string]any{
 		"protocol_version":  1,
 		schemaServiceID:     "zinusya",

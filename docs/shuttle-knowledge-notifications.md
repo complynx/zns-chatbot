@@ -79,8 +79,10 @@ stand. Source correctness and quality reviews found no actionable findings. The 
 checks, event-to-history routing and three graceful restarts. A controlled real
 Loom readback distinguishes the immutable submission receipt, current review
 state and recipient-owned delivery metadata without changing business data.
-Model-driven moderation writes, separate-device handoffs and exact API tools
-for human-authorized resolution of ambiguous delivery remain open.
+The [exact administrative resolution follow-up](shuttle-knowledge-notice-resolutions.md)
+is implemented in uninstalled mvp83/migration67 and passes a separate focused
+PostgreSQL/race gate. Full real-IAM/Loom resolution dialogues, model-driven
+moderation writes and separate-device handoffs remain open.
 Do not install this candidate on a real Telegram stand to exercise synthetic
 reviewer identities. Multi-user delivery belongs on isolated mock Telegram.
 

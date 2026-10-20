@@ -23,17 +23,18 @@ const notificationRetry = "retry"
 const pairNotificationKind = "pair"
 
 const orderNotificationKind = "order"
+const knowledgeNotificationKind = "knowledge"
 const massageNotificationKind = "massage"
 const massageSpecialistNotificationKind = "massage_specialist"
 
 // NotificationResolution changes delivery only; it cannot modify a payment.
 type NotificationResolution struct {
-	NotificationKind string    `json:"notification_kind,omitempty" enum:"payment,pair,order,massage,massage_specialist"`
-	EventID          uuid.UUID `json:"event_id"`
+	NotificationKind string    `json:"notification_kind,omitempty" enum:"payment,pair,order,massage,massage_specialist,knowledge"`
+	EventID          uuid.UUID `json:"event_id,omitempty"`
 	NotificationID   uuid.UUID `json:"notification_id"`
-	ExpectedVersion  int64     `json:"expected_version"                                                                 minimum:"1"`
+	ExpectedVersion  int64     `json:"expected_version"                                                                           minimum:"1"`
 	Action           string    `json:"action"                      enum:"retry,dismiss"`
-	Reason           string    `json:"reason"                                                                                       minLength:"1" maxLength:"512"`
+	Reason           string    `json:"reason"                                                                                                 minLength:"1" maxLength:"512"`
 }
 
 type NotificationPreparation struct {
@@ -62,9 +63,13 @@ func normalizedNotificationResolution(
 	args NotificationResolution,
 ) (NotificationResolution, []byte, error) {
 	args.Reason = strings.TrimSpace(args.Reason)
-	if !paymentScopeValid(scope, op) || args.EventID == uuid.Nil || args.NotificationID == uuid.Nil ||
-		(args.NotificationKind != "" && args.NotificationKind != "payment" && args.NotificationKind != pairNotificationKind && args.NotificationKind != orderNotificationKind && args.NotificationKind != massageNotificationKind && args.NotificationKind != massageSpecialistNotificationKind) ||
-		args.ExpectedVersion < 1 || len(args.Reason) == 0 || len(args.Reason) > payments.MaxReasonLength ||
+	if !paymentScopeValid(scope, op) ||
+		(args.EventID == uuid.Nil && args.NotificationKind != knowledgeNotificationKind) ||
+		args.NotificationID == uuid.Nil ||
+		(args.NotificationKind != "" && args.NotificationKind != "payment" && args.NotificationKind != pairNotificationKind && args.NotificationKind != orderNotificationKind && args.NotificationKind != massageNotificationKind && args.NotificationKind != massageSpecialistNotificationKind && args.NotificationKind != knowledgeNotificationKind) ||
+		args.ExpectedVersion < 1 ||
+		len(args.Reason) == 0 ||
+		len(args.Reason) > payments.MaxReasonLength ||
 		(args.Action != notificationRetry && args.Action != "dismiss") {
 		return args, nil, payments.ErrInvalid
 	}
@@ -98,6 +103,9 @@ func loadResolutionTarget(
 	scope PaymentScope,
 	args NotificationResolution,
 ) (notificationResolutionTarget, error) {
+	if args.NotificationKind == knowledgeNotificationKind {
+		return loadKnowledgeResolutionTarget(ctx, q, scope, args)
+	}
 	if args.NotificationKind == massageSpecialistNotificationKind {
 		return loadMassageSpecialistResolutionTarget(ctx, q, scope, args)
 	}
@@ -191,7 +199,7 @@ func (s *Store) beginNotificationResolution(
 		ctx,
 		fmt.Sprintf("notification:%d:%s:%s:%s", scope.BotID, scope.Organization, scope.Subject, op),
 	)
-	if err == nil {
+	if err == nil && args.EventID != uuid.Nil {
 		_, err = q.LockRegistrationEvent(
 			ctx,
 			sqlc.LockRegistrationEventParams{ID: args.EventID, BotID: scope.BotID, OrganizationID: scope.Organization},
@@ -285,16 +293,20 @@ func (s *Store) PrepareNotificationResolution(
 	if err != nil {
 		return NotificationPreparation{}, err
 	}
+	location := " in event " + args.EventID.String()
+	if args.NotificationKind == knowledgeNotificationKind && args.EventID == uuid.Nil {
+		location = " (general/history; no event origin)"
+	}
 	result := NotificationPreparation{
 		ID:        uuid.New(),
 		Arguments: args,
 		ExpiresAt: now.Time.Add(paymentPreparationTTL),
 		Description: fmt.Sprintf(
-			"%s notification %s for recipient %s in event %s, state %s, version %d. Reason: %s. No payment changes. Dismiss does not prove delivery. Retry rechecks recipient access before sending.",
+			"%s notification %s for recipient %s%s, state %s, version %d. Reason: %s. No payment changes. Dismiss does not prove delivery. Retry rechecks recipient access before sending.",
 			args.Action,
 			n.ID,
 			n.RecipientID,
-			args.EventID,
+			location,
 			n.State,
 			n.Version,
 			args.Reason,
@@ -302,6 +314,9 @@ func (s *Store) PrepareNotificationResolution(
 	}
 	if args.Action == notificationRetry && n.State == deliveryUnknown {
 		result.Description += " Telegram may already have received this message. Retry can send a duplicate. Check its receipt and the chat first; retry only as a last resort."
+	}
+	if args.NotificationKind == knowledgeNotificationKind {
+		result.Description = "Knowledge delivery only; no publication or moderation changes. " + result.Description
 	}
 	if args.NotificationKind == pairNotificationKind {
 		result.Description = "Pair invitation delivery. " + result.Description
@@ -420,6 +435,26 @@ func applyNotificationResolution(
 	args NotificationResolution,
 	state string,
 ) (notificationResolutionTarget, error) {
+	if args.NotificationKind == knowledgeNotificationKind {
+		if state == deliveryPending {
+			if _, err := q.KnowledgeNotificationRecipient(
+				ctx,
+				sqlc.KnowledgeNotificationRecipientParams{
+					ID:             n.ID,
+					BotID:          scope.BotID,
+					OrganizationID: scope.Organization,
+				},
+			); err != nil {
+				return n, err
+			}
+		}
+		row, err := q.ResolveKnowledgeNotification(
+			ctx,
+			sqlc.ResolveKnowledgeNotificationParams{ID: n.ID, Version: args.ExpectedVersion, State: state},
+		)
+		n.State, n.Version = row.State, row.Version
+		return n, err
+	}
 	if args.NotificationKind == massageSpecialistNotificationKind {
 		row, err := resolveMassageSpecialistNotification(ctx, q, scope, args, state)
 		n.State, n.Version = row.State, row.Version
@@ -572,6 +607,8 @@ func notificationResolutionParams(
 	}
 	target := pgtype.UUID{Bytes: prep.Arguments.NotificationID, Valid: true}
 	switch prep.Arguments.NotificationKind {
+	case knowledgeNotificationKind:
+		result.KnowledgeNoticeID = target
 	case pairNotificationKind:
 		result.PairNotificationID = target
 	case orderNotificationKind:
@@ -584,4 +621,26 @@ func notificationResolutionParams(
 		result.NotificationID = target
 	}
 	return result
+}
+
+func loadKnowledgeResolutionTarget(
+	ctx context.Context,
+	q *sqlc.Queries,
+	scope PaymentScope,
+	args NotificationResolution,
+) (notificationResolutionTarget, error) {
+	n, err := readKnowledgeNotification(ctx, q, scope.EventScope, args.NotificationID)
+	if err != nil {
+		return notificationResolutionTarget{}, err
+	}
+	if n.EventID == nil && args.EventID != uuid.Nil || n.EventID != nil && *n.EventID != args.EventID {
+		return notificationResolutionTarget{}, pgx.ErrNoRows
+	}
+	return notificationResolutionTarget{
+		ID:          n.ID,
+		RecipientID: n.RecipientID,
+		State:       n.State,
+		Version:     n.Version,
+		Receipt:     n.Receipt,
+	}, nil
 }

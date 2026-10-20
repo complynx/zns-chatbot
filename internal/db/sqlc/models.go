@@ -775,6 +775,7 @@ type ShuttleNotificationResolution struct {
 	OrderNotificationID             pgtype.UUID        `json:"order_notification_id"`
 	MassageReminderID               pgtype.UUID        `json:"massage_reminder_id"`
 	MassageSpecialistNotificationID pgtype.UUID        `json:"massage_specialist_notification_id"`
+	KnowledgeNoticeID               pgtype.UUID        `json:"knowledge_notice_id"`
 }
 
 type ShuttleOrder struct {

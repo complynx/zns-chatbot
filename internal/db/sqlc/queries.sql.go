@@ -2541,7 +2541,7 @@ func (q *Queries) GetMiniAppSession(ctx context.Context, id uuid.UUID) (ShuttleM
 }
 
 const getNotificationResolution = `-- name: GetNotificationResolution :one
-SELECT bot_id, organization_id, actor, operation_id, proposal_id, notification_id, request_hash, expires_at, document, result, pair_notification_id, order_notification_id, massage_reminder_id, massage_specialist_notification_id FROM shuttle_notification_resolutions
+SELECT bot_id, organization_id, actor, operation_id, proposal_id, notification_id, request_hash, expires_at, document, result, pair_notification_id, order_notification_id, massage_reminder_id, massage_specialist_notification_id, knowledge_notice_id FROM shuttle_notification_resolutions
 WHERE bot_id=$1 AND organization_id=$2 AND actor=$3 AND operation_id=$4
 `
 
@@ -2575,6 +2575,7 @@ func (q *Queries) GetNotificationResolution(ctx context.Context, arg GetNotifica
 		&i.OrderNotificationID,
 		&i.MassageReminderID,
 		&i.MassageSpecialistNotificationID,
+		&i.KnowledgeNoticeID,
 	)
 	return i, err
 }
@@ -5228,8 +5229,8 @@ func (q *Queries) InsertNativePairAssignmentAction(ctx context.Context, arg Inse
 
 const insertNotificationResolution = `-- name: InsertNotificationResolution :exec
 INSERT INTO shuttle_notification_resolutions
-(bot_id,organization_id,actor,operation_id,proposal_id,notification_id,request_hash,expires_at,document,pair_notification_id,order_notification_id,massage_reminder_id,massage_specialist_notification_id)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+(bot_id,organization_id,actor,operation_id,proposal_id,notification_id,request_hash,expires_at,document,pair_notification_id,order_notification_id,massage_reminder_id,massage_specialist_notification_id,knowledge_notice_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 `
 
 type InsertNotificationResolutionParams struct {
@@ -5246,6 +5247,7 @@ type InsertNotificationResolutionParams struct {
 	OrderNotificationID             pgtype.UUID        `json:"order_notification_id"`
 	MassageReminderID               pgtype.UUID        `json:"massage_reminder_id"`
 	MassageSpecialistNotificationID pgtype.UUID        `json:"massage_specialist_notification_id"`
+	KnowledgeNoticeID               pgtype.UUID        `json:"knowledge_notice_id"`
 }
 
 func (q *Queries) InsertNotificationResolution(ctx context.Context, arg InsertNotificationResolutionParams) error {
@@ -5263,6 +5265,7 @@ func (q *Queries) InsertNotificationResolution(ctx context.Context, arg InsertNo
 		arg.OrderNotificationID,
 		arg.MassageReminderID,
 		arg.MassageSpecialistNotificationID,
+		arg.KnowledgeNoticeID,
 	)
 	return err
 }
@@ -14162,6 +14165,39 @@ func (q *Queries) ReservePaymentNotification(ctx context.Context, arg ReservePay
 		&i.RecipientID,
 		&i.Kind,
 		&i.Document,
+		&i.State,
+		&i.Version,
+		&i.AttemptID,
+		&i.Payload,
+		&i.Receipt,
+		&i.NextAttemptAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const resolveKnowledgeNotification = `-- name: ResolveKnowledgeNotification :one
+UPDATE shuttle_knowledge_notices SET state=$3,version=version+1,next_attempt_at=clock_timestamp()
+WHERE id=$1 AND version=$2 AND state IN ('delivery_unknown','delivery_failed','delivery_blocked')
+RETURNING id, bot_id, organization_id, suggestion_id, recipient_id, kind, state, version, attempt_id, payload, receipt, next_attempt_at, created_at
+`
+
+type ResolveKnowledgeNotificationParams struct {
+	ID      uuid.UUID `json:"id"`
+	Version int64     `json:"version"`
+	State   string    `json:"state"`
+}
+
+func (q *Queries) ResolveKnowledgeNotification(ctx context.Context, arg ResolveKnowledgeNotificationParams) (ShuttleKnowledgeNotice, error) {
+	row := q.db.QueryRow(ctx, resolveKnowledgeNotification, arg.ID, arg.Version, arg.State)
+	var i ShuttleKnowledgeNotice
+	err := row.Scan(
+		&i.ID,
+		&i.BotID,
+		&i.OrganizationID,
+		&i.SuggestionID,
+		&i.RecipientID,
+		&i.Kind,
 		&i.State,
 		&i.Version,
 		&i.AttemptID,

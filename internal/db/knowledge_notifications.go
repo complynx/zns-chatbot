@@ -14,17 +14,18 @@ import (
 
 // KnowledgeNotification carries locators and delivery state, never proposed text.
 type KnowledgeNotification struct {
-	ID            uuid.UUID  `json:"id"`
-	SuggestionID  uuid.UUID  `json:"suggestion_id"`
-	RecipientID   uuid.UUID  `json:"recipient_id"`
-	Kind          string     `json:"kind"`
-	State         string     `json:"state"`
-	Version       int64      `json:"version"`
-	NextAttemptAt time.Time  `json:"next_attempt_at"`
-	CreatedAt     time.Time  `json:"created_at"`
-	ArticleID     uuid.UUID  `json:"-"`
-	EventID       *uuid.UUID `json:"-"`
-	AttemptID     uuid.UUID  `json:"-"`
+	ID            uuid.UUID       `json:"id"`
+	SuggestionID  uuid.UUID       `json:"suggestion_id"`
+	RecipientID   uuid.UUID       `json:"recipient_id"`
+	Kind          string          `json:"kind"`
+	State         string          `json:"state"`
+	Version       int64           `json:"version"`
+	NextAttemptAt time.Time       `json:"next_attempt_at"`
+	CreatedAt     time.Time       `json:"created_at"`
+	ArticleID     uuid.UUID       `json:"-"`
+	EventID       *uuid.UUID      `json:"-"`
+	AttemptID     uuid.UUID       `json:"-"`
+	Receipt       json.RawMessage `json:"-"`
 }
 
 type KnowledgeNotificationPage struct {
@@ -35,7 +36,7 @@ type KnowledgeNotificationPage struct {
 func kbNotice(row sqlc.ShuttleKnowledgeNotice) KnowledgeNotification {
 	return KnowledgeNotification{ID: row.ID, SuggestionID: row.SuggestionID, RecipientID: row.RecipientID,
 		Kind: row.Kind, State: row.State, Version: row.Version, NextAttemptAt: row.NextAttemptAt.Time.UTC(),
-		CreatedAt: row.CreatedAt.Time.UTC(), AttemptID: uuid.UUID(row.AttemptID.Bytes)}
+		CreatedAt: row.CreatedAt.Time.UTC(), AttemptID: uuid.UUID(row.AttemptID.Bytes), Receipt: row.Receipt}
 }
 
 // EnsureKnowledgeNotifications repairs at most100 missing recipients from the
