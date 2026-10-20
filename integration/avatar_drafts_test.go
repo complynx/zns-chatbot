@@ -67,7 +67,7 @@ func avatarDraftSetup(t *testing.T, processor avatar.Processor) avatarDraftFixtu
 	p.loomDown = true
 	p.avatarProcessor = processor
 	if processor == nil {
-		p.avatarProcessor = avatarProcessorFunc(renderer.Render)
+		p.avatarProcessor = avatarExecutable(t)
 	}
 	h := setup(t, p)
 	id, owner := registrationUser(t, h, 456, false)
@@ -434,6 +434,7 @@ func TestAvatarDraftByteQuotaAndFailedValidationLeaveNoPartialReceipt(t *testing
 func TestAvatarDraftSessionExpiryDuringProcessingPreventsCommit(t *testing.T) {
 	t.Parallel()
 	entered, release := make(chan struct{}), make(chan struct{})
+	worker := avatarExecutable(t)
 	processor := avatarProcessorFunc(
 		func(ctx context.Context, raw []byte, transform avatar.Transform) (avatar.Rendered, error) {
 			close(entered)
@@ -442,7 +443,7 @@ func TestAvatarDraftSessionExpiryDuringProcessingPreventsCommit(t *testing.T) {
 			case <-ctx.Done():
 				return avatar.Rendered{}, ctx.Err()
 			}
-			return renderer.Render(ctx, raw, transform)
+			return worker.Render(ctx, raw, transform)
 		},
 	)
 	f := avatarDraftSetup(t, processor)

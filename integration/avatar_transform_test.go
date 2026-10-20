@@ -10,12 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/avatar"
-	"github.com/complynx/zns-chatbot/internal/avatar/renderer"
 )
 
 func TestAvatarTransformKeepsIdentityAndReplaysCanonicalEditedRequest(t *testing.T) {
 	t.Parallel()
-	f := setupAvatar(t, avatarProcessorFunc(renderer.Render))
+	f := setupAvatar(t, avatarExecutable(t))
 	operation := uuid.New()
 	arguments := map[string]any{"source_file_id": f.source}
 	code, raw := avatarRequest(t, f, f.owner, "generate", operation, arguments)
@@ -56,10 +55,11 @@ func TestAvatarTransformKeepsIdentityAndReplaysCanonicalEditedRequest(t *testing
 
 func TestAvatarTransformRejectsWrongProcessorEchoBeforeCommit(t *testing.T) {
 	t.Parallel()
+	worker := avatarExecutable(t)
 	f := setupAvatar(
 		t,
 		avatarProcessorFunc(func(ctx context.Context, raw []byte, _ avatar.Transform) (avatar.Rendered, error) {
-			return renderer.Render(ctx, raw, avatar.IdentityTransform())
+			return worker.Render(ctx, raw, avatar.IdentityTransform())
 		}),
 	)
 	code, raw := avatarRequest(

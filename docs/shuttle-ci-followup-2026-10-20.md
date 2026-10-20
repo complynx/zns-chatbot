@@ -60,3 +60,39 @@ explicit `pool_max_conns`; explicit limits remain unchanged. Production settings
 are untouched. A fresh no-override gate passes nine roots and13 cases; strict
 lint reports zero issues and source/controller review is clean. The original
 four avatar CI failures still need investigation and a new full CI pass.
+
+## Avatar integration process boundary
+
+The avatar HTTP fixtures previously called `renderer.Render` inside the
+race-instrumented test process. Production uses the separate `zinusya-avatar`
+executable. Both paths are subject to the existing three-second request render
+budget, so the fixtures included race instrumentation in a budget intended for
+the production worker. This is a test/deployment boundary mismatch; the retained
+CI response bodies alone do not prove that every503 was a render timeout.
+
+The affected HTTP fixtures now build the actual leaf executable before requests
+and use `avatar.NewExecutable`. Only that child is built without race
+instrumentation, with CGO disabled. The HTTP server and database integration
+remain under `-race`. Each fixture owns its temporary executable; Go's build
+cache amortizes compilation. The processor still passes the request context,
+uses its production process gate, sanitizes the child environment and retains
+both production deadlines. Expected image bytes computed outside requests and
+all replay, current-session, conflict and wrong-provenance assertions remain.
+Production code and timeouts are unchanged.
+
+A fresh bounded Linux/PostgreSQL race gate passes all24 roots and30 cases from
+the four affected avatar test files, with no skips or OOM. The source snapshot,
+logs and fully decoded database dump are retained under ignored
+`ci-avatar-worker-pg-v1/`; its containers, network and volume are removed and the
+primary is preserved. A later formatting-only change wraps the helper's build
+command; strict lint then reports zero issues.
+
+A separate diagnostic selects exactly the four avatar roots that failed the
+later CI and limits the test container, including its worker, to0.5 CPU. All four
+pass with no skips or OOM. The build happens before timed HTTP requests; cold
+compilation time is part of total test duration. Its logs, frozen source and
+fully decoded dump are retained under ignored
+`ci-avatar-worker-pressure-pg-v1/`. Its owned containers, network and volume are
+removed; the primary is preserved. This is a selected CPU-pressure diagnostic,
+not full CI or an exact reproduction of the hosted runner. A new exact-source
+remote CI pass remains required. Primary remains mvp81/schema65.

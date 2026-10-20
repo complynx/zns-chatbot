@@ -1,3 +1,5 @@
+The [avatar CI follow-up](shuttle-ci-followup-2026-10-20.md#avatar-integration-process-boundary) now uses the deployed leaf-worker boundary in HTTP fixtures, retaining production timeouts and race checks for the server. The selected Linux/PostgreSQL gate passes24 roots/30 cases and is archived/removed. A separate diagnostic passes the four failing CI avatar roots at0.5 CPU and is also archived/removed. Exact-source remote CI remains open; primary stays mvp81/schema65.
+
 The [knowledge content runtime gate](shuttle-knowledge-content-runtime-qa-2026-10-20.md) now passes native-API suggestion → actual Loom moderator review → free-text consent after graceful restart → one publication and identical native replay. The fresh r2 stand is archived/removed; failed r1 expiry and a recovered Windows cleanup-receipt failure remain retained. This covers controlled-provider integration, not browser editing, separate-device handoffs or autonomous model comprehension. Primary remains mvp81/schema65 pending full CI.
 
 The [binary compatibility gates](shuttle-knowledge-resolution-compat-qa-2026-10-20.md) pass83/82/83 and a separate83/81/83 on populated schema67, retaining original notice/audit rows and native writes made by each preceding binary. Both temporary stands are archived/removed; primary81/schema65 remains unchanged. Main installation remains open and must prevent synthetic fixture recipients from real-Telegram notice delivery. The [CI follow-up](shuttle-ci-followup-2026-10-20.md) records the later808/814 CI result. Same-source pool4/8 probes identify the two lock-observation failures; deterministic fixture capacity passes nine roots/13 cases. Four avatar failures and full remote CI remain open, so the primary installation gate stays closed. The runtime renderer is unchanged. Knowledge UI coverage is now included in CI (344 combined local UI cases pass).
@@ -6,9 +8,9 @@ The [complete bounded Linux gate](shuttle-linux-batched-full-qa-2026-10-20.md) n
 
 The [bounded Linux follow-up](shuttle-linux-batched-qa-2026-10-20.md) now passes four critical roots/11 cases,316 UI cases and37 API/task roots. The preceding eight-batch run retains784/785 passing roots and one corrected false-positive assertion. A meal deadline test now runs on Linux after its accidental Windows suffix was removed. That786-root repetition passed at the snapshot above; installation of the reviewed UI fixes remains open; both temporary stands are archived/removed and the primary is preserved.
 
-# Current roadmap direction, 2026-10-20
+# Earlier accepted runtime gates, 2026-10-20
 
-The owned primary is schema64 / `mvp-78`, now with the
+At the earlier schema64 / `mvp-78` stage, the primary had the
 [payment-consent fix installed and binary rollback verified](shuttle-payment-consent-primary-qa-2026-10-20.md).
 Eleven services, domain data, queues and the contents of 134 Loom runs are preserved.
 The preceding [massage mvp78 installation](shuttle-massage-primary-qa-2026-10-20.md)

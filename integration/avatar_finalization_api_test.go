@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/avatar"
-	"github.com/complynx/zns-chatbot/internal/avatar/renderer"
 	"github.com/complynx/zns-chatbot/internal/db"
 )
 
@@ -229,13 +228,14 @@ func TestAvatarFinalizationAPIReplaySkipsRendererAfterLaterDraftEdit(t *testing.
 	t.Parallel()
 	var calls atomic.Int32
 	var unavailable atomic.Bool
+	worker := avatarExecutable(t)
 	processor := avatarProcessorFunc(
 		func(ctx context.Context, raw []byte, tr avatar.Transform) (avatar.Rendered, error) {
 			calls.Add(1)
 			if unavailable.Load() {
 				return avatar.Rendered{}, avatar.ErrProcessorUnavailable
 			}
-			return renderer.Render(ctx, raw, tr)
+			return worker.Render(ctx, raw, tr)
 		},
 	)
 	f, d := avatarFinalizationAPISetup(t, processor)
@@ -335,6 +335,7 @@ func TestAvatarFinalizationAPIRechecksDraftAndNativeSessionDuringRender(t *testi
 			var once sync.Once
 			unblock := func() { once.Do(func() { close(release) }) }
 			defer unblock()
+			worker := avatarExecutable(t)
 			processor := avatarProcessorFunc(
 				func(ctx context.Context, raw []byte, tr avatar.Transform) (avatar.Rendered, error) {
 					if armed.Swap(false) {
@@ -345,7 +346,7 @@ func TestAvatarFinalizationAPIRechecksDraftAndNativeSessionDuringRender(t *testi
 							return avatar.Rendered{}, ctx.Err()
 						}
 					}
-					return renderer.Render(ctx, raw, tr)
+					return worker.Render(ctx, raw, tr)
 				},
 			)
 			f, d := avatarFinalizationAPISetup(t, processor)
@@ -476,6 +477,7 @@ func TestAvatarFinalizationAPIConcurrentReplayAfterRenderConflict(t *testing.T) 
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(release) }) }
 	defer unblock()
+	worker := avatarExecutable(t)
 	processor := avatarProcessorFunc(
 		func(ctx context.Context, raw []byte, tr avatar.Transform) (avatar.Rendered, error) {
 			if armed.Swap(false) {
@@ -486,7 +488,7 @@ func TestAvatarFinalizationAPIConcurrentReplayAfterRenderConflict(t *testing.T) 
 					return avatar.Rendered{}, ctx.Err()
 				}
 			}
-			return renderer.Render(ctx, raw, tr)
+			return worker.Render(ctx, raw, tr)
 		},
 	)
 	f, d := avatarFinalizationAPISetup(t, processor)

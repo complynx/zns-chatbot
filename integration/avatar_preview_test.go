@@ -173,6 +173,7 @@ func TestAvatarPreviewRechecksVersionAndSessionAfterRendering(t *testing.T) {
 			entered, release := make(chan struct{}), make(chan struct{})
 			unblock := sync.OnceFunc(func() { close(release) })
 			defer unblock()
+			worker := avatarExecutable(t)
 			processor := avatarProcessorFunc(
 				func(ctx context.Context, raw []byte, transform avatar.Transform) (avatar.Rendered, error) {
 					if armed.Swap(false) {
@@ -183,7 +184,7 @@ func TestAvatarPreviewRechecksVersionAndSessionAfterRendering(t *testing.T) {
 							return avatar.Rendered{}, ctx.Err()
 						}
 					}
-					return renderer.Render(ctx, raw, transform)
+					return worker.Render(ctx, raw, transform)
 				},
 			)
 			f := avatarDraftSetup(t, processor)
@@ -234,12 +235,13 @@ func TestAvatarPreviewRejectsMismatchedWorkerProvenance(t *testing.T) {
 		t.Run(fault, func(t *testing.T) {
 			t.Parallel()
 			var armed atomic.Bool
+			worker := avatarExecutable(t)
 			processor := avatarProcessorFunc(
 				func(ctx context.Context, raw []byte, transform avatar.Transform) (avatar.Rendered, error) {
 					if armed.Load() && fault == "transform" {
 						transform = avatar.IdentityTransform()
 					}
-					r, err := renderer.Render(ctx, raw, transform)
+					r, err := worker.Render(ctx, raw, transform)
 					if armed.Load() && fault == "source" {
 						r.SourceSHA256 = "wrong"
 					}
