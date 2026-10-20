@@ -75,7 +75,7 @@ func TestAvatarPreviewNativeAgentDescriptorAndPinnedFrameAgree(t *testing.T) {
 	)
 	require.NoError(t, err)
 	code, jpeg, headers := avatarPreviewRead(f.h, avatarPreviewURL(d.ID, 2), f.session.Token, false)
-	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, http.StatusOK, code, string(jpeg))
 	require.Equal(t, "image/jpeg", headers.Get("Content-Type"))
 	require.Equal(t, "private, no-store", headers.Get("Cache-Control"))
 	require.Equal(t, "2", headers.Get("X-Zinusya-Draft-Version"))

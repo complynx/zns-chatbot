@@ -618,6 +618,7 @@ func prepareHarness(t *testing.T, p *peers) *harness {
 	require.NoError(t, err)
 	q := parsed.Query()
 	q.Set("search_path", schema)
+	q.Set("application_name", schema)
 	parsed.RawQuery = q.Encode()
 	store, err := db.Open(ctx, parsed.String())
 	require.NoError(t, err)

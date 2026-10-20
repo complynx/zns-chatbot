@@ -316,7 +316,7 @@ func TestMiniAppPaymentReviewConcurrentEventsAndLogout(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var count int
 		queryErr := f.H.store.Pool().
-			QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%FROM shuttle_miniapp_sessions WHERE id=%'`).
+			QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND application_name=current_setting('application_name') AND wait_event_type='Lock' AND query LIKE '%FROM shuttle_miniapp_sessions WHERE id=%'`).
 			Scan(&count)
 		return queryErr == nil && count == 2
 	}, 5*time.Second, 20*time.Millisecond)
@@ -328,7 +328,7 @@ func TestMiniAppPaymentReviewConcurrentEventsAndLogout(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var count int
 		queryErr := f.H.store.Pool().
-			QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%FROM shuttle_users WHERE id=%FOR UPDATE%'`).
+			QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND application_name=current_setting('application_name') AND wait_event_type='Lock' AND query LIKE '%FROM shuttle_users WHERE id=%FOR UPDATE%'`).
 			Scan(&count)
 		return queryErr == nil && count == 1
 	}, 5*time.Second, 20*time.Millisecond)

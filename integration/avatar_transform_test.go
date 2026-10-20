@@ -19,20 +19,20 @@ func TestAvatarTransformKeepsIdentityAndReplaysCanonicalEditedRequest(t *testing
 	operation := uuid.New()
 	arguments := map[string]any{"source_file_id": f.source}
 	code, raw := avatarRequest(t, f, f.owner, "generate", operation, arguments)
-	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, http.StatusOK, code, string(raw))
 	original := generatedAvatar(t, raw)
 	require.Nil(t, original.Transform)
 	require.Equal(t, f.rendered.SHA256, original.SHA256)
 	require.Equal(t, avatar.ProcessorVersion, original.ProcessorVersion)
 	arguments["transform"] = avatar.IdentityTransform()
 	code, raw = avatarRequest(t, f, f.owner, "generate", operation, arguments)
-	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, http.StatusOK, code, string(raw))
 	require.Equal(t, original, generatedAvatar(t, raw), "Explicit identity preserves the original generation receipt")
 	edit := avatar.Transform{ZoomPPM: avatar.FramePPM, AngleMilli: avatar.HalfTurnMilli}
 	editedOperation := uuid.New()
 	arguments["transform"] = edit
 	code, raw = avatarRequest(t, f, f.owner, "generate", editedOperation, arguments)
-	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, http.StatusOK, code, string(raw))
 	edited := generatedAvatar(t, raw)
 	edit.AngleMilli = -avatar.HalfTurnMilli
 	require.Equal(t, &edit, edited.Transform)
@@ -40,12 +40,12 @@ func TestAvatarTransformKeepsIdentityAndReplaysCanonicalEditedRequest(t *testing
 	require.NotEqual(t, original.SHA256, edited.SHA256)
 	arguments["transform"] = edit
 	code, raw = avatarRequest(t, f, f.owner, "generate", editedOperation, arguments)
-	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, http.StatusOK, code, string(raw))
 	require.Equal(t, edited, generatedAvatar(t, raw), "Equivalent half-turns share exact operation identity")
 	edit.OffsetXPPM++
 	arguments["transform"] = edit
 	code, raw = avatarRequest(t, f, f.owner, "generate", editedOperation, arguments)
-	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, http.StatusOK, code, string(raw))
 	require.Contains(t, string(raw), `"status":"rejected"`)
 	var count int
 	require.NoError(t, f.h.store.Pool().QueryRow(t.Context(), "SELECT count(*) FROM shuttle_avatars").Scan(&count))
