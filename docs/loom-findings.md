@@ -28,6 +28,20 @@ Unpublished findings below are marked explicitly until a write channel is availa
   was not measured. The report includes the requested bounded-recovery contract.
   GitHub publication awaits an authenticated write channel.
 
+- L05 (local contract proposal, not filed): [Native prepared-operation adoption](shuttle-loom-native-operation-adoption.md).
+  Actual Loom reads a native preparation but a supported `module_call` creates a
+  distinct operation. The required generic adoption capability is missing; this
+  is not labelled a defect in fresh-operation behavior. Exact mixed-path
+  acceptance remains open. GitHub publication awaits a write channel.
+
+- L06 (local diagnostics/lifecycle request, not filed): [Consent after moderator revocation](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md).
+  Actual owned-stand observation retains `tool_failed` and an unexecuted Loom
+  operation in `approved`; no article/review effect occurs. A separate authority
+  probe returns 403 and the agent reads disabled rights. The generic error alone
+  does not prove its cause. Safe error classification and the fate of old consent
+  after rights restoration need a contract and acceptance; maintainer
+  bug/feature classification is open. GitHub publication awaits a write channel.
+
 Not filed as Loom bugs: Huma's extra discovery `$schema` field was corrected in
 Shuttle; missing administrator role assignment in Loom's IAM project was corrected
 in the QA fixture. Both are adapter/configuration responsibilities. The later artifact disclosure
