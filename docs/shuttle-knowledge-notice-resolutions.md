@@ -3,7 +3,9 @@
 Status: source mvp83, additive migration67. The primary remains schema65/mvp81.
 The preceding mvp82 delivery acceptance is recorded separately in
 [the runtime report](shuttle-knowledge-notices-runtime-qa-2026-10-20.md).
-No installation or full real-IAM/Loom acceptance is claimed for this slice.
+The separate [real-IAM/Loom runtime gate](shuttle-knowledge-resolution-runtime-qa-2026-10-20.md)
+now passes direct diagnostics/resolution and a controlled free-text consent
+dialogue through graceful restart. No main installation is claimed.
 
 ## Administrative workflow
 
@@ -91,8 +93,9 @@ The primary stand remains unchanged. Ignored proof lives under
 `.cache/shuttle-work/knowledge-notice-resolutions-source-v1/`,
 `knowledge-notice-resolutions-pg-v1/`, `knowledge-notice-resolutions-pg-v2/`,
 `knowledge-notice-resolutions-pg-v3/` and `knowledge-notice-resolutions-build-v1/`.
-Full real-IAM/Loom resolution dialogues, installation and preceding-binary
-compatibility remain separate acceptance work. No production readiness is claimed.
+The linked full runtime gate now passes with a controlled provider. Main
+installation, preceding-binary compatibility and autonomous model quality
+remain separate acceptance work. No production readiness is claimed.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk

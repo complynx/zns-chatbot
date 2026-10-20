@@ -81,8 +81,9 @@ Loom readback distinguishes the immutable submission receipt, current review
 state and recipient-owned delivery metadata without changing business data.
 The [exact administrative resolution follow-up](shuttle-knowledge-notice-resolutions.md)
 is implemented in uninstalled mvp83/migration67 and passes a separate focused
-PostgreSQL/race gate. Full real-IAM/Loom resolution dialogues, model-driven
-moderation writes and separate-device handoffs remain open.
+PostgreSQL/race gate. The [full resolution runtime gate](shuttle-knowledge-resolution-runtime-qa-2026-10-20.md)
+now passes controlled real-Loom consent and current-IAM diagnostics. Content
+moderation writes and separate-device handoffs remain separate acceptance work.
 Do not install this candidate on a real Telegram stand to exercise synthetic
 reviewer identities. Multi-user delivery belongs on isolated mock Telegram.
 
