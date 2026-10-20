@@ -1,18 +1,20 @@
 # Knowledge foundation evidence, 2026-10-20
 
 Status: store, agent API, native forms and bounded archive maintenance are
-installed on the owned shuttle-live-test stand at schema65/mvp80. Real Telegram
+installed on the owned shuttle-live-test stand at schema65/mvp81. Real Telegram
 native suggestion, native-to-agent read, independent fixture publication/replay
 and deployed published navigation pass. The initial HTTP422 moderation failure
 is retained; its read-only completion passes after the installed correction.
-Moderator notifications, moderator UI and remaining mixed-channel write acceptance stay open.
+Native moderator management and actual-IAM native/agent HTTP assignment handoffs
+also pass. Durable reviewer notices and remaining model-driven write acceptance
+stay open.
 
 ## Applied implementation checkpoint
 
 The domain and additive migration65 are applied to source. The store implements
 published retrieval, suggestions, independent review, named moderators, exact
 operation receipts and event archival. The agent API exposes these operations
-under `zinusya_knowledge`; both owned stand and corrected source use mvp80. The stand received additive migration65 after a decoded pre-migration backup.
+under `zinusya_knowledge`; both owned stand and corrected source use mvp81. The stand received additive migration65 after a decoded pre-migration backup.
 
 The final isolated Linux/race PostgreSQL gate v5 passed nine roots and18 terminal
 cases, with no failures, skips or OOM. It covers independent review, event scope
@@ -312,9 +314,9 @@ binary-only installation and read-only completion below use the already approved
 suggestion, without repeating any completed mutation. The original failed probe
 and its custody record remain unchanged.
 
-## Installed navigation correction and read-only completion
+## Historical mvp80 navigation correction and read-only completion
 
-Source commitacb21cb is installed as schema65/mvp80 using image
+Source commitacb21cb was installed as schema65/mvp80 using image
 `sha256:750ba6b2d007f8f17ed470b7835d70cca8268984ffb81db8db7ae0a858c530c7`.
 Its extracted Linux binary matched the tested build. The independently reviewed
 binary-only procedure fenced ingress, stopped the bot gracefully, saved and
@@ -352,7 +354,7 @@ retained locally. Evidence is under ignored `knowledge-article-image-v1/`,
 `knowledge-navigation-install-v1/`, `knowledge-navigation-readonly-completion-v1/`,
 `knowledge-cache-retention-custody-v1/` and `knowledge-published-native-real-v1/`.
 
-## Remaining acceptance
+## Native moderator management
 
 Source mvp81 adds native named moderator management through the existing exact
 preparation, confirmation and operation journal. Global administrators can load
@@ -371,9 +373,33 @@ one preparation and one confirmation. The fixture was stopped and its tab
 closed. This is UI evidence, not real IAM/PostgreSQL/Telegram acceptance. Evidence
 is retained under ignored `knowledge-moderators-ui-v1/`.
 
-The installed stand remains schema65/mvp80. Build/install mvp81 and prove
-moderator assignment continuation across channels/devices against real HTTP and
-IAM. Add durable reviewer notices with multi-user delivery on mock Telegram.
+Actual IAM and native/agent HTTP continuation also pass on the owned stand.
+For the existing synthetic fixture administrator, an agent preparation was
+completed through native HTTP after an explicit-consent check; replay returned
+the same stored result. A native restoration preparation was then completed
+through agent HTTP. The original moderator flag was restored, with assignment
+version1 advancing to3 and exactly two additional operation receipts. The ordinary
+user cannot list moderator assignments. The test's Mini App session was logged
+out. No Telegram message or Loom agent run was created. This proves the HTTP
+contract with real IAM; it does not prove a model-driven Loom moderation dialogue.
+
+The reviewed source commit3b76da1 is installed as schema65/mvp81 using image
+`sha256:98f5149909fc3fa1b852c42c93fc5c538fbb3f40889b0ada4474c8a801cb90a0`.
+The packaged binary matched the bounded Linux build. Ingress was fenced, the bot
+stopped gracefully, and a fresh database archive was saved and fully decoded.
+Only the bot container was recreated; no migration or business operation was
+repeated. The same poller resumed and completed a fresh successful ingress cycle.
+All eleven services are running, with the preceding domain data and Loom state
+preserved. Deployed real-IAM reads return the original revoke and restore
+receipts, with moderator access enabled. The temporary packaging probe was
+removed. Evidence is under ignored `knowledge-moderator-http-v1/`,
+`knowledge-moderators-build-v1/`, `knowledge-moderators-image-v1/` and
+`knowledge-moderators-install-v1/`.
+
+## Remaining acceptance
+
+Add durable reviewer notices with multi-user delivery on mock Telegram. A real
+Loom moderation dialogue and continuation across separate devices remain open.
 
 Continue both directions of edit/review continuation,
 owned multi-user acceptance and notification recovery. The installed corpus now
