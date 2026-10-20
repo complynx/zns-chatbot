@@ -95,6 +95,10 @@
   let detailsBody;
   let accountAfter;
   let accountNextCursor;
+  const knowledgeUI = window.createZinusyaKnowledge?.({
+    request: (path, method, body) => request(path, method, body, session.token),
+    setBusy, denied: detailsDenied
+  });
   const passPaymentsUI = window.createZinusyaPassPayments?.({
     request: (path, method, body) => request(path, method, body, session.token),
     setBusy, denied: detailsDenied, readProof
@@ -196,6 +200,7 @@
     profileRefresh.disabled = value;
     detailsControls(value);
     passPaymentsUI?.setLocked(value);
+    knowledgeUI?.setBusy(value);
     orderProofUI?.setBusy(value);
     ordersUI?.setBusy(value);
     mealsUI?.setBusy(value);
@@ -212,6 +217,7 @@
   }
 
   function clearAccount() {
+    knowledgeUI?.clear();
     passPaymentsUI?.clear();
     orderProofUI?.clear();
     ordersUI?.clear();
@@ -315,8 +321,9 @@
       if (session.token) await avatarAdminUI?.start(account.user_id, language);
       if (session.token) await assignmentsUI?.start(account.user_id, language);
       if (session.token) await pairAssignmentsUI?.start(account.user_id, language);
+      if (session.token) await knowledgeUI?.start(account.user_id, language);
       // Restore the launch position after all modules reveal their content.
-      if (session.token && ["pass-payments", "pairs", "avatars", "orders", "meals", "massage", "payment-review", "pass-assignments", "pair-assignments"].includes(launchTarget)) {
+      if (session.token && ["knowledge", "pass-payments", "pairs", "avatars", "orders", "meals", "massage", "payment-review", "pass-assignments", "pair-assignments"].includes(launchTarget)) {
         const section = document.getElementById(launchTarget);
         if (section && !section.hidden) section.scrollIntoView({ block: "start" });
       }
@@ -355,6 +362,7 @@
       profileVersion = p.version;
       language = p.bot_language === "en" || p.bot_language === "ru" ? p.bot_language : defaultLanguage;
       document.documentElement.lang = language;
+      knowledgeUI?.setLanguage(language);
       passPaymentsUI?.setLanguage(language);
       orderProofUI?.setLanguage(language);
       ordersUI?.setLanguage(language);

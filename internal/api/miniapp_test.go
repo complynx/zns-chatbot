@@ -31,7 +31,7 @@ func TestMiniAppRoutesAreOptInAndServeOnlyBoundedPublicAssets(t *testing.T) {
 	}
 	enabled, err := api.New(&db.Store{}, &identity.Client{}, &intake{}, options)
 	require.NoError(t, err)
-	for _, path := range []string{"/app/", "/app/app.js", "/app/orders.js", "/app/meals.js", "/app/pairs.js", "/app/avatars.js", "/app/avatar-admin.js", "/app/assignments.js", "/app/pair-assignments.js", "/app/order-proof.js", "/app/payment-reviews.js", "/app/pass-payments.js", "/app/order-reviews.js", "/app/massage.js", "/app/massage-staff.js", "/app/massage-admin.js", "/app/app.css"} {
+	for _, path := range []string{"/app/", "/app/app.js", "/app/orders.js", "/app/knowledge.js", "/app/meals.js", "/app/pairs.js", "/app/avatars.js", "/app/avatar-admin.js", "/app/assignments.js", "/app/pair-assignments.js", "/app/order-proof.js", "/app/payment-reviews.js", "/app/pass-payments.js", "/app/order-reviews.js", "/app/massage.js", "/app/massage-staff.js", "/app/massage-admin.js", "/app/app.css"} {
 		response = httptest.NewRecorder()
 		enabled.PublicHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		require.Equal(t, http.StatusOK, response.Code, path)

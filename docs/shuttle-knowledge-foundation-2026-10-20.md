@@ -154,14 +154,47 @@ the promoted-field initializer used here.
 
 These tests exercise store behavior and API projections. They do not establish
 native HTTP/session, actual Loom prompt consumption or real Telegram acceptance.
-The separate ignored UI draft is not installed or included in this source gate.
+The subsequent native UI change is not included in this PostgreSQL source gate.
+
+## Native client source
+
+The Mini App now includes a knowledge section and accepts the `#knowledge`
+launch target. It uses existing authenticated requests, busy/account/language
+lifecycle hooks and static-asset security headers. It adds no frontend framework
+or Markdown HTML renderer: article text and source references render as text.
+
+Users can browse/search, read current or old revisions, suggest articles and
+corrections, inspect their suggestions and decisions, and select available empty
+events across overview pages. Authorized editors can prepare publication; an
+independent reviewer sees proposed/current text before approving or rejecting.
+An active review locks navigation so another suggestion cannot replace the
+comparison covered by consent.
+
+Recent actor-owned requests can be selected across channels for the supported
+suggest/edit/review workflows. Selection reads original server terms and requires
+fresh consent. It never creates a guessed preparation. An unknown lookup remains
+recoverable across reload. A completed receipt wins over expiry. The local
+journal stores communal content and operation metadata per user/tab, not tokens.
+A first definitive preparation rejection returns to the editable form;
+any earlier uncertain attempt retains its original identity. The attempted marker
+is persisted before dispatch to preserve this distinction across reload/crash.
+
+Eighteen focused VM/DOM/mock-HTTP behavioral tests pass for this client. The
+combined run with the32 existing Mini App lifecycle cases passed50 cases. The API
+package/static-asset tests also pass. These are source-level browser simulations,
+not a real browser, native HTTP or deployed Telegram acceptance result.
+The independent UI review loop ended with no actionable findings. It fixed
+blocked forms after definitive preparation rejection, mismatched suggestion
+pagination, changing review context during consent, and hidden publication/
+review metadata. The final metadata patch reran all18 knowledge cases.
 
 ## Remaining acceptance
 
-Connect the native frontend and Telegram `/knowledge` entry. Add moderator
-management UI and durable reviewer notices. The backend now supports event and
-actor-owned operation discovery; wire selection and recovery into the native
-client, then prove continuation across channels/devices.
+Add the Telegram `/knowledge` command/menu entry, moderator management UI and
+durable reviewer notices. The native client now supports event and actor-owned
+operation selection for article/review workflows. Moderator assignment recovery
+is not yet exposed by that interface; recent assignment entries are metadata
+only. Prove continuation across channels/devices against real HTTP and IAM.
 
 Then perform native HTTP authorization and owned multi-user real-IAM/Loom/mock-
 Telegram acceptance, including both native/agent continuation directions and

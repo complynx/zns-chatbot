@@ -24,7 +24,7 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
   const elements = Object.fromEntries(["status", "name", "retry", "logout", "account", "account-title", "account-status",
     "account-events", "account-retry", "account-first", "account-next", "profile", "profile-title", "profile-status", "profile-name", "profile-language", "profile-name-label", "profile-language-label", "profile-save-name", "profile-save-language", "profile-refresh", "profile-form", "details", "details-title", "details-note", "details-status", "details-name", "details-passport", "details-name-label", "details-passport-label", "details-name-presence", "details-passport-presence", "details-save-name", "details-save-passport", "details-refresh", "details-name-form", "details-passport-form"].map(id => [id, element()]));
   const scrolls = [];
-  const launchFactories = { pairs: "createZinusyaPairs", avatars: "createZinusyaAvatars", orders: "createZinusyaOrders", meals: "createZinusyaMeals", massage: "createZinusyaMassage", "payment-review": "createZinusyaPaymentReviews" };
+  const launchFactories = { knowledge: "createZinusyaKnowledge", pairs: "createZinusyaPairs", avatars: "createZinusyaAvatars", orders: "createZinusyaOrders", meals: "createZinusyaMeals", massage: "createZinusyaMassage", "payment-review": "createZinusyaPaymentReviews" };
   for (const id of Object.keys(launchFactories)) {
     elements[id] = element();
     elements[id].hidden = true;
@@ -485,7 +485,7 @@ test("another verified owner never receives the previous owner's recovery reques
 
 
 test("native launch targets restore their section after Telegram appends auth parameters", async () => {
-  for (const section of ["avatars", "orders", "meals", "massage", "payment-review"]) {
+  for (const section of ["knowledge", "avatars", "orders", "meals", "massage", "payment-review"]) {
     for (const hash of ["#" + section, "#" + section + "?tgWebAppData=fixture&tgWebAppVersion=9.6"]) {
       const app = browser("proof", {}, [{ status: 200, body: account }], [], [], [], { hash, launchSection: section });
       await app.settle();

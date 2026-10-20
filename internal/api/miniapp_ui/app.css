@@ -66,3 +66,8 @@ textarea { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid 
 #avatars > button, #avatars-editor > button, #avatars > .actions { margin-top: 12px; }
 #pp-target, #pp-history, #pp-receipt, #pp-recent-list { overflow-wrap: anywhere; }
 #pass-payments > .actions, #pp-recent-list button { margin-top: 12px; }
+
+#knowledge pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+#knowledge input[type="checkbox"] { width: auto; margin-right: 8px; }
+#knowledge > .actions, #kb-editor > .actions { margin-top: 12px; }
+#kb-source-inputs > div { margin-bottom: 12px; }

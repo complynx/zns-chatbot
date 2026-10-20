@@ -21,6 +21,7 @@
   <script src="./massage-admin.js" defer></script>
   <script src="./assignments.js" defer></script>
   <script src="./pair-assignments.js" defer></script>
+  <script src="./knowledge.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
 <body>
@@ -438,6 +439,35 @@
       <div id="ppa-receipt" aria-live="polite"></div><h2 id="ppa-pending-title">Unfinished assignments</h2><div id="ppa-pending"></div>
       <div class="actions"><button id="ppa-reload" type="button">Reload unfinished assignments</button><button id="ppa-recent" type="button">Recent form operations</button><button id="ppa-first" type="button" hidden>First proposals</button><button id="ppa-next" type="button" hidden>Next proposals</button></div>
     </section>
+  <section id="knowledge" hidden aria-labelledby="kb-heading">
+  <h1 id="kb-heading">Knowledge</h1><p id="kb-status" role="status" aria-live="polite"></p>
+  <label id="kb-collection-label" for="kb-collection">Collection</label><select id="kb-collection"></select>
+  <label id="kb-query-label" for="kb-query">Search</label><input id="kb-query" type="search" maxlength="256">
+  <div class="actions"><button id="kb-search" type="button">Search / browse</button><button id="kb-next" type="button" hidden>Next page</button><button id="kb-new" type="button">Suggest a new article</button><button id="kb-new-edit" type="button" hidden>Create an article</button></div>
+  <button id="kb-events-next" type="button" hidden>More events</button><p id="kb-discovery-note"></p><button id="kb-recent" type="button">Recent requests</button><div id="kb-recent-list"></div><div id="kb-results"></div>
+  <article id="kb-article" hidden><h2 id="kb-title"></h2><p id="kb-provenance"></p><pre id="kb-body"></pre><div id="kb-sources"></div>
+    <div class="actions"><button id="kb-current" type="button">Current revision</button><button id="kb-history" type="button">Revision history</button><button id="kb-history-next" type="button" hidden>Older revisions</button><button id="kb-correct" type="button">Suggest a correction</button><button id="kb-edit" type="button" hidden>Edit article</button></div><div id="kb-revisions"></div>
+  </article>
+  <div id="kb-editor" hidden>
+    <h2 id="kb-editor-title">Article change</h2>
+    <label id="kb-slug-label" for="kb-slug">Short name</label><input id="kb-slug" maxlength="100" autocomplete="off">
+    <label id="kb-name-label" for="kb-name">Title</label><input id="kb-name" maxlength="200">
+    <label id="kb-language-label" for="kb-language">Article language</label><select id="kb-language"><option value="en">English</option><option value="ru">Русский</option></select>
+    <label id="kb-topics-label" for="kb-topics">Topics, one per line</label><textarea id="kb-topics" rows="3"></textarea>
+    <label id="kb-text-label" for="kb-text">Article text (Markdown)</label><textarea id="kb-text" rows="14"></textarea>
+    <h2 id="kb-sources-heading">Sources</h2><div id="kb-source-inputs"></div><button id="kb-source-add" type="button">Add source</button>
+    <label id="kb-reason-label" for="kb-reason">Reason for change</label><textarea id="kb-reason" rows="3" maxlength="1000"></textarea>
+    <div class="actions"><button id="kb-prepare" type="button">Review this change</button><button id="kb-editor-close" type="button">Close editor</button></div>
+  </div>
+  <h2 id="kb-suggestions-heading">Suggested changes</h2>
+  <div class="actions"><button id="kb-mine" type="button">My suggestions and decisions</button><button id="kb-pending" type="button" hidden>Review pending suggestions</button><button id="kb-suggestions-next" type="button" hidden>Next suggestions</button></div>
+  <div id="kb-suggestions"></div><article id="kb-suggestion" hidden></article>
+  <div id="kb-review" hidden><label id="kb-review-reason-label" for="kb-review-reason">Decision reason</label><textarea id="kb-review-reason" rows="3" maxlength="1000"></textarea><div class="actions"><button id="kb-approve" type="button">Review approval</button><button id="kb-reject" type="button">Review rejection</button></div></div>
+  <div id="kb-preview"></div>
+  <label id="kb-consent-wrap" hidden><input id="kb-consent" type="checkbox"><span id="kb-consent-label">I confirm this exact change</span></label>
+  <div class="actions"><button id="kb-confirm" type="button" hidden>Confirm this change</button><button id="kb-recover" type="button" hidden>Check earlier request</button><button id="kb-retry" type="button" hidden>Retry the same preparation</button><button id="kb-close-expired" type="button" hidden>Close the expired request</button></div><div id="kb-receipt" aria-live="polite"></div>
+</section>
+
   </main>
 </body>
 </html>

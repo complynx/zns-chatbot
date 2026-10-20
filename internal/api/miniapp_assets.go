@@ -44,6 +44,8 @@ func (s *Server) miniAppPage(w http.ResponseWriter, r *http.Request) {
 		file, contentType = "massage-admin.js", javaScriptType
 	case "/app/massage-staff.js":
 		file, contentType = "massage-staff.js", javaScriptType
+	case "/app/knowledge.js":
+		file, contentType = "knowledge.js", javaScriptType
 	case "/app/app.css":
 		file, contentType = "app.css", "text/css; charset=utf-8"
 	default:
