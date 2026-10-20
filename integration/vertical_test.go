@@ -619,6 +619,10 @@ func prepareHarness(t *testing.T, p *peers) *harness {
 	q := parsed.Query()
 	q.Set("search_path", schema)
 	q.Set("application_name", schema)
+	// Queue workers and lock observers need capacity beyond blocked business transactions.
+	if q.Get("pool_max_conns") == "" {
+		q.Set("pool_max_conns", "8")
+	}
 	parsed.RawQuery = q.Encode()
 	store, err := db.Open(ctx, parsed.String())
 	require.NoError(t, err)

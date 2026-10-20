@@ -15,8 +15,9 @@ The five failing roots were:
 
 An unchanged-source Linux/PostgreSQL race probe passed all five roots with no
 skips or OOM. A separate diagnostic limited the test process to 0.5 CPU. Its
-two lock tests passed; the three avatar tests failed earlier, during authentication
-or initial setup. Those failures do not establish the cause of the original CI
+two lock tests passed; the three avatar tests returned503 during initial
+draft/generation setup. The authentication-labelled response is also used for
+other avatar errors and does not identify an IAM failure. Those failures do not establish the cause of the original CI
 503 responses. Both probes retain their original logs and decoded database dumps;
 their owned containers, networks and volumes were removed. The primary was preserved.
 
@@ -32,3 +33,30 @@ Mini App payment-review roots. It passes all nine roots and 13 cases with no ski
 reports zero issues, and the source/controller review has no actionable findings.
 A new full remote CI pass is still required before installing mvp83 on the primary, which remains
 mvp81/schema65. No production-readiness claim is made.
+
+## Later CI and deterministic fixture capacity
+
+The [later run at e22dca0a](https://github.com/complynx/zns-chatbot/actions/runs/39447251353)
+also failed after all nine batches: 808 of814 integration roots passed. The two
+lock-observation roots failed again. Four avatar roots returned503, including
+`TestAvatarFinalizationAPIReplaySkipsRendererAfterLaterDraftEdit`. Response bodies
+are retained under ignored `ci-critical-e22dca-v1/`. Later workflow steps were
+skipped. This run does not establish a renderer or IAM root cause.
+
+The pinned pgx5.11.0 pool default is `max(4, runtime.NumCPU())`. The payment-review
+fixture holds a blocker, two financial transactions and logout, then needs an
+additional connection to observe locks. A runner exposing at most four CPUs gets a default of4. Docker CPU quota
+alone does not pin this fixture capacity.
+
+A paired Linux/race probe freezes one shared source manifest and selects the
+same five roots with explicit pool limits4 and8. With4, both original lock roots
+fail and all three selected avatar roots pass. With8, all five pass. Neither case
+has skips or OOM; both source manifests match, dumps decode, resources are
+removed and the primary is preserved. Evidence: ignored
+`ci-critical-pool-matrix-result-v1.json` and both `ci-critical-pool-*-pg-v1/` roots.
+
+The integration harness now defaults to8 connections when the DSN has no
+explicit `pool_max_conns`; explicit limits remain unchanged. Production settings
+are untouched. A fresh no-override gate passes nine roots and13 cases; strict
+lint reports zero issues and source/controller review is clean. The original
+four avatar CI failures still need investigation and a new full CI pass.
