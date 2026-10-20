@@ -1,3 +1,58 @@
+# Current roadmap checkpoint, 2026-10-20
+
+This is the pre-installation checkpoint for knowledge notices and their exact
+resolution. The owned primary runs `mvp81/schema65`. The tested candidate is
+`mvp83/schema67`; it is not installed. Complete remote CI remains required.
+The chronological records below retain the scope and result of each earlier gate;
+a later component pass does not turn an earlier failed full run into a pass.
+
+## Next actions, in order
+
+1. Finish the full CI run for the reviewed file-revocation assertion fix. The
+   [CI follow-up](shuttle-ci-followup-2026-10-20.md) records the original failures
+   and bounded local checks. Do not substitute selected local passes for CI.
+2. Install the already-tested knowledge-notice candidate on the owned primary:
+   gracefully fence ingress, save and decode its backup, apply migrations66/67,
+   activate the candidate, verify original data/notice/authentication boundaries,
+   then resume the same ingress. Keep fixture recipients disabled. The
+   [runtime resolution](shuttle-knowledge-resolution-runtime-qa-2026-10-20.md) and
+   [binary compatibility](shuttle-knowledge-resolution-compat-qa-2026-10-20.md)
+   reports prove temporary-stand behavior, not this primary installation.
+3. Integrate the separately reviewed
+   [literal order-review preview](shuttle-order-review-preview.md), retaining
+   the original financial terms and confirmation operation. Validate the changed
+   candidate before installing it. Its browser fixture is not full order-payment QA.
+4. Close exact prepared-operation native-to-agent handoff when the generic
+   [Loom adoption contract](shuttle-loom-native-operation-adoption.md) is agreed
+   and available. Also resolve the documented
+   [revocation/consent lifecycle](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md).
+   Independent native completion and agent reads remain usable; neither proves
+   adoption of the original preparation. Do not change the Loom developer's stand.
+5. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
+   when Daniel is available. Revalidate the retained configuration first;
+   isolated HTTP/Edge results do not replace that joint check.
+6. Continue meal financial checkout after the recorded policy decisions: empty
+   completed selections, the financial cutoff across services, and explicit meal
+   capacity. Catalogs/drafts and shared kind-isolated storage exist; exposed meal
+   submission/payment/review is still missing. Service-order acceptance does not
+   cover meals. Keep unresolved decisions in the ignored local decisions file.
+7. Finish real export/account/avatar migration and server-specific cutover
+   acceptance before any separately authorized production deployment. Historical
+   payment records stay reference material, not credits in the new live ledger.
+
+## Knowledge acceptance boundary
+
+General and event-scoped publication, named moderation, immutable revisions,
+search/navigation and event archival have bounded source/runtime evidence.
+Native browser editing has separate general and event acceptance with Loom
+stopped; actual-Loom write paths use a controlled provider. See the
+[general browser](shuttle-knowledge-browser-runtime-qa-2026-10-20.md),
+[event browser](shuttle-knowledge-event-browser-qa-2026-10-20.md) and
+[event runtime](shuttle-knowledge-event-runtime-qa-2026-10-20.md) reports.
+These are not unattended model-quality, complete mixed-path or production claims.
+
+# Historical progress records
+
 The [event knowledge browser gate](shuttle-knowledge-event-browser-qa-2026-10-20.md) now passes native participant suggestion/reload, independent event-admin approval/edit, wrong-event admin controls and old/current revision reads in five fresh Edge contexts with real IAM and Loom stopped. One article/two revisions/three content operations and zero Loom runs are verified. All nine temporary services are archived/removed; primary installation, full CI and exact prepared-operation native-to-agent adoption remain separate gates.
 
 The [moderator revocation observation](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md) preserves zero publication after rights are removed and the bot is gracefully restarted (stop: 0.625 seconds). Actual Loom returns `tool_failed` and retains `approved`; current rights and the original operation are then explicitly read by the agent. This is a bounded safety snapshot, not full rejection/recovery acceptance. The linked proposal records missing diagnostic/lifecycle guarantees without attributing the generic error to a proven internal cause.
