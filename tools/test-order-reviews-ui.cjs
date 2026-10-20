@@ -69,7 +69,7 @@ function browser(api,{storage=new Map(),failGet=false,failSet=false,hash="",app=
  else ui=context.window.createZinusyaOrderReviews({request:async(path,method,body)=>{calls.push({path,method,body:body?clone(body):undefined,persisted:storage.get(key)});return api.request(path,method,body?clone(body):body);},readProof:async path=>{calls.push({path,proof:true});if(api.proof)await api.proof();return {type:"application/pdf"};},setBusy:v=>ui.setBusy(v),denied:()=>ui.clear()});
  const text=e=>(e.textContent||"")+e.children.map(text).join(" ");
  const fire=async(id,event="click",force=false)=>{const el=get("or-"+id);if(!force)assert.equal(el.disabled,false,id+" disabled");await el.listeners[event]({preventDefault(){}});};
- return {ui,calls,storage,revoked,async settled(){for(let i=0;i<100;i++){if(!get("retry").disabled && get("or-event").children.length>1)return;await new Promise(r=>setTimeout(r,5));}assert.fail("App did not connect reviewer UI");},async logout(){await get("logout").listeners.click();},get:id=>get("or-"+id),text:id=>text(get("or-"+id)),fire,start:()=>ui.start(owner,"en"),async select(){get("or-event").value=eventID;await fire("event","change");get("or-evidence").value=evidenceID;await fire("evidence","change");},async save(reason="Checked <img>",decision="confirmed"){get("or-reason").value=reason;await fire("reason","input");get("or-decision").value=decision;await fire("decision","change");await fire("form","submit");}};
+ return {ui,calls,storage,revoked,async settled(){for(let i=0;i<100;i++){if(!get("retry").disabled && get("or-event").children.length>1)return;await new Promise(r=>setTimeout(r,5));}assert.fail("App did not connect reviewer UI");},async logout(){await get("logout").listeners.click();},get:id=>get("or-"+id),text:id=>text(get("or-"+id)),fire,start:(language="en")=>ui.start(owner,language),async select(){get("or-event").value=eventID;await fire("event","change");get("or-evidence").value=evidenceID;await fire("evidence","change");},async save(reason="Checked <img>",decision="confirmed"){get("or-reason").value=reason;await fire("reason","input");get("or-decision").value=decision;await fire("decision","change");await fire("form","submit");}};
 }
 const writes=b=>b.calls.filter(c=>c.method==="POST");
 
@@ -143,4 +143,26 @@ test("a late successful decision cannot repaint logout or discard its recovery r
  const api=backend(),b=browser(api);api.prepare(api.args());await b.start();await b.select();await b.fire("proof");let release;
  api.hook=(p,m,v,base)=>{const result=base(p,m,v);return m==="POST"?new Promise(r=>{release=()=>r(result);}):result;};
  const request=b.fire("confirm");b.ui.clear();release();await request;assert.equal(api.effects,1);assert.equal(b.text("receipt"),"");assert.equal(b.text("detail"),"");assert.equal(b.storage.size,1);assert.equal(b.get("download").hidden,true);
+});
+
+for (const language of ["en","ru"]) test("saved review displays literal terms without the server fence in "+language,async()=>{
+ const api=backend();api.prepare(api.args());
+ const title=language==="ru"?"Подтвердить оплату заказа?":"Confirm order payment?";
+ const terms='Payer: "<script>alert(1)</script>"\nSoup: 12.34 BYN × 2 = 24.68 BYN\nRequired charge: 1.00 BYN\nAmount to confirm: 25.68 BYN\nCapacity held: 2\nReason: "Checked ``` literally"\nProof ID: '+evidenceID;
+ api.detail.workspace.preparation.description=title+"\n\n````\n"+terms+"\n````";
+ const b=browser(api);await b.start(language);await b.select();
+ const preview=b.get("preview");
+ assert.equal(preview.children.find(n=>n.tag==="h3").textContent,title);
+ assert.equal(preview.children.find(n=>n.tag==="pre").textContent,terms);
+ assert.equal(b.get("confirm").disabled,true);assert.equal(writes(b).length,0);
+ await b.fire("proof");await b.fire("confirm");assert.equal(api.effects,1);
+});
+test("unrecognized saved summary is shown verbatim without guessing Markdown",async()=>{
+ for (const description of ["Existing plain summary <img>","Title\n\n```\nTerms\n````","Title\n\n```\nTerms ``` literal\n```"]) {
+  const api=backend();api.prepare(api.args());api.detail.workspace.preparation.description=description;
+  const b=browser(api);await b.start();await b.select();
+  assert.equal(b.get("preview").children.find(n=>n.tag==="pre").textContent,description);
+  assert.equal(b.get("preview").children.some(n=>n.tag==="h3"),false);
+  assert.equal(writes(b).length,0);
+ }
 });

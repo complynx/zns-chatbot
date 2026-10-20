@@ -79,6 +79,15 @@ window.createZinusyaOrderReviews = function (env) {
     for (const c of visible.values()) addOption(el.evidence,c.id,money(c.amount_minor,c.currency_scale,c.currency)+" · "+stateName(c.state)+" · "+(zone?date(c.sent_at,zone):c.sent_at)+" · "+c.id.slice(0,8));
     el.evidence.value=evidenceID || "";
   }
+  // The server encloses literal decision terms in a fence longer than any backticks in them.
+  function renderSavedDescription(description) {
+    const fenced=/^([^\n]+)\n\n(`{3,})\n([\s\S]*)\n\2$/.exec(description);
+    if (fenced && !fenced[3].includes(fenced[2])) {
+      el.preview.append(node("h3",fenced[1]),node("pre",fenced[3]));
+    } else {
+      el.preview.append(node("pre",description));
+    }
+  }
   function renderDetail() {
     el.detail.replaceChildren();el.preview.replaceChildren();el.form.hidden=!detail;
     if (!detail) return;
@@ -87,7 +96,9 @@ window.createZinusyaOrderReviews = function (env) {
     if (c.review?.reason) el.detail.append(node("p",w().reason+": "+c.review.reason));
     const a=detail.workspace;
     if (!a) { el.preview.append(node("p",w().noSaved));return; }
-    el.preview.append(node("h2",w().saved),node("p",w()[a.state]),node("pre",a.preparation.description),node("p",w().expires+": "+date(a.preparation.expires_at,zone)+" · "+zone));
+    el.preview.append(node("h2",w().saved),node("p",w()[a.state]));
+    renderSavedDescription(a.preparation.description);
+    el.preview.append(node("p",w().expires+": "+date(a.preparation.expires_at,zone)+" · "+zone));
   }
   function renderReceipt() {
     el.receipt.replaceChildren();if(!lastReceipt) return;

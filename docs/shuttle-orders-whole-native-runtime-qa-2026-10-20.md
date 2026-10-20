@@ -77,6 +77,11 @@ history stays at its earlier snapshot beside the clearly labelled original
 receipt until reload; the reviewer preview exposes raw text fences and technical
 IDs. These are not financial-state failures.
 
+A later [presentation follow-up](shuttle-order-review-preview.md) removes the
+enclosing fences and uses the page font. It preserves the technical references
+and all saved terms. Its separate browser-fixture proof does not replace this
+runtime record.
+
 ## Cleanup and acceptance boundary
 
 All nine exact owned services stop with exit0 and no OOM. After writer shutdown,

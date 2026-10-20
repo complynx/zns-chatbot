@@ -49,7 +49,7 @@ textarea { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid 
 
 #order-review > .actions { margin-top: 12px; }
 #or-detail, #or-preview { overflow-wrap: anywhere; }
-#or-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+#or-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 #or-download { display: block; margin-top: 12px; }
 #or-download[hidden] { display: none; }
 
