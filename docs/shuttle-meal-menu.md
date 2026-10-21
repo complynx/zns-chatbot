@@ -1,30 +1,22 @@
 # Meal menu: composition and durable drafts
 
-The source now has a typed meal catalog and pure composition evaluator in
-`internal/orders`. It supports the separate Python `/menu` meal choices without
-changing existing service-order selections. This is a domain component, not a
-finished meal-order workflow. Migration53 now adds versioned catalogs, durable
-drafts and operation receipts. The agent HTTP API is implemented at manifest
-`mvp-60`. Native HTTP APIs and reactive action context now share that store.
-The installed ru/en meal form uses those draft APIs. The later working-source
-[financial checkout](shuttle-meal-order-submission.md#browser-checkout-source)
-adds explicit meal submission, cancellation and shared payment-proof handling;
-that source is not installed on the primary. A
-[bounded runtime check](shuttle-meal-financial-runtime-qa-2026-10-21.md) accepts
-native checkout/recovery, Loom writes/consent, pending-consent restart and native
-proof/ambassador confirmation with owner/module isolation. Full release and primary
-installation remain open.
-No new runtime dependency is required.
-The next [frozen meal terms](shuttle-meal-terms.md) component is implemented and
-verified separately; it preserves full selected names and per-service windows
-for future financial integration without creating an order.
+The meal module provides typed catalogs, pure composition evaluation, durable
+owner drafts and financial checkout. Migration53 introduced the draft store;
+the installed primary now runs schema69 / mvp-89. See the
+[installation record](shuttle-meal-primary-qa-2026-10-21.md) for current runtime
+and CI evidence. The chronological component checkpoints below retain the
+source and installation state at each earlier gate.
 
-The active Python references are `Food._load_menu` in
-`zns-chatbot/plugins/food.py`, `static/menu_2025_1.json`, `static/menu.mjs` and
-`templates/menu.html`. Other static menu files are not assumed active. The
-legacy file contains Friday/Saturday/Sunday services but no actual event dates,
-currency declaration or combo prices. Those must be explicit in a Go catalog;
-Python numeric constants 555/665 are not a conversion rule.
+[Financial checkout](shuttle-meal-order-submission.md#browser-checkout-source)
+and [shared proof/review](shuttle-meal-payment-evidence.md) use the existing order
+engine. The [bounded runtime check](shuttle-meal-financial-runtime-qa-2026-10-21.md)
+records native checkout/recovery, Loom writes/consent, restart and native proof
+review. The [controlled-agent payment check](shuttle-meal-agent-payment-qa-2026-10-21.md)
+adds actual Loom proof submission and explicit reviewer consent. These bounded
+checks do not establish autonomous model quality or exact native-preparation
+adoption. No new runtime dependency is required. The
+[frozen terms builder](shuttle-meal-terms.md) remains a pure component reused by
+financial integration; calling that builder alone creates no order or payment.
 
 ## Catalog and composition
 

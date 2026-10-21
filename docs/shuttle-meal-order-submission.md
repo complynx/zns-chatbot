@@ -1,14 +1,13 @@
 # Meal order preparation and submission
 
-Status: working source after Daniel's October21 policy answers. Meal financial
-agent and native HTTP routes now exist at mvp-89/schema69; the transport passes
-46 roots /62 cases under Linux/PostgreSQL with the race detector. Working browser
-source now also supports financial checkout and shared payment-proof submission;
-bounded runtime acceptance now covers checkout, agent consent/restart, native
-proof and ambassador confirmation. Full release and primary installation remain pending.
-The earlier [shared payment-evidence source stage](shuttle-meal-payment-evidence.md)
-adds migration69 / mvp-88 and passes147 PostgreSQL/race roots /225 cases. The primary remains
-schema68 / mvp-86; the working source is not installed.
+Status: installed on the owned primary at mvp-89/schema69 after Daniel's
+October21 policy answers. [Full CI and installation](shuttle-meal-primary-qa-2026-10-21.md)
+pass; bounded [browser checkout](shuttle-meal-final-browser-qa-2026-10-21.md),
+[native/runtime proof review](shuttle-meal-financial-runtime-qa-2026-10-21.md)
+and [controlled-agent payment](shuttle-meal-agent-payment-qa-2026-10-21.md)
+have separate acceptance scopes. The chronological source checkpoints below
+retain their original test counts and failures; none substitutes for real
+Telegram WebView or exact native-preparation adoption acceptance.
 
 ## Business and storage boundaries
 
@@ -198,7 +197,8 @@ financial tables. The later check also proves actual Loom writes with plain-text
 consent and pending-consent restart, native proof/ambassador review and runtime
 owner/module isolation. A real cleared-draft UI bug was corrected and independently
 reviewed; the resulting UI suite passes366 cases. Both databases/logs are archived
-and the nine-service stand removed. Full release and primary installation remain open.
+and the nine-service stand removed. Full release and installation remained open
+at that checkpoint; their subsequent acceptance is linked above.
 
 Combined release review then found that normal event/menu changes could turn a
 stale draft into a503 during preparation, retaining an uncertain native request.

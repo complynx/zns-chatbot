@@ -1,8 +1,9 @@
 # Meal schema69 migration rehearsal, 2026-10-21
 
 Status: clean bounded rehearsal passed on a restored copy of the owned local primary.
-The primary remains schema68 / mvp-86. Full release integration tests and primary
-installation acceptance remain open.
+At that checkpoint the primary was schema68 / mvp-86. Later full CI and
+[primary installation](shuttle-meal-primary-qa-2026-10-21.md) are accepted separately;
+this rehearsal remains copied-database evidence.
 
 ## What ran
 

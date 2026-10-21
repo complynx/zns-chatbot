@@ -1,10 +1,13 @@
 # Financial meals: bounded runtime acceptance, 2026-10-21
 
-Status: bounded substage accepted on the owned meal-financial-r1 stand. Current
-mvp-89/schema69 source is not installed on the primary mvp-86/schema68 stand.
+Status: bounded substage accepted on the owned meal-financial-r1 stand. The
+mvp-89/schema69 source was not installed on the primary mvp-86/schema68 stand
+at that checkpoint. Its subsequent [installation](shuttle-meal-primary-qa-2026-10-21.md)
+and [controlled-agent payment QA](shuttle-meal-agent-payment-qa-2026-10-21.md)
+are separate accepted evidence.
 Native submission, actual Loom submission, native proof and ambassador confirmation
 passed within the scope below. Runtime cross-owner/module denial also passed;
-the full release gate remains open.
+the full release gate was still open at this runtime checkpoint.
 
 ## Proven behavior
 
@@ -148,12 +151,12 @@ local; the independent PostgreSQL/race gate continues on its existing frozen sou
 The [separate schema69 rehearsal](shuttle-meal-schema69-rehearsal-2026-10-21.md)
 also passes on a restored primary database copy, including a clean forward,
 no-op, rollback and forward sequence. Its resources are archived/removed.
-This is migration-copy evidence; the primary still runs schema68/mvp-86.
+This is migration-copy evidence; the primary still ran schema68/mvp-86 then.
 
 The later [application release check](shuttle-meal-release-qa-2026-10-21.md)
 passes864 integration roots /1293 cases and367 UI cases. It retains a post-test
-fixture shutdown timeout and separately verified retirement. Remote CI and
-primary installation remain open.
+fixture shutdown timeout and separately verified retirement. Subsequent remote CI
+and primary installation are accepted in the installation report linked above.
 
 Still open: broader failure-window recovery.
 Exact original native-preparation adoption is a separate

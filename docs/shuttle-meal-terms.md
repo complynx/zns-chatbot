@@ -60,10 +60,12 @@ the final source freeze is recorded. Ignored evidence is
 
 The earlier [meal runtime gate](shuttle-meal-runtime-qa-2026-10-19.md) remains its
 original evidence: its image predates this builder and has not been rebuilt or
-installed. The primary remains schema49 / `mvp-56`. The subsequent shared `service|meal` storage
+installed at that checkpoint. The primary was schema49 / `mvp-56`. The subsequent shared `service|meal` storage
 expansion is now implemented with service-only access/recovery and evidence gates.
-Meal-specific exact preparation/submission and full financial routing remain open. Financial policy questions remain
-in ignored D30, and the release hold remains in force.
+Meal-specific preparation/submission and financial routing were still open then.
+The October21 policy decisions below and subsequent
+[financial installation](shuttle-meal-primary-qa-2026-10-21.md) close that earlier
+source-stage hold; their bounded acceptance does not claim production readiness.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk

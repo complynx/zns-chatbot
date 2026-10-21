@@ -1,9 +1,13 @@
 # Shared meal payment evidence
 
 Accepted source snapshot: migration69 / mvp-88, verified in bounded Linux
-batches. The primary remains schema68 / mvp-86. This is not an installation or
+batches. At this source checkpoint the primary was schema68 / mvp-86. This is not an installation or
 complete meal checkout acceptance: financial meal creation tools/forms were still
 pending, together with full end-to-end runtime QA.
+
+The later [mvp-89/schema69 installation](shuttle-meal-primary-qa-2026-10-21.md)
+and [controlled-agent evidence/review](shuttle-meal-agent-payment-qa-2026-10-21.md)
+are accepted separately. Earlier component counts below remain historical evidence.
 
 ## One payment engine, persisted business kind
 

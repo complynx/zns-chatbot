@@ -47,6 +47,9 @@ mailbox provider; this is not native-provider or broad model-quality acceptance.
    [bounded runtime QA](shuttle-meal-financial-runtime-qa-2026-10-21.md),
    [final-image browser QA](shuttle-meal-final-browser-qa-2026-10-21.md) and
    [primary installation](shuttle-meal-primary-qa-2026-10-21.md) record exact scope.
+   The [controlled-agent payment QA](shuttle-meal-agent-payment-qa-2026-10-21.md)
+   also accepts actual Loom proof submission and full reviewer consent, with one
+   confirmed665minor payment, no capacity allocation and ordinary-owner denial.
    The stale-draft fix passes actual409 UI recovery, resave and one explicit order.
    [Full local application checks](shuttle-meal-release-qa-2026-10-21.md) and
    remote CI pass; original fixture/harness failures remain retained. Broader
