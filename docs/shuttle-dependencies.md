@@ -239,3 +239,31 @@ tools/dependencies.lock.json определяют реализованный г�
 
 Written by Codex (gpt-6/Codex desktop)
 on behalf of Daniel Drizhuk
+
+
+## Parallel CI workers
+
+Shuttle CI runs four integration jobs with independent PostgreSQL 17 services.
+Each job discovers the complete sorted test list and runs every fourth root,
+starting at its zero-based shard index. Batching, race detection, process-tree
+timeouts and rejection of skipped tests remain enabled. Unit, UI, dependency,
+SQL, lint, operational and build checks run concurrently in the `checks` job;
+its PostgreSQL service also remains available to database unit tests.
+
+The final required check remains `verify`. It requires every upstream job to
+succeed and validates all four summaries: identical discovery, distinct worker
+indices, the expected partition and exactly one successful execution of every
+root. Missing artifacts or incomplete batches fail this check. Shard summaries
+and logs are retained for seven days, including failed runs.
+
+Local use remains `python3 tools/test-integration.py NEW_OUTPUT_DIRECTORY` with
+`SHUTTLE_TEST_DATABASE_URL` set. Optional `--shard-index 0 --shard-count 4`
+selects one partition; concurrent local workers need separate databases.
+`python3 tools/test-integration.py DOWNLOADED_ARTIFACT_DIRECTORY --verify-shards 4`
+validates downloaded evidence and does not require PostgreSQL or Go.
+
+Artifact transfer uses the official MIT-licensed
+[upload-artifact](https://github.com/actions/upload-artifact) v7.0.2 and
+[download-artifact](https://github.com/actions/download-artifact) v8.0.2 actions,
+pinned to full commit hashes. Both use Node 24 on the hosted Ubuntu runner and
+add no application runtime dependency or production configuration.

@@ -63,10 +63,69 @@ def verify(events, expected, exit_code):
             "skips": skips, "failures": failures, "unexpected_roots": unexpected}
 
 
+
+def partition(names, index, count):
+    """Spread sorted test roots across independent PostgreSQL workers."""
+    if count < 1 or not 0 <= index < count:
+        raise ValueError("shard index must be in [0, shard count)")
+    return names[index::count]
+
+
+def verify_shards(summaries, count):
+    """Require all workers and exactly one successful execution of every root."""
+    if count < 1 or len(summaries) != count:
+        raise ValueError("missing or extra shard summaries")
+    discovered = summaries[0]["discovered"]
+    if (not discovered or discovered != sorted(set(discovered))
+            or any(not re.fullmatch(r"Test\w+", name) for name in discovered)):
+        raise ValueError("invalid test discovery")
+    seen = set()
+    completed = []
+    for summary in summaries:
+        index = summary["shard_index"]
+        if summary["shard_count"] != count or index in seen:
+            raise ValueError("duplicate shard or inconsistent shard count")
+        selected = partition(discovered, index, count)
+        if summary["discovered"] != discovered or summary["selected"] != selected:
+            raise ValueError("shards disagree on discovery or partition")
+        expected = [name for batch in summary["batches"] for name in batch["expected"]]
+        passed = [name for batch in summary["batches"] for name in batch["passed_roots"]]
+        if (summary["passed"] is not True or expected != selected
+                or sorted(passed) != sorted(selected)):
+            raise ValueError("incomplete shard coverage")
+        for batch in summary["batches"]:
+            if (batch["passed"] is not True or batch["exit_code"] != 0
+                    or batch["skips"] or batch["failures"] or batch["unexpected_roots"]
+                    or batch["malformed_output"] or batch["timed_out"]):
+                raise ValueError("failed, skipped or incomplete batch")
+        seen.add(index)
+        completed.extend(passed)
+    if seen != set(range(count)) or sorted(completed) != discovered:
+        raise ValueError("missing, duplicate or unexpected test roots")
+    return len(completed)
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="New directory for retained test evidence")
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
+    parser.add_argument("--verify-shards", type=int, metavar="COUNT",
+                        help="Verify downloaded shard evidence instead of running Go")
     args = parser.parse_args()
+    if args.verify_shards is not None:
+        try:
+            summaries = [json.loads(path.read_text())
+                         for path in sorted(args.output.glob("*/summary.json"))]
+            total = verify_shards(summaries, args.verify_shards)
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(f"Integration coverage rejected: {error}", file=sys.stderr)
+            return 1
+        print(f"Integration coverage: {total} roots passed across {args.verify_shards} shards")
+        return 0
+    try:
+        partition([], args.shard_index, args.shard_count)
+    except ValueError as error:
+        parser.error(str(error))
     if not (os.environ.get("SHUTTLE_TEST_DATABASE_URL") or os.environ.get("SHUTTLE_TEST_DATABASE_DSN")):
         parser.error("SHUTTLE_TEST_DATABASE_URL is required; skips are not acceptance")
     args.output.mkdir(parents=True, exist_ok=False)
@@ -80,7 +139,10 @@ def main():
             {"passed": False, "discovery": {"exit_code": listing_code, "timed_out": listing_timeout}}, indent=2) + "\n")
         print("Integration test discovery failed; see discovery logs", file=sys.stderr)
         return 1
-    summary = {"passed": False, "selected": names, "batches": []}
+    discovered = names
+    names = partition(discovered, args.shard_index, args.shard_count)
+    summary = {"passed": False, "discovered": discovered, "selected": names,
+               "shard_index": args.shard_index, "shard_count": args.shard_count, "batches": []}
     (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     for number, offset in enumerate(range(0, len(names), BATCH_SIZE), 1):
         selected = names[offset:offset + BATCH_SIZE]

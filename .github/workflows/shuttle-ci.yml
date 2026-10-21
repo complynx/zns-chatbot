@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  checks:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     services:
@@ -42,11 +42,10 @@ jobs:
           go mod download all
           go mod verify
           python3 tools/check-dependencies.py
-      - name: Behavioral tests with PostgreSQL and race detector
+      - name: Unit tests with PostgreSQL and race detector
         run: |
           go test -race -timeout 10m -parallel 4 ./cmd/... ./internal/... ./migrations/...
           python3 -m unittest discover -s tools -p test_integration_runner.py
-          python3 tools/test-integration.py "$RUNNER_TEMP/zinusya-integration"
       - name: Test stand ingress and egress guards
         run: python3 -m unittest discover -s deploy/shuttle/test -p 'test_*.py'
       - name: Test isolated Telegram simulator
@@ -95,3 +94,62 @@ jobs:
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/shuttle" ./cmd/shuttle
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o "$RUNNER_TEMP/shuttle-import" ./cmd/shuttle-import
           docker build --platform linux/amd64 -f deploy/shuttle/Dockerfile -t shuttle:ci .
+
+  integration:
+    name: integration (${{ matrix.shard }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        env:
+          POSTGRES_DB: shuttle_test
+          POSTGRES_USER: shuttle
+          POSTGRES_PASSWORD: isolated-ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U shuttle -d shuttle_test"
+          --health-interval 2s --health-timeout 2s --health-retries 30
+    env:
+      GOTOOLCHAIN: local
+      SHUTTLE_TEST_DATABASE_URL: postgres://shuttle:isolated-ci-only@127.0.0.1:5432/shuttle_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.27.2'
+          cache: true
+      - name: PostgreSQL integration tests with race detector
+        run: python3 tools/test-integration.py "$RUNNER_TEMP/zinusya-integration" --shard-index ${{ matrix.shard }} --shard-count 4
+      - name: Retain shard evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: integration-${{ matrix.shard }}
+          path: ${{ runner.temp }}/zinusya-integration
+          if-no-files-found: error
+          retention-days: 7
+
+  # Keep the required PR check stable; a missing or failed worker must fail it.
+  verify:
+    if: always()
+    needs: [checks, integration]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: integration-*
+          path: ${{ runner.temp }}/integration-shards
+      - name: Verify complete integration coverage
+        run: python3 tools/test-integration.py "$RUNNER_TEMP/integration-shards" --verify-shards 4
+      - name: Require all checks and workers
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          INTEGRATION_RESULT: ${{ needs.integration.result }}
+        run: test "$CHECKS_RESULT" = success && test "$INTEGRATION_RESULT" = success
