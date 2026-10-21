@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import http.client
 import json
+import socket
 import ssl
 from concurrent.futures import ThreadPoolExecutor
 import tempfile
@@ -252,6 +253,45 @@ class MockTest(unittest.TestCase):
         with urlopen(url) as response:
             with self.assertRaises(http.client.IncompleteRead):
                 response.read()
+
+    def test_private_keyboards_reject_another_recipient(self):
+        for button, inline in [({'text': 'Confirm', 'callback_data': 'confirm'}, True),
+                               ({'text': 'Reply choice'}, False),
+                               ({'text': 'Open app', 'web_app': {'url': 'https://example.test/app/'}}, True)]:
+            with self.subTest(button=button['text']):
+                markup = {'inline_keyboard' if inline else 'keyboard': [[button]]}
+                sent = self.bot('sendMessage', {'chat_id': 101, 'text': 'Private choice', 'reply_markup': markup})
+                click = {'user': self.user2, 'chat_id': 101, 'message_id': sent['message_id'], 'row': 0, 'column': 0}
+                received = len(self.webhook.received)
+                status, _ = self.call('/qa/click', click)
+                self.assertEqual(status, 403)
+                self.assertEqual(len(self.webhook.received), received)
+                click['user'] = self.user1
+                result = self.qa('click', click)
+                if 'web_app' in button:
+                    self.assertEqual(result['launch_url'], button['web_app']['url'])
+                elif inline:
+                    self.assertEqual(result['update']['callback_query']['from']['id'], 101)
+                else:
+                    self.assertEqual(result['update']['message']['from']['id'], 101)
+
+    def test_idle_tls_peer_does_not_block_other_https_requests(self):
+        cert_path, key_path = Path(self.temp.name) / 'cert.pem', Path(self.temp.name) / 'key.pem'
+        cert_path.write_text(TLS_CERT)
+        key_path.write_text(TLS_KEY)
+        config = dict(self.config, tls_cert=str(cert_path), tls_key=str(key_path))
+        secure = make_server(config, '127.0.0.1', 0, store=self.server.store, tls=True)
+        secure.handle_error = lambda *_: None  # Closing the deliberately idle peer is expected.
+        threading.Thread(target=secure.serve_forever, daemon=True).start()
+        stalled = socket.create_connection(('127.0.0.1', secure.server_port), timeout=2)
+        try:
+            context = ssl.create_default_context(cafile=str(cert_path))
+            with urlopen(f'https://127.0.0.1:{secure.server_port}/health', context=context, timeout=1) as response:
+                self.assertEqual(json.load(response), {'ok': True})
+        finally:
+            stalled.close()
+            secure.shutdown()
+            secure.server_close()
 
     def test_https_listener_shares_store_and_requires_qa_auth(self):
         cert_path = Path(self.temp.name) / 'cert.pem'

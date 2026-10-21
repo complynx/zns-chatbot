@@ -354,6 +354,8 @@ class Store:
                 update = self.incoming_message(data, media=action == 'media')
             elif action == 'click':
                 message = self.message(data['chat_id'], data['message_id'])
+                if message['chat']['type'] == 'private' and data['user']['id'] != message['chat']['id']:
+                    raise APIError('private keyboard belongs to another user', 403)
                 markup = message.get('reply_markup', {})
                 inline = 'inline_keyboard' in markup
                 keyboard = markup.get('inline_keyboard', markup.get('keyboard', []))
@@ -573,14 +575,21 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(400, {'ok': False, 'error_code': 400, 'description': 'invalid request'})
 
 
+class TLSHandler(Handler):
+    def setup(self):
+        self.request.settimeout(15)
+        self.request.do_handshake()
+        super().setup()
+
+
 def make_server(config, host='0.0.0.0', port=8080, store=None, tls=False):
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = ThreadingHTTPServer((host, port), TLSHandler if tls else Handler)
     server.daemon_threads = True
     server.store = store or Store(config)
     if tls:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(config['tls_cert'], config['tls_key'])
-        server.socket = context.wrap_socket(server.socket, server_side=True)
+        server.socket = context.wrap_socket(server.socket, server_side=True, do_handshake_on_connect=False)
     return server
 
 
