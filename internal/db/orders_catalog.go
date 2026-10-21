@@ -362,6 +362,14 @@ func (s *Store) ChangeOrdersCatalog(
 	if err = checkIdentity(ctx); err != nil {
 		return result, err
 	}
+	// Authority verification may wait on IAM. It cannot extend exact consent.
+	now, err = q.RegistrationNow(ctx)
+	if err != nil {
+		return result, err
+	}
+	if !prepared.ExpiresAt.Time.After(now.Time) {
+		return result, ErrConflict
+	}
 	result, err = writeOrdersCatalog(ctx, q, a)
 	if err != nil {
 		return result, err
