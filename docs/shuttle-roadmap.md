@@ -5,8 +5,10 @@ The owned primary runs `mvp-86/schema68`. The
 after the earlier knowledge and order-review preview installations. Full CI for
 source commit `0599dfef` passes 835 integration roots and 357 UI tests. The bot
 was replaced, the original ingress resumed, and domain data and Loom state were
-preserved. A later test-proxy-only fix has its own pending CI. The chronological
-records below retain each earlier result; later success does not rewrite failures.
+preserved. The test-proxy privacy-header fix at `c4d3d2b4` also passed its
+[full CI](https://github.com/complynx/zns-chatbot/actions/runs/39540930166): 835
+integration roots, 357 UI tests and 20 simulator tests. The chronological records
+below retain each earlier result; later success does not rewrite failures.
 
 The [bounded model-assisted knowledge probe](shuttle-knowledge-model-qa-2026-10-20.md)
 now passes four Russian/English current/history/glossary/missing-policy dialogues
