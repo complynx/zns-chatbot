@@ -40,7 +40,11 @@ func nativePaymentSession(
 		Subject: scope.Subject, Organization: scope.Organization,
 	})
 	require.NoError(t, err)
-	return db.MiniAppPaymentSession{Bearer: bearer, Generation: generation}
+	return db.MiniAppPaymentSession{
+		Bearer:             bearer,
+		Generation:         generation,
+		AuthorityUnchanged: func() bool { return true },
+	}
 }
 
 func nativeReviewRequest(w db.PaymentReviewWorkspace) db.MiniAppPaymentReviewCommit {

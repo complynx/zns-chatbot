@@ -87,7 +87,9 @@ func (s *Store) miniAppPaymentEvidenceTx(ctx context.Context, scope PaymentScope
 	if err = paymentEvidenceFence(scope, session); err != nil {
 		return fail(err)
 	}
-	native := MiniAppPaymentSession{Bearer: session.Bearer, Generation: session.Generation}
+	native := MiniAppPaymentSession{
+		Bearer: session.Bearer, Generation: session.Generation, AuthorityUnchanged: session.AuthorityUnchanged,
+	}
 	if err = (paymentReviewOrigin{session: &native}).authorize(ctx, tx, scope); err != nil {
 		return fail(err)
 	}

@@ -308,6 +308,9 @@ func (s *Store) preparePaymentReviewWorkspace(
 	if err = saveReviewCall(ctx, tx, scope, op, "prepare", hash, id, w, origin.source()); err != nil {
 		return PaymentReviewWorkspace{}, err
 	}
+	if err = origin.checkAuthority(); err != nil {
+		return PaymentReviewWorkspace{}, err
+	}
 	return w, tx.Commit(ctx)
 }
 
@@ -410,6 +413,9 @@ func (s *Store) cancelPaymentReviewWorkspace(
 	}
 	w.State = paymentWorkspaceCancelled
 	if err = saveReviewCall(ctx, tx, scope, op, "cancel", hash, w.ID, w, origin.source()); err != nil {
+		return PaymentReviewWorkspace{}, err
+	}
+	if err = origin.checkAuthority(); err != nil {
 		return PaymentReviewWorkspace{}, err
 	}
 	return w, tx.Commit(ctx)

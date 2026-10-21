@@ -18,7 +18,8 @@ import (
 
 func nativePairSession(t *testing.T, f pairFixture, actor db.PaymentScope, tg int64) db.MiniAppPairSession {
 	t.Helper()
-	return db.MiniAppPairSession(nativePaymentSession(t, paymentFixture{H: f.H}, actor, tg))
+	session := nativePaymentSession(t, paymentFixture{H: f.H}, actor, tg)
+	return db.MiniAppPairSession{Bearer: session.Bearer, Generation: session.Generation}
 }
 
 func TestMiniAppPairsNativeAndMixedPathsShareOriginalReceipts(t *testing.T) {

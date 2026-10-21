@@ -31,7 +31,7 @@ func nativeOrderSession(
 		},
 		telegramID,
 	)
-	return db.MiniAppOrderSession(session)
+	return db.MiniAppOrderSession{Bearer: session.Bearer, Generation: session.Generation}
 }
 
 func TestMiniAppOrderSharedPreparationBothHandoffsAndRestart(t *testing.T) {

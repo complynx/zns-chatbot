@@ -22,9 +22,11 @@ const (
 
 // MiniAppPaymentSession is supplied by the session middleware after fresh IAM
 // verification. The store rechecks it inside every native operation transaction.
+// AuthorityUnchanged checks captured invalidation and expiry without IAM I/O.
 type MiniAppPaymentSession struct {
-	Bearer     [sha256.Size]byte
-	Generation [sha256.Size]byte
+	Bearer             [sha256.Size]byte
+	Generation         [sha256.Size]byte
+	AuthorityUnchanged func() bool
 }
 
 // MiniAppPaymentReviewCommit binds explicit native confirmation to the displayed
@@ -35,6 +37,13 @@ type MiniAppPaymentReviewCommit struct {
 }
 
 type paymentReviewOrigin struct{ session *MiniAppPaymentSession }
+
+func (o paymentReviewOrigin) checkAuthority() error {
+	if o.session != nil && (o.session.AuthorityUnchanged == nil || !o.session.AuthorityUnchanged()) {
+		return payments.ErrDenied
+	}
+	return nil
+}
 
 func (o paymentReviewOrigin) source() string {
 	if o.session != nil {
@@ -48,6 +57,9 @@ func (o paymentReviewOrigin) source() string {
 func (o paymentReviewOrigin) authorize(ctx context.Context, tx pgx.Tx, scope PaymentScope) error {
 	if o.session == nil {
 		return nil
+	}
+	if err := o.checkAuthority(); err != nil {
+		return err
 	}
 	q := sqlc.New(tx)
 	owner, err := q.LockAuthorityActor(ctx, sqlc.LockAuthorityActorParams{
@@ -87,7 +99,7 @@ func (o paymentReviewOrigin) authorize(ctx context.Context, tx pgx.Tx, scope Pay
 		!miniAppCurrent(row, owner, o.session.Generation, now.Time) {
 		return ErrMiniAppDenied
 	}
-	return nil
+	return o.checkAuthority()
 }
 
 // PrepareMiniAppPaymentReviewWorkspace saves intent without crediting money.
@@ -133,7 +145,8 @@ func (s *Store) CommitMiniAppPaymentReviewWorkspace(ctx context.Context, scope P
 	if err != nil {
 		return PaymentWorkspaceReviewResult{}, err
 	}
-	if err = (paymentReviewOrigin{session: &session}).authorize(ctx, tx, scope); err != nil {
+	origin := paymentReviewOrigin{session: &session}
+	if err = origin.authorize(ctx, tx, scope); err != nil {
 		return PaymentWorkspaceReviewResult{}, err
 	}
 	if err = checkCommitWorkspace(w, request.Arguments); err != nil {
@@ -180,6 +193,9 @@ func (s *Store) CommitMiniAppPaymentReviewWorkspace(ctx context.Context, scope P
 	// Recover canonical completion before new-effect expiry/current-revision gates.
 	result, err := completeWorkspaceReview(ctx, tx, scope, op, w, request.Arguments, call)
 	if err != nil {
+		return PaymentWorkspaceReviewResult{}, err
+	}
+	if err = origin.checkAuthority(); err != nil {
 		return PaymentWorkspaceReviewResult{}, err
 	}
 	return result, tx.Commit(ctx)

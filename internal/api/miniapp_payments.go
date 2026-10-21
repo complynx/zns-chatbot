@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/google/uuid"
@@ -44,6 +45,7 @@ func (s *Server) miniAppPaymentScope(
 	if err != nil {
 		return db.PaymentScope{}, session, err
 	}
+	unchanged := s.iam.InvalidationFence(attempt.User.Subject)
 	principal, err := s.miniAppVerifiedPrincipal(ctx, attempt.User)
 	if err != nil {
 		return db.PaymentScope{}, session, err
@@ -61,6 +63,10 @@ func (s *Server) miniAppPaymentScope(
 		return db.PaymentScope{}, session, err
 	}
 	session.Generation = s.miniAppKey.Generation()
+	session.AuthorityUnchanged = func() bool { return unchanged() && time.Now().Before(principal.ExpiresAt) }
+	if !session.AuthorityUnchanged() {
+		return db.PaymentScope{}, session, identity.ErrDenied
+	}
 	_, admin := principal.Roles["zinusya.admin"][s.options.OrganizationID]
 	return db.PaymentScope{
 		EventScope:  s.eventScope(),
