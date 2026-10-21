@@ -131,7 +131,7 @@ func miniAppKnowledgeActionProject[T any](
 		Status:      action.State,
 		ObservedAt:  action.ObservedAt,
 	}
-	if action.Preparation != nil {
+	if action.Preparation != nil && (action.State == agentPrepared || action.State == knowledgeActionExpired) {
 		prep := action.Preparation
 		out.Preparation = &miniAppKnowledgePreparationView[T]{
 			Arguments: fromChange(prep.Arguments),

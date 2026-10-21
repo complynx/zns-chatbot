@@ -56,16 +56,31 @@ func TestKnowledgeActionPreparationHasExactVerbArguments(t *testing.T) {
 func TestKnowledgeCompletedActionProjectsBoundedReceipt(t *testing.T) {
 	t.Parallel()
 	content := knowledge.Content{Body: strings.Repeat("full-body-", 1000)}
-	action := knowledgeActionProject(db.KnowledgeActionView{Kind: "edit",
+	stored := db.KnowledgeActionView{Kind: "edit",
 		OperationID: uuid.NewString(), State: "completed", ObservedAt: time.Now(),
+		Preparation: &db.KnowledgePreparation{ID: uuid.New(),
+			Arguments: db.KnowledgeChange{Kind: "edit", Content: &content}},
 		Result: &db.KnowledgeResult{Kind: "edit", Article: &db.KnowledgeArticle{
-			ID: uuid.New(), Content: content}}})
-	require.NotNil(t, action.Result.Article)
-	require.LessOrEqual(t, len(action.Result.Article.Excerpt.Text), knowledgePreviewBytes)
-	raw, err := json.Marshal(action)
-	require.NoError(t, err)
-	require.NotContains(t, string(raw), content.Body)
-	require.Nil(t, action.Preparation)
+			ID: uuid.New(), Content: content}}}
+	for transport, action := range map[string]any{
+		"agent":   knowledgeActionProject(stored),
+		"miniapp": miniAppKnowledgeActionProject(stored, knowledgeEditFromChange),
+	} {
+		t.Run(transport, func(t *testing.T) {
+			t.Parallel()
+			raw, err := json.Marshal(action)
+			require.NoError(t, err)
+			require.NotContains(t, string(raw), content.Body)
+			require.NotContains(t, string(raw), `"preparation"`)
+			var result struct {
+				Result *knowledgeResultView `json:"result"`
+			}
+			require.NoError(t, json.Unmarshal(raw, &result))
+			require.NotNil(t, result.Result)
+			require.NotNil(t, result.Result.Article)
+			require.LessOrEqual(t, len(result.Result.Article.Excerpt.Text), knowledgePreviewBytes)
+		})
+	}
 }
 
 func TestKnowledgeOperationLookupPreservesOriginalKey(t *testing.T) {
@@ -75,4 +90,27 @@ func TestKnowledgeOperationLookupPreservesOriginalKey(t *testing.T) {
 	var args knowledgeOperationArguments
 	require.NoError(t, json.Unmarshal([]byte(`{"kind":"edit","operation_id":"`+original+`"}`), &args))
 	require.Equal(t, original, args.OperationID)
+}
+
+func TestKnowledgePendingActionKeepsExactContent(t *testing.T) {
+	t.Parallel()
+	content := knowledge.Content{Body: "Exact original article terms"}
+	for _, state := range []string{"prepared", "expired"} {
+		stored := db.KnowledgeActionView{Kind: "edit", State: state, OperationID: uuid.NewString(),
+			Preparation: &db.KnowledgePreparation{ID: uuid.New(),
+				Arguments: db.KnowledgeChange{Kind: "edit", Content: &content}}}
+		for transport, action := range map[string]any{
+			"agent":   knowledgeActionProject(stored),
+			"miniapp": miniAppKnowledgeActionProject(stored, knowledgeEditFromChange),
+		} {
+			t.Run(state+"/"+transport, func(t *testing.T) {
+				t.Parallel()
+				raw, err := json.Marshal(action)
+				require.NoError(t, err)
+				require.Contains(t, string(raw), `"preparation"`)
+				require.Contains(t, string(raw), content.Body)
+				require.NotContains(t, string(raw), `"result"`)
+			})
+		}
+	}
 }

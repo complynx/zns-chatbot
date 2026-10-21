@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	knowledgeEditKind    = "edit"
-	knowledgeSuggestKind = "suggest"
+	knowledgeEditKind      = "edit"
+	knowledgeSuggestKind   = "suggest"
+	knowledgeActionExpired = "expired"
 )
 
 type knowledgeOperationArguments struct {
@@ -58,7 +59,7 @@ type knowledgeRecentActionsView struct {
 func knowledgeActionProject(action db.KnowledgeActionView) knowledgeActionView {
 	out := knowledgeActionView{Kind: action.Kind, OperationID: action.OperationID,
 		State: action.State, ObservedAt: action.ObservedAt}
-	if action.Preparation != nil {
+	if action.Preparation != nil && (action.State == agentPrepared || action.State == knowledgeActionExpired) {
 		prep := action.Preparation
 		args := knowledgeActionArguments{}
 		switch action.Kind {
