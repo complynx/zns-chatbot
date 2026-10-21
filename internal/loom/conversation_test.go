@@ -28,7 +28,7 @@ func TestAgentModeRequiresEchoedNegotiation(t *testing.T) {
 			defer server.Close()
 			client, err := loom.New(server.URL, server.Client())
 			require.NoError(t, err)
-			_, err = client.CreateRun(
+			created, err := client.CreateRun(
 				t.Context(),
 				loom.Auth{ServiceToken: "fixture", SessionID: "fixture"},
 				"operation",
@@ -37,13 +37,14 @@ func TestAgentModeRequiresEchoedNegotiation(t *testing.T) {
 					Interaction: loom.Interaction{ReplyMode: loom.ReplyModeAgent},
 				},
 			)
+			require.Equal(t, "fixture-run", created.ID)
 			if mode == loom.ReplyModeAgent {
 				require.NoError(t, err)
 			} else {
 				var failure *loom.Error
 				require.ErrorAs(t, err, &failure)
 				require.Equal(t, "unsupported_reply_mode", failure.Code)
-				require.Equal(t, loom.Rejected, failure.Outcome)
+				require.Equal(t, loom.Unknown, failure.Outcome)
 			}
 		})
 	}

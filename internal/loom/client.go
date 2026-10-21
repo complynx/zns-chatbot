@@ -135,7 +135,10 @@ const (
 	Unknown    Outcome = "unknown"
 )
 
-const CodeRunTerminal = "run_terminal"
+const (
+	CodeRunTerminal          = "run_terminal"
+	CodeUnsupportedReplyMode = "unsupported_reply_mode"
+)
 
 type Error struct {
 	Code       string
@@ -210,7 +213,7 @@ func (c *Client) CreateRun(ctx context.Context, auth Auth, key string, input Cre
 	}
 	err := c.call(ctx, http.MethodPost, "/runs", auth, key, input, &result, true, true)
 	if err == nil && input.Interaction.ReplyMode == "agent" && result.Interaction.ReplyMode != "agent" {
-		return result, &Error{Code: "unsupported_reply_mode", Outcome: Rejected}
+		return result, &Error{Code: CodeUnsupportedReplyMode, Outcome: Unknown, Retryable: true}
 	}
 	if err == nil && (result.ID == "" || result.Status == "") {
 		err = &Error{Outcome: Unknown, Retryable: true}

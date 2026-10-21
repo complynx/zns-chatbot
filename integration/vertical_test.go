@@ -61,6 +61,9 @@ type peers struct {
 	fileGets                                int
 	fileIDs                                 []string
 	loseResume                              bool
+	createdReplyMode                        *string
+	loseCancelAndStopLoom                   bool
+	skipLostCancel                          bool
 	resumeKeys                              []string
 	resumeEffects                           int
 	resumeBlocked                           bool
@@ -394,12 +397,25 @@ func (p *peers) resumeRun(w http.ResponseWriter, r *http.Request) {
 }
 func (p *peers) cancelRun(w http.ResponseWriter, r *http.Request) {
 	p.cancelKeys = append(p.cancelKeys, r.Header.Get("Idempotency-Key"))
+	lose := p.loseCancelAndStopLoom
+	if lose {
+		p.loseCancelAndStopLoom = false
+		p.loomDown = true
+		if p.skipLostCancel {
+			disconnect(w)
+			return
+		}
+	}
 	for key, run := range p.runs {
 		if strings.HasSuffix(r.URL.Path, "/runs/"+run.ID+"/cancel") {
 			run.Status = "cancelled"
 			run.Question = nil
 			run.Version++
 			p.runs[key] = run
+			if lose {
+				disconnect(w)
+				return
+			}
 			respond(w, loom.ControlReceipt{ID: run.ID, Status: run.Status, Version: run.Version})
 			return
 		}
@@ -440,6 +456,9 @@ func (p *peers) initialRun(key string, request loom.CreateRunRequest) loom.Run {
 		Status:        "completed",
 		Result:        "**Hello**, Daniel!",
 		Version:       1,
+	}
+	if p.createdReplyMode != nil {
+		run.Interaction.ReplyMode = *p.createdReplyMode
 	}
 	if p.question {
 		run.Status = "awaiting_input"

@@ -41,6 +41,7 @@ type checkpoint struct {
 	Run                   *loom.Run              `json:"run,omitempty"`
 	Control               *loom.InputRequest     `json:"control,omitempty"`
 	ControlUnapplied      bool                   `json:"control_unapplied,omitempty"`
+	ReplyModeMismatch     bool                   `json:"reply_mode_mismatch,omitempty"`
 }
 
 func (s *Service) save(ctx context.Context, t *db.Task, c checkpoint, out []db.Outbound) error {
@@ -229,7 +230,7 @@ func (s *Service) ensureSession(
 		return true, nil
 	}
 	if recovering {
-		if c.LoomAuthRetryUntil != nil && !time.Now().Before(*c.LoomAuthRetryUntil) {
+		if !c.ReplyModeMismatch && c.LoomAuthRetryUntil != nil && !time.Now().Before(*c.LoomAuthRetryUntil) {
 			return false, s.finish(ctx, t, *c, i, stateFailed, "denied")
 		}
 		s.iam.Invalidate(user.Subject)
@@ -297,6 +298,9 @@ func (s *Service) sessionError(ctx context.Context, t *db.Task, c *checkpoint, i
 		return s.waitForLoomAuthorization(ctx, t, *c, i)
 	}
 	if known && !upstream.Retryable && upstream.Outcome == loom.Rejected {
+		if c.ReplyModeMismatch {
+			return s.waitForLoomAuthorization(ctx, t, *c, i)
+		}
 		return s.finish(ctx, t, *c, i, stateFailed, "denied")
 	}
 	c.LoomAuthRetryUntil = nil
@@ -305,6 +309,9 @@ func (s *Service) sessionError(ctx context.Context, t *db.Task, c *checkpoint, i
 	return s.wait()
 }
 func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i intent, auth loom.Auth) error {
+	if c.ReplyModeMismatch {
+		return s.reconcileIncompatibleRun(ctx, t, c, i, auth)
+	}
 	var run loom.Run
 	var err error
 	if t.RunID == "" {
@@ -316,7 +323,7 @@ func (s *Service) advanceRun(ctx context.Context, t *db.Task, c checkpoint, i in
 		run, err = s.loom.GetRun(ctx, auth, t.RunID)
 	}
 	if err != nil {
-		return s.loomError(ctx, t, c, i, err)
+		return s.runRequestError(ctx, t, c, i, run, err)
 	}
 	if run.AuthSessionID != "" && run.AuthSessionID != t.AuthSessionID {
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
@@ -390,6 +397,9 @@ func (s *Service) observeRun(ctx context.Context, t *db.Task, c checkpoint, i in
 }
 func (s *Service) identityError(ctx context.Context, t *db.Task, c checkpoint, i intent, err error) error {
 	if errors.Is(err, identity.ErrDenied) || errors.Is(err, identity.ErrConflict) {
+		if c.ReplyModeMismatch {
+			return s.waitForLoomAuthorization(ctx, t, c, i)
+		}
 		return s.finish(ctx, t, c, i, stateFailed, "denied")
 	}
 	c.LoomAuthRetryUntil = nil
@@ -429,6 +439,9 @@ func (s *Service) control(ctx context.Context, t *db.Task, c checkpoint, i inten
 	var tc checkpoint
 	if json.Unmarshal(target.Snapshot, &tc) != nil {
 		return s.finish(ctx, t, c, i, stateFailed, stateFailed)
+	}
+	if tc.ReplyModeMismatch {
+		return s.wait()
 	}
 	if tc.Reauthorizing || !tc.Session.ExpiresAt.After(time.Now().Add(controlSessionSkew)) {
 		return s.wait()
@@ -637,12 +650,17 @@ func controlInput(_ db.Task, i intent, run loom.Run) (loom.InputRequest, error) 
 // immutable operation/session while discovery catches up. Expiry-driven renewal
 // and its unknown-outcome gate remain unchanged.
 func (s *Service) waitForLoomAuthorization(ctx context.Context, t *db.Task, c checkpoint, i intent) error {
-	if c.LoomAuthRetryUntil == nil {
-		deadline := time.Now().Add(loomAuthorizationRetryWindow)
-		c.LoomAuthRetryUntil = &deadline
-	}
-	if !time.Now().Before(*c.LoomAuthRetryUntil) {
-		return s.finish(ctx, t, c, i, stateFailed, "denied")
+	if c.ReplyModeMismatch {
+		// A discovery timeout cannot prove an already created run has stopped.
+		c.LoomAuthRetryUntil = nil
+	} else {
+		if c.LoomAuthRetryUntil == nil {
+			deadline := time.Now().Add(loomAuthorizationRetryWindow)
+			c.LoomAuthRetryUntil = &deadline
+		}
+		if !time.Now().Before(*c.LoomAuthRetryUntil) {
+			return s.finish(ctx, t, c, i, stateFailed, "denied")
+		}
 	}
 	t.State = stateAwaitingAuth
 	if err := s.save(ctx, t, c, nil); err != nil {
