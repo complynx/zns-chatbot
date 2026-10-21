@@ -29,10 +29,12 @@ All six reports below are published; their original runtime observations retain 
   Published on 2026-10-21; [original report](shuttle-loom-abrupt-exit-qa-2026-10-18.md).
 
 - L05: [Native prepared-operation adoption](https://github.com/complynx/loom/issues/20).
-  Actual Loom reads a native preparation but a supported `module_call` creates a
-  distinct operation. The required generic adoption capability is missing; this
-  is not labelled a defect in fresh-operation behavior. Exact mixed-path
-  acceptance remains open. [Original proposal](shuttle-loom-native-operation-adoption.md).
+  The generic contract is merged in Loom revision `34f46468`. The Zinusya
+  inspector and supported knowledge suggestion handoff passed actual-IAM/Loom
+  acceptance, including native/agent races, repeated receipts, restarts and
+  rejection. Other module adoption and primary installation remain separate.
+  [Consumer acceptance](shuttle-loom-adoption-acceptance-2026-10-21.md);
+  [historical proposal and failed reproduction](shuttle-loom-native-operation-adoption.md).
 
 - L06 (upstream closed after merged fix; installed acceptance separate): [Consent after moderator revocation](https://github.com/complynx/loom/issues/21).
   Actual owned-stand observation retains `tool_failed` and an unexecuted Loom

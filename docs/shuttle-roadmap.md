@@ -55,14 +55,23 @@ delivered, the six knowledge tables are unchanged after seeding, and the nine
 temporary services are archived/removed. Its 15 model turns use a synthetic
 mailbox provider; this is not native-provider or broad model-quality acceptance.
 
+The separate [operation-adoption consumer gate](shuttle-loom-adoption-acceptance-2026-10-21.md)
+passes the supported knowledge suggestion handoff against published Loom
+`34f46468`: native/agent continuation, exact consent, concurrent confirmation,
+completed receipt replay, pending-operation restarts and rejection. The candidate
+is application source `4f03e5ff`, schema70 / `mvp-91`; the primary remains the
+accepted `3be6e40b` installation above. Its temporary nine-service stand was
+archived and removed. Browser-source quota/retention is also implemented in this
+candidate; see [its policy and acceptance limits](shuttle-avatar-source-retention.md).
+
 ## Next actions, in order
 
-1. Close exact prepared-operation native-to-agent handoff when the generic
-   [Loom adoption contract](shuttle-loom-native-operation-adoption.md) is agreed
-   and available. Also resolve the documented
-   [revocation/consent lifecycle](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md).
-   Independent native completion and agent reads remain usable; neither proves
-   adoption of the original preparation. Full causal OTel tracing through Loom's
+1. Preserve the accepted [knowledge operation handoff](shuttle-loom-adoption-acceptance-2026-10-21.md)
+   and complete a separate candidate installation gate before changing the
+   primary. Loom's revocation/consent fix is merged; actual installed-runtime
+   acceptance of the documented
+   [revocation lifecycle](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md)
+   remains separate. Full causal OTel tracing through Loom's
    asynchronous queue is also an open upstream gate: the [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
    proves HTTP propagation, not durable queue context or recovered-attempt links.
    Do not change the Loom developer's stand.
