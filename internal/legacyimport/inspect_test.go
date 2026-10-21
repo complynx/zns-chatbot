@@ -200,3 +200,39 @@ func TestSnapshotRejectsManifestAliasesAndSameFileUnderTwoRoles(t *testing.T) {
 		require.Contains(t, r.Issues, legacyimport.Issue{Role: "messages", Code: "duplicate_source_file"})
 	})
 }
+
+func TestSnapshotAcceptsExactDoubleIdentitiesWithoutChangingSource(t *testing.T) {
+	t.Parallel()
+	for _, number := range []string{`42.0`, `4.2e1`, `{"$numberDouble":"42.0"}`, `{"$numberDouble":"4.2E+1"}`, `4503599627370495.0`} {
+		t.Run(number, func(t *testing.T) {
+			t.Parallel()
+			s := newSnapshot(t, map[string]string{
+				"users":    `{"_id":"u","bot_id":{"$numberDouble":"123.0"},"user_id":` + number + `}`,
+				"passes":   `{"_id":"p","bot_id":123.0,"user_id":` + number + `}`,
+				"messages": `{"_id":"m","user_id":` + number + `,"role":"user","date":{"$date":{"$numberLong":"0"}}}`,
+			})
+			r, err := s.inspect(t)
+			require.NoError(t, err)
+			require.True(t, r.ValidationPassed, "%+v", r.Issues)
+			for name, original := range s.files {
+				raw, readErr := os.ReadFile(filepath.Join(s.root, name))
+				require.NoError(t, readErr)
+				require.Equal(t, original, raw)
+			}
+		})
+	}
+}
+
+func TestSnapshotRejectsInexactAndUnsafeDoubleIdentities(t *testing.T) {
+	t.Parallel()
+	for _, number := range []string{`42.5`, `4503599627370495.1`, `4503599627370496.0`, `{"$numberDouble":"NaN"}`, `{"$numberDouble":"Infinity"}`, `{"$numberDouble":"42.0000000000000001"}`, `{"$numberDouble":"1e-999999999"}`, `{"$numberDouble":"1/1"}`, `{"$numberDouble":"42","extra":true}`} {
+		t.Run(number, func(t *testing.T) {
+			t.Parallel()
+			s := newSnapshot(t, map[string]string{"users": `{"_id":"u","bot_id":123,"user_id":` + number + `}`})
+			r, err := s.inspect(t)
+			require.NoError(t, err)
+			require.False(t, r.ValidationPassed)
+			require.Contains(t, r.Issues, legacyimport.Issue{Role: "users", Line: 1, Code: "invalid_owner_id"})
+		})
+	}
+}

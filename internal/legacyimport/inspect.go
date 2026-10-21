@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -222,7 +224,7 @@ func (i *inspector) inspectRecord(c Collection, line int, raw []byte, seen map[s
 	}
 	seen[key] = digest
 	if bot, present := object["bot_id"]; present {
-		id, valid := integer(bot)
+		id, valid := identityInteger(bot)
 		if !valid || id != i.manifest.BotID {
 			i.issue(c.Role, line, "bot_scope_mismatch")
 			return
@@ -231,7 +233,7 @@ func (i *inspector) inspectRecord(c Collection, line int, raw []byte, seen map[s
 		i.issue(c.Role, line, "missing_bot_id")
 		return
 	}
-	user, valid := integer(object["user_id"])
+	user, valid := identityInteger(object["user_id"])
 	if !valid || !validTelegramID(user) {
 		i.issue(c.Role, line, "invalid_owner_id")
 		return
@@ -263,6 +265,42 @@ func (i *inspector) emitRecord(record Record, object map[string]any) {
 	if i.visitErr == nil && i.sourceVisitor != nil {
 		i.visitErr = i.sourceVisitor(record, object)
 	}
+}
+
+// identityInteger accepts integral BSON doubles without rounding decimal source
+// values. Timestamp parsing keeps the stricter integer representation below.
+func identityInteger(v any) (int64, bool) {
+	if id, ok := integer(v); ok {
+		return id, true
+	}
+	var text string
+	switch value := v.(type) {
+	case json.Number:
+		text = value.String()
+	case map[string]any:
+		if len(value) != 1 {
+			return 0, false
+		}
+		text, _ = value["$numberDouble"].(string)
+	default:
+		return 0, false
+	}
+	// BSON double spellings are short; bound arbitrary exponents before allocating
+	// an exact rational, including JSON numbers that would underflow a float.
+	if len(text) == 0 || len(text) > 64 || !json.Valid([]byte(text)) {
+		return 0, false
+	}
+	if index := strings.IndexAny(text, "eE"); index >= 0 {
+		exponent, err := strconv.Atoi(text[index+1:])
+		if err != nil || exponent < -400 || exponent > 400 {
+			return 0, false
+		}
+	}
+	value, ok := new(big.Rat).SetString(text)
+	if !ok || !value.IsInt() || !value.Num().IsInt64() {
+		return 0, false
+	}
+	return value.Num().Int64(), true
 }
 
 func integer(v any) (int64, bool) {

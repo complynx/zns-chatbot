@@ -47,8 +47,12 @@ without first establishing which records belong to the selected bot.
 
 Record `_id` must be a nonempty string of at most 256 UTF-8 bytes or an Extended
 JSON ObjectId. Plain JSON
-integer IDs and `$numberLong`/`$numberInt` wrappers preserve integer precision;
-fractional IDs are rejected. Duplicate source IDs, changed content at the same
+integer IDs and `$numberLong`/`$numberInt` wrappers preserve integer precision.
+Integral relaxed JSON doubles (such as `42.0`) and canonical `$numberDouble`
+wrappers are also accepted for bot/owner IDs. Decimal values are checked exactly,
+without float rounding; fractional, nonfinite and out-of-range IDs are rejected.
+Double spellings are limited to 64 bytes and exponents from -400 to 400.
+Timestamp validation retains the stricter integer-millisecond representation. Duplicate source IDs, changed content at the same
 source ID, repeated user identities, foreign bot IDs and orphan owners fail
 validation. Duplicate JSON properties and case aliases in manifest properties
 also fail. Paths stay inside the manifest directory; final symlinks, nonregular
