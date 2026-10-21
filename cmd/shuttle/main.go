@@ -283,7 +283,8 @@ func serve(
 
 func server(ctx context.Context, c config.Config, handler http.Handler) *http.Server {
 	return &http.Server{
-		BaseContext:       func(net.Listener) context.Context { return ctx },
+		// SIGTERM starts drain; closing connections cancels unfinished requests.
+		BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
 		Handler:           handler,
 		ReadHeaderTimeout: headerTimeout,
 		ReadTimeout:       c.HTTPTimeout,

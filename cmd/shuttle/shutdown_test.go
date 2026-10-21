@@ -13,16 +13,32 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/complynx/zns-chatbot/internal/config"
 )
 
 func TestDrainAllowsAnActiveRequestAndWorkersToFinish(t *testing.T) {
 	t.Parallel()
+	lifecycle, stopLifecycle := context.WithCancel(context.Background())
+	defer stopLifecycle()
 	entered, release := make(chan struct{}), make(chan struct{})
-	public := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	public := httptest.NewUnstartedServer(nil)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(entered)
-		<-release
+		select {
+		case <-r.Context().Done():
+			http.Error(w, "cancelled before drain", http.StatusServiceUnavailable)
+			return
+		case <-release:
+		}
+		if r.Context().Err() != nil {
+			http.Error(w, "cancelled before drain", http.StatusServiceUnavailable)
+			return
+		}
 		_, _ = w.Write([]byte("finished"))
-	}))
+	})
+	public.Config = server(lifecycle, config.Config{HTTPTimeout: 5 * time.Second}, handler)
+	public.Start()
 	t.Cleanup(public.Close)
 	releaseRequest := sync.OnceFunc(func() { close(release) })
 	t.Cleanup(releaseRequest)
@@ -44,6 +60,7 @@ func TestDrainAllowsAnActiveRequestAndWorkersToFinish(t *testing.T) {
 		responseDone <- response{string(body), err}
 	}()
 	<-entered
+	stopLifecycle()
 	workersEntered, workersRelease := make(chan struct{}), make(chan struct{})
 	releaseWorkers := sync.OnceFunc(func() { close(workersRelease) })
 	t.Cleanup(releaseWorkers)
