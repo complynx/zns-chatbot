@@ -2,7 +2,7 @@ name: Shuttle CI
 
 on:
   push:
-    branches: [main, codex/shuttle]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
