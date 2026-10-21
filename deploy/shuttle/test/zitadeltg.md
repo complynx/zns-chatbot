@@ -4,8 +4,9 @@ This optional Linux service is for `shuttle-live-test`. It reuses the owned
 [browser gateway](browser.md) at the canonical IAM origin. It does not create
 an IAM provider or enable email auto-linking. The recorded baseline image has no
 trusted prelink hook. An optional [prepared hook](../../../docs/shuttle-zitadeltg-prelink-provider.md)
-is reviewed separately; do not enable external registration before combined
-provider/backend/IAM acceptance.
+is reviewed separately. Keep external registration disabled until the separate
+real-Telegram proof and final IAM session-cookie relay gates pass; synthetic
+combined-fixture acceptance does not establish those gates.
 
 ## Build input and credentials
 
@@ -75,13 +76,25 @@ reviews without actionable findings. The sibling checkout remained unchanged.
 ## Remaining identity gates
 
 The recorded baseline provider verifies Telegram OIDC and relays a signed assertion
-but has no trusted Zinusya prelink hook. The prepared patch has component evidence
-only; its runtime and combined flow remain unaccepted. Do not substitute email auto-linking or
-guess an opaque Telegram OIDC subject from a numeric ID. Implement the backend
-contract and explicit IAM external link with conflict/readback recovery first.
-Then configure the owned IAM IdP and test bot-first/provider-first, concurrent
-creation, revoked access and outage paths. Real browser CA trust, Web Login origin
-approval, Telegram-issued proof and cookie relay remain interactive acceptance.
+but has no trusted Zinusya prelink hook. The separate patched provider has passed
+[combined provider/API/real-IAM fixtures](../../../docs/shuttle-prelink-combined-qa-2026-10-16.md)
+for provider-first and Mini-App-first identity convergence, explicit opaque-subject
+linking, lost-response retry, conflicts, revocation and completed-login restart.
+A [resilience fixture](../../../docs/shuttle-prelink-resilience-qa-2026-10-16.md)
+adds concurrent first logins and actual IAM stop/recovery. The separate
+[backend remote-write gate](../../../docs/shuttle-prelink-remote-write-qa-2026-10-19.md)
+checks recovery after IAM accepts account/link writes but responses or read-back
+are unavailable, including graceful bot restarts and original-receipt replay.
 
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
+These fixtures use synthetic Telegram proofs or assertions; the combined fixture
+also uses a synthetic final IAM relay. They do not establish real Telegram login
+or final IAM authorization/session-cookie relay. Main provider/backend activation
+and user-assisted browser acceptance remain open. Keep email auto-linking disabled;
+never infer an opaque Telegram OIDC subject from the numeric Telegram ID.
+
+Real browser CA trust, Web Login origin approval, Telegram-issued proof, final
+IAM session-cookie relay and bidirectional browser-login acceptance remain the
+deferred joint gates. No production readiness or deployment is accepted.
+
+Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk

@@ -143,3 +143,58 @@ and clone database are removed; neither live stand is migrated or recreated.
 Ignored evidence is in `legacy-avatar-migration-v1/primary-migration-clone-v1/`.
 The original primary remains schema 67 / mvp-83. Actual exports, primary update
 and production acceptance remain separate gates.
+
+## Archive-validation isolation and proxy fidelity
+
+The later candidate from commit `0599dfef` is installed only on the owned
+`avatar-references-r1`, at schema 68 / mvp-86, image
+`sha256:5f912a3dd7476f7270bde921bd372ff217a41e0ee521d243f87c4c1ace7478ac`.
+Only its bot is recreated; the other eight service fingerprints and four captured
+domain tables match. Exact-commit remote CI is still running at this installation;
+this permits isolated candidate QA, not primary promotion or full acceptance.
+The primary remains schema 67 / mvp-83 and passes its preservation observer.
+
+A bounded incomplete archive-validation upload occupies the shared admission
+slot. Uploaded and Telegram originals both remain HTTP 200 with unchanged bytes,
+size and MIME. The historical-photo preview returns 503 while occupied. Finishing
+the deliberately invalid upload returns 400 and releases the slot; the historical
+preview then returns its identical 582,591-byte JPEG. Six domain-table snapshots
+and Loom run IDs/states remain unchanged. The four fresh historical create/finalize
+commit-backpressure cases and completed-receipt replays are separate focused
+PostgreSQL/race evidence; this live read probe does not claim render-barrier write
+coverage or real Telegram WebView acceptance.
+
+This probe also exposes a mock-proxy defect: the test HTTPS relay drops the bot's
+privacy/security headers. The bot itself sets them. The narrow relay allowlist now
+preserves `Cache-Control`, `Content-Disposition`, `Content-Security-Policy`,
+`X-Content-Type-Options` and `Referrer-Policy`. A behavioral reproduction fails for
+both successful and denied private-file responses before the fix. The nearest
+Linux HTTP/process suite then passes all 20 tests without skips or OOM; its bounded
+256 MiB container is removed. The Windows run passes the HTTP cases and retains
+one expected POSIX-only SIGTERM skip. Independent source review is clean.
+
+Only the secondary mock Telegram container is stopped and started, retaining its
+ID/image and stored state. The stop command plus post-stop inspection takes 1.266
+seconds and reports exit 0 without OOM; this is not a measurement of the bot's
+one-second graceful-drain requirement. Three successful file responses and one
+unauthenticated 401 are compared directly against the bot and through HTTPS.
+Status, body digest and the selected headers match exactly. All three successful
+responses retain `private, no-store`; the 401 retains `no-store`.
+
+The first final observer incorrectly expects an unchanged mock read-attempt
+journal. A read-only follow-up also reaches the existing 200-event page boundary.
+Both failures are retained. A complete two-page read reconciles all 208 events:
+the original 200-event prefix is intact and exactly four successful `getFile`
+attempts add eight normal attempt/result events. Prior attempt rows, messages,
+updates, holds, domain rows and all other service fingerprints match. Neither
+restart nor the four HTTP comparison cases is replayed for reconciliation.
+
+Ignored evidence is under `legacy-avatar-migration-v1/archive-budget-image-v1/`,
+`archive-budget-install-v1/`, `archive-budget-runtime-v1/`,
+`mock-private-headers-v1/` and `mock-private-headers-runtime-v1/`. The original
+assertion snapshot remains separate from the reconciled acceptance report.
+No production deployment, actual legacy export or joint Telegram/ZitadelTG
+browser-login acceptance is established by these checks.
+
+Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
+on behalf of Daniel Drizhuk

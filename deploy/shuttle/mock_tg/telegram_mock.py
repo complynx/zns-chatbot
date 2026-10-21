@@ -501,7 +501,9 @@ class Handler(BaseHTTPRequestHandler):
                 if len(payload) > MAX_BODY:
                     raise APIError('MiniApp response too large', 502)
                 self.send_response(response.status)
-                for name in ('Content-Type', 'Set-Cookie', 'Location'):
+                for name in ('Content-Type', 'Set-Cookie', 'Location', 'Cache-Control',
+                             'Content-Disposition', 'Content-Security-Policy',
+                             'X-Content-Type-Options', 'Referrer-Policy'):
                     for value in response.headers.get_all(name, []):
                         self.send_header(name, value)
                 self.send_header('Content-Length', str(len(payload)))

@@ -64,6 +64,19 @@ class MiniApp(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.server.observed.append({'method': self.command, 'path': self.path, 'authorization': self.headers.get('Authorization')})
+        if self.path in ('/app/avatars/private.jpg', '/app/avatars/denied.jpg'):
+            body = b'private image' if self.path.endswith('/private.jpg') else b'access denied'
+            self.send_response(200 if self.path.endswith('/private.jpg') else 403)
+            self.send_header('Content-Type', 'image/jpeg' if self.path.endswith('/private.jpg') else 'text/plain')
+            self.send_header('Cache-Control', 'private, no-store')
+            self.send_header('Content-Disposition', 'attachment; filename="avatar.jpg"')
+            self.send_header('Content-Security-Policy', "default-src 'none'; sandbox")
+            self.send_header('X-Content-Type-Options', 'nosniff')
+            self.send_header('Referrer-Policy', 'no-referrer')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path == '/app/me':
             authenticated = self.headers.get('Authorization') == 'ZinusyaSession fixture-session-token' and not getattr(self.server, 'revoked', False)
             self.send_response(200 if authenticated else 401)
@@ -331,6 +344,31 @@ class MockTest(unittest.TestCase):
             self.assertEqual(len(upstream.observed), before + 1)
             connection.close()
         finally:
+            upstream.shutdown()
+            upstream.server_close()
+
+    def test_miniapp_proxy_preserves_private_media_headers_on_success_and_denial(self):
+        upstream = ThreadingHTTPServer(('127.0.0.1', 0), MiniApp)
+        upstream.observed = []
+        threading.Thread(target=upstream.serve_forever, daemon=True).start()
+        self.server.store.config['app_url'] = f'http://127.0.0.1:{upstream.server_port}'
+        connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=5)
+        try:
+            for path, status, body in (('/app/avatars/private.jpg', 200, b'private image'),
+                                       ('/app/avatars/denied.jpg', 403, b'access denied')):
+                with self.subTest(status=status):
+                    connection.request('GET', path)
+                    response = connection.getresponse()
+                    self.assertEqual(response.status, status)
+                    self.assertEqual(response.read(), body)
+                    self.assertEqual(response.headers['Cache-Control'], 'private, no-store')
+                    self.assertEqual(response.headers['Content-Disposition'], 'attachment; filename="avatar.jpg"')
+                    self.assertEqual(response.headers['Content-Security-Policy'], "default-src 'none'; sandbox")
+                    self.assertEqual(response.headers['X-Content-Type-Options'], 'nosniff')
+                    self.assertEqual(response.headers['Referrer-Policy'], 'no-referrer')
+                    self.assertEqual(int(response.headers['Content-Length']), len(body))
+        finally:
+            connection.close()
             upstream.shutdown()
             upstream.server_close()
 
