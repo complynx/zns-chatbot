@@ -1,6 +1,6 @@
 # Browser avatar source retention
 
-This change introduces schema 70 and agent manifest `mvp-90`. It is not installed on the primary test stand yet. That stand remains on schema 69 and `mvp-89` until acceptance and a reviewed upgrade.
+This change introduced schema70 and agent manifest `mvp-90`. It is included in the accepted primary test installation at schema70 / `mvp-91`; see the [installation report](shuttle-candidate-install-qa-2026-10-22.md).
 
 ## Policy and administration
 

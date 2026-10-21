@@ -1,6 +1,13 @@
-# Current roadmap checkpoint, 2026-10-21
+# Current roadmap checkpoint, 2026-10-22
 
-The owned primary runs application source `3be6e40b`, `mvp-89/schema69`.
+The owned primary now runs application source `4f03e5ff`, `mvp-91/schema70`,
+with both Loom runtime processes on published revision `34f46468`.
+The [installation acceptance](shuttle-candidate-install-qa-2026-10-22.md) preserves
+original data, identities, config and receipts and resumes the original ingress.
+Its config-bind drift and explicit recovery remain in the report. The bot stopped
+by SIGTERM in0.687 seconds. This is a local stand, not a production cutover.
+
+The preceding primary installation ran source `3be6e40b`, `mvp-89/schema69`.
 The [reviewed release](shuttle-reviewed-release-qa-2026-10-21.md) passes
 [CI46](https://github.com/complynx/zns-chatbot/actions/runs/39664578385): 870
 integration roots, 369 UI tests, generated SQL, lint and Linux/container build.
@@ -59,16 +66,15 @@ The separate [operation-adoption consumer gate](shuttle-loom-adoption-acceptance
 passes the supported knowledge suggestion handoff against published Loom
 `34f46468`: native/agent continuation, exact consent, concurrent confirmation,
 completed receipt replay, pending-operation restarts and rejection. The candidate
-is application source `4f03e5ff`, schema70 / `mvp-91`; the primary remains the
-accepted `3be6e40b` installation above. Its temporary nine-service stand was
+is application source `4f03e5ff`, schema70 / `mvp-91`; the candidate is now installed on the
+primary through the separate accepted installation gate above. Its temporary nine-service stand was
 archived and removed. Browser-source quota/retention is also implemented in this
 candidate; see [its policy and acceptance limits](shuttle-avatar-source-retention.md).
 
 ## Next actions, in order
 
 1. Preserve the accepted [knowledge operation handoff](shuttle-loom-adoption-acceptance-2026-10-21.md)
-   and complete a separate candidate installation gate before changing the
-   primary. Loom's revocation/consent fix is merged; actual installed-runtime
+   and retain the accepted candidate installation epoch. Loom's revocation/consent fix is merged; actual installed-runtime
    acceptance of the documented
    [revocation lifecycle](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md)
    remains separate. Full causal OTel tracing through Loom's
