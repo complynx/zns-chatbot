@@ -1,7 +1,8 @@
 # Knowledge consent after moderator revocation, 2026-10-20
 
 Status: a bounded safety observation passes; complete workflow acceptance is not
-claimed. The actual Loom result is retained, including its nonterminal operation
+claimed. Published as [Loom issue #21](https://github.com/complynx/loom/issues/21)
+on 2026-10-21. The actual Loom result is retained, including its nonterminal operation
 state. No autonomous-model, real-Telegram or production-readiness claim is made.
 
 ## Owned runtime and sequence

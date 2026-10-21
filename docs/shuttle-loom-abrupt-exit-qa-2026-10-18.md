@@ -7,11 +7,12 @@ unanswered model request, but the run had no live lease and no new execution
 IAM and other services continued without restarting. This is a bounded runtime
 observation, not proof that recovery never happens.
 
-Status: local finding and upstream proposal, not a published GitHub issue.
-The GitHub connector has read tools only, the in-app GitHub session is signed
-out and no local `gh` executable was available. No login/token workaround was
-used. The Loom maintainer can classify this as a bug or intended recovery policy;
-the integration requirement remains unresolved.
+Status: published as [Loom issue #19](https://github.com/complynx/loom/issues/19)
+on 2026-10-21. At the time of the original probe no authenticated write channel
+was available; the later publication used `gh`. The Loom maintainer can classify
+this as a bug or intended recovery policy; the integration requirement remains
+unresolved. Publication does not turn the historical observation into a new
+runtime test of the current Loom version.
 
 ## Reproduction and observations
 

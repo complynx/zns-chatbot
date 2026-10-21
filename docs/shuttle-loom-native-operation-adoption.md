@@ -2,7 +2,8 @@
 
 Status: integration requirement reproduced on 2026-10-20. Not implemented or
 accepted. This is a proposed contract for discussion with the Loom developer;
-the wire format may change. No Loom source or developer stand was modified.
+the wire format may change. Published as [Loom issue #20](https://github.com/complynx/loom/issues/20)
+on 2026-10-21. No Loom source or developer stand was modified.
 
 ## Observed gap
 
