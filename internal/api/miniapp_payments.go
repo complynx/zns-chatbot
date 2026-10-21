@@ -63,7 +63,10 @@ func (s *Server) miniAppPaymentScope(
 		return db.PaymentScope{}, session, err
 	}
 	session.Generation = s.miniAppKey.Generation()
-	session.AuthorityUnchanged = func() bool { return unchanged() && time.Now().Before(principal.ExpiresAt) }
+	session.AuthorityUnchanged = func() bool {
+		now := time.Now()
+		return unchanged() && now.Before(principal.ExpiresAt) && now.Before(current.ExpiresAt)
+	}
 	if !session.AuthorityUnchanged() {
 		return db.PaymentScope{}, session, identity.ErrDenied
 	}
