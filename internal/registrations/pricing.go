@@ -178,7 +178,12 @@ func (r tierResolver) capacity(i int) int64 {
 
 func (r tierResolver) used(i int, role string) int64 {
 	implied := max(int64(0), min(r.counts[role]-r.prior[i], r.capacity(i)))
-	return max(r.explicit[role][r.policy.Tiers[i].ID], implied)
+	// Unsold capacity in expired tiers must not hide an explicit pair overflow.
+	var overflow int64
+	for j := range i {
+		overflow = max(int64(0), overflow+r.explicit[role][r.policy.Tiers[j].ID]-r.capacity(j))
+	}
+	return max(r.explicit[role][r.policy.Tiers[i].ID]+overflow, implied)
 }
 
 func (r tierResolver) blocked(i int) bool {

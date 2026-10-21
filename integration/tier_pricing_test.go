@@ -212,6 +212,42 @@ func TestTierPairRejectsChangedUsageQuoteBeforeEitherPassWrite(t *testing.T) {
 	require.EqualValues(t, 20000, assigned.Follower.Pass.PriceMinor)
 }
 
+func TestTierPairOverflowAfterUnsoldDateTierBlocksAnotherPass(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f, admin, args := acceptedPairForAssignment(t)
+	policy := tierPolicy(registrations.PricingDistributed, 1)
+	policy.Tiers[1].Amount = 1
+	old := policy.Tiers[0]
+	old.ID, old.Amount = "expired", 100
+	old.StartsAt = old.StartsAt.Add(-time.Hour)
+	policy.Tiers = append([]registrations.Tier{old}, policy.Tiers...)
+	event := configureTierPair(t, f, admin, &args, policy)
+	prep, err := f.H.store.PreparePairAssignment(ctx, admin, "dated-overflow-pair", args)
+	require.NoError(t, err)
+	assigned, err := f.H.store.ConfirmPairAssignment(ctx, admin, "dated-overflow-pair", args, prep.ID)
+	require.NoError(t, err)
+	for _, entry := range []registrations.Registration{assigned.Leader, assigned.Follower} {
+		require.Equal(t, "early", entry.Pass.Tier.ID)
+	}
+	user, err := f.H.store.GetUser(ctx, f.Other.UserID)
+	require.NoError(t, err)
+	entry, err := f.H.store.ChangeRegistration(ctx, f.Other.EventScope, user.Subject, "dated-overflow-join",
+		db.RegistrationChange{Kind: "register", EventID: event.ID, UserID: f.Other.UserID, Role: registrations.Leader})
+	require.NoError(t, err)
+	_, err = f.H.store.PrepareAssignment(ctx, admin.EventScope, admin.Subject, "dated-overflow-solo", db.PassAssignment{
+		EventID:              event.ID,
+		RegistrationID:       entry.ID,
+		ExpectedEventVersion: event.Version,
+		ExpectedVersion:      entry.Version,
+	})
+	require.ErrorIs(t, err, registrations.ErrCapacity)
+	after, err := f.H.store.Registration(ctx, f.Other.EventScope, event.ID, f.Other.UserID)
+	require.NoError(t, err)
+	require.Equal(t, entry, after)
+	requireTierPairUnchanged(t, f, []registrations.Registration{assigned.Leader, assigned.Follower}, 2)
+}
+
 func configureTierEvent(
 	t *testing.T,
 	h *harness,

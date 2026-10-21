@@ -165,6 +165,45 @@ func TestPricingDateFloorRetainsConfiguredOrderAndDoesNotCarryUnsoldCapacity(t *
 	require.Equal(t, "current", quotes[0].Tier.ID)
 }
 
+func TestDistributedPairOverflowConsumesSuccessorAfterUnsoldTierExpires(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		capacity int32
+	}{
+		{"successor filled by overflow", 1},
+		{"one successor place remains", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rules := pricingRules(registrations.PricingDistributed,
+				priceTier("old", 100, 1000, pricingInstant().Add(-time.Hour)),
+				priceTier("current", 1, 2000, pricingInstant()),
+				priceTier("next", tc.capacity, 3000, pricingInstant().Add(time.Hour)))
+			roles := []string{registrations.Leader, registrations.Follower}
+			quotes, err := registrations.ResolvePrices(rules, pricingInstant(), nil, roles)
+			require.NoError(t, err)
+			require.Len(t, quotes, 2)
+			var usage []registrations.TierUsage
+			for i, quote := range quotes {
+				require.Equal(t, "current", quote.Tier.ID)
+				usage = append(usage, registrations.TierUsage{Role: roles[i], TierID: quote.Tier.ID, Count: 1})
+			}
+			if tc.capacity == 2 {
+				quotes, err = registrations.ResolvePrices(
+					rules, pricingInstant(), usage, []string{registrations.Leader},
+				)
+				require.NoError(t, err)
+				require.Equal(t, "next", quotes[0].Tier.ID)
+				usage = append(usage, registrations.TierUsage{Role: registrations.Leader, TierID: "next", Count: 1})
+			}
+			quotes, err = registrations.ResolvePrices(rules, pricingInstant(), usage, []string{registrations.Follower})
+			require.ErrorIs(t, err, registrations.ErrCapacity)
+			require.Nil(t, quotes)
+		})
+	}
+}
+
 func TestPricingWaitsForFirstStartAndOpensAtExactInstant(t *testing.T) {
 	t.Parallel()
 	rules := pricingRules(registrations.PricingDistributed,
