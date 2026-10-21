@@ -9,6 +9,18 @@ integration roots and367 UI cases. Authenticated meal workflow evidence comes
 from the separately retired isolated stands; the primary HTTP check does not
 replace it.
 
+The later source review fixes remain separate from that installation. Commit
+`ab59d761` passed [CI43](https://github.com/complynx/zns-chatbot/actions/runs/39642330245):
+867 integration roots, 368 UI cases, generated SQL, lint and Linux/container
+build. Commit `3186ba69`, including bounded knowledge receipts, native payment
+authority fencing, specialist queue metrics and run custody through prolonged
+401 responses, has its own [CI44](https://github.com/complynx/zns-chatbot/actions/runs/39650197024)
+in progress at this checkpoint. The subsequent
+[graceful HTTP](shuttle-graceful-http-qa-2026-10-21.md) and
+[payment-session expiry](shuttle-payment-session-expiry-qa-2026-10-21.md) fixes
+have focused Linux/race evidence and remain uninstalled. None of these later
+source checks upgrades the accepted primary image or proves production readiness.
+
 The preceding
 [avatar source installation](shuttle-avatar-primary-qa-2026-10-21.md) is accepted
 after the earlier knowledge and order-review preview installations. Full CI for
