@@ -34,6 +34,7 @@ func QueueMetrics(ctx context.Context, pool *pgxpool.Pool) ([]observability.Queu
 			(knowledgeNotificationArgs{}).Kind(),
 			(avatarDeliveryArgs{}).Kind(),
 			(massageReminderArgs{}).Kind(),
+			(massageSpecialistNoticeArgs{}).Kind(),
 		},
 	)
 	if err != nil {

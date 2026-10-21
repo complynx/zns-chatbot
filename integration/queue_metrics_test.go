@@ -22,7 +22,7 @@ func TestQueueMetricsUseDueDeadlinesAndOwnedKindsInConfiguredSchema(t *testing.T
 	h := setup(t, newPeers(t))
 	h.stop(t)
 	ctx := context.Background()
-	for _, kind := range []string{"shuttle_task", "zinusya_payment_notification", "zinusya_pair_notification", "zinusya_order_notification"} {
+	for _, kind := range []string{"shuttle_task", "zinusya_payment_notification", "zinusya_pair_notification", "zinusya_order_notification", "zinusya_massage_specialist_notice"} {
 		for _, state := range []string{"available", "scheduled", "retryable"} {
 			_, err := h.store.Pool().
 				Exec(ctx, `INSERT INTO river_job(kind,state,max_attempts,args,created_at,scheduled_at)
@@ -42,7 +42,7 @@ func TestQueueMetricsUseDueDeadlinesAndOwnedKindsInConfiguredSchema(t *testing.T
 	require.NoError(t, err)
 	rows, err := task.QueueMetrics(ctx, h.store.Pool())
 	require.NoError(t, err)
-	require.Len(t, rows, 12)
+	require.Len(t, rows, 15)
 	for _, row := range rows {
 		require.Equal(t, int64(1), row.Count)
 		require.InDelta(t, 120, row.ScheduledAgeSeconds, 5)
@@ -62,6 +62,10 @@ func TestQueueMetricsUseDueDeadlinesAndOwnedKindsInConfiguredSchema(t *testing.T
 		response.Body.String(),
 		`zinusya_queue_due{kind="zinusya_order_notification",state="scheduled"} 1`,
 	)
+	for _, state := range []string{"available", "scheduled", "retryable"} {
+		require.Contains(t, response.Body.String(),
+			`zinusya_queue_due{kind="zinusya_massage_specialist_notice",state="`+state+`"} 1`)
+	}
 	require.NotContains(t, response.Body.String(), "private-user-token")
 	require.NotContains(t, response.Body.String(), "private-queue")
 }
