@@ -2,8 +2,10 @@
 
 Status: all application tests pass on the final source. The original test
 controller exits1 during fixture cleanup; that failure remains retained.
-Separate verified cleanup retires its resources. The primary still runs
-schema68/mvp-86. Remote CI and primary installation remain open.
+Separate verified cleanup retires its resources. The primary ran
+schema68/mvp-86 at that gate. Subsequent remote CI and
+[primary installation](shuttle-meal-primary-qa-2026-10-21.md) are now accepted
+separately. The original cleanup failure remains unchanged.
 
 ## Application verification
 
@@ -67,8 +69,8 @@ retirement-resume.json records cleanup; acceptance.json checks all864 roots,
 1293 cases, source/build hashes and actual resource retirement. The original
 failure copy and PostgreSQL logs are retained alongside these records.
 
-Next: reviewed commit, remote CI, then controlled owned-primary upgrade and
-installation acceptance. Deferred joint CA/ZitadelTG/real Telegram checks,
+The subsequent reviewed commit, remote CI and controlled owned-primary upgrade
+are recorded in the linked installation report. Deferred joint CA/ZitadelTG/real Telegram checks,
 exact native-operation adoption and durable causal tracing through Loom remain
 open roadmap gates. No production cutover or readiness is claimed.
 
