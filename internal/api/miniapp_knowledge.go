@@ -46,6 +46,7 @@ func (s *Server) miniAppKnowledgeSession(
 	}
 	scope.UserID, scope.Subject = attempt.User.ID, principal.Subject
 	_, scope.GlobalAdmin = principal.Roles["zinusya.admin"][scope.Organization]
+	session.Contract = s.knowledgeContract()
 	session.UserID = attempt.User.ID
 	session.Generation = s.miniAppKey.Generation()
 	session.AuthorityUnchanged = func() bool { return unchanged() && time.Now().Before(principal.ExpiresAt) }

@@ -21,7 +21,7 @@ All six reports below are published; their original runtime observations retain 
   yet exits zero. Reproduced on our owned isolated pinned worker; no developer
   checkout/stand changes. PDF-to-image visual acceptance remains failed.
 
-- L04: [Delayed execution recovery after SIGKILL](https://github.com/complynx/loom/issues/19).
+- L04 (upstream closed after merged fix; installed acceptance separate): [Delayed execution recovery after SIGKILL](https://github.com/complynx/loom/issues/19).
   Real owned-stand observation found an expired run lease and orphan running
   River job 117 seconds after Loom restart, without a new inference. Source
   analysis suggests a much longer queue-rescue threshold; eventual recovery
@@ -34,7 +34,7 @@ All six reports below are published; their original runtime observations retain 
   is not labelled a defect in fresh-operation behavior. Exact mixed-path
   acceptance remains open. [Original proposal](shuttle-loom-native-operation-adoption.md).
 
-- L06: [Consent after moderator revocation](https://github.com/complynx/loom/issues/21).
+- L06 (upstream closed after merged fix; installed acceptance separate): [Consent after moderator revocation](https://github.com/complynx/loom/issues/21).
   Actual owned-stand observation retains `tool_failed` and an unexecuted Loom
   operation in `approved`; no article/review effect occurs. A separate authority
   probe returns 403 and the agent reads disabled rights. The generic error alone

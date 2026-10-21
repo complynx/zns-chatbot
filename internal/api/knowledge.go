@@ -8,6 +8,7 @@ import (
 
 func (s *Server) registerKnowledge(api huma.API) {
 	s.registerKnowledgeActions(api)
+	registerAgentPost(api, "agent-operation-inspect", operationInspectPath, internalBodyLimit, s.inspectOperation)
 	registerAgentPost(
 		api,
 		"agent-knowledge-notifications",

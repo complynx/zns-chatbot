@@ -14,6 +14,7 @@ import (
 // MiniAppKnowledgeSession binds native knowledge writes to the current browser
 // session. AuthorityUnchanged checks only local invalidation and token expiry.
 type MiniAppKnowledgeSession struct {
+	Contract           KnowledgeContract
 	UserID             uuid.UUID
 	Bearer, Generation [sha256.Size]byte
 	AuthorityUnchanged func() bool
@@ -22,7 +23,7 @@ type MiniAppKnowledgeSession struct {
 func (s *Store) PrepareMiniAppKnowledge(ctx context.Context, scope PaymentScope, operation string,
 	change KnowledgeChange, session MiniAppKnowledgeSession,
 ) (KnowledgePreparation, error) {
-	return s.prepareKnowledge(ctx, scope, operation, change, knowledgeMiniAppGuard(scope, session))
+	return s.prepareKnowledge(ctx, scope, operation, change, knowledgeMiniAppGuard(scope, session), session.Contract)
 }
 
 func (s *Store) ConfirmMiniAppKnowledge(ctx context.Context, scope PaymentScope, operation string,

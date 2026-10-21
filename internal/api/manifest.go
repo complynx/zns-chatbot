@@ -91,8 +91,11 @@ const (
 	manifestType               = "type"
 )
 
+const agentContractRevision = "mvp-91"
+
 func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
-	revision := "mvp-90"
+	revision := agentContractRevision
+	w.Header().Set("Loom-Operation-Inspect-Path", operationInspectPath)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"protocol_version":  1,
 		schemaServiceID:     "zinusya",

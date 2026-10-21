@@ -29,7 +29,7 @@ func (s *Service) appendKnowledgeContext(ctx context.Context, text *strings.Buil
 	)
 	text.Write(raw)
 	text.WriteString(
-		"\nContinue only the user's explicit request. Use zinusya_knowledge.operation with the original kind and operation_id for exact normalized terms, expiry and original result; zinusya_knowledge.recent_actions refreshes bounded locators and is not an exhaustive directory. completed describes a past effect, not a request to repeat it. prepared is not current consent: continuing requires fresh exact approval with the original operation ID and unchanged arguments. Expired preparations require fresh preparation and consent. unknown is nonterminal, never proof that a replacement is safe. Current rights, lifecycle and revisions are checked again by the API. Never confirm, repeat, cancel or infer a new edit merely from this history.\n",
+		"\nContinue only the user's explicit request. Use zinusya_knowledge.operation with the original kind and operation_id for exact normalized terms, expiry and original result; zinusya_knowledge.recent_actions refreshes bounded locators and is not an exhaustive directory. completed describes a past effect, not a request to repeat it. prepared is not current consent: continuing requires fresh exact approval. Call module_call with resume_operation_id set to the original operation_id and arguments={} to adopt the original terms; never prepare a replacement. Only supported adoption methods can continue this way. Expired preparations require fresh preparation and consent. unknown is nonterminal, never proof that a replacement is safe. Current rights, lifecycle and revisions are checked again by the API. Never confirm, repeat, cancel or infer a new edit merely from this history.\n",
 	)
 	return nil
 }

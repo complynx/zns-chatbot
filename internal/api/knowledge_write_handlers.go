@@ -31,7 +31,7 @@ func knowledgePrepareHandler[T any](
 			// Repeated preparation of a new article must retain one target ID.
 			change.ArticleID = uuid.NewSHA1(scope.UserID, []byte("knowledge:"+kind+":"+in.Body.OperationID))
 		}
-		prep, err := s.store.PrepareKnowledge(ctx, scope, in.Body.OperationID, change)
+		prep, err := s.store.PrepareKnowledgeForContract(ctx, scope, in.Body.OperationID, change, s.knowledgeContract())
 		if err != nil {
 			return nil, knowledgeError(err)
 		}

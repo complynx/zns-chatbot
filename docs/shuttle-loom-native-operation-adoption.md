@@ -1,9 +1,20 @@
 # Resume an operation prepared outside Loom
 
-Status: integration requirement reproduced on 2026-10-20. Not implemented or
-accepted. This is a proposed contract for discussion with the Loom developer;
-the wire format may change. Published as [Loom issue #20](https://github.com/complynx/loom/issues/20)
-on 2026-10-21. No Loom source or developer stand was modified.
+Status: Loom's published contract is merged at `34f4646832748efd455828f6804c6274027db659`. The Zinusya authenticated inspector and native/agent acceptance are in progress; [Loom issue #20](https://github.com/complynx/loom/issues/20) remains open. The observations below describe the historical 2026-10-20 installation and remain unchanged evidence of its missing capability.
+
+The authoritative wire contract is [Loom operation adoption](https://github.com/complynx/loom/blob/34f4646832748efd455828f6804c6274027db659/docs/modules/operation-adoption.md). The application inspector must retain the original preparation contract revision, issuer/actor binding, normalized arguments, preconditions and absolute expiry. It must check current authority and share the original operation ID and receipt with native confirmation. Old preparations without a recorded contract must fail closed; inspection cannot label them with the new revision. An already completed operation returns its original receipt. Unknown results remain status-only.
+
+Initial consumer scope is the knowledge module's `suggest`, `edit`, `review` and `set_moderator` operations, including the original reported suggestion flow. Other modules return explicit unsupported responses; their existing native and agent paths remain available. This does not claim universal preparation adoption.
+
+## Consumer implementation and acceptance boundary
+
+The Zinusya candidate advertises `Loom-Operation-Inspect-Path: /internal/agent/operations/inspect` with manifest `mvp-91`. The endpoint accepts only delegated user credentials and currently supports the four knowledge write methods. It checks current rights before exposing original terms or a committed receipt. Unsupported modules or methods return 422; missing or foreign preparations return 404; a missing or changed recorded contract returns 409. It never prepares, executes, renews expiry, or relabels an older preparation. Existing preparations without a recorded contract can still use their original native/status paths.
+
+New native and agent knowledge preparations persist the issuing API revision, IAM issuer and service actor alongside existing owner, organization, arguments, description, proposal ID and expiry. Completed-operation inspection does not require obsolete business preconditions to hold; fresh execution still validates them through the existing canonical confirmation path. The agent context now directs supported continuation through `module_call` with `resume_operation_id` and unchanged original terms.
+
+On 2026-10-21, 31 PostgreSQL knowledge integration roots passed, including native and agent preparation inspection, completed receipt reuse, owner/method isolation, unrenewed expired terms, rejection of legacy contract relabelling and moderator revocation. Scoped lint passed with zero issues; independent textual review found no actionable findings. These tests use fixture identity HTTP peers and do not prove the real Loom adoption dialogue. The primary stand still runs schema 69 / manifest `mvp-89`; this candidate is not installed there.
+
+Still required before closing #20: real-IAM/native-form preparation to actual Loom adoption and fresh plain consent; reverse continuation into the native form; concurrent native and agent execution with one original backend effect and receipt. Use the published Loom revision above in a separate owned stand. Keep the original failed reproduction as historical evidence.
 
 ## Observed gap
 

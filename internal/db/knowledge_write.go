@@ -139,6 +139,7 @@ func kbAuthorize(
 }
 
 type kbPreparationDocument struct {
+	Contract     KnowledgeContract    `json:"contract"`
 	Preparation  KnowledgePreparation `json:"preparation"`
 	EventID      *uuid.UUID           `json:"event_id,omitempty"`
 	EventVersion int64                `json:"event_version,omitempty"`
@@ -269,7 +270,15 @@ func (s *Store) PrepareKnowledge(
 	op string,
 	c KnowledgeChange,
 ) (KnowledgePreparation, error) {
-	return s.prepareKnowledge(ctx, scope, op, c, nil)
+	return s.prepareKnowledge(ctx, scope, op, c, nil, KnowledgeContract{})
+}
+
+// PrepareKnowledgeForContract records the issuing API contract with the original
+// preparation. Older preparations are never relabelled during inspection.
+func (s *Store) PrepareKnowledgeForContract(ctx context.Context, scope PaymentScope, op string,
+	c KnowledgeChange, contract KnowledgeContract,
+) (KnowledgePreparation, error) {
+	return s.prepareKnowledge(ctx, scope, op, c, nil, contract)
 }
 
 // guard is a KB-local seam for native session/credential checks in this same
@@ -280,6 +289,7 @@ func (s *Store) prepareKnowledge(
 	op string,
 	c KnowledgeChange,
 	guard func(context.Context, *sqlc.Queries) error,
+	contract KnowledgeContract,
 ) (KnowledgePreparation, error) {
 	c, hash, err := kbNormalize(c)
 	if err != nil {
@@ -329,6 +339,7 @@ func (s *Store) prepareKnowledge(
 		}
 	}
 	p := kbPreparationContext(t)
+	p.Contract = contract
 	p.Preparation = KnowledgePreparation{
 		ID:          uuid.New(),
 		Arguments:   c,
