@@ -6,7 +6,9 @@ The owned `avatar-references-r1` stand runs schema 68 / manifest `mvp-86`,
 with real local Zitadel, PostgreSQL, River and Loom. Telegram and the model
 provider are deterministic fixtures. Headless Edge runs the shipped Mini App
 against that backend. This is not a real Telegram WebView or production import.
-The primary `shuttle-live-test` remains schema 67 / `mvp-83`.
+At this checkpoint the primary remained schema 67 / `mvp-83`. The later
+[primary installation](shuttle-avatar-primary-qa-2026-10-21.md) now runs schema 68 /
+`mvp-86`; it does not broaden the historical-reference tests reported here.
 
 ## Verified behavior
 

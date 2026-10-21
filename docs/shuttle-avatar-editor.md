@@ -2,8 +2,9 @@
 
 The embedded Mini App edits shared drafts. For source schema 68 / mvp-86,
 Telegram originals are downloaded on demand. See the [current source lifecycle
-and acceptance boundary](shuttle-avatar-telegram-sources.md). The installed primary
-remains schema 67 / mvp-83; this later source change is not installed yet.
+and acceptance boundary](shuttle-avatar-telegram-sources.md). The owned primary
+now runs schema 68 / mvp-86; see the [installation evidence and remaining
+acceptance limits](shuttle-avatar-primary-qa-2026-10-21.md).
 
 ## Use
 
@@ -15,7 +16,7 @@ policy is inferred.
 For imported historical photos, Find imported attachments lists owned candidates.
 Preview photo shows a bounded framed image without spending a draft slot. Use
 this photo explicitly creates the shared draft. Changing the selection or leaving
-the account clears the preview. This follow-up is installed only on the separate
+the account clears the preview. This follow-up was first accepted on the separate
 mock-Telegram QA stand. A shipped-Mini-App browser check with real IAM passes
 preview-before-write, foreign-source denial and one explicit draft creation while
 Loom is paused. It creates no task or document; Loom and browser cleanup are

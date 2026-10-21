@@ -7,7 +7,7 @@ the owner's private Telegram chat. It does not set a Telegram profile photo or
 introduce a separate current-avatar field. Receiving a photo alone creates no
 avatar; the agent decides its purpose from the message and content.
 
-## Telegram source references (source implementation; acceptance in progress)
+## Telegram source references
 
 The agreed source policy is to retain Telegram file references and ownership,
 then download the source when requested. Migration must not download and archive
@@ -19,11 +19,15 @@ server-side and belong to the bot identity that received them.
 Source schema 68 uses references for Telegram-backed drafts and retains bytes only
 for browser uploads. Generated output receipts remain stored. The reference-only
 backend and candidate discovery passed 90 PostgreSQL scenarios with mock
-Telegram/IAM; the UI passed behavioral and rendered-fixture checks. These changes run on a separate mock-Telegram QA stand and are not installed on
-the primary. Native browser-upload generation/delivery with real IAM and Loom
-stopped passes there. Agent-only and both native/agent continuation directions
-also pass, including a graceful bot restart. Real Loom import and recovery after artifact expiry pass for current originals,
-previews and finalized documents. Historical-reference handoffs and source-loss behavior also pass on that stand;
+Telegram/IAM; the UI passed behavioral and rendered-fixture checks. The changes
+were first accepted on a separate mock-Telegram QA stand and are now installed
+on the owned primary; see the [installation evidence and limits](shuttle-avatar-primary-qa-2026-10-21.md).
+On the separate `avatar-references-r1` stand, native browser-upload
+generation/delivery with real IAM and Loom stopped passes. Agent-only and both
+native/agent continuation directions also pass there, including a graceful bot
+restart. On that same stand, real Loom import and recovery after artifact expiry
+pass for current originals, previews and finalized documents. Historical-reference
+handoffs and source-loss behavior also pass on that stand;
 see [historical runtime QA](shuttle-avatar-history-runtime-qa-2026-10-21.md).
 The current single-step generated JPEG also refreshes after artifact metadata
 expiry through real Loom. This does not establish recovery of old generated
@@ -31,9 +35,9 @@ frames or custom browser crops. See the [source lifecycle](shuttle-avatar-telegr
 The native historical selector now previews a photo without creating a draft;
 explicit Use creates one. The updated bot passes a real-IAM/headless-Edge check
 on that separate stand while Loom is paused, with no task or document created.
-The full frozen-source race run passes all 833 integration roots; its later
-two-file deadline follow-up has separate behavior and lint evidence. These are
-not full race coverage of that later source or real Telegram WebView acceptance.
+The earlier frozen-source race run passed 833 integration roots. Full remote CI
+for the installed source commit `0599dfef` subsequently passed 835 integration
+roots and 357 UI tests. Neither proves real Telegram WebView acceptance.
 
 Historical input images are read through `zinusya_history.avatar_info` and
 `avatar_fetch`, with `record_id` and `archive_id` from

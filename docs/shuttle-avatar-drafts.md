@@ -2,9 +2,10 @@
 
 Schema 55 introduced shared drafts. Source schema 68 / manifest `mvp-86` changes
 Telegram-backed drafts to references; see the [current source lifecycle and QA
-boundary](shuttle-avatar-telegram-sources.md). The installed primary remains
-schema 67 / mvp-83 until separately accepted installation. Earlier stage records
-below do not establish acceptance of these later changes.
+boundary](shuttle-avatar-telegram-sources.md). The owned primary now runs
+schema 68 / mvp-86; see the [installation evidence and remaining acceptance
+limits](shuttle-avatar-primary-qa-2026-10-21.md). Earlier stage records retain their
+original scope.
 
 ## State and authorization
 

@@ -1,5 +1,13 @@
 # Telegram avatar source lifecycle
 
+## Current installation checkpoint
+
+The owned primary now runs schema 68 / mvp-86. See the
+[accepted installation and its limits](shuttle-avatar-primary-qa-2026-10-21.md).
+Later stage records in this document retain their historical installation state;
+they do not describe the current primary. Real export and real Telegram WebView
+acceptance remain open.
+
 ## Contract
 
 Telegram inputs retain their existing owner-scoped file reference, not permanent

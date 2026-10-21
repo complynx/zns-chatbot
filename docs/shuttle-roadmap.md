@@ -1,10 +1,11 @@
-# Current roadmap checkpoint, 2026-10-20
+# Current roadmap checkpoint, 2026-10-21
 
-The owned primary runs `mvp83/schema67`. Both the
-[knowledge installation](shuttle-knowledge-primary-qa-2026-10-20.md) and later
-[order-review preview installation](shuttle-order-preview-primary-qa-2026-10-20.md)
-are accepted. The latter full CI at `7fc7bd31` passes 814 integration roots and 347 UI
-tests. Domain data and original ingress remain preserved. The chronological
+The owned primary runs `mvp-86/schema68`. The
+[avatar source installation](shuttle-avatar-primary-qa-2026-10-21.md) is accepted
+after the earlier knowledge and order-review preview installations. Full CI for
+source commit `0599dfef` passes 835 integration roots and 357 UI tests. The bot
+was replaced, the original ingress resumed, and domain data and Loom state were
+preserved. A later test-proxy-only fix has its own pending CI. The chronological
 records below retain each earlier result; later success does not rewrite failures.
 
 The [bounded model-assisted knowledge probe](shuttle-knowledge-model-qa-2026-10-20.md)
