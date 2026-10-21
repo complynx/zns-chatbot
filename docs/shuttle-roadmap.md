@@ -83,7 +83,9 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    automatic original-run recovery, unknown inference accounting and one final
    delivery on actual IAM/published Loom; other crash windows remain separate.
    Full causal OTel tracing through Loom's
-   asynchronous queue is also an open upstream gate: the [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
+   asynchronous queue remains an open upstream gate. The
+   [durable tracing contract](shuttle-loom-durable-tracing.md) is published as
+   [Loom #27](https://github.com/complynx/loom/issues/27). The [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
    proves HTTP propagation, not durable queue context or recovered-attempt links.
    Do not change the Loom developer's stand.
 2. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
