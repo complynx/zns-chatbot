@@ -78,7 +78,11 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    [revocation lifecycle](shuttle-knowledge-revocation-qa-2026-10-22.md) now passes
    the bounded actual-IAM method-loss, rights-restoration, graceful-restart and
    stale/fresh-consent path on a retired isolated stand. Uncertain dispatched RPCs
-   and other revocation windows remain separate. Full causal OTel tracing through Loom's
+   and other revocation windows remain separate. The separate
+   [abrupt-exit gate](shuttle-loom-abrupt-recovery-qa-2026-10-22.md) also passes
+   automatic original-run recovery, unknown inference accounting and one final
+   delivery on actual IAM/published Loom; other crash windows remain separate.
+   Full causal OTel tracing through Loom's
    asynchronous queue is also an open upstream gate: the [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
    proves HTTP propagation, not durable queue context or recovered-attempt links.
    Do not change the Loom developer's stand.

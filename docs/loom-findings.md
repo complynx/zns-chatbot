@@ -21,12 +21,14 @@ All six reports below are published; their original runtime observations retain 
   yet exits zero. Reproduced on our owned isolated pinned worker; no developer
   checkout/stand changes. PDF-to-image visual acceptance remains failed.
 
-- L04 (upstream closed after merged fix; installed acceptance separate): [Delayed execution recovery after SIGKILL](https://github.com/complynx/loom/issues/19).
-  Real owned-stand observation found an expired run lease and orphan running
-  River job 117 seconds after Loom restart, without a new inference. Source
-  analysis suggests a much longer queue-rescue threshold; eventual recovery
-  was not measured. The report includes the requested bounded-recovery contract.
-  Published on 2026-10-21; [original report](shuttle-loom-abrupt-exit-qa-2026-10-18.md).
+- L04 (upstream closed; bounded consumer runtime acceptance passed): [Delayed execution recovery after SIGKILL](https://github.com/complynx/loom/issues/19).
+  Published Loom `34f46468` passes the actual-IAM pending-inference crash path:
+  only the owned executor is killed; the original task/run/session recover
+  automatically, original unknown exposure is retained, and one response is
+  delivered. Recovery is observed by 16.429 seconds after restart in this fixture,
+  not a general SLA. [Consumer report](shuttle-loom-abrupt-recovery-qa-2026-10-22.md).
+  The [original 117-second failure](shuttle-loom-abrupt-exit-qa-2026-10-18.md)
+  is preserved. Other crash windows remain separate.
 
 - L05: [Native prepared-operation adoption](https://github.com/complynx/loom/issues/20).
   The generic contract is merged in Loom revision `34f46468`. The Zinusya

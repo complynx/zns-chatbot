@@ -14,6 +14,14 @@ this as a bug or intended recovery policy; the integration requirement remains
 unresolved. Publication does not turn the historical observation into a new
 runtime test of the current Loom version.
 
+## Later published-runtime acceptance
+
+Published Loom `34f46468` subsequently passes the separate
+[actual-IAM pending-inference crash gate](shuttle-loom-abrupt-recovery-qa-2026-10-22.md).
+It preserves original task/run/session identity and unknown inference exposure,
+then delivers one final response. That bounded result does not rewrite this
+older failed observation or establish recovery guarantees for every crash window.
+
 ## Reproduction and observations
 
 The stand used bot image
