@@ -66,7 +66,13 @@ func (s *Server) miniAppAvatarFinalize(w http.ResponseWriter, r *http.Request) {
 		miniAppError(w, err)
 		return
 	}
-	receipt, err := s.store.CommitMiniAppAvatarDraft(ctx, scope, bearer, s.miniAppKey.Generation(), a, rendered)
+	commit, release, err := s.avatarFinalizationCommitContext(ctx, scope, a)
+	if err != nil {
+		s.miniAppAvatarError(w, err)
+		return
+	}
+	receipt, err := s.store.CommitMiniAppAvatarDraft(commit, scope, bearer, s.miniAppKey.Generation(), a, rendered)
+	release()
 	if err != nil {
 		s.miniAppAvatarError(w, err)
 		return

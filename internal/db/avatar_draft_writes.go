@@ -129,12 +129,22 @@ func (s *Store) createAvatarDraft(
 	if err != nil {
 		return AvatarDraft{}, err
 	}
-	if a.SourceFileID != uuid.Nil {
-		if err = ownedSourceFile(ctx, tx, scope.UserID, a.SourceFileID); err != nil {
-			return AvatarDraft{}, err
-		}
+	if err = validateAvatarDraftSource(
+		ctx,
+		tx,
+		s.q.WithTx(tx),
+		scope,
+		a.SourceFileID,
+		a.HistorySource,
+		mime,
+	); err != nil {
+		return AvatarDraft{}, err
 	}
-	if err = avatarDraftQuota(ctx, tx, scope.UserID, len(raw)); err != nil {
+	stored := raw
+	if a.SourceFileID != uuid.Nil || a.HistorySource != nil {
+		stored = nil
+	}
+	if err = avatarDraftQuota(ctx, tx, scope.UserID, len(stored)); err != nil {
 		return AvatarDraft{}, err
 	}
 	transform, err := json.Marshal(avatar.IdentityTransform())
@@ -150,17 +160,25 @@ func (s *Store) createAvatarDraft(
 	if a.SourceFileID != uuid.Nil {
 		source = a.SourceFileID
 	}
+	var historyRecord, historyArchive any
+	if a.HistorySource != nil {
+		historyRecord = a.HistorySource.RecordID
+		historyArchive = a.HistorySource.ArchiveID
+	}
 	_, err = tx.Exec(
 		ctx,
-		`INSERT INTO shuttle_avatar_drafts(id,user_id,source_file_id,original,source_sha256,mime_type,frame_sha256,transform,version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,1)`,
+		`INSERT INTO shuttle_avatar_drafts(id,user_id,source_file_id,original,source_sha256,mime_type,frame_sha256,transform,version,source_size_bytes,history_record_id,history_archive_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$10,$11)`,
 		id,
 		scope.UserID,
 		source,
-		raw,
+		stored,
 		digest[:],
 		mime,
 		frame,
 		transform,
+		int64(len(raw)),
+		historyRecord,
+		historyArchive,
 	)
 	if err != nil {
 		return AvatarDraft{}, err
@@ -275,7 +293,7 @@ func validateAvatarDraftOriginal(
 	digest = sha256.Sum256(raw)
 	sourceHash := hex.EncodeToString(digest[:])
 	if proof.SourceSHA256 != sourceHash || validRenderedAvatar(proof, nil) != nil ||
-		(a.SourceFileID == uuid.Nil && a.UploadSHA256 != sourceHash) {
+		(a.SourceFileID == uuid.Nil && a.HistorySource == nil && a.UploadSHA256 != sourceHash) {
 		return digest, "", ErrInvalidAvatar
 	}
 	mime := http.DetectContentType(raw)

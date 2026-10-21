@@ -76,7 +76,7 @@ func avatarFinalizationMethods(
 	)
 	finalize[manifestEffect] = effectWrite
 	finalize[manifestIdempotency] = true
-	finalize[manifestTimeout] = avatarGenerateTimeoutMillis
+	finalize[manifestTimeout] = avatarUploadTimeout.Milliseconds()
 	finalize[manifestStatusPath] = avatarPath + "finalization_operation"
 	finalize[manifestDedupWindow] = agentRegistrationDedupSeconds
 	operation := method(

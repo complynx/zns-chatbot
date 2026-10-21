@@ -1,17 +1,25 @@
 # Native avatar editor
 
-The embedded Mini App now has an avatar draft editor. The editor was introduced at schema55 / mvp63; the
-[shared finalization APIs](shuttle-avatar-finalization-api.md) extend current source
-to schema57 / mvp65. The installed primary is schema49 / mvp56.
-No new dependency, configuration or schema is required by this UI stage.
-These changes are not installed on the primary or production.
+The embedded Mini App edits shared drafts. For source schema 68 / mvp-86,
+Telegram originals are downloaded on demand. See the [current source lifecycle
+and acceptance boundary](shuttle-avatar-telegram-sources.md). The installed primary
+remains schema 67 / mvp-83; this later source change is not installed yet.
 
 ## Use
 
 Open the existing Mini App account page and find Avatar. Select a retained draft,
 or explicitly upload a new JPEG/PNG original, at most20 MiB. Existing evaluation
-admission limits remain five originals and50 MiB per owner; no automatic deletion
+admission limits remain five drafts and 50 MiB of browser uploads per owner; no automatic deletion
 policy is inferred.
+
+For imported historical photos, Find imported attachments lists owned candidates.
+Preview photo shows a bounded framed image without spending a draft slot. Use
+this photo explicitly creates the shared draft. Changing the selection or leaving
+the account clears the preview. This follow-up is installed only on the separate
+mock-Telegram QA stand. A shipped-Mini-App browser check with real IAM passes
+preview-before-write, foreign-source denial and one explicit draft creation while
+Loom is paused. It creates no task or document; Loom and browser cleanup are
+verified. Real Telegram WebView acceptance remains open.
 
 Drag the photo, or enter frame-relative horizontal/vertical percentages, scale
 25–800%, and clockwise rotation −180–180 degrees. Reset returns local edits to
@@ -60,17 +68,14 @@ RU/EN labels, behavior tests, API asset serving and isolated real-browser canvas
 checks are recorded in [editor QA](shuttle-avatar-editor-qa-2026-10-19.md).
 The browser backend is a fixture; it is not full runtime or Telegram acceptance.
 
-The [finalization storage foundation](shuttle-avatar-finalization.md) is in
-progress; shared [finalization APIs](shuttle-avatar-finalization-api.md) and task-free
+The [finalization storage foundation](shuttle-avatar-finalization.md), shared [finalization APIs](shuttle-avatar-finalization-api.md) and task-free
 delivery and the [Generate/send UI](shuttle-avatar-send-ui.md) are implemented.
-[Owned runtime acceptance](shuttle-avatar-runtime-qa-2026-10-19.md) now passes all four paths
-with real IAM/Loom and mock Telegram. Actual Telegram WebView and unattended model
+[Owned runtime acceptance](shuttle-avatar-runtime-qa-2026-10-19.md) records all four
+paths at schema 57 / mvp-65 with real IAM/Loom and mock Telegram. It does not accept
+the later schema 68 Telegram-reference/discovery changes. Actual Telegram WebView and unattended model
 acceptance remain open. Legacy
-agent generation/send still has its existing task requirements. Completed editor
-parity has native-only finalization with Loom stopped, agent-only completion,
+agent generation/send still has its existing task requirements. That recorded editor
+parity includes native-only finalization with Loom stopped, agent-only completion,
 and both owned-runtime handoffs, including a normal bot restart. This uses a
 Codex-fed deterministic provider, not an unattended model. Production
 retention/discard policy remains pending.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk

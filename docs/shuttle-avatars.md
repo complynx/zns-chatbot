@@ -7,6 +7,50 @@ the owner's private Telegram chat. It does not set a Telegram profile photo or
 introduce a separate current-avatar field. Receiving a photo alone creates no
 avatar; the agent decides its purpose from the message and content.
 
+## Telegram source references (source implementation; acceptance in progress)
+
+The agreed source policy is to retain Telegram file references and ownership,
+then download the source when requested. Migration must not download and archive
+all historical originals. If Telegram no longer returns a file, show a clear
+error and ask the person to resend it. Message deletion alone does not establish
+file availability; use the actual Telegram API result. File identifiers stay
+server-side and belong to the bot identity that received them.
+
+Source schema 68 uses references for Telegram-backed drafts and retains bytes only
+for browser uploads. Generated output receipts remain stored. The reference-only
+backend and candidate discovery passed 90 PostgreSQL scenarios with mock
+Telegram/IAM; the UI passed behavioral and rendered-fixture checks. These changes run on a separate mock-Telegram QA stand and are not installed on
+the primary. Native browser-upload generation/delivery with real IAM and Loom
+stopped passes there. Agent-only and both native/agent continuation directions
+also pass, including a graceful bot restart. Real Loom import and recovery after artifact expiry pass for current originals,
+previews and finalized documents. Historical-reference handoffs and source-loss behavior also pass on that stand;
+see [historical runtime QA](shuttle-avatar-history-runtime-qa-2026-10-21.md).
+The current single-step generated JPEG also refreshes after artifact metadata
+expiry through real Loom. This does not establish recovery of old generated
+frames or custom browser crops. See the [source lifecycle](shuttle-avatar-telegram-sources.md).
+The native historical selector now previews a photo without creating a draft;
+explicit Use creates one. The updated bot passes a real-IAM/headless-Edge check
+on that separate stand while Loom is paused, with no task or document created.
+The full frozen-source race run passes all 833 integration roots; its later
+two-file deadline follow-up has separate behavior and lint evidence. These are
+not full race coverage of that later source or real Telegram WebView acceptance.
+
+Historical input images are read through `zinusya_history.avatar_info` and
+`avatar_fetch`, with `record_id` and `archive_id` from
+`zinusya_history.avatar_candidates`. The general `history.page` contains projected
+historical content and does not expose files with no content projection. `avatar_info` validates the full applied archive and
+returns source metadata without a Telegram request. `avatar_fetch` downloads on
+demand, rechecks ownership/IAM, and returns an authenticated file descriptor.
+In mvp-86 source, the descriptor's `fetch_method` is `avatar_refetch`, which
+accepts only its exact `external_id` (archive and record locator). Its content path is
+`/internal/history-avatars/{archive_id}/{record_id}/content`. Downloads repeat
+source authorization before and after remote IO and refresh the Telegram path.
+Telegram identifiers are excluded from returned JSON. Neither method creates a
+draft, task, account or delivery, and metadata does not establish availability.
+Info validation has a 30-second budget; fetch/content allow 80 seconds for two
+validations and Telegram IO, with matching socket deadlines. A failed download
+returns an error; the agent can retry or ask the person to resend the photograph.
+
 ## Agent and API contract
 
 All tools use `POST /internal/agent/avatars/{method}` and the usual authenticated
@@ -103,9 +147,9 @@ Generated JPEGs remain in PostgreSQL independently of Telegram and Loom caches.
 The legacy generation path does not retain source bytes: later recropping after Telegram source loss is
 not promised. The module has a hard storage ceiling of 20 artifacts per owner.
 It rejects further new generations when full, while existing receipts/fetches
-remain usable. Automatic retention, deletion UI, task-free native
-finalization/delivery, alternative/event frames, face processing and avatar import are later
-slices. This ceiling is a bound for the current slice, not a production retention
+remain usable. Task-free finalization/delivery are implemented in later APIs.
+Automatic retention, deletion UI, alternative/event frames, face processing and
+production historical-avatar import acceptance remain later work. This ceiling is a bound for the current slice, not a production retention
 policy. Record production retention decisions before cutover.
 
 ## Build and rollback
@@ -128,12 +172,12 @@ and history before any deliberate destructive removal. See the
 
 The transform foundation is verified separately in
 [the transform acceptance record](shuttle-avatar-transform-qa-2026-10-19.md).
-A subsequent [shared draft storage/API stage](shuttle-avatar-drafts.md) now pins
-originals and shares versioned edit state between native and agent APIs without
-a task. The [saved-draft preview](shuttle-avatar-preview.md) now renders that state
-without creating a task or delivery. The [native visual editor](shuttle-avatar-editor.md) now edits the same drafts.
-Finalization and task-free document delivery remain open. Legacy `generate` itself still requires an active agent task. The installed local stand remains on its previous
-image; the transform changes have not been installed or deployed.
+The [shared draft API](shuttle-avatar-drafts.md), [saved-draft preview](shuttle-avatar-preview.md)
+and [native editor](shuttle-avatar-editor.md) use the same versioned editing state.
+Source schema 68 changes Telegram inputs to references; see the
+[source lifecycle and acceptance boundary](shuttle-avatar-telegram-sources.md).
+Legacy `generate` still requires an active agent task. Historical stage QA records
+remain evidence for their recorded revisions, not acceptance of these later changes.
 
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
+The current single-step generation and all five image reference families have
+owned-stand Loom acceptance; see the source lifecycle record for exact scope.

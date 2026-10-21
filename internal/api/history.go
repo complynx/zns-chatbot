@@ -61,6 +61,7 @@ type historyTextArguments struct {
 
 func (s *Server) registerHistory(api huma.API) {
 	s.registerHistoryRegistration(api)
+	s.registerHistoryAvatars(api)
 	huma.Register(api, huma.Operation{
 		OperationID:  "agent-prepare-apply-history",
 		Method:       http.MethodPost,
@@ -165,6 +166,8 @@ func historyError(err error) error {
 	switch {
 	case errors.Is(err, db.ErrInvalidHistory):
 		return huma.Error400BadRequest("invalid historical import or read request")
+	case errors.Is(err, legacyimport.ErrAvatarInput):
+		return huma.Error422UnprocessableEntity("historical file is not a supported Telegram image")
 	case errors.Is(err, legacyimport.ErrRegistrationScanLimit):
 		return huma.Error422UnprocessableEntity("historical record exceeds discovery field limit")
 	case errors.Is(err, db.ErrHistoryQuota):

@@ -2,6 +2,8 @@ package api
 
 import "github.com/complynx/zns-chatbot/internal/db"
 
+const schemaAvatarHistorySource = "history_source"
+
 const schemaSourceSHA256 = "source_sha256"
 const schemaFrameSHA256 = "frame_sha256"
 const schemaAvatarTransform = "transform"
@@ -27,11 +29,12 @@ func avatarDraftSchema() map[string]any {
 			"updated_at",
 		},
 		schemaProperties: map[string]any{
-			"id":               uuidField,
-			"source_file_id":   uuidField,
-			schemaSourceSHA256: digest,
-			schemaFrameSHA256:  digest,
-			schemaMIMEType:     map[string]any{manifestType: schemaString, "enum": []string{mimeJPEG, mimePNG}},
+			"id":                      uuidField,
+			"source_file_id":          uuidField,
+			schemaAvatarHistorySource: avatarHistorySourceSchema(),
+			schemaSourceSHA256:        digest,
+			schemaFrameSHA256:         digest,
+			schemaMIMEType:            map[string]any{manifestType: schemaString, "enum": []string{mimeJPEG, mimePNG}},
 			"size_bytes": map[string]any{
 				manifestType:  schemaInteger,
 				schemaMinimum: 1,
@@ -81,8 +84,8 @@ func avatarDraftMethods() []any {
 	}
 	create := method(
 		"create_draft",
-		"After an explicit avatar editing request, pin your owned Telegram source_file_id as an immutable original and create an identity edit draft. Does not generate or send an avatar. No active Loom run required. Reconcile lost responses with draft_operation using the same operation ID; committed originals survive Telegram source loss. Admission limit: five originals and 50 MiB per owner; no automatic retention or deletion.",
-		input(schemaSourceFileID),
+		"After an explicit avatar editing request, select exactly one owned source_file_id or history_source with record_id and archive_id; pin its digest and size and create an identity edit draft. Does not generate or send an avatar. No active Loom run required. Reconcile lost responses with draft_operation using the same operation ID; committed operation receipts survive source loss, but preview and new finalization need Telegram access. If unavailable ask for the photo again. Telegram originals are not stored. Admission limit: five drafts; browser uploads retain at most 50 MiB per owner.",
+		avatarDraftCreateSchema(),
 		avatarDraftSchema(),
 	)
 	saveInput := map[string]any{
@@ -108,7 +111,7 @@ func avatarDraftMethods() []any {
 		m[manifestStatusPath] = avatarPath + "draft_operation"
 		m[manifestDedupWindow] = agentRegistrationDedupSeconds
 	}
-	create[manifestTimeout] = avatarGenerateTimeoutMillis
+	create[manifestTimeout] = avatarUploadTimeout.Milliseconds()
 	get := method(
 		"draft",
 		"Read your current saved avatar editing state by draft_id before continuing from a native form or after a version conflict. Draft IDs are owner-scoped locators, not authority.",
@@ -117,7 +120,7 @@ func avatarDraftMethods() []any {
 	)
 	list := method(
 		"drafts",
-		"List your retained avatar edit drafts, newest edited first. Originals are stored in Zinusya, independent of Loom or Telegram availability.",
+		"List your saved avatar edit metadata, newest edited first. Telegram inputs are references and may require the person to resend a lost source. Browser-upload originals are retained. Metadata and committed operation receipts remain readable independently of source availability.",
 		input(""),
 		map[string]any{
 			manifestType:               schemaObject,
@@ -140,11 +143,33 @@ func avatarDraftMethods() []any {
 	)
 	fetch := method(
 		"fetch_original",
-		"Explicitly import the pinned original into Loom file tools by draft_id. The owner-authorized descriptor references bytes in Zinusya; never put image bytes in conversation JSON.",
+		"Explicitly import the selected original into Loom file tools by draft_id. Telegram inputs are downloaded on demand and may be unavailable; browser uploads are retained. The owner-authorized descriptor references an authenticated Zinusya endpoint; never put image bytes in conversation JSON.",
 		input("draft_id"),
 		avatarDraftSchema(),
 	)
 	fetch[manifestDisclosure] = true
 	fetch[manifestMIMETypes] = []string{mimeJPEG, mimePNG}
 	return []any{create, save, get, list, op, fetch, avatarPreviewMethod(method, input("draft_id"), uuidField)}
+}
+
+func avatarHistorySourceSchema() map[string]any {
+	return map[string]any{manifestType: schemaObject, schemaAdditionalProperties: false,
+		schemaRequired: []string{schemaHistoryRecordID, schemaArchiveID}, schemaProperties: map[string]any{
+			schemaHistoryRecordID: map[string]any{manifestType: schemaString, schemaFormat: schemaUUID},
+			schemaArchiveID:       map[string]any{manifestType: schemaString, schemaFormat: schemaUUID},
+		}}
+}
+func avatarDraftCreateSchema() map[string]any {
+	return map[string]any{
+		manifestType:               schemaObject,
+		schemaAdditionalProperties: false,
+		schemaProperties: map[string]any{
+			schemaSourceFileID:        map[string]any{manifestType: schemaString, schemaFormat: schemaUUID},
+			schemaAvatarHistorySource: avatarHistorySourceSchema(),
+		},
+		"oneOf": []map[string]any{
+			{schemaRequired: []string{schemaSourceFileID}},
+			{schemaRequired: []string{schemaAvatarHistorySource}},
+		},
+	}
 }

@@ -110,6 +110,16 @@
       <label id="avatars-file-label" for="avatars-file">JPEG or PNG, up to 20 MiB</label>
       <input id="avatars-file" type="file" accept="image/jpeg,image/png">
       <button id="avatars-upload" type="button">Upload a new original</button>
+      <p id="avatars-history-note">Imported attachments are checked when selected. Some may be unavailable or unsupported.</p>
+      <button id="avatars-history-list" type="button">Find imported attachments</button>
+      <label id="avatars-history-label" for="avatars-history">Imported attachment</label>
+      <select id="avatars-history"></select>
+      <img id="avatars-history-image" hidden alt="Imported photo preview" width="1024" height="1024">
+      <div class="actions">
+        <button id="avatars-history-preview" type="button">Preview photo</button>
+        <button id="avatars-history-import" type="button">Use this photo</button>
+        <button id="avatars-history-next" type="button" hidden>Next attachments</button>
+      </div>
       <label id="avatars-draft-label" for="avatars-draft">Saved draft</label>
       <select id="avatars-draft"></select>
       <div id="avatars-editor" hidden>

@@ -21,8 +21,9 @@ import (
 const avatarUploadOperationHeader = "X-Zinusya-Operation-Id"
 
 type miniAppAvatarImport struct {
-	OperationID  uuid.UUID `json:"operation_id"`
-	SourceFileID uuid.UUID `json:"source_file_id"`
+	HistorySource *db.AvatarHistorySource `json:"history_source,omitempty"`
+	OperationID   uuid.UUID               `json:"operation_id"`
+	SourceFileID  uuid.UUID               `json:"source_file_id"`
 }
 type miniAppAvatarSave struct {
 	OperationID     uuid.UUID        `json:"operation_id"`
@@ -31,6 +32,8 @@ type miniAppAvatarSave struct {
 }
 
 func (s *Server) registerMiniAppAvatars() {
+	s.public.HandleFunc("GET /app/avatars/history", s.miniAppAvatarCandidates)
+	s.public.HandleFunc("GET /app/avatars/history/{archive}/{id}/preview", s.miniAppAvatarHistoryPreview)
 	s.public.HandleFunc("GET /app/avatars/drafts", s.miniAppAvatarRead)
 	s.public.HandleFunc("GET /app/avatars/drafts/{id}", s.miniAppAvatarRead)
 	s.public.HandleFunc("GET /app/avatars/drafts/{id}/original", s.miniAppAvatarOriginal)
@@ -108,19 +111,19 @@ func (s *Server) miniAppAvatarOriginal(w http.ResponseWriter, r *http.Request) {
 		miniAppHTTPError(w, http.StatusBadRequest, "invalid avatar draft")
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), miniAppTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), avatarUploadTimeout)
 	defer cancel()
 	attempt, err := s.authenticatedMiniApp(ctx, r)
 	if err != nil {
 		miniAppError(w, err)
 		return
 	}
-	d, raw, err := s.store.AvatarDraftOriginal(ctx, miniAppOrdersScope(attempt), id)
+	d, raw, err := s.readAvatarDraftOriginal(ctx, miniAppOrdersScope(attempt), id)
 	if err != nil {
 		s.miniAppAvatarError(w, err)
 		return
 	}
-	if _, err = s.currentMiniApp(ctx, r); err != nil {
+	if _, err = s.authenticatedMiniApp(ctx, r); err != nil {
 		miniAppError(w, err)
 		return
 	}
@@ -134,7 +137,7 @@ func (s *Server) miniAppAvatarImport(w http.ResponseWriter, r *http.Request) {
 	if !decodeMiniAppAvatar(w, r, &input) {
 		return
 	}
-	if input.OperationID == uuid.Nil || input.SourceFileID == uuid.Nil {
+	if input.OperationID == uuid.Nil || (input.SourceFileID == uuid.Nil && input.HistorySource == nil) {
 		miniAppHTTPError(w, http.StatusBadRequest, "operation and owned source file required")
 		return
 	}
@@ -145,7 +148,11 @@ func (s *Server) miniAppAvatarImport(w http.ResponseWriter, r *http.Request) {
 		miniAppError(w, err)
 		return
 	}
-	a := db.AvatarDraftCreate{OperationID: input.OperationID, SourceFileID: input.SourceFileID}
+	a := db.AvatarDraftCreate{
+		OperationID:   input.OperationID,
+		SourceFileID:  input.SourceFileID,
+		HistorySource: input.HistorySource,
+	}
 	scope := miniAppOrdersScope(attempt)
 	prior, err := s.store.AvatarDraftPreflight(ctx, scope, a)
 	if err != nil {
@@ -155,21 +162,7 @@ func (s *Server) miniAppAvatarImport(w http.ResponseWriter, r *http.Request) {
 	var raw []byte
 	var proof avatar.Rendered
 	if prior == nil {
-		record, fileErr := s.store.File(
-			ctx,
-			db.EventContextScope{
-				BotID:        scope.BotID,
-				Organization: scope.Organization,
-				Subject:      scope.Subject,
-				UserID:       scope.UserID,
-			},
-			a.SourceFileID,
-		)
-		if fileErr != nil {
-			s.miniAppAvatarError(w, fileErr)
-			return
-		}
-		raw, err = s.readFile(ctx, record)
+		raw, err = s.readAvatarCreationSource(ctx, scope, a)
 		if err != nil {
 			s.miniAppAvatarError(w, err)
 			return
@@ -236,12 +229,27 @@ func (s *Server) commitMiniAppAvatar(
 	raw []byte,
 	proof avatar.Rendered,
 ) {
+	current, err := s.authenticatedMiniApp(ctx, r)
+	if err != nil {
+		miniAppError(w, err)
+		return
+	}
+	if miniAppOrdersScope(current) != scope {
+		miniAppHTTPError(w, http.StatusNotFound, "avatar owner unavailable")
+		return
+	}
 	bearer, err := miniAppBearer(r)
 	if err != nil {
 		miniAppError(w, err)
 		return
 	}
-	result, err := s.store.CreateMiniAppAvatarDraft(ctx, scope, bearer, s.miniAppKey.Generation(), a, raw, proof)
+	commit, release, err := s.avatarCreationCommitContext(ctx, scope, a)
+	if err != nil {
+		s.miniAppAvatarError(w, err)
+		return
+	}
+	result, err := s.store.CreateMiniAppAvatarDraft(commit, scope, bearer, s.miniAppKey.Generation(), a, raw, proof)
+	release()
 	if err != nil {
 		s.miniAppAvatarError(w, err)
 		return
@@ -293,6 +301,13 @@ func (s *Server) miniAppAvatarSave(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) miniAppAvatarError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, errAvatarSourceUnavailable):
+		w.Header().Set("Cache-Control", "private, no-store")
+		miniAppHTTPError(
+			w,
+			http.StatusUnprocessableEntity,
+			"source photo unavailable; send it again or upload another original",
+		)
 	case errors.Is(err, pgx.ErrNoRows):
 		miniAppHTTPError(w, http.StatusNotFound, "avatar source, draft or operation unavailable")
 	case errors.Is(err, db.ErrConflict):
@@ -307,7 +322,7 @@ func (s *Server) miniAppAvatarError(w http.ResponseWriter, err error) {
 		miniAppHTTPError(
 			w,
 			http.StatusConflict,
-			"avatar originals quota reached: at most five originals and 50 MiB per owner",
+			"avatar draft quota reached: at most five drafts and 50 MiB of uploads per owner",
 		)
 	case errors.Is(err, avatar.ErrImageLimit):
 		miniAppHTTPError(w, http.StatusRequestEntityTooLarge, "avatar image exceeds processing limits")
@@ -322,4 +337,32 @@ func (s *Server) miniAppAvatarError(w http.ResponseWriter, err error) {
 		}
 		miniAppError(w, err)
 	}
+}
+
+func (s *Server) miniAppAvatarCandidates(w http.ResponseWriter, r *http.Request) {
+	if !s.miniAppRequest(w, r) {
+		return
+	}
+	after := uuid.Nil
+	if raw := r.URL.Query().Get("after"); raw != "" {
+		var err error
+		after, err = uuid.Parse(raw)
+		if err != nil || after == uuid.Nil {
+			miniAppHTTPError(w, http.StatusBadRequest, "invalid history cursor")
+			return
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), miniAppTimeout)
+	defer cancel()
+	attempt, err := s.authenticatedMiniApp(ctx, r)
+	if err != nil {
+		miniAppError(w, err)
+		return
+	}
+	result, err := s.store.OwnerHistoryAvatarCandidates(ctx, miniAppOrdersScope(attempt), after, agentTaskPageLimit)
+	if err != nil {
+		s.miniAppAvatarError(w, err)
+		return
+	}
+	s.writeMiniAppAvatar(ctx, w, r, result)
 }

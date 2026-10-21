@@ -2170,3 +2170,20 @@ AND id>sqlc.arg(after_id)::uuid ORDER BY id LIMIT sqlc.arg(page_limit);
 UPDATE shuttle_knowledge_notices SET state=$3,version=version+1,next_attempt_at=clock_timestamp()
 WHERE id=$1 AND version=$2 AND state IN ('delivery_unknown','delivery_failed','delivery_blocked')
 RETURNING *;
+
+-- name: OwnerHistoryAvatarSource :one
+SELECT sqlc.embed(r),sqlc.embed(a),m.source_line
+FROM shuttle_legacy_history_records r
+JOIN shuttle_legacy_history_memberships m ON m.record_id=r.id AND m.source_role=r.source_role
+JOIN shuttle_legacy_archives a ON a.id=m.archive_id AND a.bot_id=r.bot_id AND a.organization_id=r.organization_id
+JOIN shuttle_legacy_history_applications applied ON applied.archive_id=a.id
+WHERE r.id=$1 AND a.id=$2 AND r.bot_id=$3 AND r.organization_id=$4 AND r.owner_telegram_id=$5 AND r.source_role='files';
+
+-- name: OwnerHistoryAvatarCandidates :many
+SELECT h.id,h.first_archive_id
+FROM shuttle_legacy_history_records h
+JOIN shuttle_legacy_history_applications a ON a.archive_id=h.first_archive_id
+JOIN shuttle_legacy_history_memberships m ON m.archive_id=a.archive_id AND m.record_id=h.id AND m.source_role='files'
+WHERE h.bot_id=$1 AND h.organization_id=$2 AND h.owner_telegram_id=$3
+AND h.source_role='files' AND h.id>$4
+ORDER BY h.id LIMIT $5;

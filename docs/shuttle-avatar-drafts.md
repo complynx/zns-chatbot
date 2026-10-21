@@ -1,13 +1,14 @@
 # Shared avatar edit drafts
 
-Source schema 55 and manifest `mvp-62` introduced owner-scoped edit drafts shared by the
-native HTTP API and `zinusya_avatars`. The later `mvp-63` [preview API](shuttle-avatar-preview.md) renders saved drafts. The [native visual editor](shuttle-avatar-editor.md) now edits these drafts. Draft
-finalization and independent Telegram document delivery remain open.
-The installed primary stand remains on its previous schema49/mvp56 image.
+Schema 55 introduced shared drafts. Source schema 68 / manifest `mvp-86` changes
+Telegram-backed drafts to references; see the [current source lifecycle and QA
+boundary](shuttle-avatar-telegram-sources.md). The installed primary remains
+schema 67 / mvp-83 until separately accepted installation. Earlier stage records
+below do not establish acceptance of these later changes.
 
 ## State and authorization
 
-Each draft pins one immutable JPEG/PNG original, its actual digest, verified
+Each draft pins one JPEG/PNG source reference or browser upload, its actual digest, verified
 content type, size, frame digest and canonical transform. Versions start at 1.
 Another image creates another draft. Metadata contains no image bytes, Telegram
 file credentials or session tokens. Originals retain their original metadata,
@@ -20,8 +21,10 @@ expiry and revocation inside the same transaction as the draft and receipt.
 UUIDs locate data and grant no access. Administrators have no arbitrary-owner
 read or write bypass.
 
-A successful Telegram import pins bytes before returning. Reopening, saving and
-fetching that original then survive Telegram source loss and Loom downtime.
+A successful Telegram import pins metadata without retaining original bytes.
+Metadata, saved transforms and successful operation receipts survive Telegram
+source loss and Loom downtime. Preview and new finalization require a fresh source
+download; unavailable photos produce resend guidance. Browser uploads retain bytes.
 The existing `generate` method remains a separate legacy path: it still needs
 an active owned run, queues its task document and does not pin source bytes.
 Existing generation receipts, operation hashes and artifact tables are unchanged.
@@ -30,7 +33,7 @@ Existing generation receipts, operation hashes and artifact tables are unchanged
 
 Agent tools use `POST /internal/agent/avatars/{method}`:
 
-- `create_draft`: `arguments.source_file_id`; pin an owned Telegram file.
+- `create_draft`: exactly one `arguments.source_file_id` or `arguments.history_source`; pin an owned Telegram input.
 - `draft`: `arguments.draft_id`; read current metadata.
 - `drafts`: empty arguments; list at most five retained drafts, newest edit first.
 - `save_draft`: `draft_id`, `expected_version` and a complete `transform`.
@@ -54,7 +57,7 @@ rules are shared across transports and survive application restart.
 
 Native routes under the existing Mini App base URL:
 
-- `POST /app/avatars/drafts`: JSON `operation_id` and `source_file_id`.
+- `POST /app/avatars/drafts`: JSON `operation_id` and exactly one `source_file_id` or `history_source`.
 - `POST /app/avatars/drafts/upload`: raw image body and UUID header
   `X-Zinusya-Operation-Id`; image/jpeg, image/png or application/octet-stream.
 - `GET /app/avatars/drafts` and `GET /app/avatars/drafts/{id}`.
@@ -74,8 +77,9 @@ when needed without owning long-lived file storage.
 
 ## Bounds, action history and rollback
 
-Admission is bounded to five retained originals and 50 MiB total per owner, with
-20 MiB per image. Owner serialization protects count and byte limits against
+Admission is bounded to five retained drafts and 50 MiB of browser-upload bytes
+per owner, with 20 MiB per source image. Telegram references do not consume the
+retained-byte quota, but they count toward the five-draft limit. Owner serialization protects count and byte limits against
 parallel requests. These are compile-time evaluation safeguards, not production
 retention policy. No silent expiry or deletion is implemented. Quota exhaustion
 rejects new drafts; existing reads, edits and operation replay remain available.
@@ -92,7 +96,7 @@ history also reject rollback. Export originals and receipts before any deliberat
 removal. This guard does not establish safety of every historical migration.
 
 See [draft source acceptance](shuttle-avatar-drafts-qa-2026-10-19.md). The [authoritative preview API](shuttle-avatar-preview.md) is implemented. The [native visual editor](shuttle-avatar-editor.md) is implemented;
-finalization and task-free durable send remain the next stages. Production retention/discard policy remains open.
-
-Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
-on behalf of Daniel Drizhuk
+the later [finalization API](shuttle-avatar-finalization-api.md) stores immutable
+results and independent delivery intents. Acceptance records describe their own
+revisions. The [Telegram reference change](shuttle-avatar-telegram-sources.md) has
+separate current verification requirements. Production retention/discard policy remains open.

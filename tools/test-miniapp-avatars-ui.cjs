@@ -57,7 +57,7 @@ function browser(api, { storage = new Map(), failStorage = false, readBlob } = {
     return elements.get(id);
   }
   const env = { request: (...args) => api.request(...args), upload: (...args) => api.upload(...args), setBusy: v => controller.setBusy(v), denied() { denied = true; controller.clear(); },
-    readBlob: readBlob || (async path => { api.reads.push(path); return new Blob([path.includes("/frame/") ? frameBytes : (path.includes("/preview/") || path.includes("/finalized/")) ? "jpeg" : originalBytes]); }) };
+    readBlob: readBlob || (async path => { api.reads.push(path); if (path.includes("/history/")) return new Blob(["jpeg"], { type: "image/jpeg" }); return new Blob([path.includes("/frame/") ? frameBytes : (path.includes("/preview/") || path.includes("/finalized/")) ? "jpeg" : originalBytes]); }) };
   const window = {};
   runInNewContext(source, { window, document: { getElementById: get, createElement: () => ({ value: "", textContent: "", click() { downloads.push({ href: this.href, download: this.download }); } }) }, crypto: { subtle: webcrypto.subtle, randomUUID },
     sessionStorage: { getItem: k => storage.get(k) || null, setItem(k, v) { if (failStorage) throw new Error("storage"); storage.set(k, v); }, removeItem(k) { storage.delete(k); } },
@@ -229,4 +229,151 @@ test("corrupt document download is refused and late document list cannot restore
   let release; api.hook = (path, method, body, base) => path === "./avatars/finalized" ? new Promise(resolve => { release = resolve; }) : base(path, method, body);
   const held = ui.fire("refresh-documents"); await new Promise(resolve => setImmediate(resolve)); ui.controller.clear(); release({ avatars: [...api.documents.values()].map(copy) }); await held;
   assert.equal(ui.get("avatars").hidden, true); assert.equal(ui.get("documents").children.length, 0); assert.equal(ui.get("download").disabled, true);
+});
+
+test("lost Telegram source keeps completed documents downloadable and asks for a new photo", async () => {
+  const api = backend(), first = browser(api); await first.start(); await first.fire("preview"); await first.fire("generate");
+  const reopened = browser(api, { readBlob: async path => {
+    if (path.endsWith("/original")) throw { status: 422 };
+    return new Blob(["jpeg"]);
+  } });
+  await reopened.start();
+  assert.match(reopened.get("status").textContent, /photo.*unavailable.*send.*again/i);
+  assert.equal(reopened.get("editor").hidden, true);
+  assert.equal(reopened.get("documents").children.length, 1);
+  assert.equal(reopened.get("download").disabled, false);
+  await reopened.fire("download"); assert.equal(reopened.downloads.length, 1);
+  assert.equal(api.finalizationWrites.length, 1);
+});
+
+test("source loss on reload closes stale editor and leaves selecting another draft available", async () => {
+  const api = backend(); let lost = false;
+  const ui = browser(api, { readBlob: async path => {
+    if (path.endsWith("/original") && lost) throw { status: 422 };
+    return new Blob([path.includes("/frame/") ? frameBytes : originalBytes]);
+  } });
+  await ui.start(); await ui.edit("x", 12); lost = true; await ui.fire("reload");
+  assert.equal(ui.get("editor").hidden, true);
+  assert.equal(ui.get("generate").disabled, true);
+  assert.equal(ui.get("save").disabled, true);
+  assert.equal(ui.get("draft").disabled, false);
+  assert.ok(ui.images.every(image => image.closed));
+  assert.match(ui.get("status").textContent, /photo.*unavailable/i);
+});
+
+test("confirmed save remains confirmed when subsequent source download fails", async () => {
+  const api = backend(), storage = new Map(), ui = browser(api, { storage });
+  await ui.start(); await ui.edit("y", 12);
+  api.hook = async (path, method, body, base) => {
+    const result = await base(path, method, body);
+    if (method === "POST") throw new TypeError("lost reply");
+    return result;
+  };
+  await ui.submit(); assert.equal(storage.has(key(owner)), true);
+  const reopened = browser(api, { storage, readBlob: async () => { throw { status: 422 }; } });
+  await reopened.start();
+  assert.equal(storage.has(key(owner)), false);
+  assert.equal(reopened.get("recover").hidden, true);
+  assert.match(reopened.get("status").textContent, /photo.*unavailable.*send.*again/i);
+  assert.equal(api.writes.length, 1);
+});
+
+
+test("imported attachment selection is bounded, localized and uses a private history locator", async () => {
+  const api = backend(), ui = browser(api), source = { record_id: randomUUID(), archive_id: randomUUID() };
+  api.hook = (path, method, body, base) => {
+    if (path === "./avatars/history") return { items: [source], has_more: true, next_id: source.record_id };
+    if (path.startsWith("./avatars/history?after=")) return { items: [], has_more: false };
+    if (method === "POST" && path === "./avatars/drafts") {
+      assert.deepEqual(copy(body.history_source), source);
+      api.writes.push(copy(body)); api.current = { ...api.current, id: randomUUID(), version: 1 };
+      api.receipts.set(body.operation_id, copy(api.current)); return copy(api.current);
+    }
+    return base(path, method, body);
+  };
+  await ui.start(); await ui.fire("history-list");
+  assert.equal(ui.get("history").children.length, 1); assert.equal(ui.get("history-next").hidden, false);
+  ui.controller.setLanguage("ru"); assert.match(ui.get("history").children[0].textContent, /Импортированный файл/);
+  await ui.fire("history-preview"); await ui.fire("history-import"); assert.equal(api.writes.length, 1); assert.equal(ui.storage.has(key(owner)), false);
+  assert.deepEqual(Object.keys(api.writes[0]).sort(), ["history_source", "operation_id"]);
+  await ui.fire("history-next"); assert.equal(ui.get("history-import").disabled, true);
+});
+
+test("lost imported-draft response recovers its receipt without another import or source read", async () => {
+  const api = backend(), source = { record_id: randomUUID(), archive_id: randomUUID() };
+  api.hook = async (path, method, body, base) => {
+    if (path === "./avatars/history") return { items: [source], has_more: false };
+    if (method === "POST" && path === "./avatars/drafts") {
+      api.writes.push(copy(body)); api.receipts.set(body.operation_id, copy(api.current)); throw new TypeError("lost reply");
+    }
+    return base(path, method, body);
+  };
+  const first = browser(api); await first.start(); await first.fire("history-list"); await first.fire("history-preview"); await first.fire("history-import");
+  const pending = JSON.parse(first.storage.get(key(owner))); assert.equal(pending.kind, "history");
+  const reopened = browser(api, { storage: first.storage, readBlob: async () => { throw { status: 422 }; } });
+  await reopened.start(); assert.equal(first.storage.has(key(owner)), false); assert.equal(api.writes.length, 1);
+  assert.match(reopened.get("status").textContent, /photo.*unavailable/);
+});
+
+test("late imported attachment list cannot restore another user's private selection", async () => {
+  const api = backend(), ui = browser(api); let release;
+  api.hook = (path, method, body, base) => path === "./avatars/history" ? new Promise(resolve => { release = resolve; }) : base(path, method, body);
+  await ui.start(); const held = ui.fire("history-list"); await new Promise(resolve => setImmediate(resolve));
+  await ui.start(other); release({ items: [{ record_id: randomUUID(), archive_id: randomUUID() }], has_more: false }); await held;
+  assert.equal(ui.get("history").children.length, 0); assert.equal(ui.get("history-import").disabled, true);
+});
+
+
+test("source loss during preview closes stale editor with resend guidance", async () => {
+  const api = backend(), ui = browser(api, { readBlob: async path => {
+    if (path.includes("/preview/")) throw { status: 422 };
+    return new Blob([path.includes("/frame/") ? frameBytes : originalBytes]);
+  } });
+  await ui.start(); await ui.fire("preview");
+  assert.equal(ui.get("editor").hidden, true); assert.equal(ui.get("generate").disabled, true);
+  assert.equal(ui.get("history-list").disabled, false);
+  assert.match(ui.get("status").textContent, /photo.*unavailable.*send.*again/i);
+  assert.equal(ui.storage.has(key(owner)), false);
+});
+
+test("source loss during finalization is a definite rejection and preserves generated documents", async () => {
+  const api = backend(), ui = browser(api); await ui.start(); await ui.fire("preview"); await ui.fire("generate");
+  api.current = { ...api.current, version: 2 }; await ui.fire("reload"); await ui.fire("preview");
+  api.hook = (path, method, body, base) => {
+    if (path.endsWith("/finalize")) throw { status: 422 };
+    return base(path, method, body);
+  };
+  await ui.fire("generate"); assert.equal(ui.storage.has(key(owner)), false);
+  assert.equal(ui.get("editor").hidden, true); assert.equal(ui.get("recover").hidden, true);
+  assert.equal(ui.get("download").disabled, false);
+  assert.match(ui.get("status").textContent, /photo.*unavailable.*send.*again/i);
+  assert.equal(api.finalizationWrites.length, 1); await ui.fire("download"); assert.equal(ui.downloads.length, 1);
+});
+
+
+test("browsing six historical photos spends no draft slots and only the previewed choice can be used", async () => {
+  const api = backend(), ui = browser(api), sources = Array.from({ length: 6 }, () => ({ record_id: randomUUID(), archive_id: randomUUID() }));
+  api.hook = (path, method, body, base) => path === "./avatars/history" ? { items: sources, has_more: false } : base(path, method, body);
+  await ui.start(); await ui.fire("history-list");
+  for (const source of sources) {
+    ui.get("history").value = source.record_id; await ui.fire("history", "change");
+    assert.equal(ui.get("history-import").disabled, true); await ui.fire("history-import"); assert.equal(api.writes.length, 0);
+    await ui.fire("history-preview"); assert.equal(ui.get("history-image").hidden, false); assert.equal(ui.get("history-import").disabled, false);
+  }
+  assert.equal(api.writes.length, 0); assert.equal(api.finalizationWrites.length, 0); assert.equal(ui.storage.size, 0);
+  assert.equal(ui.revoked.length, 5); ui.controller.clear(); assert.equal(ui.revoked.length, 6); assert.equal(ui.get("history-image").hidden, true);
+});
+
+test("missing historical photo and sign-out never leave a usable stale preview", async () => {
+  const api = backend(), source = { record_id: randomUUID(), archive_id: randomUUID() }; let missing = false;
+  api.hook = (path, method, body, base) => path === "./avatars/history" ? { items: [source], has_more: false } : base(path, method, body);
+  const ui = browser(api, { readBlob: async path => {
+    if (path.includes("/history/")) { if (missing) throw { status: 422 }; return new Blob(["jpeg"], { type: "image/jpeg" }); }
+    return new Blob([path.includes("/frame/") ? frameBytes : originalBytes]);
+  } });
+  await ui.start(); await ui.fire("history-list"); await ui.fire("history-preview"); missing = true; await ui.fire("history-preview");
+  assert.equal(ui.get("history-image").hidden, true); assert.equal(ui.get("history-import").disabled, true); assert.match(ui.get("status").textContent, /unavailable.*send a photo again/i); assert.equal(api.writes.length, 0);
+  let release; const delayed = browser(api, { readBlob: async path => path.includes("/history/") ? new Promise(resolve => { release = resolve; }) : new Blob([path.includes("/frame/") ? frameBytes : originalBytes]) });
+  await delayed.start(); await delayed.fire("history-list"); const pending = delayed.fire("history-preview"); await new Promise(resolve => setImmediate(resolve)); delayed.controller.clear(); release(new Blob(["jpeg"], { type: "image/jpeg" })); await pending;
+  assert.equal(delayed.get("history-image").hidden, true); assert.equal(delayed.get("history-import").disabled, true); assert.equal(delayed.revoked.length, 0);
 });

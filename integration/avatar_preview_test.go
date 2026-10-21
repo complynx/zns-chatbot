@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -23,19 +24,33 @@ import (
 )
 
 func avatarPreviewRead(h *harness, path, token string, internal bool) (int, []byte, http.Header) {
-	r := httptest.NewRequest(http.MethodGet, path, nil)
-	w := httptest.NewRecorder()
+	handler := h.endpoint.PublicHandler()
+	authorization := "ZinusyaSession " + token
 	if internal {
-		r.Header.Set("Authorization", "Bearer "+token)
-		h.endpoint.InternalHandler().ServeHTTP(w, r)
-	} else {
-		if token != "" {
-			r.Header.Set("Authorization", "ZinusyaSession "+token)
-		}
-		h.endpoint.PublicHandler().ServeHTTP(w, r)
+		handler = h.endpoint.InternalHandler()
+		authorization = "Bearer " + token
 	}
-	return w.Code, w.Body.Bytes(), w.Header()
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	request, err := http.NewRequest(http.MethodGet, server.URL+path, nil)
+	if err != nil {
+		return 0, []byte(err.Error()), nil
+	}
+	if token != "" {
+		request.Header.Set("Authorization", authorization)
+	}
+	response, err := server.Client().Do(request)
+	if err != nil {
+		return 0, []byte(err.Error()), nil
+	}
+	defer response.Body.Close()
+	raw, err := io.ReadAll(response.Body)
+	if err != nil {
+		return 0, []byte(err.Error()), nil
+	}
+	return response.StatusCode, raw, response.Header
 }
+
 func avatarPreviewURL(id uuid.UUID, version int64) string {
 	return "/app/avatars/drafts/" + id.String() + "/preview/" + strconv.FormatInt(version, 10)
 }

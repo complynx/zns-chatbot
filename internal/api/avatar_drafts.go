@@ -14,6 +14,12 @@ import (
 	"github.com/complynx/zns-chatbot/internal/db"
 )
 
+type avatarDraftCreateArguments struct {
+	SourceFileID  uuid.UUID               `json:"source_file_id,omitempty"`
+	HistorySource *db.AvatarHistorySource `json:"history_source,omitempty"`
+	Transform     *avatar.Transform       `json:"transform,omitempty"`
+}
+
 type avatarDraftIDArguments struct {
 	DraftID uuid.UUID `json:"draft_id"`
 }
@@ -108,7 +114,7 @@ func avatarDraftOperationID(operation, key string) (uuid.UUID, error) {
 
 func (s *Server) createAvatarDraft(
 	ctx context.Context,
-	in *profileWriteRequest[avatarGenerateArguments],
+	in *profileWriteRequest[avatarDraftCreateArguments],
 ) (*avatarDraftResponse, error) {
 	scope, err := s.profileScope(ctx, in.AuthInput)
 	if err != nil {
@@ -121,7 +127,11 @@ func (s *Server) createAvatarDraft(
 	if in.Body.Arguments.Transform != nil {
 		return nil, huma.Error400BadRequest("create a draft with identity, then save its transform")
 	}
-	a := db.AvatarDraftCreate{OperationID: op, SourceFileID: in.Body.Arguments.SourceFileID}
+	a := db.AvatarDraftCreate{
+		OperationID:   op,
+		SourceFileID:  in.Body.Arguments.SourceFileID,
+		HistorySource: in.Body.Arguments.HistorySource,
+	}
 	prior, err := s.store.AvatarDraftPreflight(ctx, scope, a)
 	if err != nil {
 		return avatarDraftWriteResult(in.Body.OperationID, db.AvatarDraft{}, err)
@@ -129,19 +139,30 @@ func (s *Server) createAvatarDraft(
 	if prior != nil {
 		return avatarDraftWriteResult(in.Body.OperationID, *prior, nil)
 	}
-	record, err := s.ownedFile(ctx, in.AuthInput, a.SourceFileID)
+	raw, err := s.readAvatarCreationSource(ctx, scope, a)
 	if err != nil {
-		return nil, err
-	}
-	raw, err := s.readFile(ctx, record)
-	if err != nil {
-		return nil, err
+		if _, ok := errors.AsType[huma.StatusError](err); ok {
+			return nil, err
+		}
+		return avatarDraftWriteResult(in.Body.OperationID, db.AvatarDraft{}, err)
 	}
 	proof, err := s.validateAvatarOriginal(ctx, raw)
 	if err != nil {
 		return avatarDraftWriteResult(in.Body.OperationID, db.AvatarDraft{}, err)
 	}
-	result, err := s.store.CreateAvatarDraft(ctx, scope, a, raw, proof)
+	current, err := s.profileScope(ctx, in.AuthInput)
+	if err != nil {
+		return nil, err
+	}
+	if current != scope {
+		return nil, huma.Error404NotFound("avatar owner unavailable")
+	}
+	commit, release, err := s.avatarCreationCommitContext(ctx, scope, a)
+	if err != nil {
+		return avatarDraftWriteResult(in.Body.OperationID, db.AvatarDraft{}, err)
+	}
+	result, err := s.store.CreateAvatarDraft(commit, scope, a, raw, proof)
+	release()
 	return avatarDraftWriteResult(in.Body.OperationID, result, err)
 }
 func (s *Server) validateAvatarOriginal(ctx context.Context, raw []byte) (avatar.Rendered, error) {
@@ -237,7 +258,7 @@ func avatarDraftWriteResult(operation string, d db.AvatarDraft, err error) (*ava
 	if err != nil {
 		message := avatarRejection(err)
 		if errors.Is(err, db.ErrAvatarDraftQuota) {
-			message = "avatar originals quota reached: at most five originals and 50 MiB per owner"
+			message = "avatar draft quota reached: at most five drafts and 50 MiB of uploads per owner"
 		}
 		if message == "" {
 			return nil, huma.Error503ServiceUnavailable("avatar draft unavailable")
@@ -255,4 +276,4 @@ func avatarDraftWriteResult(operation string, d db.AvatarDraft, err error) (*ava
 }
 
 // Keep upload/read endpoints bounded independently of the default JSON guard.
-const avatarUploadTimeout = 30 * time.Second
+const avatarUploadTimeout = 2 * time.Minute

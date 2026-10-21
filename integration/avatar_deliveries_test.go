@@ -26,7 +26,7 @@ func queuedAvatar(t *testing.T) (avatarDraftFixture, db.AvatarDraftReceipt, avat
 		keys.bearer,
 		keys.generation,
 		db.AvatarDraftFinalize{OperationID: uuid.New(), DraftID: d.ID, ExpectedVersion: 1},
-		r,
+		db.AvatarDraftRender{Original: f.raw, Output: r},
 	)
 	require.NoError(t, err)
 	return f, receipt, r, keys

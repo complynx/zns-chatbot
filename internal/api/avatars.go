@@ -42,6 +42,7 @@ type avatarResponse struct {
 }
 
 func (s *Server) registerAvatars(api huma.API) {
+	registerAgentPost(api, "agent-avatar-refetch", avatarPath+avatarRefetchMethod, internalBodyLimit, s.refetchAvatar)
 	s.registerAvatarDrafts(api)
 	s.registerAvatarFinalization(api)
 	huma.Register(api, huma.Operation{OperationID: "agent-avatar-generate", Method: http.MethodPost,
@@ -141,6 +142,8 @@ func avatarWriteResult(operation string, result db.AvatarReceipt, err error) (*a
 
 func avatarRejection(err error) string {
 	switch {
+	case errors.Is(err, errAvatarSourceUnavailable):
+		return "source photo unavailable; send it again or upload another original"
 	case errors.Is(err, avatar.ErrInvalidTransform):
 		return "avatar transform is outside supported limits"
 	case errors.Is(err, avatar.ErrInvalidImage):
@@ -190,7 +193,7 @@ func (s *Server) avatarFetch(ctx context.Context, in *agentReadRequest[avatarArg
 		Result      db.AvatarReceipt `json:"result"`
 		Artifacts   []fileDescriptor `json:"artifacts"`
 	}{agentSucceeded, in.Body.OperationID, view.Avatar, []fileDescriptor{{
-		ExternalID: view.Avatar.ArtifactID.String(), FetchMethod: fileFetchMethod,
+		ExternalID: view.Avatar.ArtifactID.String(), FetchMethod: avatarRefetchMethod,
 		DownloadPath: "/internal/avatars/" + view.Avatar.ArtifactID.String() + "/content",
 		MIMEType:     mimeJPEG, SizeBytes: view.Avatar.SizeBytes, SHA256: view.Avatar.SHA256,
 	}}}
@@ -202,6 +205,9 @@ func (s *Server) avatarFetch(ctx context.Context, in *agentReadRequest[avatarArg
 }
 
 func avatarReadError(err error) error {
+	if errors.Is(err, errAvatarSourceUnavailable) {
+		return huma.Error422UnprocessableEntity(errAvatarSourceUnavailable.Error())
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return huma.Error404NotFound("avatar unavailable")
 	}
@@ -300,7 +306,7 @@ func avatarModule() map[string]any {
 		manifestPermissions: []string{},
 		manifestDiscovery:   discoveryStatic,
 		manifestMethods: append(
-			append([]any{generate, get, fetch, operation}, avatarDraftMethods()...),
+			append([]any{generate, get, fetch, operation, avatarRefetchManifest(false)}, avatarDraftMethods()...),
 			avatarFinalizationMethods(method, input)...),
 	}
 }

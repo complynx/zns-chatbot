@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/complynx/zns-chatbot/internal/avatar"
 	"github.com/complynx/zns-chatbot/internal/db"
 )
 
@@ -63,21 +62,21 @@ func (s *Server) renderAvatarFinalization(
 	ctx context.Context,
 	scope db.ProfileScope,
 	a db.AvatarDraftFinalize,
-) (avatar.Rendered, error) {
+) (db.AvatarDraftRender, error) {
 	prior, err := s.store.AvatarDraftFinalizePreflight(ctx, scope, a)
 	if err != nil || prior != nil {
-		return avatar.Rendered{}, err
+		return db.AvatarDraftRender{}, err
 	}
-	_, rendered, err := s.renderAvatarPreview(ctx, scope, a.DraftID, a.ExpectedVersion)
+	_, rendered, err := s.renderAvatarDraft(ctx, scope, a.DraftID, a.ExpectedVersion)
 	if err != nil {
 		// Another exact request may have committed while this render was running.
 		// Reconcile it before declaring a stale draft or processing error terminal.
 		committed, checkErr := s.store.AvatarDraftFinalizePreflight(ctx, scope, a)
 		if checkErr != nil {
-			return avatar.Rendered{}, checkErr
+			return db.AvatarDraftRender{}, checkErr
 		}
 		if committed != nil {
-			return avatar.Rendered{}, nil
+			return db.AvatarDraftRender{}, nil
 		}
 	}
 	return rendered, err
@@ -111,7 +110,12 @@ func (s *Server) finalizeAvatarDraft(
 	if current != scope {
 		return nil, huma.Error404NotFound("avatar owner unavailable")
 	}
-	receipt, err := s.store.CommitAvatarDraft(ctx, scope, a, rendered)
+	commit, release, err := s.avatarFinalizationCommitContext(ctx, scope, a)
+	if err != nil {
+		return avatarFinalizationResult(in.Body.OperationID, db.AvatarDraftReceipt{}, err)
+	}
+	receipt, err := s.store.CommitAvatarDraft(commit, scope, a, rendered)
+	release()
 	return avatarFinalizationResult(in.Body.OperationID, receipt, err)
 }
 
@@ -199,7 +203,7 @@ func (s *Server) fetchFinalizedAvatar(
 		OperationID string                `json:"operation_id"`
 		Result      db.AvatarDraftReceipt `json:"result"`
 		Artifacts   []fileDescriptor      `json:"artifacts"`
-	}{agentSucceeded, in.Body.OperationID, view.Avatar, []fileDescriptor{{ExternalID: "avatar-finalized:" + view.Avatar.ArtifactID.String(), FetchMethod: fileFetchMethod, DownloadPath: finalizedAvatarPath(view.Avatar), MIMEType: mimeJPEG, SizeBytes: view.Avatar.SizeBytes, SHA256: view.Avatar.SHA256}}}
+	}{agentSucceeded, in.Body.OperationID, view.Avatar, []fileDescriptor{{ExternalID: "avatar-finalized:" + view.Avatar.ArtifactID.String(), FetchMethod: avatarRefetchMethod, DownloadPath: finalizedAvatarPath(view.Avatar), MIMEType: mimeJPEG, SizeBytes: view.Avatar.SizeBytes, SHA256: view.Avatar.SHA256}}}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return nil, huma.Error503ServiceUnavailable("avatar descriptor unavailable")

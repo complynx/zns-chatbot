@@ -62,21 +62,30 @@ func (s *Server) renderAvatarPreview(
 	id uuid.UUID,
 	version int64,
 ) (db.AvatarDraft, avatar.Rendered, error) {
+	d, input, err := s.renderAvatarDraft(ctx, scope, id, version)
+	return d, input.Output, err
+}
+func (s *Server) renderAvatarDraft(
+	ctx context.Context,
+	scope db.ProfileScope,
+	id uuid.UUID,
+	version int64,
+) (db.AvatarDraft, db.AvatarDraftRender, error) {
 	if id == uuid.Nil || version < 1 {
-		return db.AvatarDraft{}, avatar.Rendered{}, db.ErrInvalidAvatar
+		return db.AvatarDraft{}, db.AvatarDraftRender{}, db.ErrInvalidAvatar
 	}
-	d, raw, err := s.store.AvatarDraftOriginal(ctx, scope, id)
+	d, raw, err := s.readAvatarDraftOriginal(ctx, scope, id)
 	if err != nil {
-		return d, avatar.Rendered{}, err
+		return d, db.AvatarDraftRender{}, err
 	}
 	if d.Version != version {
-		return d, avatar.Rendered{}, db.ErrConflict
+		return d, db.AvatarDraftRender{}, db.ErrConflict
 	}
 	if d.FrameSHA256 != avatar.FrameSHA256 {
-		return d, avatar.Rendered{}, errAvatarPreviewFrame
+		return d, db.AvatarDraftRender{}, errAvatarPreviewFrame
 	}
 	if s.options.AvatarRenderer == nil {
-		return d, avatar.Rendered{}, avatar.ErrProcessorUnavailable
+		return d, db.AvatarDraftRender{}, avatar.ErrProcessorUnavailable
 	}
 	child, cancel := context.WithTimeout(ctx, avatarRenderTimeout)
 	defer cancel()
@@ -85,19 +94,19 @@ func (s *Server) renderAvatarPreview(
 		err = child.Err()
 	}
 	if err != nil {
-		return d, avatar.Rendered{}, err
+		return d, db.AvatarDraftRender{}, err
 	}
 	if !validAvatarPreview(d, result) {
-		return d, avatar.Rendered{}, avatar.ErrProcessorUnavailable
+		return d, db.AvatarDraftRender{}, avatar.ErrProcessorUnavailable
 	}
 	current, err := s.store.GetAvatarDraft(ctx, scope, id)
 	if err != nil {
-		return d, avatar.Rendered{}, err
+		return d, db.AvatarDraftRender{}, err
 	}
 	if current.Version != d.Version {
-		return d, avatar.Rendered{}, db.ErrConflict
+		return d, db.AvatarDraftRender{}, db.ErrConflict
 	}
-	return d, result, nil
+	return d, db.AvatarDraftRender{Original: raw, Output: result}, nil
 }
 func validAvatarPreview(d db.AvatarDraft, r avatar.Rendered) bool {
 	if len(r.JPEG) == 0 || len(r.JPEG) > avatar.MaxOutputBytes {
@@ -151,7 +160,7 @@ func (s *Server) avatarDraftPreview(
 		OperationID string                `json:"operation_id"`
 		Result      avatarPreviewMetadata `json:"result"`
 		Artifacts   []fileDescriptor      `json:"artifacts"`
-	}{agentSucceeded, in.Body.OperationID, avatarPreviewInfo(d, r), []fileDescriptor{{ExternalID: "avatar-preview:" + d.ID.String() + ":" + strconv.FormatInt(d.Version, 10), FetchMethod: fileFetchMethod, DownloadPath: avatarPreviewPath(d), MIMEType: mimeJPEG, SizeBytes: int64(len(r.JPEG)), SHA256: r.SHA256}}}
+	}{agentSucceeded, in.Body.OperationID, avatarPreviewInfo(d, r), []fileDescriptor{{ExternalID: "avatar-preview:" + d.ID.String() + ":" + strconv.FormatInt(d.Version, 10), FetchMethod: avatarRefetchMethod, DownloadPath: avatarPreviewPath(d), MIMEType: mimeJPEG, SizeBytes: int64(len(r.JPEG)), SHA256: r.SHA256}}}
 	raw, err := json.Marshal(result)
 	if err != nil {
 		return nil, huma.Error503ServiceUnavailable("avatar preview descriptor unavailable")
@@ -160,6 +169,8 @@ func (s *Server) avatarDraftPreview(
 }
 func avatarPreviewReadError(err error) error {
 	switch {
+	case errors.Is(err, errAvatarSourceUnavailable):
+		return huma.Error422UnprocessableEntity(errAvatarSourceUnavailable.Error())
 	case errors.Is(err, db.ErrInvalidAvatar):
 		return huma.Error400BadRequest("draft ID and positive version required")
 	case errors.Is(err, db.ErrConflict):
@@ -184,7 +195,9 @@ func avatarPreviewLocator(r *http.Request) (uuid.UUID, int64, error) {
 func (s *Server) avatarDraftPreviewContent(w http.ResponseWriter, r *http.Request) {
 	id, version, err := avatarPreviewLocator(r)
 	if err != nil {
-		fileHTTPError(w, avatarPreviewReadError(err))
+		if !writeAvatarSourceUnavailable(w, err) {
+			fileHTTPError(w, avatarPreviewReadError(err))
+		}
 		return
 	}
 	auth := AuthInput{Authorization: r.Header.Get("Authorization")}
@@ -195,7 +208,9 @@ func (s *Server) avatarDraftPreviewContent(w http.ResponseWriter, r *http.Reques
 	}
 	d, result, err := s.renderAvatarPreview(r.Context(), scope, id, version)
 	if err != nil {
-		fileHTTPError(w, avatarPreviewReadError(err))
+		if !writeAvatarSourceUnavailable(w, err) {
+			fileHTTPError(w, avatarPreviewReadError(err))
+		}
 		return
 	}
 	current, err := s.profileScope(r.Context(), auth)
@@ -227,6 +242,10 @@ func (s *Server) miniAppAvatarPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	d, result, err := s.renderAvatarPreview(ctx, miniAppOrdersScope(attempt), id, version)
 	if err != nil {
+		if errors.Is(err, errAvatarSourceUnavailable) {
+			s.miniAppAvatarError(w, err)
+			return
+		}
 		status := http.StatusServiceUnavailable
 		if errors.Is(err, pgx.ErrNoRows) {
 			status = http.StatusNotFound
@@ -237,7 +256,7 @@ func (s *Server) miniAppAvatarPreview(w http.ResponseWriter, r *http.Request) {
 		miniAppHTTPError(w, status, "avatar preview unavailable or draft changed; read current draft")
 		return
 	}
-	if _, err = s.currentMiniApp(ctx, r); err != nil {
+	if _, err = s.authenticatedMiniApp(ctx, r); err != nil {
 		miniAppError(w, err)
 		return
 	}

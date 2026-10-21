@@ -107,7 +107,7 @@ func avatarDraftMetadata(t *testing.T, raw []byte) db.AvatarDraft {
 func avatarDraftAgent(t *testing.T, f avatarDraftFixture, method string, operation uuid.UUID, args any) (int, []byte) {
 	t.Helper()
 	body := map[string]any{"protocol_version": 1, "operation_id": operation, "arguments": args}
-	if method == "create_draft" || method == "save_draft" {
+	if method == "create_draft" || method == "save_draft" || method == "finalize_draft" {
 		body["idempotency_key"] = operation
 	}
 	return adminRequest(t, f.h, f.owner, http.MethodPost, "/internal/agent/avatars/"+method, body)
@@ -187,7 +187,7 @@ func TestAvatarDraftNativeAgentHandoffsAndHistoricalReplayWithoutLoom(t *testing
 	require.Zero(t, calls)
 }
 
-func TestAvatarDraftImportPinsOriginalAndReplaysAfterTelegramLoss(t *testing.T) {
+func TestAvatarDraftImportPinsDigestAndReplaysAfterTelegramLoss(t *testing.T) {
 	t.Parallel()
 	f := avatarDraftSetup(t, nil)
 	f.p.mu.Lock()
@@ -221,11 +221,11 @@ func TestAvatarDraftImportPinsOriginalAndReplaysAfterTelegramLoss(t *testing.T) 
 	defer response.Body.Close()
 	original, err := io.ReadAll(response.Body)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, response.StatusCode)
-	require.Equal(t, f.raw, original)
+	require.Equal(t, http.StatusUnprocessableEntity, response.StatusCode)
+	require.Contains(t, string(original), "send it again")
 	require.Equal(t, "private, no-store", response.Header.Get("Cache-Control"))
 	f.p.mu.Lock()
-	require.Equal(t, gets, f.p.fileGets)
+	require.Equal(t, gets+1, f.p.fileGets)
 	f.p.mu.Unlock()
 	code, raw, _ = appCall(
 		t,
@@ -541,8 +541,9 @@ func TestAvatarDraftMigrationAllowsEmptyRollbackAndProtectsOriginals(t *testing.
 	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
 	require.True(t, ok)
 	extensionUp, extensionDown := avatarFinalizationMigration(t)
-	up = up + "\n" + extensionUp
-	down = extensionDown + "\n" + down
+	sourceUp, sourceDown := avatarDraftSourceMigration(t)
+	up = up + "\n" + extensionUp + "\n" + sourceUp
+	down = sourceDown + "\n" + extensionDown + "\n" + down
 	_, err = f.h.store.Pool().Exec(t.Context(), down)
 	require.NoError(t, err)
 	var gone bool
@@ -586,7 +587,7 @@ func TestAvatarDraftRollbackRejectsUncommittedOriginal(t *testing.T) {
 	require.NoError(t, err)
 	_, err = writer.Exec(
 		t.Context(),
-		`INSERT INTO shuttle_avatar_drafts(id,user_id,original,source_sha256,mime_type,frame_sha256,transform,version) VALUES($1,$2,$3,$4,'image/png',$5,$6,1)`,
+		`INSERT INTO shuttle_avatar_drafts(id,user_id,original,source_sha256,mime_type,frame_sha256,transform,version,source_size_bytes) VALUES($1,$2,$3,$4,'image/png',$5,$6,1,octet_length($3::bytea))`,
 		id,
 		f.scope.UserID,
 		f.raw,
@@ -625,6 +626,12 @@ func TestAvatarDraftNativeImportPreservesOversizeRejectionBeforeTelegramIO(t *te
 		appTestOrigin,
 	)
 	require.Equal(t, http.StatusRequestEntityTooLarge, code, string(raw))
+	agentOperation := uuid.New()
+	code, raw = avatarDraftAgent(t, f, "create_draft", agentOperation, map[string]any{"source_file_id": source})
+	require.Equal(t, http.StatusRequestEntityTooLarge, code, string(raw))
+	_, agentErr := f.h.store.AvatarDraftOperation(t.Context(), f.scope, agentOperation)
+	require.ErrorIs(t, agentErr, pgx.ErrNoRows)
+
 	f.p.mu.Lock()
 	gets := f.p.fileGets
 	f.p.mu.Unlock()

@@ -34,16 +34,22 @@ func avatarDraftOperation(
 
 func readAvatarDraft(ctx context.Context, tx pgx.Tx, owner, id uuid.UUID, content bool) (AvatarDraft, []byte, error) {
 	var d AvatarDraft
-	var source pgtype.UUID
+	var source, historyRecord, historyArchive pgtype.UUID
 	var digest, frame, transform, original []byte
-	err := tx.QueryRow(ctx, `SELECT id,source_file_id,source_sha256,mime_type,octet_length(original)::bigint,frame_sha256,transform,version,created_at,updated_at,CASE WHEN $3 THEN original ELSE NULL END FROM shuttle_avatar_drafts WHERE user_id=$1 AND id=$2`, owner, id, content).
-		Scan(&d.ID, &source, &digest, &d.MIMEType, &d.SizeBytes, &frame, &transform, &d.Version, &d.CreatedAt, &d.UpdatedAt, &original)
+	err := tx.QueryRow(ctx, `SELECT id,source_file_id,source_sha256,mime_type,source_size_bytes,frame_sha256,transform,version,created_at,updated_at,CASE WHEN $3 THEN original ELSE NULL END,history_record_id,history_archive_id FROM shuttle_avatar_drafts WHERE user_id=$1 AND id=$2`, owner, id, content).
+		Scan(&d.ID, &source, &digest, &d.MIMEType, &d.SizeBytes, &frame, &transform, &d.Version, &d.CreatedAt, &d.UpdatedAt, &original, &historyRecord, &historyArchive)
 	if err != nil {
 		return d, nil, err
 	}
 	if source.Valid {
 		sourceID := uuid.UUID(source.Bytes)
 		d.SourceFileID = &sourceID
+	}
+	if historyRecord.Valid && historyArchive.Valid {
+		d.HistorySource = &AvatarHistorySource{
+			RecordID:  uuid.UUID(historyRecord.Bytes),
+			ArchiveID: uuid.UUID(historyArchive.Bytes),
+		}
 	}
 	d.SourceSHA256, d.FrameSHA256 = hex.EncodeToString(digest), hex.EncodeToString(frame)
 	d.CreatedAt, d.UpdatedAt = d.CreatedAt.UTC(), d.UpdatedAt.UTC()
@@ -167,6 +173,11 @@ func (s *Store) AvatarDraftPreflight(
 	}
 	if a.SourceFileID != uuid.Nil {
 		if err = ownedSourceFile(ctx, tx, scope.UserID, a.SourceFileID); err != nil {
+			return nil, err
+		}
+	}
+	if a.HistorySource != nil {
+		if _, err = ownedAvatarHistory(ctx, tx, s.q.WithTx(tx), scope, *a.HistorySource); err != nil {
 			return nil, err
 		}
 	}

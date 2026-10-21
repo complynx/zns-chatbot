@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -437,12 +438,27 @@ func TestAvatarFinalizationAPIConcurrentNativeAgentCreatesOneDocument(t *testing
 		done <- answer{true, code, raw, requestErr}
 	}()
 	go func() {
-		r := httptest.NewRequest(http.MethodPost, "/internal/agent/avatars/finalize_draft", bytes.NewReader(agentBody))
+		server := httptest.NewServer(f.h.endpoint.InternalHandler())
+		defer server.Close()
+		r, requestErr := http.NewRequest(
+			http.MethodPost,
+			server.URL+"/internal/agent/avatars/finalize_draft",
+			bytes.NewReader(agentBody),
+		)
+		if requestErr != nil {
+			done <- answer{false, 0, nil, requestErr}
+			return
+		}
 		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("Authorization", "Bearer "+f.owner)
-		w := httptest.NewRecorder()
-		f.h.endpoint.InternalHandler().ServeHTTP(w, r)
-		done <- answer{false, w.Code, w.Body.Bytes(), nil}
+		response, requestErr := server.Client().Do(r)
+		if requestErr != nil {
+			done <- answer{false, 0, nil, requestErr}
+			return
+		}
+		defer response.Body.Close()
+		data, readErr := io.ReadAll(response.Body)
+		done <- answer{false, response.StatusCode, data, readErr}
 	}()
 	var receipts []db.AvatarDraftReceipt
 	for range 2 {

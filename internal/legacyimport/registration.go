@@ -15,7 +15,7 @@ const MaxRegistrationPageSize = 20
 const MaxRegistrationFields = 4096
 
 var ErrRegistrationKey = errors.New("invalid historical registration key")
-var ErrRegistrationSource = errors.New("historical source record mismatch")
+var ErrRegistrationSource = ErrSourceRecord
 var ErrRegistrationPage = errors.New("invalid historical registration page")
 var ErrRegistrationScanLimit = errors.New("historical registration field limit exceeded")
 
@@ -61,38 +61,10 @@ func ReadRegistration(ctx context.Context, input io.Reader, digest string, targe
 func readRegistrationSource(ctx context.Context, input io.Reader, digest string, target Record,
 	project func(map[string]any) error,
 ) (BundleValidation, error) {
-	if target.Role != roleUsers || target.SourceKey == "" || !validTelegramID(target.OwnerID) {
+	if target.Role != roleUsers {
 		return BundleValidation{}, ErrRegistrationSource
 	}
-	found := false
-	validation, err := visitBundle(ctx, input, digest, nil, func(record Record, object map[string]any) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if record.SourceInstance != target.SourceInstance || record.Collection != target.Collection ||
-			record.SourceKey != target.SourceKey {
-			return nil
-		}
-		if record.Role != target.Role || record.OwnerID != target.OwnerID || record.Line != target.Line ||
-			record.SHA256 != target.SHA256 {
-			return ErrRegistrationSource
-		}
-		if err := project(object); err != nil {
-			return err
-		}
-		found = true
-		return nil
-	})
-	if ctx.Err() != nil {
-		return BundleValidation{}, ctx.Err()
-	}
-	if err != nil {
-		return BundleValidation{}, err
-	}
-	if !found {
-		return BundleValidation{}, ErrRegistrationSource
-	}
-	return validation, nil
+	return readSourceRecord(ctx, input, digest, target, project)
 }
 
 // RegistrationPage contains structurally supported historical candidates. It

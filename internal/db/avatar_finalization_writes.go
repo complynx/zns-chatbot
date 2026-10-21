@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,7 +19,7 @@ func (s *Store) CommitAvatarDraft(
 	ctx context.Context,
 	scope ProfileScope,
 	a AvatarDraftFinalize,
-	rendered avatar.Rendered,
+	rendered AvatarDraftRender,
 ) (AvatarDraftReceipt, error) {
 	return s.commitAvatarDraft(ctx, scope, a, rendered, nil)
 }
@@ -28,7 +29,7 @@ func (s *Store) CommitMiniAppAvatarDraft(
 	scope ProfileScope,
 	bearer, generation [sha256.Size]byte,
 	a AvatarDraftFinalize,
-	rendered avatar.Rendered,
+	rendered AvatarDraftRender,
 ) (AvatarDraftReceipt, error) {
 	return s.commitAvatarDraft(ctx, scope, a, rendered, &avatarDraftSession{bearer, generation})
 }
@@ -40,7 +41,7 @@ func (s *Store) commitAvatarDraft(
 	ctx context.Context,
 	scope ProfileScope,
 	a AvatarDraftFinalize,
-	rendered avatar.Rendered,
+	rendered AvatarDraftRender,
 	session *avatarDraftSession,
 ) (AvatarDraftReceipt, error) {
 	hash, err := avatarFinalizeHash(a)
@@ -59,14 +60,32 @@ func (s *Store) commitAvatarDraft(
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return AvatarDraftReceipt{}, err
 	}
-	d, raw, err := readAvatarDraft(ctx, tx, scope.UserID, a.DraftID, true)
+	d, storedOriginal, err := readAvatarDraft(ctx, tx, scope.UserID, a.DraftID, true)
 	if err != nil {
 		return AvatarDraftReceipt{}, err
 	}
 	if d.Version != a.ExpectedVersion || d.FrameSHA256 != avatar.FrameSHA256 {
 		return AvatarDraftReceipt{}, ErrConflict
 	}
-	if err = validateFinalizedAvatar(d, raw, rendered); err != nil {
+	if d.SourceFileID == nil && d.HistorySource == nil && !bytes.Equal(storedOriginal, rendered.Original) {
+		return AvatarDraftReceipt{}, ErrInvalidAvatar
+	}
+	if err = validateFinalizedAvatar(d, rendered.Original, rendered.Output); err != nil {
+		return AvatarDraftReceipt{}, err
+	}
+	var sourceID uuid.UUID
+	if d.SourceFileID != nil {
+		sourceID = *d.SourceFileID
+	}
+	if err = validateAvatarDraftSource(
+		ctx,
+		tx,
+		s.q.WithTx(tx),
+		scope,
+		sourceID,
+		d.HistorySource,
+		d.MIMEType,
+	); err != nil {
 		return AvatarDraftReceipt{}, err
 	}
 	var count int
@@ -77,11 +96,13 @@ func (s *Store) commitAvatarDraft(
 	if count >= MaxAvatarsPerOwner {
 		return AvatarDraftReceipt{}, ErrAvatarQuota
 	}
-	return writeFinalizedAvatar(ctx, tx, scope, a, hash, d, rendered, session != nil)
+	return writeFinalizedAvatar(ctx, tx, scope, a, hash, d, rendered.Output, session != nil)
 }
 func validateFinalizedAvatar(d AvatarDraft, raw []byte, r avatar.Rendered) error {
 	digest := sha256.Sum256(raw)
-	if r.SourceSHA256 != d.SourceSHA256 || d.SourceSHA256 != hex.EncodeToString(digest[:]) ||
+	if int64(len(raw)) != d.SizeBytes || http.DetectContentType(raw) != d.MIMEType ||
+		r.SourceSHA256 != d.SourceSHA256 ||
+		d.SourceSHA256 != hex.EncodeToString(digest[:]) ||
 		r.FrameSHA256 != d.FrameSHA256 ||
 		!bytes.HasPrefix(r.JPEG, []byte{0xff, 0xd8}) {
 		return ErrInvalidAvatar

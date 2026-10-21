@@ -109,7 +109,7 @@ func New(store *db.Store, iam *identity.Client, tasks Acceptor, options Options)
 	s.registerFiles(api)
 	return s, nil
 }
-func (s *Server) PublicHandler() http.Handler   { return s.public }
+func (s *Server) PublicHandler() http.Handler   { return http.HandlerFunc(s.servePublic) }
 func (s *Server) InternalHandler() http.Handler { return http.HandlerFunc(s.serveInternal) }
 
 // SetAccepting stops new intake before worker shutdown.

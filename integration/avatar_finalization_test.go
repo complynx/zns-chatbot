@@ -74,7 +74,14 @@ func TestAvatarFinalizationStoresImmutableSnapshotAndIntentWithoutLoom(t *testin
 	prior, err := f.h.store.AvatarDraftFinalizePreflight(ctx, f.scope, a)
 	require.NoError(t, err)
 	require.Nil(t, prior)
-	receipt, err := f.h.store.CommitMiniAppAvatarDraft(ctx, f.scope, keys.bearer, keys.generation, a, r)
+	receipt, err := f.h.store.CommitMiniAppAvatarDraft(
+		ctx,
+		f.scope,
+		keys.bearer,
+		keys.generation,
+		a,
+		db.AvatarDraftRender{Original: f.raw, Output: r},
+	)
 	require.NoError(t, err)
 	require.Equal(t, d.ID, receipt.DraftID)
 	require.Equal(t, int64(2), receipt.DraftVersion)
@@ -110,7 +117,12 @@ func TestAvatarFinalizationStoresImmutableSnapshotAndIntentWithoutLoom(t *testin
 		},
 	)
 	require.NoError(t, err)
-	replay, err := f.h.store.CommitAvatarDraft(ctx, f.scope, a, avatar.Rendered{})
+	replay, err := f.h.store.CommitAvatarDraft(
+		ctx,
+		f.scope,
+		a,
+		db.AvatarDraftRender{Original: nil, Output: avatar.Rendered{}},
+	)
 	require.NoError(t, err)
 	require.Equal(t, receipt, replay)
 	prior, err = f.h.store.AvatarDraftFinalizePreflight(ctx, f.scope, a)
@@ -132,40 +144,47 @@ func TestAvatarFinalizationRejectsStaleForeignSessionAndWrongProvenance(t *testi
 	a := db.AvatarDraftFinalize{OperationID: uuid.New(), DraftID: d.ID, ExpectedVersion: 1}
 	wrong := r
 	wrong.SourceSHA256 = strings.Repeat("a", 64)
-	_, err := f.h.store.CommitAvatarDraft(ctx, f.scope, a, wrong)
+	_, err := f.h.store.CommitAvatarDraft(ctx, f.scope, a, db.AvatarDraftRender{Original: f.raw, Output: wrong})
 	require.ErrorIs(t, err, db.ErrInvalidAvatar)
 	wrong = r
 	wrong.FrameSHA256 = strings.Repeat("b", 64)
-	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, wrong)
+	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, db.AvatarDraftRender{Original: f.raw, Output: wrong})
 	require.ErrorIs(t, err, db.ErrInvalidAvatar)
 	wrong = r
 	wrong.ProcessorVersion = "unexpected"
-	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, wrong)
+	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, db.AvatarDraftRender{Original: f.raw, Output: wrong})
 	require.ErrorIs(t, err, db.ErrInvalidAvatar)
 	wrong = r
 	edited := avatar.Transform{ZoomPPM: 2 * avatar.FramePPM}
 	wrong.Transform = &edited
-	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, wrong)
+	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, db.AvatarDraftRender{Original: f.raw, Output: wrong})
 	require.ErrorIs(t, err, db.ErrInvalidAvatar)
 	wrong = r
 	wrong.JPEG = []byte("not JPEG")
 	sum := sha256.Sum256(wrong.JPEG)
 	wrong.SHA256 = hex.EncodeToString(sum[:])
-	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, wrong)
+	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, db.AvatarDraftRender{Original: f.raw, Output: wrong})
 	require.ErrorIs(t, err, db.ErrInvalidAvatar)
 	a.ExpectedVersion = 2
-	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, r)
+	_, err = f.h.store.CommitAvatarDraft(ctx, f.scope, a, db.AvatarDraftRender{Original: f.raw, Output: r})
 	require.ErrorIs(t, err, db.ErrConflict)
 	a.ExpectedVersion = 1
 	otherID, _ := registrationUser(t, f.h, 457, false)
 	other := ownerProfileScope(t, f.h, otherID)
-	_, err = f.h.store.CommitAvatarDraft(ctx, other, a, r)
+	_, err = f.h.store.CommitAvatarDraft(ctx, other, a, db.AvatarDraftRender{Original: f.raw, Output: r})
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	require.NoError(t, f.h.store.LogoutMiniAppSession(ctx, f.scope.BotID, keys.bearer, keys.generation))
-	_, err = f.h.store.CommitMiniAppAvatarDraft(ctx, f.scope, keys.bearer, keys.generation, a, r)
+	_, err = f.h.store.CommitMiniAppAvatarDraft(
+		ctx,
+		f.scope,
+		keys.bearer,
+		keys.generation,
+		a,
+		db.AvatarDraftRender{Original: f.raw, Output: r},
+	)
 	require.ErrorIs(t, err, db.ErrMiniAppDenied)
 	avatarIntentCount(t, f, 0)
-	receipt, err := f.h.store.CommitAvatarDraft(ctx, f.scope, a, r)
+	receipt, err := f.h.store.CommitAvatarDraft(ctx, f.scope, a, db.AvatarDraftRender{Original: f.raw, Output: r})
 	require.NoError(t, err)
 	_, _, err = f.h.store.GetFinalizedAvatar(ctx, other, receipt.ArtifactID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -192,7 +211,12 @@ func TestAvatarFinalizationConcurrentCrossPathReplayAndSharedQuota(t *testing.T)
 		group.Go(func() {
 			<-start
 			if i == 0 {
-				results[i], failures[i] = f.h.store.CommitAvatarDraft(ctx, f.scope, a, r)
+				results[i], failures[i] = f.h.store.CommitAvatarDraft(
+					ctx,
+					f.scope,
+					a,
+					db.AvatarDraftRender{Original: f.raw, Output: r},
+				)
 			} else {
 				results[i], failures[i] = f.h.store.CommitMiniAppAvatarDraft(
 					ctx,
@@ -200,7 +224,7 @@ func TestAvatarFinalizationConcurrentCrossPathReplayAndSharedQuota(t *testing.T)
 					keys.bearer,
 					keys.generation,
 					a,
-					r,
+					db.AvatarDraftRender{Original: f.raw, Output: r},
 				)
 			}
 		})
@@ -214,15 +238,20 @@ func TestAvatarFinalizationConcurrentCrossPathReplayAndSharedQuota(t *testing.T)
 	for range db.MaxAvatarsPerOwner - 1 {
 		next := a
 		next.OperationID = uuid.New()
-		_, err := f.h.store.CommitAvatarDraft(ctx, f.scope, next, r)
+		_, err := f.h.store.CommitAvatarDraft(ctx, f.scope, next, db.AvatarDraftRender{Original: f.raw, Output: r})
 		require.NoError(t, err)
 	}
 	next := a
 	next.OperationID = uuid.New()
-	_, err := f.h.store.CommitAvatarDraft(ctx, f.scope, next, r)
+	_, err := f.h.store.CommitAvatarDraft(ctx, f.scope, next, db.AvatarDraftRender{Original: f.raw, Output: r})
 	require.ErrorIs(t, err, db.ErrAvatarQuota)
 	avatarIntentCount(t, f, db.MaxAvatarsPerOwner)
-	replay, err := f.h.store.CommitAvatarDraft(ctx, f.scope, a, avatar.Rendered{})
+	replay, err := f.h.store.CommitAvatarDraft(
+		ctx,
+		f.scope,
+		a,
+		db.AvatarDraftRender{Original: nil, Output: avatar.Rendered{}},
+	)
 	require.NoError(t, err)
 	require.Equal(t, results[0], replay)
 }
@@ -251,7 +280,12 @@ func TestAvatarFinalizationPreservesLegacyReceiptAndOriginIsolation(t *testing.T
 	)
 	require.NoError(t, err)
 	a := db.AvatarDraftFinalize{OperationID: uuid.New(), DraftID: d.ID, ExpectedVersion: 1}
-	result, err := f.h.store.CommitAvatarDraft(ctx, scope, a, f.rendered)
+	result, err := f.h.store.CommitAvatarDraft(
+		ctx,
+		scope,
+		a,
+		db.AvatarDraftRender{Original: f.p.fileBytes, Output: f.rendered},
+	)
 	require.NoError(t, err)
 	_, err = f.h.store.AvatarOperation(ctx, scope, a.OperationID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
@@ -280,14 +314,24 @@ func TestAvatarFinalizationPreservesLegacyReceiptAndOriginIsolation(t *testing.T
 	require.Equal(t, before, after)
 	for range db.MaxAvatarsPerOwner - 2 {
 		next := db.AvatarDraftFinalize{OperationID: uuid.New(), DraftID: d.ID, ExpectedVersion: 1}
-		_, err = f.h.store.CommitAvatarDraft(ctx, scope, next, f.rendered)
+		_, err = f.h.store.CommitAvatarDraft(
+			ctx,
+			scope,
+			next,
+			db.AvatarDraftRender{Original: f.p.fileBytes, Output: f.rendered},
+		)
 		require.NoError(t, err)
 	}
 	legacy.OperationID = uuid.New()
 	_, err = f.h.store.CommitAvatar(ctx, scope, legacy, f.rendered)
 	require.ErrorIs(t, err, db.ErrAvatarQuota)
 	a.OperationID = uuid.New()
-	_, err = f.h.store.CommitAvatarDraft(ctx, scope, a, f.rendered)
+	_, err = f.h.store.CommitAvatarDraft(
+		ctx,
+		scope,
+		a,
+		db.AvatarDraftRender{Original: f.p.fileBytes, Output: f.rendered},
+	)
 	require.ErrorIs(t, err, db.ErrAvatarQuota)
 }
 func avatarFinalizationMigration(t *testing.T) (string, string) {
@@ -324,7 +368,7 @@ func TestAvatarFinalizationMigrationProtectsHistoryAndPartialOrigins(t *testing.
 		ctx,
 		f.scope,
 		db.AvatarDraftFinalize{OperationID: uuid.New(), DraftID: d.ID, ExpectedVersion: 1},
-		r,
+		db.AvatarDraftRender{Original: f.raw, Output: r},
 	)
 	require.NoError(t, err)
 	for _, change := range []string{

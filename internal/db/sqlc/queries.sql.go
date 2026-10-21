@@ -10854,6 +10854,114 @@ func (q *Queries) OwnActiveMassageSpecialistIDs(ctx context.Context, arg OwnActi
 	return items, nil
 }
 
+const ownerHistoryAvatarCandidates = `-- name: OwnerHistoryAvatarCandidates :many
+SELECT h.id,h.first_archive_id
+FROM shuttle_legacy_history_records h
+JOIN shuttle_legacy_history_applications a ON a.archive_id=h.first_archive_id
+JOIN shuttle_legacy_history_memberships m ON m.archive_id=a.archive_id AND m.record_id=h.id AND m.source_role='files'
+WHERE h.bot_id=$1 AND h.organization_id=$2 AND h.owner_telegram_id=$3
+AND h.source_role='files' AND h.id>$4
+ORDER BY h.id LIMIT $5
+`
+
+type OwnerHistoryAvatarCandidatesParams struct {
+	BotID           int64     `json:"bot_id"`
+	OrganizationID  string    `json:"organization_id"`
+	OwnerTelegramID int64     `json:"owner_telegram_id"`
+	ID              uuid.UUID `json:"id"`
+	Limit           int32     `json:"limit"`
+}
+
+type OwnerHistoryAvatarCandidatesRow struct {
+	ID             uuid.UUID `json:"id"`
+	FirstArchiveID uuid.UUID `json:"first_archive_id"`
+}
+
+func (q *Queries) OwnerHistoryAvatarCandidates(ctx context.Context, arg OwnerHistoryAvatarCandidatesParams) ([]OwnerHistoryAvatarCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, ownerHistoryAvatarCandidates,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.OwnerTelegramID,
+		arg.ID,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OwnerHistoryAvatarCandidatesRow
+	for rows.Next() {
+		var i OwnerHistoryAvatarCandidatesRow
+		if err := rows.Scan(&i.ID, &i.FirstArchiveID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const ownerHistoryAvatarSource = `-- name: OwnerHistoryAvatarSource :one
+SELECT r.id, r.bot_id, r.organization_id, r.source_instance, r.collection_name, r.source_key, r.source_role, r.owner_telegram_id, r.canonical_hash, r.projection_version, r.projection, r.first_archive_id, r.first_line,a.id, a.bot_id, a.organization_id, a.sha256, a.size_bytes, a.validation, a.created_by, a.created_at,m.source_line
+FROM shuttle_legacy_history_records r
+JOIN shuttle_legacy_history_memberships m ON m.record_id=r.id AND m.source_role=r.source_role
+JOIN shuttle_legacy_archives a ON a.id=m.archive_id AND a.bot_id=r.bot_id AND a.organization_id=r.organization_id
+JOIN shuttle_legacy_history_applications applied ON applied.archive_id=a.id
+WHERE r.id=$1 AND a.id=$2 AND r.bot_id=$3 AND r.organization_id=$4 AND r.owner_telegram_id=$5 AND r.source_role='files'
+`
+
+type OwnerHistoryAvatarSourceParams struct {
+	ID              uuid.UUID `json:"id"`
+	ID_2            uuid.UUID `json:"id_2"`
+	BotID           int64     `json:"bot_id"`
+	OrganizationID  string    `json:"organization_id"`
+	OwnerTelegramID int64     `json:"owner_telegram_id"`
+}
+
+type OwnerHistoryAvatarSourceRow struct {
+	ShuttleLegacyHistoryRecord ShuttleLegacyHistoryRecord `json:"shuttle_legacy_history_record"`
+	ShuttleLegacyArchive       ShuttleLegacyArchive       `json:"shuttle_legacy_archive"`
+	SourceLine                 int32                      `json:"source_line"`
+}
+
+func (q *Queries) OwnerHistoryAvatarSource(ctx context.Context, arg OwnerHistoryAvatarSourceParams) (OwnerHistoryAvatarSourceRow, error) {
+	row := q.db.QueryRow(ctx, ownerHistoryAvatarSource,
+		arg.ID,
+		arg.ID_2,
+		arg.BotID,
+		arg.OrganizationID,
+		arg.OwnerTelegramID,
+	)
+	var i OwnerHistoryAvatarSourceRow
+	err := row.Scan(
+		&i.ShuttleLegacyHistoryRecord.ID,
+		&i.ShuttleLegacyHistoryRecord.BotID,
+		&i.ShuttleLegacyHistoryRecord.OrganizationID,
+		&i.ShuttleLegacyHistoryRecord.SourceInstance,
+		&i.ShuttleLegacyHistoryRecord.CollectionName,
+		&i.ShuttleLegacyHistoryRecord.SourceKey,
+		&i.ShuttleLegacyHistoryRecord.SourceRole,
+		&i.ShuttleLegacyHistoryRecord.OwnerTelegramID,
+		&i.ShuttleLegacyHistoryRecord.CanonicalHash,
+		&i.ShuttleLegacyHistoryRecord.ProjectionVersion,
+		&i.ShuttleLegacyHistoryRecord.Projection,
+		&i.ShuttleLegacyHistoryRecord.FirstArchiveID,
+		&i.ShuttleLegacyHistoryRecord.FirstLine,
+		&i.ShuttleLegacyArchive.ID,
+		&i.ShuttleLegacyArchive.BotID,
+		&i.ShuttleLegacyArchive.OrganizationID,
+		&i.ShuttleLegacyArchive.Sha256,
+		&i.ShuttleLegacyArchive.SizeBytes,
+		&i.ShuttleLegacyArchive.Validation,
+		&i.ShuttleLegacyArchive.CreatedBy,
+		&i.ShuttleLegacyArchive.CreatedAt,
+		&i.SourceLine,
+	)
+	return i, err
+}
+
 const ownerHistoryPage = `-- name: OwnerHistoryPage :many
 SELECT id,source_instance,collection_name,source_key,source_role,first_archive_id,first_line,projection_version,preview::jsonb
 FROM shuttle_legacy_history_previews WHERE bot_id=$1 AND organization_id=$2 AND owner_telegram_id=$3 AND id>$4

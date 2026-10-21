@@ -60,9 +60,9 @@ textarea { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid 
 #pairs input[type="checkbox"], #pass-assignments input[type="checkbox"], #pair-assignments input[type="checkbox"] { width: auto; margin-right: 8px; }
 #meals-saved { overflow-wrap: anywhere; }
 
-#avatars-canvas, #avatars-saved-preview { display: block; width: 100%; height: auto; max-width: 32rem; border: 1px solid GrayText; box-sizing: border-box; }
+#avatars-canvas, #avatars-saved-preview, #avatars-history-image { display: block; width: 100%; height: auto; max-width: 32rem; border: 1px solid GrayText; box-sizing: border-box; }
 #avatars-canvas { touch-action: none; }
-#avatars-saved-preview[hidden] { display: none; }
+#avatars-saved-preview[hidden], #avatars-history-image[hidden] { display: none; }
 #avatars > button, #avatars-editor > button, #avatars > .actions { margin-top: 12px; }
 #pp-target, #pp-history, #pp-receipt, #pp-recent-list { overflow-wrap: anywhere; }
 #pass-payments > .actions, #pp-recent-list button { margin-top: 12px; }

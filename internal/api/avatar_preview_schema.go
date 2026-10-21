@@ -54,6 +54,6 @@ func avatarPreviewMethod(
 	)
 	preview[manifestDisclosure] = true
 	preview[manifestMIMETypes] = []string{mimeJPEG}
-	preview[manifestTimeout] = avatarGenerateTimeoutMillis
+	preview[manifestTimeout] = avatarUploadTimeout.Milliseconds()
 	return preview
 }
