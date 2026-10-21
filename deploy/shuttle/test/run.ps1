@@ -11,6 +11,8 @@ try {
     switch($Action) {
         Start {
             if(-not (Test-Path config/shuttle.test.env)){throw 'Add the test token to config/shuttle.test.env first'}
+            & python deploy/shuttle/test/prepare.py --check-fresh
+            if($LASTEXITCODE -ne 0){throw 'Test stand bootstrap preflight failed'}
             Invoke-CheckedDocker @('build','--target','api','-t','shuttle-test-loom:local','../clx-scripter')
             Invoke-CheckedDocker @('build','-f','deploy/shuttle/Dockerfile','-t','shuttle-test-bot:local','.')
             & python deploy/shuttle/test/prepare.py

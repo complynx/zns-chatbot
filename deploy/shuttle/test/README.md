@@ -75,9 +75,15 @@ automatically. Renewal preserves the previous leaf/key for local rollback; the
 old leaf temporarily remains in the container/probe trust bundle. A new root
 requires a fresh browser import. Preserve CA, issuer, IAM and database state.
 
-Start reuses completed IAM provisioning and existing volumes. A failed partial
-initial provisioning may require operator repair; it does not blindly replay
-unknown creation requests. Never delete state/volumes as a routine retry.
+Start is initial bootstrap only. It refuses a stand containing `identity.json`,
+`loom.yaml` or `shuttle.yaml` before building images or changing services/config.
+Direct `prepare.py` calls enforce the same guard. CA-only preparation is allowed.
+For an initialized stand, preserve runtime settings and use its complete Compose
+model, including any browser/canonical-issuer overlays, to restart services.
+See [browser setup](browser.md) for that overlay; base-only bootstrap must not
+recreate IAM after this cutover. A failed partial initial provisioning may require
+operator repair; it does not blindly replay unknown creation requests.
+Never delete state/volumes as a routine retry.
 Runtime files and the bot token must remain ignored/private. Do not publish
 `docker compose config` output: it expands secrets.
 

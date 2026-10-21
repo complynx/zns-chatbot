@@ -112,8 +112,18 @@ test("review cannot approve own suggestion and another reviewer uses current rev
 test("pagination retains original query and late old-owner reads do not leak", async () => {
   const h = harness(); h.b.next = "cursor"; await h.start(); h.get("query").value = "dance"; await h.click("search"); h.get("query").value = "changed"; await h.click("next"); assert.deepEqual(h.b.calls.at(-1).args.queries, ["dance"]); assert.equal(h.b.calls.at(-1).args.cursor, "cursor");
   let release; const wait = new Promise(r => { release = r; }); let first = true;
-  h.b.hook = async path => { if (first && path.endsWith("overview")) { first = false; await wait; return { items: [] }; } };
-  const old = h.start(); await h.start(randomUUID()); release(); await old; assert.equal(h.denied, 0); assert.equal(h.get("knowledge").hidden, false);
+  const oldEvent = randomUUID(), newEvent = randomUUID();
+  h.b.hook = async path => {
+    if (!path.endsWith("overview")) return;
+    if (first) { first = false; await wait; return { items: [{ collection: "event", event_id: oldEvent, event_name: "Old owner's event" }] }; }
+    return { items: [{ collection: "event", event_id: newEvent, event_name: "New owner's event" }] };
+  };
+  const old = h.start(); await h.start(randomUUID());
+  const collectionValues = () => Array.from(h.get("collection").children, option => option.value);
+  assert.deepEqual(collectionValues(), ["all", "general", "event:" + newEvent]);
+  release(); await old;
+  assert.deepEqual(collectionValues(), ["all", "general", "event:" + newEvent]);
+  assert.equal(h.denied, 0); assert.equal(h.get("knowledge").hidden, false);
 });
 test("RU, Belarusian and Ukrainian language fallback and no implicit new-article publication", async () => {
   const h = harness(); await h.start(h.b.owner, "uk-UA"); assert.equal(h.get("confirm").textContent, "Подтвердить изменение"); assert.equal(h.get("new-edit").hidden, true); assert.equal(h.b.effects, 0);

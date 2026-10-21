@@ -32,6 +32,18 @@ def save(path, text):
     path.chmod(0o600)
 
 
+class InitializedStandError(RuntimeError):
+    """Bootstrap cannot safely reconstruct an existing stand's Compose model."""
+
+
+def require_fresh():
+    if any((STATE / name).exists() for name in ('identity.json', 'loom.yaml', 'shuttle.yaml')):
+        raise InitializedStandError(
+            'Stand already initialized; preserve its configuration and restart services '
+            'with the complete Compose model used for that stand, including overlays. '
+            'Do not rerun bootstrap or delete runtime state as a retry.')
+
+
 def compose(*args):
     subprocess.run(['docker', 'compose', '--env-file', str(ENV), '-f', str(HERE / 'compose.yaml'), *args], check=True)
 
@@ -45,6 +57,7 @@ def api(path, body, pat, method=None):
 
 
 def prepare():
+    require_fresh()
     STATE.mkdir(parents=True, exist_ok=True)
     for child in ('data', 'mailbox', 'poller'):
         (STATE / child).mkdir(exist_ok=True)
@@ -157,7 +170,15 @@ def prepare():
 
 if __name__ == '__main__':
     try:
-        prepare()
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument('--check-fresh', action='store_true', help='Check bootstrap eligibility without changing state')
+        args = parser.parse_args()
+        if args.check_fresh:
+            require_fresh()
+        else:
+            prepare()
+    except InitializedStandError as error:
+        raise SystemExit(str(error)) from None
     except Exception as error:
         # Do not print URLs, request bodies or credential-bearing subprocess args.
         raise SystemExit('Test preparation failed: ' + type(error).__name__ + '; inspect local service health') from None
