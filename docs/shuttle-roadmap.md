@@ -52,7 +52,11 @@ mailbox provider; this is not native-provider or broad model-quality acceptance.
    confirmed665minor payment, no capacity allocation and ordinary-owner denial.
    The stale-draft fix passes actual409 UI recovery, resave and one explicit order.
    [Full local application checks](shuttle-meal-release-qa-2026-10-21.md) and
-   remote CI pass; original fixture/harness failures remain retained. Broader
+   the application release's remote CI pass; original fixture/harness failures
+   remain retained.
+   The [dual-dependency recovery check](shuttle-meal-recovery-qa-2026-10-21.md)
+   accepts a consent queued with Zitadel/Loom stopped, graceful bot restart,
+   and completion of the original approval with one financial review. Other
    recovery windows and exact native-preparation adoption remain separate gates.
 4. Finish real export/account/avatar migration and server-specific cutover
    acceptance before any separately authorized production deployment. Historical
