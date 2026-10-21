@@ -1,7 +1,7 @@
-# Развёртывание Shuttle на complynx.net
+# Развёртывание Зинуси на complynx.net
 
 Это инструкция для оператора, а не запись выполненного deployment. Проверка
-сервера 2026-10-12 была только на чтение. Текущий этап Shuttle не заменяет рабочий
+сервера 2026-10-21 была только на чтение. Текущий этап Shuttle не заменяет рабочий
 бот. Регистрации, пары, платежи, аватарки и подготовка миграции теперь имеют
 реализованные и проверенные на отдельном стенде части; текущие границы приёмки
 перечислены в [roadmap](shuttle-roadmap.md). Production cutover ещё не принят.
@@ -25,15 +25,27 @@ launch URL с таким префиксом не заменяет маршрут
 
 ## 1. Зафиксировать исходное состояние и релиз
 
-Подтверждено на сервере: x86_64, Docker 29.4.0, Compose 5.1.3;
-`/home/complynx/server_configs`, HEAD `20e9be3`; Traefik v3.6; PostgreSQL 17
-в `postgres-postgres-1`; Zitadel v4.16.3 в `zitadel`; issuer
-`https://id.complynx.net`. PostgreSQL имеет alias `postgres` в `traefik-net`.
-Рабочий бот — `zns-chatbot-zns_chatbot-1`, его каталог — `configs/zns-chatbot`.
-Zitadeltg подключён к отдельной `zitadeltg-edge`: Shuttle не нужно подключать туда.
-Loom и Shuttle не запущены; `configs/loom`, `configs/shuttle` и сеть
-`clx-observability` на момент проверки отсутствовали. На диске было около 90 GiB
-свободно. Перед deployment перепроверить эти факты.
+Снимок на 2026-10-21: x86_64, Docker 29.9.1, Compose 5.6.0;
+`/home/complynx/server_configs`, HEAD `9cd2336ccc370fd7ca02580fc0001b9f47d1efc2`.
+Traefik v3.6, PostgreSQL image `pgvector/pgvector:pg17` в
+`postgres-postgres-1`, Zitadel v4.16.3 в `zitadel` и `zitadeltg` уже работают.
+PostgreSQL имеет alias `postgres` в `traefik-net`. Рабочий Python-бот —
+`zns-chatbot-zns_chatbot-1`, его профиль — `configs/zns-chatbot`.
+Zitadeltg подключён только к `zitadeltg-edge`; боту не нужно подключаться туда.
+
+Loom уже запущен: `loom-loom-api-1` healthy, также работают file worker,
+Docker API proxy и sandbox. Его API имеет alias `loom-api` в `traefik-net`,
+контейнер объявляет порты 8080 и 9090. Это не проверка HTTP, IAM grants или
+баланса модели. Профиль `configs/loom` есть; `configs/shuttle` и сети
+`clx-observability` нет. На диске свободно 106.5 GiB; listening sockets для
+58380 и 58390 не обнаружены. Перед deployment перепроверить эти факты.
+
+Git показал одну изменённую запись и предупреждение о запрете чтения
+`liquidsoap/hls/obs-stream/`. Полная чистота server checkout не установлена.
+Не перезаписывать его, не выполнять reset/clean и не исправлять права ради
+deployment. Сначала оператор должен разобрать изменения в отдельном шаге.
+Приватная запись read-only проверки:
+`.cache/shuttle-work/server-readonly-2026-10-21-v1/proof.json`.
 
 Из PowerShell:
 
@@ -79,13 +91,18 @@ docker build --platform linux/amd64 -f deploy/shuttle/Dockerfile \
 
 ## 2. Сначала подготовить Loom и проверить IAM
 
-У Loom уже есть отдельная инструкция `clx-scripter/docs/server-rollout.md` и
-шаблон `clx-scripter/deploy/server/docker-compose.prod.yml`. Для текущего сервера
-нужны его профиль `configs/loom`, миграции отдельной БД, sandbox/proxy/API,
-receiver обновлений и согласованные Alloy changes. Не запускать глобальный
-`init.sh` ради этих двух приложений. Использовать целевые Compose команды или
-`scripts/rollout.sh --config-name loom --profile prod --service-name api` после
-подготовки migration hook. Стратегия — `recreate`.
+Loom уже работает на сервере. Сначала проверить его текущий контракт и
+подготовить только подключение нового бота; не создавать второй Loom и не
+перезапускать существующий ради пилота. В read-only снимке API называется
+`loom-loom-api-1`, сервис в профиле — `loom-api`. Команды из старой инструкции
+с `--service-name api` нельзя переносить на этот профиль без проверки.
+
+Изменения Loom, его миграции, receiver и Alloy относятся к отдельному
+согласованному rollout. Его документация находится в
+`clx-scripter/docs/server-rollout.md`, серверный профиль — `configs/loom`.
+Не запускать глобальный `init.sh` ради подключения бота и не менять стенды
+разработчика Loom. Новый пилот не доказывает совместимость с изменяемым tag
+`complynx/loom:latest`: перед приёмкой записать фактический image digest и контракт.
 
 Для Shuttle в существующей организации Zitadel подготовить:
 
@@ -122,14 +139,14 @@ email само по себе не доказывает двустороннее 
 непроверенное auto-linking реальных адресов.
 
 В проекте Loom назначить service account отдельную роль caller, например
-`shuttle-caller`. В конфигурации Loom добавить соответствие этой роли только
+`zinusya-caller`. В конфигурации Loom добавить соответствие этой роли только
 правам, объявленным текущим manifest Shuttle:
 
 ```yaml
 identity:
   service_subjects: ["<Shuttle-actor-user-id>"]
   role_permissions:
-    shuttle-caller: [runs.create, runs.control, chat.read, chat.events.append, artifacts.read, artifacts.write]
+    zinusya-caller: [runs.create, runs.control, chat.read, chat.events.append, artifacts.read, artifacts.write]
 ```
 
 Это фрагмент для слияния с существующим identity block, а не замена остальных
@@ -207,7 +224,8 @@ install -d -m 0700 data/shuttle
 `shutdown_timeout: 1s`, `identity.issuer: https://id.complynx.net`, реальные org,
 actor/client IDs, аудитории; `loom.base_url` — подтверждённый URL Loom.
 Для Docker выбрать уникальный alias Loom из его профиля, например
-`http://loom:8080`, только после проверки этого alias в `traefik-net`.
+`http://loom-api:8080`: alias подтверждён в `traefik-net`, но HTTP доступность
+из будущего контейнера бота ещё нужно проверить.
 Не использовать неоднозначный общий alias `api` нескольких Compose проектов.
 Публичный `https://agent.complynx.net` допустим после deployment Loom и проверки TLS.
 
@@ -410,6 +428,35 @@ trace Telegram intake → durable attempt → Loom. Zinusya добавляет `
 
 ## 8. Пилот, обновление и откат
 
+### Версия и обязательные проверки перед переключением
+
+Локальный owned primary принят на schema 68 / `mvp-86`; source commit и image
+зафиксированы в [отчёте установки](shuttle-avatar-primary-qa-2026-10-21.md).
+Это не выбранный production release. Проверенные на локальном стенде image,
+команды и ресурсы нельзя считать проверкой будущего серверного профиля.
+
+Для миграции 68 Telegram-оригиналы становятся ссылками; они не архивируются
+заранее. Сохранение пользовательских загрузок, generated JPEG и operation
+receipts проверяется отдельно от доступности Telegram file ID. Недоступный
+оригинал означает просьбу прислать фото заново, а не повторное выполнение
+завершённой операции. На локальном primary при обновлении было ноль drafts;
+для populated серверной БД нужна проверка на отдельной копии её снимка.
+
+Перед разрешённым переключением записать неизменяемые source/image digests,
+состояние consumers и webhook без токена, версии схемы и manifest; сохранить
+приватные логи и проверенный backup. Остановить приём новых updates старым
+consumer, дождаться завершения принятых работ и штатного SIGTERM. При ошибке
+или неопределённом результате сначала сверить тот же контейнер, БД и webhook;
+не повторять migration/start/send только из-за таймаута наблюдения.
+
+Не запускать старый binary на schema 68 без отдельного доказательства
+совместимости. Успешный forward migration и Down SQL внутри отменённой
+транзакции не доказывают полный rollback. Не понижать схему автоматически и
+не восстанавливать snapshot поверх уже выполненных операций.
+
+### Проверки пилота
+
+
 Реальная приёмка: новый и существующий пользователь, двусторонняя Zitadel связь,
 account.me, вопрос/ответ/inline approval/cancel, duplicate update, owner/admin denial,
 настройки CAS и отзыв прав, отключение IAM/Loom по отдельности и одновременно,
@@ -471,7 +518,7 @@ updates старого бота, настройки и backup; останови�
 затем проверить восстановление очереди. Переключение обратно требует сверки
 операций, исполненных новой версией. Эти действия данный этап не выполняет.
 
-Written by Codex (gpt-6/Codex desktop)
+Written by Codex (gpt-6.1-sol/Codex desktop)
 on behalf of Daniel Drizhuk
 
 The queue schema is pinned to bot ID, IAM organization and issuer before worker
