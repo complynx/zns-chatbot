@@ -54,33 +54,98 @@ func TestLoomAuthorizationRecoveryAfterRestartKeepsSameRun(t *testing.T) {
 	require.Equal(t, "Recovered after restart", p.sent[0].Text)
 }
 
-func TestPersistentLoomAuthorizationDenialKeepsDeadlineAcrossRestart(t *testing.T) {
+func TestLoomAuthorizationDeadlineRetainsRunCustodyAcrossRestart(t *testing.T) {
 	t.Parallel()
+	for _, lost := range []bool{false, true} {
+		name := "known_run"
+		if lost {
+			name = "lost_creation_receipt"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			testAuthorizationDeadlineRetainsRun(t, lost)
+		})
+	}
+}
+
+func testAuthorizationDeadlineRetainsRun(t *testing.T, lost bool) {
+	t.Helper()
 	p := newPeers(t)
 	p.steering = true
+	p.loseCreate, p.pauseAfterLostCreate = lost, lost
 	h := setup(t, p)
 	id := h.submit(t, 91)
-	awaitLoomRun(t, h, id)
+	if lost {
+		h.await(t, id, "awaiting_service")
+	} else {
+		awaitLoomRun(t, h, id)
+	}
 	h.stop(t)
 	p.mu.Lock()
 	p.loomAuthDenied = true
+	p.loomDown = false
 	p.mu.Unlock()
 	h.start(t)
 	h.await(t, id, "awaiting_authorization")
 	h.stop(t)
+	before, err := h.store.GetTask(context.Background(), id)
+	require.NoError(t, err)
 	// Model a long outage while the process was stopped, retaining its deadline.
-	_, err := h.store.Pool().Exec(context.Background(),
+	_, err = h.store.Pool().Exec(context.Background(),
 		`UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',to_jsonb($2::text)) WHERE id=$1`,
 		id, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
 	require.NoError(t, err)
+	p.mu.Lock()
+	deniedCalls := p.loomAuthDeniedCalls
+	p.mu.Unlock()
 	h.start(t)
-	h.await(t, id, "failed")
-	h.awaitReplies(t, 1)
+	require.Eventually(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return p.loomAuthDeniedCalls > deniedCalls
+	}, 5*time.Second, 20*time.Millisecond)
+	h.stop(t)
+	waiting, err := h.store.GetTask(context.Background(), id)
+	require.NoError(t, err)
+	require.Equal(t, "awaiting_authorization", waiting.State)
+	require.Equal(t, before.RunID, waiting.RunID)
+	require.Equal(t, before.AuthSessionID, waiting.AuthSessionID)
+	var owner uuid.UUID
+	require.NoError(t, h.store.Pool().QueryRow(context.Background(),
+		`SELECT active_task_id FROM shuttle_conversations WHERE id=$1`, before.ConversationID).Scan(&owner))
+	require.Equal(t, id, owner)
+	// New text must continue the retained task, rather than start a parallel run.
+	h.start(t)
+	next := h.submitText(t, 9191, "Continue the same task")
+	routed, err := h.store.Route(context.Background(), next)
+	require.NoError(t, err)
+	require.Equal(t, id, routed.TargetTaskID)
+	require.Equal(t, "input", routed.Route)
 	h.stop(t)
 	p.mu.Lock()
+	runCount, replyCount := len(p.runs), len(p.sent)
+	p.loomAuthDenied = false
+	p.mu.Unlock()
+	require.Equal(t, 1, runCount)
+	require.Zero(t, replyCount)
+	h.start(t)
+	awaitLoomRun(t, h, id)
+	require.Eventually(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return len(p.inputs) == 1
+	}, 5*time.Second, 20*time.Millisecond)
+	h.stop(t)
+	after, err := h.store.GetTask(context.Background(), id)
+	require.NoError(t, err)
+	require.Equal(t, before.AuthSessionID, after.AuthSessionID)
+	p.mu.Lock()
 	defer p.mu.Unlock()
+	require.Equal(t, p.runs[id.String()].ID, after.RunID)
 	require.Len(t, p.runs, 1)
-	require.Equal(t, "Access denied. Please contact the administrator.", p.sent[0].Text)
+	for _, key := range p.createKeys {
+		require.Equal(t, id.String(), key)
+	}
 }
 
 func TestLocalRevocationStopsLoomAuthorizationRecovery(t *testing.T) {
@@ -107,6 +172,28 @@ func TestLocalRevocationStopsLoomAuthorizationRecovery(t *testing.T) {
 	defer p.mu.Unlock()
 	require.Len(t, p.runs, 1)
 	require.Empty(t, p.inputs)
+	require.Equal(t, "Access denied. Please contact the administrator.", p.sent[0].Text)
+}
+
+func TestLoomAuthorizationDeadlineBeforeCreationStillDenies(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.loomAuthDenied = true
+	h := setup(t, p)
+	id := h.submit(t, 9192)
+	h.await(t, id, "awaiting_authorization")
+	h.stop(t)
+	_, err := h.store.Pool().Exec(context.Background(),
+		`UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',to_jsonb($2::text)) WHERE id=$1`,
+		id, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
+	require.NoError(t, err)
+	h.start(t)
+	h.await(t, id, "failed")
+	h.awaitReplies(t, 1)
+	h.stop(t)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Empty(t, p.runs)
 	require.Equal(t, "Access denied. Please contact the administrator.", p.sent[0].Text)
 }
 

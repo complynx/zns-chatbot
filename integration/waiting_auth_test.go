@@ -129,23 +129,29 @@ func TestWaitingAuthSuccessfulRenewalDoesNotResetGraceDeadline(t *testing.T) {
 	require.Equal(t, originalDeadline, saved.Deadline)
 }
 
-func TestWaitingAuthExpiredGraceSurvivesRestartWithoutRenewal(t *testing.T) {
+func TestWaitingAuthExpiredGraceRecoversOriginalRunAfterRestart(t *testing.T) {
 	t.Parallel()
 	p := newPeers(t)
-	p.steering, p.keepWaitingAuth = true, true
+	p.steering = true
 	h := setup(t, p)
-	id, _ := suspendRunAuthorization(t, h, "authorization_required")
+	id, before := suspendRunAuthorization(t, h, "authorization_required")
 	_, err := h.store.Pool().Exec(context.Background(),
 		`UPDATE shuttle_tasks SET snapshot=jsonb_set(snapshot,'{loom_auth_retry_until}',to_jsonb($2::text)) WHERE id=$1`,
 		id, time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano))
 	require.NoError(t, err)
 	h.start(t)
-	h.await(t, id, "failed")
+	h.await(t, id, "completed")
+	h.awaitReplies(t, 1)
 	h.stop(t)
+	after, err := h.store.GetTask(context.Background(), id)
+	require.NoError(t, err)
+	require.Equal(t, before.RunID, after.RunID)
+	require.Equal(t, before.AuthSessionID, after.AuthSessionID)
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	require.Zero(t, p.sessionReauthorizations)
+	require.Equal(t, 1, p.sessionReauthorizations)
 	require.Empty(t, p.resumeKeys)
+	require.Len(t, p.runs, 1)
 }
 
 func TestWaitingAuthLocalRevocationStopsRecoveryBeforeRenewal(t *testing.T) {

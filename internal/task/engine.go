@@ -230,7 +230,8 @@ func (s *Service) ensureSession(
 		return true, nil
 	}
 	if recovering {
-		if !c.ReplyModeMismatch && c.LoomAuthRetryUntil != nil && !time.Now().Before(*c.LoomAuthRetryUntil) {
+		if !mayHaveRun(*t, *c) && !c.ReplyModeMismatch && c.LoomAuthRetryUntil != nil &&
+			!time.Now().Before(*c.LoomAuthRetryUntil) {
 			return false, s.finish(ctx, t, *c, i, stateFailed, "denied")
 		}
 		s.iam.Invalidate(user.Subject)
@@ -658,7 +659,7 @@ func (s *Service) waitForLoomAuthorization(ctx context.Context, t *db.Task, c ch
 			deadline := time.Now().Add(loomAuthorizationRetryWindow)
 			c.LoomAuthRetryUntil = &deadline
 		}
-		if !time.Now().Before(*c.LoomAuthRetryUntil) {
+		if !time.Now().Before(*c.LoomAuthRetryUntil) && !mayHaveRun(*t, c) {
 			return s.finish(ctx, t, c, i, stateFailed, "denied")
 		}
 	}
@@ -667,6 +668,12 @@ func (s *Service) waitForLoomAuthorization(ctx context.Context, t *db.Task, c ch
 		return s.wait()
 	}
 	return s.wait()
+}
+
+// A prepared create may have succeeded despite a lost response. Authorization
+// failure alone does not prove that its run stopped or release its conversation.
+func mayHaveRun(t db.Task, c checkpoint) bool {
+	return t.Route == "new_run" && (t.RunID != "" || c.Create != nil)
 }
 
 func (s *Service) pendingRunOutput(
