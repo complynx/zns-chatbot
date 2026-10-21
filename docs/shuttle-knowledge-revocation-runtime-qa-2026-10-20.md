@@ -5,6 +5,13 @@ claimed. Published as [Loom issue #21](https://github.com/complynx/loom/issues/2
 on 2026-10-21. The actual Loom result is retained, including its nonterminal operation
 state. No autonomous-model, real-Telegram or production-readiness claim is made.
 
+## Later published-runtime acceptance
+
+Published Loom `34f46468` subsequently passes the separately recorded
+[bounded revocation/restoration lifecycle](shuttle-knowledge-revocation-qa-2026-10-22.md)
+with actual IAM, original-operation preservation and fresh consent. That result
+does not rewrite the old observation below or prove its hidden failure cause.
+
 ## Owned runtime and sequence
 
 The disposable `kb-revoke-r1` stand used actual PostgreSQL, Zitadel and Loom, mock

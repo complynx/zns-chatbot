@@ -36,13 +36,14 @@ All six reports below are published; their original runtime observations retain 
   [Consumer acceptance](shuttle-loom-adoption-acceptance-2026-10-21.md);
   [historical proposal and failed reproduction](shuttle-loom-native-operation-adoption.md).
 
-- L06 (upstream closed after merged fix; installed acceptance separate): [Consent after moderator revocation](https://github.com/complynx/loom/issues/21).
-  Actual owned-stand observation retains `tool_failed` and an unexecuted Loom
-  operation in `approved`; no article/review effect occurs. A separate authority
-  probe returns 403 and the agent reads disabled rights. The generic error alone
-  does not prove its cause. Safe error classification and the fate of old consent
-  after rights restoration need a contract and acceptance; maintainer
-  bug/feature classification is open. [Original report](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md).
+- L06 (upstream closed; bounded consumer runtime acceptance passed): [Consent after moderator revocation](https://github.com/complynx/loom/issues/21).
+  Published Loom `34f46468` passes the actual-IAM pre-dispatch method-loss path:
+  old consent is invalidated, the approval rotates without changing original
+  operation/terms/expiry, rights restoration and graceful restarts do not execute,
+  the stale approval is rejected, and fresh consent produces one original effect.
+  [Consumer report](shuttle-knowledge-revocation-qa-2026-10-22.md).
+  Other revocation windows remain separate. The [original generic-error observation](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md)
+  is preserved; the later result does not establish its hidden cause.
 
 Not filed as Loom bugs: Huma's extra discovery `$schema` field was corrected in
 Shuttle; missing administrator role assignment in Loom's IAM project was corrected

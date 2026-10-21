@@ -74,10 +74,11 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
 ## Next actions, in order
 
 1. Preserve the accepted [knowledge operation handoff](shuttle-loom-adoption-acceptance-2026-10-21.md)
-   and retain the accepted candidate installation epoch. Loom's revocation/consent fix is merged; actual installed-runtime
-   acceptance of the documented
-   [revocation lifecycle](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md)
-   remains separate. Full causal OTel tracing through Loom's
+   and retain the accepted candidate installation epoch. The published Loom
+   [revocation lifecycle](shuttle-knowledge-revocation-qa-2026-10-22.md) now passes
+   the bounded actual-IAM method-loss, rights-restoration, graceful-restart and
+   stale/fresh-consent path on a retired isolated stand. Uncertain dispatched RPCs
+   and other revocation windows remain separate. Full causal OTel tracing through Loom's
    asynchronous queue is also an open upstream gate: the [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
    proves HTTP propagation, not durable queue context or recovered-attempt links.
    Do not change the Loom developer's stand.
