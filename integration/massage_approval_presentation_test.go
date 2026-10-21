@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
@@ -139,6 +140,18 @@ func checkMassageApprovalPresentation(t *testing.T, tc massageApprovalCase, quot
 		require.Contains(t, sent.Text, "Specialist")
 	}
 	require.IsType(t, &telegram.ReplyKeyboardMarkup{}, sent.ReplyMarkup)
+	// Restart after acknowledged delivery, not merely after the peer received the request.
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		rows, e := f.H.store.ListOutbox(t.Context(), first)
+		require.NoError(c, e)
+		require.Len(c, rows, 1)
+		require.Equal(c, "delivered", rows[0].State)
+		var receipt struct {
+			MessageID int64 `json:"message_id"`
+		}
+		require.NoError(c, json.Unmarshal(rows[0].Receipt, &receipt))
+		require.Positive(c, receipt.MessageID)
+	}, 15*time.Second, 25*time.Millisecond)
 	f.H.stop(t)
 	f.H.start(t)
 	second := acceptMassageApprovalReply(t, f.H, first, quoted)
