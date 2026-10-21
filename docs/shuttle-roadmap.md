@@ -1,6 +1,15 @@
 # Current roadmap checkpoint, 2026-10-21
 
-The owned primary runs `mvp-89/schema69`. The
+The owned primary runs application source `3be6e40b`, `mvp-89/schema69`.
+The [reviewed release](shuttle-reviewed-release-qa-2026-10-21.md) passes
+[CI46](https://github.com/complynx/zns-chatbot/actions/runs/39664578385): 870
+integration roots, 369 UI tests, generated SQL, lint and Linux/container build.
+Its separate candidate check covers native menus/registration with Loom stopped,
+exact name-expectation continuation through actual Loom and graceful restart.
+The image-only primary replacement is accepted; original ingress, business data,
+configuration and Loom state are preserved. No production cutover is included.
+
+The preceding
 [meal financial installation](shuttle-meal-primary-qa-2026-10-21.md) passes controlled
 cutover, original ingress recovery, all18 installed assets, six anonymous auth
 boundaries and preservation of old domain data. Source commit `f78f7096` passes
@@ -9,7 +18,7 @@ integration roots and367 UI cases. Authenticated meal workflow evidence comes
 from the separately retired isolated stands; the primary HTTP check does not
 replace it.
 
-The later source review fixes remain separate from that installation. Commit
+The following review fixes were validated before the current installation. Commit
 `ab59d761` passed [CI43](https://github.com/complynx/zns-chatbot/actions/runs/39642330245):
 867 integration roots, 368 UI cases, generated SQL, lint and Linux/container
 build. Commit `3186ba69`, including bounded knowledge receipts, native payment
@@ -20,12 +29,14 @@ authority fencing, specialist queue metrics and run custody through prolonged
 368 UI tests, generated SQL, lint and Linux/container build. The subsequent
 [graceful HTTP](shuttle-graceful-http-qa-2026-10-21.md) and
 [payment-session expiry](shuttle-payment-session-expiry-qa-2026-10-21.md) fixes
-have focused Linux/race evidence and remain uninstalled. None of these later
-source checks upgrades the accepted primary image or proves production readiness.
+have focused Linux/race evidence and are included in the current installation.
+Their original reports retain the earlier source-only boundary. Source checks
+alone do not prove installed behavior or production readiness.
 
 The [full Go review and test-fidelity follow-up](shuttle-integration-review-qa-2026-10-21.md)
 records complete static read coverage and the separate focused runtime gate.
-These later test/source changes remain distinct from the installed image.
+Its source review and focused tests remain distinct from the separately recorded
+installation and bounded workflow acceptance.
 
 The preceding
 [avatar source installation](shuttle-avatar-primary-qa-2026-10-21.md) is accepted

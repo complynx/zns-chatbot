@@ -54,9 +54,16 @@ modified.
 870 integration roots, 368 UI tests, generated SQL, lint and Linux/container build.
 Its source is `a7ba9287`; the tested PR merge is
 `ab02483a4de9739f0ac9a62f470907f3a52358cc`. Later local test fixes are not included
-in that result. The primary still runs the image built from source `f78f7096`,
-`mvp-89/schema69`; no new primary installation or real Telegram acceptance is
-claimed here.
+in that result. The subsequent [CI46](https://github.com/complynx/zns-chatbot/actions/runs/39664578385)
+passes current application source `3be6e40b`: 870 roots, 369 UI tests,
+generated SQL, zero lint issues and Linux/container build. Its tested merge is
+`4822433a17120e05ad036bad652ea12139db935b`.
+
+The [reviewed release installation](shuttle-reviewed-release-qa-2026-10-21.md)
+subsequently replaced the primary with that source while preserving schema69 /
+mvp-89, domain and Loom state. Its bounded native/name-agent/restart QA and
+installation checks are recorded separately; real Telegram/WebView and broad
+business-workflow acceptance are not implied by this integration-test sweep.
 
 Private frozen sources, source hashes, JSON test streams, process states and
 failure evidence are retained under `.cache/shuttle-work/integration-fidelity-v1`.
