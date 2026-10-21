@@ -299,7 +299,7 @@ func TestMiniAppOrdersSelectionRechecksSessionAfterEventLockWait(t *testing.T) {
 	require.Eventually(t, func() bool {
 		var waiting bool
 		probeErr := f.H.store.Pool().
-			QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='transactionid' AND NOT granted)`).
+			QueryRow(t.Context(), "SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid)))", blocking.Conn().PgConn().PID()).
 			Scan(&waiting)
 		return probeErr == nil && waiting
 	}, 3*time.Second, 5*time.Millisecond)

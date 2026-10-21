@@ -30,11 +30,12 @@ func TestAgentRegistrationWriteReconcilesOwnerReceiptAfterRestart(t *testing.T) 
 	}
 	code, data := adminRequest(t, h, user, http.MethodPost, "/internal/agent/registrations/join", body)
 	require.Equal(t, http.StatusOK, code, string(data))
-	var response struct {
+	type registrationResponse struct {
 		Status      string                     `json:"status"`
 		OperationID string                     `json:"operation_id"`
 		Result      registrations.Registration `json:"result"`
 	}
+	var response registrationResponse
 	require.NoError(t, json.Unmarshal(data, &response))
 	require.Equal(t, "succeeded", response.Status)
 	require.Equal(t, operation, response.OperationID)
@@ -45,11 +46,15 @@ func TestAgentRegistrationWriteReconcilesOwnerReceiptAfterRestart(t *testing.T) 
 	lookup := map[string]any{"protocol_version": 1, "operation_id": operation}
 	code, data = adminRequest(t, h, user, http.MethodPost, "/internal/agent/registrations/status", lookup)
 	require.Equal(t, http.StatusOK, code, string(data))
+	response = registrationResponse{}
 	require.NoError(t, json.Unmarshal(data, &response))
+	require.Equal(t, "succeeded", response.Status)
 	require.Equal(t, original, response.Result)
 	code, data = adminRequest(t, h, user, http.MethodPost, "/internal/agent/registrations/join", body)
 	require.Equal(t, http.StatusOK, code, string(data))
+	response = registrationResponse{}
 	require.NoError(t, json.Unmarshal(data, &response))
+	require.Equal(t, "succeeded", response.Status)
 	require.Equal(t, original, response.Result)
 	code, data = adminRequest(t, h, other, http.MethodPost, "/internal/agent/registrations/status", lookup)
 	require.Equal(t, http.StatusOK, code, string(data))
@@ -68,7 +73,9 @@ func TestAgentRegistrationWriteReconcilesOwnerReceiptAfterRestart(t *testing.T) 
 		},
 	)
 	require.Equal(t, http.StatusOK, code, string(data))
+	response = registrationResponse{}
 	require.NoError(t, json.Unmarshal(data, &response))
+	require.Equal(t, "succeeded", response.Status)
 	require.Equal(t, original, response.Result)
 	body["idempotency_key"] = "different"
 	code, _ = adminRequest(t, h, user, http.MethodPost, "/internal/agent/registrations/join", body)

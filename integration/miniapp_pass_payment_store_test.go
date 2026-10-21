@@ -225,7 +225,7 @@ func TestMiniAppPassPaymentStoreSessionChangesDuringEventWait(t *testing.T) {
 				require.Eventually(t, func() bool {
 					var waiting int
 					queryErr := f.H.store.Pool().
-						QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%FROM shuttle_events WHERE id=%FOR UPDATE%'`).
+						QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid))", blocker.Conn().PgConn().PID()).
 						Scan(&waiting)
 					return queryErr == nil && waiting >= 1
 				}, 5*time.Second, 20*time.Millisecond)

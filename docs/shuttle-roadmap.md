@@ -14,12 +14,18 @@ The later source review fixes remain separate from that installation. Commit
 867 integration roots, 368 UI cases, generated SQL, lint and Linux/container
 build. Commit `3186ba69`, including bounded knowledge receipts, native payment
 authority fencing, specialist queue metrics and run custody through prolonged
-401 responses, has its own [CI44](https://github.com/complynx/zns-chatbot/actions/runs/39650197024)
-in progress at this checkpoint. The subsequent
+401 responses, passed [CI44](https://github.com/complynx/zns-chatbot/actions/runs/39650197024):
+869 integration roots and 368 UI tests. Commit `a7ba9287` subsequently passed
+[CI45](https://github.com/complynx/zns-chatbot/actions/runs/39655949519):870 roots,
+368 UI tests, generated SQL, lint and Linux/container build. The subsequent
 [graceful HTTP](shuttle-graceful-http-qa-2026-10-21.md) and
 [payment-session expiry](shuttle-payment-session-expiry-qa-2026-10-21.md) fixes
 have focused Linux/race evidence and remain uninstalled. None of these later
 source checks upgrades the accepted primary image or proves production readiness.
+
+The [full Go review and test-fidelity follow-up](shuttle-integration-review-qa-2026-10-21.md)
+records complete static read coverage and the separate focused runtime gate.
+These later test/source changes remain distinct from the installed image.
 
 The preceding
 [avatar source installation](shuttle-avatar-primary-qa-2026-10-21.md) is accepted

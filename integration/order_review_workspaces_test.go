@@ -353,7 +353,7 @@ func TestOrderReviewWorkspaceNativeSessionRecheckedAfterEventWait(t *testing.T) 
 	require.Eventually(t, func() bool {
 		var count int
 		readErr := f.H.store.Pool().
-			QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%FROM shuttle_events%'`).
+			QueryRow(ctx, "SELECT count(*) FROM pg_stat_activity WHERE $1::integer=ANY(pg_blocking_pids(pid))", blocker.Conn().PgConn().PID()).
 			Scan(&count)
 		return readErr == nil && count > 0
 	}, 3*time.Second, 20*time.Millisecond)

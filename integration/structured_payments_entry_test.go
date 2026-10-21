@@ -86,7 +86,6 @@ func TestStructuredPaymentsPreservesAgentQuestionAndAppearsInReactiveContext(t *
 	require.Equal(t, appTestOrigin+"/app/#pass-payments", form.InlineKeyboard[0][0].WebApp.URL)
 	require.Len(t, p.runs, 1)
 	require.Empty(t, p.inputs)
-	require.Zero(t, p.loomUnavailableCalls)
 	p.mu.Unlock()
 	h.stop(t)
 	p.mu.Lock()

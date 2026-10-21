@@ -51,16 +51,23 @@ func TestPairNotificationIntentsSurviveRestartWithoutDuplicatingDecisions(t *tes
 			f.H.stop(t)
 			f.H.start(t)
 			applyPairNoticeDecision(t, f, actor, decision, args)
-			notices, err = f.H.store.ReadyPairInvitationNotifications(ctx, f.A.EventScope, uuid.Nil)
-			require.NoError(t, err)
+			// Delivery workers may already have consumed either intent after restart.
+			notices = persistedPairNoticeIntents(t, f, invitation.Invitation.ID)
 			require.Len(t, notices, 2)
-			require.Contains(t, notices, first)
 			var changed db.PairInvitationNotification
+			foundFirst := false
 			for _, notice := range notices {
 				if notice.ID != first.ID {
 					changed = notice
+					continue
 				}
+				foundFirst = true
+				require.Equal(t, first.InvitationID, notice.InvitationID)
+				require.Equal(t, first.InvitationVersion, notice.InvitationVersion)
+				require.Equal(t, first.RecipientID, notice.RecipientID)
+				require.Equal(t, first.Kind, notice.Kind)
 			}
+			require.True(t, foundFirst)
 			require.Equal(t, int64(2), changed.InvitationVersion)
 			require.Equal(t, invitation.Invitation.ID, changed.InvitationID)
 			expectedKind := map[string]string{"accept": "accepted", "decline": "declined", "revoke": "revoked", "expired": "expired"}[decision]
@@ -77,6 +84,25 @@ func TestPairNotificationIntentsSurviveRestartWithoutDuplicatingDecisions(t *tes
 			require.Empty(t, notices)
 		})
 	}
+}
+
+func persistedPairNoticeIntents(t *testing.T, f pairFixture, invitation uuid.UUID) []db.PairInvitationNotification {
+	t.Helper()
+	rows, err := f.H.store.Pool().Query(t.Context(),
+		`SELECT id,invitation_id,invitation_version,recipient_id,kind
+		 FROM shuttle_pair_notifications WHERE invitation_id=$1 ORDER BY id`, invitation)
+	require.NoError(t, err)
+	defer rows.Close()
+	var notices []db.PairInvitationNotification
+	for rows.Next() {
+		var notice db.PairInvitationNotification
+		require.NoError(t, rows.Scan(
+			&notice.ID, &notice.InvitationID, &notice.InvitationVersion, &notice.RecipientID, &notice.Kind,
+		))
+		notices = append(notices, notice)
+	}
+	require.NoError(t, rows.Err())
+	return notices
 }
 
 func awaitPairNotice(t *testing.T, f pairFixture, id uuid.UUID, state string) {
