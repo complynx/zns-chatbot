@@ -6,8 +6,15 @@ changing existing service-order selections. This is a domain component, not a
 finished meal-order workflow. Migration53 now adds versioned catalogs, durable
 drafts and operation receipts. The agent HTTP API is implemented at manifest
 `mvp-60`. Native HTTP APIs and reactive action context now share that store.
-The shipped ru/en meal form now uses those APIs. Financial submission is not
-implemented yet. No new runtime dependency is required.
+The installed ru/en meal form uses those draft APIs. The later working-source
+[financial checkout](shuttle-meal-order-submission.md#browser-checkout-source)
+adds explicit meal submission, cancellation and shared payment-proof handling;
+that source is not installed on the primary. A
+[bounded runtime check](shuttle-meal-financial-runtime-qa-2026-10-21.md) accepts
+native checkout/recovery, Loom writes/consent, pending-consent restart and native
+proof/ambassador confirmation with owner/module isolation. Full release and primary
+installation remain open.
+No new runtime dependency is required.
 The next [frozen meal terms](shuttle-meal-terms.md) component is implemented and
 verified separately; it preserves full selected names and per-service windows
 for future financial integration without creating an order.
@@ -393,3 +400,19 @@ controlled, so unattended model behavior remains outside this gate.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
+
+
+## Agreed financial policy, 2026-10-21
+
+Daniel chose no submitted order for an empty composition, one explicit payment
+proof deadline for all meals at an event (the legacy Food deadline), and unlimited
+meal quantities. Ambassador review may finish after a timely proof submission.
+An empty selection is distinct from a selected item whose configured price is zero.
+
+The source catalog now accepts optional `payment_deadline` as an explicit absolute
+instant. Normalization validates microsecond precision, copies the value and stores
+UTC. Existing descriptive catalogs may omit it; no deadline is inferred from their
+service windows. The administrative catalog API advertises the field in source
+manifest mvp-87, and immutable meal terms retain the original configured deadline.
+This adds no SQL migration and does not enable order submission or payment evidence
+yet. Schema remains68; the installed primary still runs mvp-86.

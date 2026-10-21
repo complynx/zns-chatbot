@@ -84,9 +84,15 @@ func (s *Store) orderReviewOperationByID(
 	case orderReviewSave, orderReviewCancel:
 		result.Workspace = &OrderReviewWorkspace{}
 		err = json.Unmarshal(call.Result, result.Workspace)
+		if err == nil {
+			err = hydrateOrderReviewWorkspace(ctx, s.q.WithTx(tx), scope.UserID, result.Workspace)
+		}
 	case orderReviewCommit:
 		result.Preparation = &OrderReviewCommitPreparation{}
 		err = json.Unmarshal(call.Document, result.Preparation)
+		if err == nil {
+			err = hydrateOrderReviewCommit(w, result.Preparation)
+		}
 		if err == nil && len(call.Result) > 0 {
 			result.Review = &OrderWorkspaceReviewResult{}
 			err = json.Unmarshal(call.Result, result.Review)

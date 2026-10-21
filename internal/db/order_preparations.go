@@ -58,13 +58,13 @@ func (s *Store) prepareOrderSubmission(
 		err = json.Unmarshal(raw, &prior)
 		return prior, true, err
 	}
-	snapshot, now, err := s.orderSnapshot(ctx, tx, scope, args)
+	snapshot, now, err := s.orderSnapshotForKind(ctx, tx, scope, args, call.businessKind())
 	if err != nil {
 		return OrderPreparation{}, false, err
 	}
 	row, err := q.FindPendingOrderPreparation(
 		ctx,
-		sqlc.FindPendingOrderPreparationParams{
+		sqlc.FindPendingOrderPreparationParams{OrderKind: string(call.businessKind()),
 			UserID:             scope.UserID,
 			EventID:            args.EventID,
 			SourceDraftVersion: args.ExpectedDraftVersion,
@@ -74,16 +74,34 @@ func (s *Store) prepareOrderSubmission(
 	)
 	var result OrderPreparation
 	if err == nil {
-		result, err = orderPreparationRecord(row)
+		result, err = orderPreparationRecordForKind(row, call.businessKind())
 		if err == nil {
 			var same bool
 			same, err = sameOrderConditions(snapshot, result.Snapshot)
 			if err == nil && !same {
-				result, err = insertOrderPreparation(ctx, q, scope, args, snapshot, now, call.businessHash)
+				result, err = insertOrderPreparationForKind(
+					ctx,
+					q,
+					scope,
+					args,
+					snapshot,
+					now,
+					call.businessHash,
+					call.businessKind(),
+				)
 			}
 		}
 	} else if errors.Is(err, pgx.ErrNoRows) {
-		result, err = insertOrderPreparation(ctx, q, scope, args, snapshot, now, call.businessHash)
+		result, err = insertOrderPreparationForKind(
+			ctx,
+			q,
+			scope,
+			args,
+			snapshot,
+			now,
+			call.businessHash,
+			call.businessKind(),
+		)
 	}
 	if err == nil {
 		err = insertOrderReceipt(ctx, q, scope, call, result.ID, uuid.Nil, result)
@@ -91,8 +109,8 @@ func (s *Store) prepareOrderSubmission(
 	return result, false, err
 }
 
-func orderPreparationRecord(row sqlc.ShuttleOrderPreparation) (OrderPreparation, error) {
-	if row.OrderKind != string(OrderKindService) {
+func orderPreparationRecordForKind(row sqlc.ShuttleOrderPreparation, kind OrderKind) (OrderPreparation, error) {
+	if row.OrderKind != string(kind) {
 		return OrderPreparation{}, ErrConflict
 	}
 	p := OrderPreparation{ID: row.ID, ExpiresAt: row.ExpiresAt.Time.UTC()}
@@ -102,14 +120,9 @@ func orderPreparationRecord(row sqlc.ShuttleOrderPreparation) (OrderPreparation,
 	return p, json.Unmarshal(row.Snapshot, &p.Snapshot)
 }
 
-func insertOrderPreparation(
-	ctx context.Context,
-	q *sqlc.Queries,
-	scope ProfileScope,
-	args OrderSubmission,
-	snapshot OrderSnapshot,
-	now time.Time,
-	hash []byte,
+func insertOrderPreparationForKind(
+	ctx context.Context, q *sqlc.Queries, scope ProfileScope,
+	args OrderSubmission, snapshot OrderSnapshot, now time.Time, hash []byte, kind OrderKind,
 ) (OrderPreparation, error) {
 	expiry := now.Add(assignmentPreparationTTL)
 	if snapshot.SalesClosesAt.Before(expiry) {
@@ -126,7 +139,7 @@ func insertOrderPreparation(
 	}
 	err = q.InsertOrderPreparation(
 		ctx,
-		sqlc.InsertOrderPreparationParams{
+		sqlc.InsertOrderPreparationParams{OrderKind: string(kind),
 			ID:                 result.ID,
 			UserID:             scope.UserID,
 			EventID:            args.EventID,

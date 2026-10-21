@@ -53,12 +53,17 @@ func orderReviewSummary(
 	evidence := p.Evidence
 	row, err := q.ReadSubmittedOrder(
 		ctx,
-		sqlc.ReadSubmittedOrderParams{ID: evidence.OrderID, EventID: evidence.EventID, UserID: evidence.UserID},
+		sqlc.ReadSubmittedOrderParams{
+			OrderKind: string(evidence.businessKind()),
+			ID:        evidence.OrderID,
+			EventID:   evidence.EventID,
+			UserID:    evidence.UserID,
+		},
 	)
 	if err != nil {
 		return "", err
 	}
-	order, err := submittedOrderRecord(row)
+	order, err := submittedOrderRecordForKind(row, evidence.businessKind())
 	if err != nil {
 		return "", err
 	}
@@ -118,6 +123,12 @@ func renderOrderReviewSummary(
 			note = "Отклоняет это подтверждение и освобождает только его резерв, если он был. Деньги не возвращаются, заказ не отменяется."
 		}
 	}
+	if snapshot.Meal != nil && p.Arguments.Decision == OrderEvidenceConfirmed {
+		note = "Records confirmed meal payment. It does not fulfill the order or reserve limited resources."
+		if ru {
+			note = "Фиксирует подтверждённую оплату питания. Это не выполнение заказа и не резерв ограниченных мест."
+		}
+	}
 	money := func(amount int64) string { return paymentReviewMoney(amount, int32(e.CurrencyScale), e.Currency) } // #nosec G115 -- orderReviewSummary validates scale0..6 before calling this renderer.
 	body := fmt.Sprintf(
 		template,
@@ -168,6 +179,7 @@ func renderOrderReviewSummary(
 			zone.String(),
 		)
 	}
+	writeMealOrderReviewDetails(&details, snapshot.Meal, zone, ru)
 	writeOrderReviewCapacity(&details, snapshot.Capacity, e.AdmissionState, ru)
 	body += details.String()
 	fence := "```"

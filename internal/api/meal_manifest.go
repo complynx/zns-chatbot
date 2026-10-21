@@ -57,10 +57,10 @@ func mealsModule() map[string]any {
 	operation[manifestPath] = mealDraftPath + "draft_operation"
 	return map[string]any{
 		"id":                "zinusya_meals",
-		manifestDescription: "Separate meal composition and durable drafts; no financial submission",
+		manifestDescription: "Meal catalogs, durable drafts, exact order submission and original receipts",
 		manifestPermissions: []string{},
 		manifestDiscovery:   discoveryStatic,
-		manifestMethods:     []map[string]any{catalog, draft, save, operation},
+		manifestMethods:     append([]map[string]any{catalog, draft, save, operation}, mealSubmissionMethods()...),
 	}
 }
 

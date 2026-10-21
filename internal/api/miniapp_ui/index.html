@@ -192,6 +192,15 @@
       <button id="meals-latest" type="button" hidden>Start a new draft with the current menu</button>
       <form id="meals-form"><div id="meals-items"></div><div class="actions"><button id="meals-save" type="submit">Save meal draft</button><button id="meals-clear" type="button">Clear saved meal draft</button></div></form>
       <div class="actions"><button id="meals-reload" type="button">Reload saved draft</button><button id="meals-recover" type="button" hidden>Check earlier save</button><button id="meals-retry" type="button" hidden>Retry the same save</button></div>
+      <button id="meals-prepare" type="button">Review order</button>
+      <div id="meals-preview"></div>
+      <button id="meals-confirm" type="button">Confirm this order</button>
+      <p id="meals-order-status" role="status" aria-live="polite"></p>
+      <div class="actions"><button id="meals-order-recover" type="button" hidden>Check earlier order request</button><button id="meals-order-retry" type="button" hidden>Retry same order request</button></div>
+      <h2 id="meals-submitted-title">My orders</h2>
+      <p id="meals-submitted-note">Submission does not confirm payment.</p>
+      <div class="actions"><button id="meals-submitted-reload" type="button">Reload orders</button><button id="meals-submitted-first" type="button" hidden>First orders</button><button id="meals-submitted-next" type="button" hidden>Next orders</button></div>
+      <div id="meals-submitted"></div>
     </section>
     <section id="orders" hidden aria-labelledby="orders-title">
       <h1 id="orders-title">Saved selection</h1>

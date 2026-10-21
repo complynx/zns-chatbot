@@ -44,7 +44,7 @@ func (s *Store) SubmitMiniAppOrderEvidence(
 	if err != nil {
 		return OrderPaymentEvidence{}, err
 	}
-	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, args.EventID, operation)
+	tx, scope, err := s.miniAppOrderTxForKind(ctx, deployment, session, args.EventID, operation, "")
 	if err != nil {
 		return OrderPaymentEvidence{}, err
 	}
@@ -68,7 +68,7 @@ func (s *Store) MiniAppOwnOrderEvidence(
 	session MiniAppOrderSession,
 	event, evidence uuid.UUID,
 ) (OrderPaymentEvidence, error) {
-	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, event, uuid.Nil)
+	tx, scope, err := s.miniAppOrderTxForKind(ctx, deployment, session, event, uuid.Nil, "")
 	if err != nil {
 		return OrderPaymentEvidence{}, err
 	}
@@ -80,6 +80,9 @@ func (s *Store) MiniAppOwnOrderEvidence(
 	}
 	if row.UserID != scope.UserID {
 		return OrderPaymentEvidence{}, pgx.ErrNoRows
+	}
+	if err = authorizeOrderPaymentKind(ctx, q, scope, event, OrderKind(row.OrderKind)); err != nil {
+		return OrderPaymentEvidence{}, err
 	}
 	return loadOrderEvidenceDecision(ctx, q, row)
 }
@@ -95,7 +98,7 @@ func (s *Store) MiniAppOrderEvidenceSubmissionReceipt(
 	if operation == uuid.Nil {
 		return OrderEvidenceOperation{}, orders.ErrSelection
 	}
-	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, event, operation)
+	tx, scope, err := s.miniAppOrderTxForKind(ctx, deployment, session, event, operation, "")
 	if err != nil {
 		return OrderEvidenceOperation{}, err
 	}
@@ -110,6 +113,9 @@ func (s *Store) MiniAppOrderEvidenceSubmissionReceipt(
 	}
 	result := OrderEvidenceOperation{OperationID: operation, Kind: OrderEvidenceSubmissionReceipt}
 	if err = json.Unmarshal(row.Result, &result.Result); err != nil {
+		return OrderEvidenceOperation{}, err
+	}
+	if err = authorizeOrderEvidenceOwner(ctx, s.q.WithTx(tx), scope, event, result.Result.ID); err != nil {
 		return OrderEvidenceOperation{}, err
 	}
 	return result, nil
@@ -127,7 +133,7 @@ func (s *Store) MiniAppOrderEvidenceFileList(
 	if limit < 1 || limit > miniAppOrderEvidencePageSize {
 		return MiniAppOrderEvidenceFiles{}, orders.ErrSelection
 	}
-	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, event, uuid.Nil)
+	tx, scope, err := s.miniAppOrderTxForKind(ctx, deployment, session, event, uuid.Nil, "")
 	if err != nil {
 		return MiniAppOrderEvidenceFiles{}, err
 	}
@@ -174,7 +180,7 @@ func (s *Store) MiniAppOwnOrderEvidenceList(
 	if limit < 1 || limit > miniAppOrderEvidencePageSize {
 		return OrderEvidencePage{}, orders.ErrSelection
 	}
-	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, event, uuid.Nil)
+	tx, scope, err := s.miniAppOrderTxForKind(ctx, deployment, session, event, uuid.Nil, "")
 	if err != nil {
 		return OrderEvidencePage{}, err
 	}
@@ -202,7 +208,7 @@ func (s *Store) MiniAppOrderEvidenceSource(
 	session MiniAppOrderSession,
 	event, file uuid.UUID,
 ) (File, error) {
-	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, event, uuid.Nil)
+	tx, scope, err := s.miniAppOrderTxForKind(ctx, deployment, session, event, uuid.Nil, "")
 	if err != nil {
 		return File{}, err
 	}

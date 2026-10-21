@@ -228,7 +228,7 @@ func TestOrderCancellationSQLGuardIsExclusiveAtFrozenInstant(t *testing.T) {
 		q := sqlc.New(tx)
 		row, err := q.CancelSubmittedOrder(
 			ctx,
-			sqlc.CancelSubmittedOrderParams{
+			sqlc.CancelSubmittedOrderParams{OrderKind: string(db.OrderKindService),
 				ObservedAt:      pgtype.Timestamptz{Time: cutoff.Add(offset), Valid: true},
 				ID:              result.Order.ID,
 				UserID:          scope.UserID,

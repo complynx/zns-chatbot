@@ -3,7 +3,6 @@ package db
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -32,7 +31,7 @@ func normalizeOrderEvidenceReview(args OrderEvidenceReview) (OrderEvidenceReview
 func (s *Store) orderEvidenceReviewTx(
 	ctx context.Context,
 	scope PaymentScope,
-	operation, event uuid.UUID,
+	operation, event, evidence uuid.UUID,
 ) (pgx.Tx, string, error) {
 	if operation == uuid.Nil || !paymentScopeValid(scope, operation.String()) {
 		return nil, "", orders.ErrSelection
@@ -45,7 +44,7 @@ func (s *Store) orderEvidenceReviewTx(
 	err = q.LockEventOperation(ctx, fmt.Sprintf("order-evidence-review:%s:%s", scope.UserID, operation))
 	var role string
 	if err == nil {
-		_, role, err = lockPaymentModuleEvent(ctx, q, scope, event, "orders", true)
+		_, role, err = lockOrderPaymentEvent(ctx, q, scope, event, evidence, true)
 	}
 	if err != nil {
 		rollbackLegacyArchive(ctx, tx)
@@ -95,7 +94,7 @@ func (s *Store) PrepareOrderEvidenceReview(
 	if err != nil {
 		return OrderEvidenceReviewPreparation{}, err
 	}
-	tx, _, err := s.orderEvidenceReviewTx(ctx, scope, operation, args.EventID)
+	tx, _, err := s.orderEvidenceReviewTx(ctx, scope, operation, args.EventID, args.EvidenceID)
 	if err != nil {
 		return OrderEvidenceReviewPreparation{}, err
 	}
@@ -130,7 +129,7 @@ func prepareOrderEvidenceReview(
 			return OrderEvidenceReviewPreparation{}, ErrConflict
 		}
 		var result OrderEvidenceReviewPreparation
-		err = json.Unmarshal(prior.Document, &result)
+		result, err = decodeOrderReviewPreparation(prior.Document, prior.Presentation)
 		return result, err
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -154,20 +153,23 @@ func prepareOrderEvidenceReview(
 	if err != nil {
 		return OrderEvidenceReviewPreparation{}, err
 	}
-	raw, err := orderJSON(result)
+	compact := result
+	compact.Description = ""
+	raw, err := orderJSON(compact)
 	if err != nil {
 		return OrderEvidenceReviewPreparation{}, err
 	}
 	err = q.InsertOrderEvidencePreparation(
 		ctx,
 		sqlc.InsertOrderEvidencePreparationParams{
-			ID:          result.ID,
-			UserID:      scope.UserID,
-			OperationID: operation,
-			EventID:     args.EventID,
-			RequestHash: hash,
-			Document:    raw,
-			ExpiresAt:   pgtype.Timestamptz{Time: result.ExpiresAt, Valid: true},
+			ID:           result.ID,
+			UserID:       scope.UserID,
+			OperationID:  operation,
+			EventID:      args.EventID,
+			RequestHash:  hash,
+			Document:     raw,
+			Presentation: result.Description,
+			ExpiresAt:    pgtype.Timestamptz{Time: result.ExpiresAt, Valid: true},
 		},
 	)
 	if err != nil {
@@ -199,7 +201,7 @@ func (s *Store) ReviewOrderEvidence(
 	if err != nil {
 		return OrderPaymentEvidence{}, err
 	}
-	tx, role, err := s.orderEvidenceReviewTx(ctx, scope, operation, args.EventID)
+	tx, role, err := s.orderEvidenceReviewTx(ctx, scope, operation, args.EventID, args.EvidenceID)
 	if err != nil {
 		return OrderPaymentEvidence{}, err
 	}

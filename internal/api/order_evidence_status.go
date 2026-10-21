@@ -23,7 +23,8 @@ func (s *Server) orderReviewStatusReceipt(
 	if err != nil || op == uuid.Nil {
 		return db.OrderReviewReceipt{}, huma.Error400BadRequest("nonzero operation UUID required")
 	}
-	return s.store.OrderReviewOperationByID(ctx, scope, op)
+	receipt, err := s.store.OrderReviewOperationByID(ctx, scope, op)
+	return orderReviewAgentReceipt(receipt), err
 }
 
 func orderEvidenceStatusResult[T any](operation string, result *T, err error) (*fileEnvelope, error) {

@@ -439,7 +439,8 @@ WHERE ev.id=$1 AND ev.event_id=$2;
 -- name: ListPaymentEvidence :many
 SELECT sqlc.embed(ev),coalesce(rv.decision,'pending')::text AS state,to_jsonb(rv) AS review FROM shuttle_payment_evidence ev
 LEFT JOIN shuttle_payment_reviews rv ON rv.evidence_id=ev.id
-WHERE ev.event_id=$1 AND (sqlc.arg(owner_id)::uuid='00000000-0000-0000-0000-000000000000' OR ev.user_id=sqlc.arg(owner_id))
+WHERE ev.event_id=$1
+ AND (sqlc.arg(owner_id)::uuid='00000000-0000-0000-0000-000000000000' OR ev.user_id=sqlc.arg(owner_id))
 AND ev.id>sqlc.arg(after_id)::uuid ORDER BY ev.id LIMIT sqlc.arg(page_limit);
 -- name: PaymentTotal :one
 SELECT coalesce(sum(rv.amount_minor),0)::bigint AS amount FROM shuttle_payment_reviews rv
@@ -975,37 +976,37 @@ AND owner.bot_id=event.bot_id AND owner.zitadel_org=event.organization_id;
 
 -- name: InsertOrderPreparation :exec
 INSERT INTO shuttle_order_preparations(id,user_id,event_id,source_draft_version,request_hash,arguments,snapshot,created_at,expires_at,order_kind)
-VALUES(sqlc.arg(id),sqlc.arg(user_id),sqlc.arg(event_id),sqlc.arg(source_draft_version),sqlc.arg(request_hash),sqlc.arg(arguments),sqlc.arg(snapshot),sqlc.arg(created_at),sqlc.arg(expires_at),'service');
+VALUES(sqlc.arg(id),sqlc.arg(user_id),sqlc.arg(event_id),sqlc.arg(source_draft_version),sqlc.arg(request_hash),sqlc.arg(arguments),sqlc.arg(snapshot),sqlc.arg(created_at),sqlc.arg(expires_at),sqlc.arg(order_kind));
 -- name: ReadOrderPreparation :one
-SELECT * FROM shuttle_order_preparations WHERE id=sqlc.arg(id) AND user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id) AND order_kind='service';
+SELECT * FROM shuttle_order_preparations WHERE id=sqlc.arg(id) AND user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id) AND order_kind=sqlc.arg(order_kind);
 -- name: FindPendingOrderPreparation :one
 SELECT * FROM shuttle_order_preparations WHERE user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id)
- AND order_kind='service' AND source_draft_version=sqlc.arg(source_draft_version) AND request_hash=sqlc.arg(request_hash)
+ AND order_kind=sqlc.arg(order_kind) AND source_draft_version=sqlc.arg(source_draft_version) AND request_hash=sqlc.arg(request_hash)
  AND consumed_at IS NULL AND expires_at>sqlc.arg(observed_at) ORDER BY created_at DESC,id DESC LIMIT 1;
 -- name: ConsumeOrderPreparation :execrows
 UPDATE shuttle_order_preparations SET consumed_at=sqlc.arg(observed_at)
-WHERE id=sqlc.arg(id) AND user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id) AND consumed_at IS NULL AND order_kind='service';
+WHERE id=sqlc.arg(id) AND user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id) AND consumed_at IS NULL AND order_kind=sqlc.arg(order_kind);
 -- name: ReadOrderOperations :many
 SELECT * FROM shuttle_order_operations WHERE user_id=sqlc.arg(user_id) AND operation_id=sqlc.arg(operation_id) ORDER BY kind;
 -- name: InsertOrderOperation :exec
 INSERT INTO shuttle_order_operations(user_id,operation_id,kind,event_id,preparation_id,order_id,business_hash,request_hash,result,source,order_kind)
-VALUES(sqlc.arg(user_id),sqlc.arg(operation_id),sqlc.arg(kind),sqlc.arg(event_id),sqlc.narg(preparation_id),sqlc.narg(order_id),sqlc.arg(business_hash),sqlc.arg(request_hash),sqlc.arg(result),sqlc.arg(source),'service');
+VALUES(sqlc.arg(user_id),sqlc.arg(operation_id),sqlc.arg(kind),sqlc.arg(event_id),sqlc.narg(preparation_id),sqlc.narg(order_id),sqlc.arg(business_hash),sqlc.arg(request_hash),sqlc.arg(result),sqlc.arg(source),sqlc.arg(order_kind));
 -- name: ReadSubmittedOrder :one
-SELECT * FROM shuttle_orders WHERE id=sqlc.arg(id) AND user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id) AND order_kind='service';
+SELECT * FROM shuttle_orders WHERE id=sqlc.arg(id) AND user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id) AND order_kind=sqlc.arg(order_kind);
 -- name: ReadCanonicalOrder :one
-SELECT * FROM shuttle_orders WHERE user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id) AND source_draft_version=sqlc.arg(source_draft_version) AND order_kind='service';
+SELECT * FROM shuttle_orders WHERE user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id) AND source_draft_version=sqlc.arg(source_draft_version) AND order_kind=sqlc.arg(order_kind);
 -- name: InsertSubmittedOrder :exec
 INSERT INTO shuttle_orders(id,user_id,event_id,source_draft_version,preparation_id,request_hash,version,state,submitted_result,sales_closes_at,submitted_at,order_kind)
-VALUES(sqlc.arg(id),sqlc.arg(user_id),sqlc.arg(event_id),sqlc.arg(source_draft_version),sqlc.arg(preparation_id),sqlc.arg(request_hash),1,'submitted',sqlc.arg(submitted_result),sqlc.arg(sales_closes_at),sqlc.arg(submitted_at),'service');
+VALUES(sqlc.arg(id),sqlc.arg(user_id),sqlc.arg(event_id),sqlc.arg(source_draft_version),sqlc.arg(preparation_id),sqlc.arg(request_hash),1,'submitted',sqlc.arg(submitted_result),sqlc.arg(sales_closes_at),sqlc.arg(submitted_at),sqlc.arg(order_kind));
 -- name: CancelSubmittedOrder :one
 UPDATE shuttle_orders AS o SET version=o.version+1,state='cancelled',cancelled_at=sqlc.arg(observed_at)
 WHERE o.id=sqlc.arg(id) AND o.user_id=sqlc.arg(user_id) AND o.event_id=sqlc.arg(event_id)
- AND o.order_kind='service' AND o.version=sqlc.arg(expected_version) AND o.version<9223372036854775807 AND o.state='submitted' AND o.sales_closes_at>sqlc.arg(observed_at)
+ AND o.order_kind=sqlc.arg(order_kind) AND o.version=sqlc.arg(expected_version) AND o.version<9223372036854775807 AND o.state='submitted' AND o.sales_closes_at>sqlc.arg(observed_at)
  AND NOT EXISTS(SELECT 1 FROM shuttle_order_evidence ev WHERE ev.order_id=o.id)
 RETURNING o.*;
 -- name: ListOwnSubmittedOrders :many
 SELECT * FROM shuttle_orders WHERE user_id=sqlc.arg(user_id) AND event_id=sqlc.arg(event_id) AND id>sqlc.arg(after_id)
-AND order_kind='service' ORDER BY id LIMIT sqlc.arg(page_limit);
+AND order_kind=sqlc.arg(order_kind) ORDER BY id LIMIT sqlc.arg(page_limit);
 
 
 -- name: OrderResourceUsage :many
@@ -1018,8 +1019,8 @@ SELECT EXISTS(SELECT 1 FROM shuttle_order_evidence WHERE order_id=$1) AS present
 -- name: HasActiveOrderEvidence :one
 SELECT EXISTS(SELECT 1 FROM shuttle_order_evidence WHERE order_id=$1 AND state<>'rejected') AS present;
 -- name: InsertOrderEvidence :one
-INSERT INTO shuttle_order_evidence(id,order_id,event_id,user_id,file_id,source_unique_id,reported_amount_minor,quoted_amount_minor,currency,currency_scale,sent_at,submitted_at,due_at,admission_state,reason,state)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$14) RETURNING *;
+INSERT INTO shuttle_order_evidence(id,order_id,event_id,user_id,file_id,source_unique_id,reported_amount_minor,quoted_amount_minor,currency,currency_scale,sent_at,submitted_at,due_at,admission_state,reason,state,order_kind)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$14,sqlc.arg(order_kind)) RETURNING *;
 -- name: InsertOrderAllocation :exec
 INSERT INTO shuttle_order_allocations(evidence_id,event_id,resource_id,units,state) VALUES($1,$2,$3,$4,'held');
 -- name: ChangeOrderAllocations :exec
@@ -1033,7 +1034,7 @@ INSERT INTO shuttle_order_evidence_operations(user_id,operation_id,kind,event_id
 -- name: ReadOrderEvidencePreparation :one
 SELECT * FROM shuttle_order_evidence_preparations WHERE user_id=$1 AND operation_id=$2;
 -- name: InsertOrderEvidencePreparation :exec
-INSERT INTO shuttle_order_evidence_preparations(id,user_id,operation_id,event_id,request_hash,document,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7);
+INSERT INTO shuttle_order_evidence_preparations(id,user_id,operation_id,event_id,request_hash,document,expires_at,presentation) VALUES($1,$2,$3,$4,$5,$6,$7,$8);
 -- name: InsertOrderEvidenceReview :exec
 INSERT INTO shuttle_order_evidence_reviews(evidence_id,actor_id,actor_subject,authority_role,decision,amount_minor,reason,reviewed_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8);
 -- name: InsertOrderEvidenceNotice :exec
@@ -1057,17 +1058,19 @@ WHERE ev.id=$1 AND ev.event_id=$2 AND owner.bot_id=$3 AND owner.zitadel_org=$4;
 -- name: HasOrdersEvidenceAuthority :one
 SELECT EXISTS(SELECT 1 FROM shuttle_event_authorities a JOIN shuttle_events e ON e.id=a.event_id
 WHERE a.user_id=$1 AND e.bot_id=$2 AND e.organization_id=$3 AND a.role IN ('ambassador','administrator')
-AND 'orders'=ANY(e.modules)) AS available;
+AND e.modules && ARRAY['orders','meals']::text[]) AS available;
 -- name: ListOrderEvidence :many
 SELECT ev.* FROM shuttle_order_evidence ev JOIN shuttle_users owner ON owner.id=ev.user_id
+JOIN shuttle_events e ON e.id=ev.event_id
 WHERE ev.event_id=sqlc.arg(event_id) AND owner.bot_id=sqlc.arg(bot_id) AND owner.zitadel_org=sqlc.arg(organization_id)
+ AND (CASE ev.order_kind WHEN 'service' THEN 'orders' WHEN 'meal' THEN 'meals' END)=ANY(e.modules)
  AND (sqlc.arg(owner_id)::uuid='00000000-0000-0000-0000-000000000000'::uuid OR ev.user_id=sqlc.arg(owner_id))
  AND (sqlc.arg(order_id)::uuid='00000000-0000-0000-0000-000000000000'::uuid OR ev.order_id=sqlc.arg(order_id))
  AND (NOT sqlc.arg(unresolved_only)::boolean OR ev.state IN ('pending','exhausted','needs_decision'))
  AND ev.id>sqlc.arg(after_id) ORDER BY ev.id LIMIT sqlc.arg(page_limit);
 
 -- name: ReadOrderReviewWorkspace :one
-SELECT w.*,p.document,NOT EXISTS(SELECT 1 FROM shuttle_order_review_workspaces later
+SELECT w.*,p.document,p.presentation,NOT EXISTS(SELECT 1 FROM shuttle_order_review_workspaces later
  WHERE later.actor_id=w.actor_id AND later.evidence_id=w.evidence_id AND later.revision>w.revision) AS current
 FROM shuttle_order_review_workspaces w JOIN shuttle_order_evidence_preparations p ON p.id=w.proposal_id
 WHERE w.id=$1 AND w.actor_id=$2;
@@ -1125,7 +1128,7 @@ JOIN shuttle_users actor ON actor.id=sqlc.arg(user_id) AND actor.bot_id=e.bot_id
 AND actor.zitadel_org=e.organization_id AND actor.zitadel_subject=sqlc.arg(subject) AND NOT actor.revoked
 LEFT JOIN shuttle_event_authorities a ON a.event_id=e.id AND a.user_id=actor.id
 WHERE e.bot_id=sqlc.arg(bot_id) AND e.organization_id=sqlc.arg(organization_id)
-AND 'orders'=ANY(e.modules) AND e.id>sqlc.arg(after_id)::uuid
+AND e.modules && ARRAY['orders','meals']::text[] AND e.id>sqlc.arg(after_id)::uuid
 AND (sqlc.arg(global_admin)::boolean OR a.role IN ('ambassador','administrator'))
 ORDER BY e.id LIMIT sqlc.arg(page_limit);
 
@@ -1149,7 +1152,8 @@ FROM shuttle_order_evidence_notices n
 JOIN shuttle_order_evidence ev ON ev.id=n.evidence_id
 JOIN shuttle_events e ON e.id=ev.event_id
 JOIN shuttle_users u ON u.id=n.recipient_id
-WHERE n.id=$1 AND e.bot_id=$2 AND e.organization_id=$3 AND 'orders'=ANY(e.modules)
+WHERE n.id=$1 AND e.bot_id=$2 AND e.organization_id=$3
+AND (CASE ev.order_kind WHEN 'service' THEN 'orders' WHEN 'meal' THEN 'meals' END)=ANY(e.modules)
 AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id AND NOT u.revoked AND u.zitadel_subject<>''
 AND n.kind=ev.state
 AND (u.id=ev.user_id OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
@@ -2187,3 +2191,6 @@ JOIN shuttle_legacy_history_memberships m ON m.archive_id=a.archive_id AND m.rec
 WHERE h.bot_id=$1 AND h.organization_id=$2 AND h.owner_telegram_id=$3
 AND h.source_role='files' AND h.id>$4
 ORDER BY h.id LIMIT $5;
+
+-- name: ReadOrderPaymentTarget :one
+SELECT * FROM shuttle_orders WHERE id=$1 AND event_id=$2 AND user_id=$3;

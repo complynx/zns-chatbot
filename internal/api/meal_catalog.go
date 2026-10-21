@@ -48,6 +48,7 @@ type mealCatalogPreparationResponse struct {
 
 func (s *Server) registerMealCatalog(api huma.API) {
 	s.registerMealDraft(api)
+	s.registerMealSubmission(api)
 	huma.Register(
 		api,
 		huma.Operation{
@@ -218,9 +219,16 @@ func (s *Server) mealCatalogStatus(
 
 func mealError(err error) error {
 	switch {
+	case errors.Is(err, db.ErrMealDeadlineMissing):
+		return huma.Error409Conflict("meal payment deadline is not configured")
+	case errors.Is(err, db.ErrEmptyMealOrder):
+		return huma.Error400BadRequest("meal order has no selections")
 	case errors.Is(err, orders.ErrSalesClosed):
 		return huma.Error409Conflict("changed meal service sales are closed")
-	case errors.Is(err, orders.ErrMealCatalog), errors.Is(err, orders.ErrMealChoices), errors.Is(err, orders.ErrAmount):
+	case errors.Is(err, orders.ErrMealCatalog),
+		errors.Is(err, orders.ErrMealChoices),
+		errors.Is(err, orders.ErrAmount),
+		errors.Is(err, orders.ErrSelection):
 		return huma.Error400BadRequest("invalid meal catalog or choices")
 	case errors.Is(err, pgx.ErrNoRows):
 		return huma.Error404NotFound("meal catalog, draft or entitlement not found")

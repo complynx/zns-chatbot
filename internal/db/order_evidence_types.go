@@ -27,6 +27,7 @@ type OrderEvidenceSubmission struct {
 // OrderPaymentEvidence reports an admission or human decision, never fulfillment.
 // Submission receipts retain their original state; reads return current state.
 type OrderPaymentEvidence struct {
+	OrderKind         OrderKind             `json:"order_kind,omitempty"`
 	Review            *OrderPaymentDecision `json:"review,omitempty"`
 	ID                uuid.UUID             `json:"id"`
 	OrderID           uuid.UUID             `json:"order_id"`
@@ -47,7 +48,7 @@ type OrderPaymentEvidence struct {
 }
 
 func orderEvidenceRecord(row sqlc.ShuttleOrderEvidence) OrderPaymentEvidence {
-	return OrderPaymentEvidence{
+	result := OrderPaymentEvidence{
 		ID:                row.ID,
 		OrderID:           row.OrderID,
 		EventID:           row.EventID,
@@ -65,6 +66,10 @@ func orderEvidenceRecord(row sqlc.ShuttleOrderEvidence) OrderPaymentEvidence {
 		State:             row.State,
 		Version:           row.Version,
 	}
+	if row.OrderKind == string(OrderKindMeal) {
+		result.OrderKind = OrderKindMeal
+	}
+	return result
 }
 
 type OrderEvidenceReview struct {
@@ -91,4 +96,11 @@ type OrderPaymentDecision struct {
 	AmountMinor   int64     `json:"amount_minor"`
 	Reason        string    `json:"reason"`
 	ReviewedAt    time.Time `json:"reviewed_at"`
+}
+
+func (e OrderPaymentEvidence) businessKind() OrderKind {
+	if e.OrderKind == "" {
+		return OrderKindService
+	}
+	return e.OrderKind
 }

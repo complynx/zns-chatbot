@@ -108,6 +108,7 @@ func (s *Server) agentSaveOrderReview(
 		return nil, err
 	}
 	result, err := s.store.PrepareOrderReviewWorkspace(ctx, scope, op, in.Body.Arguments)
+	result = orderReviewAgentWorkspace(result)
 	return orderEvidenceWriteResult(in.Body.OperationID, result, err)
 }
 
@@ -124,6 +125,7 @@ func (s *Server) agentCancelOrderReview(
 		return nil, err
 	}
 	result, err := s.store.CancelOrderReviewWorkspace(ctx, scope, op, in.Body.Arguments)
+	result = orderReviewAgentWorkspace(result)
 	return orderEvidenceWriteResult(in.Body.OperationID, result, err)
 }
 
@@ -153,7 +155,7 @@ func (s *Server) agentPrepareOrderReviewCommit(
 		Preconditions assignmentPreconditions    `json:"preconditions"`
 		Description   string                     `json:"description"`
 		ExpiresAt     time.Time                  `json:"expires_at"`
-	}{agentPrepared, in.Body.OperationID, prepared.Arguments, assignmentPreconditions{ProposalID: prepared.ID}, prepared.Description, prepared.ExpiresAt}
+	}{agentPrepared, in.Body.OperationID, prepared.Arguments, assignmentPreconditions{ProposalID: prepared.ID}, orderReviewPrepareDescription(prepared), prepared.ExpiresAt}
 	return boundedOrderEvidenceJSON(out)
 }
 
@@ -188,6 +190,7 @@ func (s *Server) agentOrderReviewWorkspace(
 	if err != nil {
 		return nil, orderEvidenceError(err)
 	}
+	w = orderReviewAgentWorkspace(w)
 	return orderEvidenceReadResult(in.Body.OperationID, orderReviewWorkspaceView{Workspace: &w})
 }
 
@@ -206,5 +209,6 @@ func (s *Server) agentOrderReviewOperation(
 	if err != nil {
 		return nil, orderEvidenceError(err)
 	}
+	receipt = orderReviewAgentReceipt(receipt)
 	return orderEvidenceReadResult(in.Body.OperationID, orderReviewOperationView{Receipt: &receipt})
 }

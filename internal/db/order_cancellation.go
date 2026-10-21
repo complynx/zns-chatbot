@@ -59,7 +59,7 @@ func (s *Store) cancelOrder(
 	}
 	row, err := q.CancelSubmittedOrder(
 		ctx,
-		sqlc.CancelSubmittedOrderParams{
+		sqlc.CancelSubmittedOrderParams{OrderKind: string(call.businessKind()),
 			ObservedAt:      now,
 			ID:              args.OrderID,
 			UserID:          scope.UserID,
@@ -73,7 +73,7 @@ func (s *Store) cancelOrder(
 	if err != nil {
 		return SubmittedOrder{}, false, err
 	}
-	result, err := submittedOrderRecord(row)
+	result, err := submittedOrderRecordForKind(row, call.businessKind())
 	if err == nil {
 		err = insertOrderReceipt(ctx, q, scope, call, uuid.Nil, args.OrderID, result)
 	}

@@ -43,6 +43,7 @@ type OrderService struct {
 
 // OrderSnapshot retains exactly what was quoted, including the original cutoff.
 type OrderSnapshot struct {
+	Meal          *MealTerms               `json:"meal,omitempty"`
 	Capacity      *orders.CapacitySnapshot `json:"capacity,omitempty"`
 	Services      []OrderService           `json:"services,omitempty"`
 	EventName     string                   `json:"event_name"`
@@ -59,6 +60,7 @@ type OrderPreparation struct {
 }
 
 type SubmittedOrder struct {
+	OrderKind          OrderKind     `json:"order_kind,omitempty"`
 	ID                 uuid.UUID     `json:"id"`
 	EventID            uuid.UUID     `json:"event_id"`
 	SourceDraftVersion int64         `json:"source_draft_version"`
@@ -71,8 +73,9 @@ type SubmittedOrder struct {
 
 // OrderSubmissionResult is immutable; read the order separately for current state.
 type OrderSubmissionResult struct {
-	Order     SubmittedOrder  `json:"order"`
-	Selection OrdersSelection `json:"selection"`
+	Order     SubmittedOrder   `json:"order"`
+	Selection *OrdersSelection `json:"selection,omitempty"`
+	MealDraft *MealDraft       `json:"meal_draft,omitempty"`
 }
 
 type OrderCancellation struct {

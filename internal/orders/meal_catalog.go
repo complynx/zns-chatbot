@@ -54,9 +54,10 @@ type MealDay struct {
 // MealCatalog uses final item and combo prices, including mandatory charges.
 // Catalogs requiring additional charges are not supported by this version.
 type MealCatalog struct {
-	Currency      string    `json:"currency"`
-	CurrencyScale int       `json:"currency_scale"`
-	Days          []MealDay `json:"days"`
+	PaymentDeadline *time.Time `json:"payment_deadline,omitempty"`
+	Currency        string     `json:"currency"`
+	CurrencyScale   int        `json:"currency_scale"`
+	Days            []MealDay  `json:"days"`
 }
 
 // NormalizeMeals copies a bounded catalog with explicit instants and integer
@@ -69,6 +70,13 @@ func NormalizeMeals(document MealCatalog) (MealCatalog, error) {
 		return MealCatalog{}, ErrMealCatalog
 	}
 	result := document
+	if document.PaymentDeadline != nil {
+		if !validInstant(*document.PaymentDeadline) {
+			return MealCatalog{}, ErrMealCatalog
+		}
+		deadline := document.PaymentDeadline.UTC()
+		result.PaymentDeadline = &deadline
+	}
 	result.Days = make([]MealDay, len(document.Days))
 	seen := make(map[string]bool, len(document.Days))
 	for i, day := range document.Days {

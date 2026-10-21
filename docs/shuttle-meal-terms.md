@@ -67,3 +67,15 @@ in ignored D30, and the release hold remains in force.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
+
+
+## Explicit shared deadline follow-up, 2026-10-21
+
+After Daniel selected the legacy single-deadline policy, optional catalog
+`payment_deadline` is retained in `MealTerms`. It is copied and normalized to UTC;
+source mutation cannot change the frozen value. Omitted legacy deadlines remain
+omitted. Service sales windows remain separate descriptive terms and do not imply
+this payment-proof deadline. The builder still creates no order or payment and
+performs no current-time admission. Empty-order suppression and unlimited-quantity
+financial submission are agreed requirements for the next integration, not effects
+of this pure builder.

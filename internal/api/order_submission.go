@@ -48,27 +48,24 @@ type orderOperationArguments struct {
 	Kind        db.OrderOperationKind `json:"kind"         enum:"prepare,submit,cancel"`
 }
 
-func orderRoute(method string) huma.Operation {
-	return huma.Operation{
-		OperationID:  "agent-orders-" + method,
-		Method:       http.MethodPost,
-		Path:         ordersSelectionPath + method,
-		MaxBodyBytes: internalBodyLimit,
+// The business bindings are fixed when routes are registered; requests cannot
+// select another order kind or bypass that module's store authorization.
+func (s *orderAgentAPI) register(api huma.API, path, prefix string) {
+	route := func(method string) huma.Operation {
+		return huma.Operation{OperationID: prefix + method, Method: http.MethodPost,
+			Path: path + method, MaxBodyBytes: internalBodyLimit}
 	}
+	huma.Register(api, route("submit/prepare"), s.agentPrepareOrder)
+	huma.Register(api, route("submit"), s.agentSubmitOrder)
+	huma.Register(api, route("submit/status"), s.agentOrderSubmissionStatus)
+	huma.Register(api, route("cancel"), s.agentCancelOrder)
+	huma.Register(api, route("cancel/status"), s.agentOrderCancellationStatus)
+	huma.Register(api, route("get"), s.agentOwnOrder)
+	huma.Register(api, route("list"), s.agentOwnOrders)
+	huma.Register(api, route("operation"), s.agentOrderOperation)
 }
 
-func (s *Server) registerOrderSubmission(api huma.API) {
-	huma.Register(api, orderRoute("submit/prepare"), s.agentPrepareOrder)
-	huma.Register(api, orderRoute("submit"), s.agentSubmitOrder)
-	huma.Register(api, orderRoute("submit/status"), s.agentOrderSubmissionStatus)
-	huma.Register(api, orderRoute("cancel"), s.agentCancelOrder)
-	huma.Register(api, orderRoute("cancel/status"), s.agentOrderCancellationStatus)
-	huma.Register(api, orderRoute("get"), s.agentOwnOrder)
-	huma.Register(api, orderRoute("list"), s.agentOwnOrders)
-	huma.Register(api, orderRoute("operation"), s.agentOrderOperation)
-}
-
-func (s *Server) agentPrepareOrder(
+func (s *orderAgentAPI) agentPrepareOrder(
 	ctx context.Context,
 	in *agentReadRequest[db.OrderSubmission],
 ) (*orderPreparationResponse, error) {
@@ -80,17 +77,17 @@ func (s *Server) agentPrepareOrder(
 	if err != nil || op == uuid.Nil {
 		return nil, huma.Error400BadRequest("nonzero operation UUID required")
 	}
-	prepared, err := s.store.PrepareOwnOrderSubmission(ctx, scope, op, in.Body.Arguments, db.OrderSourceAgent)
+	prepared, err := s.actions.prepare(ctx, scope, op, in.Body.Arguments, db.OrderSourceAgent)
 	if err != nil {
-		return nil, ordersCatalogError(err)
+		return nil, s.mapError(err)
 	}
 	language, err := s.orderPresentationLanguage(ctx, scope)
 	if err != nil {
-		return nil, ordersCatalogError(err)
+		return nil, s.mapError(err)
 	}
-	description, err := orderSubmissionDescription(prepared, language)
+	description, err := s.describe(prepared, language)
 	if err != nil {
-		return nil, ordersCatalogError(err)
+		return nil, s.mapError(err)
 	}
 	out := &orderPreparationResponse{}
 	out.Body.Status, out.Body.OperationID, out.Body.Arguments = agentPrepared, in.Body.OperationID, prepared.Arguments
@@ -99,7 +96,7 @@ func (s *Server) agentPrepareOrder(
 	return out, nil
 }
 
-func (s *Server) agentSubmitOrder(
+func (s *orderAgentAPI) agentSubmitOrder(
 	ctx context.Context,
 	in *orderSubmitRequest,
 ) (*paymentWriteResponse[db.OrderSubmissionResult], error) {
@@ -111,7 +108,7 @@ func (s *Server) agentSubmitOrder(
 		in.Body.Confirmation.Preconditions.ProposalID == uuid.Nil {
 		return nil, huma.Error400BadRequest("matching nonzero operation key and exact proposal confirmation required")
 	}
-	result, err := s.store.SubmitOwnOrder(
+	result, err := s.actions.submit(
 		ctx,
 		scope,
 		in.Body.OperationID,
@@ -119,10 +116,10 @@ func (s *Server) agentSubmitOrder(
 		in.Body.Confirmation.Preconditions.ProposalID,
 		db.OrderSourceAgent,
 	)
-	return orderWriteResult(in.Body.OperationID.String(), result, err)
+	return orderWriteResult(in.Body.OperationID.String(), result, err, s.mapError)
 }
 
-func (s *Server) agentCancelOrder(
+func (s *orderAgentAPI) agentCancelOrder(
 	ctx context.Context,
 	in *profileWriteRequest[db.OrderCancellation],
 ) (*paymentWriteResponse[db.SubmittedOrder], error) {
@@ -134,11 +131,11 @@ func (s *Server) agentCancelOrder(
 	if err != nil || op == uuid.Nil || in.Body.IdempotencyKey != in.Body.OperationID {
 		return nil, huma.Error400BadRequest("operation ID must be a nonzero UUID and match idempotency key")
 	}
-	result, err := s.store.CancelOwnOrder(ctx, scope, op, in.Body.Arguments, db.OrderSourceAgent)
-	return orderWriteResult(in.Body.OperationID, result, err)
+	result, err := s.actions.cancel(ctx, scope, op, in.Body.Arguments, db.OrderSourceAgent)
+	return orderWriteResult(in.Body.OperationID, result, err, s.mapError)
 }
 
-func (s *Server) agentOwnOrder(
+func (s *orderAgentAPI) agentOwnOrder(
 	ctx context.Context,
 	in *agentReadRequest[orderDetailArguments],
 ) (*agentReadResponse[db.SubmittedOrder], error) {
@@ -146,14 +143,14 @@ func (s *Server) agentOwnOrder(
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.store.OwnOrder(ctx, scope, in.Body.Arguments.EventID, in.Body.Arguments.OrderID)
+	result, err := s.actions.get(ctx, scope, in.Body.Arguments.EventID, in.Body.Arguments.OrderID)
 	if err != nil {
-		return nil, ordersCatalogError(err)
+		return nil, s.mapError(err)
 	}
 	return agentReadResult(in.Body.OperationID, result), nil
 }
 
-func (s *Server) agentOwnOrders(
+func (s *orderAgentAPI) agentOwnOrders(
 	ctx context.Context,
 	in *agentReadRequest[agentRegistrationListArguments],
 ) (*agentReadResponse[db.OrdersPage], error) {
@@ -165,22 +162,27 @@ func (s *Server) agentOwnOrders(
 	if args.Limit == 0 {
 		args.Limit = 20
 	}
-	result, err := s.store.ListOwnOrders(ctx, scope, args.EventID, args.After, args.Limit)
+	result, err := s.actions.list(ctx, scope, args.EventID, args.After, args.Limit)
 	if err != nil {
-		return nil, ordersCatalogError(err)
+		return nil, s.mapError(err)
 	}
 	result, err = boundedOrdersPage(result)
 	if err != nil {
-		return nil, ordersCatalogError(err)
+		return nil, s.mapError(err)
 	}
 	return agentReadResult(in.Body.OperationID, result), nil
 }
 
-func orderWriteResult[T any](operation string, result T, err error) (*paymentWriteResponse[T], error) {
+func orderWriteResult[T any](
+	operation string,
+	result T,
+	err error,
+	mapError func(error) error,
+) (*paymentWriteResponse[T], error) {
 	out := &paymentWriteResponse[T]{}
 	out.Body.OperationID = operation
 	if err != nil {
-		mapped := ordersCatalogError(err)
+		mapped := mapError(err)
 		status, ok := errors.AsType[huma.StatusError](mapped)
 		if !ok || status.GetStatus() >= http.StatusInternalServerError {
 			return nil, mapped
@@ -197,7 +199,7 @@ func orderWriteResult[T any](operation string, result T, err error) (*paymentWri
 	return out, nil
 }
 
-func (s *Server) orderOperationStatus(
+func (s *orderAgentAPI) orderOperationStatus(
 	ctx context.Context,
 	in *profileOperationRequest,
 	kind db.OrderOperationKind,
@@ -206,30 +208,30 @@ func (s *Server) orderOperationStatus(
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.store.OwnOrderOperationByID(ctx, scope, op, kind)
+	result, err := s.actions.operation(ctx, scope, op, kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		out := &paymentWriteResponse[json.RawMessage]{}
 		out.Body.Status, out.Body.OperationID = agentNotFound, in.Body.OperationID
 		return out, nil
 	}
-	return orderWriteResult(in.Body.OperationID, result.Result, err)
+	return orderWriteResult(in.Body.OperationID, result.Result, err, s.mapError)
 }
 
-func (s *Server) agentOrderSubmissionStatus(
+func (s *orderAgentAPI) agentOrderSubmissionStatus(
 	ctx context.Context,
 	in *profileOperationRequest,
 ) (*paymentWriteResponse[json.RawMessage], error) {
 	return s.orderOperationStatus(ctx, in, db.OrderSubmit)
 }
 
-func (s *Server) agentOrderCancellationStatus(
+func (s *orderAgentAPI) agentOrderCancellationStatus(
 	ctx context.Context,
 	in *profileOperationRequest,
 ) (*paymentWriteResponse[json.RawMessage], error) {
 	return s.orderOperationStatus(ctx, in, db.OrderCancel)
 }
 
-func (s *Server) agentOrderOperation(
+func (s *orderAgentAPI) agentOrderOperation(
 	ctx context.Context,
 	in *agentReadRequest[orderOperationArguments],
 ) (*paymentWriteResponse[db.OrderOperation], error) {
@@ -237,11 +239,11 @@ func (s *Server) agentOrderOperation(
 	if err != nil {
 		return nil, err
 	}
-	result, err := s.store.OwnOrderOperationByID(ctx, scope, in.Body.Arguments.OperationID, in.Body.Arguments.Kind)
+	result, err := s.actions.operation(ctx, scope, in.Body.Arguments.OperationID, in.Body.Arguments.Kind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		out := &paymentWriteResponse[db.OrderOperation]{}
 		out.Body.Status, out.Body.OperationID = agentNotFound, in.Body.OperationID
 		return out, nil
 	}
-	return orderWriteResult(in.Body.OperationID, result, err)
+	return orderWriteResult(in.Body.OperationID, result, err, s.mapError)
 }

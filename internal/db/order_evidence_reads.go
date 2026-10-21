@@ -34,13 +34,17 @@ func orderEvidenceProfile(scope PaymentScope) ProfileScope {
 	}
 }
 
-// orderEvidenceAuthorityTx uses the orders module, independently of registrations.
-func (s *Store) orderEvidenceAuthorityTx(ctx context.Context, scope PaymentScope, event uuid.UUID) (pgx.Tx, error) {
+// orderEvidenceAuthorityTx authorizes the persisted kind; zero evidence is list discovery.
+func (s *Store) orderEvidenceAuthorityTx(
+	ctx context.Context,
+	scope PaymentScope,
+	event, evidence uuid.UUID,
+) (pgx.Tx, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	_, _, err = lockPaymentModuleEvent(ctx, s.q.WithTx(tx), scope, event, "orders", true)
+	_, _, err = lockOrderPaymentEvent(ctx, s.q.WithTx(tx), scope, event, evidence, true)
 	if err != nil {
 		rollbackLegacyArchive(ctx, tx)
 		return nil, err
@@ -54,6 +58,9 @@ func currentAuthorityOrderEvidence(
 	scope PaymentScope,
 	event, id uuid.UUID,
 ) (OrderPaymentEvidence, error) {
+	if _, _, err := lockOrderPaymentEvent(ctx, q, scope, event, id, true); err != nil {
+		return OrderPaymentEvidence{}, err
+	}
 	row, err := q.ReadOrderEvidence(ctx, sqlc.ReadOrderEvidenceParams{ID: id, EventID: event})
 	if err != nil {
 		return OrderPaymentEvidence{}, err
@@ -74,7 +81,7 @@ func (s *Store) OrderEvidenceForReview(
 	scope PaymentScope,
 	event, id uuid.UUID,
 ) (OrderPaymentEvidence, error) {
-	tx, err := s.orderEvidenceAuthorityTx(ctx, scope, event)
+	tx, err := s.orderEvidenceAuthorityTx(ctx, scope, event, id)
 	if err != nil {
 		return OrderPaymentEvidence{}, err
 	}
@@ -121,9 +128,9 @@ func (s *Store) authorizedOrderEvidenceOperation(
 	var tx pgx.Tx
 	var err error
 	if kind == OrderEvidenceSubmissionReceipt {
-		tx, err = s.orderTx(ctx, orderEvidenceProfile(scope), event, uuid.Nil)
+		tx, err = s.orderPaymentOwnerTx(ctx, orderEvidenceProfile(scope), event, uuid.Nil)
 	} else {
-		tx, err = s.orderEvidenceAuthorityTx(ctx, scope, event)
+		tx, err = s.orderEvidenceAuthorityTx(ctx, scope, event, uuid.Nil)
 	}
 	if err != nil {
 		return OrderEvidenceOperation{}, err
@@ -138,6 +145,15 @@ func (s *Store) authorizedOrderEvidenceOperation(
 	}
 	result := OrderEvidenceOperation{OperationID: key.OperationID, Kind: kind}
 	if err = json.Unmarshal(row.Result, &result.Result); err != nil {
+		return OrderEvidenceOperation{}, err
+	}
+	q := s.q.WithTx(tx)
+	if kind == OrderEvidenceSubmissionReceipt {
+		err = authorizeOrderEvidenceOwner(ctx, q, orderEvidenceProfile(scope), event, result.Result.ID)
+	} else {
+		_, err = currentAuthorityOrderEvidence(ctx, q, scope, event, result.Result.ID)
+	}
+	if err != nil {
 		return OrderEvidenceOperation{}, err
 	}
 	return result, nil
@@ -177,11 +193,14 @@ func (s *Store) OrderEvidenceFile(
 	}
 	switch {
 	case audit:
-		_, _, err = lockPaymentModuleEvent(ctx, q, scope, event, "orders", true)
+		_, _, err = lockOrderPaymentEvent(ctx, q, scope, event, evidence, true)
 	case row.UserID != scope.UserID:
 		return File{}, pgx.ErrNoRows
 	default:
-		err = authorizeOrdersSelection(ctx, tx, orderEvidenceProfile(scope), event)
+		err = lockProfileOwner(ctx, tx, orderEvidenceProfile(scope), false)
+		if err == nil {
+			err = authorizeOrderPaymentKind(ctx, q, orderEvidenceProfile(scope), event, OrderKind(row.OrderKind))
+		}
 	}
 	if err != nil {
 		return File{}, err

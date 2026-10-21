@@ -14,12 +14,16 @@ window.createZinusyaOrderProof = function (env) {
   const nonnegative = v => Number.isSafeInteger(v) && v >= 0 && v <= 9000000000000000;
   const positive = v => nonnegative(v) && v > 0;
   const states = ["pending", "exhausted", "needs_decision", "confirmed", "rejected"];
+  words.en.mealPending = "Awaiting review";
+  words.ru.mealPending = "Ожидает проверки";
   const w = () => words[language];
   let owner, language = "en", epoch = 0, locked = false, working = false, blocked = false;
+  let orderKind = "service";
   let eventID, orderID, order, pending, fileNext, filesAfter, historyNext, historyActive = false, historyLoaded = false;
   let files = [], claims = [], historyButtons = [], loadedFile, blobURL, statusName, originalReceipt;
   const key = () => "zinusya-order-proof-v1:" + owner;
   const path = () => "./orders/" + eventID;
+  const orderPath = () => (orderKind === "meal" ? "./meals/" : "./orders/") + eventID;
   function node(tag, text) { const n = document.createElement(tag); n.textContent = text; return n; }
   function status(name) { statusName = name; el.status.textContent = w()[name]; }
   function labels() { for (const id of ["title", "note", "file-label", "amount-label", "submit", "preview", "download", "reload", "recover", "retry", "files-first", "files-next", "history-next"]) el[id].textContent = w()[id]; }
@@ -39,7 +43,7 @@ window.createZinusyaOrderProof = function (env) {
     for (const button of historyButtons) button.disabled = disabled;
   }
   function clear() {
-    epoch++; dropPreview(); owner = eventID = orderID = order = pending = fileNext = filesAfter = historyNext = undefined;
+    epoch++; dropPreview(); orderKind = "service"; owner = eventID = orderID = order = pending = fileNext = filesAfter = historyNext = undefined;
     working = blocked = historyActive = historyLoaded = false; files = []; claims = []; historyButtons = []; statusName = originalReceipt = undefined;
     section.hidden = true; for (const id of ["target", "history", "receipt"]) el[id].replaceChildren();
     el.file.replaceChildren(); el.amount.value = ""; el.status.textContent = ""; controls();
@@ -48,11 +52,12 @@ window.createZinusyaOrderProof = function (env) {
   function decimal(amount, scale) { const digits = BigInt(amount).toString().padStart(scale + 1, "0"); return scale ? digits.slice(0, -scale) + "." + digits.slice(-scale) : digits; }
   function money(amount, scale, currency) { if (!Number.isSafeInteger(amount) || amount < 0 || scale < 0 || scale > 6 || !/^[A-Z]{3}$/.test(currency)) throw new Error("Invalid money"); return decimal(amount, scale) + " " + currency; }
   function date(value) { if (!Number.isFinite(Date.parse(value))) throw new Error("Invalid timestamp"); return new Intl.DateTimeFormat(language, {timeZone:order.snapshot.quote.timezone, dateStyle:"medium", timeStyle:"long"}).format(new Date(value)); }
-  function checkOrder(value) { if (!value || value.id !== orderID || value.event_id !== eventID || !positive(value.version) || !["submitted", "cancelled"].includes(value.state) || !value.snapshot || typeof value.snapshot.event_name !== "string") throw new Error("Invalid order"); quote(value.snapshot.quote); return value; }
+  function checkOrder(value) { if (!value || value.id !== orderID || value.event_id !== eventID || !positive(value.version) || !["submitted", "cancelled"].includes(value.state) || !value.snapshot || typeof value.snapshot.event_name !== "string") throw new Error("Invalid order"); if ((value.order_kind || "service") !== orderKind) throw new Error("Order kind mismatch"); quote(value.snapshot.quote); return value; }
   function checkClaim(value) { if (!value || !uuid(value.id) || value.user_id !== owner || value.order_id !== orderID || value.event_id !== eventID || !uuid(value.file_id) || !positive(value.amount_minor) || !nonnegative(value.quoted_amount_minor) || !positive(value.version) || !states.includes(value.state) || !Number.isInteger(value.currency_scale) || value.currency_scale < 0 || value.currency_scale > 6 || !/^[A-Z]{3}$/.test(value.currency)) throw new Error("Invalid proof"); if (!Number.isFinite(Date.parse(value.sent_at)) || !Number.isFinite(Date.parse(value.due_at)) || (order && (value.currency !== order.snapshot.quote.currency || value.currency_scale !== order.snapshot.quote.currency_scale || value.quoted_amount_minor !== order.snapshot.quote.total_minor))) throw new Error("Proof terms mismatch"); return value; }
   function claimView(value, historical) {
     const article = document.createElement("article");
-    article.append(node("p", (historical ? w().historical : w().current) + ": " + w()[value.state]));
+    const stateText = orderKind === "meal" && value.state === "pending" ? w().mealPending : w()[value.state];
+    article.append(node("p", (historical ? w().historical : w().current) + ": " + stateText));
     article.append(node("p", w().reported + ": " + money(value.amount_minor, value.currency_scale, value.currency)));
     article.append(node("p", w().file + ": " + value.file_id), node("p", "ID: " + value.id));
     if (order) article.append(node("p", w().sent + ": " + date(value.sent_at)), node("p", w().deadline + ": " + date(value.due_at) + " · " + order.snapshot.quote.timezone));
@@ -95,19 +100,19 @@ window.createZinusyaOrderProof = function (env) {
     dropPreview(); files = page.files; filesAfter = cursor; fileNext = page.next; renderFiles();
   }
   async function load(e) {
-    order = checkOrder(await call(e, path() + "/submitted/" + orderID)); renderOrder();
+    order = checkOrder(await call(e, orderPath() + "/submitted/" + orderID)); renderOrder();
     if (!pending) el.amount.value = decimal(order.snapshot.quote.total_minor, order.snapshot.quote.currency_scale);
     await loadClaims(e); if (!pending) await loadFiles(e);
     if (pending) status("unknown"); else status(order.state !== "submitted" ? "closed" : historyActive ? "active" : historyNext ? "more" : "ready");
   }
   function validPending(p) {
-    if (!p || Object.keys(p).sort().join() !== "body,event_id,owner" || p.owner !== owner || !uuid(p.event_id) || !p.body) return false;
+    if (!p || !["body,event_id,owner", "body,event_id,order_kind,owner"].includes(Object.keys(p).sort().join()) || (p.order_kind !== undefined && p.order_kind !== "meal") || p.owner !== owner || !uuid(p.event_id) || !p.body) return false;
     const b = p.body;
     return Object.keys(b).sort().join() === "amount_minor,expected_order_version,file_id,operation_id,order_id" && uuid(b.operation_id) && uuid(b.order_id) && uuid(b.file_id) && positive(b.expected_order_version) && positive(b.amount_minor);
   }
   function forget() { try { sessionStorage.removeItem(key()); } catch { throw {local:"storage"}; } pending = undefined; }
   function pinPending() {
-    eventID = pending.event_id; orderID = pending.body.order_id; section.hidden = false;
+    orderKind = pending.order_kind || "service"; eventID = pending.event_id; orderID = pending.body.order_id; section.hidden = false;
     if (order && order.id === orderID && order.event_id === eventID) {
       renderOrder(); const q = order.snapshot.quote;
       el.target.append(node("p", w().reported + ": " + money(pending.body.amount_minor, q.currency_scale, q.currency)));
@@ -122,7 +127,7 @@ window.createZinusyaOrderProof = function (env) {
   async function recover(e) {
     if (!pending) return;
     pinPending();
-    order = checkOrder(await call(e, path() + "/submitted/" + orderID)); pinPending();
+    order = checkOrder(await call(e, orderPath() + "/submitted/" + orderID)); pinPending();
     try { const receipt = await call(e, path() + "/payment-evidence-operations/" + pending.body.operation_id); if (receipt.operation_id !== pending.body.operation_id || receipt.kind !== "submit") throw new Error("Invalid proof receipt"); await accept(e, receipt.result); }
     catch (error) { if (error.status === 404) status("unknown"); else throw error; }
   }
@@ -142,6 +147,7 @@ window.createZinusyaOrderProof = function (env) {
   el.form.addEventListener("submit", event => { event.preventDefault(); return run(async e => {
     if (pending || !order || order.state !== "submitted" || !historyLoaded || historyActive || historyNext || loadedFile !== el.file.value || !files.some(f => f.id === loadedFile)) throw {local:"invalid"};
     const record = {owner, event_id:eventID, body:{operation_id:crypto.randomUUID(), order_id:orderID, expected_order_version:order.version, file_id:loadedFile, amount_minor:amount()}};
+    if (orderKind === "meal") record.order_kind = "meal";
     try { const raw = JSON.stringify(record); sessionStorage.setItem(key(), raw); if (sessionStorage.getItem(key()) !== raw) throw new Error("Storage unavailable"); } catch { throw {local:"storage"}; }
     pending = record; controls(); await dispatch(e);
   }); });
@@ -180,8 +186,8 @@ window.createZinusyaOrderProof = function (env) {
     async open(value, locale) {
       if (!owner || blocked || locked || working) return;
       if (pending) { section.hidden = false; status("unknown"); return; }
-      if (!value || !uuid(value.id) || !uuid(value.event_id)) return;
-      epoch++; dropPreview(); language = locale === "ru" ? "ru" : "en"; eventID = value.event_id; orderID = value.id;
+      if (!value || !uuid(value.id) || !uuid(value.event_id) || (value.order_kind !== undefined && !["service", "meal"].includes(value.order_kind))) return;
+      epoch++; dropPreview(); language = locale === "ru" ? "ru" : "en"; orderKind = value.order_kind || "service"; eventID = value.event_id; orderID = value.id;
       order = originalReceipt = statusName = undefined; claims = []; files = []; historyActive = historyLoaded = false; historyNext = filesAfter = fileNext = undefined; el.target.replaceChildren(); el.history.replaceChildren(); el.file.replaceChildren(); el.amount.value = ""; el.receipt.replaceChildren(); section.hidden = false; labels();
       const result = run(load); section.scrollIntoView?.({block:"start"}); return result;
     }

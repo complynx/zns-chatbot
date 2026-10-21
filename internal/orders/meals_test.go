@@ -260,3 +260,23 @@ func TestDinnerOnlyMealDraftNeedsNoLunchChoice(t *testing.T) {
 	)
 	require.ErrorIs(t, err, orders.ErrMealChoices)
 }
+
+func TestMealCatalogRetainsExplicitPaymentDeadlineWithoutInferringOne(t *testing.T) {
+	t.Parallel()
+	catalog := mealCatalog()
+	legacy, err := orders.NormalizeMeals(catalog)
+	require.NoError(t, err)
+	require.Nil(t, legacy.PaymentDeadline)
+	deadline := time.Date(2026, 10, 23, 18, 0, 0, 0, time.FixedZone("event", 3*60*60))
+	catalog.PaymentDeadline = &deadline
+	normalized, err := orders.NormalizeMeals(catalog)
+	require.NoError(t, err)
+	require.Equal(t, "2026-10-23T15:00:00Z", normalized.PaymentDeadline.Format(time.RFC3339))
+	deadline = deadline.Add(time.Hour)
+	require.Equal(t, "2026-10-23T15:00:00Z", normalized.PaymentDeadline.Format(time.RFC3339))
+	for _, invalid := range []time.Time{{}, time.Date(2026, 10, 23, 18, 0, 0, 1, time.UTC)} {
+		catalog.PaymentDeadline = &invalid
+		_, err = orders.NormalizeMeals(catalog)
+		require.ErrorIs(t, err, orders.ErrMealCatalog)
+	}
+}

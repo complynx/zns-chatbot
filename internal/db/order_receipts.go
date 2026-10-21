@@ -15,9 +15,18 @@ import (
 
 type orderCall struct {
 	event, operation          uuid.UUID
+	orderKind                 OrderKind
 	kind                      OrderOperationKind
 	source                    OrderSource
 	businessHash, requestHash []byte
+}
+
+// businessKind keeps existing service callers explicit at the shared receipt boundary.
+func (c orderCall) businessKind() OrderKind {
+	if c.orderKind == "" {
+		return OrderKindService
+	}
+	return c.orderKind
 }
 
 // orderTx shares the selection's event -> owner serialization, without external IO.
@@ -57,7 +66,7 @@ func orderReceipt(ctx context.Context, q *sqlc.Queries, scope ProfileScope, call
 	}
 	var result []byte
 	for _, row := range rows {
-		if row.OrderKind != string(OrderKindService) || row.EventID != call.event ||
+		if row.OrderKind != string(call.businessKind()) || row.EventID != call.event ||
 			!bytes.Equal(row.BusinessHash, call.businessHash) ||
 			(row.Kind == string(OrderCancel)) != (call.kind == OrderCancel) {
 			return nil, ErrConflict
@@ -84,7 +93,7 @@ func insertOrderReceipt(
 	if err != nil {
 		return err
 	}
-	return q.InsertOrderOperation(ctx, sqlc.InsertOrderOperationParams{
+	return q.InsertOrderOperation(ctx, sqlc.InsertOrderOperationParams{OrderKind: string(call.businessKind()),
 		UserID:      scope.UserID,
 		OperationID: call.operation,
 		Kind:        string(call.kind),
@@ -101,8 +110,8 @@ func insertOrderReceipt(
 	})
 }
 
-func submittedOrderRecord(row sqlc.ShuttleOrder) (SubmittedOrder, error) {
-	if row.OrderKind != string(OrderKindService) {
+func submittedOrderRecordForKind(row sqlc.ShuttleOrder, kind OrderKind) (SubmittedOrder, error) {
+	if row.OrderKind != string(kind) {
 		return SubmittedOrder{}, ErrConflict
 	}
 	var original OrderSubmissionResult

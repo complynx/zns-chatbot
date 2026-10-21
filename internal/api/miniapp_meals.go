@@ -25,6 +25,7 @@ type miniAppMealDraftInput struct {
 }
 
 func (s *Server) registerMiniAppMeals() {
+	s.registerMiniAppMealSubmission()
 	s.public.HandleFunc("GET /app/meals/events", s.miniAppMealsEvents)
 	s.public.HandleFunc("GET /app/meals/{event}/catalog", s.miniAppMealsRead)
 	s.public.HandleFunc("GET /app/meals/{event}/draft", s.miniAppMealsRead)
@@ -171,6 +172,10 @@ func (s *Server) miniAppMealsError(ctx context.Context, w http.ResponseWriter, r
 		return
 	}
 	switch {
+	case errors.Is(err, db.ErrMealDeadlineMissing):
+		miniAppHTTPError(w, http.StatusConflict, "meal payment deadline is not configured")
+	case errors.Is(err, db.ErrEmptyMealOrder):
+		miniAppHTTPError(w, http.StatusBadRequest, "meal order has no selections")
 	case errors.Is(err, db.ErrConflict),
 		errors.Is(err, orders.ErrSalesClosed):
 		miniAppHTTPError(
@@ -178,7 +183,10 @@ func (s *Server) miniAppMealsError(ctx context.Context, w http.ResponseWriter, r
 			http.StatusConflict,
 			"meal draft or catalog changed, or affected sales closed; read current state",
 		)
-	case errors.Is(err, orders.ErrMealChoices), errors.Is(err, orders.ErrMealCatalog), errors.Is(err, orders.ErrAmount):
+	case errors.Is(err, orders.ErrMealChoices),
+		errors.Is(err, orders.ErrMealCatalog),
+		errors.Is(err, orders.ErrAmount),
+		errors.Is(err, orders.ErrSelection):
 		miniAppHTTPError(w, http.StatusBadRequest, "invalid meal choices or amount exceeds supported bounds")
 	default:
 		miniAppError(w, err)

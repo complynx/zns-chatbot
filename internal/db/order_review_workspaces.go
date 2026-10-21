@@ -39,7 +39,7 @@ func (s *Store) prepareOrderReviewWorkspace(
 	if err != nil {
 		return OrderReviewWorkspace{}, err
 	}
-	tx, _, err := s.orderReviewTx(ctx, scope, op, args.Review.EventID, origin)
+	tx, _, err := s.orderReviewTx(ctx, scope, op, args.Review.EventID, args.Review.EvidenceID, origin)
 	if err != nil {
 		return OrderReviewWorkspace{}, err
 	}
@@ -52,6 +52,9 @@ func (s *Store) prepareOrderReviewWorkspace(
 		}
 		var original OrderReviewWorkspace
 		err = json.Unmarshal(call.Result, &original)
+		if err == nil {
+			err = hydrateOrderReviewWorkspace(ctx, q, scope.UserID, &original)
+		}
 		return original, err
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
@@ -119,7 +122,7 @@ func (s *Store) currentOrderReviewWorkspace(
 	event, evidence uuid.UUID,
 	origin paymentReviewOrigin,
 ) (OrderReviewWorkspace, error) {
-	tx, err := s.orderEvidenceAuthorityTx(ctx, scope, event)
+	tx, err := s.orderEvidenceAuthorityTx(ctx, scope, event, evidence)
 	if err != nil {
 		return OrderReviewWorkspace{}, err
 	}
@@ -177,6 +180,9 @@ func (s *Store) cancelOrderReviewWorkspace(
 		}
 		var original OrderReviewWorkspace
 		err = json.Unmarshal(call.Result, &original)
+		if err == nil {
+			err = hydrateOrderReviewWorkspace(ctx, q, scope.UserID, &original)
+		}
 		return original, err
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {

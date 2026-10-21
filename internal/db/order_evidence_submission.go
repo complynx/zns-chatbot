@@ -27,7 +27,7 @@ func (s *Store) SubmitOwnOrderEvidence(
 	if err != nil {
 		return OrderPaymentEvidence{}, err
 	}
-	tx, err := s.orderTx(ctx, scope, args.EventID, operation)
+	tx, err := s.orderPaymentOwnerTx(ctx, scope, args.EventID, operation)
 	if err != nil {
 		return OrderPaymentEvidence{}, err
 	}
@@ -57,6 +57,20 @@ func submitOrderEvidence(
 	args OrderEvidenceSubmission,
 	hash []byte,
 ) (OrderPaymentEvidence, bool, error) {
+	row, err := q.ReadOrderPaymentTarget(ctx, sqlc.ReadOrderPaymentTargetParams{
+		ID: args.OrderID, EventID: args.EventID, UserID: scope.UserID,
+	})
+	if err != nil {
+		return OrderPaymentEvidence{}, false, err
+	}
+	kind := OrderKind(row.OrderKind)
+	if err = authorizeOrderPaymentKind(ctx, q, scope, args.EventID, kind); err != nil {
+		return OrderPaymentEvidence{}, false, err
+	}
+	order, err := submittedOrderRecordForKind(row, kind)
+	if err != nil {
+		return OrderPaymentEvidence{}, false, err
+	}
 	file, err := q.GetOwnedFile(
 		ctx,
 		sqlc.GetOwnedFileParams{
@@ -81,17 +95,6 @@ func submitOrderEvidence(
 	)
 	if err != nil || found {
 		return prior, found, err
-	}
-	row, err := q.ReadSubmittedOrder(
-		ctx,
-		sqlc.ReadSubmittedOrderParams{ID: args.OrderID, EventID: args.EventID, UserID: scope.UserID},
-	)
-	if err != nil {
-		return OrderPaymentEvidence{}, false, err
-	}
-	order, err := submittedOrderRecord(row)
-	if err != nil {
-		return OrderPaymentEvidence{}, false, err
 	}
 	if order.Version != args.ExpectedOrderVersion || order.State != orderSubmitted {
 		return OrderPaymentEvidence{}, false, ErrConflict
@@ -140,6 +143,7 @@ func storeOrderEvidence(
 	}
 	saved, err := q.InsertOrderEvidence(ctx, sqlc.InsertOrderEvidenceParams{
 		ID:                  uuid.New(),
+		OrderKind:           string(orderKindForSnapshot(order)),
 		OrderID:             args.OrderID,
 		EventID:             args.EventID,
 		UserID:              scope.UserID,
@@ -191,7 +195,8 @@ func orderEvidenceAdmission(
 	if args.AmountMinor != order.Snapshot.Quote.TotalMinor {
 		return OrderEvidenceNeedsDecision, "amount_requires_decision", nil
 	}
-	if !sent.Before(order.Snapshot.SalesClosesAt) || !now.Before(order.Snapshot.SalesClosesAt) {
+	if !sent.Before(order.Snapshot.SalesClosesAt) ||
+		(order.OrderKind != OrderKindMeal && !now.Before(order.Snapshot.SalesClosesAt)) {
 		return OrderEvidenceNeedsDecision, "deadline_requires_decision", nil
 	}
 	if order.Snapshot.Capacity == nil {
@@ -215,7 +220,7 @@ func (s *Store) OwnOrderEvidence(
 	scope ProfileScope,
 	event, evidence uuid.UUID,
 ) (OrderPaymentEvidence, error) {
-	tx, err := s.orderTx(ctx, scope, event, uuid.Nil)
+	tx, err := s.orderPaymentOwnerTx(ctx, scope, event, uuid.Nil)
 	if err != nil {
 		return OrderPaymentEvidence{}, err
 	}
@@ -227,5 +232,15 @@ func (s *Store) OwnOrderEvidence(
 	if row.UserID != scope.UserID {
 		return OrderPaymentEvidence{}, pgx.ErrNoRows
 	}
+	if err = authorizeOrderPaymentKind(ctx, s.q.WithTx(tx), scope, event, OrderKind(row.OrderKind)); err != nil {
+		return OrderPaymentEvidence{}, err
+	}
 	return loadOrderEvidenceDecision(ctx, s.q.WithTx(tx), row)
+}
+
+func orderKindForSnapshot(order SubmittedOrder) OrderKind {
+	if order.OrderKind == "" {
+		return OrderKindService
+	}
+	return order.OrderKind
 }

@@ -12,6 +12,8 @@ import (
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
 
+const preparationCodeFence = "```"
+
 func (s *Server) orderPresentationLanguage(ctx context.Context, scope db.ProfileScope) (string, error) {
 	profile, err := s.store.GetProfile(ctx, scope)
 	if err != nil {
@@ -84,7 +86,7 @@ Submission clears this exact draft. It reserves no capacity and confirms no mone
 		p.Snapshot.SalesClosesAt.In(zone).Format(time.RFC3339),
 		q.Timezone,
 	)
-	fence := "```"
+	fence := preparationCodeFence
 	for strings.Contains(body, fence) {
 		fence += "`"
 	}
@@ -101,4 +103,29 @@ func orderMoney(amount int64, scale int, currency string) string {
 		value = fmt.Sprintf("%d.%0*d", amount/divisor, scale, amount%divisor)
 	}
 	return value + " " + currency
+}
+
+// Loom caps preparation descriptions at4000 bytes. The bot's specialized review
+// presentation reads the complete immutable receipt before the consent keyboard;
+// only this transport description is abbreviated, never the stored consent.
+const maxOrderReviewPrepareDescriptionBytes = 4000
+
+func orderReviewPrepareDescription(p db.OrderReviewCommitPreparation) string {
+	if len(p.Description) <= maxOrderReviewPrepareDescriptionBytes {
+		return p.Description
+	}
+	return fmt.Sprintf(
+		`Review exact saved order payment decision.
+Event: %s
+Evidence: %s
+Workspace: %s
+Revision: %d
+Decision: %s
+The full immutable review, including meal composition, prices, proof timing and reason, is retained by the bot and must be displayed before human approval. This short tool description is not the complete consent presentation.`,
+		p.Arguments.Review.EventID,
+		p.Arguments.Review.EvidenceID,
+		p.Arguments.WorkspaceID,
+		p.Arguments.Revision,
+		p.Arguments.Review.Decision,
+	)
 }

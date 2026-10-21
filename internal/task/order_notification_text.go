@@ -29,8 +29,12 @@ func orderNotificationText(n db.OrderNotification, language string, reviewer boo
 	sent := e.SentAt.In(zone).Format(time.RFC3339)
 	due := e.DueAt.In(zone).Format(time.RFC3339)
 	amount := noticeAmount(e.AmountMinor, int32(e.CurrencyScale), e.Currency)
+	title := structuredText(ru, "Order payment update", "Оплата заказа")
+	if e.OrderKind == db.OrderKindMeal {
+		title = structuredText(ru, "Meal payment update", "Оплата питания")
+	}
 	text := fmt.Sprintf("%s: %.200s\n%s\n%s: %s\n%s: %s\n%s: %s (%s)\n%s: %s\n%s: %s\n%s: %s",
-		structuredText(ru, "Order payment update", "Оплата заказа"), n.Order.Snapshot.EventName, status,
+		title, n.Order.Snapshot.EventName, status,
 		structuredText(ru, "Reported amount", "Заявленная сумма"), amount,
 		structuredText(ru, "Proof sent", "Файл отправлен"), sent,
 		structuredText(ru, "Evidence deadline", "Срок отправки подтверждения"), due, zoneName,
@@ -57,6 +61,13 @@ func orderNotificationText(n db.OrderNotification, language string, reviewer boo
 func orderNoticeStatus(n db.OrderNotification, ru, reviewer bool) (string, error) {
 	switch n.Kind {
 	case db.OrderEvidencePending:
+		if n.Evidence.OrderKind == db.OrderKindMeal {
+			return structuredText(
+				ru,
+				"Meal payment awaits human review. Meal quantities are unlimited; no capacity is held.",
+				"Оплата питания ожидает проверки человеком. Количество порций не ограничено; места не резервируются.",
+			), nil
+		}
 		return structuredText(
 			ru,
 			"Proof received. Payment awaits human review; limited resources are held for this evidence.",
@@ -85,6 +96,13 @@ func orderNoticeStatus(n db.OrderNotification, ru, reviewer bool) (string, error
 		if n.Evidence.Review == nil {
 			return "", errors.New("order decision notice has no review")
 		}
+		if n.Evidence.OrderKind == db.OrderKindMeal {
+			return structuredText(
+				ru,
+				"Meal payment confirmed by the reviewer.",
+				"Оплата питания подтверждена проверяющим.",
+			), nil
+		}
 		return structuredText(
 			ru,
 			"Order payment confirmed by the reviewer. Held resources are now occupied.",
@@ -93,6 +111,13 @@ func orderNoticeStatus(n db.OrderNotification, ru, reviewer bool) (string, error
 	case db.OrderEvidenceRejected:
 		if n.Evidence.Review == nil {
 			return "", errors.New("order decision notice has no review")
+		}
+		if n.Evidence.OrderKind == db.OrderKindMeal {
+			return structuredText(
+				ru,
+				"Meal payment evidence rejected. The order was not cancelled and no refund was performed.",
+				"Подтверждение оплаты питания отклонено. Заказ не отменён, возврат не выполнен.",
+			), nil
 		}
 		return structuredText(
 			ru,

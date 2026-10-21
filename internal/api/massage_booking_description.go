@@ -47,7 +47,7 @@ func massageBookingDescription(snapshot db.MassageBookingSnapshot, language stri
 		price, orderMoney(terms.PriceMinor, terms.CurrencyScale, terms.Currency),
 		start, terms.StartsAt.In(zone).Format(time.RFC3339), end, terms.TreatmentEndsAt.In(zone).Format(time.RFC3339),
 		occupied, terms.OccupancyEndsAt.In(zone).Format(time.RFC3339)+" ("+terms.Timezone+")", effect)
-	fence := "```"
+	fence := preparationCodeFence
 	for strings.Contains(body, fence) {
 		fence += "`"
 	}

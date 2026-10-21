@@ -24,11 +24,17 @@ func (s *Store) miniAppOrderTx(
 	session MiniAppOrderSession,
 	event, operation uuid.UUID,
 ) (pgx.Tx, ProfileScope, error) {
+	return s.miniAppOrderTxForKind(ctx, deployment, session, event, operation, OrderKindService)
+}
+
+func (s *Store) miniAppOrderTxForKind(ctx context.Context, deployment EventScope,
+	session MiniAppOrderSession, event, operation uuid.UUID, kind OrderKind,
+) (pgx.Tx, ProfileScope, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, ProfileScope{}, err
 	}
-	scope, err := s.lockMiniAppOrder(ctx, tx, deployment, session, event, operation)
+	scope, err := s.lockMiniAppOrderForKind(ctx, tx, deployment, session, event, operation, kind)
 	if err != nil {
 		rollbackLegacyArchive(ctx, tx)
 		return nil, ProfileScope{}, err
@@ -36,12 +42,9 @@ func (s *Store) miniAppOrderTx(
 	return tx, scope, nil
 }
 
-func (s *Store) lockMiniAppOrder(
-	ctx context.Context,
-	tx pgx.Tx,
-	deployment EventScope,
-	session MiniAppOrderSession,
-	event, operation uuid.UUID,
+func (s *Store) lockMiniAppOrderForKind(
+	ctx context.Context, tx pgx.Tx, deployment EventScope, session MiniAppOrderSession,
+	event, operation uuid.UUID, kind OrderKind,
 ) (ProfileScope, error) {
 	q := s.q.WithTx(tx)
 	initial, err := q.FindMiniAppBearer(
@@ -74,7 +77,16 @@ func (s *Store) lockMiniAppOrder(
 		Subject:      attempt.User.Subject,
 		UserID:       attempt.User.ID,
 	}
-	return scope, authorizeOrdersSelection(ctx, tx, scope, event)
+	switch kind {
+	case "":
+		return scope, authorizeAnyOrderPayment(ctx, q, scope, event)
+	case OrderKindService:
+		return scope, authorizeOrdersSelection(ctx, tx, scope, event)
+	case OrderKindMeal:
+		return scope, authorizeMealDraft(ctx, tx, scope, event)
+	default:
+		return ProfileScope{}, ErrMiniAppDenied
+	}
 }
 
 func (s *Store) PrepareMiniAppOrderSubmission(

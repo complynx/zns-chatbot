@@ -104,7 +104,11 @@ func authorizeOrdersSelection(ctx context.Context, tx pgx.Tx, scope ProfileScope
 		return err
 	}
 	allowed, err := sqlc.New(tx).UserModuleAvailable(ctx, sqlc.UserModuleAvailableParams{
-		ID: event, BotID: scope.BotID, OrganizationID: scope.Organization, ID_2: scope.UserID, Column5: "orders",
+		ID:             event,
+		BotID:          scope.BotID,
+		OrganizationID: scope.Organization,
+		ID_2:           scope.UserID,
+		Column5:        orderModuleServices,
 	})
 	if err != nil {
 		return err

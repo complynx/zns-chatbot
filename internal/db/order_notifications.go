@@ -112,7 +112,14 @@ func (s *Store) ReserveOrderNotification(ctx context.Context, scope PaymentScope
 	if original.RecipientID != scope.UserID {
 		return OrderNotification{}, payments.ErrDenied
 	}
-	if _, _, err = lockPaymentModuleEvent(ctx, q, scope, original.Evidence.EventID, "orders", false); err != nil {
+	if _, _, err = lockOrderPaymentEvent(
+		ctx,
+		q,
+		scope,
+		original.Evidence.EventID,
+		original.Evidence.ID,
+		false,
+	); err != nil {
 		return OrderNotification{}, err
 	}
 	if _, _, err = orderNoticeRecipient(ctx, q, scope.EventScope, id); err != nil {

@@ -89,7 +89,12 @@ func (s *Store) submitOrder(
 	}
 	row, err := q.ReadOrderPreparation(
 		ctx,
-		sqlc.ReadOrderPreparationParams{ID: proposal, UserID: scope.UserID, EventID: args.EventID},
+		sqlc.ReadOrderPreparationParams{
+			OrderKind: string(call.businessKind()),
+			ID:        proposal,
+			UserID:    scope.UserID,
+			EventID:   args.EventID,
+		},
 	)
 	if err != nil {
 		return OrderSubmissionResult{}, false, err
@@ -99,7 +104,7 @@ func (s *Store) submitOrder(
 	}
 	canonical, err := q.ReadCanonicalOrder(
 		ctx,
-		sqlc.ReadCanonicalOrderParams{
+		sqlc.ReadCanonicalOrderParams{OrderKind: string(call.businessKind()),
 			UserID:             scope.UserID,
 			EventID:            args.EventID,
 			SourceDraftVersion: args.ExpectedDraftVersion,
@@ -118,11 +123,11 @@ func (s *Store) submitOrder(
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return OrderSubmissionResult{}, false, err
 	}
-	prepared, err := orderPreparationRecord(row)
+	prepared, err := orderPreparationRecordForKind(row, call.businessKind())
 	if err != nil {
 		return OrderSubmissionResult{}, false, err
 	}
-	snapshot, now, err := s.orderSnapshot(ctx, tx, scope, args)
+	snapshot, now, err := s.orderSnapshotForKind(ctx, tx, scope, args, call.businessKind())
 	if err != nil {
 		return OrderSubmissionResult{}, false, err
 	}
@@ -166,7 +171,7 @@ func storeSubmittedOrder(
 			Snapshot:           prepared.Snapshot,
 			SubmittedAt:        now,
 		},
-		Selection: OrdersSelection{
+		Selection: &OrdersSelection{
 			EventID:        args.EventID,
 			EventVersion:   args.ExpectedEventVersion,
 			CatalogVersion: args.ExpectedCatalogVersion,
@@ -175,13 +180,22 @@ func storeSubmittedOrder(
 			SavedAt:        &now,
 		},
 	}
+	if call.businessKind() == OrderKindMeal {
+		result.Order.OrderKind = OrderKindMeal
+		result.Selection = nil
+		result.MealDraft = &MealDraft{
+			EventID: args.EventID, EventVersion: args.ExpectedEventVersion,
+			CatalogVersion: args.ExpectedCatalogVersion, Version: args.ExpectedDraftVersion + 1,
+			Timezone: prepared.Snapshot.Quote.Timezone, Cleared: true, SavedAt: &now,
+		}
+	}
 	raw, err := orderJSON(result)
 	if err != nil {
 		return result, err
 	}
 	err = q.InsertSubmittedOrder(
 		ctx,
-		sqlc.InsertSubmittedOrderParams{
+		sqlc.InsertSubmittedOrderParams{OrderKind: string(call.businessKind()),
 			ID:                 result.Order.ID,
 			UserID:             scope.UserID,
 			EventID:            args.EventID,
@@ -196,25 +210,12 @@ func storeSubmittedOrder(
 	if err != nil {
 		return result, err
 	}
-	draft, err := orderJSON(result.Selection)
-	if err != nil {
-		return result, err
-	}
-	err = q.SaveOrdersSelection(
-		ctx,
-		sqlc.SaveOrdersSelectionParams{
-			UserID:  scope.UserID,
-			EventID: args.EventID,
-			Version: result.Selection.Version,
-			Result:  draft,
-		},
-	)
-	if err != nil {
+	if err = saveConsumedOrderDraft(ctx, q, scope, args.EventID, result); err != nil {
 		return result, err
 	}
 	consumed, err := q.ConsumeOrderPreparation(
 		ctx,
-		sqlc.ConsumeOrderPreparationParams{
+		sqlc.ConsumeOrderPreparationParams{OrderKind: string(call.businessKind()),
 			ObservedAt: pgtype.Timestamptz{Time: now, Valid: true},
 			ID:         prepared.ID,
 			UserID:     scope.UserID,
@@ -228,4 +229,42 @@ func storeSubmittedOrder(
 		return result, ErrConflict
 	}
 	return result, insertOrderReceipt(ctx, q, scope, call, prepared.ID, result.Order.ID, result)
+}
+
+func saveConsumedOrderDraft(
+	ctx context.Context,
+	q *sqlc.Queries,
+	scope ProfileScope,
+	event uuid.UUID,
+	result OrderSubmissionResult,
+) error {
+	if result.MealDraft != nil {
+		raw, err := orderJSON(result.MealDraft)
+		if err != nil {
+			return err
+		}
+		return q.SaveMealDraft(
+			ctx,
+			sqlc.SaveMealDraftParams{
+				UserID:         scope.UserID,
+				EventID:        event,
+				CatalogVersion: result.MealDraft.CatalogVersion,
+				Version:        result.MealDraft.Version,
+				Result:         raw,
+			},
+		)
+	}
+	raw, err := orderJSON(result.Selection)
+	if err != nil {
+		return err
+	}
+	return q.SaveOrdersSelection(
+		ctx,
+		sqlc.SaveOrdersSelectionParams{
+			UserID:  scope.UserID,
+			EventID: event,
+			Version: result.Selection.Version,
+			Result:  raw,
+		},
+	)
 }

@@ -81,3 +81,33 @@ func TestOrderNotificationTextRejectsMissingHumanDecisionOrUnknownKind(t *testin
 		require.Error(t, err)
 	}
 }
+
+func TestMealNoticeReportsHumanStateWithoutClaimingCapacityHolds(t *testing.T) {
+	t.Parallel()
+	for _, ru := range []bool{false, true} {
+		for _, state := range []string{db.OrderEvidencePending, db.OrderEvidenceConfirmed, db.OrderEvidenceRejected} {
+			n := db.OrderNotification{
+				Kind: state,
+				Evidence: db.OrderPaymentEvidence{
+					OrderKind:     db.OrderKindMeal,
+					Currency:      "BYN",
+					CurrencyScale: 2,
+					AmountMinor:   715,
+					Review:        &db.OrderPaymentDecision{},
+				},
+			}
+			n.Order.Snapshot.Quote.Timezone = "Europe/Minsk"
+			language := "en"
+			title := "Meal payment update"
+			if ru {
+				language = "ru"
+				title = "Оплата питания"
+			}
+			text, err := orderNotificationText(n, language, false)
+			require.NoError(t, err)
+			require.Contains(t, text, title)
+			require.NotContains(t, text, "resources are held")
+			require.NotContains(t, text, "ресурсы удерживаются")
+		}
+	}
+}

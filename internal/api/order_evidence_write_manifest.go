@@ -21,7 +21,7 @@ func orderEvidenceSubmitMethod(id map[string]any) map[string]any {
 	return orderEvidenceMutation(
 		orderEvidenceMethod(
 			"submit",
-			"Bind your accepted file to your own explicit order/version as reported payment evidence after a user request. Required event_id/order_id/expected_order_version/file_id/amount_minor. Read the frozen order and receipt, verify the amount or clarify it, and clarify ambiguous targets. Arrival time comes from Telegram metadata. Exact timely full-price claims hold available resources; unsupported amount/deadline/resource cases remain needs_decision without holds, and exhausted requires refund attention. This is not confirmed payment, fulfillment or refund. One non-rejected attempt per order; active source files cannot fund another pass/order. Reconcile the same operation after uncertainty; status not_found is unknown.",
+			"Bind your accepted file to your own explicit order/version as reported payment evidence after a user request. Required event_id/order_id/expected_order_version/file_id/amount_minor. Read the frozen order and receipt, verify the amount or clarify it, and clarify ambiguous targets. The server chooses orders or meals entitlement from the persisted order kind; callers cannot relabel an order. Arrival time comes from Telegram metadata. Meal proofs sent before the frozen common deadline remain timely if processed or reviewed later; service admission also retains its processing cutoff. Meal quantities are unlimited and hold no resources. Exact timely full-price service claims hold available resources; unsupported amount/deadline/resource cases remain needs_decision without holds, and exhausted requires refund attention. This is not confirmed payment, fulfillment or refund. One non-rejected attempt per order; active source files cannot fund another pass/order. Reconcile the same operation after uncertainty; status not_found is unknown.",
 			map[string]any{
 				schemaEventID:              id,
 				schemaOrderEvidenceOrderID: id,
@@ -76,7 +76,7 @@ func orderReviewMethods(id map[string]any) []map[string]any {
 	methods := []map[string]any{
 		orderEvidenceMethod(
 			"review_workspace",
-			"Read your current actor-owned order review for event_id/evidence_id before continuing from a form or agent. workspace:null means no saved intent, not a payment result. Fields include id, revision, state, current and the immutable preparation/description. A saved-intent receipt can be historical; reread current workspace/evidence after replay.",
+			"Read your current actor-owned order review for event_id/evidence_id before continuing from a form or agent. workspace:null means no saved intent, not a payment result. Fields include id, revision, state, current and the immutable preparation and a bounded description; the bot retains the full consent presentation and displays it before approval. A saved-intent receipt can be historical; reread current workspace/evidence after replay.",
 			map[string]any{schemaEventID: id, schemaEvidenceID: id},
 			[]string{schemaEventID, schemaEvidenceID},
 			[]string{"workspace"},
@@ -112,7 +112,7 @@ func orderReviewMethods(id map[string]any) []map[string]any {
 	)
 	commit := orderEvidenceMethod(
 		"review_commit",
-		"Execute the shared exact order review only after human exact-parameter approval. Required workspace_id/revision and unchanged full review. Preparation returns the immutable complete localized description; retries never renew expiry. Role/current revision/evidence/proposal/expiry are checked again. Native and agent calls share canonical_operation_id and commit decision, capacity changes, notices/workspace/source receipt atomically. Completed canonical results recover after expiry without a second decision. To change parameters save a new revision and obtain new consent. Reconcile this same transport operation after uncertainty; status not_found means unknown.",
+		"Execute the shared exact order review only after human exact-parameter approval. Required workspace_id/revision and unchanged full review. Preparation returns the immutable localized description, or a bounded reference summary for large presentations. The bot displays the full saved presentation before approval; retries never renew expiry. Role/current revision/evidence/proposal/expiry are checked again. Native and agent calls share canonical_operation_id and commit decision, capacity changes, notices/workspace/source receipt atomically. Completed canonical results recover after expiry without a second decision. To change parameters save a new revision and obtain new consent. Reconcile this same transport operation after uncertainty; status not_found means unknown.",
 		map[string]any{paymentSchemaWorkspaceID: id, paymentSchemaRevision: revision, paymentSchemaReview: review},
 		[]string{paymentSchemaWorkspaceID, paymentSchemaRevision, paymentSchemaReview},
 		[]string{"canonical_operation_id", schemaEvidence},

@@ -20,18 +20,20 @@ const MaxMealTermsBytes = 48 << 10
 var ErrMealTerms = errors.New("invalid complete meal draft terms")
 
 // MealTerms describes a complete composition, not sale permission or an order.
-// Each service keeps its own sales window; no common financial cutoff is inferred.
+// Each service keeps its own sales window. An explicitly configured payment
+// deadline is retained; no common financial cutoff is inferred.
 type MealTerms struct {
-	EventID        uuid.UUID              `json:"event_id"`
-	EventVersion   int64                  `json:"event_version"`
-	CatalogVersion int64                  `json:"catalog_version"`
-	DraftVersion   int64                  `json:"draft_version"`
-	EventName      string                 `json:"event_name"`
-	Timezone       string                 `json:"timezone"`
-	Choices        []orders.MealDayChoice `json:"choices"`
-	Days           []MealDayTerms         `json:"days"`
-	Lines          []orders.MealPriceLine `json:"lines"`
-	Quote          orders.MealQuote       `json:"quote"`
+	PaymentDeadline *time.Time             `json:"payment_deadline,omitempty"`
+	EventID         uuid.UUID              `json:"event_id"`
+	EventVersion    int64                  `json:"event_version"`
+	CatalogVersion  int64                  `json:"catalog_version"`
+	DraftVersion    int64                  `json:"draft_version"`
+	EventName       string                 `json:"event_name"`
+	Timezone        string                 `json:"timezone"`
+	Choices         []orders.MealDayChoice `json:"choices"`
+	Days            []MealDayTerms         `json:"days"`
+	Lines           []orders.MealPriceLine `json:"lines"`
+	Quote           orders.MealQuote       `json:"quote"`
 }
 
 type MealDayTerms struct {
@@ -77,7 +79,8 @@ func FreezeMealDraft(catalog MealCatalogView, draft MealDraft) (MealTerms, error
 		return MealTerms{}, ErrMealTerms
 	}
 	result := MealTerms{
-		EventID: catalog.EventID, EventVersion: catalog.EventVersion,
+		PaymentDeadline: document.PaymentDeadline,
+		EventID:         catalog.EventID, EventVersion: catalog.EventVersion,
 		CatalogVersion: catalog.Version, DraftVersion: draft.Version,
 		EventName: catalog.EventName, Timezone: catalog.Timezone,
 		Choices: evaluation.Choices, Lines: evaluation.Lines, Quote: *evaluation.Quote,

@@ -851,13 +851,14 @@ type ShuttleOrderEvidenceOperation struct {
 }
 
 type ShuttleOrderEvidencePreparation struct {
-	ID          uuid.UUID          `json:"id"`
-	UserID      uuid.UUID          `json:"user_id"`
-	OperationID uuid.UUID          `json:"operation_id"`
-	EventID     uuid.UUID          `json:"event_id"`
-	RequestHash []byte             `json:"request_hash"`
-	Document    []byte             `json:"document"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	ID           uuid.UUID          `json:"id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	OperationID  uuid.UUID          `json:"operation_id"`
+	EventID      uuid.UUID          `json:"event_id"`
+	RequestHash  []byte             `json:"request_hash"`
+	Document     []byte             `json:"document"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	Presentation string             `json:"presentation"`
 }
 
 type ShuttleOrderEvidenceReview struct {

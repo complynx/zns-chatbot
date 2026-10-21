@@ -555,7 +555,7 @@ func (q *Queries) CancelOrderReviewWorkspace(ctx context.Context, arg CancelOrde
 const cancelSubmittedOrder = `-- name: CancelSubmittedOrder :one
 UPDATE shuttle_orders AS o SET version=o.version+1,state='cancelled',cancelled_at=$1
 WHERE o.id=$2 AND o.user_id=$3 AND o.event_id=$4
- AND o.order_kind='service' AND o.version=$5 AND o.version<9223372036854775807 AND o.state='submitted' AND o.sales_closes_at>$1
+ AND o.order_kind=$5 AND o.version=$6 AND o.version<9223372036854775807 AND o.state='submitted' AND o.sales_closes_at>$1
  AND NOT EXISTS(SELECT 1 FROM shuttle_order_evidence ev WHERE ev.order_id=o.id)
 RETURNING o.id, o.user_id, o.event_id, o.source_draft_version, o.preparation_id, o.request_hash, o.version, o.state, o.submitted_result, o.sales_closes_at, o.submitted_at, o.cancelled_at, o.order_kind
 `
@@ -565,6 +565,7 @@ type CancelSubmittedOrderParams struct {
 	ID              uuid.UUID          `json:"id"`
 	UserID          uuid.UUID          `json:"user_id"`
 	EventID         uuid.UUID          `json:"event_id"`
+	OrderKind       string             `json:"order_kind"`
 	ExpectedVersion int64              `json:"expected_version"`
 }
 
@@ -574,6 +575,7 @@ func (q *Queries) CancelSubmittedOrder(ctx context.Context, arg CancelSubmittedO
 		arg.ID,
 		arg.UserID,
 		arg.EventID,
+		arg.OrderKind,
 		arg.ExpectedVersion,
 	)
 	var i ShuttleOrder
@@ -834,7 +836,7 @@ func (q *Queries) ConsumeMassagePreparation(ctx context.Context, arg ConsumeMass
 
 const consumeOrderPreparation = `-- name: ConsumeOrderPreparation :execrows
 UPDATE shuttle_order_preparations SET consumed_at=$1
-WHERE id=$2 AND user_id=$3 AND event_id=$4 AND consumed_at IS NULL AND order_kind='service'
+WHERE id=$2 AND user_id=$3 AND event_id=$4 AND consumed_at IS NULL AND order_kind=$5
 `
 
 type ConsumeOrderPreparationParams struct {
@@ -842,6 +844,7 @@ type ConsumeOrderPreparationParams struct {
 	ID         uuid.UUID          `json:"id"`
 	UserID     uuid.UUID          `json:"user_id"`
 	EventID    uuid.UUID          `json:"event_id"`
+	OrderKind  string             `json:"order_kind"`
 }
 
 func (q *Queries) ConsumeOrderPreparation(ctx context.Context, arg ConsumeOrderPreparationParams) (int64, error) {
@@ -850,6 +853,7 @@ func (q *Queries) ConsumeOrderPreparation(ctx context.Context, arg ConsumeOrderP
 		arg.ID,
 		arg.UserID,
 		arg.EventID,
+		arg.OrderKind,
 	)
 	if err != nil {
 		return 0, err
@@ -1537,13 +1541,14 @@ func (q *Queries) FindMiniAppBearer(ctx context.Context, arg FindMiniAppBearerPa
 
 const findPendingOrderPreparation = `-- name: FindPendingOrderPreparation :one
 SELECT id, user_id, event_id, source_draft_version, request_hash, arguments, snapshot, created_at, expires_at, consumed_at, order_kind FROM shuttle_order_preparations WHERE user_id=$1 AND event_id=$2
- AND order_kind='service' AND source_draft_version=$3 AND request_hash=$4
- AND consumed_at IS NULL AND expires_at>$5 ORDER BY created_at DESC,id DESC LIMIT 1
+ AND order_kind=$3 AND source_draft_version=$4 AND request_hash=$5
+ AND consumed_at IS NULL AND expires_at>$6 ORDER BY created_at DESC,id DESC LIMIT 1
 `
 
 type FindPendingOrderPreparationParams struct {
 	UserID             uuid.UUID          `json:"user_id"`
 	EventID            uuid.UUID          `json:"event_id"`
+	OrderKind          string             `json:"order_kind"`
 	SourceDraftVersion int64              `json:"source_draft_version"`
 	RequestHash        []byte             `json:"request_hash"`
 	ObservedAt         pgtype.Timestamptz `json:"observed_at"`
@@ -1553,6 +1558,7 @@ func (q *Queries) FindPendingOrderPreparation(ctx context.Context, arg FindPendi
 	row := q.db.QueryRow(ctx, findPendingOrderPreparation,
 		arg.UserID,
 		arg.EventID,
+		arg.OrderKind,
 		arg.SourceDraftVersion,
 		arg.RequestHash,
 		arg.ObservedAt,
@@ -3713,7 +3719,7 @@ func (q *Queries) HasOrderReviewWorkspaceHistory(ctx context.Context, arg HasOrd
 const hasOrdersEvidenceAuthority = `-- name: HasOrdersEvidenceAuthority :one
 SELECT EXISTS(SELECT 1 FROM shuttle_event_authorities a JOIN shuttle_events e ON e.id=a.event_id
 WHERE a.user_id=$1 AND e.bot_id=$2 AND e.organization_id=$3 AND a.role IN ('ambassador','administrator')
-AND 'orders'=ANY(e.modules)) AS available
+AND e.modules && ARRAY['orders','meals']::text[]) AS available
 `
 
 type HasOrdersEvidenceAuthorityParams struct {
@@ -5292,8 +5298,8 @@ func (q *Queries) InsertOrderAllocation(ctx context.Context, arg InsertOrderAllo
 }
 
 const insertOrderEvidence = `-- name: InsertOrderEvidence :one
-INSERT INTO shuttle_order_evidence(id,order_id,event_id,user_id,file_id,source_unique_id,reported_amount_minor,quoted_amount_minor,currency,currency_scale,sent_at,submitted_at,due_at,admission_state,reason,state)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$14) RETURNING id, order_id, event_id, user_id, file_id, source_unique_id, reported_amount_minor, quoted_amount_minor, currency, currency_scale, sent_at, submitted_at, due_at, admission_state, reason, state, version, order_kind
+INSERT INTO shuttle_order_evidence(id,order_id,event_id,user_id,file_id,source_unique_id,reported_amount_minor,quoted_amount_minor,currency,currency_scale,sent_at,submitted_at,due_at,admission_state,reason,state,order_kind)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$14,$16) RETURNING id, order_id, event_id, user_id, file_id, source_unique_id, reported_amount_minor, quoted_amount_minor, currency, currency_scale, sent_at, submitted_at, due_at, admission_state, reason, state, version, order_kind
 `
 
 type InsertOrderEvidenceParams struct {
@@ -5312,6 +5318,7 @@ type InsertOrderEvidenceParams struct {
 	DueAt               pgtype.Timestamptz `json:"due_at"`
 	AdmissionState      string             `json:"admission_state"`
 	Reason              string             `json:"reason"`
+	OrderKind           string             `json:"order_kind"`
 }
 
 func (q *Queries) InsertOrderEvidence(ctx context.Context, arg InsertOrderEvidenceParams) (ShuttleOrderEvidence, error) {
@@ -5331,6 +5338,7 @@ func (q *Queries) InsertOrderEvidence(ctx context.Context, arg InsertOrderEviden
 		arg.DueAt,
 		arg.AdmissionState,
 		arg.Reason,
+		arg.OrderKind,
 	)
 	var i ShuttleOrderEvidence
 	err := row.Scan(
@@ -5405,17 +5413,18 @@ func (q *Queries) InsertOrderEvidenceOperation(ctx context.Context, arg InsertOr
 }
 
 const insertOrderEvidencePreparation = `-- name: InsertOrderEvidencePreparation :exec
-INSERT INTO shuttle_order_evidence_preparations(id,user_id,operation_id,event_id,request_hash,document,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)
+INSERT INTO shuttle_order_evidence_preparations(id,user_id,operation_id,event_id,request_hash,document,expires_at,presentation) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
 `
 
 type InsertOrderEvidencePreparationParams struct {
-	ID          uuid.UUID          `json:"id"`
-	UserID      uuid.UUID          `json:"user_id"`
-	OperationID uuid.UUID          `json:"operation_id"`
-	EventID     uuid.UUID          `json:"event_id"`
-	RequestHash []byte             `json:"request_hash"`
-	Document    []byte             `json:"document"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	ID           uuid.UUID          `json:"id"`
+	UserID       uuid.UUID          `json:"user_id"`
+	OperationID  uuid.UUID          `json:"operation_id"`
+	EventID      uuid.UUID          `json:"event_id"`
+	RequestHash  []byte             `json:"request_hash"`
+	Document     []byte             `json:"document"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	Presentation string             `json:"presentation"`
 }
 
 func (q *Queries) InsertOrderEvidencePreparation(ctx context.Context, arg InsertOrderEvidencePreparationParams) error {
@@ -5427,6 +5436,7 @@ func (q *Queries) InsertOrderEvidencePreparation(ctx context.Context, arg Insert
 		arg.RequestHash,
 		arg.Document,
 		arg.ExpiresAt,
+		arg.Presentation,
 	)
 	return err
 }
@@ -5462,7 +5472,7 @@ func (q *Queries) InsertOrderEvidenceReview(ctx context.Context, arg InsertOrder
 
 const insertOrderOperation = `-- name: InsertOrderOperation :exec
 INSERT INTO shuttle_order_operations(user_id,operation_id,kind,event_id,preparation_id,order_id,business_hash,request_hash,result,source,order_kind)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'service')
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 `
 
 type InsertOrderOperationParams struct {
@@ -5476,6 +5486,7 @@ type InsertOrderOperationParams struct {
 	RequestHash   []byte      `json:"request_hash"`
 	Result        []byte      `json:"result"`
 	Source        string      `json:"source"`
+	OrderKind     string      `json:"order_kind"`
 }
 
 func (q *Queries) InsertOrderOperation(ctx context.Context, arg InsertOrderOperationParams) error {
@@ -5490,13 +5501,14 @@ func (q *Queries) InsertOrderOperation(ctx context.Context, arg InsertOrderOpera
 		arg.RequestHash,
 		arg.Result,
 		arg.Source,
+		arg.OrderKind,
 	)
 	return err
 }
 
 const insertOrderPreparation = `-- name: InsertOrderPreparation :exec
 INSERT INTO shuttle_order_preparations(id,user_id,event_id,source_draft_version,request_hash,arguments,snapshot,created_at,expires_at,order_kind)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'service')
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 `
 
 type InsertOrderPreparationParams struct {
@@ -5509,6 +5521,7 @@ type InsertOrderPreparationParams struct {
 	Snapshot           []byte             `json:"snapshot"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	ExpiresAt          pgtype.Timestamptz `json:"expires_at"`
+	OrderKind          string             `json:"order_kind"`
 }
 
 func (q *Queries) InsertOrderPreparation(ctx context.Context, arg InsertOrderPreparationParams) error {
@@ -5522,6 +5535,7 @@ func (q *Queries) InsertOrderPreparation(ctx context.Context, arg InsertOrderPre
 		arg.Snapshot,
 		arg.CreatedAt,
 		arg.ExpiresAt,
+		arg.OrderKind,
 	)
 	return err
 }
@@ -6124,7 +6138,7 @@ func (q *Queries) InsertSettingsChangeProposal(ctx context.Context, arg InsertSe
 
 const insertSubmittedOrder = `-- name: InsertSubmittedOrder :exec
 INSERT INTO shuttle_orders(id,user_id,event_id,source_draft_version,preparation_id,request_hash,version,state,submitted_result,sales_closes_at,submitted_at,order_kind)
-VALUES($1,$2,$3,$4,$5,$6,1,'submitted',$7,$8,$9,'service')
+VALUES($1,$2,$3,$4,$5,$6,1,'submitted',$7,$8,$9,$10)
 `
 
 type InsertSubmittedOrderParams struct {
@@ -6137,6 +6151,7 @@ type InsertSubmittedOrderParams struct {
 	SubmittedResult    []byte             `json:"submitted_result"`
 	SalesClosesAt      pgtype.Timestamptz `json:"sales_closes_at"`
 	SubmittedAt        pgtype.Timestamptz `json:"submitted_at"`
+	OrderKind          string             `json:"order_kind"`
 }
 
 func (q *Queries) InsertSubmittedOrder(ctx context.Context, arg InsertSubmittedOrderParams) error {
@@ -6150,6 +6165,7 @@ func (q *Queries) InsertSubmittedOrder(ctx context.Context, arg InsertSubmittedO
 		arg.SubmittedResult,
 		arg.SalesClosesAt,
 		arg.SubmittedAt,
+		arg.OrderKind,
 	)
 	return err
 }
@@ -8059,7 +8075,9 @@ func (q *Queries) ListMiniAppOrderEvidenceFiles(ctx context.Context, arg ListMin
 
 const listOrderEvidence = `-- name: ListOrderEvidence :many
 SELECT ev.id, ev.order_id, ev.event_id, ev.user_id, ev.file_id, ev.source_unique_id, ev.reported_amount_minor, ev.quoted_amount_minor, ev.currency, ev.currency_scale, ev.sent_at, ev.submitted_at, ev.due_at, ev.admission_state, ev.reason, ev.state, ev.version, ev.order_kind FROM shuttle_order_evidence ev JOIN shuttle_users owner ON owner.id=ev.user_id
+JOIN shuttle_events e ON e.id=ev.event_id
 WHERE ev.event_id=$1 AND owner.bot_id=$2 AND owner.zitadel_org=$3
+ AND (CASE ev.order_kind WHEN 'service' THEN 'orders' WHEN 'meal' THEN 'meals' END)=ANY(e.modules)
  AND ($4::uuid='00000000-0000-0000-0000-000000000000'::uuid OR ev.user_id=$4)
  AND ($5::uuid='00000000-0000-0000-0000-000000000000'::uuid OR ev.order_id=$5)
  AND (NOT $6::boolean OR ev.state IN ('pending','exhausted','needs_decision'))
@@ -8131,7 +8149,7 @@ JOIN shuttle_users actor ON actor.id=$1 AND actor.bot_id=e.bot_id
 AND actor.zitadel_org=e.organization_id AND actor.zitadel_subject=$2 AND NOT actor.revoked
 LEFT JOIN shuttle_event_authorities a ON a.event_id=e.id AND a.user_id=actor.id
 WHERE e.bot_id=$3 AND e.organization_id=$4
-AND 'orders'=ANY(e.modules) AND e.id>$5::uuid
+AND e.modules && ARRAY['orders','meals']::text[] AND e.id>$5::uuid
 AND ($6::boolean OR a.role IN ('ambassador','administrator'))
 ORDER BY e.id LIMIT $7
 `
@@ -8625,13 +8643,14 @@ func (q *Queries) ListOwnPendingMassagePreparations(ctx context.Context, arg Lis
 
 const listOwnSubmittedOrders = `-- name: ListOwnSubmittedOrders :many
 SELECT id, user_id, event_id, source_draft_version, preparation_id, request_hash, version, state, submitted_result, sales_closes_at, submitted_at, cancelled_at, order_kind FROM shuttle_orders WHERE user_id=$1 AND event_id=$2 AND id>$3
-AND order_kind='service' ORDER BY id LIMIT $4
+AND order_kind=$4 ORDER BY id LIMIT $5
 `
 
 type ListOwnSubmittedOrdersParams struct {
 	UserID    uuid.UUID `json:"user_id"`
 	EventID   uuid.UUID `json:"event_id"`
 	AfterID   uuid.UUID `json:"after_id"`
+	OrderKind string    `json:"order_kind"`
 	PageLimit int32     `json:"page_limit"`
 }
 
@@ -8640,6 +8659,7 @@ func (q *Queries) ListOwnSubmittedOrders(ctx context.Context, arg ListOwnSubmitt
 		arg.UserID,
 		arg.EventID,
 		arg.AfterID,
+		arg.OrderKind,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -9028,7 +9048,8 @@ func (q *Queries) ListPaymentEvents(ctx context.Context, arg ListPaymentEventsPa
 const listPaymentEvidence = `-- name: ListPaymentEvidence :many
 SELECT ev.id, ev.event_id, ev.pass_id, ev.user_id, ev.file_id, ev.source_unique_id, ev.amount_minor, ev.currency, ev.currency_scale, ev.purpose, ev.sent_at, ev.submitted_at, ev.due_at,coalesce(rv.decision,'pending')::text AS state,to_jsonb(rv) AS review FROM shuttle_payment_evidence ev
 LEFT JOIN shuttle_payment_reviews rv ON rv.evidence_id=ev.id
-WHERE ev.event_id=$1 AND ($2::uuid='00000000-0000-0000-0000-000000000000' OR ev.user_id=$2)
+WHERE ev.event_id=$1
+ AND ($2::uuid='00000000-0000-0000-0000-000000000000' OR ev.user_id=$2)
 AND ev.id>$3::uuid ORDER BY ev.id LIMIT $4
 `
 
@@ -10724,7 +10745,8 @@ FROM shuttle_order_evidence_notices n
 JOIN shuttle_order_evidence ev ON ev.id=n.evidence_id
 JOIN shuttle_events e ON e.id=ev.event_id
 JOIN shuttle_users u ON u.id=n.recipient_id
-WHERE n.id=$1 AND e.bot_id=$2 AND e.organization_id=$3 AND 'orders'=ANY(e.modules)
+WHERE n.id=$1 AND e.bot_id=$2 AND e.organization_id=$3
+AND (CASE ev.order_kind WHEN 'service' THEN 'orders' WHEN 'meal' THEN 'meals' END)=ANY(e.modules)
 AND u.bot_id=e.bot_id AND u.zitadel_org=e.organization_id AND NOT u.revoked AND u.zitadel_subject<>''
 AND n.kind=ev.state
 AND (u.id=ev.user_id OR EXISTS(SELECT 1 FROM shuttle_event_authorities a
@@ -11337,17 +11359,23 @@ func (q *Queries) PruneMiniAppSessions(ctx context.Context, botID int64) (int64,
 }
 
 const readCanonicalOrder = `-- name: ReadCanonicalOrder :one
-SELECT id, user_id, event_id, source_draft_version, preparation_id, request_hash, version, state, submitted_result, sales_closes_at, submitted_at, cancelled_at, order_kind FROM shuttle_orders WHERE user_id=$1 AND event_id=$2 AND source_draft_version=$3 AND order_kind='service'
+SELECT id, user_id, event_id, source_draft_version, preparation_id, request_hash, version, state, submitted_result, sales_closes_at, submitted_at, cancelled_at, order_kind FROM shuttle_orders WHERE user_id=$1 AND event_id=$2 AND source_draft_version=$3 AND order_kind=$4
 `
 
 type ReadCanonicalOrderParams struct {
 	UserID             uuid.UUID `json:"user_id"`
 	EventID            uuid.UUID `json:"event_id"`
 	SourceDraftVersion int64     `json:"source_draft_version"`
+	OrderKind          string    `json:"order_kind"`
 }
 
 func (q *Queries) ReadCanonicalOrder(ctx context.Context, arg ReadCanonicalOrderParams) (ShuttleOrder, error) {
-	row := q.db.QueryRow(ctx, readCanonicalOrder, arg.UserID, arg.EventID, arg.SourceDraftVersion)
+	row := q.db.QueryRow(ctx, readCanonicalOrder,
+		arg.UserID,
+		arg.EventID,
+		arg.SourceDraftVersion,
+		arg.OrderKind,
+	)
 	var i ShuttleOrder
 	err := row.Scan(
 		&i.ID,
@@ -12412,7 +12440,7 @@ func (q *Queries) ReadOrderEvidenceOperation(ctx context.Context, arg ReadOrderE
 }
 
 const readOrderEvidencePreparation = `-- name: ReadOrderEvidencePreparation :one
-SELECT id, user_id, operation_id, event_id, request_hash, document, expires_at FROM shuttle_order_evidence_preparations WHERE user_id=$1 AND operation_id=$2
+SELECT id, user_id, operation_id, event_id, request_hash, document, expires_at, presentation FROM shuttle_order_evidence_preparations WHERE user_id=$1 AND operation_id=$2
 `
 
 type ReadOrderEvidencePreparationParams struct {
@@ -12431,6 +12459,7 @@ func (q *Queries) ReadOrderEvidencePreparation(ctx context.Context, arg ReadOrde
 		&i.RequestHash,
 		&i.Document,
 		&i.ExpiresAt,
+		&i.Presentation,
 	)
 	return i, err
 }
@@ -12497,18 +12526,55 @@ func (q *Queries) ReadOrderOperations(ctx context.Context, arg ReadOrderOperatio
 	return items, nil
 }
 
+const readOrderPaymentTarget = `-- name: ReadOrderPaymentTarget :one
+SELECT id, user_id, event_id, source_draft_version, preparation_id, request_hash, version, state, submitted_result, sales_closes_at, submitted_at, cancelled_at, order_kind FROM shuttle_orders WHERE id=$1 AND event_id=$2 AND user_id=$3
+`
+
+type ReadOrderPaymentTargetParams struct {
+	ID      uuid.UUID `json:"id"`
+	EventID uuid.UUID `json:"event_id"`
+	UserID  uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) ReadOrderPaymentTarget(ctx context.Context, arg ReadOrderPaymentTargetParams) (ShuttleOrder, error) {
+	row := q.db.QueryRow(ctx, readOrderPaymentTarget, arg.ID, arg.EventID, arg.UserID)
+	var i ShuttleOrder
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.EventID,
+		&i.SourceDraftVersion,
+		&i.PreparationID,
+		&i.RequestHash,
+		&i.Version,
+		&i.State,
+		&i.SubmittedResult,
+		&i.SalesClosesAt,
+		&i.SubmittedAt,
+		&i.CancelledAt,
+		&i.OrderKind,
+	)
+	return i, err
+}
+
 const readOrderPreparation = `-- name: ReadOrderPreparation :one
-SELECT id, user_id, event_id, source_draft_version, request_hash, arguments, snapshot, created_at, expires_at, consumed_at, order_kind FROM shuttle_order_preparations WHERE id=$1 AND user_id=$2 AND event_id=$3 AND order_kind='service'
+SELECT id, user_id, event_id, source_draft_version, request_hash, arguments, snapshot, created_at, expires_at, consumed_at, order_kind FROM shuttle_order_preparations WHERE id=$1 AND user_id=$2 AND event_id=$3 AND order_kind=$4
 `
 
 type ReadOrderPreparationParams struct {
-	ID      uuid.UUID `json:"id"`
-	UserID  uuid.UUID `json:"user_id"`
-	EventID uuid.UUID `json:"event_id"`
+	ID        uuid.UUID `json:"id"`
+	UserID    uuid.UUID `json:"user_id"`
+	EventID   uuid.UUID `json:"event_id"`
+	OrderKind string    `json:"order_kind"`
 }
 
 func (q *Queries) ReadOrderPreparation(ctx context.Context, arg ReadOrderPreparationParams) (ShuttleOrderPreparation, error) {
-	row := q.db.QueryRow(ctx, readOrderPreparation, arg.ID, arg.UserID, arg.EventID)
+	row := q.db.QueryRow(ctx, readOrderPreparation,
+		arg.ID,
+		arg.UserID,
+		arg.EventID,
+		arg.OrderKind,
+	)
 	var i ShuttleOrderPreparation
 	err := row.Scan(
 		&i.ID,
@@ -12608,7 +12674,7 @@ func (q *Queries) ReadOrderReviewPresentation(ctx context.Context, arg ReadOrder
 }
 
 const readOrderReviewWorkspace = `-- name: ReadOrderReviewWorkspace :one
-SELECT w.id, w.actor_id, w.event_id, w.evidence_id, w.revision, w.proposal_id, w.state,p.document,NOT EXISTS(SELECT 1 FROM shuttle_order_review_workspaces later
+SELECT w.id, w.actor_id, w.event_id, w.evidence_id, w.revision, w.proposal_id, w.state,p.document,p.presentation,NOT EXISTS(SELECT 1 FROM shuttle_order_review_workspaces later
  WHERE later.actor_id=w.actor_id AND later.evidence_id=w.evidence_id AND later.revision>w.revision) AS current
 FROM shuttle_order_review_workspaces w JOIN shuttle_order_evidence_preparations p ON p.id=w.proposal_id
 WHERE w.id=$1 AND w.actor_id=$2
@@ -12620,15 +12686,16 @@ type ReadOrderReviewWorkspaceParams struct {
 }
 
 type ReadOrderReviewWorkspaceRow struct {
-	ID         uuid.UUID `json:"id"`
-	ActorID    uuid.UUID `json:"actor_id"`
-	EventID    uuid.UUID `json:"event_id"`
-	EvidenceID uuid.UUID `json:"evidence_id"`
-	Revision   int64     `json:"revision"`
-	ProposalID uuid.UUID `json:"proposal_id"`
-	State      string    `json:"state"`
-	Document   []byte    `json:"document"`
-	Current    bool      `json:"current"`
+	ID           uuid.UUID `json:"id"`
+	ActorID      uuid.UUID `json:"actor_id"`
+	EventID      uuid.UUID `json:"event_id"`
+	EvidenceID   uuid.UUID `json:"evidence_id"`
+	Revision     int64     `json:"revision"`
+	ProposalID   uuid.UUID `json:"proposal_id"`
+	State        string    `json:"state"`
+	Document     []byte    `json:"document"`
+	Presentation string    `json:"presentation"`
+	Current      bool      `json:"current"`
 }
 
 func (q *Queries) ReadOrderReviewWorkspace(ctx context.Context, arg ReadOrderReviewWorkspaceParams) (ReadOrderReviewWorkspaceRow, error) {
@@ -12643,6 +12710,7 @@ func (q *Queries) ReadOrderReviewWorkspace(ctx context.Context, arg ReadOrderRev
 		&i.ProposalID,
 		&i.State,
 		&i.Document,
+		&i.Presentation,
 		&i.Current,
 	)
 	return i, err
@@ -12968,17 +13036,23 @@ func (q *Queries) ReadSettingsForMassage(ctx context.Context) (ShuttleSetting, e
 }
 
 const readSubmittedOrder = `-- name: ReadSubmittedOrder :one
-SELECT id, user_id, event_id, source_draft_version, preparation_id, request_hash, version, state, submitted_result, sales_closes_at, submitted_at, cancelled_at, order_kind FROM shuttle_orders WHERE id=$1 AND user_id=$2 AND event_id=$3 AND order_kind='service'
+SELECT id, user_id, event_id, source_draft_version, preparation_id, request_hash, version, state, submitted_result, sales_closes_at, submitted_at, cancelled_at, order_kind FROM shuttle_orders WHERE id=$1 AND user_id=$2 AND event_id=$3 AND order_kind=$4
 `
 
 type ReadSubmittedOrderParams struct {
-	ID      uuid.UUID `json:"id"`
-	UserID  uuid.UUID `json:"user_id"`
-	EventID uuid.UUID `json:"event_id"`
+	ID        uuid.UUID `json:"id"`
+	UserID    uuid.UUID `json:"user_id"`
+	EventID   uuid.UUID `json:"event_id"`
+	OrderKind string    `json:"order_kind"`
 }
 
 func (q *Queries) ReadSubmittedOrder(ctx context.Context, arg ReadSubmittedOrderParams) (ShuttleOrder, error) {
-	row := q.db.QueryRow(ctx, readSubmittedOrder, arg.ID, arg.UserID, arg.EventID)
+	row := q.db.QueryRow(ctx, readSubmittedOrder,
+		arg.ID,
+		arg.UserID,
+		arg.EventID,
+		arg.OrderKind,
+	)
 	var i ShuttleOrder
 	err := row.Scan(
 		&i.ID,

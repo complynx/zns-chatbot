@@ -4,6 +4,14 @@ const orderExpectedCatalogVersion = "expected_catalog_version"
 const orderExpectedDraftVersion = "expected_draft_version"
 
 func orderSubmissionMethods() []map[string]any {
+	return orderSubmissionMethodsFor(ordersSelectionPath, "selection")
+}
+
+func mealSubmissionMethods() []map[string]any {
+	return orderSubmissionMethodsFor(mealDraftPath, "meal_draft")
+}
+
+func orderSubmissionMethodsFor(path, draftField string) []map[string]any {
 	detail := ordersEventProperties()
 	detail["order_id"] = map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	get := paymentMethod(
@@ -13,7 +21,7 @@ func orderSubmissionMethods() []map[string]any {
 		[]string{schemaEventID, "order_id"},
 		[]string{"id", schemaEventID, schemaVersion, schemaState, "snapshot"},
 	)
-	get[manifestPath] = ordersSelectionPath + "get"
+	get[manifestPath] = path + "get"
 	listProps := ordersEventProperties()
 	listProps[schemaAfter] = map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	listProps["limit"] = map[string]any{
@@ -28,25 +36,29 @@ func orderSubmissionMethods() []map[string]any {
 		[]string{schemaEventID},
 		[]string{"orders"},
 	)
-	list[manifestPath] = ordersSelectionPath + "list"
+	list[manifestPath] = path + "list"
 	props := ordersEventProperties()
 	for _, field := range []string{schemaExpectedEventVersion, orderExpectedCatalogVersion, orderExpectedDraftVersion} {
 		props[field] = map[string]any{manifestType: schemaInteger, schemaMinimum: 1}
 	}
+	submitDescription := "Submit your exact nonempty saved draft only after reviewing selection's complete items and all charges with the user and obtaining exact approval of this preparation. Read catalog and selection first; use current event/catalog/draft versions. Preparation is shared across agent and native form and expires in five minutes or at the earliest selected offer cutoff. The server recalculates and rejects stale versions, changed price/content, closed sales or expired preparation. Success atomically retains an immutable order/receipt and clears only the consumed draft revision. No capacity or confirmed money is created; even a zero total does not assert payment. Owner/event/source draft revision is canonical: changing transport ID cannot duplicate that order. Same operation and exact body/proposal replay the original result after later draft/catalog changes or cancellation, subject to current access. Changed arguments conflict. On uncertain response reconcile the original operation; not_found is unknown, never permission to replace it."
+	if path == mealDraftPath {
+		submitDescription = "Submit your exact nonempty saved meal draft after human approval of its complete frozen composition, all prices and common event-local payment-proof deadline. Read catalog and draft first; supply exact event/catalog/draft revisions. Empty composition creates no order; a selected free dish is not empty. A configured common payment deadline and currently open selected services are mandatory. Preparation lasts at most five minutes and never beyond the common deadline; execution rechecks selected service sales and current meals entitlement. The bot displays all frozen details before consent, even when the tool preparation description is abbreviated. Success atomically retains the meal order and original receipt and clears only this draft revision. Unlimited meal quantities create no capacity holds, confirmed money or evidence. Native and agent calls share canonical preparations/orders, but exact adoption of another interface's preparation still needs its explicit supported handoff protocol. A new operation cannot duplicate a consumed draft. Replay returns the original result after later changes/cancellation, subject to current access. Recover the same original operation after uncertainty; not_found is unknown, never authorization to replace it."
+	}
 	submit := paymentMethod(
 		"submit",
-		"Submit your exact nonempty saved draft only after reviewing selection's complete items and all charges with the user and obtaining exact approval of this preparation. Read catalog and selection first; use current event/catalog/draft versions. Preparation is shared across agent and native form and expires in five minutes or at the earliest selected offer cutoff. The server recalculates and rejects stale versions, changed price/content, closed sales or expired preparation. Success atomically retains an immutable order/receipt and clears only the consumed draft revision. No capacity or confirmed money is created; even a zero total does not assert payment. Owner/event/source draft revision is canonical: changing transport ID cannot duplicate that order. Same operation and exact body/proposal replay the original result after later draft/catalog changes or cancellation, subject to current access. Changed arguments conflict. On uncertain response reconcile the original operation; not_found is unknown, never permission to replace it.",
+		submitDescription,
 		props,
 		[]string{schemaEventID, schemaExpectedEventVersion, orderExpectedCatalogVersion, orderExpectedDraftVersion},
-		[]string{"order", "selection"},
+		[]string{"order", draftField},
 	)
-	submit[manifestPath] = ordersSelectionPath + "submit"
+	submit[manifestPath] = path + "submit"
 	submit[manifestEffect], submit[manifestIdempotency] = effectWrite, true
-	submit[manifestStatusPath] = ordersSelectionPath + "submit/status"
+	submit[manifestStatusPath] = path + "submit/status"
 	submit[manifestDedupWindow] = agentRegistrationDedupSeconds
 	submit[manifestConfirmation] = map[string]any{
 		confirmationMode:    assignmentConfirmationMode,
-		manifestPreparePath: ordersSelectionPath + "submit/prepare",
+		manifestPreparePath: path + "submit/prepare",
 	}
 	cancelProps := ordersEventProperties()
 	cancelProps["order_id"] = map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
@@ -58,9 +70,9 @@ func orderSubmissionMethods() []map[string]any {
 		[]string{schemaEventID, "order_id", schemaExpectedVersion},
 		[]string{"id", schemaEventID, schemaVersion, schemaState, "snapshot"},
 	)
-	cancel[manifestPath] = ordersSelectionPath + "cancel"
+	cancel[manifestPath] = path + "cancel"
 	cancel[manifestEffect], cancel[manifestIdempotency] = effectWrite, true
-	cancel[manifestStatusPath] = ordersSelectionPath + "cancel/status"
+	cancel[manifestStatusPath] = path + "cancel/status"
 	cancel[manifestDedupWindow] = agentRegistrationDedupSeconds
 	operation := paymentMethod(
 		"operation",
@@ -75,6 +87,6 @@ func orderSubmissionMethods() []map[string]any {
 		[]string{detailsOperationID, schemaKind},
 		[]string{detailsOperationID, schemaEventID, schemaKind, "result"},
 	)
-	operation[manifestPath] = ordersSelectionPath + "operation"
+	operation[manifestPath] = path + "operation"
 	return []map[string]any{list, get, submit, cancel, operation}
 }

@@ -61,10 +61,10 @@ func (s *Store) OrderEvidenceList(
 	var err error
 	owner := scope.UserID
 	if audit {
-		tx, err = s.orderEvidenceAuthorityTx(ctx, scope, event)
+		tx, err = s.orderEvidenceAuthorityTx(ctx, scope, event, uuid.Nil)
 		owner = uuid.Nil
 	} else {
-		tx, err = s.orderTx(ctx, orderEvidenceProfile(scope), event, uuid.Nil)
+		tx, err = s.orderPaymentOwnerTx(ctx, orderEvidenceProfile(scope), event, uuid.Nil)
 	}
 	if err != nil {
 		return OrderEvidencePage{}, err

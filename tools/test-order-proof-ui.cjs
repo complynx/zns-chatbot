@@ -45,6 +45,29 @@ test("explicit order and accepted file produce an exact persisted claim, not pai
  const api=backend(),b=browser(api);await b.start();await b.open();await b.select();b.get("amount").value="25,68";await b.submit();
  const write=b.calls.find(c=>c.method==="POST");assert.ok(write.saved);assert.deepEqual(JSON.parse(write.saved).body,write.body);assert.equal(write.body.order_id,orderID);assert.equal(write.body.file_id,fileID);assert.equal(write.body.amount_minor,2568);assert.equal(api.claims.length,1);assert.equal(b.storage.size,0);assert.match(b.text(),/available places held/);assert.doesNotMatch(b.text(),/Payment confirmed/);assert.match(b.text(),/<script>/);
 });
+
+test("meal proof reads meal order but uses shared evidence API and preserves its kind on recovery",async()=>{
+ const api=backend(),storage=new Map();api.order.order_kind="meal";
+ api.hook=(path,method,body,base)=>{
+   if(path.includes("/submitted/"))assert.ok(path.startsWith("./meals/"));
+   else assert.ok(path.startsWith("./orders/"));
+   const result=base(path,method,body);if(method==="POST")throw {status:503};return result;
+ };
+ const b=browser(api,{storage});await b.start();await b.open();await b.select();await b.submit();
+ assert.equal(JSON.parse(storage.get(key(owner))).order_kind,"meal");assert.equal(api.claims.length,1);
+ const reload=browser(api,{storage});await reload.start();
+ assert.equal(reload.calls.filter(c=>c.method==="POST").length,0);assert.equal(storage.size,0);
+ assert.ok(reload.calls.some(c=>c.path.startsWith("./meals/")&&c.path.includes("/submitted/")));
+ assert.match(reload.text(),/Awaiting review/);
+ assert.doesNotMatch(reload.text(),/available places held/);
+});
+
+test("meal proof refuses mismatched service order response before accepting a file or sending payment",async()=>{
+ const api=backend();api.order.order_kind="meal";
+ api.hook=(path,method,body,base)=>path.includes("/submitted/")?{...api.order,order_kind:"service"}:base(path,method,body);
+ const b=browser(api);await b.start();await b.open();
+ assert.equal(b.get("submit").disabled,true);assert.equal(b.calls.filter(c=>c.method==="POST").length,0);
+});
 test("commit with lost reply recovers original receipt after reload without another POST",async()=>{
  const api=backend(),storage=new Map();api.hook=(path,method,body,base)=>{const result=base(path,method,body);if(method==="POST")throw {status:503};return result;};
  const b=browser(api,{storage});await b.start();await b.open();await b.select();await b.submit();assert.equal(storage.size,1);assert.equal(api.claims.length,1);

@@ -116,6 +116,7 @@
     readBlob: readProof, upload: uploadAvatar, setBusy, denied: detailsDenied
   });
   const mealsUI = window.createZinusyaMeals?.({
+    openProof: orderProofUI ? (order, locale) => orderProofUI.open(order, locale) : undefined,
     request: (path, method, body) => request(path, method, body, session.token), setBusy, denied: detailsDenied
   });
   const ordersUI = window.createZinusyaOrders?.({

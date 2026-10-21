@@ -33,9 +33,9 @@ type miniAppOrderCancelInput struct {
 func (s *Server) registerMiniAppOrderSubmission() {
 	s.registerMiniAppOrderReviews()
 	s.registerMiniAppOrderEvidence()
-	s.public.HandleFunc("POST /app/orders/{event}/submit/prepare", s.miniAppPrepareOrder)
-	s.public.HandleFunc("POST /app/orders/{event}/submit", s.miniAppSubmitOrder)
-	s.public.HandleFunc("POST /app/orders/{event}/cancel", s.miniAppCancelOrder)
+	writes := miniAppOrderWrites{Server: s, prepare: s.store.PrepareMiniAppOrderSubmission,
+		submit: s.store.SubmitMiniAppOrder, cancel: s.store.CancelMiniAppOrder, failure: s.miniAppOrdersError}
+	writes.register("/app/orders/{event}/")
 	s.public.HandleFunc("GET /app/orders/{event}/submitted", s.miniAppSubmittedOrders)
 	s.public.HandleFunc("GET /app/orders/{event}/submitted/{order}", s.miniAppSubmittedOrder)
 	s.public.HandleFunc("GET /app/orders/{event}/operation-receipts/{kind}/{operation}", s.miniAppOrderReceipt)
@@ -98,7 +98,7 @@ func (s *Server) miniAppOrderResult(
 	_ = json.NewEncoder(w).Encode(result)
 }
 
-func (s *Server) miniAppPrepareOrder(w http.ResponseWriter, r *http.Request) {
+func (s *miniAppOrderWrites) miniAppPrepareOrder(w http.ResponseWriter, r *http.Request) {
 	if !s.miniAppRequest(w, r) {
 		return
 	}
@@ -126,11 +126,11 @@ func (s *Server) miniAppPrepareOrder(w http.ResponseWriter, r *http.Request) {
 		miniAppError(w, err)
 		return
 	}
-	result, err := s.store.PrepareMiniAppOrderSubmission(ctx, s.eventScope(), session, input.OperationID, args)
+	result, err := s.prepare(ctx, s.eventScope(), session, input.OperationID, args)
 	s.miniAppOrderResult(ctx, w, r, result, err)
 }
 
-func (s *Server) miniAppSubmitOrder(w http.ResponseWriter, r *http.Request) {
+func (s *miniAppOrderWrites) miniAppSubmitOrder(w http.ResponseWriter, r *http.Request) {
 	if !s.miniAppRequest(w, r) {
 		return
 	}
@@ -154,11 +154,11 @@ func (s *Server) miniAppSubmitOrder(w http.ResponseWriter, r *http.Request) {
 		miniAppError(w, err)
 		return
 	}
-	result, err := s.store.SubmitMiniAppOrder(ctx, s.eventScope(), session, input.OperationID, args, input.ProposalID)
+	result, err := s.submit(ctx, s.eventScope(), session, input.OperationID, args, input.ProposalID)
 	s.miniAppOrderResult(ctx, w, r, result, err)
 }
 
-func (s *Server) miniAppCancelOrder(w http.ResponseWriter, r *http.Request) {
+func (s *miniAppOrderWrites) miniAppCancelOrder(w http.ResponseWriter, r *http.Request) {
 	if !s.miniAppRequest(w, r) {
 		return
 	}
@@ -182,7 +182,7 @@ func (s *Server) miniAppCancelOrder(w http.ResponseWriter, r *http.Request) {
 		miniAppError(w, err)
 		return
 	}
-	result, err := s.store.CancelMiniAppOrder(
+	result, err := s.cancel(
 		ctx,
 		s.eventScope(),
 		session,

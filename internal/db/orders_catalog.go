@@ -127,7 +127,12 @@ func (s *Store) ownOrdersCatalogSnapshot(
 	}
 	q := s.q.WithTx(tx)
 	allowed, err := q.UserModuleAvailable(ctx, sqlc.UserModuleAvailableParams{
-		ID: eventID, BotID: scope.BotID, OrganizationID: scope.Organization, ID_2: scope.UserID, Column5: "orders"})
+		ID:             eventID,
+		BotID:          scope.BotID,
+		OrganizationID: scope.Organization,
+		ID_2:           scope.UserID,
+		Column5:        orderModuleServices,
+	})
 	if err != nil {
 		return result, err
 	}

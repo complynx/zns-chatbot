@@ -32,7 +32,7 @@ func (s *Store) miniAppOrderReviewReadTx(ctx context.Context, scope PaymentScope
 	if err != nil {
 		return nil, record, err
 	}
-	record, _, err = lockPaymentModuleEvent(ctx, s.q.WithTx(tx), scope, event, "orders", true)
+	record, _, err = lockOrderPaymentEvent(ctx, s.q.WithTx(tx), scope, event, uuid.Nil, true)
 	if err == nil {
 		err = (paymentReviewOrigin{session: &session}).authorize(ctx, tx, scope)
 	}
@@ -127,13 +127,16 @@ func (s *Store) MiniAppOrderReviewDetail(ctx context.Context, scope PaymentScope
 	if err != nil {
 		return result, err
 	}
-	row, err := q.ReadSubmittedOrder(ctx, sqlc.ReadSubmittedOrderParams{
-		ID: result.Evidence.OrderID, UserID: result.Evidence.UserID, EventID: event,
-	})
+	row, err := q.ReadSubmittedOrder(
+		ctx,
+		sqlc.ReadSubmittedOrderParams{OrderKind: string(result.Evidence.businessKind()),
+			ID: result.Evidence.OrderID, UserID: result.Evidence.UserID, EventID: event,
+		},
+	)
 	if err != nil {
 		return result, err
 	}
-	result.Order, err = submittedOrderRecord(row)
+	result.Order, err = submittedOrderRecordForKind(row, result.Evidence.businessKind())
 	if err != nil {
 		return result, err
 	}
@@ -172,6 +175,9 @@ func (s *Store) MiniAppOrderReviewFile(ctx context.Context, scope PaymentScope,
 		return File{}, err
 	}
 	defer rollbackLegacyArchive(ctx, tx)
+	if _, err = currentAuthorityOrderEvidence(ctx, s.q.WithTx(tx), scope, event, evidence); err != nil {
+		return File{}, err
+	}
 	row, err := s.q.WithTx(tx).GetOrderEvidenceFile(ctx, sqlc.GetOrderEvidenceFileParams{
 		ID: evidence, EventID: event, BotID: scope.BotID, ZitadelOrg: scope.Organization,
 	})

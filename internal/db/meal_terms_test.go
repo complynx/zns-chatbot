@@ -227,3 +227,16 @@ func TestMealTermsRejectOversizedSnapshot(t *testing.T) {
 	_, err = db.FreezeMealDraft(catalog, draft)
 	require.ErrorIs(t, err, db.ErrMealTerms)
 }
+
+func TestMealTermsFreezeOriginalSharedPaymentDeadline(t *testing.T) {
+	t.Parallel()
+	catalog, draft := mealTermsFixture(t)
+	deadline := time.Date(2026, 10, 23, 15, 0, 0, 0, time.UTC)
+	catalog.Document.PaymentDeadline = &deadline
+	terms, err := db.FreezeMealDraft(catalog, draft)
+	require.NoError(t, err)
+	require.Equal(t, deadline, *terms.PaymentDeadline)
+	deadline = deadline.Add(24 * time.Hour)
+	require.Equal(t, "2026-10-23T15:00:00Z", terms.PaymentDeadline.Format(time.RFC3339))
+	require.Equal(t, int64(715), terms.Quote.TotalMinor)
+}

@@ -6,7 +6,7 @@ const schemaOrderEvidenceSentAt = "sent_at"
 func orderEvidenceModule() map[string]any {
 	return map[string]any{
 		"id":                "zinusya_order_payments",
-		manifestDescription: "Order payment evidence, shared human review and original receipts",
+		manifestDescription: "Service and meal payment evidence, shared human review and original receipts",
 		manifestPermissions: []string{}, manifestDiscovery: discoveryDynamic,
 		manifestDiscoveryPath: orderEvidencePath + "discover", manifestCacheTTL: 0,
 	}
@@ -38,7 +38,7 @@ func orderEvidenceMethods(audit bool) []map[string]any {
 	methods := []map[string]any{
 		orderEvidenceMethod(
 			"evidence",
-			"Read your own order payment evidence's current state by event_id/evidence_id. Owner access needs a currently assigned pass and the orders module. pending holds requirements; exhausted requests refund attention; needs_decision preserves an unresolved claim; only confirmed records a human-confirmed payment. None means fulfillment or a completed refund. Admission reason and optional human review reason are separate. Original sent_at, submitted_at and due_at are UTC instants; retrieve the order's frozen quote for its event timezone.",
+			"Read your own order payment evidence's current state by event_id/evidence_id. Owner access needs a currently assigned pass and the persisted order kind's module: orders for service, meals for meal. pending holds limited requirements, if any; exhausted requests refund attention; needs_decision preserves an unresolved claim; only confirmed records a human-confirmed payment. None means fulfillment or a completed refund. Admission reason and optional human review reason are separate. Original sent_at, submitted_at and due_at are UTC instants; retrieve the order's frozen quote for its event timezone.",
 			detail,
 			[]string{schemaEventID, schemaEvidenceID},
 			[]string{"id", schemaOrderEvidenceOrderID, schemaEventID, schemaState},
@@ -73,7 +73,7 @@ func orderEvidenceMethods(audit bool) []map[string]any {
 		methods,
 		orderEvidenceMethod(
 			"evidence_for_review",
-			"Read current order payment evidence for this event as its current ambassador/admin, including a revoked payer's historical claim. A role in another event is insufficient. Only the orders module is needed; no reviewer pass is required. This method does not confirm or reject anything.",
+			"Read current order payment evidence for this event as its current ambassador/admin, including a revoked payer's historical claim. A role in another event is insufficient. The persisted order kind's module must be enabled: orders for service, meals for meal; no reviewer pass is required. This method does not confirm or reject anything.",
 			detail,
 			[]string{schemaEventID, schemaEvidenceID},
 			[]string{"id", schemaOrderEvidenceOrderID, schemaEventID, schemaState},

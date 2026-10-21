@@ -9,6 +9,7 @@ import (
 )
 
 type MiniAppOrderAction struct {
+	OrderKind     OrderKind          `json:"order_kind"`
 	OperationID   uuid.UUID          `json:"operation_id"`
 	EventID       uuid.UUID          `json:"event_id"`
 	Kind          OrderOperationKind `json:"kind"`
@@ -33,14 +34,22 @@ func (s *Store) RecentMiniAppOrderActions(
 	if err = lockProfileOwner(ctx, tx, scope, false); err != nil {
 		return nil, err
 	}
-	rows, err := tx.Query(ctx, `SELECT op.operation_id,op.event_id,op.kind,op.preparation_id,op.order_id,op.created_at
+	rows, err := tx.Query(
+		ctx,
+		`SELECT op.operation_id,op.event_id,op.kind,op.preparation_id,op.order_id,op.created_at,op.order_kind
  FROM shuttle_tasks task JOIN shuttle_order_operations op ON op.user_id=task.user_id
  JOIN shuttle_events e ON e.id=op.event_id
  JOIN shuttle_registrations r ON r.event_id=e.id AND r.user_id=op.user_id AND r.state='assigned'
  JOIN shuttle_passes p ON p.registration_id=r.id
  WHERE task.id=$1 AND task.user_id=$2 AND op.source='miniapp' AND op.created_at<task.created_at
- AND e.bot_id=$3 AND e.organization_id=$4 AND 'orders'=ANY(e.modules)
- ORDER BY op.created_at DESC,op.operation_id DESC,op.kind LIMIT 5`, taskID, scope.UserID, scope.BotID, scope.Organization)
+ AND e.bot_id=$3 AND e.organization_id=$4
+ AND (CASE op.order_kind WHEN 'service' THEN 'orders' WHEN 'meal' THEN 'meals' END)=ANY(e.modules)
+ ORDER BY op.created_at DESC,op.operation_id DESC,op.kind LIMIT 5`,
+		taskID,
+		scope.UserID,
+		scope.BotID,
+		scope.Organization,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -56,6 +65,7 @@ func (s *Store) RecentMiniAppOrderActions(
 			&preparation,
 			&order,
 			&action.RecordedAt,
+			&action.OrderKind,
 		); err != nil {
 			return nil, err
 		}

@@ -11,6 +11,7 @@ import (
 )
 
 type MiniAppOrderReviewAction struct {
+	OrderKind   OrderKind `json:"order_kind"`
 	OperationID uuid.UUID `json:"operation_id"`
 	EventID     uuid.UUID `json:"event_id"`
 	EvidenceID  uuid.UUID `json:"evidence_id"`
@@ -60,12 +61,13 @@ func (s *Store) RecentMiniAppOrderReviewActions(
 	}
 	defer rollbackLegacyArchive(ctx, tx)
 	rows, err := tx.Query(ctx, `SELECT c.operation_id,w.event_id,w.evidence_id,w.id,w.revision,c.kind,
- CASE WHEN c.kind='commit' THEN c.result#>>'{evidence,state}' ELSE c.result->>'state' END,c.completed_at
+ CASE WHEN c.kind='commit' THEN c.result#>>'{evidence,state}' ELSE c.result->>'state' END,c.completed_at,ev.order_kind
  FROM shuttle_tasks task JOIN shuttle_order_review_calls c ON c.actor_id=task.user_id
  JOIN shuttle_order_review_workspaces w ON w.id=c.workspace_id AND w.actor_id=c.actor_id
+ JOIN shuttle_order_evidence ev ON ev.id=w.evidence_id AND ev.event_id=w.event_id
  JOIN shuttle_events e ON e.id=w.event_id
  WHERE task.id=$1 AND task.user_id=$2 AND c.source='miniapp' AND c.completed_at<task.created_at
- AND e.bot_id=$3 AND e.organization_id=$4 AND 'orders'=ANY(e.modules)
+ AND e.bot_id=$3 AND e.organization_id=$4 AND (CASE ev.order_kind WHEN 'service' THEN 'orders' WHEN 'meal' THEN 'meals' END)=ANY(e.modules)
  AND ($5 OR EXISTS(SELECT 1 FROM shuttle_event_authorities a WHERE a.event_id=e.id
  AND a.user_id=c.actor_id AND a.role IN ('ambassador','administrator')))
  ORDER BY c.completed_at DESC,c.operation_id DESC LIMIT 5`, taskID, scope.UserID, scope.BotID, scope.Organization, scope.GlobalAdmin)
@@ -83,6 +85,7 @@ func (s *Store) RecentMiniAppOrderReviewActions(
 			&action.Kind,
 			&action.Outcome,
 			&action.CompletedAt,
+			&action.OrderKind,
 		)
 		action.CompletedAt = action.CompletedAt.UTC()
 		return action, scanErr

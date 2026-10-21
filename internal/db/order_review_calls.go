@@ -3,7 +3,6 @@ package db
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -23,7 +22,7 @@ const orderReviewCommit = "commit"
 func (s *Store) orderReviewTx(
 	ctx context.Context,
 	scope PaymentScope,
-	operation, event uuid.UUID,
+	operation, event, evidence uuid.UUID,
 	origin paymentReviewOrigin,
 ) (pgx.Tx, string, error) {
 	if operation == uuid.Nil || !paymentScopeValid(scope, operation.String()) {
@@ -37,7 +36,7 @@ func (s *Store) orderReviewTx(
 	err = q.LockEventOperation(ctx, fmt.Sprintf("order-review-call:%s:%s", scope.UserID, operation))
 	var role string
 	if err == nil {
-		_, role, err = lockPaymentModuleEvent(ctx, q, scope, event, "orders", true)
+		_, role, err = lockOrderPaymentEvent(ctx, q, scope, event, evidence, true)
 	}
 	if err == nil {
 		err = origin.authorize(ctx, tx, scope)
@@ -62,7 +61,7 @@ func readOrderReviewWorkspace(ctx context.Context, q *sqlc.Queries, actor, id uu
 		State:      row.State,
 		Current:    row.Current,
 	}
-	err = json.Unmarshal(row.Document, &w.Preparation)
+	w.Preparation, err = decodeOrderReviewPreparation(row.Document, row.Presentation)
 	return w, err
 }
 
@@ -86,7 +85,7 @@ func saveOrderReviewCall(
 	complete bool,
 	preparation *OrderReviewCommitPreparation,
 ) error {
-	raw, err := orderJSON(document)
+	raw, err := compactOrderReviewDocument(document)
 	if err != nil {
 		return err
 	}
@@ -152,7 +151,7 @@ func (s *Store) orderReviewWorkspaceTx(
 	if err != nil {
 		return nil, OrderReviewWorkspace{}, "", err
 	}
-	tx, role, err := s.orderReviewTx(ctx, scope, op, initial.EventID, origin)
+	tx, role, err := s.orderReviewTx(ctx, scope, op, initial.EventID, initial.EvidenceID, origin)
 	if err != nil {
 		return nil, OrderReviewWorkspace{}, "", err
 	}

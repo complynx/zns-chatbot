@@ -12,8 +12,39 @@ const key = user => "zinusya-meals-pending-v1:" + user;
 function backend() {
   const service = { starts_at: "2026-10-25T00:30:00Z", ends_at: "2026-10-25T01:30:00Z", sales_opens_at: "2026-10-01T00:00:00Z", sales_closes_at: "2026-10-24T00:00:00Z", items: ["soup", "main", "side", "salad"].map(id => ({ id, category: id, name: { en: id + " <img>", ru: "Блюдо " + id }, price_minor: 100 })) };
   const catalog = { event_id: eventID, event_version: 1, version: 1, event_name: "Event <script>", timezone: "Europe/Berlin", document: { currency: "BYN", currency_scale: 2, days: [{ id: "day", name: { en: "Day <script>", ru: "День" }, lunch: { service, combos: { with_soup_minor: 665, without_soup_minor: 555 } }, dinner: { ...service, items: [{ id: "tea", name: { en: "Tea <img>", ru: "Чай" }, price_minor: 50 }] } }] } };
-  const api = { catalog, history: new Map([[1, copy(catalog)]]), current: { event_id: eventID, version: 0 }, receipts: new Map(), hook: undefined };
+  const api = { catalog, history: new Map([[1, copy(catalog)]]), current: { event_id: eventID, version: 0 }, receipts: new Map(), orderReceipts: new Map(), submitted: [], hook: undefined };
   api.base = (path, method, body) => {
+    if (path.includes("/operation-receipts/")) {
+      const key = path.split("/").slice(-2).join("/"), result = api.orderReceipts.get(key);
+      if (!result) throw { status: 404 };
+      return { operation_id: key.split("/")[1], event_id: eventID, kind: key.split("/")[0], result };
+    }
+    if (path.endsWith("/submitted")) return { orders: api.submitted };
+    if (path.endsWith("/submit/prepare") && method === "POST") {
+      const key = "prepare/" + body.operation_id;
+      if (api.orderReceipts.has(key)) return api.orderReceipts.get(key);
+      const d = api.catalog.document.days[0], q = { currency: "BYN", currency_scale: 2, total_minor: api.current.evaluation.quote.total_minor, timezone: "Europe/Berlin" };
+      const deadline = new Date(Date.now() + 3600000).toISOString();
+      const result = { proposal_id: randomUUID(), expires_at: deadline, arguments: { event_id: eventID, expected_event_version: api.catalog.event_version, expected_catalog_version: api.catalog.version, expected_draft_version: api.current.version }, snapshot: { event_name: api.catalog.event_name, sales_closes_at: deadline, quote: q,
+        meal: { event_id: eventID, event_name: api.catalog.event_name, timezone: q.timezone, payment_deadline: deadline, days: [{ id: "day", name: d.name, lunch: { ...d.lunch.service }, dinner: { ...d.dinner } }], lines: [{ day_id: "day", meal: "lunch", mode: "combo-with-soup", amount_minor: 665 }, { day_id: "day", meal: "dinner", item_id: "tea", amount_minor: 50 }] } } };
+      api.orderReceipts.set(key, copy(result)); return result;
+    }
+    if (path.endsWith("/submit") && method === "POST") {
+      const key = "submit/" + body.operation_id;
+      if (api.orderReceipts.has(key)) return api.orderReceipts.get(key);
+      const prep = [...api.orderReceipts.values()].find(p => p.proposal_id === body.proposal_id);
+      if (!prep || !body.confirmed || body.expected_draft_version !== prep.arguments.expected_draft_version) throw { status: 409 };
+      const order = { id: randomUUID(), event_id: eventID, order_kind: "meal", state: "submitted", version: 1, snapshot: prep.snapshot, submitted_at: new Date().toISOString() };
+      api.submitted.push(order); const result = { order, meal_draft: { event_id:eventID, event_version:prep.arguments.expected_event_version, catalog_version:prep.arguments.expected_catalog_version, timezone:"Europe/Berlin", cleared:true, version:api.current.version + 1 } };
+      api.current = result.meal_draft; api.orderReceipts.set(key, copy(result)); return result;
+    }
+    if (path.endsWith("/cancel") && method === "POST") {
+      const key = "cancel/" + body.operation_id;
+      if (api.orderReceipts.has(key)) return api.orderReceipts.get(key);
+      const index = api.submitted.findIndex(o => o.id === body.order_id);
+      const result = { ...api.submitted[index], state: "cancelled", version: body.expected_version + 1 };
+      api.submitted[index] = result; api.orderReceipts.set(key, copy(result)); return result;
+    }
     if (path.startsWith("./meals/events")) return { events: [{ id: eventID, name: "Event <script>", timezone: "Europe/Berlin" }] };
     if (path.includes("/catalog?version=")) return copy(api.history.get(Number(path.split("=").at(-1))));
     if (path.endsWith("/catalog")) return api.catalog;
@@ -24,7 +55,7 @@ function backend() {
       const choices = body.choices.length ? copy(body.choices) : [{ day_id: "day", lunch: null, dinner_ids: [] }], l = choices[0].lunch;
       const complete = !api.catalog.document.days[0].lunch || l?.mode === "no-lunch" || l?.mode === "individual-items" || (l?.main_id && l?.side_id && l?.salad_id && (l.mode !== "combo-with-soup" || l.soup_id));
       const amount = (l?.mode === "combo-with-soup" && complete ? 665 : l?.mode === "combo-no-soup" && complete ? 555 : (l?.individual_ids || []).length * 100) + (choices[0].dinner_ids || []).length * 50;
-      api.current = { event_id: eventID, event_version: 1, catalog_version: api.catalog.version, version: api.current.version + 1, timezone: "Europe/Berlin", saved_at: "2026-10-19T10:00:00Z", cleared: !body.choices.length, evaluation: { choices, complete: !!complete, missing: complete ? [] : [{ day_id: "day", field: "lunch" }], known_amount_minor: amount, ...(complete ? { quote: { total_minor: amount } } : {}) } };
+      api.current = { event_id: eventID, event_version: api.catalog.event_version, catalog_version: api.catalog.version, version: api.current.version + 1, timezone: "Europe/Berlin", saved_at: "2026-10-19T10:00:00Z", cleared: !body.choices.length, evaluation: { choices, complete: !!complete, missing: complete ? [] : [{ day_id: "day", field: "lunch" }], known_amount_minor: amount, ...(complete ? { quote: { total_minor: amount } } : {}) } };
       api.receipts.set(body.operation_id, copy(api.current)); return api.current;
     }
     if (path.endsWith("/draft")) return api.current;
@@ -33,7 +64,7 @@ function backend() {
   return api;
 }
 function browser(api, { storage = new Map(), failSet = false } = {}) {
-  const elements = new Map(), calls = [];
+  const elements = new Map(), calls = [], openedProofs = [];
   let activeElement, busy = false;
   function element(tag = "div") {
     const e = { tag, children: [], focus() { activeElement = this; }, listeners: {}, hidden: false, disabled: false, value: "", append(...nodes) { this.children.push(...nodes); }, replaceChildren(...nodes) { this.children = nodes; }, addEventListener(name, fn) { this.listeners[name] = fn; } };
@@ -43,12 +74,12 @@ function browser(api, { storage = new Map(), failSet = false } = {}) {
   }
   const get = id => { if (!elements.has(id)) { const e = element(); e.id = id; } return elements.get(id); };
   let controller;
-  const env = { request: async (path, method = "GET", body) => { calls.push({ path, method, body: body && copy(body) }); const r = api.hook ? await api.hook(path, method, body, api.base) : api.base(path, method, body); return copy(r); }, setBusy: value => { busy = value; controller.setBusy(value); }, denied: () => controller.clear() };
+  const env = { openProof: order => openedProofs.push(copy(order)), request: async (path, method = "GET", body) => { calls.push({ path, method, body: body && copy(body) }); const r = api.hook ? await api.hook(path, method, body, api.base) : api.base(path, method, body); return copy(r); }, setBusy: value => { busy = value; controller.setBusy(value); }, denied: () => controller.clear() };
   const context = { window: { location: { hash: "#meals" } }, document: { getElementById: get, createElement: element, createTextNode: text => ({ textContent: text, children: [] }) }, sessionStorage: { getItem: k => storage.get(k) || null, setItem(k, v) { if (failSet) throw new Error("storage full"); storage.set(k, v); }, removeItem: k => storage.delete(k) }, crypto: { randomUUID }, Intl, console };
   runInNewContext(source, context); controller = context.window.createZinusyaMeals(env);
   const click = async (id, event = "click") => { const e = get(id); assert.ok(e.listeners[event], id + " listener"); await e.listeners[event]({ preventDefault() {} }); };
   const text = e => e.textContent + e.children.map(text).join(" ");
-  return { get, elements, calls, storage, controller, get activeElement() { return activeElement; }, get busy() { return busy; }, text: id => text(get(id)), click,
+  return { get, elements, calls, storage, controller, openedProofs, get activeElement() { return activeElement; }, get busy() { return busy; }, text: id => text(get(id)), click,
     start: (user = owner, locale = "en") => controller.start(user, locale),
     async select() { get("meals-event").value = eventID; await click("meals-event", "change"); },
     async choose(id, value) { get(id).value = value; await click(id, "change"); },
@@ -57,6 +88,117 @@ function browser(api, { storage = new Map(), failSet = false } = {}) {
   };
 }
 const posts = ui => ui.calls.filter(c => c.method === "POST");
+
+async function completeDraft(ui) {
+  await ui.start(); await ui.select(); await ui.choose("meal-mode:day", "combo-with-soup");
+  for (const category of ["soup", "main", "side", "salad"]) await ui.choose("meal-" + category + ":day", category);
+  await ui.check("meal-dinner:day:tea"); await ui.submit();
+}
+function submittedButton(ui, text) {
+  const find = node => node.tag === "button" && node.textContent === text ? node : node.children.map(find).find(Boolean);
+  const button = find(ui.get("meals-submitted")); assert.ok(button, text); return button;
+}
+
+test("meal checkout shows frozen full composition and only explicit confirmation creates an order", async () => {
+  const api = backend(), ui = browser(api); await completeDraft(ui);
+  await ui.click("meals-prepare"); assert.equal(api.submitted.length, 0);
+  assert.match(ui.text("meals-preview"), /soup <img>.*main <img>.*side <img>.*salad <img>/);
+  assert.match(ui.text("meals-preview"), /Tea <img>/);
+  assert.match(ui.text("meals-preview"), /BYN 6.65/); assert.match(ui.text("meals-preview"), /BYN 0.50/);
+  assert.match(ui.text("meals-preview"), /BYN 7.15/); assert.match(ui.text("meals-preview"), /Europe\/Berlin/);
+  assert.equal(ui.get("meals-confirm").disabled, false);
+  await ui.click("meals-confirm"); assert.equal(api.submitted.length, 1);
+  assert.match(ui.text("meals-submitted"), /Submitted; check payment proofs/);
+  await submittedButton(ui, "Payment and proofs").listeners.click();
+  assert.equal(ui.openedProofs[0].order_kind, "meal");
+  await submittedButton(ui, "Cancel this order").listeners.click();
+  assert.equal(api.submitted[0].state, "cancelled"); assert.match(ui.text("meals-submitted"), /Order cancelled/);
+});
+
+test("stale event checkout conflict allows reload, resave and explicit confirmation", async () => {
+  const api = backend(), ui = browser(api); await completeDraft(ui);
+  api.catalog.event_version++;
+  api.hook = (path, method, body, base) => {
+    if (path.endsWith("/submit/prepare") && api.current.event_version !== api.catalog.event_version) throw {status:409};
+    return base(path, method, body);
+  };
+  await ui.select(); await ui.click("meals-prepare");
+  assert.equal(ui.storage.size, 0); assert.equal(api.submitted.length, 0);
+  assert.equal(ui.get("meals-reload").disabled, false);
+  await ui.click("meals-reload"); await ui.submit();
+  assert.equal(api.current.event_version, api.catalog.event_version);
+  await ui.click("meals-prepare"); assert.equal(api.submitted.length, 0);
+  assert.equal(ui.get("meals-confirm").disabled, false);
+  await ui.click("meals-confirm"); assert.equal(api.submitted.length, 1);
+});
+
+test("lost meal preparation recovers for review and never submits automatically", async () => {
+  const api = backend(), storage = new Map(), first = browser(api, {storage}); await completeDraft(first);
+  api.hook = (path, method, body, base) => { const result = base(path, method, body); if (path.endsWith("/submit/prepare")) throw {status:503}; return result; };
+  await first.click("meals-prepare"); assert.equal(first.get("meals-save").disabled, true);
+  api.hook = undefined;
+  const reload = browser(api, {storage}); await reload.start();
+  assert.equal(posts(reload).length, 0); assert.equal(api.submitted.length, 0);
+  assert.equal(reload.get("meals-confirm").disabled, false); assert.match(reload.text("meals-preview"), /BYN 7.15/);
+  assert.equal(storage.size, 0);
+});
+
+test("lost submission recovers original meal receipt without consuming a newer draft", async () => {
+  const api = backend(), storage = new Map(), first = browser(api, {storage}); await completeDraft(first); await first.click("meals-prepare");
+  const savedDraft = copy(api.current);
+  api.hook = (path, method, body, base) => { const result = base(path, method, body); if (path.endsWith("/submit")) throw {status:503}; return result; };
+  await first.click("meals-confirm"); const request = posts(first).at(-1).body;
+  api.current = {...savedDraft, version:api.current.version + 1, cleared:false}; const newer = copy(api.current); api.hook = undefined;
+  const reload = browser(api, {storage}); await reload.start();
+  assert.equal(posts(reload).length, 0); assert.equal(api.submitted.length, 1);
+  assert.deepEqual(api.current, newer); assert.equal(storage.size, 0);
+  assert.ok(reload.calls.some(c => c.path.endsWith("/submit/" + request.operation_id)));
+  assert.match(reload.text("meals-order-status"), /Earlier request completed/);
+});
+
+test("uncommitted meal submission retries the original approved request after reload", async () => {
+  const api = backend(), storage = new Map(), first = browser(api, {storage}); await completeDraft(first); await first.click("meals-prepare");
+  api.hook = (path, method, body, base) => { if (path.endsWith("/submit")) throw {status:503}; return base(path, method, body); };
+  await first.click("meals-confirm"); const original = posts(first).at(-1).body;
+  const reload = browser(api, {storage}); await reload.start(); assert.equal(reload.get("meals-confirm").disabled, true);
+  assert.equal(reload.get("meals-save").disabled, true); api.hook = undefined; await reload.click("meals-order-retry");
+  assert.deepEqual(posts(reload)[0].body, original); assert.equal(api.submitted.length, 1);
+});
+
+test("meal financial storage failure sends nothing and malformed recovery blocks new work", async () => {
+  const api = backend(), ui = browser(api); await completeDraft(ui);
+  const broken = browser(api, {failSet:true}); await broken.start(); await broken.select(); await broken.click("meals-prepare"); assert.equal(posts(broken).length, 0);
+  const storage = new Map([["zinusya-meals-operation-v1:" + owner, "{}"]]);
+  const invalid = browser(api, {storage}); await invalid.start(); assert.match(invalid.text("meals-status"), /invalid/);
+  assert.equal(invalid.get("meals-prepare").disabled, true); assert.equal(posts(invalid).length, 0);
+});
+
+test("failed event switch removes previous event order actions before loading", async () => {
+  const api = backend(), another = randomUUID();
+  api.hook = (path, method, body, base) => path.startsWith("./meals/events") ? {events:[{id:eventID,name:"A"},{id:another,name:"B"}]} : base(path,method,body);
+  const ui = browser(api); await completeDraft(ui); await ui.click("meals-prepare"); await ui.click("meals-confirm");
+  const old = api.submitted[0].id; assert.match(ui.text("meals-submitted"), new RegExp(old));
+  api.hook = (path, method, body, base) => { if (path.includes(another)) throw {status:503}; return base(path,method,body); };
+  ui.get("meals-event").value = another; await ui.click("meals-event", "change");
+  assert.doesNotMatch(ui.text("meals-submitted"), new RegExp(old));
+  assert.equal(ui.get("meals-submitted-first").hidden, true); assert.equal(ui.get("meals-submitted-next").hidden, true);
+  assert.equal(posts(ui).filter(c => c.path.includes(another)).length, 0);
+});
+
+test("consumed meal draft opens order history and saves new choices using the current menu", async () => {
+  const api = backend(), first = browser(api); await completeDraft(first); await first.click("meals-prepare"); await first.click("meals-confirm");
+  assert.equal(api.current.cleared,true); assert.equal(api.current.evaluation,undefined);
+  const revision = api.current.version;
+  api.catalog.version = 2; api.history.set(2,copy(api.catalog));
+  const reload = browser(api); await reload.start(); await reload.select();
+  assert.match(reload.text("meals-submitted"),new RegExp(api.submitted[0].id));
+  assert.equal(reload.get("meals-save").disabled,false); assert.equal(reload.get("meal-mode:day").value,"");
+  assert.equal(reload.get("meals-confirm").disabled,true);
+  assert.equal(reload.calls.some(c=>c.path.includes("catalog?version=")),false);
+  await reload.choose("meal-mode:day","no-lunch"); await reload.submit();
+  assert.equal(posts(reload)[0].body.expected_draft_version,revision);
+  assert.equal(posts(reload)[0].body.expected_catalog_version,2);
+});
 
 test("incomplete combo continues to complete with category choices and exact server total", async () => {
   const api = backend(), ui = browser(api); await ui.start(); await ui.select();

@@ -52,7 +52,7 @@ func (s *Service) pendingApprovalMessages(
 		}
 		return s.approvalContent(ctx, i, t.ID, *a, text), nil
 	}
-	if a.Method != "zinusya_orders.submit" {
+	if a.Method != "zinusya_orders.submit" && a.Method != "zinusya_meals.submit" {
 		return s.approval(ctx, i, t.ID, *a), nil
 	}
 	text, err := s.orderApprovalText(ctx, *t, i, *a)
@@ -87,7 +87,15 @@ func (s *Service) orderApprovalText(ctx context.Context, t db.Task, i intent, a 
 		return "", errors.New("order approval recipient mismatch")
 	}
 	scope := db.ProfileScope{BotID: bot, Organization: organization, Subject: user.Subject, UserID: user.ID}
-	receipt, err := s.store.OwnOrderOperation(ctx, scope, args.EventID, operation, db.OrderPrepare)
+	var receipt db.OrderOperation
+	switch a.Method {
+	case "zinusya_orders.submit":
+		receipt, err = s.store.OwnOrderOperation(ctx, scope, args.EventID, operation, db.OrderPrepare)
+	case "zinusya_meals.submit":
+		receipt, err = s.store.OwnMealOrderOperation(ctx, scope, args.EventID, operation, db.OrderPrepare)
+	default:
+		return "", errors.New("unsupported order approval method")
+	}
 	if err != nil {
 		return "", err
 	}
@@ -116,8 +124,20 @@ func fullOrderApproval(p db.OrderPreparation, expires time.Time, language string
 	}
 	var body strings.Builder
 	fmt.Fprintf(&body, "%s: %s\n", event, strconv.Quote(p.Snapshot.EventName))
-	writeOrderServices(&body, p.Snapshot.Services, zone, ru)
-	writeOrderCapacity(&body, p.Snapshot.Capacity, ru)
+	if meal := p.Snapshot.Meal; meal != nil {
+		composition, presentationErr := meal.Presentation(language)
+		if presentationErr != nil {
+			return "", presentationErr
+		}
+		body.WriteString(composition)
+		cutoff = "Payment proof / cancellation deadline"
+		if ru {
+			cutoff = "Срок подтверждения оплаты / отмены"
+		}
+	} else {
+		writeOrderServices(&body, p.Snapshot.Services, zone, ru)
+		writeOrderCapacity(&body, p.Snapshot.Capacity, ru)
+	}
 	writeLines := func(heading string, lines []orders.QuoteLine) {
 		if len(lines) == 0 {
 			return
@@ -141,8 +161,10 @@ func fullOrderApproval(p db.OrderPreparation, expires time.Time, language string
 			)
 		}
 	}
-	writeLines(items, q.Items)
-	writeLines(charges, q.Supplements)
+	if p.Snapshot.Meal == nil {
+		writeLines(items, q.Items)
+		writeLines(charges, q.Supplements)
+	}
 	fmt.Fprintf(
 		&body,
 		"\n%s: %s\n%s: %s (%s)\n%s: %s (%s)\n\n%s",

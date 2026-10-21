@@ -31,11 +31,45 @@ mailbox provider; this is not native-provider or broad model-quality acceptance.
 2. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
    when Daniel is available. Revalidate the retained configuration first;
    isolated HTTP/Edge results do not replace that joint check.
-3. Continue meal financial checkout after the recorded policy decisions: empty
-   completed selections, the financial cutoff across services, and explicit meal
-   capacity. Catalogs/drafts and shared kind-isolated storage exist; exposed meal
-   submission/payment/review is still missing. Service-order acceptance does not
-   cover meals. Keep unresolved decisions in the ignored local decisions file.
+3. Implement meal financial checkout with the answers received on October21:
+   no order for empty composition, one explicit event meal payment-proof deadline
+   as in the Python version, and unlimited quantities. Catalogs/drafts and shared
+   kind-isolated storage exist. The source adds the explicit catalog deadline and
+   retains it in frozen terms. The [shared meal submission backend](shuttle-meal-order-submission.md)
+   passes scoped Linux/PostgreSQL race tests and review. The
+   [shared meal evidence/review backend](shuttle-meal-payment-evidence.md) now passes
+   147 roots /225 cases, with full immutable consent and persisted-kind access.
+   These source stages are uninstalled. Working mvp-89 source now adds financial
+   creation/recovery tools, native HTTP routes, full meal consent in the bot and
+   kind-aware context. Scoped Linux/PostgreSQL race verification passes 46 roots /62 cases; lint and
+   independent source review are clean, and owned test resources are retired.
+   Submitted-meal reads/recovery now pass29 roots /41 cases, with owner/kind
+   isolation and native session checks after lock waits. Browser checkout and
+   shared meal proof handling now exist in working source. After real browser QA
+   found a valid cleared draft was rejected, the source and fixture were corrected;
+   366 simulated-DOM UI cases pass. Fresh source review is clean.
+   The [bounded financial runtime check](shuttle-meal-financial-runtime-qa-2026-10-21.md)
+   now proves actual Edge checkout and lost-response recovery with real IAM/DB
+   while Loom is stopped, plus real Loom read/write tools, full consent and plain-text
+   approval. An idle0.656s restart and a0.687s restart with consent pending preserve
+   their respective state. Native proof and separate ambassador prepare/confirm
+   sessions pass, as do same-event assigned-user isolation and current-module gates.
+   The nine-service QA stand is archived/removed; the primary is unchanged. Next:
+   full release gate and installation acceptance. Broader recovery windows and
+   exact native-preparation adoption remain separate gates.
+   Combined release review also found stale event/catalog draft lineage could
+   trap native preparation behind503. Red/green HTTP tests now prove409 followed
+   by resave and explicit submission;367 UI cases pass and focused review is clean.
+   The first full gate was interrupted before integration execution; its evidence
+   is retained. The corrected candidate runs in a fresh release-v2 namespace.
+   The [schema69 copy rehearsal](shuttle-meal-schema69-rehearsal-2026-10-21.md)
+   passes a clean68→69→68→69 cycle, data/sequence preservation and a no-op.
+   Its own database resources are archived/removed; the primary remains68.
+   The [final application gate](shuttle-meal-release-qa-2026-10-21.md) now passes
+   864 integration roots /1293 cases and367 UI cases. The original controller
+   exits1 after a PostgreSQL fixture stop timeout; the failure is retained and
+   separate verified cleanup removes its resources. Remote CI and primary
+   installation remain open.
 4. Finish real export/account/avatar migration and server-specific cutover
    acceptance before any separately authorized production deployment. Historical
    payment records stay reference material, not credits in the new live ledger.

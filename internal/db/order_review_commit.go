@@ -52,6 +52,9 @@ func (s *Store) PrepareOrderReviewCommit(
 		}
 		var result OrderReviewCommitPreparation
 		err = json.Unmarshal(call.Document, &result)
+		if err == nil {
+			err = hydrateOrderReviewCommit(w, &result)
+		}
 		return result, err
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
