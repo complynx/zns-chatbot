@@ -49,6 +49,9 @@ func (s *Store) CompareAndSwapSettings(
 }
 
 func validateSettings(d Settings, actor string) error {
+	if _, err := d.AvatarBrowserPolicy(); err != nil {
+		return err
+	}
 	if _, _, err := d.MassageReminderLeads(); err != nil {
 		return err
 	}

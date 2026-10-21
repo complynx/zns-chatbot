@@ -29,6 +29,8 @@ func avatarDraftSchema() map[string]any {
 			"updated_at",
 		},
 		schemaProperties: map[string]any{
+			"source_expires_at":       instant,
+			"source_expired":          map[string]any{manifestType: "boolean"},
 			"id":                      uuidField,
 			"source_file_id":          uuidField,
 			schemaAvatarHistorySource: avatarHistorySourceSchema(),
@@ -84,7 +86,7 @@ func avatarDraftMethods() []any {
 	}
 	create := method(
 		"create_draft",
-		"After an explicit avatar editing request, select exactly one owned source_file_id or history_source with record_id and archive_id; pin its digest and size and create an identity edit draft. Does not generate or send an avatar. No active Loom run required. Reconcile lost responses with draft_operation using the same operation ID; committed operation receipts survive source loss, but preview and new finalization need Telegram access. If unavailable ask for the photo again. Telegram originals are not stored. Admission limit: five drafts; browser uploads retain at most 50 MiB per owner.",
+		"After an explicit avatar editing request, select exactly one owned source_file_id or history_source with record_id and archive_id; pin its digest and size and create an identity edit draft. Does not generate or send an avatar. No active Loom run required. Reconcile lost responses with draft_operation using the same operation ID; committed operation receipts survive source loss, but preview and new finalization need Telegram access. If unavailable ask for the photo again. Telegram originals are not stored. Admission limit: five active drafts and 50 MiB of browser sources per owner, plus the application-wide browser byte quota. Browser sources expire from creation time under DB settings; current metadata reports source_expires_at/source_expired. Expired sources reject new edits, reads, preview and finalization; immutable receipts and completed JPEGs remain available.",
 		avatarDraftCreateSchema(),
 		avatarDraftSchema(),
 	)

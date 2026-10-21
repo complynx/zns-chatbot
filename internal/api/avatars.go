@@ -142,6 +142,8 @@ func avatarWriteResult(operation string, result db.AvatarReceipt, err error) (*a
 
 func avatarRejection(err error) string {
 	switch {
+	case errors.Is(err, db.ErrAvatarSourceExpired):
+		return db.ErrAvatarSourceExpired.Error()
 	case errors.Is(err, errAvatarSourceUnavailable):
 		return "source photo unavailable; send it again or upload another original"
 	case errors.Is(err, avatar.ErrInvalidTransform):
@@ -205,6 +207,9 @@ func (s *Server) avatarFetch(ctx context.Context, in *agentReadRequest[avatarArg
 }
 
 func avatarReadError(err error) error {
+	if errors.Is(err, db.ErrAvatarSourceExpired) {
+		return huma.NewError(http.StatusGone, db.ErrAvatarSourceExpired.Error())
+	}
 	if errors.Is(err, errAvatarSourceUnavailable) {
 		return huma.Error422UnprocessableEntity(errAvatarSourceUnavailable.Error())
 	}

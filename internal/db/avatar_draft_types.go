@@ -16,6 +16,8 @@ import (
 const MaxAvatarDraftsPerOwner = 5
 const MaxAvatarOriginalBytesPerOwner = 50 << 20
 
+var ErrAvatarSourceExpired = errors.New("avatar source expired; upload the original again")
+
 var ErrAvatarDraftQuota = errors.New("avatar original storage limit reached")
 
 // AvatarHistorySource identifies one applied historical file record.
@@ -33,17 +35,19 @@ type AvatarDraftRender struct {
 
 // AvatarDraft metadata contains no original bytes or bearer credentials.
 type AvatarDraft struct {
-	HistorySource *AvatarHistorySource `json:"history_source,omitempty"`
-	ID            uuid.UUID            `json:"id"`
-	SourceFileID  *uuid.UUID           `json:"source_file_id,omitempty"`
-	SourceSHA256  string               `json:"source_sha256"`
-	MIMEType      string               `json:"mime_type"`
-	SizeBytes     int64                `json:"size_bytes"`
-	FrameSHA256   string               `json:"frame_sha256"`
-	Transform     avatar.Transform     `json:"transform"`
-	Version       int64                `json:"version"`
-	CreatedAt     time.Time            `json:"created_at"`
-	UpdatedAt     time.Time            `json:"updated_at"`
+	SourceExpiresAt *time.Time           `json:"source_expires_at,omitempty"`
+	SourceExpired   bool                 `json:"source_expired,omitempty"`
+	HistorySource   *AvatarHistorySource `json:"history_source,omitempty"`
+	ID              uuid.UUID            `json:"id"`
+	SourceFileID    *uuid.UUID           `json:"source_file_id,omitempty"`
+	SourceSHA256    string               `json:"source_sha256"`
+	MIMEType        string               `json:"mime_type"`
+	SizeBytes       int64                `json:"size_bytes"`
+	FrameSHA256     string               `json:"frame_sha256"`
+	Transform       avatar.Transform     `json:"transform"`
+	Version         int64                `json:"version"`
+	CreatedAt       time.Time            `json:"created_at"`
+	UpdatedAt       time.Time            `json:"updated_at"`
 }
 
 type AvatarDraftCreate struct {

@@ -102,6 +102,9 @@ func (s *Store) AvatarDraftFinalizePreflight(
 		return prior, err
 	}
 	d, _, err := readAvatarDraft(ctx, tx, scope.UserID, a.DraftID, false)
+	if err == nil && d.SourceExpired {
+		return nil, ErrAvatarSourceExpired
+	}
 	if err == nil && (d.Version != a.ExpectedVersion || d.FrameSHA256 != avatar.FrameSHA256) {
 		err = ErrConflict
 	}

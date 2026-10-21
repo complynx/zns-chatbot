@@ -258,7 +258,7 @@ func avatarDraftWriteResult(operation string, d db.AvatarDraft, err error) (*ava
 	if err != nil {
 		message := avatarRejection(err)
 		if errors.Is(err, db.ErrAvatarDraftQuota) {
-			message = "avatar draft quota reached: at most five drafts and 50 MiB of uploads per owner"
+			message = "avatar draft quota reached: five active drafts, 50 MiB per owner or the configured global browser storage limit"
 		}
 		if message == "" {
 			return nil, huma.Error503ServiceUnavailable("avatar draft unavailable")

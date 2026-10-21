@@ -1257,6 +1257,8 @@ avatars and unrelated media. Reuse Loom's common PDF/audio/video tools; isolate
 specialized avatar processing if external binaries are required. Stickers remain
 unsupported; custom emoji use ordinary fallbacks until their cache stage.
 
+Browser-original quota and expiry are implemented and locally accepted at schema 70 / manifest `mvp-90`; the primary stand is still on schema 69 / `mvp-89`. See [retention policy, rollback and acceptance limits](shuttle-avatar-source-retention.md). Telegram originals remain reference-only.
+
 ## 5. Import and cutover preparation
 
 A known-key embedded historical registration read is now implemented with owner

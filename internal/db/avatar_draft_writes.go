@@ -39,19 +39,6 @@ func (s *Store) avatarDraftTransaction(
 	}
 	return tx, nil
 }
-func avatarDraftQuota(ctx context.Context, tx pgx.Tx, owner uuid.UUID, additional int) error {
-	var count int
-	var size int64
-	err := tx.QueryRow(ctx, `SELECT count(*),coalesce(sum(octet_length(original)),0)::bigint FROM shuttle_avatar_drafts WHERE user_id=$1`, owner).
-		Scan(&count, &size)
-	if err != nil {
-		return err
-	}
-	if count >= MaxAvatarDraftsPerOwner || size+int64(additional) > MaxAvatarOriginalBytesPerOwner {
-		return ErrAvatarDraftQuota
-	}
-	return nil
-}
 
 func writeAvatarDraftOperation(
 	ctx context.Context,
@@ -240,6 +227,9 @@ func (s *Store) saveAvatarDraft(
 	d, _, err := readAvatarDraft(ctx, tx, scope.UserID, a.DraftID, false)
 	if err != nil {
 		return d, err
+	}
+	if d.SourceExpired {
+		return AvatarDraft{}, ErrAvatarSourceExpired
 	}
 	if d.Version != a.ExpectedVersion {
 		return AvatarDraft{}, ErrConflict

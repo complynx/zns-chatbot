@@ -301,6 +301,9 @@ func (s *Server) miniAppAvatarSave(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) miniAppAvatarError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, db.ErrAvatarSourceExpired):
+		w.Header().Set("Cache-Control", "private, no-store")
+		miniAppHTTPError(w, http.StatusGone, db.ErrAvatarSourceExpired.Error())
 	case errors.Is(err, errAvatarSourceUnavailable):
 		w.Header().Set("Cache-Control", "private, no-store")
 		miniAppHTTPError(
@@ -322,7 +325,7 @@ func (s *Server) miniAppAvatarError(w http.ResponseWriter, err error) {
 		miniAppHTTPError(
 			w,
 			http.StatusConflict,
-			"avatar draft quota reached: at most five drafts and 50 MiB of uploads per owner",
+			"avatar draft quota reached: five active drafts, 50 MiB per owner or the configured global browser storage limit",
 		)
 	case errors.Is(err, avatar.ErrImageLimit):
 		miniAppHTTPError(w, http.StatusRequestEntityTooLarge, "avatar image exceeds processing limits")

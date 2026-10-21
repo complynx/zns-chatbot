@@ -61,6 +61,8 @@ type DeliveryReceipt struct {
 	ResponseElapsedSeconds *float64
 }
 type Settings struct {
+	AvatarBrowserStorageLimitBytes      int64  `json:"avatar_browser_storage_limit_bytes,omitempty"       doc:"Global browser avatar original budget in bytes; zero uses 10000000000 (10 GB). Range 1 to 10000000000. Lowering stops admission without evicting unexpired originals."`
+	AvatarBrowserRetentionSeconds       int    `json:"avatar_browser_retention_seconds,omitempty"         doc:"Browser avatar source lifetime from upload; zero uses 7776000 (90 days). Range 60 to 7776000. Lowering also expires existing sources; completed JPEGs and receipts remain."`
 	MassageNotifyClientPriorLongSeconds int    `json:"massage_notify_client_prior_long_seconds,omitempty" doc:"Long massage reminder lead in nonnegative 32-bit seconds; zero uses 3600. Changes reschedule pending/retryable reminders."`
 	MassageNotifyClientPriorSeconds     int    `json:"massage_notify_client_prior_seconds,omitempty"      doc:"Short massage reminder lead in nonnegative 32-bit seconds; zero uses 600. Changes reschedule pending/retryable reminders."`
 	MassageMaxBookingsPerWindow         int    `json:"massage_max_bookings_per_window,omitempty"          doc:"Ordinary-owner massage booking limit per configured party window; zero uses the legacy default 3. Range 1 to 100."`

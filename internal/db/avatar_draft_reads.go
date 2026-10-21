@@ -34,10 +34,15 @@ func avatarDraftOperation(
 
 func readAvatarDraft(ctx context.Context, tx pgx.Tx, owner, id uuid.UUID, content bool) (AvatarDraft, []byte, error) {
 	var d AvatarDraft
+	policy, now, err := avatarSourcePolicy(ctx, tx)
+	if err != nil {
+		return d, nil, err
+	}
+	var expired pgtype.Timestamptz
 	var source, historyRecord, historyArchive pgtype.UUID
 	var digest, frame, transform, original []byte
-	err := tx.QueryRow(ctx, `SELECT id,source_file_id,source_sha256,mime_type,source_size_bytes,frame_sha256,transform,version,created_at,updated_at,CASE WHEN $3 THEN original ELSE NULL END,history_record_id,history_archive_id FROM shuttle_avatar_drafts WHERE user_id=$1 AND id=$2`, owner, id, content).
-		Scan(&d.ID, &source, &digest, &d.MIMEType, &d.SizeBytes, &frame, &transform, &d.Version, &d.CreatedAt, &d.UpdatedAt, &original, &historyRecord, &historyArchive)
+	err = tx.QueryRow(ctx, `SELECT id,source_file_id,source_sha256,mime_type,source_size_bytes,frame_sha256,transform,version,created_at,updated_at,CASE WHEN $3 AND original_expired_at IS NULL AND created_at > $4 THEN original ELSE NULL END,history_record_id,history_archive_id,original_expired_at FROM shuttle_avatar_drafts WHERE user_id=$1 AND id=$2`, owner, id, content, now.Add(-policy.Retention)).
+		Scan(&d.ID, &source, &digest, &d.MIMEType, &d.SizeBytes, &frame, &transform, &d.Version, &d.CreatedAt, &d.UpdatedAt, &original, &historyRecord, &historyArchive, &expired)
 	if err != nil {
 		return d, nil, err
 	}
@@ -49,6 +54,14 @@ func readAvatarDraft(ctx context.Context, tx pgx.Tx, owner, id uuid.UUID, conten
 		d.HistorySource = &AvatarHistorySource{
 			RecordID:  uuid.UUID(historyRecord.Bytes),
 			ArchiveID: uuid.UUID(historyArchive.Bytes),
+		}
+	}
+	if !source.Valid && !historyRecord.Valid {
+		deadline := d.CreatedAt.Add(policy.Retention).UTC()
+		d.SourceExpiresAt = &deadline
+		d.SourceExpired = expired.Valid || !now.Before(deadline)
+		if content && d.SourceExpired {
+			return d, nil, ErrAvatarSourceExpired
 		}
 	}
 	d.SourceSHA256, d.FrameSHA256 = hex.EncodeToString(digest), hex.EncodeToString(frame)
@@ -95,11 +108,16 @@ func (s *Store) ListAvatarDrafts(ctx context.Context, scope ProfileScope) ([]Ava
 	if err = lockProfileOwner(ctx, tx, scope, false); err != nil {
 		return nil, err
 	}
+	policy, now, err := avatarSourcePolicy(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := tx.Query(
 		ctx,
-		`SELECT id FROM shuttle_avatar_drafts WHERE user_id=$1 ORDER BY updated_at DESC,id LIMIT $2`,
+		`SELECT id FROM shuttle_avatar_drafts WHERE user_id=$1 AND (source_file_id IS NOT NULL OR history_record_id IS NOT NULL OR (original_expired_at IS NULL AND created_at > $3)) ORDER BY updated_at DESC,id LIMIT $2`,
 		scope.UserID,
 		MaxAvatarDraftsPerOwner,
+		now.Add(-policy.Retention),
 	)
 	if err != nil {
 		return nil, err

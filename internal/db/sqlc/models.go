@@ -99,20 +99,21 @@ type ShuttleAvatarDeliveryResolution struct {
 }
 
 type ShuttleAvatarDraft struct {
-	ID               uuid.UUID          `json:"id"`
-	UserID           uuid.UUID          `json:"user_id"`
-	SourceFileID     pgtype.UUID        `json:"source_file_id"`
-	Original         []byte             `json:"original"`
-	SourceSha256     []byte             `json:"source_sha256"`
-	MimeType         string             `json:"mime_type"`
-	FrameSha256      []byte             `json:"frame_sha256"`
-	Transform        []byte             `json:"transform"`
-	Version          int64              `json:"version"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	SourceSizeBytes  int64              `json:"source_size_bytes"`
-	HistoryRecordID  pgtype.UUID        `json:"history_record_id"`
-	HistoryArchiveID pgtype.UUID        `json:"history_archive_id"`
+	ID                uuid.UUID          `json:"id"`
+	UserID            uuid.UUID          `json:"user_id"`
+	SourceFileID      pgtype.UUID        `json:"source_file_id"`
+	Original          []byte             `json:"original"`
+	SourceSha256      []byte             `json:"source_sha256"`
+	MimeType          string             `json:"mime_type"`
+	FrameSha256       []byte             `json:"frame_sha256"`
+	Transform         []byte             `json:"transform"`
+	Version           int64              `json:"version"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	SourceSizeBytes   int64              `json:"source_size_bytes"`
+	HistoryRecordID   pgtype.UUID        `json:"history_record_id"`
+	HistoryArchiveID  pgtype.UUID        `json:"history_archive_id"`
+	OriginalExpiredAt pgtype.Timestamptz `json:"original_expired_at"`
 }
 
 type ShuttleAvatarDraftOperation struct {

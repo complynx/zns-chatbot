@@ -542,8 +542,12 @@ func TestAvatarDraftMigrationAllowsEmptyRollbackAndProtectsOriginals(t *testing.
 	require.True(t, ok)
 	extensionUp, extensionDown := avatarFinalizationMigration(t)
 	sourceUp, sourceDown := avatarDraftSourceMigration(t)
-	up = up + "\n" + extensionUp + "\n" + sourceUp
-	down = sourceDown + "\n" + extensionDown + "\n" + down
+	retentionRaw, err := migrations.Files.ReadFile("00070_avatar_source_retention.sql")
+	require.NoError(t, err)
+	retentionUp, retentionDown, ok := strings.Cut(string(retentionRaw), "-- +goose Down")
+	require.True(t, ok)
+	up = up + "\n" + extensionUp + "\n" + sourceUp + "\n" + retentionUp
+	down = retentionDown + "\n" + sourceDown + "\n" + extensionDown + "\n" + down
 	_, err = f.h.store.Pool().Exec(t.Context(), down)
 	require.NoError(t, err)
 	var gone bool

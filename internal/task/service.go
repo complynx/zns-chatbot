@@ -66,6 +66,7 @@ type Service struct {
 	notificationCursor            uuid.UUID
 	pairExpiryCursor              uuid.UUID
 	knowledgeArchiveCursor        uuid.UUID
+	avatarSourceExpiryCursor      uuid.UUID
 	knowledgeNotificationCursor   uuid.UUID
 	pairNotificationCursor        uuid.UUID
 	avatarDeliveryCursor          uuid.UUID
@@ -319,6 +320,7 @@ func (s *Service) watchLock(ctx context.Context, conn *pgxpool.Conn, done chan s
 			s.repairMassageReminders(ctx)
 			s.repairMassageSpecialistNotices(ctx)
 			s.archiveEndedKnowledge(ctx)
+			s.expireAvatarSources(ctx)
 			expiryCtx, expiryCancel := context.WithTimeout(ctx, time.Second)
 			next, expiryErr := s.store.ExpirePairInvitations(expiryCtx, s.notificationScope(), s.pairExpiryCursor)
 			expiryCancel()

@@ -23,6 +23,9 @@ func (s *Server) avatarDraftFetch(
 	if err != nil {
 		return nil, avatarReadError(err)
 	}
+	if d.SourceExpired {
+		return nil, avatarReadError(db.ErrAvatarSourceExpired)
+	}
 	result := struct {
 		Status      string           `json:"status"`
 		OperationID string           `json:"operation_id"`

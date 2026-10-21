@@ -377,3 +377,18 @@ test("missing historical photo and sign-out never leave a usable stale preview",
   await delayed.start(); await delayed.fire("history-list"); const pending = delayed.fire("history-preview"); await new Promise(resolve => setImmediate(resolve)); delayed.controller.clear(); release(new Blob(["jpeg"], { type: "image/jpeg" })); await pending;
   assert.equal(delayed.get("history-image").hidden, true); assert.equal(delayed.get("history-import").disabled, true); assert.equal(delayed.revoked.length, 0);
 });
+
+test("expired browser source keeps completed documents downloadable and asks for a new photo", async () => {
+  const api = backend(), first = browser(api); await first.start(); await first.fire("preview"); await first.fire("generate");
+  const reopened = browser(api, { readBlob: async path => {
+    if (path.endsWith("/original")) throw { status: 410 };
+    return new Blob(["jpeg"]);
+  } });
+  await reopened.start();
+  assert.match(reopened.get("status").textContent, /photo.*unavailable.*send.*again/i);
+  assert.equal(reopened.get("editor").hidden, true);
+  assert.equal(reopened.get("documents").children.length, 1);
+  assert.equal(reopened.get("download").disabled, false);
+  await reopened.fire("download"); assert.equal(reopened.downloads.length, 1);
+  assert.equal(api.finalizationWrites.length, 1);
+});
