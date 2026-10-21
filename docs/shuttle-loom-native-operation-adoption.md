@@ -1,6 +1,6 @@
 # Resume an operation prepared outside Loom
 
-Status: Loom's published contract is merged at `34f4646832748efd455828f6804c6274027db659`. The Zinusya authenticated inspector and native/agent acceptance are in progress; [Loom issue #20](https://github.com/complynx/loom/issues/20) remains open. The observations below describe the historical 2026-10-20 installation and remain unchanged evidence of its missing capability.
+Status: Loom's published contract is merged at `34f4646832748efd455828f6804c6274027db659`. The Zinusya authenticated inspector and supported knowledge-module handoff passed separate actual-IAM/Loom acceptance; see the [consumer acceptance report](shuttle-loom-adoption-acceptance-2026-10-21.md). [Loom issue #20](https://github.com/complynx/loom/issues/20) is the upstream tracking issue. The observations below describe the historical 2026-10-20 installation and remain unchanged evidence of its missing capability.
 
 The authoritative wire contract is [Loom operation adoption](https://github.com/complynx/loom/blob/34f4646832748efd455828f6804c6274027db659/docs/modules/operation-adoption.md). The application inspector must retain the original preparation contract revision, issuer/actor binding, normalized arguments, preconditions and absolute expiry. It must check current authority and share the original operation ID and receipt with native confirmation. Old preparations without a recorded contract must fail closed; inspection cannot label them with the new revision. An already completed operation returns its original receipt. Unknown results remain status-only.
 
@@ -14,9 +14,9 @@ New native and agent knowledge preparations persist the issuing API revision, IA
 
 On 2026-10-21, 31 PostgreSQL knowledge integration roots passed, including native and agent preparation inspection, completed receipt reuse, owner/method isolation, unrenewed expired terms, rejection of legacy contract relabelling and moderator revocation. Scoped lint passed with zero issues; independent textual review found no actionable findings. These tests use fixture identity HTTP peers and do not prove the real Loom adoption dialogue. The primary stand still runs schema 69 / manifest `mvp-89`; this candidate is not installed there.
 
-Still required before closing #20: real-IAM/native-form preparation to actual Loom adoption and fresh plain consent; reverse continuation into the native form; concurrent native and agent execution with one original backend effect and receipt. Use the published Loom revision above in a separate owned stand. Keep the original failed reproduction as historical evidence.
+The separate `kb-adopt-r2` runtime passed native-to-agent adoption, fresh plain consent, unambiguous reverse continuation, concurrent native/agent confirmation, completed receipt replay, pending-operation restarts, rejection and actor/method isolation. See the [acceptance report](shuttle-loom-adoption-acceptance-2026-10-21.md) for pinned versions, negative-path evidence, scope and retained inconclusive probes. The original failed reproduction below remains historical evidence.
 
-## Observed gap
+## Historical observed gap
 
 A participant can prepare a knowledge suggestion in the native form and then ask
 the agent to continue it. Shuttle exposes the original normalized arguments,
@@ -87,7 +87,7 @@ completed operation returns its original receipt without another effect. Unknown
 or uncertain status must not create a replacement operation. A changed argument
 or foreign operation must fail closed, without fallback to a fresh write.
 
-## Candidate tool shape
+## Historical candidate tool shape
 
 An optional `resume_operation_id` on `module_call` would let the agent keep one
 write tool. This field identifies the backend operation, not a run or approval.
@@ -101,7 +101,7 @@ cannot silently substitute a new operation. The final contract must define the
 inspection request/response and distinguish backend IDs from internal Loom IDs.
 A caller-supplied UUID alone is insufficient evidence of ownership or existence.
 
-## Acceptance before enabling
+## Acceptance criteria
 
 - Native prepare, agent inspect/adopt, fresh plain-text approval, one original
   backend effect, and identical receipt when the native form checks the result.
@@ -116,7 +116,7 @@ A caller-supplied UUID alone is insufficient evidence of ownership or existence.
 - Unsupported modules/bridges return an explicit unsupported result; discovery,
   reading and independent native completion remain available.
 
-Full mixed-path acceptance remains open until the agreed contract is implemented
-on both sides and these gates pass with actual Loom. Separate moderator review
+The supported knowledge suggestion handoff now passes these consumer runtime gates;
+other verbs and modules have the boundaries described in the acceptance report. Separate moderator review
 of an already-submitted suggestion is a different operation and does not prove
 adoption of an existing preparation.
