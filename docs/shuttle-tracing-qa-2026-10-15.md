@@ -132,6 +132,14 @@ This is operator recovery, not automatic acceptance. Image, schema 31, manifest
 
 ## Open trace boundary
 
+Read-only source revalidation on 2026-10-21 found local Loom still at
+`a958185e8f81baf49a9cbee492adebd511518995`. In `internal/app/runtime.go`,
+`executeRun` retains only `run_id`, the queue insertion supplies that locator,
+and the worker starts `run_execution` without restoring a saved admission
+carrier. This agrees with the open boundary below; it is static source evidence,
+not a new runtime trace test or a statement about the production Loom image.
+
+
 The copied Loom version explicitly starts a fresh async run trace without
 persisting the admission trace context. Both HTTP boundaries can propagate
 correctly while the graph remains disconnected through the queue. Full causal

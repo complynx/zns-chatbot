@@ -22,7 +22,10 @@ mailbox provider; this is not native-provider or broad model-quality acceptance.
    and available. Also resolve the documented
    [revocation/consent lifecycle](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md).
    Independent native completion and agent reads remain usable; neither proves
-   adoption of the original preparation. Do not change the Loom developer's stand.
+   adoption of the original preparation. Full causal OTel tracing through Loom's
+   asynchronous queue is also an open upstream gate: the [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
+   proves HTTP propagation, not durable queue context or recovered-attempt links.
+   Do not change the Loom developer's stand.
 2. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
    when Daniel is available. Revalidate the retained configuration first;
    isolated HTTP/Edge results do not replace that joint check.
