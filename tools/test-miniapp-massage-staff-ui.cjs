@@ -16,7 +16,15 @@ function backend() {
   const api = { hook: undefined, requests: [], pageSize: 20, events: [{ id: eventID, name: "Event <script>" }] };
   api.preference = { user_id: owner, notify_bookings: true, notify_next: true, version: 0 }; api.preferenceReceipts = new Map();
   const name = { en: "Alex <img>", ru: "Алекс <img>" };
-  api.schedule = { event_id: eventID, timezone: "Europe/Berlin", own_specialist_ids: ["alex"], document: { windows: [{ id: "night", name, starts_at: "2026-10-25T00:00:00Z", ends_at: "2026-10-27T00:00:00Z" }], services: [{ id: "short", price_minor: 9999 }] } };
+  api.schedule = {
+    event_id: eventID, event_name: api.events[0].name, event_version: 1, version: 1,
+    observed_at: "2026-10-24T12:00:00Z", timezone: "Europe/Berlin", own_specialist_ids: ["alex"],
+    document: {
+      windows: [{ id: "night", name, starts_at: "2026-10-25T00:00:00Z", ends_at: "2026-10-27T00:00:00Z" }],
+      specialists: [{ id: "alex", name, service_ids: ["short"], work_spans: [{ window_id: "night", starts_at: "2026-10-25T00:00:00Z", ends_at: "2026-10-27T00:00:00Z" }] }],
+      services: [{ id: "short", name: { en: "Massage", ru: "Массаж" }, price_minor: 9999 }]
+    }
+  };
   const terms = { window_id: "night", specialist_id: "alex", service_id: "short", specialist_name: name, service_name: { en: "Massage", ru: "Массаж" }, timezone: "UTC", starts_at: "2026-10-25T00:30:00Z", treatment_ends_at: "2026-10-25T00:50:00Z", occupancy_ends_at: "2026-10-25T00:55:00Z", price_minor: 1234, currency: "BYN", currency_scale: 2 };
   api.rows = [{ id: ownID, version: 1, client_name: "PRIVATE_CLIENT <script>", contact: "tg://user?id=11002", terms }, { id: foreignID, version: 1, client_name: "OTHER_CLIENT <img>", terms: { ...terms, specialist_id: "beth", starts_at: "2026-10-25T01:30:00Z", treatment_ends_at: "2026-10-25T01:50:00Z", occupancy_ends_at: "2026-10-25T01:55:00Z" } }];
   api.base = (path, method, body) => {
@@ -38,8 +46,9 @@ function backend() {
     if (path.endsWith("/timetable")) {
       assert.equal(method, "POST"); assert.equal(body.limit, 20);
       const from = Date.parse(body.from), until = Date.parse(body.until);
-      let rows = api.rows.filter(row => Date.parse(row.terms.starts_at) >= from && Date.parse(row.terms.starts_at) < until && (!body.own_only || row.terms.specialist_id === "alex"));
-      if (body.after) rows = rows.filter(row => Date.parse(row.terms.starts_at) > Date.parse(body.after.starts_at));
+      const compare = (left, right) => Date.parse(left.terms.starts_at) - Date.parse(right.terms.starts_at) || (left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+      let rows = api.rows.filter(row => Date.parse(row.terms.starts_at) < until && Date.parse(row.terms.occupancy_ends_at) > from && (!body.window_id || row.terms.window_id === body.window_id) && (!body.own_only || api.schedule.own_specialist_ids.includes(row.terms.specialist_id))).sort(compare);
+      if (body.after) rows = rows.filter(row => compare(row, { id: body.after.id, terms: { starts_at: body.after.starts_at } }) > 0);
       const page = rows.slice(0, api.pageSize), last = page.at(-1);
       return { event_id: eventID, timezone: api.schedule.timezone, bookings: page, ...(rows.length > page.length ? { next: { event_id: eventID, window_id: body.window_id, from: body.from, until: body.until, own_only: body.own_only, id: last.id, starts_at: last.terms.starts_at } } : {}) };
     }
@@ -101,6 +110,9 @@ function browser(api, { app = false, hash = "", storage = new Map() } = {}) {
 test("specialist without a pass reads all bookings and only own contact/detail, with event DST offsets and frozen price", async () => {
   const api = backend(), b = browser(api);
   await b.start(); await b.select();
+  assert.equal(b.get("ms-instant-specialist").disabled, false);
+  assert.equal(b.get("ms-instant-specialist").value, "alex");
+  assert.equal(b.get("ms-instant-service").value, "short");
   assert.match(b.text("ms-rows"), /PRIVATE_CLIENT <script>/); assert.match(b.text("ms-rows"), /OTHER_CLIENT <img>/);
   assert.match(b.text("ms-rows"), /12\.34 BYN/); assert.doesNotMatch(b.text("ms-rows"), /99\.99/);
   assert.match(b.text("ms-rows"), /GMT\+02:00/); assert.match(b.text("ms-rows"), /GMT\+01:00/);
@@ -130,6 +142,20 @@ test("booking cursor is passed intact and range navigation has no time gaps acro
   await b.click("ms-range-next"); const later = b.calls.at(-1).body;
   assert.equal(later.from, first.until); assert.equal(later.after, undefined); assert.equal(Date.parse(later.until) - Date.parse(later.from), 86400000);
   await b.click("ms-range-prev"); assert.equal(b.calls.at(-1).body.from, first.from);
+});
+
+test("timetable includes overlapping reservations and paginates equal start times without loss", async () => {
+  const api = backend(); api.pageSize = 1;
+  const base = clone(api.rows[0]);
+  const crossing = { ...clone(base), id: "00000000-0000-4000-8000-000000000001", client_name: "CROSSING",
+    terms: { ...base.terms, starts_at: "2026-10-24T23:50:00Z", treatment_ends_at: "2026-10-25T00:05:00Z", occupancy_ends_at: "2026-10-25T00:10:00Z" } };
+  const tied = { ...clone(base), id: "ffffffff-ffff-4fff-8fff-ffffffffffff", client_name: "SAME_START" };
+  api.rows = [tied, base, crossing];
+  const b = browser(api); await b.start(); await b.select();
+  assert.match(b.text("ms-rows"), /CROSSING/);
+  await b.click("ms-rows-next"); assert.match(b.text("ms-rows"), /PRIVATE_CLIENT/);
+  await b.click("ms-rows-next"); assert.match(b.text("ms-rows"), /SAME_START/);
+  assert.equal(b.get("ms-rows-next").hidden, true);
 });
 
 test("event pagination clears prior client data and preserves the event cursor", async () => {

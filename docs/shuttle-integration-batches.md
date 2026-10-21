@@ -3,8 +3,12 @@
 `tools/test-integration.py` runs the complete integration package in sequential
 processes of at most 100 root tests. Each process uses the race detector,
 `-count=1`, at most two parallel tests and a 10-minute timeout. Nested subtests
-remain selected. This bounds each test process; it does not alter application
-timeouts, delivery uncertainty rules or business assertions.
+remain selected. Discovery has a five-minute wall-clock limit; each batch has
+a twelve-minute outer limit that includes compilation and dependency resolution.
+The outer limit terminates the owned process tree, retains partial stdout/stderr,
+and records `timed_out` with exit code 124. Cleanup failure rejects the runner.
+These limits do not alter application timeouts, delivery uncertainty rules or
+business assertions.
 
 The runner requires Python 3 from the standard library, Go with CGO and a C
 compiler, and a disposable migrated-by-tests PostgreSQL database. These are test
@@ -30,17 +34,22 @@ duplicate or unexpected roots, malformed output and nonzero process exit reject
 acceptance. An absent database configuration rejects the command before output
 creation. The result covers `./integration`; CI runs `./cmd/...`, `./internal/...`
 and `./migrations/...` separately with the race detector. The CI job keeps its
-45-minute overall deadline; individual batch limits do not extend it.
+60-minute overall deadline; individual batch limits do not extend it.
 
 ## Current verification
 
-Four focused acceptance-validator tests pass. The CLI's missing-database guard
+Seven focused runner tests pass on Linux, including a child-process timeout and
+retained partial evidence. Six run on Windows; the Linux `/proc` case is skipped.
+The earlier four acceptance-validator tests remain part of that set.
+The CLI's missing-database guard
 also passes. Two independent source reviewers found no actionable issues.
 The [first owned eight-batch run and focused follow-up](shuttle-linux-batched-qa-2026-10-20.md)
 retain784/785 passing broad roots and a corrected false-positive assertion.
-The four-root Linux/race follow-up passes, including a meal deadline case that
-had an accidental Windows-only filename. The current default Linux set has786
-roots; its full repetition remains open. The separate `browserqa` build tag is
+The four-root Linux/race follow-up passed, including a meal deadline case that
+had an accidental Windows-only filename. At that October 20 checkpoint the
+default Linux set had786 roots and full repetition was still open. Later source
+and CI checkpoints are recorded in the [roadmap](shuttle-roadmap.md); this old
+count is not the current suite size. The separate `browserqa` build tag is
 not selected by the default CI invocation. No examples or fuzz roots currently
 exist in this integration package. The [preceding full run](shuttle-linux-race-qa-2026-10-20.md)
 remains failed, even though its19 failures pass the separate serial diagnostic.
