@@ -45,6 +45,7 @@
   let language = defaultLanguage;
   let session = {};
   let busy = false;
+  let connecting = false;
   let profileVersion;
   const profileSection = document.getElementById("profile");
   const profileStatus = document.getElementById("profile-status");
@@ -193,6 +194,8 @@
   }
 
   function setBusy(value) {
+    // One module finishing startup must not unlock the remaining initialization.
+    value = value || connecting;
     busy = value;
     for (const button of [retry, logout, accountRetry, accountFirst, accountNext]) button.disabled = value;
     const pending = session.profileChange;
@@ -266,6 +269,7 @@
 
   async function connect() {
     if (busy) return;
+    connecting = true;
     setBusy(true);
     clearAccount();
     name.hidden = true;
@@ -338,6 +342,7 @@
         show("unavailable", true);
       }
     } finally {
+      connecting = false;
       setBusy(false);
     }
   }

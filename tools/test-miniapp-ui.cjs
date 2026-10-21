@@ -18,6 +18,7 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
     hidden: false, disabled: false, textContent: "", value: "", options: [{textContent:""}], listeners: {},
       children: [], append(...children) { this.children.push(...children); },
       replaceChildren(...children) { this.children = children; },
+      removeAttribute(name) { delete this[name]; },
       addEventListener(event, callback) { this.listeners[event] = callback; }
     };
   }
@@ -38,31 +39,36 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
       async start() { section.hidden = !!options.hideLaunchSection; }
     });
   }
+  options.configureWindow?.(window);
   const calls = [];
   const accountCalls = [];
   const profileCalls = [];
   const detailsCalls = [];
   const storageWrites = [];
   let saved = JSON.stringify(stored || {});
-  runInNewContext(source, {
-    document: { getElementById: id => elements[id], createElement: element, documentElement: {} },
+  const context = {
+    document: { getElementById: id => elements[id] || (options.passPayments ? elements[id] = element() : undefined), createElement: element, documentElement: {} },
     navigator: { language: "en" }, window,
-    sessionStorage: { getItem: () => saved, setItem: (_, value) => {
+    sessionStorage: { getItem: key => key === "zinusya-miniapp-v1" ? saved : null, setItem: (_, value) => {
       if (options.storageUnavailable) throw new Error("Storage unavailable");
       storageWrites.push(value); saved = value;
     } },
     crypto: webcrypto, Uint8Array, TextEncoder, btoa,
-    fetch: async (path, options) => {
+    fetch: async (path, requestOptions) => {
       const accountRead = path.startsWith("./account");
       const profileRead = path.startsWith("./profile");
       const detailsRead = path.startsWith("./registration-details");
-      (detailsRead ? detailsCalls : profileRead ? profileCalls : accountRead ? accountCalls : calls).push({ path, ...options });
-      const reply = detailsRead ? (detailsReplies.shift() || {status:404}) : profileRead ? (profileReplies.shift() || {status:200,body:{version:0,full_name:account.full_name,bot_language:account.bot_language}}) : accountRead ? (accountReplies.shift() || { status: 200, body: emptyPage }) : replies.shift();
+      (detailsRead ? detailsCalls : profileRead ? profileCalls : accountRead ? accountCalls : calls).push({ path, ...requestOptions });
+      const reply = options.extraReplies?.[path] || (detailsRead ? (detailsReplies.shift() || {status:404}) : profileRead ? (profileReplies.shift() || {status:200,body:{version:0,full_name:account.full_name,bot_language:account.bot_language}}) : accountRead ? (accountReplies.shift() || { status: 200, body: emptyPage }) : replies.shift());
       assert.ok(reply, "Unexpected HTTP request");
       if (reply.error) throw reply.error;
       return { ok: reply.status < 400, status: reply.status, json: async () => reply.body };
     }
-  });
+  };
+  if (options.passPayments) {
+    runInNewContext(readFileSync(resolve(__dirname, "../internal/api/miniapp_ui/pass-payments.js"), "utf8"), context);
+  }
+  runInNewContext(source, context);
   return {
     elements, calls, accountCalls, profileCalls, detailsCalls, storageWrites, scrolls, stored: () => JSON.parse(saved),
     async settle() {
@@ -77,6 +83,41 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
 
 const account = { user_id: "510e58dd-e547-48d4-b9fa-571d24953218", full_name: "Daniel <test>", bot_language: "en", session_token: token };
 const emptyPage = { observed_at: "2026-10-15T00:00:00Z", events: [], has_more: false };
+
+test("startup keeps controls locked after pass payments load until the last module is ready", { timeout: 5000 }, async () => {
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const ready = new Promise(resolve => { release = resolve; });
+  const app = browser("proof", {}, [{ status: 200, body: account }], [], [], [], {
+    passPayments: true,
+    extraReplies: {
+      "./pass-payments/targets": { status: 200, body: { targets: [] } },
+      "./pass-payments/recent": { status: 200, body: { actions: [] } }
+    },
+    configureWindow(window) {
+      window.createZinusyaKnowledge = () => ({
+        clear() {}, setBusy() {}, setLanguage() {},
+        async start() { entered(); await ready; }
+      });
+    }
+  });
+  try {
+    await started;
+    assert.deepEqual(app.calls.filter(call => call.path.startsWith("./pass-payments/")).map(call => call.path),
+      ["./pass-payments/targets", "./pass-payments/recent"]);
+    assert.equal(app.elements["pp-status"].textContent, "Choose the file, amount and purpose explicitly before sharing.");
+    assert.equal(app.elements.logout.hidden, false);
+    assert.equal(app.elements.logout.disabled, true);
+    assert.equal(app.elements["profile-save-name"].disabled, true);
+    assert.equal(app.elements["pp-recent"].disabled, true);
+  } finally {
+    release();
+    await app.settle();
+  }
+  assert.equal(app.elements.logout.disabled, false);
+  assert.equal(app.elements["profile-save-name"].disabled, false);
+  assert.equal(app.elements["pp-recent"].disabled, false);
+});
 
 function visibleText(element) {
   return [element.textContent, ...element.children.map(visibleText)].join("\n");
