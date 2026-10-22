@@ -194,8 +194,11 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    [consumer trace gate](shuttle-consumer-tracing-qa-2026-10-22.md) now passes actual
    Zinusya task/Loom queue/RPC propagation, consumed steering and graceful bot
    restart on an isolated fixture, with one completed run and one final delivery.
-   Loom-process restart, approval tracing and primary backend visibility remain
-   separate consumer gates. The earlier
+   The follow-up [Loom restart trace gate](shuttle-consumer-loom-restart-tracing-qa-2026-10-22.md)
+   also passes automatic same-run recovery after SIGTERM, the consumed steering
+   trace and previous-attempt link, one observed profile RPC, and preservation of
+   unknown inference accounting after completion. Approval tracing and primary
+   backend visibility remain separate consumer gates. The earlier
    [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
    remains historical HTTP propagation evidence.
    Do not change the Loom developer's stand.
