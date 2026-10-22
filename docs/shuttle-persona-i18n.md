@@ -48,8 +48,8 @@ The earlier actual first-contact request used30520 input tokens. Its tool sectio
 occupied93.7% of compact JSON bytes, and Loom rendered the application input twice.
 [Loom29](https://github.com/complynx/loom/issues/29) separately owns on-demand
 contract loading and current-input rendering. Published Loom `5c25e0ec` / image
-`bc0a7837` now passes an isolated native-request capture with this application
-candidate:146981→56079 bytes (61.85%), all125 method IDs preserved, one input
+`bc0a7837` now passes an isolated native-request capture with application
+candidate `498b6db8` / image `bd8cc621`:146981→56079 bytes (61.85%), all125 method IDs preserved, one input
 message instead of two, unchanged instructions and API settings. The full
 synthetic request and comparison remain private local artifacts. This does not
 measure live tokens, total workflow cost or extra discovery/model turns.
@@ -70,16 +70,71 @@ of the application prompt/native changes and manifest changes are clean.
 
 Model style is an instruction until observed with the actual target model.
 Daniel selected `gpt-6-luna / low` and authorized20 additional generations,
-including retries and summaries. The campaign has spent0. Automatic approval
+including retries and summaries. The campaign has spent9;11 remain. Automatic approval
 review rejected the first paid dispatch before execution because exact payload
 and destination authorization were not established. A separately reviewed
 capture-only mode has no upstream client or API-key access and hard-denies
 outbound connections. Both the earlier and new published-Loom captures completed
 with zero external dispatches and no API-key access. Their service runs were
-cancelled through the canonical owner API; original accounting is preserved and
-the paid provider remains stopped. Bind the subsequent model dialogue to the
-current application/runtime images. Do not reuse an old
+cancelled through the canonical owner API; original accounting is preserved.
+Paid-provider restoration and model dispatch are separate reviewed steps. Bind the subsequent model dialogue to the
+current application/runtime images. Daniel subsequently explicitly authorized
+the displayed payload and then updated synthetic test prompts, instruction
+corrections and dialogue continuations to the same OpenAI destination within the
+unchanged total20 allowance. Do not reuse an old
 image's successful packaging or model result as acceptance of this voice.
+
+The three initial real Luna calls returned200 but did not produce a delivered question
+or confirmed name. A1 attempted `request_name` through read-only JavaScript; the
+backend correctly denied it. A2 sought help and the profile but supplied numeric
+`cursor:0`, while the help contract requires a string. A3 read the complete help
+card successfully but called the read-only `get` through `module_call`, receiving
+`use_script_for_reads`. The original test proxy conservatively froze before
+another generation whenever a tool result contained an error.
+The failed runs were cancelled through the owner API; original unknown steps,
+credits, real usage and frozen campaign copies remain preserved. The remaining
+allowance at that checkpoint was17; there is no reset or refund.
+
+The localized operational instruction now explains selected full help, current
+profile version, durable `module_call` routing, first-page help without cursor and
+unchanged string `next_cursor` for later pages. Focused locale/prompt tests, lint
+and independent review pass. This is a source correction, not successful model
+dialogue or voice acceptance.
+
+Independent review identified the blanket tool-error freeze as a test-proxy
+policy that differs from normal Loom recovery. A separate minimal counter
+revision now forwards actual tool errors unchanged to the next model turn.
+Three focused offline checks prove unchanged history forwarding, cumulative
+accounting, per-case limits and the unchanged global20 ceiling. Backend permissions, schemas, exact consent and durable-operation recovery
+remain authoritative; the proxy retains the global20-request ceiling and its
+unknown paid-HTTP fencing. Earlier failed campaigns and usage are not relabelled.
+
+The subsequent A4 dialogue used6 real generations on application source
+`ca04fd3c` / image `0538c240` with published Loom `5c25e0ec` / `bc0a7837`.
+The model read full help and the current profile, requested a name, and delivered
+an actual question. Names remained empty until explicit typed correction.
+An actual graceful bot restart preserved the expectation and its deadline.
+The original restart observer failed while JSON-parsing plaintext readiness;
+a separate read-only observer accepted the already performed restart without
+replaying it. Both results remain recorded.
+
+The explicit correction saved first name `Александр Павел` and last name
+`ван дер Берг`, cleared the expectation, and converged local/IAM versions to2.
+The delivered response used feminine `сохранила`. Read-only semantic comparison
+preserved username, email/verification, provider links and grants. The first
+comparison helper conservatively returned unknown for omitted zero protobuf
+fields; a separately reviewed HTTP200-aware helper retained raw replies and
+accepted their canonical zero defaults. Original unknown evidence is retained.
+All6 A4 calls completed200, with70639 input and256 output tokens reported across
+the dialogue. This is one measured workflow, without a paired old-Loom baseline.
+
+A4 still fails the suggested-name keyboard requirement: the model delivered a
+plaintext final answer rather than native `question`. Source instructions now
+explicitly bind `text`, `allow_text:true` and `choices` to that native tool;
+focused locale checks, lint and independent source review pass. This new
+instruction is not yet model-accepted or installed in production. Suggested-name
+choice and cancellation remain separate pending model gates; broad voice
+acceptance and issue24 closure remain open.
 
 Required model observations include concise useful replies, questions/choices,
 typed name correction, cancellation, mixed language, missing information and

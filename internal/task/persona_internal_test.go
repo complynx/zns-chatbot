@@ -49,10 +49,11 @@ func TestProfileContextKeepsUntrustedHintsSeparateFromServiceIdentity(t *testing
 			require.Contains(t, text.String(), "complete_name")
 			for _, contract := range []string{
 				"modules.help.read({module,method})", "next_cursor", "zinusya_profile.get", "expected_version", "module_call",
+				"question", "choices", "allow_text:true", "final_answer",
 			} {
 				require.Contains(
 					t, text.String(), contract,
-					"Both prompt locales must explain contract discovery and durable action routing",
+					"Both prompt locales must explain contract discovery, action routing and native questions",
 				)
 			}
 			require.Empty(t, profile.FullName, "Prompt generation must not adopt Telegram hints")

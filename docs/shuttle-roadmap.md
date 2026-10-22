@@ -28,8 +28,8 @@ were removed. This does not claim906-user HTTP or avatar-byte acceptance.
 Avatar migration retains owner-checked Telegram references downloaded on demand;
 bulk byte copying is not required by the existing contract.
 
-Current production IAM and Loom already match the qualified 4.20/b2b8d429
-versions. Daniel subsequently updated ZitadelTG: production digest `8864dd80`
+At the initial checkpoint, production IAM and Loom matched the qualified
+4.20/b2b8d429 versions. Daniel subsequently updated ZitadelTG: production digest `8864dd80`
 contains prelink support; upstream [PR11](https://github.com/complynx/zitadeltg/pull/11)
 is merged. Protocol review found no critical consumer mismatch with the accepted
 patched-provider flow; the upstream14-scenario acceptance covers its tighter
@@ -48,12 +48,14 @@ now pass; [model voice acceptance](shuttle-persona-i18n.md) remains open. Upstre
 separately addresses eager full catalogs and duplicate current-input rendering;
 another lane owns that runtime change. Published Loom `5c25e0ec` / image `bc0a7837`
 now supplies a concise authorized method index and identity-based current-request
-rendering. An isolated no-upstream capture with the same application candidate
+rendering. An isolated no-upstream capture with application candidate `bd8cc621`
 shrunk146981→56079 bytes (61.85%), preserved all125 method IDs and reduced two
-input messages to one. Instructions and API settings match. This is byte-size
-and serialization evidence; total workflow tokens, discovery turns and model
-judgment remain unmeasured. Cache envelope v2 requires coordinated workers;
+input messages to one. Instructions and API settings match. This capture measures bytes
+and serialization only; it does not measure workflow tokens, discovery turns
+or model judgment. Cache envelope v2 requires coordinated workers;
 old-binary rollback requires disposal of the disposable `run_contexts` cache.
+Read-only metadata also confirms production Loom API is healthy on this published
+revision, with sandbox and Docker API proxy using the same actual image.
 
 Daniel selected `gpt-6-luna` with `low` reasoning as the main target model and
 authorized 20 additional generation requests for bounded onboarding acceptance.
@@ -61,6 +63,27 @@ The previous series exhausted its separate eight-request allowance. Retries and
 summary requests count against the new total. Complete one name dialogue with
 restart and typed correction first; run cancellation and suggested-name choice
 only after it passes. Authorization is not a completed acceptance result.
+Nine real requests have been used;11 remain. The first three failed attempts
+remain recorded: JavaScript write denial, numeric help-cursor validation, and
+read routing through the action tool. The original test proxy froze on any
+error result; its separately reviewed minimal replacement now permits native
+self-correction while preserving global20 accounting, unknown paid-HTTP fencing
+and backend business/consent gates.
+
+A4 on source `ca04fd3c` / image `0538c240` used6 real generations and accepted the
+bounded typed-name/restart/IAM slice: a delivered question, unchanged expectation
+across an actual restart, explicit compound first/last names, cleared expectation,
+local/IAM version2 convergence and unchanged email, provider links and grants.
+The reply used feminine `сохранила`. Actual provider usage totals70639 input and256
+output tokens for that workflow; this is not a paired old/new Loom comparison.
+The original readiness observer failure and conservative unknown IAM comparison
+are retained alongside separate successful observers.
+
+Full A4 acceptance is blocked by a missing suggested-name reply keyboard: the
+model used plaintext final_answer. A narrowly reviewed source instruction now
+requires native question with text, allow_text:true and choices; focused tests
+and lint pass. The corrected candidate still needs actual keyboard/choice and
+cancellation observations. No full-model or production acceptance is asserted.
 
 The [isolated synthetic-Telegram/real-IAM fixture](shuttle-prelink-real-iam-qa-2026-10-22.md)
 now completes canonical-account creation/linking and full OIDC without the IAM
