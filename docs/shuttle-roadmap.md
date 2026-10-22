@@ -34,7 +34,7 @@ safe adoption of existing IAM names, preserving concurrent profile changes and
 active name dialogs. Technical or unknown provenance still requires confirmation.
 Stop the old application before migration 72 so old provisioning cannot bypass
 the provenance ledger. This does not complete the first-use onboarding,
-real-model first-contact dialogue, installed name-sync worker gate or
+real-model first-contact dialogue or primary candidate
 installation acceptance. The accepted primary installation below is unchanged.
 
 New `/name` messages now use the agent dialogue. Context supplies untrusted
@@ -54,6 +54,15 @@ converged to the latest compound name while preserving other profile fields,
 email, username and one provider link. The grant baseline was empty. This is
 not a River/process-restart or primary installation claim; see the
 [name synchronization QA](shuttle-profile-name-sync-qa-2026-10-22.md).
+
+The subsequent isolated installation also passed the real River-worker gate.
+Image `0d4457b6` from `74604b7e` migrated the owned synthetic prelink database
+70→72, preserved its existing rows, retained a pending name during an actual
+IAM pause, stopped gracefully in 0.546 seconds and recovered the latest edit
+after application restart. A temporary 30-second authorization cache enabled the
+outage request; its original zero setting was restored. The temporary candidate
+container was retired without OOM. This does not install the primary stand or
+complete real-model onboarding acceptance.
 
 ## Accepted installation checkpoint
 

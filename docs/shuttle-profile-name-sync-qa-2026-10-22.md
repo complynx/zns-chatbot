@@ -3,7 +3,8 @@
 This checkpoint covers the candidate `mvp-92/schema72` source on `codex/shuttle`.
 The accepted primary installation remains `mvp-91/schema70`; no new application
 image or migration was installed there. Real-model first-contact/name-dialog
-acceptance and installed worker acceptance remain open. New `/start` messages
+acceptance and primary candidate installation remain open. The isolated
+real-IAM worker acceptance below passed. New `/start` messages
 without a filled local profile and new `/name` messages use the agent dialogue; see the
 [name-entry contract](shuttle-telegram-name-entry.md).
 
@@ -35,6 +36,42 @@ without a filled local profile and new `/name` messages use the agent dialogue; 
   is authoritative for synchronization. No legal registration fields are filled.
 
 ## Verification performed
+
+### Installed worker in the owned synthetic IAM contour
+
+Committed source `74604b7e` was built with the standard pinned Go Dockerfile as
+image `sha256:0d4457b619004ab23f3b6a196a333e537864257b1b026cb5056040ca37d96193`.
+The separate owned `mock_prelink_v1` database was backed up and migrated from
+70 to 72. Every original application row was checked after migration and after
+the worker run; all were preserved, allowing the expected added columns.
+The original three synthetic users and five prelinks remained; one synthetic
+worker-test user was added.
+
+The candidate application ran with its real River queue and real local Zitadel.
+For this outage scenario only, the fixture's authorization cache was changed
+from zero to 30 seconds, and the user's authorization was warmed before pausing
+the owned IAM container. An authenticated profile write committed, and the real
+worker recorded pending work with retry backoff while IAM was unavailable.
+SIGTERM stopped the application with exit 0 in 0.546 seconds measured around
+the Docker stop command, including controller overhead. IAM was unpaused, the
+application restarted and a newer name was submitted. The worker converged to
+that latest name; reading the old operation receipt did not restore the old
+name. Two profile-name River jobs completed.
+
+The original settings document/version, including disabled authorization cache,
+was restored and checked before the final preservation assertion. The controller
+restores settings on failure and always unpauses IAM after its fault window.
+Review found the initial missing cache prerequisite and an error handler that
+could overwrite a prior receipt on replay. Both were corrected before execution;
+the final fresh review had no actionable findings. A separate refusal check
+confirmed that replay leaves the accepted receipt byte-for-byte unchanged.
+
+The temporary application container was stopped with exit 0 and OOM false and
+removed. Its private logs, database backup and receipts remain under
+`.cache/shuttle-live-test/zns-identity-v1/name-worker-v1/`. The owned synthetic
+database remains at schema 72 for diagnosis; the four base IAM containers keep
+their original IDs and are running and unpaused. No real Telegram authorization,
+paid model call, primary-stand installation or production change was performed.
 
 ### Real owned IAM adapter and durable-store acceptance
 
