@@ -4,8 +4,9 @@ Status, 2026-10-22: native preparation to real Loom adoption passed on the
 isolated `orders-adopt-r2` fixture, including graceful recovery and original
 receipt replay. The [current-image reverse browser gate](shuttle-orders-reverse-browser-qa-2026-10-22.md)
 also verifies one original form submission, unexpired stale-draft protection and
-completed-link recovery. Still-live original-question settlement, other mixed
-windows and real Telegram WebView remain under acceptance.
+completed-link recovery. A subsequent distinct case also verifies receipt
+reconciliation and settlement of the still-live original question in the same
+Loom run. Other mixed windows and real Telegram WebView remain under acceptance.
 The owned primary now runs source `74604b7e`, image `0d4457b6`, schema72 /
 `mvp-92`, through the separately accepted
 [candidate installation](shuttle-profile-name-sync-qa-2026-10-22.md#owned-primary-upgrade-with-ingress-fenced).

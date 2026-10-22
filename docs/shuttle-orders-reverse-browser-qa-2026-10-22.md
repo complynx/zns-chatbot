@@ -89,13 +89,41 @@ The final `passed_stopped` receipt and current-order readback are in
 `continuation/r2/r3/r4/checkpoint.json`; its `browser-completed.json` records the
 clean read-only browser result. Parent receipts are preserved and hash-linked.
 
+## Still-live question reconciliation
+
+A later distinct synthetic event on the same candidate passed the missing live
+handoff. A fresh agent preparation was submitted once through the shipped form.
+The original Loom operation remained prepared, with the same awaiting-user task,
+approval and run; its deadline still had more than 30 seconds remaining. The
+person then explicitly asked to reconcile that completed original operation.
+
+The controlled agent read its immutable submit receipt through `script`, then
+approved that same pending question through `interaction_resolve`. Loom marked
+the original write operation succeeded with exactly the native submission result
+and completed the original run. Final database readback proved one additional
+order, submitted version 1, the exact stored submission result and receipt, an
+empty consumed draft at version 2, and one additional run. All preexisting order
+rows were identical in every column; the payment-evidence count was unchanged.
+
+The initial controller completed the dialogue but failed its final SQL assertion:
+it expected a `snapshot` column, whereas the table stores the complete result in
+`submitted_result`. The original failed checkpoint remains unchanged. An
+independently reviewed observer started only PostgreSQL and verified the saved
+outcome; it sent no messages, model responses or business requests. Its successful
+`readback/checkpoint.json`, original source, clean browser report and screenshot
+are retained under `.cache/shuttle-work/orders-live-form-reconciliation-20261022-v1/`.
+The screenshot captures the consumed draft and receipt while the subsequent UI
+reload still says Loading; it is not settled-layout acceptance. All nine fixture
+containers ended stopped with exit 0 and no OOM; configuration bytes were
+preserved. This proves the controlled orchestration path, not autonomous choice
+of that path by a model.
+
 ## Remaining acceptance
 
 The separate [native-to-Loom gate](shuttle-order-operation-adoption.md#native-preparation-to-actual-loom-accepted-isolated-gate)
 already covers adoption with distinct Loom/backend IDs and graceful bot restart.
 This reverse gate adds current-image browser evidence, but does not complete all
-mixed-flow cases. Still-live pending-question reconciliation after external form
-submission, other contention/access/expiry windows, real Telegram WebView and
+mixed-flow cases. Other contention/access/expiry windows, real Telegram WebView and
 autonomous model interpretation remain separate. This is not production readiness.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer

@@ -218,9 +218,10 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    The [current-image reverse browser gate](shuttle-orders-reverse-browser-qa-2026-10-22.md)
    also verifies an original agent preparation submitted once through the shipped
    form, full frozen terms, unexpired stale-draft protection, and completed-link
-   recovery without changing a newer draft. Earlier harness failures remain
-   recorded. Continue with still-live original-question settlement after form
-   completion and other contention/access windows. Real Telegram WebView and
+   recovery without changing a newer draft. A distinct follow-up gate also passed
+   still-live original-question settlement after form completion, with the same
+   Loom run, one order and complete historical-row preservation. Earlier harness
+   failures remain recorded. Continue with other contention/access windows. Real Telegram WebView and
    autonomous model judgment remain separate; the primary is unchanged.
 2. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
    when Daniel is available. Revalidate the retained configuration first;
