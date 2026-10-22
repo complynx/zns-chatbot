@@ -9,7 +9,10 @@ separately accepted [primary upgrade](shuttle-profile-name-sync-qa-2026-10-22.md
 That installation is distinct from the isolated consumer fixtures. Separate
 consumer gates passed [steering and bot restart](shuttle-consumer-tracing-qa-2026-10-22.md)
 and [Loom restart](shuttle-consumer-loom-restart-tracing-qa-2026-10-22.md).
-Approval trace continuation and primary-backend visibility remain open.
+The [approval trace gate](shuttle-consumer-approval-tracing-qa-2026-10-22.md)
+also passes original-operation consent after both process restarts, including
+the exact backend commit HTTP span in the consumed-consent trace.
+Primary-backend visibility remains open.
 The original request below describes the earlier `34f46468` source boundary;
 it is retained as history, not a description of the new implementation.
 

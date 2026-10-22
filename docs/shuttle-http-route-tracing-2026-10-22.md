@@ -41,12 +41,14 @@ removed after its result/state were saved. Evidence remains under
 
 ## Runtime boundary
 
-This is source/package acceptance. A new candidate image must be built and
-installed on the owned fixture before claiming installed `http.route` behavior.
-The prepared approval trace controller has not run. Its stronger check requires
-the exact knowledge-confirm route, HTTP200 POST, the backend commit interval,
-and exported causal ancestry to the consumed-consent execution step in the SAME
-HTTP span. Approval continuation and primary-backend visibility remain open.
+Source `be55b4a1`, image `7e0fc10b`, is now installed on the isolated owned
+IAM4.20 fixture. The [approval consumer gate](shuttle-consumer-approval-tracing-qa-2026-10-22.md)
+passed the exact knowledge-confirm route, HTTP200 POST, backend commit interval
+and exported ancestry to the consumed-consent execution step in the SAME HTTP
+span, after graceful bot and Loom restarts. The original task/run and approval
+were continued; one pending suggestion was created without publication.
+Primary installation of this route feature and external trace-backend visibility
+remain separate. The primary still uses its previous accepted bot image.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk

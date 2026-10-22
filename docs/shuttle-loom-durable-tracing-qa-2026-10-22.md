@@ -49,7 +49,10 @@ stand is accepted in the separate
 this upstream test did not perform that installation. Separate consumer gates now verify
 [intake/task/queue/RPC, steering and bot restart](shuttle-consumer-tracing-qa-2026-10-22.md)
 and [Loom restart](shuttle-consumer-loom-restart-tracing-qa-2026-10-22.md)
-with original task/run IDs. Approval-operation trace continuation remains open.
+with original task/run IDs. The separate
+[approval consumer gate](shuttle-consumer-approval-tracing-qa-2026-10-22.md)
+also passes original approval/operation continuation across both restarts and
+the exact successful commit HTTP span in the consumed-consent trace.
 External trace-backend visibility, all crash windows and production rollout remain
 separate. Earlier failed tracing/outage observations remain preserved.
 

@@ -197,16 +197,20 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    The follow-up [Loom restart trace gate](shuttle-consumer-loom-restart-tracing-qa-2026-10-22.md)
    also passes automatic same-run recovery after SIGTERM, the consumed steering
    trace and previous-attempt link, one observed profile RPC, and preservation of
-   unknown inference accounting after completion. Approval tracing and primary
-   backend visibility remain separate consumer gates. The earlier
+   unknown inference accounting after completion. The
+   [approval trace gate](shuttle-consumer-approval-tracing-qa-2026-10-22.md)
+   also passes the original approval and backend preparation through bot/Loom
+   restarts, ordinary text consent, one pending suggestion and the exact commit
+   HTTP span under the consent trace. Primary backend visibility remains open. The earlier
    [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
    remains historical HTTP propagation evidence.
    The approval-gate review identified missing route attribution in bot spans.
    The [private route-template follow-up](shuttle-http-route-tracing-2026-10-22.md)
    now passes focused source reviews, Windows/package and Linux/race checks.
-   Build/install that candidate on the owned fixture, then run the prepared
-   free-text approval trace gate against its exact commit route. Installed route
-   behavior and that approval workflow are not yet accepted.
+   Source `be55b4a1` / image `7e0fc10b` is installed only on the owned IAM4.20
+   fixture, with schema72 and existing table hashes preserved. Its free-text
+   approval trace gate now passes. Primary route-feature installation and
+   external backend visibility remain open; the primary bot is unchanged.
    Do not change the Loom developer's stand.
    Orders submit original-operation adoption is now in source acceptance; see
    [its contract and remaining gates](shuttle-order-operation-adoption.md).
