@@ -33,7 +33,7 @@ type miniAppOrderCancelInput struct {
 func (s *Server) registerMiniAppOrderSubmission() {
 	s.registerMiniAppOrderReviews()
 	s.registerMiniAppOrderEvidence()
-	writes := miniAppOrderWrites{Server: s, prepare: s.store.PrepareMiniAppOrderSubmission,
+	writes := miniAppOrderWrites{Server: s, prepare: s.prepareMiniAppOrderWithContract,
 		submit: s.store.SubmitMiniAppOrder, cancel: s.store.CancelMiniAppOrder, failure: s.miniAppOrdersError}
 	writes.register("/app/orders/{event}/")
 	s.public.HandleFunc("GET /app/orders/{event}/submitted", s.miniAppSubmittedOrders)

@@ -31,7 +31,7 @@ type orderAgentAPI struct {
 func (s *Server) registerOrderSubmission(api huma.API) {
 	h := orderAgentAPI{Server: s, mapError: ordersCatalogError, describe: orderSubmissionDescription,
 		actions: orderAgentActions{
-			prepare: s.store.PrepareOwnOrderSubmission, submit: s.store.SubmitOwnOrder,
+			prepare: s.prepareOwnOrderWithContract, submit: s.store.SubmitOwnOrder,
 			cancel: s.store.CancelOwnOrder, get: s.store.OwnOrder, list: s.store.ListOwnOrders,
 			operation: s.store.OwnOrderOperationByID,
 		}}

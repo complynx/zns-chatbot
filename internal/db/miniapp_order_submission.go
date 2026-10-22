@@ -96,10 +96,27 @@ func (s *Store) PrepareMiniAppOrderSubmission(
 	operation uuid.UUID,
 	args OrderSubmission,
 ) (OrderPreparation, error) {
+	return s.prepareMiniAppOrderSubmission(ctx, deployment, session, operation, args, nil, nil)
+}
+
+// PrepareMiniAppOrderSubmissionWithContract rechecks the session inside the
+// transaction before recording the original operation binding and description.
+func (s *Store) PrepareMiniAppOrderSubmissionWithContract(ctx context.Context, deployment EventScope,
+	session MiniAppOrderSession, operation uuid.UUID, args OrderSubmission,
+	contract OrderPreparationContract, describe func(OrderPreparation) (string, error),
+) (OrderPreparation, error) {
+	return s.prepareMiniAppOrderSubmission(ctx, deployment, session, operation, args, &contract, describe)
+}
+
+func (s *Store) prepareMiniAppOrderSubmission(ctx context.Context, deployment EventScope,
+	session MiniAppOrderSession, operation uuid.UUID, args OrderSubmission,
+	contract *OrderPreparationContract, describe func(OrderPreparation) (string, error),
+) (OrderPreparation, error) {
 	call, err := orderPrepareCall(operation, args, OrderSourceMiniApp)
 	if err != nil {
 		return OrderPreparation{}, err
 	}
+	call.contract, call.describe = contract, describe
 	tx, scope, err := s.miniAppOrderTx(ctx, deployment, session, args.EventID, operation)
 	if err != nil {
 		return OrderPreparation{}, err

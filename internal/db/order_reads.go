@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -123,10 +124,22 @@ func readOrderOperationForKind(
 		return OrderOperation{}, err
 	}
 	for _, row := range rows {
-		if row.OrderKind == string(orderKind) && row.Kind == string(kind) &&
-			(event == uuid.Nil || row.EventID == event) {
-			return OrderOperation{OperationID: operation, EventID: row.EventID, Kind: kind, Result: row.Result}, nil
+		if row.OrderKind != string(orderKind) || row.Kind != string(kind) ||
+			(event != uuid.Nil && row.EventID != event) {
+			continue
 		}
+		result := row.Result
+		if kind == OrderPrepare {
+			var preparation OrderPreparation
+			if err = json.Unmarshal(result, &preparation); err != nil {
+				return OrderOperation{}, err
+			}
+			result, err = orderJSON(preparation)
+			if err != nil {
+				return OrderOperation{}, err
+			}
+		}
+		return OrderOperation{OperationID: operation, EventID: row.EventID, Kind: kind, Result: result}, nil
 	}
 	return OrderOperation{}, pgx.ErrNoRows
 }

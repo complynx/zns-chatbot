@@ -88,6 +88,10 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    [Loom #27](https://github.com/complynx/loom/issues/27). The [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
    proves HTTP propagation, not durable queue context or recovered-attempt links.
    Do not change the Loom developer's stand.
+   Orders submit original-operation adoption is now in source acceptance; see
+   [its contract and remaining gates](shuttle-order-operation-adoption.md).
+   Continue with actual Loom approval and agent-to-native browser import while
+   preserving the original operation and newer drafts. The primary is unchanged.
 2. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
    when Daniel is available. Revalidate the retained configuration first;
    isolated HTTP/Edge results do not replace that joint check.

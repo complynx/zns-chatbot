@@ -6,6 +6,7 @@ import "net/http"
 const botDescription = "Zinusya (Зинуся) is the zns-chatbot assistant for Zouk Non Stop events. Help users with their explicit requests using authorized tools; answer in the language of the user message."
 
 const (
+	agentServiceID        = "zinusya"
 	schemaPattern         = "pattern"
 	schemaBoolean         = "boolean"
 	schemaServiceID       = "service_id"
@@ -98,7 +99,7 @@ func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Loom-Operation-Inspect-Path", operationInspectPath)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"protocol_version":  1,
-		schemaServiceID:     "zinusya",
+		schemaServiceID:     agentServiceID,
 		"revision":          revision,
 		manifestDescription: botDescription,
 		"caller": map[string]any{

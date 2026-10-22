@@ -14,6 +14,8 @@ import (
 )
 
 type orderCall struct {
+	contract                  *OrderPreparationContract
+	describe                  func(OrderPreparation) (string, error)
 	event, operation          uuid.UUID
 	orderKind                 OrderKind
 	kind                      OrderOperationKind

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -38,11 +39,11 @@ type operationInspectionResponse struct {
 			Actor   string `json:"actor"`
 			OrgID   string `json:"org_id"`
 		} `json:"binding"`
-		Arguments     knowledgeActionArguments `json:"arguments"`
-		Description   string                   `json:"description"`
-		Preconditions assignmentPreconditions  `json:"preconditions"`
-		ExpiresAt     time.Time                `json:"expires_at"`
-		Result        *knowledgeResultView     `json:"result,omitempty"`
+		Arguments     json.RawMessage         `json:"arguments"`
+		Description   string                  `json:"description"`
+		Preconditions assignmentPreconditions `json:"preconditions"`
+		ExpiresAt     time.Time               `json:"expires_at"`
+		Result        json.RawMessage         `json:"result,omitempty"`
 	}
 }
 
@@ -66,6 +67,9 @@ func (s *Server) inspectOperation(
 		return nil, err
 	}
 	body := in.Body
+	if body.Module == "zinusya_orders" {
+		return s.inspectOrderOperation(ctx, in, scope)
+	}
 	if body.Module != "zinusya_knowledge" {
 		return nil, huma.NewError(http.StatusUnprocessableEntity, "operation adoption unsupported for this module")
 	}
@@ -92,7 +96,7 @@ func (s *Server) inspectOperation(
 	out.Body.ProtocolVersion = 1
 	out.Body.Status = agentPrepared
 	out.Body.OperationID = body.OperationID
-	out.Body.ServiceID = "zinusya"
+	out.Body.ServiceID = agentServiceID
 	out.Body.Module = body.Module
 	out.Body.Method = body.Method
 	out.Body.ContractRevision = original.Contract.Revision
@@ -100,13 +104,19 @@ func (s *Server) inspectOperation(
 	out.Body.Binding.Actor = original.Contract.Actor
 	out.Body.Binding.Subject = original.Subject
 	out.Body.Binding.OrgID = original.Organization
-	out.Body.Arguments = view.Preparation.Arguments
+	out.Body.Arguments, err = json.Marshal(view.Preparation.Arguments)
+	if err != nil {
+		return nil, err
+	}
 	out.Body.Description = original.Preparation.Description
 	out.Body.Preconditions.ProposalID = original.Preparation.ID
 	out.Body.ExpiresAt = original.Preparation.ExpiresAt
 	if original.Result != nil {
 		result := knowledgeResultProject(*original.Result)
-		out.Body.Result = &result
+		out.Body.Result, err = json.Marshal(result)
+		if err != nil {
+			return nil, err
+		}
 		out.Body.Status = agentSucceeded
 	}
 	return out, nil

@@ -16,6 +16,13 @@ On 2026-10-21, 31 PostgreSQL knowledge integration roots passed, including nativ
 
 The separate `kb-adopt-r2` runtime passed native-to-agent adoption, fresh plain consent, unambiguous reverse continuation, concurrent native/agent confirmation, completed receipt replay, pending-operation restarts, rejection and actor/method isolation. See the [acceptance report](shuttle-loom-adoption-acceptance-2026-10-21.md) for pinned versions, negative-path evidence, scope and retained inconclusive probes. The original failed reproduction below remains historical evidence.
 
+## Orders extension in development
+
+The [orders submit extension](shuttle-order-operation-adoption.md) is implemented
+in source and has focused PostgreSQL/HTTP evidence. It is not installed on the
+primary and has not passed real Loom/browser handoff acceptance. The knowledge
+support described above remains the accepted runtime boundary.
+
 ## Historical observed gap
 
 A participant can prepare a knowledge suggestion in the native form and then ask

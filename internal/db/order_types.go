@@ -53,10 +53,11 @@ type OrderSnapshot struct {
 }
 
 type OrderPreparation struct {
-	ID        uuid.UUID       `json:"proposal_id"`
-	Arguments OrderSubmission `json:"arguments"`
-	Snapshot  OrderSnapshot   `json:"snapshot"`
-	ExpiresAt time.Time       `json:"expires_at"`
+	Description string          `json:"description,omitempty"`
+	ID          uuid.UUID       `json:"proposal_id"`
+	Arguments   OrderSubmission `json:"arguments"`
+	Snapshot    OrderSnapshot   `json:"snapshot"`
+	ExpiresAt   time.Time       `json:"expires_at"`
 }
 
 type SubmittedOrder struct {

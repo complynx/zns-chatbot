@@ -24,10 +24,27 @@ func (s *Store) PrepareOwnOrderSubmission(
 	args OrderSubmission,
 	source OrderSource,
 ) (OrderPreparation, error) {
+	return s.prepareOwnOrderSubmission(ctx, scope, operation, args, source, nil, nil)
+}
+
+// PrepareOwnOrderSubmissionWithContract records original API provenance and
+// localized terms atomically. The formatter must not use database/network IO.
+func (s *Store) PrepareOwnOrderSubmissionWithContract(ctx context.Context, scope ProfileScope,
+	operation uuid.UUID, args OrderSubmission, source OrderSource, contract OrderPreparationContract,
+	describe func(OrderPreparation) (string, error),
+) (OrderPreparation, error) {
+	return s.prepareOwnOrderSubmission(ctx, scope, operation, args, source, &contract, describe)
+}
+
+func (s *Store) prepareOwnOrderSubmission(ctx context.Context, scope ProfileScope,
+	operation uuid.UUID, args OrderSubmission, source OrderSource, contract *OrderPreparationContract,
+	describe func(OrderPreparation) (string, error),
+) (OrderPreparation, error) {
 	call, err := orderPrepareCall(operation, args, source)
 	if err != nil {
 		return OrderPreparation{}, err
 	}
+	call.contract, call.describe = contract, describe
 	tx, err := s.orderTx(ctx, scope, args.EventID, operation)
 	if err != nil {
 		return OrderPreparation{}, err
@@ -104,7 +121,11 @@ func (s *Store) prepareOrderSubmission(
 		)
 	}
 	if err == nil {
-		err = insertOrderReceipt(ctx, q, scope, call, result.ID, uuid.Nil, result)
+		var receipt any
+		result, receipt, err = contractedOrderPreparation(scope, call, result)
+		if err == nil {
+			err = insertOrderReceipt(ctx, q, scope, call, result.ID, uuid.Nil, receipt)
+		}
 	}
 	return result, false, err
 }

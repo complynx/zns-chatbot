@@ -85,9 +85,12 @@ func (s *orderAgentAPI) agentPrepareOrder(
 	if err != nil {
 		return nil, s.mapError(err)
 	}
-	description, err := s.describe(prepared, language)
-	if err != nil {
-		return nil, s.mapError(err)
+	description := prepared.Description
+	if description == "" {
+		description, err = s.describe(prepared, language)
+		if err != nil {
+			return nil, s.mapError(err)
+		}
 	}
 	out := &orderPreparationResponse{}
 	out.Body.Status, out.Body.OperationID, out.Body.Arguments = agentPrepared, in.Body.OperationID, prepared.Arguments
