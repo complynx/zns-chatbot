@@ -15,11 +15,15 @@ All six reports below are published; their original runtime observations retain 
   reproduction proved persisted seal mismatch and canonical argument seal match.
   See [registration adapter acceptance boundary](shuttle-agent-registrations.md).
 
-- L03: [File worker silently renders standard-font PDF text as a blank page](https://github.com/complynx/loom/issues/4).
-  Native text extraction succeeds, but an unembedded standard Helvetica page
-  renders white. The worker has no font faces; pdftoppm logs missing Helvetica
-  yet exits zero. Reproduced on our owned isolated pinned worker; no developer
-  checkout/stand changes. PDF-to-image visual acceptance remains failed.
+- L03 (historical failure; bounded consumer acceptance passed on 2026-10-15):
+  [File worker silently renders standard-font PDF text as a blank page](https://github.com/complynx/loom/issues/4).
+  The original fontless worker rendered an unembedded Helvetica page white while
+  text extraction succeeded and pdftoppm exited zero. That failure is preserved.
+  A later owned-stand run on unmodified Loom `1050d74e` and its font-equipped
+  worker fetched the same Telegram source by opaque file ID, extracted text and
+  rendered a readable PNG. [Consumer acceptance and image provenance](shuttle-loom-upstream-qa-2026-10-15.md).
+  This covers that synthetic document and version; it does not establish a new
+  end-to-end file-processing pass on Loom `34f46468`, OCR or arbitrary fonts.
 
 - L04 (upstream closed; bounded consumer runtime acceptance passed): [Delayed execution recovery after SIGKILL](https://github.com/complynx/loom/issues/19).
   Published Loom `34f46468` passes the actual-IAM pending-inference crash path:
