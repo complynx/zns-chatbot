@@ -23,7 +23,7 @@ restart and repeated start; IAM outage followed by recovery; consecutive edits
 that must converge to the latest name without modifying another account or its
 permissions. These requirements are recorded, not yet accepted as implemented.
 
-The current uninstalled source adds `mvp-92/schema72`: structured first/last
+The current installed candidate adds `mvp-92/schema72`: structured first/last
 profile storage, atomic durable IAM-sync intent, River repair/retry and periodic
 name verification, plus separate agent and Mini App name inputs. Focused
 PostgreSQL/mock-IAM checks cover outage/restart, late older writes, scope,
@@ -34,8 +34,8 @@ safe adoption of existing IAM names, preserving concurrent profile changes and
 active name dialogs. Technical or unknown provenance still requires confirmation.
 Stop the old application before migration 72 so old provisioning cannot bypass
 the provenance ledger. This does not complete the first-use onboarding,
-real-model first-contact dialogue or primary candidate
-installation acceptance. The accepted primary installation below is unchanged.
+real-model first-contact dialogue acceptance. The newer primary candidate
+installation is described below; ingress remains fenced.
 
 New `/name` messages now use the agent dialogue. Context supplies untrusted
 Telegram name/username hints, suggestion and confirmation rules; the Mini App
@@ -61,12 +61,30 @@ Image `0d4457b6` from `74604b7e` migrated the owned synthetic prelink database
 IAM pause, stopped gracefully in 0.546 seconds and recovered the latest edit
 after application restart. A temporary 30-second authorization cache enabled the
 outage request; its original zero setting was restored. The temporary candidate
-container was retired without OOM. This does not install the primary stand or
-complete real-model onboarding acceptance.
+container was retired without OOM. This isolated gate alone does not prove the
+primary installation or real-model onboarding acceptance.
 
-## Accepted installation checkpoint
+## Current candidate installation, ingress fenced
 
-The last accepted primary installation uses application source `4f03e5ff`, `mvp-91/schema70`,
+Bot source `74604b7e` / image `0d4457b6` is installed on the owned primary stand
+with `mvp-92/schema72`. Loom API and sandbox now use published revision
+`b2b8d429` / image `9ddd3175`, application schema 5. Backups passed temporary
+restore and original-row/sequence comparison; migrations preserved original data
+before workers started. Compose-declared environment, compared startup settings
+and mounted-file digests matched the original; image-provided environment defaults
+and unlisted container settings were not compared.
+
+The first final observer failed because of a Python module/helper name collision;
+a separate reviewed read-only observer passed without replaying migration or
+replacement. Both receipts are retained. Telegram ingress and the counted model
+provider remain stopped. Next: prepare bounded real-model onboarding acceptance
+and resume ingress through a reviewed continuation. Real Telegram authorization
+remains deferred until the user is available. See the
+[name synchronization report](shuttle-profile-name-sync-qa-2026-10-22.md).
+
+## Previous accepted installation checkpoint
+
+The previous accepted primary installation used application source `4f03e5ff`, `mvp-91/schema70`,
 with both Loom runtime processes on published revision `34f46468`.
 The [installation acceptance](shuttle-candidate-install-qa-2026-10-22.md) preserves
 original data, identities, config and receipts and resumes the original ingress.

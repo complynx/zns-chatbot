@@ -1,9 +1,9 @@
 # Structured profile names: source and isolated QA, 2026-10-22
 
-This checkpoint covers the candidate `mvp-92/schema72` source on `codex/shuttle`.
-The accepted primary installation remains `mvp-91/schema70`; no new application
-image or migration was installed there. Real-model first-contact/name-dialog
-acceptance and primary candidate installation remain open. The isolated
+This checkpoint covers `mvp-92/schema72` source on `codex/shuttle` and its
+owned primary test installation. Published Loom was also upgraded to application
+schema 5. Telegram ingress and the counted model provider remain stopped;
+real-model first-contact/name-dialog acceptance remains open. The isolated
 real-IAM worker acceptance below passed. New `/start` messages
 without a filled local profile and new `/name` messages use the agent dialogue; see the
 [name-entry contract](shuttle-telegram-name-entry.md).
@@ -36,6 +36,44 @@ without a filled local profile and new `/name` messages use the agent dialogue; 
   is authoritative for synchronization. No legal registration fields are filled.
 
 ## Verification performed
+
+### Owned primary upgrade with ingress fenced
+
+The primary stand now uses bot image `0d4457b6` from source `74604b7e`, schema 72,
+and manifest `mvp-92`. Both Loom API and sandbox use published image `9ddd3175`
+from revision `b2b8d429156adcb4d667cb950a6c0a8d97f09cce`, application schema 5.
+The existing file-worker image and all support container identities were retained.
+Only bot, Loom API and sandbox containers were replaced.
+
+Before migration, private custom dumps of both databases were decoded and
+restored into temporary databases. Ordered row hashes for all 127 bot and 37 Loom
+tables and sequence metadata/state matched the originals; the temporary databases
+were then removed. This used `--no-owner --no-privileges` and does not prove
+role, ACL, large-object or complete schema disaster recovery.
+
+The upgrade compared original row fields and sequence state again after migrations
+70→72 and 4→5, before starting workers. All originals matched, allowing only added
+fields and objects and migration metadata. Compose-declared environment, compared
+startup settings and mounted-file digests matched the original. Image-provided
+environment defaults and unlisted container settings were not compared. Existing support containers were started by
+ID because the resolved app Compose chain had unrelated support configuration
+drift; that drift was not applied to them.
+
+The initial final observer failed: its `http` helper shadowed the imported Python
+module. Migration, preservation comparison and image replacement had already
+completed. The original failed receipt remains unchanged. A separately reviewed
+read-only observer checked exact images, original support IDs, running/stopped
+states, absence of OOM, schemas, both readiness endpoints, manifest and every
+served Mini App asset against source. It passed without repeating migrations or
+replacement. Protected evidence is under
+`.cache/shuttle-live-test/onboarding-primary-v1/`; the accepted readback is
+`upgrade-readback.json`, referencing the retained failed `upgrade.json`.
+
+Telegram poller, Telegram guard, browser gateway and counted model provider remain
+stopped. There were zero real Telegram authorizations and zero paid model calls.
+This is an installed candidate with ingress fenced, not live Telegram onboarding
+acceptance or production readiness. The earlier installation report remains a
+historical checkpoint.
 
 ### Installed worker in the owned synthetic IAM contour
 
