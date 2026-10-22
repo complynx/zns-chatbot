@@ -54,12 +54,13 @@ All six reports below are published; their original runtime observations retain 
   Other revocation windows remain separate. The [original generic-error observation](shuttle-knowledge-revocation-runtime-qa-2026-10-20.md)
   is preserved; the later result does not establish its hidden cause.
 
-- L07 (feature/contract request; source-backed, runtime acceptance pending):
-  [Durable trace context across queued execution and recovery](https://github.com/complynx/loom/issues/27).
-  Current Loom has HTTP propagation and worker spans. The remaining request is
-  bounded persisted causal context, documented parent/link policy, later-input
-  treatment and recovery links across River delivery. No new runtime failure is
-  asserted from source inspection. [Contract and acceptance requirements](shuttle-loom-durable-tracing.md).
+- L07 (implemented upstream; consumer acceptance pending):
+  [Durable trace context across queued execution and recovery](https://github.com/complynx/loom/issues/27)
+  is closed. Published main `b2b8d429` passed CI; nine focused Linux/race tests
+  passed independently with real PostgreSQL/River and OTLP, including consumed
+  steering and process restart. The accepted primary image is unchanged.
+  [Evidence and remaining consumer gate](shuttle-loom-durable-tracing-qa-2026-10-22.md).
+  [Original contract](shuttle-loom-durable-tracing.md).
 
 Not filed as Loom bugs: Huma's extra discovery `$schema` field was corrected in
 Shuttle; missing administrator role assignment in Loom's IAM project was corrected

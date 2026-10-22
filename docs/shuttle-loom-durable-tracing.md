@@ -1,13 +1,16 @@
 # Durable trace context across Loom queue delivery and recovery
 
-Status: source-backed feature/contract request; implementation and consumer
-acceptance are pending. This does not assert violation of an existing contract
-or a new runtime reproduction. Read-only checkout reviewed on 2026-10-22:
-`34f4646832748efd455828f6804c6274027db659` (clean working tree).
+Status, 2026-10-22: implementation merged and published in Loom main
+`b2b8d429156adcb4d667cb950a6c0a8d97f09cce`. Merged-main CI and an independent
+local rerun of nine focused Linux/race/PostgreSQL/OTLP tests passed.
+[Evidence and remaining consumer gate](shuttle-loom-durable-tracing-qa-2026-10-22.md).
+Full Zinusya consumer acceptance and primary-stand installation remain pending.
+The original request below describes the earlier `34f46468` source boundary;
+it is retained as history, not a description of the new implementation.
 
 Upstream request: [Loom #27](https://github.com/complynx/loom/issues/27).
 
-## Observed source boundary
+## Original source boundary (34f46468)
 
 [Loom HTTP telemetry](https://github.com/complynx/loom/blob/34f4646832748efd455828f6804c6274027db659/internal/telemetry/otel.go#L190) extracts W3C context on HTTP and injects it into
 outgoing HTTP; it explicitly does not forward baggage. [runWorker.Work](https://github.com/complynx/loom/blob/34f4646832748efd455828f6804c6274027db659/internal/app/runtime.go#L41) starts `run_execution` from the River worker context.

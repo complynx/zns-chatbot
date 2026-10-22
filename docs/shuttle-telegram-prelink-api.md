@@ -25,6 +25,11 @@ real Telegram or final IAM login-session acceptance.
 
 ## Startup and caller contract
 
+The later [synthetic-proof/real-IAM acceptance](shuttle-prelink-real-iam-qa-2026-10-22.md)
+also completes actual IAM OIDC authorization and Mini App identity reconciliation
+in both orders, without an IAM registration/link form. It uses synthetic Telegram
+proofs; activation and final real-Telegram browser acceptance remain separate.
+
 `telegram_prelink` in config.yaml has five fields: `issuer`, `jwks_url`,
 `audience`, `provider_id`, `service_bearer`. All empty disables the endpoint;
 partial configuration fails startup. Env overrides use

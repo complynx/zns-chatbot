@@ -1,6 +1,31 @@
 # Current roadmap checkpoint, 2026-10-22
 
-The owned primary now runs application source `4f03e5ff`, `mvp-91/schema70`,
+## Added acceptance requirements: identity onboarding
+
+The [isolated synthetic-Telegram/real-IAM fixture](shuttle-prelink-real-iam-qa-2026-10-22.md)
+now completes canonical-account creation/linking and full OIDC without the IAM
+external-user registration form. Both provider-first/Mini-App-first paths,
+sequential relogin and completed-login restart pass. Activation and final real
+Telegram browser acceptance remain open; do not request another human Telegram
+authorization until that flow is prepared.
+
+The [specification](shuttle-spec.md) now also requires first-contact real-name
+onboarding, reuse of filled names from an existing linked IAM account, agent-selected
+Telegram name suggestions through a reply keyboard, free-text fallback, and later
+name edits synchronized to Zitadel through durable versioned work. Technical
+provisioning placeholders must not satisfy onboarding. Profile names and separate
+legal registration details retain their distinct purposes.
+
+Required behavioral paths: new user with a plausible suggestion; new user without
+one; an existing identity with or without usable names; typed correction instead
+of the keyboard choice; later correction through native UI or agent; cancellation,
+restart and repeated start; IAM outage followed by recovery; consecutive edits
+that must converge to the latest name without modifying another account or its
+permissions. These requirements are recorded, not yet accepted as implemented.
+
+## Accepted installation checkpoint
+
+The last accepted primary installation uses application source `4f03e5ff`, `mvp-91/schema70`,
 with both Loom runtime processes on published revision `34f46468`.
 The [installation acceptance](shuttle-candidate-install-qa-2026-10-22.md) preserves
 original data, identities, config and receipts and resumes the original ingress.
@@ -82,11 +107,13 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    [abrupt-exit gate](shuttle-loom-abrupt-recovery-qa-2026-10-22.md) also passes
    automatic original-run recovery, unknown inference accounting and one final
    delivery on actual IAM/published Loom; other crash windows remain separate.
-   Full causal OTel tracing through Loom's
-   asynchronous queue remains an open upstream gate. The
-   [durable tracing contract](shuttle-loom-durable-tracing.md) is published as
-   [Loom #27](https://github.com/complynx/loom/issues/27). The [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
-   proves HTTP propagation, not durable queue context or recovered-attempt links.
+   [Loom #27](https://github.com/complynx/loom/issues/27) is merged and published.
+   Nine focused Linux/race/PostgreSQL/OTLP tests passed independently, including
+   consumed steering and restart; see [source acceptance](shuttle-loom-durable-tracing-qa-2026-10-22.md).
+   Install the published image through the candidate procedure and finish
+   Zinusya consumer tracing across its durable task and Loom queue. The earlier
+   [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
+   remains historical HTTP propagation evidence.
    Do not change the Loom developer's stand.
    Orders submit original-operation adoption is now in source acceptance; see
    [its contract and remaining gates](shuttle-order-operation-adoption.md).

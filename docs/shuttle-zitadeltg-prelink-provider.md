@@ -8,6 +8,42 @@ and exercised by [combined fixtures](shuttle-prelink-combined-qa-2026-10-16.md);
 main provider activation remains open. The sibling checkout is not modified. The [private backend contract](shuttle-telegram-prelink-api.md) remains
 the authority for link persistence and current authorization.
 
+## Intermediate real Telegram browser proof (2026-10-22)
+
+An isolated local IAM/provider fixture reached ZITADEL's **External User Not
+Found** form after a real Telegram login. This proves the baseline Telegram
+callback, provider validation, IAM JWKS fetch and registration-form relay for
+that attempt. It does not prove automatic account creation, prelink, an
+authenticated IAM session or either direction of application-account linking.
+The fixture still runs the baseline provider, without the prelink hook.
+The required integrated flow must create or link the canonical account
+automatically and complete authentication without displaying this form or
+requiring manual Link/Register. The final browser gate remains open.
+
+The fixture required these configuration corrections:
+
+- Use the bundled Login V1 when no separate Login V2 service is deployed.
+- Open Telegram Login over standard HTTPS443. Configure the test bot's exact
+  redirect URI and trusted origin. The earlier nonstandard-port attempts
+  authorized successfully in Telegram but ended with `popup_closed` locally;
+  Telegram's public auth page derived an origin without that port.
+- Permit IAM's JWKS fetch to the owned gateway's exact Docker IP. The fixture
+  excludes that single `/32` from the default HTTP-client denylist, preserving
+  every other denied address and TLS validation. Keep provider proxy trust
+  synchronized with the gateway's exact IP after container recreation.
+
+For this test only, the gateway exposes Telegram routes on loopback443 while
+the IAM issuer remains on28443. Production uses its normal HTTPS origin and
+does not require this alias. Safe gateway access logs omit headers, query
+strings and bodies; provider debug is off because it logs unsigned JWT claims.
+The disposable same-origin/cross-origin popup probe passed and was removed.
+Private local receipts retain the original failures and the corrected attempt.
+
+A later [synthetic-proof/real-IAM acceptance](shuttle-prelink-real-iam-qa-2026-10-22.md)
+activates the hook in a separate scoped fixture and completes OIDC without this
+form, in both identity orders and after restart. Its Telegram proofs are synthetic;
+activation and final browser acceptance with the real Telegram account remain open.
+
 ## Behavior
 
 After Telegram signature, audience, issuer, nonce and state validation, the hook

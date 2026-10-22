@@ -132,6 +132,12 @@ This is operator recovery, not automatic acceptance. Image, schema 31, manifest
 
 ## Open trace boundary
 
+Update, 2026-10-22: Loom #27 is implemented and published. Nine focused
+Linux/race/PostgreSQL/OTLP tests passed independently; see
+[the new source acceptance report](shuttle-loom-durable-tracing-qa-2026-10-22.md).
+Primary image installation and full Zinusya consumer acceptance remain open.
+The following source observations describe the earlier version.
+
 Read-only source revalidation on 2026-10-21 found local Loom still at
 `a958185e8f81baf49a9cbee492adebd511518995`. In `internal/app/runtime.go`,
 `executeRun` retains only `run_id`, the queue insertion supplies that locator,
