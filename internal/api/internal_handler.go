@@ -27,7 +27,10 @@ func serveBoundedAPI(w http.ResponseWriter, r *http.Request, handler http.Handle
 	}
 	ctx, cancel := context.WithDeadline(r.Context(), deadline)
 	defer cancel()
-	handler.ServeHTTP(w, r.WithContext(ctx))
+	request := r.WithContext(ctx)
+	handler.ServeHTTP(w, request)
+	// Preserve the matched route for outer telemetry.
+	r.Pattern = request.Pattern
 }
 
 func (s *Server) servePublic(w http.ResponseWriter, r *http.Request) {

@@ -4,7 +4,12 @@ Status, 2026-10-22: implementation merged and published in Loom main
 `b2b8d429156adcb4d667cb950a6c0a8d97f09cce`. Merged-main CI and an independent
 local rerun of nine focused Linux/race/PostgreSQL/OTLP tests passed.
 [Evidence and remaining consumer gate](shuttle-loom-durable-tracing-qa-2026-10-22.md).
-Full Zinusya consumer acceptance and primary-stand installation remain pending.
+The published image is installed on the owned primary stand through the
+separately accepted [primary upgrade](shuttle-profile-name-sync-qa-2026-10-22.md#owned-primary-upgrade-with-ingress-fenced).
+That installation is distinct from the isolated consumer fixtures. Separate
+consumer gates passed [steering and bot restart](shuttle-consumer-tracing-qa-2026-10-22.md)
+and [Loom restart](shuttle-consumer-loom-restart-tracing-qa-2026-10-22.md).
+Approval trace continuation and primary-backend visibility remain open.
 The original request below describes the earlier `34f46468` source boundary;
 it is retained as history, not a description of the new implementation.
 

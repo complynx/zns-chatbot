@@ -61,6 +61,7 @@ func TestHistoryImageRequestsHaveTimeToReturnAfterBoundedReads(t *testing.T) {
 				server.serveInternal(writer, request)
 			}
 			require.Equal(t, http.StatusNoContent, writer.Code)
+			require.Equal(t, tc.path, request.Pattern)
 			if tc.budget == 0 {
 				require.False(t, exists)
 				require.True(t, writer.read.IsZero())

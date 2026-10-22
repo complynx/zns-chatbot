@@ -201,6 +201,12 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    backend visibility remain separate consumer gates. The earlier
    [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
    remains historical HTTP propagation evidence.
+   The approval-gate review identified missing route attribution in bot spans.
+   The [private route-template follow-up](shuttle-http-route-tracing-2026-10-22.md)
+   now passes focused source reviews, Windows/package and Linux/race checks.
+   Build/install that candidate on the owned fixture, then run the prepared
+   free-text approval trace gate against its exact commit route. Installed route
+   behavior and that approval workflow are not yet accepted.
    Do not change the Loom developer's stand.
    Orders submit original-operation adoption is now in source acceptance; see
    [its contract and remaining gates](shuttle-order-operation-adoption.md).

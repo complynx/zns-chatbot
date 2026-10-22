@@ -43,10 +43,13 @@ hash-pinned published-tree/CI evidence before execution. Private receipts are in
 ## Acceptance boundary
 
 This is independently rerun upstream regression evidence, not full Zinusya
-consumer acceptance. The accepted primary stand still runs the prior Loom image.
-Install the published image only through the owned candidate procedure, then
-verify Telegram intake → Zinusya durable task → Loom queue → actual service HTTP
-spans, including steering and restart, with the same task/run/operation IDs.
+consumer acceptance. Installation of the published image on the owned primary
+stand is accepted in the separate
+[primary-upgrade report](shuttle-profile-name-sync-qa-2026-10-22.md#owned-primary-upgrade-with-ingress-fenced);
+this upstream test did not perform that installation. Separate consumer gates now verify
+[intake/task/queue/RPC, steering and bot restart](shuttle-consumer-tracing-qa-2026-10-22.md)
+and [Loom restart](shuttle-consumer-loom-restart-tracing-qa-2026-10-22.md)
+with original task/run IDs. Approval-operation trace continuation remains open.
 External trace-backend visibility, all crash windows and production rollout remain
 separate. Earlier failed tracing/outage observations remain preserved.
 

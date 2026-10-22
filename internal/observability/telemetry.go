@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -169,7 +170,7 @@ func (t *Telemetry) Start(ctx context.Context, operation string) (context.Contex
 	}
 }
 
-// Middleware extracts W3C context without recording headers, URLs or user IDs.
+// Middleware records matched route templates, never request URLs, headers or user IDs.
 func (t *Telemetry) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		started := time.Now()
@@ -183,7 +184,16 @@ func (t *Telemetry) Middleware(next http.Handler) http.Handler {
 		)
 		defer span.End()
 		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rw, r.WithContext(ctx))
+		request := r.WithContext(ctx)
+		next.ServeHTTP(rw, request)
+		// CONNECT redirects can expose a raw path as Pattern.
+		if request.Pattern != "" && request.Method != http.MethodConnect {
+			_, route, hasMethod := strings.Cut(request.Pattern, " ")
+			if !hasMethod {
+				route = request.Pattern
+			}
+			span.SetAttributes(attribute.String("http.route", route))
+		}
 		outcome := "success"
 		if rw.status >= http.StatusInternalServerError {
 			outcome = errorLabel

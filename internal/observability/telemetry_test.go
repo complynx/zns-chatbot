@@ -101,6 +101,65 @@ func TestIncomingTraceAndErrorAreSanitized(t *testing.T) {
 	}
 }
 
+func TestHTTPTraceRouteTemplates(t *testing.T) {
+	t.Parallel()
+	tm, err := New(t.Context(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tm.Shutdown(context.Background()) })
+	exp := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+	tm.tracer = provider.Tracer("test")
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /users/{id}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/legacy/{id}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/trees/{id}/", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	handler := tm.Middleware(mux)
+	for _, tc := range []struct {
+		method, path, route string
+		status              int
+	}{
+		{http.MethodGet, "/users/private-user?token=private-token", "/users/{id}", http.StatusNoContent},
+		{http.MethodHead, "/users/private-other", "/users/{id}", http.StatusNoContent},
+		{http.MethodPost, "/legacy/private-user", "/legacy/{id}", http.StatusNoContent},
+		{http.MethodGet, "/missing/private-user", "", http.StatusNotFound},
+		{http.MethodPost, "/users/private-user", "", http.StatusMethodNotAllowed},
+		{http.MethodGet, "/trees/private-user", "/trees/{id}/", http.StatusTemporaryRedirect},
+		{http.MethodConnect, "/trees/private-user", "", http.StatusTemporaryRedirect},
+	} {
+		reply := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, tc.path, nil)
+		request.Method = tc.method
+		request.Header.Set("Authorization", "Bearer private-token")
+		handler.ServeHTTP(reply, request)
+		if reply.Code != tc.status {
+			t.Fatalf("%s %s: status %d, want %d", tc.method, tc.path, reply.Code, tc.status)
+		}
+		spans := exp.GetSpans()
+		span := spans[len(spans)-1]
+		var route string
+		for _, a := range span.Attributes {
+			if a.Key == "http.route" {
+				route = a.Value.AsString()
+			}
+		}
+		if route != tc.route {
+			t.Errorf("%s %s: route %q, want %q", tc.method, tc.path, route, tc.route)
+		}
+		if strings.Contains(fmt.Sprint(span.Attributes), "private-") {
+			t.Error("trace exposed request values")
+		}
+	}
+}
+
 func TestExporterFailureDoesNotBlockRequest(t *testing.T) {
 	t.Parallel()
 	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
