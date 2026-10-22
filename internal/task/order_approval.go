@@ -16,7 +16,10 @@ import (
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/loom"
 	"github.com/complynx/zns-chatbot/internal/orders"
+	"github.com/complynx/zns-chatbot/internal/telegram"
 )
+
+const orderSubmitApprovalMethod = "zinusya_orders.submit"
 
 func (s *Service) pendingApprovalMessages(
 	ctx context.Context,
@@ -52,61 +55,89 @@ func (s *Service) pendingApprovalMessages(
 		}
 		return s.approvalContent(ctx, i, t.ID, *a, text), nil
 	}
-	if a.Method != "zinusya_orders.submit" && a.Method != "zinusya_meals.submit" {
+	if a.Method != orderSubmitApprovalMethod && a.Method != "zinusya_meals.submit" {
 		return s.approval(ctx, i, t.ID, *a), nil
 	}
-	text, err := s.orderApprovalText(ctx, *t, i, *a)
+	text, nativeURL, err := s.orderApprovalText(ctx, *t, i, *a)
 	if err != nil {
 		return nil, err
 	}
-	return s.approvalContent(ctx, i, t.ID, *a, text), nil
+	out := s.approvalContent(ctx, i, t.ID, *a, text)
+	if nativeURL == "" || len(out) == 0 {
+		return out, nil
+	}
+	label := "Continue in form"
+	if s.languageFor(ctx, i) == "ru" {
+		label = "Продолжить в форме"
+	}
+	// Reply-keyboard launches have no initData. Keep the conversational keyboard
+	// on the final quote message and use a separate durable inline WebApp button.
+	form := s.result(i, label, "approval:dialog-v1:"+keyboardPromptKey(*a)+":form")
+	var payload telegram.SendMessageRequest
+	if err = json.Unmarshal(form[0].Payload, &payload); err != nil {
+		return nil, err
+	}
+	payload.ReplyMarkup = &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{{
+		Text: label, WebApp: &telegram.WebAppInfo{URL: nativeURL},
+	}}}}
+	form[0].Payload, err = json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	recordPromptContext(form, loom.InputPresentation{ApprovalID: a.ID})
+	return append(form, out...), nil
 }
 
 // Order approval uses the immutable preparation receipt, not the mutable draft
 // or Loom's bounded description. The normal outbox splits all lines before consent.
-func (s *Service) orderApprovalText(ctx context.Context, t db.Task, i intent, a loom.Approval) (string, error) {
+func (s *Service) orderApprovalText(ctx context.Context, t db.Task, i intent, a loom.Approval) (string, string, error) {
 	operation, err := uuid.Parse(a.OperationID)
 	if err != nil || operation == uuid.Nil {
-		return "", errors.New("invalid order approval operation")
+		return "", "", errors.New("invalid order approval operation")
 	}
 	var args db.OrderSubmission
 	decoder := json.NewDecoder(bytes.NewReader(a.Arguments))
 	decoder.DisallowUnknownFields()
 	if err = decoder.Decode(&args); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err = decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
-		return "", errors.New("trailing order approval arguments")
+		return "", "", errors.New("trailing order approval arguments")
 	}
 	user, err := s.store.GetUser(ctx, t.UserID)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	bot, organization, _ := s.iam.DeploymentScope()
 	if user.BotID != bot || user.TelegramUserID != i.User.ID {
-		return "", errors.New("order approval recipient mismatch")
+		return "", "", errors.New("order approval recipient mismatch")
 	}
 	scope := db.ProfileScope{BotID: bot, Organization: organization, Subject: user.Subject, UserID: user.ID}
 	var receipt db.OrderOperation
 	switch a.Method {
-	case "zinusya_orders.submit":
+	case orderSubmitApprovalMethod:
 		receipt, err = s.store.OwnOrderOperation(ctx, scope, args.EventID, operation, db.OrderPrepare)
 	case "zinusya_meals.submit":
 		receipt, err = s.store.OwnMealOrderOperation(ctx, scope, args.EventID, operation, db.OrderPrepare)
 	default:
-		return "", errors.New("unsupported order approval method")
+		return "", "", errors.New("unsupported order approval method")
 	}
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	var prepared db.OrderPreparation
 	if err = json.Unmarshal(receipt.Result, &prepared); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if prepared.Arguments != args || a.ExpiresAt.After(prepared.ExpiresAt) {
-		return "", errors.New("order approval does not match preparation")
+		return "", "", errors.New("order approval does not match preparation")
 	}
-	return fullOrderApproval(prepared, a.ExpiresAt, s.languageFor(ctx, i))
+	text, err := fullOrderApproval(prepared, a.ExpiresAt, s.languageFor(ctx, i))
+	nativeURL := ""
+	if err == nil && a.Method == orderSubmitApprovalMethod && s.options.MiniAppURL != "" && i.ChatID == i.User.ID {
+		nativeURL = s.options.MiniAppURL + "#orders?event=" + prepared.Arguments.EventID.String() + "&operation=" + receipt.OperationID.String()
+	}
+	return text, nativeURL, err
 }
 
 func fullOrderApproval(p db.OrderPreparation, expires time.Time, language string) (string, error) {

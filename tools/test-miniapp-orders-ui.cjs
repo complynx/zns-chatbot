@@ -48,7 +48,7 @@ function backend() {
   };
   return api;
 }
-function browser(api, { storage = new Map(), app = false, proof = false, failSet = false } = {}) {
+function browser(api, { storage = new Map(), app = false, proof = false, failSet = false, continuation, hash = "" } = {}) {
   const elements = new Map(), calls = [], writes = [];
   function element(tag = "div") {
     const e = { tag, children: [], hidden: false, disabled: false, value: "", listeners: {},
@@ -65,7 +65,7 @@ function browser(api, { storage = new Map(), app = false, proof = false, failSet
   }
   const get = id => { if (!elements.has(id)) elements.set(id, element()); return elements.get(id); };
   const context = { document: { getElementById: get, createElement: element, documentElement: {} },
-    window: { Telegram: { WebApp: { initData: "non-authorizing-fixture", ready() {} } } }, navigator: { language: "en" },
+    window: { location: { hash }, Telegram: { WebApp: { initData: "non-authorizing-fixture", ready() {} } } }, navigator: { language: "en" },
     crypto: webcrypto, TextEncoder, Uint8Array, btoa, Intl, console, URL: { createObjectURL: () => "blob:proof", revokeObjectURL() {} },
     sessionStorage: { getItem: key => storage.get(key) ?? null,
       setItem: (key, value) => { if (failSet) throw new Error("Storage unavailable"); storage.set(key, value); writes.push({ key, value }); },
@@ -75,7 +75,7 @@ function browser(api, { storage = new Map(), app = false, proof = false, failSet
     calls.push({ path, method, body: body === undefined ? undefined : clone(body), storedBefore: storage.get(storageKey(owner)) });
     return api.request(path, method, body);
   };
-  const env = { request, setBusy: value => controller?.setBusy(value), denied() { controller.clear(); } };
+  const env = { continuation, request, setBusy: value => controller?.setBusy(value), denied() { controller.clear(); } };
   context.fetch = async (path, options) => {
     const body = options.body ? JSON.parse(options.body) : undefined;
     let result;
@@ -480,4 +480,91 @@ test("real app connects order selection, proof preview and owner-bound submissio
   await b.click("op-form","submit");assert.equal(claim.order_id,id);assert.equal(claim.file_id,file);assert.equal(claim.amount_minor,2468);
   for(const call of b.calls.filter(c=>c.path.includes("/proof-files")||c.path.includes("/payment-evidence")))assert.equal(call.authorization,"ZinusyaSession "+"a".repeat(43));
   await b.click("logout");assert.equal(b.get("order-proof").hidden,true);assert.equal(b.text("op-target"),"");assert.equal(b.get("op-download").hidden,true);
+});
+
+function linkedPreparation(api) {
+  api.current={event_id:eventID,version:1,selections:[{offer_id:"lunch",item_id:"soup",quantity:2}]};
+  const operation_id=randomUUID();
+  const body={operation_id,expected_event_version:1,expected_catalog_version:1,expected_draft_version:1};
+  const prepared=api.base("./orders/"+eventID+"/submit/prepare","POST",body);
+  return {continuation:{event_id:eventID,operation_id},prepared,body};
+}
+test("linked preparation opens read-only and explicit confirmation retains original operation",async()=>{
+ const api=submissionBackend(), link=linkedPreparation(api), b=browser(api,link);
+ await b.start();
+ assert.match(b.text("orders-preview"),/BYN 25.68/);
+ assert.equal(b.calls.filter(c=>c.method==="POST").length,0);
+ assert.equal(b.get("orders-confirm").disabled,false);
+ await b.click("orders-confirm");
+ assert.equal(orderPosts(b,"submit")[0].body.operation_id,link.body.operation_id);
+ assert.equal(orderPosts(b,"prepare").length,0);
+ assert.equal(api.orders.length,1);
+});
+test("linked completed operation wins and a newer draft is preserved",async()=>{
+ const api=submissionBackend(),link=linkedPreparation(api);
+ api.base("./orders/"+eventID+"/submit","POST",{...link.body,proposal_id:link.prepared.proposal_id,confirmed:true});
+ api.current={event_id:eventID,version:7,selections:[{offer_id:"lunch",item_id:"soup",quantity:9}]};
+ const b=browser(api,link);await b.start();
+ assert.match(b.text("orders-order-status"),/Earlier request completed/);
+ assert.equal(b.get("order-qty-lunch:soup").value,"9");
+ assert.equal(b.calls.some(c=>c.path.includes("/operation-receipts/prepare/")),false);
+ assert.equal(b.calls.filter(c=>c.method==="POST").length,0);
+ assert.equal(api.orders.length,1);
+});
+test("linked old preparation shows frozen terms but cannot consume a newer draft",async()=>{
+ const api=submissionBackend(),link=linkedPreparation(api);
+ api.current={event_id:eventID,version:2,selections:[{offer_id:"lunch",item_id:"soup",quantity:8}]};
+ const b=browser(api,link);await b.start();
+ assert.match(b.text("orders-preview"),/BYN 25.68/);
+ assert.equal(b.get("order-qty-lunch:soup").value,"8");
+ assert.equal(b.get("orders-confirm").disabled,true);
+ await b.click("orders-confirm");assert.equal(orderPosts(b,"submit").length,0);
+});
+test("unknown local save takes priority over linked operation and keeps its original key",async()=>{
+ const api=submissionBackend(),link=linkedPreparation(api),operation_id=randomUUID();
+ const pending={owner,event_id:eventID,body:{...link.body,operation_id,selections:[{offer_id:"lunch",item_id:"soup",quantity:4}]}};
+ const storage=new Map([[storageKey(owner),JSON.stringify(pending)]]);
+ const b=browser(api,{...link,storage});await b.start();
+ assert.equal(b.calls.some(c=>c.path.includes("/operation-receipts/")),false);
+ assert.equal(storage.get(storageKey(owner)),JSON.stringify(pending));
+ assert.match(b.text("orders-order-status"),/earlier.*before|прежн/i);
+});
+test("unknown linked operation is read-only and can be rechecked without a replacement",async()=>{
+ const api=submissionBackend(),link=linkedPreparation(api);api.orderReceipts.clear();
+ const b=browser(api,link);await b.start();
+ assert.match(b.text("orders-order-status"),/no confirmed result/);
+ assert.equal(b.get("orders-order-recover").hidden,false);
+ assert.equal(b.get("orders-prepare").disabled,true);
+ await b.click("orders-prepare");assert.equal(orderPosts(b,"prepare").length,0);
+ api.orderReceipts.set("prepare:"+link.body.operation_id,clone(link.prepared));
+ await b.click("orders-order-recover");assert.match(b.text("orders-preview"),/BYN 25.68/);
+ assert.equal(b.calls.filter(c=>c.method==="POST").length,0);
+});
+test("real app passes the authenticated order operation fragment to the form",async()=>{
+ const api=submissionBackend(),link=linkedPreparation(api);
+ const b=browser(api,{app:true,hash:"#orders?event="+eventID+"&operation="+link.body.operation_id+"&tgWebAppVersion=9.0"});
+ await b.settled();for(let n=0;n<100&&!b.text("orders-preview");n++)await new Promise(r=>setTimeout(r,5));
+ assert.match(b.text("orders-preview"),/BYN 25.68/);
+ assert.equal(b.calls.filter(c=>c.method==="POST").length,0);
+});
+
+test("failed cross-event link recheck clears the old editor and cannot send its quantities",async()=>{
+ const api=submissionBackend(),link=linkedPreparation(api),b=browser(api,link);await b.start();
+ api.hook=(path,method,body,normal)=>{
+  const value=normal(path,method,body);
+  if(path.startsWith("./orders/"+other+"/selection"))return {...value,event_id:other};
+  if(path.startsWith("./orders/"+other+"/catalog"))return {...value,event_id:other,event_name:"Other event"};
+  return value;
+ };
+ b.get("orders-event").value=other;await b.click("orders-event","change");
+ assert.equal(b.get("order-qty-lunch:soup").value,"2");
+ api.hook=(path,method,body,normal)=>{if(path.includes("/operation-receipts/"))throw {status:503};return normal(path,method,body);};
+ await b.click("orders-order-recover");
+ assert.equal(b.get("orders-event").value,eventID);
+ assert.equal(b.get("orders-items").children.length,0);
+ assert.equal(b.get("orders-saved").children.length,0);
+ assert.equal(b.get("orders-save").disabled,true);
+ assert.equal(b.get("orders-prepare").disabled,true);
+ await b.submit();await b.click("orders-prepare");
+ assert.equal(b.calls.filter(c=>c.method==="POST").length,0);
 });

@@ -36,15 +36,18 @@ window.createZinusyaOrders = function (env) {
       saved: "Версия сохранённого выбора", receipt: "Запрос сохранён с версией", historical: "Исторический расчёт, не гарантия текущей цены",
       current: "Текущий расчёт; сохранение ещё раз проверит версии", none: "Нет сохранённых позиций.", recovered: "Прежний запрос сохранён. Ниже показано текущее состояние." }
   };
-  Object.assign(words.en, { prepare: "Review order", confirm: "Confirm this order", "submitted-title": "My orders", "submitted-note": "Order submission alone does not confirm payment or reserve items. Check payment proofs for the current status.", "submitted-reload": "Reload orders", "submitted-first": "First orders", "submitted-next": "Next orders", "order-recover": "Check earlier order request", "order-retry": "Retry same order request", prepared: "Check the exact items and total before confirming.", orderUnknown: "The earlier order request has no confirmed result. Check it or retry the same request before making changes.", orderConflict: "The request was rejected. Reload saved selection and orders before trying again.", submitted: "Order submitted; payment is not confirmed and items are not reserved.", cancelled: "Order cancelled", cancelOrder: "Cancel this order", emptyOrders: "No submitted orders.", total: "Total", cutoff: "Cancellation deadline", expires: "Confirmation expires", unit: "each", charge: "Required charge", orderID: "Order", submittedAt: "Submitted", state: "State", unpaid: "Submitted; check payment proofs", receiptOrder: "Earlier request completed", saveFirst: "Save your edits before reviewing the order." });
-  Object.assign(words.ru, { prepare: "Проверить заказ", confirm: "Подтвердить этот заказ", "submitted-title": "Мои заказы", "submitted-note": "Оформление заказа само по себе не подтверждает оплату и не резервирует товары. Текущий статус смотри в подтверждениях оплаты.", "submitted-reload": "Загрузить заказы", "submitted-first": "Первые заказы", "submitted-next": "Следующие заказы", "order-recover": "Проверить прежний запрос заказа", "order-retry": "Повторить тот же запрос заказа", prepared: "Проверь точный состав и итоговую цену перед подтверждением.", orderUnknown: "Результат прежнего запроса заказа неизвестен. Проверь его или повтори тот же запрос перед изменениями.", orderConflict: "Запрос отклонён. Загрузи сохранённый выбор и заказы перед новой попыткой.", submitted: "Заказ оформлен; оплата не подтверждена, товары не зарезервированы.", cancelled: "Заказ отменён", cancelOrder: "Отменить этот заказ", emptyOrders: "Нет оформленных заказов.", total: "Итого", cutoff: "Срок отмены", expires: "Подтвердить до", unit: "за единицу", charge: "Обязательная доплата", orderID: "Заказ", submittedAt: "Оформлен", state: "Статус", unpaid: "Оформлен; проверь подтверждения оплаты", receiptOrder: "Прежний запрос выполнен", saveFirst: "Сохрани изменения перед проверкой заказа." });
+  Object.assign(words.en, { prepare: "Review order", confirm: "Confirm this order", "submitted-title": "My orders", "submitted-note": "Order submission alone does not confirm payment or reserve items. Check payment proofs for the current status.", "submitted-reload": "Reload orders", "submitted-first": "First orders", "submitted-next": "Next orders", "order-recover": "Check earlier order request", "order-retry": "Retry same order request", prepared: "Check the exact items and total before confirming.", orderUnknown: "The earlier order request has no confirmed result. Check it or retry the same request before making changes.", linkedDeferred: "Check the earlier request before opening the linked order. Then use Check earlier order request.", orderStale: "These original terms no longer match the saved selection, or have expired. Review the current draft before preparing a new order.", orderConflict: "The request was rejected. Reload saved selection and orders before trying again.", submitted: "Order submitted; payment is not confirmed and items are not reserved.", cancelled: "Order cancelled", cancelOrder: "Cancel this order", emptyOrders: "No submitted orders.", total: "Total", cutoff: "Cancellation deadline", expires: "Confirmation expires", unit: "each", charge: "Required charge", orderID: "Order", submittedAt: "Submitted", state: "State", unpaid: "Submitted; check payment proofs", receiptOrder: "Earlier request completed", saveFirst: "Save your edits before reviewing the order." });
+  Object.assign(words.ru, { prepare: "Проверить заказ", confirm: "Подтвердить этот заказ", "submitted-title": "Мои заказы", "submitted-note": "Оформление заказа само по себе не подтверждает оплату и не резервирует товары. Текущий статус смотри в подтверждениях оплаты.", "submitted-reload": "Загрузить заказы", "submitted-first": "Первые заказы", "submitted-next": "Следующие заказы", "order-recover": "Проверить прежний запрос заказа", "order-retry": "Повторить тот же запрос заказа", prepared: "Проверь точный состав и итоговую цену перед подтверждением.", orderUnknown: "Результат прежнего запроса заказа неизвестен. Проверь его или повтори тот же запрос перед изменениями.", linkedDeferred: "Сначала проверь прежний запрос. Затем открой связанный заказ кнопкой проверки прежнего запроса заказа.", orderStale: "Исходные условия устарели или срок подтверждения истёк. Проверь текущий выбор перед новой подготовкой заказа.", orderConflict: "Запрос отклонён. Загрузи сохранённый выбор и заказы перед новой попыткой.", submitted: "Заказ оформлен; оплата не подтверждена, товары не зарезервированы.", cancelled: "Заказ отменён", cancelOrder: "Отменить этот заказ", emptyOrders: "Нет оформленных заказов.", total: "Итого", cutoff: "Срок отмены", expires: "Подтвердить до", unit: "за единицу", charge: "Обязательная доплата", orderID: "Заказ", submittedAt: "Оформлен", state: "Статус", unpaid: "Оформлен; проверь подтверждения оплаты", receiptOrder: "Прежний запрос выполнен", saveFirst: "Сохрани изменения перед проверкой заказа." });
   const uuid = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(value);
   const version = value => Number.isSafeInteger(value) && value >= 0;
   const itemID = value => typeof value === "string" && /^[a-z][a-z0-9_-]{0,31}$/.test(value);
   let owner, language = "en", epoch = 0, locked = false, working = false;
   let eventID, after, next, catalog, draft, pending, blocked = false, dirty = false;
   let inputs = [], cancelButtons = [], proofButtons = [];
+  let linkedUnknown = false;
   let pendingOrder, preparation, submittedOrders = [], orderAfter, orderNext;
+  const link = env.continuation;
+  const linked = link && (link.event_id || link.operation_id);
   const orderKey = () => "zinusya-orders-operation-v1:" + owner;
   const w = () => words[language];
   const key = () => "zinusya-orders-pending-v1:" + owner;
@@ -72,20 +75,26 @@ window.createZinusyaOrders = function (env) {
     if (!value || value.event_id !== id || !version(value.version) || !validSelections(value.selections)) throw new Error("Invalid saved selection");
     return value;
   }
+  function currentPreparation() {
+    const a = preparation?.arguments;
+    return a && a.event_id === eventID && draft?.event_id === eventID && catalog?.event_id === eventID && a.expected_draft_version === draft?.version && a.expected_catalog_version === catalog?.version &&
+      a.expected_event_version === catalog?.event_version && Date.parse(preparation.expires_at) > Date.now();
+  }
   function controls() {
     const disabled = locked || working || !owner;
-    const editing = disabled || !!pending || !!pendingOrder || blocked || !catalog || !draft;
-    el.event.disabled = el.first.disabled = el.next.disabled = disabled || !!pending || !!pendingOrder || blocked;
+    const editing = disabled || !!pending || !!pendingOrder || linkedUnknown || blocked || !catalog || !draft;
+    el.event.disabled = el.first.disabled = el.next.disabled = disabled || !!pending || !!pendingOrder || linkedUnknown || blocked;
     el.save.disabled = editing;
     el.clear.disabled = editing || draft.version === 0 || draft.selections.length === 0;
     el.calculate.disabled = editing || !catalog.complete_pricing;
     el.reload.disabled = disabled;
     el.prepare.disabled = editing || dirty || !draft?.selections.length || !catalog?.complete_pricing;
-    el.confirm.disabled = editing || dirty || !preparation || Date.parse(preparation.expires_at) <= Date.now();
+    el.confirm.disabled = editing || dirty || !currentPreparation();
     el["submitted-reload"].disabled = disabled || !eventID;
     el["submitted-first"].disabled = el["submitted-next"].disabled = disabled || !!pendingOrder || !!pending || blocked || !eventID;
-    el["order-recover"].hidden = el["order-retry"].hidden = !pendingOrder;
-    el["order-recover"].disabled = el["order-retry"].disabled = disabled || blocked;
+    el["order-recover"].hidden = !pendingOrder && !linked;
+    el["order-retry"].hidden = !pendingOrder;
+    el["order-recover"].disabled = el["order-retry"].disabled = disabled || blocked || !!pending;
     for (const button of [...cancelButtons, ...proofButtons]) button.disabled = disabled || !!pending || !!pendingOrder || blocked;
     el.recover.hidden = el.retry.hidden = !pending || blocked;
     el.recover.disabled = el.retry.disabled = disabled;
@@ -96,7 +105,7 @@ window.createZinusyaOrders = function (env) {
     el["event-label"].textContent = w().event;
   }
   function clear() {
-    epoch++; owner = undefined; working = false; pending = undefined; blocked = false;
+    epoch++; owner = undefined; working = false; pending = undefined; blocked = false; linkedUnknown = false;
     pendingOrder = preparation = orderAfter = orderNext = undefined; submittedOrders = []; cancelButtons = []; proofButtons = [];
     el.preview.replaceChildren(); el.submitted.replaceChildren(); el["order-status"].textContent = "";
     eventID = after = next = catalog = draft = undefined; dirty = false; inputs = [];
@@ -231,7 +240,7 @@ window.createZinusyaOrders = function (env) {
     }
   }
   async function saveSelection(e, empty) {
-    if (pending || pendingOrder || blocked || !catalog || !draft) return;
+    if (pending || pendingOrder || linkedUnknown || blocked || !catalog || !draft) return;
     const rows = empty ? [] : selections();
     if (rows.length && !catalog.complete_pricing) throw { local: "noPricing" };
     const body = { operation_id: crypto.randomUUID(), expected_event_version: catalog.event_version,
@@ -367,6 +376,42 @@ window.createZinusyaOrders = function (env) {
     // The receipt can be historical. Read current draft/orders separately.
     if (p.kind === "submit" || !catalog || !draft) await loadEvent(e, eventID); else await loadSubmitted(e);
   }
+  async function importOrder(e) {
+    if (!linked || pending || pendingOrder || blocked) return;
+    if (dirty) throw { local: "saveFirst" };
+    if (!uuid(link.event_id) || !uuid(link.operation_id)) throw new Error("Invalid order link");
+    eventID = link.event_id; el.event.value = eventID; linkedUnknown = true;
+    catalog = draft = preparation = undefined; inputs = []; dirty = false;
+    submittedOrders = []; orderAfter = orderNext = undefined;
+    el.items.replaceChildren(); el.saved.replaceChildren(); el.preview.replaceChildren();
+    el.quote.textContent = el.receipt.textContent = ""; renderSubmitted();
+    el.status.textContent = w().loading; controls();
+    const receipt = async kind => {
+      const value = await call(e, path() + "/operation-receipts/" + kind + "/" + link.operation_id);
+      if (value.operation_id !== link.operation_id || value.event_id !== eventID || value.kind !== kind) throw new Error("Invalid operation receipt");
+      return value.result;
+    };
+    let completed;
+    try { completed = await receipt("submit"); }
+    catch (error) { if (error.status !== 404) throw error; }
+    if (completed) {
+      const order = checkOrder(completed.order);
+      await loadEvent(e, eventID);
+      linkedUnknown = false;
+      el["order-status"].textContent = w().receiptOrder + ": " + order.id + " · " + w().submitted;
+      return;
+    }
+    let original;
+    try { original = await receipt("prepare"); }
+    catch (error) { if (error.status !== 404) throw error; await loadEvent(e, eventID); el["order-status"].textContent = w().orderUnknown; return; }
+    const a = original?.arguments;
+    if (!uuid(original?.proposal_id) || !original.snapshot?.quote || !Number.isFinite(Date.parse(original.expires_at)) || a?.event_id !== eventID ||
+      ["expected_event_version", "expected_catalog_version", "expected_draft_version"].some(k => !version(a[k]) || a[k] < 1)) throw new Error("Invalid preparation");
+    renderSnapshot(document.createElement("div"), original.snapshot);
+    await loadEvent(e, eventID);
+    linkedUnknown = false; preparation = { ...original, operation_id: link.operation_id }; renderPreparation();
+    el["order-status"].textContent = w()[currentPreparation() ? "prepared" : "orderStale"];
+  }
   async function recoverOrder(e) {
     if (!pendingOrder || blocked) return;
     eventID = pendingOrder.event_id; el.event.value = eventID;
@@ -386,7 +431,7 @@ window.createZinusyaOrders = function (env) {
     }
   }
   async function beginOrder(e, kind, body) {
-    if (pending || pendingOrder || blocked || !eventID) return;
+    if (pending || pendingOrder || linkedUnknown || blocked || !eventID) return;
     const record = { owner, event_id: eventID, kind, body };
     try { sessionStorage.setItem(orderKey(), JSON.stringify(record)); } catch { throw { local: "storage" }; }
     pendingOrder = record; controls(); await dispatchOrder(e);
@@ -398,11 +443,11 @@ window.createZinusyaOrders = function (env) {
     return beginOrder(e, "prepare", { operation_id: crypto.randomUUID(), expected_event_version: catalog.event_version, expected_catalog_version: catalog.version, expected_draft_version: draft.version });
   }));
   el.confirm.addEventListener("click", () => run(e => {
-    if (dirty || !preparation || Date.parse(preparation.expires_at) <= Date.now()) return;
+    if (dirty || !currentPreparation()) return;
     const a = preparation.arguments;
     return beginOrder(e, "submit", { operation_id: preparation.operation_id, expected_event_version: a.expected_event_version, expected_catalog_version: a.expected_catalog_version, expected_draft_version: a.expected_draft_version, proposal_id: preparation.proposal_id, confirmed: true });
   }));
-  el["order-recover"].addEventListener("click", () => run(recoverOrder));
+  el["order-recover"].addEventListener("click", () => run(e => pendingOrder ? recoverOrder(e) : importOrder(e)));
   el["order-retry"].addEventListener("click", () => run(dispatchOrder));
   el["submitted-reload"].addEventListener("click", () => run(e => eventID && loadSubmitted(e)));
   for (const [button, cursor] of [[el["submitted-first"], () => undefined], [el["submitted-next"], () => orderNext]]) button.addEventListener("click", () => run(e => !pendingOrder && !pending && !blocked && eventID && loadSubmitted(e, cursor())));
@@ -434,7 +479,13 @@ window.createZinusyaOrders = function (env) {
         const orderRaw = sessionStorage.getItem(orderKey());
         if (orderRaw) { if (orderRaw.length > 2048) throw new Error("Invalid order recovery record"); pendingOrder = JSON.parse(orderRaw); if (!validOrderPending(pendingOrder) || pending) throw new Error("Invalid order recovery record"); }
       } catch { blocked = true; pending = undefined; el.status.textContent = w().blocked; controls(); return; }
-      try { await loadPage(e); if (pending) await recover(e); else if (pendingOrder) await recoverOrder(e); }
+      try {
+        await loadPage(e);
+        if (pending || pendingOrder) {
+          if (pending) await recover(e); else await recoverOrder(e);
+          if (linked) el["order-status"].textContent += "\n" + w().linkedDeferred;
+        } else if (linked) await importOrder(e);
+      }
       catch (error) { if (e === epoch) errorStatus(error); }
       controls();
     }

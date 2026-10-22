@@ -2,8 +2,8 @@
 
 Status: source implementation under acceptance, 2026-10-22. The owned primary
 still runs application `4f03e5ff`, schema70 / `mvp-91`; it does not include these
-order-inspection changes. Real Loom adoption and browser import of an agent
-preparation remain open. This is not a production-readiness claim.
+order-inspection changes. The browser import and durable launch button are implemented in source. Real
+Loom adoption and browser-runtime acceptance remain open. This is not a production-readiness claim.
 
 ## Contract
 
@@ -61,7 +61,53 @@ the race detector; full CI and real Loom acceptance remain separate.
 These tests use fixture IAM/HTTP peers. They prove original-ID API handoffs,
 replay, immutable terms/language, legacy and binding rejection, current access,
 expiry, formatter rollback and single-connection operation. They do not prove a
-real Loom approval dialogue, autonomous interpretation or a browser opening an
+real Loom approval dialogue, autonomous interpretation or an actual browser opening an
 agent's existing preparation. Those are required next acceptance steps. The
 native browser now retains its prepare operation UUID at explicit confirmation;
 the separate committed UI fix has 28 passing behavior cases.
+
+## Native continuation from an agent preparation
+
+The order approval now includes a separate inline WebApp button before the full
+quote and conversational answer keyboard. Its URL is built from the existing
+configured Mini App launch base, the checked original event and operation UUID.
+There is no new production URL setting and no authentication token in the link.
+The URL is transport metadata, not part of the frozen price or consent record.
+Only service-order submission in the private user chat receives this button.
+
+The button uses an inline WebApp launch. A reply-keyboard launch cannot supply
+the required identity data: Telegram documents that its initialization data is
+empty in that mode. See [WebAppInitData](https://core.telegram.org/bots/webapps#webappinitdata).
+The ordinary dialogue answer keyboard remains on the final approval message.
+Both messages use the existing durable outbox, approval context and presentation
+keys. Opening the form is not approval and does not answer the pending dialogue.
+
+After authenticated bootstrap, `#orders?event=UUID&operation=UUID` reads the
+original submit receipt first, then the prepare receipt if completion is absent.
+It never submits or prepares on open. A completed operation displays its original
+receipt while separately loading the current draft/orders. A pending preparation
+displays its frozen snapshot and requires an explicit confirmation with the
+original operation UUID and proposal. Stale versions or expiry disable that
+confirmation; a newer saved draft remains unchanged.
+
+Local pending browser saves or order requests take priority over the link. The
+form explains the deferral and offers a read-only recheck. Missing or failed
+linked receipts remain unknown: writes are blocked until recovery. A link
+recheck also clears the previous event's displayed editor before any awaited
+request, so a network error cannot retain quantities under another event's ID.
+
+The initial six UI cases failed against the previous implementation and passed
+after the import was wired. A fresh review found the cross-event failure path;
+its focused case now passes. The final review found no actionable issue.
+All 377 Mini App source behavior cases pass; this includes seven new import
+cases. The PostgreSQL/outbox gate passes 12 selected roots, including agent and
+protocol reply modes, original link persistence and unchanged consent state.
+Scoped task/integration lint reports zero issues. These are fixture HTTP/outbox
+and JavaScript VM checks; real Telegram WebView, actual browser and published
+Loom approval/replay remain separate acceptance gates.
+
+The preceding backend commit `6441a2e3` passed
+[CI53](https://github.com/complynx/zns-chatbot/actions/runs/39703986240): 883
+integration roots across four isolated race-enabled workers, checks and final
+coverage verification all succeeded in 11 minutes 45 seconds. This run predates
+the native import and button changes described in this section.

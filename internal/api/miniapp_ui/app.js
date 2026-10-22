@@ -121,6 +121,10 @@
     request: (path, method, body) => request(path, method, body, session.token), setBusy, denied: detailsDenied
   });
   const ordersUI = window.createZinusyaOrders?.({
+    continuation: launchTarget === "orders" ? {
+      event_id: (window.location?.hash || "").split(/[?&#]/).find(part => part.startsWith("event="))?.slice(6),
+      operation_id: (window.location?.hash || "").split(/[?&#]/).find(part => part.startsWith("operation="))?.slice(10)
+    } : undefined,
     openProof: orderProofUI ? (order, locale) => orderProofUI.open(order, locale) : undefined,
     request: (path, method, body) => request(path, method, body, session.token),
     setBusy,

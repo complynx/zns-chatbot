@@ -333,3 +333,73 @@ func TestOrderApprovalReturnsAfterQuestionWithoutChangingApprovalIdentity(t *tes
 	require.NoError(t, f.H.store.Pool().QueryRow(t.Context(), "SELECT count(*) FROM shuttle_orders").Scan(&count))
 	require.Zero(t, count)
 }
+
+func TestOrderApprovalOffersOriginalNativeOperationWithoutConsumingConsent(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{loom.ReplyModeAgent, loom.ReplyModeProtocol} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			p := newPeers(t)
+			p.miniAppOrigin = appTestOrigin
+			f, scope, args := orderApprovalFixture(t, p, false)
+			op := uuid.New()
+			prepared, err := f.H.store.PrepareOwnOrderSubmission(t.Context(), scope, op, args, db.OrderSourceAgent)
+			require.NoError(t, err)
+			raw, err := json.Marshal(args)
+			require.NoError(t, err)
+			p.mu.Lock()
+			p.approval = &loom.Approval{
+				ID:           op.String(),
+				OperationID:  op.String(),
+				Method:       "zinusya_orders.submit",
+				ReplyMode:    mode,
+				Text:         "Review original order",
+				Arguments:    raw,
+				ArgumentHash: "exact-hash",
+				ExpiresAt:    prepared.ExpiresAt,
+			}
+			p.mu.Unlock()
+			id := acceptOrderApprovalMessage(t, f)
+			f.H.await(t, id, "awaiting_user")
+			var sent []telegram.SendMessageRequest
+			require.Eventually(t, func() bool {
+				p.mu.Lock()
+				defer p.mu.Unlock()
+				sent = append([]telegram.SendMessageRequest(nil), p.sent...)
+				return len(sent) >= 2 && sent[len(sent)-1].ReplyMarkup != nil
+			}, 5*time.Second, 10*time.Millisecond)
+			form, ok := sent[0].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+			require.True(t, ok, "Native launch must use inline WebApp to retain Telegram initData")
+			require.Len(t, form.InlineKeyboard, 1)
+			button := form.InlineKeyboard[0][0]
+			require.NotNil(t, button.WebApp)
+			require.Equal(
+				t,
+				appTestOrigin+"/app/#orders?event="+args.EventID.String()+"&operation="+op.String(),
+				button.WebApp.URL,
+			)
+			require.Empty(t, button.CallbackData)
+			if mode == loom.ReplyModeAgent {
+				_, ok = sent[len(sent)-1].ReplyMarkup.(*telegram.ReplyKeyboardMarkup)
+				require.True(t, ok, "Latest dialogue question retains its conversational answer keyboard")
+			}
+			var orders int
+			require.NoError(
+				t,
+				f.H.store.Pool().QueryRow(t.Context(), "SELECT count(*) FROM shuttle_orders").Scan(&orders),
+			)
+			require.Zero(t, orders)
+			rows, err := f.H.store.ListOutbox(t.Context(), id)
+			require.NoError(t, err)
+			var stored telegram.SendMessageRequest
+			require.NoError(t, json.Unmarshal(rows[0].Payload, &stored))
+			replayed := stored.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+			require.Equal(
+				t,
+				button.WebApp.URL,
+				replayed.InlineKeyboard[0][0].WebApp.URL,
+				"Durable replay retains the original operation link",
+			)
+		})
+	}
+}

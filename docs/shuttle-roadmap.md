@@ -90,8 +90,9 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    Do not change the Loom developer's stand.
    Orders submit original-operation adoption is now in source acceptance; see
    [its contract and remaining gates](shuttle-order-operation-adoption.md).
-   Continue with actual Loom approval and agent-to-native browser import while
-   preserving the original operation and newer drafts. The primary is unchanged.
+   The authenticated browser import and durable inline WebApp launch button are
+   implemented in source. Continue with actual Loom approval/browser acceptance
+   while preserving the original operation and newer drafts. The primary is unchanged.
 2. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
    when Daniel is available. Revalidate the retained configuration first;
    isolated HTTP/Edge results do not replace that joint check.
