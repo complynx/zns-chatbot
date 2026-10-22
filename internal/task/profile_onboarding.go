@@ -51,8 +51,8 @@ func appendProfileContext(text *strings.Builder, profile db.UserProfile, user te
 	text.WriteString(personaPrompt(language))
 	text.WriteString(promptText(
 		language,
-		"\nProfile changes are durable actions, not JavaScript methods. Read each selected method's full contract through modules.help.read in script; follow all pages. Read zinusya_profile.get for the current expected_version. Call request_name, set_name and complete_name with the module_call tool using the documented arguments, never through modules.zinusya_profile in script.",
-		"\nИзменения профиля — действия, а не методы JavaScript. Сначала прочитай полный контракт выбранного метода через modules.help.read в script, включая все страницы. Прочитай zinusya_profile.get для текущего expected_version. Вызывай request_name, set_name и complete_name инструментом module_call с аргументами из контракта, никогда через modules.zinusya_profile в script.",
+		"\nProfile changes are durable actions, not JavaScript methods. In script, read the selected contract with modules.help.read({module,method}), omitting cursor on the first page; copy each returned next_cursor string unchanged into cursor for later pages. Read zinusya_profile.get for the current expected_version. Call request_name, set_name and complete_name with the module_call tool using the documented arguments, never through modules.zinusya_profile in script.",
+		"\nИзменения профиля — действия, а не методы JavaScript. В script прочитай контракт через modules.help.read({module,method}), без cursor для первой страницы; для следующих копируй строку next_cursor из ответа в cursor без изменений. Прочитай zinusya_profile.get для текущего expected_version. Вызывай request_name, set_name и complete_name инструментом module_call с аргументами из контракта, никогда через modules.zinusya_profile в script.",
 	))
 	text.WriteString(promptText(
 		language,
