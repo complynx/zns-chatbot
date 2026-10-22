@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Export the pinned provider and apply the owned prelink patch without changing it.
 
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
+Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
 """
 
@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 import subprocess
 import tempfile
 
-BASE_COMMIT = "f6c532e15adb26053897858a0f709e08b1e8591f"
+BASE_COMMIT = "59ac6a152e04dd6af0b10968dc67b10126921bb6"
 EXPORT_PATHS = ("go.mod", "go.sum", "cmd", "internal", "LICENSE")
 NEW_FILES = {"internal/app/prelink.go", "internal/app/prelink_test.go",
              "internal/app/prelink_config_test.go"}

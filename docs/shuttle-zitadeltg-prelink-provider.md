@@ -2,11 +2,23 @@
 
 The optional per-bot hook is distributed as
 [`zitadeltg-prelink.patch`](../deploy/shuttle/test/zitadeltg-prelink.patch) against
-provider commit `f6c532e15adb26053897858a0f709e08b1e8591f`. The reviewed patch was
-built into the [candidate provider image](shuttle-prelink-images-qa-2026-10-16.md)
+provider commit `59ac6a152e04dd6af0b10968dc67b10126921bb6` in the current exporter.
+The patch applies unchanged to that upstream snapshot. The earlier export at
+`f6c532e15adb26053897858a0f709e08b1e8591f` was built into the
+[candidate provider image](shuttle-prelink-images-qa-2026-10-16.md)
 and exercised by [combined fixtures](shuttle-prelink-combined-qa-2026-10-16.md);
 main provider activation remains open. The sibling checkout is not modified. The [private backend contract](shuttle-telegram-prelink-api.md) remains
 the authority for link persistence and current authorization.
+
+The server-published image
+`complynx/zitadeltg@sha256:fa6cc200c8ff0b6dda717ebe8194ab92092ee18a5a4005d26f426aa04658736b`
+does not implement this hook. A network-disabled synthetic startup probe on
+2026-10-22 exited 1 with `field prelink not found`. The upstream main snapshot
+above also has no hook; it is added only by the owned patch. Published-provider
+compatibility checks therefore do not establish prelink acceptance. The refreshed
+export's component results are recorded below; image/build and combined runtime
+acceptance remain open. Historical candidate results do not automatically apply
+to its updated dependencies.
 
 ## Intermediate real Telegram browser proof (2026-10-22)
 
@@ -78,6 +90,12 @@ The relay JWT has its existing IAM audience and no prelink-purpose claim.
 
 Run from the zns-chatbot repository root with Python3 and Git:
 
+The read-only source repository must already contain the pinned commit above.
+The helper does not fetch or change it. If the sibling checkout lacks that
+commit, fetch it into a separate owned bare repository and pass that repository
+with `--repository` instead. The current refreshed export used this separate
+repository; it did not update the sibling checkout.
+
 ```powershell
 python deploy/shuttle/test/prepare_zitadeltg.py --repository ../zitadeltg --output .cache/shuttle-live-test/zitadeltg-runtime/prelink-build-source
 ```
@@ -89,9 +107,31 @@ third-party Python dependency. Build using that prepared directory as context an
 `deploy/shuttle/test/zitadeltg.Dockerfile` as the absolute Dockerfile path. This
 step does not enable prelink, create an IAM provider or start a container.
 
-## Component evidence and limits
+## Current-upstream component checkpoint, 2026-10-22
 
-The complete provider suite passed on Linux/Go1.27.2 under race:140 root tests,
+The refreshed 25-file export at `59ac6a152e04dd6af0b10968dc67b10126921bb6`
+passed the full provider suite under Linux Go 1.27.3 with `-race`: 140 root tests,
+296 test/subtest pass events, no failed or skipped tests. The command package has
+no tests. `go mod verify` and `go vet ./...` also passed. The original reviewed
+patch digest is unchanged; source file hashes matched before and after execution.
+
+The disposable runner used pinned Go image `972b4110`, two CPUs, a 2 GiB
+memory/swap ceiling and a 1 GiB temporary filesystem. It was removed after
+successful completion; OOM was false. The first runner compiled the test but
+could not execute it because its temporary filesystem had `noexec`. That attempt
+remains failed. A separately reviewed runner enabled execution only on its own
+temporary filesystem and passed without changing the exported source or tests.
+
+Ignored source receipts, published-image rejection probe, original failed runner
+and successful `r2/component.json` are retained under
+`.cache/shuttle-work/provider-prelink-refresh-20261022-v1/`; the source export is
+under `.cache/shuttle-live-test/zitadeltg-runtime/prelink-main59ac-20261022-v1/`.
+These are component results. A new candidate image and full OIDC/prelink
+acceptance against Zitadel 4.20 with the current bot remain to be completed.
+
+## Historical component evidence and limits
+
+The earlier export's complete provider suite passed on Linux/Go1.27.2 under race:140 root tests,
 296 test/subtest pass events, no failed or skipped test. The command package has
 no tests. `go vet ./...` also passed. Focused `TestPrelink` tests passed on Windows;
 the inherited full Windows suite is not accepted because six existing key-file
