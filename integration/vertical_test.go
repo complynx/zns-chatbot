@@ -929,7 +929,7 @@ func TestRevocationBlocksDeferredOutputAndPreservesDenialAfterRestart(t *testing
 			defer p.mu.Unlock()
 			if question {
 				require.Len(t, p.sent, 2)
-				require.Equal(t, "Access denied. Please contact the administrator.", p.sent[1].Text)
+				require.Equal(t, "You don’t have access right now. Please contact the administrator.", p.sent[1].Text)
 				require.Equal(t, "delivered", rows[1].State)
 			} else {
 				require.Len(t, p.sent, 1)

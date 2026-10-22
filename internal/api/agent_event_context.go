@@ -215,7 +215,7 @@ func eventContextModule() map[string]any {
 	common := func(id, description, effect string, input map[string]any) map[string]any {
 		return map[string]any{
 			"id":                 id,
-			manifestDescription:  botDescription + " " + description,
+			manifestDescription:  description,
 			manifestPermissions:  []string{},
 			manifestPath:         "/internal/agent/context/" + id,
 			manifestEffect:       effect,

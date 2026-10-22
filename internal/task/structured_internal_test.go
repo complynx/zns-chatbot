@@ -1,6 +1,7 @@
 package task
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -71,4 +72,28 @@ func TestStructuredPaginationCallbackIsOwnerBoundAndNeverAnApproval(t *testing.T
 	update.CallbackQuery.Data = "r:not-a-cursor"
 	_, err = normalize(update, raw)
 	require.ErrorIs(t, err, ErrUnsupportedUpdate)
+}
+
+// The native entry point must introduce the same named assistant without hiding
+// the service commands behind the conversational introduction.
+func TestStructuredMenuIntroducesAssistantAndKeepsCommands(t *testing.T) {
+	t.Parallel()
+	service := &Service{}
+	for _, ru := range []bool{false, true} {
+		for _, command := range []string{startCommand, menuCommand} {
+			text, next, err := service.structuredView(context.Background(), db.ProfileScope{}, command, ru)
+			require.NoError(t, err)
+			require.Nil(t, next)
+			require.Contains(t, text, "Zouk Non Stop")
+			if ru {
+				require.Contains(t, text, "Я ЗиНуСя, помощница")
+			} else {
+				require.Contains(t, text, "I’m Zinusya, your assistant")
+			}
+			for _, available := range []string{profileCommand, registrationsCommand, registerCommand,
+				ordersCommand, massageCommand, avatarCommand, pairsCommand, paymentsCommand, knowledgeCommand} {
+				require.Contains(t, text, available+" — ")
+			}
+		}
+	}
 }

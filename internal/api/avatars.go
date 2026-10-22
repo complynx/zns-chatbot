@@ -270,7 +270,7 @@ func avatarModule() map[string]any {
 		}
 	}
 	method := func(id, description string, args, output map[string]any) map[string]any {
-		return map[string]any{"id": id, manifestDescription: botDescription + " " + description,
+		return map[string]any{"id": id, manifestDescription: description,
 			manifestPermissions: []string{}, manifestPath: avatarPath + id, manifestEffect: effectRead,
 			manifestTimeout: toolTimeoutMillis, manifestMaxResult: toolResultLimit,
 			manifestInputSchema: args, manifestOutputSchema: output, manifestIdempotency: false,

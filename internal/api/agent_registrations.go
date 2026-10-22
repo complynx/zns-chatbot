@@ -195,7 +195,7 @@ func registrationMethods() []any {
 	output := registrationSchema()
 	read := map[string]any{
 		"id":                "me",
-		manifestDescription: botDescription + " Read your own registration and assigned pass for event_id. UTC instants; display in event timezone. 404 means no accessible registration. Example: {\"event_id\":\"00000000-0000-4000-8000-000000000001\"}.",
+		manifestDescription: "Read your own registration and assigned pass for event_id. UTC instants; display in event timezone. 404 means no accessible registration. Example: {\"event_id\":\"00000000-0000-4000-8000-000000000001\"}.",
 		manifestPermissions: []string{},
 		manifestPath:        "/internal/agent/registrations/me",
 		manifestEffect:      effectRead,
@@ -215,7 +215,7 @@ func registrationMethods() []any {
 	}
 	join := map[string]any{
 		"id":                "join",
-		manifestDescription: botDescription + " Request your solo waitlist registration for event_id and role (leader or follower), only after a user request. No pass or payment is implied. Sales must be open and registrations enabled. Repeating the same role preserves original request time; role changes conflict. Example: {\"event_id\":\"00000000-0000-4000-8000-000000000001\",\"role\":\"leader\"}. Receipt survives restart; after uncertainty reconcile the same operation ID. A missing status is unknown and does not prove no effect; never create a replacement operation blindly.",
+		manifestDescription: "Request your solo waitlist registration for event_id and role (leader or follower), only after a user request. No pass or payment is implied. Sales must be open and registrations enabled. Repeating the same role preserves original request time; role changes conflict. Example: {\"event_id\":\"00000000-0000-4000-8000-000000000001\",\"role\":\"leader\"}. Receipt survives restart; after uncertainty reconcile the same operation ID. A missing status is unknown and does not prove no effect; never create a replacement operation blindly.",
 		manifestPermissions: []string{},
 		manifestPath:        "/internal/agent/registrations/join",
 		manifestEffect:      effectWrite,

@@ -39,7 +39,7 @@ func (s *Service) structuredName(
 			structuredText(
 				ru,
 				"The name request changed, expired, or the name is invalid. Open /profile and use /name again.",
-				"Запрос имени изменился, истёк или имя некорректно. Откройте /profile и используйте /name заново.",
+				"Запрос имени изменился, истёк или имя некорректно. Открой /profile и отправь /name заново.",
 			),
 			false,
 			ru,
@@ -48,13 +48,13 @@ func (s *Service) structuredName(
 	if err != nil {
 		return s.identityError(ctx, t, c, i, err)
 	}
-	text := structuredText(ru, "Name saved: ", "Имя сохранено: ") + profile.FullName
+	text := structuredText(ru, "I saved your name: ", "Сохранила имя: ") + profile.FullName
 	prompt := c.ProfileChange.Kind == "request_name" && profile.NameExpectation != nil
 	if prompt {
 		text = structuredText(
 			ru,
 			"Reply to this message with your full name. You can also send /name followed by your full name. Request expires: ",
-			"Ответьте на это сообщение полным именем. Также можно отправить /name и полное имя. Запрос действует до: ",
+			"Ответь на это сообщение полным именем. Ещё можно отправить /name и полное имя. Запрос действует до: ",
 		) + profile.NameExpectation.ExpiresAt.UTC().
 			Format(time.RFC3339)
 	}

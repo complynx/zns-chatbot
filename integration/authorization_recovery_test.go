@@ -172,7 +172,7 @@ func TestLocalRevocationStopsLoomAuthorizationRecovery(t *testing.T) {
 	defer p.mu.Unlock()
 	require.Len(t, p.runs, 1)
 	require.Empty(t, p.inputs)
-	require.Equal(t, "Access denied. Please contact the administrator.", p.sent[0].Text)
+	require.Equal(t, "You don’t have access right now. Please contact the administrator.", p.sent[0].Text)
 }
 
 func TestLoomAuthorizationDeadlineBeforeCreationStillDenies(t *testing.T) {
@@ -194,7 +194,7 @@ func TestLoomAuthorizationDeadlineBeforeCreationStillDenies(t *testing.T) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	require.Empty(t, p.runs)
-	require.Equal(t, "Access denied. Please contact the administrator.", p.sent[0].Text)
+	require.Equal(t, "You don’t have access right now. Please contact the administrator.", p.sent[0].Text)
 }
 
 func TestLostReauthorizationReceiptIsNotRepeatedAfterRestart(t *testing.T) {

@@ -156,7 +156,7 @@ func (s *Server) manifest(w http.ResponseWriter, _ *http.Request) {
 				manifestMethods: []any{
 					map[string]any{
 						"id":                "me",
-						manifestDescription: botDescription + " Read the current authenticated user's account. No user ID argument is accepted.",
+						manifestDescription: "Read the current authenticated user's account. No user ID argument is accepted.",
 						manifestPermissions: []string{},
 						manifestPath:        "/internal/agent/account/me",
 						manifestEffect:      effectRead,

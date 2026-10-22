@@ -237,7 +237,7 @@ func administrativeRead(
 	}
 	return map[string]any{
 		"id":                 id,
-		"description":        botDescription + " " + description,
+		"description":        description,
 		"permissions":        []string{},
 		manifestPath:         "/internal/agent/administration/" + id,
 		manifestEffect:       effectRead,

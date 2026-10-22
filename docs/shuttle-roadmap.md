@@ -17,8 +17,10 @@ application-account migration slice, and release-source/CI evidence. The new
 now pass focused PostgreSQL tests, CLI tests, strict lint and independent review;
 the Linux candidate is built and packaged. See the
 [exact verification boundaries](shuttle-history-account-import-qa-2026-10-22.md).
-Historical archive and IAM-only migration passes do not establish the remaining
-combined real-IAM/application or production-copy account dry-run.
+The combined synthetic real-IAM/application gate now passes packaged Linux import,
+replay, real-JWT owner/stranger HTTP metadata reads and current revocation. Both
+fixture preparation failures remain recorded. The permitted count-only
+production-copy account dry-run remains separate.
 Avatar migration retains owner-checked Telegram references downloaded on demand;
 bulk byte copying is not required by the existing contract.
 
@@ -33,6 +35,21 @@ remaining gate. Exact image-to-source provenance is not asserted for the new
 provider because its image lacks revision metadata.
 
 ## Added acceptance requirements: identity onboarding
+
+Daniel assigned [issue24](https://github.com/complynx/zns-chatbot/issues/24) to this
+PR: retain Zinusya's feminine, warm and lightly playful user-facing voice, add
+locale-selected identity/domain terminology, and apply it to model and native
+texts without changing action correctness or exact consent. The reviewed source and focused checks
+now pass; [model voice acceptance](shuttle-persona-i18n.md) remains open. Upstream [Loom29](https://github.com/complynx/loom/issues/29)
+separately addresses eager full catalogs and duplicate current-input rendering;
+another lane owns that runtime change.
+
+Daniel selected `gpt-6-luna` with `low` reasoning as the main target model and
+authorized 20 additional generation requests for bounded onboarding acceptance.
+The previous series exhausted its separate eight-request allowance. Retries and
+summary requests count against the new total. Complete one name dialogue with
+restart and typed correction first; run cancellation and suggested-name choice
+only after it passes. Authorization is not a completed acceptance result.
 
 The [isolated synthetic-Telegram/real-IAM fixture](shuttle-prelink-real-iam-qa-2026-10-22.md)
 now completes canonical-account creation/linking and full OIDC without the IAM

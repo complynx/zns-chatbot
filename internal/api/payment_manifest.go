@@ -19,7 +19,7 @@ func paymentMethod(id, description string, properties map[string]any, required, 
 	}
 	return map[string]any{
 		"id":                 id,
-		manifestDescription:  botDescription + " " + description,
+		manifestDescription:  description,
 		manifestPermissions:  []string{},
 		manifestPath:         paymentPath + id,
 		manifestEffect:       effectRead,

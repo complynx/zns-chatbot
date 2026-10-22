@@ -52,25 +52,25 @@ func (s *Service) localized(ctx context.Context, i intent, key string) string {
 	ru := s.languageFor(ctx, i) == "ru"
 	texts := map[string][2]string{
 		kindUnsupported: {
-			"Этот тип сообщения пока не поддерживается. Пожалуйста, отправьте текст.",
-			"This message type is not supported yet. Please send text.",
+			"Пока не умею читать такие сообщения. Пришли текст, пожалуйста.",
+			"I can’t read this message type yet. Please send text.",
 		},
 		"denied": {
-			"Доступ запрещён. Обратитесь к администратору.",
-			"Access denied. Please contact the administrator.",
+			"Сейчас у тебя нет доступа. Обратись к администратору.",
+			"You don’t have access right now. Please contact the administrator.",
 		},
 		stateFailed: {
-			"Не удалось завершить задачу. Действия могли уже выполниться. Проверь их статус перед повтором.",
-			"The task could not be completed. Actions may already have completed. Check their status before retrying.",
+			"Не смогла завершить задачу. Действия могли уже выполниться. Проверь их статус перед повтором.",
+			"I couldn’t finish the task. Actions may already have completed. Check their status before retrying.",
 		},
 		stateCancelled: {
-			"Задача отменена. Уже выполненные действия могут сохраниться.",
-			"Task cancelled. Actions already completed may remain.",
+			"Отменила задачу. Уже выполненные действия могут сохраниться.",
+			"I cancelled the task. Actions already completed may remain.",
 		},
 		"no_active": {"Нет активной задачи.", "There is no active task."},
 		"stale": {
-			"Этот вопрос уже не актуален. Используйте последнее сообщение бота.",
-			"This prompt is no longer current. Use the bot's latest message.",
+			"Этот вопрос уже не актуален. Используй моё последнее сообщение.",
+			"This prompt is no longer current. Use my latest message.",
 		},
 		stateAuthUnknown: {
 			"Результат обновления авторизации неизвестен. Задача приостановлена для проверки администратором.",

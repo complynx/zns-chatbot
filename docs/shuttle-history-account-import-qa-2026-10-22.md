@@ -29,7 +29,8 @@ See [operator contract](shuttle-history-account-import.md).
   mismatch cases on the same disposable PostgreSQL. No broad suite is rerun.
 - A fresh independent unified review found one real omission: the CLI initially
   did not check the pinned issuer. The normal deployment guard was added. A fresh
-  final reviewer reports no actionable findings. The Git index remains untouched.
+  final reviewer reports no actionable findings. Publication and later CI are
+  recorded separately below.
 
 ## Target artifact
 
@@ -67,13 +68,47 @@ implementation changed in this slice.
 
 ## Remaining release gates
 
-Actual Linux account-import runtime, real-IAM combined import and the permitted
-count-only production-copy app-account dry-run remain unverified. The next
-publication CI must run the new tests on the exact reviewed revision. Historical
+The permitted count-only production-copy app-account dry-run remains unverified.
+Historical
 Telegram names are hints, not confirmed app names; legal names remain separate.
 Owner-checked avatar references do not require bulk byte migration. Full model
 onboarding, prepared human Telegram login and production switch retain separate
 approval/acceptance boundaries. Production data and services were untouched.
+
+## Combined real-IAM runtime and published CI
+
+The packaged Linux CLI in image `7fc2a06a` passed a fresh synthetic PostgreSQL/
+IAM4.20 gate: two exact accounts imported, identical replay returned the original
+receipts, and both local revocation and IAM deactivation prevented later replay.
+Exact canonical bindings and fingerprints of all other application tables were
+checked through each phase. No confirmed names, tasks, queue jobs or live business
+records were created.
+
+Real owner JWTs exercised the current application `InternalHandler` over actual
+loopback HTTP in a separately compiled Linux helper. Owner history and exact
+avatar record/archive/image metadata passed; another user's JWT was denied.
+This is packaged-CLI plus current-source HTTP metadata evidence. It does not
+claim that the candidate bot daemon served those HTTP requests or that Telegram
+avatar bytes were fetched.
+
+Two earlier fixture attempts failed before archive storage or account import:
+first missing message dates caused a nil archive dereference; then plain timestamp
+strings failed the legacy Extended JSON date contract. Both failures and all
+existing identities were preserved. The accepted continuation consumed a frozen
+five-record archive that had first passed offline inspection, creation and
+independent validation. It did not recreate the operator or target IAM users.
+
+Fresh independent controller reviews passed. The owned project was archived with
+all-database SQL and an application custom-format dump; the application dump was
+fully decoded before the two containers, project network and volume were removed.
+This is retained populated synthetic evidence, not a production restore rehearsal.
+Private receipts are in `parallel-acceptance-20261022/combined-import/`.
+
+Published source `d659209e` passes all six jobs of
+[CI39844699908](https://github.com/complynx/zns-chatbot/actions/runs/39844699908),
+including909 integration roots across four race-test shards and complete coverage
+verification. CI initially found a missing generated receipt model and an outdated
+knowledge-inspection contract expectation; both were fixed after fresh review.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk

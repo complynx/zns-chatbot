@@ -142,7 +142,7 @@ func (s *Service) registrationRoleMenu(
 	text += structuredText(
 		ru,
 		"\nChoose your role to join the waiting list. This does not assign or pay for a pass.\nChoices expire: ",
-		"\nВыберите роль для заявки в лист ожидания. Это не назначает пасс и не подтверждает оплату.\nВыбор действует до: ",
+		"\nВыбери роль для заявки в лист ожидания. Это не назначает пасс и не подтверждает оплату.\nВыбор действует до: ",
 	) + expiry.In(zone).
 		Format("2006-01-02 15:04") +
 		" (" + event.Timezone + ")"
@@ -174,7 +174,7 @@ func (s *Service) registrationEventsMenu(
 	if err != nil {
 		return s.identityError(ctx, t, c, i, err)
 	}
-	text := structuredText(ru, "Choose an event for registration:", "Выберите эвент для регистрации:")
+	text := structuredText(ru, "Choose an event for registration:", "Выбери мероприятие для регистрации:")
 	keyboard := &telegram.InlineKeyboardMarkup{}
 	for _, event := range page.Events {
 		keyboard.InlineKeyboard = append(
@@ -272,7 +272,7 @@ func (s *Service) registerChoice(
 		text += structuredText(
 			ru,
 			"\nYou are on the waiting list. No pass or payment was created.",
-			"\nВы в листе ожидания. Пасс и платёж не создавались.",
+			"\nТы в листе ожидания. Пасс и платёж не создавались.",
 		)
 	}
 	return s.finishRegistration(ctx, t, c, i, text, nil, ru)
@@ -287,7 +287,7 @@ func (s *Service) registrationRetry(ctx context.Context, t *db.Task, c checkpoin
 		structuredText(
 			ru,
 			"The registration choice could not be verified, changed, or expired. Open /register again; an existing role cannot be changed here.",
-			"Не удалось проверить выбор, он изменился или истёк. Откройте /register заново; изменить существующую роль здесь нельзя.",
+			"Не удалось проверить выбор, он изменился или истёк. Открой /register заново; изменить существующую роль здесь нельзя.",
 		),
 		nil,
 		ru,

@@ -97,8 +97,8 @@ func (s *Service) registrationDetailsEntry(
 	} else if len(fields) > 0 {
 		text += structuredText(
 			ru,
-			"\nThe form is currently unavailable. Try /register later or ask the assistant to help fill in these fields.",
-			"\nФорма сейчас недоступна. Попробуй /register позже или попроси ассистента помочь заполнить данные.",
+			"\nThe form is currently unavailable. Try /register later or ask me to help fill in these fields.",
+			"\nФорма сейчас недоступна. Попробуй /register позже или попроси меня помочь заполнить данные.",
 		)
 	}
 	keyboard.InlineKeyboard = append(

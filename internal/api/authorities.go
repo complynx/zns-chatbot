@@ -311,7 +311,7 @@ func authorityMethods() []map[string]any {
 	)
 	write := map[string]any{
 		"id":                "authority",
-		manifestDescription: botDescription + " Grant or revoke a local event authority only on a global administrator request with exact-parameter approval. Required event_id, local user_id, role (none/ambassador/administrator), expected_version (0 before first assignment). Get current versions from authorities. No global IAM role is granted. Preparation reserves nothing and expires in five minutes. An event ambassador cannot grant roles. Reconcile the same operation after uncertainty; missing status is unknown.",
+		manifestDescription: "Grant or revoke a local event authority only on a global administrator request with exact-parameter approval. Required event_id, local user_id, role (none/ambassador/administrator), expected_version (0 before first assignment). Get current versions from authorities. No global IAM role is granted. Preparation reserves nothing and expires in five minutes. An event ambassador cannot grant roles. Reconcile the same operation after uncertainty; missing status is unknown.",
 		manifestPermissions: []string{},
 		manifestPath:        "/internal/agent/administration/authority",
 		manifestEffect:      effectWrite,

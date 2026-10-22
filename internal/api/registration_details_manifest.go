@@ -31,7 +31,7 @@ func registrationDetailsModule() map[string]any {
 	method := func(id, description string, arguments map[string]any, write bool) map[string]any {
 		item := map[string]any{
 			"id":                 id,
-			manifestDescription:  botDescription + " " + description,
+			manifestDescription:  description,
 			manifestPermissions:  []string{},
 			manifestPath:         registrationDetailsPath + id,
 			manifestEffect:       effectRead,

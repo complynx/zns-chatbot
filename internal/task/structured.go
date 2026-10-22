@@ -150,8 +150,8 @@ func (s *Service) structuredView(
 	case menuCommand, startCommand:
 		return structuredText(
 			ru,
-			"Zinusya\n/profile — My profile\n/registrations — My registrations and passes\n/register — Register for an event\n/orders — Saved order selection\n/massage — Massage bookings\n/avatar — My avatar\n/pairs — Pair invitations\n/payments — Pass payment\n/knowledge — Community and event knowledge",
-			"Зинуся\n/profile — Мой профиль\n/registrations — Мои регистрации и пассы\n/register — Регистрация на эвент\n/orders — Сохранённый выбор для заказа\n/massage — Записи на массаж\n/avatar — Моя аватарка\n/pairs — Приглашения в пару\n/payments — Оплата пасса\n/knowledge — База знаний сообщества и эвентов",
+			"Hi! I’m Zinusya, your assistant for the Zouk Non Stop community and events. I can help with registrations, passes and the services below.\n\n/profile — My profile\n/registrations — My registrations and passes\n/register — Register for an event\n/orders — Saved order selection\n/massage — Massage bookings\n/avatar — My avatar\n/pairs — Pair invitations\n/payments — Pass payment\n/knowledge — Community and event knowledge",
+			"Привет! Я ЗиНуСя, помощница сообщества и мероприятий Zouk Non Stop. Помогу с регистрациями, пассами и сервисами ниже.\n\n/profile — Мой профиль\n/registrations — Мои регистрации и пассы\n/register — Регистрация на эвент\n/orders — Сохранённый выбор для заказа\n/massage — Записи на массаж\n/avatar — Моя аватарка\n/pairs — Приглашения в пару\n/payments — Оплата пасса\n/knowledge — База знаний сообщества и эвентов",
 		), nil, nil
 	case paymentsCommand:
 		return s.structuredPaymentsView(ru), nil, nil
@@ -207,7 +207,7 @@ func (s *Service) structuredView(
 	}
 	after, valid := registrationCursor(command)
 	if !valid {
-		return structuredText(ru, "Open /registrations again.", "Откройте /registrations заново."), nil, nil
+		return structuredText(ru, "Open /registrations again.", "Открой /registrations заново."), nil, nil
 	}
 	page, err := s.store.OwnAccountEvents(ctx, scope, after, 0)
 	if err != nil {

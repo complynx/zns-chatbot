@@ -230,7 +230,7 @@ func profileModule() map[string]any {
 			schemaProperties: fields, schemaRequired: required}
 	}
 	method := func(id, description string, args map[string]any, write bool) map[string]any {
-		m := map[string]any{"id": id, manifestDescription: botDescription + " " + description,
+		m := map[string]any{"id": id, manifestDescription: description,
 			manifestPermissions: []string{}, manifestPath: profilePath + id, manifestEffect: effectRead,
 			manifestTimeout: toolTimeoutMillis, manifestMaxResult: toolResultLimit,
 			manifestInputSchema: args, manifestOutputSchema: profileSchema(), manifestIdempotency: write,
