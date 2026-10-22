@@ -91,7 +91,11 @@ func (s *Service) pendingApprovalMessages(
 // Order approval uses the immutable preparation receipt, not the mutable draft
 // or Loom's bounded description. The normal outbox splits all lines before consent.
 func (s *Service) orderApprovalText(ctx context.Context, t db.Task, i intent, a loom.Approval) (string, string, error) {
-	operation, err := uuid.Parse(a.OperationID)
+	operationID := a.BackendOperationID
+	if operationID == "" {
+		operationID = a.OperationID
+	}
+	operation, err := uuid.Parse(operationID)
 	if err != nil || operation == uuid.Nil {
 		return "", "", errors.New("invalid order approval operation")
 	}

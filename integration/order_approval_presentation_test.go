@@ -347,16 +347,18 @@ func TestOrderApprovalOffersOriginalNativeOperationWithoutConsumingConsent(t *te
 			require.NoError(t, err)
 			raw, err := json.Marshal(args)
 			require.NoError(t, err)
+			loomOperation := uuid.NewString()
 			p.mu.Lock()
 			p.approval = &loom.Approval{
-				ID:           op.String(),
-				OperationID:  op.String(),
-				Method:       "zinusya_orders.submit",
-				ReplyMode:    mode,
-				Text:         "Review original order",
-				Arguments:    raw,
-				ArgumentHash: "exact-hash",
-				ExpiresAt:    prepared.ExpiresAt,
+				ID:                 loomOperation,
+				OperationID:        loomOperation,
+				BackendOperationID: op.String(),
+				Method:             "zinusya_orders.submit",
+				ReplyMode:          mode,
+				Text:               "Review original order",
+				Arguments:          raw,
+				ArgumentHash:       "exact-hash",
+				ExpiresAt:          prepared.ExpiresAt,
 			}
 			p.mu.Unlock()
 			id := acceptOrderApprovalMessage(t, f)

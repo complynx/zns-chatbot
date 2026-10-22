@@ -71,18 +71,19 @@ type Question struct {
 	ExpiresAt time.Time     `json:"expires_at"`
 }
 type Approval struct {
-	ReplyMode        string          `json:"reply_mode"`
-	ConfirmationText string          `json:"confirmation_text,omitempty"`
-	Decision         string          `json:"decision,omitempty"`
-	ID               string          `json:"approval_id"`
-	Text             string          `json:"text"`
-	OperationID      string          `json:"operation_id"`
-	Method           string          `json:"method"`
-	Arguments        json.RawMessage `json:"arguments"`
-	ArgumentHash     string          `json:"argument_hash"`
-	ConfirmationID   string          `json:"confirmation_id,omitempty"`
-	Precondition     string          `json:"precondition,omitempty"`
-	ExpiresAt        time.Time       `json:"expires_at"`
+	BackendOperationID string          `json:"backend_operation_id,omitempty"`
+	ReplyMode          string          `json:"reply_mode"`
+	ConfirmationText   string          `json:"confirmation_text,omitempty"`
+	Decision           string          `json:"decision,omitempty"`
+	ID                 string          `json:"approval_id"`
+	Text               string          `json:"text"`
+	OperationID        string          `json:"operation_id"`
+	Method             string          `json:"method"`
+	Arguments          json.RawMessage `json:"arguments"`
+	ArgumentHash       string          `json:"argument_hash"`
+	ConfirmationID     string          `json:"confirmation_id,omitempty"`
+	Precondition       string          `json:"precondition,omitempty"`
+	ExpiresAt          time.Time       `json:"expires_at"`
 }
 type Run struct {
 	Interaction          Interaction `json:"interaction"`

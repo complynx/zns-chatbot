@@ -111,3 +111,30 @@ The preceding backend commit `6441a2e3` passed
 integration roots across four isolated race-enabled workers, checks and final
 coverage verification all succeeded in 11 minutes 45 seconds. This run predates
 the native import and button changes described in this section.
+
+## Distinct Loom and backend operation IDs
+
+Source inspection before the runtime gate found a consumer bug in the preceding
+candidate. Loom retains its own `operation_id` and separately sends the original
+bot `backend_operation_id` when adopting a native operation. Zinusya's approval
+DTO omitted the latter field and the complete-order prompt looked up the Loom ID
+as though it were the bot receipt ID. The initial fixture covered fresh approvals
+where those IDs were equal, so it missed this path.
+
+The fixture now uses distinct IDs and reproduces the missing approval in both
+agent and protocol reply modes. The correction retains both fields and selects
+the nonempty backend ID only for receipt lookup/native continuation. When the
+field is absent, the previous operation-ID path remains valid. Loom's operation
+and approval IDs are unchanged for dialogue resolution. The initial failed test
+is retained. This is a Zinusya consumer correction, not a Loom defect.
+
+The bafe7833 image was built but never installed or used for live runtime QA.
+The runtime gate must use a newly built image containing this correction.
+
+The corrected source passes the focused broader gate: 60 PostgreSQL integration
+roots, two task-unit roots and one Loom transport root, with no failures or skips. Scoped lint reports
+zero issues and independent textual review found no actionable findings. The
+initial expanded run failed after its own PostgreSQL fixture exceeded 192 MiB and
+entered recovery; it was retained, archived and removed. A fresh 512 MiB fixture
+with 32 MiB shared buffers passed the same selection. That infrastructure failure
+is not counted as a successful run. Real IAM/Loom/browser acceptance remains open.
