@@ -77,8 +77,13 @@ and unlisted container settings were not compared.
 The first final observer failed because of a Python module/helper name collision;
 a separate reviewed read-only observer passed without replaying migration or
 replacement. Both receipts are retained. Telegram ingress and the counted model
-provider remain stopped. Next: prepare bounded real-model onboarding acceptance
-and resume ingress through a reviewed continuation. Real Telegram authorization
+provider remain stopped. A separate same-image mock Telegram stand passed one
+actual `gpt-5.4-mini`/`low` decision: the model selected `request_name`, real Loom
+executed it, and a durable expectation was created without saving Telegram hints.
+The next model step remains unanswered. All eight requests in the bounded first
+series are accounted for; complete dialogue acceptance requires another bounded
+series. Next: complete that acceptance and resume ingress through a reviewed
+continuation. Real Telegram authorization
 remains deferred until the user is available. See the
 [name synchronization report](shuttle-profile-name-sync-qa-2026-10-22.md).
 

@@ -37,6 +37,40 @@ without a filled local profile and new `/name` messages use the agent dialogue; 
 
 ## Verification performed
 
+### Actual first model decision on the installed candidate images
+
+A separate `name-onboarding-v1` stand used the same bot/Loom images with real
+PostgreSQL, Zitadel and Loom, a mock Telegram server and the synthetic counted
+provider transport. Only invented users were used; no production documents,
+real Telegram calls or changes to the primary stand were involved.
+
+A fresh `/start` input reached Loom with the real onboarding instructions and
+Telegram name hints. One actual `gpt-5.4-mini` generation with reasoning `low`
+selected `module_call` → `zinusya_profile.request_name`, expected version 0.
+Real Loom executed the tool: the profile advanced to version 1 with a durable
+name expectation, while first/last names remained empty. No Telegram hint was
+silently saved. Actual API usage was 30,520 input and 125 output tokens.
+
+The next model step remained pending. No scripted response was substituted and
+no user-facing question, suggested keyboard, confirmation, correction or complete
+onboarding dialogue is accepted by this gate. The fixture transport still uses
+synthetic token counts and omits encrypted reasoning state from following turns;
+this is not native-provider context-limit or billing integration acceptance.
+
+The first synthetic case exceeded the mailbox wait while the controller was
+being reviewed. Loom eventually paused that run after unavailable responses.
+Two pre-dispatch admission checks rejected stale/absent pending steps before
+any paid request or budget reservation. These failures remain retained. A new
+synthetic user then captured and dispatched consecutively. The eighth and final
+request in this bounded test series was reserved in the shared ledger before
+network dispatch; the original seven-call ledger was copied unchanged first.
+There was no automatic paid retry. All nine fixture containers stopped with exit
+0 and OOM false. Full logs and inspect records were exported before the stopped
+containers were removed; four owned volumes and bind-mounted state remain for
+continuation. The primary and separate base IAM containers were not removed.
+The complete dialogue
+requires a further bounded model test series and remains open.
+
 ### Owned primary upgrade with ingress fenced
 
 The primary stand now uses bot image `0d4457b6` from source `74604b7e`, schema 72,
@@ -254,9 +288,10 @@ failure; it is not a passed graceful PostgreSQL test or an application restart
 claim. It contained synthetic QA data only and was retired after the tests.
 The main application's graceful-restart contract was not broadened by this QA.
 
-No production data, real Telegram authorization or paid model calls were used.
-The primary application installation and base IAM service configuration were
-not changed. The real-IAM probe created and updated a synthetic user and its
+The earlier source/browser and isolated IAM gates used no production data,
+real Telegram authorization or paid model calls. Those gates did not change the
+primary application installation or base IAM service configuration. The later
+primary installation and one-generation model gate are reported separately above. The real-IAM probe created and updated a synthetic user and its
 provider link within the owned mock organization; these fixture records remain
 for diagnosis.
 
