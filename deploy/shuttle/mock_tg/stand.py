@@ -3,6 +3,7 @@ import argparse
 import base64
 import importlib.util
 import json
+import os
 import re
 import secrets
 import socket
@@ -34,7 +35,9 @@ def state_path(name):
 
 
 def run(args, state):
-    result = subprocess.run(args, capture_output=True, text=True)
+    env = dict(os.environ)
+    env.pop('QA_ZITADEL_IMAGE', None)  # Only the stand's saved env/default may choose its IAM image.
+    result = subprocess.run(args, capture_output=True, text=True, env=env)
     if result.returncode:
         private(state / 'last-error.private.log', result.stdout + result.stderr)
         raise RuntimeError('Command failed; inspect ignored last-error.private.log; do not blindly replay an uncertain operation')
@@ -80,7 +83,10 @@ def create(args):
     assert args.loom_template.is_file()
     # Pin actual local immutable image IDs; do not build or pull another checkout.
     images = {}
-    for key, image in (('bot', args.bot_image), ('loom', args.loom_image), ('file_worker', args.file_worker_image)):
+    candidates = [('bot', args.bot_image), ('loom', args.loom_image), ('file_worker', args.file_worker_image)]
+    if zitadel_image := getattr(args, 'zitadel_image', None):
+        candidates.append(('zitadel', zitadel_image))
+    for key, image in candidates:
         value = json.loads(subprocess.check_output(['docker', 'image', 'inspect', image], text=True))[0]
         images[key] = value['Id']
     ports = dict(zip(('bot', 'internal', 'mock', 'iam', 'loom', 'app'), range(args.base_port, args.base_port + 6)))
@@ -112,6 +118,8 @@ def create(args):
     env = {'QA_OWNER': owner, 'QA_NAME': args.name, 'QA_STATE': state.as_posix(), 'QA_SOURCE': REPO.as_posix(),
            'QA_DB_PASSWORD': credentials['db_password'], 'QA_MASTERKEY': credentials['masterkey'], 'QA_HUMAN_PASSWORD': credentials['human_password'],
            'QA_BOT_IMAGE': images['bot'], 'QA_LOOM_IMAGE': images['loom'], 'QA_FILE_WORKER_IMAGE': images['file_worker'], 'QA_PROVIDER_KEY': credentials['provider_key']}
+    if 'zitadel' in images:
+        env['QA_ZITADEL_IMAGE'] = images['zitadel']
     env.update({'QA_' + k.upper() + '_PORT': str(v) for k, v in ports.items()})
     private(state / 'compose.env', '\n'.join(k + '=' + v for k, v in env.items()) + '\n')
     private(state / 'telegram/mock.json', json.dumps(dict(token=credentials['bot_token'], qa_token=credentials['qa_token'],
@@ -325,6 +333,7 @@ def main():
     new.add_argument('--bot-image', required=True)
     new.add_argument('--loom-image', required=True)
     new.add_argument('--file-worker-image', required=True)
+    new.add_argument('--zitadel-image', help='Optional local IAM image; omitted keeps the pinned Compose default')
     new.add_argument('--loom-template', type=Path, required=True)
     for action in ('start', 'status', 'stop', 'destroy'):
         sub.add_parser(action).add_argument('--name', required=True)

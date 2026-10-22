@@ -95,9 +95,13 @@ the published binaries were not race-instrumented. The harness executed the
 published provider binary, real Zitadel/PostgreSQL and
 synthetic Telegram proofs. Temporary resources were removed after retaining the
 original fixture/controller failures and logs. The previous primary/base IAM
-installations remain unchanged on 4.16.3. This is upstream Login V1 compatibility,
-not yet Zinusya prelink, token-refresh/profile-sync or existing-database upgrade
-acceptance; see the [report](shuttle-iam420-compat-qa-2026-10-22.md).
+installations remain unchanged on 4.16.3. A separate fresh 4.20 fixture also passed
+Zinusya Mini App bootstrap, user-token profile reads, durable name synchronization,
+receipt replay and session persistence across graceful restart. That fixture
+required a documented repair of a missed app projection; all original events
+were preserved. Prelink, token expiry/refresh, existing-database upgrade and real
+Telegram consent remain separate gates; see the
+[report](shuttle-iam420-compat-qa-2026-10-22.md).
 
 ## Previous accepted installation checkpoint
 

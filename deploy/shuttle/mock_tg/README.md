@@ -28,6 +28,13 @@ python deploy/shuttle/mock_tg/stand.py start --name qa-a
 python deploy/shuttle/mock_tg/stand.py start --name qa-b
 ```
 
+For IAM compatibility acceptance, `create` also accepts `--zitadel-image` with
+an already available local image. Creation resolves it to an immutable local ID,
+records it in the manifest and sets `QA_ZITADEL_IMAGE` only for that stand.
+Omitting the flag preserves the pinned Compose default (currently Zitadel 4.16.3),
+including existing stand manifests and environment files. This fixture option
+adds no production configuration field and does not upgrade existing IAM data.
+
 Choose a new name for each independent QA owner. Names are lowercase letters,
 digits and hyphens, start with a letter and have at most 24 characters. Base ports
 are multiples of 10 in 20000..60000. Six loopback ports are reserved: bot HTTP,

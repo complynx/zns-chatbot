@@ -78,5 +78,63 @@ The primary and separate base IAM still use the previously tested 4.16.3 image;
 the base provider still uses its previous test image. Qualify the Zinusya-specific
 paths in a separate owned fixture before replacing those installations.
 
+## Zinusya-specific follow-up
+
+The separate `iam420-zinusya-v1` mock-Telegram fixture subsequently passed
+Mini App bootstrap and profile acceptance with the same pinned Zitadel 4.20.0
+image. It used the current bot image built from `74604b7e`, schema 72 and
+manifest `mvp-92`. The mock stand factory accepts an optional, locally resolved
+`--zitadel-image`; omitted selection preserves its previous pinned default.
+Saved stand configuration wins over an ambient `QA_ZITADEL_IMAGE` value. Actual
+Compose resolution checked both the old default and the new pinned selection
+under a deliberately conflicting ambient value. Factory tests passed: 29 tests,
+including two skips.
+
+The first bootstrap failed with HTTP 401. The fixture's exchange client had
+creation events but was absent from the `apps7` projection; its management read
+returned 404 and token acquisition reported an invalid client. Recorded event
+positions and creation timestamps moved backwards by about 50 ms between
+sequential application-creation requests. This is evidence of an ordering
+problem in this fixture, not proof that every 4.20 installation is affected or
+of the clock change's cause.
+
+Only this synthetic fixture was repaired. With IAM stopped, a full custom-format
+database backup was saved and decoded, and the four derived `apps7` tables and
+their projection cursor were reset in one transaction. The original exchange
+application and client IDs then became readable and active. The repair controller
+failed its final whole-eventstore hash assertion after restarting IAM. A separate
+read-only comparison against the backup confirmed all 1,022 original event rows
+were byte-for-byte preserved; the 14 added rows were startup migration events
+(`system.migration.started` and `system.migration.repeatable.done`). The original
+failure receipts remain intact. This reset is a recorded fixture recovery, not
+an automatic application recovery mechanism or an upgrade procedure.
+
+A separately reviewed continuation reused the original synthetic Telegram user
+and original OIDC client. It verified:
+
+- Signed Mini App bootstrap and profile reads through the bot's real
+  user-token acquisition and verification path.
+- Two compound-name edits, each acknowledged by the durable worker and read
+  back from the real IAM profile; unrelated IAM profile fields stayed unchanged.
+- Replay of the first operation returned its historical receipt without
+  replacing the second name.
+- Repeated bootstrap reused the same local identity; the second session and
+  profile survived a graceful bot restart. Bot stop took 0.547 seconds.
+- No Loom runs or bot tasks were created. No real Telegram authorization or
+  paid-model dispatch was performed by the controller.
+
+The follow-up passed and all nine fixture containers stopped with exit 0 and
+without OOM. Evidence remains under
+`.cache/shuttle-work/iam420-zinusya-20261022-v1/`, including the failed
+`profile.json` and `projection-repair.json`, the event comparison
+`projection-repair-observation.json`, and successful
+`profile-continuation.json`. The continuation received an independent review
+with no actionable findings before execution.
+
+This adds bot-specific Mini App, token acquisition and profile-sync evidence on
+a fresh, repaired 4.20 fixture. It does not cover an existing IAM database
+upgrade, token expiry/refresh, the Zinusya prelink callback, or real Telegram
+consent. The primary and separate base IAM installations remain unchanged.
+
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
