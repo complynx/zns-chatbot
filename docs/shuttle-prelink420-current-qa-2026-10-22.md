@@ -84,9 +84,12 @@ Ignored evidence is under
 Never replay these one-shot setup or login controllers to inspect state.
 
 The published unpatched provider still rejects prelink configuration. This gate
-qualifies our patched candidate only. Primary/base installation, token
-expiry/refresh, user-assisted real Telegram login and production readiness remain
-separate gates. No additional human Telegram authorization was requested.
+qualifies our patched candidate only. The subsequent
+[current identity-client gate](shuttle-iam420-credential-expiry-qa-2026-10-22.md)
+passes natural expiry and issuance recovery on the same IAM 4.20 clone.
+Primary/base installation, current bot-task/Loom session renewal, user-assisted
+real Telegram login and production readiness remain separate gates. No additional
+human Telegram authorization was requested.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk

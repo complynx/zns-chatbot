@@ -102,8 +102,11 @@ required a documented repair of a missed app projection; all original events
 were preserved. An [existing-database copy rehearsal](shuttle-iam-existing-upgrade-qa-2026-10-22.md)
 subsequently passed 4.16.3 to 4.20 migration, original-event and user/grant
 preservation, old/fresh token checks, restart and backup-restore authentication
-on 4.16.3. The primary/base installations remain unchanged. Token expiry/refresh
-and real Telegram consent remain separate gates; see the
+on 4.16.3. The primary/base installations remain unchanged. The
+[current identity-client expiry gate](shuttle-iam420-credential-expiry-qa-2026-10-22.md)
+also passes natural credential/JWT expiry, warm/cold outage behavior and issuance
+after the same IAM 4.20 restarts. Current bot-task/Loom session renewal and real
+Telegram consent remain separate gates; see the
 [compatibility report](shuttle-iam420-compat-qa-2026-10-22.md).
 
 The published provider rejects the optional prelink configuration; the existing
