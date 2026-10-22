@@ -1,0 +1,79 @@
+# Account migration slice QA, 2026-10-22
+
+The missing application-account import is implemented as an explicit operator
+command. Historical18517-record and IAM906-user dry-runs remain separate evidence;
+they have not been replayed or relabelled as complete application migration.
+See [operator contract](shuttle-history-account-import.md).
+
+## Changes and focused verification
+
+- Schema73 adds immutable per-source account import receipts. The bounded batch
+  revalidates applied users records against the exact archive and derives numeric
+  Telegram owners. It creates/reuses canonical application accounts with exact
+  reconciled IAM bindings, without changing existing profiles, preferences or
+  Telegram metadata. It creates no tasks, jobs or live business state.
+- The operator CLI verifies current application-admin authority and every exact
+  active IAM target, then rechecks operator authority before commit. IAM names
+  are read only for identity verification and discarded. The database deployment
+  guard pins bot, organization and issuer. The existing image now packages the CLI.
+- Four focused real-PostgreSQL test roots pass after the final store changes:
+  creation/reuse; immutable replay and store reopen; current owner-history/avatar
+  access; stranger/revoked denial; existing profile/language preservation; conflict
+  and final-authorization rollback; non-user source rejection; no new live work.
+  PostgreSQL runs in a fresh Docker container; the Go test process runs on Windows.
+- CLI tests pass. They cover exact verified targets, initial/final current admin
+  authority, foreign authority rejection, strict plan parsing and private argument
+  handling. `go vet ./cmd/shuttle-import` passes. Final strict lint on
+  `./cmd/shuttle-import ./internal/db ./integration` reports zero issues.
+- The existing deployment-guard test passes its bot, organization and issuer
+  mismatch cases on the same disposable PostgreSQL. No broad suite is rerun.
+- A fresh independent unified review found one real omission: the CLI initially
+  did not check the pinned issuer. The normal deployment guard was added. A fresh
+  final reviewer reports no actionable findings. The Git index remains untouched.
+
+## Target artifact
+
+The ordinary Linux/amd64 release Dockerfile builds all three executables. Local
+candidate image is
+`sha256:7fc2a06aceb576f5d075fde6feeda7cbc47c886fdb06a2b13c708904c7f6a7ff`.
+Its source-input manifest pins1083 files, including the new uncommitted files,
+with manifest SHA256
+`4b9fb54d2aafb7b1f925564a6d0ebe56bd4ff32c9bfc236956d474be67d83164`.
+The image carries that manifest label; it is not falsely labelled as a committed
+release SHA. The Dockerfile-specific whitelist excludes private caches/configs.
+The packaged CLI runs as10001:10001 and returns its expected usage/exit2 in a
+read-only, networkless, resource-limited container. This proves Linux packaging
+and executable startup, not Linux database import or deployment acceptance.
+
+The first build with networking disabled failed because the builder lacked its
+module cache. Its original log remains. The ordinary build then downloaded and
+verified the existing locked module dependencies and succeeded; go.mod/go.sum
+were not changed. No image was pushed or installed.
+
+## Preserved failures and cleanup
+
+Initial worker compile/lint failures and the root formatting failures are retained
+alongside accepted reruns; no original receipt is rewritten. The disposable PG
+was owner/ID-checked, dumped and fully decode-checked, then removed with its own
+anonymous volume. The decode helper was also removed. The final809-byte dump
+contains the harness-cleaned database: individual test schemas were removed by
+the harness, so it is not a populated restore or behavioral backup claim.
+
+Private evidence: `.cache/shuttle-work/parallel-acceptance-20261022/migration/`
+(test/lint logs, review and cleanup receipts), `review-input-r2.json`,
+`root-lint-final.log`, and `candidate-build/acceptance.json`. The independent
+business gate in `business/` remains scoped to its previous exact image; no order
+implementation changed in this slice.
+
+## Remaining release gates
+
+Actual Linux account-import runtime, real-IAM combined import and the permitted
+count-only production-copy app-account dry-run remain unverified. The next
+publication CI must run the new tests on the exact reviewed revision. Historical
+Telegram names are hints, not confirmed app names; legal names remain separate.
+Owner-checked avatar references do not require bulk byte migration. Full model
+onboarding, prepared human Telegram login and production switch retain separate
+approval/acceptance boundaries. Production data and services were untouched.
+
+Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
+on behalf of Daniel Drizhuk

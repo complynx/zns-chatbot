@@ -1,4 +1,4 @@
-// shuttle-import inspects local legacy snapshots without applying them.
+// shuttle-import validates snapshots and provides explicit operator import commands.
 package main
 
 import (
@@ -22,6 +22,9 @@ const (
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
 
 func run(args []string, output, diagnostics io.Writer) int {
+	if len(args) > 0 && args[0] == "apply-accounts" {
+		return runAccounts(args[1:], output, diagnostics)
+	}
 	flags := flag.NewFlagSet("shuttle-import", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	manifest := flags.String("manifest", "", "Local snapshot manifest path")

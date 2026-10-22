@@ -1,5 +1,37 @@
 # Current roadmap checkpoint, 2026-10-22
 
+## Resumed acceptance and IAM upgrade scope
+
+Daniel resumed work in the new chat and authorized parallel acceptance. For IAM
+4.20, qualify critical changed integration paths and reuse accepted evidence;
+do not repeat the entire suite. The [upstream delta review and focused runtime
+checks](shuttle-iam420-delta-qa-2026-10-22.md) cover the new administrator
+impersonation and inactive-organization boundaries. Current-client expiry,
+existing-database upgrade and full prelink/OIDC evidence remain reusable.
+Running-task renewal is not an additional IAM-upgrade gate solely because the
+version changed. Independent unmet product requirements retain their own scope.
+
+Parallel lanes cover one bounded business contention/access gate, the missing
+application-account migration slice, and release-source/CI evidence. The new
+[operator account import](shuttle-history-account-import.md) and additive schema73
+now pass focused PostgreSQL tests, CLI tests, strict lint and independent review;
+the Linux candidate is built and packaged. See the
+[exact verification boundaries](shuttle-history-account-import-qa-2026-10-22.md).
+Historical archive and IAM-only migration passes do not establish the remaining
+combined real-IAM/application or production-copy account dry-run.
+Avatar migration retains owner-checked Telegram references downloaded on demand;
+bulk byte copying is not required by the existing contract.
+
+Current production IAM and Loom already match the qualified 4.20/b2b8d429
+versions. Daniel subsequently updated ZitadelTG: production digest `8864dd80`
+contains prelink support; upstream [PR11](https://github.com/complynx/zitadeltg/pull/11)
+is merged. Protocol review found no critical consumer mismatch with the accepted
+patched-provider flow; the upstream14-scenario acceptance covers its tighter
+lifetime/profile/cancellation checks. Hook activation and real Telegram remain
+separate; an automatic provider reinstall or full compatibility rerun is not a
+remaining gate. Exact image-to-source provenance is not asserted for the new
+provider because its image lacks revision metadata.
+
 ## Added acceptance requirements: identity onboarding
 
 The [isolated synthetic-Telegram/real-IAM fixture](shuttle-prelink-real-iam-qa-2026-10-22.md)
