@@ -13,15 +13,19 @@ import (
 )
 
 const (
-	profilePath          = "/internal/agent/profile/"
-	schemaFullName       = "full_name"
-	schemaBotLanguage    = "bot_language"
-	profileNameMaxLength = 256
+	profilePath              = "/internal/agent/profile/"
+	schemaFullName           = "full_name"
+	schemaFirstName          = "first_name"
+	schemaLastName           = "last_name"
+	schemaBotLanguage        = "bot_language"
+	profileNameMaxLength     = 256
+	profileNamePartMaxLength = 200
 )
 
 type profileNameArguments struct {
 	ExpectedVersion int64  `json:"expected_version" minimum:"0"`
-	FullName        string `json:"full_name"                    minLength:"1" maxLength:"256"`
+	FirstName       string `json:"first_name"                   minLength:"1" maxLength:"200"`
+	LastName        string `json:"last_name"                    minLength:"1" maxLength:"200"`
 }
 
 type profileLanguageArguments struct {
@@ -36,7 +40,8 @@ type profileRequestNameArguments struct {
 type profileCompleteNameArguments struct {
 	ExpectedVersion int64     `json:"expected_version" minimum:"0"`
 	ExpectationID   uuid.UUID `json:"expectation_id"`
-	FullName        string    `json:"full_name"                    minLength:"1" maxLength:"256"`
+	FirstName       string    `json:"first_name"                   minLength:"1" maxLength:"200"`
+	LastName        string    `json:"last_name"                    minLength:"1" maxLength:"200"`
 }
 
 type profileCancelNameArguments struct {
@@ -87,7 +92,7 @@ func (s *Server) registerProfile(api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "agent-profile-operation", Method: http.MethodPost,
 		Path: profilePath + "operation", MaxBodyBytes: internalBodyLimit}, s.agentProfileOperation)
 	registerProfileMutation(s, api, "set_name", func(a profileNameArguments) db.ProfileMutation {
-		return db.ProfileMutation{ExpectedVersion: a.ExpectedVersion, FullName: a.FullName}
+		return db.ProfileMutation{ExpectedVersion: a.ExpectedVersion, FirstName: a.FirstName, LastName: a.LastName}
 	})
 	registerProfileMutation(s, api, "set_language", func(a profileLanguageArguments) db.ProfileMutation {
 		return db.ProfileMutation{ExpectedVersion: a.ExpectedVersion, BotLanguage: a.BotLanguage}
@@ -99,7 +104,8 @@ func (s *Server) registerProfile(api huma.API) {
 		return db.ProfileMutation{
 			ExpectedVersion: a.ExpectedVersion,
 			ExpectationID:   a.ExpectationID,
-			FullName:        a.FullName,
+			FirstName:       a.FirstName,
+			LastName:        a.LastName,
 		}
 	})
 	registerProfileMutation(s, api, "cancel_name", func(a profileCancelNameArguments) db.ProfileMutation {
@@ -214,7 +220,7 @@ func profileError(err error) error {
 func profileModule() map[string]any {
 	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	version := map[string]any{manifestType: schemaInteger, schemaMinimum: 0}
-	name := map[string]any{manifestType: schemaString, schemaMinLength: 1, schemaMaxLength: profileNameMaxLength}
+	name := map[string]any{manifestType: schemaString, schemaMinLength: 1, schemaMaxLength: profileNamePartMaxLength}
 	language := map[string]any{manifestType: schemaString, schemaEnum: []string{"auto", "en", "ru"}}
 	input := func(fields map[string]any, required ...string) map[string]any {
 		if required == nil {
@@ -243,11 +249,12 @@ func profileModule() map[string]any {
 	)
 	setName := method(
 		"set_name",
-		"Save the full name explicitly provided by the user and finish any pending name request. Read get first and send expected_version; never copy a Telegram display name without user intent.",
+		"Save the user's explicitly supplied or confirmed real first_name and last_name separately; components may contain spaces. Do not guess a split by word position: ask when ambiguous. Read get first and send expected_version. This finishes any pending name request and schedules name-only IAM synchronization; it does not prove IAM has updated or change legal registration details. Never copy Telegram hints without the user's confirmation.",
 		input(
-			map[string]any{schemaExpectedVersion: version, schemaFullName: name},
+			map[string]any{schemaExpectedVersion: version, schemaFirstName: name, schemaLastName: name},
 			schemaExpectedVersion,
-			schemaFullName,
+			schemaFirstName,
+			schemaLastName,
 		),
 		true,
 	)
@@ -269,12 +276,18 @@ func profileModule() map[string]any {
 	)
 	complete := method(
 		"complete_name",
-		"After deciding the user supplied their name for this request, atomically save it and finish the matching unexpired expectation. Requires get's version and expectation ID. Stale or expired requests conflict; reread and follow current user intent.",
+		"After explicit user input or confirmation, save separate real first_name and last_name and finish the matching unexpired name request. Components may contain spaces; clarify an ambiguous split. Requires get's version and expectation ID. Schedules name-only IAM synchronization, not legal registration details. A local receipt does not prove remote IAM completion. Stale or expired requests conflict; reread and follow current user intent.",
 		input(
-			map[string]any{schemaExpectedVersion: version, "expectation_id": uuidField, schemaFullName: name},
+			map[string]any{
+				schemaExpectedVersion: version,
+				"expectation_id":      uuidField,
+				schemaFirstName:       name,
+				schemaLastName:        name,
+			},
 			schemaExpectedVersion,
 			"expectation_id",
-			schemaFullName,
+			schemaFirstName,
+			schemaLastName,
 		),
 		true,
 	)
@@ -312,6 +325,9 @@ func profileSchema() map[string]any {
 			schemaUserID:      uuidField,
 			schemaVersion:     map[string]any{manifestType: schemaInteger, schemaMinimum: 0},
 			schemaFullName:    map[string]any{manifestType: schemaString, schemaMaxLength: profileNameMaxLength},
+			"first_name":      map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength},
+			"last_name":       map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength},
+			"name_source":     map[string]any{manifestType: schemaString, schemaEnum: []string{"user", "iam"}},
 			schemaBotLanguage: map[string]any{manifestType: schemaString, schemaEnum: []string{"auto", "en", "ru"}},
 			schemaObservedAt:  instant,
 			"name_expectation": map[string]any{manifestType: schemaObject, schemaAdditionalProperties: false,

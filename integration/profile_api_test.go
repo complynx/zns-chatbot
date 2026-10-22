@@ -109,12 +109,18 @@ func TestProfileAgentToolsExposeValidOwnerResultsAndReconcileAfterRestart(t *tes
 	require.Equal(t, expectation, profile.NameExpectation)
 	operation := uuid.New()
 	complete := map[string]any{
-		"expected_version": profile.Version, "expectation_id": expectation.ID, "full_name": "Мария Петрова",
+		"expected_version": profile.Version,
+		"expectation_id":   expectation.ID,
+		"first_name":       "Мария",
+		"last_name":        "Петрова",
 	}
 	code, raw = profileRequest(t, h, token, "complete_name", operation, complete)
 	require.Equal(t, http.StatusOK, code, string(raw))
 	completed := validProfileReceipt(t, raw, schemas["complete_name"])
 	require.Equal(t, "Мария Петрова", completed.FullName)
+	require.Equal(t, "Мария", completed.FirstName)
+	require.Equal(t, "Петрова", completed.LastName)
+	require.Equal(t, "user", completed.NameSource)
 	require.Nil(t, completed.NameExpectation)
 	h.stop(t)
 	h.start(t)
@@ -144,7 +150,7 @@ func TestProfileAgentToolsExposeValidOwnerResultsAndReconcileAfterRestart(t *tes
 	require.Equal(t, completed.FullName, profile.FullName)
 	require.Nil(t, profile.NameExpectation)
 	code, raw = profileRequest(t, h, token, "set_name", uuid.New(), map[string]any{
-		"expected_version": profile.Version, "full_name": "New Explicit Name",
+		"expected_version": profile.Version, "first_name": "New Explicit", "last_name": "Name",
 	})
 	require.Equal(t, http.StatusOK, code, string(raw))
 	profile = validProfileReceipt(t, raw, schemas["set_name"])
@@ -159,6 +165,25 @@ func TestProfileAgentToolsExposeValidOwnerResultsAndReconcileAfterRestart(t *tes
 	)
 }
 
+func TestProfileAgentRequiresSeparateNameComponents(t *testing.T) {
+	t.Parallel()
+	h := setup(t, newPeers(t))
+	userID, token := registrationUser(t, h, 18204, false)
+	for _, args := range []map[string]any{
+		{"expected_version": 0, "full_name": "Anna Name"},
+		{"expected_version": 0, "first_name": "Anna"},
+		{"expected_version": 0, "first_name": "Anna", "last_name": ""},
+		{"expected_version": 0, "first_name": "Anna", "last_name": "Name", "full_name": "Anna Name"},
+	} {
+		code, raw := profileRequest(t, h, token, "set_name", uuid.New(), args)
+		require.Equal(t, http.StatusUnprocessableEntity, code, string(raw))
+	}
+	p, err := h.store.GetProfile(t.Context(), ownerProfileScope(t, h, userID))
+	require.NoError(t, err)
+	require.Zero(t, p.Version)
+	require.Empty(t, p.FullName)
+}
+
 func TestProfileAgentRejectsStaleWritesAndKeepsReceiptsPrivateEvenFromAdministrators(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -166,7 +191,7 @@ func TestProfileAgentRejectsStaleWritesAndKeepsReceiptsPrivateEvenFromAdministra
 	ownerID, owner := registrationUser(t, h, 18202, false)
 	_, otherAdmin := registrationUser(t, h, 18203, true)
 	operation := uuid.New()
-	args := map[string]any{"expected_version": 0, "full_name": "Private Owner Name"}
+	args := map[string]any{"expected_version": 0, "first_name": "Private Owner", "last_name": "Name"}
 	code, raw := profileRequest(t, h, owner, "set_name", operation, args)
 	require.Equal(t, http.StatusOK, code, string(raw))
 	require.Contains(t, string(raw), "succeeded")
@@ -175,11 +200,11 @@ func TestProfileAgentRejectsStaleWritesAndKeepsReceiptsPrivateEvenFromAdministra
 	require.Contains(t, string(raw), "not_found")
 	require.NotContains(t, string(raw), "Private Owner Name")
 	code, raw = profileRequest(t, h, owner, "set_name", uuid.New(), map[string]any{
-		"expected_version": 0, "full_name": "Stale Name",
+		"expected_version": 0, "first_name": "Stale", "last_name": "Name",
 	})
 	require.Equal(t, http.StatusOK, code, string(raw))
 	require.Contains(t, string(raw), "terminal_rejection")
-	args["full_name"] = "Changed Collision"
+	args["first_name"] = "Changed Collision"
 	code, raw = profileRequest(t, h, owner, "set_name", operation, args)
 	require.Equal(t, http.StatusOK, code, string(raw))
 	require.Contains(t, string(raw), "terminal_rejection")

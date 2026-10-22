@@ -27,7 +27,12 @@ func TestMiniAppProfileCompletesAgentExpectationAndRecoversExactWrite(t *testing
 	scope := ownerProfileScope(t, h, session.UserID)
 	pending := changeProfile(t, h, scope, profileChange("request_name", 0))
 	require.NotNil(t, pending.NameExpectation)
-	input := map[string]any{"operation_id": uuid.New(), "expected_version": pending.Version, "full_name": "  Анна QA  "}
+	input := map[string]any{
+		"operation_id":     uuid.New(),
+		"expected_version": pending.Version,
+		"first_name":       "  Анна ",
+		"last_name":        " QA  ",
+	}
 	body, err := json.Marshal(input)
 	require.NoError(t, err)
 	code, first, _ := appCall(t, h, http.MethodPost, "/app/profile/name", string(body), session.Token, appTestOrigin)
@@ -43,7 +48,7 @@ func TestMiniAppProfileCompletesAgentExpectationAndRecoversExactWrite(t *testing
 	require.Equal(t, http.StatusOK, code, string(replay))
 	require.JSONEq(t, string(first), string(replay))
 	input["operation_id"] = uuid.New()
-	input["full_name"] = "Stale overwrite"
+	input["first_name"] = "Stale overwrite"
 	body, err = json.Marshal(input)
 	require.NoError(t, err)
 	code, raw, _ = appCall(t, h, http.MethodPost, "/app/profile/name", string(body), session.Token, appTestOrigin)
@@ -66,7 +71,7 @@ func TestMiniAppProfileCompletesAgentExpectationAndRecoversExactWrite(t *testing
 		h,
 		http.MethodPost,
 		"/app/profile/name",
-		`{"operation_id":"`+uuid.NewString()+`","expected_version":0,"full_name":"X","user_id":"`+uuid.NewString()+`"}`,
+		`{"operation_id":"`+uuid.NewString()+`","expected_version":0,"first_name":"X","last_name":"Y","user_id":"`+uuid.NewString()+`"}`,
 		session.Token,
 		appTestOrigin,
 	)
@@ -79,6 +84,63 @@ func TestMiniAppProfileCompletesAgentExpectationAndRecoversExactWrite(t *testing
 	defer p.mu.Unlock()
 	require.Empty(t, p.runs)
 	require.Empty(t, p.sent)
+}
+
+func TestProfileAgentAndMiniAppContinueTheSameStructuredNameChange(t *testing.T) {
+	t.Parallel()
+	p := newPeers(t)
+	p.miniAppOrigin = appTestOrigin
+	h := setup(t, p)
+	code, raw, _ := appCall(t, h, http.MethodPost, appBootstrapPath, appBody(appProof(19121), 91), "", appTestOrigin)
+	require.Equal(t, http.StatusOK, code, string(raw))
+	var session appSession
+	require.NoError(t, json.Unmarshal(raw, &session))
+	scope := ownerProfileScope(t, h, session.UserID)
+	token := p.token(scope.Subject)
+	code, raw = profileRequest(t, h, token, "request_name", uuid.New(), map[string]any{"expected_version": 0})
+	require.Equal(t, http.StatusOK, code, string(raw))
+	var requested profileAPIReceipt
+	require.NoError(t, json.Unmarshal(raw, &requested))
+	require.NotNil(t, requested.Result.NameExpectation)
+	body, err := json.Marshal(map[string]any{"operation_id": uuid.New(), "expected_version": requested.Result.Version,
+		"first_name": "Анна Мария", "last_name": "де ла Крус"})
+	require.NoError(t, err)
+	code, first, _ := appCall(t, h, http.MethodPost, "/app/profile/name", string(body), session.Token, appTestOrigin)
+	require.Equal(t, http.StatusOK, code, string(first))
+	var saved db.UserProfile
+	require.NoError(t, json.Unmarshal(first, &saved))
+	require.Nil(t, saved.NameExpectation)
+	code, raw = profileRequest(t, h, token, "set_name", uuid.New(), map[string]any{"expected_version": saved.Version,
+		"first_name": "Анна Мария", "last_name": "Петрова"})
+	require.Equal(t, http.StatusOK, code, string(raw))
+	var corrected profileAPIReceipt
+	require.NoError(t, json.Unmarshal(raw, &corrected))
+	require.Equal(t, "succeeded", corrected.Status)
+	code, replay, _ := appCall(t, h, http.MethodPost, "/app/profile/name", string(body), session.Token, appTestOrigin)
+	require.Equal(t, http.StatusOK, code, string(replay))
+	require.JSONEq(t, string(first), string(replay))
+	code, raw, _ = appCall(t, h, http.MethodGet, "/app/profile", "", session.Token, "")
+	require.Equal(t, http.StatusOK, code, string(raw))
+	var current db.UserProfile
+	require.NoError(t, json.Unmarshal(raw, &current))
+	require.Equal(t, corrected.Result.Version, current.Version)
+	require.Equal(t, "Анна Мария", current.FirstName)
+	require.Equal(
+		t,
+		"Петрова",
+		current.LastName,
+		"A native receipt replay must not replace the agent's later correction",
+	)
+	require.Equal(t, "user", current.NameSource)
+	var desired int64
+	err = h.store.Pool().
+		QueryRow(t.Context(), `SELECT desired_version FROM shuttle_profile_name_sync WHERE user_id=$1`, session.UserID).
+		Scan(&desired)
+	require.NoError(t, err)
+	require.Equal(t, current.Version, desired)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	require.Empty(t, p.runs, "Explicit form/API actions do not start proactive agent runs")
 }
 
 func TestMiniAppProfileSuppressesDataWhenSessionExpiresDuringRead(t *testing.T) {
@@ -147,7 +209,7 @@ func TestMiniAppProfileActionsReachNextAgentOnceAfterRestart(t *testing.T) {
 	var session appSession
 	require.NoError(t, json.Unmarshal(raw, &session))
 	operation := uuid.New()
-	body := `{"operation_id":"` + operation.String() + `","expected_version":0,"full_name":"Mini App QA"}`
+	body := `{"operation_id":"` + operation.String() + `","expected_version":0,"first_name":"Mini App","last_name":"QA"}`
 	code, first, _ := appCall(t, h, http.MethodPost, "/app/profile/name", body, session.Token, appTestOrigin)
 	require.Equal(t, http.StatusOK, code, string(first))
 	h.stop(t)
@@ -198,7 +260,7 @@ func TestMiniAppProfileJournalFailureRollsBackWrite(t *testing.T) {
 		Exec(t.Context(), `CREATE FUNCTION reject_manual_action() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected journal failure'; END $$;
 CREATE TRIGGER reject_manual_action BEFORE INSERT ON shuttle_miniapp_profile_actions FOR EACH ROW EXECUTE FUNCTION reject_manual_action()`)
 	require.NoError(t, err)
-	body := `{"operation_id":"` + operation.String() + `","expected_version":0,"full_name":"Atomic QA"}`
+	body := `{"operation_id":"` + operation.String() + `","expected_version":0,"first_name":"Atomic","last_name":"QA"}`
 	code, raw, _ = appCall(t, h, http.MethodPost, "/app/profile/name", body, session.Token, appTestOrigin)
 	require.Equal(t, http.StatusServiceUnavailable, code, string(raw))
 	profile, err := h.store.GetProfile(t.Context(), scope)
@@ -248,7 +310,7 @@ func TestMiniAppProfileContextIsBoundedAndOwnerScoped(t *testing.T) {
 		h,
 		http.MethodPost,
 		"/app/profile/name",
-		`{"operation_id":"`+foreignOperation.String()+`","expected_version":0,"full_name":"Private other owner"}`,
+		`{"operation_id":"`+foreignOperation.String()+`","expected_version":0,"first_name":"Private other","last_name":"owner"}`,
 		other.Token,
 		appTestOrigin,
 	)

@@ -19,10 +19,11 @@ import (
 var ErrInvalidProfile = errors.New("invalid profile change")
 
 const (
-	profileLanguageAuto = "auto"
-	profileSetName      = "set_name"
-	profileCompleteName = "complete_name"
-	profileSetLanguage  = "set_language"
+	profileLanguageAuto   = "auto"
+	profileSetName        = "set_name"
+	profileCompleteName   = "complete_name"
+	profileSetLanguage    = "set_language"
+	profileNameSourceUser = "user"
 )
 
 type ProfileScope struct {
@@ -41,6 +42,9 @@ type UserProfile struct {
 	UserID          uuid.UUID        `json:"user_id"`
 	Version         int64            `json:"version"`
 	FullName        string           `json:"full_name"`
+	FirstName       string           `json:"first_name,omitempty"`
+	LastName        string           `json:"last_name,omitempty"`
+	NameSource      string           `json:"name_source,omitempty"`
 	BotLanguage     string           `json:"bot_language"`
 	NameExpectation *NameExpectation `json:"name_expectation,omitempty"`
 	ObservedAt      time.Time        `json:"observed_at"`
@@ -51,6 +55,8 @@ type ProfileMutation struct {
 	ExpectedVersion int64     `json:"expected_version"`
 	Kind            string    `json:"kind"`
 	FullName        string    `json:"full_name,omitempty"`
+	FirstName       string    `json:"first_name,omitempty"`
+	LastName        string    `json:"last_name,omitempty"`
 	BotLanguage     string    `json:"bot_language,omitempty"`
 	ExpectationID   uuid.UUID `json:"expectation_id,omitempty"`
 }
@@ -115,8 +121,8 @@ func readProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID) (UserProfile,
 	p := UserProfile{UserID: userID, BotLanguage: profileLanguageAuto}
 	var id pgtype.UUID
 	var created, expires pgtype.Timestamptz
-	err := tx.QueryRow(ctx, `SELECT version,full_name,bot_language,expectation_id,expectation_created_at,expectation_expires_at FROM shuttle_user_profiles WHERE user_id=$1`, userID).
-		Scan(&p.Version, &p.FullName, &p.BotLanguage, &id, &created, &expires)
+	err := tx.QueryRow(ctx, `SELECT version,full_name,bot_language,expectation_id,expectation_created_at,expectation_expires_at,first_name,last_name,name_source FROM shuttle_user_profiles WHERE user_id=$1`, userID).
+		Scan(&p.Version, &p.FullName, &p.BotLanguage, &id, &created, &expires, &p.FirstName, &p.LastName, &p.NameSource)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return p, err
 	}
@@ -153,15 +159,7 @@ func normalizeProfileMutation(m ProfileMutation) (ProfileMutation, error) {
 	}
 	switch m.Kind {
 	case profileSetName, profileCompleteName:
-		m.FullName = strings.TrimSpace(m.FullName)
-		if !utf8.ValidString(m.FullName) || m.FullName == "" || utf8.RuneCountInString(m.FullName) > 256 ||
-			strings.IndexFunc(m.FullName, unicode.IsControl) >= 0 ||
-			m.BotLanguage != "" {
-			return m, ErrInvalidProfile
-		}
-		if (m.Kind == profileSetName) != (m.ExpectationID == uuid.Nil) {
-			return m, ErrInvalidProfile
-		}
+		return normalizeProfileNameMutation(m)
 	case profileSetLanguage:
 		if m.BotLanguage != profileLanguageAuto && m.BotLanguage != "en" && m.BotLanguage != "ru" {
 			return m, ErrInvalidProfile
@@ -180,7 +178,32 @@ func normalizeProfileMutation(m ProfileMutation) (ProfileMutation, error) {
 	default:
 		return m, ErrInvalidProfile
 	}
+	if m.Kind != profileSetName && m.Kind != profileCompleteName && (m.FirstName != "" || m.LastName != "") {
+		return m, ErrInvalidProfile
+	}
 	return m, nil
+}
+
+func normalizeProfileNameMutation(m ProfileMutation) (ProfileMutation, error) {
+	if m.FirstName != "" || m.LastName != "" {
+		m.FirstName, m.LastName = strings.TrimSpace(m.FirstName), strings.TrimSpace(m.LastName)
+		if !validProfileNameComponent(m.FirstName) || !validProfileNameComponent(m.LastName) || m.FullName != "" {
+			return m, ErrInvalidProfile
+		}
+		m.FullName = m.FirstName + " " + m.LastName
+	}
+	m.FullName = strings.TrimSpace(m.FullName)
+	if !utf8.ValidString(m.FullName) || m.FullName == "" || utf8.RuneCountInString(m.FullName) > 256 ||
+		strings.IndexFunc(m.FullName, unicode.IsControl) >= 0 || m.BotLanguage != "" ||
+		(m.Kind == profileSetName) != (m.ExpectationID == uuid.Nil) {
+		return m, ErrInvalidProfile
+	}
+	return m, nil
+}
+
+func validProfileNameComponent(value string) bool {
+	return value != "" && utf8.ValidString(value) && utf8.RuneCountInString(value) <= 200 &&
+		!strings.ContainsFunc(value, unicode.IsControl)
 }
 
 // MutateProfile serializes owner changes with revocation and saves immutable receipts.
@@ -223,6 +246,12 @@ func mutateProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, mutation Pr
 	if p.Version != m.ExpectedVersion {
 		return UserProfile{}, ErrConflict
 	}
+	nameChanged := m.FirstName != "" &&
+		(p.FirstName != m.FirstName || p.LastName != m.LastName || p.NameSource != profileNameSourceUser)
+	if (m.Kind == profileSetName || m.Kind == profileCompleteName) && p.NameSource != "" && m.FirstName == "" {
+		// A display-only legacy write cannot erase a confirmed structured name.
+		return UserProfile{}, ErrInvalidProfile
+	}
 	changed, err := applyProfileMutation(ctx, tx, &p, m)
 	if err != nil {
 		return p, err
@@ -237,6 +266,14 @@ func mutateProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, mutation Pr
 	}
 	if err = saveProfileReceipt(ctx, tx, m.OperationID, digest[:], p); err != nil {
 		return p, err
+	}
+	if nameChanged {
+		_, err = tx.Exec(ctx, `INSERT INTO shuttle_profile_name_sync(user_id,desired_version) VALUES($1,$2)
+ON CONFLICT(user_id) DO UPDATE SET desired_version=EXCLUDED.desired_version,next_attempt_at=clock_timestamp(),updated_at=clock_timestamp()`,
+			userID, p.Version)
+		if err != nil {
+			return p, err
+		}
 	}
 	return p, nil
 }
@@ -264,8 +301,10 @@ func replayProfileOperation(
 func applyProfileMutation(ctx context.Context, tx pgx.Tx, p *UserProfile, m ProfileMutation) (bool, error) {
 	switch m.Kind {
 	case profileSetName:
-		changed := p.FullName != m.FullName || p.NameExpectation != nil
+		changed := p.FullName != m.FullName || p.NameExpectation != nil ||
+			(m.FirstName != "" && (p.FirstName != m.FirstName || p.LastName != m.LastName || p.NameSource != profileNameSourceUser))
 		p.FullName, p.NameExpectation = m.FullName, nil
+		applyProfileNameComponents(p, m)
 		return changed, nil
 	case profileSetLanguage:
 		changed := p.BotLanguage != m.BotLanguage
@@ -287,11 +326,18 @@ func applyProfileMutation(ctx context.Context, tx pgx.Tx, p *UserProfile, m Prof
 		}
 		if m.Kind == profileCompleteName {
 			p.FullName = m.FullName
+			applyProfileNameComponents(p, m)
 		}
 		p.NameExpectation = nil
 		return true, nil
 	}
 	return false, ErrInvalidProfile
+}
+
+func applyProfileNameComponents(p *UserProfile, m ProfileMutation) {
+	if m.FirstName != "" {
+		p.FirstName, p.LastName, p.NameSource = m.FirstName, m.LastName, profileNameSourceUser
+	}
 }
 
 func newNameExpectation(ctx context.Context, tx pgx.Tx, now time.Time) (*NameExpectation, error) {
@@ -323,7 +369,7 @@ func saveProfile(ctx context.Context, tx pgx.Tx, p UserProfile) error {
 	}
 	_, err := tx.Exec(
 		ctx,
-		`INSERT INTO shuttle_user_profiles(user_id,version,full_name,bot_language,expectation_id,expectation_created_at,expectation_expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(user_id) DO UPDATE SET version=EXCLUDED.version,full_name=EXCLUDED.full_name,bot_language=EXCLUDED.bot_language,expectation_id=EXCLUDED.expectation_id,expectation_created_at=EXCLUDED.expectation_created_at,expectation_expires_at=EXCLUDED.expectation_expires_at`,
+		`INSERT INTO shuttle_user_profiles(user_id,version,full_name,bot_language,expectation_id,expectation_created_at,expectation_expires_at,first_name,last_name,name_source) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(user_id) DO UPDATE SET version=EXCLUDED.version,full_name=EXCLUDED.full_name,bot_language=EXCLUDED.bot_language,expectation_id=EXCLUDED.expectation_id,expectation_created_at=EXCLUDED.expectation_created_at,expectation_expires_at=EXCLUDED.expectation_expires_at,first_name=EXCLUDED.first_name,last_name=EXCLUDED.last_name,name_source=EXCLUDED.name_source`,
 		p.UserID,
 		p.Version,
 		p.FullName,
@@ -331,6 +377,9 @@ func saveProfile(ctx context.Context, tx pgx.Tx, p UserProfile) error {
 		id,
 		created,
 		expires,
+		p.FirstName,
+		p.LastName,
+		p.NameSource,
 	)
 	return err
 }

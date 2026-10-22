@@ -176,6 +176,7 @@ func New(
 	}
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &worker{service: s})
+	river.AddWorker(workers, &profileNameSyncWorker{service: s})
 	river.AddWorker(workers, &notificationWorker{service: s})
 	river.AddWorker(workers, &pairNotificationWorker{service: s})
 	river.AddWorker(workers, &orderNotificationWorker{service: s})
@@ -314,6 +315,7 @@ func (s *Service) watchLock(ctx context.Context, conn *pgxpool.Conn, done chan s
 				s.logger.WarnContext(ctx, "notification scheduling unavailable", "class", "notification_queue")
 			}
 			s.repairPairNotifications(ctx)
+			s.repairProfileNames(ctx)
 			s.repairOrderNotifications(ctx)
 			s.repairKnowledgeNotifications(ctx)
 			s.repairAvatarDeliveries(ctx)

@@ -15,7 +15,8 @@ import (
 type miniAppProfileChange struct {
 	OperationID     uuid.UUID `json:"operation_id"`
 	ExpectedVersion *int64    `json:"expected_version"`
-	FullName        string    `json:"full_name,omitempty"`
+	FirstName       string    `json:"first_name,omitempty"`
+	LastName        string    `json:"last_name,omitempty"`
 	BotLanguage     string    `json:"bot_language,omitempty"`
 }
 
@@ -68,7 +69,8 @@ func (s *Server) miniAppProfileChange(w http.ResponseWriter, r *http.Request) {
 	mutation := db.ProfileMutation{
 		OperationID:     input.OperationID,
 		ExpectedVersion: *input.ExpectedVersion,
-		FullName:        input.FullName,
+		FirstName:       input.FirstName,
+		LastName:        input.LastName,
 		BotLanguage:     input.BotLanguage,
 	}
 	switch r.URL.Path {

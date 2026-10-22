@@ -23,6 +23,16 @@ restart and repeated start; IAM outage followed by recovery; consecutive edits
 that must converge to the latest name without modifying another account or its
 permissions. These requirements are recorded, not yet accepted as implemented.
 
+The current uninstalled source adds `mvp-92/schema71`: structured first/last
+profile storage, atomic durable IAM-sync intent, River repair/retry and periodic
+name verification, plus separate agent and Mini App name inputs. Focused
+PostgreSQL/mock-IAM checks cover outage/restart, late older writes, scope,
+immutable receipts and mixed agent/form corrections. Browser form QA with a
+synthetic HTTP peer covers compound names, en/ru labels and the same write after
+an uncertain reply and reload. This does not complete the first-use onboarding,
+trusted IAM-name reuse, Telegram `/name` dialog port, real-IAM name-write gate or
+installation acceptance. The accepted primary installation below is unchanged.
+
 ## Accepted installation checkpoint
 
 The last accepted primary installation uses application source `4f03e5ff`, `mvp-91/schema70`,

@@ -37,8 +37,10 @@
       <h1 id="profile-title">My profile</h1>
       <p id="profile-status" role="status" aria-live="polite"></p>
       <form id="profile-form">
-        <label id="profile-name-label" for="profile-name">Full name</label>
-        <input id="profile-name" name="full_name" autocomplete="name" maxlength="256" required>
+        <label id="profile-first-name-label" for="profile-first-name">First name</label>
+        <input id="profile-first-name" name="first_name" autocomplete="given-name" maxlength="200" required>
+        <label id="profile-last-name-label" for="profile-last-name">Last name</label>
+        <input id="profile-last-name" name="last_name" autocomplete="family-name" maxlength="200" required>
         <button id="profile-save-name" type="submit">Save name</button>
       </form>
       <label id="profile-language-label" for="profile-language">Bot language</label>

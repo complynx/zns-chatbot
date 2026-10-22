@@ -109,6 +109,16 @@ skew is a fixed 30 seconds. Session expiry is absolute, independent of IAM refre
 - `POST /app/session/logout` uses the same scheme and JSON `{}`. A 204 consumes
   the session. It does not require IAM availability.
 
+The [profile contract](shuttle-profile-expectations.md) adds owner-only
+`GET /app/profile` and `POST /app/profile/name` / `language`. Name writes use
+`operation_id`, `expected_version`, `first_name` and `last_name`; the form has
+separate first/last inputs. Components may contain spaces. Legacy full-name
+strings are displayed without guessing their components. A committed change
+queues a name-only IAM update; the form confirms the local save, not remote
+IAM completion. The same operation and both components are retained for an
+uncertain retry after reload. These explicit form actions do not start a
+proactive agent run.
+
 POST requests require the exact configured Origin and JSON content type. GET
 requests with an Origin must also match. There is no CORS or cookie authentication.
 Responses are no-store. Bootstrap bodies are bounded at 64 KiB, raw proofs at

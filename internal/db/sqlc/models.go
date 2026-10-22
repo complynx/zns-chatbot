@@ -1166,6 +1166,14 @@ type ShuttlePaymentVersion struct {
 	Version int64     `json:"version"`
 }
 
+type ShuttleProfileNameSync struct {
+	UserID         uuid.UUID          `json:"user_id"`
+	DesiredVersion int64              `json:"desired_version"`
+	SyncedVersion  int64              `json:"synced_version"`
+	NextAttemptAt  pgtype.Timestamptz `json:"next_attempt_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type ShuttleProfileOperation struct {
 	UserID      uuid.UUID `json:"user_id"`
 	OperationID uuid.UUID `json:"operation_id"`
@@ -1353,6 +1361,9 @@ type ShuttleUserProfile struct {
 	ExpectationID        pgtype.UUID        `json:"expectation_id"`
 	ExpectationCreatedAt pgtype.Timestamptz `json:"expectation_created_at"`
 	ExpectationExpiresAt pgtype.Timestamptz `json:"expectation_expires_at"`
+	FirstName            string             `json:"first_name"`
+	LastName             string             `json:"last_name"`
+	NameSource           string             `json:"name_source"`
 }
 
 type ShuttleUserRevocationProposal struct {

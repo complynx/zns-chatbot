@@ -23,7 +23,7 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
     };
   }
   const elements = Object.fromEntries(["status", "name", "retry", "logout", "account", "account-title", "account-status",
-    "account-events", "account-retry", "account-first", "account-next", "profile", "profile-title", "profile-status", "profile-name", "profile-language", "profile-name-label", "profile-language-label", "profile-save-name", "profile-save-language", "profile-refresh", "profile-form", "details", "details-title", "details-note", "details-status", "details-name", "details-passport", "details-name-label", "details-passport-label", "details-name-presence", "details-passport-presence", "details-save-name", "details-save-passport", "details-refresh", "details-name-form", "details-passport-form"].map(id => [id, element()]));
+    "account-events", "account-retry", "account-first", "account-next", "profile", "profile-title", "profile-status", "profile-first-name", "profile-last-name", "profile-language", "profile-first-name-label", "profile-last-name-label", "profile-language-label", "profile-save-name", "profile-save-language", "profile-refresh", "profile-form", "details", "details-title", "details-note", "details-status", "details-name", "details-passport", "details-name-label", "details-passport-label", "details-name-presence", "details-passport-presence", "details-save-name", "details-save-passport", "details-refresh", "details-name-form", "details-passport-form"].map(id => [id, element()]));
   const scrolls = [];
   const launchFactories = { knowledge: "createZinusyaKnowledge", pairs: "createZinusyaPairs", avatars: "createZinusyaAvatars", orders: "createZinusyaOrders", meals: "createZinusyaMeals", massage: "createZinusyaMassage", "payment-review": "createZinusyaPaymentReviews" };
   for (const id of Object.keys(launchFactories)) {
@@ -59,7 +59,7 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
       const profileRead = path.startsWith("./profile");
       const detailsRead = path.startsWith("./registration-details");
       (detailsRead ? detailsCalls : profileRead ? profileCalls : accountRead ? accountCalls : calls).push({ path, ...requestOptions });
-      const reply = options.extraReplies?.[path] || (detailsRead ? (detailsReplies.shift() || {status:404}) : profileRead ? (profileReplies.shift() || {status:200,body:{version:0,full_name:account.full_name,bot_language:account.bot_language}}) : accountRead ? (accountReplies.shift() || { status: 200, body: emptyPage }) : replies.shift());
+      const reply = options.extraReplies?.[path] || (detailsRead ? (detailsReplies.shift() || {status:404}) : profileRead ? (profileReplies.shift() || {status:200,body:{version:0,full_name:account.full_name,first_name:account.first_name,last_name:account.last_name,bot_language:account.bot_language}}) : accountRead ? (accountReplies.shift() || { status: 200, body: emptyPage }) : replies.shift());
       assert.ok(reply, "Unexpected HTTP request");
       if (reply.error) throw reply.error;
       return { ok: reply.status < 400, status: reply.status, json: async () => reply.body };
@@ -81,7 +81,7 @@ function browser(proof, stored, replies, accountReplies = [], profileReplies = [
   };
 }
 
-const account = { user_id: "510e58dd-e547-48d4-b9fa-571d24953218", full_name: "Daniel <test>", bot_language: "en", session_token: token };
+const account = { user_id: "510e58dd-e547-48d4-b9fa-571d24953218", full_name: "Daniel <test>", first_name: "Daniel", last_name: "<test>", bot_language: "en", session_token: token };
 const emptyPage = { observed_at: "2026-10-15T00:00:00Z", events: [], has_more: false };
 
 test("startup keeps controls locked after pass payments load until the last module is ready", { timeout: 5000 }, async () => {
@@ -267,18 +267,19 @@ test("a page outside Telegram does not resume a stored capability", async () => 
 
 test("an uncertain profile write retries the same operation after reload", async () => {
   const first = browser("proof", {launch:launch("proof"),token,nonce}, [{status:200,body:account}], [],
-    [{status:200,body:{version:4,full_name:"Old name",bot_language:"en"}}, {status:503}]);
+    [{status:200,body:{version:4,full_name:"Old name",first_name:"Old",last_name:"name",bot_language:"en"}}, {status:503}]);
   await first.settle();
-  first.elements["profile-name"].value = "New name";
+  first.elements["profile-first-name"].value = "New";
+  first.elements["profile-last-name"].value = "name";
   await first.elements["profile-form"].listeners.submit({preventDefault(){}});
   await first.settle();
   assert.equal(first.profileCalls.length,2);
   const pending = first.stored().profileChange;
-  assert.equal(pending.body.full_name,"New name");
+  assert.equal(pending.body.first_name,"New");
   assert.equal(pending.body.expected_version,4);
-  assert.equal(first.elements["profile-name"].disabled,true);
+  assert.equal(first.elements["profile-first-name"].disabled,true);
   const second = browser("proof", first.stored(), [{status:200,body:account}], [],
-    [{status:200,body:{version:5,full_name:"New name",bot_language:"en"}}, {status:200,body:{}}, {status:200,body:{version:5,full_name:"New name",bot_language:"en"}}]);
+    [{status:200,body:{version:5,full_name:"New name",first_name:"New",last_name:"name",bot_language:"en"}}, {status:200,body:{}}, {status:200,body:{version:5,full_name:"New name",first_name:"New",last_name:"name",bot_language:"en"}}]);
   await second.settle();
   await second.elements["profile-form"].listeners.submit({preventDefault(){}});
   await second.settle();
@@ -288,9 +289,10 @@ test("an uncertain profile write retries the same operation after reload", async
 
 test("a conflicting profile write requires refresh before another save", async () => {
   const app = browser("proof", {launch:launch("proof"),token,nonce}, [{status:200,body:account}], [],
-    [{status:200,body:{version:1,full_name:"Old name",bot_language:"en"}}, {status:409}]);
+    [{status:200,body:{version:1,full_name:"Old name",first_name:"Old",last_name:"name",bot_language:"en"}}, {status:409}]);
   await app.settle();
-  app.elements["profile-name"].value = "New name";
+  app.elements["profile-first-name"].value = "New";
+  app.elements["profile-last-name"].value = "name";
   await app.elements["profile-form"].listeners.submit({preventDefault(){}});
   await app.settle();
   assert.equal(app.elements["profile-save-name"].disabled,true);
@@ -299,11 +301,35 @@ test("a conflicting profile write requires refresh before another save", async (
   assert.equal(app.stored().profileChange,undefined);
 });
 
+test("name form keeps explicit compound components and leaves legacy full names unsplit", async () => {
+  const app = browser("proof", {launch:launch("proof"),token,nonce}, [{status:200,body:account}], [], [
+    {status:200,body:{version:4,full_name:"Old unsplit full name",bot_language:"ru"}},
+    {status:200,body:{}},
+    {status:200,body:{version:5,first_name:"Анна Мария",last_name:"де ла Крус",full_name:"Анна Мария де ла Крус",bot_language:"ru"}}
+  ]);
+  await app.settle();
+  assert.equal(app.elements["profile-first-name"].value, "");
+  assert.equal(app.elements["profile-last-name"].value, "");
+  assert.equal(app.elements.name.textContent, "Old unsplit full name");
+  assert.equal(app.elements["profile-first-name-label"].textContent, "Имя");
+  assert.equal(app.elements["profile-last-name-label"].textContent, "Фамилия");
+  app.elements["profile-first-name"].value = "Анна Мария";
+  app.elements["profile-last-name"].value = "де ла Крус";
+  await app.elements["profile-form"].listeners.submit({preventDefault(){}});
+  await app.settle();
+  const body = JSON.parse(app.profileCalls[1].body);
+  assert.equal(body.first_name, "Анна Мария");
+  assert.equal(body.last_name, "де ла Крус");
+  assert.equal(body.full_name, undefined);
+  assert.equal(app.elements.name.textContent, "Анна Мария де ла Крус");
+  assert.equal(app.elements["details-name"].value, "");
+});
+
 
 test("pending write survives failed read and refresh without changing its operation", async () => {
-  const pending={kind:"name",body:{operation_id:webcrypto.randomUUID(),expected_version:2,full_name:"New name"}};
+  const pending={kind:"name",body:{operation_id:webcrypto.randomUUID(),expected_version:2,first_name:"New",last_name:"name"}};
   const app=browser("proof",{launch:launch("proof"),token,nonce,profileChange:pending},[{status:200,body:account}],[],
-    [{status:503},{status:200,body:{version:3,full_name:"New name",bot_language:"en"}},{status:200,body:{}},{status:200,body:{version:3,full_name:"New name",bot_language:"en"}}]);
+    [{status:503},{status:200,body:{version:3,full_name:"New name",first_name:"New",last_name:"name",bot_language:"en"}},{status:200,body:{}},{status:200,body:{version:3,full_name:"New name",first_name:"New",last_name:"name",bot_language:"en"}}]);
   await app.settle();
   assert.equal(app.elements["profile-refresh"].disabled,false);
   await app.elements["profile-refresh"].listeners.click();
@@ -348,7 +374,7 @@ test("private form saves one field without storing or prefilling legal values",a
  assert.equal(app.elements["details-name"].value,"");
  assert.equal(app.stored().detailsChange,undefined);
  assert.match(app.elements["details-name-presence"].textContent,/Saved; value hidden/);
- assert.equal(app.elements["profile-name"].value,account.full_name);
+ assert.equal(app.elements["profile-first-name"].value,account.first_name);
  assertNoPrivateStorage(app,"Synthetic Private Legal Name");
 });
 

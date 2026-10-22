@@ -21,7 +21,8 @@ type iamUser struct {
 		Org string `json:"resourceOwner"`
 	} `json:"details"`
 	Human *struct {
-		Email struct {
+		Profile ProfileName `json:"profile"`
+		Email   struct {
 			Address  string `json:"email"`
 			Verified bool   `json:"isVerified"`
 		} `json:"email"`

@@ -237,9 +237,13 @@ func TestTelegramPrelinkCannotCompleteAfterProofExpires(t *testing.T) {
 	claim.ExpiresAt = time.Now().UTC().Truncate(time.Second).Add(3 * time.Second)
 	first, err := s.ClaimTelegramPrelink(ctx, claim)
 	require.NoError(t, err)
-	timer := time.NewTimer(time.Until(claim.ExpiresAt.Add(20 * time.Millisecond)))
-	defer timer.Stop()
-	<-timer.C
+	// Expiry is checked against PostgreSQL wall time. The Docker database
+	// clock can trail the Windows test process around a deadline.
+	require.Eventually(t, func() bool {
+		var now time.Time
+		clockErr := s.Pool().QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now)
+		return clockErr == nil && !now.Before(claim.ExpiresAt)
+	}, 5*time.Second, 10*time.Millisecond)
 	_, err = s.CompleteTelegramPrelink(ctx, first.ID, claim, "subject")
 	require.ErrorIs(t, err, db.ErrTelegramPrelinkDenied)
 	_, err = s.ClaimTelegramPrelink(ctx, claim)

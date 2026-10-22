@@ -1,10 +1,75 @@
 # User profile and name expectations
 
-The independent owner profile stores a full name and an interface language:
+The independent owner profile stores separate first and last names, a derived
+full name, and an interface language:
 `auto`, `en`, or `ru`. Telegram intake continues to refresh Telegram metadata.
 It does not copy a Telegram display name into the full name, overwrite a saved
 name, or change the user's language choice. The full name is user-provided text,
-not verified legal identity. It does not rename an IAM account.
+not verified legal identity. Confirmed structured name changes schedule a
+name-only IAM update. The agreed onboarding and durable name-sync requirements are recorded
+in the [specification](shuttle-spec.md#агентские-ожидания-и-пользовательский-контекст).
+
+The IAM adapter now provides `ReadProfileName` and `SyncProfileName` for a
+persisted user binding. It checks the exact subject, organization, verified
+synthetic email and active account. Its partial
+[Zitadel update](https://zitadel.com/docs/reference/api/user/zitadel.user.v2.UserService.UpdateUser)
+contains only separate given and family names and requires matching read-back.
+An uncertain write remains an error; a later attempt reads the current value
+before writing again. Populated IAM names do not establish user confirmation.
+The adapter is not an agent endpoint. The structured-name store and River
+worker described below are implemented. The agent and Mini App APIs now accept
+separate name components. First-use onboarding, trusted IAM name reuse and the
+Telegram `/name` agent-dialog port are still pending.
+
+## Structured names and IAM synchronization
+
+Migration 71 adds separate first and last names, name provenance, and one
+durable desired-sync row per profile. Existing full-name strings remain intact;
+the migration does not guess their components or mark onboarding complete.
+The internal profile mutation accepts either legacy `full_name` or separate
+`first_name` and `last_name`, never both. Separate names are trimmed, nonempty,
+at most 200 characters each and at most 256 characters combined with their
+separator. Control characters and malformed UTF-8 are rejected. Components can
+contain spaces. A legacy write cannot erase confirmed structured components.
+
+A structured name change saves the profile, immutable operation receipt and
+latest desired IAM version in one transaction. Changing language, repeating
+the same name or replaying an old receipt does not schedule another IAM write.
+Both profile entry points share that transaction, including Mini App storage.
+The agent and Mini App payloads require separate name components. The Mini App
+shows two labeled inputs and never guesses a split for an older full-name string.
+Its uncertain write retains both components and the same operation ID across
+reload. A form change can complete an agent-created expectation; a later agent
+correction is visible in the form. Replaying an older form receipt does not
+overwrite that later correction or reschedule the old IAM name.
+
+This is a breaking input change in `mvp-92`: `set_name` and `complete_name`
+require `first_name` and `last_name` instead of `full_name`. Mini App
+`POST /app/profile/name` uses the same fields. Name reads and historical
+operation receipts still contain `full_name`; newer results also contain the
+components and `name_source`. Existing records and receipts are not rewritten.
+
+The existing service repair loop queues `zinusya_profile_name_sync` jobs with
+only user ID and revision hints. The worker always reads the current desired
+name. It holds the existing owner lock during bounded IAM dispatch, serializing
+local edits and revocation with admitted writes. Success acknowledges only the
+current desired revision after IAM read-back. A failure leaves durable work and
+a 30-second backoff; an early River retry snoozes rather than completing the
+job. Restart discovers unacknowledged work through the same repair loop.
+Queue and worker metrics include the new bounded job kind. Once a name is
+explicitly saved in the structured profile, that profile is authoritative for
+IAM synchronization. The worker checks it again every ten minutes, including
+after acknowledgement. An unchanged IAM value needs only a read. Completed
+River jobs from an earlier minute cannot suppress this later verification.
+
+This local lock cannot recall an HTTP request that IAM already received.
+Timeouts and cancellation therefore remain uncertain remote outcomes and leave
+the intent pending for reconciliation. Periodic checks also repair an older
+request that finishes after a newer name was already acknowledged, including
+when cancellation prevented recording the old attempt's error. This is eventual
+reconciliation; the database lock is not a remote fencing token. No local
+receipt claims remote success without a confirmed name. Legal registration
+details are not changed.
 
 The `zinusya_profile` module exposes `get`, `set_name`, `set_language`,
 `request_name`, `complete_name`, `cancel_name`, and `operation`. Routes use
@@ -44,8 +109,8 @@ Expired requests are hidden from fresh reads. An explicit later request creates
 a new UUID and deadline. No scheduler or proactive agent run is needed.
 
 `complete_name` requires the current profile version, exact expectation ID,
-and a nonempty full name of at most 256 Unicode characters, with no control
-characters. The API trims outer whitespace. It checks expiry with database
+and separate nonempty first and last names within the bounds above. The API
+trims outer whitespace from each component. It checks expiry with database
 wall time after acquiring the owner lock. Saving the name and clearing the
 request happen in one transaction. `set_name` supports an explicit name change
 without a pending request and clears any old request. `cancel_name` clears only
@@ -105,5 +170,5 @@ fresh dispatch context, immutable uncertain-create retries, textual answer and
 steering context, profile-storage outages and notification language choice.
 Native owned-stand acceptance is recorded separately when complete.
 
-Written by Codex (gpt-6/Codex desktop), zns-chatbot developer
+Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk

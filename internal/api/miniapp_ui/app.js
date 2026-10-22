@@ -49,14 +49,15 @@
   let profileVersion;
   const profileSection = document.getElementById("profile");
   const profileStatus = document.getElementById("profile-status");
-  const profileName = document.getElementById("profile-name");
+  const profileFirstName = document.getElementById("profile-first-name");
+  const profileLastName = document.getElementById("profile-last-name");
   const profileLanguage = document.getElementById("profile-language");
   const profileSaveName = document.getElementById("profile-save-name");
   const profileSaveLanguage = document.getElementById("profile-save-language");
   const profileRefresh = document.getElementById("profile-refresh");
   const profileWords = {
-    en: { title: "My profile", name: "Full name", language: "Bot language", auto: "Automatic", saveName: "Save name", saveLanguage: "Save language", refresh: "Refresh profile", saved: "Profile saved.", loading: "Loading profile…", unavailable: "Could not load profile. Refresh to retry.", retry: "Could not confirm the change. Press Save again to retry the same change.", conflict: "The profile changed elsewhere. Refresh and review it before saving.", invalid: "Check the name or language and try again." },
-    ru: { title: "Мой профиль", name: "Полное имя", language: "Язык бота", auto: "Автоматически", saveName: "Сохранить имя", saveLanguage: "Сохранить язык", refresh: "Обновить профиль", saved: "Профиль сохранён.", loading: "Загружаю профиль…", unavailable: "Не удалось прочитать профиль. Нажми «Обновить профиль».", retry: "Не удалось подтвердить изменение. Нажми «Сохранить» ещё раз для повтора того же изменения.", conflict: "Профиль изменён в другом месте. Обнови его и проверь перед сохранением.", invalid: "Проверь имя или язык и попробуй снова." }
+    en: { title: "My profile", firstName: "First name", lastName: "Last name", language: "Bot language", auto: "Automatic", saveName: "Save name", saveLanguage: "Save language", refresh: "Refresh profile", saved: "Profile saved.", loading: "Loading profile…", unavailable: "Could not load profile. Refresh to retry.", retry: "Could not confirm the change. Press Save again to retry the same change.", conflict: "The profile changed elsewhere. Refresh and review it before saving.", invalid: "Check the name or language and try again." },
+    ru: { title: "Мой профиль", firstName: "Имя", lastName: "Фамилия", language: "Язык бота", auto: "Автоматически", saveName: "Сохранить имя", saveLanguage: "Сохранить язык", refresh: "Обновить профиль", saved: "Профиль сохранён.", loading: "Загружаю профиль…", unavailable: "Не удалось прочитать профиль. Нажми «Обновить профиль».", retry: "Не удалось подтвердить изменение. Нажми «Сохранить» ещё раз для повтора того же изменения.", conflict: "Профиль изменён в другом месте. Обнови его и проверь перед сохранением.", invalid: "Проверь имя или язык и попробуй снова." }
   };
   const detailsSection = document.getElementById("details");
   const detailsStatus = document.getElementById("details-status");
@@ -203,7 +204,7 @@
     busy = value;
     for (const button of [retry, logout, accountRetry, accountFirst, accountNext]) button.disabled = value;
     const pending = session.profileChange;
-    profileName.disabled = profileLanguage.disabled = value || !!pending;
+    profileFirstName.disabled = profileLastName.disabled = profileLanguage.disabled = value || !!pending;
     profileSaveName.disabled = value || profileVersion === undefined || (!!pending && pending.kind !== "name");
     profileSaveLanguage.disabled = value || profileVersion === undefined || (!!pending && pending.kind !== "language");
     profileRefresh.disabled = value;
@@ -354,7 +355,8 @@
   function profileLabels() {
     const w = profileWords[language];
     document.getElementById("profile-title").textContent = w.title;
-    document.getElementById("profile-name-label").textContent = w.name;
+    document.getElementById("profile-first-name-label").textContent = w.firstName;
+    document.getElementById("profile-last-name-label").textContent = w.lastName;
     document.getElementById("profile-language-label").textContent = w.language;
     profileLanguage.options[0].textContent = w.auto;
     profileSaveName.textContent = w.saveName;
@@ -393,14 +395,18 @@
       name.textContent = p.full_name;
       name.hidden = !name.textContent;
       show("connected");
-      profileName.value = p.full_name;
+      profileFirstName.value = p.first_name || "";
+      profileLastName.value = p.last_name || "";
       profileLanguage.value = p.bot_language;
       if (session.profileChange) {
         const pending = session.profileChange;
         if ((pending.kind !== "name" && pending.kind !== "language") || !pending.body || typeof pending.body !== "object") {
           delete session.profileChange; save();
         } else {
-          if (pending.kind === "name") profileName.value = pending.body.full_name;
+          if (pending.kind === "name") {
+            profileFirstName.value = pending.body.first_name || "";
+            profileLastName.value = pending.body.last_name || "";
+          }
           else profileLanguage.value = pending.body.bot_language;
         }
       }
@@ -419,7 +425,10 @@
     if (session.profileChange && session.profileChange.kind !== kind) return;
     if (!session.profileChange) {
       const body = { operation_id: crypto.randomUUID(), expected_version: profileVersion };
-      if (kind === "name") body.full_name = profileName.value;
+      if (kind === "name") {
+        body.first_name = profileFirstName.value;
+        body.last_name = profileLastName.value;
+      }
       else body.bot_language = profileLanguage.value;
       session.profileChange = { kind, body };
       save();
