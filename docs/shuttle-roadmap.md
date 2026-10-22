@@ -110,8 +110,10 @@ The published provider rejects the optional prelink configuration; the existing
 full OIDC prelink acceptance used our patched candidate. The
 [owned provider export](shuttle-zitadeltg-prelink-provider.md#current-upstream-component-checkpoint-2026-10-22)
 now pins upstream `59ac6a15` and applies the same patch unchanged. Its refreshed
-Linux race/vet component gate passed, but a new image and combined 4.20/current-bot
-OIDC gate remain open. Do not enable prelink on the unpatched published image.
+Linux race/vet component gate passed. Candidate image `858d7005` then passed the
+bounded build/artifact gate, and its builder/cache were removed without OOM.
+Combined 4.20/current-bot OIDC acceptance and installation remain open. Do not
+enable prelink on the unpatched published image.
 
 ## Previous accepted installation checkpoint
 

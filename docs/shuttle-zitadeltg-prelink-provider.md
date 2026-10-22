@@ -16,8 +16,8 @@ does not implement this hook. A network-disabled synthetic startup probe on
 2026-10-22 exited 1 with `field prelink not found`. The upstream main snapshot
 above also has no hook; it is added only by the owned patch. Published-provider
 compatibility checks therefore do not establish prelink acceptance. The refreshed
-export's component results are recorded below; image/build and combined runtime
-acceptance remain open. Historical candidate results do not automatically apply
+export's component and image results are recorded below; combined runtime
+acceptance remains open. Historical candidate results do not automatically apply
 to its updated dependencies.
 
 ## Intermediate real Telegram browser proof (2026-10-22)
@@ -126,8 +126,27 @@ Ignored source receipts, published-image rejection probe, original failed runner
 and successful `r2/component.json` are retained under
 `.cache/shuttle-work/provider-prelink-refresh-20261022-v1/`; the source export is
 under `.cache/shuttle-live-test/zitadeltg-runtime/prelink-main59ac-20261022-v1/`.
-These are component results. A new candidate image and full OIDC/prelink
-acceptance against Zitadel 4.20 with the current bot remain to be completed.
+The subsequent bounded build produced candidate image
+`sha256:858d7005772e8e5ca538983b0d866baec279024866ae2c25a8189f8126905084`.
+The pinned Dockerfile builds with Go 1.27.2; the component tests above used
+Go 1.27.3. Image metadata, iid and Docker's OCI image identity matched. Exported
+artifacts contained the expected Linux/amd64 ELF, runtime user `1000:1000`,
+SIGTERM, source-matching provider license and the saved same-base Go license,
+patent and public CA files. No source tree, shell, private PEM or configuration
+directory was present. Binary SHA256:
+`244d8215560c2ccdf2d47300548eaf0310f65a676d24cd032ffd5f744444b5c2`.
+
+The separate pinned BuildKit builder had a 2 GiB RAM/total-swap limit, two CPUs
+and one concurrent worker operation. Build and artifact inspection passed, with
+zero cgroup OOM/kill events. Its builder container and private cache volume were
+removed; global builder selection and shared caches were not changed. Source
+hashes remained identical. Review strengthened digest binding and cleanup under
+diagnostic failures before execution; fresh review found no actionable findings.
+Evidence remains under `.cache/shuttle-work/provider-prelink-build-20261022-v1/`.
+
+These are component and artifact results. Full OIDC/prelink acceptance against
+Zitadel 4.20 with the current bot remains to be completed; no image was installed
+on a running identity stand by this build.
 
 ## Historical component evidence and limits
 
