@@ -279,6 +279,7 @@ test("review shows exact lines and charges; only explicit confirmation submits; 
   assert.equal(orderPosts(b, "submit").length, 0); assert.match(b.text("orders-preview"), /Soup <img>/); assert.match(b.text("orders-preview"), /BYN 12.34 each = BYN 24.68/);
   assert.match(b.text("orders-preview"), /Required charge: Service/); assert.match(b.text("orders-preview"), /Total: BYN 25.68/); assert.match(b.text("orders-preview"), /Europe\/Berlin/);
   assert.equal(b.get("orders-confirm").disabled, false); await b.click("orders-confirm"); assert.equal(api.orders.length, 1);
+  assert.equal(orderPosts(b, "submit")[0].body.operation_id, orderPosts(b, "prepare")[0].body.operation_id);
   assert.equal(b.storage.has(orderStorageKey(owner)), false); assert.match(b.text("orders-order-status"), /unpaid|payment is not confirmed/);
   assert.match(b.text("orders-submitted"), /Submitted; check payment proofs/); assert.match(b.text("orders-submitted"), /BYN 25.68/);
   const article = b.get("orders-submitted").children[0], cancel = article.children.find(e => e.tag === "button"); assert.ok(cancel); await cancel.listeners.click();
@@ -313,6 +314,7 @@ test("lost preparation recovers review after page restart and never automaticall
   const reload = browser(api, { storage: b.storage }); await reload.start(); assert.match(reload.text("orders-preview"), /Total: BYN 25.68/);
   assert.equal(reload.get("orders-confirm").disabled, false); assert.equal(orderPosts(reload, "submit").length, 0); assert.equal(api.orders.length, 0);
   await reload.click("orders-confirm"); assert.equal(api.orders.length, 1);
+  assert.equal(orderPosts(reload, "submit")[0].body.operation_id, orderPosts(b, "prepare")[0].body.operation_id);
 });
 
 test("unsaved edits invalidate review; stale submission does not reprice or replace its confirmation", async () => {

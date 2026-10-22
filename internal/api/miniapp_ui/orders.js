@@ -357,7 +357,7 @@ window.createZinusyaOrders = function (env) {
       // A recovered preparation is displayed for review; it never authorizes submission.
       renderSnapshot(document.createElement("div"), result.snapshot);
       if (!catalog || !draft) await loadEvent(e, eventID);
-      forgetOrder(); preparation = result; renderPreparation(); el["order-status"].textContent = w().prepared;
+      forgetOrder(); preparation = { ...result, operation_id: p.body.operation_id }; renderPreparation(); el["order-status"].textContent = w().prepared;
       return;
     }
     const order = checkOrder(p.kind === "submit" ? result?.order : result);
@@ -400,7 +400,7 @@ window.createZinusyaOrders = function (env) {
   el.confirm.addEventListener("click", () => run(e => {
     if (dirty || !preparation || Date.parse(preparation.expires_at) <= Date.now()) return;
     const a = preparation.arguments;
-    return beginOrder(e, "submit", { operation_id: crypto.randomUUID(), expected_event_version: a.expected_event_version, expected_catalog_version: a.expected_catalog_version, expected_draft_version: a.expected_draft_version, proposal_id: preparation.proposal_id, confirmed: true });
+    return beginOrder(e, "submit", { operation_id: preparation.operation_id, expected_event_version: a.expected_event_version, expected_catalog_version: a.expected_catalog_version, expected_draft_version: a.expected_draft_version, proposal_id: preparation.proposal_id, confirmed: true });
   }));
   el["order-recover"].addEventListener("click", () => run(recoverOrder));
   el["order-retry"].addEventListener("click", () => run(dispatchOrder));
