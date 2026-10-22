@@ -136,5 +136,11 @@ a fresh, repaired 4.20 fixture. It does not cover an existing IAM database
 upgrade, token expiry/refresh, the Zinusya prelink callback, or real Telegram
 consent. The primary and separate base IAM installations remain unchanged.
 
+A later [existing-database copy rehearsal](shuttle-iam-existing-upgrade-qa-2026-10-22.md)
+also passed 4.16.3 to 4.20.0 migration, preservation of original events and
+user/grant records, old/fresh user-token checks, a 4.20 restart, and backup-restore
+authentication on 4.16.3. That isolated rehearsal did not upgrade the primary or
+base installation and did not run the bot or provider.
+
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
