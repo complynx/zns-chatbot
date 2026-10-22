@@ -80,7 +80,7 @@ func TestKnowledgeInspectorPreservesOriginalNativeAndAgentPreparations(t *testin
 			require.NoError(t, json.Unmarshal(raw, &found))
 			require.Equal(t, "prepared", found.Status)
 			require.Equal(t, op, found.OperationID)
-			require.Equal(t, "mvp-91", found.ContractRevision)
+			require.Equal(t, "mvp-92", found.ContractRevision)
 			require.Equal(t, prep.Preconditions.ProposalID, found.Preconditions.ProposalID)
 			require.JSONEq(t, string(prep.Arguments), string(found.Arguments))
 			require.Equal(t, f.ownerScope.Subject, found.Binding.Subject)
