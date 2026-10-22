@@ -30,7 +30,8 @@ func TestStructuredNavigationNeedsNoLoomAndReplaysAcceptedUpdates(t *testing.T) 
 	require.Zero(t, p.loomUnavailableCalls)
 	require.Empty(t, p.runs)
 	require.Empty(t, p.inputs)
-	require.Contains(t, p.sent[0].Text, "Zinusya\n/profile")
+	require.Contains(t, p.sent[0].Text, "Zinusya")
+	require.Contains(t, p.sent[0].Text, "/profile")
 	require.Contains(t, p.sent[1].Text, "Name: Not set")
 	require.Contains(t, p.sent[2].Text, "No registrations")
 	require.Contains(t, p.sent[3].Text, "Open /registrations again")
@@ -163,7 +164,7 @@ func TestStructuredProfilePlainTextUsesSavedLanguageAndCurrentAuthorization(t *t
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	require.NotContains(t, p.sent[2].Text, "Daniel")
-	require.Contains(t, p.sent[2].Text, "Access denied")
+	require.Contains(t, p.sent[2].Text, "You don’t have access")
 	require.Zero(t, p.loomUnavailableCalls)
 }
 

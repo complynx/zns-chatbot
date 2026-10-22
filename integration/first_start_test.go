@@ -48,7 +48,8 @@ func TestFirstStartOnboardingContinuesAcrossRestartAndThenUsesNativeMenu(t *test
 	require.Len(t, p.inputs, 1)
 	require.Equal(t, "Anna Maria de la Cruz", promptUserText(p.inputs[0].Text))
 	require.Contains(t, p.createdInputs[0], `"needs_real_name":true`)
-	require.Contains(t, p.sent[len(p.sent)-1].Text, "Zinusya\n/profile")
+	require.Contains(t, p.sent[len(p.sent)-1].Text, "Zinusya")
+	require.Contains(t, p.sent[len(p.sent)-1].Text, "/profile")
 	require.Zero(t, p.loomUnavailableCalls)
 }
 

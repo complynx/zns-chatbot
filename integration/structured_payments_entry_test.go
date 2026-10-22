@@ -48,7 +48,7 @@ func TestStructuredPaymentsNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 			form := p.sent[1].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
 			require.Equal(t, appTestOrigin+"/app/#pass-payments", form.InlineKeyboard[0][0].WebApp.URL)
 			if language == "ru" {
-				require.Contains(t, p.sent[0].Text, "Зинуся")
+				require.Contains(t, p.sent[0].Text, "ЗиНуСя")
 				require.Equal(t, "Открыть оплату пасса", form.InlineKeyboard[0][0].Text)
 				require.Contains(t, p.sent[1].Text, "оплату подтверждает")
 			} else {

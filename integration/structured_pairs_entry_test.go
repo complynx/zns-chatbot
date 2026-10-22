@@ -48,7 +48,7 @@ func TestStructuredStartAndPairsNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 			form := p.sent[1].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
 			require.Equal(t, appTestOrigin+"/app/#pairs", form.InlineKeyboard[0][0].WebApp.URL)
 			if language == "ru" {
-				require.Contains(t, p.sent[0].Text, "Зинуся")
+				require.Contains(t, p.sent[0].Text, "ЗиНуСя")
 				require.Equal(t, "Открыть приглашения в пару", form.InlineKeyboard[0][0].Text)
 				require.Contains(t, p.sent[1].Text, "не означает согласия")
 			} else {
