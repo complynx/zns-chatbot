@@ -228,6 +228,13 @@ type ShuttleFile struct {
 	AcceptedAt pgtype.Timestamptz `json:"accepted_at"`
 }
 
+type ShuttleIamNameOrigin struct {
+	UserID     uuid.UUID          `json:"user_id"`
+	Origin     string             `json:"origin"`
+	RecordedAt pgtype.Timestamptz `json:"recorded_at"`
+	CheckedAt  pgtype.Timestamptz `json:"checked_at"`
+}
+
 type ShuttleIdentityAudit struct {
 	ID        int64              `json:"id"`
 	UserID    uuid.UUID          `json:"user_id"`

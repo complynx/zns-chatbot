@@ -68,8 +68,14 @@ func (c *Client) find(ctx context.Context, email string, credential Credential) 
 // EnsureUser requires a verified Telegram user and a caller-persisted proposed
 // UUID under the caller's durable identity lock. Reuse that UUID after an
 // unknown create result. This adapter never invents a Telegram OIDC subject.
-func (c *Client) EnsureUser(ctx context.Context, u telegram.User, proposedUserID string) (Account, error) {
-	if u.ID <= 0 || u.ID > maxTelegramID || u.IsBot || proposedUserID == "" || len(proposedUserID) > maxUserIDLength {
+// recordOrigin must persist technical provenance before create (true), or record
+// a verified existing-account lookup (false), without downgrading prior technical
+// provenance after an unknown create. A failed callback prevents creation/return.
+func (c *Client) EnsureUser(
+	ctx context.Context, u telegram.User, proposedUserID string, recordOrigin func(context.Context, bool) error,
+) (Account, error) {
+	if u.ID <= 0 || u.ID > maxTelegramID || u.IsBot || proposedUserID == "" || len(proposedUserID) > maxUserIDLength ||
+		recordOrigin == nil {
 		return Account{}, ErrDenied
 	}
 	email := "tg+" + strconv.FormatInt(c.options.BotID, 10) + "+" + strconv.FormatInt(u.ID, 10) + "@telegram.invalid"
@@ -82,16 +88,19 @@ func (c *Client) EnsureUser(ctx context.Context, u telegram.User, proposedUserID
 		return Account{}, err
 	}
 	if len(users) == 1 {
-		return c.account(users[0], email)
+		return c.existingAccount(ctx, users[0], email, recordOrigin)
 	}
 	// Check the caller's immutable ID before creation: the email projection can
 	// lag after a previous create request whose response was lost.
 	existing, readErr := c.getAccount(ctx, credential, proposedUserID, email)
 	if readErr == nil {
-		return existing, nil
+		return existing, recordOrigin(ctx, false)
 	}
 	if !errors.Is(readErr, errNotFound) {
 		return Account{}, readErr
+	}
+	if err = recordOrigin(ctx, true); err != nil {
+		return Account{}, err
 	}
 	given, family := strings.TrimSpace(u.FirstName), strings.TrimSpace(u.LastName)
 	if given == "" {
@@ -133,6 +142,16 @@ func (c *Client) EnsureUser(ctx context.Context, u telegram.User, proposedUserID
 		return Account{}, createErr
 	}
 	return Account{}, ErrUnavailable
+}
+
+func (c *Client) existingAccount(
+	ctx context.Context, user iamUser, email string, recordOrigin func(context.Context, bool) error,
+) (Account, error) {
+	account, err := c.account(user, email)
+	if err != nil {
+		return Account{}, err
+	}
+	return account, recordOrigin(ctx, false)
 }
 
 func (c *Client) getAccount(ctx context.Context, credential Credential, userID, email string) (Account, error) {

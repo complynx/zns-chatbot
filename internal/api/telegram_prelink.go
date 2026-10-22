@@ -182,7 +182,20 @@ func (s *Server) completeTelegramPrelink(ctx context.Context, assertion string) 
 	account := identity.Account{Subject: attempt.User.Subject, OrganizationID: s.options.OrganizationID,
 		SyntheticEmail: fmt.Sprintf("tg+%d+%d@telegram.invalid", s.options.BotID, proof.User.ID)}
 	if account.Subject == "" {
-		account, err = s.iam.EnsureUser(ctx, proof.User, attempt.User.ID.String())
+		account, err = s.iam.EnsureUser(
+			ctx,
+			proof.User,
+			attempt.User.ID.String(),
+			func(ctx context.Context, technical bool) error {
+				return s.store.RecordIAMNameOrigin(
+					ctx,
+					attempt.User.ID,
+					s.options.BotID,
+					s.options.OrganizationID,
+					technical,
+				)
+			},
+		)
 		if err != nil {
 			return telegramPrelinkResponse{}, err
 		}

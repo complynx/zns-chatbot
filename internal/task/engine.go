@@ -191,7 +191,15 @@ func (s *Service) authorize(ctx context.Context, t db.Task, i intent) (db.User, 
 		return user, identity.Credential{}, identity.ErrDenied
 	}
 	if user.Subject == "" {
-		account, ensureErr := s.iam.EnsureUser(ctx, i.User, t.UserID.String())
+		bot, organization, _ := s.iam.DeploymentScope()
+		account, ensureErr := s.iam.EnsureUser(
+			ctx,
+			i.User,
+			t.UserID.String(),
+			func(ctx context.Context, technical bool) error {
+				return s.store.RecordIAMNameOrigin(ctx, t.UserID, bot, organization, technical)
+			},
+		)
 		if ensureErr != nil {
 			return user, identity.Credential{}, ensureErr
 		}

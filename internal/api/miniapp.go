@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -208,7 +209,14 @@ func (s *Server) bootstrapMiniApp(
 	}
 	owner := attempt.User
 	if owner.Subject == "" {
-		account, ensureErr := s.iam.EnsureUser(ctx, proof.User, owner.ID.String())
+		account, ensureErr := s.iam.EnsureUser(
+			ctx,
+			proof.User,
+			owner.ID.String(),
+			func(ctx context.Context, technical bool) error {
+				return s.store.RecordIAMNameOrigin(ctx, owner.ID, s.options.BotID, s.options.OrganizationID, technical)
+			},
+		)
 		if ensureErr != nil {
 			return miniAppBootstrapResponse{}, ensureErr
 		}
@@ -259,8 +267,18 @@ func (s *Server) miniAppVerifiedPrincipal(ctx context.Context, owner db.User) (i
 }
 
 func (s *Server) miniAppView(ctx context.Context, attempt db.MiniAppAttempt) (miniAppSessionResponse, error) {
-	profile, err := s.store.GetProfile(ctx, db.ProfileScope{BotID: s.options.BotID, UserID: attempt.User.ID,
-		Subject: attempt.User.Subject, Organization: s.options.OrganizationID})
+	scope := db.ProfileScope{BotID: s.options.BotID, UserID: attempt.User.ID,
+		Subject: attempt.User.Subject, Organization: s.options.OrganizationID}
+	profile, err := s.store.ImportIAMProfileName(ctx, scope, func(ctx context.Context) (string, string, error) {
+		name, readErr := s.iam.ReadProfileName(ctx, identity.Account{
+			Subject: attempt.User.Subject, OrganizationID: s.options.OrganizationID,
+			SyntheticEmail: fmt.Sprintf("tg+%d+%d@telegram.invalid", s.options.BotID, attempt.User.TelegramUserID),
+		}, attempt.User.TelegramUserID)
+		return name.FirstName, name.LastName, readErr
+	})
+	if errors.Is(err, identity.ErrUnavailable) {
+		profile, err = s.store.GetProfile(ctx, scope)
+	}
 	if err != nil {
 		return miniAppSessionResponse{}, err
 	}

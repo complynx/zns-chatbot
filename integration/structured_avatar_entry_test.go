@@ -18,6 +18,7 @@ func TestStructuredStartAndAvatarNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 			p.loomDown = true
 			p.miniAppOrigin = appTestOrigin
 			h := setup(t, p)
+			seedNamedTelegramUser(t, h)
 			for n, command := range []string{"/start", "/avatar"} {
 				update := telegram.Update{ID: int64(97500 + n), Message: &telegram.Message{
 					ID: int64(97500 + n), From: &telegram.User{ID: 456, LanguageCode: language},
@@ -64,6 +65,7 @@ func TestStructuredAvatarUnavailablePreservesAgentQuestion(t *testing.T) {
 	p := newPeers(t)
 	p.question = true
 	h := setup(t, p)
+	seedNamedTelegramUser(t, h)
 	original := h.submitText(t, 97600, "Ask me a question")
 	h.await(t, original, "awaiting_user")
 	h.awaitReplies(t, 1)

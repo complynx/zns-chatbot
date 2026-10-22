@@ -18,6 +18,7 @@ func TestStructuredPaymentsNeedNoLoomAndReplayAfterRestart(t *testing.T) {
 			p.loomDown = true
 			p.miniAppOrigin = appTestOrigin
 			h := setup(t, p)
+			seedNamedTelegramUser(t, h)
 			for n, command := range []string{"/start", "/payments"} {
 				update := telegram.Update{ID: int64(98700 + n), Message: &telegram.Message{
 					ID: int64(98700 + n), From: &telegram.User{ID: 456, LanguageCode: language},

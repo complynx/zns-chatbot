@@ -32,7 +32,12 @@ type linkFixture struct {
 func linkedFixture(t *testing.T) (*linkFixture, *iamFixture, *Client, Account) {
 	t.Helper()
 	f, c := fixture(t)
-	account, err := c.EnsureUser(context.Background(), telegram.User{ID: 456, FirstName: "Fixture"}, "persisted-id")
+	account, err := c.EnsureUser(
+		context.Background(),
+		telegram.User{ID: 456, FirstName: "Fixture"},
+		"persisted-id",
+		func(context.Context, bool) error { return nil },
+	)
 	require.NoError(t, err)
 	links := &linkFixture{}
 	original := f.server.Config.Handler

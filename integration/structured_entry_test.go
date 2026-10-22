@@ -64,7 +64,7 @@ func TestStructuredNavigationPreservesAgentQuestionAcrossLoomOutageAndRestart(t 
 	p.mu.Lock()
 	p.loomDown = true
 	p.mu.Unlock()
-	for n, command := range []string{"/menu", "/profile", "/registrations", "/name"} {
+	for n, command := range []string{"/menu", "/profile", "/registrations"} {
 		id := h.submitText(t, int64(89201+n), command)
 		h.await(t, id, "completed")
 		h.awaitReplies(t, n+2)
@@ -81,7 +81,7 @@ func TestStructuredNavigationPreservesAgentQuestionAcrossLoomOutageAndRestart(t 
 	answer := h.submitText(t, 89205, "My answer")
 	h.await(t, answer, "completed")
 	h.await(t, original, "completed")
-	h.awaitReplies(t, 6)
+	h.awaitReplies(t, 5)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	require.Len(t, p.runs, 1)

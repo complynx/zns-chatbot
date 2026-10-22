@@ -114,7 +114,7 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 	scope := db.ProfileScope{
 		BotID: bot, Organization: organization, Subject: user.Subject, UserID: user.ID,
 	}
-	profile, err := s.store.GetProfile(ctx, scope)
+	profile, err := s.importIAMName(ctx, scope, user)
 	if err != nil {
 		return "", err
 	}
@@ -123,14 +123,11 @@ func (s *Service) profilePrompt(ctx context.Context, t db.Task, i intent) (strin
 		return "", err
 	}
 	language := profileLanguage(profile.BotLanguage, i.User.LanguageCode, settings.Document.DefaultLanguage)
-	raw, err := json.Marshal(profile)
-	if err != nil {
-		return "", err
-	}
 	var text strings.Builder
 	text.WriteString(files.Prompt(i.Text, language, i.Attachments))
-	text.WriteString(profileContextMarker)
-	text.Write(raw)
+	if err = appendProfileContext(&text, profile, i.User); err != nil {
+		return "", err
+	}
 	if err = s.appendStructuredContext(ctx, &text, user, t.ID); err != nil {
 		return "", err
 	}

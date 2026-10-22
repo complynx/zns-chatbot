@@ -360,6 +360,9 @@ func (s *Service) accept(ctx context.Context, update telegram.Update, raw json.R
 	if err != nil {
 		return db.Task{}, false, err
 	}
+	if err = s.routeStart(ctx, &request); err != nil {
+		return db.Task{}, false, err
+	}
 	if s.observer != nil {
 		carrier := propagation.MapCarrier{}
 		s.observer.Propagator().Inject(ctx, carrier)

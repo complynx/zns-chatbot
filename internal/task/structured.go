@@ -35,8 +35,7 @@ const (
 
 func structuredCommand(text string) bool {
 	text = strings.TrimSpace(text)
-	return text == registerCommand || strings.HasPrefix(text, registerCommand+" ") || text == nameCommand ||
-		strings.HasPrefix(text, nameCommand+" ") ||
+	return text == registerCommand || strings.HasPrefix(text, registerCommand+" ") ||
 		text == startCommand || text == pairsCommand || text == avatarCommand || text == menuCommand || text == ordersCommand || text == massageCommand || text == paymentReviewsCommand ||
 		text == knowledgeCommand || text == paymentsCommand || text == profileCommand ||
 		text == registrationsCommand ||
@@ -70,7 +69,9 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 	if i.StructuredCommand == registerCommand {
 		return s.structuredRegister(ctx, t, c, i, scope, ru)
 	}
-	if i.StructuredCommand == nameCommand || (i.Kind == kindMessage && i.ReplyToMessageID > 0) {
+	// Only already-admitted native name tasks can reach this branch. New /name
+	// messages use the agent dialogue and explicit profile tools.
+	if i.StructuredCommand == nameCommand {
 		return s.structuredName(ctx, t, c, i, scope, ru)
 	}
 	if i.StructuredCommand == paymentReviewsCommand {

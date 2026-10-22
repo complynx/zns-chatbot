@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -262,25 +263,56 @@ func TestEnsureUserCreatesAndReusesSyntheticIdentity(t *testing.T) {
 	t.Parallel()
 	f, c := fixture(t)
 	ctx := context.Background()
-	a, err := c.EnsureUser(ctx, telegram.User{ID: 456, FirstName: "Daniel"}, "persisted-id")
+	recorded := []bool{}
+	recordOrigin := func(_ context.Context, technical bool) error {
+		recorded = append(recorded, technical)
+		if technical {
+			require.Zero(t, f.count("create"))
+		}
+		return nil
+	}
+	a, err := c.EnsureUser(ctx, telegram.User{ID: 456, FirstName: "Daniel"}, "persisted-id", recordOrigin)
 	require.NoError(t, err)
 	require.Equal(t, "persisted-id", a.Subject)
 	require.Equal(t, "tg+123+456@telegram.invalid", a.SyntheticEmail)
-	a, err = c.EnsureUser(ctx, telegram.User{ID: 456, FirstName: "Changed"}, "other-proposed-id")
+	a, err = c.EnsureUser(ctx, telegram.User{ID: 456, FirstName: "Changed"}, "other-proposed-id", recordOrigin)
 	require.NoError(t, err)
 	require.Equal(t, "persisted-id", a.Subject)
 	require.Equal(t, 1, f.count("create"))
+	require.Equal(t, []bool{true, false}, recorded)
 }
 func TestEnsureUserReconcilesLostCreateResponse(t *testing.T) {
 	t.Parallel()
 	f, c := fixture(t)
 	f.loseCreate = true
-	a, err := c.EnsureUser(context.Background(), telegram.User{ID: 456}, "persisted-id")
+	recorded := []bool{}
+	recordOrigin := func(_ context.Context, technical bool) error { recorded = append(recorded, technical); return nil }
+	a, err := c.EnsureUser(context.Background(), telegram.User{ID: 456}, "persisted-id", recordOrigin)
 	require.NoError(t, err)
 	require.Equal(t, "persisted-id", a.Subject)
-	_, err = c.EnsureUser(context.Background(), telegram.User{ID: 456}, "persisted-id")
+	_, err = c.EnsureUser(context.Background(), telegram.User{ID: 456}, "persisted-id", recordOrigin)
 	require.NoError(t, err)
 	require.Equal(t, 1, f.count("create"))
+	require.Equal(t, []bool{true, false}, recorded)
+}
+
+func TestEnsureUserCannotCreateBeforeProvenanceCommit(t *testing.T) {
+	t.Parallel()
+	f, c := fixture(t)
+	errStorage := errors.New("fixture provenance storage unavailable")
+	_, err := c.EnsureUser(
+		context.Background(),
+		telegram.User{ID: 456},
+		"persisted-id",
+		func(context.Context, bool) error {
+			return errStorage
+		},
+	)
+	require.ErrorIs(t, err, errStorage)
+	require.Zero(t, f.count("create"))
+	_, err = c.EnsureUser(context.Background(), telegram.User{ID: 456}, "persisted-id", nil)
+	require.ErrorIs(t, err, ErrDenied)
+	require.Zero(t, f.count("create"))
 }
 func TestEnsureUserRejectsAmbiguousOrWrongOrg(t *testing.T) {
 	t.Parallel()
@@ -302,7 +334,12 @@ func TestEnsureUserRejectsAmbiguousOrWrongOrg(t *testing.T) {
 				u.State = "USER_STATE_LOCKED"
 				f.users = []iamUser{u}
 			}
-			_, err := c.EnsureUser(context.Background(), telegram.User{ID: 456}, "id")
+			_, err := c.EnsureUser(
+				context.Background(),
+				telegram.User{ID: 456},
+				"id",
+				func(context.Context, bool) error { return nil },
+			)
 			require.Error(t, err)
 			require.Equal(t, 0, f.count("create"))
 		})

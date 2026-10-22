@@ -23,15 +23,37 @@ restart and repeated start; IAM outage followed by recovery; consecutive edits
 that must converge to the latest name without modifying another account or its
 permissions. These requirements are recorded, not yet accepted as implemented.
 
-The current uninstalled source adds `mvp-92/schema71`: structured first/last
+The current uninstalled source adds `mvp-92/schema72`: structured first/last
 profile storage, atomic durable IAM-sync intent, River repair/retry and periodic
 name verification, plus separate agent and Mini App name inputs. Focused
 PostgreSQL/mock-IAM checks cover outage/restart, late older writes, scope,
 immutable receipts and mixed agent/form corrections. Browser form QA with a
 synthetic HTTP peer covers compound names, en/ru labels and the same write after
-an uncertain reply and reload. This does not complete the first-use onboarding,
-trusted IAM-name reuse, Telegram `/name` dialog port, real-IAM name-write gate or
+an uncertain reply and reload. Explicit provisioning provenance now permits
+safe adoption of existing IAM names, preserving concurrent profile changes and
+active name dialogs. Technical or unknown provenance still requires confirmation.
+Stop the old application before migration 72 so old provisioning cannot bypass
+the provenance ledger. This does not complete the first-use onboarding,
+real-model first-contact dialogue, installed name-sync worker gate or
 installation acceptance. The accepted primary installation below is unchanged.
+
+New `/name` messages now use the agent dialogue. Context supplies untrusted
+Telegram name/username hints, suggestion and confirmation rules; the Mini App
+retains an agent-free name form. Scripted-provider checks are not model judgment
+acceptance. Previously admitted native name tasks retain their recovery handler.
+
+New `/start` messages without filled local first/last names now enter the agent
+dialogue; dispatch can first reuse names from a verified existing IAM account.
+Filled local profiles keep native `/start` navigation while Loom is down.
+Duplicate updates retain their original task even after a profile is completed.
+This is source and scripted-provider coverage, not real-model acceptance.
+
+The real owned IAM adapter/store name-update gate also passed with a fresh
+synthetic identity: an injected client outage, store reopen and newer edit
+converged to the latest compound name while preserving other profile fields,
+email, username and one provider link. The grant baseline was empty. This is
+not a River/process-restart or primary installation claim; see the
+[name synchronization QA](shuttle-profile-name-sync-qa-2026-10-22.md).
 
 ## Accepted installation checkpoint
 
