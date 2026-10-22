@@ -113,6 +113,20 @@ PR35 merges its source fix at `ba1f4a11`, with published-image consumer proof
 still separate. Cancellation, broad voice and production-cutover acceptance
 remain open.
 
+The subsequent B2 gate now accepts actual `gpt-6-luna/low` cancellation from a
+native-API seeded expectation on application `c8d1205e` / image `8339d01c` and
+Loom `ba1f4a11` / `cbba225f`. The model read contracts/profile, cancelled the
+exact expectation and delivered a truthful completion. Names remain empty,
+local version is 2, no IAM name sync was created, and known IAM account fields
+are unchanged. Task/run and all seven steps completed; earlier histories and
+paid raw evidence are preserved. Four calls used 30386 input/173 output tokens,
+exhausting 21/21; the provider is held. This does not relabel original B opening
+or broad voice acceptance. See [scope and remaining gates](shuttle-persona-i18n.md).
+Loom33 is closed with exact-image native classification evidence; its failed
+aggregate-POST observer remains recorded. Read-only production metadata also
+confirms all four Loom components on `ba1f4a11`, API healthy. No production
+change was performed by this acceptance.
+
 The [isolated synthetic-Telegram/real-IAM fixture](shuttle-prelink-real-iam-qa-2026-10-22.md)
 now completes canonical-account creation/linking and full OIDC without the IAM
 external-user registration form. Both provider-first/Mini-App-first paths,

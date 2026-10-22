@@ -157,12 +157,39 @@ defect is tracked in [Loom33](https://github.com/complynx/loom/issues/33). Its
 fix is merged in PR35 at `ba1f4a11`; published-image consumer acceptance remains
 separate from upstream source and CI proof.
 
+The subsequent B2 gate accepts actual model cancellation on application
+`c8d1205e` / image `8339d01c` and Loom `ba1f4a11` / image `cbba225f`.
+A fresh synthetic owner's bounded name expectation was created through the
+supported native API, with no model request. The actual user input then asked
+to cancel it. `gpt-6-luna/low` read selected contracts and the current profile,
+called `cancel_name` with the exact expectation and version 1, and delivered:
+`Запрос имени отменён — сейчас можно его не указывать. 👌`
+
+The profile reached version 2 with empty names and no expectation or name-sync
+work. The task/run and all seven steps completed. Known IAM names, email,
+username, links and grants are unchanged; prior runs, steps, credit rows and
+the archived artifacts from the first 17 paid requests are preserved. Four actual requests
+used 30386 input and 173 output tokens. Total paid usage is now 21/21 and the
+provider is held. This accepts cancellation from native API setup, not model
+opening or full original B acceptance. The final response is gender-neutral;
+broad voice acceptance and issue24 remain open.
+
+Loom33 is now [accepted and closed](https://github.com/complynx/loom/issues/33#issuecomment-6353650897).
+An exact-image native fixture returned `invalid_arguments` with the declared
+`expected_version` field and created no profile operation. Its aggregate POST
+observer failed because discovery also uses POST; that failure remains recorded
+and proves no route-specific zero-dispatch claim. The unfinished fixture was
+canonically cancelled with unknown inference accounting retained. Upstream
+tests separately cover no preparation for invalid input and corrected calls.
+
 ## Hierarchical discovery protocol update
 
 Published Loom `70e2c5eb` (PR31) replaces the eager flat method index with a
 bounded service/category overview, global/hierarchical discovery and selected
-full contracts. Production read-only metadata confirms this revision across API,
-sandbox, proxy and file worker; API is healthy. There is no SQL migration or
+full contracts. At the PR31 checkpoint, production read-only metadata confirmed
+this revision across API, sandbox, proxy and file worker; API was healthy.
+The later PR35 checkpoint confirms all four on `ba1f4a11`, with API healthy.
+There is no SQL migration or
 context-cache format change from `5c25e0ec`.
 
 New application run requests explicitly persist
@@ -193,7 +220,8 @@ hard-denied outbound connections. Its task/run were canonically cancelled and
 the paid ledger remains 17/21. Provider tokens, cost and model quality were not
 measured. [Loom29 was accepted and closed](https://github.com/complynx/loom/issues/29#issuecomment-6353391948)
 using this capture and upstream discovery, authorization and context-identity
-evidence. No paid-model acceptance of the new protocol is asserted.
+evidence. This capture alone provides no paid-model acceptance; subsequent B2
+accepts only the cancellation path described above.
 
 Required model observations include concise useful replies, questions/choices,
 typed name correction, cancellation, mixed language, missing information and
