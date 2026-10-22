@@ -163,6 +163,14 @@ container-only metadata and a rejected header without losing source access.
 Voice/video notes, unknown-size cloud rejections, other malformed formats, transcription and
 unattended attachment classification remain separate.
 
+Current file-ID PDF processing also has a separate [2026-10-22 acceptance](shuttle-pdf-file-id-qa-2026-10-22.md)
+on application source `4f03e5ff` and published Loom `34f46468`. A fresh synthetic
+intake completes with one reply; source/derived ownership and simulated source
+loss are checked. An earlier fixture run stopped at the provider retry limit
+and was cancelled after one ineffective resume. It remains a failed completion;
+the fresh case does not establish automatic provider recovery. All temporary
+stand resources were archived and removed.
+
 Production retention and smaller configurable size policies remain open in the
 ignored decisions file. This milestone is not production readiness.
 

@@ -22,8 +22,11 @@ All six reports below are published; their original runtime observations retain 
   A later owned-stand run on unmodified Loom `1050d74e` and its font-equipped
   worker fetched the same Telegram source by opaque file ID, extracted text and
   rendered a readable PNG. [Consumer acceptance and image provenance](shuttle-loom-upstream-qa-2026-10-15.md).
-  This covers that synthetic document and version; it does not establish a new
-  end-to-end file-processing pass on Loom `34f46468`, OCR or arbitrary fonts.
+  A separate [current file-ID gate](shuttle-pdf-file-id-qa-2026-10-22.md) on Loom
+  `34f46468` passes a fresh full PDF case and ownership/source-loss checks. Its
+  earlier fixture run timed out, returned to the retry limit after one resume,
+  and was cancelled; that failure is retained. OCR and arbitrary fonts remain
+  outside these bounded passes.
 
 - L04 (upstream closed; bounded consumer runtime acceptance passed): [Delayed execution recovery after SIGKILL](https://github.com/complynx/loom/issues/19).
   Published Loom `34f46468` passes the actual-IAM pending-inference crash path:
