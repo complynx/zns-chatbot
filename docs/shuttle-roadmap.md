@@ -190,8 +190,12 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    [Loom #27](https://github.com/complynx/loom/issues/27) is merged and published.
    Nine focused Linux/race/PostgreSQL/OTLP tests passed independently, including
    consumed steering and restart; see [source acceptance](shuttle-loom-durable-tracing-qa-2026-10-22.md).
-   Install the published image through the candidate procedure and finish
-   Zinusya consumer tracing across its durable task and Loom queue. The earlier
+   The published image is installed through the candidate procedure. The bounded
+   [consumer trace gate](shuttle-consumer-tracing-qa-2026-10-22.md) now passes actual
+   Zinusya task/Loom queue/RPC propagation, consumed steering and graceful bot
+   restart on an isolated fixture, with one completed run and one final delivery.
+   Loom-process restart, approval tracing and primary backend visibility remain
+   separate consumer gates. The earlier
    [bounded trace report](shuttle-tracing-qa-2026-10-15.md#open-trace-boundary)
    remains historical HTTP propagation evidence.
    Do not change the Loom developer's stand.
