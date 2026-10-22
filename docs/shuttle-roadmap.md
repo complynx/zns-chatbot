@@ -87,6 +87,18 @@ continuation. Real Telegram authorization
 remains deferred until the user is available. See the
 [name synchronization report](shuttle-profile-name-sync-qa-2026-10-22.md).
 
+## Published IAM 4.20 compatibility checkpoint
+
+The exact server-published Zitadel 4.20.0 and ZitadelTG images passed 35 upstream
+compatibility subtests in a fresh isolated project. The Go harness used `-race`;
+the published binaries were not race-instrumented. The harness executed the
+published provider binary, real Zitadel/PostgreSQL and
+synthetic Telegram proofs. Temporary resources were removed after retaining the
+original fixture/controller failures and logs. The previous primary/base IAM
+installations remain unchanged on 4.16.3. This is upstream Login V1 compatibility,
+not yet Zinusya prelink, token-refresh/profile-sync or existing-database upgrade
+acceptance; see the [report](shuttle-iam420-compat-qa-2026-10-22.md).
+
 ## Previous accepted installation checkpoint
 
 The previous accepted primary installation used application source `4f03e5ff`, `mvp-91/schema70`,
