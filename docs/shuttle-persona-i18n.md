@@ -132,9 +132,9 @@ A4 still fails the suggested-name keyboard requirement: the model delivered a
 plaintext final answer rather than native `question`. Source instructions now
 explicitly bind `text`, `allow_text:true` and `choices` to that native tool;
 focused locale checks, lint and independent source review pass. This new
-instruction is not yet model-accepted or installed in production. Suggested-name
-choice and cancellation remain separate pending model gates; broad voice
-acceptance and issue24 closure remain open.
+instruction was not model-accepted at that checkpoint or installed in production.
+The subsequent C gate below accepts suggested-name choice. Cancellation, broad
+voice acceptance and issue24 closure remain open.
 
 The subsequent C dialogue on `057acdb2` / image `f98baa50` and Loom `5c25e0ec`
 used6 generations. Actual native `question` supplied an ordinary reply keyboard
@@ -152,7 +152,10 @@ the arguments locally before action HTTP dispatch, but its failure adapter
 reported `dependency_unavailable`; the model described a service outage.
 No outage HTTP503 was observed. No name expectation or profile mutation exists
 for B. Cancellation remains unaccepted. The cumulative spend is17/21, leaving4;
-all failed and successful observations remain preserved.
+all failed and successful observations remain preserved. The classification
+defect is tracked in [Loom33](https://github.com/complynx/loom/issues/33). Its
+fix is merged in PR35 at `ba1f4a11`; published-image consumer acceptance remains
+separate from upstream source and CI proof.
 
 ## Hierarchical discovery protocol update
 
@@ -173,9 +176,24 @@ coverage checks the new field and exact replay identity.
 
 Upgrade Loom to70e2c5eb or newer before new app runs send this field. Before
 rolling back to older strict readers, stop new discovery requests and drain
-pending creates; do not rewrite frozen idempotent payloads. The application
-change still needs an exact-image zero-upstream native capture. No paid-model
-acceptance of this new protocol or workflow-cost saving is asserted.
+pending creates; do not rewrite frozen idempotent payloads.
+
+The exact-image native capture now passes on application `c8d1205e` / image
+`8339d01c` and Loom `70e2c5eb` / image `3ab20b62`. Both the frozen application
+request and stored Loom run contain exactly `expand_services:["zinusya"]`.
+The request has one current user input, two service summaries, 23 categories and
+50 selected-service method summaries with a continuation cursor. Full input
+schemas are not eagerly expanded; all five tool schemas remain unchanged.
+
+The captured request is 37604 bytes, versus 57182 for the preceding C fixture
+(34.24% fewer bytes). Engine instructions/descriptions and the consumer's
+expansion preference changed, so this is not an isolated single-change estimate.
+The capture made zero external model requests, accessed no API credential and
+hard-denied outbound connections. Its task/run were canonically cancelled and
+the paid ledger remains 17/21. Provider tokens, cost and model quality were not
+measured. [Loom29 was accepted and closed](https://github.com/complynx/loom/issues/29#issuecomment-6353391948)
+using this capture and upstream discovery, authorization and context-identity
+evidence. No paid-model acceptance of the new protocol is asserted.
 
 Required model observations include concise useful replies, questions/choices,
 typed name correction, cancellation, mixed language, missing information and

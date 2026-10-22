@@ -101,8 +101,17 @@ flat-index checkpoint; there is no SQL/cache-version migration. New consumer
 run requests explicitly freeze discovery.expand_services:[zinusya], using the
 actual service ID. Existing frozen requests remain unchanged. This requires
 Loom70e+ and draining pending discovery creates before any older-server rollback.
-Focused wire/replay tests pass; the exact new candidate capture remains pending.
-No full-model or production-cutover acceptance is asserted.
+Focused wire/replay tests and all six CI 39868442521 jobs pass at `c8d1205e`.
+The exact-image capture on candidate `8339d01c` and Loom `3ab20b62` now confirms
+the accepted preference and one current input. Request bytes fall 57182→37604
+(34.24%); five tool schemas are unchanged, while instructions/descriptions and
+the expansion preference changed. This zero-upstream capture measures no
+provider tokens or cost. Its task/run were canonically cancelled, preserving
+paid usage 17/21. [Loom29 is closed with acceptance evidence](https://github.com/complynx/loom/issues/29#issuecomment-6353391948).
+The B classification defect is tracked in [Loom33](https://github.com/complynx/loom/issues/33);
+PR35 merges its source fix at `ba1f4a11`, with published-image consumer proof
+still separate. Cancellation, broad voice and production-cutover acceptance
+remain open.
 
 The [isolated synthetic-Telegram/real-IAM fixture](shuttle-prelink-real-iam-qa-2026-10-22.md)
 now completes canonical-account creation/linking and full OIDC without the IAM
