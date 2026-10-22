@@ -1,8 +1,9 @@
 # Account migration slice QA, 2026-10-22
 
 The missing application-account import is implemented as an explicit operator
-command. Historical18517-record and IAM906-user dry-runs remain separate evidence;
-they have not been replayed or relabelled as complete application migration.
+command. The earlier history and IAM dry-runs retain their original scope. A new
+combined protected-copy gate now verifies application import for906 exact existing
+subjects and18517 historical records; its count-only boundary is recorded below.
 See [operator contract](shuttle-history-account-import.md).
 
 ## Changes and focused verification
@@ -68,9 +69,9 @@ implementation changed in this slice.
 
 ## Remaining release gates
 
-The permitted count-only production-copy app-account dry-run remains unverified.
-Historical
-Telegram names are hints, not confirmed app names; legal names remain separate.
+The permitted count-only production-copy app-account dry-run now passes on an
+isolated clone. Historical Telegram names remain hints, not confirmed app names;
+legal names remain separate.
 Owner-checked avatar references do not require bulk byte migration. Full model
 onboarding, prepared human Telegram login and production switch retain separate
 approval/acceptance boundaries. Production data and services were untouched.
@@ -109,6 +110,39 @@ Published source `d659209e` passes all six jobs of
 including909 integration roots across four race-test shards and complete coverage
 verification. CI initially found a missing generated receipt model and an outdated
 knowledge-inspection contract expectation; both were fixed after fresh review.
+
+## Protected-copy906-account gate
+
+Daniel explicitly authorized a local private IAM snapshot. The source fixture
+remained unchanged. The608161-byte snapshot passed full decode before restoration
+into an isolated IAM4.20 project with its canonical issuer and TLS route. Offline
+machine-only validation matched906 unique archive owners to906 exact existing IAM
+subjects and validated18517 historical records. No raw rows or credentials were
+displayed or sent to a model.
+
+The packaged CLI in candidate `bd8cc621` imported all906 accounts. The application
+contained907 users including one synthetic operator,18517 history records and no
+confirmed profile names. Current operator/target IAM checks, identical-plan replay,
+receipt equality after store reopen and fingerprints of all other application
+tables passed. This is count-only private-copy import evidence, not906-user HTTP
+dialogue or avatar-byte acceptance; the earlier synthetic gate supplies HTTP
+authorization evidence.
+
+The initial controller failed before IAM bootstrap because Docker did not publish
+the gateway port on an internal-only network. An independently reviewed recovery
+connected only the gateway to a separate frontend bridge, preserved PostgreSQL,
+IAM and the failed checkpoint, and continued the previously unreached phases.
+It did not restore the snapshot again or recreate the906 subjects.
+
+Cleanup retained private application/IAM backups, fully decoded both, and removed
+all owned containers, volumes and networks. Source metadata and the failed receipt
+remained unchanged. No production write, real Telegram request or paid model call
+occurred. Aggregate acceptance and cleanup evidence is retained privately under
+`parallel-acceptance-20261022/combined-import/private906/`.
+
+Current source `fe8e9d89` passes all six jobs of
+[CI39852066416](https://github.com/complynx/zns-chatbot/actions/runs/39852066416):
+checks, four PostgreSQL race-test shards and complete-coverage verification.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk

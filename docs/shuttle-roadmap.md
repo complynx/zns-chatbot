@@ -19,8 +19,12 @@ the Linux candidate is built and packaged. See the
 [exact verification boundaries](shuttle-history-account-import-qa-2026-10-22.md).
 The combined synthetic real-IAM/application gate now passes packaged Linux import,
 replay, real-JWT owner/stranger HTTP metadata reads and current revocation. Both
-fixture preparation failures remain recorded. The permitted count-only
-production-copy account dry-run remains separate.
+fixture preparation failures remain recorded. The separately authorized
+protected-copy count-only gate now passes906 exact existing IAM subjects,
+907 application users including one synthetic operator,18517 history records,
+identical replay and reopened receipts. Other application tables and source
+metadata remain unchanged; private backups passed decode and all owned resources
+were removed. This does not claim906-user HTTP or avatar-byte acceptance.
 Avatar migration retains owner-checked Telegram references downloaded on demand;
 bulk byte copying is not required by the existing contract.
 
@@ -42,7 +46,14 @@ locale-selected identity/domain terminology, and apply it to model and native
 texts without changing action correctness or exact consent. The reviewed source and focused checks
 now pass; [model voice acceptance](shuttle-persona-i18n.md) remains open. Upstream [Loom29](https://github.com/complynx/loom/issues/29)
 separately addresses eager full catalogs and duplicate current-input rendering;
-another lane owns that runtime change.
+another lane owns that runtime change. Published Loom `5c25e0ec` / image `bc0a7837`
+now supplies a concise authorized method index and identity-based current-request
+rendering. An isolated no-upstream capture with the same application candidate
+shrunk146981→56079 bytes (61.85%), preserved all125 method IDs and reduced two
+input messages to one. Instructions and API settings match. This is byte-size
+and serialization evidence; total workflow tokens, discovery turns and model
+judgment remain unmeasured. Cache envelope v2 requires coordinated workers;
+old-binary rollback requires disposal of the disposable `run_contexts` cache.
 
 Daniel selected `gpt-6-luna` with `low` reasoning as the main target model and
 authorized 20 additional generation requests for bounded onboarding acceptance.

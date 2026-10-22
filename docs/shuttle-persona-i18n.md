@@ -47,9 +47,12 @@ contain fewer methods; this is not a measured token or price reduction.
 The earlier actual first-contact request used30520 input tokens. Its tool section
 occupied93.7% of compact JSON bytes, and Loom rendered the application input twice.
 [Loom29](https://github.com/complynx/loom/issues/29) separately owns on-demand
-contract loading and current-input rendering. This application change does not
-claim those runtime fixes or a single identity occurrence in the final provider
-request before that runtime change is accepted.
+contract loading and current-input rendering. Published Loom `5c25e0ec` / image
+`bc0a7837` now passes an isolated native-request capture with this application
+candidate:146981→56079 bytes (61.85%), all125 method IDs preserved, one input
+message instead of two, unchanged instructions and API settings. The full
+synthetic request and comparison remain private local artifacts. This does not
+measure live tokens, total workflow cost or extra discovery/model turns.
 
 ## Verification and remaining acceptance
 
@@ -71,8 +74,11 @@ including retries and summaries. The campaign has spent0. Automatic approval
 review rejected the first paid dispatch before execution because exact payload
 and destination authorization were not established. A separately reviewed
 capture-only mode has no upstream client or API-key access and hard-denies
-outbound connections; it is prepared but unexecuted. Bind a later capture and
-model dialogue to the final application/runtime images. Do not reuse an old
+outbound connections. Both the earlier and new published-Loom captures completed
+with zero external dispatches and no API-key access. Their service runs were
+cancelled through the canonical owner API; original accounting is preserved and
+the paid provider remains stopped. Bind the subsequent model dialogue to the
+current application/runtime images. Do not reuse an old
 image's successful packaging or model result as acceptance of this voice.
 
 Required model observations include concise useful replies, questions/choices,
