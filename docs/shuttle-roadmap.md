@@ -102,8 +102,8 @@ required a documented repair of a missed app projection; all original events
 were preserved. An [existing-database copy rehearsal](shuttle-iam-existing-upgrade-qa-2026-10-22.md)
 subsequently passed 4.16.3 to 4.20 migration, original-event and user/grant
 preservation, old/fresh token checks, restart and backup-restore authentication
-on 4.16.3. The primary/base installations remain unchanged. Prelink on 4.20,
-token expiry/refresh and real Telegram consent remain separate gates; see the
+on 4.16.3. The primary/base installations remain unchanged. Token expiry/refresh
+and real Telegram consent remain separate gates; see the
 [compatibility report](shuttle-iam420-compat-qa-2026-10-22.md).
 
 The published provider rejects the optional prelink configuration; the existing
@@ -112,8 +112,10 @@ full OIDC prelink acceptance used our patched candidate. The
 now pins upstream `59ac6a15` and applies the same patch unchanged. Its refreshed
 Linux race/vet component gate passed. Candidate image `858d7005` then passed the
 bounded build/artifact gate, and its builder/cache were removed without OOM.
-Combined 4.20/current-bot OIDC acceptance and installation remain open. Do not
-enable prelink on the unpatched published image.
+The [combined 4.20/current-bot OIDC gate](shuttle-prelink420-current-qa-2026-10-22.md)
+then passed on an isolated clone, including both login orders and completed-login
+restart. Primary/base installation remains open. Do not enable prelink on the
+unpatched published image.
 
 ## Previous accepted installation checkpoint
 

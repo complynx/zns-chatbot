@@ -144,9 +144,10 @@ hashes remained identical. Review strengthened digest binding and cleanup under
 diagnostic failures before execution; fresh review found no actionable findings.
 Evidence remains under `.cache/shuttle-work/provider-prelink-build-20261022-v1/`.
 
-These are component and artifact results. Full OIDC/prelink acceptance against
-Zitadel 4.20 with the current bot remains to be completed; no image was installed
-on a running identity stand by this build.
+These are component and artifact results. The subsequent
+[current-bot/Zitadel 4.20 OIDC gate](shuttle-prelink420-current-qa-2026-10-22.md)
+passed on an isolated clone with this candidate. The build itself did not install
+an image on a running identity stand; primary/base activation remains open.
 
 ## Historical component evidence and limits
 
