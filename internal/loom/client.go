@@ -48,12 +48,17 @@ type Budget struct {
 	MaxMicrocredits int64 `json:"max_microcredits"`
 }
 
+type Discovery struct {
+	ExpandServices []string `json:"expand_services,omitempty"`
+}
+
 // CreateRunRequest contains semantic arguments; the session is sent in an authorization header.
 type CreateRunRequest struct {
 	ChatID           string      `json:"chat_id,omitempty"`
 	PreviousRunID    string      `json:"previous_run_id,omitempty"`
 	Input            Input       `json:"input"`
 	Interaction      Interaction `json:"interaction"`
+	Discovery        *Discovery  `json:"discovery,omitempty"`
 	DisconnectPolicy string      `json:"disconnect_policy"`
 	Delivery         Delivery    `json:"delivery"`
 	Budget           Budget      `json:"budget"`

@@ -35,6 +35,7 @@ func TestCreateRunReplaysStableKeyAfterLostReceipt(t *testing.T) {
 		var body map[string]any
 		assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		assert.NotContains(t, body, "auth_session_id")
+		assert.Equal(t, map[string]any{"expand_services": []any{"zinusya"}}, body["discovery"])
 		encoded, err := json.Marshal(body)
 		if !assert.NoError(t, err) {
 			return
@@ -60,7 +61,10 @@ func TestCreateRunReplaysStableKeyAfterLostReceipt(t *testing.T) {
 	client, err := loom.New(server.URL, server.Client())
 	require.NoError(t, err)
 	auth := loom.Auth{ServiceToken: "service-secret", SessionID: "session-1"}
-	input := loom.CreateRunRequest{Input: loom.Input{Text: "hello"}}
+	input := loom.CreateRunRequest{
+		Input:     loom.Input{Text: "hello"},
+		Discovery: &loom.Discovery{ExpandServices: []string{"zinusya"}},
+	}
 	_, err = client.CreateRun(context.Background(), auth, "operation-1", input)
 	var failure *loom.Error
 	require.ErrorAs(t, err, &failure)

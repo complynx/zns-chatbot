@@ -33,6 +33,7 @@ func (s *Service) prepareCreate(ctx context.Context, t *db.Task, c *checkpoint, 
 			Questions: "choices_and_text",
 			Approvals: true,
 		},
+		Discovery:        &loom.Discovery{ExpandServices: []string{"zinusya"}},
 		DisconnectPolicy: "continue",
 		Delivery:         loom.Delivery{Mode: "async"},
 	}

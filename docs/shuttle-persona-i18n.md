@@ -70,7 +70,7 @@ of the application prompt/native changes and manifest changes are clean.
 
 Model style is an instruction until observed with the actual target model.
 Daniel selected `gpt-6-luna / low` and authorized20 additional generations,
-including retries and summaries. The campaign has spent9;11 remain. Automatic approval
+including retries and summaries. At the A4 checkpoint the campaign had spent9, leaving11. Automatic approval
 review rejected the first paid dispatch before execution because exact payload
 and destination authorization were not established. A separately reviewed
 capture-only mode has no upstream client or API-key access and hard-denies
@@ -135,6 +135,47 @@ focused locale checks, lint and independent source review pass. This new
 instruction is not yet model-accepted or installed in production. Suggested-name
 choice and cancellation remain separate pending model gates; broad voice
 acceptance and issue24 closure remain open.
+
+The subsequent C dialogue on `057acdb2` / image `f98baa50` and Loom `5c25e0ec`
+used6 generations. Actual native `question` supplied an ordinary reply keyboard
+with `Александр Иванов` and free-text fallback. Names remained empty before the
+exact offered choice. `complete_name` then saved separate components, cleared the
+expectation and converged local/IAM versions to2; account fields were preserved.
+The final feminine response used one appropriate emoji and removed the keyboard.
+This accepts the current native-question/choice slice; it does not relabel old
+A4's missing-keyboard failure.
+
+Daniel explicitly extended the cumulative generation allowance20→21 by one.
+B then used2 generations and stopped before any question: the model called
+`request_name` without help/get or required `expected_version`. Loom rejected
+the arguments locally before action HTTP dispatch, but its failure adapter
+reported `dependency_unavailable`; the model described a service outage.
+No outage HTTP503 was observed. No name expectation or profile mutation exists
+for B. Cancellation remains unaccepted. The cumulative spend is17/21, leaving4;
+all failed and successful observations remain preserved.
+
+## Hierarchical discovery protocol update
+
+Published Loom `70e2c5eb` (PR31) replaces the eager flat method index with a
+bounded service/category overview, global/hierarchical discovery and selected
+full contracts. Production read-only metadata confirms this revision across API,
+sandbox, proxy and file worker; API is healthy. There is no SQL migration or
+context-cache format change from `5c25e0ec`.
+
+New application run requests explicitly persist
+`discovery: {"expand_services":["zinusya"]}` in the frozen create checkpoint.
+These are service IDs; `zinusya` contains our application modules. Expansion is
+a bounded discovery preference, not full eager schemas or additional authority.
+Selected methods still require full help and current permission/consent checks.
+The generic transport adds no default; existing frozen requests retain their
+original absent field and idempotent replay payload. Focused lost-receipt wire
+coverage checks the new field and exact replay identity.
+
+Upgrade Loom to70e2c5eb or newer before new app runs send this field. Before
+rolling back to older strict readers, stop new discovery requests and drain
+pending creates; do not rewrite frozen idempotent payloads. The application
+change still needs an exact-image zero-upstream native capture. No paid-model
+acceptance of this new protocol or workflow-cost saving is asserted.
 
 Required model observations include concise useful replies, questions/choices,
 typed name correction, cancellation, mixed language, missing information and

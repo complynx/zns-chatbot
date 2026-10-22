@@ -47,15 +47,15 @@ texts without changing action correctness or exact consent. The reviewed source 
 now pass; [model voice acceptance](shuttle-persona-i18n.md) remains open. Upstream [Loom29](https://github.com/complynx/loom/issues/29)
 separately addresses eager full catalogs and duplicate current-input rendering;
 another lane owns that runtime change. Published Loom `5c25e0ec` / image `bc0a7837`
-now supplies a concise authorized method index and identity-based current-request
+supplied a concise authorized method index and identity-based current-request
 rendering. An isolated no-upstream capture with application candidate `bd8cc621`
 shrunk146981→56079 bytes (61.85%), preserved all125 method IDs and reduced two
 input messages to one. Instructions and API settings match. This capture measures bytes
 and serialization only; it does not measure workflow tokens, discovery turns
 or model judgment. Cache envelope v2 requires coordinated workers;
 old-binary rollback requires disposal of the disposable `run_contexts` cache.
-Read-only metadata also confirms production Loom API is healthy on this published
-revision, with sandbox and Docker API proxy using the same actual image.
+Read-only metadata at that checkpoint confirmed production Loom API healthy on
+that revision, with sandbox and Docker API proxy using the same actual image.
 
 Daniel selected `gpt-6-luna` with `low` reasoning as the main target model and
 authorized 20 additional generation requests for bounded onboarding acceptance.
@@ -63,7 +63,7 @@ The previous series exhausted its separate eight-request allowance. Retries and
 summary requests count against the new total. Complete one name dialogue with
 restart and typed correction first; run cancellation and suggested-name choice
 only after it passes. Authorization is not a completed acceptance result.
-Nine real requests have been used;11 remain. The first three failed attempts
+At the A4 checkpoint nine real requests had been used, leaving11. The first three failed attempts
 remain recorded: JavaScript write denial, numeric help-cursor validation, and
 read routing through the action tool. The original test proxy froze on any
 error result; its separately reviewed minimal replacement now permits native
@@ -79,11 +79,30 @@ output tokens for that workflow; this is not a paired old/new Loom comparison.
 The original readiness observer failure and conservative unknown IAM comparison
 are retained alongside separate successful observers.
 
-Full A4 acceptance is blocked by a missing suggested-name reply keyboard: the
-model used plaintext final_answer. A narrowly reviewed source instruction now
-requires native question with text, allow_text:true and choices; focused tests
-and lint pass. The corrected candidate still needs actual keyboard/choice and
-cancellation observations. No full-model or production acceptance is asserted.
+Full A4 acceptance is blocked by its missing suggested-name reply keyboard:
+the model used plaintext final_answer. A narrowly reviewed source instruction
+requires native question with text, allow_text:true and choices. Current source
+`057acdb2` / image `f98baa50` passed the subsequent C flow in6 generations:
+actual native question/reply keyboard, exact offered choice, separate saved
+components, local/IAM version2, completed run and removed keyboard. Selected
+account fields remained unchanged. All six CI39864917394 jobs passed.
+
+Daniel then extended the cumulative allowance20→21 by one. B used2 more calls
+but failed before a question: request_name{} omitted required expected_version.
+Loom's local validation failed before action HTTP; its adapter mislabeled that
+as dependency_unavailable, so the model described an outage. No HTTP503 was
+observed, and no B expectation/name mutation exists. Cancellation is unaccepted.
+The total is17/21, leaving4; original failed attempts are preserved.
+
+Published Loom70e2c5eb/PR31 now provides a hierarchical service/category overview
+and lazy full-contract discovery. Production read-only metadata confirms all
+four components updated coherently and API healthy. This replaces the earlier
+flat-index checkpoint; there is no SQL/cache-version migration. New consumer
+run requests explicitly freeze discovery.expand_services:[zinusya], using the
+actual service ID. Existing frozen requests remain unchanged. This requires
+Loom70e+ and draining pending discovery creates before any older-server rollback.
+Focused wire/replay tests pass; the exact new candidate capture remains pending.
+No full-model or production-cutover acceptance is asserted.
 
 The [isolated synthetic-Telegram/real-IAM fixture](shuttle-prelink-real-iam-qa-2026-10-22.md)
 now completes canonical-account creation/linking and full OIDC without the IAM
