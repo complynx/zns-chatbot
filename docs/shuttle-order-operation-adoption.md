@@ -1,9 +1,15 @@
 # Original order submission operations
 
-Status: source implementation under acceptance, 2026-10-22. The owned primary
-still runs application `4f03e5ff`, schema70 / `mvp-91`; it does not include these
-order-inspection changes. The browser import and durable launch button are implemented in source. Real
-Loom adoption and browser-runtime acceptance remain open. This is not a production-readiness claim.
+Status, 2026-10-22: native preparation to real Loom adoption passed on the
+isolated `orders-adopt-r2` fixture, including graceful recovery and original
+receipt replay. The [current-image reverse browser gate](shuttle-orders-reverse-browser-qa-2026-10-22.md)
+also verifies one original form submission, unexpired stale-draft protection and
+completed-link recovery. Still-live original-question settlement, other mixed
+windows and real Telegram WebView remain under acceptance.
+The owned primary now runs source `74604b7e`, image `0d4457b6`, schema72 /
+`mvp-92`, through the separately accepted
+[candidate installation](shuttle-profile-name-sync-qa-2026-10-22.md#owned-primary-upgrade-with-ingress-fenced).
+Its Telegram ingress remains fenced. This is not a production-readiness claim.
 
 ## Contract
 
@@ -103,8 +109,9 @@ All 377 Mini App source behavior cases pass; this includes seven new import
 cases. The PostgreSQL/outbox gate passes 12 selected roots, including agent and
 protocol reply modes, original link persistence and unchanged consent state.
 Scoped task/integration lint reports zero issues. These are fixture HTTP/outbox
-and JavaScript VM checks; real Telegram WebView, actual browser and published
-Loom approval/replay remain separate acceptance gates.
+and JavaScript VM checks. The subsequent real Loom approval/replay gate is
+described below. The separate reverse report adds actual browser evidence;
+real Telegram WebView remains open.
 
 The preceding backend commit `6441a2e3` passed
 [CI53](https://github.com/complynx/zns-chatbot/actions/runs/39703986240): 883
@@ -137,4 +144,32 @@ zero issues and independent textual review found no actionable findings. The
 initial expanded run failed after its own PostgreSQL fixture exceeded 192 MiB and
 entered recovery; it was retained, archived and removed. A fresh 512 MiB fixture
 with 32 MiB shared buffers passed the same selection. That infrastructure failure
-is not counted as a successful run. Real IAM/Loom/browser acceptance remains open.
+is not counted as a successful run. The subsequent native-to-Loom runtime gate
+is accepted below; the separate reverse report records browser continuation and
+its remaining limits.
+
+## Native preparation to actual Loom: accepted isolated gate
+
+Source `d21d657c`, image `daf18c4f`, passed this direction on the owned
+`orders-adopt-r2` stand with real IAM and Loom and a controlled model provider.
+That source is an ancestor of the current source. This is acceptance of that
+recorded candidate, not a new browser or current-image runtime claim.
+
+The native API saved a selection and prepared submission. Loom adopted the
+original backend operation with a distinct Loom operation ID, retained its exact
+arguments, description, proposal and expiry, and presented the full localized
+terms with the inline original-operation WebApp link. A graceful bot stop took
+0.766 seconds. The same approval and run resumed; plain-text consent created one
+canonical order and cleared its consumed draft. Native replay of the original
+operation returned the identical historical receipt. No payment evidence was
+created. The Telegram peer and provider replies were synthetic; no browser was
+opened in this gate.
+
+The first harness attempt expected an origin without the configured `/app/`
+path and failed its URL assertion after preparation. A separately reviewed
+continuation checked the actual original link, retained the same approval and
+did not resend the original message or model response. The failed observation
+remains in `resume-attempt.json`; the completed proof is
+`.cache/shuttle-work/orders-adoption-runtime-20261022-r2/forward/checkpoint.json`
+with phase `forward_graceful_gate_passed`. Do not replay either driver: its
+completed order remains in the stopped fixture.

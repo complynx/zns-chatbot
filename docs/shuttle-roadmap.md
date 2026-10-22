@@ -212,11 +212,16 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    approval trace gate now passes. Primary route-feature installation and
    external backend visibility remain open; the primary bot is unchanged.
    Do not change the Loom developer's stand.
-   Orders submit original-operation adoption is now in source acceptance; see
-   [its contract and remaining gates](shuttle-order-operation-adoption.md).
-   The authenticated browser import and durable inline WebApp launch button are
-   implemented in source. Continue with actual Loom approval/browser acceptance
-   while preserving the original operation and newer drafts. The primary is unchanged.
+   Orders submit original-operation adoption now has isolated native-to-Loom
+   runtime evidence with distinct IDs and graceful recovery; see
+   [the contract and remaining gates](shuttle-order-operation-adoption.md).
+   The [current-image reverse browser gate](shuttle-orders-reverse-browser-qa-2026-10-22.md)
+   also verifies an original agent preparation submitted once through the shipped
+   form, full frozen terms, unexpired stale-draft protection, and completed-link
+   recovery without changing a newer draft. Earlier harness failures remain
+   recorded. Continue with still-live original-question settlement after form
+   completion and other contention/access windows. Real Telegram WebView and
+   autonomous model judgment remain separate; the primary is unchanged.
 2. Complete deferred joint CA/ZitadelTG and real-Telegram Mini App acceptance
    when Daniel is available. Revalidate the retained configuration first;
    isolated HTTP/Edge results do not replace that joint check.
