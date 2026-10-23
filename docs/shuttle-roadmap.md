@@ -385,7 +385,13 @@ candidate; see [its policy and acceptance limits](shuttle-avatar-source-retentio
    The [dual-dependency recovery check](shuttle-meal-recovery-qa-2026-10-21.md)
    accepts a consent queued with Zitadel/Loom stopped, graceful bot restart,
    and completion of the original approval with one financial review. Other
-   recovery windows and exact native-preparation adoption remain separate gates.
+   recovery windows retain their separate scope. Exact native-preparation adoption
+   is accepted in the [meal original-operation contract](shuttle-order-operation-adoption.md#meal-original-operation-acceptance).
+   The [ff8 actual Edge/IAM/Loom handoff](shuttle-meal-operation-handoff-qa-2026-10-23.md)
+   also accepts explicit form completion, settlement of the same live original
+   question and completed-link readback with one order. Original harness failures
+   remain preserved; the final result is independently verified by read-only
+   observation. Real Telegram/model and server-pilot boundaries remain open.
 4. Finish real export/account/avatar migration and server-specific cutover
    acceptance before any separately authorized production deployment. Historical
    payment records stay reference material, not credits in the new live ledger.

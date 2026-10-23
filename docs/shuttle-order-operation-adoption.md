@@ -230,5 +230,10 @@ and same-live-question result belongs in the ignored
 `.cache/shuttle-work/parallel-acceptance-20261022/meal-reverse-runtime/` receipts;
 it must not be inferred from these tests or the earlier native-to-agent gate.
 
+The [isolated actual Edge/IAM/Loom handoff report](shuttle-meal-operation-handoff-qa-2026-10-23.md)
+now records this bounded transition at ff8/image871, including original live-question
+settlement and completed-link recovery. Its two original harness failures remain
+failures; separate reviewed read-only observation establishes the final verdict.
+
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
