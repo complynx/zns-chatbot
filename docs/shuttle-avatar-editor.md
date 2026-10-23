@@ -34,8 +34,8 @@ The document's Crop button opens `#avatar-crop?draft=ID` directly on its owned
 shared draft. This full-screen canvas carries the interaction style of the
 original Python application's frame editor. It uses Telegram theme colors,
 stable viewport height and safe-area variables, with browser fallbacks. Native
-Telegram MainButton and BackButton controls are used when available; ordinary
-page buttons remain the browser fallback.
+Telegram MainButton and BackButton controls are used when available. Page buttons
+also stay available because an SDK object does not confirm host rendering.
 
 Drag to move the photo. Two fingers move, zoom and rotate it together. With a
 mouse, scroll zooms, Shift-scroll gives finer zoom, and Shift-drag rotates. The
@@ -44,9 +44,11 @@ is approximate and does not replace the server renderer.
 
 Finish saves a changed transform with the loaded version, obtains the saved
 version's server preview, then finalizes that exact draft version. These are
-separate recoverable operations. It does not finalize while a save is unknown,
-and an already generated unchanged version cannot be submitted again from this
-view. Successful finalization shows that the document is queued, not delivered.
+separate recoverable operations. It does not finalize while a save is unknown.
+Finish on an already generated unchanged version closes the Mini App without
+another write or delivery. A validated finalization receipt also closes the
+Mini App; it proves that the document is queued, not delivered. An unknown
+outcome leaves the view open for recovery.
 The generic editor's separate Save and Preview controls retain their existing
 behavior.
 
