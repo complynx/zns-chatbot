@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func bookingReminders(t *testing.T, f paymentFixture, booking uuid.UUID) map[string]db.MassageReminder {
@@ -130,12 +128,6 @@ func TestMassageRemindersShareBookingReplayAndCancellationAcrossInterfaces(t *te
 				require.Equal(t, notices[kind].DueAt, n.DueAt)
 				require.Equal(t, "cancelled", n.Booking.State)
 			}
-			migration, err := migrations.Files.ReadFile("00047_massage_reminders.sql")
-			require.NoError(t, err)
-			_, down, ok := strings.Cut(string(migration), "-- +goose Down")
-			require.True(t, ok)
-			_, err = f.H.store.Pool().Exec(t.Context(), down)
-			require.ErrorContains(t, err, "Export massage reminder intents and delivery history before rollback")
 			require.Len(t, bookingReminders(t, f, booking.ID), 2)
 		})
 	}

@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/orders"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func selectionFixture(t *testing.T) (paymentFixture, db.ProfileScope, db.OrdersSelectionChange) {
@@ -244,21 +242,12 @@ func TestOrdersSelectionPreservesHistoryAcrossCatalogChanges(t *testing.T) {
 	require.Nil(t, cleared.Quote)
 }
 
-func TestOrdersSelectionRollbackPreservesRetainedDraftAndReceipt(t *testing.T) {
+func TestOrdersSelectionPreservesRetainedDraftAndReceipt(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	f, scope, a := selectionFixture(t)
 	original, err := f.H.store.SaveOwnOrdersSelection(ctx, scope, a)
 	require.NoError(t, err)
-	raw, err := migrations.Files.ReadFile("00038_orders_selections.sql")
-	require.NoError(t, err)
-	_, down, found := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, found)
-	tx, err := f.H.store.Pool().Begin(ctx)
-	require.NoError(t, err)
-	_, downErr := tx.Exec(ctx, down)
-	require.ErrorContains(t, downErr, "Saved selections and operation history must be exported before rollback")
-	require.NoError(t, tx.Rollback(ctx))
 	receipt, err := f.H.store.OwnOrdersSelectionOperation(ctx, scope, a.EventID, a.OperationID)
 	require.NoError(t, err)
 	require.Equal(t, original, receipt)

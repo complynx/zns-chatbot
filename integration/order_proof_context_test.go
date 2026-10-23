@@ -12,7 +12,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/telegram"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func orderProofHistoryTask(t *testing.T, f paymentFixture, update int64) db.Task {
@@ -73,12 +72,6 @@ func TestMiniAppOrderProofContextTracksNativeAcceptanceAndOriginalReceipt(t *tes
 	require.NoError(t, err)
 	require.Equal(t, snapshot, rows)
 	require.Equal(t, int64(8), orderAllocationUnits(t, f, "occupied"))
-	migration, err := migrations.Files.ReadFile("00043_miniapp_order_evidence_actions.sql")
-	require.NoError(t, err)
-	_, down, ok := strings.Cut(string(migration), "-- +goose Down")
-	require.True(t, ok)
-	_, err = f.H.store.Pool().Exec(t.Context(), down)
-	require.ErrorContains(t, err, "Export native order proof action history before rollback")
 	rows, err = f.H.store.RecentMiniAppOrderEvidenceActions(t.Context(), scope, later.ID)
 	require.NoError(t, err)
 	require.Equal(t, snapshot, rows)

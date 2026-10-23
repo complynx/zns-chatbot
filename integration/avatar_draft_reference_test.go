@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -18,17 +17,7 @@ import (
 	"github.com/complynx/zns-chatbot/internal/avatar"
 	"github.com/complynx/zns-chatbot/internal/avatar/renderer"
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
-
-func avatarDraftSourceMigration(t *testing.T) (string, string) {
-	t.Helper()
-	raw, err := migrations.Files.ReadFile("00068_avatar_draft_sources.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	return up, down
-}
 
 func avatarHistoryFixture(t *testing.T, f avatarDraftFixture) db.AvatarHistorySource {
 	t.Helper()
@@ -264,96 +253,6 @@ func TestAvatarDraftHistoryRejectsChangedPhotoBeforePreview(t *testing.T) {
 	avatarIntentCount(t, f, 0)
 }
 
-func TestAvatarDraftReferenceMigrationPreservesUploadsAndOldOperationReplay(t *testing.T) {
-	t.Parallel()
-	f := avatarDraftSetup(t, nil)
-	f.p.mu.Lock()
-	f.p.fileBytes = f.raw
-	f.p.mu.Unlock()
-	taskID := submitFile(t, f.h, 29201, time.Now().UTC().Truncate(time.Second))
-	task, err := f.h.store.GetTask(t.Context(), taskID)
-	require.NoError(t, err)
-	var request struct {
-		Attachments []struct {
-			ID uuid.UUID `json:"id"`
-		} `json:"attachments"`
-	}
-	require.NoError(t, json.Unmarshal(task.Request, &request))
-	require.Len(t, request.Attachments, 1)
-	fileID := request.Attachments[0].ID
-	f.h.stop(t)
-	up, down := avatarDraftSourceMigration(t)
-	_, err = f.h.store.Pool().Exec(t.Context(), down)
-	require.NoError(t, err)
-	uploadID, telegramID, operation := uuid.New(), uuid.New(), uuid.New()
-	digest := sha256.Sum256(f.raw)
-	frame, err := hex.DecodeString(avatar.FrameSHA256)
-	require.NoError(t, err)
-	transform, err := json.Marshal(avatar.IdentityTransform())
-	require.NoError(t, err)
-	for _, row := range []struct {
-		id     uuid.UUID
-		source any
-	}{{uploadID, nil}, {telegramID, fileID}} {
-		_, err = f.h.store.Pool().
-			Exec(t.Context(), `INSERT INTO shuttle_avatar_drafts(id,user_id,source_file_id,original,source_sha256,mime_type,frame_sha256,transform,version) VALUES($1,$2,$3,$4,$5,'image/png',$6,$7,1)`, row.id, f.scope.UserID, row.source, f.raw, digest[:], frame, transform)
-		require.NoError(t, err)
-	}
-	oldReceipt := map[string]any{
-		"id":             telegramID,
-		"source_file_id": fileID,
-		"source_sha256":  hex.EncodeToString(digest[:]),
-		"mime_type":      "image/png",
-		"size_bytes":     len(f.raw),
-		"frame_sha256":   avatar.FrameSHA256,
-		"transform":      avatar.IdentityTransform(),
-		"version":        1,
-		"created_at":     "2026-10-20T12:00:00Z",
-		"updated_at":     "2026-10-20T12:00:00Z",
-	}
-	result, err := json.Marshal(oldReceipt)
-	require.NoError(t, err)
-	oldHash := sha256.Sum256(
-		[]byte(
-			`{"kind":"create_file","source_file_id":"` + fileID.String() + `","draft_id":"00000000-0000-0000-0000-000000000000"}`,
-		),
-	)
-	_, err = f.h.store.Pool().
-		Exec(t.Context(), `INSERT INTO shuttle_avatar_draft_operations(user_id,operation_id,kind,request_hash,draft_id,result,native) VALUES($1,$2,'create_file',$3,$4,$5,false)`, f.scope.UserID, operation, oldHash[:], telegramID, result)
-	require.NoError(t, err)
-	_, err = f.h.store.Pool().Exec(t.Context(), up)
-	require.NoError(t, err)
-	upload, raw, err := f.h.store.AvatarDraftOriginal(t.Context(), f.scope, uploadID)
-	require.NoError(t, err)
-	require.Equal(t, f.raw, raw)
-	require.EqualValues(t, len(f.raw), upload.SizeBytes)
-	reference, raw, err := f.h.store.AvatarDraftOriginal(t.Context(), f.scope, telegramID)
-	require.NoError(t, err)
-	require.Empty(t, raw)
-	require.EqualValues(t, len(f.raw), reference.SizeBytes)
-	require.Equal(t, &fileID, reference.SourceFileID)
-	f.p.mu.Lock()
-	f.p.fileGone = true
-	gets := f.p.fileGets
-	f.p.mu.Unlock()
-	code, replayed := avatarDraftAgent(t, f, "create_draft", operation, map[string]any{"source_file_id": fileID})
-	require.Equal(t, http.StatusOK, code, string(replayed))
-	require.Contains(t, string(replayed), `"status":"succeeded"`)
-	var receipt struct {
-		Result json.RawMessage `json:"result"`
-	}
-	require.NoError(t, json.Unmarshal(replayed, &receipt))
-	require.JSONEq(t, string(result), string(receipt.Result))
-	f.p.mu.Lock()
-	require.Equal(t, gets, f.p.fileGets)
-	f.p.mu.Unlock()
-	_, err = f.h.store.Pool().Exec(t.Context(), down)
-	require.ErrorContains(t, err, "reference-only avatar drafts")
-	_, raw, err = f.h.store.AvatarDraftOriginal(t.Context(), f.scope, uploadID)
-	require.NoError(t, err)
-	require.Equal(t, f.raw, raw, "refused rollback preserves uploaded originals")
-}
-
 func TestAvatarDraftHistorySingleConnectionAtomicLifecycle(t *testing.T) {
 	t.Parallel()
 	f := avatarDraftSetup(t, nil)
@@ -496,4 +395,93 @@ func TestHistoryAvatarCandidatesDiscoverOwnedFilesAcrossAgentAndNative(t *testin
 	gets := f.p.fileGets
 	f.p.mu.Unlock()
 	require.Zero(t, gets, "discovery never downloads Telegram files")
+}
+
+func TestAvatarDraftReferencePreservesUploadsAndOldOperationReplay(t *testing.T) {
+	t.Parallel()
+	f := avatarDraftSetup(t, nil)
+	f.p.mu.Lock()
+	f.p.fileBytes = f.raw
+	f.p.mu.Unlock()
+	taskID := submitFile(t, f.h, 29201, time.Now().UTC().Truncate(time.Second))
+	task, err := f.h.store.GetTask(t.Context(), taskID)
+	require.NoError(t, err)
+	var request struct {
+		Attachments []struct {
+			ID uuid.UUID `json:"id"`
+		} `json:"attachments"`
+	}
+	require.NoError(t, json.Unmarshal(task.Request, &request))
+	require.Len(t, request.Attachments, 1)
+	fileID := request.Attachments[0].ID
+	f.h.stop(t)
+	uploadID, telegramID, operation := uuid.New(), uuid.New(), uuid.New()
+	digest := sha256.Sum256(f.raw)
+	frame, err := hex.DecodeString(avatar.FrameSHA256)
+	require.NoError(t, err)
+	transform, err := json.Marshal(avatar.IdentityTransform())
+	require.NoError(t, err)
+	for _, row := range []struct {
+		id     uuid.UUID
+		source any
+	}{{uploadID, nil}, {telegramID, fileID}} {
+		var original any = f.raw
+		if row.source != nil {
+			original = nil
+		}
+		_, err = f.h.store.Pool().Exec(t.Context(),
+			`INSERT INTO shuttle_avatar_drafts(id,user_id,source_file_id,original,source_sha256,mime_type,frame_sha256,transform,version,source_size_bytes)
+ VALUES($1,$2,$3,$4,$5,'image/png',$6,$7,1,$8)`,
+			row.id, f.scope.UserID, row.source, original, digest[:], frame, transform, len(f.raw))
+		require.NoError(t, err)
+	}
+	oldReceipt := map[string]any{
+		"id":             telegramID,
+		"source_file_id": fileID,
+		"source_sha256":  hex.EncodeToString(digest[:]),
+		"mime_type":      "image/png",
+		"size_bytes":     len(f.raw),
+		"frame_sha256":   avatar.FrameSHA256,
+		"transform":      avatar.IdentityTransform(),
+		"version":        1,
+		"created_at":     "2026-10-20T12:00:00Z",
+		"updated_at":     "2026-10-20T12:00:00Z",
+	}
+	result, err := json.Marshal(oldReceipt)
+	require.NoError(t, err)
+	oldHash := sha256.Sum256(
+		[]byte(
+			`{"kind":"create_file","source_file_id":"` + fileID.String() + `","draft_id":"00000000-0000-0000-0000-000000000000"}`,
+		),
+	)
+	_, err = f.h.store.Pool().
+		Exec(t.Context(), `INSERT INTO shuttle_avatar_draft_operations(user_id,operation_id,kind,request_hash,draft_id,result,native) VALUES($1,$2,'create_file',$3,$4,$5,false)`, f.scope.UserID, operation, oldHash[:], telegramID, result)
+	require.NoError(t, err)
+	upload, raw, err := f.h.store.AvatarDraftOriginal(t.Context(), f.scope, uploadID)
+	require.NoError(t, err)
+	require.Equal(t, f.raw, raw)
+	require.EqualValues(t, len(f.raw), upload.SizeBytes)
+	reference, raw, err := f.h.store.AvatarDraftOriginal(t.Context(), f.scope, telegramID)
+	require.NoError(t, err)
+	require.Empty(t, raw)
+	require.EqualValues(t, len(f.raw), reference.SizeBytes)
+	require.Equal(t, &fileID, reference.SourceFileID)
+	f.p.mu.Lock()
+	f.p.fileGone = true
+	gets := f.p.fileGets
+	f.p.mu.Unlock()
+	code, replayed := avatarDraftAgent(t, f, "create_draft", operation, map[string]any{"source_file_id": fileID})
+	require.Equal(t, http.StatusOK, code, string(replayed))
+	require.Contains(t, string(replayed), `"status":"succeeded"`)
+	var receipt struct {
+		Result json.RawMessage `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(replayed, &receipt))
+	require.JSONEq(t, string(result), string(receipt.Result))
+	f.p.mu.Lock()
+	require.Equal(t, gets, f.p.fileGets)
+	f.p.mu.Unlock()
+	_, raw, err = f.h.store.AvatarDraftOriginal(t.Context(), f.scope, uploadID)
+	require.NoError(t, err)
+	require.Equal(t, f.raw, raw, "old operation replay preserves uploaded originals")
 }

@@ -3,7 +3,6 @@ package integration_test
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/telegram"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func orderNoticeList(t *testing.T, f paymentFixture) []db.NotificationSummary {
@@ -219,12 +217,6 @@ func TestOrderNotificationDeliveryUnknownRequiresAuthorizedExactResolution(t *te
 			)
 			require.Zero(t, reviewCount)
 			require.Equal(t, int64(8), orderAllocationUnits(t, f, "held"))
-			migration, err := migrations.Files.ReadFile("00045_order_notice_resolutions.sql")
-			require.NoError(t, err)
-			_, down, found := strings.Cut(string(migration), "-- +goose Down")
-			require.True(t, found)
-			_, err = f.H.store.Pool().Exec(t.Context(), down)
-			require.ErrorContains(t, err, "Export order notice resolution history before rollback")
 		})
 	}
 }

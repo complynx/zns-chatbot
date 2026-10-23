@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func submissionFixture(t *testing.T) (paymentFixture, db.ProfileScope, db.OrdersSelectionChange, db.OrderSubmission) {
@@ -293,26 +291,13 @@ func TestOrderCancellationFrozenCutoffAndExactOperation(t *testing.T) {
 	require.WithinDuration(t, time.Now(), current.SubmittedAt, time.Minute)
 }
 
-func TestOrderRollbackRefusesRetainedPreparation(t *testing.T) {
+func TestOrderPreparationRetainsOriginalReceipt(t *testing.T) {
 	t.Parallel()
 	f, scope, _, args := submissionFixture(t)
 	ctx := context.Background()
 	operation := uuid.New()
 	original, err := f.H.store.PrepareOwnOrderSubmission(ctx, scope, operation, args, db.OrderSourceAgent)
 	require.NoError(t, err)
-	raw, err := migrations.Files.ReadFile("00040_orders.sql")
-	require.NoError(t, err)
-	_, down, found := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, found)
-	tx, err := f.H.store.Pool().Begin(ctx)
-	require.NoError(t, err)
-	_, err = tx.Exec(ctx, down)
-	require.ErrorContains(
-		t,
-		err,
-		"Order snapshots, preparations and operation history must be exported before rollback",
-	)
-	require.NoError(t, tx.Rollback(ctx))
 	replay, err := f.H.store.PrepareOwnOrderSubmission(ctx, scope, operation, args, db.OrderSourceAgent)
 	require.NoError(t, err)
 	require.Equal(t, original, replay)

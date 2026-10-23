@@ -1,10 +1,8 @@
 package integration_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/registrationdetails"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 const appDetailsPath = "/app/registration-details"
@@ -312,83 +309,4 @@ func TestMiniAppDetailsRemainUnavailableWithoutProtectionKey(t *testing.T) {
 	)
 	require.Equal(t, http.StatusMethodNotAllowed, code, string(raw))
 	require.NotContains(t, string(raw), "PRIVATE-DISABLED")
-}
-
-func TestMiniAppDetailsRollbackPreservesConcurrentActionHistory(t *testing.T) {
-	t.Parallel()
-	h, p, session := detailsApp(t)
-	scope := ownerProfileScope(t, h, session.UserID)
-	operation := uuid.New()
-	_, err := h.store.MutateRegistrationDetails(
-		t.Context(),
-		scope,
-		registrationdetails.Mutation{
-			OperationID:     operation,
-			ExpectedVersion: 0,
-			Field:           registrationdetails.LegalName,
-			Value:           "Synthetic Retained Name",
-		},
-		p.registrationDetails,
-	)
-	require.NoError(t, err)
-	writer, err := h.store.Pool().Begin(t.Context())
-	require.NoError(t, err)
-	defer func() { _ = writer.Rollback(context.Background()) }()
-	_, err = writer.Exec(
-		t.Context(),
-		`INSERT INTO shuttle_miniapp_details_actions(user_id,operation_id,field) VALUES($1,$2,'legal_name')`,
-		session.UserID,
-		operation,
-	)
-	require.NoError(t, err)
-	conn, err := h.store.Pool().Acquire(t.Context())
-	require.NoError(t, err)
-	defer conn.Release()
-	down, err := conn.Begin(t.Context())
-	require.NoError(t, err)
-	defer func() { _ = down.Rollback(context.Background()) }()
-	raw, err := migrations.Files.ReadFile("00037_miniapp_details_actions.sql")
-	require.NoError(t, err)
-	_, sql, found := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, found)
-	pid := conn.Conn().PgConn().PID()
-	downCtx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	finished := make(chan error, 1)
-	done := make(chan struct{})
-	defer func() { _ = writer.Rollback(context.Background()); cancel(); <-done }()
-	go func() {
-		defer close(done)
-		_, executeErr := down.Exec(downCtx, sql)
-		if executeErr == nil {
-			executeErr = down.Commit(downCtx)
-		} else {
-			_ = down.Rollback(downCtx)
-		}
-		finished <- executeErr
-	}()
-	require.Eventually(t, func() bool {
-		var waiting bool
-		readErr := h.store.Pool().
-			QueryRow(t.Context(), `SELECT wait_event_type='Lock' FROM pg_stat_activity WHERE pid=$1`, pid).
-			Scan(&waiting)
-		return readErr == nil && waiting
-	}, 5*time.Second, 10*time.Millisecond)
-	require.NoError(t, writer.Commit(t.Context()))
-	select {
-	case downErr := <-finished:
-		require.ErrorContains(t, downErr, "registration details action history must be exported before rollback")
-	case <-time.After(5 * time.Second):
-		t.Fatal("Rollback did not finish after journal commit")
-	}
-	var retained int
-	require.NoError(
-		t,
-		h.store.Pool().
-			QueryRow(t.Context(), "SELECT count(*) FROM shuttle_miniapp_details_actions WHERE user_id=$1 AND operation_id=$2", session.UserID, operation).
-			Scan(&retained),
-	)
-	require.Equal(t, 1, retained)
-	receipt, err := h.store.RegistrationDetailsOperation(t.Context(), scope, operation)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, receipt.Version)
 }

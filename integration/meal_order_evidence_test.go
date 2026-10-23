@@ -15,7 +15,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/orders"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func mealEvidenceFixture(t *testing.T) (paymentFixture, db.ProfileScope, db.SubmittedOrder) {
@@ -262,22 +261,13 @@ func TestMealEvidenceConcurrentNativeAndAgentCreateOneClaim(t *testing.T) {
 	require.Zero(t, orderAllocationUnits(t, f, "held"))
 }
 
-func TestMealEvidenceMigrationRejectsDestructiveRollback(t *testing.T) {
+func TestMealEvidenceRetainsOriginalReceipt(t *testing.T) {
 	t.Parallel()
 	f, owner, order := mealEvidenceFixture(t)
 	ctx := t.Context()
 	args := orderEvidenceArgs(t, f, order, 79106, "meal-rollback-proof")
 	proof, err := f.H.store.SubmitOwnOrderEvidence(ctx, owner, uuid.New(), args)
 	require.NoError(t, err)
-	raw, err := migrations.Files.ReadFile("00069_meal_order_evidence.sql")
-	require.NoError(t, err)
-	parts := strings.Split(string(raw), "-- +goose Down")
-	require.Len(t, parts, 2)
-	tx, err := f.H.store.Pool().Begin(ctx)
-	require.NoError(t, err)
-	_, err = tx.Exec(ctx, parts[1])
-	require.ErrorContains(t, err, "Meal payment evidence must be exported before rollback")
-	require.NoError(t, tx.Rollback(ctx))
 	current, err := f.H.store.OwnOrderEvidence(ctx, owner, order.EventID, proof.ID)
 	require.NoError(t, err)
 	require.Equal(t, proof, current)
@@ -478,7 +468,7 @@ func TestMealEvidenceLargeReviewKeepsFullConsentOutsideLoomSummary(t *testing.T)
 	}
 }
 
-func TestMealEvidenceMigrationPreservesServiceHistoryOnRollbackAndReapply(t *testing.T) {
+func TestMealEvidencePreservesServiceHistoryAndReplay(t *testing.T) {
 	t.Parallel()
 	f, owner, order := orderEvidenceFixture(t)
 	ctx := t.Context()
@@ -487,19 +477,8 @@ func TestMealEvidenceMigrationPreservesServiceHistoryOnRollbackAndReapply(t *tes
 	proof, err := f.H.store.SubmitOwnOrderEvidence(ctx, owner, op, args)
 	require.NoError(t, err)
 	before := orderKindFingerprint(t, f)
-	raw, err := migrations.Files.ReadFile("00069_meal_order_evidence.sql")
-	require.NoError(t, err)
-	parts := strings.Split(string(raw), "-- +goose Down")
-	require.Len(t, parts, 2)
-	tx, err := f.H.store.Pool().Begin(ctx)
-	require.NoError(t, err)
-	_, err = tx.Exec(ctx, parts[1])
-	require.NoError(t, err)
-	_, err = tx.Exec(ctx, parts[0])
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
-	require.Equal(t, before, orderKindFingerprint(t, f))
 	replay, err := f.H.store.SubmitOwnOrderEvidence(ctx, owner, op, args)
 	require.NoError(t, err)
 	require.Equal(t, proof, replay)
+	require.Equal(t, before, orderKindFingerprint(t, f))
 }

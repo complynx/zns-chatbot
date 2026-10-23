@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/massage"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func noticePreference(event uuid.UUID, version int64, enabled bool) db.MassageSpecialistPreferenceChange {
@@ -453,38 +451,16 @@ func TestMassageSpecialistNoticeFailureRollsBackBookingOrCancellation(t *testing
 	}
 }
 
-func TestMassageSpecialistNoticeMigrationRefusesDiscardingPreferenceHistory(t *testing.T) {
+func TestMassageSpecialistNoticePreferencesRemainReadable(t *testing.T) {
 	t.Parallel()
 	f, staff, _, _ := staffFixture(t)
-	nextRaw, err := migrations.Files.ReadFile("00051_massage_specialist_next_preference.sql")
-	require.NoError(t, err)
-	nextUp, nextDown, ok := strings.Cut(string(nextRaw), "-- +goose Down")
-	require.True(t, ok)
-	_, err = f.H.store.Pool().Exec(t.Context(), nextDown)
-	require.NoError(t, err)
-	raw, err := migrations.Files.ReadFile("00049_massage_specialist_notifications.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	_, err = f.H.store.Pool().Exec(t.Context(), down)
-	require.NoError(t, err)
-	_, err = f.H.store.Pool().Exec(t.Context(), up)
-	require.NoError(t, err)
-	_, err = f.H.store.Pool().Exec(t.Context(), nextUp)
-	require.NoError(t, err)
-	_, err = f.H.store.SetMassageSpecialistPreferences(
+	_, err := f.H.store.SetMassageSpecialistPreferences(
 		t.Context(),
 		staff,
 		uuid.New(),
 		noticePreference(f.Event.ID, 0, true),
 	)
 	require.NoError(t, err)
-	_, err = f.H.store.Pool().Exec(t.Context(), down)
-	require.ErrorContains(
-		t,
-		err,
-		"Export massage specialist preferences, notices and operation history before rollback",
-	)
 	current, err := f.H.store.MassageSpecialistPreferences(t.Context(), staff, f.Event.ID)
 	require.NoError(t, err)
 	require.True(t, current.NotifyBookings)

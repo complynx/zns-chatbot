@@ -64,7 +64,7 @@ three event/registration reads and the confirmed assignment. Non-admins see none
 
 ## Persistence and rollback
 
-Migration `00007_assignment_preparations.sql` adds immutable preparation records.
+The [schema baseline](shuttle-schema.md) includes immutable preparation records.
 They and their original assignment receipts have no automatic deletion. A binary
 rollback keeps both tables. Dropping preparation data would erase confirmation and
 status binding; an intentional down migration requires a reviewed data export and

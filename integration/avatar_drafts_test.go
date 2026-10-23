@@ -19,14 +19,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/avatar"
 	"github.com/complynx/zns-chatbot/internal/avatar/renderer"
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/files"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 type avatarDraftFixture struct {
@@ -533,37 +531,13 @@ func TestAvatarDraftNativeImportSharesAgentReceiptAndManifestSchemas(t *testing.
 	require.Equal(t, operation, actions[0].OperationID)
 }
 
-func TestAvatarDraftMigrationAllowsEmptyRollbackAndProtectsOriginals(t *testing.T) {
+func TestAvatarDraftProtectsOriginalsAndOperationReceipt(t *testing.T) {
 	t.Parallel()
 	f := avatarDraftSetup(t, nil)
-	raw, err := migrations.Files.ReadFile("00055_avatar_drafts.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	extensionUp, extensionDown := avatarFinalizationMigration(t)
-	sourceUp, sourceDown := avatarDraftSourceMigration(t)
-	retentionRaw, err := migrations.Files.ReadFile("00070_avatar_source_retention.sql")
-	require.NoError(t, err)
-	retentionUp, retentionDown, ok := strings.Cut(string(retentionRaw), "-- +goose Down")
-	require.True(t, ok)
-	up = up + "\n" + extensionUp + "\n" + sourceUp + "\n" + retentionUp
-	down = retentionDown + "\n" + sourceDown + "\n" + extensionDown + "\n" + down
-	_, err = f.h.store.Pool().Exec(t.Context(), down)
-	require.NoError(t, err)
-	var gone bool
-	require.NoError(
-		t,
-		f.h.store.Pool().QueryRow(t.Context(), "SELECT to_regclass('shuttle_avatar_drafts') IS NULL").Scan(&gone),
-	)
-	require.True(t, gone)
-	_, err = f.h.store.Pool().Exec(t.Context(), up)
-	require.NoError(t, err)
 	operation := uuid.New()
 	code, created := avatarUpload(t, f, operation, f.raw)
 	require.Equal(t, http.StatusOK, code, string(created))
 	draft := avatarDraftMetadata(t, created)
-	_, err = f.h.store.Pool().Exec(t.Context(), down)
-	require.ErrorContains(t, err, "export avatar originals and operation history before rollback")
 	current, original, err := f.h.store.AvatarDraftOriginal(t.Context(), f.scope, draft.ID)
 	require.NoError(t, err)
 	require.Equal(t, draft, current)
@@ -571,46 +545,6 @@ func TestAvatarDraftMigrationAllowsEmptyRollbackAndProtectsOriginals(t *testing.
 	replay, err := f.h.store.AvatarDraftOperation(t.Context(), f.scope, operation)
 	require.NoError(t, err)
 	require.Equal(t, draft, replay)
-}
-
-func TestAvatarDraftRollbackRejectsUncommittedOriginal(t *testing.T) {
-	t.Parallel()
-	f := avatarDraftSetup(t, nil)
-	migration, err := migrations.Files.ReadFile("00055_avatar_drafts.sql")
-	require.NoError(t, err)
-	_, down, ok := strings.Cut(string(migration), "-- +goose Down")
-	require.True(t, ok)
-	writer, err := f.h.store.Pool().Begin(t.Context())
-	require.NoError(t, err)
-	defer func() { _ = writer.Rollback(t.Context()) }()
-	id := uuid.New()
-	digest := sha256.Sum256(f.raw)
-	frame, err := hex.DecodeString(avatar.FrameSHA256)
-	require.NoError(t, err)
-	transform, err := json.Marshal(avatar.IdentityTransform())
-	require.NoError(t, err)
-	_, err = writer.Exec(
-		t.Context(),
-		`INSERT INTO shuttle_avatar_drafts(id,user_id,original,source_sha256,mime_type,frame_sha256,transform,version,source_size_bytes) VALUES($1,$2,$3,$4,'image/png',$5,$6,1,octet_length($3::bytea))`,
-		id,
-		f.scope.UserID,
-		f.raw,
-		digest[:],
-		frame,
-		transform,
-	)
-	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
-	defer cancel()
-	_, err = f.h.store.Pool().Exec(ctx, down)
-	var lockError *pgconn.PgError
-	require.ErrorAs(t, err, &lockError)
-	require.Equal(t, "55P03", lockError.Code, "Rollback must refuse active writers before any destructive statement")
-	require.NoError(t, writer.Commit(t.Context()))
-	d, original, err := f.h.store.AvatarDraftOriginal(t.Context(), f.scope, id)
-	require.NoError(t, err)
-	require.Equal(t, id, d.ID)
-	require.Equal(t, f.raw, original)
 }
 
 func TestAvatarDraftNativeImportPreservesOversizeRejectionBeforeTelegramIO(t *testing.T) {

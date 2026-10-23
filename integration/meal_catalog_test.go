@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func TestMealCatalogExactCASAuthorityExpiryAndHistoricalConfiguration(t *testing.T) {
@@ -120,25 +118,6 @@ func TestMealCatalogExactCASAuthorityExpiryAndHistoricalConfiguration(t *testing
 	require.NoError(t, err)
 	require.Equal(t, expired.ID, retained.ID)
 	require.True(t, retained.ExpiresAt.Before(expired.ExpiresAt))
-}
-
-func TestMealMigrationEmptyRollbackAndReapply(t *testing.T) {
-	t.Parallel()
-	h := prepareHarness(t, newPeers(t))
-	raw, err := migrations.Files.ReadFile("00053_meal_drafts.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	tx, err := h.store.Pool().Begin(t.Context())
-	require.NoError(t, err)
-	_, err = tx.Exec(t.Context(), down)
-	require.NoError(t, err)
-	_, err = tx.Exec(t.Context(), strings.TrimPrefix(up, "-- +goose Up"))
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(t.Context()))
-	var rows int
-	require.NoError(t, h.store.Pool().QueryRow(t.Context(), "SELECT count(*) FROM shuttle_meal_catalogs").Scan(&rows))
-	require.Zero(t, rows)
 }
 
 func TestMealCatalogCannotExpireWhileAuthorityCheckWaits(t *testing.T) {

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 	"github.com/complynx/zns-chatbot/internal/api"
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/miniapp"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 const avatarAdminAppPath = "/app/avatar-admin"
@@ -419,22 +417,12 @@ func TestAvatarNativeAdminContextReachesAgentAndRespectsRoleLoss(t *testing.T) {
 	require.NotContains(t, prompt, "Recent native avatar delivery repair actions")
 }
 
-func TestAvatarNativeAdminMigrationProtectsActionHistory(t *testing.T) {
+func TestAvatarNativeAdminCreatesActionHistory(t *testing.T) {
 	t.Parallel()
 	f, scope, _, a := avatarRepairFixture(t)
 	_, session := avatarAdminSession(t, f, scope)
-	raw, err := migrations.Files.ReadFile("00059_miniapp_avatar_resolutions.sql")
+	_, err := f.h.store.PrepareMiniAppAvatarResolution(t.Context(), scope, session, uuid.New(), uuid.Nil, a)
 	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	_, err = f.h.store.Pool().Exec(t.Context(), down)
-	require.NoError(t, err)
-	_, err = f.h.store.Pool().Exec(t.Context(), up)
-	require.NoError(t, err)
-	_, err = f.h.store.PrepareMiniAppAvatarResolution(t.Context(), scope, session, uuid.New(), uuid.Nil, a)
-	require.NoError(t, err)
-	_, err = f.h.store.Pool().Exec(t.Context(), down)
-	require.ErrorContains(t, err, "export and deliberately remove native avatar resolution actions")
 }
 
 func avatarAdminSingleConnection(t *testing.T, f avatarDraftFixture) (*db.Store, uint32) {

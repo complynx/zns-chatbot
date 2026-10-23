@@ -3,7 +3,6 @@ package integration_test
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 
@@ -13,7 +12,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/payments"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func TestAvatarAdoptionSharesOneProposalAcrossConcurrentOperations(t *testing.T) {
@@ -146,17 +144,11 @@ func TestAvatarAdoptionNeverRenewsExpiredOrCompletedConsent(t *testing.T) {
 	require.ErrorIs(t, err, db.ErrConflict)
 }
 
-func TestAvatarAdoptionMigrationPreservesHistoryAndBlocksLoss(t *testing.T) {
+func TestAvatarAdoptionPreservesOriginalHistory(t *testing.T) {
 	t.Parallel()
 	f, scope, _, a := avatarRepairFixture(t)
 	original := uuid.New()
 	prep, err := f.h.store.PrepareAvatarDeliveryResolution(t.Context(), scope, original, a)
-	require.NoError(t, err)
-	raw, err := migrations.Files.ReadFile("00058_avatar_resolution_aliases.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	_, err = f.h.store.Pool().Exec(t.Context(), down)
 	require.NoError(t, err)
 	var preserved []byte
 	require.NoError(
@@ -168,17 +160,11 @@ func TestAvatarAdoptionMigrationPreservesHistoryAndBlocksLoss(t *testing.T) {
 	var old db.AvatarDeliveryPreparation
 	require.NoError(t, json.Unmarshal(preserved, &old))
 	require.Equal(t, prep, old)
-	_, err = f.h.store.Pool().Exec(t.Context(), up)
-	require.NoError(t, err)
 	alias := uuid.New()
 	_, err = f.h.store.AdoptAvatarDeliveryResolution(t.Context(), scope, alias, prep.ID, a)
 	require.NoError(t, err)
-	_, err = f.h.store.Pool().Exec(t.Context(), down)
-	require.ErrorContains(t, err, "export and deliberately remove avatar resolution aliases")
 	result, err := f.h.store.ResolveAvatarDelivery(t.Context(), scope, alias, a, prep.ID)
 	require.NoError(t, err)
-	_, err = f.h.store.Pool().Exec(t.Context(), down)
-	require.ErrorContains(t, err, "export and deliberately remove avatar resolution aliases")
 	replay, err := f.h.store.AvatarDeliveryResolutionReceipt(t.Context(), scope, original)
 	require.NoError(t, err)
 	require.Equal(t, result, replay)

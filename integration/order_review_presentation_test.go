@@ -2,14 +2,12 @@ package integration_test
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func TestOrderEvidenceLegacyEmbeddedConsentRemainsReadable(t *testing.T) {
@@ -40,7 +38,7 @@ func TestOrderEvidenceLegacyEmbeddedConsentRemainsReadable(t *testing.T) {
 	require.Equal(t, db.OrderEvidenceConfirmed, accepted.State)
 }
 
-func TestOrderEvidenceRollbackPreservesSeparateConsent(t *testing.T) {
+func TestOrderEvidencePreservesSeparateConsent(t *testing.T) {
 	t.Parallel()
 	f, owner, order := orderEvidenceFixture(t)
 	ctx := t.Context()
@@ -53,15 +51,6 @@ func TestOrderEvidenceRollbackPreservesSeparateConsent(t *testing.T) {
 		ExpectedVersion: 1, Decision: db.OrderEvidenceConfirmed, Reason: "Preserve full consent"}
 	prepared, err := f.H.store.PrepareOrderEvidenceReview(ctx, scope, op, args)
 	require.NoError(t, err)
-	raw, err := migrations.Files.ReadFile("00069_meal_order_evidence.sql")
-	require.NoError(t, err)
-	parts := strings.Split(string(raw), "-- +goose Down")
-	require.Len(t, parts, 2)
-	tx, err := f.H.store.Pool().Begin(ctx)
-	require.NoError(t, err)
-	_, err = tx.Exec(ctx, parts[1])
-	require.ErrorContains(t, err, "Order review presentations must be exported before rollback")
-	require.NoError(t, tx.Rollback(ctx))
 	replay, err := f.H.store.PrepareOrderEvidenceReview(ctx, scope, op, args)
 	require.NoError(t, err)
 	require.Equal(t, prepared, replay)

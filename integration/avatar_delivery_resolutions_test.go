@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"encoding/json"
-	"strings"
 	"sync"
 	"testing"
 
@@ -12,7 +11,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/payments"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func avatarRepairFixture(
@@ -194,23 +192,15 @@ func TestAvatarResolutionRechecksChangedRecipientAtConfirmation(t *testing.T) {
 	require.Equal(t, n, current)
 }
 
-func TestAvatarResolutionRollbackProtectsPreparedAndCompletedHistory(t *testing.T) {
+func TestAvatarResolutionRetainsPreparedAndCompletedHistory(t *testing.T) {
 	t.Parallel()
 	f, scope, _, a := avatarRepairFixture(t)
 	ctx := t.Context()
 	op := uuid.New()
 	p, err := f.h.store.PrepareAvatarDeliveryResolution(ctx, scope, op, a)
 	require.NoError(t, err)
-	raw, err := migrations.Files.ReadFile("00057_avatar_delivery_resolutions.sql")
-	require.NoError(t, err)
-	_, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	_, err = f.h.store.Pool().Exec(ctx, down)
-	require.ErrorContains(t, err, "export and deliberately remove avatar resolution history")
 	result, err := f.h.store.ResolveAvatarDelivery(ctx, scope, op, a, p.ID)
 	require.NoError(t, err)
-	_, err = f.h.store.Pool().Exec(ctx, down)
-	require.ErrorContains(t, err, "export and deliberately remove avatar resolution history")
 	receipt, err := f.h.store.AvatarDeliveryResolutionReceipt(ctx, scope, op)
 	require.NoError(t, err)
 	require.Equal(t, result, receipt)

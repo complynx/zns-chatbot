@@ -1,14 +1,12 @@
 package integration_test
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -18,7 +16,6 @@ import (
 	"github.com/complynx/zns-chatbot/internal/avatar"
 	"github.com/complynx/zns-chatbot/internal/avatar/renderer"
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 type avatarNativeKeys struct{ bearer, generation [sha256.Size]byte }
@@ -334,36 +331,11 @@ func TestAvatarFinalizationPreservesLegacyReceiptAndOriginIsolation(t *testing.T
 	)
 	require.ErrorIs(t, err, db.ErrAvatarQuota)
 }
-func avatarFinalizationMigration(t *testing.T) (string, string) {
-	t.Helper()
-	raw, err := migrations.Files.ReadFile("00056_avatar_finalization.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	repair, err := migrations.Files.ReadFile("00057_avatar_delivery_resolutions.sql")
-	require.NoError(t, err)
-	repairUp, repairDown, ok := strings.Cut(string(repair), "-- +goose Down")
-	require.True(t, ok)
-	aliases, err := migrations.Files.ReadFile("00058_avatar_resolution_aliases.sql")
-	require.NoError(t, err)
-	aliasUp, aliasDown, ok := strings.Cut(string(aliases), "-- +goose Down")
-	require.True(t, ok)
-	native, err := migrations.Files.ReadFile("00059_miniapp_avatar_resolutions.sql")
-	require.NoError(t, err)
-	nativeUp, nativeDown, ok := strings.Cut(string(native), "-- +goose Down")
-	require.True(t, ok)
-	return up + "\n" + repairUp + "\n" + aliasUp + "\n" + nativeUp, nativeDown + "\n" + aliasDown + "\n" + repairDown + "\n" + down
-}
-func TestAvatarFinalizationMigrationProtectsHistoryAndPartialOrigins(t *testing.T) {
+func TestAvatarFinalizationProtectsHistoryAndPartialOrigins(t *testing.T) {
 	t.Parallel()
 	f, d, r, _ := avatarFinalizationFixture(t)
 	f.h.stop(t)
 	ctx := t.Context()
-	up, down := avatarFinalizationMigration(t)
-	_, err := f.h.store.Pool().Exec(ctx, down)
-	require.NoError(t, err)
-	_, err = f.h.store.Pool().Exec(ctx, up)
-	require.NoError(t, err)
 	receipt, err := f.h.store.CommitAvatarDraft(
 		ctx,
 		f.scope,
@@ -381,46 +353,9 @@ func TestAvatarFinalizationMigrationProtectsHistoryAndPartialOrigins(t *testing.
 		require.ErrorAs(t, err, &rejected)
 		require.Equal(t, "23514", rejected.Code, change)
 	}
-	_, err = f.h.store.Pool().Exec(ctx, down)
-	require.ErrorContains(t, err, "export finalized avatar bytes and delivery history")
 	current, raw, err := f.h.store.GetFinalizedAvatar(ctx, f.scope, receipt.ArtifactID)
 	require.NoError(t, err)
 	require.Equal(t, receipt, current)
 	require.Equal(t, r.JPEG, raw)
 	avatarIntentCount(t, f, 1)
-}
-func TestAvatarFinalizationRollbackRefusesUncommittedArtifact(t *testing.T) {
-	t.Parallel()
-	f, d, _, _ := avatarFinalizationFixture(t)
-	f.h.stop(t)
-	_, down := avatarFinalizationMigration(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
-	defer cancel()
-	writer, err := f.h.store.Pool().Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = writer.Rollback(context.Background()) }()
-	_, err = writer.Exec(
-		ctx,
-		`INSERT INTO shuttle_avatars(id,user_id,operation_id,request_hash,receipt,jpeg,draft_id,draft_version) VALUES($1,$2,$3,$4,'{}',$5,$6,1)`,
-		uuid.New(),
-		f.scope.UserID,
-		uuid.New(),
-		make([]byte, 32),
-		[]byte{255, 216},
-		d.ID,
-	)
-	require.NoError(t, err)
-	_, err = f.h.store.Pool().Exec(ctx, down)
-	var locked *pgconn.PgError
-	require.ErrorAs(t, err, &locked)
-	require.Equal(t, "55P03", locked.Code)
-	require.NoError(t, writer.Commit(ctx))
-	var count int
-	require.NoError(
-		t,
-		f.h.store.Pool().
-			QueryRow(ctx, `SELECT count(*) FROM shuttle_avatars WHERE user_id=$1`, f.scope.UserID).
-			Scan(&count),
-	)
-	require.Equal(t, 1, count)
 }

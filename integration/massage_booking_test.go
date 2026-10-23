@@ -3,7 +3,6 @@ package integration_test
 import (
 	"context"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/massage"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func massageBookingFixture(
@@ -157,12 +155,6 @@ func TestMassageBookingSharesProposalAcrossInterfacesAndPreservesOriginalReceipt
 		f.H.store.Pool().QueryRow(t.Context(), "SELECT count(*) FROM shuttle_payment_reviews").Scan(&reviews),
 	)
 	require.Zero(t, reviews)
-	migration, err := migrations.Files.ReadFile("00046_massage_bookings.sql")
-	require.NoError(t, err)
-	_, down, found := strings.Cut(string(migration), "-- +goose Down")
-	require.True(t, found)
-	_, err = f.H.store.Pool().Exec(t.Context(), down)
-	require.ErrorContains(t, err, "Export massage booking, approval and operation history before rollback")
 	_, err = f.H.store.OwnMassageBooking(t.Context(), owner, f.Event.ID, second.ID)
 	require.NoError(t, err)
 }

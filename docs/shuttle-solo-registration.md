@@ -80,8 +80,8 @@ as proof that an effect did not commit.
 
 ## Migration and rollback
 
-Migration `00006_registrations.sql` adds registrations, pass snapshots and operation
-receipts without changing previous tables. Rolling back the application binary
+The [schema baseline](shuttle-schema.md) includes registrations, pass snapshots and
+operation receipts. Rolling back the application binary
 leaves these data intact, but the previous binary has no registration API. Do not
 run the destructive down migration merely to roll back a binary. Intentional data
 rollback requires exporting all three tables and restoring their foreign-key

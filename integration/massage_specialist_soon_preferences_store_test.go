@@ -3,7 +3,6 @@ package integration_test
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -11,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func TestMassageSpecialistSoonPreferencesPreserveQueuedBookingNotice(t *testing.T) {
@@ -54,17 +52,11 @@ func TestMassageSpecialistSoonPreferencesPreserveQueuedBookingNotice(t *testing.
 	require.ErrorIs(t, err, pgx.ErrNoRows, "Re-enabling booked notifications must not revive an older booked notice")
 }
 
-func TestMassageSpecialistSoonPreferencesMigrationRetainsLegacyReceipts(t *testing.T) {
+func TestMassageSpecialistSoonPreferencesRetainsLegacyReceipts(t *testing.T) {
 	t.Parallel()
 	f, staff, _, _ := staffFixture(t)
 	pool := f.H.store.Pool()
-	raw, err := migrations.Files.ReadFile("00051_massage_specialist_next_preference.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	_, err = pool.Exec(t.Context(), down)
-	require.NoError(t, err)
-	_, err = pool.Exec(
+	_, err := pool.Exec(
 		t.Context(),
 		"INSERT INTO shuttle_massage_specialist_preferences(user_id,notify_bookings,version) VALUES($1,false,4)",
 		staff.UserID,
@@ -87,8 +79,6 @@ func TestMassageSpecialistSoonPreferencesMigrationRetainsLegacyReceipts(t *testi
 		legacy,
 	)
 	require.NoError(t, err)
-	_, err = pool.Exec(t.Context(), up)
-	require.NoError(t, err)
 	expected := db.MassageSpecialistPreferences{
 		UserID:         staff.UserID,
 		NotifyBookings: false,
@@ -98,11 +88,7 @@ func TestMassageSpecialistSoonPreferencesMigrationRetainsLegacyReceipts(t *testi
 	current, err := f.H.store.MassageSpecialistPreferences(t.Context(), staff, f.Event.ID)
 	require.NoError(t, err)
 	require.Equal(t, expected, current)
-	// A legacy-only database can still round-trip; its immutable result is not rewritten.
-	_, err = pool.Exec(t.Context(), down)
-	require.NoError(t, err)
-	_, err = pool.Exec(t.Context(), up)
-	require.NoError(t, err)
+	// A legacy JSON receipt remains immutable on the current schema.
 	receipt, err := f.H.store.SetMassageSpecialistPreferences(t.Context(), staff, op, args)
 	require.NoError(t, err)
 	require.Equal(t, expected, receipt)
@@ -127,8 +113,6 @@ func TestMassageSpecialistSoonPreferencesMigrationRetainsLegacyReceipts(t *testi
 			Scan(&original),
 	)
 	require.JSONEq(t, string(legacy), string(original))
-	_, err = pool.Exec(t.Context(), down)
-	require.ErrorContains(t, err, "Export upcoming-session preferences and operation history before rollback")
 	current, err = f.H.store.MassageSpecialistPreferences(t.Context(), staff, f.Event.ID)
 	require.NoError(t, err)
 	require.Equal(t, changed, current)

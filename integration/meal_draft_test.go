@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/orders"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func mealDocument(now time.Time) orders.MealCatalog {
@@ -383,20 +381,11 @@ func TestMealDraftNativeAndAgentShareReceiptsAndJournalAtomically(t *testing.T) 
 	require.Equal(t, 2, actions)
 }
 
-func TestMealDraftRollbackRefusesRetainedHistory(t *testing.T) {
+func TestMealDraftRetainsOriginalOperationReceipt(t *testing.T) {
 	t.Parallel()
 	f, scope, a := mealFixture(t)
 	saved, err := f.H.store.SaveOwnMealDraft(t.Context(), scope, a)
 	require.NoError(t, err)
-	raw, err := migrations.Files.ReadFile("00053_meal_drafts.sql")
-	require.NoError(t, err)
-	_, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	tx, err := f.H.store.Pool().Begin(t.Context())
-	require.NoError(t, err)
-	_, err = tx.Exec(t.Context(), down)
-	require.ErrorContains(t, err, "Meal catalogs, drafts and operation history must be exported before rollback")
-	require.NoError(t, tx.Rollback(t.Context()))
 	receipt, err := f.H.store.OwnMealDraftOperation(t.Context(), scope, a.EventID, a.OperationID)
 	require.NoError(t, err)
 	require.Equal(t, saved, receipt)

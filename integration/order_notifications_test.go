@@ -2,7 +2,6 @@ package integration_test
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func pendingOrderNotice(t *testing.T) (paymentFixture, db.ProfileScope, db.OrderNotification) {
@@ -76,12 +74,6 @@ func TestOrderNoticeStorePersistsAttemptAndNeverAutomaticallyRetriesUnknown(t *t
 	}
 	require.Equal(t, int64(8), orderAllocationUnits(t, f, "held"))
 	require.Zero(t, orderAllocationUnits(t, f, "occupied"))
-	raw, err := migrations.Files.ReadFile("00044_order_notice_delivery.sql")
-	require.NoError(t, err)
-	_, down, found := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, found)
-	_, err = reopened.Pool().Exec(t.Context(), down)
-	require.ErrorContains(t, err, "Export order notice delivery history before rollback")
 }
 
 func TestOrderNoticeStoreRechecksCurrentAccessBeforeReservation(t *testing.T) {

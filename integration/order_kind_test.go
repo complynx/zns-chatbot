@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,17 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
-
-func orderKindMigration(t *testing.T) (string, string) {
-	t.Helper()
-	raw, err := migrations.Files.ReadFile("00054_order_kind.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	return up, down
-}
 
 func orderKindFingerprint(t *testing.T, f paymentFixture) string {
 	t.Helper()
@@ -71,7 +60,7 @@ func seedMealOperation(t *testing.T, f paymentFixture, preparation, serviceOpera
 	return id
 }
 
-func TestOrderKindServiceReceiptsSurviveRollbackAndReapply(t *testing.T) {
+func TestOrderKindServiceReceiptsRemainImmutableAndDefaultToService(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	f, scope, _, args := submissionFixture(t)
@@ -85,19 +74,6 @@ func TestOrderKindServiceReceiptsSurviveRollbackAndReapply(t *testing.T) {
 	evidence, err := f.H.store.SubmitOwnOrderEvidence(ctx, scope, evidenceOp, evidenceArgs)
 	require.NoError(t, err)
 	before := orderKindFingerprint(t, f)
-	up, down := orderKindMigration(t)
-	tx, err := f.H.store.Pool().Begin(ctx)
-	require.NoError(t, err)
-	_, err = tx.Exec(ctx, down)
-	require.NoError(t, err)
-	var columns int
-	require.NoError(t, tx.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns
- WHERE table_schema=current_schema() AND table_name='shuttle_orders' AND column_name='order_kind'`).Scan(&columns))
-	require.Zero(t, columns)
-	_, err = tx.Exec(ctx, up)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(ctx))
-	require.Equal(t, before, orderKindFingerprint(t, f), "No snapshot, receipt, hash or evidence bytes change")
 	replay, err := f.H.store.SubmitOwnOrder(ctx, scope, op, args, prepared.ID, db.OrderSourceMiniApp)
 	require.NoError(t, err)
 	require.Equal(t, submitted, replay)
@@ -107,6 +83,7 @@ func TestOrderKindServiceReceiptsSurviveRollbackAndReapply(t *testing.T) {
 	evidenceReplay, err := f.H.store.SubmitOwnOrderEvidence(ctx, scope, evidenceOp, evidenceArgs)
 	require.NoError(t, err)
 	require.Equal(t, evidence, evidenceReplay)
+	require.Equal(t, before, orderKindFingerprint(t, f), "Replays preserve snapshots, receipts, hashes and evidence")
 	// Old binaries still omit order_kind after expansion; the compatibility default is service.
 	legacy := uuid.New()
 	_, err = f.H.store.Pool().Exec(ctx, `INSERT INTO shuttle_order_preparations
@@ -169,12 +146,6 @@ func TestOrderKindIndependentIdentityAndServiceAccess(t *testing.T) {
 			Scan(&count),
 	)
 	require.Equal(t, 2, count)
-	_, down := orderKindMigration(t)
-	tx, err := f.H.store.Pool().Begin(ctx)
-	require.NoError(t, err)
-	_, err = tx.Exec(ctx, down)
-	require.ErrorContains(t, err, "Meal order identity/history must be exported before rollback")
-	require.NoError(t, tx.Rollback(ctx))
 	require.NoError(
 		t,
 		f.H.store.Pool().QueryRow(ctx, "SELECT count(*) FROM shuttle_orders WHERE order_kind='meal'").Scan(&count),

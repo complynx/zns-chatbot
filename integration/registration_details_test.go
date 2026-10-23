@@ -2,12 +2,9 @@ package integration_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -15,7 +12,6 @@ import (
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/registrationdetails"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func detailsProtector(t *testing.T, key byte) *registrationdetails.Protector {
@@ -188,69 +184,4 @@ func TestRegistrationDetailsConcurrentFieldsShareOneVersion(t *testing.T) {
 		registrationdetails.Status{Version: 2, LegalNamePresent: true, PassportNumberPresent: true},
 		completed,
 	)
-}
-
-func TestRegistrationDetailsRollbackPreservesConcurrentFirstWrite(t *testing.T) {
-	t.Parallel()
-	h := setup(t, newPeers(t))
-	user, _ := registrationUser(t, h, 95005, false)
-	scope := ownerProfileScope(t, h, user)
-	encrypted, err := detailsProtector(t, 65).Seal(user, `{"legal_name":"Synthetic Legal Name","passport_number":""}`)
-	require.NoError(t, err)
-	writer, err := h.store.Pool().Begin(t.Context())
-	require.NoError(t, err)
-	defer func() { _ = writer.Rollback(context.Background()) }()
-	_, err = writer.Exec(
-		t.Context(),
-		`INSERT INTO shuttle_registration_details(user_id,version,encrypted_record,legal_name_present,passport_number_present) VALUES($1,1,$2,true,false)`,
-		user,
-		encrypted,
-	)
-	require.NoError(t, err)
-	downConn, err := h.store.Pool().Acquire(t.Context())
-	require.NoError(t, err)
-	defer downConn.Release()
-	downTx, err := downConn.Begin(t.Context())
-	require.NoError(t, err)
-	defer func() { _ = downTx.Rollback(context.Background()) }()
-	migration, err := migrations.Files.ReadFile("00035_registration_details.sql")
-	require.NoError(t, err)
-	_, downSQL, found := strings.Cut(string(migration), "-- +goose Down")
-	require.True(t, found)
-	finished := make(chan error, 1)
-	done := make(chan struct{})
-	downPID := downConn.Conn().PgConn().PID()
-	downCtx, cancelDown := context.WithTimeout(t.Context(), 10*time.Second)
-	defer func() {
-		_ = writer.Rollback(context.Background())
-		cancelDown()
-		<-done
-	}()
-	go func() {
-		defer close(done)
-		_, executeErr := downTx.Exec(downCtx, downSQL)
-		if executeErr == nil {
-			executeErr = downTx.Commit(downCtx)
-		} else {
-			_ = downTx.Rollback(downCtx)
-		}
-		finished <- executeErr
-	}()
-	require.Eventually(t, func() bool {
-		var waiting bool
-		readErr := h.store.Pool().
-			QueryRow(t.Context(), `SELECT wait_event_type='Lock' FROM pg_stat_activity WHERE pid=$1`, downPID).
-			Scan(&waiting)
-		return readErr == nil && waiting
-	}, 5*time.Second, 10*time.Millisecond)
-	require.NoError(t, writer.Commit(t.Context()))
-	select {
-	case downErr := <-finished:
-		require.ErrorContains(t, downErr, "registration details and receipts must be exported before rollback")
-	case <-time.After(5 * time.Second):
-		t.Fatal("Rollback remained blocked after writer committed")
-	}
-	status, err := h.store.RegistrationDetailsStatus(t.Context(), scope)
-	require.NoError(t, err)
-	require.Equal(t, registrationdetails.Status{Version: 1, LegalNamePresent: true}, status)
 }

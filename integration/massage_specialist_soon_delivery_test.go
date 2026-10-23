@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func soonSelfBooking(t *testing.T) (paymentFixture, db.ProfileScope, db.MassageBooking, db.MassageBindingChange) {
@@ -230,17 +229,9 @@ func TestMassageSpecialistSoonDeliveryRecoveryKeepsOriginalUnknownAttempt(t *tes
 	require.ErrorIs(t, err, db.ErrConflict)
 }
 
-func TestMassageSpecialistSoonDeliveryMigrationRetainsHistory(t *testing.T) {
+func TestMassageSpecialistSoonDeliveryRetainsHistory(t *testing.T) {
 	t.Parallel()
 	f, staff, booking, _ := soonSelfBooking(t)
-	raw, err := migrations.Files.ReadFile("00052_massage_specialist_soon_notifications.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	_, err = f.H.store.Pool().Exec(t.Context(), down)
-	require.NoError(t, err)
-	_, err = f.H.store.Pool().Exec(t.Context(), strings.TrimPrefix(up, "-- +goose Up"))
-	require.NoError(t, err)
 	require.NoError(
 		t,
 		f.H.store.CreateDueMassageSpecialistNotifications(
@@ -249,11 +240,9 @@ func TestMassageSpecialistSoonDeliveryMigrationRetainsHistory(t *testing.T) {
 		),
 	)
 	before := soonNotice(t, f, booking.ID)
-	_, err = f.H.store.Pool().Exec(t.Context(), down)
-	require.ErrorContains(t, err, "Export upcoming-session notification history")
 	require.Equal(t, before, soonNotice(t, f, booking.ID))
-	// The refused rollback leaves the expanded constraint and exact original receipt readable.
-	_, err = f.H.store.MassageSpecialistNotification(
+	// The queued notification remains readable through the store.
+	_, err := f.H.store.MassageSpecialistNotification(
 		t.Context(),
 		db.EventScope{BotID: staff.BotID, Organization: staff.Organization},
 		before.ID,

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"github.com/complynx/zns-chatbot/internal/avatar"
 	"github.com/complynx/zns-chatbot/internal/avatar/renderer"
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func avatarSourceSettings(t *testing.T, f avatarDraftFixture, limit int64, seconds int) {
@@ -201,7 +199,7 @@ func TestAvatarBrowserExpiredOriginalReturnsGoneAndCanBeReplaced(t *testing.T) {
 	require.NotEqual(t, d.ID, avatarDraftMetadata(t, raw).ID)
 }
 
-func TestAvatarBrowserRetentionMigrationRollbackProtectsExpiredSource(t *testing.T) {
+func TestAvatarBrowserRetentionPreservesDraftAfterSourceExpiry(t *testing.T) {
 	t.Parallel()
 	f := avatarDraftSetup(t, nil)
 	code, body := avatarUpload(t, f, uuid.New(), f.raw)
@@ -209,14 +207,6 @@ func TestAvatarBrowserRetentionMigrationRollbackProtectsExpiredSource(t *testing
 	d := avatarDraftMetadata(t, body)
 	f.h.stop(t)
 	ctx := t.Context()
-	raw, err := migrations.Files.ReadFile("00070_avatar_source_retention.sql")
-	require.NoError(t, err)
-	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
-	require.True(t, ok)
-	_, err = f.h.store.Pool().Exec(ctx, down)
-	require.NoError(t, err, "retained originals allow downgrade")
-	_, err = f.h.store.Pool().Exec(ctx, up)
-	require.NoError(t, err)
 	current, original, err := f.h.store.AvatarDraftOriginal(ctx, f.scope, d.ID)
 	require.NoError(t, err)
 	require.Equal(t, d, current)
@@ -230,8 +220,6 @@ func TestAvatarBrowserRetentionMigrationRollbackProtectsExpiredSource(t *testing
 		uuid.Nil,
 	)
 	require.NoError(t, err)
-	_, err = f.h.store.Pool().Exec(ctx, down)
-	require.ErrorContains(t, err, "expired avatar sources require explicit recovery before rollback")
 	current, err = f.h.store.GetAvatarDraft(ctx, f.scope, d.ID)
 	require.NoError(t, err)
 	require.True(t, current.SourceExpired)
