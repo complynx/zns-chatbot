@@ -88,10 +88,19 @@ func TestMealOrderApprovalShowsFrozenCompositionBeforeLastChunkConsent(t *testin
 			f, p, op, prepared := mealApprovalPreparation(t, locale)
 			raw, err := json.Marshal(prepared.Arguments)
 			require.NoError(t, err)
+			loomOperation := uuid.NewString()
 			p.mu.Lock()
-			p.approval = &loom.Approval{ID: op.String(), OperationID: op.String(), Method: "zinusya_meals.submit",
-				ReplyMode: loom.ReplyModeAgent, Text: "INCOMPLETE TOOL SUMMARY", Arguments: raw,
-				ArgumentHash: "exact-meal-hash", ExpiresAt: prepared.ExpiresAt}
+			p.approval = &loom.Approval{
+				ID:                 loomOperation,
+				OperationID:        loomOperation,
+				BackendOperationID: op.String(),
+				Method:             "zinusya_meals.submit",
+				ReplyMode:          loom.ReplyModeAgent,
+				Text:               "INCOMPLETE TOOL SUMMARY",
+				Arguments:          raw,
+				ArgumentHash:       "exact-meal-hash",
+				ExpiresAt:          prepared.ExpiresAt,
+			}
 			p.mu.Unlock()
 			id := acceptOrderApprovalMessage(t, f)
 			f.H.await(t, id, "awaiting_user")
@@ -102,7 +111,18 @@ func TestMealOrderApprovalShowsFrozenCompositionBeforeLastChunkConsent(t *testin
 				sent = append([]telegram.SendMessageRequest(nil), p.sent...)
 				return len(sent) > 1 && sent[len(sent)-1].ReplyMarkup != nil
 			}, 5*time.Second, 10*time.Millisecond)
-			text := mealApprovalContent(t, sent)
+			form, ok := sent[0].ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+			require.True(t, ok, "Meal form launch retains Telegram initData via an inline WebApp")
+			require.Len(t, form.InlineKeyboard, 1)
+			require.Len(t, form.InlineKeyboard[0], 1)
+			button := form.InlineKeyboard[0][0]
+			require.NotNil(t, button.WebApp)
+			formURL := appTestOrigin + "/app/#meals?event=" + prepared.Arguments.EventID.String()
+			require.Equal(t, formURL+"&operation="+op.String(), button.WebApp.URL)
+			require.Empty(t, button.CallbackData)
+			_, ok = sent[len(sent)-1].ReplyMarkup.(*telegram.ReplyKeyboardMarkup)
+			require.True(t, ok, "The final quote chunk retains its conversational consent keyboard")
+			text := mealApprovalContent(t, sent[1:])
 			for n := range 40 {
 				label := fmt.Sprintf("Dish %02d", n)
 				if locale == "ru" {
@@ -114,6 +134,14 @@ func TestMealOrderApprovalShowsFrozenCompositionBeforeLastChunkConsent(t *testin
 				require.Contains(t, text, part)
 			}
 			require.NotContains(t, text, "INCOMPLETE TOOL SUMMARY")
+			rows, err := f.H.store.ListOutbox(t.Context(), id)
+			require.NoError(t, err)
+			require.NotEmpty(t, rows)
+			var stored telegram.SendMessageRequest
+			require.NoError(t, json.Unmarshal(rows[0].Payload, &stored))
+			replayed := stored.ReplyMarkup.(*telegram.InlineKeyboardMarkup)
+			require.Equal(t, button.WebApp.URL, replayed.InlineKeyboard[0][0].WebApp.URL,
+				"Durable replay retains the original backend meal operation rather than the Loom operation")
 			var count int
 			require.NoError(
 				t,

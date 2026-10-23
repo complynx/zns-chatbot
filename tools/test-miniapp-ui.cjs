@@ -576,3 +576,19 @@ test("launch targets cannot jump to unrelated controls or unauthenticated conten
   await hidden.settle();
   assert.deepEqual(hidden.scrolls, []);
 });
+
+
+test("verified meal and order forms receive only their original operation fragment", async () => {
+  const event = webcrypto.randomUUID(), operation = webcrypto.randomUUID();
+  for (const section of ["meals", "orders"]) {
+    let continuation;
+    const factory = section === "meals" ? "createZinusyaMeals" : "createZinusyaOrders";
+    const app = browser("proof", {}, [{ status: 200, body: account }], [], [], [], {
+      hash: "#" + section + "?event=" + event + "&operation=" + operation + "&tgWebAppVersion=9.6", launchSection: section,
+      configureWindow(window) { const create = window[factory]; window[factory] = env => { continuation = env.continuation; return create(env); }; }
+    });
+    await app.settle();
+    assert.equal(continuation.event_id, event); assert.equal(continuation.operation_id, operation);
+    assert.equal(app.elements.status.textContent, "Signed in"); assert.equal(app.calls.length, 1);
+  }
+});

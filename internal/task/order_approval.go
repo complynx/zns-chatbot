@@ -20,6 +20,7 @@ import (
 )
 
 const orderSubmitApprovalMethod = "zinusya_orders.submit"
+const mealSubmitApprovalMethod = "zinusya_meals.submit"
 
 func (s *Service) pendingApprovalMessages(
 	ctx context.Context,
@@ -55,7 +56,7 @@ func (s *Service) pendingApprovalMessages(
 		}
 		return s.approvalContent(ctx, i, t.ID, *a, text), nil
 	}
-	if a.Method != orderSubmitApprovalMethod && a.Method != "zinusya_meals.submit" {
+	if a.Method != orderSubmitApprovalMethod && a.Method != mealSubmitApprovalMethod {
 		return s.approval(ctx, i, t.ID, *a), nil
 	}
 	text, nativeURL, err := s.orderApprovalText(ctx, *t, i, *a)
@@ -121,7 +122,7 @@ func (s *Service) orderApprovalText(ctx context.Context, t db.Task, i intent, a 
 	switch a.Method {
 	case orderSubmitApprovalMethod:
 		receipt, err = s.store.OwnOrderOperation(ctx, scope, args.EventID, operation, db.OrderPrepare)
-	case "zinusya_meals.submit":
+	case mealSubmitApprovalMethod:
 		receipt, err = s.store.OwnMealOrderOperation(ctx, scope, args.EventID, operation, db.OrderPrepare)
 	default:
 		return "", "", errors.New("unsupported order approval method")
@@ -138,8 +139,12 @@ func (s *Service) orderApprovalText(ctx context.Context, t db.Task, i intent, a 
 	}
 	text, err := fullOrderApproval(prepared, a.ExpiresAt, s.languageFor(ctx, i))
 	nativeURL := ""
-	if err == nil && a.Method == orderSubmitApprovalMethod && s.options.MiniAppURL != "" && i.ChatID == i.User.ID {
-		nativeURL = s.options.MiniAppURL + "#orders?event=" + prepared.Arguments.EventID.String() + "&operation=" + receipt.OperationID.String()
+	if err == nil && s.options.MiniAppURL != "" && i.ChatID == i.User.ID {
+		page := "orders"
+		if a.Method == mealSubmitApprovalMethod {
+			page = "meals"
+		}
+		nativeURL = s.options.MiniAppURL + "#" + page + "?event=" + prepared.Arguments.EventID.String() + "&operation=" + receipt.OperationID.String()
 	}
 	return text, nativeURL, err
 }

@@ -63,7 +63,7 @@ function backend() {
   };
   return api;
 }
-function browser(api, { storage = new Map(), failSet = false } = {}) {
+function browser(api, { storage = new Map(), failSet = false, continuation } = {}) {
   const elements = new Map(), calls = [], openedProofs = [];
   let activeElement, busy = false;
   function element(tag = "div") {
@@ -74,7 +74,7 @@ function browser(api, { storage = new Map(), failSet = false } = {}) {
   }
   const get = id => { if (!elements.has(id)) { const e = element(); e.id = id; } return elements.get(id); };
   let controller;
-  const env = { openProof: order => openedProofs.push(copy(order)), request: async (path, method = "GET", body) => { calls.push({ path, method, body: body && copy(body) }); const r = api.hook ? await api.hook(path, method, body, api.base) : api.base(path, method, body); return copy(r); }, setBusy: value => { busy = value; controller.setBusy(value); }, denied: () => controller.clear() };
+  const env = { continuation, openProof: order => openedProofs.push(copy(order)), request: async (path, method = "GET", body) => { calls.push({ path, method, body: body && copy(body) }); const r = api.hook ? await api.hook(path, method, body, api.base) : api.base(path, method, body); return copy(r); }, setBusy: value => { busy = value; controller.setBusy(value); }, denied: () => controller.clear() };
   const context = { window: { location: { hash: "#meals" } }, document: { getElementById: get, createElement: element, createTextNode: text => ({ textContent: text, children: [] }) }, sessionStorage: { getItem: k => storage.get(k) || null, setItem(k, v) { if (failSet) throw new Error("storage full"); storage.set(k, v); }, removeItem: k => storage.delete(k) }, crypto: { randomUUID }, Intl, console };
   runInNewContext(source, context); controller = context.window.createZinusyaMeals(env);
   const click = async (id, event = "click") => { const e = get(id); assert.ok(e.listeners[event], id + " listener"); await e.listeners[event]({ preventDefault() {} }); };
@@ -108,6 +108,8 @@ test("meal checkout shows frozen full composition and only explicit confirmation
   assert.match(ui.text("meals-preview"), /BYN 7.15/); assert.match(ui.text("meals-preview"), /Europe\/Berlin/);
   assert.equal(ui.get("meals-confirm").disabled, false);
   await ui.click("meals-confirm"); assert.equal(api.submitted.length, 1);
+  assert.equal(posts(ui).find(c => c.path.endsWith("/submit")).body.operation_id,
+    posts(ui).find(c => c.path.endsWith("/submit/prepare")).body.operation_id);
   assert.match(ui.text("meals-submitted"), /Submitted; check payment proofs/);
   await submittedButton(ui, "Payment and proofs").listeners.click();
   assert.equal(ui.openedProofs[0].order_kind, "meal");
@@ -141,6 +143,9 @@ test("lost meal preparation recovers for review and never submits automatically"
   assert.equal(posts(reload).length, 0); assert.equal(api.submitted.length, 0);
   assert.equal(reload.get("meals-confirm").disabled, false); assert.match(reload.text("meals-preview"), /BYN 7.15/);
   assert.equal(storage.size, 0);
+  await reload.click("meals-confirm");
+  assert.equal(posts(reload)[0].body.operation_id, posts(first).find(c => c.path.endsWith("/submit/prepare")).body.operation_id);
+  assert.equal(api.submitted.length, 1);
 });
 
 test("lost submission recovers original meal receipt without consuming a newer draft", async () => {
@@ -275,4 +280,71 @@ test("selecting the event placeholder clears the old writable event", async () =
 test("lunch mode changes restore keyboard focus to the replacement select", async () => {
   const ui = browser(backend()); await ui.start(); await ui.select(); await ui.choose("meal-mode:day", "combo-with-soup");
   assert.equal(ui.activeElement, ui.get("meal-mode:day")); assert.equal(ui.activeElement.value, "combo-with-soup");
+});
+
+
+async function originalMealPreparation(api) {
+  await completeDraft(browser(api));
+  const operation = randomUUID();
+  const args = { expected_event_version: api.catalog.event_version, expected_catalog_version: api.catalog.version, expected_draft_version: api.current.version };
+  const original = api.base("./meals/" + eventID + "/submit/prepare", "POST", { operation_id: operation, ...args });
+  return { operation, original, arguments: args, continuation: { event_id: eventID, operation_id: operation } };
+}
+
+test("linked meal preparation shows original terms and confirms the same operation once", async () => {
+  const api = backend(), link = await originalMealPreparation(api), ui = browser(api, link);
+  await ui.start();
+  assert.equal(posts(ui).length, 0); assert.equal(api.submitted.length, 0);
+  assert.match(ui.text("meals-preview"), /BYN 7.15/); assert.match(ui.text("meals-preview"), /Tea <img>/);
+  assert.equal(ui.get("meals-confirm").disabled, false);
+  await ui.click("meals-confirm");
+  assert.deepEqual(posts(ui).map(c => c.body), [{ operation_id: link.operation, ...link.arguments, proposal_id: link.original.proposal_id, confirmed: true }]);
+  assert.equal(api.submitted.length, 1);
+  const reopened = browser(api, link); await reopened.start();
+  assert.equal(posts(reopened).length, 0); assert.equal(api.submitted.length, 1);
+  assert.match(reopened.text("meals-order-status"), new RegExp(api.submitted[0].id));
+  assert.equal(reopened.get("meals-confirm").disabled, true);
+});
+
+test("linked historical meal terms cannot confirm a newer draft, menu or expired preparation", async t => {
+  for (const change of ["draft", "menu", "expiry"]) await t.test(change, async () => {
+    const api = backend(), link = await originalMealPreparation(api);
+    if (change === "draft") api.current.version++;
+    if (change === "menu") api.catalog.version++;
+    if (change === "expiry") api.orderReceipts.get("prepare/" + link.operation).expires_at = new Date(Date.now() - 1000).toISOString();
+    const ui = browser(api, link); await ui.start();
+    assert.match(ui.text("meals-preview"), /BYN 7.15/);
+    assert.match(ui.text("meals-order-status"), /original terms/);
+    assert.equal(ui.get("meals-confirm").disabled, true);
+    await ui.click("meals-confirm"); assert.equal(posts(ui).length, 0); assert.equal(api.submitted.length, 0);
+  });
+});
+
+test("unknown linked meal operation stays read-only and rechecks the original ID", async () => {
+  const api = backend(), link = await originalMealPreparation(api); api.orderReceipts.clear();
+  const ui = browser(api, link); await ui.start();
+  assert.match(ui.text("meals-order-status"), /no confirmed result/);
+  assert.equal(ui.get("meals-prepare").disabled, true); assert.equal(ui.get("meals-save").disabled, true);
+  await ui.click("meals-prepare"); await ui.submit(); await ui.click("meals-confirm"); await ui.click("meals-order-recover");
+  assert.equal(posts(ui).length, 0);
+  const reads = ui.calls.filter(c => c.path.includes("/operation-receipts/"));
+  assert.equal(reads.length, 4); assert.ok(reads.every(c => c.path.endsWith("/" + link.operation)));
+});
+
+test("unknown local meal request takes priority over an incoming operation link", async () => {
+  const api = backend(), link = await originalMealPreparation(api), operation = randomUUID();
+  const record = { owner, event_id: eventID, kind: "prepare", body: { operation_id: operation, ...link.arguments } };
+  const raw = JSON.stringify(record), storage = new Map([["zinusya-meals-operation-v1:" + owner, raw]]);
+  const ui = browser(api, { ...link, storage }); await ui.start();
+  assert.equal(storage.get("zinusya-meals-operation-v1:" + owner), raw);
+  assert.ok(ui.calls.some(c => c.path.endsWith("/prepare/" + operation)));
+  assert.equal(ui.calls.some(c => c.path.endsWith("/" + link.operation)), false);
+  assert.equal(posts(ui).length, 0); assert.equal(ui.get("meals-confirm").disabled, true);
+});
+
+test("denied linked meal receipt clears the form without another preparation or submission", async () => {
+  const api = backend(), link = await originalMealPreparation(api);
+  api.hook = (path, method, body, base) => { if (path.includes("/operation-receipts/")) throw { status: 403 }; return base(path, method, body); };
+  const ui = browser(api, link); await ui.start();
+  assert.equal(ui.get("meals").hidden, true); assert.equal(posts(ui).length, 0); assert.equal(api.submitted.length, 0);
 });

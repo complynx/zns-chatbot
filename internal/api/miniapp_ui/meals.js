@@ -13,6 +13,8 @@ window.createZinusyaMeals = function (env) {
   words.en.cutoff = "Payment proof and cancellation deadline";
   words.ru.cutoff = "Срок отправки подтверждения и отмены";
   const copy = value => JSON.parse(JSON.stringify(value));
+  Object.assign(words.en, { linkedDeferred: "Check the earlier request before opening the linked order. Then use Check earlier order request.", orderStale: "These original terms no longer match the saved draft, or have expired. Review the current draft before preparing a new order." });
+  Object.assign(words.ru, { linkedDeferred: "Сначала проверь прежний запрос. Затем открой связанный заказ кнопкой проверки прежнего запроса.", orderStale: "Исходные условия устарели или срок подтверждения истёк. Проверь текущий черновик перед новой подготовкой заказа." });
   const uuid = value => typeof value === "string" && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value) && !/^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(value);
   const id = value => typeof value === "string" && /^[a-z][a-z0-9_-]{0,31}$/.test(value);
   const revision = value => Number.isSafeInteger(value) && value >= 0;
@@ -20,6 +22,9 @@ window.createZinusyaMeals = function (env) {
   let owner, language = "en", epoch = 0, locked = false, working = false, blocked = false, conflict = false;
   let eventID, after, next, catalog, savedCatalog, draft, pending, historical = false, dirty = false;
   let pendingOrder, preparation, submittedOrders = [], orderAfter, orderNext;
+  let linkedUnknown = false;
+  const link = env.continuation;
+  const linked = link && (link.event_id || link.operation_id);
   let cancelButtons = [], proofButtons = [];
   const orderKey = () => "zinusya-meals-operation-v1:" + owner;
   let choices = [], inputs = [], statusKey = "choose", statusSuffix = "";
@@ -46,22 +51,29 @@ window.createZinusyaMeals = function (env) {
     const b = p?.body;
     return p?.owner === owner && uuid(p.event_id) && Object.keys(p).sort().join() === "body,event_id,owner" && b && Object.keys(b).sort().join() === "choices,expected_catalog_version,expected_draft_version,expected_event_version,operation_id" && uuid(b.operation_id) && revision(b.expected_event_version) && b.expected_event_version > 0 && revision(b.expected_catalog_version) && b.expected_catalog_version > 0 && revision(b.expected_draft_version) && validChoices(b.choices);
   }
+  function currentPreparation() {
+    const a = preparation?.arguments;
+    return !historical && !conflict && uuid(preparation?.operation_id) && a?.event_id === eventID && draft?.event_id === eventID && catalog?.event_id === eventID &&
+      a.expected_draft_version === draft.version && a.expected_catalog_version === catalog.version && a.expected_event_version === catalog.event_version &&
+      Date.parse(preparation.expires_at) > Date.now();
+  }
   function controls() {
-    const busy = locked || working, editing = busy || blocked || !!pending || !!pendingOrder || !catalog || !draft || historical || conflict;
+    const busy = locked || working, editing = busy || blocked || linkedUnknown || !!pending || !!pendingOrder || !catalog || !draft || historical || conflict;
     for (const input of inputs) input.disabled = editing;
     el.save.disabled = el.clear.disabled = editing;
-    el.event.disabled = el.first.disabled = el.next.disabled = busy || blocked || !!pending || !!pendingOrder || dirty;
+    el.event.disabled = el.first.disabled = el.next.disabled = busy || blocked || linkedUnknown || !!pending || !!pendingOrder || dirty;
     el.reload.disabled = busy || blocked || !!pending || !!pendingOrder;
     el.latest.hidden = !historical; el.latest.disabled = busy || blocked || !!pending || !!pendingOrder;
     el.recover.hidden = el.retry.hidden = !pending || blocked;
     el.recover.disabled = el.retry.disabled = busy;
     el.prepare.disabled = editing || dirty || !draft?.evaluation?.complete || draft.cleared;
-    el.confirm.disabled = busy || blocked || !!pending || !!pendingOrder || dirty || !preparation || Date.parse(preparation.expires_at) <= Date.now();
+    el.confirm.disabled = busy || blocked || linkedUnknown || !!pending || !!pendingOrder || dirty || !currentPreparation();
     el["submitted-reload"].disabled = busy || !eventID;
     el["submitted-first"].disabled = el["submitted-next"].disabled = busy || blocked || !!pending || !!pendingOrder || !eventID;
-    el["order-recover"].hidden = el["order-retry"].hidden = !pendingOrder;
+    el["order-recover"].hidden = !pendingOrder && !linked;
+    el["order-retry"].hidden = !pendingOrder;
     el["order-recover"].disabled = el["order-retry"].disabled = busy || blocked;
-    for (const button of [...cancelButtons, ...proofButtons]) button.disabled = busy || blocked || !!pending || !!pendingOrder;
+    for (const button of [...cancelButtons, ...proofButtons]) button.disabled = busy || blocked || linkedUnknown || !!pending || !!pendingOrder;
   }
   function showStatus(key, suffix = "") { statusKey = key; statusSuffix = suffix; el.status.textContent = w()[key] + suffix; }
   function labels() {
@@ -71,7 +83,7 @@ window.createZinusyaMeals = function (env) {
   }
   function clear() {
     epoch++; owner = eventID = after = next = catalog = savedCatalog = draft = pending = undefined;
-    working = blocked = conflict = historical = dirty = false; choices = []; inputs = [];
+    working = blocked = conflict = historical = dirty = linkedUnknown = false; choices = []; inputs = [];
     pendingOrder = preparation = orderAfter = orderNext = undefined; submittedOrders = []; cancelButtons = []; proofButtons = [];
     el.preview.replaceChildren(); el.submitted.replaceChildren(); el["order-status"].textContent = "";
     el.meals.hidden = true;
@@ -207,7 +219,7 @@ window.createZinusyaMeals = function (env) {
     catch (error) { if (error.status === 400 || error.status === 409) { forget(); conflict = true; showStatus("conflict"); } else throw error; }
   }
   async function save(e, empty) {
-    if (pending || pendingOrder || blocked || conflict || !catalog || !draft || (!empty && historical)) return;
+    if (pending || pendingOrder || blocked || linkedUnknown || conflict || !catalog || !draft || (!empty && historical)) return;
     const body = { operation_id: crypto.randomUUID(), expected_event_version: catalog.event_version, expected_catalog_version: catalog.version, expected_draft_version: draft.version, choices: empty ? [] : copy(choices) };
     if (!validChoices(body.choices)) throw { local: "invalid" };
     const record = { owner, event_id: eventID, body }, raw = JSON.stringify(record);
@@ -220,7 +232,7 @@ window.createZinusyaMeals = function (env) {
   el.recover.addEventListener("click", () => run(recover)); el.retry.addEventListener("click", () => run(dispatch));
   el.reload.addEventListener("click", () => run(e => eventID ? loadEvent(e, eventID) : loadPage(e, after)));
   el.event.addEventListener("change", () => {
-    if (pending || pendingOrder || blocked || dirty) return;
+    if (pending || pendingOrder || blocked || linkedUnknown || dirty) return;
     if (!el.event.value) {
       preparation = undefined; submittedOrders = []; el.preview.replaceChildren(); renderSubmitted();
       eventID = catalog = savedCatalog = draft = undefined; choices = []; inputs = []; historical = conflict = false;
@@ -312,7 +324,7 @@ window.createZinusyaMeals = function (env) {
       // A recovered preparation is displayed for review; it never authorizes submission.
       renderSnapshot(document.createElement("div"), result.snapshot);
       if (!catalog || !draft) await loadEvent(e, eventID);
-      forgetOrder(); preparation = result; renderPreparation(); el["order-status"].textContent = w().prepared;
+      forgetOrder(); preparation = { ...result, operation_id: p.body.operation_id }; renderPreparation(); el["order-status"].textContent = w().prepared;
       return;
     }
     const order = checkOrder(p.kind === "submit" ? result?.order : result);
@@ -321,6 +333,42 @@ window.createZinusyaMeals = function (env) {
     el["order-status"].textContent = w().receiptOrder + ": " + order.id + " · " + (p.kind === "submit" ? w().submitted : w().cancelled);
     // The receipt can be historical. Read current draft/orders separately.
     if (p.kind === "submit" || !catalog || !draft) await loadEvent(e, eventID); else await loadSubmitted(e);
+  }
+  async function importOrder(e) {
+    if (!linked || pending || pendingOrder || blocked) return;
+    if (dirty) throw { local: "saveFirst" };
+    if (!uuid(link.event_id) || !uuid(link.operation_id)) throw new Error("Invalid order link");
+    eventID = link.event_id; el.event.value = eventID; linkedUnknown = true;
+    catalog = draft = preparation = undefined; inputs = []; dirty = false;
+    submittedOrders = []; orderAfter = orderNext = undefined;
+    el.items.replaceChildren(); el.saved.replaceChildren(); el.preview.replaceChildren();
+    renderSubmitted();
+    controls();
+    const receipt = async kind => {
+      const value = await call(e, path() + "/operation-receipts/" + kind + "/" + link.operation_id);
+      if (value.operation_id !== link.operation_id || value.event_id !== eventID || value.kind !== kind) throw new Error("Invalid operation receipt");
+      return value.result;
+    };
+    let completed;
+    try { completed = await receipt("submit"); }
+    catch (error) { if (error.status !== 404) throw error; }
+    if (completed) {
+      const order = checkOrder(completed.order);
+      await loadEvent(e, eventID);
+      linkedUnknown = false;
+      el["order-status"].textContent = w().receiptOrder + ": " + order.id + " · " + w().submitted;
+      return;
+    }
+    let original;
+    try { original = await receipt("prepare"); }
+    catch (error) { if (error.status !== 404) throw error; await loadEvent(e, eventID); el["order-status"].textContent = w().orderUnknown; return; }
+    const a = original?.arguments;
+    if (!uuid(original?.proposal_id) || !original.snapshot?.quote || !Number.isFinite(Date.parse(original.expires_at)) || a?.event_id !== eventID ||
+      ["expected_event_version", "expected_catalog_version", "expected_draft_version"].some(k => !revision(a[k]) || a[k] < 1)) throw new Error("Invalid preparation");
+    renderSnapshot(document.createElement("div"), original.snapshot);
+    await loadEvent(e, eventID);
+    linkedUnknown = false; preparation = { ...original, operation_id: link.operation_id }; renderPreparation();
+    el["order-status"].textContent = w()[currentPreparation() ? "prepared" : "orderStale"];
   }
   async function recoverOrder(e) {
     if (!pendingOrder || blocked) return;
@@ -341,7 +389,7 @@ window.createZinusyaMeals = function (env) {
     }
   }
   async function beginOrder(e, kind, body) {
-    if (pending || pendingOrder || blocked || !eventID) return;
+    if (pending || pendingOrder || blocked || linkedUnknown || !eventID) return;
     const record = { owner, event_id: eventID, kind, body };
     try { const raw = JSON.stringify(record); sessionStorage.setItem(orderKey(), raw); if (sessionStorage.getItem(orderKey()) !== raw) throw new Error("Storage unavailable"); } catch { throw { local: "storage" }; }
     pendingOrder = record; controls(); await dispatchOrder(e);
@@ -353,11 +401,11 @@ window.createZinusyaMeals = function (env) {
     return beginOrder(e, "prepare", { operation_id: crypto.randomUUID(), expected_event_version: catalog.event_version, expected_catalog_version: catalog.version, expected_draft_version: draft.version });
   }));
   el.confirm.addEventListener("click", () => run(e => {
-    if (dirty || !preparation || Date.parse(preparation.expires_at) <= Date.now()) return;
+    if (dirty || linkedUnknown || !currentPreparation()) return;
     const a = preparation.arguments;
-    return beginOrder(e, "submit", { operation_id: crypto.randomUUID(), expected_event_version: a.expected_event_version, expected_catalog_version: a.expected_catalog_version, expected_draft_version: a.expected_draft_version, proposal_id: preparation.proposal_id, confirmed: true });
+    return beginOrder(e, "submit", { operation_id: preparation.operation_id, expected_event_version: a.expected_event_version, expected_catalog_version: a.expected_catalog_version, expected_draft_version: a.expected_draft_version, proposal_id: preparation.proposal_id, confirmed: true });
   }));
-  el["order-recover"].addEventListener("click", () => run(recoverOrder));
+  el["order-recover"].addEventListener("click", () => run(e => pendingOrder ? recoverOrder(e) : importOrder(e)));
   el["order-retry"].addEventListener("click", () => run(dispatchOrder));
   el["submitted-reload"].addEventListener("click", () => run(e => eventID && loadSubmitted(e)));
   for (const [button, cursor] of [[el["submitted-first"], () => undefined], [el["submitted-next"], () => orderNext]]) button.addEventListener("click", () => run(e => !pendingOrder && !pending && !blocked && eventID && loadSubmitted(e, cursor())));
@@ -367,7 +415,14 @@ window.createZinusyaMeals = function (env) {
       const e = epoch;
       try { const raw = sessionStorage.getItem(key()); if (raw) { if (raw.length > 65536) throw new Error("Oversized recovery record"); pending = JSON.parse(raw); if (!validPending(pending)) throw new Error("Invalid recovery record"); } const rawOrder = sessionStorage.getItem(orderKey()); if (rawOrder) { if (rawOrder.length > 2048) throw new Error("Oversized operation record"); pendingOrder = JSON.parse(rawOrder); if (!validOrderPending(pendingOrder) || pending) throw new Error("Invalid operation recovery"); } }
       catch { blocked = true; pending = undefined; showStatus("blocked"); controls(); return; }
-      try { await loadPage(e); if (pending) await recover(e); else if (pendingOrder) await recoverOrder(e); if ((window.location?.hash || "") === "#meals") el.meals.scrollIntoView?.({ block: "start" }); }
+      try {
+        await loadPage(e);
+        if (pending || pendingOrder) {
+          if (pending) await recover(e); else await recoverOrder(e);
+          if (linked) el["order-status"].textContent += "\n" + w().linkedDeferred;
+        } else if (linked) await importOrder(e);
+        if ((window.location?.hash || "").split("?")[0] === "#meals") el.meals.scrollIntoView?.({ block: "start" });
+      }
       catch (error) { if (e === epoch) errorStatus(error); } controls();
     }
   };

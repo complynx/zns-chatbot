@@ -87,7 +87,7 @@ quote and conversational answer keyboard. Its URL is built from the existing
 configured Mini App launch base, the checked original event and operation UUID.
 There is no new production URL setting and no authentication token in the link.
 The URL is transport metadata, not part of the frozen price or consent record.
-Only service-order submission in the private user chat receives this button.
+Service-order and meal submission in the private user chat receive this button.
 
 The button uses an inline WebApp launch. A reply-keyboard launch cannot supply
 the required identity data: Telegram documents that its initialization data is
@@ -96,7 +96,8 @@ The ordinary dialogue answer keyboard remains on the final approval message.
 Both messages use the existing durable outbox, approval context and presentation
 keys. Opening the form is not approval and does not answer the pending dialogue.
 
-After authenticated bootstrap, `#orders?event=UUID&operation=UUID` reads the
+After authenticated bootstrap, `#orders?event=UUID&operation=UUID` or
+`#meals?event=UUID&operation=UUID` reads the
 original submit receipt first, then the prepare receipt if completion is absent.
 It never submits or prepares on open. A completed operation displays its original
 receipt while separately loading the current draft/orders. A pending preparation
@@ -205,6 +206,29 @@ downloaded and its revision verified. After acceptance, all three synthetic
 databases passed full archive decode, the original checkpoint stayed unchanged,
 and only the new owned fixture was removed. Aggregate receipt:
 `.cache/shuttle-work/parallel-acceptance-20261022/meal-adoption-runtime/acceptance.json`.
+
+## Meal browser continuation source boundary
+
+The meal form now retains the preparation operation UUID for explicit submit,
+including after preparation-response recovery. The Telegram approval links to
+that original backend UUID even when Loom retains a distinct operation ID.
+The parent routes the meal fragment to the meal form. It reads receipts only
+after ordinary authentication. Opening the link reads submit then prepare receipts; it cannot
+prepare or submit automatically. Local uncertain requests retain priority, and
+missing linked receipts cannot authorize a replacement. The original snapshot
+is shown separately from the current draft; changed draft/menu/event versions,
+historical menus and expiry prevent confirmation.
+
+The focused UI regression first reproduced distinct prepare/submit UUIDs. The
+follow-up passes 98 Node behavior cases, including original meal-link submit,
+completed-link reopen, changed terms/expiry, unknown receipts, pending-request
+precedence, authorization denial and parent fragment routing. The affected
+meal RU/EN full-quote/keyboard test and existing service-order link guard pass
+against isolated PostgreSQL. These are source/fixture checks, not a real Telegram
+WebView or autonomous-model claim. The separately reviewed actual served-browser
+and same-live-question result belongs in the ignored
+`.cache/shuttle-work/parallel-acceptance-20261022/meal-reverse-runtime/` receipts;
+it must not be inferred from these tests or the earlier native-to-agent gate.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
