@@ -43,6 +43,11 @@ intake/restart/size/privacy scenarios are reused through the focused file-test
 selection. This uses synthetic Telegram/IAM peers and an isolated test database;
 no paid model, real Telegram, production data or external ASR was used.
 
+Final affected strict lint reports zero issues, and the eight-file source/test/doc
+review is clean. Source `035f2a6b` built local Linux/amd64 image `bf1383e8` with
+UID10001 from a tracked-only archive. The isolated synthetic test database was
+archived, fully decoded and removed. No image publication or installation occurred.
+
 This accepts the API/transport classification. It does not establish autonomous
 model recovery wording or real source deletion. Existing bounded model voice
 and local-pilot receipts retain their exact image and scenario scope.

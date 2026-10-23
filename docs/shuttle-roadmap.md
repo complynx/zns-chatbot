@@ -1,21 +1,32 @@
 # Current roadmap checkpoint, 2026-10-23
 
-## Remaining local release checks
+## File-source and audio consumer delta
 
-A requirement-to-evidence audit found a concrete file-source API gap after the
-completed voice/local-pilot lanes below. The [focused correction](shuttle-file-source-errors.md)
-now distinguishes invalid source IDs404, source refusal424 and temporary503,
-without changing caller authority or marking files permanently lost. Its
-regression and PostgreSQL/HTTP owner/privacy/recovery checks pass; final
-review/lint/release binding are in progress. Earlier accepted identity, queue,
-business, model and pilot paths retain their exact evidence scope.
+A requirement-to-evidence audit found two remaining local file/tool gaps after
+voice and pilot acceptance. The [file-source correction](shuttle-file-source-errors.md)
+now distinguishes explicit invalid source IDs404, source refusal424 and temporary503,
+without changing caller authority or marking files permanently lost. Twelve API
+cases and the focused PostgreSQL/HTTP owner/privacy/recovery selection pass
+(10 test roots,37 pass events,zero skips); strict affected lint and independent
+review are clean. Source `035f2a6b` produced local Linux image `bf1383e8` from a
+tracked-only archive. Its synthetic test DB was archived, fully decoded and removed.
 
-One consumer join remains unverified: Shuttle opaque attachment ID → Loom
-`audio_transcribe` → actual worker → transcription provider. Implementation and
-upstream adapter tests exist; an isolated local ASR stub gate is being prepared
-with zero paid calls. This is a transport/tool contract check, separate from
-the completed voice campaign and paid ASR speech quality. No old one-shot or
-accepted media matrix should be replayed to fill it.
+The [audio transcription consumer join](shuttle-audio-transcription-qa-2026-10-23.md)
+now passes on that exact app image and published Loom ba1/APIcbba/worker856:
+opaque Shuttle attachment → native artifact import → audio_transcribe → actual
+worker extraction → one local TLS ASR receipt → transcript artifact and Telegram
+delivery. Three Responses frames were controlled local fixtures; external model
+and ASR calls were zero. Both stands' databases were archived and fully decoded,
+and project/owner resources removed. Original fixture/controller failures remain;
+final acceptance uses a separately reviewed read-only observation of the same
+completed run, without replay. This proves the contract, not speech quality.
+
+A separate independent audit mapped all21 mandatory specification scenarios to
+concrete existing reports and current assertions, with their finite fixture,
+component and runtime limits. No unexplained mandatory-scenario gap was found.
+Earlier identity, queue, business, model and pilot acceptance is reused within
+its original version/scope; the complete matrix was not rerun for this delta.
+Merge, image publication and production changes still require separate permission.
 
 ## Real-model voice and local pilot
 
