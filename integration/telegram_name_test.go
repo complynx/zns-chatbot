@@ -132,7 +132,11 @@ func TestTelegramNameReplyTextAndMediaRemainAgentInputAcrossRestart(t *testing.T
 			require.NotNil(t, p.inputs[0].Presentation)
 			require.Empty(t, p.cancelKeys)
 			if text == "An unrelated picture" {
-				require.Contains(t, p.inputs[0].Text, "Use zinusya_files tools with these IDs")
+				require.Contains(
+					t,
+					p.inputs[0].Text,
+					"Use zinusya_files.fetch with these IDs to import and inspect the attachment with Loom file tools; metadata alone is not image content.",
+				)
 				require.NotContains(t, p.inputs[0].Text, "private-native-reply-file")
 			}
 		})

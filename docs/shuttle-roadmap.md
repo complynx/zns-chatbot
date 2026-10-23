@@ -1,6 +1,6 @@
 # Shuttle roadmap
 
-Shuttle is the standalone Go implementation of zns-chatbot / Зинуся. The [specification](shuttle-spec.md) defines the target behavior; the [architecture](shuttle-architecture.md) defines ownership. The application uses the consolidated [schema73 baseline](shuttle-schema.md).
+Shuttle is the standalone Go implementation of zns-chatbot / Зинуся. The [specification](shuttle-spec.md) defines the target behavior; the [architecture](shuttle-architecture.md) defines ownership. The application uses the consolidated [schema74 baseline](shuttle-schema.md).
 
 ## Current scope
 
