@@ -81,7 +81,14 @@ function browser(api, { app = false, hash = "", storage = new Map() } = {}) {
   let controller = context.window.createZinusyaMassageStaff({ request: async (path, method, body) => { calls.push({ path, method, body: body && clone(body) }); return api.request(path, method, body && clone(body)); }, setBusy: value => { b.busy.push(value); controller.setBusy(value); }, denied: () => { b.denied++; controller.clear(); } });
   if (app) {
     const create = context.window.createZinusyaMassageStaff;
-    context.window.createZinusyaMassageStaff = env => { controller = create(env); return controller; };
+    let started;
+    b.started = new Promise(resolve => { started = resolve; });
+    context.window.createZinusyaMassageStaff = env => {
+      controller = create(env);
+      const start = controller.start.bind(controller);
+      controller.start = (...args) => { const result = start(...args); started(result); return result; };
+      return controller;
+    };
     context.fetch = async (path, options) => {
       try {
         let reply;
@@ -208,8 +215,8 @@ test("connection failure can be reloaded without any agent or business mutation"
   assert.match(b.text("ms-rows"), /PRIVATE_CLIENT/); assert.ok(b.calls.filter(call => call.method === "POST").every(call => (call.path.endsWith("/timetable") || call.path.endsWith("/windows"))));
 });
 
-test("Mini App wiring uses the authenticated session, then logout clears all specialist data", async () => {
-  const api = backend(), b = browser(api, { app: true }); await b.settle();
+test("Mini App wiring uses the authenticated session, then logout clears all specialist data", { timeout: 5000 }, async () => {
+  const api = backend(), b = browser(api, { app: true }); await b.started; await b.settle();
   assert.equal(b.get("massage-staff").hidden, false); await b.select(); await b.click(b.buttons("ms-rows")[0]);
   assert.ok(b.calls.every(call => call.authorization === "ZinusyaSession " + "a".repeat(43)));
   await b.click("logout"); assert.equal(b.get("massage-staff").hidden, true); assert.equal(b.text("ms-rows"), ""); assert.equal(b.text("ms-detail"), "");
