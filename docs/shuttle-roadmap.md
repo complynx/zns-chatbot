@@ -14,8 +14,16 @@ The G2 approval naturally expired with `wait_expired`; its preparation remains
 unconsumed. Earlier failures and narrow evidence limits remain recorded.
 
 Daniel also authorized an isolated production-like local pilot in parallel.
-Actual verified TLS and scoped IAM provisioning pass there; provider callback,
-owner read, telemetry, restart/rollback and cleanup are still in progress.
+[Its bounded local acceptance](shuttle-local-pilot-qa-2026-10-23.md) now passes:
+verified TLS, scoped IAM and separate DB roles, the actual published-provider
+prelink callback, native owner read, delegated discovered Loom account read,
+private metrics/local OTLP, graceful restart and a same-fresh-session
+current-old-current binary round trip. Three DB archives passed full decode;
+owned resources were removed. Original harness failures and local gateway
+restart interruptions remain explicit. Telegram issuer/browser relay and Loom
+responses were controlled local peers; this does not establish human Telegram,
+paid-model behavior or Grafana Cloud ingestion. The real-model campaign above
+provides its separate bounded model evidence.
 This local authorization does not authorize merge, image publication or any
 production provisioning/deployment/cutover. Real Telegram still needs Daniel.
 
