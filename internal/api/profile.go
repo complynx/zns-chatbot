@@ -17,15 +17,19 @@ const (
 	schemaFullName           = "full_name"
 	schemaFirstName          = "first_name"
 	schemaLastName           = "last_name"
+	schemaFirstNameLatin     = "first_name_latin"
+	schemaLastNameLatin      = "last_name_latin"
 	schemaBotLanguage        = "bot_language"
 	profileNameMaxLength     = 256
 	profileNamePartMaxLength = 200
 )
 
 type profileNameArguments struct {
-	ExpectedVersion int64  `json:"expected_version" minimum:"0"`
-	FirstName       string `json:"first_name"                   minLength:"1" maxLength:"200"`
-	LastName        string `json:"last_name"                    minLength:"1" maxLength:"200"`
+	FirstNameLatin  *string `json:"first_name_latin,omitempty" maxLength:"200"`
+	LastNameLatin   *string `json:"last_name_latin,omitempty"  maxLength:"200"`
+	ExpectedVersion int64   `json:"expected_version"                           minimum:"0"`
+	FirstName       string  `json:"first_name"                 maxLength:"200"             minLength:"1"`
+	LastName        string  `json:"last_name"                  maxLength:"200"             minLength:"1"`
 }
 
 type profileLanguageArguments struct {
@@ -38,10 +42,12 @@ type profileRequestNameArguments struct {
 }
 
 type profileCompleteNameArguments struct {
-	ExpectedVersion int64     `json:"expected_version" minimum:"0"`
+	FirstNameLatin  *string   `json:"first_name_latin,omitempty" maxLength:"200"`
+	LastNameLatin   *string   `json:"last_name_latin,omitempty"  maxLength:"200"`
+	ExpectedVersion int64     `json:"expected_version"                           minimum:"0"`
 	ExpectationID   uuid.UUID `json:"expectation_id"`
-	FirstName       string    `json:"first_name"                   minLength:"1" maxLength:"200"`
-	LastName        string    `json:"last_name"                    minLength:"1" maxLength:"200"`
+	FirstName       string    `json:"first_name"                 maxLength:"200"             minLength:"1"`
+	LastName        string    `json:"last_name"                  maxLength:"200"             minLength:"1"`
 }
 
 type profileCancelNameArguments struct {
@@ -92,7 +98,8 @@ func (s *Server) registerProfile(api huma.API) {
 	huma.Register(api, huma.Operation{OperationID: "agent-profile-operation", Method: http.MethodPost,
 		Path: profilePath + "operation", MaxBodyBytes: internalBodyLimit}, s.agentProfileOperation)
 	registerProfileMutation(s, api, "set_name", func(a profileNameArguments) db.ProfileMutation {
-		return db.ProfileMutation{ExpectedVersion: a.ExpectedVersion, FirstName: a.FirstName, LastName: a.LastName}
+		return db.ProfileMutation{ExpectedVersion: a.ExpectedVersion, FirstName: a.FirstName, LastName: a.LastName,
+			FirstNameLatin: a.FirstNameLatin, LastNameLatin: a.LastNameLatin}
 	})
 	registerProfileMutation(s, api, "set_language", func(a profileLanguageArguments) db.ProfileMutation {
 		return db.ProfileMutation{ExpectedVersion: a.ExpectedVersion, BotLanguage: a.BotLanguage}
@@ -106,6 +113,8 @@ func (s *Server) registerProfile(api huma.API) {
 			ExpectationID:   a.ExpectationID,
 			FirstName:       a.FirstName,
 			LastName:        a.LastName,
+			FirstNameLatin:  a.FirstNameLatin,
+			LastNameLatin:   a.LastNameLatin,
 		}
 	})
 	registerProfileMutation(s, api, "cancel_name", func(a profileCancelNameArguments) db.ProfileMutation {
@@ -217,10 +226,25 @@ func profileError(err error) error {
 	return huma.Error503ServiceUnavailable("profile storage unavailable")
 }
 
+func profileMethod(id, description string, args map[string]any, write bool) map[string]any {
+	m := map[string]any{"id": id, manifestDescription: description,
+		manifestPermissions: []string{}, manifestPath: profilePath + id, manifestEffect: effectRead,
+		manifestTimeout: toolTimeoutMillis, manifestMaxResult: toolResultLimit,
+		manifestInputSchema: args, manifestOutputSchema: profileSchema(), manifestIdempotency: write,
+		manifestConfirmation: map[string]any{confirmationMode: confirmationNone},
+		manifestMIMETypes:    []string{}, manifestDisclosure: false}
+	if write {
+		m[manifestEffect], m[manifestStatusPath], m[manifestDedupWindow] = effectWrite, profilePath+"operation", agentRegistrationDedupSeconds
+	}
+	return m
+}
+
 func profileModule() map[string]any {
 	uuidField := map[string]any{manifestType: schemaString, schemaFormat: schemaUUID}
 	version := map[string]any{manifestType: schemaInteger, schemaMinimum: 0}
 	name := map[string]any{manifestType: schemaString, schemaMinLength: 1, schemaMaxLength: profileNamePartMaxLength}
+	latin := map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength}
+	latinHelp := " Preserve original names. Immediately transliterate confirmed non-Latin components into first_name_latin and last_name_latin in this same write; do not translate or anglicize them. Explicit user or passport Latin spelling takes priority. Both optional Latin fields must be supplied together (both empty clears them), at most 200 characters each and 256 including the separating space. Omission preserves Latin for unchanged originals and clears it when originals change. Latin-only corrections do not synchronize IAM. After an unknown outcome keep the same operation ID and all original arguments. Do not backfill older profiles automatically."
 	language := map[string]any{manifestType: schemaString, schemaEnum: []string{"auto", "en", "ru"}}
 	input := func(fields map[string]any, required ...string) map[string]any {
 		if required == nil {
@@ -229,36 +253,31 @@ func profileModule() map[string]any {
 		return map[string]any{manifestType: schemaObject, schemaAdditionalProperties: false,
 			schemaProperties: fields, schemaRequired: required}
 	}
-	method := func(id, description string, args map[string]any, write bool) map[string]any {
-		m := map[string]any{"id": id, manifestDescription: description,
-			manifestPermissions: []string{}, manifestPath: profilePath + id, manifestEffect: effectRead,
-			manifestTimeout: toolTimeoutMillis, manifestMaxResult: toolResultLimit,
-			manifestInputSchema: args, manifestOutputSchema: profileSchema(), manifestIdempotency: write,
-			manifestConfirmation: map[string]any{confirmationMode: confirmationNone},
-			manifestMIMETypes:    []string{}, manifestDisclosure: false}
-		if write {
-			m[manifestEffect], m[manifestStatusPath], m[manifestDedupWindow] = effectWrite, profilePath+"operation", agentRegistrationDedupSeconds
-		}
-		return m
-	}
-	get := method(
+
+	get := profileMethod(
 		"get",
 		"Read your independent full name, bot language, profile version and pending name request. Telegram metadata never overwrites these fields. Name is not legal identity. Expired name requests do not affect registration or payment state.",
 		input(map[string]any{}),
 		false,
 	)
-	setName := method(
+	setName := profileMethod(
 		"set_name",
-		"Save the user's explicitly supplied or confirmed real first_name and last_name separately; components may contain spaces. Do not guess a split by word position: ask when ambiguous. Read get first and send expected_version. This finishes any pending name request and schedules name-only IAM synchronization; it does not prove IAM has updated or change legal registration details. Never copy Telegram hints without the user's confirmation.",
+		"Save the user's explicitly supplied or confirmed real first_name and last_name separately; components may contain spaces. Do not guess a split by word position: ask when ambiguous. Read get first and send expected_version. This finishes any pending name request and schedules name-only IAM synchronization; it does not prove IAM has updated or change legal registration details. Never copy Telegram hints without the user's confirmation."+latinHelp,
 		input(
-			map[string]any{schemaExpectedVersion: version, schemaFirstName: name, schemaLastName: name},
+			map[string]any{
+				schemaExpectedVersion: version,
+				schemaFirstName:       name,
+				schemaLastName:        name,
+				schemaFirstNameLatin:  latin,
+				schemaLastNameLatin:   latin,
+			},
 			schemaExpectedVersion,
 			schemaFirstName,
 			schemaLastName,
 		),
 		true,
 	)
-	setLanguage := method(
+	setLanguage := profileMethod(
 		"set_language",
 		"Save the user's explicit interface language choice: en, ru, or auto for Telegram fallback. Agent replies still follow meaningful current user text; neutral input uses conversation then interface language. This preserves a pending name request.",
 		input(
@@ -268,21 +287,23 @@ func profileModule() map[string]any {
 		),
 		true,
 	)
-	request := method(
+	request := profileMethod(
 		"request_name",
 		"Record a bounded request for the user's full name, then ask conversationally. Existing active request and deadline are preserved. No message is captured automatically; unrelated conversation is allowed.",
 		input(map[string]any{schemaExpectedVersion: version}, schemaExpectedVersion),
 		true,
 	)
-	complete := method(
+	complete := profileMethod(
 		"complete_name",
-		"After explicit user input or confirmation, save separate real first_name and last_name and finish the matching unexpired name request. Components may contain spaces; clarify an ambiguous split. Requires get's version and expectation ID. Schedules name-only IAM synchronization, not legal registration details. A local receipt does not prove remote IAM completion. Stale or expired requests conflict; reread and follow current user intent.",
+		"After explicit user input or confirmation, save separate real first_name and last_name and finish the matching unexpired name request. Components may contain spaces; clarify an ambiguous split. Requires get's version and expectation ID. Schedules name-only IAM synchronization, not legal registration details. A local receipt does not prove remote IAM completion. Stale or expired requests conflict; reread and follow current user intent."+latinHelp,
 		input(
 			map[string]any{
 				schemaExpectedVersion: version,
 				"expectation_id":      uuidField,
 				schemaFirstName:       name,
 				schemaLastName:        name,
+				schemaFirstNameLatin:  latin,
+				schemaLastNameLatin:   latin,
 			},
 			schemaExpectedVersion,
 			"expectation_id",
@@ -291,7 +312,7 @@ func profileModule() map[string]any {
 		),
 		true,
 	)
-	cancel := method(
+	cancel := profileMethod(
 		"cancel_name",
 		"Cancel only the matching pending name request after user intent; no business object changes. Requires current profile version and expectation ID.",
 		input(
@@ -301,7 +322,7 @@ func profileModule() map[string]any {
 		),
 		true,
 	)
-	operation := method(
+	operation := profileMethod(
 		"operation",
 		"Reconcile the original immutable result of a profile write using arguments.operation_id. The status endpoint also accepts protocol_version and the original operation_id in the envelope without arguments. Missing status is unknown; retain the same operation ID and arguments after uncertainty.",
 		input(map[string]any{"operation_id": uuidField}, "operation_id"),
@@ -322,14 +343,16 @@ func profileSchema() map[string]any {
 	return map[string]any{manifestType: schemaObject, schemaAdditionalProperties: false,
 		schemaRequired: []string{schemaUserID, schemaVersion, schemaFullName, schemaBotLanguage, schemaObservedAt},
 		schemaProperties: map[string]any{
-			schemaUserID:      uuidField,
-			schemaVersion:     map[string]any{manifestType: schemaInteger, schemaMinimum: 0},
-			schemaFullName:    map[string]any{manifestType: schemaString, schemaMaxLength: profileNameMaxLength},
-			"first_name":      map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength},
-			"last_name":       map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength},
-			"name_source":     map[string]any{manifestType: schemaString, schemaEnum: []string{"user", "iam"}},
-			schemaBotLanguage: map[string]any{manifestType: schemaString, schemaEnum: []string{"auto", "en", "ru"}},
-			schemaObservedAt:  instant,
+			schemaUserID:         uuidField,
+			schemaVersion:        map[string]any{manifestType: schemaInteger, schemaMinimum: 0},
+			schemaFullName:       map[string]any{manifestType: schemaString, schemaMaxLength: profileNameMaxLength},
+			"first_name":         map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength},
+			"last_name":          map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength},
+			schemaFirstNameLatin: map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength},
+			schemaLastNameLatin:  map[string]any{manifestType: schemaString, schemaMaxLength: profileNamePartMaxLength},
+			"name_source":        map[string]any{manifestType: schemaString, schemaEnum: []string{"user", "iam"}},
+			schemaBotLanguage:    map[string]any{manifestType: schemaString, schemaEnum: []string{"auto", "en", "ru"}},
+			schemaObservedAt:     instant,
 			"name_expectation": map[string]any{manifestType: schemaObject, schemaAdditionalProperties: false,
 				schemaRequired:   []string{"id", schemaCreatedAt, schemaExpiresAt},
 				schemaProperties: map[string]any{"id": uuidField, schemaCreatedAt: instant, schemaExpiresAt: instant}},

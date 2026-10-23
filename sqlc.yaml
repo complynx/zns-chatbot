@@ -1,7 +1,7 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    schema: "migrations"
+    schema: ".cache/shuttle-sqlc/schema.sql"
     queries: "internal/db/queries.sql"
     gen:
       go:

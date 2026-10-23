@@ -1,10 +1,7 @@
 # Native avatar editor
 
-The embedded Mini App edits shared drafts.
-For source schema 68 / mvp-86,
-Telegram originals are downloaded on demand.
-See the [current source lifecycle
-and acceptance boundary](shuttle-avatar-telegram-sources.md).
+The embedded Mini App edits shared drafts. Telegram originals are downloaded
+on demand through the [source lifecycle contract](shuttle-avatar-telegram-sources.md).
 
 ## Use
 
@@ -16,11 +13,7 @@ policy is inferred.
 For imported historical photos, Find imported attachments lists owned candidates.
 Preview photo shows a bounded framed image without spending a draft slot. Use
 this photo explicitly creates the shared draft. Changing the selection or leaving
-the account clears the preview. This follow-up was first accepted on the separate
-mock-Telegram QA stand. A shipped-Mini-App browser check with real IAM passes
-preview-before-write, foreign-source denial and one explicit draft creation while
-Loom is paused. It creates no task or document; Loom and browser cleanup are
-verified. Real Telegram WebView acceptance remains open.
+the account clears the preview.
 
 Drag the photo, or enter frame-relative horizontal/vertical percentages, scale
 25–800%, and clockwise rotation −180–180 degrees. Reset returns local edits to
@@ -34,6 +27,34 @@ The frame and original are fetched from the bot by ID and checked against the
 saved digests. Browser image decoding follows EXIF orientation. The browser's
 interpolation is not claimed to match the leaf renderer pixel for pixel.
 The server remains responsible for bounded image admission and processing.
+
+## Dedicated crop view
+
+The document's Crop button opens `#avatar-crop?draft=ID` directly on its owned
+shared draft. This full-screen canvas carries the interaction style of the
+original Python application's frame editor. It uses Telegram theme colors,
+stable viewport height and safe-area variables, with browser fallbacks. Native
+Telegram MainButton and BackButton controls are used when available; ordinary
+page buttons remain the browser fallback.
+
+Drag to move the photo. Two fingers move, zoom and rotate it together. With a
+mouse, scroll zooms, Shift-scroll gives finer zoom, and Shift-drag rotates. The
+same canonical transform bounds apply as in the generic editor. The local canvas
+is approximate and does not replace the server renderer.
+
+Finish saves a changed transform with the loaded version, obtains the saved
+version's server preview, then finalizes that exact draft version. These are
+separate recoverable operations. It does not finalize while a save is unknown,
+and an already generated unchanged version cannot be submitted again from this
+view. Successful finalization shows that the document is queued, not delivered.
+The generic editor's separate Save and Preview controls retain their existing
+behavior.
+
+An explicit authenticated open uses the owner-scoped draft-open endpoint and a
+stable operation ID. Its first-open timestamp is separate from button-offered
+and delivery state; it does not rewrite the immutable artifact receipt. Loading
+metadata or an image preview alone does not record an open. Both native-created
+and agent-created owned drafts use the same entry and recovery rules.
 
 ## Continue with the agent or form
 

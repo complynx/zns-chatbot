@@ -74,7 +74,14 @@ func (s *Store) CreateAvatarDraft(
 	raw []byte,
 	proof avatar.Rendered,
 ) (AvatarDraft, error) {
-	return s.createAvatarDraft(ctx, scope, a, raw, proof, nil)
+	return s.createAvatarDraft(ctx, scope, a, raw, proof, nil, false)
+}
+
+// CreateSystemAvatarDraft records a native photo workflow without a Mini App session.
+func (s *Store) CreateSystemAvatarDraft(
+	ctx context.Context, scope ProfileScope, a AvatarDraftCreate, raw []byte, proof avatar.Rendered,
+) (AvatarDraft, error) {
+	return s.createAvatarDraft(ctx, scope, a, raw, proof, nil, true)
 }
 
 func (s *Store) CreateMiniAppAvatarDraft(
@@ -85,7 +92,7 @@ func (s *Store) CreateMiniAppAvatarDraft(
 	raw []byte,
 	proof avatar.Rendered,
 ) (AvatarDraft, error) {
-	return s.createAvatarDraft(ctx, scope, a, raw, proof, &avatarDraftSession{bearer, generation})
+	return s.createAvatarDraft(ctx, scope, a, raw, proof, &avatarDraftSession{bearer, generation}, true)
 }
 
 func (s *Store) createAvatarDraft(
@@ -95,6 +102,7 @@ func (s *Store) createAvatarDraft(
 	raw []byte,
 	proof avatar.Rendered,
 	session *avatarDraftSession,
+	native bool,
 ) (AvatarDraft, error) {
 	hash, kind, err := avatarDraftCreateHash(a)
 	if err != nil {
@@ -182,7 +190,7 @@ func (s *Store) createAvatarDraft(
 		kind,
 		hash,
 		d,
-		session != nil,
+		native,
 	); err != nil {
 		return AvatarDraft{}, err
 	}

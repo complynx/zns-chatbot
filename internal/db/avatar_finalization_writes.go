@@ -21,7 +21,14 @@ func (s *Store) CommitAvatarDraft(
 	a AvatarDraftFinalize,
 	rendered AvatarDraftRender,
 ) (AvatarDraftReceipt, error) {
-	return s.commitAvatarDraft(ctx, scope, a, rendered, nil)
+	return s.commitAvatarDraft(ctx, scope, a, rendered, nil, false)
+}
+
+// CommitSystemAvatarDraft admits a native photo document without creating a Loom run.
+func (s *Store) CommitSystemAvatarDraft(
+	ctx context.Context, scope ProfileScope, a AvatarDraftFinalize, rendered AvatarDraftRender,
+) (AvatarDraftReceipt, error) {
+	return s.commitAvatarDraft(ctx, scope, a, rendered, nil, true)
 }
 
 func (s *Store) CommitMiniAppAvatarDraft(
@@ -31,7 +38,7 @@ func (s *Store) CommitMiniAppAvatarDraft(
 	a AvatarDraftFinalize,
 	rendered AvatarDraftRender,
 ) (AvatarDraftReceipt, error) {
-	return s.commitAvatarDraft(ctx, scope, a, rendered, &avatarDraftSession{bearer, generation})
+	return s.commitAvatarDraft(ctx, scope, a, rendered, &avatarDraftSession{bearer, generation}, true)
 }
 
 // commitAvatarDraft serializes owner admission with draft edits and the shared
@@ -43,6 +50,7 @@ func (s *Store) commitAvatarDraft(
 	a AvatarDraftFinalize,
 	rendered AvatarDraftRender,
 	session *avatarDraftSession,
+	native bool,
 ) (AvatarDraftReceipt, error) {
 	hash, err := avatarFinalizeHash(a)
 	if err != nil {
@@ -96,7 +104,7 @@ func (s *Store) commitAvatarDraft(
 	if count >= MaxAvatarsPerOwner {
 		return AvatarDraftReceipt{}, ErrAvatarQuota
 	}
-	return writeFinalizedAvatar(ctx, tx, scope, a, hash, d, rendered.Output, session != nil)
+	return writeFinalizedAvatar(ctx, tx, scope, a, hash, d, rendered.Output, native)
 }
 func validateFinalizedAvatar(d AvatarDraft, raw []byte, r avatar.Rendered) error {
 	digest := sha256.Sum256(raw)

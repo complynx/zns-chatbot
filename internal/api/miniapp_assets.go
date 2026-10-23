@@ -48,6 +48,10 @@ func miniAppAsset(path string) (string, string) {
 		return "pairs.js", javaScriptType
 	case "/app/avatars.js":
 		return "avatars.js", javaScriptType
+	case "/app/crop.js":
+		return "crop.js", javaScriptType
+	case "/app/crop.css":
+		return "crop.css", "text/css; charset=utf-8"
 	case "/app/meals.js":
 		return "meals.js", javaScriptType
 	case "/app/orders.js":

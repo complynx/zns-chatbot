@@ -70,7 +70,7 @@ func avatarFinalizationMethods(
 
 	finalize := method(
 		"finalize_draft",
-		"After an explicit avatar request, finalize the saved draft_id at expected_version into an immutable JPEG and queue its Telegram document. Needs no active Loom run. Success proves persistence and delivery admission, not delivery. Read finalized for current delivery. Reconcile unknown HTTP replies with finalization_operation using the same operation ID and exact payload, even after later edits. Never finalize merely because a photo/draft exists, never regenerate to retry unknown delivery, and never set the Telegram profile photo.",
+		"Complete an explicit current avatar request by finalizing the saved draft_id at expected_version into an immutable JPEG and queueing its Telegram document. Existing editing-only or preview-only requests do not authorize finalization. Needs no active Loom run. Success proves persistence and delivery admission, not delivery. Read finalized with the returned artifact_id for current delivery; say sent only when delivery_state is delivered, otherwise describe queued or failed status. A saved draft, preview or imported model artifact is not a delivered document. Reconcile unknown HTTP replies with finalization_operation using the same operation ID and exact payload, even after later edits. Never finalize merely because a photo/draft exists, never regenerate to retry unknown delivery, and never set the Telegram profile photo.",
 		args,
 		avatarFinalizationReceiptSchema(),
 	)

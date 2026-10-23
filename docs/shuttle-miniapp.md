@@ -115,3 +115,11 @@ has a separate contract: it persists owner/event IDs, operation UUID, versions a
 exact quantities before dispatch, and blocks new saves if that storage fails. CSP permits only the app assets and official
 Telegram SDK, with Telegram Web as the allowed iframe ancestor. Actual Telegram
 iframe/storage behavior remains a separate acceptance gate.
+
+## Styling rules
+
+Design for a vertical Telegram WebView first. Check a narrow portrait viewport before desktop layouts. Use Telegram CSS variables for application colors: `--tg-theme-bg-color`, `--tg-theme-text-color`, `--tg-theme-hint-color`, `--tg-theme-link-color`, `--tg-theme-button-color` and `--tg-theme-button-text-color`. Keep product colors for artwork such as avatar frames. Supply neutral fallbacks in `var(...)`; do not redefine Telegram theme variables with fixed application colors.
+
+Respect `--tg-safe-area-inset-*` and `--tg-content-safe-area-inset-*` so controls stay clear of device and Telegram chrome. Size fixed bottom controls using `--tg-viewport-stable-height` rather than the changing viewport height. Keep controls usable when the keyboard, theme or WebView size changes. Use native Telegram MainButton and BackButton where the flow supports them, with accessible browser fallbacks.
+
+Theme, viewport and safe-area values come from the official Telegram SDK. They are presentation data, never authentication or permission evidence. See the [Telegram Mini Apps reference](https://core.telegram.org/bots/webapps).

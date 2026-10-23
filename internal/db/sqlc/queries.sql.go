@@ -117,7 +117,7 @@ func (q *Queries) AdvanceRouting(ctx context.Context, arg AdvanceRoutingParams) 
 
 const applyAvatarDeliveryResolution = `-- name: ApplyAvatarDeliveryResolution :one
 UPDATE shuttle_avatar_deliveries SET state=$2,version=version+1,attempt_id=NULL,
- receipt='{}',next_attempt_at=clock_timestamp()
+ receipt=CASE WHEN jsonb_typeof(receipt->'ui')='object' THEN jsonb_build_object('ui',receipt->'ui') ELSE '{}'::jsonb END,next_attempt_at=clock_timestamp()
 WHERE id=$1 AND version=$3
 AND state IN ('delivery_unknown','delivery_failed','delivery_blocked') RETURNING id, artifact_id, user_id, telegram_user_id, state, version, attempt_id, receipt, next_attempt_at, created_at
 `
@@ -1581,7 +1581,7 @@ func (q *Queries) FindPendingOrderPreparation(ctx context.Context, arg FindPendi
 }
 
 const finishAvatarDelivery = `-- name: FinishAvatarDelivery :execrows
-UPDATE shuttle_avatar_deliveries SET state=$2,version=version+1,receipt=$3,
+UPDATE shuttle_avatar_deliveries SET state=$2,version=version+1,receipt=$3::jsonb || CASE WHEN jsonb_typeof(receipt->'ui')='object' THEN jsonb_build_object('ui',receipt->'ui') ELSE '{}'::jsonb END,
 next_attempt_at=clock_timestamp()+$4::bigint*interval '1 millisecond'
 WHERE id=$1 AND version=$5 AND attempt_id=$6 AND state='send_inflight'
 `

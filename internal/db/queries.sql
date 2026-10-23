@@ -1742,7 +1742,7 @@ UPDATE shuttle_avatar_deliveries SET state='send_inflight',version=version+1,att
 WHERE id=$1 AND version=$2 AND state IN ('pending','retryable')
 AND next_attempt_at<=clock_timestamp() RETURNING *;
 -- name: FinishAvatarDelivery :execrows
-UPDATE shuttle_avatar_deliveries SET state=sqlc.arg(outcome),version=version+1,receipt=sqlc.arg(receipt),
+UPDATE shuttle_avatar_deliveries SET state=sqlc.arg(outcome),version=version+1,receipt=sqlc.arg(receipt)::jsonb || CASE WHEN jsonb_typeof(receipt->'ui')='object' THEN jsonb_build_object('ui',receipt->'ui') ELSE '{}'::jsonb END,
 next_attempt_at=clock_timestamp()+sqlc.arg(delay_ms)::bigint*interval '1 millisecond'
 WHERE id=$1 AND version=sqlc.arg(expected_version) AND attempt_id=sqlc.arg(attempt_id) AND state='send_inflight';
 -- name: BlockAvatarDelivery :execrows
@@ -1770,7 +1770,7 @@ SELECT n.* FROM shuttle_avatar_deliveries n JOIN shuttle_users u ON u.id=n.user_
 WHERE n.id=$1 AND u.bot_id=$2 AND u.zitadel_org=$3 FOR UPDATE OF n;
 -- name: ApplyAvatarDeliveryResolution :one
 UPDATE shuttle_avatar_deliveries SET state=sqlc.arg(outcome),version=version+1,attempt_id=NULL,
- receipt='{}',next_attempt_at=clock_timestamp()
+ receipt=CASE WHEN jsonb_typeof(receipt->'ui')='object' THEN jsonb_build_object('ui',receipt->'ui') ELSE '{}'::jsonb END,next_attempt_at=clock_timestamp()
 WHERE id=$1 AND version=sqlc.arg(expected_version)
 AND state IN ('delivery_unknown','delivery_failed','delivery_blocked') RETURNING *;
 

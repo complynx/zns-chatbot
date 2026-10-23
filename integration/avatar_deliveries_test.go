@@ -81,10 +81,13 @@ func TestAvatarDeliverySendsNativeArtifactWithLoomDownAndExpiredSession(t *testi
 	f.h.start(t)
 	n := awaitDraftAvatarDelivery(t, f, receipt.DeliveryID, "delivered")
 	// Persisted metadata distinguishes an acknowledged message from a queued artifact.
-	values := map[string]int64{}
+	var values struct {
+		MessageID int64 `json:"message_id"`
+		ChatID    int64 `json:"chat_id"`
+	}
 	require.NoError(t, json.Unmarshal(n.Receipt, &values))
-	require.Positive(t, values["message_id"])
-	require.Equal(t, int64(456), values["chat_id"])
+	require.Positive(t, values.MessageID)
+	require.Equal(t, int64(456), values.ChatID)
 	f.p.mu.Lock()
 	require.Len(t, f.p.documentSent, 1)
 	document := f.p.documentSent[0]

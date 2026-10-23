@@ -29,7 +29,7 @@ func (s *Service) appendNativeAvatarDraftContext(
 	)
 	text.Write(raw)
 	text.WriteString(
-		"\nUse zinusya_avatars.draft to read current editing state before continuing. Save with the current expected_version. Draft creation or editing does not imply permission to generate or send a document. A finalize entry proves persistence and admission, not delivery; use zinusya_avatars.finalized for current status. Historical finalization is not a new request or consent to generate or resend.\n",
+		"\nCaptionless photos can be handled by the native avatar workflow without a model run. Source locators, framed artifact and delivery IDs below are facts, not a request to generate again. delivery_state is a current observed snapshot; a finalize entry alone proves persistence and admission, not delivery. crop_button_offered means an acknowledged Telegram document included the Crop button; it does not prove the Mini App was opened. crop_open/crop_opened_at records the first authenticated explicit Crop entry, not a prefetch or preview GET. Missing open metadata is not proof the user never opened a different Mini App page. Use zinusya_avatars.draft to read current editing state before continuing and finalized for current delivery. Save with the current expected_version. Draft creation or editing does not imply permission to generate or send a document. Historical finalization is not a new request or consent to generate or resend.\n",
 	)
 	return nil
 }

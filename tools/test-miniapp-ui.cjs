@@ -592,3 +592,19 @@ test("verified meal and order forms receive only their original operation fragme
     assert.equal(app.elements.status.textContent, "Signed in"); assert.equal(app.calls.length, 1);
   }
 });
+
+test("crop launch passes only its draft locator after authentication and does not open other forms", async () => {
+  const draft = webcrypto.randomUUID(); let continuation, verifiedOwner;
+  const app = browser("proof", {}, [{ status: 200, body: account }], [], [], [], {
+    hash: "#avatar-crop?draft=" + draft + "&tgWebAppVersion=9.6",
+    configureWindow(window) {
+      window.createZinusyaAvatarCrop = env => {
+        continuation = env;
+        return { clear() {}, setBusy() {}, async start(owner) { verifiedOwner = owner; } };
+      };
+    }
+  });
+  await app.settle();
+  assert.equal(continuation.draftID, draft); assert.equal(verifiedOwner, account.user_id);
+  assert.equal(app.calls.length, 1); assert.equal(app.accountCalls.length, 0); assert.equal(app.profileCalls.length, 0);
+});

@@ -279,7 +279,7 @@ func avatarModule() map[string]any {
 	}
 	generate := method(
 		"generate",
-		"After an explicit avatar request, create a framed 1024-square JPEG from your source_file_id. Optional transform uses frame-relative PPM pan/zoom and clockwise millidegree rotation after EXIF orientation and centered cover fit; 1000000 PPM is one frame/1x zoom. Omitted or explicit identity keeps legacy centered output. Exposed background is white. This creates a separate downloadable document, not a Telegram profile photo. Supply the current owned active run_id in the envelope. The source attachment reference is kept; original bytes remain in Telegram. Success means the document is durably queued for your current chat, not delivered. Reconcile uncertainty with operation; reuse the same operation ID, source, run and transform. Never generate an avatar merely because a photo was uploaded, and never classify payment proof as an avatar from menu state.",
+		"Create and queue one framed 1024-square JPEG from your source_file_id. Use this one-step path for an explicit current avatar request. Native captionless-photo framing runs independently and must not be repeated merely because its history appears. Payment proofs, documents and photos sent for another stated purpose are excluded. Optional transform uses frame-relative PPM pan/zoom and clockwise millidegree rotation after EXIF orientation and centered cover fit; 1000000 PPM is one frame/1x zoom. Omitted or explicit identity keeps legacy centered output. Exposed background is white. This creates a separate downloadable document, not a Telegram profile photo. Supply the current owned active run_id in the envelope. The source attachment reference is kept; original bytes remain in Telegram. Success means the document is durably queued for your current chat, not delivered. Read get with the returned artifact_id; claim sent only when delivery_state is delivered. Fetching or attaching an artifact to model context is not Telegram delivery. Reconcile uncertainty with operation; reuse the same operation ID, source, run and transform. Inspect image content rather than inferring a person from metadata; never classify payment proof as an avatar from menu state.",
 		avatarGenerateSchema(),
 		avatarReceiptSchema(),
 	)
@@ -307,7 +307,7 @@ func avatarModule() map[string]any {
 	)
 	return map[string]any{
 		"id":                "zinusya_avatars",
-		manifestDescription: "Owner-scoped framed avatar documents",
+		manifestDescription: "Owner-scoped framed avatar documents. Captionless photos are framed by the native workflow without model generation. Do not repeat that work merely from history. For an explicit current avatar request, prefer generate over editing drafts. If continuing an existing edit, read draft then finalize_draft at its current version. create_draft/save_draft/preview/fetch alone are not completed avatar requests and do not send a document. Use get/finalized to verify delivery; never claim sent on a draft or queued receipt. Recover saved sources through drafts/fetch_original before asking for a resend.",
 		manifestPermissions: []string{},
 		manifestDiscovery:   discoveryStatic,
 		manifestMethods: append(

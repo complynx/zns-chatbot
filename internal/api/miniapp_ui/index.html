@@ -6,6 +6,7 @@
   <meta name="referrer" content="no-referrer">
   <title>Зинуся</title>
   <link rel="stylesheet" href="./app.css">
+  <link rel="stylesheet" href="./crop.css">
   <script src="https://telegram.org/js/telegram-web-app.js?63" defer></script>
   <script src="./pass-payments.js" defer></script>
   <script src="./order-proof.js" defer></script>
@@ -13,6 +14,7 @@
   <script src="./meals.js" defer></script>
   <script src="./pairs.js" defer></script>
   <script src="./avatars.js" defer></script>
+  <script src="./crop.js" defer></script>
   <script src="./avatar-admin.js" defer></script>
   <script src="./payment-reviews.js" defer></script>
   <script src="./order-reviews.js" defer></script>
@@ -499,6 +501,16 @@
 </section>
 
   </main>
+  <section id="avatar-crop" hidden aria-label="Avatar crop">
+    <canvas id="crop-canvas"></canvas>
+    <div class="crop-help"><p id="crop-help"></p><p id="crop-status" role="status" aria-live="polite"></p></div>
+    <div class="crop-actions">
+      <button id="crop-back" type="button">Back</button>
+      <button id="crop-recover" type="button" hidden>Check earlier request</button>
+      <button id="crop-retry" type="button" hidden>Retry the same request</button>
+      <button id="crop-finish" type="button" disabled>Finish</button>
+    </div>
+  </section>
 </body>
 </html>
 

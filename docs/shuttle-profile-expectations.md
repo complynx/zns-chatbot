@@ -5,8 +5,8 @@ full name, and an interface language:
 `auto`, `en`, or `ru`. Telegram intake continues to refresh Telegram metadata.
 It does not copy a Telegram display name into the full name, overwrite a saved
 name, or change the user's language choice. The full name is user-provided text,
-not verified legal identity. Confirmed structured name changes schedule a
-name-only IAM update. The agreed onboarding and durable name-sync requirements are recorded
+not verified legal identity. Changes to original structured name components
+schedule a name-only IAM update. Latin spelling changes do not. The agreed onboarding and durable name-sync requirements are recorded
 in the [specification](shuttle-spec.md#агентские-ожидания-и-пользовательский-контекст).
 
 The IAM adapter now provides `ReadProfileName` and `SyncProfileName` for a
@@ -22,8 +22,8 @@ The structured-name store and River
 worker described below are implemented.
 The agent and Mini App APIs now accept
 separate name components.
-First-use onboarding, trusted IAM name reuse and the
-Telegram `/name` agent-dialog port are still pending.
+First-use onboarding and `/name` use the agent dialogue; a verified existing
+IAM name can be reused before that dialogue when the profile is eligible.
 
 ## Structured names and IAM synchronization
 
@@ -80,6 +80,39 @@ The `zinusya_profile` module exposes `get`, `set_name`, `set_language`,
 `POST /internal/agent/profile/{method}` and the existing agent envelope. Access
 is always the authenticated local owner in the current bot and organization.
 An administrator does not gain access to another user's profile or receipts.
+
+## Original and Latin names
+
+The profile keeps confirmed `first_name` and `last_name` separately from optional
+`first_name_latin` and `last_name_latin`. The agent immediately transliterates
+confirmed non-Latin components when saving a new name or correction. It does not
+translate names or replace them with English equivalents. Explicit user or
+passport Latin spelling takes priority; generated transliteration is not a claim
+of official passport spelling. Names already in Latin script keep their spelling.
+Older profiles are not automatically backfilled or asked to repeat onboarding.
+
+The agent's `set_name`/`complete_name` and Mini App name endpoint accept the two
+Latin fields together. Both empty explicitly clears them; omitting both preserves
+them when the originals are unchanged and clears them when either original
+component changes. Each nonempty Latin component contains Latin letters,
+inherited combining marks, spaces, hyphens or apostrophes, with at least one
+letter. Limits are 200 Unicode characters per component and 256 including their
+separating space. The original name validation remains unchanged.
+
+Original components, Latin pair, version and immutable receipt commit in one
+owner-locked transaction. The writer saves originals first, then the Latin pair;
+a compatibility trigger clears stale Latin if an older writer changes either
+original component. Latin-only changes advance the version without changing the
+original names or scheduling IAM synchronization. Confirming an IAM-imported
+profile may change provenance to `user`; identical original components still
+produce no remote name write. Legal registration fields remain separate.
+
+Omitted Latin fields retain the previous normalized request bytes. Historical
+operation receipts remain immutable and may omit Latin fields. An uncertain
+write must retain its operation ID and exact original/Latin arguments; a later
+correction must not rewrite an earlier receipt. The [schema compatibility guide](shuttle-schema.md)
+describes the single version-74 migration for fresh and completed version-73
+databases, including old-writer protection. No paid backfill is introduced.
 
 ## Version and retry contract
 

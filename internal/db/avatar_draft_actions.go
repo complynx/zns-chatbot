@@ -9,13 +9,18 @@ import (
 )
 
 type NativeAvatarDraftAction struct {
-	OperationID uuid.UUID  `json:"operation_id"`
-	DraftID     uuid.UUID  `json:"draft_id"`
-	ArtifactID  *uuid.UUID `json:"artifact_id,omitempty"`
-	DeliveryID  *uuid.UUID `json:"delivery_id,omitempty"`
-	Kind        string     `json:"kind"`
-	Version     int64      `json:"version"`
-	CompletedAt time.Time  `json:"completed_at"`
+	OperationID       uuid.UUID  `json:"operation_id"`
+	DraftID           uuid.UUID  `json:"draft_id"`
+	ArtifactID        *uuid.UUID `json:"artifact_id,omitempty"`
+	DeliveryID        *uuid.UUID `json:"delivery_id,omitempty"`
+	SourceFileID      *uuid.UUID `json:"source_file_id,omitempty"`
+	SourceKind        string     `json:"source_kind,omitempty"`
+	DeliveryState     string     `json:"delivery_state,omitempty"`
+	CropButtonOffered bool       `json:"crop_button_offered"`
+	CropOpenedAt      *time.Time `json:"crop_opened_at,omitempty"`
+	Kind              string     `json:"kind"`
+	Version           int64      `json:"version"`
+	CompletedAt       time.Time  `json:"completed_at"`
 }
 
 // RecentNativeAvatarDraftActions gives the reactive agent bounded historical
@@ -35,12 +40,22 @@ func (s *Store) RecentNativeAvatarDraftActions(
 	}
 	rows, err := tx.Query(
 		ctx,
-		`SELECT actions.operation_id,actions.draft_id,actions.kind,actions.version,actions.created_at,actions.artifact_id,actions.delivery_id
+		`SELECT actions.operation_id,actions.draft_id,actions.kind,actions.version,actions.created_at,actions.artifact_id,actions.delivery_id,
+ d.source_file_id,coalesce(f.kind,''),coalesce(n.state,''),coalesce((n.receipt->>'crop_button_offered')::boolean,false),
+ (n.receipt#>>'{ui,crop_opened_at}')::timestamptz
  FROM (
  SELECT user_id,operation_id,draft_id,kind,(result->>'version')::bigint AS version,created_at,NULL::uuid AS artifact_id,NULL::uuid AS delivery_id FROM shuttle_avatar_draft_operations WHERE user_id=$2 AND native
  UNION ALL
  SELECT user_id,operation_id,draft_id,'finalize',draft_version,created_at,id, (receipt->>'delivery_id')::uuid FROM shuttle_avatars WHERE user_id=$2 AND native AND draft_id IS NOT NULL
- ) actions JOIN shuttle_tasks task ON task.user_id=actions.user_id
+ UNION ALL
+ SELECT a.user_id,(n.receipt#>>'{ui,crop_open_operation_id}')::uuid,a.draft_id,'crop_open',a.draft_version,
+ (n.receipt#>>'{ui,crop_opened_at}')::timestamptz,a.id,n.id
+ FROM shuttle_avatars a JOIN shuttle_avatar_deliveries n ON n.artifact_id=a.id AND n.user_id=a.user_id
+ WHERE a.user_id=$2 AND a.draft_id IS NOT NULL AND n.receipt#>>'{ui,crop_opened_at}' IS NOT NULL
+	 ) actions JOIN shuttle_tasks task ON task.user_id=actions.user_id
+ LEFT JOIN shuttle_avatar_drafts d ON d.id=actions.draft_id AND d.user_id=actions.user_id
+ LEFT JOIN shuttle_files f ON f.id=d.source_file_id AND f.user_id=actions.user_id
+ LEFT JOIN shuttle_avatar_deliveries n ON n.id=actions.delivery_id AND n.user_id=actions.user_id
  WHERE task.id=$1 AND task.user_id=$2 AND actions.created_at<task.created_at
  ORDER BY actions.created_at DESC,actions.operation_id LIMIT 5`,
 		taskID,
@@ -53,7 +68,8 @@ func (s *Store) RecentNativeAvatarDraftActions(
 	result := make([]NativeAvatarDraftAction, 0)
 	for rows.Next() {
 		var a NativeAvatarDraftAction
-		var artifact, delivery pgtype.UUID
+		var artifact, delivery, source pgtype.UUID
+		var opened pgtype.Timestamptz
 		if err = rows.Scan(
 			&a.OperationID,
 			&a.DraftID,
@@ -62,6 +78,11 @@ func (s *Store) RecentNativeAvatarDraftActions(
 			&a.CompletedAt,
 			&artifact,
 			&delivery,
+			&source,
+			&a.SourceKind,
+			&a.DeliveryState,
+			&a.CropButtonOffered,
+			&opened,
 		); err != nil {
 			return nil, err
 		}
@@ -72,6 +93,14 @@ func (s *Store) RecentNativeAvatarDraftActions(
 		if delivery.Valid {
 			id := uuid.UUID(delivery.Bytes)
 			a.DeliveryID = &id
+		}
+		if source.Valid {
+			id := uuid.UUID(source.Bytes)
+			a.SourceFileID = &id
+		}
+		if opened.Valid {
+			at := opened.Time.UTC()
+			a.CropOpenedAt = &at
 		}
 		a.CompletedAt = a.CompletedAt.UTC()
 		result = append(result, a)

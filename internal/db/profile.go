@@ -48,6 +48,8 @@ type UserProfile struct {
 	BotLanguage     string           `json:"bot_language"`
 	NameExpectation *NameExpectation `json:"name_expectation,omitempty"`
 	ObservedAt      time.Time        `json:"observed_at"`
+	FirstNameLatin  string           `json:"first_name_latin,omitempty"`
+	LastNameLatin   string           `json:"last_name_latin,omitempty"`
 }
 
 type ProfileMutation struct {
@@ -59,6 +61,8 @@ type ProfileMutation struct {
 	LastName        string    `json:"last_name,omitempty"`
 	BotLanguage     string    `json:"bot_language,omitempty"`
 	ExpectationID   uuid.UUID `json:"expectation_id,omitempty"`
+	FirstNameLatin  *string   `json:"first_name_latin,omitempty"`
+	LastNameLatin   *string   `json:"last_name_latin,omitempty"`
 }
 
 type ProfileConversationTurn struct {
@@ -121,8 +125,8 @@ func readProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID) (UserProfile,
 	p := UserProfile{UserID: userID, BotLanguage: profileLanguageAuto}
 	var id pgtype.UUID
 	var created, expires pgtype.Timestamptz
-	err := tx.QueryRow(ctx, `SELECT version,full_name,bot_language,expectation_id,expectation_created_at,expectation_expires_at,first_name,last_name,name_source FROM shuttle_user_profiles WHERE user_id=$1`, userID).
-		Scan(&p.Version, &p.FullName, &p.BotLanguage, &id, &created, &expires, &p.FirstName, &p.LastName, &p.NameSource)
+	err := tx.QueryRow(ctx, `SELECT version,full_name,bot_language,expectation_id,expectation_created_at,expectation_expires_at,first_name,last_name,name_source,first_name_latin,last_name_latin FROM shuttle_user_profiles WHERE user_id=$1`, userID).
+		Scan(&p.Version, &p.FullName, &p.BotLanguage, &id, &created, &expires, &p.FirstName, &p.LastName, &p.NameSource, &p.FirstNameLatin, &p.LastNameLatin)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return p, err
 	}
@@ -178,7 +182,7 @@ func normalizeProfileMutation(m ProfileMutation) (ProfileMutation, error) {
 	default:
 		return m, ErrInvalidProfile
 	}
-	if m.Kind != profileSetName && m.Kind != profileCompleteName && (m.FirstName != "" || m.LastName != "") {
+	if m.FirstName != "" || m.LastName != "" || m.FirstNameLatin != nil || m.LastNameLatin != nil {
 		return m, ErrInvalidProfile
 	}
 	return m, nil
@@ -198,7 +202,7 @@ func normalizeProfileNameMutation(m ProfileMutation) (ProfileMutation, error) {
 		(m.Kind == profileSetName) != (m.ExpectationID == uuid.Nil) {
 		return m, ErrInvalidProfile
 	}
-	return m, nil
+	return normalizeProfileLatin(m)
 }
 
 func validProfileNameComponent(value string) bool {
@@ -247,7 +251,7 @@ func mutateProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, mutation Pr
 		return UserProfile{}, ErrConflict
 	}
 	nameChanged := m.FirstName != "" &&
-		(p.FirstName != m.FirstName || p.LastName != m.LastName || p.NameSource != profileNameSourceUser)
+		(p.FirstName != m.FirstName || p.LastName != m.LastName)
 	if (m.Kind == profileSetName || m.Kind == profileCompleteName) && p.NameSource != "" && m.FirstName == "" {
 		// A display-only legacy write cannot erase a confirmed structured name.
 		return UserProfile{}, ErrInvalidProfile
@@ -260,7 +264,7 @@ func mutateProfile(ctx context.Context, tx pgx.Tx, userID uuid.UUID, mutation Pr
 		p.Version++
 	}
 	if changed || m.Kind == profileSetName {
-		if err = saveProfile(ctx, tx, p); err != nil {
+		if err = saveProfileWithLatin(ctx, tx, p); err != nil {
 			return p, err
 		}
 	}
@@ -301,8 +305,9 @@ func replayProfileOperation(
 func applyProfileMutation(ctx context.Context, tx pgx.Tx, p *UserProfile, m ProfileMutation) (bool, error) {
 	switch m.Kind {
 	case profileSetName:
+		latinChanged := applyProfileLatin(p, m)
 		changed := p.FullName != m.FullName || p.NameExpectation != nil ||
-			(m.FirstName != "" && (p.FirstName != m.FirstName || p.LastName != m.LastName || p.NameSource != profileNameSourceUser))
+			(m.FirstName != "" && (p.FirstName != m.FirstName || p.LastName != m.LastName || p.NameSource != profileNameSourceUser)) || latinChanged
 		p.FullName, p.NameExpectation = m.FullName, nil
 		applyProfileNameComponents(p, m)
 		return changed, nil
@@ -325,6 +330,7 @@ func applyProfileMutation(ctx context.Context, tx pgx.Tx, p *UserProfile, m Prof
 			return false, ErrConflict
 		}
 		if m.Kind == profileCompleteName {
+			applyProfileLatin(p, m)
 			p.FullName = m.FullName
 			applyProfileNameComponents(p, m)
 		}

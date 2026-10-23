@@ -59,6 +59,11 @@ func (s *Service) structured(ctx context.Context, t *db.Task, c checkpoint, i in
 	if err != nil {
 		return s.identityError(ctx, t, c, i, err)
 	}
+	if i.StructuredCommand == startCommand {
+		if err = s.refreshStartMenu(ctx, i.ChatID); err != nil {
+			return s.wait()
+		}
+	}
 	scope := db.ProfileScope{
 		BotID:        s.options.BotID,
 		Organization: user.Organization,

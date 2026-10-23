@@ -199,8 +199,9 @@ func (s *Store) Route(ctx context.Context, id uuid.UUID) (Task, error) {
 		return task(t), nil
 	}
 	var envelope struct {
-		Kind       string `json:"kind"`
-		QuestionID string `json:"question_id"`
+		NativeAvatar bool   `json:"native_avatar"`
+		Kind         string `json:"kind"`
+		QuestionID   string `json:"question_id"`
 	}
 	if e = json.Unmarshal(t.Request, &envelope); e != nil {
 		return Task{}, e
@@ -208,11 +209,29 @@ func (s *Store) Route(ctx context.Context, id uuid.UUID) (Task, error) {
 	if envelope.Kind == routeStructured {
 		return saveStructuredRoute(ctx, tx, q, c, t)
 	}
+	if envelope.NativeAvatar {
+		active, err := activeTask(ctx, q, c.ActiveTaskID)
+		if err != nil {
+			return Task{}, err
+		}
+		// A photo answering an active question belongs to that workflow. Other
+		// captionless photos are native side tasks and do not steer a Loom run.
+		if active.ID == uuid.Nil || active.State != "awaiting_user" {
+			return saveStructuredRoute(ctx, tx, q, c, t)
+		}
+	}
+	return routeConversationMessage(ctx, tx, q, c, t, envelope.Kind, envelope.QuestionID)
+}
+
+func routeConversationMessage(
+	ctx context.Context, tx pgx.Tx, q *sqlc.Queries, c sqlc.ShuttleConversation, t sqlc.ShuttleTask,
+	kind, questionID string,
+) (Task, error) {
 	if t.Seq != c.RoutedSeq+1 {
 		return Task{}, ErrRoutingPending
 	}
 	route, target := routeNewRun, uuid.Nil
-	run, question := "", envelope.QuestionID
+	run, question := "", questionID
 	active := c.ActiveTaskID
 	a, lookupErr := routingActiveTask(ctx, q, c, t.Seq)
 	if lookupErr != nil {
@@ -222,15 +241,15 @@ func (s *Store) Route(ctx context.Context, id uuid.UUID) (Task, error) {
 		target = a.ID
 		run = a.RunID
 		question = a.QuestionID
-		if envelope.QuestionID != "" {
-			question = envelope.QuestionID
+		if questionID != "" {
+			question = questionID
 		}
 		route = "input"
 	} else {
 		active = pgtype.UUID{}
 	}
-	if envelope.Kind == "cancel" || envelope.Kind == "approval" || envelope.Kind == "input" {
-		route = envelope.Kind
+	if kind == "cancel" || kind == "approval" || kind == "input" {
+		route = kind
 		if target == uuid.Nil {
 			route = "no_active"
 		}
@@ -238,9 +257,9 @@ func (s *Store) Route(ctx context.Context, id uuid.UUID) (Task, error) {
 	if route == routeNewRun {
 		active = pgtype.UUID{Bytes: t.ID, Valid: true}
 	}
-	t, e = q.SetRoute(
+	t, e := q.SetRoute(
 		ctx,
-		sqlc.SetRouteParams{ID: id, Route: route, TargetRunID: run, QuestionID: question, TargetTaskID: target},
+		sqlc.SetRouteParams{ID: t.ID, Route: route, TargetRunID: run, QuestionID: question, TargetTaskID: target},
 	)
 	if e != nil {
 		return Task{}, e

@@ -48,6 +48,7 @@ type peers struct {
 	loseUserCreateAndStopIAM                bool
 	avatarProcessor                         avatar.Processor
 	documentSent                            []telegram.SendDocumentRequest
+	menuCalls                               []menuCall
 	loseDocumentSend                        bool
 	documentAttempts                        []time.Time
 	documentRejectOnce                      int
@@ -495,6 +496,17 @@ func (p *peers) initialRun(key string, request loom.CreateRunRequest) loom.Run {
 func (p *peers) telegram(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if strings.HasSuffix(r.URL.Path, "/setMyCommands") || strings.HasSuffix(r.URL.Path, "/setChatMenuButton") {
+		var call menuCall
+		if json.NewDecoder(r.Body).Decode(&call) != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		call.Method = r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+		p.menuCalls = append(p.menuCalls, call)
+		respond(w, map[string]any{"ok": true, "result": true})
+		return
+	}
 	if strings.HasSuffix(r.URL.Path, "/getMe") {
 		p.telegramMe(w)
 		return
@@ -674,6 +686,7 @@ func (h *harness) start(t *testing.T) {
 		h.observer,
 		slog.New(slog.DiscardHandler),
 		task.Options{
+			AvatarRenderer:             p.avatarProcessor,
 			BotID:                      123,
 			RegistrationDetailsEnabled: p.registrationDetails != nil,
 			MiniAppURL: func() string {

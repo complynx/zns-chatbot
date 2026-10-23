@@ -3,6 +3,7 @@ package telegram
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -14,9 +15,10 @@ const maxDocumentBytes = 4 * 1024 * 1024
 const maxDocumentNameLength = 256
 
 type SendDocumentRequest struct {
-	ChatID   int64
-	Filename string
-	Content  []byte
+	ChatID      int64
+	Filename    string
+	Content     []byte
+	ReplyMarkup *InlineKeyboardMarkup
 }
 
 // SendDocument uploads bounded local bytes. URLs and Telegram file IDs are not accepted.
@@ -30,6 +32,15 @@ func (c *Client) SendDocument(ctx context.Context, input SendDocumentRequest) (R
 	form := multipart.NewWriter(&body)
 	if err := form.WriteField("chat_id", strconv.FormatInt(input.ChatID, 10)); err != nil {
 		return Receipt{}, &Error{Outcome: NotStarted}
+	}
+	if input.ReplyMarkup != nil {
+		raw, err := json.Marshal(input.ReplyMarkup)
+		if err != nil {
+			return Receipt{}, &Error{Outcome: NotStarted}
+		}
+		if err = form.WriteField("reply_markup", string(raw)); err != nil {
+			return Receipt{}, &Error{Outcome: NotStarted}
+		}
 	}
 	file, err := form.CreateFormFile("document", input.Filename)
 	if err != nil {

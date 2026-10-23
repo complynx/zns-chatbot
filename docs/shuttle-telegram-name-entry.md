@@ -27,6 +27,12 @@ It may offer a plausible real name through an ordinary reply-keyboard choice,
 or ask without suggested choices. Presenting a suggestion does not save it.
 The user may correct it, give another name or cancel in ordinary text. Compound
 name components remain intact; ambiguous divisions require clarification.
+Immediately after confirmation, the agent preserves the original components and
+saves their Latin transliteration in the same versioned operation. Explicit
+user/passport Latin spelling takes priority. Transliteration never anglicizes a
+name; an absent Latin pair in an older profile does not restart onboarding.
+See the [original and Latin contract](shuttle-profile-expectations.md#original-and-latin-names)
+and [schema compatibility guide](shuttle-schema.md).
 
 For agent-free changes, the Mini App profile form uses separate first/last fields.
 It shares the versioned profile and closes the current name expectation when

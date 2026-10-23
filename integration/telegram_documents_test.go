@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -39,9 +40,17 @@ func (p *peers) sendDocument(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	var markup *telegram.InlineKeyboardMarkup
+	if raw := r.FormValue("reply_markup"); raw != "" {
+		markup = &telegram.InlineKeyboardMarkup{}
+		if err = json.Unmarshal([]byte(raw), markup); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+	}
 	p.documentSent = append(
 		p.documentSent,
-		telegram.SendDocumentRequest{ChatID: chat, Filename: header.Filename, Content: content},
+		telegram.SendDocumentRequest{ChatID: chat, Filename: header.Filename, Content: content, ReplyMarkup: markup},
 	)
 	if p.documentEntered != nil {
 		close(p.documentEntered)

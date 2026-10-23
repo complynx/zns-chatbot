@@ -20,6 +20,7 @@ import (
 	"github.com/riverqueue/river/rivermigrate"
 	"go.opentelemetry.io/otel/propagation"
 
+	"github.com/complynx/zns-chatbot/internal/avatar"
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/identity"
 	"github.com/complynx/zns-chatbot/internal/loom"
@@ -37,6 +38,7 @@ const (
 )
 
 type Options struct {
+	AvatarRenderer                              avatar.Processor
 	RegistrationDetailsEnabled                  bool
 	MiniAppURL                                  string
 	BotID                                       int64
@@ -60,6 +62,7 @@ type Service struct {
 	lockKey                       string
 	watchCancel                   context.CancelFunc
 	watchDone                     chan struct{}
+	typingDone                    chan struct{}
 	failures                      chan error
 	diagnosticMu                  sync.Mutex
 	nextDatabaseDiagnostic        time.Time
@@ -268,7 +271,9 @@ func (s *Service) Start(ctx context.Context) error {
 	watchCtx, watchCancel := context.WithCancel(ctx)
 	s.watchCancel = watchCancel
 	s.watchDone = make(chan struct{})
+	s.typingDone = make(chan struct{})
 	go s.watchLock(watchCtx, conn, s.watchDone)
+	go s.watchTyping(watchCtx, s.typingDone)
 	return nil
 }
 func (s *Service) releaseLock(parent context.Context) {
@@ -286,6 +291,7 @@ func (s *Service) releaseLock(parent context.Context) {
 }
 func (s *Service) watchLock(ctx context.Context, conn *pgxpool.Conn, done chan struct{}) {
 	defer close(done)
+	defer s.watchCancel()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -345,6 +351,11 @@ func (s *Service) Stop(ctx context.Context) error {
 		s.watchCancel()
 		select {
 		case <-s.watchDone:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		select {
+		case <-s.typingDone:
 		case <-ctx.Done():
 			return ctx.Err()
 		}

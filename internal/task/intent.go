@@ -16,6 +16,7 @@ import (
 var ErrUnsupportedUpdate = errors.New("unsupported Telegram update")
 
 type intent struct {
+	NativeAvatar         bool             `json:"native_avatar,omitempty"`
 	RegistrationPromptID uuid.UUID        `json:"registration_prompt_id,omitempty"`
 	RegistrationRole     string           `json:"registration_role,omitempty"`
 	CallbackMessageID    int64            `json:"callback_message_id,omitempty"`
@@ -83,12 +84,23 @@ func messageIntent(i intent, m *telegram.Message) (intent, error) {
 	if i.Kind == kindMessage && m.ReplyToMessage != nil {
 		i.ReplyToMessageID = m.ReplyToMessage.ID
 	}
+	i.NativeAvatar = i.Kind == kindMessage && nativeAvatarImage(i.Attachments) &&
+		strings.TrimSpace(i.Text) == "" && i.ReplyToMessageID == 0
 	if i.Kind == kindMessage && len(i.Attachments) == 0 && structuredCommand(m.Text) {
 		i.Kind = kindStructured
 		i.StructuredCommand = strings.Fields(strings.TrimSpace(m.Text))[0]
 	}
 	return i, nil
 }
+
+func nativeAvatarImage(attachments []files.Incoming) bool {
+	if len(attachments) != 1 {
+		return false
+	}
+	a := attachments[0]
+	return a.Kind == "photo" || a.Kind == "document" && strings.HasPrefix(a.MIMEType, "image/")
+}
+
 func unsupportedMedia(raw json.RawMessage) bool {
 	var update map[string]json.RawMessage
 	var message map[string]json.RawMessage

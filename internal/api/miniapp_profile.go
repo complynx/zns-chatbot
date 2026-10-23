@@ -18,6 +18,8 @@ type miniAppProfileChange struct {
 	FirstName       string    `json:"first_name,omitempty"`
 	LastName        string    `json:"last_name,omitempty"`
 	BotLanguage     string    `json:"bot_language,omitempty"`
+	FirstNameLatin  *string   `json:"first_name_latin,omitempty"`
+	LastNameLatin   *string   `json:"last_name_latin,omitempty"`
 }
 
 func (s *Server) miniAppProfile(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +74,8 @@ func (s *Server) miniAppProfileChange(w http.ResponseWriter, r *http.Request) {
 		FirstName:       input.FirstName,
 		LastName:        input.LastName,
 		BotLanguage:     input.BotLanguage,
+		FirstNameLatin:  input.FirstNameLatin,
+		LastNameLatin:   input.LastNameLatin,
 	}
 	switch r.URL.Path {
 	case "/app/profile/name":

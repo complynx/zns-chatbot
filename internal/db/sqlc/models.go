@@ -1378,6 +1378,8 @@ type ShuttleUserProfile struct {
 	FirstName            string             `json:"first_name"`
 	LastName             string             `json:"last_name"`
 	NameSource           string             `json:"name_source"`
+	FirstNameLatin       string             `json:"first_name_latin"`
+	LastNameLatin        string             `json:"last_name_latin"`
 }
 
 type ShuttleUserRevocationProposal struct {

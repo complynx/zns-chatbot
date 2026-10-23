@@ -1,17 +1,9 @@
 # Direct Mini App profile entry
 
-The working tree adds a name form and language selection to the existing Mini App.
-This is part of structured registration/profile parity.
-It does not establish
-complete Telegram registration, agent reply-keyboard questions or mixed workflow
-acceptance for complete registration.
-Static Mini App assets match the frozen source byte for byte;
-trusted WebView sign-in and form writes remain unaccepted.
-
-Two exact profile/action
-receipts and two revoked sessions are independently verified.
-Broader form,
-response-loss and mixed-agent acceptance remain separate.
+The Mini App provides separate first/last name inputs and language selection.
+It shares the owner profile with agent onboarding and does not create a Loom run.
+The original and optional Latin API fields use the
+[shared profile contract](shuttle-profile-expectations.md#original-and-latin-names).
 
 ## Interface and shared state
 
@@ -28,7 +20,12 @@ Setting a name closes the current name expectation, including one requested by
 the agent. A stale expected version returns409. An exact repeated operation
 returns its original result, even after restart. Reusing its ID with different
 arguments conflicts. Saving a bot language preserves the name and expectation.
-No conversation or Loom run is created for these form operations.
+No conversation or Loom run is created for these form operations. The name
+endpoint also accepts the optional Latin pair. Both versions commit atomically;
+a Latin-only correction changes the profile version without scheduling IAM
+synchronization. The form does not invent a Latin spelling or backfill older
+profiles automatically. An original-name edit without a replacement Latin pair
+clears stale Latin.
 
 A write rechecks the app capability inside the same transaction as the profile
 and operation receipt. It locks the current owner before the session, matching
@@ -36,7 +33,8 @@ logout and identity binding. Session expiry, key generation, subject, organizati
 state and local owner revocation are checked under these locks. Network IAM calls
 stay outside the transaction. Profile GET performs the same final session recheck
 as the existing account and session reads before exposing its response.
-There is no new table, migration or dependency.
+The [version-74 schema guide](shuttle-schema.md) covers Latin storage and
+compatibility with completed version-73 databases.
 
 ## Client recovery
 

@@ -90,6 +90,33 @@ class GuardTests(unittest.TestCase):
             error.exception.close()
         self.assertEqual(self.forwarded, [])
 
+    def test_chat_menu_refresh_is_scoped_and_cannot_replace_global_menu(self):
+        commands = [{"command": "menu", "description": "Menu"}]
+        valid = {"commands": commands, "scope": {"type": "chat", "chat_id": 42}}
+        menu = {"chat_id": 42, "menu_button": {"type": "commands"}}
+        for method, body in (("setMyCommands", valid), ("setMyCommands", {**valid, "language_code": "ru"}),
+                             ("setChatMenuButton", menu)):
+            with self.request("/bot999:fake/" + method, body) as response:
+                self.assertTrue(json.load(response)["ok"])
+        self.assertEqual(len(self.forwarded), 3)
+        rejected = [
+            ("setMyCommands", {"commands": commands}),
+            ("setMyCommands", {**valid, "scope": {"type": "default"}}),
+            ("setMyCommands", {**valid, "scope": {"type": "chat", "chat_id": 43}}),
+            ("setMyCommands", {**valid, "scope": {"type": "chat", "chat_id": "42"}}),
+            ("setMyCommands", {**valid, "commands": [{"command": "payment_reviews", "description": "Admin"}]}),
+            ("setMyCommands", {**valid, "commands": [{"command": [], "description": "Invalid"}]}),
+            ("setChatMenuButton", {"menu_button": {"type": "commands"}}),
+            ("setChatMenuButton", {**menu, "chat_id": 43}),
+            ("setChatMenuButton", {**menu, "menu_button": {"type": "web_app", "web_app": {"url": "https://example.invalid/"}}}),
+        ]
+        for method, body in rejected:
+            with self.subTest(method=method, body=body), self.assertRaises(urllib.error.HTTPError) as error:
+                self.request("/bot999:fake/" + method, body)
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+        self.assertEqual(len(self.forwarded), 3)
+
     def test_duplicate_json_recipients_never_reach_upstream(self):
         for raw in (b'{"chat_id":43,"chat_id":42,"text":"x"}',
                     b'{"chat_id":42,"chat_id":43,"text":"x"}',
@@ -102,6 +129,69 @@ class GuardTests(unittest.TestCase):
             self.assertEqual(error.exception.code,400)
             error.exception.close()
         self.assertEqual(self.forwarded,[])
+
+    def test_typing_is_exactly_scoped(self):
+        valid = {"chat_id": 42, "action": "typing"}
+        for body in ({**valid, "chat_id": 43}, {**valid, "chat_id": "42"},
+                     {**valid, "chat_id": True}, {**valid, "action": "upload_photo"},
+                     {**valid, "business_connection_id": "other"}):
+            with self.subTest(body=body), self.assertRaises(urllib.error.HTTPError) as error:
+                self.request("/bot999:fake/sendChatAction", body)
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+        self.assertEqual(self.forwarded, [])
+        with self.request("/bot999:fake/sendChatAction", valid) as response:
+            self.assertTrue(json.load(response)["ok"])
+        self.assertEqual(self.forwarded, [("/bot999:fake/sendChatAction", valid)])
+
+    def test_crop_document_requires_exact_configured_launch_and_unique_parts(self):
+        launch = "https://example.invalid/testbot/app/"
+        url = launch + "#avatar-crop?draft=12345678-1234-1234-1234-123456789abc"
+        def markup(target=url, **extra):
+            return {"inline_keyboard": [[{"text": "Crop", "web_app": {"url": target}, **extra}]]}
+        def upload(value, chat=b"42", duplicate=None):
+            fields = [("chat_id", chat), ("document", b"jpeg"), ("reply_markup", value)]
+            if duplicate:
+                fields.append(duplicate)
+            raw = b"".join(b'--qa-boundary\r\nContent-Disposition: form-data; name="' + name.encode() +
+                (b'"; filename="zinusya-avatar.jpg' if name == "document" else b'') +
+                b'"\r\n\r\n' + body + b"\r\n" for name, body in fields) + b"--qa-boundary--\r\n"
+            request = urllib.request.Request("http://127.0.0.1:" + str(self.guard.server_port) +
+                "/bot999:fake/sendDocument", data=raw,
+                headers={"Content-Type": "multipart/form-data; boundary=qa-boundary"})
+            return request, raw
+        encoded = json.dumps(markup()).encode()
+        request, _ = upload(encoded)
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(request, timeout=3)
+        self.assertEqual(error.exception.code, 403)
+        error.exception.close()
+        self.guard.launch_url = launch
+        invalid = [markup("https://foreign.invalid/app/#avatar-crop?draft=12345678-1234-1234-1234-123456789abc"),
+            markup(url + "&extra=1"), markup(url.upper()), markup(url, callback_data="other"),
+            {"inline_keyboard": [[{"text": "Crop", "web_app": {"url": url, "other": True}}]]},
+            {"inline_keyboard": markup()["inline_keyboard"], "resize_keyboard": True}]
+        attempts = [upload(json.dumps(value).encode()) for value in invalid]
+        attempts += [upload(encoded, chat=b"43"), upload(encoded, duplicate=("reply_markup", encoded)),
+            upload(encoded, duplicate=("chat_id", b"42")), upload(encoded, duplicate=("document", b"jpeg")),
+            upload(encoded.replace(b'"url":', b'"url":"https://foreign.invalid/","url":'))]
+        for request, _ in attempts:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(request, timeout=3)
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+        self.assertEqual(self.forwarded, [])
+        request, raw = upload(encoded)
+        with urllib.request.urlopen(request, timeout=3) as response:
+            self.assertTrue(json.load(response)["ok"])
+        self.assertEqual(self.forwarded, [("/bot999:fake/sendDocument", ("multipart/form-data; boundary=qa-boundary", raw))])
+
+    def test_invalid_launch_configuration_is_rejected_before_listening(self):
+        for launch in ("http://example.invalid/app", "https://user:pass@example.invalid/app",
+                       "https://example.invalid/app?x=1", "https://example.invalid/app#fragment",
+                       "https://example.invalid/other", "https://example.invalid/app//"):
+            with self.subTest(launch=launch), self.assertRaises(ValueError):
+                telegram_guard.GuardServer(("127.0.0.1", 0), "999:fake", 42, launch_url=launch)
 
     def test_document_upload_preserves_bytes_and_only_allows_our_recipient(self):
         def upload(fields):

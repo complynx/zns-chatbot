@@ -26,6 +26,11 @@ func TestSendDocumentUploadsPrivateBytesAndChecksReceipt(t *testing.T) {
 		}
 		defer r.MultipartForm.RemoveAll()
 		assert.Equal(t, "42", r.FormValue("chat_id"))
+		assert.JSONEq(
+			t,
+			`{"inline_keyboard":[[{"text":"Crop","web_app":{"url":"https://example.test/app/#avatar-crop?draft=00000000-0000-0000-0000-000000000001"}}]]}`,
+			r.FormValue("reply_markup"),
+		)
 		file, header, err := r.FormFile("document")
 		if !assert.NoError(t, err) {
 			w.WriteHeader(http.StatusBadRequest)
@@ -43,6 +48,10 @@ func TestSendDocumentUploadsPrivateBytesAndChecksReceipt(t *testing.T) {
 	require.NoError(t, err)
 	receipt, err := client.SendDocument(context.Background(), telegram.SendDocumentRequest{
 		ChatID: 42, Filename: "zinusya-avatar.jpg", Content: []byte("private JPEG fixture"),
+		ReplyMarkup: &telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{{
+			Text: "Crop", WebApp: &telegram.WebAppInfo{
+				URL: "https://example.test/app/#avatar-crop?draft=00000000-0000-0000-0000-000000000001"},
+		}}}},
 	})
 	require.NoError(t, err)
 	require.Equal(t, telegram.Receipt{MessageID: 7, ChatID: 42}, receipt)

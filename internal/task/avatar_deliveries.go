@@ -109,6 +109,10 @@ func (s *Service) deliverAvatar(ctx context.Context, args avatarDeliveryArgs, jo
 		return river.JobSnooze(s.options.PollInterval)
 	}
 	principal := db.ProfileScope{BotID: scope.BotID, Organization: scope.Organization, UserID: u.ID, Subject: u.Subject}
+	buttons, err := s.avatarCropMarkup(ctx, principal, u, n.ArtifactID)
+	if err != nil {
+		return err
+	}
 	reserved, content, err := s.store.ReserveAvatarDelivery(ctx, principal, n.ID, n.Version, attempt)
 	if errors.Is(err, db.ErrConflict) {
 		return nil
@@ -119,7 +123,31 @@ func (s *Service) deliverAvatar(ctx context.Context, args avatarDeliveryArgs, jo
 	if err != nil {
 		return err
 	}
-	return s.sendDraftAvatar(ctx, reserved, content)
+	var markup *telegram.InlineKeyboardMarkup
+	if len(buttons.InlineKeyboard) > 0 {
+		markup = &buttons
+	}
+	return s.sendDraftAvatar(ctx, reserved, content, markup)
+}
+
+func (s *Service) avatarCropMarkup(
+	ctx context.Context, scope db.ProfileScope, user db.User, artifactID uuid.UUID,
+) (telegram.InlineKeyboardMarkup, error) {
+	if s.options.MiniAppURL == "" {
+		return telegram.InlineKeyboardMarkup{}, nil
+	}
+	view, err := s.store.FinalizedAvatarStatus(ctx, scope, artifactID)
+	if err != nil {
+		return telegram.InlineKeyboardMarkup{}, err
+	}
+	language, err := s.notificationLanguage(ctx, user)
+	if err != nil {
+		return telegram.InlineKeyboardMarkup{}, err
+	}
+	return telegram.InlineKeyboardMarkup{InlineKeyboard: [][]telegram.InlineKeyboardButton{{{
+		Text:   promptText(language, "Crop", "Кадрировать"),
+		WebApp: &telegram.WebAppInfo{URL: s.options.MiniAppURL + "#avatar-crop?draft=" + view.Avatar.DraftID.String()},
+	}}}}, nil
 }
 func (s *Service) blockAvatarDelivery(ctx context.Context, n db.AvatarDelivery) error {
 	err := s.store.BlockAvatarDelivery(ctx, s.notificationScope(), n.ID, n.Version)
@@ -128,16 +156,20 @@ func (s *Service) blockAvatarDelivery(ctx context.Context, n db.AvatarDelivery) 
 	}
 	return err
 }
-func (s *Service) sendDraftAvatar(ctx context.Context, n db.AvatarDelivery, content []byte) error {
+func (s *Service) sendDraftAvatar(
+	ctx context.Context, n db.AvatarDelivery, content []byte, markup *telegram.InlineKeyboardMarkup,
+) error {
 	receipt, sendErr := s.tg.SendDocument(
 		ctx,
-		telegram.SendDocumentRequest{ChatID: n.TelegramUserID, Filename: "zinusya-avatar.jpg", Content: content},
+		telegram.SendDocumentRequest{ChatID: n.TelegramUserID, Filename: "zinusya-avatar.jpg", Content: content,
+			ReplyMarkup: markup},
 	)
 	outcome, delay := deliveryOutcome(sendErr)
 	if outcome == deliveryRetryable && delay <= 0 {
 		delay = s.options.PollInterval
 	}
-	raw, _ := json.Marshal(map[string]int64{"message_id": receipt.MessageID, "chat_id": receipt.ChatID})
+	raw, _ := json.Marshal(map[string]any{"message_id": receipt.MessageID, "chat_id": receipt.ChatID,
+		"crop_button_offered": markup != nil && sendErr == nil})
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	defer cancel()
 	err := s.store.FinishAvatarDelivery(finishCtx, n, outcome, raw, delay)

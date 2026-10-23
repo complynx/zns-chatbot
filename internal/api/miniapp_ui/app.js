@@ -117,6 +117,11 @@
     request: (path, method, body) => request(path, method, body, session.token),
     readBlob: readProof, upload: uploadAvatar, setBusy, denied: detailsDenied
   });
+  const cropUI = launchTarget === "avatar-crop" ? window.createZinusyaAvatarCrop?.({
+    draftID: (window.location?.hash || "").split(/[?&#]/).find(part => part.startsWith("draft="))?.slice(6),
+    request: (path, method, body) => request(path, method, body, session.token),
+    readBlob: readProof, setBusy, denied: detailsDenied
+  }) : undefined;
   const mealsUI = window.createZinusyaMeals?.({
     continuation: launchTarget === "meals" ? {
       event_id: (window.location?.hash || "").split(/[?&#]/).find(part => part.startsWith("event="))?.slice(6),
@@ -220,6 +225,7 @@
     mealsUI?.setBusy(value);
     pairsUI?.setBusy(value);
     avatarsUI?.setBusy(value);
+    cropUI?.setBusy(value);
     paymentReviewsUI?.setBusy(value);
     orderReviewsUI?.setBusy(value);
     massageUI?.setBusy(value);
@@ -238,6 +244,7 @@
     mealsUI?.clear();
     pairsUI?.clear();
     avatarsUI?.clear();
+    cropUI?.clear();
     paymentReviewsUI?.clear();
     orderReviewsUI?.clear();
     massageUI?.clear();
@@ -319,6 +326,10 @@
       name.hidden = !name.textContent;
       show("connected");
       logout.hidden = false;
+      if (cropUI && session.token) {
+        await cropUI.start(account.user_id, language);
+        return;
+      }
       await readProfile();
       await readAccount();
       if (session.token) await readDetails();

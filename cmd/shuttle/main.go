@@ -132,6 +132,11 @@ func compose(
 		return nil, nil, nil, err
 	}
 	miniAppURL := c.MiniAppURL()
+	renderer, err := avatar.NewExecutable(c.AvatarExecutable)
+	if err != nil {
+		_ = obs.Shutdown(ctx)
+		return nil, nil, nil, err
+	}
 	engine, err := task.New(
 		store,
 		iam,
@@ -140,6 +145,7 @@ func compose(
 		obs,
 		logger,
 		task.Options{
+			AvatarRenderer:             renderer,
 			BotID:                      c.Telegram.BotID,
 			MiniAppURL:                 miniAppURL,
 			RegistrationDetailsEnabled: details != nil,
@@ -149,11 +155,6 @@ func compose(
 			LeaseDuration:              c.HTTPTimeout + hardShutdownTimeout,
 		},
 	)
-	if err != nil {
-		_ = obs.Shutdown(ctx)
-		return nil, nil, nil, err
-	}
-	renderer, err := avatar.NewExecutable(c.AvatarExecutable)
 	if err != nil {
 		_ = obs.Shutdown(ctx)
 		return nil, nil, nil, err

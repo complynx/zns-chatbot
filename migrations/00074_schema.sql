@@ -1,14 +1,16 @@
 -- +goose Up
--- Single baseline at version 73 keeps already migrated databases unchanged.
--- Partial legacy databases must finish the original chain before using this baseline.
+-- Fresh databases receive the preserved version-73 schema, then the Latin pair.
+-- Completed version-73 databases receive only the compatible Latin extension.
 -- +goose StatementBegin
-DO $$ BEGIN
- IF EXISTS (SELECT 1 FROM goose_db_version WHERE version_id > 0 AND is_applied) THEN
-  RAISE EXCEPTION 'partial legacy schema: finish migrations through version 73 with the previous release';
- END IF;
-END $$;
--- +goose StatementEnd
--- +goose StatementBegin
+DO $shuttle_baseline74$
+DECLARE applied bigint;
+BEGIN
+ SELECT max(version_id) INTO applied FROM (
+  SELECT DISTINCT ON (version_id) version_id,is_applied
+  FROM goose_db_version ORDER BY version_id,id DESC
+ ) history WHERE is_applied AND version_id>0;
+ IF applied IS NULL THEN
+-- BEGIN PRESERVED VERSION 73 DDL
 CREATE FUNCTION shuttle_guard_assignment_namespace() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -44,9 +46,7 @@ BEGIN
  RETURN NEW;
 END;
 $$;
--- +goose StatementEnd
 
--- +goose StatementBegin
 CREATE FUNCTION shuttle_guard_pair_assignment_namespace() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -82,7 +82,6 @@ BEGIN
  RETURN NEW;
 END;
 $$;
--- +goose StatementEnd
 
 CREATE TABLE shuttle_active_pair_members (
     registration_id uuid NOT NULL,
@@ -3213,11 +3212,36 @@ ALTER TABLE ONLY shuttle_user_revocation_proposals
     ADD CONSTRAINT shuttle_user_revocation_proposals_target_id_fkey FOREIGN KEY (target_id) REFERENCES shuttle_users(id);
 
 INSERT INTO shuttle_settings (id, version, document) VALUES (true, 1, '{"default_language": "en", "max_parallel_tasks": 8, "auth_cache_ttl_seconds": 0, "question_timeout_seconds": 3600}');
+-- END PRESERVED VERSION 73 DDL
+ ELSIF applied<>73 THEN
+  RAISE EXCEPTION 'partial legacy schema: finish migrations through version 73 with the previous release';
+ END IF;
+END $shuttle_baseline74$;
+-- +goose StatementEnd
+-- BEGIN COMMON VERSION 74 DDL
+ALTER TABLE shuttle_user_profiles
+ ADD COLUMN first_name_latin text NOT NULL DEFAULT '',
+ ADD COLUMN last_name_latin text NOT NULL DEFAULT '';
+-- +goose StatementBegin
+CREATE FUNCTION shuttle_clear_stale_latin_name() RETURNS trigger
+ LANGUAGE plpgsql AS $$
+BEGIN
+ IF NEW.first_name IS DISTINCT FROM OLD.first_name OR NEW.last_name IS DISTINCT FROM OLD.last_name THEN
+  NEW.first_name_latin := '';
+  NEW.last_name_latin := '';
+ END IF;
+ RETURN NEW;
+END $$;
+-- +goose StatementEnd
+CREATE TRIGGER shuttle_clear_stale_latin_name
+ BEFORE UPDATE OF first_name,last_name ON shuttle_user_profiles
+ FOR EACH ROW EXECUTE FUNCTION shuttle_clear_stale_latin_name();
+-- END COMMON VERSION 74 DDL
 -- +goose Down
 -- Rollback removes only an unused baseline; preserve accepted data before rollback.
 -- +goose StatementBegin
 DO $$ BEGIN
- IF EXISTS (SELECT 1 FROM goose_db_version WHERE version_id > 0 AND version_id < 73 AND is_applied) THEN
+ IF EXISTS (SELECT 1 FROM goose_db_version WHERE version_id > 0 AND version_id <= 73) THEN
   RAISE EXCEPTION 'legacy migration history must be preserved; baseline rollback requires a fresh database';
  END IF;
 END $$;
@@ -3242,4 +3266,4 @@ END $$;
 -- +goose StatementEnd
 DROP VIEW shuttle_legacy_history_previews, shuttle_knowledge_notice_candidates;
 DROP TABLE shuttle_active_pair_members, shuttle_assignment_aliases, shuttle_assignment_preparations, shuttle_authority_operations, shuttle_authority_preparations, shuttle_avatar_deliveries, shuttle_avatar_delivery_resolutions, shuttle_avatar_draft_operations, shuttle_avatar_drafts, shuttle_avatar_resolution_aliases, shuttle_avatars, shuttle_conversations, shuttle_deployment, shuttle_event_authorities, shuttle_event_change_proposals, shuttle_event_context_operations, shuttle_event_deposit_policy, shuttle_event_operations, shuttle_event_registration_rules, shuttle_events, shuttle_files, shuttle_history_account_receipts, shuttle_iam_name_origins, shuttle_identity_audit, shuttle_inbox, shuttle_knowledge_articles, shuttle_knowledge_moderators, shuttle_knowledge_suggestions, shuttle_users, shuttle_knowledge_notices, shuttle_knowledge_operations, shuttle_knowledge_preparations, shuttle_knowledge_revisions, shuttle_legacy_archive_chunks, shuttle_legacy_archive_operations, shuttle_legacy_archive_preparations, shuttle_legacy_archives, shuttle_legacy_history_applications, shuttle_legacy_history_memberships, shuttle_legacy_history_operations, shuttle_legacy_history_preparations, shuttle_legacy_history_records, shuttle_massage_binding_operation_aliases, shuttle_massage_binding_operations, shuttle_massage_bookings, shuttle_massage_operations, shuttle_massage_preparations, shuttle_massage_reminders, shuttle_massage_schedule_operations, shuttle_massage_schedule_preparations, shuttle_massage_schedules, shuttle_massage_specialist_bindings, shuttle_massage_specialist_notifications, shuttle_massage_specialist_preference_operations, shuttle_massage_specialist_preferences, shuttle_meal_catalog_operations, shuttle_meal_catalog_preparations, shuttle_meal_catalogs, shuttle_meal_draft_operations, shuttle_meal_drafts, shuttle_miniapp_assignment_actions, shuttle_miniapp_avatar_resolution_actions, shuttle_miniapp_details_actions, shuttle_miniapp_meal_draft_actions, shuttle_miniapp_order_evidence_actions, shuttle_miniapp_orders_selection_actions, shuttle_miniapp_pair_assignment_actions, shuttle_miniapp_profile_actions, shuttle_miniapp_sessions, shuttle_native_payment_evidence_actions, shuttle_notification_resolutions, shuttle_order_allocations, shuttle_order_evidence, shuttle_order_evidence_notices, shuttle_order_evidence_operations, shuttle_order_evidence_preparations, shuttle_order_evidence_reviews, shuttle_order_operations, shuttle_order_preparations, shuttle_order_review_calls, shuttle_order_review_workspaces, shuttle_orders, shuttle_orders_catalog_operations, shuttle_orders_catalog_preparations, shuttle_orders_catalogs, shuttle_orders_selection_operations, shuttle_orders_selections, shuttle_outbox, shuttle_pair_assignment_aliases, shuttle_pair_invitations, shuttle_pair_notifications, shuttle_pair_operations, shuttle_pair_preparations, shuttle_pairs, shuttle_pass_deposit_policy, shuttle_pass_tiers, shuttle_passes, shuttle_payment_evidence, shuttle_payment_notifications, shuttle_payment_operations, shuttle_payment_preparations, shuttle_payment_review_calls, shuttle_payment_review_workspaces, shuttle_payment_reviews, shuttle_payment_versions, shuttle_profile_name_sync, shuttle_profile_operations, shuttle_registration_details, shuttle_registration_details_operations, shuttle_registration_details_request_operations, shuttle_registration_details_requests, shuttle_registration_operations, shuttle_registrations, shuttle_run_event_context, shuttle_settings, shuttle_settings_audit, shuttle_settings_change_proposals, shuttle_task_closure_proposals, shuttle_task_resolutions, shuttle_tasks, shuttle_telegram_prelinks, shuttle_user_event_context, shuttle_user_profiles, shuttle_user_revocation_proposals;
-DROP FUNCTION shuttle_guard_assignment_namespace(), shuttle_guard_pair_assignment_namespace();
+DROP FUNCTION shuttle_guard_assignment_namespace(), shuttle_guard_pair_assignment_namespace(), shuttle_clear_stale_latin_name();

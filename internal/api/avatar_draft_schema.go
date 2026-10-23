@@ -86,7 +86,7 @@ func avatarDraftMethods() []any {
 	}
 	create := method(
 		"create_draft",
-		"After an explicit avatar editing request, select exactly one owned source_file_id or history_source with record_id and archive_id; pin its digest and size and create an identity edit draft. Does not generate or send an avatar. No active Loom run required. Reconcile lost responses with draft_operation using the same operation ID; committed operation receipts survive source loss, but preview and new finalization need Telegram access. If unavailable ask for the photo again. Telegram originals are not stored. Admission limit: five active drafts and 50 MiB of browser sources per owner, plus the application-wide browser byte quota. Browser sources expire from creation time under DB settings; current metadata reports source_expires_at/source_expired. Expired sources reject new edits, reads, preview and finalization; immutable receipts and completed JPEGs remain available.",
+		"When saved editing is needed, select exactly one owned source_file_id or history_source with record_id and archive_id; pin its digest and size and create an identity edit draft. Intermediate editing only: does not generate or send an avatar. For a plain explicit avatar request prefer generate. If you create a draft to fulfill that request, continue to finalize_draft with the returned id and version; do not finish with a created/sent claim. Stop at a draft only when the user requested editing or preview alone. No active Loom run required. Reconcile lost responses with draft_operation using the same operation ID; committed operation receipts survive source loss, but preview and new finalization need Telegram access. Try fetch_original for the saved draft before asking for the photo again; an expired model artifact handle does not prove Telegram source loss. Telegram originals are not stored. Admission limit: five active drafts and 50 MiB of browser sources per owner, plus the application-wide browser byte quota. Browser sources expire from creation time under DB settings; current metadata reports source_expires_at/source_expired. Expired sources reject new edits, reads, preview and finalization; immutable receipts and completed JPEGs remain available.",
 		avatarDraftCreateSchema(),
 		avatarDraftSchema(),
 	)
@@ -122,7 +122,7 @@ func avatarDraftMethods() []any {
 	)
 	list := method(
 		"drafts",
-		"List your saved avatar edit metadata, newest edited first. Telegram inputs are references and may require the person to resend a lost source. Browser-upload originals are retained. Metadata and committed operation receipts remain readable independently of source availability.",
+		"List your saved avatar edit metadata, newest edited first. Recover earlier Telegram photos here using source_file_id or fetch_original by draft id; try the source before asking for a resend. Telegram inputs are references and may require the person to resend a lost source. Browser-upload originals are retained. Metadata and committed operation receipts remain readable independently of source availability.",
 		input(""),
 		map[string]any{
 			manifestType:               schemaObject,

@@ -32,6 +32,7 @@ type miniAppAvatarSave struct {
 }
 
 func (s *Server) registerMiniAppAvatars() {
+	s.public.HandleFunc("POST /app/avatars/drafts/{id}/open", s.miniAppAvatarCropOpen)
 	s.public.HandleFunc("GET /app/avatars/history", s.miniAppAvatarCandidates)
 	s.public.HandleFunc("GET /app/avatars/history/{archive}/{id}/preview", s.miniAppAvatarHistoryPreview)
 	s.public.HandleFunc("GET /app/avatars/drafts", s.miniAppAvatarRead)

@@ -4,8 +4,33 @@ The `zinusya_avatars` module restores the legacy fixed-frame generator. After an
 explicit user request, it takes an existing owner-scoped `source_file_id`, makes
 a 1024×1024 JPEG with the ZNS frame (centered by default), and queues that document to
 the owner's private Telegram chat. It does not set a Telegram profile photo or
-introduce a separate current-avatar field. Receiving a photo alone creates no
-avatar; the agent decides its purpose from the message and content.
+introduce a separate current-avatar field. Explicit agent generation remains
+available alongside the native image workflow below.
+
+## Native image entry
+
+A single captionless Telegram photo, or a document with an `image/*` MIME type,
+uses the native avatar path when it is not a reply and the conversation has no
+active user question. Captions, replies and images answering an active question
+keep their conversational purpose. PDF documents do not enter this path. MIME
+admission is not image validation: the renderer still accepts only bounded JPEG
+or PNG bytes; unsupported or unavailable sources produce native guidance.
+
+The system authenticates the current owner, creates a shared identity-transform
+draft and finalizes its framed document through durable operation receipts.
+It starts no Loom run and makes no model call. Repeated processing recovers the
+same draft/finalization operations. Rendering happens outside database locks;
+commit rechecks the owner and atomically saves the artifact and delivery intent.
+Existing quotas and source-access checks still apply.
+
+When the Mini App is available, the document includes a localized Crop button
+for its draft, opening `#avatar-crop?draft=ID`. Finalization success means stored
+and queued. Only an acknowledged Telegram send establishes delivery and that
+the Crop button was offered. An unknown send requires reconciliation and does
+not automatically resend. Offering the button does not establish that it was
+opened; an authenticated explicit Crop entry records that separately. Later
+agent context carries these facts as owner-scoped history, never fresh consent
+to generate or send another document.
 
 ## Telegram source references
 
@@ -22,7 +47,7 @@ Historical input images are read through `zinusya_history.avatar_info` and
 historical content and does not expose files with no content projection. `avatar_info` validates the full applied archive and
 returns source metadata without a Telegram request. `avatar_fetch` downloads on
 demand, rechecks ownership/IAM, and returns an authenticated file descriptor.
-In mvp-86 source, the descriptor's `fetch_method` is `avatar_refetch`, which
+The descriptor's `fetch_method` is `avatar_refetch`, which
 accepts only its exact `external_id` (archive and record locator). Its content path is
 `/internal/history-avatars/{archive_id}/{record_id}/content`. Downloads repeat
 source authorization before and after remote IO and refresh the Telegram path.

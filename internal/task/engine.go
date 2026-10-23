@@ -24,6 +24,7 @@ import (
 var errControlTargetFinished = errors.New("control target finished without applying input")
 
 type checkpoint struct {
+	NativeAvatar          *db.AvatarDraftReceipt `json:"native_avatar,omitempty"`
 	KeyboardRevision      int64                  `json:"keyboard_revision,omitempty"`
 	InputReceipt          *loom.ControlReceipt   `json:"input_receipt,omitempty"`
 	KeyboardPrompt        string                 `json:"keyboard_prompt,omitempty"`
@@ -132,6 +133,9 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 		return s.finish(ctx, &t, c, i, stateCompleted, "no_active")
 	}
 	if t.Route == kindStructured {
+		if i.NativeAvatar {
+			return s.nativeAvatarPhoto(ctx, &t, c, i)
+		}
 		return s.structured(ctx, &t, c, i)
 	}
 	if t.TargetTaskID != uuid.Nil {
@@ -148,10 +152,20 @@ func (s *Service) work(parent context.Context, id uuid.UUID) error {
 	if err != nil {
 		return s.identityError(ctx, &t, c, i, err)
 	}
-	if t.Route != "new_run" {
-		return s.control(ctx, &t, c, i, user, service.Token)
+	return s.authorizedTask(ctx, &t, c, i, user, service.Token)
+}
+
+func (s *Service) authorizedTask(
+	ctx context.Context, t *db.Task, c checkpoint, i intent, user db.User, service string,
+) error {
+	ready, startErr := s.prepareStart(ctx, t, c, i)
+	if !ready {
+		return startErr
 	}
-	return s.runTask(ctx, &t, c, i, user, service.Token)
+	if t.Route != "new_run" {
+		return s.control(ctx, t, c, i, user, service)
+	}
+	return s.runTask(ctx, t, c, i, user, service)
 }
 func (s *Service) runTask(ctx context.Context, t *db.Task, c checkpoint, i intent, user db.User, service string) error {
 	ready, err := s.ensureSession(ctx, t, &c, i, user, service)
