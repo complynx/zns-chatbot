@@ -13,7 +13,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from motor.core import AgnosticCollection
 from telegram import Update
 from telegram.ext import filters
@@ -216,10 +216,12 @@ class Assistant(BasePlugin):
                 text.append("")
         self.qa_data = "\n".join(text)
 
-        self.chat = ChatGoogleGenerativeAI(
-            api_key=self.config.language_model.google_api_key.get_secret_value(),
+        self.chat = ChatOpenAI(
+            api_key=self.config.language_model.openai_api_key.get_secret_value(),
             model=self.config.language_model.model,
             temperature=self.config.language_model.temperature,
+            reasoning_effort="none",
+            max_completion_tokens=self.config.language_model.reply_token_cap,
         )
         self.message_db: AgnosticCollection = base_app.mongodb[
             self.config.mongo_db.messages_collection
