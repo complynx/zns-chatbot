@@ -1,4 +1,23 @@
-# Current roadmap checkpoint, 2026-10-22
+# Current roadmap checkpoint, 2026-10-23
+
+## Real-model voice and local pilot
+
+[Bounded real-model voice acceptance](shuttle-persona-model-qa-2026-10-23.md)
+now passes on current application `ff8d4234` / image `87103b82` and Loom
+`ba1f4a11` / API `cbba225f`. Actual opening, ordinary name keyboard, same-container
+restart, compound-name correction, mixed language, unknown facts, tool-error
+recovery and full native financial proposal were observed. Earlier choice and
+cancellation evidence is reused. Fresh independent semantic review is clean.
+Daniel's new30-request allowance brings the current campaign limit to51;
+49 are used,2 remain and provider is HELD. No order consent/execution occurred.
+The G2 approval naturally expired with `wait_expired`; its preparation remains
+unconsumed. Earlier failures and narrow evidence limits remain recorded.
+
+Daniel also authorized an isolated production-like local pilot in parallel.
+Actual verified TLS and scoped IAM provisioning pass there; provider callback,
+owner read, telemetry, restart/rollback and cleanup are still in progress.
+This local authorization does not authorize merge, image publication or any
+production provisioning/deployment/cutover. Real Telegram still needs Daniel.
 
 ## Resumed acceptance and IAM upgrade scope
 

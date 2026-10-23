@@ -1,8 +1,9 @@
 # Zinusya identity, language and visible voice
 
-This implements the source portion of
-[issue24](https://github.com/complynx/zns-chatbot/issues/24). Real-model judgment
-and installation acceptance remain separate.
+Source/native checks and the [bounded real-model voice acceptance](shuttle-persona-model-qa-2026-10-23.md)
+now pass for [issue24](https://github.com/complynx/zns-chatbot/issues/24).
+Production installation and real Telegram acceptance remain separate. Earlier
+checkpoints below retain their original failures and budget boundaries.
 
 ## Contract
 
@@ -223,11 +224,13 @@ using this capture and upstream discovery, authorization and context-identity
 evidence. This capture alone provides no paid-model acceptance; subsequent B2
 accepts only the cancellation path described above.
 
-Required model observations include concise useful replies, questions/choices,
-typed name correction, cancellation, mixed language, missing information and
-honest failure. Native and financial confirmation terms remain separately
-checkable without spending the model budget. Do not close issue24 from source
-tests alone.
+The [2026-10-23 actual-model checkpoint](shuttle-persona-model-qa-2026-10-23.md)
+completes concise replies, actual opening/keyboard/restart/typed correction,
+mixed language, unknown facts, real tool-error recovery and native financial
+proposal delivery. Earlier C choice and B2 cancellation remain accepted.
+The campaign is HELD49/51, with2 unused requests. Fresh independent semantic
+review supports issue24 closure within those finite synthetic boundaries;
+production and real Telegram are not accepted by this result.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
