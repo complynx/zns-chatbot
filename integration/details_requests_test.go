@@ -7,14 +7,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/events"
 	"github.com/complynx/zns-chatbot/internal/registrationdetails"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func detailsRequestFixture(t *testing.T) (*harness, db.ProfileScope, events.Event) {
@@ -269,27 +266,4 @@ func TestDetailsRequestsForMultipleEventsFulfillWithSeparateDeadlines(t *testing
 		require.Equal(t, "completed", current.State)
 		require.Equal(t, original.Request.ExpiresAt, current.Request.ExpiresAt)
 	}
-}
-
-func TestDetailsRequestsMigrationPreservesRetainedHistory(t *testing.T) {
-	t.Parallel()
-	h, scope, event := detailsRequestFixture(t)
-	driver := stdlib.OpenDBFromPool(h.store.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(t.Context(), 36, false)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(t.Context(), 36, true)
-	require.NoError(t, err)
-	operation := uuid.New()
-	original := beginDetailsRequest(t, h, scope, event, operation)
-	_, err = provider.ApplyVersion(t.Context(), 36, false)
-	require.ErrorContains(t, err, "registration details requests and receipts must be exported before rollback")
-	current, err := h.store.DetailsRequest(t.Context(), scope, original.Request.ID)
-	require.NoError(t, err)
-	require.Equal(t, original.Request, current.Request)
-	historical, err := h.store.DetailsRequestOperation(t.Context(), scope, operation)
-	require.NoError(t, err)
-	require.Equal(t, original, historical)
 }

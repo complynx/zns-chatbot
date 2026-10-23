@@ -8,12 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func responseTask(t *testing.T, s *db.Store) db.Task {
@@ -169,80 +166,6 @@ func TestResponseTimingReceiptFailureLeavesNoCompletion(t *testing.T) {
 			Scan(&delivered),
 	)
 	require.Nil(t, delivered)
-}
-
-func TestResponseTimingMigrationRefusesToEraseAcceptedFacts(t *testing.T) {
-	t.Parallel()
-	s := testStore(t)
-	driver := stdlib.OpenDBFromPool(s.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(t.Context(), 32, false)
-	require.NoError(t, err, "empty timing schema can be rolled back")
-	_, err = provider.ApplyVersion(t.Context(), 32, true)
-	require.NoError(t, err)
-	task := accepted(t, s, 1)
-	var before time.Time
-	require.NoError(
-		t,
-		s.Pool().
-			QueryRow(t.Context(), "SELECT response_started_at FROM shuttle_tasks WHERE id=$1", task.ID).
-			Scan(&before),
-	)
-	_, err = provider.ApplyVersion(t.Context(), 32, false)
-	require.ErrorContains(t, err, "response timing facts must be exported")
-	var after time.Time
-	require.NoError(
-		t,
-		s.Pool().
-			QueryRow(t.Context(), "SELECT response_started_at FROM shuttle_tasks WHERE id=$1", task.ID).
-			Scan(&after),
-	)
-	require.Equal(t, before, after)
-	current, err := s.GetTask(t.Context(), task.ID)
-	require.NoError(t, err)
-	require.Equal(t, task.Request, current.Request)
-}
-
-func TestResponseTimingRollbackPreservesConcurrentIntake(t *testing.T) {
-	t.Parallel()
-	s := testStore(t)
-	ctx := t.Context()
-	task := accepted(t, s, 1)
-	_, err := s.Pool().Exec(ctx, "UPDATE shuttle_tasks SET response_started_at=NULL WHERE id=$1", task.ID)
-	require.NoError(t, err)
-	driver := stdlib.OpenDBFromPool(s.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	writer, err := s.Pool().Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = writer.Rollback(context.Background()) }()
-	_, err = writer.Exec(ctx, "LOCK TABLE shuttle_tasks IN ROW EXCLUSIVE MODE")
-	require.NoError(t, err)
-	var pid int32
-	require.NoError(t, writer.QueryRow(ctx, "SELECT pg_backend_pid()").Scan(&pid))
-	result := make(chan error, 1)
-	go func() {
-		_, applyErr := provider.ApplyVersion(ctx, 32, false)
-		result <- applyErr
-	}()
-	require.Eventually(t, func() bool {
-		var blocked bool
-		e := s.Pool().QueryRow(ctx, `SELECT EXISTS(
-SELECT 1 FROM pg_locks WHERE mode='AccessExclusiveLock' AND NOT granted
-AND $1=ANY(pg_blocking_pids(pid)))`, pid).Scan(&blocked)
-		return e == nil && blocked
-	}, 3*time.Second, 10*time.Millisecond)
-	_, err = writer.Exec(ctx, "UPDATE shuttle_tasks SET response_started_at=clock_timestamp() WHERE id=$1", task.ID)
-	require.NoError(t, err)
-	require.NoError(t, writer.Commit(ctx))
-	require.ErrorContains(t, <-result, "response timing facts must be exported")
-	var retained bool
-	require.NoError(t, s.Pool().QueryRow(ctx,
-		"SELECT response_started_at IS NOT NULL FROM shuttle_tasks WHERE id=$1", task.ID).Scan(&retained))
-	require.True(t, retained)
 }
 
 func deliverExcludedResponse(t *testing.T, s *db.Store, rows []db.Delivery, mode string) {

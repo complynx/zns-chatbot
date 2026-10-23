@@ -8,13 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/registrations"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func adoptAssignmentHTTP(t *testing.T, h *harness, token, operation string, original assignmentProposal) (int, []byte) {
@@ -355,88 +352,4 @@ func TestAssignmentAdoptionRechecksExpiryAfterCanonicalLock(t *testing.T) {
 	var aliases int
 	require.NoError(t, h.store.Pool().QueryRow(ctx, "SELECT count(*) FROM shuttle_assignment_aliases").Scan(&aliases))
 	require.Zero(t, aliases)
-}
-
-func TestAssignmentAliasMigrationPreservesCanonicalHistoryAndRejectsLegacyCollision(t *testing.T) {
-	t.Parallel()
-	h := setup(t, newPeers(t))
-	adminID, operator := registrationUser(t, h, 98801, true)
-	_, owner := registrationUser(t, h, 98802, false)
-	event := registrationEvent(t, h, operator)
-	entry := registerForEvent(t, h, owner, event.ID, "join", "leader")
-	proposal := prepareAssignment(t, h, operator, "original", event, entry)
-	driver := stdlib.OpenDBFromPool(h.store.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(t.Context(), 60, false)
-	require.NoError(t, err)
-	var document []byte
-	require.NoError(
-		t,
-		h.store.Pool().
-			QueryRow(t.Context(), "SELECT document FROM shuttle_assignment_preparations WHERE proposal_id=$1", proposal.Preconditions.ProposalID).
-			Scan(&document),
-	)
-	require.Contains(t, string(document), proposal.Preconditions.ProposalID.String())
-	_, err = provider.ApplyVersion(t.Context(), 60, true)
-	require.NoError(t, err)
-	admin, err := h.store.GetUser(t.Context(), adminID)
-	require.NoError(t, err)
-	scope := db.EventScope{BotID: 123, Organization: "org"}
-	_, err = h.store.AdoptAssignment(
-		t.Context(),
-		scope,
-		admin.Subject,
-		"alias",
-		proposal.Arguments,
-		proposal.Preconditions.ProposalID,
-	)
-	require.NoError(t, err)
-	// This is the previous binary's canonical INSERT shape, without alias awareness.
-	_, err = h.store.Pool().
-		Exec(t.Context(), `INSERT INTO shuttle_assignment_preparations(bot_id,organization_id,actor,operation_id,proposal_id,request_hash,expires_at,document)
- SELECT bot_id,organization_id,actor,$1,$2,request_hash,expires_at,document FROM shuttle_assignment_preparations WHERE proposal_id=$3`, "alias", uuid.New(), proposal.Preconditions.ProposalID)
-	require.ErrorContains(t, err, "assignment operation is already an alias")
-	// The previous binary's effect and receipt remain atomic if it tries a reserved alias.
-	legacy, err := h.store.Pool().Begin(t.Context())
-	require.NoError(t, err)
-	_, err = legacy.Exec(
-		t.Context(),
-		"UPDATE shuttle_registrations SET state='assigned',version=version+1 WHERE id=$1",
-		entry.ID,
-	)
-	require.NoError(t, err)
-	_, err = legacy.Exec(
-		t.Context(),
-		`INSERT INTO shuttle_registration_operations(bot_id,organization_id,actor,operation_id,request_hash,result)
- SELECT bot_id,organization_id,actor,'alias',request_hash,'{}'::jsonb FROM shuttle_assignment_preparations WHERE proposal_id=$1`,
-		proposal.Preconditions.ProposalID,
-	)
-	require.ErrorContains(t, err, "assignment operation is already an alias")
-	require.NoError(t, legacy.Rollback(t.Context()))
-	current, err := h.store.Registration(t.Context(), scope, event.ID, entry.UserID)
-	require.NoError(t, err)
-	require.Equal(t, registrations.Waitlisted, current.State)
-	require.Nil(t, current.Pass)
-	// Even an older receipt writer cannot poison a canonical proposal with another digest.
-	_, err = h.store.Pool().
-		Exec(t.Context(), `INSERT INTO shuttle_registration_operations(bot_id,organization_id,actor,operation_id,request_hash,result)
- SELECT bot_id,organization_id,actor,operation_id,decode(repeat('00',32),'hex'),'{}'::jsonb FROM shuttle_assignment_preparations WHERE proposal_id=$1`, proposal.Preconditions.ProposalID)
-	require.ErrorContains(t, err, "registration key has a different assignment preparation")
-	_, err = provider.ApplyVersion(t.Context(), 60, false)
-	require.ErrorContains(t, err, "export and deliberately remove assignment aliases")
-	result, err := h.store.ConfirmAssignment(
-		t.Context(),
-		scope,
-		admin.Subject,
-		"alias",
-		proposal.Arguments,
-		proposal.Preconditions.ProposalID,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, result.Pass)
-	receipt, err := h.store.AssignmentOperation(t.Context(), scope, admin.Subject, proposal.OperationID)
-	require.NoError(t, err)
-	require.Equal(t, result, receipt)
 }

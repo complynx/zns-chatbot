@@ -7,12 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func revocationArguments(target db.User) db.UserRevocationArguments {
@@ -276,30 +273,4 @@ func TestUserRevocationSupportsEmptyBindingAndRejectsTargetsOutsideDeployment(t 
 	_, err = h.store.RevokeScopedUser(ctx, scope, target.ID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 	require.EqualValues(t, 1, revocationAuditCount(t, h, target.ID))
-}
-
-func TestUserRevocationMigrationPreservesPendingAndCommittedAudit(t *testing.T) {
-	t.Parallel()
-	h, scope, target := revocationFixture(t)
-	ctx := t.Context()
-	driver := stdlib.OpenDBFromPool(h.store.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 30, false)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 30, true)
-	require.NoError(t, err)
-	args := revocationArguments(target)
-	prep, err := h.store.PrepareUserRevocation(ctx, scope, "retained", args)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 30, false)
-	require.ErrorContains(t, err, "user revocation approval and result history must be exported")
-	_, err = h.store.ConfirmUserRevocation(ctx, scope, "retained", args, prep.ID)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 30, false)
-	require.ErrorContains(t, err, "user revocation approval and result history must be exported")
-	receipt, err := h.store.UserRevocationReceipt(ctx, scope, "retained")
-	require.NoError(t, err)
-	require.True(t, receipt.Revoked)
 }

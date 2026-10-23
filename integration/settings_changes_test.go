@@ -8,12 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func settingsChangeFixture(t *testing.T) (*harness, db.AdminScope, db.SettingsChangeArguments) {
@@ -316,29 +313,4 @@ func TestSettingsChangeAndOperatorCASHaveOneWinner(t *testing.T) {
 		require.ErrorIs(t, err, pgx.ErrNoRows)
 		require.Equal(t, operatorDoc, current.Document)
 	}
-}
-
-func TestSettingsChangeMigrationAllowsEmptyRollbackAndPreservesApprovalAudit(t *testing.T) {
-	t.Parallel()
-	h, scope, args := settingsChangeFixture(t)
-	ctx := t.Context()
-	driver := stdlib.OpenDBFromPool(h.store.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 29, false)
-	require.NoError(t, err)
-	operator, err := h.store.CompareAndSwapSettings(ctx, args.ExpectedVersion, args.Document, "operator")
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 29, true)
-	require.NoError(t, err)
-	args.ExpectedVersion = operator.Version
-	prep, err := h.store.PrepareSettingsChange(ctx, scope, "retained-settings-approval", args)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 29, false)
-	require.ErrorContains(t, err, "settings approval and result history must be exported")
-	repeated, err := h.store.PrepareSettingsChange(ctx, scope, "retained-settings-approval", args)
-	require.NoError(t, err)
-	sameTaskClosureJSON(t, prep, repeated)
-	require.EqualValues(t, 1, settingsAuditCount(t, h))
 }

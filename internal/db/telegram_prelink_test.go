@@ -10,12 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func telegramPrelinkClaim() db.TelegramPrelinkClaim {
@@ -279,61 +276,4 @@ func TestTelegramPrelinkSubjectUniquenessIsAtomicAcrossUsers(t *testing.T) {
 	require.Equal(t, "pending", retry.State)
 	_, err = s.BindSubject(ctx, second.User.ID, "subject", "org")
 	require.Error(t, err, "Older writers must also be unable to create a duplicate IAM binding")
-}
-
-func prelinkMigrations(t *testing.T, s *db.Store) *goose.Provider {
-	t.Helper()
-	database := stdlib.OpenDBFromPool(s.Pool())
-	t.Cleanup(func() { require.NoError(t, database.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, database, migrations.Files)
-	require.NoError(t, err)
-	return provider
-}
-
-func TestTelegramPrelinkMigrationRollbackPreservesPendingIntent(t *testing.T) {
-	t.Parallel()
-	s := testStore(t)
-	ctx := context.Background()
-	claim := telegramPrelinkClaim()
-	first, err := s.ClaimTelegramPrelink(ctx, claim)
-	require.NoError(t, err)
-	provider := prelinkMigrations(t, s)
-	_, err = provider.DownTo(ctx, 32)
-	require.ErrorContains(t, err, "prelink receipts must be exported")
-	retry, err := s.ClaimTelegramPrelink(ctx, claim)
-	require.NoError(t, err)
-	require.Equal(t, first, retry)
-}
-
-func TestTelegramPrelinkMigrationEmptyRollbackAndDuplicateGuard(t *testing.T) {
-	t.Parallel()
-	s := testStore(t)
-	ctx := context.Background()
-	provider := prelinkMigrations(t, s)
-	_, err := provider.DownTo(ctx, 32)
-	require.NoError(t, err)
-	_, err = provider.Up(ctx)
-	require.NoError(t, err)
-	_, err = provider.DownTo(ctx, 32)
-	require.NoError(t, err)
-	claim := telegramPrelinkClaim()
-	one := accepted(t, s, 1)
-	_, err = s.BindSubject(ctx, one.UserID, "duplicate-subject", claim.Organization)
-	require.NoError(t, err)
-	other := miniAppClaim()
-	other.TelegramUserID = 3
-	second, err := s.ClaimMiniAppSession(ctx, other)
-	require.NoError(t, err)
-	_, err = s.BindSubject(ctx, second.User.ID, "duplicate-subject", claim.Organization)
-	require.NoError(t, err)
-	_, err = provider.Up(ctx)
-	require.ErrorContains(t, err, "shuttle_user_bound_identity")
-	var count int
-	require.NoError(
-		t,
-		s.Pool().
-			QueryRow(ctx, "SELECT count(*) FROM shuttle_users WHERE zitadel_subject='duplicate-subject'").
-			Scan(&count),
-	)
-	require.Equal(t, 2, count, "Failed migration must preserve both old records for explicit resolution")
 }

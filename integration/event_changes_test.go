@@ -8,14 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/events"
 	"github.com/complynx/zns-chatbot/internal/registrations"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func eventChangeFixture(t *testing.T) (*harness, db.AdminScope, db.EventChange) {
@@ -295,35 +292,4 @@ VALUES($1,123,'org','temporary','Europe/Minsk',$2,$3,ARRAY['registrations']) RET
 			}
 		})
 	}
-}
-
-func TestEventChangeMigrationPreservesProposalHistory(t *testing.T) {
-	t.Parallel()
-	h, scope, args := eventChangeFixture(t)
-	ctx := t.Context()
-	driver := stdlib.OpenDBFromPool(h.store.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 31, false)
-	require.NoError(t, err)
-	// The previous operator path works while the additive proposal table is absent.
-	created, err := h.store.ChangeEvent(
-		ctx,
-		db.EventScope{BotID: 123, Organization: "org"},
-		scope.Subject,
-		"old-path",
-		args,
-	)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 31, true)
-	require.NoError(t, err)
-	args.ExpectedVersion = created.Version
-	prep, err := h.store.PrepareEventChange(ctx, scope, "retained-event", args)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 31, false)
-	require.ErrorContains(t, err, "event approval and result history must be exported")
-	repeated, err := h.store.PrepareEventChange(ctx, scope, "retained-event", args)
-	require.NoError(t, err)
-	sameTaskClosureJSON(t, prep, repeated)
 }

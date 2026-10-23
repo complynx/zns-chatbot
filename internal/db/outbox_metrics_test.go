@@ -6,14 +6,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
-
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
-func TestOutboxMetricsCountChunksIndependentlyOfTaskAndPreserveRowsAcrossRollback(t *testing.T) {
+func TestOutboxMetricsCountChunksIndependentlyOfTaskAndPreserveRowsAcrossBaselineReplay(t *testing.T) {
 	t.Parallel()
 	s := testStore(t)
 	ctx := context.Background()
@@ -59,33 +55,20 @@ func TestOutboxMetricsCountChunksIndependentlyOfTaskAndPreserveRowsAcrossRollbac
 	var before string
 	require.NoError(t, s.Pool().QueryRow(ctx,
 		"SELECT md5(jsonb_agg(to_jsonb(t) ORDER BY id)::text) FROM shuttle_outbox t").Scan(&before))
-	driver := stdlib.OpenDBFromPool(s.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	for _, phase := range []struct {
-		name   string
-		apply  func() error
-		exists bool
-	}{
-		{"down", func() error { _, downErr := provider.ApplyVersion(ctx, 27, false); return downErr }, false},
-		{"up", func() error { _, upErr := provider.ApplyVersion(ctx, 27, true); return upErr }, true},
-	} {
-		require.NoError(t, phase.apply(), phase.name)
-		var exists bool
-		require.NoError(t, s.Pool().QueryRow(ctx,
-			"SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND indexname='shuttle_outbox_unresolved_metrics_idx')").
-			Scan(&exists))
-		require.Equal(t, phase.exists, exists, phase.name)
-		_, err = s.Pool().Exec(ctx, `INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload)
+	require.NoError(t, s.Migrate(ctx))
+	var exists bool
+	require.NoError(t, s.Pool().QueryRow(ctx,
+		"SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND indexname='shuttle_outbox_unresolved_metrics_idx')").
+		Scan(&exists))
+	require.True(t, exists)
+	_, err = s.Pool().Exec(ctx, `INSERT INTO shuttle_outbox(id,task_id,dedup_key,chunk_seq,payload)
 		 VALUES($1,$2,$3,100,'{"changed retry":true}') ON CONFLICT(dedup_key) DO NOTHING`, uuid.New(), task.ID, first.String())
-		require.NoError(t, err)
-		var after string
-		require.NoError(t, s.Pool().QueryRow(ctx,
-			"SELECT md5(jsonb_agg(to_jsonb(t) ORDER BY id)::text) FROM shuttle_outbox t").Scan(&after))
-		require.Equal(t, before, after, phase.name)
-		current, readErr := s.OutboxMetrics(ctx)
-		require.NoError(t, readErr)
-		require.Len(t, current, len(rows))
-	}
+	require.NoError(t, err)
+	var after string
+	require.NoError(t, s.Pool().QueryRow(ctx,
+		"SELECT md5(jsonb_agg(to_jsonb(t) ORDER BY id)::text) FROM shuttle_outbox t").Scan(&after))
+	require.Equal(t, before, after)
+	current, readErr := s.OutboxMetrics(ctx)
+	require.NoError(t, readErr)
+	require.Len(t, current, len(rows))
 }

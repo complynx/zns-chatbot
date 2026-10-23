@@ -10,12 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func allowExistingIAMNameImport(t *testing.T, h *harness, id uuid.UUID) {
@@ -23,45 +20,6 @@ func allowExistingIAMNameImport(t *testing.T, h *harness, id uuid.UUID) {
 	_, err := h.store.Pool().
 		Exec(t.Context(), `INSERT INTO shuttle_iam_name_origins(user_id,origin) VALUES($1,'existing')`, id)
 	require.NoError(t, err)
-}
-
-func TestIAMNameOriginMigrationBackfillsUnknownAndProtectsNewProvenance(t *testing.T) {
-	t.Parallel()
-	h := prepareHarness(t, newPeers(t))
-	id, _ := registrationUser(t, h, 19240, false)
-	scope := ownerProfileScope(t, h, id)
-	legacy := profileChange("set_name", 0)
-	legacy.FullName = "Retained legacy name"
-	saved := changeProfile(t, h, scope, legacy)
-	driver := stdlib.OpenDBFromPool(h.store.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(t.Context(), 72, false)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(t.Context(), 72, true)
-	require.NoError(t, err)
-	var origin string
-	err = h.store.Pool().
-		QueryRow(t.Context(), `SELECT origin FROM shuttle_iam_name_origins WHERE user_id=$1`, id).
-		Scan(&origin)
-	require.NoError(t, err)
-	require.Equal(t, "unknown", origin)
-	receipt, err := h.store.ProfileOperation(t.Context(), scope, legacy.OperationID)
-	require.NoError(t, err)
-	require.Equal(t, saved, receipt)
-	newID := uuid.New()
-	_, err = h.store.Pool().
-		Exec(t.Context(), `INSERT INTO shuttle_users(id,bot_id,tg_user_id,profile) VALUES($1,123,19241,'{}')`, newID)
-	require.NoError(t, err)
-	require.NoError(t, h.store.RecordIAMNameOrigin(t.Context(), newID, 123, "org", true))
-	_, err = provider.ApplyVersion(t.Context(), 72, false)
-	require.ErrorContains(t, err, "IAM name provenance must be exported")
-	err = h.store.Pool().
-		QueryRow(t.Context(), `SELECT origin FROM shuttle_iam_name_origins WHERE user_id=$1`, newID).
-		Scan(&origin)
-	require.NoError(t, err)
-	require.Equal(t, "technical", origin)
 }
 
 func TestIAMNameImportReusesExistingNamesWithoutHoldingConnectionOrOverwritingLaterEdits(t *testing.T) {

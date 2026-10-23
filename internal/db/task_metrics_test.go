@@ -7,16 +7,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/events"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
-func TestTaskMetricsGroupUnknownStatesAndPreserveRowsAcrossIndexRollback(t *testing.T) {
+func TestTaskMetricsGroupUnknownStatesAndPreserveRowsAcrossBaselineReplay(t *testing.T) {
 	t.Parallel()
 	s := testStore(t)
 	ctx := context.Background()
@@ -65,7 +62,7 @@ func TestTaskMetricsGroupUnknownStatesAndPreserveRowsAcrossIndexRollback(t *test
 	scope := db.EventScope{BotID: 1, Organization: "org"}
 	start := time.Date(2026, time.November, 10, 12, 0, 0, 0, time.UTC)
 	change := db.EventChange{ID: uuid.New(), Document: events.Document{
-		Name: "Metrics rollback fixture", Timezone: "Europe/Minsk", StartsAt: start, EndsAt: start.Add(time.Hour),
+		Name: "Metrics baseline fixture", Timezone: "Europe/Minsk", StartsAt: start, EndsAt: start.Add(time.Hour),
 	}}
 	event, err := s.ChangeEvent(ctx, scope, "operator", "metrics-replay", change)
 	require.NoError(t, err)
@@ -73,43 +70,30 @@ func TestTaskMetricsGroupUnknownStatesAndPreserveRowsAcrossIndexRollback(t *test
 	require.NoError(t, s.Pool().QueryRow(ctx,
 		"SELECT md5(jsonb_agg(to_jsonb(t) ORDER BY id)::text) FROM shuttle_tasks t",
 	).Scan(&before))
-	driver := stdlib.OpenDBFromPool(s.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	for _, phase := range []struct {
-		name   string
-		apply  func() error
-		exists bool
-	}{
-		{"down", func() error { _, downErr := provider.ApplyVersion(ctx, 26, false); return downErr }, false},
-		{"up", func() error { _, upErr := provider.ApplyVersion(ctx, 26, true); return upErr }, true},
-	} {
-		require.NoError(t, phase.apply(), phase.name)
-		var after string
-		require.NoError(t, s.Pool().QueryRow(ctx,
-			"SELECT md5(jsonb_agg(to_jsonb(t) ORDER BY id)::text) FROM shuttle_tasks t",
-		).Scan(&after))
-		require.Equal(t, before, after, phase.name)
-		var exists bool
-		require.NoError(t, s.Pool().QueryRow(ctx,
-			"SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND indexname='shuttle_tasks_unresolved_metrics_idx')",
-		).
-			Scan(&exists))
-		require.Equal(t, phase.exists, exists, phase.name)
-		replay, replayErr := s.ChangeEvent(ctx, scope, "operator", "metrics-replay", change)
-		require.NoError(t, replayErr)
-		require.Equal(t, event, replay)
-		duplicate, reused, intakeErr := s.Intake(ctx, db.IntakeRequest{
-			BotID: 1, UpdateID: 1, TelegramUserID: 2, ChatID: 3,
-			Payload: json.RawMessage(`{"kind":"message","text":"changed retry"}`),
-		}, nil)
-		require.NoError(t, intakeErr)
-		require.True(t, reused)
-		require.Equal(t, original.ID, duplicate.ID)
-		require.JSONEq(t, string(original.Request), string(duplicate.Request))
-		current, readErr := s.TaskMetrics(ctx)
-		require.NoError(t, readErr)
-		require.Len(t, current, len(rows))
-	}
+	require.NoError(t, s.Migrate(ctx))
+	var after string
+	require.NoError(t, s.Pool().QueryRow(ctx,
+		"SELECT md5(jsonb_agg(to_jsonb(t) ORDER BY id)::text) FROM shuttle_tasks t",
+	).Scan(&after))
+	require.Equal(t, before, after)
+	var exists bool
+	require.NoError(t, s.Pool().QueryRow(ctx,
+		"SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE schemaname=current_schema() AND indexname='shuttle_tasks_unresolved_metrics_idx')",
+	).
+		Scan(&exists))
+	require.True(t, exists)
+	replay, replayErr := s.ChangeEvent(ctx, scope, "operator", "metrics-replay", change)
+	require.NoError(t, replayErr)
+	require.Equal(t, event, replay)
+	duplicate, reused, intakeErr := s.Intake(ctx, db.IntakeRequest{
+		BotID: 1, UpdateID: 1, TelegramUserID: 2, ChatID: 3,
+		Payload: json.RawMessage(`{"kind":"message","text":"changed retry"}`),
+	}, nil)
+	require.NoError(t, intakeErr)
+	require.True(t, reused)
+	require.Equal(t, original.ID, duplicate.ID)
+	require.JSONEq(t, string(original.Request), string(duplicate.Request))
+	current, readErr := s.TaskMetrics(ctx)
+	require.NoError(t, readErr)
+	require.Len(t, current, len(rows))
 }

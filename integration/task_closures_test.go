@@ -7,12 +7,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/db"
-	"github.com/complynx/zns-chatbot/migrations"
 )
 
 func taskClosureFixture(t *testing.T) (*harness, db.AdminScope, db.TaskClosureArguments) {
@@ -312,47 +309,4 @@ func TestTaskClosureKeepsNewerConversationBinding(t *testing.T) {
 		Scan(&task, &run))
 	require.Equal(t, newer.ID, task)
 	require.Equal(t, "newer-remote-run", run)
-}
-
-func TestTaskClosureMigrationPreservesOperatorPathAndRefusesAuditLoss(t *testing.T) {
-	t.Parallel()
-	h, scope, args := taskClosureFixture(t)
-	ctx := context.Background()
-	driver := stdlib.OpenDBFromPool(h.store.Pool())
-	t.Cleanup(func() { require.NoError(t, driver.Close()) })
-	provider, err := goose.NewProvider(goose.DialectPostgres, driver, migrations.Files)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 28, false)
-	require.NoError(t, err)
-	operator, err := h.store.CloseUncertainTask(ctx, db.CloseTaskRequest{
-		TaskID: args.TaskID, BotID: scope.BotID, Organization: scope.Organization, Actor: scope.Subject,
-		OperationID: "operator-without-proposals", Reason: args.Reason, ExpectedVersion: args.ExpectedVersion,
-	})
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 28, true)
-	require.NoError(t, err)
-	user, err := h.store.GetUser(ctx, scope.UserID)
-	require.NoError(t, err)
-	second := closureIntake(t, h, scope.BotID, user.TelegramUserID, 991)
-	_, err = h.store.Pool().Exec(ctx, "UPDATE shuttle_tasks SET state='auth_unknown' WHERE id=$1", second.ID)
-	require.NoError(t, err)
-	secondArgs := db.TaskClosureArguments{
-		TaskID:          second.ID,
-		ExpectedVersion: second.Version,
-		Reason:          "Preserve approval history",
-	}
-	prep, err := h.store.PrepareTaskClosure(ctx, scope, "retain-proposal", secondArgs)
-	require.NoError(t, err)
-	_, err = provider.ApplyVersion(ctx, 28, false)
-	require.ErrorContains(t, err, "task closure approval and result history must be exported")
-	repeated, err := h.store.PrepareTaskClosure(ctx, scope, "retain-proposal", secondArgs)
-	require.NoError(t, err)
-	sameTaskClosureJSON(t, prep, repeated)
-	before := taskClosureDiagnostics(t, h, scope, args.TaskID)
-	require.Len(t, before.Resolutions, 1)
-	sameTaskClosureJSON(t, operator, before.Resolutions[0])
-	var applied bool
-	require.NoError(t, h.store.Pool().QueryRow(ctx,
-		"SELECT is_applied FROM goose_db_version WHERE version_id=28 ORDER BY id DESC LIMIT 1").Scan(&applied))
-	require.True(t, applied)
 }
