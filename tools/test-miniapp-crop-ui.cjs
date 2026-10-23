@@ -16,7 +16,7 @@ function browser({ storage = new Map(), hook, width = 400, height = 800, transfo
   const elements = new Map(), calls = [], draws = [], listeners = {}, button = {};
   let viewWidth = width, viewHeight = height;
   let state = { id: draftID, version: 1, transform, source_sha256: hash("photo"), frame_sha256: hash("frame") };
-  let active, mainEnabled = false, closed = 0, controller, canvasResized;
+  let active, mainEnabled = false, mainVisible = false, backVisible = false, closed = 0, controller, canvasResized;
   const ctx = { clearRect() {}, beginPath() {}, rect() {}, clip() {}, fillRect() {}, save() {}, restore() {}, translate() {},
     transform(...args) { draws.push({ kind: "matrix", args }); }, drawImage(image, ...args) { draws.push({ kind: image.kind, args }); } };
   function element(id) {
@@ -25,8 +25,8 @@ function browser({ storage = new Map(), hook, width = 400, height = 800, transfo
       addEventListener(name, fn) { this.listeners[name] = fn; } };
   }
   const get = id => { if (!elements.has(id)) elements.set(id, element(id)); return elements.get(id); };
-  const mainButton = { setText(value) { button.text = value; }, enable() { mainEnabled = true; }, disable() { mainEnabled = false; }, show() {}, hide() {}, onClick(fn) { button.click = fn; } };
-  const window = { devicePixelRatio: 2, Telegram: { WebApp: { MainButton: mainButton, BackButton: { show() {}, hide() {}, onClick() {} }, expand() {}, close() { closed++; } } },
+  const mainButton = { setText(value) { button.text = value; }, enable() { mainEnabled = true; }, disable() { mainEnabled = false; }, show() { mainVisible = true; }, hide() { mainVisible = false; }, onClick(fn) { button.click = fn; }, offClick(fn) { if (button.click === fn) button.click = undefined; } };
+  const window = { devicePixelRatio: 2, Telegram: { WebApp: { MainButton: mainButton, BackButton: { show() { backVisible = true; }, hide() { backVisible = false; }, onClick() {} }, expand() {}, close() { closed++; } } },
     addEventListener(name, fn) { listeners[name] = fn; } };
   const context = { window, document: { getElementById: get, body: { classList: { add() { active = true; }, remove() { active = false; } } } },
     sessionStorage: { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) },
@@ -49,7 +49,7 @@ function browser({ storage = new Map(), hook, width = 400, height = 800, transfo
     async readBlob(path) { calls.push({ path, method: "BLOB" }); if (path.endsWith("/original")) return photo; if (path.includes("/frame/")) return frame; if (path.includes("/preview/")) return new Blob(["preview"]); throw new Error(path); }
   });
   const event = (target, type, props = {}) => (target === "window" ? listeners : get(target).listeners)[type]({ preventDefault() {}, ...props });
-  return { calls, draws, storage, get, controller, button, enabled: () => mainEnabled, active: () => active, closed: () => closed,
+  return { calls, draws, storage, get, controller, button, enabled: () => mainEnabled, visible: () => mainVisible && backVisible, active: () => active, closed: () => closed,
     start: () => controller.start(owner, "en"), event,
     resize(w, h) { viewWidth = w; viewHeight = h; canvasResized(); },
     finish: () => button.click(), posts: () => calls.filter(c => c.method === "POST" && !c.path.endsWith("/open")) };
@@ -64,6 +64,15 @@ test("crop opens exact authenticated source, records the actual open and preserv
   assert.ok(ui.draws.some(d => d.kind === "photo" && d.args[0] === -600 && d.args[1] === -400));
   const matrix = ui.draws.find(d => d.kind === "matrix").args;
   assert.equal(matrix[0], 1); assert.equal(matrix[3], 1); // 800 device pixels / 800 oriented photo height.
+});
+
+test("native Finish and Back remain visible through parent loading and busy updates", async () => {
+  const ui = browser(); ui.controller.setBusy(true); await ui.start();
+  assert.equal(ui.visible(), true); assert.equal(ui.enabled(), false);
+  ui.controller.setBusy(false);
+  assert.equal(ui.visible(), true); assert.equal(ui.enabled(), true); assert.equal(ui.button.text, "Finish");
+  ui.controller.clear(); assert.equal(ui.visible(), false); assert.equal(ui.button.click, undefined);
+  await ui.start(); assert.equal(ui.visible(), true); assert.equal(ui.enabled(), true);
 });
 
 test("uncertain crop-open audit retries the same passive operation and never generates", async () => {
@@ -90,6 +99,7 @@ test("one-finger drag maps screen pixels to frame-relative translation, then use
   const finalize = ui.calls.findIndex(c => c.path.endsWith("/finalize"));
   assert.ok(preview > 0 && preview < finalize);
   assert.equal(ui.storage.size, 0); assert.match(ui.get("crop-status").textContent, /queued/);
+  assert.equal(ui.closed(), 1);
 });
 
 test("two-finger pinch and quarter-turn retain the gesture center and persist the corresponding crop", async () => {
@@ -132,11 +142,14 @@ test("Shift mouse drag rotates around frame center without changing cover scale"
 });
 
 test("automatic original document is not generated again until the crop changes", async () => {
-  const ui = browser({ hook(path, method, body, base) {
+  const options = { hook(path, method, body, base) {
     if (path === "./avatars/finalized") return { avatars: [{ avatar: { draft_id: draftID, draft_version: 1 } }] };
     return base(path, method, body);
-  } });
-  await ui.start(); await ui.finish(); assert.equal(ui.posts().length, 0); assert.equal(ui.enabled(), false);
+  } };
+  const unchanged = browser(options); await unchanged.start();
+  assert.equal(unchanged.enabled(), true); await unchanged.finish();
+  assert.equal(unchanged.posts().length, 0); assert.equal(unchanged.closed(), 1);
+  const ui = browser(options); await ui.start();
   ui.event("crop-canvas", "mousedown", { clientX: 100, clientY: 400 });
   ui.event("window", "mousemove", { clientX: 140, clientY: 400 });
   assert.equal(ui.enabled(), true); await ui.finish(); assert.equal(ui.posts().length, 2);
@@ -149,9 +162,11 @@ test("a lost finalization response retains its original operation and recovers w
     return base(path, method, body);
   } });
   await first.start(); await first.finish();
+  assert.equal(first.closed(), 0);
   assert.equal(JSON.parse(storage.get("zinusya-avatar-pending-v1:" + owner)).operation_id, originalOperation);
   const reopened = browser({ storage, hook(path, method, body, base) { if (path.endsWith("/operations/" + originalOperation)) return receipt; return base(path, method, body); } });
   await reopened.start(); assert.equal(reopened.posts().length, 0); assert.equal(storage.size, 0); assert.equal(reopened.enabled(), false);
+  assert.equal(reopened.closed(), 1);
 });
 
 test("uncertain save is recovered on reload without automatically generating a document", async () => {

@@ -29,8 +29,10 @@ window.createZinusyaAvatarCrop = function (env) {
   }
   const editable = () => !!owner && !!original && !!frame && !!draft && !pending && !openPending && !blocked && !conflict && !working && !locked && !completed;
   function controls() {
-    const enabled = editable() && (!generated || changed()); el["crop-finish"].disabled = !enabled;
+    const enabled = editable(); el["crop-finish"].disabled = !enabled;
     if (enabled) app?.MainButton?.enable(); else app?.MainButton?.disable();
+    // As in the original cropper, keep native actions visible after loading and busy updates.
+    if (owner) { app?.MainButton?.show(); app?.BackButton?.show(); }
     el["crop-recover"].hidden = !pending && !openPending;
     el["crop-retry"].hidden = !pending;
     el["crop-recover"].disabled = working || locked || blocked;
@@ -39,7 +41,7 @@ window.createZinusyaAvatarCrop = function (env) {
   function clear() {
     epoch++; original?.close(); frame?.close(); original = frame = draft = owner = pending = openPending = mouse = touches = undefined;
     completed = blocked = conflict = working = generated = false;
-    el["avatar-crop"].hidden = true; document.body.classList.remove("avatar-crop-active", "avatar-crop-telegram");
+    el["avatar-crop"].hidden = true; document.body.classList.remove("avatar-crop-active");
     app?.MainButton?.offClick?.(finishClick); app?.BackButton?.offClick?.(back);
     app?.MainButton?.hide(); app?.BackButton?.hide(); ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
@@ -190,7 +192,7 @@ window.createZinusyaAvatarCrop = function (env) {
     const p = pending;
     if (p.kind === "finalize") {
       if (!uuid(result?.artifact_id) || !uuid(result.delivery_id) || result.draft_id !== p.draft_id || result.draft_version !== p.body.expected_version) throw { local: "invalid" };
-      forget(); completed = true; status("queued"); return;
+      forget(); completed = true; status("queued"); app?.close?.(); return;
     }
     if (!validDraft(result) || (p.kind === "save" && (result.id !== p.draft_id || result.version !== p.body.expected_version + 1))) throw { local: "invalid" };
     forget(); await load(e, result.id);
@@ -212,7 +214,7 @@ window.createZinusyaAvatarCrop = function (env) {
   async function finish(e) {
     if (!original || !draft || pending || openPending || conflict || completed) return;
     const transform = toTransform(); if (!validTransform(transform)) throw { local: "invalid" };
-    if (!changed() && generated) return;
+    if (!changed() && generated) { completed = true; app?.close?.(); return; }
     if (changed()) {
       status("saving"); const body = { operation_id: crypto.randomUUID(), expected_version: draft.version, transform };
       remember({ owner, kind: "save", operation_id: body.operation_id, draft_id: draft.id, body }); await dispatch(e);
@@ -232,7 +234,7 @@ window.createZinusyaAvatarCrop = function (env) {
     async start(id, language) {
       clear(); if (!uuid(id)) return; owner = id; locale = language === "ru" ? "ru" : "en"; labels(); status("loading");
       el["avatar-crop"].hidden = false; document.body.classList.add("avatar-crop-active");
-      if (app?.MainButton) { document.body.classList.add("avatar-crop-telegram"); app.MainButton.onClick(finishClick); app.MainButton.show(); app.BackButton?.onClick(back); app.BackButton?.show(); app.expand?.(); }
+      if (app?.MainButton) { app.MainButton.onClick(finishClick); app.BackButton?.onClick(back); app.ready?.(); app.expand?.(); }
       const e = epoch;
       try {
         const raw = sessionStorage.getItem(key());
