@@ -2,7 +2,7 @@ from asyncio import gather
 from datetime import datetime, timedelta
 from html import escape
 import logging
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 from motor.core import AgnosticCollection
 from tornado.template import Template
@@ -260,7 +260,7 @@ class Superuser(BasePlugin):
     async def user_informal_name(self, user: dict) -> str:
         if "informal_name" in user:
             return user["informal_name"]
-        chat: ChatGoogleGenerativeAI = self.base_app.assistant.chat
+        chat: ChatOpenAI = self.base_app.assistant.chat
         names_found = {}
         for key in user.keys():
             if "name" in key and key != "bot_username":
