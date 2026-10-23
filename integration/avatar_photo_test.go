@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/complynx/zns-chatbot/internal/avatar"
-	"github.com/complynx/zns-chatbot/internal/avatar/renderer"
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/telegram"
 )
@@ -239,11 +238,12 @@ func TestNativePhotoTransientSourceReadRetriesSameWorkflow(t *testing.T) {
 	p.loomDown = true
 	p.fileBytes = avatarDraftPhoto(t, false)
 	p.fileErrorCode = http.StatusServiceUnavailable
+	processor := avatarExecutable(t)
 	var renders atomic.Int32
 	p.avatarProcessor = avatarProcessorFunc(
 		func(ctx context.Context, raw []byte, transform avatar.Transform) (avatar.Rendered, error) {
 			renders.Add(1)
-			return renderer.Render(ctx, raw, transform)
+			return processor.Render(ctx, raw, transform)
 		},
 	)
 	h := setup(t, p)
