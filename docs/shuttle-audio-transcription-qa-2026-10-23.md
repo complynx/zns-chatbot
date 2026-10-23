@@ -5,6 +5,29 @@ Loom native tools, isolated file worker and a local TLS transcription peer.
 This accepts the consumer contract. The transcription text is a deterministic
 fixture response, not a measurement of speech recognition or model judgment.
 
+## Additional real-provider probe
+
+After this synthetic consumer proof, Daniel selected one local Opus recording
+and explicitly authorized its transmission to OpenAI. Exactly one POST to
+`https://api.openai.com/v1/audio/transcriptions`, model `gpt-transcribe`, returned
+HTTP200. The unchanged native Loom transcription adapter accepted both the text
+and the provider's duration-based usage receipt. Source audio was9.1265 seconds;
+the provider reported10 seconds. This is a provider usage unit, not a measured
+price or an exercised Shuttle credit tariff.
+
+The selected recording was normalized offline to mono16kHz PCM WAV using the
+accepted worker image `856d5968`, with networking disabled. Source and WAV hashes,
+raw provider receipt and transcript remain private. The transcript was shown to
+Daniel. An exclusive fsynced admission record preceded network dispatch; the
+single-request allowance is exhausted and no retry occurred. The initial tool
+approval rejection happened before process execution, consumed no request, and
+remains preserved alongside the later explicit consent and completed receipt.
+
+This proves real-provider compatibility through the exact native adapter on one
+recording. It is separate from the synthetic full consumer path below and does
+not claim an additional full Telegram-to-provider run or broad speech accuracy.
+Real Telegram ingress/login and human acceptance remain pending.
+
 ## Exact versions and path
 
 - Shuttle source `035f2a6b0356effff75f3dfce0c776d7551c706a`, local image
@@ -72,7 +95,7 @@ volumes and networks for both project and owner selectors. Host evidence and
 original failure receipts remain protected. Full decode is not a restored-DB
 exercise.
 
-This adds no real Telegram, paid ASR quality, real-model dialogue or production
+The synthetic consumer proof adds no real Telegram, paid ASR quality, real-model dialogue or production
 acceptance. Existing file authorization/refetch, worker limits and completed
 [model voice](shuttle-persona-model-qa-2026-10-23.md) and
 [local pilot](shuttle-local-pilot-qa-2026-10-23.md) evidence retain their exact

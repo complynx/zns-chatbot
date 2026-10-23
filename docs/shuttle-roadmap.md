@@ -1,5 +1,29 @@
 # Current roadmap checkpoint, 2026-10-23
 
+## Direct production plan and human acceptance
+
+Daniel cancelled the server pilot. The next route is a local real testbot,
+human login/audio acceptance and Daniel's bounded real-API walkthrough, followed
+by a separately authorized direct production cutover. The
+[deployment plan](shuttle-production-deployment-plan.md) and
+[permissions matrix](shuttle-permissions-matrix.md) describe that route; the new
+local human testbot has not yet been started. Merge, image publication and
+production changes remain unauthorized.
+
+One separately authorized real ASR request returned HTTP200. The unchanged native
+Loom adapter accepted the selected recording's transcript and duration receipt;
+the one-call allowance is exhausted, without retries. This adds provider adapter
+evidence to the existing synthetic full consumer proof, not a real Telegram run.
+See [audio QA](shuttle-audio-transcription-qa-2026-10-23.md).
+
+Six additional real `gpt-6-luna/low` language probes also pass: Portuguese with
+Russian/English prompt locale and after synthetic Russian/English history,
+Belarusian and Ukrainian with Russian locale. Full native instructions/tools
+were retained. Cold probes use a named profile with no history; new-user
+onboarding and Telegram are separate. The new six-call ledger is exhausted and
+held; the original campaign remains49/51 HELD. No tools or business writes were
+executed. Exact answers and limits: [language QA](shuttle-language-model-qa-2026-10-23.md).
+
 ## File-source and audio consumer delta
 
 A requirement-to-evidence audit found two remaining local file/tool gaps after
