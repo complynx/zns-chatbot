@@ -29,8 +29,8 @@ now uses this same inspection/adoption contract in source, with
 its independent meals entitlement and original meal composition/payment deadline.
 The focused native preparation → agent submission → reopen/replay regression and
 existing service-order inspection guards pass against isolated PostgreSQL.
-The affected meal HTTP/submission/MiniApp tests also pass. Actual-Loom runtime
-acceptance of this meal extension remains pending.
+The affected meal HTTP/submission/MiniApp tests also pass. The exact-image
+actual-Loom acceptance below covers this meal extension.
 Cancellation remains an unsupported adoption method; ordinary tools/forms remain
 available. Existing meal receipts without an authenticated contract remain
 unsupported and are not retrofitted on replay.
@@ -181,6 +181,30 @@ remains in `resume-attempt.json`; the completed proof is
 `.cache/shuttle-work/orders-adoption-runtime-20261022-r2/forward/checkpoint.json`
 with phase `forward_graceful_gate_passed`. Do not replay either driver: its
 completed order remains in the stopped fixture.
+
+## Meal original-operation acceptance
+
+Source `dd06c40dff6315f1779ba0aba1a512db25a18d6d`, local Linux candidate
+`sha256:a2fae485515db9f5cecccaf6f29708093f3256cb95fcd8998890af45551638fd`,
+passes one fresh controlled-provider gate with actual IAM4.20 and Loom
+`ba1f4a11` / API `cbba225f` / file worker `856d5968`. The event enables meals
+while service orders remain disabled. MiniApp prepares operation N; an actual
+Loom `module_call` adopts N with a distinct Loom operation L. Original arguments,
+identity binding, proposal, description and expiry remain unchanged. Inspection
+creates no order. Mock Telegram receives the full frozen meal composition,
+prices, total and event-local deadlines before fresh plain-text consent. The
+actual `interaction_resolve` then submits N once; native replay returns the same
+receipt with one order, no payment evidence and no capacity allocation.
+
+This proves controlled-provider orchestration, not autonomous model behavior,
+real Telegram/WebView interaction or production installation. No paid generation
+was made; the prior campaign remains HELD21/21 with unchanged control/ledger
+hashes. The first preflight refused a missing pinned worker image before creating
+resources; it is retained separately. The exact published worker was then
+downloaded and its revision verified. After acceptance, all three synthetic
+databases passed full archive decode, the original checkpoint stayed unchanged,
+and only the new owned fixture was removed. Aggregate receipt:
+`.cache/shuttle-work/parallel-acceptance-20261022/meal-adoption-runtime/acceptance.json`.
 
 Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
 on behalf of Daniel Drizhuk
