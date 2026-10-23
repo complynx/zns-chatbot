@@ -35,7 +35,7 @@ func (s *miniAppOrderWrites) miniAppOrderResult(ctx context.Context, w http.Resp
 }
 
 func (s *Server) registerMiniAppMealSubmission() {
-	writes := miniAppOrderWrites{Server: s, prepare: s.store.PrepareMiniAppMealOrderSubmission,
+	writes := miniAppOrderWrites{Server: s, prepare: s.prepareMiniAppMealWithContract,
 		submit: s.store.SubmitMiniAppMealOrder, cancel: s.store.CancelMiniAppMealOrder, failure: s.miniAppMealsError}
 	writes.register("/app/meals/{event}/")
 	s.public.HandleFunc("GET /app/meals/{event}/submitted", s.miniAppSubmittedMeals)

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/complynx/zns-chatbot/internal/api"
 	"github.com/complynx/zns-chatbot/internal/db"
 	"github.com/complynx/zns-chatbot/internal/identity"
 )
@@ -272,8 +273,29 @@ func TestAgentUserRevocationLostPreparationCommitKeepsOriginalProposal(t *testin
 	require.NoError(t, err)
 	t.Cleanup(store.Close)
 	h.store = store
-	h.start(t)
-	h.stop(t)
+	// Only this synchronous API may transact through the armed proxy. Queue
+	// startup/shutdown commits do not belong to the preparation fault window.
+	h.iam, err = identity.New(identity.Options{
+		Issuer:                         h.peers.iam.URL,
+		OrganizationID:                 "org",
+		BotID:                          123,
+		LoomAudience:                   "loom",
+		APIAudience:                    "api",
+		ActorID:                        "actor",
+		ActorClientCredentials:         identity.ClientCredentials{ID: "actor-client", Secret: "secret"},
+		ExchangeClientCredentials:      identity.ClientCredentials{ID: "exchange", Secret: "secret"},
+		IntrospectionClientCredentials: identity.ClientCredentials{ID: "intro", Secret: "secret"},
+	}, h.peers.iam.Client())
+	require.NoError(t, err)
+	h.endpoint, err = api.New(h.store, h.iam, bindingHTTPNoIntake{t}, api.Options{
+		BotID:          123,
+		WebhookSecret:  "test-secret",
+		OrganizationID: "org",
+		ActorID:        "actor",
+		Issuer:         h.peers.iam.URL,
+		LoomAudience:   "loom",
+	})
+	require.NoError(t, err)
 	operator := settingsAdminToken(h, scope)
 	proxy.armed.Store(true)
 	code, raw := adminRequest(

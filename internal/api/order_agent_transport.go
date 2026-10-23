@@ -41,7 +41,7 @@ func (s *Server) registerOrderSubmission(api huma.API) {
 func (s *Server) registerMealSubmission(api huma.API) {
 	h := orderAgentAPI{Server: s, mapError: mealError, describe: mealOrderSubmissionDescription,
 		actions: orderAgentActions{
-			prepare: s.store.PrepareOwnMealOrderSubmission, submit: s.store.SubmitOwnMealOrder,
+			prepare: s.prepareOwnMealWithContract, submit: s.store.SubmitOwnMealOrder,
 			cancel: s.store.CancelOwnMealOrder, get: s.store.OwnMealOrder, list: s.store.ListOwnMealOrders,
 			operation: s.store.OwnMealOrderOperationByID,
 		}}

@@ -18,11 +18,28 @@ func (s *Store) miniAppMealOrderTx(ctx context.Context, deployment EventScope,
 func (s *Store) PrepareMiniAppMealOrderSubmission(ctx context.Context, deployment EventScope,
 	session MiniAppOrderSession, operation uuid.UUID, args OrderSubmission,
 ) (OrderPreparation, error) {
+	return s.prepareMiniAppMealOrderSubmission(ctx, deployment, session, operation, args, nil, nil)
+}
+
+// PrepareMiniAppMealOrderSubmissionWithContract records the original binding
+// after session validation in the same transaction as the immutable receipt.
+func (s *Store) PrepareMiniAppMealOrderSubmissionWithContract(ctx context.Context, deployment EventScope,
+	session MiniAppOrderSession, operation uuid.UUID, args OrderSubmission, contract OrderPreparationContract,
+	describe func(OrderPreparation) (string, error),
+) (OrderPreparation, error) {
+	return s.prepareMiniAppMealOrderSubmission(ctx, deployment, session, operation, args, &contract, describe)
+}
+
+func (s *Store) prepareMiniAppMealOrderSubmission(ctx context.Context, deployment EventScope,
+	session MiniAppOrderSession, operation uuid.UUID, args OrderSubmission, contract *OrderPreparationContract,
+	describe func(OrderPreparation) (string, error),
+) (OrderPreparation, error) {
 	call, err := orderPrepareCall(operation, args, OrderSourceMiniApp)
 	if err != nil {
 		return OrderPreparation{}, err
 	}
 	call.orderKind = OrderKindMeal
+	call.contract, call.describe = contract, describe
 	tx, scope, err := s.miniAppMealOrderTx(ctx, deployment, session, args.EventID, operation)
 	if err != nil {
 		return OrderPreparation{}, err

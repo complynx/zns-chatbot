@@ -22,11 +22,27 @@ func (s *Server) orderContract() db.OrderPreparationContract {
 func (s *Server) prepareOwnOrderWithContract(ctx context.Context, scope db.ProfileScope,
 	operation uuid.UUID, args db.OrderSubmission, source db.OrderSource,
 ) (db.OrderPreparation, error) {
+	return s.prepareOwnOrderWithContractForKind(ctx, scope, operation, args, source, db.OrderKindService)
+}
+
+func (s *Server) prepareOwnMealWithContract(ctx context.Context, scope db.ProfileScope,
+	operation uuid.UUID, args db.OrderSubmission, source db.OrderSource,
+) (db.OrderPreparation, error) {
+	return s.prepareOwnOrderWithContractForKind(ctx, scope, operation, args, source, db.OrderKindMeal)
+}
+
+func (s *Server) prepareOwnOrderWithContractForKind(ctx context.Context, scope db.ProfileScope,
+	operation uuid.UUID, args db.OrderSubmission, source db.OrderSource, kind db.OrderKind,
+) (db.OrderPreparation, error) {
 	language, err := s.orderPresentationLanguage(ctx, scope)
 	if err != nil {
 		return db.OrderPreparation{}, err
 	}
-	return s.store.PrepareOwnOrderSubmissionWithContract(
+	prepare, describe := s.store.PrepareOwnOrderSubmissionWithContract, orderSubmissionDescription
+	if kind == db.OrderKindMeal {
+		prepare, describe = s.store.PrepareOwnMealOrderSubmissionWithContract, mealOrderSubmissionDescription
+	}
+	return prepare(
 		ctx,
 		scope,
 		operation,
@@ -34,13 +50,25 @@ func (s *Server) prepareOwnOrderWithContract(ctx context.Context, scope db.Profi
 		source,
 		s.orderContract(),
 		func(p db.OrderPreparation) (string, error) {
-			return orderSubmissionDescription(p, language)
+			return describe(p, language)
 		},
 	)
 }
 
 func (s *Server) prepareMiniAppOrderWithContract(ctx context.Context, deployment db.EventScope,
 	session db.MiniAppOrderSession, operation uuid.UUID, args db.OrderSubmission,
+) (db.OrderPreparation, error) {
+	return s.prepareMiniAppOrderWithContractForKind(ctx, deployment, session, operation, args, db.OrderKindService)
+}
+
+func (s *Server) prepareMiniAppMealWithContract(ctx context.Context, deployment db.EventScope,
+	session db.MiniAppOrderSession, operation uuid.UUID, args db.OrderSubmission,
+) (db.OrderPreparation, error) {
+	return s.prepareMiniAppOrderWithContractForKind(ctx, deployment, session, operation, args, db.OrderKindMeal)
+}
+
+func (s *Server) prepareMiniAppOrderWithContractForKind(ctx context.Context, deployment db.EventScope,
+	session db.MiniAppOrderSession, operation uuid.UUID, args db.OrderSubmission, kind db.OrderKind,
 ) (db.OrderPreparation, error) {
 	// Resolve presentation only; the write transaction revalidates the session and
 	// derives its original identity binding from that transaction's current scope.
@@ -52,7 +80,11 @@ func (s *Server) prepareMiniAppOrderWithContract(ctx context.Context, deployment
 	if err != nil {
 		return db.OrderPreparation{}, err
 	}
-	return s.store.PrepareMiniAppOrderSubmissionWithContract(
+	prepare, describe := s.store.PrepareMiniAppOrderSubmissionWithContract, orderSubmissionDescription
+	if kind == db.OrderKindMeal {
+		prepare, describe = s.store.PrepareMiniAppMealOrderSubmissionWithContract, mealOrderSubmissionDescription
+	}
+	return prepare(
 		ctx,
 		deployment,
 		session,
@@ -60,7 +92,7 @@ func (s *Server) prepareMiniAppOrderWithContract(ctx context.Context, deployment
 		args,
 		s.orderContract(),
 		func(p db.OrderPreparation) (string, error) {
-			return orderSubmissionDescription(p, language)
+			return describe(p, language)
 		},
 	)
 }
@@ -81,9 +113,13 @@ func (s *Server) inspectOrderOperation(ctx context.Context, in *operationInspect
 		Subject:      scope.Subject,
 		UserID:       scope.UserID,
 	}
-	original, err := s.store.InspectOrderSubmissionOperation(ctx, owner, operation, s.orderContract())
+	inspect, mapError := s.store.InspectOrderSubmissionOperation, ordersCatalogError
+	if in.Body.Module == mealModuleID {
+		inspect, mapError = s.store.InspectMealOrderSubmissionOperation, mealError
+	}
+	original, err := inspect(ctx, owner, operation, s.orderContract())
 	if err != nil {
-		return nil, ordersCatalogError(err)
+		return nil, mapError(err)
 	}
 	out := &operationInspectionResponse{}
 	out.Body.ProtocolVersion = 1

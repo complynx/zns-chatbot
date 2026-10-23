@@ -2,6 +2,8 @@ package api
 
 import "github.com/complynx/zns-chatbot/internal/orders"
 
+const mealModuleID = "zinusya_meals"
+
 const mealSchemaCleared = "cleared"
 
 const mealSchemaCatalogVersion = "catalog_version"
@@ -56,7 +58,7 @@ func mealsModule() map[string]any {
 	)
 	operation[manifestPath] = mealDraftPath + "draft_operation"
 	return map[string]any{
-		"id":                "zinusya_meals",
+		"id":                mealModuleID,
 		manifestDescription: "Meal catalogs, durable drafts, exact order submission and original receipts",
 		manifestPermissions: []string{},
 		manifestDiscovery:   discoveryStatic,

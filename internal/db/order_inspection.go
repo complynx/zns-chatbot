@@ -48,7 +48,8 @@ func contractedOrderPreparation(scope ProfileScope, call orderCall, p OrderPrepa
 		return p, p, nil
 	}
 	c := *call.contract
-	if call.businessKind() != OrderKindService || c.Issuer == "" || c.Actor == "" || c.Revision == "" ||
+	if (call.businessKind() != OrderKindService && call.businessKind() != OrderKindMeal) ||
+		c.Issuer == "" || c.Actor == "" || c.Revision == "" ||
 		call.describe == nil {
 		return p, nil, ErrConflict
 	}
@@ -74,17 +75,35 @@ func contractedOrderPreparation(scope ProfileScope, call orderCall, p OrderPrepa
 func (s *Store) InspectOrderSubmissionOperation(ctx context.Context, scope ProfileScope,
 	operation uuid.UUID, contract OrderPreparationContract,
 ) (OrderInspection, error) {
+	return s.inspectOrderSubmissionOperation(ctx, scope, operation, contract, OrderKindService)
+}
+
+// InspectMealOrderSubmissionOperation uses meals entitlement and rejects service
+// order receipts even though both kinds share the operation namespace.
+func (s *Store) InspectMealOrderSubmissionOperation(ctx context.Context, scope ProfileScope,
+	operation uuid.UUID, contract OrderPreparationContract,
+) (OrderInspection, error) {
+	return s.inspectOrderSubmissionOperation(ctx, scope, operation, contract, OrderKindMeal)
+}
+
+func (s *Store) inspectOrderSubmissionOperation(ctx context.Context, scope ProfileScope,
+	operation uuid.UUID, contract OrderPreparationContract, kind OrderKind,
+) (OrderInspection, error) {
 	var out OrderInspection
 	if operation == uuid.Nil || contract.Issuer == "" || contract.Actor == "" || contract.Revision == "" {
 		return out, ErrConflict
 	}
 	// The existing read resolves the event with owner checks and releases its
 	// connection before the normal operation -> event -> owner write lock order.
-	hint, err := s.OwnOrderOperationByID(ctx, scope, operation, OrderPrepare)
+	readOperation, begin := s.OwnOrderOperationByID, s.orderTx
+	if kind == OrderKindMeal {
+		readOperation, begin = s.OwnMealOrderOperationByID, s.mealOrderTx
+	}
+	hint, err := readOperation(ctx, scope, operation, OrderPrepare)
 	if err != nil {
 		return out, err
 	}
-	tx, err := s.orderTx(ctx, scope, hint.EventID, operation)
+	tx, err := begin(ctx, scope, hint.EventID, operation)
 	if err != nil {
 		return out, err
 	}
@@ -97,7 +116,7 @@ func (s *Store) InspectOrderSubmissionOperation(ctx context.Context, scope Profi
 	var prepared, submitted *sqlc.ShuttleOrderOperation
 	for i := range rows {
 		row := &rows[i]
-		if row.OrderKind != string(OrderKindService) || row.EventID != hint.EventID {
+		if row.OrderKind != string(kind) || row.EventID != hint.EventID {
 			return out, ErrConflict
 		}
 		switch OrderOperationKind(row.Kind) {

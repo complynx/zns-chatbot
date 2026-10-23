@@ -26,11 +26,28 @@ func (s *Store) mealOrderTx(ctx context.Context, scope ProfileScope, event, oper
 func (s *Store) PrepareOwnMealOrderSubmission(ctx context.Context, scope ProfileScope,
 	operation uuid.UUID, args OrderSubmission, source OrderSource,
 ) (OrderPreparation, error) {
+	return s.prepareOwnMealOrderSubmission(ctx, scope, operation, args, source, nil, nil)
+}
+
+// PrepareOwnMealOrderSubmissionWithContract retains authenticated original terms
+// for cross-interface adoption. The formatter must not use database/network IO.
+func (s *Store) PrepareOwnMealOrderSubmissionWithContract(ctx context.Context, scope ProfileScope,
+	operation uuid.UUID, args OrderSubmission, source OrderSource, contract OrderPreparationContract,
+	describe func(OrderPreparation) (string, error),
+) (OrderPreparation, error) {
+	return s.prepareOwnMealOrderSubmission(ctx, scope, operation, args, source, &contract, describe)
+}
+
+func (s *Store) prepareOwnMealOrderSubmission(ctx context.Context, scope ProfileScope,
+	operation uuid.UUID, args OrderSubmission, source OrderSource, contract *OrderPreparationContract,
+	describe func(OrderPreparation) (string, error),
+) (OrderPreparation, error) {
 	call, err := orderPrepareCall(operation, args, source)
 	if err != nil {
 		return OrderPreparation{}, err
 	}
 	call.orderKind = OrderKindMeal
+	call.contract, call.describe = contract, describe
 	tx, err := s.mealOrderTx(ctx, scope, args.EventID, operation)
 	if err != nil {
 		return OrderPreparation{}, err

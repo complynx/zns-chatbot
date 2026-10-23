@@ -24,9 +24,16 @@ operation creates no order and grants no consent.
 The agent continues a supported submission with `module_call`, setting
 `resume_operation_id` to that UUID and `arguments` to `{}`. Loom obtains the
 recorded terms and requests fresh approval. The application still checks current
-owner and event/module access before inspection and execution. Meal orders and
-cancellation are outside this extension and remain explicit unsupported adoption
-methods; their existing ordinary tools and forms remain available.
+owner and event/module access before inspection and execution. Meal submission
+now uses this same inspection/adoption contract in source, with
+its independent meals entitlement and original meal composition/payment deadline.
+The focused native preparation → agent submission → reopen/replay regression and
+existing service-order inspection guards pass against isolated PostgreSQL.
+The affected meal HTTP/submission/MiniApp tests also pass. Actual-Loom runtime
+acceptance of this meal extension remains pending.
+Cancellation remains an unsupported adoption method; ordinary tools/forms remain
+available. Existing meal receipts without an authenticated contract remain
+unsupported and are not retrofitted on replay.
 
 ## Storage and recovery
 
@@ -174,3 +181,6 @@ remains in `resume-attempt.json`; the completed proof is
 `.cache/shuttle-work/orders-adoption-runtime-20261022-r2/forward/checkpoint.json`
 with phase `forward_graceful_gate_passed`. Do not replay either driver: its
 completed order remains in the stopped fixture.
+
+Written by Codex (gpt-6.1-sol/Codex desktop), zns-chatbot (Shuttle) developer
+on behalf of Daniel Drizhuk

@@ -67,7 +67,7 @@ func (s *Server) inspectOperation(
 		return nil, err
 	}
 	body := in.Body
-	if body.Module == "zinusya_orders" {
+	if body.Module == "zinusya_orders" || body.Module == mealModuleID {
 		return s.inspectOrderOperation(ctx, in, scope)
 	}
 	if body.Module != "zinusya_knowledge" {
