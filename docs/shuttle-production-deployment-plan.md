@@ -15,10 +15,10 @@ production cutover сейчас не разрешены. Статус проду
 | App build source | `035f2a6b0356effff75f3dfce0c776d7551c706a`; tracked context SHA256 `6bc1bf6d9b1df21bae56ea394c1b4190fa9a8b928b5c47de3f259c34337ea2c6`. |
 | Local image ID | `sha256:bf1383e85fafd2d328437d1787420cb778c2b4f90ddd01806f62f4c8361a5fbe`; Linux/amd64, UID/GID10001. **Не registry digest**, не опубликован. Нельзя превращать его в вымышленный `complynx/shuttle@sha256:…`. |
 | Build-input delta | `git diff 035f2a6b… HEAD -- cmd internal migrations deploy/shuttle/Dockerfile go.mod go.sum` пуст. При новом build-input delta привязать новый image и проверить только затронутые gates. |
-| Loom | Source `ba1f4a11237a07edb242735b09edb210e2a7209e`; API/sandbox/proxy `complynx/loom@sha256:cbba225f8491449ab1110f7321d25aa1afb105cb039023daf22f4624550b56f4`. |
-| Loom worker | `complynx/loom@sha256:856d5968d9d03f5234ac6a778f93138676b1e67680fd396d6439175d39a6150e`; не смешивать protocol/cache generations. |
+| Loom | Deployed source `6b04ab9c050ce384057be78c7eaefd8099e03bc7`; empty source comparison to reviewed `6adc0dd6b16321dc73a350e2de032e83deabd9d5`. API/sandbox/proxy `complynx/loom@sha256:e7a8cac6f54494b4d131fb21548e001070dda13becd45fc0759ccb251bd99314`; all4 same revision, API healthy, schema006 applied. |
+| Loom worker | `complynx/loom@sha256:0f74a6d64261d1a1bdd2dd11ce571ecb2dc8bde8de0582d0423b431db1344fd5`; exact deployed RepoDigest reused by accepted local N3. Не смешивать protocol/cache generations. |
 | IAM |4.20.0, `ghcr.io/zitadel/zitadel@sha256:9ea0e9ecfdc43115da871242e40a0320f2ece864c7cd8b5d41a863a7f4902499`. Уже приняты узкие критические IAM4.20/prelink изменения; повтор всей матрицы не нужен. |
-| ZitadelTG | `complynx/zitadeltg@sha256:8864dd802d83c92a7cb63e044a6e79ea8de5a7c1f12f4d609f5c3f8e5765d431`; published prelink принят, но exact source revision image не доказана. |
+| ZitadelTG | Deployed `complynx/zitadeltg@sha256:a7936858cb4c6d66591741983a74a4cd2c9a4a1efd0ca929e55c36011f28c231`; executable SHA256 `b6f2ccf16b3d4325f8363f2b28ebddd840c7cd1ff5d5c130d088c2970c9d0d14` equals reviewed local9274/source2f38. PR13 merged03614 with no source-file delta; local real-phone R4 automatic callback PASS, issue12 closed. Production phone flow separately not exercised; original8864 failures retained. |
 
 Evidence: `.cache/shuttle-work/parallel-acceptance-20261022/file-source-qa/build-intent.json`,
 `image.iid`, `release/file-audio-final-head-ci.json`;
@@ -36,7 +36,7 @@ Evidence: `.cache/shuttle-work/parallel-acceptance-20261022/file-source-qa/build
 | Фаза | Владелец | Действие / разрешение Daniel |
 | --- | --- | --- |
 | L0 | Локальный агент | Read-only inventory старых стендов, owner/journal/version guards, reviewed reuse. Не replay старого setup. |
-| L1/L2 | Локальный агент + Daniel | Real Mini App bootstrap и настройки приняты. Отдельный OIDC завершился после manual recovery; чистый возврат после phone confirmation открыт в ZitadelTG12. Daniel выбрал `C:/Users/ddriz/Downloads/Untitled.opus`; original ASR завершился HTTP200, использован1/1 без retry; native adapter принял text и usage duration10s. Real voice ingress и долговременный ASR reuse (Loom36) остаются открыты. Второй paid ASR не требуется. |
+| L1/L2 | Локальный агент + Daniel | Real Mini App bootstrap/настройки и R4 phone OIDC с автоматическим callback приняты, без manual IAM GET/POST replay; ZitadelTG12 closed. Выбранный original ASR HTTP200 использован1/1 без retry. Loom36 full transcript/reuse gate принят отдельно с local stub и exact deployed RepoDigests. Real Telegram voice ingress/delivery ещё pending; второй paid ASR не требуется. |
 | L3 | Локальный агент + Daniel | Только после L1/L2 PASS включить реальный API для walkthrough. Нужны новый bounded budget/расходы; дополнительная автономная серия не подразумевается. |
 | P0 | Release agent | Конкретный release change-set/review можно готовить; merge и publication требуют явного разрешения. |
 | P1/P2 | Серверный оператор | Production provisioning/config/backup/restore только после разрешения конкретного reviewed набора, включая private data scope и paths. |
@@ -52,20 +52,28 @@ Deployment journal и effect lock имеют одного владельца; п
 
 ## 3. L0–L3: локальная человеческая приёмка
 
-Текущий L0: локальный testbot поднят на app035f/imagebf138, IAM4.20 и published
-provider8864; пять сервисов, отдельная организация и ограниченная runtime role.
+Текущий L0: локальный testbot поднят на app035f/imagebf138, IAM4.20 и
+provider9274/source2f38 (локальный PR13 image); пять сервисов, отдельная организация и ограниченная runtime role.
 Сохранённая локальная IAM DB действительно восстановлена в отдельный clone.
 Canonical app18382, IAM28443 и Telegram443 проверены; прежние app/gateway
 штатно остановлены с сохранением storage/config/cursor. Персональная кнопка
 Daniel «Открыть Зинусю» настроена, exact URL readback прошёл. Runtime-role
 read-only baseline до входа: users/sessions/tasks/inbox/outbox0. Последующая
 реальная Mini App приёмка принята: bootstrap, профиль/язык, logout текущей сессии
-и повторный вход. Отдельный OIDC принят только с manual recovery; новая попытка
-зависла после подтверждения на телефоне. [Real Telegram QA](shuttle-real-telegram-qa-2026-10-23.md)
-фиксирует границы и открытый ZitadelTG12. Loom и polling не запущены,
-платная модель не подключена. Один разрешённый ASR уже использован; новый
-release gate Loom36 требует сохранять полный текст независимо от temporary bytes
-и возвращать его без повторного распознавания/оплаты.
+и повторный вход. Прежние manual-recovered OIDC R1/R2 и R3 expiry сохранены;
+свежий R4 на real phone прошёл до автоматического callback77621/exit0 без manual
+IAM GET и Telegram POST replay, same canonical subject/token checks и unchanged
+app counts. [Real Telegram QA](shuttle-real-telegram-qa-2026-10-23.md) фиксирует
+bounded CLEAN review и закрытие ZitadelTG12. Deployed a793 executable bit-for-bit
+равен проверенному local9274 (b6f2ccf1), source03614 не отличается от reviewed2f38;
+это не отдельный production phone test.
+Testbot Loom/polling/paid-model ingress ещё не подключены. Отдельный Loom36 N3
+на exact deployed APIe7a/worker0f74 принят: full56021-byte transcript пережил
+source/WAV GC/API restart, distinct-run reuse не добавил ASR/charge, current human
+revocation дал waiting_auth без утечки. CLEAN evidence,3 decoded DB archives и
+owner/project resources0; N1/N2 failures сохранены. Issue36 closed, но20 Responses
+CONTROLLED и local ASR stub не доказывают autonomous model discovery/real Telegram
+voice. Единственный actual-provider ASR allowance1/1 остаётся исчерпанным.
 
 Первый app-controller остановился на лишнем chmod после успешного копирования
 ключа. Read-only проверка установила исходные bytes hash, UID100/GID101 и0600;
@@ -198,6 +206,20 @@ aliases/secrets/бот/DB/org/audiences. Не устанавливать `config
    trusted Docker discovery на actual network и per-deployment admission до
    любого model-starting ingress. Если нужный scoped fence отсутствует, держать
    Shuttle ingress/worker закрытым, а не выключать весь общий provider.
+   Durable ASR gate уже принят на deployed6b04/APIe7a/worker0f74/schema006,
+   empty source compare к reviewed6adc; [audio QA](shuttle-audio-transcription-qa-2026-10-23.md)
+   фиксирует N3 full text/GC/restart/distinct-run reuse/current revocation и cleanup.
+   Loom36 closed; повторный paid call и полная матрица не нужны. На actual install
+   сверить эти exact digests/schema, не запускать миграцию00006 заново только ради
+   нового consumer, если она уже applied. Для дальнейших ASR upgrades: закрыть
+   admission новых ASR, завершить старые исполнения, unresolved/unknown сверить,
+   сохранить backup и не смешивать old/new writers. Unchanged concurrency/unknown/
+   model-upgrade/legacy evidence reused. При откате закрыть ASR
+   admission, сверить pending/unknown операции и сохранить таблицу
+   `audio_transcripts` и receipts. Старый binary не обеспечивает новый контракт
+   reuse и безопасную дедупликацию новых ASR: его ASR admission оставить закрытым,
+   без автоматических повторов. Down migration удаляет сохранённый
+   текст и не является обычным шагом rollback.
 3. **DB.** Создать/reuse роли по [server runbook](shuttle-server-rollout.md#3-отдельная-база-и-роли).
    Runtime NOSUPERUSER/NOCREATEDB/NOCREATEROLE, без permanent schema CREATE и
    membership migrator; archive staging требует TEMPORARY. Миграции — только
@@ -416,7 +438,9 @@ ff8/871↔dd06/a2fa. Она не доказывает bf138→старый Pytho
 
 ## 11. Незакрытые решения и следующий шаг
 
-1. Human Telegram login/voice ingress и основной real-API walkthrough ещё pending.
+1. Real Telegram voice ingress/delivery и основной real-API walkthrough ещё pending;
+   Mini App login и clean R4 phone OIDC уже приняты, ZitadelTG12 closed.
+   Durable ASR/reuse N3 принят, Loom36 closed, без нового paid request.
    Actual-provider ASR выбранного audio завершён HTTP200: native adapter принял
    результат/usage, использован1/1 без retry; второй paid Telegram call не gate.
    [Шесть языковых probes](shuttle-language-model-qa-2026-10-23.md) завершены:

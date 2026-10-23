@@ -1,25 +1,37 @@
 # Current roadmap checkpoint, 2026-10-23
 
-## Direct production plan and human acceptance
+## Real phone and durable ASR accepted; voice and walkthrough next
 
 Daniel cancelled the server pilot. The next route is a local real testbot,
 human login/audio acceptance and Daniel's bounded real-API walkthrough, followed
 by a separately authorized direct production cutover. The
 [deployment plan](shuttle-production-deployment-plan.md) and
 [permissions matrix](shuttle-permissions-matrix.md) describe that route; the new
-local human testbot is running on app035f/imagebf138, IAM4.20 and published
-provider8864, with five services and a separate organization/restricted app DB role.
+local human testbot is running on app035f/imagebf138, IAM4.20 and local
+provider9274/source2f38 from [ZitadelTG PR13](https://github.com/complynx/zitadeltg/pull/13),
+with five services and a separate organization/restricted app DB role.
 The retained local IAM database was restored into the isolated clone. Canonical
 TLS/provider routes and the Mini App launch are ready; only the two old local
 listeners were gracefully stopped, retaining their storage/configuration/cursor.
 Daniel has a personal testbot launch menu. Real Telegram-signed Mini App bootstrap,
 profile/language persistence, current-session logout and reopening are accepted.
-Separate provider OIDC completed after a manual GET of the existing IAM request;
-a fresh phone-confirmed attempt remained on `Waiting for Telegram...`. Clean
-return navigation remains open in [ZitadelTG issue12](https://github.com/complynx/zitadeltg/issues/12).
-See [real Telegram QA](shuttle-real-telegram-qa-2026-10-23.md) for exact scope and
-preserved failure boundaries. Loom, polling and paid model ingress are disabled.
-Merge, image publication and production changes remain unauthorized.
+Earlier provider OIDC attempts required manual IAM-page recovery; those results
+remain historical. The fresh R4 phone flow now reaches automatic completion on
+local9274/source2f38 without manual IAM GET or Telegram POST replay: original
+callback77621 exits0, verifies signature/issuer/audience/nonce and the same
+canonical subject, and preserves application counts. Independent evidence review
+is CLEAN. [ZitadelTG issue12](https://github.com/complynx/zitadeltg/issues/12#issuecomment-6371945946)
+is closed. PR13 merged as03614 with no source-file difference from reviewed2f38.
+Daniel's deployed provider RepoDigest a7936858 is bound to the reviewed local
+executable by identical binary SHA256 b6f2ccf1; selected production observation
+shows zero restarts. This is binary equivalence plus a tested local real-phone
+flow, not a separately exercised production phone flow. R3 expired without phone
+confirmation and remains neither PASS nor a new product failure. Original8864
+failures and recovered R1/R2 results remain in
+[real Telegram QA](shuttle-real-telegram-qa-2026-10-23.md).
+The human testbot still has no active Loom/polling/paid-model ingress. Main
+Shuttle production installation/cutover, merge and image publication remain
+unauthorized; dependency updates reported by Daniel are already verified separately.
 
 One separately authorized real ASR request returned HTTP200. The unchanged native
 Loom adapter accepted the selected recording's transcript and duration receipt;
@@ -27,11 +39,24 @@ the one-call allowance is exhausted, without retries. This adds provider adapter
 evidence to the existing synthetic full consumer proof, not a real Telegram run.
 See [audio QA](shuttle-audio-transcription-qa-2026-10-23.md).
 
-Daniel's new ASR requirement is not met by accepted Loom: full transcripts must
-survive temporary source/WAV expiry and restart, and an already processed file
-must reuse its text without another ASR request or charge. [Loom issue36](https://github.com/complynx/loom/issues/36)
-owns this release gate. Verify the local fix with a stub/counter, not another paid
-ASR request; a longer artifact TTL alone does not meet the requirement.
+The durable transcript/reuse gate now passes on exact deployed Loom source
+6b04/API e7a8/worker0f74, equivalent by empty source comparison to reviewed6adc.
+All four production Loom services share revision6b04; API is healthy and additive
+schema006/audio_transcripts is applied. The local N3 consumer uses these exact
+immutable RepoDigests:56021 UTF-8 bytes over7 pages retain the same full SHA after
+source/WAV collection, actual API restart and reuse by a distinct completed run.
+There is one local ASR stub dispatch, one reserve and one settlement. Current
+human-authority revocation yields typed waiting_auth without transcript leakage.
+Twenty Responses frames are CONTROLLED; external model/ASR calls and business
+writes are zero. Independent final evidence review is CLEAN;
+[Loom issue36](https://github.com/complynx/loom/issues/36#issuecomment-6371973515)
+is closed. Subsequent cleanup20160 exited0:3 DB archives fully decoded and root
+project/owner container/network/volume counts all0. N1's pre-ASR fixture collision
+and N2's preprivate image-ID preflight failure remain FAIL, never replayed.
+See [audio QA](shuttle-audio-transcription-qa-2026-10-23.md). Unchanged developer
+concurrency/unknown/model-upgrade/legacy evidence is reused, not a full rerun.
+This proves neither autonomous model discovery nor real Telegram voice; those
+transport and real-API walkthrough gates remain next, with no new paid allowance.
 
 Six additional real `gpt-6-luna/low` language probes also pass: Portuguese with
 Russian/English prompt locale and after synthetic Russian/English history,

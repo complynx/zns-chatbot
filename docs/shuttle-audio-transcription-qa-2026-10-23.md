@@ -26,9 +26,66 @@ remains preserved alongside the later explicit consent and completed receipt.
 This proves real-provider compatibility through the exact native adapter on one
 recording. It is separate from the synthetic full consumer path below and does
 not claim an additional full Telegram-to-provider run or broad speech accuracy.
-Real Telegram ingress/login and human acceptance remain pending.
+Real Telegram Mini App login and clean provider OIDC are now accepted separately
+(see [real Telegram QA](shuttle-real-telegram-qa-2026-10-23.md)); real Telegram
+voice ingress/delivery and the main real-API walkthrough remain pending.
 
-## Exact versions and path
+## Durable full transcript and no-charge reuse: accepted (Loom36)
+
+Daniel deployed the updated Loom before this bounded local gate. Selected
+read-only production evidence records all four services at revision
+6b04ab9c050ce384057be78c7eaefd8099e03bc7, API healthy/zero restarts, and additive
+schema006/audio_transcripts present with matching columns. No transcript content
+was read in production. Comparison with reviewed source
+6adc0dd6b16321dc73a350e2de032e83deabd9d5 contains no changed files.
+
+N3 uses exact deployed immutable RepoDigests locally:
+
+- API/sandbox/proxy: complynx/loom@sha256:e7a8cac6f54494b4d131fb21548e001070dda13becd45fc0759ccb251bd99314.
+- Worker: complynx/loom@sha256:0f74a6d64261d1a1bdd2dd11ce571ecb2dc8bde8de0582d0423b431db1344fd5.
+
+Docker Desktop reports manifest digests as local image IDs while the server
+reports image config IDs. These observations are joined by exact RepoDigests,
+not an assertion that different engines' IDs are equal.
+
+Original N3 flow8438 terminated exit0. The complete synthetic transcript is56021
+UTF-8 bytes over7 pages, SHA256
+9bbc62fe7012cb3bed3a0ac6a0fbf0c7589a26514ea0276948d7003d663e6c1c.
+The joined full text has the same SHA initially and after actual source/WAV blob
+collection, a stop/start of the same API container, and reuse by a distinct
+completed run. Both initial and post-restart reads return all7 pages. Reuse
+retains original provenance and performs no source refetch/file processing.
+
+The gate observes exactly one local ASR stub dispatch, one reservation and one
+settlement; the later reuse adds no provider dispatch or charge. A staged current
+human-authority revocation yields typed waiting_auth on a third run, no next
+model request, no transcript disclosure and no additional ASR/refetch/ledger
+effect. No order, payment evidence or review was created. The20 native Responses
+frames are CONTROLLED fixtures, external model/ASR calls0 and business writes0.
+This is not autonomous model discovery or another real paid transcription.
+
+Fresh independent final evidence review is CLEAN. Unchanged developer tests for
+concurrency, unknown outcomes, model upgrade and legacy paths are reused within
+their original scopes; this consumer gate does not rerun the whole matrix.
+[Loom issue36](https://github.com/complynx/loom/issues/36#issuecomment-6371973515)
+is closed for this storage/reuse requirement, not for whole-production readiness.
+
+N1's fixture HTTP collision failed before ASR; its three DB archives were fully
+decoded and project/owner resources removed. N2 failed an image-ID preflight
+before private setup with zero effects. Both original FAIL checkpoints remain,
+without replay. N3's final evidence review preceded cleanup; subsequent original
+cleanup20160 terminated exit0, archived and fully decoded all3 DBs. Root's separate
+inventory verifies project and owner containers/networks/volumes all0 and original
+checkpoints unchanged. Full decode does not claim a restored-database exercise.
+
+Sanitized evidence: .cache/shuttle-work/direct-production-20261023/
+deployed-fixes-local-identity.root.json and loom36-consumer-qa-r3/
+{acceptance,runtime-observation.root,final-evidence-review,root-cleanup-verification}.json.
+The original real-provider allowance remains exhausted1/1 with no retry. Real
+Telegram voice ingress/delivery and Daniel's main real-API walkthrough remain
+next; this gate neither spends another paid request nor authorizes production.
+
+## Earlier consumer baseline: exact versions and path
 
 - Shuttle source `035f2a6b0356effff75f3dfce0c776d7551c706a`, local image
   `sha256:bf1383e85fafd2d328437d1787420cb778c2b4f90ddd01806f62f4c8361a5fbe`.
